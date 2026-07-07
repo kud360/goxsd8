@@ -28,5 +28,12 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
+.idea/
 # .vscode/
+
+# Agent session scratch (grounding files, logs) — durable context lives in
+# GitHub issue comments and docs/LOG/, never here.
+.agent/
+
+# Build output
+bin/

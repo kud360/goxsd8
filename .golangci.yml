@@ -1,0 +1,59 @@
+# Lint gate for docs/STYLE.md — the machine-checkable subset only.
+# Deliberately lean: rules needing judgment (T4 duplicate structures,
+# D2 map-iteration-into-output, D3 derivable state) stay with the arbiter
+# and warden; do not pile on linters to approximate them.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # correctness baseline
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - bodyclose
+    # S3/E1: no dropped errors, correct wrapping/matching
+    - errcheck
+    - errorlint
+    - nilerr
+    # S1/S2: happy path left, no else blocks; T5: exported identifiers documented
+    - revive
+    # T1/T2: closed-sum switches cover all cases
+    - exhaustive
+    # L1: injected slog only, no globals
+    - sloglint
+    # P4 streaming / L1: no whole-document buffering, no print debugging
+    - forbidigo
+  settings:
+    revive:
+      rules:
+        - name: early-return
+        - name: superfluous-else
+        - name: indent-error-flow
+        - name: exported
+    exhaustive:
+      default-signifies-exhaustive: true
+    sloglint:
+      no-global: all
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^io\.ReadAll$
+          msg: stream with bounded buffering instead (docs/PRINCIPLES.md)
+        - pattern: ^fmt\.Print(f|ln)?$
+          msg: use the injected slog logger (docs/STYLE.md L1)
+  exclusions:
+    rules:
+      # tests may buffer and print freely
+      - path: _test\.go
+        linters: [forbidigo]
+      # CLIs under tools/ and cmd/ print to stdout by design
+      - path: ^tools/
+        linters: [forbidigo, sloglint]
+      - path: ^cmd/
+        linters: [forbidigo]
+
+formatters:
+  enable:
+    - gofmt
