@@ -5,67 +5,72 @@ package builtin
 // lets the generated file stay pure data — no logic, no function values — per
 // PRINCIPLES 26 and builtin/doc.go.
 
-// Variety is a builtin datatype's {variety} (§4.1.1). Only atomic and list
-// occur among the builtins; no builtin has union variety. The zero value is
-// invalid so an unset Variety is caught rather than silently treated as
-// atomic.
-type Variety uint8
+// Variety is a builtin datatype's {variety} (§4.1.1). It is a sealed sum
+// (STYLE T2): Atomic and List are its only implementations — no builtin has
+// union variety, and anySimpleType's absent variety has no row (it is excluded
+// from the table). List carries the item-type name, so an item type cannot
+// exist without list-ness and consumers exhaustively switch the two branches.
+type Variety interface{ variety() }
 
-// The builtin varieties. anySimpleType's absent variety has no row (it is
-// excluded from the table), so no "absent" member is needed here.
-const (
-	VarietyAtomic Variety = iota + 1
-	VarietyList
-)
+// Atomic is the {variety} of an atomic builtin datatype (§4.1.1).
+type Atomic struct{}
+
+// List is the {variety} of a list builtin datatype (§4.1.1). Item names its
+// {item type definition}.
+type List struct {
+	// Item is the list item type name (e.g. "NMTOKEN").
+	Item string
+}
+
+func (Atomic) variety() {}
+func (List) variety()   {}
 
 // Ordered is the value of the {ordered} fundamental facet (§4.2.1). The zero
-// value OrderedAbsent is what anyAtomicType carries, whose {fundamental
-// facets} is the empty set (§4.1.6 anyAtomicType-def).
+// value is invalid so an unset field is a caught bug; anyAtomicType, whose
+// {fundamental facets} is the empty set (§4.1.6 anyAtomicType-def), carries a
+// nil *Fundamental rather than an "absent" member here.
 type Ordered uint8
 
 // The {ordered} values.
 const (
-	OrderedAbsent Ordered = iota
-	OrderedFalse
+	OrderedFalse Ordered = iota + 1
 	OrderedPartial
 	OrderedTotal
 )
 
-// Bounded is the value of the {bounded} fundamental facet (§4.2.2). Zero is
-// absent (anyAtomicType).
+// Bounded is the value of the {bounded} fundamental facet (§4.2.2). The zero
+// value is invalid (see Ordered).
 type Bounded uint8
 
 // The {bounded} values.
 const (
-	BoundedAbsent Bounded = iota
-	BoundedFalse
+	BoundedFalse Bounded = iota + 1
 	BoundedTrue
 )
 
 // Cardinality is the value of the {cardinality} fundamental facet (§4.2.3).
-// Zero is absent (anyAtomicType).
+// The zero value is invalid (see Ordered).
 type Cardinality uint8
 
 // The {cardinality} values.
 const (
-	CardinalityAbsent Cardinality = iota
-	CardinalityFinite
+	CardinalityFinite Cardinality = iota + 1
 	CardinalityCountablyInfinite
 )
 
-// Numeric is the value of the {numeric} fundamental facet (§4.2.4). Zero is
-// absent (anyAtomicType).
+// Numeric is the value of the {numeric} fundamental facet (§4.2.4). The zero
+// value is invalid (see Ordered).
 type Numeric uint8
 
 // The {numeric} values.
 const (
-	NumericAbsent Numeric = iota
-	NumericFalse
+	NumericFalse Numeric = iota + 1
 	NumericTrue
 )
 
-// Fundamental groups a datatype's four fundamental facets (§4.2). For
-// anyAtomicType every field is its Absent zero value.
+// Fundamental groups a datatype's four fundamental facets (§4.2). Every
+// datatype has all four or, for anyAtomicType alone, none; the "none" case is
+// a nil *Fundamental on the TypeSpec, so a partial mix is unrepresentable.
 type Fundamental struct {
 	Ordered     Ordered
 	Bounded     Bounded
@@ -91,7 +96,7 @@ type Facet struct {
 }
 
 // TypeSpec is the backend-neutral description of one builtin datatype: its
-// name and base, variety (and item type for lists), fundamental facets, and
+// name and base, variety (with item type for lists), fundamental facets, and
 // the constraining facets that apply to it with their spec defaults. It is
 // data only; all rows live in gen_typespec.go.
 type TypeSpec struct {
@@ -101,12 +106,11 @@ type TypeSpec struct {
 	// anyAtomicType (§4.1.6 dummy-def); anyAtomicType derives from
 	// anySimpleType; lists restrict an anonymous list rooted at anySimpleType.
 	Base string
-	// Variety is atomic or list.
+	// Variety is the datatype's {variety}: Atomic{} or List{Item: ...}.
 	Variety Variety
-	// Item is the list item type name; "" unless Variety is VarietyList.
-	Item string
-	// Fundamental holds the four fundamental facets (§4.2).
-	Fundamental Fundamental
+	// Fundamental holds the four fundamental facets (§4.2), or is nil for the
+	// empty {fundamental facets} that only anyAtomicType carries.
+	Fundamental *Fundamental
 	// Facets are the applicable constraining facets in spec order, each with
 	// its spec default. The applicable-facet set is exactly the names here;
 	// it is not stored separately (STYLE D3).

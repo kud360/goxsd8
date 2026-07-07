@@ -6,21 +6,24 @@
 // # The generated table (M1)
 //
 //	type TypeSpec struct {
-//	    Name        string      // spec name, verbatim (e.g. "nonNegativeInteger")
-//	    Base        string      // base type name (see below)
-//	    Variety     Variety     // atomic | list
-//	    Item        string      // list item type; "" for atomic
-//	    Fundamental Fundamental // ordered/bounded/cardinality/numeric
-//	    Facets      []Facet     // applicable constraining facets, spec order, with defaults
+//	    Name        string       // spec name, verbatim (e.g. "nonNegativeInteger")
+//	    Base        string       // base type name (see below)
+//	    Variety     Variety      // Atomic{} | List{Item: ...}
+//	    Fundamental *Fundamental // ordered/bounded/cardinality/numeric; nil for anyAtomicType
+//	    Facets      []Facet      // applicable constraining facets, spec order, with defaults
 //	}
 //
 //	var Types []TypeSpec   // all 49 builtins, spec order
 //
-// The applicable-facet set is exactly the names in Facets, so it is read
-// off Facets via TypeSpec.Applies rather than stored twice (STYLE D3).
-// Base follows the spec hierarchy (§4.1.6): the 19 primitives and
-// precisionDecimal derive from anyAtomicType, anyAtomicType from
-// anySimpleType, and each list restricts an anonymous list rooted at
+// Variety is a sealed sum: Atomic{} or List{Item: ...}, so a list's item
+// type cannot exist without list-ness (STYLE T1/T2). Fundamental is a
+// pointer: every datatype has all four fundamental facets, except
+// anyAtomicType, whose empty {fundamental facets} (§4.1.6) is the nil case —
+// no partial mix is representable. The applicable-facet set is exactly the
+// names in Facets, so it is read off Facets via TypeSpec.Applies rather than
+// stored twice (STYLE D3). Base follows the spec hierarchy (§4.1.6): the 19
+// primitives and precisionDecimal derive from anyAtomicType, anyAtomicType
+// from anySimpleType, and each list restricts an anonymous list rooted at
 // anySimpleType. The closed value types (Variety, Fundamental, Facet) are
 // hand-written in typespec.go; the type IsPrimitive helper reports
 // Base == "anyAtomicType".

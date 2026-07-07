@@ -11,8 +11,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "string",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "preserve"},
 			{Name: "length"},
@@ -26,8 +26,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "boolean",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityFinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityFinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "pattern"},
@@ -37,8 +37,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "decimal",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "totalDigits"},
@@ -55,8 +55,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "float",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "pattern"},
@@ -71,8 +71,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "double",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "pattern"},
@@ -87,8 +87,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "duration",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "pattern"},
@@ -103,8 +103,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "dateTime",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "explicitTimezone", Default: "optional"},
@@ -120,8 +120,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "time",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "explicitTimezone", Default: "optional"},
@@ -137,8 +137,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "date",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "explicitTimezone", Default: "optional"},
@@ -154,8 +154,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "gYearMonth",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "explicitTimezone", Default: "optional"},
@@ -171,8 +171,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "gYear",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "explicitTimezone", Default: "optional"},
@@ -188,8 +188,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "gMonthDay",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "explicitTimezone", Default: "optional"},
@@ -205,8 +205,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "gDay",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "explicitTimezone", Default: "optional"},
@@ -222,8 +222,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "gMonth",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "explicitTimezone", Default: "optional"},
@@ -239,8 +239,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "hexBinary",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "length"},
@@ -254,8 +254,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "base64Binary",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "length"},
@@ -269,8 +269,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "anyURI",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "length"},
@@ -284,8 +284,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "QName",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "length"},
@@ -299,8 +299,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "NOTATION",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "length"},
@@ -314,8 +314,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "normalizedString",
 		Base:        "string",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "replace"},
 			{Name: "length"},
@@ -329,8 +329,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "token",
 		Base:        "normalizedString",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse"},
 			{Name: "length"},
@@ -344,8 +344,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "language",
 		Base:        "token",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "pattern", Default: "[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*"},
 			{Name: "whiteSpace", Default: "collapse"},
@@ -359,8 +359,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "NMTOKEN",
 		Base:        "token",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "pattern", Default: "\\c+"},
 			{Name: "whiteSpace", Default: "collapse"},
@@ -374,9 +374,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "NMTOKENS",
 		Base:        "anySimpleType",
-		Variety:     VarietyList,
-		Item:        "NMTOKEN",
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     List{Item: "NMTOKEN"},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "minLength", Default: "1"},
 			{Name: "whiteSpace", Default: "collapse"},
@@ -390,8 +389,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "Name",
 		Base:        "token",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "pattern", Default: "\\i\\c*"},
 			{Name: "whiteSpace", Default: "collapse"},
@@ -405,8 +404,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "NCName",
 		Base:        "Name",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "pattern", Default: "\\i\\c* ∩ [\\i-[:]][\\c-[:]]*"},
 			{Name: "whiteSpace", Default: "collapse"},
@@ -420,8 +419,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "ID",
 		Base:        "NCName",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "pattern", Default: "\\i\\c* ∩ [\\i-[:]][\\c-[:]]*"},
 			{Name: "whiteSpace", Default: "collapse"},
@@ -435,8 +434,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "IDREF",
 		Base:        "NCName",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "pattern", Default: "\\i\\c* ∩ [\\i-[:]][\\c-[:]]*"},
 			{Name: "whiteSpace", Default: "collapse"},
@@ -450,9 +449,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "IDREFS",
 		Base:        "anySimpleType",
-		Variety:     VarietyList,
-		Item:        "IDREF",
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     List{Item: "IDREF"},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "minLength", Default: "1"},
 			{Name: "whiteSpace", Default: "collapse"},
@@ -466,8 +464,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "ENTITY",
 		Base:        "NCName",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "pattern", Default: "\\i\\c* ∩ [\\i-[:]][\\c-[:]]*"},
 			{Name: "whiteSpace", Default: "collapse"},
@@ -481,9 +479,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "ENTITIES",
 		Base:        "anySimpleType",
-		Variety:     VarietyList,
-		Item:        "ENTITY",
-		Fundamental: Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     List{Item: "ENTITY"},
+		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "minLength", Default: "1"},
 			{Name: "whiteSpace", Default: "collapse"},
@@ -497,8 +494,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "integer",
 		Base:        "decimal",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -515,8 +512,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "nonPositiveInteger",
 		Base:        "integer",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -533,8 +530,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "negativeInteger",
 		Base:        "nonPositiveInteger",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -551,8 +548,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "long",
 		Base:        "integer",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -569,8 +566,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "int",
 		Base:        "long",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -587,8 +584,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "short",
 		Base:        "int",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -605,8 +602,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "byte",
 		Base:        "short",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -623,8 +620,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "nonNegativeInteger",
 		Base:        "integer",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -641,8 +638,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "unsignedLong",
 		Base:        "nonNegativeInteger",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -659,8 +656,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "unsignedInt",
 		Base:        "unsignedLong",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -677,8 +674,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "unsignedShort",
 		Base:        "unsignedInt",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -695,8 +692,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "unsignedByte",
 		Base:        "unsignedShort",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedTrue, Cardinality: CardinalityFinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -713,8 +710,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "positiveInteger",
 		Base:        "nonNegativeInteger",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedTotal, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedTotal, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "fractionDigits", Default: "0", Fixed: true},
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
@@ -731,8 +728,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "yearMonthDuration",
 		Base:        "duration",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "pattern", Default: "[^DT]*"},
@@ -747,8 +744,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "dayTimeDuration",
 		Base:        "duration",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "pattern", Default: "[^YM]*(T.*)?"},
@@ -763,8 +760,8 @@ var Types = []TypeSpec{
 	{
 		Name:        "dateTimeStamp",
 		Base:        "dateTime",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "explicitTimezone", Default: "required", Fixed: true},
@@ -778,16 +775,15 @@ var Types = []TypeSpec{
 		},
 	},
 	{
-		Name:        "anyAtomicType",
-		Base:        "anySimpleType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedAbsent, Bounded: BoundedAbsent, Cardinality: CardinalityAbsent, Numeric: NumericAbsent},
+		Name:    "anyAtomicType",
+		Base:    "anySimpleType",
+		Variety: Atomic{},
 	},
 	{
 		Name:        "precisionDecimal",
 		Base:        "anyAtomicType",
-		Variety:     VarietyAtomic,
-		Fundamental: Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
+		Variety:     Atomic{},
+		Fundamental: &Fundamental{Ordered: OrderedPartial, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericTrue},
 		Facets: []Facet{
 			{Name: "whiteSpace", Default: "collapse", Fixed: true},
 			{Name: "totalDigits"},

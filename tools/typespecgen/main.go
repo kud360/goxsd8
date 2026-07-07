@@ -64,7 +64,7 @@ func emit(types []builtins.Builtin) ([]byte, error) {
 }
 
 func emitType(b *strings.Builder, t builtins.Builtin) error {
-	variety, err := varietyConst(t.Variety)
+	variety, err := varietyLit(t)
 	if err != nil {
 		return fmt.Errorf("%s: %w", t.Name, err)
 	}
@@ -77,10 +77,10 @@ func emitType(b *strings.Builder, t builtins.Builtin) error {
 	fmt.Fprintf(b, "\t\tName:    %q,\n", t.Name)
 	fmt.Fprintf(b, "\t\tBase:    %q,\n", t.Base)
 	fmt.Fprintf(b, "\t\tVariety: %s,\n", variety)
-	if t.Item != "" {
-		fmt.Fprintf(b, "\t\tItem:    %q,\n", t.Item)
+	// fund == "" is the empty {fundamental facets}: leave Fundamental nil.
+	if fund != "" {
+		fmt.Fprintf(b, "\t\tFundamental: %s,\n", fund)
 	}
-	fmt.Fprintf(b, "\t\tFundamental: %s,\n", fund)
 	if len(t.Facets) > 0 {
 		fmt.Fprintf(b, "\t\tFacets: []Facet{\n")
 		for _, f := range t.Facets {
@@ -100,17 +100,26 @@ func emitType(b *strings.Builder, t builtins.Builtin) error {
 	return nil
 }
 
-func varietyConst(v string) (string, error) {
-	switch v {
+// varietyLit emits the sealed Variety branch: Atomic{} for atomic types,
+// List{Item: "..."} for lists (§4.1.1).
+func varietyLit(t builtins.Builtin) (string, error) {
+	switch t.Variety {
 	case "atomic":
-		return "VarietyAtomic", nil
+		return "Atomic{}", nil
 	case "list":
-		return "VarietyList", nil
+		return fmt.Sprintf("List{Item: %q}", t.Item), nil
 	}
-	return "", fmt.Errorf("unknown variety %q", v)
+	return "", fmt.Errorf("unknown variety %q", t.Variety)
 }
 
+// fundamental emits the &Fundamental{...} literal, or "" to signal the empty
+// {fundamental facets} (anyAtomicType alone), for which the caller leaves the
+// nil pointer. All four inputs empty is that all-or-nothing empty case (§4.2);
+// a partial mix is a parser bug and errors below.
 func fundamental(t builtins.Builtin) (string, error) {
+	if t.Ordered == "" && t.Bounded == "" && t.Cardinality == "" && t.Numeric == "" {
+		return "", nil
+	}
 	ordered, err := lookup(orderedConst, t.Ordered)
 	if err != nil {
 		return "", fmt.Errorf("ordered: %w", err)
@@ -127,7 +136,7 @@ func fundamental(t builtins.Builtin) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("numeric: %w", err)
 	}
-	return fmt.Sprintf("Fundamental{Ordered: %s, Bounded: %s, Cardinality: %s, Numeric: %s}", ordered, bounded, card, numeric), nil
+	return fmt.Sprintf("&Fundamental{Ordered: %s, Bounded: %s, Cardinality: %s, Numeric: %s}", ordered, bounded, card, numeric), nil
 }
 
 func lookup(m map[string]string, token string) (string, error) {
@@ -138,11 +147,13 @@ func lookup(m map[string]string, token string) (string, error) {
 	return c, nil
 }
 
-// The maps translate the spec tokens the parser reports into the Go
-// constants in builtin/typespec.go. "" is the absent value (anyAtomicType).
+// The maps translate the spec tokens the parser reports into the Go constants
+// in builtin/typespec.go. There is no "" entry: an empty {fundamental facets}
+// is handled whole in fundamental (nil *Fundamental), never per field, so a
+// stray empty token on one facet is a caught error rather than an absent value.
 var (
-	orderedConst     = map[string]string{"": "OrderedAbsent", "false": "OrderedFalse", "partial": "OrderedPartial", "total": "OrderedTotal"}
-	boundedConst     = map[string]string{"": "BoundedAbsent", "false": "BoundedFalse", "true": "BoundedTrue"}
-	cardinalityConst = map[string]string{"": "CardinalityAbsent", "finite": "CardinalityFinite", "countably infinite": "CardinalityCountablyInfinite"}
-	numericConst     = map[string]string{"": "NumericAbsent", "false": "NumericFalse", "true": "NumericTrue"}
+	orderedConst     = map[string]string{"false": "OrderedFalse", "partial": "OrderedPartial", "total": "OrderedTotal"}
+	boundedConst     = map[string]string{"false": "BoundedFalse", "true": "BoundedTrue"}
+	cardinalityConst = map[string]string{"finite": "CardinalityFinite", "countably infinite": "CardinalityCountablyInfinite"}
+	numericConst     = map[string]string{"false": "NumericFalse", "true": "NumericTrue"}
 )

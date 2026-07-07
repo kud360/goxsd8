@@ -84,24 +84,25 @@ func TestAnyAtomicType(t *testing.T) {
 	if len(ts.Facets) != 0 {
 		t.Errorf("anyAtomicType has %d facets, want 0", len(ts.Facets))
 	}
-	if ts.Fundamental != (Fundamental{}) {
-		t.Errorf("anyAtomicType.Fundamental = %+v, want all-absent zero value", ts.Fundamental)
+	// The empty {fundamental facets} is a nil *Fundamental, not a partial mix.
+	if ts.Fundamental != nil {
+		t.Errorf("anyAtomicType.Fundamental = %+v, want nil (empty fundamental facets)", ts.Fundamental)
 	}
 }
 
 func TestListVariety(t *testing.T) {
 	wantList := map[string]string{"NMTOKENS": "NMTOKEN", "IDREFS": "IDREF", "ENTITIES": "ENTITY"}
 	for _, ts := range Types {
-		isList := ts.Variety == VarietyList
+		l, isList := ts.Variety.(List)
 		wantItem, wantIsList := wantList[ts.Name]
 		if isList != wantIsList {
-			t.Errorf("%s Variety==list is %v, want %v", ts.Name, isList, wantIsList)
+			t.Errorf("%s is List is %v, want %v", ts.Name, isList, wantIsList)
 		}
 		if !wantIsList {
 			continue
 		}
-		if ts.Item != wantItem {
-			t.Errorf("%s.Item = %q, want %q", ts.Name, ts.Item, wantItem)
+		if l.Item != wantItem {
+			t.Errorf("%s List.Item = %q, want %q", ts.Name, l.Item, wantItem)
 		}
 	}
 }
@@ -124,7 +125,7 @@ func TestPrecisionDecimalFacets(t *testing.T) {
 			t.Errorf("precisionDecimal must not apply facet %q", f)
 		}
 	}
-	if pd.Variety != VarietyAtomic {
-		t.Errorf("precisionDecimal.Variety = %v, want atomic", pd.Variety)
+	if _, ok := pd.Variety.(Atomic); !ok {
+		t.Errorf("precisionDecimal.Variety = %T, want Atomic", pd.Variety)
 	}
 }
