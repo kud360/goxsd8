@@ -6,21 +6,48 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 const (
-	srcDir    = "docs/specs/md"
-	outPath   = "xsderr/catalog.go"
-	ruleRegex = `\b(cvc|cos|src)-[a-zA-Z0-9\._-]+`
+	srcDir  = "docs/specs/md"
+	outPath = "xsderr/catalog.go"
+	// rulePrefixRegex matches the four canonical rule-ID families defined in
+	// xmlschema11-1.md §2.3: cvc- (Validation Rules), cos- (Schema Component
+	// Constraints), src- (Schema Representation Constraints), and sic- (Schema
+	// Information Set Contributions). The required "-" after the prefix keeps
+	// section-header anchors like "coss-attribute" out of the catalog.
+	rulePrefixRegex = `\b(?:cvc|cos|src|sic)-[a-zA-Z0-9\._-]+`
 )
 
+// irregularRules are genuine "Schema Component Constraint:"-labeled rule IDs
+// whose anchors do not follow the cvc-/cos-/src-/sic- prefix convention. They
+// are matched as whole words, so they only enter the catalog when they actually
+// appear in the specs. doc.go's own contract cites derivation-ok-restriction as
+// a valid Rule; see .agent/grounding-issue-3.md for the exhaustive list.
+var irregularRules = []string{
+	"derivation-ok-restriction",
+	"sch-props-correct",
+	"length-valid-restriction",
+	"enumeration-valid-restriction",
+	"timezone-valid-restriction",
+	"length-minLength-maxLength",
+}
+
 func main() {
-	re := regexp.MustCompile(ruleRegex)
+	root, err := moduleRoot()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "locating module root: %v\n", err)
+		os.Exit(1)
+	}
+
+	re := regexp.MustCompile(buildRuleRegex())
 	rulesMap := make(map[string]struct{})
 
-	files, err := os.ReadDir(srcDir)
+	specDir := filepath.Join(root, srcDir)
+	files, err := os.ReadDir(specDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "reading spec dir %s: %v\n", srcDir, err)
+		fmt.Fprintf(os.Stderr, "reading spec dir %s: %v\n", specDir, err)
 		os.Exit(1)
 	}
 
@@ -29,7 +56,7 @@ func main() {
 			continue
 		}
 
-		path := filepath.Join(srcDir, file.Name())
+		path := filepath.Join(specDir, file.Name())
 		content, err := os.ReadFile(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "reading file %s: %v\n", path, err)
@@ -48,22 +75,54 @@ func main() {
 	}
 	sort.Strings(sortedRules)
 
-	f, err := os.Create(outPath)
+	dst := filepath.Join(root, outPath)
+	f, err := os.Create(dst)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "creating output file %s: %v\n", outPath, err)
+		fmt.Fprintf(os.Stderr, "creating output file %s: %v\n", dst, err)
 		os.Exit(1)
 	}
 
 	if err := writeCatalog(f, sortedRules); err != nil {
-		fmt.Fprintf(os.Stderr, "writing catalog to %s: %v\n", outPath, err)
+		fmt.Fprintf(os.Stderr, "writing catalog to %s: %v\n", dst, err)
 		_ = f.Close()
 		os.Exit(1)
 	}
 
 	if err := f.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "closing output file %s: %v\n", outPath, err)
+		fmt.Fprintf(os.Stderr, "closing output file %s: %v\n", dst, err)
 		os.Exit(1)
 	}
+}
+
+// moduleRoot walks up from the current working directory until it finds the
+// directory containing go.mod, so the tool resolves its spec inputs and catalog
+// output the same way whether `go generate` runs it in the module root or in the
+// xsderr package directory.
+func moduleRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("go.mod not found from working directory")
+		}
+		dir = parent
+	}
+}
+
+// buildRuleRegex combines the canonical prefix families with whole-word
+// alternations for each irregular literal rule ID.
+func buildRuleRegex() string {
+	parts := []string{rulePrefixRegex}
+	for _, id := range irregularRules {
+		parts = append(parts, `\b`+regexp.QuoteMeta(id)+`\b`)
+	}
+	return strings.Join(parts, "|")
 }
 
 func writeCatalog(f *os.File, rules []string) error {
