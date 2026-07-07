@@ -25,8 +25,20 @@ translate the local times above and mind DST drift.
   suite) — conformance runs skip without it.
 - Non-interactive `git push` (credentials installed; a push that prompts
   hangs a headless session forever).
-- GitHub MCP server connected (`.mcp.json`) for issue/label/milestone
-  operations; `gh` CLI works as local fallback.
+- **A GitHub channel for issue operations** — three options, in order of
+  preference per context:
+  1. *Cloud sessions*: the platform's built-in GitHub tools (read
+     issues, list PRs, post comments) work with zero setup via the
+     Claude GitHub app — the token never enters the container. Prefer
+     these in routines.
+  2. *GitHub MCP server* (`.mcp.json`): authenticates interactively via
+     OAuth in local sessions; headless containers have no browser, so
+     set a `GITHUB_PAT` environment variable in the routine's
+     environment config — the committed config expands it into the
+     Authorization header (`${GITHUB_PAT}`). Without the variable the
+     server simply fails to connect; the other channels still work.
+  3. *`gh` CLI*: authenticated locally; in cloud containers it needs
+     installing (environment setup script) plus a `GH_TOKEN` env var.
 - No human is watching: commands must never wait for input. Abort and log
   instead.
 

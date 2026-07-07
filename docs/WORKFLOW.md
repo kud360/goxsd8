@@ -8,8 +8,10 @@ short; the repo and its GitHub issues are the brain.
 **Long-horizon memory lives in GitHub issues** (plans, groundings,
 verdicts, hand-off notes — all as issue comments) **and docs/LOG/**
 (history). Anything a future cold-start session needs must be on the issue
-thread or in the log, never only in a transcript. Use the GitHub MCP
-server for issue operations; the `gh` CLI is the local fallback.
+thread or in the log, never only in a transcript. For issue operations
+use whichever GitHub channel the session has (docs/ROUTINES.md ranks
+them): the cloud platform's built-in GitHub tools, the GitHub MCP server
+(needs `GITHUB_PAT` when headless), or the `gh` CLI.
 
 **The container is ephemeral.** A scheduled routine may start from a
 fresh clone every run: local git state — stashes, dirty trees, local-only

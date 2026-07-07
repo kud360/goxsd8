@@ -71,7 +71,9 @@ Work is planned as GitHub issues (label `ready`). One issue = one focused
 change = one commit. **GitHub issues are the cross-session channel**: post
 oracle groundings, arbiter verdicts, and RESUME hand-off notes as issue
 comments so any later session can reconstruct context from the thread.
-Use the GitHub MCP server; `gh` CLI is the local fallback. Commit format:
+Use whichever GitHub channel this session has — cloud built-in GitHub
+tools, the GitHub MCP server (needs `GITHUB_PAT` when headless), or
+`gh` CLI (see docs/ROUTINES.md). Commit format:
 
 ```
 <area>: <what changed> (#<issue>)
