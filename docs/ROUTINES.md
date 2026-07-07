@@ -9,7 +9,7 @@ interactive `/develop` behave identically.
 
 | Routine | Command | When (UTC, local EST) | Purpose |
 |---|---|---|---|
-| plan | `/plan` | daily 12:00 (local 08:00) | reconcile issues, keep 5–10 `ready` |
+| backlog | `/backlog` | daily 12:00 (local 08:00) | reconcile issues, keep 5–10 `ready` |
 | develop | `/develop` | 18:00, 00:00, 06:00 (local 14:00, 20:00, 02:00) | one issue → one commit |
 | retro | `/retro` | weekly, Sun 13:00 (local Sun 09:00) | process self-improvement |
 | ratchet | `/ratchet` | on demand | conformance maintenance |

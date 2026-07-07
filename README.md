@@ -94,7 +94,7 @@ go test ./conformance -run TestConformance -count=1
 ## How this repo is developed
 
 goxsd8 is built primarily by AI agents — scheduled Claude Code routines
-running the slash commands in `.claude/commands/` (`/develop`, `/plan`,
+running the slash commands in `.claude/commands/` (`/develop`, `/backlog`,
 `/ratchet`, `/retro`, `/story`), with specialized personas in
 `.claude/agents/` (implementer, judge, spec oracle, API warden, planner,
 historian, and two simulated users who test the docs you are reading
