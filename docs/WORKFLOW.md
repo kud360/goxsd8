@@ -15,8 +15,49 @@ server for issue operations; the `gh` CLI is the local fallback.
 fresh clone every run: local git state — stashes, dirty trees, local-only
 branches, `.agent/` scratch — does NOT survive between sessions. The rule
 that follows: **anything not pushed does not exist** (PRINCIPLES 28).
-Work-in-progress is preserved by committing it to a `rescue/…` branch and
-pushing that branch, never by stashing.
+All work therefore happens on pushed WIP branches under a fixed naming
+scheme; the scheme itself is how a cold-start session discovers in-flight
+work.
+
+## The branch scheme (the WIP discovery index)
+
+The remote branch namespace is a machine-readable index. Exactly four
+kinds of branches exist; nothing else is ever pushed:
+
+| Branch | Meaning | Lifecycle |
+|---|---|---|
+| `main` | always green; receives only squash-landed, arbiter-accepted develop work plus the maintenance triggers' own commits (`meta:`/`conformance:` from /plan, /retro, /ratchet) | permanent |
+| `wip/issue-<N>` | THE work branch for issue #N — at most one, its name is stable | created when work starts; deleted when the work lands |
+| `parked/issue-<N>-<YYYYMMDD-HHMMSS>` | an abandoned attempt at #N (second reject, or a resume that wouldn't rebase) | kept for triage; cartographer garbage-collects |
+| `parked/untriaged-<YYYYMMDD-HHMMSS>` | unattributable work found in a dirty local tree | kept for human triage |
+
+Any session can reconstruct the entire in-flight state with one command,
+no issue archaeology required:
+
+```sh
+git ls-remote --heads origin 'refs/heads/wip/*' 'refs/heads/parked/*'
+```
+
+Invariants the scheme encodes:
+
+- **The name is the claim.** `wip/issue-<N>` existing means issue #N has
+  an in-flight attempt; its stable name makes a second concurrent attempt
+  impossible to start by accident. Resume it or leave it alone — never
+  create a second branch for the same issue.
+- **`wip/` is resumable, `parked/` is not.** A `parked/` branch is
+  evidence for re-planning (its issue carries `needs-replan` and the
+  arbiter's findings); a fresh attempt after re-planning starts a new
+  `wip/issue-<N>` from `origin/main`, it never resurrects a parked
+  branch.
+- **Checkpoint = commit + push.** Work is committed on the WIP branch at
+  every step boundary (grounding done, implementation done, each verdict)
+  with message `wip #<N>: <step>`, and pushed immediately. A session that
+  dies loses at most the work since its last checkpoint.
+- **Landing is atomic.** Accept → squash-merge the WIP branch into main
+  as the session's ONE commit (code + log entry), push main, delete the
+  WIP branch. A `wip/issue-<N>` whose issue is closed is a landing that
+  crashed between push and delete — the cartographer verifies the content
+  is in main (`git log`/diff) and deletes it, or parks it if it isn't.
 
 ## The cast
 
@@ -38,92 +79,103 @@ no specialist work itself and never skips the arbiter.
 
 ## The develop loop (`/develop`, the default scheduled trigger)
 
-1. **Rescue** — a dirty tree at session start (possible only in a
-   persistent local checkout; a fresh routine container always starts
-   clean) is committed to a pushed rescue branch and never cleaned
-   (PRINCIPLES 28):
+1. **Survey** — `git fetch origin` and list the WIP index:
+   `git ls-remote --heads origin 'refs/heads/wip/*'`. If the local tree
+   is somehow dirty (persistent local checkout only; a routine container
+   starts clean), push it to `parked/untriaged-<ts>` first and log it —
+   never clean it (PRINCIPLES 28).
+2. **Pick** — **resuming beats starting.** If a `wip/issue-<N>` exists
+   whose issue is open and not `needs-replan`: switch to it, rebase onto
+   `origin/main` if main has moved, read the issue's newest `RESUME:`
+   comment, and continue from its "Next:". (A rebase with non-trivial
+   conflicts → park the branch, comment, pick again.) Otherwise take the
+   highest-priority `ready` issue whose dependencies are closed and
+   create its branch:
 
    ```sh
-   git switch -c rescue/untriaged-<YYYYMMDD-HHMMSS>
-   git add -A && git commit -m "rescue: untriaged work found at session start"
-   git push -u origin HEAD
-   git switch main
+   git switch -c wip/issue-<N> origin/main
+   git push -u origin HEAD        # the push IS the claim
    ```
 
-   Log it and, if the work is attributable to an issue, comment the
-   branch name there.
-2. **Pick** — list `ready` issues; take the highest-priority one whose
-   dependencies are closed. No ready issue → run the cartographer
-   instead and stop.
+   No WIP to resume and no ready issue → run the cartographer instead
+   and stop.
 3. **Ground** — ask the **oracle** for the exact spec clauses and rule
    IDs in scope. Post the answer verbatim as a comment on the issue
    (`GROUNDING:` prefix); also save to `.agent/grounding-issue-<N>.md`
-   as session scratch. The citation goes in the commit.
+   as session scratch. The citation goes in the commit. **Checkpoint.**
 4. **Implement** — **mason** makes the smallest change that closes the
-   issue, per docs/STYLE.md. New/changed public API → **warden** reviews
-   before proceeding (post the verdict on the issue).
+   issue, per docs/STYLE.md, committing on the WIP branch. New/changed
+   public API → **warden** reviews before proceeding (post the verdict
+   on the issue). **Checkpoint.**
 5. **Judge** — **arbiter** runs the gate
    (`go build ./... && go test ./... && go vet ./...` + the lint gate +
-   the conformance run), reviews the diff against STYLE.md including the
-   exported-surface diff (T5), and posts a verdict on the issue:
+   the conformance run), reviews the branch diff against main per
+   STYLE.md including the exported-surface diff (T5), and posts a
+   verdict on the issue. **Checkpoint after each verdict.**
    - *accept* → arbiter runs the ratchet (`GOXSD_RATCHET=1`, upward only).
    - *reject* → one repair round by mason (edit the flagged lines, don't
-     rewrite), then re-judge. Second reject → rescue the work to a pushed
-     branch (see "Checkpoints & resume"), comment findings, relabel
-     `needs-replan`. **Two rejections is the hard cap** (PRINCIPLES 30).
-6. **Record & commit** — **chronicler** appends to
-   `docs/LOG/<year>-<month>.md` FIRST; then one commit carries the code
-   and the log entry together; close or comment the issue; push. The tree
-   is clean after every push — a session that leaves docs/LOG uncommitted
-   has failed (PRINCIPLES 29).
-
-Budget: one issue per session. Nothing works? A pushed rescue branch + a
-good issue comment is a successful session. Never wait for a human; abort
-hanging commands and log the failure.
-
-## Checkpoints & resume (context management)
-
-The orchestrator's transcript is disposable (compaction may summarize it
-at any moment) and so is the container (the next session may be a fresh
-clone). ALL durable session state therefore lives on GitHub, written at
-step boundaries: the grounding comment, verdict comments, pushed rescue
-branches, and pushed commits. Neither compaction nor a recycled container
-may be able to eat anything that can't be rebuilt from those.
-
-Wrapping up early at a checkpoint (time budget hit, or second reject) is
-a first-class outcome, not a failure. To hand off:
-
-1. Commit the work-in-progress to a rescue branch and push it:
+     rewrite), then re-judge. Second reject → **park** (see below),
+     comment findings, relabel `needs-replan`. **Two rejections is the
+     hard cap** (PRINCIPLES 30).
+6. **Land** — **chronicler** appends to `docs/LOG/<year>-<month>.md` on
+   the WIP branch FIRST (PRINCIPLES 29); then land atomically:
 
    ```sh
-   git switch -c rescue/issue-<N>-<YYYYMMDD-HHMMSS>
-   git add -A && git commit -m "rescue #<N>: WIP at <step>"
-   git push -u origin HEAD
-   git switch main
+   git switch main && git pull --ff-only
+   git merge --squash wip/issue-<N>
+   git commit    # the ONE session commit: code + log, CLAUDE.md format
+   git push origin main
+   git push origin --delete wip/issue-<N>
    ```
 
-2. Comment on the issue:
+   Close the issue. Nothing else is ever committed directly to main.
 
-   ```
-   RESUME: <last completed step, e.g. "implementation done, warden passed">
-   Branch: rescue/issue-<N>-<timestamp>
-   Next: <the exact next action, e.g. "arbiter verdict round 2 — prior
-   findings were X, Y">
-   Grounding: see the GROUNDING comment above (re-ask the oracle if absent)
-   ```
+Budget: one issue per session. Nothing works? A checkpointed WIP branch
++ a good RESUME comment is a successful session. Never wait for a human;
+abort hanging commands and log the failure.
 
-3. Chronicler log entry, commit it on main, push.
+## Checkpoints, hand-off, and parking
 
-To resume (next session, step 2 of the loop): read the newest RESUME
-comment, `git fetch origin`, and `git switch` to the named rescue branch.
-If main has moved since, rebase the branch onto main first
-(`git rebase origin/main`); on conflicts that don't resolve trivially,
-comment that the resume failed and start the issue fresh — the branch
-stays on the remote for triage. Continue from "Next:" on the branch; when
-the arbiter accepts, land it as the session's ONE commit on main
-(`git switch main && git merge --squash rescue/issue-<N>-<ts>`, then the
-normal commit with the log entry), push main, and delete the remote
-rescue branch (`git push origin --delete rescue/issue-<N>-<ts>`).
+**Checkpoint** (at every step boundary, and before ending any session):
+
+```sh
+git add -A && git commit -m "wip #<N>: <step completed>"
+git push origin wip/issue-<N>
+```
+
+plus a `RESUME:` comment on the issue whenever the next action isn't
+obvious from the branch alone:
+
+```
+RESUME: <last completed step, e.g. "implementation done, warden passed">
+Next: <the exact next action, e.g. "arbiter verdict round 2 — prior
+findings were X, Y">
+Grounding: see the GROUNDING comment above (re-ask the oracle if absent)
+```
+
+The branch carries the CONTENT; the RESUME comment carries the INTENT.
+Discovery never depends on the comment — `wip/issue-<N>` is found by
+listing the namespace — but a good "Next:" saves the resuming session
+from re-deriving where things stood.
+
+The orchestrator's transcript is disposable (compaction may summarize it
+at any moment) and so is the container. ALL durable state lives on
+GitHub: the issue thread, the pushed WIP branch, and main. Neither
+compaction nor a recycled container may be able to eat anything that
+can't be rebuilt from those. Wrapping up early at a checkpoint (time
+budget hit, second reject) is a first-class outcome, not a failure.
+
+**Park** (second reject, or a resume whose rebase won't resolve):
+
+```sh
+git push origin wip/issue-<N>:refs/heads/parked/issue-<N>-<YYYYMMDD-HHMMSS>
+git push origin --delete wip/issue-<N>
+```
+
+Label the issue `needs-replan` and comment the parked branch name plus
+the findings that killed the attempt. Parked branches are re-planning
+evidence, not resumable work: after the cartographer re-plans, a fresh
+attempt starts a new `wip/issue-<N>` from `origin/main`.
 
 ## Other triggers
 
@@ -132,7 +184,12 @@ rescue branch (`git push origin --delete rescue/issue-<N>-<ts>`).
 - **`/plan`** — cartographer: reconcile GitHub issues with reality (close
   stale, split oversized, order by dependency, keep 5–10 `ready`);
   consult **libuser**/**cliuser** when planning API- or CLI-facing
-  milestones.
+  milestones. Also **garbage-collect the branch namespace**: a
+  `wip/issue-<N>` whose issue is closed is verified landed and deleted
+  (parked if it isn't); a `wip/` branch with no pushes for several days
+  and no RESUME comment is parked; `parked/` branches whose issues were
+  re-planned and re-shipped are deleted, the rest listed for human
+  triage.
 - **`/story`** — cartographer interviews libuser and cliuser (feeding
   them only the current README and `go doc` output) to produce user
   stories with acceptance criteria, filed as issues.

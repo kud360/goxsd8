@@ -12,8 +12,17 @@ obsolete or duplicate freely.
 ## Procedure (one /plan run)
 
 1. **Survey reality**: `git log` since the last plan, recent docs/LOG
-   entries, the full issue list, current ratchet lane files, and
+   entries, the full issue list, the WIP index
+   (`git ls-remote --heads origin 'refs/heads/wip/*'
+   'refs/heads/parked/*'`), current ratchet lane files, and
    `grep -rn "GAP(" --include=*.go` for fail-open debt.
+1b. **Garbage-collect branches** (docs/WORKFLOW.md branch scheme): a
+   `wip/issue-<N>` whose issue is CLOSED is a landing that crashed
+   before cleanup — verify its content is in main, then delete it (park
+   it if it isn't). A `wip/` branch stale for several days with no
+   RESUME comment → park it and label the issue `needs-replan`. A
+   `parked/` branch whose issue has since shipped → delete; the rest →
+   list for human triage in your plan summary.
 2. **Reconcile**: close stale/obsolete issues, split anything too big
    for one session, merge duplicates, file `kind/gap` issues for
    untracked GAP sites.

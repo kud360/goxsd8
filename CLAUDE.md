@@ -80,13 +80,18 @@ Spec: <rule ids touched>
 Ratchet: <lane movement, or "unchanged">
 ```
 
-Append a dated entry to `docs/LOG/<year>-<month>.md` BEFORE the final
-commit so the log rides in it. Sessions run in ephemeral containers:
-**anything not pushed does not exist** — never stash; rescue
-work-in-progress by committing it to a `rescue/issue-<N>-<ts>` branch and
-pushing it, with an issue comment naming the branch. Never destroy a
-dirty tree. Two arbiter rejections is the hard cap; then rescue-branch,
-comment, relabel `needs-replan`, stop.
+Append a dated entry to `docs/LOG/<year>-<month>.md` BEFORE landing so
+the log rides in the session commit. Sessions run in ephemeral
+containers: **anything not pushed does not exist**. All work happens on
+pushed WIP branches under the fixed scheme (docs/WORKFLOW.md is
+normative): `wip/issue-<N>` is THE branch for issue #N (stable name =
+the claim; discover in-flight work with
+`git ls-remote --heads origin 'refs/heads/wip/*'`); checkpoint
+(commit + push) at every step boundary; land by squash-merging to main
+as one commit and deleting the branch; abandoned attempts are parked as
+`parked/issue-<N>-<ts>`, never resumed. Never stash, never destroy a
+dirty tree. Two arbiter rejections is the hard cap; then park, comment,
+relabel `needs-replan`, stop.
 
 ## Personas
 

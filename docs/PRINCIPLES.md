@@ -159,24 +159,30 @@ codified as rules in docs/STYLE.md.
 
 ## Process
 
-28. **Anything not pushed does not exist — rescue by branch, never by
-    stash.** Sessions run in ephemeral containers: the next run may be a
+28. **Anything not pushed does not exist — and the branch NAME is the
+    index.** Sessions run in ephemeral containers: the next run may be a
     fresh clone, so stashes, dirty trees, and local-only branches are
-    already lost the moment the session ends. Work-in-progress worth
-    keeping is committed to a `rescue/…` branch and PUSHED; the issue
-    comment names the branch. And never destroy uncommitted work:
-    `git clean`, `git restore .`, `git checkout -- <file>`, and stashing
-    of any kind are forbidden — a dirty tree found at session start is
-    rescued to a pushed branch and logged for triage.
+    already lost the moment the session ends. All work lives on pushed
+    branches under a fixed scheme (`wip/issue-<N>` in-flight and
+    resumable, one per issue, the name itself the claim;
+    `parked/…-<ts>` abandoned, triage-only) so any cold-start agent
+    reconstructs the in-flight state from one
+    `git ls-remote --heads origin 'refs/heads/wip/*'` — discovery must
+    never depend on reading comments or transcripts. Checkpoint
+    (commit + push) at every step boundary. And never destroy
+    uncommitted work: `git clean`, `git restore .`,
+    `git checkout -- <file>`, and stashing of any kind are forbidden —
+    a dirty local tree is pushed to `parked/untriaged-<ts>` and logged.
 
 29. **The session log rides in the session commit.** A log entry written
     after the commit is left uncommitted and dies with the next session's
     cleanup. Chronicler writes first; then one commit carries code + log.
 
 30. **Two rejections is the convergence horizon.** If the arbiter rejects
-    the same change twice, a third attempt will not converge: rescue the
-    work to a pushed branch, comment findings on the issue, relabel
-    `needs-replan`, stop.
+    the same change twice, a third attempt will not converge: park the
+    WIP branch (`parked/issue-<N>-<ts>`), comment findings on the issue,
+    relabel `needs-replan`, stop. A fresh attempt after re-planning
+    starts from main, never from the parked branch.
 
 31. **Documentation is the tested product surface.** The README and the
     package godoc are what the user personas (libuser, cliuser) work from

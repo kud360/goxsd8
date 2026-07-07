@@ -46,14 +46,18 @@ go tool fetchspecs                                 # (re)download pristine spec 
 - **Assume every routine run starts in a fresh container with a fresh
   clone.** Local git state — stashes, dirty trees, local-only branches,
   `.agent/` scratch — does not survive between runs. Anything not
-  pushed does not exist (PRINCIPLES 28); work-in-progress is preserved
-  only as pushed `rescue/…` branches.
-- A failed, interrupted, or timed-out routine run is recoverable by
-  design: durable state lives on the GitHub issue thread
-  (grounding/verdict/RESUME comments), in pushed rescue branches, and
-  in pushed commits — see docs/WORKFLOW.md "Checkpoints & resume". A
-  run that dies mid-session loses at most the work since its last
-  checkpoint push.
-- If two routines fire concurrently, the second will find the issue
-  claimed by fresh comments; it should pick the next `ready` issue or
-  stop. Keep develop slots ≥ 6h apart to make this rare.
+  pushed does not exist (PRINCIPLES 28).
+- **In-flight work is discovered from the branch namespace**, not from
+  memory or comments: `git ls-remote --heads origin 'refs/heads/wip/*'`
+  lists every resumable attempt (`wip/issue-<N>`, one per issue); the
+  develop loop resumes those before starting new issues. See the branch
+  scheme in docs/WORKFLOW.md (normative).
+- A failed, interrupted, or timed-out run is recoverable by design:
+  durable state = the issue thread (grounding/verdict/RESUME comments) +
+  the checkpointed WIP branch + main. A run that dies mid-session loses
+  at most the work since its last checkpoint push; the next run's
+  survey step finds the branch and continues.
+- If two routines fire concurrently, the WIP branch is the claim: the
+  second run sees `wip/issue-<N>` freshly pushed and picks a different
+  `ready` issue (or stops). Keep develop slots ≥ 6h apart to make even
+  that rare.
