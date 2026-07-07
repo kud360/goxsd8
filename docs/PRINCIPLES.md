@@ -159,18 +159,24 @@ codified as rules in docs/STYLE.md.
 
 ## Process
 
-28. **Never destroy a dirty worktree; rescue it.** `git clean`,
-    `git restore .`, `git checkout -- <file>`, `git stash drop` are
-    forbidden. Uncommitted work at session start is stashed as
-    `rescue <timestamp>` and logged for triage.
+28. **Anything not pushed does not exist — rescue by branch, never by
+    stash.** Sessions run in ephemeral containers: the next run may be a
+    fresh clone, so stashes, dirty trees, and local-only branches are
+    already lost the moment the session ends. Work-in-progress worth
+    keeping is committed to a `rescue/…` branch and PUSHED; the issue
+    comment names the branch. And never destroy uncommitted work:
+    `git clean`, `git restore .`, `git checkout -- <file>`, and stashing
+    of any kind are forbidden — a dirty tree found at session start is
+    rescued to a pushed branch and logged for triage.
 
 29. **The session log rides in the session commit.** A log entry written
     after the commit is left uncommitted and dies with the next session's
     cleanup. Chronicler writes first; then one commit carries code + log.
 
 30. **Two rejections is the convergence horizon.** If the arbiter rejects
-    the same change twice, a third attempt will not converge: stash,
-    comment findings on the issue, relabel `needs-replan`, stop.
+    the same change twice, a third attempt will not converge: rescue the
+    work to a pushed branch, comment findings on the issue, relabel
+    `needs-replan`, stop.
 
 31. **Documentation is the tested product surface.** The README and the
     package godoc are what the user personas (libuser, cliuser) work from

@@ -81,9 +81,12 @@ Ratchet: <lane movement, or "unchanged">
 ```
 
 Append a dated entry to `docs/LOG/<year>-<month>.md` BEFORE the final
-commit so the log rides in it. Never destroy a dirty tree — rescue with
-`git stash push -u -m "rescue <timestamp>"`. Two arbiter rejections is
-the hard cap; then stash, comment, relabel `needs-replan`, stop.
+commit so the log rides in it. Sessions run in ephemeral containers:
+**anything not pushed does not exist** — never stash; rescue
+work-in-progress by committing it to a `rescue/issue-<N>-<ts>` branch and
+pushing it, with an issue comment naming the branch. Never destroy a
+dirty tree. Two arbiter rejections is the hard cap; then rescue-branch,
+comment, relabel `needs-replan`, stop.
 
 ## Personas
 

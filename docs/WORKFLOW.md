@@ -11,6 +11,13 @@ verdicts, hand-off notes — all as issue comments) **and docs/LOG/**
 thread or in the log, never only in a transcript. Use the GitHub MCP
 server for issue operations; the `gh` CLI is the local fallback.
 
+**The container is ephemeral.** A scheduled routine may start from a
+fresh clone every run: local git state — stashes, dirty trees, local-only
+branches, `.agent/` scratch — does NOT survive between sessions. The rule
+that follows: **anything not pushed does not exist** (PRINCIPLES 28).
+Work-in-progress is preserved by committing it to a `rescue/…` branch and
+pushing that branch, never by stashing.
+
 ## The cast
 
 | Agent | File | Model | Role |
@@ -31,9 +38,20 @@ no specialist work itself and never skips the arbiter.
 
 ## The develop loop (`/develop`, the default scheduled trigger)
 
-1. **Rescue** — a dirty tree at session start is stashed
-   (`git stash push -u -m "rescue <timestamp>"`) and logged; never
-   cleaned (PRINCIPLES 28).
+1. **Rescue** — a dirty tree at session start (possible only in a
+   persistent local checkout; a fresh routine container always starts
+   clean) is committed to a pushed rescue branch and never cleaned
+   (PRINCIPLES 28):
+
+   ```sh
+   git switch -c rescue/untriaged-<YYYYMMDD-HHMMSS>
+   git add -A && git commit -m "rescue: untriaged work found at session start"
+   git push -u origin HEAD
+   git switch main
+   ```
+
+   Log it and, if the work is attributable to an issue, comment the
+   branch name there.
 2. **Pick** — list `ready` issues; take the highest-priority one whose
    dependencies are closed. No ready issue → run the cartographer
    instead and stop.
@@ -50,50 +68,62 @@ no specialist work itself and never skips the arbiter.
    exported-surface diff (T5), and posts a verdict on the issue:
    - *accept* → arbiter runs the ratchet (`GOXSD_RATCHET=1`, upward only).
    - *reject* → one repair round by mason (edit the flagged lines, don't
-     rewrite), then re-judge. Second reject → stash the work, comment
-     findings, relabel `needs-replan`. **Two rejections is the hard cap**
-     (PRINCIPLES 30).
+     rewrite), then re-judge. Second reject → rescue the work to a pushed
+     branch (see "Checkpoints & resume"), comment findings, relabel
+     `needs-replan`. **Two rejections is the hard cap** (PRINCIPLES 30).
 6. **Record & commit** — **chronicler** appends to
    `docs/LOG/<year>-<month>.md` FIRST; then one commit carries the code
    and the log entry together; close or comment the issue; push. The tree
    is clean after every push — a session that leaves docs/LOG uncommitted
    has failed (PRINCIPLES 29).
 
-Budget: one issue per session. Nothing works? A rescue stash + a good
-issue comment is a successful session. Never wait for a human; abort
+Budget: one issue per session. Nothing works? A pushed rescue branch + a
+good issue comment is a successful session. Never wait for a human; abort
 hanging commands and log the failure.
 
 ## Checkpoints & resume (context management)
 
-The orchestrator's transcript is disposable; compaction may summarize it
-at any moment. ALL durable session state lives on the issue thread and on
-disk, written at step boundaries: the grounding comment, verdict comments,
-rescue stashes, and commits. Compaction must never be able to eat anything
-that can't be rebuilt from those.
+The orchestrator's transcript is disposable (compaction may summarize it
+at any moment) and so is the container (the next session may be a fresh
+clone). ALL durable session state therefore lives on GitHub, written at
+step boundaries: the grounding comment, verdict comments, pushed rescue
+branches, and pushed commits. Neither compaction nor a recycled container
+may be able to eat anything that can't be rebuilt from those.
 
 Wrapping up early at a checkpoint (time budget hit, or second reject) is
 a first-class outcome, not a failure. To hand off:
 
-1. `git stash push -u -m "rescue #<N> <YYYYMMDD-HHMMSS>"`
+1. Commit the work-in-progress to a rescue branch and push it:
+
+   ```sh
+   git switch -c rescue/issue-<N>-<YYYYMMDD-HHMMSS>
+   git add -A && git commit -m "rescue #<N>: WIP at <step>"
+   git push -u origin HEAD
+   git switch main
+   ```
+
 2. Comment on the issue:
 
    ```
    RESUME: <last completed step, e.g. "implementation done, warden passed">
-   Stash: rescue #<N> <timestamp>
+   Branch: rescue/issue-<N>-<timestamp>
    Next: <the exact next action, e.g. "arbiter verdict round 2 — prior
    findings were X, Y">
    Grounding: see the GROUNDING comment above (re-ask the oracle if absent)
    ```
 
-3. Chronicler log entry, commit it, push.
+3. Chronicler log entry, commit it on main, push.
 
-To resume (next session, step 2 of the loop): find the stash named in the
-newest RESUME comment via `git stash list`, then `git stash apply` (NOT
-pop). If it applies cleanly, `git stash drop` that entry and continue
-from "Next:". If it conflicts, undo the failed apply (`git checkout -- .`
-is permitted here ONLY because the content is still safely held in the
-stash), comment that the resume failed, and start the issue fresh — the
-stash stays for human triage.
+To resume (next session, step 2 of the loop): read the newest RESUME
+comment, `git fetch origin`, and `git switch` to the named rescue branch.
+If main has moved since, rebase the branch onto main first
+(`git rebase origin/main`); on conflicts that don't resolve trivially,
+comment that the resume failed and start the issue fresh — the branch
+stays on the remote for triage. Continue from "Next:" on the branch; when
+the arbiter accepts, land it as the session's ONE commit on main
+(`git switch main && git merge --squash rescue/issue-<N>-<ts>`, then the
+normal commit with the log entry), push main, and delete the remote
+rescue branch (`git push origin --delete rescue/issue-<N>-<ts>`).
 
 ## Other triggers
 
