@@ -39,13 +39,26 @@ obsolete or duplicate freely.
 ## Issue body template (mandatory — an agent must be able to start from
 the body alone)
 
+Fill every `##` section; write "n/a" or "none" rather than dropping one.
+
 ```
-Goal: <one sentence, observable outcome>
-Spec: <rule IDs / section anchors in docs/specs/md, or "n/a">
-Acceptance: <which tests/conformance cases prove it; exported-surface
-             expectations if API changes>
-Notes: <design constraints, pointers to PRINCIPLES items, prior art>
-Depends on: #N, #M (or "none")
+## Goal
+<one sentence, observable outcome>
+
+## Spec
+<rule IDs / docs/specs/md anchors the change implements — or "n/a">
+
+## Acceptance
+<tests / conformance cases that prove it done — the ratchet lane it moves>
+
+## Surface
+<exported-identifier additions or changes — or "none">
+
+## Notes
+<design constraints, PRINCIPLES pointers, prior art>
+
+## Depends on
+<#N, #M — or "none">
 ```
 
 Labels: `ready`/`blocked`/`needs-replan`/`epic`; `area/<pkg>`;
