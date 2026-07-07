@@ -91,10 +91,11 @@ the claim, tip time = the lease: pushed within 2h → live, off-limits;
 older → resumable; rejected push = lost race, never force-push;
 discover in-flight work with
 `git ls-remote --heads origin 'refs/heads/wip/*'`); checkpoint
-(commit + push) at every step boundary; land by squash-merging to main
-as one commit and deleting the branch; abandoned attempts are parked as
-`parked/issue-<N>-<ts>`, never resumed. Never stash, never destroy a
-dirty tree. Two arbiter rejections is the hard cap; then park, comment,
+(commit + push) at every step boundary; land by opening a PR
+(`Closes #<N>` in the body) and squash-merging it via the GitHub Merge
+API as one commit (GitHub auto-deletes the branch); abandoned attempts
+are retired in place under `needs-replan`, never resumed. Never stash,
+never destroy a dirty tree. Two arbiter rejections is the hard cap; then park, comment,
 relabel `needs-replan`, stop.
 
 ## Personas

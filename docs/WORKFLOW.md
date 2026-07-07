@@ -23,18 +23,18 @@ work.
 
 ## The branch scheme (the WIP discovery index)
 
-The remote branch namespace is a machine-readable index. Exactly four
+The remote branch namespace is a machine-readable index. Exactly three
 kinds of branches exist; nothing else is ever pushed:
 
 | Branch | Meaning | Lifecycle |
 |---|---|---|
 | `main` | always green; receives only squash-landed, arbiter-accepted develop work plus the maintenance triggers' own commits (`meta:`/`conformance:` from /plan, /retro, /ratchet) | permanent |
-| `wip/issue-<N>` | THE work branch for issue #N — at most one, its name is stable | created when work starts; deleted when the work lands |
-| `parked/issue-<N>-<YYYYMMDD-HHMMSS>` | an abandoned attempt at #N (second reject, or a resume that wouldn't rebase) | kept for triage; cartographer garbage-collects |
+| `wip/issue-<N>` | THE work branch for issue #N — at most one, its name is stable | created when work starts; auto-deleted by GitHub when its PR squash-merges; retired in place if the attempt is abandoned |
 | `parked/untriaged-<YYYYMMDD-HHMMSS>` | unattributable work found in a dirty local tree | kept for human triage |
 
-Any session can reconstruct the entire in-flight state with one command,
-no issue archaeology required:
+Sessions only ever CREATE refs; the one deletion in the system is
+GitHub's auto-delete on merge. Any session can reconstruct the entire
+in-flight state with one command, no issue archaeology required:
 
 ```sh
 git ls-remote --heads origin 'refs/heads/wip/*' 'refs/heads/parked/*'
@@ -62,22 +62,27 @@ Invariants the scheme encodes:
   and pick a different issue. Force-pushing any `wip/*` or `parked/*`
   ref is forbidden; it is the one way sessions could actually stomp
   each other.
-- **`wip/` is resumable, `parked/` is not.** A `parked/` branch is
-  evidence for re-planning (its issue carries `needs-replan` and the
-  arbiter's findings); a fresh attempt after re-planning starts a new
-  `wip/issue-<N>` from `origin/main`, it never resurrects a parked
-  branch.
+- **A `wip/` branch is work only while its issue is open and not
+  `needs-replan`.** Otherwise it is retired: landed branches vanish on
+  merge, abandoned ones stay put as re-planning evidence — never
+  resumed, never deleted by a session. A retired name is never
+  contended, because an issue is never re-attempted under its own
+  number: re-planning supersedes it with a new issue, and the fresh
+  attempt starts as `wip/issue-<M>` from `origin/main`.
 - **Checkpoint = commit + push.** Work is committed on the WIP branch at
   every step boundary (grounding done, implementation done, each verdict)
   with message `wip #<N>: <step>`, and pushed immediately. A session that
   dies loses at most the work since its last checkpoint — and its lease
   expires on its own, so the next session recovers the branch without
   human help.
-- **Landing is atomic.** Accept → squash-merge the WIP branch into main
-  as the session's ONE commit (code + log entry), push main, delete the
-  WIP branch. A `wip/issue-<N>` whose issue is closed is a landing that
-  crashed between push and delete — the cartographer verifies the content
-  is in main (`git log`/diff) and deletes it, or parks it if it isn't.
+- **Landing is atomic.** Accept → open a PR for the WIP branch and
+  squash-merge it via the GitHub Merge API: the squash is the session's
+  ONE commit (code + log entry), `Closes #<N>` in the PR body closes
+  the issue, and GitHub auto-deletes the head branch (repo setting
+  "Automatically delete head branches" — keep it ON). A `wip/issue-<N>`
+  whose issue is closed is retired — survey skips it; the cartographer
+  verifies its content is in main (`git log`/diff) and supersedes the
+  issue if it isn't.
 
 ## The cast
 
@@ -109,9 +114,10 @@ no specialist work itself and never skips the arbiter.
    - **LIVE** branches (and their issues) are off-limits this session.
    - **Resuming beats starting**: if any EXPIRED `wip/issue-<N>` exists
      whose issue is open and not `needs-replan`, take the oldest —
-     switch to it, rebase onto `origin/main` if main has moved, read
+     switch to it, merge `origin/main` in if main has moved (never
+     rebase — a rewritten branch cannot be pushed without force), read
      the issue's newest `RESUME:` comment, and continue from its
-     "Next:". (A rebase with non-trivial conflicts → park the branch,
+     "Next:". (A merge with non-trivial conflicts → park the branch,
      comment, pick again.)
    - Otherwise take the highest-priority `ready` issue with closed
      dependencies and no live branch, and claim it:
@@ -144,17 +150,21 @@ no specialist work itself and never skips the arbiter.
      comment findings, relabel `needs-replan`. **Two rejections is the
      hard cap** (PRINCIPLES 30).
 6. **Land** — **chronicler** appends to `docs/LOG/<year>-<month>.md` on
-   the WIP branch FIRST (PRINCIPLES 29); then land atomically:
+   the WIP branch FIRST (PRINCIPLES 29) and checkpoints; then land
+   through GitHub, never a local merge:
 
-   ```sh
-   git switch main && git pull --ff-only
-   git merge --squash wip/issue-<N>
-   git commit    # the ONE session commit: code + log, CLAUDE.md format
-   git push origin main
-   git push origin --delete wip/issue-<N>
-   ```
+   1. Open a PR from `wip/issue-<N>` to `main`; the body carries
+      `Closes #<N>` plus a pointer to the arbiter's accept verdict.
+   2. Squash-merge it via the Merge API (MCP `merge_pull_request` with
+      `merge_method: "squash"`, or the platform's built-in PR tools),
+      supplying the CLAUDE.md commit format as the squash title
+      (`<area>: <what changed> (#<N>)`) and body (`Spec:`/`Ratchet:`
+      lines).
+   3. GitHub finishes server-side: main gets the ONE session commit,
+      `Closes #<N>` closes the issue, and the head branch is
+      auto-deleted.
 
-   Close the issue. Nothing else is ever committed directly to main.
+   Nothing else is ever committed directly to main.
 
 Budget: one issue per session. Nothing works? A checkpointed WIP branch
 + a good RESUME comment is a successful session. Never wait for a human;
@@ -191,17 +201,14 @@ compaction nor a recycled container may be able to eat anything that
 can't be rebuilt from those. Wrapping up early at a checkpoint (time
 budget hit, second reject) is a first-class outcome, not a failure.
 
-**Park** (second reject, or a resume whose rebase won't resolve):
-
-```sh
-git push origin wip/issue-<N>:refs/heads/parked/issue-<N>-<YYYYMMDD-HHMMSS>
-git push origin --delete wip/issue-<N>
-```
-
-Label the issue `needs-replan` and comment the parked branch name plus
-the findings that killed the attempt. Parked branches are re-planning
-evidence, not resumable work: after the cartographer re-plans, a fresh
-attempt starts a new `wip/issue-<N>` from `origin/main`.
+**Park** (second reject, or a resume whose merge won't resolve):
+checkpoint the branch one final time, label the issue `needs-replan`,
+and comment the findings that killed the attempt. Nothing is renamed or
+deleted — the `needs-replan` label alone retires the branch in place,
+where it stays as re-planning evidence, not resumable work. After
+re-planning, the cartographer closes the issue as superseded and files
+a replacement; the fresh attempt starts as `wip/issue-<M>` under the
+new number, from `origin/main`.
 
 ## Other triggers
 
@@ -210,12 +217,13 @@ attempt starts a new `wip/issue-<N>` from `origin/main`.
 - **`/plan`** — cartographer: reconcile GitHub issues with reality (close
   stale, split oversized, order by dependency, keep 5–10 `ready`);
   consult **libuser**/**cliuser** when planning API- or CLI-facing
-  milestones. Also **garbage-collect the branch namespace**: a
-  `wip/issue-<N>` whose issue is closed is verified landed and deleted
-  (parked if it isn't); a `wip/` branch with no pushes for several days
-  and no RESUME comment is parked; `parked/` branches whose issues were
-  re-planned and re-shipped are deleted, the rest listed for human
-  triage.
+  milestones. Also **reconcile the branch namespace**: classify every
+  `wip/*` branch by its issue's state (live / resumable / retired); a
+  `wip/` branch stale for several days with no RESUME comment gets its
+  issue flagged `needs-replan`; a closed issue's leftover branch is
+  verified landed (superseded if it isn't); retired branches and
+  `parked/untriaged-*` are listed in the plan summary for human triage
+  — never deleted by an agent.
 - **`/story`** — cartographer interviews libuser and cliuser (feeding
   them only the current README and `go doc` output) to produce user
   stories with acceptance criteria, filed as issues.

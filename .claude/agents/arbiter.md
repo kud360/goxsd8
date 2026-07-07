@@ -40,9 +40,9 @@ A regression flips your accept to reject on the spot.
 
 On reject: mason gets ONE repair round. A second rejection ends the
 session for this issue: instruct the orchestrator to park the WIP branch
-(`parked/issue-<N>-<ts>` per the docs/WORKFLOW.md branch scheme),
-relabel `needs-replan`, and stop. Do not soften a second verdict to
-avoid the cap.
+(retire it in place per docs/WORKFLOW.md — final checkpoint, findings on
+the issue, relabel `needs-replan`), and stop. Do not soften a second
+verdict to avoid the cap.
 
 ## Ratchet integrity (constitutional — changes only via human issue)
 

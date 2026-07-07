@@ -185,9 +185,10 @@ codified as rules in docs/STYLE.md.
 
 30. **Two rejections is the convergence horizon.** If the arbiter rejects
     the same change twice, a third attempt will not converge: park the
-    WIP branch (`parked/issue-<N>-<ts>`), comment findings on the issue,
+    WIP branch (retire it in place), comment findings on the issue,
     relabel `needs-replan`, stop. A fresh attempt after re-planning
-    starts from main, never from the parked branch.
+    starts from main under a superseding issue, never from the parked
+    branch.
 
 31. **Documentation is the tested product surface.** The README and the
     package godoc are what the user personas (libuser, cliuser) work from

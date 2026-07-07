@@ -21,9 +21,10 @@ WIP branch) at every step boundary.
    EXPIRED — resumable.
    - **Resuming beats starting**: oldest EXPIRED `wip/issue-<N>` whose
      issue is open and not `needs-replan` → `git switch wip/issue-<N>`,
-     rebase onto `origin/main` if main moved (non-trivial conflicts →
-     park it, comment, pick again), read the issue's newest `RESUME:`
-     comment, continue from its "Next:" at the matching step below.
+     merge `origin/main` in if main moved — never rebase (non-trivial
+     conflicts → park it, comment, pick again), read the issue's newest
+     `RESUME:` comment, continue from its "Next:" at the matching step
+     below.
    - Otherwise take the highest-priority `ready` issue with closed
      dependencies and no live branch:
      `git switch -c wip/issue-<N> origin/main` and
@@ -47,31 +48,18 @@ WIP branch) at every step boundary.
 5. **Judge** — delegate to **arbiter** (it reviews the branch diff
    against main). CHECKPOINT after each verdict. On reject: ONE repair
    round by mason (edit flagged lines only), re-judge. On a second
-   reject: PARK —
-
-   ```sh
-   git push origin wip/issue-<N>:refs/heads/parked/issue-<N>-<ts>
-   git push origin --delete wip/issue-<N>
-   ```
-
-   — post findings + the parked branch name on the issue, relabel
-   `needs-replan`, then go to step 6's log entry (committed on main)
-   and stop. Never solicit a third round.
+   reject: PARK — checkpoint the branch one final time, post the
+   findings on the issue, relabel `needs-replan` (that alone retires
+   the branch; nothing is renamed or deleted), then go to step 6's log
+   entry (committed on main) and stop. Never solicit a third round.
 
 6. **Land** — delegate the log entry to **chronicler** (docs/LOG on the
-   WIP branch, BEFORE landing). Then atomically:
-
-   ```sh
-   git switch main && git pull --ff-only
-   git merge --squash wip/issue-<N>
-   git commit    # ONE commit: code + log, CLAUDE.md format
-   git push origin main
-   git push origin --delete wip/issue-<N>
-   ```
-
-   Close the issue. If anything fails between the main push and the
-   branch delete, the leftover branch is safe — the cartographer's GC
-   reconciles it.
+   WIP branch, BEFORE landing), checkpoint. Then land through GitHub,
+   never a local merge: open a PR from `wip/issue-<N>` to `main`
+   (`Closes #<N>` in the body) and squash-merge it via the Merge API
+   with the CLAUDE.md commit format as squash title and body. GitHub
+   lands the ONE session commit, closes the issue, and auto-deletes the
+   branch.
 
 If the session must end early at any point: CHECKPOINT + a `RESUME:` /
 "Next:" comment on the issue is a successful hand-off. Budget: one issue
