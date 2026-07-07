@@ -23,25 +23,37 @@
 // and is byte-identical on regeneration. No row is ever hand-typed
 // (PRINCIPLES 26).
 //
-// # Only primitives carry code
+// # Mapping resolution: nearest mapped ancestor
 //
-// Derived builtins are restrictions of a primitive plus facets from the
-// table; they inherit the primitive's operations. A backend therefore
-// implements mappings for the ~25 primitives only (several share a value
+// Derived builtins are DATA BY DEFAULT — restrictions of a primitive
+// plus facets from the table, inheriting operations — so a minimal
+// backend implements only the ~25 primitives (several share a value
 // space — the Gregorian types ride one temporal model), and every list
 // builtin (NMTOKENS, IDREFS, ENTITIES) is handled generically by the
 // engine via its item type.
+//
+// A backend MAY additionally map derived builtins to give them their
+// own, typically narrower, representation. Each builtin's governing
+// mapping is resolved by walking UP the base chain to the nearest type
+// the backend maps; the primitives are the mandatory floor of that
+// walk. A derived mapping governs only the value the application
+// receives — inherited facet checks (enumeration, bounds) and
+// restriction-validity checks still run in the declaring/base type's
+// wider space per the widest-space rule in package value. A lexical
+// that passes those checks but cannot be represented by the narrow
+// derived mapping is a mapping error on that type, never a false
+// validity verdict.
 //
 // # Seeding
 //
 //	func Seed(b value.Backend) ([]*xsd.SimpleType, error)
 //
 // Seed walks Types in order, builds each builtin type definition, and
-// attaches b's Mapping at the primitives. It errors if b lacks a mapping
-// for a primitive the table needs (compose with value.Override to fill
-// gaps from another backend). The parser seeds its symbol table from the
-// result; xs:anyType and xs:anySimpleType are structural and always
-// present.
+// attaches each type's governing mapping by the nearest-mapped-ancestor
+// resolution above. It errors if b lacks a mapping for a primitive
+// (compose with value.Override to fill gaps from another backend). The
+// parser seeds its symbol table from the result; xs:anyType and
+// xs:anySimpleType are structural and always present.
 //
 // precisionDecimal is registered always-on: its applicable facet set
 // (totalDigits, maxScale, minScale — NOT fractionDigits or the length

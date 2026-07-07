@@ -73,12 +73,25 @@ represents it**:
   from the hfn definitions and per-type property tables in the local
   Datatypes spec by a deterministic generator; byte-identical on
   regeneration; contains no function values.
-- **Only primitives carry code.** Derived builtins (`unsignedShort`,
-  `token`, …) are pure data — restrictions of a primitive plus facets from
-  the table; they inherit the primitive's operations. A backend implements
-  ~25 primitive mappings, and several of those share a value space (the
-  Gregorian types ride the temporal model).
-- **`value.Backend`** answers `Mapping(primitive)` → a
+- **Primitives are the mandatory floor; derived mappings are optional.**
+  Derived builtins (`unsignedShort`, `token`, …) are data by default —
+  restrictions of a primitive plus facets from the table, inheriting
+  operations — so a minimal backend implements ~25 primitive mappings
+  (several share a value space; the Gregorian types ride the temporal
+  model). A backend may ALSO map derived builtins to give them narrower
+  representations; each type's governing mapping resolves by walking up
+  the base chain to the nearest mapped ancestor.
+- **The widest-space rule.** A derived type's own mapping governs only
+  the value the application receives. Inherited facet checks —
+  enumeration and bounds declared anywhere on the derivation chain — are
+  compared in the declaring type's space via ITS governing (wider)
+  mapping, and schema-build restriction checks always run in the base's
+  space: a narrower representation must never distort base-chain
+  semantics (overflow, collapsed precision, different ordering). A
+  lexical that passes the wide checks but doesn't fit the narrow
+  representation is a mapping error on that type, never a false validity
+  verdict.
+- **`value.Backend`** answers `Mapping(typ)` → a
   `value.Mapping{Parse(lexical, ctx), Canonical(v)}` pair. `Parse` takes a
   context because QName/NOTATION need in-scope namespace bindings.
   Comparison, length, digits, scale, identity are **not** backend methods —

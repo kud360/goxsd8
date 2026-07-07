@@ -35,8 +35,11 @@
 //
 // # Backends
 //
-// A backend supplies the lexical↔value mappings for the builtin
-// PRIMITIVES only — derived builtins are data (see package builtin):
+// A backend supplies lexical↔value mappings for builtin types. It MUST
+// cover the primitives (directly or via composition); it MAY also map
+// derived builtins to give them their own, typically narrower,
+// representation — derived types without their own mapping inherit the
+// nearest mapped ancestor's (see package builtin):
 //
 //	type Context interface{ LookupNamespace(prefix string) (string, bool) }
 //	    QName and NOTATION need in-scope namespace bindings at parse time
@@ -47,12 +50,34 @@
 //	    Canonical func(v Value) (string, error)
 //	}
 //
-//	type Backend interface{ Mapping(primitive xsd.QName) (Mapping, bool) }
+//	type Backend interface{ Mapping(typ xsd.QName) (Mapping, bool) }
 //
 //	func Override(base, partial Backend) Backend
 //	    Per-type composition: partial's mappings where defined, base
 //	    otherwise — back only xs:decimal with a money type and keep the
 //	    rest.
+//
+// # The widest-space rule (facet checks under derived mappings)
+//
+// A derived type's own mapping governs the VALUE the application
+// receives — never the space in which inherited facet checks run. A
+// derived representation is allowed to be narrower than its base's
+// value space; using it for base-chain semantics would corrupt them
+// (overflow where the base space has none, collapsed precision,
+// different ordering). So:
+//
+//   - enumeration and bound facets, wherever they sit on the derivation
+//     chain, are compared in the value space of the type that DECLARES
+//     the facet, parsed by that type's governing mapping (its own, or
+//     its nearest mapped ancestor's — ultimately the primitive's, which
+//     is always the widest);
+//   - schema-build restriction checks (a derived facet must narrow the
+//     base's) always run in the base's space;
+//   - only after the wider-space checks pass is the derived mapping's
+//     Parse used to produce the application-facing value; a lexical the
+//     checks accept but the narrow representation cannot hold is a
+//     mapping error on the derived type, reported as such — never a
+//     false validity verdict.
 //
 // Comparison and facet capabilities are NOT backend methods; they live on
 // the values a Mapping produces. A backend's values must implement the
