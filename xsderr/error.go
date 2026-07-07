@@ -11,6 +11,15 @@ import (
 // be present in the generated catalog (see IsValidRule).
 type Rule string
 
+// RuleXMLWellFormed is the sentinel Rule for XML well-formedness faults
+// (unbound namespace prefix, mismatched or unclosed tag, malformed XML) that
+// are not XSD schema- or instance-validity violations and so have no
+// spec-defined cvc-*/src-*/cos-*/sic-* rule ID. It lets such an Error carry a
+// recognizable, non-empty Rule instead of "" (which would be indistinguishable
+// from a caller that simply forgot to set one). IsValidRule accepts it as a
+// documented, non-spec exemption from the generated catalog.
+const RuleXMLWellFormed Rule = "xml-wf"
+
 // Loc identifies where an offending construct lives — the schema document or
 // the instance document. Its fields are threaded from parser positions, never
 // reconstructed. The zero Loc means the location is unknown.
@@ -96,4 +105,19 @@ func LocOf(err error) (Loc, bool) {
 		return e.Loc, true
 	}
 	return Loc{}, false
+}
+
+// IsValidRule reports whether r is a Rule the module is allowed to construct:
+// any rule ID present in the generated spec catalog (ruleCatalog, emitted by
+// tools/rulecat into catalog.go), plus the hand-added RuleXMLWellFormed
+// sentinel, which is deliberately outside the catalog because XML
+// well-formedness faults have no spec-defined rule ID. It lives here rather
+// than in the generated catalog.go so the sentinel exemption survives
+// `go generate`.
+func IsValidRule(r Rule) bool {
+	if r == RuleXMLWellFormed {
+		return true
+	}
+	_, ok := ruleCatalog[r]
+	return ok
 }

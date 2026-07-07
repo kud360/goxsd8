@@ -28,11 +28,13 @@ type Reader struct {
 	eof bool
 }
 
-// frame is one open element: its resolved name (to match the end tag) and
-// the scope in force for its content.
+// frame is one open element: its resolved name (to match the end tag), the
+// scope in force for its content, and the location of its start tag (so an
+// unclosed-element error points at the tag left open, not at end-of-stream).
 type frame struct {
 	name  Name
 	scope *scope
+	loc   xsderr.Loc
 }
 
 // NewReader returns a Reader over r. uri names the document for locations
@@ -78,16 +80,15 @@ func (r *Reader) Token() (Node, error) {
 // well-formed document (unclosed elements are an error instead); any other
 // error is a malformed-XML failure wrapped with the current location.
 func (r *Reader) handleReadErr(err error) (Node, error) {
-	loc := r.locAt(r.dec.InputOffset())
 	if errors.Is(err, io.EOF) {
 		r.eof = true
 		if len(r.stack) > 0 {
-			open := r.stack[len(r.stack)-1].name
-			return nil, xsderr.New("", loc, "unexpected end of document: element %s left unclosed", qname(open))
+			open := r.stack[len(r.stack)-1]
+			return nil, xsderr.New(xsderr.RuleXMLWellFormed, open.loc, "unexpected end of document: element %s left unclosed", qname(open.name))
 		}
 		return nil, io.EOF
 	}
-	return nil, xsderr.Wrap("", loc, err)
+	return nil, xsderr.Wrap(xsderr.RuleXMLWellFormed, r.locAt(r.dec.InputOffset()), err)
 }
 
 // classify resolves one raw token. It returns (node, true, nil) to emit a
@@ -125,11 +126,11 @@ func (r *Reader) startElement(t xml.StartElement, loc xsderr.Loc) (*StartElement
 	child := parent.child(bindingsOf(t.Attr))
 
 	if t.Name.Space == xmlnsPrefix {
-		return nil, xsderr.New("", loc, "%q is a reserved prefix and cannot name an element", xmlnsPrefix)
+		return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "%q is a reserved prefix and cannot name an element", xmlnsPrefix)
 	}
 	space, ok := child.lookup(t.Name.Space)
 	if !ok {
-		return nil, xsderr.New("", loc, "unbound namespace prefix %q on element <%s>", t.Name.Space, rawName(t.Name))
+		return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "unbound namespace prefix %q on element <%s>", t.Name.Space, rawName(t.Name))
 	}
 	name := Name{space: space, local: t.Name.Local}
 
@@ -138,23 +139,23 @@ func (r *Reader) startElement(t xml.StartElement, loc xsderr.Loc) (*StartElement
 		return nil, err
 	}
 
-	r.stack = append(r.stack, frame{name: name, scope: child})
+	r.stack = append(r.stack, frame{name: name, scope: child, loc: loc})
 	return &StartElement{name: name, attrs: attrs, scope: child, loc: loc}, nil
 }
 
 // endElement matches an end tag against the open element and pops it.
 func (r *Reader) endElement(t xml.EndElement, loc xsderr.Loc) (*EndElement, error) {
 	if len(r.stack) == 0 {
-		return nil, xsderr.New("", loc, "unexpected end tag </%s> with no open element", rawName(t.Name))
+		return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "unexpected end tag </%s> with no open element", rawName(t.Name))
 	}
 	top := r.stack[len(r.stack)-1]
 	space, ok := top.scope.lookup(t.Name.Space)
 	if !ok {
-		return nil, xsderr.New("", loc, "unbound namespace prefix %q on end tag </%s>", t.Name.Space, rawName(t.Name))
+		return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "unbound namespace prefix %q on end tag </%s>", t.Name.Space, rawName(t.Name))
 	}
 	got := Name{space: space, local: t.Name.Local}
 	if got != top.name {
-		return nil, xsderr.New("", loc, "end tag </%s> does not match open element %s", rawName(t.Name), qname(top.name))
+		return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "end tag </%s> does not match open element %s", rawName(t.Name), qname(top.name))
 	}
 	r.stack = r.stack[:len(r.stack)-1]
 	return &EndElement{name: got, loc: loc}, nil
@@ -197,13 +198,13 @@ func resolveAttrs(attrs []xml.Attr, s *scope, loc xsderr.Loc) ([]Attribute, erro
 			continue
 		}
 		if a.Name.Space == xmlnsPrefix {
-			return nil, xsderr.New("", loc, "%q is a reserved prefix and cannot name an attribute", xmlnsPrefix)
+			return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "%q is a reserved prefix and cannot name an attribute", xmlnsPrefix)
 		}
 		space := ""
 		if a.Name.Space != "" {
 			resolved, ok := s.lookup(a.Name.Space)
 			if !ok {
-				return nil, xsderr.New("", loc, "unbound namespace prefix %q on attribute %s", a.Name.Space, rawName(a.Name))
+				return nil, xsderr.New(xsderr.RuleXMLWellFormed, loc, "unbound namespace prefix %q on attribute %s", a.Name.Space, rawName(a.Name))
 			}
 			space = resolved
 		}

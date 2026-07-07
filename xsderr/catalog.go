@@ -137,9 +137,3 @@ var ruleCatalog = map[Rule]struct{}{
 	"src-wildcard": {},
 	"timezone-valid-restriction": {},
 }
-
-// IsValidRule returns true if the provided rule identifier is defined in the spec catalog.
-func IsValidRule(r Rule) bool {
-	_, ok := ruleCatalog[r]
-	return ok
-}
