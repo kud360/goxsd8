@@ -140,12 +140,10 @@ func writeCatalog(f *os.File, rules []string) error {
 	}
 	lines = append(lines, "}\n")
 
-	lines = append(lines, "\n")
-	lines = append(lines, "// IsValidRule returns true if the provided rule identifier is defined in the spec catalog.\n")
-	lines = append(lines, "func IsValidRule(r Rule) bool {\n")
-	lines = append(lines, "\t_, ok := ruleCatalog[r]\n")
-	lines = append(lines, "\treturn ok\n")
-	lines = append(lines, "}\n")
+	// IsValidRule is intentionally NOT emitted here: it is hand-written in
+	// error.go so it can grant the non-spec RuleXMLWellFormed sentinel a
+	// documented exemption that regeneration will not clobber. This generator
+	// owns only the ruleCatalog data table.
 
 	for _, line := range lines {
 		if _, err := fmt.Fprint(f, line); err != nil {

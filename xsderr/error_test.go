@@ -94,3 +94,16 @@ func TestIsValidRuleDerivationOkRestriction(t *testing.T) {
 		t.Fatalf("IsValidRule(%q) = false, want true", "derivation-ok-restriction")
 	}
 }
+
+// TestIsValidRuleXMLWellFormed guards the non-spec sentinel exemption: XML
+// well-formedness faults have no catalog rule ID, so RuleXMLWellFormed must be
+// accepted by IsValidRule even though it is absent from the generated catalog.
+func TestIsValidRuleXMLWellFormed(t *testing.T) {
+	if !IsValidRule(RuleXMLWellFormed) {
+		t.Fatalf("IsValidRule(%q) = false, want true", RuleXMLWellFormed)
+	}
+	// It is deliberately NOT in the generated spec catalog.
+	if _, ok := ruleCatalog[RuleXMLWellFormed]; ok {
+		t.Fatalf("RuleXMLWellFormed %q leaked into the generated ruleCatalog", RuleXMLWellFormed)
+	}
+}
