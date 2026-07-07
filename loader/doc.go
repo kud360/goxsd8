@@ -33,4 +33,13 @@
 // hints found in instances route through the SAME Resolver, resolved
 // relative to the instance document's location — hint loading and root
 // loading must never diverge.
+//
+// # Design notes
+//
+// Resolve takes no context.Context: this seam runs no concurrency of its
+// own (STYLE D5), and callers bound blocking through the injected
+// dependency — the HTTP resolver's *http.Client carries its own Transport
+// timeouts, and a caller needing cancellation wraps Resolve itself. Path-
+// traversal defense (Dir), request construction (HTTP), and this omission
+// are engineering decisions, not spec rules — no XSD text governs them.
 package loader
