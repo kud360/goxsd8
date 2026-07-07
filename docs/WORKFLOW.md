@@ -40,10 +40,26 @@ git ls-remote --heads origin 'refs/heads/wip/*' 'refs/heads/parked/*'
 
 Invariants the scheme encodes:
 
-- **The name is the claim.** `wip/issue-<N>` existing means issue #N has
-  an in-flight attempt; its stable name makes a second concurrent attempt
-  impossible to start by accident. Resume it or leave it alone — never
-  create a second branch for the same issue.
+- **The name is the claim; the tip time is the lease.** `wip/issue-<N>`
+  existing means issue #N has an in-flight attempt, and its stable name
+  makes a second branch for the same issue impossible to create by
+  accident. But existence alone cannot distinguish "being worked right
+  now" from "abandoned by a dead session" — that is the tip's committer
+  timestamp (`git log -1 --format=%cI origin/wip/issue-<N>`):
+  - tip newer than the **claim TTL (2 hours)** → LIVE: another session
+    presumably holds it. Do not resume it, and do not start issue #N.
+  - tip older than the TTL → EXPIRED: the owner is gone (a healthy
+    session checkpoints far more often than that) → resumable.
+  Checkpoint pushes are therefore also the lease heartbeat: a step
+  expected to run long pushes intermediate commits rather than letting
+  its lease lapse mid-work.
+- **Races are settled by git's atomic ref updates — never by force.**
+  Two sessions claiming or checkpointing the same branch: the second
+  push is rejected (non-fast-forward). A rejected push to `wip/*` means
+  you lost the race — fetch, abandon your local copy of that attempt,
+  and pick a different issue. Force-pushing any `wip/*` or `parked/*`
+  ref is forbidden; it is the one way sessions could actually stomp
+  each other.
 - **`wip/` is resumable, `parked/` is not.** A `parked/` branch is
   evidence for re-planning (its issue carries `needs-replan` and the
   arbiter's findings); a fresh attempt after re-planning starts a new
@@ -52,7 +68,9 @@ Invariants the scheme encodes:
 - **Checkpoint = commit + push.** Work is committed on the WIP branch at
   every step boundary (grounding done, implementation done, each verdict)
   with message `wip #<N>: <step>`, and pushed immediately. A session that
-  dies loses at most the work since its last checkpoint.
+  dies loses at most the work since its last checkpoint — and its lease
+  expires on its own, so the next session recovers the branch without
+  human help.
 - **Landing is atomic.** Accept → squash-merge the WIP branch into main
   as the session's ONE commit (code + log entry), push main, delete the
   WIP branch. A `wip/issue-<N>` whose issue is closed is a landing that
@@ -84,21 +102,27 @@ no specialist work itself and never skips the arbiter.
    is somehow dirty (persistent local checkout only; a routine container
    starts clean), push it to `parked/untriaged-<ts>` first and log it —
    never clean it (PRINCIPLES 28).
-2. **Pick** — **resuming beats starting.** If a `wip/issue-<N>` exists
-   whose issue is open and not `needs-replan`: switch to it, rebase onto
-   `origin/main` if main has moved, read the issue's newest `RESUME:`
-   comment, and continue from its "Next:". (A rebase with non-trivial
-   conflicts → park the branch, comment, pick again.) Otherwise take the
-   highest-priority `ready` issue whose dependencies are closed and
-   create its branch:
+2. **Pick** — partition the `wip/*` branches by lease
+   (tip timestamp vs the 2h claim TTL — see the branch scheme):
+   - **LIVE** branches (and their issues) are off-limits this session.
+   - **Resuming beats starting**: if any EXPIRED `wip/issue-<N>` exists
+     whose issue is open and not `needs-replan`, take the oldest —
+     switch to it, rebase onto `origin/main` if main has moved, read
+     the issue's newest `RESUME:` comment, and continue from its
+     "Next:". (A rebase with non-trivial conflicts → park the branch,
+     comment, pick again.)
+   - Otherwise take the highest-priority `ready` issue with closed
+     dependencies and no live branch, and claim it:
 
-   ```sh
-   git switch -c wip/issue-<N> origin/main
-   git push -u origin HEAD        # the push IS the claim
-   ```
+     ```sh
+     git switch -c wip/issue-<N> origin/main
+     git push -u origin HEAD     # the push IS the claim
+     ```
 
-   No WIP to resume and no ready issue → run the cartographer instead
-   and stop.
+     Push rejected → another session claimed it between your survey and
+     now; fetch and pick again.
+   - Nothing to resume, nothing ready → run the cartographer instead
+     and stop.
 3. **Ground** — ask the **oracle** for the exact spec clauses and rule
    IDs in scope. Post the answer verbatim as a comment on the issue
    (`GROUNDING:` prefix); also save to `.agent/grounding-issue-<N>.md`

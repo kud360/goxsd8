@@ -85,7 +85,9 @@ the log rides in the session commit. Sessions run in ephemeral
 containers: **anything not pushed does not exist**. All work happens on
 pushed WIP branches under the fixed scheme (docs/WORKFLOW.md is
 normative): `wip/issue-<N>` is THE branch for issue #N (stable name =
-the claim; discover in-flight work with
+the claim, tip time = the lease: pushed within 2h → live, off-limits;
+older → resumable; rejected push = lost race, never force-push;
+discover in-flight work with
 `git ls-remote --heads origin 'refs/heads/wip/*'`); checkpoint
 (commit + push) at every step boundary; land by squash-merging to main
 as one commit and deleting the branch; abandoned attempts are parked as

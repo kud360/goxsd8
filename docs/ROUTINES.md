@@ -57,7 +57,10 @@ go tool fetchspecs                                 # (re)download pristine spec 
   the checkpointed WIP branch + main. A run that dies mid-session loses
   at most the work since its last checkpoint push; the next run's
   survey step finds the branch and continues.
-- If two routines fire concurrently, the WIP branch is the claim: the
-  second run sees `wip/issue-<N>` freshly pushed and picks a different
-  `ready` issue (or stops). Keep develop slots ≥ 6h apart to make even
-  that rare.
+- If two routines fire concurrently, the claim mechanism arbitrates: a
+  `wip/issue-<N>` pushed within the 2h claim TTL is LIVE and off-limits
+  to other sessions; simultaneous claims of the same issue are settled
+  by git itself (the second push is rejected — that session picks a
+  different issue). Checkpoint pushes refresh the lease, so a crashed
+  session's branch expires on its own and the next run resumes it. Keep
+  develop slots ≥ 6h apart so overlap stays rare anyway.

@@ -168,8 +168,13 @@ codified as rules in docs/STYLE.md.
     `parked/…-<ts>` abandoned, triage-only) so any cold-start agent
     reconstructs the in-flight state from one
     `git ls-remote --heads origin 'refs/heads/wip/*'` — discovery must
-    never depend on reading comments or transcripts. Checkpoint
-    (commit + push) at every step boundary. And never destroy
+    never depend on reading comments or transcripts. The claim has a
+    lease: a `wip/` tip pushed within the 2h TTL is live and
+    off-limits; older is resumable — and simultaneous pushes are
+    arbitrated by git's atomic ref updates (rejected push = lost race;
+    force-pushing `wip/*`/`parked/*` is forbidden). Checkpoint
+    (commit + push) at every step boundary — it is also the lease
+    heartbeat. And never destroy
     uncommitted work: `git clean`, `git restore .`,
     `git checkout -- <file>`, and stashing of any kind are forbidden —
     a dirty local tree is pushed to `parked/untriaged-<ts>` and logged.

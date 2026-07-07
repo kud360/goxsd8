@@ -15,16 +15,25 @@ WIP branch) at every step boundary.
    log it. NEVER `git clean`, `git restore .`, `git checkout -- <file>`,
    or any stashing.
 
-2. **Pick — resuming beats starting.**
-   - A `wip/issue-<N>` exists with its issue open and not
-     `needs-replan` → `git switch wip/issue-<N>`, rebase onto
-     `origin/main` if main moved (non-trivial conflicts → park it,
-     comment, pick again), read the issue's newest `RESUME:` comment,
-     continue from its "Next:" at the matching step below.
+2. **Pick** — partition `wip/*` by lease: a branch whose tip
+   (`git log -1 --format=%cI origin/wip/issue-<N>`) is newer than the
+   **2h claim TTL** is LIVE — off-limits, along with its issue; older is
+   EXPIRED — resumable.
+   - **Resuming beats starting**: oldest EXPIRED `wip/issue-<N>` whose
+     issue is open and not `needs-replan` → `git switch wip/issue-<N>`,
+     rebase onto `origin/main` if main moved (non-trivial conflicts →
+     park it, comment, pick again), read the issue's newest `RESUME:`
+     comment, continue from its "Next:" at the matching step below.
    - Otherwise take the highest-priority `ready` issue with closed
-     dependencies: `git switch -c wip/issue-<N> origin/main` and
-     `git push -u origin HEAD` — the push is the claim.
+     dependencies and no live branch:
+     `git switch -c wip/issue-<N> origin/main` and
+     `git push -u origin HEAD` — the push is the claim. Push rejected →
+     lost the race; fetch and pick again.
    - Neither → delegate to **cartographer** to plan, then STOP.
+
+   Any rejected push to `wip/*` at any later step means another session
+   holds the branch: fetch, abandon the local attempt, and stop (log
+   it). NEVER force-push a `wip/*` or `parked/*` ref.
 
 3. **Ground** — delegate spec questions to **oracle**. Post the answer
    verbatim as a `GROUNDING:` comment on the issue; save a copy to
