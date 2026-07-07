@@ -28,7 +28,7 @@ kinds of branches exist; nothing else is ever pushed:
 
 | Branch | Meaning | Lifecycle |
 |---|---|---|
-| `main` | always green; receives only squash-landed, arbiter-accepted develop work plus the maintenance triggers' own commits (`meta:`/`conformance:` from /plan, /retro, /ratchet) | permanent |
+| `main` | always green; receives only squash-landed, arbiter-accepted develop work plus the maintenance triggers' own commits (`meta:`/`conformance:` from /backlog, /retro, /ratchet) | permanent |
 | `wip/issue-<N>` | THE work branch for issue #N — at most one, its name is stable | created when work starts; auto-deleted by GitHub when its PR squash-merges; retired in place if the attempt is abandoned |
 | `parked/untriaged-<YYYYMMDD-HHMMSS>` | unattributable work found in a dirty local tree | kept for human triage |
 
@@ -214,7 +214,7 @@ new number, from `origin/main`.
 
 - **`/ratchet`** — arbiter only: run conformance, report movement per
   lane, ratchet upward, investigate & file issues for any regression.
-- **`/plan`** — cartographer: reconcile GitHub issues with reality (close
+- **`/backlog`** — cartographer: reconcile GitHub issues with reality (close
   stale, split oversized, order by dependency, keep 5–10 `ready`);
   consult **libuser**/**cliuser** when planning API- or CLI-facing
   milestones. Also **reconcile the branch namespace**: classify every

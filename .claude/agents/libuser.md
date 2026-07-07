@@ -25,7 +25,7 @@ work around it by peeking.
 
 ## What you produce
 
-When consulted (by the cartographer for /plan or /story, or the arbiter
+When consulted (by the cartographer for /backlog or /story, or the arbiter
 for API-facing changes):
 
 1. **Usage stories**: "As a service author, I want to validate incoming

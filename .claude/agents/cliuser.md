@@ -37,7 +37,7 @@ a bug by definition (PRINCIPLES 31).
 
 ## What you produce
 
-When consulted (by the cartographer for /plan or /story):
+When consulted (by the cartographer for /backlog or /story):
 
 1. **CLI stories** with the exact command lines you WISH would work.
 2. **Acceptance criteria**: expected output, exit code, and help text.
