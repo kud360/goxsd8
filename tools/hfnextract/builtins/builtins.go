@@ -189,17 +189,17 @@ func parseSection(name, section string, lines []string) (Builtin, error) {
 			if b.Item == "" {
 				return Builtin{}, fmt.Errorf("%s: list item type not found", name)
 			}
-		} else {
-			b.Variety = "atomic"
-			// Most ordinary types state the base in a "·base type· of X is Y"
-			// sentence (X either bold, of **integer**is [decimal], or a link,
-			// of [language]… is [token]). The three 1.1 additions
-			// (yearMonthDuration, dayTimeDuration, dateTimeStamp) instead only
-			// say "·derived· from [Y]"; fall back to that.
-			b.Base = linkAfter(def, `#dt-basetype\) of .*?\bis \[`)
-			if b.Base == "" {
-				b.Base = linkAfter(def, `#dt-derived\) from \[`)
-			}
+			break
+		}
+		b.Variety = "atomic"
+		// Most ordinary types state the base in a "·base type· of X is Y"
+		// sentence (X either bold, of **integer**is [decimal], or a link,
+		// of [language]… is [token]). The three 1.1 additions
+		// (yearMonthDuration, dayTimeDuration, dateTimeStamp) instead only
+		// say "·derived· from [Y]"; fall back to that.
+		b.Base = linkAfter(def, `#dt-basetype\) of .*?\bis \[`)
+		if b.Base == "" {
+			b.Base = linkAfter(def, `#dt-derived\) from \[`)
 		}
 	}
 	if b.Base == "" {
