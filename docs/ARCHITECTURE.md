@@ -169,9 +169,11 @@ flag** (PRINCIPLES 10):
 - **XSD flavor** (pattern facets): implicitly anchored, `^`/`$` literal,
   non-capturing groups, no flags, `.` excludes `\n` and `\r`.
 - **F&O flavor** (`fn:matches`/`fn:replace`/`fn:tokenize`): unanchored,
-  real anchors, capturing groups, `i`/`s` flags honored; `m`/`x`/`q` and
-  back-references are not expressible in RE2 and are flavor errors —
-  surfaced, never silently accepted.
+  real anchors, capturing groups; `i`/`s`/`m` map to RE2 inline flags and
+  `x` strips insignificant whitespace before parsing; `q` (undefined in the
+  local F&O edition) and any other flag are `err:FORX0001`, and
+  back-references — legal F&O grammar but with no RE2 form — are
+  `err:FORX0002`, surfaced, never silently accepted.
 
 Character-class handling (`\d \w \p{…}`, subtraction `[a-z-[m]]`) is
 shared. The package is a pure leaf (stdlib only).
