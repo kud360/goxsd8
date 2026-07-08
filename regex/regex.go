@@ -11,20 +11,23 @@ import (
 
 // Flavor selects the regular-expression dialect Translate parses. The two
 // flavors share one grammar family but differ in anchoring, the meaning of
-// ^/$, group capture, and flag handling (PRINCIPLES 10). The zero Flavor is
-// invalid; use FlavorXSD or FlavorFO.
-type Flavor struct{ name string }
+// ^/$, group capture, and flag handling (PRINCIPLES 10). The zero value is
+// invalid so an unset Flavor is a caught bug (see builtin.Ordered); use
+// FlavorXSD or FlavorFO.
+type Flavor uint8
 
-// FlavorXSD is the XML Schema pattern-facet dialect (Datatypes Appendix G):
-// the whole pattern is implicitly anchored, ^ and $ are literal characters,
-// groups are non-capturing, no flags are accepted, and . excludes \n and \r.
-var FlavorXSD = Flavor{"XSD"}
-
-// FlavorFO is the XPath/XQuery Functions & Operators dialect used by
-// fn:matches, fn:replace, and fn:tokenize (F&O §7.6.1): unanchored unless the
-// pattern anchors itself, ^ and $ are real anchors, groups capture, the flags
-// i/s/m/x are honored, and . excludes only \n unless the s flag is set.
-var FlavorFO = Flavor{"FO"}
+// The Flavor values.
+const (
+	// FlavorXSD is the XML Schema pattern-facet dialect (Datatypes Appendix G):
+	// the whole pattern is implicitly anchored, ^ and $ are literal characters,
+	// groups are non-capturing, no flags are accepted, and . excludes \n and \r.
+	FlavorXSD Flavor = iota + 1
+	// FlavorFO is the XPath/XQuery Functions & Operators dialect used by
+	// fn:matches, fn:replace, and fn:tokenize (F&O §7.6.1): unanchored unless
+	// the pattern anchors itself, ^ and $ are real anchors, groups capture, the
+	// flags i/s/m/x are honored, and . excludes only \n unless the s flag is set.
+	FlavorFO
+)
 
 // Rule IDs attached to translation failures (STYLE E2). XSD-flavor failures are
 // schema-authoring-time pattern errors (Datatypes §4.3.4.3); FO-flavor failures
@@ -47,12 +50,14 @@ const maxRepeat = 1000
 // (regexp) source string, or returns an *xsderr.Error carrying the offending
 // construct and its byte offset. The result is deterministic; compiling and
 // caching it is the caller's concern. flags is honored only for FlavorFO; it
-// must be empty for FlavorXSD.
+// must be empty for FlavorXSD. An invalid Flavor, or a non-empty flags with
+// FlavorXSD, is a caller-contract violation (a programming error, not a
+// pattern error) and panics rather than returning an error.
 func Translate(pattern string, flavor Flavor, flags string) (string, error) {
 	switch flavor {
 	case FlavorXSD:
 		if flags != "" {
-			return "", xsderr.New(ruleXSDPattern, xsderr.Loc{}, "regex: XSD-flavor patterns accept no flags, got %q", flags)
+			panic(fmt.Sprintf("regex: XSD-flavor Translate accepts no flags, got %q", flags))
 		}
 		p := &parser{in: pattern, flavor: flavor}
 		if err := p.translateBody(); err != nil {
@@ -74,7 +79,7 @@ func Translate(pattern string, flavor Flavor, flags string) (string, error) {
 		}
 		return prefix + p.out.String(), nil
 	default:
-		return "", fmt.Errorf("regex: unknown flavor %+v", flavor)
+		panic(fmt.Sprintf("regex: invalid Flavor %d", flavor))
 	}
 }
 

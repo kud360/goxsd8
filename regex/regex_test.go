@@ -165,8 +165,6 @@ func TestErrorsSurfaceNeverSilentlyAccepted(t *testing.T) {
 		flags  string
 		rule   xsderr.Rule
 	}{
-		{"xsd-rejects-any-flags", "abc", FlavorXSD, "m", ruleXSDPattern},
-		{"xsd-rejects-x-flag", "abc", FlavorXSD, "x", ruleXSDPattern},
 		{"fo-rejects-q-flag", "abc", FlavorFO, "q", ruleFOFlags},
 		{"fo-rejects-unknown-flag", "abc", FlavorFO, "z", ruleFOFlags},
 		{"fo-backreference", `(a)\1`, FlavorFO, "", ruleFOPattern},
@@ -227,10 +225,29 @@ func TestDeterministic(t *testing.T) {
 	}
 }
 
-func TestZeroFlavorRejected(t *testing.T) {
-	if _, err := Translate("abc", Flavor{}, ""); err == nil {
-		t.Fatal("zero Flavor should be rejected")
-	}
+// mustPanic runs fn and fails unless it panics; caller-contract violations are
+// programming errors, not returned *xsderr.Errors.
+func mustPanic(t *testing.T, fn func()) {
+	t.Helper()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected a panic, got none")
+		}
+	}()
+	fn()
+}
+
+func TestInvalidFlavorPanics(t *testing.T) {
+	// The zero Flavor and any out-of-range cast reach the switch default.
+	mustPanic(t, func() { _, _ = Translate("abc", Flavor(0), "") })
+	mustPanic(t, func() { _, _ = Translate("abc", Flavor(99), "") })
+}
+
+func TestXSDFlagsPanic(t *testing.T) {
+	// Passing flags to the flagless XSD flavor is caller misuse, not a pattern
+	// error, so it panics rather than returning a src-pattern-value error.
+	mustPanic(t, func() { _, _ = Translate("abc", FlavorXSD, "m") })
+	mustPanic(t, func() { _, _ = Translate("abc", FlavorXSD, "x") })
 }
 
 func TestMultiCharEscapes(t *testing.T) {
