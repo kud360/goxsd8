@@ -31,6 +31,7 @@ type Context interface {
 type Mapping struct {
 	// Parse maps a normalized lexical form to a value, or returns an
 	// *xsderr.Error describing why the lexical is not in the type's space.
+	// Parse MUST be non-nil: a Mapping is meaningless without it.
 	Parse func(lexical string, ctx Context) (Value, error)
 	// Canonical maps a value back to its canonical lexical form. It is nil for
 	// types that have no canonical mapping.
@@ -64,6 +65,8 @@ type Backend interface {
 // The widest-space rule (see [Backend]) still governs: an override changes only
 // the value an application receives for the overridden type, not the space in
 // which any type's inherited facet checks run.
+//
+// Both base and partial MUST be non-nil.
 func Override(base, partial Backend) Backend {
 	return overrideBackend{base: base, partial: partial}
 }
