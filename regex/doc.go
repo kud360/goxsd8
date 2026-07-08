@@ -15,17 +15,22 @@
 //	  - no flags;
 //	  - . excludes both \n and \r.
 //
-//	FO (fn:matches / fn:replace / fn:tokenize; F&O Appendix F):
+//	FO (fn:matches / fn:replace / fn:tokenize; F&O §7.6.1):
 //	  - unanchored — the pattern matches a substring unless it anchors
 //	    itself;
-//	  - ^ and $ are real anchors (\A, \z);
-//	  - groups CAPTURE, so fn:replace can reference $1, $2 (with the
-//	    longest-valid-group-number rule for multi-digit references);
-//	  - flags: i (case-insensitive) and s (dot-all) are honored;
-//	    m, x, q, and back-references are not expressible in RE2 and are
-//	    ERRORS — surfaced to the caller, never silently accepted or
-//	    ignored (a wrong answer is worse than a refusal);
-//	  - . excludes only \n by default (it matches \r).
+//	  - ^ and $ are real anchors;
+//	  - groups CAPTURE in opening-parenthesis order (so fn:replace can
+//	    reference $1, $2; the longest-valid-group-number resolution of a
+//	    multi-digit $N is the replacement caller's concern, not Translate's);
+//	  - flags: i (case-insensitive), s (dot-all), and m (multi-line) map to
+//	    the RE2 inline flags (?i)/(?s)/(?m); x (extended) strips insignificant
+//	    whitespace before parsing. Any other flag character — including q,
+//	    which this local F&O edition does not define — is an err:FORX0001
+//	    error;
+//	  - back-references (\N) are legal F&O grammar but have no RE2 form, so
+//	    they are an err:FORX0002 error — surfaced, never silently accepted (a
+//	    wrong answer is worse than a refusal);
+//	  - . excludes only \n by default (it matches \r); the s flag lifts that.
 //
 // Character-class handling — \d \w \s, \p{…}/\P{…} including Unicode
 // blocks (\p{IsBasicLatin}), and class subtraction ([a-z-[m]]) — is

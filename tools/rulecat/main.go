@@ -18,6 +18,14 @@ const (
 	// Information Set Contributions). The required "-" after the prefix keeps
 	// section-header anchors like "coss-attribute" out of the catalog.
 	rulePrefixRegex = `\b(?:cvc|cos|src|sic)-[a-zA-Z0-9\._-]+`
+	// foErrCodeRegex matches the F&O / XPath dynamic-error code family
+	// (xpath-functions.md, xpath20.md), written in the specs as "err:FORX0002",
+	// "err:XPST0003", etc. — a four-letter family code followed by a four-digit
+	// number. These are genuine spec rule IDs (e.g. err:FORX0001/0002 for regex
+	// flag/pattern failures in fn:matches) that the regex and xpath packages
+	// attach to *xsderr.Error values, so they belong in the catalog alongside
+	// the schema-side cvc-/cos-/src-/sic- families.
+	foErrCodeRegex = `\berr:[A-Z]{4}[0-9]{4}\b`
 )
 
 // irregularRules are genuine "Schema Component Constraint:"-labeled rule IDs
@@ -118,7 +126,7 @@ func moduleRoot() (string, error) {
 // buildRuleRegex combines the canonical prefix families with whole-word
 // alternations for each irregular literal rule ID.
 func buildRuleRegex() string {
-	parts := []string{rulePrefixRegex}
+	parts := []string{rulePrefixRegex, foErrCodeRegex}
 	for _, id := range irregularRules {
 		parts = append(parts, `\b`+regexp.QuoteMeta(id)+`\b`)
 	}
