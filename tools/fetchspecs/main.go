@@ -2,9 +2,13 @@
 // docs/specs/html. Normally never needed — the HTML is committed. Run
 // `go generate ./...` afterwards to regenerate the Markdown.
 //
-// The F&O spec is pinned to its dated 1.0 (Second Edition) URI: the
-// undated /TR/xpath-functions/ shortname has moved on to later major
-// versions, but XPath 2.0 normatively binds to 1.0.
+// The F&O and XDM specs are pinned to their dated URIs: the undated
+// /TR/xpath-functions/ and /TR/xpath-datamodel/ shortnames have moved on
+// to later major versions (3.x), but XPath 2.0 normatively binds to the
+// 1.0 (Second Edition) documents. The other undated shortnames still
+// resolve to the editions XSD 1.1 §1.4 cites (Namespaces in XML 1.0 Third
+// Edition, XML 1.0 Fifth Edition, XML Information Set Second Edition), so
+// they stay undated and track future in-place errata.
 package main
 
 import (
@@ -23,7 +27,11 @@ var specs = []struct {
 	{"xmlschema11-2.html", "https://www.w3.org/TR/xmlschema11-2/"},
 	{"xpath20.html", "https://www.w3.org/TR/xpath20/"},
 	{"xpath-functions.html", "https://www.w3.org/TR/2010/REC-xpath-functions-20101214/"},
+	{"xpath-datamodel.html", "https://www.w3.org/TR/2010/REC-xpath-datamodel-20101214/"},
 	{"xsd-precisionDecimal.html", "https://www.w3.org/TR/xsd-precisionDecimal/"},
+	{"xml-names.html", "https://www.w3.org/TR/xml-names/"},
+	{"xml.html", "https://www.w3.org/TR/xml/"},
+	{"xml-infoset.html", "https://www.w3.org/TR/xml-infoset/"},
 }
 
 func main() {
