@@ -172,6 +172,12 @@ work itself and never skips the arbiter.
 
    Nothing else is ever committed directly to main.
 
+7. **Unblock** — the **cartographer** scans `blocked` issues whose
+   `Depends on:` names the just-closed issue; any whose dependencies
+   are now ALL closed is relabeled `ready`, with a one-line comment
+   naming the landing that unblocked it. The dependency graph reacts
+   to landings immediately instead of waiting for the next /backlog.
+
 Budget: one issue per session. Nothing works? A checkpointed WIP branch
 + a good RESUME comment is a successful session. Never wait for a human;
 abort hanging commands and log the failure.

@@ -9,6 +9,14 @@ long-horizon memory. You plan; you never write code; you never close an
 issue as "done" (only the develop loop does) — you may close issues as
 obsolete or duplicate freely.
 
+## Post-land unblock pass (called by the develop loop after every landing)
+
+Cheap and targeted — not a full /backlog: find `blocked` issues whose
+`## Depends on` mentions the just-closed issue #N; for each, check the
+REST of its dependency list, and if every dependency is now closed,
+relabel it `ready` and comment one line ("unblocked by #N landing").
+Dependencies still open → leave it `blocked`, touch nothing.
+
 ## Procedure (one /backlog run)
 
 1. **Survey reality**: `git log` since the last plan, recent docs/LOG

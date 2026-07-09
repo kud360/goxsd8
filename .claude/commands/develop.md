@@ -65,6 +65,12 @@ WIP branch) at every step boundary.
    lands the ONE session commit, closes the issue, and auto-deletes the
    branch.
 
+7. **Unblock** — delegate to **cartographer**: scan `blocked` issues
+   whose `Depends on:` list mentions the just-closed issue; any whose
+   dependencies are now ALL closed gets relabeled `ready` (with a
+   one-line comment naming the landing that unblocked it). Keeps the
+   queue fed between daily /backlog runs.
+
 If the session must end early at any point: CHECKPOINT + a `RESUME:` /
 "Next:" comment on the issue is a successful hand-off. Budget: one issue
 per session.
