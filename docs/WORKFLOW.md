@@ -172,11 +172,16 @@ work itself and never skips the arbiter.
 
    Nothing else is ever committed directly to main.
 
-7. **Unblock** — the **cartographer** scans `blocked` issues whose
-   `Depends on:` names the just-closed issue; any whose dependencies
-   are now ALL closed is relabeled `ready`, with a one-line comment
-   naming the landing that unblocked it. The dependency graph reacts
-   to landings immediately instead of waiting for the next /backlog.
+7. **Post-land pass** — the **cartographer**, twofold: (a) **unblock**
+   — scan `blocked` issues whose `Depends on:` names the just-closed
+   issue; any whose dependencies are now ALL closed is relabeled
+   `ready`, with a one-line comment naming the landing that unblocked
+   it; (b) **harvest follow-ups from this landing** — the session log
+   entry's "Next:"/deferred items and the issue thread's advisory
+   verdict notes are each filed as an issue or explicitly dismissed in
+   a comment, while the context is fresh. The dependency graph and the
+   follow-up ledger react to landings immediately instead of waiting
+   for the next /backlog.
 
 Budget: one issue per session. Nothing works? A checkpointed WIP branch
 + a good RESUME comment is a successful session. Never wait for a human;
@@ -227,11 +232,7 @@ new number, from `origin/main`.
 - **`/ratchet`** — arbiter only: run conformance, report movement per
   lane, ratchet upward, investigate & file issues for any regression.
 - **`/backlog`** — cartographer: reconcile GitHub issues with reality (close
-  stale, split oversized, order by dependency, keep 8–10 `ready` and
-  readiness-audited — deps verifiably closed, acceptance criteria
-  reference only symbols that exist or the issue creates, spec claims
-  oracle-verified or marked `UNVERIFIED:`); harvest un-filed follow-ups
-  from docs/LOG and verdict comments;
+  stale, split oversized, order by dependency, keep 8–10 `ready`);
   consult **libuser**/**cliuser** when planning API- or CLI-facing
   milestones. Also **reconcile the branch namespace**: classify every
   `wip/*` branch by its issue's state (live / resumable / retired); a

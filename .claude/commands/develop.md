@@ -65,11 +65,14 @@ WIP branch) at every step boundary.
    lands the ONE session commit, closes the issue, and auto-deletes the
    branch.
 
-7. **Unblock** — delegate to **cartographer**: scan `blocked` issues
-   whose `Depends on:` list mentions the just-closed issue; any whose
-   dependencies are now ALL closed gets relabeled `ready` (with a
-   one-line comment naming the landing that unblocked it). Keeps the
-   queue fed between daily /backlog runs.
+7. **Post-land pass** — delegate to **cartographer** (its "Post-land
+   pass" procedure): (a) unblock — scan `blocked` issues whose
+   `Depends on:` mentions the just-closed issue; any whose dependencies
+   are now ALL closed gets relabeled `ready` with a one-line comment
+   naming the landing; (b) harvest follow-ups from THIS landing while
+   they're fresh — the log entry's "Next:"/deferred items and the issue
+   thread's advisory verdict notes each get filed as an issue or
+   explicitly dismissed in a comment.
 
 If the session must end early at any point: CHECKPOINT + a `RESUME:` /
 "Next:" comment on the issue is a successful hand-off. Budget: one issue

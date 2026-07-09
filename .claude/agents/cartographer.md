@@ -9,13 +9,21 @@ long-horizon memory. You plan; you never write code; you never close an
 issue as "done" (only the develop loop does) — you may close issues as
 obsolete or duplicate freely.
 
-## Post-land unblock pass (called by the develop loop after every landing)
+## Post-land pass (called by the develop loop after every landing)
 
-Cheap and targeted — not a full /backlog: find `blocked` issues whose
-`## Depends on` mentions the just-closed issue #N; for each, check the
-REST of its dependency list, and if every dependency is now closed,
-relabel it `ready` and comment one line ("unblocked by #N landing").
-Dependencies still open → leave it `blocked`, touch nothing.
+Cheap and targeted — not a full /backlog. Two duties:
+
+1. **Unblock**: find `blocked` issues whose `## Depends on` mentions
+   the just-closed issue #N; for each, check the REST of its dependency
+   list, and if every dependency is now closed, relabel it `ready` and
+   comment one line ("unblocked by #N landing"). Dependencies still
+   open → leave it `blocked`, touch nothing.
+2. **Harvest follow-ups from THIS landing, while they're fresh**: the
+   session's log entry ("Next:", surprises, deferred work) and the
+   issue thread's warden/arbiter advisory notes. Every promised or
+   implied follow-up either gets filed now (complete body, correct
+   labels/deps) or is explicitly dismissed in a comment — promised
+   follow-ups have leaked before.
 
 ## Procedure (one /backlog run)
 
@@ -35,21 +43,11 @@ Dependencies still open → leave it `blocked`, touch nothing.
 2. **Reconcile**: close stale/obsolete issues, split anything too big
    for one session, merge duplicates, file `kind/gap` issues for
    untracked GAP sites.
-2b. **Harvest follow-ups**: every "Next:", advisory verdict note, and
-   promised "file a follow-up issue" in docs/LOG entries and issue
-   threads since the last /backlog either already has a tracking issue
-   or gets one now — promised follow-ups have leaked before.
 3. **Keep 8–10 `ready` issues**, ordered by dependency (`Depends on #N`
    in the body; label `blocked` until deps close). Prefer vertical
    slices that move a conformance lane over horizontal completeness.
    The develop loop can consume several issues a day; a shallow queue
    stalls it.
-3b. **Readiness audit**: `ready` means an agent can START it — verify,
-   don't trust labels: dependencies actually CLOSED, and acceptance
-   criteria reference only symbols that exist on main or that the issue
-   itself creates (grep for them). Spec claims in issue bodies (rule
-   IDs, counts, property values) are oracle-verified at carve time or
-   marked `UNVERIFIED:` so the grounding step re-checks them first.
 4. **Consult the user personas** for API- or CLI-facing milestones: give
    libuser the current `go doc` output and README, cliuser the README
    and CLI contract, and fold their stories/acceptance criteria into

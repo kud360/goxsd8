@@ -4,9 +4,8 @@ description: Reconcile GitHub issues with reality and keep 8–10 ready issues, 
 
 Run the **cartographer**'s full /backlog procedure (see its agent file and
 docs/WORKFLOW.md): survey reality (git log, docs/LOG, issues, ratchet
-lanes, `grep -rn "GAP("`), reconcile the issue list, harvest un-filed
-follow-ups from the log and verdict comments, keep 8–10 `ready` issues
-with complete, readiness-audited bodies, order by dependency, and update
+lanes, `grep -rn "GAP("`), reconcile the issue list, keep 8–10 `ready`
+issues with complete bodies, order by dependency, and update
 docs/PLAN.md on drift.
 
 For API- or CLI-facing milestones, have the cartographer consult
