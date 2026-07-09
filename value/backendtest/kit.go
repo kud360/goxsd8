@@ -12,28 +12,28 @@ import (
 // emitted by tools/backendtestgen). The schema is unexported: the kit's API is
 // [Run]; the corpus is an internal implementation detail (STYLE T5).
 type typeVectors struct {
-	// Typ is the builtin the vectors exercise.
-	Typ xsd.QName
-	// Valid are lexicals in the type's lexical space, each paired with the
+	// typ is the builtin the vectors exercise.
+	typ xsd.QName
+	// valid are lexicals in the type's lexical space, each paired with the
 	// canonical form its value must render to (the round-trip check).
-	Valid []roundtrip
-	// Invalid are lexicals outside the type's lexical space; Parse must reject
+	valid []roundtrip
+	// invalid are lexicals outside the type's lexical space; Parse must reject
 	// each with an *xsderr.Error (cvc-datatype-valid).
-	Invalid []string
-	// NarrowReject are lexicals a wider ancestor space accepts but a derived,
+	invalid []string
+	// narrowReject are lexicals a wider ancestor space accepts but a derived,
 	// narrow representation cannot hold; Parse must surface a mapping error,
 	// never a validity verdict (the widest-space discipline, value.Backend doc).
 	// It is empty for primitives, whose representation is the widest — the slot
 	// exists for derived-type backends and is exercised once one lands.
-	NarrowReject []string
+	narrowReject []string
 }
 
 // roundtrip is a valid lexical and the canonical form its value must render.
 type roundtrip struct {
-	// Lexical is a member of the type's lexical space.
-	Lexical string
-	// Canonical is the canonical mapping of the value Lexical parses to.
-	Canonical string
+	// lexical is a member of the type's lexical space.
+	lexical string
+	// canonical is the canonical mapping of the value lexical parses to.
+	canonical string
 }
 
 // Option configures a [Run]. Options are constructed with the exported option
@@ -51,6 +51,10 @@ type config struct {
 // Absent declares that the backend intentionally does not map types — typically
 // primitives it expects to be supplied by composition with [value.Override].
 // Run then skips those types rather than reporting a missing mapping.
+//
+// Declaring a type Absent that the backend actually maps is a harmless no-op:
+// Run only consults the declaration when the mapping is missing, so a mapped
+// type is checked regardless — Absent can never mask a broken mapping.
 //
 // Full primitive-coverage checking (every builtin primitive mapped or declared
 // Absent) arrives with the first concrete backend (see package doc); today Run
@@ -92,12 +96,12 @@ func run(r reporter, b value.Backend, opts []Option) {
 		opt(&cfg)
 	}
 	for _, tv := range vectors {
-		m, ok := b.Mapping(tv.Typ)
+		m, ok := b.Mapping(tv.typ)
 		if !ok {
-			if cfg.absent[tv.Typ] {
+			if cfg.absent[tv.typ] {
 				continue
 			}
-			r.Errorf("backendtest: %s has vectors but the backend does not map it (declare it Absent if intended)", tv.Typ)
+			r.Errorf("backendtest: %s has vectors but the backend does not map it (declare it Absent if intended)", tv.typ)
 			continue
 		}
 		checkType(r, tv, m)
@@ -107,14 +111,14 @@ func run(r reporter, b value.Backend, opts []Option) {
 // checkType runs one type's vectors against its mapping.
 func checkType(r reporter, tv typeVectors, m value.Mapping) {
 	r.Helper()
-	for _, rt := range tv.Valid {
-		checkRoundtrip(r, tv.Typ, m, rt)
+	for _, rt := range tv.valid {
+		checkRoundtrip(r, tv.typ, m, rt)
 	}
-	for _, lex := range tv.Invalid {
-		checkRejected(r, tv.Typ, m, lex, "an invalid lexical (cvc-datatype-valid)")
+	for _, lex := range tv.invalid {
+		checkRejected(r, tv.typ, m, lex, "an invalid lexical (cvc-datatype-valid)")
 	}
-	for _, lex := range tv.NarrowReject {
-		checkRejected(r, tv.Typ, m, lex, "a wide-valid lexical the narrow representation cannot hold")
+	for _, lex := range tv.narrowReject {
+		checkRejected(r, tv.typ, m, lex, "a wide-valid lexical the narrow representation cannot hold")
 	}
 }
 
@@ -122,9 +126,9 @@ func checkType(r reporter, tv typeVectors, m value.Mapping) {
 // requires.
 func checkRoundtrip(r reporter, typ xsd.QName, m value.Mapping, rt roundtrip) {
 	r.Helper()
-	v, err := m.Parse(rt.Lexical, nil)
+	v, err := m.Parse(rt.lexical, nil)
 	if err != nil {
-		r.Errorf("%s: Parse(%q) = error %v; want it to map", typ, rt.Lexical, err)
+		r.Errorf("%s: Parse(%q) = error %v; want it to map", typ, rt.lexical, err)
 		return
 	}
 	if m.Canonical == nil {
@@ -132,11 +136,11 @@ func checkRoundtrip(r reporter, typ xsd.QName, m value.Mapping, rt roundtrip) {
 	}
 	got, err := m.Canonical(v)
 	if err != nil {
-		r.Errorf("%s: Canonical(value of %q) = error %v", typ, rt.Lexical, err)
+		r.Errorf("%s: Canonical(value of %q) = error %v", typ, rt.lexical, err)
 		return
 	}
-	if got != rt.Canonical {
-		r.Errorf("%s: %q canonicalizes to %q; want %q", typ, rt.Lexical, got, rt.Canonical)
+	if got != rt.canonical {
+		r.Errorf("%s: %q canonicalizes to %q; want %q", typ, rt.lexical, got, rt.canonical)
 	}
 }
 

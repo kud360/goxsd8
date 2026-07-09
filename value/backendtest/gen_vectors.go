@@ -9,14 +9,14 @@ import "github.com/kud360/goxsd8/xsd"
 // builtin type's lexical/canonical vectors. M3 covers boolean only.
 var vectors = []typeVectors{
 	{
-		Typ: xsd.QName{Space: "http://www.w3.org/2001/XMLSchema", Local: "boolean"},
-		Valid: []roundtrip{
-			{Lexical: "true", Canonical: "true"},
-			{Lexical: "false", Canonical: "false"},
-			{Lexical: "1", Canonical: "true"},
-			{Lexical: "0", Canonical: "false"},
+		typ: xsd.QName{Space: "http://www.w3.org/2001/XMLSchema", Local: "boolean"},
+		valid: []roundtrip{
+			{lexical: "true", canonical: "true"},
+			{lexical: "false", canonical: "false"},
+			{lexical: "1", canonical: "true"},
+			{lexical: "0", canonical: "false"},
 		},
-		Invalid: []string{
+		invalid: []string{
 			"True",
 			"TRUE",
 			"False",

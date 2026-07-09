@@ -33,23 +33,23 @@ func emit(types []typeVectors) ([]byte, error) {
 
 func emitType(b *strings.Builder, t typeVectors) {
 	b.WriteString("\t{\n")
-	fmt.Fprintf(b, "\t\tTyp: xsd.QName{Space: %q, Local: %q},\n", xsdNamespace, t.Local)
+	fmt.Fprintf(b, "\t\ttyp: xsd.QName{Space: %q, Local: %q},\n", xsdNamespace, t.Local)
 	if len(t.Valid) > 0 {
-		b.WriteString("\t\tValid: []roundtrip{\n")
+		b.WriteString("\t\tvalid: []roundtrip{\n")
 		for _, rt := range t.Valid {
-			fmt.Fprintf(b, "\t\t\t{Lexical: %q, Canonical: %q},\n", rt.Lexical, rt.Canonical)
+			fmt.Fprintf(b, "\t\t\t{lexical: %q, canonical: %q},\n", rt.Lexical, rt.Canonical)
 		}
 		b.WriteString("\t\t},\n")
 	}
 	if len(t.Invalid) > 0 {
-		b.WriteString("\t\tInvalid: []string{\n")
+		b.WriteString("\t\tinvalid: []string{\n")
 		for _, lex := range t.Invalid {
 			fmt.Fprintf(b, "\t\t\t%q,\n", lex)
 		}
 		b.WriteString("\t\t},\n")
 	}
 	if len(t.NarrowReject) > 0 {
-		b.WriteString("\t\tNarrowReject: []string{\n")
+		b.WriteString("\t\tnarrowReject: []string{\n")
 		for _, lex := range t.NarrowReject {
 			fmt.Fprintf(b, "\t\t\t%q,\n", lex)
 		}

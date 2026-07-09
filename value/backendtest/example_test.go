@@ -64,7 +64,8 @@ func ExampleRun() {
 
 	// In a test, one call — backendtest.Run(t, backend) — drives every vector;
 	// here we show the lexical→value→canonical round-trip it verifies for one
-	// boolean lexical.
+	// boolean lexical. Run itself needs a *testing.T, which a runnable Example
+	// cannot construct, so this reference just pins the call Run's godoc shows.
 	_ = backendtest.Run
 	m, _ := backend.Mapping(boolean)
 	v, _ := m.Parse("1", nil)
