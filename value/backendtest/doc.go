@@ -6,29 +6,34 @@
 //
 //	func Run(t *testing.T, b value.Backend, opts ...Option)
 //
-// Run drives, per builtin primitive the backend covers:
+// Run drives, per builtin type the backend covers:
 //
 //   - lexical → value → canonical round-trips over spec-derived vectors
 //     (valid lexicals map; invalid lexicals error; canonical output is
 //     the spec's canonical mapping of the value);
-//   - order and identity cases, including the partial-order edges
-//     (Incomparable across timezone-less/timezone-aware, NaN
-//     incomparable in order yet identical to itself);
-//   - capability coverage: the value types produced implement every
-//     capability interface the primitive's applicable facets require
+//   - capability coverage: the value each mapping produces implements
+//     every capability interface the type's applicable facets require
 //     (value.Ordered for bounded types, value.DigitCounted for digit
-//     facets, value.Scaled for precisionDecimal, value.Lengthed for
-//     length-faceted spaces, …);
-//   - primitive coverage: every builtin primitive is either mapped or
-//     explicitly declared absent via Option (absent primitives are then
-//     expected to be supplied by composition with value.Override);
-//   - widest-space discipline for DERIVED mappings: for every derived
-//     builtin the backend chooses to map, vectors verify that inherited
-//     enumeration/bound facets still evaluate through the governing
-//     ancestor's wider space (a boundary lexical the base space orders
-//     correctly must not be misjudged by the narrow representation),
-//     and that a wide-valid lexical the narrow representation cannot
-//     hold surfaces as a mapping error, never as a validity verdict.
+//     facets, value.Lengthed for length-faceted spaces, value.Scaled for
+//     scale facets, value.Eq for enumeration) — a missing capability or a
+//     facet the kit cannot classify is a loud failure. The applicable-facet
+//     lists are spec-derived (cos-applicable-facets); the facet→capability
+//     classification is a fixed, spec-cited table in this package.
+//
+// Two contract areas named in the value package doc are not yet exercised,
+// because they need inputs no current backend can supply:
+//
+//   - order and identity cases (the partial-order edges — Incomparable
+//     across timezone-less/timezone-aware, NaN incomparable in order yet
+//     identical to itself) await the date/time and float families;
+//   - the widest-space discipline for DERIVED mappings awaits the
+//     derived-type facet model (#33): the narrowReject slot and the
+//     inherited-facet vectors are exercised once a derived mapping lands.
+//
+// Coverage checking is likewise partial: Run checks only the types it has
+// vectors for. Full primitive coverage (every builtin primitive mapped or
+// declared Absent via Option, absent ones supplied by value.Override) arrives
+// with the first backend that maps them all.
 //
 // Vectors are spec-derived — generated from examples and function
 // definitions in docs/specs/md (PRINCIPLES 26) — and identical for every

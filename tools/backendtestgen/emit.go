@@ -17,7 +17,9 @@ func emit(types []typeVectors) ([]byte, error) {
 	b.WriteString(`import "github.com/kud360/goxsd8/xsd"` + "\n\n")
 	b.WriteString("// vectors is the spec-derived conformance corpus value/backendtest.Run\n")
 	b.WriteString("// drives every value.Backend through (PRINCIPLES 26). Each row is one\n")
-	b.WriteString("// builtin type's lexical/canonical vectors. M3 covers boolean only.\n")
+	b.WriteString("// builtin type's lexical/canonical vectors plus its applicable constraining\n")
+	b.WriteString("// facets in spec order (cos-applicable-facets). M3 covers boolean, decimal\n")
+	b.WriteString("// and string.\n")
 	b.WriteString("var vectors = []typeVectors{\n")
 	for _, t := range types {
 		emitType(&b, t)
@@ -52,6 +54,13 @@ func emitType(b *strings.Builder, t typeVectors) {
 		b.WriteString("\t\tnarrowReject: []string{\n")
 		for _, lex := range t.NarrowReject {
 			fmt.Fprintf(b, "\t\t\t%q,\n", lex)
+		}
+		b.WriteString("\t\t},\n")
+	}
+	if len(t.ApplicableFacets) > 0 {
+		b.WriteString("\t\tapplicableFacets: []string{\n")
+		for _, f := range t.ApplicableFacets {
+			fmt.Fprintf(b, "\t\t\t%q,\n", f)
 		}
 		b.WriteString("\t\t},\n")
 	}

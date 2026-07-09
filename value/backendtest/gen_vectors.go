@@ -6,7 +6,9 @@ import "github.com/kud360/goxsd8/xsd"
 
 // vectors is the spec-derived conformance corpus value/backendtest.Run
 // drives every value.Backend through (PRINCIPLES 26). Each row is one
-// builtin type's lexical/canonical vectors. M3 covers boolean only.
+// builtin type's lexical/canonical vectors plus its applicable constraining
+// facets in spec order (cos-applicable-facets). M3 covers boolean, decimal
+// and string.
 var vectors = []typeVectors{
 	{
 		typ: xsd.QName{Space: "http://www.w3.org/2001/XMLSchema", Local: "boolean"},
@@ -23,6 +25,56 @@ var vectors = []typeVectors{
 			"FALSE",
 			"",
 			"2",
+		},
+		applicableFacets: []string{
+			"whiteSpace",
+			"pattern",
+			"assertions",
+		},
+	},
+	{
+		typ: xsd.QName{Space: "http://www.w3.org/2001/XMLSchema", Local: "decimal"},
+		valid: []roundtrip{
+			{lexical: "-1.23", canonical: "-1.23"},
+			{lexical: "12678967.543233", canonical: "12678967.543233"},
+			{lexical: "+100000.00", canonical: "100000"},
+			{lexical: "210", canonical: "210"},
+		},
+		invalid: []string{
+			"-1.23E2",
+			"+",
+			".",
+			"",
+		},
+		applicableFacets: []string{
+			"whiteSpace",
+			"totalDigits",
+			"fractionDigits",
+			"pattern",
+			"enumeration",
+			"maxInclusive",
+			"maxExclusive",
+			"minInclusive",
+			"minExclusive",
+			"assertions",
+		},
+	},
+	{
+		typ: xsd.QName{Space: "http://www.w3.org/2001/XMLSchema", Local: "string"},
+		valid: []roundtrip{
+			{lexical: "", canonical: ""},
+			{lexical: "abc", canonical: "abc"},
+			{lexical: "café", canonical: "café"},
+			{lexical: "𝔘nicode", canonical: "𝔘nicode"},
+		},
+		applicableFacets: []string{
+			"whiteSpace",
+			"length",
+			"minLength",
+			"maxLength",
+			"pattern",
+			"enumeration",
+			"assertions",
 		},
 	},
 }

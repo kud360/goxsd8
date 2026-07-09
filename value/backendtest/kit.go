@@ -26,6 +26,10 @@ type typeVectors struct {
 	// It is empty for primitives, whose representation is the widest — the slot
 	// exists for derived-type backends and is exercised once one lands.
 	narrowReject []string
+	// applicableFacets are the type's applicable constraining facets in spec
+	// order (cos-applicable-facets, §4.1.5). checkCapabilities asserts the value
+	// the mapping produces carries the capability each facet's check requires.
+	applicableFacets []string
 }
 
 // roundtrip is a valid lexical and the canonical form its value must render.
@@ -79,10 +83,11 @@ type reporter interface {
 // conformance kit's entry point: a backend that passes Run for the types it
 // covers implements those types' lexical↔value↔canonical mappings correctly.
 //
-// M3 exercises the lexical→value→canonical round-trips and invalid-lexical
-// rejection. Order/identity, capability coverage, and the widest-space
-// discipline described in the package doc arrive with the concrete backends
-// that can exercise them.
+// M3 exercises the lexical→value→canonical round-trips, invalid-lexical
+// rejection, and capability coverage (each type's produced value implements the
+// capability its applicable facets require, or Run fails loudly). Order/identity
+// vectors and the widest-space discipline described in the package doc arrive
+// with the derived-type facet model (#33) that can exercise them.
 func Run(t *testing.T, b value.Backend, opts ...Option) {
 	t.Helper()
 	run(t, b, opts)
@@ -120,6 +125,122 @@ func checkType(r reporter, tv typeVectors, m value.Mapping) {
 	for _, lex := range tv.narrowReject {
 		checkRejected(r, tv.typ, m, lex, "a wide-valid lexical the narrow representation cannot hold")
 	}
+	checkCapabilities(r, tv, m)
+}
+
+// capability names the value-capability interface a facet's check requires. The
+// zero value capNone means the facet needs no value capability.
+type capability uint8
+
+const (
+	// capNone marks a facet whose check needs no value capability.
+	capNone capability = iota
+	capOrdered
+	capDigitCounted
+	capLengthed
+	capScaled
+	capEq
+)
+
+// requiredCapability classifies one applicable constraining facet by the value
+// capability its check requires (dv_vfacets, §4.1.4). ok is false for a facet
+// name the kit does not recognize — an unclassified facet is drift the kit must
+// catch loudly, never silently skip.
+//
+// This table is fixed, hand-written and spec-cited — NOT generated data
+// (PRINCIPLES 26, warden pre-flight): only each type's applicableFacets list is
+// spec-derived. whiteSpace, pattern and assertions map to capNone: §4.1.4
+// dv_vfacets is value-based and excludes them — whiteSpace and pattern act on
+// the normalized lexical (pre-value stages) and assertions are an XPath
+// mechanism, so none constrains a produced value's capabilities.
+func requiredCapability(facet string) (capability, bool) {
+	switch facet {
+	case "minInclusive", "maxInclusive", "minExclusive", "maxExclusive": // §4.3.7–§4.3.10
+		return capOrdered, true
+	case "totalDigits", "fractionDigits": // §4.3.11–§4.3.12
+		return capDigitCounted, true
+	case "length", "minLength", "maxLength": // §4.3.1–§4.3.3
+		return capLengthed, true
+	case "maxScale", "minScale": // xsd-precisionDecimal (no cohort type uses these yet)
+		return capScaled, true
+	case "enumeration": // §4.3.5, cvc-enumeration-valid — "equal or identical"
+		return capEq, true
+	case "whiteSpace", "pattern", "assertions": // pre-lexical / lexical / assertion stages
+		return capNone, true
+	}
+	return capNone, false
+}
+
+// checkCapabilities asserts the value the mapping produces implements every
+// capability its applicable facets require (value.Backend doc: "a backend's
+// values must implement the capabilities its types' applicable facets require").
+// It parses the first valid lexical to obtain a representative value, then for
+// each applicable facet looks up the required capability and type-asserts the
+// value against it — failing loudly on a missing capability or an unclassified
+// facet name.
+func checkCapabilities(r reporter, tv typeVectors, m value.Mapping) {
+	r.Helper()
+	if len(tv.valid) == 0 {
+		return
+	}
+	v, err := m.Parse(tv.valid[0].lexical, nil)
+	if err != nil {
+		return // the round-trip check already reported this parse failure
+	}
+	for _, facet := range tv.applicableFacets {
+		cap, ok := requiredCapability(facet)
+		if !ok {
+			r.Errorf("%s: applicable facet %q is not classified by requiredCapability; an unclassified facet is drift the kit must catch", tv.typ, facet)
+			continue
+		}
+		if hasCapability(v, cap) {
+			continue
+		}
+		r.Errorf("%s: value of %q lacks %s, required by applicable facet %q", tv.typ, tv.valid[0].lexical, capabilityName(cap), facet)
+	}
+}
+
+// hasCapability reports whether v implements the interface capability c names.
+func hasCapability(v value.Value, c capability) bool {
+	switch c {
+	case capNone:
+		return true
+	case capOrdered:
+		_, ok := v.(value.Ordered)
+		return ok
+	case capDigitCounted:
+		_, ok := v.(value.DigitCounted)
+		return ok
+	case capLengthed:
+		_, ok := v.(value.Lengthed)
+		return ok
+	case capScaled:
+		_, ok := v.(value.Scaled)
+		return ok
+	case capEq:
+		_, ok := v.(value.Eq)
+		return ok
+	}
+	return false
+}
+
+// capabilityName is the diagnostic name of a capability for failure messages.
+func capabilityName(c capability) string {
+	switch c {
+	case capNone:
+		return "no capability"
+	case capOrdered:
+		return "value.Ordered"
+	case capDigitCounted:
+		return "value.DigitCounted"
+	case capLengthed:
+		return "value.Lengthed"
+	case capScaled:
+		return "value.Scaled"
+	case capEq:
+		return "value.Eq"
+	}
+	return "no capability"
 }
 
 // checkRoundtrip asserts a valid lexical parses and canonicalizes as the spec

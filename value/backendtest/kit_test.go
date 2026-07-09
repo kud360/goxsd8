@@ -11,6 +11,13 @@ import (
 const xsdNS = "http://www.w3.org/2001/XMLSchema"
 
 func booleanQName() xsd.QName { return xsd.QName{Space: xsdNS, Local: "boolean"} }
+func decimalQName() xsd.QName { return xsd.QName{Space: xsdNS, Local: "decimal"} }
+func stringQName() xsd.QName  { return xsd.QName{Space: xsdNS, Local: "string"} }
+
+// othersAbsent declares the cohort types other than boolean absent, so the
+// boolean-only test backends below are checked purely on boolean without Run
+// reporting the (intentionally) unmapped decimal/string vectors.
+func othersAbsent() []Option { return []Option{Absent(decimalQName(), stringQName())} }
 
 // mapBackend is a test value.Backend over an explicit table.
 type mapBackend map[xsd.QName]value.Mapping
@@ -65,14 +72,14 @@ func (r *recordT) Helper()               {}
 func TestRunCatchesBackends(t *testing.T) {
 	good := mapBackend{booleanQName(): correctBoolean()}
 	var rg recordT
-	run(&rg, good, nil)
+	run(&rg, good, othersAbsent())
 	if rg.errs != 0 {
 		t.Fatalf("correct backend: run reported %d failures, want 0", rg.errs)
 	}
 
 	bad := mapBackend{booleanQName(): buggyBoolean()}
 	var rb recordT
-	run(&rb, bad, nil)
+	run(&rb, bad, othersAbsent())
 	if rb.errs == 0 {
 		t.Fatal("buggy backend: run reported 0 failures, want > 0")
 	}
@@ -88,14 +95,91 @@ func TestRunAbsentSkipsUnmapped(t *testing.T) {
 	}
 
 	var r2 recordT
-	run(&r2, empty, []Option{Absent(booleanQName())})
+	run(&r2, empty, []Option{Absent(booleanQName(), decimalQName(), stringQName())})
 	if r2.errs != 0 {
-		t.Fatalf("Absent(boolean): run reported %d failures, want 0", r2.errs)
+		t.Fatalf("Absent(all cohort): run reported %d failures, want 0", r2.errs)
 	}
 }
 
 // TestRunPublic exercises the exported Run against a *testing.T with a correct
 // backend: the public entry point must run the generated vectors and pass.
 func TestRunPublic(t *testing.T) {
-	Run(t, mapBackend{booleanQName(): correctBoolean()})
+	Run(t, mapBackend{booleanQName(): correctBoolean()}, othersAbsent()...)
+}
+
+// orderedVal implements value.Ordered (hence value.Eq) so a synthetic mapping
+// can produce a capability-carrying value.
+type orderedVal struct{}
+
+func (orderedVal) Eq(value.Value) bool            { return true }
+func (orderedVal) Cmp(value.Value) value.Ordering { return value.Equal }
+
+// TestRequiredCapabilityClassification pins the fixed facet→capability table,
+// including that an unrecognized facet name is reported (ok=false).
+func TestRequiredCapabilityClassification(t *testing.T) {
+	cases := map[string]struct {
+		cap capability
+		ok  bool
+	}{
+		"minInclusive":   {capOrdered, true},
+		"maxExclusive":   {capOrdered, true},
+		"totalDigits":    {capDigitCounted, true},
+		"fractionDigits": {capDigitCounted, true},
+		"length":         {capLengthed, true},
+		"maxLength":      {capLengthed, true},
+		"maxScale":       {capScaled, true},
+		"enumeration":    {capEq, true},
+		"whiteSpace":     {capNone, true},
+		"pattern":        {capNone, true},
+		"assertions":     {capNone, true},
+		"bogusFacet":     {capNone, false},
+	}
+	for facet, want := range cases {
+		gotCap, gotOK := requiredCapability(facet)
+		if gotCap != want.cap || gotOK != want.ok {
+			t.Errorf("requiredCapability(%q) = (%v,%v), want (%v,%v)", facet, gotCap, gotOK, want.cap, want.ok)
+		}
+	}
+}
+
+// TestCheckCapabilitiesCatchesMissing proves checkCapabilities fails loudly when
+// a produced value misses a required capability and passes when it carries it.
+func TestCheckCapabilitiesCatchesMissing(t *testing.T) {
+	// A mapping whose value carries no capabilities at all.
+	bare := value.Mapping{Parse: func(string, value.Context) (value.Value, error) { return struct{}{}, nil }}
+	ordered := value.Mapping{Parse: func(string, value.Context) (value.Value, error) { return orderedVal{}, nil }}
+
+	tv := typeVectors{
+		typ:              xsd.QName{Space: xsdNS, Local: "synthetic"},
+		valid:            []roundtrip{{lexical: "x", canonical: "x"}},
+		applicableFacets: []string{"minInclusive"}, // requires value.Ordered
+	}
+
+	var miss recordT
+	checkCapabilities(&miss, tv, bare)
+	if miss.errs == 0 {
+		t.Fatal("bare value missing value.Ordered: checkCapabilities reported 0 failures, want > 0")
+	}
+
+	var ok recordT
+	checkCapabilities(&ok, tv, ordered)
+	if ok.errs != 0 {
+		t.Fatalf("ordered value: checkCapabilities reported %d failures, want 0", ok.errs)
+	}
+}
+
+// TestCheckCapabilitiesUnclassifiedFacet proves an applicable facet the table
+// does not recognize is reported, never silently skipped.
+func TestCheckCapabilitiesUnclassifiedFacet(t *testing.T) {
+	tv := typeVectors{
+		typ:              xsd.QName{Space: xsdNS, Local: "synthetic"},
+		valid:            []roundtrip{{lexical: "x", canonical: "x"}},
+		applicableFacets: []string{"bogusFacet"},
+	}
+	pass := value.Mapping{Parse: func(string, value.Context) (value.Value, error) { return orderedVal{}, nil }}
+	var r recordT
+	checkCapabilities(&r, tv, pass)
+	if r.errs == 0 {
+		t.Fatal("unclassified facet: checkCapabilities reported 0 failures, want > 0")
+	}
 }
