@@ -32,14 +32,18 @@ local specs + conversion tooling, W3C suite submodule, package contracts
 `xsderr` (Error/Rule/Loc + narrowing helpers), `loader` (Resolver +
 Dir/FS/HTTP/Map/Chain), `parser/xmltree` (streaming position-tracking
 decoder), and the `xsd.QName` expanded-name value type that
-`value.Backend` and the builtin table key on (the rest of the `xsd`
-component model waits for M4). Full unit tests; fuzz targets for xmltree.
+`value.Backend` and the builtin table key on (the datatypes-facing
+`xsd.SimpleType` component follows in M3 alongside `Seed`; the rest of the
+`xsd` component model waits for M4). Full unit tests; fuzz targets for
+xmltree.
 
 ## M3 — Datatypes vertical slice
 
 `value` contracts finalized; `builtin/strict` primitive mappings + the
 facet pipeline (pattern facets via package `regex`, XSD flavor) +
-`builtin.Seed`; `value/backendtest` kit running against strict. First
+`builtin.Seed` — including the datatypes-facing `xsd.SimpleType` component
+that `Seed` builds one of per builtin (the rest of the `xsd` component
+model stays M4); `value/backendtest` kit running against strict. First
 **`datatypes` ratchet lane** produces real numbers.
 
 ## M4 — Schema parsing
