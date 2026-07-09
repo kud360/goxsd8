@@ -4,4 +4,4 @@ package backendtest
 // tools/backendtestgen. Paths below are relative to this package directory,
 // where the generate directive runs.
 
-//go:generate go tool backendtestgen -structures ../../docs/specs/md/xmlschema11-2.md -out gen_vectors.go
+//go:generate go tool backendtestgen -structures ../../docs/specs/md/xmlschema11-2.md -precision ../../docs/specs/md/xsd-precisionDecimal.md -out gen_vectors.go

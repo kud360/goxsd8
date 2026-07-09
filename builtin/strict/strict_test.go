@@ -5,12 +5,22 @@ import (
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/value/backendtest"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
 // xsdNS is the XML Schema namespace the cohort types live in.
 const xsdNS = "http://www.w3.org/2001/XMLSchema"
+
+// TestBackendtestCertification is the headline acceptance of #14: the strict
+// backend passes the shared conformance kit for the #27 cohort — round-trips,
+// invalid-lexical rejection, and capability coverage (each value carries the
+// capabilities its applicable facets require, with no type switch). strict maps
+// every type the kit has vectors for, so no Absent option is needed.
+func TestBackendtestCertification(t *testing.T) {
+	backendtest.Run(t, strict.New())
+}
 
 func TestBackendCoverage(t *testing.T) {
 	backend := strict.New()

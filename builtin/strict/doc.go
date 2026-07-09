@@ -33,6 +33,17 @@
 // xs:boolean and xs:string — with spec-exact parse, canonical and comparison.
 // The remaining representations above (precisionDecimal, the date/time family,
 // duration, float/double, the rest of the string family, anyURI,
-// QName/NOTATION, hexBinary/base64Binary), full value/backendtest coverage, and
-// the value.Emitter fast path remain future milestones.
+// QName/NOTATION, hexBinary/base64Binary) and the value.Emitter fast path remain
+// future milestones. The cohort is certified by value/backendtest.Run: each
+// type's value carries exactly the capability interfaces its applicable facets
+// require (cos-applicable-facets), documented per type on [New].
+//
+// # whiteSpace stage
+//
+// The whiteSpace pre-lexical normalization (Datatypes §4.3.6) is applied before
+// a type's lexical mapping: decimal and boolean fix whiteSpace=collapse, string
+// is whiteSpace=preserve. The per-type mode is read from the generated
+// builtin.Types table, not hand-duplicated. The pattern and value-facet pipeline
+// stages await the derived-SimpleType facet model (#33), since only whiteSpace
+// has a spec-mandated value at the primitive level.
 package strict

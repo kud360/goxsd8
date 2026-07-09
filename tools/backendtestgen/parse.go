@@ -15,6 +15,9 @@ type typeVectors struct {
 	Valid        []roundtrip
 	Invalid      []string
 	NarrowReject []string
+	// ApplicableFacets are the type's applicable constraining facets in spec
+	// order (cos-applicable-facets, §4.1.5), read from the shared builtin parser.
+	ApplicableFacets []string
 }
 
 // roundtrip is a valid lexical paired with the canonical form its value renders.
@@ -27,6 +30,10 @@ type roundtrip struct {
 // backtick, apostrophe), the form the Datatypes spec uses for booleanRep
 // literals and for the operands of the boolean lexical/canonical mappings.
 var litRE = regexp.MustCompile("'`([^`]+)`'")
+
+// backtickRE matches a bare `X` backtick span, the form the decimal Lexical
+// Mapping section uses for the lexical-space regular expression.
+var backtickRE = regexp.MustCompile("`([^`]+)`")
 
 // parseBoolean derives the boolean vectors from the Datatypes spec, purely from
 // the normative mapping definitions (§3.3.2.2):
@@ -158,6 +165,146 @@ func booleanInvalids(lexicals []string) []string {
 			add(string(d))
 			break
 		}
+	}
+	return out
+}
+
+// parseString derives the string vectors. f-stringLexmap and f-stringCanmap are
+// the identity on the whole domain (§3.3.1.2), and every finite Char* sequence
+// is in the lexical space (nt-stringRep) — so there is NO invalid string lexical
+// and the Invalid slot is deliberately left empty; inventing "invalid strings"
+// would contradict the lexical space. string's space is unbounded, so unlike
+// boolean/decimal there is no finite spec production to enumerate: the valid
+// sample is a small deterministic set of representative literals — the empty
+// string, ASCII, a multi-byte (combining) codepoint and an astral codepoint —
+// each round-tripping to itself under the identity canonical mapping. The spec
+// anchors are consulted only to fail loud if the identity mappings move.
+func parseString(spec string) (typeVectors, error) {
+	for _, anchor := range []string{`id="f-stringLexmap"`, `id="f-stringCanmap"`} {
+		if !strings.Contains(spec, anchor) {
+			return typeVectors{}, fmt.Errorf("string identity mapping anchor %q not found", anchor)
+		}
+	}
+	sample := []string{"", "abc", "café", "𝔘nicode"}
+	valid := make([]roundtrip, 0, len(sample))
+	for _, s := range sample {
+		valid = append(valid, roundtrip{Lexical: s, Canonical: s})
+	}
+	return typeVectors{Local: "string", Valid: valid}, nil
+}
+
+// parseDecimal derives the decimal vectors from the Datatypes spec (§3.3.3):
+//
+//   - the valid lexicals are the worked examples in the decimal Lexical Mapping
+//     prose (decimal-lexical-representation, nt-decimalRep), each paired with the
+//     canonical form decimalCanonicalMap (f-decimalCanmap, §3.3.3.2) assigns it,
+//     computed by decimalCanonical here so the vectors are an INDEPENDENT oracle
+//     rather than an echo of the backend under test;
+//   - the lexical space is exactly the regular expression the same production
+//     gives; the invalid sample is a deterministic set of near-misses that regex
+//     rejects (an exponent form, which the prose explicitly excludes; a bare
+//     sign; a bare point; the empty string), each verified against the extracted
+//     regex so a spec change widening the space would drop it rather than let a
+//     now-valid lexical masquerade as invalid.
+func parseDecimal(spec string) (typeVectors, error) {
+	sec, err := section(spec, `id="decimal-lexical-representation"`, `id="decimal-facets"`)
+	if err != nil {
+		return typeVectors{}, fmt.Errorf("decimal lexical mapping: %w", err)
+	}
+	lexicals := literalsIn(sec)
+	if len(lexicals) == 0 {
+		return typeVectors{}, fmt.Errorf("decimal lexical mapping: no example lexicals found")
+	}
+	re, err := decimalLexicalRegex(sec)
+	if err != nil {
+		return typeVectors{}, err
+	}
+
+	valid := make([]roundtrip, 0, len(lexicals))
+	for _, lex := range lexicals {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("decimal: example lexical %q does not match its own production regex", lex)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: decimalCanonical(lex)})
+	}
+
+	return typeVectors{
+		Local:   "decimal",
+		Valid:   valid,
+		Invalid: decimalInvalids(re, lexicals),
+	}, nil
+}
+
+// decimalLexicalRegex extracts the decimal lexical-space regular expression from
+// the production prose and returns it anchored (^…$). The spec writes it as a
+// bare `…` backtick span containing [0-9] and \. ; it is valid Go regexp syntax.
+func decimalLexicalRegex(sec string) (*regexp.Regexp, error) {
+	for _, line := range strings.Split(sec, "\n") {
+		if !strings.Contains(line, `[0-9]+`) || !strings.Contains(line, `\.[0-9]`) {
+			continue
+		}
+		m := backtickRE.FindStringSubmatch(line)
+		if m == nil {
+			return nil, fmt.Errorf("decimal: regex line has no backtick span: %q", line)
+		}
+		re, err := regexp.Compile("^(?:" + m[1] + ")$")
+		if err != nil {
+			return nil, fmt.Errorf("decimal: compiling extracted lexical regex %q: %w", m[1], err)
+		}
+		return re, nil
+	}
+	return nil, fmt.Errorf("decimal: lexical-space regular expression not found")
+}
+
+// decimalCanonical implements decimalCanonicalMap (f-decimalCanmap, §3.3.3.2):
+// drop a '+' sign; an integer value has no point or fractional part; otherwise a
+// mandatory point with at least one digit on each side and no superfluous
+// leading/trailing zeros; no sign on zero. Its input is a lexical the production
+// regex already accepted, so body[0] is a sign or digit or '.'.
+func decimalCanonical(lexical string) string {
+	neg := false
+	body := lexical
+	switch body[0] {
+	case '+':
+		body = body[1:]
+	case '-':
+		neg = true
+		body = body[1:]
+	}
+	intPart, fracPart := body, ""
+	if i := strings.IndexByte(body, '.'); i >= 0 {
+		intPart, fracPart = body[:i], body[i+1:]
+	}
+	intPart = strings.TrimLeft(intPart, "0")
+	fracPart = strings.TrimRight(fracPart, "0")
+	if intPart == "" {
+		intPart = "0"
+	}
+	sign := ""
+	if neg && (intPart != "0" || fracPart != "") {
+		sign = "-"
+	}
+	if fracPart == "" {
+		return sign + intPart
+	}
+	return sign + intPart + "." + fracPart
+}
+
+// decimalInvalids derives a deterministic near-miss sample of lexicals outside
+// the decimal production, keeping only those the extracted regex rejects: an
+// exponent form built from the first valid example (the prose explicitly
+// excludes exponents), a bare sign and a bare point (the production requires at
+// least one digit), and the empty string.
+func decimalInvalids(re *regexp.Regexp, lexicals []string) []string {
+	candidates := []string{lexicals[0] + "E2", "+", ".", ""}
+	var out []string
+	seen := map[string]bool{}
+	for _, c := range candidates {
+		if seen[c] || re.MatchString(c) {
+			continue
+		}
+		seen[c] = true
+		out = append(out, c)
 	}
 	return out
 }
