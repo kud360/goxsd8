@@ -1,4 +1,4 @@
-# goxsd8 Roadmap
+to# goxsd8 Roadmap
 
 Milestones map one-to-one to GitHub milestones. The cartographer carves
 each into session-sized `ready` issues; the develop loop closes them one
@@ -86,6 +86,17 @@ identical error rule IDs) and `testing.AllocsPerRun` budgets.
 ## M12 — Native backend completion
 
 `builtin/native` mappings + emitter, backendtest green, performance pass.
+
+## v1.0 — the stability line
+
+1.0 is declared by a human, not by a milestone rollover (expected after
+M12). Until then, **pre-1.0 mobility** applies: interfaces, package
+boundaries, and exported names move freely whenever the steward's
+audit finds a better placement — the ratchet and the gate are the only
+compatibility promises. After 1.0, exported-surface changes require a
+deprecation path and a compatibility argument; the audit's posture
+flips from "move it now" to "guard the surface". (Narrower freezes may
+land earlier where a milestone says so — e.g. `value.Emitter` at M9.)
 
 ## Non-goals
 

@@ -41,9 +41,13 @@ WIP branch) at every step boundary.
    `.agent/grounding-issue-<N>.md` as scratch. CHECKPOINT
    (`git commit -am "wip #<N>: grounding" && git push`).
 
-4. **Implement** — delegate to **mason**, committing on the WIP branch.
-   Public API added/changed → **warden** reviews first; post its verdict
-   on the issue. CHECKPOINT.
+4. **Implement** — if the issue's `## Surface` section is non-"none",
+   have **warden** review the PLANNED surface first (the Surface sketch
+   plus mason's intended type shapes — a one-comment design pre-flight,
+   posted on the issue) BEFORE any code is written; shape errors are
+   cheapest before they're built. Then delegate to **mason**,
+   committing on the WIP branch. Public API added/changed → **warden**
+   reviews the diff too; post its verdict on the issue. CHECKPOINT.
 
 5. **Judge** — delegate to **arbiter** (it reviews the branch diff
    against main). CHECKPOINT after each verdict. On reject: ONE repair

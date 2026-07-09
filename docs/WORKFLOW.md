@@ -93,14 +93,17 @@ Invariants the scheme encodes:
 | **oracle** | `.claude/agents/oracle.md` | sonnet | Spec exegesis; answers only from `docs/specs/md` |
 | **warden** | `.claude/agents/warden.md` | opus | API/type-safety review; illegal states unrepresentable |
 | **cartographer** | `.claude/agents/cartographer.md` | opus | Long-horizon planning; owns GitHub issues/milestones |
-| **chronicler** | `.claude/agents/chronicler.md` | haiku | Session logs; meta-process retrospectives |
+| **steward** | `.claude/agents/steward.md` | opus | Long-horizon architecture steward; audit (Part 2 of /retro); pre/post-1.0 mobility policy |
+| **chronicler** | `.claude/agents/chronicler.md` | opus | Session logs; meta-process retrospectives |
 | **libuser** | `.claude/agents/libuser.md` | sonnet | Role-plays a library consumer; works only from godoc + README |
 | **cliuser** | `.claude/agents/cliuser.md` | sonnet | Role-plays a CLI user; works only from README + `-help` |
 
 Roles do not blur: mason never re-baselines the ratchet, arbiter never
 implements fixes, oracle never writes code, libuser/cliuser never read
-the source. The orchestrating session delegates and coordinates; it does
-no specialist work itself and never skips the arbiter.
+the source, steward never touches Go code (it files refactor issues;
+warden judges individual diffs, steward judges the whole). The
+orchestrating session delegates and coordinates; it does no specialist
+work itself and never skips the arbiter.
 
 ## The develop loop (`/develop`, the default scheduled trigger)
 
@@ -135,9 +138,12 @@ no specialist work itself and never skips the arbiter.
    IDs in scope. Post the answer verbatim as a comment on the issue
    (`GROUNDING:` prefix); also save to `.agent/grounding-issue-<N>.md`
    as session scratch. The citation goes in the commit. **Checkpoint.**
-4. **Implement** — **mason** makes the smallest change that closes the
-   issue, per docs/STYLE.md, committing on the WIP branch. New/changed
-   public API → **warden** reviews before proceeding (post the verdict
+4. **Implement** — if the issue's `## Surface` section is non-"none",
+   **warden** pre-flights the planned surface (sketch + intended type
+   shapes) before any code is written; post it on the issue. Then
+   **mason** makes the smallest change that closes the issue, per
+   docs/STYLE.md, committing on the WIP branch. New/changed public API
+   → **warden** reviews the diff before proceeding (post the verdict
    on the issue). **Checkpoint.**
 5. **Judge** — **arbiter** runs the gate
    (`go build ./... && go test ./... && go vet ./...` + the lint gate +
@@ -215,7 +221,11 @@ new number, from `origin/main`.
 - **`/ratchet`** — arbiter only: run conformance, report movement per
   lane, ratchet upward, investigate & file issues for any regression.
 - **`/backlog`** — cartographer: reconcile GitHub issues with reality (close
-  stale, split oversized, order by dependency, keep 5–10 `ready`);
+  stale, split oversized, order by dependency, keep 8–10 `ready` and
+  readiness-audited — deps verifiably closed, acceptance criteria
+  reference only symbols that exist or the issue creates, spec claims
+  oracle-verified or marked `UNVERIFIED:`); harvest un-filed follow-ups
+  from docs/LOG and verdict comments;
   consult **libuser**/**cliuser** when planning API- or CLI-facing
   milestones. Also **reconcile the branch namespace**: classify every
   `wip/*` branch by its issue's state (live / resumable / retired); a
@@ -228,8 +238,18 @@ new number, from `origin/main`.
   them only the current README and `go doc` output) to produce user
   stories with acceptance criteria, filed as issues.
 - **`/retro`** — chronicler: read the last ~2 weeks of LOG + git history +
-  `needs-replan` issues; find recurring friction; apply the smallest
-  durable fix to WORKFLOW/STYLE/agent prompts in a `meta: retro` commit.
+  `needs-replan` issues + verdict comments on issue threads; find
+  recurring friction and classify it by pipeline entry point; audit the
+  follow-up ledger (every promised follow-up filed or dismissed); apply
+  the smallest durable fix to WORKFLOW/STYLE/agent prompts in a
+  `meta: retro` commit; log metric trends vs the previous retro.
+  Then Part 2, the **architecture audit** — delegate to the
+  **steward**: import graph and exported surface vs
+  docs/ARCHITECTURE.md; placement, duplicate concepts/representations
+  (judged by upkeep cost), exported-symbol usage vs godoc intent, doc
+  drift. Files `kind/refactor` issues ranked by cost-of-delay;
+  pre-1.0 movement is encouraged, post-1.0 the audit guards the
+  surface (docs/PLAN.md defines the line).
   The ratchet-integrity rules (CLAUDE.md's one rule, arbiter.md's
   ratchet section) change only via a human-filed issue.
 

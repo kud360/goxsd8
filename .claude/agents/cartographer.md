@@ -16,19 +16,32 @@ obsolete or duplicate freely.
    (`git ls-remote --heads origin 'refs/heads/wip/*'
    'refs/heads/parked/*'`), current ratchet lane files, and
    `grep -rn "GAP(" --include=*.go` for fail-open debt.
-1b. **Garbage-collect branches** (docs/WORKFLOW.md branch scheme): a
-   `wip/issue-<N>` whose issue is CLOSED is a landing that crashed
-   before cleanup — verify its content is in main, then delete it (park
-   it if it isn't). A `wip/` branch stale for several days with no
-   RESUME comment → park it and label the issue `needs-replan`. A
-   `parked/` branch whose issue has since shipped → delete; the rest →
-   list for human triage in your plan summary.
+1b. **Reconcile the branch namespace** (docs/WORKFLOW.md branch scheme
+   — report-only: sessions never delete or rename refs): a
+   `wip/issue-<N>` whose issue is CLOSED should have vanished at merge
+   — verify its content is in main (`git log`/diff) and supersede the
+   issue if it isn't. A `wip/` branch stale for several days with no
+   RESUME comment → label its issue `needs-replan` (that alone retires
+   the branch in place). List retired branches and `parked/untriaged-*`
+   for human triage in your plan summary.
 2. **Reconcile**: close stale/obsolete issues, split anything too big
    for one session, merge duplicates, file `kind/gap` issues for
    untracked GAP sites.
-3. **Keep 5–10 `ready` issues**, ordered by dependency (`Depends on #N`
+2b. **Harvest follow-ups**: every "Next:", advisory verdict note, and
+   promised "file a follow-up issue" in docs/LOG entries and issue
+   threads since the last /backlog either already has a tracking issue
+   or gets one now — promised follow-ups have leaked before.
+3. **Keep 8–10 `ready` issues**, ordered by dependency (`Depends on #N`
    in the body; label `blocked` until deps close). Prefer vertical
    slices that move a conformance lane over horizontal completeness.
+   The develop loop can consume several issues a day; a shallow queue
+   stalls it.
+3b. **Readiness audit**: `ready` means an agent can START it — verify,
+   don't trust labels: dependencies actually CLOSED, and acceptance
+   criteria reference only symbols that exist on main or that the issue
+   itself creates (grep for them). Spec claims in issue bodies (rule
+   IDs, counts, property values) are oracle-verified at carve time or
+   marked `UNVERIFIED:` so the grounding step re-checks them first.
 4. **Consult the user personas** for API- or CLI-facing milestones: give
    libuser the current `go doc` output and README, cliuser the README
    and CLI contract, and fold their stories/acceptance criteria into

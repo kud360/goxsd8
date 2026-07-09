@@ -97,8 +97,8 @@ goxsd8 is built primarily by AI agents — scheduled Claude Code routines
 running the slash commands in `.claude/commands/` (`/develop`, `/backlog`,
 `/ratchet`, `/retro`, `/story`), with specialized personas in
 `.claude/agents/` (implementer, judge, spec oracle, API warden, planner,
-historian, and two simulated users who test the docs you are reading
-right now). GitHub issues are the project's memory; every change is
+architecture steward, historian, and two simulated users who test the
+docs you are reading right now). GitHub issues are the project's memory; every change is
 judged against [docs/STYLE.md](docs/STYLE.md) and the conformance
 ratchet before it lands. Humans are welcome — file issues, or run the
 same commands locally.

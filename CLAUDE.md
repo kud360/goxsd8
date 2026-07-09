@@ -104,7 +104,10 @@ Specialized subagents are defined in `.claude/agents/`:
 **mason** (implements), **arbiter** (judges & runs the ratchet — the only
 agent allowed to), **oracle** (spec exegesis, read-only), **warden**
 (API/type-safety review, read-only), **cartographer** (long-horizon
-planning, GitHub issues), **chronicler** (logs & retros), **libuser**
+planning, GitHub issues), **steward** (long-horizon architecture
+stewardship — audits placement, duplication, and drift as Part 2 of
+every /retro; files refactor issues, never implements), **chronicler**
+(logs & retros), **libuser**
 (role-plays a library consumer; sees only godoc + README), **cliuser**
 (role-plays a CLI user; sees only README + `-help`). Delegate per
 docs/WORKFLOW.md; do not blur their roles. The orchestrating session
