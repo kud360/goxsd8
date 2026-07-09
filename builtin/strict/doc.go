@@ -27,6 +27,12 @@
 // definition in the local Datatypes spec, cited at the implementation
 // site.
 //
-// The package passes value/backendtest with full primitive coverage and
-// implements value.Emitter (M9+) for generated fast paths.
+// # Current coverage
+//
+// [New] returns a backend covering the first primitive cohort — xs:decimal,
+// xs:boolean and xs:string — with spec-exact parse, canonical and comparison.
+// The remaining representations above (precisionDecimal, the date/time family,
+// duration, float/double, the rest of the string family, anyURI,
+// QName/NOTATION, hexBinary/base64Binary), full value/backendtest coverage, and
+// the value.Emitter fast path remain future milestones.
 package strict
