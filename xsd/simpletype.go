@@ -342,6 +342,44 @@ func (t *SimpleType) OwnFacets() []Facet {
 	return append([]Facet(nil), t.ownFacets...)
 }
 
+// EffectiveFacet pairs a Facet with the {name} QName of the type on the base
+// chain that declared it — the operand type of the §3.16.6.4 overlay that
+// contributed that facet-kind to the winning overlay. It is what EffectiveFacets
+// yields, so a consumer keeps facet provenance instead of a flattened final
+// value.
+//
+// Provenance is load-bearing for a value-space consumer: the widest-space rule
+// requires an inherited enumeration or bound facet to be compared in the value
+// space of the type that DECLARES it, not the type that inherits it — a
+// consumer building the facet pipeline cannot honor that if the effective view
+// flattens away which ancestor contributed the facet. (Package xsd itself does
+// NOT depend on package value; this is forward-looking motivation for that
+// future consumer, stated as rationale only, not an implemented dependency.)
+//
+// Declaring is the zero QName when the declaring type is anonymous, per this
+// package's zero-value-means-anonymous convention (see QName and SimpleType's
+// {name} godoc). That is a legitimate value, not a missing one: an inherited
+// facet can genuinely come from an unnamed ancestor on the chain.
+//
+// EffectiveFacet is immutable after construction; it is produced only by
+// EffectiveFacets.
+type EffectiveFacet struct {
+	facet     Facet
+	declaring QName
+}
+
+// Facet returns the Constraining Facet in force.
+func (f EffectiveFacet) Facet() Facet {
+	return f.facet
+}
+
+// Declaring returns the {name} QName of the type on the base chain that
+// declared the facet. It is the zero QName when that type is anonymous (the
+// zero-value-means-anonymous convention, not a missing value).
+func (f EffectiveFacet) Declaring() QName {
+	return f.declaring
+}
+
 // EffectiveFacets computes and returns the spec's {facets} property (Structures
 // §3.16.1): the Constraining Facets in force on this type, accumulated through
 // the whole {base type definition} chain. It is computed on demand, never
@@ -351,23 +389,31 @@ func (t *SimpleType) OwnFacets() []Facet {
 // same-kind facet from a less-derived level, and every non-superseded facet
 // survives.
 //
+// Each result element is an EffectiveFacet, pairing the surviving Facet with
+// the {name} QName of the type on the chain that declared it. That provenance
+// is required by a downstream value-space consumer's widest-space rule (see
+// EffectiveFacet), which must compare an inherited facet in the value space of
+// the type that declared it — a bare []Facet would flatten that away. A facet
+// declared by an anonymous type reports the zero QName as its declaring name.
+//
 // The result is deterministic (STYLE D2/D3) and ordered base-to-derived:
 // facets from a less-derived type come first, and within one type in declared
 // order; when a more-derived type overrides a facet kind, the overriding facet
 // replaces the base one and takes its own (more-derived) position. It returns a
 // fresh slice each call; mutating it does not affect t.
-func (t *SimpleType) EffectiveFacets() []Facet {
+func (t *SimpleType) EffectiveFacets() []EffectiveFacet {
 	// Collect the base chain most-derived first (t, then its base, ...).
 	var chain []*SimpleType
 	for s := t; s != nil; s = s.base {
 		chain = append(chain, s)
 	}
 
-	// Overlay least-derived first so more-derived facets win.
-	var result []Facet
+	// Overlay least-derived first so more-derived facets win. Each facet
+	// carries the declaring type's {name} as its provenance QName.
+	var result []EffectiveFacet
 	for i := len(chain) - 1; i >= 0; i-- {
 		for _, f := range chain[i].ownFacets {
-			result = overlayFacet(result, f)
+			result = overlayFacet(result, EffectiveFacet{facet: f, declaring: chain[i].name})
 		}
 	}
 
@@ -380,10 +426,10 @@ func (t *SimpleType) EffectiveFacets() []Facet {
 // overlayFacet applies a single more-derived facet onto acc per §3.16.6.4:
 // any same-kind facet already in acc is dropped, and f is appended, so f both
 // wins and takes the more-derived position.
-func overlayFacet(acc []Facet, f Facet) []Facet {
-	out := make([]Facet, 0, len(acc)+1)
+func overlayFacet(acc []EffectiveFacet, f EffectiveFacet) []EffectiveFacet {
+	out := make([]EffectiveFacet, 0, len(acc)+1)
 	for _, existing := range acc {
-		if existing.kind != f.kind {
+		if existing.facet.kind != f.facet.kind {
 			out = append(out, existing)
 		}
 	}

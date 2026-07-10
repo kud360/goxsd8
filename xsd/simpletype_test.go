@@ -246,26 +246,39 @@ func TestOwnVsEffectiveFacets(t *testing.T) {
 	// EffectiveFacets accumulates the whole chain, base-to-derived, with the
 	// leaf's maxLength=5 masking mid's maxLength=10.
 	eff := leaf.EffectiveFacets()
-	byKind := map[FacetKind]Facet{}
+	byKind := map[FacetKind]EffectiveFacet{}
 	var order []FacetKind
 	for _, f := range eff {
-		if _, dup := byKind[f.Kind()]; dup {
-			t.Fatalf("EffectiveFacets has duplicate kind %s", f.Kind())
+		if _, dup := byKind[f.Facet().Kind()]; dup {
+			t.Fatalf("EffectiveFacets has duplicate kind %s", f.Facet().Kind())
 		}
-		byKind[f.Kind()] = f
-		order = append(order, f.Kind())
+		byKind[f.Facet().Kind()] = f
+		order = append(order, f.Facet().Kind())
 	}
 	if len(eff) != 3 {
 		t.Fatalf("EffectiveFacets len = %d (%v), want 3", len(eff), order)
 	}
-	if byKind[FacetWhiteSpace].Values()[0] != "collapse" {
+	if byKind[FacetWhiteSpace].Facet().Values()[0] != "collapse" {
 		t.Error("whiteSpace from primitive did not survive")
 	}
-	if byKind[FacetMinLength].Values()[0] != "1" {
+	if byKind[FacetMinLength].Facet().Values()[0] != "1" {
 		t.Error("minLength from mid did not survive")
 	}
-	if byKind[FacetMaxLength].Values()[0] != "5" {
-		t.Errorf("maxLength = %q, want leaf's 5 (masking mid's 10)", byKind[FacetMaxLength].Values()[0])
+	if byKind[FacetMaxLength].Facet().Values()[0] != "5" {
+		t.Errorf("maxLength = %q, want leaf's 5 (masking mid's 10)", byKind[FacetMaxLength].Facet().Values()[0])
+	}
+
+	// Provenance: each effective facet reports the {name} of the type on the
+	// chain that DECLARED it, not the leaf that inherits it. whiteSpace came
+	// from prim, minLength from mid, and the overriding maxLength from leaf.
+	if got := byKind[FacetWhiteSpace].Declaring(); got != (QName{Local: "prim"}) {
+		t.Errorf("whiteSpace Declaring() = %v, want {Local: prim}", got)
+	}
+	if got := byKind[FacetMinLength].Declaring(); got != (QName{Local: "mid"}) {
+		t.Errorf("minLength Declaring() = %v, want {Local: mid}", got)
+	}
+	if got := byKind[FacetMaxLength].Declaring(); got != (QName{Local: "leaf"}) {
+		t.Errorf("maxLength Declaring() = %v, want leaf (overriding type's own name)", got)
 	}
 
 	// Deterministic base-to-derived order: whiteSpace (prim) before minLength
@@ -274,6 +287,23 @@ func TestOwnVsEffectiveFacets(t *testing.T) {
 	for i := range want {
 		if order[i] != want[i] {
 			t.Errorf("EffectiveFacets order = %v, want %v", order, want)
+		}
+	}
+
+	// An anonymous restriction (zero {name}) that contributes its own facet
+	// reports the zero QName as provenance — the zero-value-means-anonymous
+	// convention, not a missing value.
+	anon, err := NewSimpleType(xsderr.Loc{}, QName{}, Atomic{Primitive: prim}, leaf,
+		[]Facet{NewFacet(FacetLength, []string{"3"}, false)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range anon.EffectiveFacets() {
+		if f.Facet().Kind() != FacetLength {
+			continue
+		}
+		if got := f.Declaring(); got != (QName{}) {
+			t.Errorf("anonymous-declared length Declaring() = %v, want zero QName", got)
 		}
 	}
 
