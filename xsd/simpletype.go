@@ -41,9 +41,11 @@ type Variety interface{ variety() }
 
 // Atomic is the atomic {variety} (Datatypes §2.4.1.1). Primitive is the
 // {primitive type definition} (§3.16.1): a live pointer to this type's
-// primitive ancestor, or nil for the one exception, xs:anyAtomicType, whose
-// {primitive type definition} is ·absent·. The field is read-only by
-// convention; do not mutate it after construction.
+// primitive ancestor — which for a primitive datatype is the type itself
+// (§3.16.1: "the {primitive type definition} of a primitive datatype is that
+// datatype itself"), wired via NewPrimitiveType — or nil for the one exception,
+// xs:anyAtomicType, whose {primitive type definition} is ·absent·. The field is
+// read-only by convention; do not mutate it after construction.
 type Atomic struct{ Primitive *SimpleType }
 
 // List is the list {variety} (Datatypes §2.4.1.2). Item is the {item type
@@ -255,12 +257,49 @@ type SimpleType struct {
 // parser position — a synthesized or programmatically built type — may
 // legitimately pass the zero xsderr.Loc{}.
 func NewSimpleType(loc xsderr.Loc, name QName, variety Variety, base *SimpleType, ownFacets []Facet, final []DerivationMethod) (*SimpleType, error) {
+	if err := checkSTProps(loc, ownFacets, final); err != nil {
+		return nil, err
+	}
+	t := &SimpleType{name: name, variety: variety, base: base}
+	t.setOwnFacetsFinal(ownFacets, final)
+	return t, nil
+}
+
+// NewPrimitiveType builds a primitive datatype (Datatypes §2.4.2): one of the
+// types whose {base type definition} is xs:anyAtomicType (§3.16.1). It fixes the
+// {base type definition} to the canonical xs:anyAtomicType anchor (see
+// AnyAtomicType) so IsPrimitive reports true and pointer identity holds across
+// every graph, and it wires the self-referential {primitive type definition} —
+// a primitive's {primitive type definition} is itself (§3.16.1) — so the
+// returned node's {variety} is an Atomic whose Primitive points back at that
+// same node.
+//
+// The self-reference is established inside this constructor, before the node
+// escapes, so the node is immutable to every external caller. ownFacets and
+// final follow NewSimpleType's contract and are validated identically
+// (st-props-correct); they are copied, not aliased. loc is charged to any
+// rejection.
+func NewPrimitiveType(loc xsderr.Loc, name QName, ownFacets []Facet, final []DerivationMethod) (*SimpleType, error) {
+	if err := checkSTProps(loc, ownFacets, final); err != nil {
+		return nil, err
+	}
+	t := &SimpleType{name: name, base: anyAtomicType}
+	t.variety = Atomic{Primitive: t}
+	t.setOwnFacetsFinal(ownFacets, final)
+	return t, nil
+}
+
+// checkSTProps enforces the st-props-correct (§3.16.6.1) construction-time
+// rejections shared by NewSimpleType and NewPrimitiveType: no {final} token
+// outside the legal simple-type subset, and no two ownFacets of the same
+// FacetKind (clause 4). loc is charged to any rejection.
+func checkSTProps(loc xsderr.Loc, ownFacets []Facet, final []DerivationMethod) error {
 	for _, d := range final {
 		switch d {
 		case DerivationRestriction, DerivationExtension, DerivationList, DerivationUnion:
 			// legal simple-type {final} token
 		default:
-			return nil, xsderr.New(ruleSTPropsCorrect, loc,
+			return xsderr.New(ruleSTPropsCorrect, loc,
 				"simple type {final} token %s is not one of restriction, extension, list, union", d)
 		}
 	}
@@ -268,20 +307,24 @@ func NewSimpleType(loc xsderr.Loc, name QName, variety Variety, base *SimpleType
 	seen := make(map[FacetKind]struct{}, len(ownFacets))
 	for _, f := range ownFacets {
 		if _, dup := seen[f.kind]; dup {
-			return nil, xsderr.New(ruleSTPropsCorrect, loc,
+			return xsderr.New(ruleSTPropsCorrect, loc,
 				"simple type has more than one %s facet", f.kind)
 		}
 		seen[f.kind] = struct{}{}
 	}
+	return nil
+}
 
-	t := &SimpleType{name: name, variety: variety, base: base}
+// setOwnFacetsFinal copies ownFacets and final onto t during construction. It
+// is called only by the constructors before t escapes; SimpleType is immutable
+// thereafter. The caller's backing arrays are not aliased.
+func (t *SimpleType) setOwnFacetsFinal(ownFacets []Facet, final []DerivationMethod) {
 	if len(ownFacets) > 0 {
 		t.ownFacets = append([]Facet(nil), ownFacets...)
 	}
 	if len(final) > 0 {
 		t.final = append([]DerivationMethod(nil), final...)
 	}
-	return t, nil
 }
 
 // Name returns the {name} property, bundled with {target namespace} as a QName.
@@ -436,11 +479,28 @@ func overlayFacet(acc []EffectiveFacet, f EffectiveFacet) []EffectiveFacet {
 	return append(out, f)
 }
 
+// AnySimpleType returns the canonical xs:anySimpleType anchor (§3.16.1): the
+// single shared root of the simple-type hierarchy, an immutable package
+// singleton whose {variety} and {base type definition} are both absent. A
+// producer that builds the simple-type graph (e.g. builtin.Seed) roots every
+// chain on THIS node so the whole graph has one anySimpleType identity — pointer
+// identity is load-bearing (see SimpleType). The returned node is read-only; do
+// not mutate it.
+func AnySimpleType() *SimpleType { return anySimpleType }
+
+// AnyAtomicType returns the canonical xs:anyAtomicType anchor (Datatypes
+// §4.1.6): the special atomic type that is the {base type definition} of every
+// primitive datatype, an immutable package singleton. A producer roots every
+// primitive on THIS node (NewPrimitiveType does so) so IsPrimitive — which tests
+// {base type definition} == xs:anyAtomicType by pointer — holds across the whole
+// graph. Its own {primitive type definition} is absent (Atomic{Primitive: nil},
+// §3.16.1). The returned node is read-only; do not mutate it.
+func AnyAtomicType() *SimpleType { return anyAtomicType }
+
 // anySimpleType is the xs:anySimpleType anchor (§3.16.1): the root of the
 // simple-type hierarchy. Its {variety} and {base type definition} are both
 // absent (nil) — its real base, xs:anyType, is a Complex Type Definition
-// outside this package's scope. It is unexported: no consumer needs it yet
-// (STYLE T5).
+// outside this package's scope. Exposed to producers through AnySimpleType.
 var anySimpleType = &SimpleType{
 	name: QName{Space: xsdNamespace, Local: "anySimpleType"},
 }
@@ -449,7 +509,7 @@ var anySimpleType = &SimpleType{
 // atomic type that is the {base type definition} of every primitive datatype.
 // Its {base type definition} is anySimpleType, and it is the one atomic type
 // whose {primitive type definition} is itself absent (Atomic{Primitive: nil}).
-// It is unexported: no consumer needs it yet (STYLE T5).
+// Exposed to producers through AnyAtomicType.
 var anyAtomicType = &SimpleType{
 	name:    QName{Space: xsdNamespace, Local: "anyAtomicType"},
 	variety: Atomic{Primitive: nil},

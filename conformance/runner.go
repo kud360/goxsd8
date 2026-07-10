@@ -103,7 +103,7 @@ func selectsKind(k string) func(caseSpec) bool {
 // without editing the runner.
 func defaultLanes() []lane {
 	return []lane{
-		{name: "datatypes", selects: selectsNone, exec: stubFail},
+		{name: "datatypes", selects: selectsDatatypes, exec: newDatatypesExec()},
 		{name: "schema", selects: selectsKind(kindSchema), exec: stubFail},
 		{name: "instance", selects: selectsKind(kindInstance), exec: stubFail},
 		{name: "xpath", selects: selectsNone, exec: stubFail},
