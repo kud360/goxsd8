@@ -37,6 +37,8 @@ var irregularRules = []string{
 	"derivation-ok-restriction",
 	"sch-props-correct",
 	"p-props-correct",
+	"n-props-correct",
+	"an-props-correct",
 	"length-valid-restriction",
 	"enumeration-valid-restriction",
 	"timezone-valid-restriction",
