@@ -4,6 +4,7 @@ package xsderr
 
 // ruleCatalog contains all normative validation rule IDs extracted from the specs.
 var ruleCatalog = map[Rule]struct{}{
+	"an-props-correct": {},
 	"cos-all-limited": {},
 	"cos-applicable-facets": {},
 	"cos-assertions-restriction": {},
@@ -131,6 +132,7 @@ var ruleCatalog = map[Rule]struct{}{
 	"err:XPTY0020": {},
 	"length-minLength-maxLength": {},
 	"length-valid-restriction": {},
+	"n-props-correct": {},
 	"p-props-correct": {},
 	"sch-props-correct": {},
 	"sic-a-outcome": {},
