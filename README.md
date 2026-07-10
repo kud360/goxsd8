@@ -59,6 +59,12 @@ Violations print one per line: `<loc>: [<rule>] <message>`.
 ### Library
 
 ```go
+// Seed the builtin datatypes from a value backend (compose to cover every
+// primitive). This is the required first step — the components feed the
+// parser's symbol table.
+backend := value.Override(fallback, strict.New())  // cover all primitives
+builtins, err := builtin.Seed(backend)             // []*xsd.SimpleType
+
 set, err := parser.Parse("order.xsd")           // or ParseMultiple
 v, err := validate.New(set)
 res := xmlsrc.Validate(v, r)                     // res.Errors: []*xsderr.Error
