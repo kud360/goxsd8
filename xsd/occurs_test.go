@@ -20,7 +20,7 @@ func TestNewOccursValid(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			o, err := xsd.NewOccurs(c.min, c.max)
+			o, err := xsd.NewOccurs(xsderr.Loc{}, c.min, c.max)
 			if err != nil {
 				t.Fatalf("NewOccurs(%d, %d) unexpected error: %v", c.min, c.max, err)
 			}
@@ -39,7 +39,7 @@ func TestNewOccursValid(t *testing.T) {
 }
 
 func TestNewOccursRejectsInvertedRange(t *testing.T) {
-	_, err := xsd.NewOccurs(3, 2)
+	_, err := xsd.NewOccurs(xsderr.Loc{}, 3, 2)
 	if err == nil {
 		t.Fatal("NewOccurs(3, 2) succeeded, want p-props-correct error")
 	}
@@ -47,7 +47,7 @@ func TestNewOccursRejectsInvertedRange(t *testing.T) {
 }
 
 func TestNewOccursRejectsNegativeMin(t *testing.T) {
-	_, err := xsd.NewOccurs(-1, 5)
+	_, err := xsd.NewOccurs(xsderr.Loc{}, -1, 5)
 	if err == nil {
 		t.Fatal("NewOccurs(-1, 5) succeeded, want p-props-correct error")
 	}
@@ -55,7 +55,7 @@ func TestNewOccursRejectsNegativeMin(t *testing.T) {
 }
 
 func TestNewOccursRejectsNegativeMax(t *testing.T) {
-	_, err := xsd.NewOccurs(0, -1)
+	_, err := xsd.NewOccurs(xsderr.Loc{}, 0, -1)
 	if err == nil {
 		t.Fatal("NewOccurs(0, -1) succeeded, want p-props-correct error")
 	}
@@ -64,7 +64,7 @@ func TestNewOccursRejectsNegativeMax(t *testing.T) {
 
 func TestNewUnboundedOccursValid(t *testing.T) {
 	for _, min := range []int{0, 1, 42} {
-		o, err := xsd.NewUnboundedOccurs(min)
+		o, err := xsd.NewUnboundedOccurs(xsderr.Loc{}, min)
 		if err != nil {
 			t.Fatalf("NewUnboundedOccurs(%d) unexpected error: %v", min, err)
 		}
@@ -81,7 +81,7 @@ func TestNewUnboundedOccursValid(t *testing.T) {
 }
 
 func TestNewUnboundedOccursRejectsNegativeMin(t *testing.T) {
-	_, err := xsd.NewUnboundedOccurs(-1)
+	_, err := xsd.NewUnboundedOccurs(xsderr.Loc{}, -1)
 	if err == nil {
 		t.Fatal("NewUnboundedOccurs(-1) succeeded, want p-props-correct error")
 	}
@@ -89,7 +89,7 @@ func TestNewUnboundedOccursRejectsNegativeMin(t *testing.T) {
 }
 
 func TestOccursPermitsBounded(t *testing.T) {
-	o, err := xsd.NewOccurs(2, 5)
+	o, err := xsd.NewOccurs(xsderr.Loc{}, 2, 5)
 	if err != nil {
 		t.Fatalf("NewOccurs(2, 5): %v", err)
 	}
@@ -113,7 +113,7 @@ func TestOccursPermitsBounded(t *testing.T) {
 }
 
 func TestOccursPermitsUnbounded(t *testing.T) {
-	o, err := xsd.NewUnboundedOccurs(2)
+	o, err := xsd.NewUnboundedOccurs(xsderr.Loc{}, 2)
 	if err != nil {
 		t.Fatalf("NewUnboundedOccurs(2): %v", err)
 	}
@@ -136,14 +136,14 @@ func TestOccursPermitsUnbounded(t *testing.T) {
 
 func TestOccursString(t *testing.T) {
 	mustBounded := func(min, max int) xsd.Occurs {
-		o, err := xsd.NewOccurs(min, max)
+		o, err := xsd.NewOccurs(xsderr.Loc{}, min, max)
 		if err != nil {
 			t.Fatalf("NewOccurs(%d, %d): %v", min, max, err)
 		}
 		return o
 	}
 	mustUnbounded := func(min int) xsd.Occurs {
-		o, err := xsd.NewUnboundedOccurs(min)
+		o, err := xsd.NewUnboundedOccurs(xsderr.Loc{}, min)
 		if err != nil {
 			t.Fatalf("NewUnboundedOccurs(%d): %v", min, err)
 		}

@@ -34,40 +34,52 @@ const unboundedMax = -1
 // The zero value is the vacuous range 0..0 (a legal particle: §3.9.2 admits
 // maxOccurs 0), which Permits only n == 0. It is a valid Occurs, not an
 // absent/invalid marker.
+//
+// Occurs is comparable: it is usable with ==, as a map key, and as a struct
+// field, giving value equality. It is immutable after construction.
 type Occurs struct {
 	min int
 	max int
 }
 
 // NewOccurs builds a bounded occurrence range. It rejects a negative min or max
-// (both are nonNegativeInteger value spaces, §3.9.1 via §3.9.2's xs:allNNI) and
-// a max below min (Particle Correct §3.9.6.1, clause 2.1), returning an
-// *xsderr.Error carrying rule p-props-correct. A bounded max of 0 (a vacuous
-// particle) is legal and forces min to 0.
-func NewOccurs(min, max int) (Occurs, error) {
+// (both derive from the nonNegativeInteger-based xs:allNNI value space of the
+// minOccurs/maxOccurs XML attributes, §3.9.2) and a max below min (Particle
+// Correct §3.9.6.1, clause 2.1), returning an *xsderr.Error carrying rule
+// p-props-correct. A bounded max of 0 (a vacuous particle) is legal and forces
+// min to 0.
+//
+// loc is the source position charged to any rejection. A caller with no real
+// parser position — a synthesized or programmatically built particle — may
+// legitimately pass the zero xsderr.Loc{}.
+func NewOccurs(loc xsderr.Loc, min, max int) (Occurs, error) {
 	if min < 0 {
-		return Occurs{}, xsderr.New(ruleParticleCorrect, xsderr.Loc{},
+		return Occurs{}, xsderr.New(ruleParticleCorrect, loc,
 			"particle {min occurs} must be a nonNegativeInteger, got %d", min)
 	}
 	if max < 0 {
-		return Occurs{}, xsderr.New(ruleParticleCorrect, xsderr.Loc{},
+		return Occurs{}, xsderr.New(ruleParticleCorrect, loc,
 			"particle {max occurs} must be a nonNegativeInteger or unbounded, got %d", max)
 	}
 	if max < min {
-		return Occurs{}, xsderr.New(ruleParticleCorrect, xsderr.Loc{},
+		return Occurs{}, xsderr.New(ruleParticleCorrect, loc,
 			"particle {min occurs} %d is greater than {max occurs} %d", min, max)
 	}
 	return Occurs{min: min, max: max}, nil
 }
 
 // NewUnboundedOccurs builds an occurrence range whose {max occurs} is
-// unbounded. It rejects a negative min (nonNegativeInteger, §3.9.1), returning
-// an *xsderr.Error carrying rule p-props-correct. Particle Correct clause 2
-// imposes no upper-bound check when {max occurs} is unbounded, so any
-// nonNegativeInteger min is legal.
-func NewUnboundedOccurs(min int) (Occurs, error) {
+// unbounded. It rejects a negative min (the nonNegativeInteger-based xs:allNNI
+// value space, §3.9.2), returning an *xsderr.Error carrying rule
+// p-props-correct. Particle Correct clause 2 imposes no upper-bound check when
+// {max occurs} is unbounded, so any nonNegativeInteger min is legal.
+//
+// loc is the source position charged to any rejection. A caller with no real
+// parser position — a synthesized or programmatically built particle — may
+// legitimately pass the zero xsderr.Loc{}.
+func NewUnboundedOccurs(loc xsderr.Loc, min int) (Occurs, error) {
 	if min < 0 {
-		return Occurs{}, xsderr.New(ruleParticleCorrect, xsderr.Loc{},
+		return Occurs{}, xsderr.New(ruleParticleCorrect, loc,
 			"particle {min occurs} must be a nonNegativeInteger, got %d", min)
 	}
 	return Occurs{min: min, max: unboundedMax}, nil
