@@ -36,6 +36,7 @@ const (
 var irregularRules = []string{
 	"derivation-ok-restriction",
 	"sch-props-correct",
+	"p-props-correct",
 	"length-valid-restriction",
 	"enumeration-valid-restriction",
 	"timezone-valid-restriction",

@@ -131,6 +131,7 @@ var ruleCatalog = map[Rule]struct{}{
 	"err:XPTY0020": {},
 	"length-minLength-maxLength": {},
 	"length-valid-restriction": {},
+	"p-props-correct": {},
 	"sch-props-correct": {},
 	"sic-a-outcome": {},
 	"sic-agd": {},
