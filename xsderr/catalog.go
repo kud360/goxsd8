@@ -192,5 +192,6 @@ var ruleCatalog = map[Rule]struct{}{
 	"src-ta": {},
 	"src-union-memberTypes-or-simpleTypes": {},
 	"src-wildcard": {},
+	"st-props-correct": {},
 	"timezone-valid-restriction": {},
 }
