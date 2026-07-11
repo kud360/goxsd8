@@ -34,7 +34,7 @@ func wantAccept(t *testing.T, err error) {
 // mirroring builtin.Seed's NewPrimitiveType path so whiteSpaceOf resolves it.
 func newPrim(t *testing.T, local string) *xsd.SimpleType {
 	t.Helper()
-	p, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsdNS, Local: local}, nil, nil)
+	p, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: local}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewPrimitiveType(%q): %v", local, err)
 	}
@@ -69,7 +69,7 @@ func TestWidestSpaceInheritedBound(t *testing.T) {
 	leaf := derive(t, "leaf", lvl1)
 
 	// Premise: the effective maxInclusive on leaf is DECLARED by lvl1 (urn:test),
-	// which is not in xsdNS and so is not directly mapped by strict.New().
+	// which is not in xsd.XMLSchemaNS and so is not directly mapped by strict.New().
 	facets := leaf.EffectiveFacets()
 	if len(facets) != 1 {
 		t.Fatalf("leaf effective facets = %d, want 1 (the inherited maxInclusive)", len(facets))

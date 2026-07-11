@@ -9,11 +9,6 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// xsdNS is the XML Schema namespace all builtin datatypes live in (Datatypes
-// §1.5). It is private to this package pending issue #39, which will export a
-// shared named constant for it (STYLE T5).
-const xsdNS = "http://www.w3.org/2001/XMLSchema"
-
 // MissingPrimitivesError reports that a backend handed to [Seed] does not map
 // every builtin primitive datatype Seed requires. It is a precondition
 // violation on Seed's b argument — a library/API contract fault, NOT a spec
@@ -288,4 +283,4 @@ func facetKind(name FacetName) (xsd.FacetKind, bool) {
 }
 
 // qname bundles a builtin local name with the XSD namespace.
-func qname(local string) xsd.QName { return xsd.QName{Space: xsdNS, Local: local} }
+func qname(local string) xsd.QName { return xsd.QName{Space: xsd.XMLSchemaNS, Local: local} }
