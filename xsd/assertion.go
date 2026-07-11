@@ -1,6 +1,6 @@
 package xsd
 
-// Assertion is the Assertion component (Structures §3.13.1, id="Assertion"):
+// Assertion is the Assertion component (Structures §3.13.1, id="as"):
 // a kind of Annotated Component with {annotations} (a sequence of
 // Annotation) and {test} (an XPathExpression property record, Required —
 // unlike TypeAlternative's {test}, which is Optional).

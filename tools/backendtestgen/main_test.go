@@ -6,14 +6,14 @@ import (
 )
 
 const (
-	testStructures = "../../docs/specs/md/xmlschema11-2.md"
-	testPrecision  = "../../docs/specs/md/xsd-precisionDecimal.md"
-	testCommitted  = "../../value/backendtest/gen_vectors.go"
+	testDatatypes = "../../docs/specs/md/xmlschema11-2.md"
+	testPrecision = "../../docs/specs/md/xsd-precisionDecimal.md"
+	testCommitted = "../../value/backendtest/gen_vectors.go"
 )
 
 func generate(t *testing.T) []byte {
 	t.Helper()
-	src, err := build(testStructures, testPrecision)
+	src, err := build(testDatatypes, testPrecision)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -22,7 +22,7 @@ func generate(t *testing.T) []byte {
 
 func readSpec(t *testing.T) string {
 	t.Helper()
-	content, err := os.ReadFile(testStructures)
+	content, err := os.ReadFile(testDatatypes)
 	if err != nil {
 		t.Fatalf("reading spec: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestStringVectors(t *testing.T) {
 // TestApplicableFacets pins that each cohort type carries its cos-applicable-facets
 // list in spec order (§4.1.5), sourced from the shared builtin spec parser.
 func TestApplicableFacets(t *testing.T) {
-	facets, err := applicableFacets(testStructures, testPrecision)
+	facets, err := applicableFacets(testDatatypes, testPrecision)
 	if err != nil {
 		t.Fatalf("applicableFacets: %v", err)
 	}
