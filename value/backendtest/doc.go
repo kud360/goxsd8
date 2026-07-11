@@ -2,7 +2,7 @@
 // against any value.Backend — the two shipped ones or your own — to
 // verify it implements the value contracts correctly.
 //
-// # Contract (implemented in M3)
+// # Contract (core round-trip + capability checks implemented; derived-mapping discipline pending)
 //
 //	func Run(t *testing.T, b value.Backend, opts ...Option)
 //

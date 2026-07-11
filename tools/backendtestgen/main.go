@@ -23,19 +23,19 @@ import (
 )
 
 func main() {
-	structuresPath := flag.String("structures", "docs/specs/md/xmlschema11-2.md", "Datatypes spec Markdown")
+	datatypesPath := flag.String("datatypes", "docs/specs/md/xmlschema11-2.md", "Datatypes spec Markdown")
 	precisionPath := flag.String("precision", "docs/specs/md/xsd-precisionDecimal.md", "precisionDecimal Note Markdown (for the shared builtin parser)")
 	outPath := flag.String("out", "value/backendtest/gen_vectors.go", "output Go file")
 	flag.Parse()
 
-	if err := run(*structuresPath, *precisionPath, *outPath); err != nil {
+	if err := run(*datatypesPath, *precisionPath, *outPath); err != nil {
 		fmt.Fprintf(os.Stderr, "backendtestgen: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(structuresPath, precisionPath, outPath string) error {
-	src, err := build(structuresPath, precisionPath)
+func run(datatypesPath, precisionPath, outPath string) error {
+	src, err := build(datatypesPath, precisionPath)
 	if err != nil {
 		return err
 	}
@@ -45,27 +45,27 @@ func run(structuresPath, precisionPath, outPath string) error {
 // build reads the spec, derives every cohort type's vectors and applicable
 // facets, and returns the gofmt'd source. It is the pure core both run and the
 // tests share, so a determinism test needs no filesystem write.
-func build(structuresPath, precisionPath string) ([]byte, error) {
-	content, err := os.ReadFile(structuresPath)
+func build(datatypesPath, precisionPath string) ([]byte, error) {
+	content, err := os.ReadFile(datatypesPath)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", structuresPath, err)
+		return nil, fmt.Errorf("reading %s: %w", datatypesPath, err)
 	}
 	spec := string(content)
 
 	boolean, err := parseBoolean(spec)
 	if err != nil {
-		return nil, fmt.Errorf("parsing %s: boolean: %w", structuresPath, err)
+		return nil, fmt.Errorf("parsing %s: boolean: %w", datatypesPath, err)
 	}
 	decimal, err := parseDecimal(spec)
 	if err != nil {
-		return nil, fmt.Errorf("parsing %s: decimal: %w", structuresPath, err)
+		return nil, fmt.Errorf("parsing %s: decimal: %w", datatypesPath, err)
 	}
 	str, err := parseString(spec)
 	if err != nil {
-		return nil, fmt.Errorf("parsing %s: string: %w", structuresPath, err)
+		return nil, fmt.Errorf("parsing %s: string: %w", datatypesPath, err)
 	}
 
-	facets, err := applicableFacets(structuresPath, precisionPath)
+	facets, err := applicableFacets(datatypesPath, precisionPath)
 	if err != nil {
 		return nil, err
 	}
@@ -81,8 +81,8 @@ func build(structuresPath, precisionPath string) ([]byte, error) {
 // parser — the same source tools/typespecgen consumes, never a second hand-rolled
 // parser (STYLE D1). The parser needs both spec files; precisionDecimal is not
 // in this cohort, but Parse's signature requires the path.
-func applicableFacets(structuresPath, precisionPath string) (map[string][]string, error) {
-	types, err := builtins.Parse(structuresPath, precisionPath)
+func applicableFacets(datatypesPath, precisionPath string) (map[string][]string, error) {
+	types, err := builtins.Parse(datatypesPath, precisionPath)
 	if err != nil {
 		return nil, fmt.Errorf("applicable facets: %w", err)
 	}
