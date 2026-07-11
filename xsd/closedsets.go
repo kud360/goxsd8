@@ -253,3 +253,33 @@ func (k ValueConstraintKind) String() string {
 		return "ValueConstraintKind(" + strconv.Itoa(int(k)) + ")"
 	}
 }
+
+// IdentityConstraintCategory is the {identity-constraint category} property
+// of an Identity-Constraint Definition (§3.11.1). Legal tokens: "key",
+// "keyref", "unique". The zero value is invalid (see builtin.Ordered).
+type IdentityConstraintCategory uint8
+
+// The IdentityConstraintCategory values.
+const (
+	// IdentityConstraintKey is the "key" token (§3.11.1).
+	IdentityConstraintKey IdentityConstraintCategory = iota + 1
+	// IdentityConstraintKeyref is the "keyref" token (§3.11.1).
+	IdentityConstraintKeyref
+	// IdentityConstraintUnique is the "unique" token (§3.11.1).
+	IdentityConstraintUnique
+)
+
+// String returns the verbatim §3.11.1 token, or a diagnostic form for an
+// invalid value (never panics).
+func (c IdentityConstraintCategory) String() string {
+	switch c {
+	case IdentityConstraintKey:
+		return "key"
+	case IdentityConstraintKeyref:
+		return "keyref"
+	case IdentityConstraintUnique:
+		return "unique"
+	default:
+		return "IdentityConstraintCategory(" + strconv.Itoa(int(c)) + ")"
+	}
+}
