@@ -14,8 +14,7 @@ import (
 func ExampleNew() {
 	backend := strict.New()
 
-	const xsdNS = "http://www.w3.org/2001/XMLSchema"
-	m, _ := backend.Mapping(xsd.QName{Space: xsdNS, Local: "decimal"})
+	m, _ := backend.Mapping(xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"})
 
 	v, err := m.Parse("+1.0", nil)
 	if err != nil {

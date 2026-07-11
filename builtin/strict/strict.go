@@ -5,11 +5,6 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// xsdNS is the XML Schema namespace all builtin datatypes live in (Datatypes
-// §1.5). It is private to this package: no cross-package consumer justifies a
-// shared exported constant yet (warden pre-flight, STYLE T5).
-const xsdNS = "http://www.w3.org/2001/XMLSchema"
-
 // New returns the spec-exact value.Backend for the first primitive cohort:
 // xs:decimal, xs:boolean and xs:string. Each type's value space is represented
 // with full fidelity to the Datatypes spec (§3.3.3, §3.3.2, §3.3.1); a
@@ -42,7 +37,7 @@ type backend struct{}
 // into output (STYLE D2/D3), and covers only the three cohort types; ok is
 // false for every other name, including non-XML-Schema-namespace names.
 func (backend) Mapping(typ xsd.QName) (value.Mapping, bool) {
-	if typ.Space != xsdNS {
+	if typ.Space != xsd.XMLSchemaNS {
 		return value.Mapping{}, false
 	}
 	switch typ.Local {
