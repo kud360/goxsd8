@@ -194,4 +194,5 @@ var ruleCatalog = map[Rule]struct{}{
 	"src-wildcard": {},
 	"st-props-correct": {},
 	"timezone-valid-restriction": {},
+	"w-props-correct": {},
 }
