@@ -27,7 +27,7 @@ import (
 //
 // Compile-time assertions that the concrete checkers satisfy the pre-declared
 // pipeline-stage interfaces (value/backend.go): compile builds
-// []value.LexicalFacet and []value.ValueFacet and checkAgainstType ranges over
+// []value.LexicalFacet and []value.ValueFacet and ValidateLexical ranges over
 // them polymorphically, so the interface satisfaction has real call sites.
 var (
 	_ value.LexicalFacet = patternFacet{}
@@ -37,12 +37,24 @@ var (
 	_ value.ValueFacet   = lengthFacet{}
 )
 
-// checkAgainstType validates rawLexical against st through the full facet
-// pipeline, returning the parsed value on success or the first *xsderr.Error a
-// stage produces (stop-on-first-failure; this issue does not collect all facet
-// violations). ctx is the VALIDATED INSTANCE's context, threaded to the
-// governing mapping's Parse for the candidate value; the strict cohort
+// ValidateLexical validates the lexical string rawLexical against st's effective
+// facets through the full facet pipeline (whiteSpace → pattern → lexical mapping
+// → value facets), returning the parsed value on success or the first
+// *xsderr.Error a stage produces (stop-on-first-failure; this does not collect
+// all facet violations). ctx is the VALIDATED INSTANCE's context, threaded to
+// the governing mapping's Parse for the candidate value; the strict cohort
 // (decimal/boolean/string) is context-free, so nil is fine here.
+//
+// PRECONDITION (caller-guarded, NOT checked here): every facet on st must be
+// APPLICABLE to st's primitive ancestor (cos-applicable-facets §4.1.5), and st
+// must have a primitive ancestor b maps (the decimal/boolean/string cohort).
+// ValidateLexical PANICS — it does not return an error — when a value facet is
+// paired with a value lacking the capability that facet needs (a bound facet on
+// a non-Ordered value, a length facet on a non-Lengthed value, a digit facet on
+// a non-DigitCounted value), or when st has no primitive ancestor. Those are
+// schema-construction errors (st-restrict-facets / cos-applicable-facets) the
+// caller must have already rejected, never instance data, so they surface as
+// programming-error panics, not validity verdicts.
 //
 // Facet {value} parsing is a separate concern with its own scope: an inherited
 // enumeration/bound facet's lexical {value} is parsed in the DECLARING SCHEMA's
@@ -50,7 +62,7 @@ var (
 // context-free (nil). Future QName/NOTATION enumeration facets must not
 // silently inherit the instance context here — that would resolve a facet
 // literal's prefixes against the wrong scope.
-func checkAgainstType(b value.Backend, st *xsd.SimpleType, rawLexical string, ctx value.Context) (value.Value, error) {
+func ValidateLexical(b value.Backend, st *xsd.SimpleType, rawLexical string, ctx value.Context) (value.Value, error) {
 	lexFacets, valFacets, err := compile(b, st)
 	if err != nil {
 		return nil, err
@@ -254,7 +266,7 @@ type enumFacet struct {
 
 // newEnumFacet parses each enumeration {value} lexical via the declaring type's
 // mapping (widest-space rule, st-restrict-facets §3.16.6.4). The declaring
-// schema's context is nil for this context-free cohort (see checkAgainstType).
+// schema's context is nil for this context-free cohort (see ValidateLexical).
 func newEnumFacet(b value.Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (enumFacet, error) {
 	m, ok := declaringMapping(b, st, ef.Declaring())
 	if !ok {
