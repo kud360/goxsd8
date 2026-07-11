@@ -83,11 +83,11 @@ func TestWidestSpaceInheritedBound(t *testing.T) {
 	}
 
 	// "150" > 100: rejected via the declaring type's decimal space.
-	_, err := checkAgainstType(New(), leaf, "150", nil)
+	_, err := ValidateLexical(New(), leaf, "150", nil)
 	wantRule(t, err, "cvc-maxInclusive-valid")
 
 	// "50" ≤ 100: accepted.
-	_, err = checkAgainstType(New(), leaf, "50", nil)
+	_, err = ValidateLexical(New(), leaf, "50", nil)
 	wantAccept(t, err)
 }
 
@@ -99,10 +99,10 @@ func TestPatternFacet(t *testing.T) {
 	stringPrim := newPrim(t, "string")
 	lower := derive(t, "lower", stringPrim, xsd.NewFacet(xsd.FacetPattern, []string{"[a-z]+"}, false))
 
-	_, err := checkAgainstType(New(), lower, "abc", nil)
+	_, err := ValidateLexical(New(), lower, "abc", nil)
 	wantAccept(t, err)
 
-	_, err = checkAgainstType(New(), lower, "ab3", nil)
+	_, err = ValidateLexical(New(), lower, "ab3", nil)
 	wantRule(t, err, "cvc-pattern-valid")
 }
 
@@ -112,10 +112,10 @@ func TestEnumerationFacet(t *testing.T) {
 	stringPrim := newPrim(t, "string")
 	colors := derive(t, "color", stringPrim, xsd.NewFacet(xsd.FacetEnumeration, []string{"red", "green", "blue"}, false))
 
-	_, err := checkAgainstType(New(), colors, "green", nil)
+	_, err := ValidateLexical(New(), colors, "green", nil)
 	wantAccept(t, err)
 
-	_, err = checkAgainstType(New(), colors, "purple", nil)
+	_, err = ValidateLexical(New(), colors, "purple", nil)
 	wantRule(t, err, "cvc-enumeration-valid")
 }
 
@@ -125,17 +125,17 @@ func TestDigitsFacets(t *testing.T) {
 	decimalPrim := newPrim(t, "decimal")
 
 	total3 := derive(t, "total3", decimalPrim, xsd.NewFacet(xsd.FacetTotalDigits, []string{"3"}, false))
-	if _, err := checkAgainstType(New(), total3, "123", nil); err != nil {
+	if _, err := ValidateLexical(New(), total3, "123", nil); err != nil {
 		t.Fatalf("totalDigits=3 should accept 123: %v", err)
 	}
-	_, err := checkAgainstType(New(), total3, "1234", nil)
+	_, err := ValidateLexical(New(), total3, "1234", nil)
 	wantRule(t, err, "cvc-totalDigits-valid")
 
 	frac2 := derive(t, "frac2", decimalPrim, xsd.NewFacet(xsd.FacetFractionDigits, []string{"2"}, false))
-	if _, err := checkAgainstType(New(), frac2, "1.23", nil); err != nil {
+	if _, err := ValidateLexical(New(), frac2, "1.23", nil); err != nil {
 		t.Fatalf("fractionDigits=2 should accept 1.23: %v", err)
 	}
-	_, err = checkAgainstType(New(), frac2, "1.234", nil)
+	_, err = ValidateLexical(New(), frac2, "1.234", nil)
 	wantRule(t, err, "cvc-fractionDigits-valid")
 }
 
@@ -145,17 +145,17 @@ func TestLengthFacets(t *testing.T) {
 	stringPrim := newPrim(t, "string")
 
 	len3 := derive(t, "len3", stringPrim, xsd.NewFacet(xsd.FacetLength, []string{"3"}, false))
-	if _, err := checkAgainstType(New(), len3, "abc", nil); err != nil {
+	if _, err := ValidateLexical(New(), len3, "abc", nil); err != nil {
 		t.Fatalf("length=3 should accept abc: %v", err)
 	}
-	_, err := checkAgainstType(New(), len3, "abcd", nil)
+	_, err := ValidateLexical(New(), len3, "abcd", nil)
 	wantRule(t, err, "cvc-length-valid")
 
 	min3 := derive(t, "min3", stringPrim, xsd.NewFacet(xsd.FacetMinLength, []string{"3"}, false))
-	_, err = checkAgainstType(New(), min3, "ab", nil)
+	_, err = ValidateLexical(New(), min3, "ab", nil)
 	wantRule(t, err, "cvc-minLength-valid")
 
 	max3 := derive(t, "max3", stringPrim, xsd.NewFacet(xsd.FacetMaxLength, []string{"3"}, false))
-	_, err = checkAgainstType(New(), max3, "abcd", nil)
+	_, err = ValidateLexical(New(), max3, "abcd", nil)
 	wantRule(t, err, "cvc-maxLength-valid")
 }
