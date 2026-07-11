@@ -40,6 +40,7 @@ var irregularRules = []string{
 	"n-props-correct",
 	"an-props-correct",
 	"st-props-correct",
+	"w-props-correct",
 	"length-valid-restriction",
 	"enumeration-valid-restriction",
 	"timezone-valid-restriction",
