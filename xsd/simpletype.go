@@ -158,35 +158,70 @@ func (k FacetKind) HasFixed() bool {
 }
 
 // Facet is a Constraining Facet component (Datatypes §4.3): a facet kind, its
-// {value} (one or more normalized lexical strings — a single string for the
-// single-valued kinds such as length or whiteSpace, or several for the
-// set/sequence-valued kinds pattern, enumeration, and assertions), and its
-// {fixed} flag where the kind has one.
+// {value}, and its {fixed} flag where the kind has one. How {value} is modeled
+// depends on the kind:
 //
-// Construct only through NewFacet, which normalizes away the illegal
-// combination of a set {fixed} on a kind that has no {fixed} property, so that
-// state is unrepresentable (STYLE T1). Facet is immutable after construction.
+//   - For every kind except FacetAssertions, {value} is one or more normalized
+//     lexical strings — a single string for the single-valued kinds such as
+//     length or whiteSpace, or several for the set/sequence-valued kinds pattern
+//     and enumeration — held in values and read through Values.
+//   - For FacetAssertions (§4.3.13) {value} is "a sequence of Assertion
+//     components" (Structures §3.13.1, id="as"), each carrying a Required {test}
+//     XPathExpression that a lexical string cannot represent. It is held in
+//     assertions and read through Assertions; values stays nil. kind is the sole
+//     discriminant between the two representations.
+//
+// Construct a non-assertions facet through NewFacet and an assertions facet
+// through NewAssertionsFacet; NewFacet normalizes away the illegal combination
+// of a set {fixed} on a kind that has no {fixed} property, so that state is
+// unrepresentable (STYLE T1). Facet is immutable after construction.
 type Facet struct {
-	kind   FacetKind
-	values []string
-	fixed  bool
+	kind       FacetKind
+	values     []string
+	assertions []Assertion
+	fixed      bool
 }
 
 // NewFacet builds a Facet of the given kind carrying values as its {value}. The
 // values slice is copied; the caller's backing array is not aliased.
 //
-// fixed is honored only when kind.HasFixed() is true; for FacetPattern,
-// FacetEnumeration, and FacetAssertions (which have no {fixed} property,
-// §4.3.4/.5/.13) it is normalized to false so that "fixed set on a kind with no
-// {fixed}" cannot be stored (STYLE T1). Read {fixed} back through Fixed, whose
-// second result reports whether the kind has the property at all.
+// It panics if kind is FacetAssertions: the assertions facet models {value} as
+// a sequence of Assertion components, not lexical strings, so it must be built
+// through NewAssertionsFacet. That is a programmer error (the wrong
+// constructor), not user-supplied invalid data, so a panic — not an xsderr
+// validation error — is the right guard per this package's convention.
+//
+// fixed is honored only when kind.HasFixed() is true; for FacetPattern and
+// FacetEnumeration (which have no {fixed} property, §4.3.4/.5) it is normalized
+// to false so that "fixed set on a kind with no {fixed}" cannot be stored
+// (STYLE T1). FacetAssertions likewise has no {fixed} (§4.3.13) but is
+// unreachable here. Read {fixed} back through Fixed, whose second result
+// reports whether the kind has the property at all.
 func NewFacet(kind FacetKind, values []string, fixed bool) Facet {
+	if kind == FacetAssertions {
+		panic("xsd: NewFacet cannot build an assertions facet; use NewAssertionsFacet")
+	}
 	f := Facet{kind: kind}
 	if len(values) > 0 {
 		f.values = append([]string(nil), values...)
 	}
 	if kind.HasFixed() {
 		f.fixed = fixed
+	}
+	return f
+}
+
+// NewAssertionsFacet builds the assertions Constraining Facet (Datatypes
+// §4.3.13) whose {value} is a sequence of Assertion components (Structures
+// §3.13.1, id="as") rather than lexical strings. The assertions slice is copied
+// in document order; the caller's backing array is not aliased. The result's
+// kind is FacetAssertions, its values stays nil, and its {fixed} is false —
+// §4.3.13 gives the assertions facet no {fixed} property (HasFixed reports
+// false for it). Read the assertions back through Assertions.
+func NewAssertionsFacet(assertions []Assertion) Facet {
+	f := Facet{kind: FacetAssertions}
+	if len(assertions) > 0 {
+		f.assertions = append([]Assertion(nil), assertions...)
 	}
 	return f
 }
@@ -203,6 +238,22 @@ func (f Facet) Values() []string {
 		return nil
 	}
 	return append([]string(nil), f.values...)
+}
+
+// Assertions returns the facet's {value} as a sequence of Assertion components
+// in document order. The second result reports whether this is an assertions
+// facet (Kind() == FacetAssertions): when it is false the facet models {value}
+// as lexical strings instead (use Values), and the first result is nil. It
+// returns a copy: mutating the result does not affect f. An assertions facet
+// with no assertions yields nil.
+func (f Facet) Assertions() (assertions []Assertion, ok bool) {
+	if f.kind != FacetAssertions {
+		return nil, false
+	}
+	if len(f.assertions) == 0 {
+		return nil, true
+	}
+	return append([]Assertion(nil), f.assertions...), true
 }
 
 // Fixed returns the {fixed} property. The second result is Kind().HasFixed():

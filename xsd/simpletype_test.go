@@ -21,7 +21,8 @@ func TestNewFacetFixedNormalization(t *testing.T) {
 		{FacetExplicitTimezone, true, true, true},
 		{FacetPattern, true, false, false},     // normalized: pattern has no {fixed}
 		{FacetEnumeration, true, false, false}, // normalized: enumeration has no {fixed}
-		{FacetAssertions, true, false, false},  // normalized: assertions has no {fixed}
+		// FacetAssertions (also fixed-less) is excluded: NewFacet panics for it;
+		// see TestNewFacetAssertionsPanics and NewAssertionsFacet.
 	}
 	for _, c := range cases {
 		f := NewFacet(c.kind, []string{"x"}, c.fixedIn)
@@ -48,6 +49,76 @@ func TestNewFacetValuesCopied(t *testing.T) {
 	got[1] = "clobber"
 	if again := f.Values(); again[1] != "b" {
 		t.Fatalf("Values() aliased internal slice: got %q, want %q", again[1], "b")
+	}
+}
+
+// TestNewFacetAssertionsPanics confirms NewFacet rejects FacetAssertions: the
+// assertions facet models {value} as Assertion components (§4.3.13), so it must
+// go through NewAssertionsFacet, and using the wrong constructor is a caught
+// programmer error, not a silent mis-build.
+func TestNewFacetAssertionsPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("NewFacet(FacetAssertions, ...): want panic, got none")
+		}
+	}()
+	_ = NewFacet(FacetAssertions, []string{"true()"}, false)
+}
+
+// TestNewAssertionsFacetRoundTrip verifies NewAssertionsFacet builds an
+// assertions-kind Facet whose Assertions round-trips in document order, with no
+// {fixed} property, and with defensive-copy semantics on both the input slice
+// and the returned slice.
+func TestNewAssertionsFacetRoundTrip(t *testing.T) {
+	a0 := NewAssertion(NewXPathExpression("@a > 0", nil, nil, nil), nil)
+	a1 := NewAssertion(NewXPathExpression("@b < 10", nil, nil, nil), nil)
+	in := []Assertion{a0, a1}
+	f := NewAssertionsFacet(in)
+
+	if f.Kind() != FacetAssertions {
+		t.Fatalf("Kind() = %s, want assertions", f.Kind())
+	}
+	if _, ok := f.Fixed(); ok {
+		t.Error("Fixed() ok = true, want false (assertions has no {fixed})")
+	}
+
+	got, ok := f.Assertions()
+	if !ok {
+		t.Fatal("Assertions() ok = false, want true for an assertions facet")
+	}
+	if len(got) != 2 {
+		t.Fatalf("Assertions() len = %d, want 2", len(got))
+	}
+	if got[0].Test().Expression() != "@a > 0" || got[1].Test().Expression() != "@b < 10" {
+		t.Errorf("Assertions() document order wrong: got %q, %q",
+			got[0].Test().Expression(), got[1].Test().Expression())
+	}
+
+	// Mutating the caller's input slice must not affect the facet.
+	in[0] = a1
+	if again, _ := f.Assertions(); again[0].Test().Expression() != "@a > 0" {
+		t.Errorf("NewAssertionsFacet aliased caller slice: got %q, want %q",
+			again[0].Test().Expression(), "@a > 0")
+	}
+
+	// Mutating the returned slice must not affect the facet.
+	got[0] = a1
+	if again, _ := f.Assertions(); again[0].Test().Expression() != "@a > 0" {
+		t.Errorf("Assertions() aliased internal slice: got %q, want %q",
+			again[0].Test().Expression(), "@a > 0")
+	}
+}
+
+// TestAssertionsOnNonAssertionsFacet verifies Assertions reports ok == false and
+// nil for a facet whose kind is not FacetAssertions.
+func TestAssertionsOnNonAssertionsFacet(t *testing.T) {
+	f := NewFacet(FacetLength, []string{"3"}, false)
+	got, ok := f.Assertions()
+	if ok {
+		t.Error("Assertions() ok = true for a length facet, want false")
+	}
+	if got != nil {
+		t.Errorf("Assertions() = %v for a length facet, want nil", got)
 	}
 }
 
