@@ -75,6 +75,11 @@
 //
 // precisionDecimal is registered always-on: its applicable facet set
 // (totalDigits, maxScale, minScale — NOT fractionDigits or the length
-// facets) comes from the precisionDecimal spec's applicability list, so
-// cos-applicable-facets fires correctly on misuse.
+// facets) comes from the precisionDecimal spec's applicability list.
+// Applicability is answered by the generated table via TypeSpec.Applies,
+// not by the seeded xsd.SimpleType's {facets}: maxScale/minScale carry no
+// spec default, so ownFacets never materializes them as an xsd.Facet (and
+// xsd.FacetKind excludes them by design). cos-applicable-facets therefore
+// fires on misuse by querying TypeSpec.Applies, not the component's
+// {facets}/EffectiveFacets.
 package builtin

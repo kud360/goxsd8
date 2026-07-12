@@ -1,7 +1,7 @@
 // Package xmlsrc adapts XML instance documents onto the validate
 // infoset — the first and reference source adapter.
 //
-// # Contract (implemented in M5)
+// # Planned contract (M5 — not yet implemented)
 //
 //	func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Result, error)
 //

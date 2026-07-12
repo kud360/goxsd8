@@ -29,10 +29,11 @@ marshalling code.
   values typed by your chosen backend, decode paths specialized for
   minimal allocation. Multiple schemas map to multiple output
   directories.
-- **Bring your own value backend.** Two ship in-repo — `builtin/strict`
+- **Bring your own value backend.** One ships today — `builtin/strict`
   (spec-exact: arbitrary precision, `precisionDecimal`, seven-property
-  temporal model) and `builtin/native` (Go-friendly: `int64`,
-  `time.Time`, documented deviations) — composable per type, and
+  temporal model); a second, `builtin/native` (Go-friendly: `int64`,
+  `time.Time`, documented deviations), is a fixed planned contract
+  (M12 — see its `doc.go`). Backends are composable per type, and
   `value/backendtest` certifies third-party backends.
 
 ## Quickstart
@@ -56,22 +57,31 @@ goxsd8 gen -schema order.xsd -out ./gen/order \
 
 Violations print one per line: `<loc>: [<rule>] <message>`.
 
-### Library
+### Library (contract; APIs land with their milestones)
 
 ```go
 // Seed the builtin datatypes from a value backend (compose to cover every
-// primitive). This is the required first step — the components feed the
-// parser's symbol table.
+// primitive). This step works TODAY — the components feed the parser's
+// symbol table. See builtin/example_test.go and builtin/strict/example_test.go.
 backend := value.Override(fallback, strict.New())  // cover all primitives
 builtins, err := builtin.Seed(backend)             // []*xsd.SimpleType
 
+// The parse → validate steps below are the PLANNED contract — parser.Parse
+// (M4), validate.New / xmlsrc.Validate (M5) do not exist yet. Shown here for
+// the shape the API will take, not code you can build today.
 set, err := parser.Parse("order.xsd")           // or ParseMultiple
 v, err := validate.New(set)
 res := xmlsrc.Validate(v, r)                     // res.Errors: []*xsderr.Error
 ```
 
 Start at `go doc github.com/kud360/goxsd8` and follow the package list;
-each package's godoc is its contract.
+each package's godoc is its contract. Plain-text `go doc` does not print
+the runnable `Example*` funcs, so for working, tested end-to-end code
+(seed builtins → parse a lexical → assert capabilities) read the example
+tests directly: `value/example_test.go` (`ExampleOverride`),
+`builtin/example_test.go` (`ExampleSeed`, `ExampleSeed_missingPrimitive`),
+`builtin/strict/example_test.go` (`ExampleNew`), and
+`loader/example_test.go` (`Example_chain`).
 
 ## Documentation map
 

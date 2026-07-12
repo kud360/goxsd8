@@ -41,7 +41,7 @@
 //     components never leaks back into the overriding document under
 //     mutual/circular overrides (PRINCIPLES 16).
 //
-// # Contract (implemented across M4)
+// # Planned contract (M4 — not yet implemented)
 //
 //	func Parse(location string, opts ...Option) (*xsd.SchemaSet, error)
 //	func ParseMultiple(locations []string, opts ...Option) (*xsd.SchemaSet, error)
