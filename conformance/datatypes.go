@@ -15,31 +15,43 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// This file activates the datatypes lane (issue #15, extended by issue #57) by
-// giving the datatypes entry of defaultLanes a real selector and executor. It
-// touches nothing else in the runner (the #6 seam). It is package-internal
-// conformance support: it exports nothing and no library code imports it.
+// This file activates the datatypes lane (issue #15, extended by issues #57 and
+// #80) by giving the datatypes entry of defaultLanes a real selector and
+// executor. It touches nothing else in the runner (the #6 seam). It is
+// package-internal conformance support: it exports nothing and no library code
+// imports it.
 //
-// # The lexical cohort (issue #15)
+// # The lexical cohort (issue #15, widened by issue #80)
 //
 // The lane claims the Microsoft datatype LEXICAL cases under
-// msData/datatypes/{boolean,decimal,string}NNN.xml. Each such schema declares
-// an element of an UNRESTRICTED builtin primitive (xsd:boolean / xsd:decimal /
-// xsd:string — comp_foo directly, simpleTest via a facet-free restriction), so
-// an instance is valid iff its content lies in that primitive's lexical space.
-// That is exactly what value.Mapping.Parse decides, so the executor is a
-// genuine, complete check: both polarities are decided for the right reason,
-// and Parse really discriminates (boolean rejects "True"/"+1"/""; decimal
-// rejects "1E2"/"INF"/"NaN"/"13.1513.561"/"ABCDEF").
+// msData/datatypes/{boolean,decimal,string,float,double}NNN.xml. Each such
+// schema declares an element of an UNRESTRICTED builtin primitive (xsd:boolean /
+// xsd:decimal / xsd:string / xsd:float / xsd:double — comp_foo directly,
+// simpleTest via a facet-free restriction), so an instance is valid iff its
+// content lies in that primitive's lexical space. That is exactly what
+// value.Mapping.Parse decides, so the executor is a genuine, complete check:
+// both polarities are decided for the right reason, and Parse really
+// discriminates (boolean rejects "True"/"+1"/""; decimal rejects
+// "1E2"/"INF"/"NaN"/"13.1513.561"/"ABCDEF"; float/double admit scientific
+// notation and bare exponents like "1E2" and the special values "INF"/"+INF"/
+// "-INF"/"NaN" case-sensitively, while rejecting "Infinity"/"nan"
+// (xmlschema11-2.md §3.3.4.2/§3.3.5.2)).
 //
-// # The facet cohort (issue #57)
+// # The facet cohort (issue #57, widened by issue #80)
 //
 // The lane additionally claims the Microsoft *Facets* instance cases under
-// msData/datatypes/Facets/{string,decimal}/<prim>_<facet>NNN.xml. Each such
-// schema restricts a strict-mapped primitive (xsd:string or xsd:decimal) by one
-// or more constraining facets (length/minLength/maxLength/pattern/enumeration on
-// string; minInclusive/maxInclusive/minExclusive/maxExclusive/totalDigits/
-// pattern/enumeration on decimal). Validity there depends on FACET checking, not
+// msData/datatypes/Facets/{string,decimal,float,double}/<prim>_<facet>NNN.xml.
+// Each such schema restricts a strict-mapped primitive (xsd:string, xsd:decimal,
+// xsd:float or xsd:double) by one or more constraining facets (length/minLength/
+// maxLength/pattern/enumeration on string; minInclusive/maxInclusive/
+// minExclusive/maxExclusive/totalDigits/pattern/enumeration on decimal; the
+// bound facets minInclusive/maxInclusive/minExclusive/maxExclusive plus pattern/
+// enumeration on float/double). The float/double bound facets are checked over
+// the PARTIAL order (NaN is incomparable to every value, so a NaN bound yields an
+// empty value space and any bound comparison against NaN excludes — §2.2.3;
+// §3.3.4.1 Note), which the existing boundFacet path already decides
+// (incomparable ⇒ reject, spec-correct per §4.3.7.3–§4.3.10.3). Validity there
+// depends on FACET checking, not
 // just primitive lexical-space membership: an instance can be lexically valid
 // yet facet-invalid (e.g. a 5-character string under length=4). The executor
 // synthesizes the corresponding xsd.SimpleType (the seeded primitive as base,
@@ -77,11 +89,11 @@ import (
 const synthNS = "urn:goxsd8:conformance:facets"
 
 // datatypesCase matches an instance case in the lexical cohort.
-var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string)[0-9]+\.xml$`)
+var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double)[0-9]+\.xml$`)
 
 // facetsCase matches an instance case in the facet cohort: an MS Facets instance
 // restricting a strict-mapped primitive (string or decimal).
-var facetsCase = regexp.MustCompile(`msData/datatypes/Facets/(string|decimal)/(string|decimal)_[A-Za-z]+[0-9]+\.xml$`)
+var facetsCase = regexp.MustCompile(`msData/datatypes/Facets/(string|decimal|float|double)/(string|decimal|float|double)_[A-Za-z]+[0-9]+\.xml$`)
 
 // selectsDatatypes claims the instance cases of both cohorts. It is a cheap path
 // predicate; the executor does the real document reading.
@@ -102,9 +114,10 @@ func newDatatypesExec() executor {
 	// float/double); Seed requires all 20 primitives, so the fallback covers the
 	// remaining ones with a no-op mapping. strict wins where it maps (Override
 	// yields partial first), so those fallback mappings are never actually
-	// exercised — the lane's selector only claims decimal/boolean/string (lexical
-	// cohort) and string/decimal (facet cohort) cases; widening the selector to
-	// route float/double through strict is #57's job.
+	// exercised: the lane now claims boolean/decimal/string/float/double (lexical
+	// cohort) and string/decimal/float/double (facet cohort) cases (float/double
+	// added in #80), every one of which strict maps — the no-op fallback still
+	// never runs for a claimed case.
 	strictBackend := strict.New()
 	backend := value.Override(fallbackPrimitives{}, strictBackend)
 
