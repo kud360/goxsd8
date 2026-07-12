@@ -315,10 +315,13 @@ func enumMatch(candidate, member value.Value) bool {
 
 // boundFacet is one of the four bound value-facet stages
 // (cvc-maxInclusive/maxExclusive/minInclusive/minExclusive-valid, §4.3.7–4.3.10).
-// Only decimal (of this cohort) can carry these (cos-applicable-facets §4.1.5),
-// so the limit and candidate both assert value.Ordered; an Incomparable Cmp is
-// an internal-consistency bug (facet applicability not enforced upstream), a
-// panic — never a legitimate spec rejection.
+// The limit and candidate both assert value.Ordered (every bound-applicable
+// primitive is ordered, cos-applicable-facets §4.1.5). An Incomparable Cmp is a
+// legitimate spec outcome for a PARTIALLY ordered primitive (float/double): a
+// value incomparable with a bounding facet's value is EXCLUDED from the
+// restricted value space (§3.3.4.3/§3.3.5.3 Note — e.g. NaN against any numeric
+// bound, or any value when the bound itself is NaN), so CheckValue REJECTS it
+// rather than panicking.
 type boundFacet struct {
 	limit value.Ordered
 	kind  xsd.FacetKind
@@ -358,7 +361,12 @@ func (bf boundFacet) CheckValue(v value.Value) error {
 	}
 	ord := cand.Cmp(bf.limit)
 	if ord == value.Incomparable {
-		panic(fmt.Sprintf("strict: %s facet comparison is Incomparable (facet applicability not enforced upstream)", bf.kind))
+		// A value incomparable with the bound is excluded from the restricted
+		// value space (§3.3.4.3/§3.3.5.3 Note): a real facet rejection, e.g. a
+		// NaN candidate against a numeric bound, or any candidate when the bound
+		// value is itself NaN (the restricted space is then empty).
+		return xsderr.New(boundRule(bf.kind), xsderr.Loc{},
+			"value is incomparable with the %s facet bound, so it is excluded from the restricted value space (%s, §4.3.7–4.3.10)", bf.kind, boundRule(bf.kind))
 	}
 	if bf.violates(ord) {
 		return xsderr.New(boundRule(bf.kind), xsderr.Loc{},

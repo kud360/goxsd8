@@ -98,12 +98,13 @@ func selectsDatatypes(c caseSpec) bool {
 // Seeds the builtins once (the M3 composition step), and captures the composed
 // backend plus the seeded symbol table in the returned closure.
 func newDatatypesExec() executor {
-	// strict.New() maps only decimal/boolean/string; Seed requires all 20
-	// primitives, so the fallback covers the other 17 with a no-op mapping.
-	// strict wins where it maps (Override yields partial first), so those
-	// fallback mappings are never actually exercised — the lane's selector only
-	// claims decimal/boolean/string (lexical cohort) and string/decimal (facet
-	// cohort) cases.
+	// strict.New() maps the primitive cohort so far (decimal/boolean/string/
+	// float/double); Seed requires all 20 primitives, so the fallback covers the
+	// remaining ones with a no-op mapping. strict wins where it maps (Override
+	// yields partial first), so those fallback mappings are never actually
+	// exercised — the lane's selector only claims decimal/boolean/string (lexical
+	// cohort) and string/decimal (facet cohort) cases; widening the selector to
+	// route float/double through strict is #57's job.
 	strictBackend := strict.New()
 	backend := value.Override(fallbackPrimitives{}, strictBackend)
 
