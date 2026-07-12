@@ -6,9 +6,6 @@ import (
 	"strings"
 )
 
-// xsdNamespace is the XML Schema namespace every builtin QName carries.
-const xsdNamespace = "http://www.w3.org/2001/XMLSchema"
-
 // emit renders the vectors table as gofmt'd Go source for package backendtest.
 func emit(types []typeVectors) ([]byte, error) {
 	var b strings.Builder
@@ -35,7 +32,10 @@ func emit(types []typeVectors) ([]byte, error) {
 
 func emitType(b *strings.Builder, t typeVectors) {
 	b.WriteString("\t{\n")
-	fmt.Fprintf(b, "\t\ttyp: xsd.QName{Space: %q, Local: %q},\n", xsdNamespace, t.Local)
+	// Emit the exported xsd.XMLSchemaNS identifier, not the raw literal: the
+	// generated file already imports xsd (for xsd.QName), so referencing the
+	// shared constant de-duplicates the namespace string (STYLE D3).
+	fmt.Fprintf(b, "\t\ttyp: xsd.QName{Space: xsd.XMLSchemaNS, Local: %q},\n", t.Local)
 	if len(t.Valid) > 0 {
 		b.WriteString("\t\tvalid: []roundtrip{\n")
 		for _, rt := range t.Valid {

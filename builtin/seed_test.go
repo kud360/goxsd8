@@ -10,15 +10,13 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-const testNS = "http://www.w3.org/2001/XMLSchema"
-
 // mapBackend is a value.Backend backed by a set of primitive local names it
 // claims to map; the mapping itself is a trivial identity Parse (Seed only
 // checks presence, never calls Parse).
 type mapBackend map[string]struct{}
 
 func (b mapBackend) Mapping(typ xsd.QName) (value.Mapping, bool) {
-	if typ.Space != testNS {
+	if typ.Space != xsd.XMLSchemaNS {
 		return value.Mapping{}, false
 	}
 	if _, ok := b[typ.Local]; !ok {
@@ -58,7 +56,7 @@ func TestSeedSuccessShapeAndOrder(t *testing.T) {
 	if got, want := len(types), len(builtin.Types)+1; got != want {
 		t.Fatalf("len(types) = %d, want len(Types)+1 = %d", got, want)
 	}
-	if types[0].Name() != (xsd.QName{Space: testNS, Local: "anySimpleType"}) {
+	if types[0].Name() != (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"}) {
 		t.Fatalf("types[0] = %v, want xs:anySimpleType prepended", types[0].Name())
 	}
 	if !types[0].IsAnySimpleType() {
@@ -104,8 +102,8 @@ func TestSeedMissingPrimitivesCollectsAllInOrder(t *testing.T) {
 	// boolean precedes decimal? No: Types order is string, boolean, decimal,...
 	// so the collected order is boolean then decimal.
 	want := []xsd.QName{
-		{Space: testNS, Local: "boolean"},
-		{Space: testNS, Local: "decimal"},
+		{Space: xsd.XMLSchemaNS, Local: "boolean"},
+		{Space: xsd.XMLSchemaNS, Local: "decimal"},
 	}
 	if len(missing.Missing) != len(want) {
 		t.Fatalf("Missing = %v, want %v", missing.Missing, want)

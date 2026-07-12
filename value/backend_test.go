@@ -25,11 +25,10 @@ func constMapping(tag string) value.Mapping {
 }
 
 func TestOverride(t *testing.T) {
-	const xsdNS = "http://www.w3.org/2001/XMLSchema"
-	decimal := xsd.QName{Space: xsdNS, Local: "decimal"}
-	str := xsd.QName{Space: xsdNS, Local: "string"}
-	boolean := xsd.QName{Space: xsdNS, Local: "boolean"}
-	missing := xsd.QName{Space: xsdNS, Local: "date"}
+	decimal := xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}
+	str := xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
+	boolean := xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"}
+	missing := xsd.QName{Space: xsd.XMLSchemaNS, Local: "date"}
 
 	// base covers the rest; partial covers only decimal.
 	base := mapBackend{

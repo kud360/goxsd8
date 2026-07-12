@@ -8,11 +8,9 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-const xsdNS = "http://www.w3.org/2001/XMLSchema"
-
-func booleanQName() xsd.QName { return xsd.QName{Space: xsdNS, Local: "boolean"} }
-func decimalQName() xsd.QName { return xsd.QName{Space: xsdNS, Local: "decimal"} }
-func stringQName() xsd.QName  { return xsd.QName{Space: xsdNS, Local: "string"} }
+func booleanQName() xsd.QName { return xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"} }
+func decimalQName() xsd.QName { return xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"} }
+func stringQName() xsd.QName  { return xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"} }
 
 // othersAbsent declares the cohort types other than boolean absent, so the
 // boolean-only test backends below are checked purely on boolean without Run
@@ -150,7 +148,7 @@ func TestCheckCapabilitiesCatchesMissing(t *testing.T) {
 	ordered := value.Mapping{Parse: func(string, value.Context) (value.Value, error) { return orderedVal{}, nil }}
 
 	tv := typeVectors{
-		typ:              xsd.QName{Space: xsdNS, Local: "synthetic"},
+		typ:              xsd.QName{Space: xsd.XMLSchemaNS, Local: "synthetic"},
 		valid:            []roundtrip{{lexical: "x", canonical: "x"}},
 		applicableFacets: []string{"minInclusive"}, // requires value.Ordered
 	}
@@ -172,7 +170,7 @@ func TestCheckCapabilitiesCatchesMissing(t *testing.T) {
 // does not recognize is reported, never silently skipped.
 func TestCheckCapabilitiesUnclassifiedFacet(t *testing.T) {
 	tv := typeVectors{
-		typ:              xsd.QName{Space: xsdNS, Local: "synthetic"},
+		typ:              xsd.QName{Space: xsd.XMLSchemaNS, Local: "synthetic"},
 		valid:            []roundtrip{{lexical: "x", canonical: "x"}},
 		applicableFacets: []string{"bogusFacet"},
 	}

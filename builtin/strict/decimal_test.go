@@ -11,7 +11,7 @@ import (
 
 func decimalMapping(t *testing.T) value.Mapping {
 	t.Helper()
-	m, ok := strict.New().Mapping(xsd.QName{Space: xsdNS, Local: "decimal"})
+	m, ok := strict.New().Mapping(xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"})
 	if !ok {
 		t.Fatal("strict backend does not map xs:decimal")
 	}

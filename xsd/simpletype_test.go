@@ -259,13 +259,13 @@ func TestAnchorsNilContract(t *testing.T) {
 // from that primitive.
 func TestIsPrimitive(t *testing.T) {
 	// A primitive-like type: its base IS anyAtomicType.
-	prim, err := NewSimpleType(xsderr.Loc{}, QName{Space: xsdNamespace, Local: "decimal"},
+	prim, err := NewSimpleType(xsderr.Loc{}, QName{Space: XMLSchemaNS, Local: "decimal"},
 		Atomic{Primitive: nil}, anyAtomicType, nil, nil)
 	if err != nil {
 		t.Fatalf("building primitive: %v", err)
 	}
 	// A derived type restricting the primitive.
-	derived, err := NewSimpleType(xsderr.Loc{}, QName{Space: xsdNamespace, Local: "integer"},
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Space: XMLSchemaNS, Local: "integer"},
 		Atomic{Primitive: prim}, prim, nil, nil)
 	if err != nil {
 		t.Fatalf("building derived: %v", err)

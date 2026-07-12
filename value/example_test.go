@@ -27,9 +27,8 @@ func (b oneType) Mapping(typ xsd.QName) (value.Mapping, bool) {
 func ExampleOverride() {
 	// A QName is an expanded name {namespace}local; the XSD builtins live in
 	// the XML Schema namespace.
-	const xsdNS = "http://www.w3.org/2001/XMLSchema"
-	decimal := xsd.QName{Space: xsdNS, Local: "decimal"}
-	str := xsd.QName{Space: xsdNS, Local: "string"}
+	decimal := xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}
+	str := xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
 
 	base := oneType{
 		typ: str,
