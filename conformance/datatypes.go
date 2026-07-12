@@ -92,7 +92,7 @@ const synthNS = "urn:goxsd8:conformance:facets"
 var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double)[0-9]+\.xml$`)
 
 // facetsCase matches an instance case in the facet cohort: an MS Facets instance
-// restricting a strict-mapped primitive (string or decimal).
+// restricting a strict-mapped primitive (string, decimal, float, or double).
 var facetsCase = regexp.MustCompile(`msData/datatypes/Facets/(string|decimal|float|double)/(string|decimal|float|double)_[A-Za-z]+[0-9]+\.xml$`)
 
 // selectsDatatypes claims the instance cases of both cohorts. It is a cheap path
@@ -356,7 +356,9 @@ type facetChild struct {
 }
 
 // facetKinds is the set of facet kinds the facet cohort recognizes: the value-
-// and pattern-facet kinds strict.ValidateLexical decides for string/decimal.
+// and pattern-facet kinds strict.ValidateLexical decides for
+// string/decimal/float/double (the bound facets also serve the
+// partially-ordered float/double).
 // whiteSpace (normalization, no cvc-* rule), assertions and explicitTimezone are
 // deliberately excluded, so a schema carrying one is declined rather than
 // silently ignored.
