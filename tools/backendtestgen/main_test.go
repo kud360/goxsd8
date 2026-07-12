@@ -122,6 +122,54 @@ func TestStringVectors(t *testing.T) {
 	}
 }
 
+// floatingWant is the spec canonical corpus float and double must both produce
+// (§3.3.4.2/§3.3.5.2): identical because the sample values are exactly
+// representable at both precisions, so the shortest round-trip is the same.
+var floatingWant = struct {
+	valid   []roundtrip
+	invalid []string
+}{
+	valid: []roundtrip{
+		{"INF", "INF"}, {"-INF", "-INF"}, {"NaN", "NaN"}, {"+INF", "INF"},
+		{"0", "0.0E0"}, {"-0", "-0.0E0"}, {"1", "1.0E0"}, {"-1", "-1.0E0"},
+		{"1.5E1", "1.5E1"}, {"100", "1.0E2"}, {".5", "5.0E-1"},
+		{"-0.001", "-1.0E-3"}, {"3.14", "3.14E0"},
+	},
+	invalid: []string{"+NaN", "-NaN", "Infinity", "INF ", "1.5e", "++1", "1.0.0", ""},
+}
+
+// TestFloatVectors and TestDoubleVectors pin the spec-derived float/double corpora:
+// the special literals (nt-numSpecReps) and representative numerals with the
+// canonical forms scientificCanonicalMap assigns (§3.3.4.2/§3.3.5.2), plus the
+// regex-verified near-miss invalids (notably the +NaN/-NaN the stricter special
+// grammar excludes). They fail loudly if a spec edit or a parser change drifts.
+func TestFloatVectors(t *testing.T)  { checkFloatingVectors(t, "float", 32) }
+func TestDoubleVectors(t *testing.T) { checkFloatingVectors(t, "double", 64) }
+
+func checkFloatingVectors(t *testing.T, local string, bitSize int) {
+	t.Helper()
+	tv, err := parseFloating(readSpec(t), local, bitSize)
+	if err != nil {
+		t.Fatalf("parseFloating(%s): %v", local, err)
+	}
+	if len(tv.Valid) != len(floatingWant.valid) {
+		t.Fatalf("%s valid: got %v, want %v", local, tv.Valid, floatingWant.valid)
+	}
+	for i, w := range floatingWant.valid {
+		if tv.Valid[i] != w {
+			t.Errorf("%s valid[%d]: got %v, want %v", local, i, tv.Valid[i], w)
+		}
+	}
+	if len(tv.Invalid) != len(floatingWant.invalid) {
+		t.Fatalf("%s invalid: got %q, want %q", local, tv.Invalid, floatingWant.invalid)
+	}
+	for i, w := range floatingWant.invalid {
+		if tv.Invalid[i] != w {
+			t.Errorf("%s invalid[%d]: got %q, want %q", local, i, tv.Invalid[i], w)
+		}
+	}
+}
+
 // TestApplicableFacets pins that each cohort type carries its cos-applicable-facets
 // list in spec order (§4.1.5), sourced from the shared builtin spec parser.
 func TestApplicableFacets(t *testing.T) {
@@ -133,6 +181,8 @@ func TestApplicableFacets(t *testing.T) {
 		"boolean": {"whiteSpace", "pattern", "assertions"},
 		"string":  {"whiteSpace", "length", "minLength", "maxLength", "pattern", "enumeration", "assertions"},
 		"decimal": {"whiteSpace", "totalDigits", "fractionDigits", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"float":   {"whiteSpace", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"double":  {"whiteSpace", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
 	}
 	for name, w := range want {
 		got := facets[name]

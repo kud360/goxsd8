@@ -5,12 +5,12 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// New returns the spec-exact value.Backend for the first primitive cohort:
-// xs:decimal, xs:boolean and xs:string. Each type's value space is represented
-// with full fidelity to the Datatypes spec (§3.3.3, §3.3.2, §3.3.1); a
-// [value.Mapping.Parse] rejects any lexical outside the type's lexical space as
-// an *xsderr.Error with rule "cvc-datatype-valid" (§4.1.4), never a false
-// validity verdict.
+// New returns the spec-exact value.Backend for the primitive cohort so far:
+// xs:decimal, xs:boolean, xs:string, xs:float and xs:double. Each type's value
+// space is represented with full fidelity to the Datatypes spec (§3.3.3,
+// §3.3.2, §3.3.1, §3.3.4, §3.3.5); a [value.Mapping.Parse] rejects any lexical
+// outside the type's lexical space as an *xsderr.Error with rule
+// "cvc-datatype-valid" (§4.1.4), never a false validity verdict.
 //
 // The value each mapping's Parse produces satisfies exactly the capability
 // interfaces its applicable facets require (cos-applicable-facets), so a
@@ -26,6 +26,12 @@ import (
 //   - xs:string — [value.Eq], [value.Lengthed] (character count) and
 //     [value.Canonical]. It is deliberately NOT [value.Ordered]
 //     (ordered=false, §3.3.1.3).
+//   - xs:float, xs:double — [value.Ordered] (PARTIAL order, §3.3.4.3/§3.3.5.3:
+//     NaN is incomparable with every value, itself included), [value.Eq],
+//     [value.Identical] and [value.Canonical]. Equality and identity genuinely
+//     disagree here (NaN ≠ NaN but is identical to itself; +0 = −0 but is not
+//     identical to −0), so both capabilities are implemented independently.
+//     Deliberately NOT [value.Lengthed]/[value.DigitCounted]/[value.Scaled].
 func New() value.Backend { return backend{} }
 
 // backend is the spec-exact primitive-cohort mapping. It carries no state: the
@@ -34,8 +40,8 @@ func New() value.Backend { return backend{} }
 type backend struct{}
 
 // Mapping dispatches on the builtin QName. It is a switch, not a map ranged
-// into output (STYLE D2/D3), and covers only the three cohort types; ok is
-// false for every other name, including non-XML-Schema-namespace names.
+// into output (STYLE D2/D3), and covers only the cohort types; ok is false for
+// every other name, including non-XML-Schema-namespace names.
 func (backend) Mapping(typ xsd.QName) (value.Mapping, bool) {
 	if typ.Space != xsd.XMLSchemaNS {
 		return value.Mapping{}, false
@@ -47,6 +53,10 @@ func (backend) Mapping(typ xsd.QName) (value.Mapping, bool) {
 		return value.Mapping{Parse: parseBoolean, Canonical: canonicalBoolean}, true
 	case "string":
 		return value.Mapping{Parse: parseString, Canonical: canonicalString}, true
+	case "float":
+		return value.Mapping{Parse: parseFloat, Canonical: canonicalFloat}, true
+	case "double":
+		return value.Mapping{Parse: parseDouble, Canonical: canonicalDouble}, true
 	}
 	return value.Mapping{}, false
 }

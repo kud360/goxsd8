@@ -1,8 +1,10 @@
 package strict_test
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/value/backendtest"
@@ -21,7 +23,7 @@ func TestBackendtestCertification(t *testing.T) {
 
 func TestBackendCoverage(t *testing.T) {
 	backend := strict.New()
-	for _, local := range []string{"decimal", "boolean", "string"} {
+	for _, local := range []string{"decimal", "boolean", "string", "float", "double"} {
 		m, ok := backend.Mapping(xsd.QName{Space: xsd.XMLSchemaNS, Local: local})
 		if !ok {
 			t.Errorf("Mapping(xs:%s): ok=false, want true", local)
@@ -42,13 +44,45 @@ func TestBackendUnmapped(t *testing.T) {
 	// are both unmapped.
 	for _, q := range []xsd.QName{
 		{Space: xsd.XMLSchemaNS, Local: "integer"},
-		{Space: xsd.XMLSchemaNS, Local: "float"},
+		{Space: xsd.XMLSchemaNS, Local: "duration"},
 		{Space: "urn:other", Local: "decimal"},
 		{Local: "decimal"},
 	} {
 		if _, ok := backend.Mapping(q); ok {
 			t.Errorf("Mapping(%s): ok=true, want false", q)
 		}
+	}
+}
+
+// TestSeedMissingShrinksByFloatDouble proves float and double have joined the
+// mapped primitives: builtin.Seed(strict.New()) still reports a
+// MissingPrimitivesError (the later cohorts remain unmapped), but float and
+// double are no longer in it, while an earlier-unmapped primitive (integer's
+// primitive ancestor is decimal, so check a genuinely unmapped one, e.g. the
+// dateTime primitive) still is.
+func TestSeedMissingShrinksByFloatDouble(t *testing.T) {
+	_, err := builtin.Seed(strict.New())
+	var missing *builtin.MissingPrimitivesError
+	if !errors.As(err, &missing) {
+		t.Fatalf("Seed(strict.New()) error = %v, want a *MissingPrimitivesError (later cohorts still unmapped)", err)
+	}
+	inMissing := func(local string) bool {
+		for _, q := range missing.Missing {
+			if q == (xsd.QName{Space: xsd.XMLSchemaNS, Local: local}) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, mapped := range []string{"decimal", "boolean", "string", "float", "double"} {
+		if inMissing(mapped) {
+			t.Errorf("primitive %q must NOT be in the missing set (strict maps it)", mapped)
+		}
+	}
+	// A primitive strict does not yet map must still be reported, so the test
+	// cannot pass by strict suddenly mapping everything.
+	if !inMissing("dateTime") {
+		t.Error("dateTime must still be in the missing set (strict does not map it yet)")
 	}
 }
 

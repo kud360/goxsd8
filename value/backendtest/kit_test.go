@@ -11,11 +11,15 @@ import (
 func booleanQName() xsd.QName { return xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"} }
 func decimalQName() xsd.QName { return xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"} }
 func stringQName() xsd.QName  { return xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"} }
+func floatQName() xsd.QName   { return xsd.QName{Space: xsd.XMLSchemaNS, Local: "float"} }
+func doubleQName() xsd.QName  { return xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"} }
 
 // othersAbsent declares the cohort types other than boolean absent, so the
 // boolean-only test backends below are checked purely on boolean without Run
-// reporting the (intentionally) unmapped decimal/string vectors.
-func othersAbsent() []Option { return []Option{Absent(decimalQName(), stringQName())} }
+// reporting the (intentionally) unmapped decimal/string/float/double vectors.
+func othersAbsent() []Option {
+	return []Option{Absent(decimalQName(), stringQName(), floatQName(), doubleQName())}
+}
 
 // mapBackend is a test value.Backend over an explicit table.
 type mapBackend map[xsd.QName]value.Mapping
@@ -93,7 +97,7 @@ func TestRunAbsentSkipsUnmapped(t *testing.T) {
 	}
 
 	var r2 recordT
-	run(&r2, empty, []Option{Absent(booleanQName(), decimalQName(), stringQName())})
+	run(&r2, empty, []Option{Absent(booleanQName(), decimalQName(), stringQName(), floatQName(), doubleQName())})
 	if r2.errs != 0 {
 		t.Fatalf("Absent(all cohort): run reported %d failures, want 0", r2.errs)
 	}

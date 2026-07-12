@@ -64,6 +64,14 @@ func build(datatypesPath, precisionPath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s: string: %w", datatypesPath, err)
 	}
+	flt, err := parseFloating(spec, "float", 32)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: float: %w", datatypesPath, err)
+	}
+	dbl, err := parseFloating(spec, "double", 64)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: double: %w", datatypesPath, err)
+	}
 
 	facets, err := applicableFacets(datatypesPath, precisionPath)
 	if err != nil {
@@ -72,8 +80,10 @@ func build(datatypesPath, precisionPath string) ([]byte, error) {
 	boolean.ApplicableFacets = facets["boolean"]
 	decimal.ApplicableFacets = facets["decimal"]
 	str.ApplicableFacets = facets["string"]
+	flt.ApplicableFacets = facets["float"]
+	dbl.ApplicableFacets = facets["double"]
 
-	return emit([]typeVectors{boolean, decimal, str})
+	return emit([]typeVectors{boolean, decimal, str, flt, dbl})
 }
 
 // applicableFacets reads each cohort type's applicable constraining facets in
@@ -86,7 +96,7 @@ func applicableFacets(datatypesPath, precisionPath string) (map[string][]string,
 	if err != nil {
 		return nil, fmt.Errorf("applicable facets: %w", err)
 	}
-	want := map[string]bool{"boolean": true, "decimal": true, "string": true}
+	want := map[string]bool{"boolean": true, "decimal": true, "string": true, "float": true, "double": true}
 	out := make(map[string][]string, len(want))
 	for _, b := range types {
 		if !want[b.Name] {

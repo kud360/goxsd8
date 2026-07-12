@@ -1,8 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"math"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -307,6 +310,175 @@ func decimalInvalids(re *regexp.Regexp, lexicals []string) []string {
 		out = append(out, c)
 	}
 	return out
+}
+
+// parseFloating derives the float (bitSize 32) or double (bitSize 64) vectors
+// from the Datatypes spec (§3.3.4/§3.3.5). float and double share one lexical
+// space and one canonical algorithm; only the IEEE precision differs, carried
+// here by bitSize (strconv's rounding at 32 vs 64 bits IS floatingPointRound,
+// f-floatLexmap Note). The valid sample pairs the special literals (extracted
+// from nt-numSpecReps) and a deterministic representative set of numerals — like
+// string (§3.3.1.2) the numeric space is unbounded, so a sample exercises each
+// structural feature (special values, signed zero, integer, fraction, exponent,
+// sign) — each canonicalised by floatingCanonicalOf, an INDEPENDENT oracle
+// implementing scientificCanonicalMap (f-sciCanFragMap), never an echo of the
+// backend. Invalid near-misses are verified against the extracted regex so a
+// spec change widening the space drops them rather than mislabelling them.
+func parseFloating(spec, local string, bitSize int) (typeVectors, error) {
+	sec, err := section(spec, `id="sec-lex-`+local+`"`, `id="`+local+`-facets"`)
+	if err != nil {
+		return typeVectors{}, fmt.Errorf("%s lexical mapping: %w", local, err)
+	}
+	re, err := floatingLexicalRegex(sec)
+	if err != nil {
+		return typeVectors{}, fmt.Errorf("%s: %w", local, err)
+	}
+	specials, err := floatingSpecials(spec)
+	if err != nil {
+		return typeVectors{}, fmt.Errorf("%s: %w", local, err)
+	}
+
+	numerals := []string{"0", "-0", "1", "-1", "1.5E1", "100", ".5", "-0.001", "3.14"}
+	sample := append(append([]string{}, specials...), numerals...)
+
+	valid := make([]roundtrip, 0, len(sample))
+	for _, lex := range sample {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("%s: sample lexical %q does not match its own production regex", local, lex)
+		}
+		canon, err := floatingCanonicalOf(lex, bitSize)
+		if err != nil {
+			return typeVectors{}, fmt.Errorf("%s: canonical of %q: %w", local, lex, err)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: canon})
+	}
+
+	return typeVectors{
+		Local:   local,
+		Valid:   valid,
+		Invalid: floatingInvalids(re),
+	}, nil
+}
+
+// floatingLexicalRegex extracts the shared float/double lexical-space regular
+// expression from a lexical section and returns it anchored (^…$). The spec
+// writes it as a bare `…` backtick span with a display space (" |") that must be
+// removed ("after whitespace is removed from the regular expression").
+func floatingLexicalRegex(sec string) (*regexp.Regexp, error) {
+	for _, line := range strings.Split(sec, "\n") {
+		if !strings.Contains(line, `[Ee]`) || !strings.Contains(line, `INF`) {
+			continue
+		}
+		m := backtickRE.FindStringSubmatch(line)
+		if m == nil {
+			return nil, fmt.Errorf("regex line has no backtick span: %q", line)
+		}
+		expr := strings.ReplaceAll(m[1], " ", "")
+		re, err := regexp.Compile("^(?:" + expr + ")$")
+		if err != nil {
+			return nil, fmt.Errorf("compiling extracted lexical regex %q: %w", expr, err)
+		}
+		return re, nil
+	}
+	return nil, fmt.Errorf("lexical-space regular expression not found")
+}
+
+// floatingSpecials extracts the numericalSpecialRep literals (nt-numSpecReps,
+// nt-minNumSpecReps) and verifies the set is exactly INF, +INF, -INF, NaN — the
+// stricter special sub-grammar (no +NaN/-NaN). It fails loud if the spec moves.
+func floatingSpecials(spec string) ([]string, error) {
+	sec, err := section(spec, `id="nt-minNumSpecReps"`, `Lexical Mapping for Non-numerical`)
+	if err != nil {
+		return nil, fmt.Errorf("numericalSpecialRep production: %w", err)
+	}
+	lits := literalsIn(sec)
+	want := map[string]bool{"INF": true, "+INF": true, "-INF": true, "NaN": true}
+	if len(lits) != len(want) {
+		return nil, fmt.Errorf("numericalSpecialRep: found %q, want the 4 literals INF/+INF/-INF/NaN", lits)
+	}
+	for _, l := range lits {
+		if !want[l] {
+			return nil, fmt.Errorf("numericalSpecialRep: unexpected special literal %q", l)
+		}
+	}
+	return lits, nil
+}
+
+// floatingInvalids is a deterministic near-miss sample outside the shared
+// production (rejected by cvc-datatype-valid): the signed NaN spellings the
+// stricter special grammar excludes (+NaN/-NaN, whereas +INF is allowed), a
+// foreign infinity spelling, a trailing-whitespace literal (whiteSpace is a
+// separate stage), a dangling exponent, a double sign and a double point, and
+// the empty string. Each is kept only if the extracted regex rejects it.
+func floatingInvalids(re *regexp.Regexp) []string {
+	candidates := []string{"+NaN", "-NaN", "Infinity", "INF ", "1.5e", "++1", "1.0.0", ""}
+	var out []string
+	seen := map[string]bool{}
+	for _, c := range candidates {
+		if seen[c] || re.MatchString(c) {
+			continue
+		}
+		seen[c] = true
+		out = append(out, c)
+	}
+	return out
+}
+
+// floatingCanonicalOf computes the canonical form of a float/double lexical at
+// the given bitSize, the independent oracle the vectors pin. Specials map per
+// specialRepCanonicalMap (f-specValCanMap); numerals parse at bitSize (strconv's
+// rounding is floatingPointRound) then render via floatingCanonical. An
+// out-of-range numeral (ErrRange) is valid — it yields ±INF or a signed zero.
+func floatingCanonicalOf(lex string, bitSize int) (string, error) {
+	switch lex {
+	case "INF", "+INF":
+		return "INF", nil
+	case "-INF":
+		return "-INF", nil
+	case "NaN":
+		return "NaN", nil
+	}
+	f, err := strconv.ParseFloat(lex, bitSize)
+	if err != nil && !errors.Is(err, strconv.ErrRange) {
+		return "", err
+	}
+	return floatingCanonical(f, bitSize), nil
+}
+
+// floatingCanonical implements floatCanonicalMap/doubleCanonicalMap (§3.3.4.2/
+// §3.3.5.2): the special forms and signed zeros, else scientificCanonicalMap —
+// the shortest round-tripping decimal (strconv.FormatFloat precision -1) in
+// scientific notation, reshaped to the spec numeral: one leading mantissa digit,
+// a mandatory decimal point, uppercase E, and a minimal signless-plus exponent.
+func floatingCanonical(f float64, bitSize int) string {
+	switch {
+	case math.IsNaN(f):
+		return "NaN"
+	case math.IsInf(f, 1):
+		return "INF"
+	case math.IsInf(f, -1):
+		return "-INF"
+	case f == 0:
+		if math.Signbit(f) {
+			return "-0.0E0"
+		}
+		return "0.0E0"
+	}
+	s := strconv.FormatFloat(f, 'e', -1, bitSize)
+	i := strings.IndexByte(s, 'e')
+	mantissa, exp := s[:i], s[i+1:]
+	if !strings.ContainsRune(mantissa, '.') {
+		mantissa += ".0"
+	}
+	neg := exp[0] == '-'
+	exp = strings.TrimLeft(exp[1:], "0")
+	if exp == "" {
+		exp = "0"
+	}
+	if neg && exp != "0" {
+		exp = "-" + exp
+	}
+	return mantissa + "E" + exp
 }
 
 // literalsIn returns every '`X`' literal in text, in order.

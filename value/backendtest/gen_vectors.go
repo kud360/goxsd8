@@ -7,8 +7,8 @@ import "github.com/kud360/goxsd8/xsd"
 // vectors is the spec-derived conformance corpus value/backendtest.Run
 // drives every value.Backend through (PRINCIPLES 26). Each row is one
 // builtin type's lexical/canonical vectors plus its applicable constraining
-// facets in spec order (cos-applicable-facets). M3 covers boolean, decimal
-// and string.
+// facets in spec order (cos-applicable-facets). M3 covers boolean, decimal,
+// string, float and double.
 var vectors = []typeVectors{
 	{
 		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"},
@@ -74,6 +74,82 @@ var vectors = []typeVectors{
 			"maxLength",
 			"pattern",
 			"enumeration",
+			"assertions",
+		},
+	},
+	{
+		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "float"},
+		valid: []roundtrip{
+			{lexical: "INF", canonical: "INF"},
+			{lexical: "-INF", canonical: "-INF"},
+			{lexical: "NaN", canonical: "NaN"},
+			{lexical: "+INF", canonical: "INF"},
+			{lexical: "0", canonical: "0.0E0"},
+			{lexical: "-0", canonical: "-0.0E0"},
+			{lexical: "1", canonical: "1.0E0"},
+			{lexical: "-1", canonical: "-1.0E0"},
+			{lexical: "1.5E1", canonical: "1.5E1"},
+			{lexical: "100", canonical: "1.0E2"},
+			{lexical: ".5", canonical: "5.0E-1"},
+			{lexical: "-0.001", canonical: "-1.0E-3"},
+			{lexical: "3.14", canonical: "3.14E0"},
+		},
+		invalid: []string{
+			"+NaN",
+			"-NaN",
+			"Infinity",
+			"INF ",
+			"1.5e",
+			"++1",
+			"1.0.0",
+			"",
+		},
+		applicableFacets: []string{
+			"whiteSpace",
+			"pattern",
+			"enumeration",
+			"maxInclusive",
+			"maxExclusive",
+			"minInclusive",
+			"minExclusive",
+			"assertions",
+		},
+	},
+	{
+		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"},
+		valid: []roundtrip{
+			{lexical: "INF", canonical: "INF"},
+			{lexical: "-INF", canonical: "-INF"},
+			{lexical: "NaN", canonical: "NaN"},
+			{lexical: "+INF", canonical: "INF"},
+			{lexical: "0", canonical: "0.0E0"},
+			{lexical: "-0", canonical: "-0.0E0"},
+			{lexical: "1", canonical: "1.0E0"},
+			{lexical: "-1", canonical: "-1.0E0"},
+			{lexical: "1.5E1", canonical: "1.5E1"},
+			{lexical: "100", canonical: "1.0E2"},
+			{lexical: ".5", canonical: "5.0E-1"},
+			{lexical: "-0.001", canonical: "-1.0E-3"},
+			{lexical: "3.14", canonical: "3.14E0"},
+		},
+		invalid: []string{
+			"+NaN",
+			"-NaN",
+			"Infinity",
+			"INF ",
+			"1.5e",
+			"++1",
+			"1.0.0",
+			"",
+		},
+		applicableFacets: []string{
+			"whiteSpace",
+			"pattern",
+			"enumeration",
+			"maxInclusive",
+			"maxExclusive",
+			"minInclusive",
+			"minExclusive",
 			"assertions",
 		},
 	},

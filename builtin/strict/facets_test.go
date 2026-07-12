@@ -91,6 +91,33 @@ func TestWidestSpaceInheritedBound(t *testing.T) {
 	wantAccept(t, err)
 }
 
+// TestBoundFacetNaNExcluded is the load-bearing partial-order test (#60): a
+// bounding facet applied to a value that is INCOMPARABLE with the bound must
+// EXCLUDE that value from the restricted value space (§3.3.4.3/§3.3.5.3 Note),
+// routing through a real cvc-*-valid rejection — NOT a panic. float is the first
+// cohort primitive whose order is partial, so this path is exercisable at last.
+//
+// Two directions: (1) a NaN instance against a numeric maxInclusive bound is
+// incomparable, so excluded; (2) a NaN bound value makes the restricted space
+// empty, so even an ordinary instance is excluded.
+func TestBoundFacetNaNExcluded(t *testing.T) {
+	floatPrim := newPrim(t, "float")
+
+	// (1) NaN instance, numeric bound: NaN is incomparable with 10, so excluded.
+	maxTen := derive(t, "maxTen", floatPrim, xsd.NewFacet(xsd.FacetMaxInclusive, []string{"10"}, false))
+	_, err := ValidateLexical(New(), maxTen, "NaN", nil)
+	wantRule(t, err, "cvc-maxInclusive-valid")
+	// A comparable in-range instance still passes the same facet.
+	_, err = ValidateLexical(New(), maxTen, "5", nil)
+	wantAccept(t, err)
+
+	// (2) NaN bound value: no float is comparable with NaN, so the restricted
+	// value space is empty and every instance — even 5 — is excluded.
+	maxNaN := derive(t, "maxNaN", floatPrim, xsd.NewFacet(xsd.FacetMinInclusive, []string{"NaN"}, false))
+	_, err = ValidateLexical(New(), maxNaN, "5", nil)
+	wantRule(t, err, "cvc-minInclusive-valid")
+}
+
 // TestPatternFacet exercises the pattern (lexical) stage on a string restricted
 // to [a-z]+ (cvc-pattern-valid). Note the XSD flavor anchors the whole literal
 // and treats ^/$ as literal characters, so the pattern is "[a-z]+", not
