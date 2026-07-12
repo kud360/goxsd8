@@ -322,7 +322,6 @@ func enumMatch(candidate, member value.Value) bool {
 type boundFacet struct {
 	limit value.Ordered
 	kind  xsd.FacetKind
-	rule  xsderr.Rule
 }
 
 // newBoundFacet parses the single bound {value} via the declaring type's
@@ -348,7 +347,7 @@ func newBoundFacet(b value.Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (
 	if !ok {
 		panic(fmt.Sprintf("strict: %s facet value %q is not value.Ordered (cos-applicable-facets §4.1.5 not enforced upstream)", kind, values[0]))
 	}
-	return boundFacet{limit: ord, kind: kind, rule: rule}, nil
+	return boundFacet{limit: ord, kind: kind}, nil
 }
 
 // CheckValue rejects a candidate that violates the bound (§4.3.7–4.3.10).
@@ -362,8 +361,8 @@ func (bf boundFacet) CheckValue(v value.Value) error {
 		panic(fmt.Sprintf("strict: %s facet comparison is Incomparable (facet applicability not enforced upstream)", bf.kind))
 	}
 	if bf.violates(ord) {
-		return xsderr.New(bf.rule, xsderr.Loc{},
-			"value violates the %s facet (%s, §4.3.7–4.3.10)", bf.kind, bf.rule)
+		return xsderr.New(boundRule(bf.kind), xsderr.Loc{},
+			"value violates the %s facet (%s, §4.3.7–4.3.10)", bf.kind, boundRule(bf.kind))
 	}
 	return nil
 }
@@ -407,7 +406,6 @@ func boundRule(k xsd.FacetKind) xsderr.Rule {
 type digitsFacet struct {
 	limit int
 	kind  xsd.FacetKind
-	rule  xsderr.Rule
 }
 
 // newDigitsFacet reads the facet's plain nonNegativeInteger {value} — a count,
@@ -418,7 +416,7 @@ func newDigitsFacet(f xsd.Facet) (digitsFacet, error) {
 	if err != nil {
 		return digitsFacet{}, err
 	}
-	return digitsFacet{limit: n, kind: f.Kind(), rule: rule}, nil
+	return digitsFacet{limit: n, kind: f.Kind()}, nil
 }
 
 // CheckValue rejects a candidate whose digit count exceeds the limit
@@ -433,8 +431,8 @@ func (df digitsFacet) CheckValue(v value.Value) error {
 		got = dc.FractionDigits()
 	}
 	if got > df.limit {
-		return xsderr.New(df.rule, xsderr.Loc{},
-			"value has %d %s, exceeds facet limit %d (%s)", got, df.kind, df.limit, df.rule)
+		return xsderr.New(digitsRule(df.kind), xsderr.Loc{},
+			"value has %d %s, exceeds facet limit %d (%s)", got, df.kind, df.limit, digitsRule(df.kind))
 	}
 	return nil
 }
@@ -457,7 +455,6 @@ func digitsRule(k xsd.FacetKind) xsderr.Rule {
 type lengthFacet struct {
 	limit int
 	kind  xsd.FacetKind
-	rule  xsderr.Rule
 }
 
 // newLengthFacet reads the facet's plain nonNegativeInteger {value} (a count),
@@ -468,7 +465,7 @@ func newLengthFacet(f xsd.Facet) (lengthFacet, error) {
 	if err != nil {
 		return lengthFacet{}, err
 	}
-	return lengthFacet{limit: n, kind: f.Kind(), rule: rule}, nil
+	return lengthFacet{limit: n, kind: f.Kind()}, nil
 }
 
 // CheckValue rejects a candidate whose length violates the facet
@@ -479,8 +476,8 @@ func (lf lengthFacet) CheckValue(v value.Value) error {
 		panic(fmt.Sprintf("strict: candidate %T under a %s facet is not value.Lengthed (cos-applicable-facets §4.1.5 not enforced upstream)", v, lf.kind))
 	}
 	if lf.violates(l.Len()) {
-		return xsderr.New(lf.rule, xsderr.Loc{},
-			"value length %d violates the %s facet limit %d (%s)", l.Len(), lf.kind, lf.limit, lf.rule)
+		return xsderr.New(lengthRule(lf.kind), xsderr.Loc{},
+			"value length %d violates the %s facet limit %d (%s)", l.Len(), lf.kind, lf.limit, lengthRule(lf.kind))
 	}
 	return nil
 }
