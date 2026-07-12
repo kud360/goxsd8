@@ -285,6 +285,284 @@ func TestIsPrimitive(t *testing.T) {
 	}
 }
 
+// mkAssertion builds a bare Assertion carrying only the given XPath test, the
+// shape the assertions-accumulation tests below exercise.
+func mkAssertion(expr string) Assertion {
+	return NewAssertion(NewXPathExpression(expr, nil, nil, nil), nil)
+}
+
+// assertionsFacet returns the single FacetAssertions EffectiveFacet in eff (and
+// fails if there is not exactly one), plus its assertion {test} expressions in
+// document order — the accumulated {value} the §4.3.13.2 tests assert over.
+func assertionsFacet(t *testing.T, eff []EffectiveFacet) (EffectiveFacet, []string) {
+	t.Helper()
+	var found EffectiveFacet
+	count := 0
+	for _, f := range eff {
+		if f.Facet().Kind() != FacetAssertions {
+			continue
+		}
+		count++
+		found = f
+	}
+	if count != 1 {
+		t.Fatalf("EffectiveFacets has %d assertions facets, want exactly 1", count)
+	}
+	as, ok := found.Facet().Assertions()
+	if !ok {
+		t.Fatal("Assertions() ok = false on an assertions facet")
+	}
+	exprs := make([]string, len(as))
+	for i, a := range as {
+		exprs[i] = a.Test().Expression()
+	}
+	return found, exprs
+}
+
+func wantExprs(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("accumulated assertions = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("accumulated assertions = %v, want %v", got, want)
+		}
+	}
+}
+
+// TestEffectiveFacetsAssertionsAccumulateTwoLevel exercises §4.3.13.2: a
+// derived type's assertions {value} is the base type's Assertions followed by
+// the derived type's own new Assertions, in that order (append, not replace).
+// It also pins Declaring to the most-derived contributor and checks the
+// cos-assertions-restriction (§4.3.13.4) prefix invariant holds.
+func TestEffectiveFacetsAssertionsAccumulateTwoLevel(t *testing.T) {
+	base, err := NewSimpleType(xsderr.Loc{}, QName{Local: "base"}, Atomic{}, anyAtomicType,
+		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("@a > 0"), mkAssertion("@b < 10")})}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, Atomic{}, base,
+		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("@c = 1")})}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ef, got := assertionsFacet(t, derived.EffectiveFacets())
+	wantExprs(t, got, []string{"@a > 0", "@b < 10", "@c = 1"})
+
+	// Declaring reflects the most-derived contributor's position (Q2).
+	if d := ef.Declaring(); d != (QName{Local: "derived"}) {
+		t.Errorf("merged assertions Declaring() = %v, want {Local: derived}", d)
+	}
+
+	// cos-assertions-restriction (§4.3.13.4): base's {value} is a literal
+	// prefix of the derived's accumulated {value}.
+	_, baseExprs := assertionsFacet(t, base.EffectiveFacets())
+	if len(baseExprs) > len(got) {
+		t.Fatalf("base {value} longer than derived: base=%v derived=%v", baseExprs, got)
+	}
+	for i := range baseExprs {
+		if got[i] != baseExprs[i] {
+			t.Fatalf("base {value} %v is not a prefix of derived's %v", baseExprs, got)
+		}
+	}
+}
+
+// TestEffectiveFacetsAssertionsAccumulateThreeLevel exercises recursive
+// accumulation across A <- B <- C (§4.3.13.2 point 4): C's effective assertions
+// {value} is A's ++ B's-own ++ C's-own, oldest first.
+func TestEffectiveFacetsAssertionsAccumulateThreeLevel(t *testing.T) {
+	a, err := NewSimpleType(xsderr.Loc{}, QName{Local: "A"}, Atomic{}, anyAtomicType,
+		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("a1")})}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := NewSimpleType(xsderr.Loc{}, QName{Local: "B"}, Atomic{}, a,
+		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("b1"), mkAssertion("b2")})}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewSimpleType(xsderr.Loc{}, QName{Local: "C"}, Atomic{}, b,
+		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("c1")})}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ef, got := assertionsFacet(t, c.EffectiveFacets())
+	wantExprs(t, got, []string{"a1", "b1", "b2", "c1"})
+	if d := ef.Declaring(); d != (QName{Local: "C"}) {
+		t.Errorf("merged assertions Declaring() = %v, want {Local: C}", d)
+	}
+}
+
+// TestEffectiveFacetsReplaceKindStillReplaces is the regression guard that the
+// FacetAssertions accumulation is kind-selective: a single-valued replace-kind
+// facet (FacetMaxInclusive) across a base/derived chain still REPLACES — the
+// derived's value wins and the base's is dropped, not accumulated.
+func TestEffectiveFacetsReplaceKindStillReplaces(t *testing.T) {
+	base, err := NewSimpleType(xsderr.Loc{}, QName{Local: "base"}, Atomic{}, anyAtomicType,
+		[]Facet{NewFacet(FacetMaxInclusive, []string{"100"}, false)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, Atomic{}, base,
+		[]Facet{NewFacet(FacetMaxInclusive, []string{"50"}, false)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	eff := derived.EffectiveFacets()
+	if len(eff) != 1 {
+		t.Fatalf("EffectiveFacets len = %d, want 1 (maxInclusive replaced, not accumulated)", len(eff))
+	}
+	if got := eff[0].Facet().Values(); len(got) != 1 || got[0] != "50" {
+		t.Errorf("maxInclusive {value} = %v, want [50] (derived replaces base)", got)
+	}
+}
+
+// TestEffectiveFacetsAssertionsMixedWithReplaceKind proves both behaviors
+// coexist in ONE EffectiveFacets call: on the same two types, the assertions
+// facet accumulates while a replace-kind facet (FacetLength) still replaces.
+func TestEffectiveFacetsAssertionsMixedWithReplaceKind(t *testing.T) {
+	base, err := NewSimpleType(xsderr.Loc{}, QName{Local: "base"}, Atomic{}, anyAtomicType,
+		[]Facet{
+			NewFacet(FacetLength, []string{"8"}, false),
+			NewAssertionsFacet([]Assertion{mkAssertion("base1")}),
+		}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, Atomic{}, base,
+		[]Facet{
+			NewFacet(FacetLength, []string{"4"}, false),
+			NewAssertionsFacet([]Assertion{mkAssertion("derived1")}),
+		}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	eff := derived.EffectiveFacets()
+	_, got := assertionsFacet(t, eff)
+	wantExprs(t, got, []string{"base1", "derived1"})
+
+	lengthCount := 0
+	for _, f := range eff {
+		if f.Facet().Kind() != FacetLength {
+			continue
+		}
+		lengthCount++
+		if v := f.Facet().Values(); len(v) != 1 || v[0] != "4" {
+			t.Errorf("length {value} = %v, want [4] (derived replaces base)", v)
+		}
+	}
+	if lengthCount != 1 {
+		t.Fatalf("EffectiveFacets has %d length facets, want exactly 1", lengthCount)
+	}
+}
+
+// TestEffectiveFacetsAssertionsBaseHasNoneDerivedAdds exercises the
+// plain-append branch of overlayFacet: when acc has no prior FacetAssertions
+// entry, the derived type's assertions facet is appended unchanged.
+func TestEffectiveFacetsAssertionsBaseHasNoneDerivedAdds(t *testing.T) {
+	base, err := NewSimpleType(xsderr.Loc{}, QName{Local: "base"}, Atomic{}, anyAtomicType, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, Atomic{}, base,
+		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("d1")})}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ef, got := assertionsFacet(t, derived.EffectiveFacets())
+	wantExprs(t, got, []string{"d1"})
+	if d := ef.Declaring(); d != (QName{Local: "derived"}) {
+		t.Errorf("Declaring() = %v, want {Local: derived}", d)
+	}
+}
+
+// TestEffectiveFacetsAssertionsBaseHasDerivedAddsNone covers both ways a
+// derived type can contribute no new assertions: (1) it declares no assertions
+// facet at all — the base's facet is inherited unchanged, keeping the base's
+// Declaring; (2) it declares an empty assertions facet — the base's Assertions
+// survive but the merged facet takes the derived's most-derived position and
+// Declaring.
+func TestEffectiveFacetsAssertionsBaseHasDerivedAddsNone(t *testing.T) {
+	base, err := NewSimpleType(xsderr.Loc{}, QName{Local: "base"}, Atomic{}, anyAtomicType,
+		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("b1"), mkAssertion("b2")})}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// (1) derived declares NO assertions facet: base's facet is inherited as-is.
+	noFacet, err := NewSimpleType(xsderr.Loc{}, QName{Local: "noFacet"}, Atomic{}, base,
+		[]Facet{NewFacet(FacetLength, []string{"3"}, false)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ef1, got1 := assertionsFacet(t, noFacet.EffectiveFacets())
+	wantExprs(t, got1, []string{"b1", "b2"})
+	if d := ef1.Declaring(); d != (QName{Local: "base"}) {
+		t.Errorf("inherited assertions Declaring() = %v, want {Local: base}", d)
+	}
+
+	// (2) derived declares an EMPTY assertions facet: base's Assertions survive,
+	// but the merged facet takes the derived's position and Declaring.
+	emptyFacet, err := NewSimpleType(xsderr.Loc{}, QName{Local: "emptyFacet"}, Atomic{}, base,
+		[]Facet{NewAssertionsFacet(nil)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ef2, got2 := assertionsFacet(t, emptyFacet.EffectiveFacets())
+	wantExprs(t, got2, []string{"b1", "b2"})
+	if d := ef2.Declaring(); d != (QName{Local: "emptyFacet"}) {
+		t.Errorf("merged empty-derived assertions Declaring() = %v, want {Local: emptyFacet}", d)
+	}
+}
+
+// TestEffectiveFacetsAssertionsNoDedup guards against a "helpful" set-union:
+// §4.3.13.2 accumulation is a plain append, so identical assertion {test}s
+// declared at two levels BOTH survive — length is base-count + derived-count.
+func TestEffectiveFacetsAssertionsNoDedup(t *testing.T) {
+	base, err := NewSimpleType(xsderr.Loc{}, QName{Local: "base"}, Atomic{}, anyAtomicType,
+		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("@x = 1")})}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, Atomic{}, base,
+		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("@x = 1")})}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, got := assertionsFacet(t, derived.EffectiveFacets())
+	wantExprs(t, got, []string{"@x = 1", "@x = 1"})
+}
+
+// TestEffectiveFacetsAssertionsMergeCopyIndependence checks the new merge path
+// returns non-aliased data: mutating a slice returned from the merged facet's
+// Assertions() does not affect the stored facet on a later call.
+func TestEffectiveFacetsAssertionsMergeCopyIndependence(t *testing.T) {
+	base, err := NewSimpleType(xsderr.Loc{}, QName{Local: "base"}, Atomic{}, anyAtomicType,
+		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("b1")})}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, Atomic{}, base,
+		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("d1")})}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ef, _ := assertionsFacet(t, derived.EffectiveFacets())
+	first, _ := ef.Facet().Assertions()
+	first[0] = mkAssertion("MUTATED")
+
+	_, again := assertionsFacet(t, derived.EffectiveFacets())
+	wantExprs(t, again, []string{"b1", "d1"})
+}
+
 // TestOwnVsEffectiveFacets exercises the §3.16.6.4 overlay across a 3-level
 // restriction chain: anyAtomicType -> primitive -> mid -> leaf. A more-derived
 // same-kind facet masks the base's facet, and non-superseded facets survive.

@@ -450,6 +450,19 @@ func (t *SimpleType) OwnFacets() []Facet {
 // {name} godoc). That is a legitimate value, not a missing one: an inherited
 // facet can genuinely come from an unnamed ancestor on the chain.
 //
+// FacetAssertions is an explicit EXCEPTION to the "the type that declared it"
+// contract above. Its {value} accumulates across the base chain (Datatypes
+// §4.3.13.2: the base's Assertions then each restriction's own, appended), so a
+// single merged assertions facet spans multiple declaring types and no lone
+// QName is truthful. For it, Declaring reflects ONLY the most-derived
+// contributor's position — chosen for positional consistency with the
+// replace-kind facets — and per-assertion provenance (which type each
+// individual Assertion came from) is NOT recoverable from an EffectiveFacet; a
+// caller needing it must track it separately. This is acceptable because
+// downstream evaluation reads each Assertion's own {test} XPathExpression and
+// context, not facet-level Declaring, so the widest-space rationale that makes
+// Declaring load-bearing for enumeration and bound facets does not apply here.
+//
 // EffectiveFacet is immutable after construction; it is produced only by
 // EffectiveFacets.
 type EffectiveFacet struct {
@@ -465,6 +478,11 @@ func (f EffectiveFacet) Facet() Facet {
 // Declaring returns the {name} QName of the type on the base chain that
 // declared the facet. It is the zero QName when that type is anonymous (the
 // zero-value-means-anonymous convention, not a missing value).
+//
+// For a merged FacetAssertions facet — whose {value} accumulates across the
+// chain (§4.3.13.2) — Declaring reflects only the most-derived contributor's
+// position; the individual Assertions may originate from several ancestors and
+// their provenance is not recoverable here (see EffectiveFacet's godoc).
 func (f EffectiveFacet) Declaring() QName {
 	return f.declaring
 }
@@ -476,7 +494,9 @@ func (f EffectiveFacet) Declaring() QName {
 // xs:anySimpleType and overlaying each level's OwnFacets per the §3.16.6.4
 // overlay rule: a facet contributed by a more-derived level supersedes any
 // same-kind facet from a less-derived level, and every non-superseded facet
-// survives.
+// survives. FacetAssertions is the one exception — its {value} accumulates
+// (the base's Assertions then the restriction's own, appended, §4.3.13.2)
+// instead of being superseded; see overlayFacet.
 //
 // Each result element is an EffectiveFacet, pairing the surviving Facet with
 // the {name} QName of the type on the chain that declared it. That provenance
@@ -512,17 +532,58 @@ func (t *SimpleType) EffectiveFacets() []EffectiveFacet {
 	return result
 }
 
-// overlayFacet applies a single more-derived facet onto acc per §3.16.6.4:
-// any same-kind facet already in acc is dropped, and f is appended, so f both
-// wins and takes the more-derived position.
+// overlayFacet applies a single more-derived facet onto acc per the §3.16.6.4
+// key-facets-overlay rule (which facet component survives per kind): any
+// same-kind facet already in acc is dropped, and f is appended, so f both wins
+// and takes the more-derived position.
+//
+// FacetAssertions is the sole exception: its {value} ACCUMULATES rather than
+// replacing (Datatypes §4.3.13.2, id="xr-assertions"). The assertions {value}
+// on a restriction is the base type's Assertions followed by the restriction's
+// own new Assertions, in that order — an append, never a set-union and never
+// deduplicated. So when acc already holds a FacetAssertions entry (the base's
+// accumulated {value}) and f is also FacetAssertions, the two are merged into a
+// single NewAssertionsFacet whose sequence is the existing (base) Assertions
+// PREPENDED before f's own, and that merged facet takes f's more-derived
+// position. The merged facet's declaring QName is f's — the most-derived
+// contributor (see EffectiveFacet's godoc for why per-assertion provenance is
+// not recoverable from the result). With no prior FacetAssertions entry in acc,
+// f is appended unchanged, exactly as for every other kind.
+//
+// Because the base's already-accumulated {value} is unconditionally PREPENDED
+// before f's own, the base type's assertions {value} is always a prefix of the
+// derived type's: cos-assertions-restriction (§4.3.13.4,
+// id="cos-assertions-restriction"; cataloged in xsderr/catalog.go) holds by
+// construction. That guarantee rests on this prepend mechanic — NOT on the
+// producer-side ownFacets "own-only" convention, which the type system does not
+// enforce. Even a caller that smuggled a pre-merged assertions facet into a
+// derived type's ownFacets would still have the base prepended, keeping the
+// base a prefix. There is therefore no runtime rejection path to add here; the
+// constraint is structurally unfalsifiable, so no xsderr call site wraps it.
 func overlayFacet(acc []EffectiveFacet, f EffectiveFacet) []EffectiveFacet {
 	out := make([]EffectiveFacet, 0, len(acc)+1)
 	for _, existing := range acc {
 		if existing.facet.kind != f.facet.kind {
 			out = append(out, existing)
+			continue
+		}
+		if f.facet.kind == FacetAssertions {
+			f.facet = mergeAssertions(existing.facet, f.facet)
 		}
 	}
 	return append(out, f)
+}
+
+// mergeAssertions builds the accumulated assertions facet for a restriction per
+// §4.3.13.2: base's Assertions first, then own's, in that order — an append,
+// never a set-union and never deduplicated. Both arguments are FacetAssertions
+// facets. NewAssertionsFacet copies the merged sequence, so the result aliases
+// neither operand's backing array.
+func mergeAssertions(base, own Facet) Facet {
+	merged := make([]Assertion, 0, len(base.assertions)+len(own.assertions))
+	merged = append(merged, base.assertions...)
+	merged = append(merged, own.assertions...)
+	return NewAssertionsFacet(merged)
 }
 
 // AnySimpleType returns the canonical xs:anySimpleType anchor (§3.16.1): the
