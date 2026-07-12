@@ -57,7 +57,10 @@ func (e *MissingPrimitivesError) Error() string {
 // linked pointer chain up to the shared xs:anySimpleType node, its {variety}
 // (atomic or list, with list item pointers resolved), its own {facets} (the
 // value-bearing spec defaults from the row, cos-applicable-facets §4.1.5), and
-// an empty {final}. A derived atomic type's {primitive type definition} points
+// an empty {final}. {facets} holds only value-bearing (default-carrying) facets;
+// facet APPLICABILITY that carries no default — notably precisionDecimal's
+// maxScale/minScale — is not materialized here and is answered instead via
+// [Types]/[TypeSpec.Applies], not the component's {facets}. A derived atomic type's {primitive type definition} points
 // at its primitive ancestor; a primitive datatype's own {primitive type
 // definition} is itself, wired via [xsd.NewPrimitiveType]. Only xs:anyAtomicType
 // carries an absent {primitive type definition} (Atomic{Primitive: nil}).

@@ -38,7 +38,7 @@
 //   - Assertions run at every variety level, fail-open per xpath's
 //     contract.
 //
-// # Contract (implemented across M5)
+// # Planned contract (M5 — not yet implemented)
 //
 //	func New(set *xsd.SchemaSet, opts ...Option) (*Validator, error)
 //	    Options: WithLogger. The Validator is immutable and reusable.

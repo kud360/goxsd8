@@ -1,7 +1,7 @@
 // Package native is the Go-friendly value backend: familiar Go types
 // with documented, deliberate deviations from the spec value spaces.
 //
-// # Representations (implemented in M12; contract fixed now)
+// # Planned representations (M12 — not yet implemented; contract fixed now)
 //
 //   - integer family — int64; lexicals outside int64 range are errors
 //     (a deviation: the spec spaces are unbounded).
