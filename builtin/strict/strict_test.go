@@ -10,9 +10,6 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// xsdNS is the XML Schema namespace the cohort types live in.
-const xsdNS = "http://www.w3.org/2001/XMLSchema"
-
 // TestBackendtestCertification is the headline acceptance of #14: the strict
 // backend passes the shared conformance kit for the #27 cohort — round-trips,
 // invalid-lexical rejection, and capability coverage (each value carries the
@@ -25,7 +22,7 @@ func TestBackendtestCertification(t *testing.T) {
 func TestBackendCoverage(t *testing.T) {
 	backend := strict.New()
 	for _, local := range []string{"decimal", "boolean", "string"} {
-		m, ok := backend.Mapping(xsd.QName{Space: xsdNS, Local: local})
+		m, ok := backend.Mapping(xsd.QName{Space: xsd.XMLSchemaNS, Local: local})
 		if !ok {
 			t.Errorf("Mapping(xs:%s): ok=false, want true", local)
 			continue
@@ -44,8 +41,8 @@ func TestBackendUnmapped(t *testing.T) {
 	// A type outside the cohort, and a same-local name in the wrong namespace,
 	// are both unmapped.
 	for _, q := range []xsd.QName{
-		{Space: xsdNS, Local: "integer"},
-		{Space: xsdNS, Local: "float"},
+		{Space: xsd.XMLSchemaNS, Local: "integer"},
+		{Space: xsd.XMLSchemaNS, Local: "float"},
 		{Space: "urn:other", Local: "decimal"},
 		{Local: "decimal"},
 	} {
@@ -57,7 +54,7 @@ func TestBackendUnmapped(t *testing.T) {
 
 func mappingFor(t *testing.T, local string) value.Mapping {
 	t.Helper()
-	m, ok := strict.New().Mapping(xsd.QName{Space: xsdNS, Local: local})
+	m, ok := strict.New().Mapping(xsd.QName{Space: xsd.XMLSchemaNS, Local: local})
 	if !ok {
 		t.Fatalf("strict backend does not map xs:%s", local)
 	}

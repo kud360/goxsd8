@@ -15,8 +15,7 @@ import (
 type exampleFullBackend struct{}
 
 func (exampleFullBackend) Mapping(typ xsd.QName) (value.Mapping, bool) {
-	const ns = "http://www.w3.org/2001/XMLSchema"
-	if typ.Space != ns {
+	if typ.Space != xsd.XMLSchemaNS {
 		return value.Mapping{}, false
 	}
 	for _, t := range builtin.Types {
@@ -41,8 +40,6 @@ func (exampleEmptyBackend) Mapping(xsd.QName) (value.Mapping, bool) {
 // parser/symbol-table constructor exists yet (that is a later M4 surface), so a
 // consumer keys the slice itself for now.
 func ExampleSeed() {
-	const ns = "http://www.w3.org/2001/XMLSchema"
-
 	types, err := builtin.Seed(exampleFullBackend{})
 	if err != nil {
 		fmt.Println(err)
@@ -54,7 +51,7 @@ func ExampleSeed() {
 		sym[t.Name()] = t
 	}
 
-	decimal := sym[xsd.QName{Space: ns, Local: "decimal"}]
+	decimal := sym[xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}]
 	fmt.Println("components:", len(types) == len(builtin.Types)+1)
 	fmt.Println("first:", types[0].Name().Local)
 	fmt.Println("decimal base:", decimal.Base().Name().Local)

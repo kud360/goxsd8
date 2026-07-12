@@ -33,9 +33,8 @@ func (b oneType) Mapping(typ xsd.QName) (value.Mapping, bool) {
 //
 //	backendtest.Run(t, backend)
 func ExampleRun() {
-	const xsdNS = "http://www.w3.org/2001/XMLSchema"
-	boolean := xsd.QName{Space: xsdNS, Local: "boolean"}
-	str := xsd.QName{Space: xsdNS, Local: "string"}
+	boolean := xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"}
+	str := xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
 
 	// base covers xs:string; a custom backend covers xs:boolean.
 	base := oneType{typ: str, mapping: value.Mapping{

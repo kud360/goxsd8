@@ -15,11 +15,6 @@ import (
 // same FacetKind (clause 4).
 const ruleSTPropsCorrect xsderr.Rule = "st-props-correct"
 
-// xsdNamespace is the XSD namespace URI. It is a local unexported constant
-// pending issue #39, which will export a shared named constant for it; this
-// package uses it only to name the anySimpleType/anyAtomicType anchors.
-const xsdNamespace = "http://www.w3.org/2001/XMLSchema"
-
 // Variety is a Simple Type Definition's {variety} (Structures §3.16.1,
 // Datatypes §2.4.1): one of atomic, list, or union. It is a sealed sum (STYLE
 // T2/T7): Atomic, List, and Union are its only implementations, sealed by the
@@ -553,7 +548,7 @@ func AnyAtomicType() *SimpleType { return anyAtomicType }
 // absent (nil) — its real base, xs:anyType, is a Complex Type Definition
 // outside this package's scope. Exposed to producers through AnySimpleType.
 var anySimpleType = &SimpleType{
-	name: QName{Space: xsdNamespace, Local: "anySimpleType"},
+	name: QName{Space: XMLSchemaNS, Local: "anySimpleType"},
 }
 
 // anyAtomicType is the xs:anyAtomicType anchor (Datatypes §4.1.6): the special
@@ -562,7 +557,7 @@ var anySimpleType = &SimpleType{
 // whose {primitive type definition} is itself absent (Atomic{Primitive: nil}).
 // Exposed to producers through AnyAtomicType.
 var anyAtomicType = &SimpleType{
-	name:    QName{Space: xsdNamespace, Local: "anyAtomicType"},
+	name:    QName{Space: XMLSchemaNS, Local: "anyAtomicType"},
 	variety: Atomic{Primitive: nil},
 	base:    anySimpleType,
 }

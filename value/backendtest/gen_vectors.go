@@ -11,7 +11,7 @@ import "github.com/kud360/goxsd8/xsd"
 // and string.
 var vectors = []typeVectors{
 	{
-		typ: xsd.QName{Space: "http://www.w3.org/2001/XMLSchema", Local: "boolean"},
+		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"},
 		valid: []roundtrip{
 			{lexical: "true", canonical: "true"},
 			{lexical: "false", canonical: "false"},
@@ -33,7 +33,7 @@ var vectors = []typeVectors{
 		},
 	},
 	{
-		typ: xsd.QName{Space: "http://www.w3.org/2001/XMLSchema", Local: "decimal"},
+		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"},
 		valid: []roundtrip{
 			{lexical: "-1.23", canonical: "-1.23"},
 			{lexical: "12678967.543233", canonical: "12678967.543233"},
@@ -60,7 +60,7 @@ var vectors = []typeVectors{
 		},
 	},
 	{
-		typ: xsd.QName{Space: "http://www.w3.org/2001/XMLSchema", Local: "string"},
+		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"},
 		valid: []roundtrip{
 			{lexical: "", canonical: ""},
 			{lexical: "abc", canonical: "abc"},

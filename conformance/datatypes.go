@@ -70,12 +70,10 @@ import (
 // on a user-defined "myList") resolves to a non-seeded type and is honestly
 // recorded as a gap (Fail); it flips only when list variety is reachable here.
 
-const xsdNS = "http://www.w3.org/2001/XMLSchema"
-
 // synthNS namespaces the anonymous leaf types the facet cohort synthesizes. It
-// is deliberately outside xsdNS so a synthesized leaf is never mistaken for a
-// backend-mapped builtin (the widest-space facet checks resolve to its primitive
-// base's mapping, never the leaf's own).
+// is deliberately outside xsd.XMLSchemaNS so a synthesized leaf is never mistaken
+// for a backend-mapped builtin (the widest-space facet checks resolve to its
+// primitive base's mapping, never the leaf's own).
 const synthNS = "urn:goxsd8:conformance:facets"
 
 // datatypesCase matches an instance case in the lexical cohort.
@@ -139,7 +137,7 @@ func execLexicalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c
 	if !ok {
 		return Fail()
 	}
-	qn := xsd.QName{Space: xsdNS, Local: prim}
+	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: prim}
 	if _, seeded := sym[qn]; !seeded {
 		return Fail()
 	}
@@ -170,7 +168,7 @@ func execFacetsCase(backend, strictBackend value.Backend, sym map[xsd.QName]*xsd
 	if !ok {
 		return Fail()
 	}
-	qn := xsd.QName{Space: xsdNS, Local: base}
+	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: base}
 	// Authoritative cohort guard: ask strict itself whether it maps base, so the
 	// no-op fallback (which "maps" every primitive) can never route a non-strict
 	// primitive through ValidateLexical and mis-decide it.
@@ -206,7 +204,7 @@ func execFacetsCase(backend, strictBackend value.Backend, sym map[xsd.QName]*xsd
 type fallbackPrimitives struct{}
 
 func (fallbackPrimitives) Mapping(typ xsd.QName) (value.Mapping, bool) {
-	if typ.Space != xsdNS {
+	if typ.Space != xsd.XMLSchemaNS {
 		return value.Mapping{}, false
 	}
 	for _, t := range builtin.Types {
@@ -469,7 +467,7 @@ func decodeRestriction(path string) (base string, children []facetChild, ok bool
 			break
 		}
 		if end, isEnd := tok.(xml.EndElement); isEnd {
-			if inRestriction && end.Name.Local == "restriction" && end.Name.Space == xsdNS {
+			if inRestriction && end.Name.Local == "restriction" && end.Name.Space == xsd.XMLSchemaNS {
 				return base, children, true
 			}
 			continue
@@ -479,13 +477,13 @@ func decodeRestriction(path string) (base string, children []facetChild, ok bool
 			continue
 		}
 		if !inRestriction {
-			if se.Name.Local == "restriction" && se.Name.Space == xsdNS {
+			if se.Name.Local == "restriction" && se.Name.Space == xsd.XMLSchemaNS {
 				inRestriction = true
 				base = localName(attrValue(se, "base"))
 			}
 			continue
 		}
-		if se.Name.Space == xsdNS {
+		if se.Name.Space == xsd.XMLSchemaNS {
 			children = append(children, facetChild{name: se.Name.Local, value: attrValue(se, "value")})
 		}
 	}
