@@ -1,4 +1,4 @@
-package strict
+package value
 
 import (
 	"fmt"
@@ -6,15 +6,14 @@ import (
 	"strconv"
 
 	"github.com/kud360/goxsd8/regex"
-	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// This file drives the pattern-facet and value-facet pipeline stages that run
-// after the whiteSpace stage (whitespace.go) over the strict primitive cohort
-// (decimal/boolean/string). The fixed stage sequence (value/doc.go "The facet
-// pipeline", ARCHITECTURE.md) is:
+// This file drives the backend-generic facet pipeline: the pattern (lexical)
+// and value-facet stages that run after the whiteSpace stage (whitespace.go)
+// over an atomic type's effective facets. The fixed stage sequence (doc.go "The
+// facet pipeline", ARCHITECTURE.md) is:
 //
 //	whiteSpace → pattern (lexical) → lexical mapping (Parse) → value facets
 //
@@ -25,16 +24,16 @@ import (
 // cvc-length/minLength/maxLength §4.3.1–4.3.3). Each stage failure carries the
 // SPECIFIC per-facet rule ID, never the cvc-facet-valid umbrella (§4.1.4).
 //
-// Compile-time assertions that the concrete checkers satisfy the pre-declared
-// pipeline-stage interfaces (value/backend.go): compile builds
-// []value.LexicalFacet and []value.ValueFacet and ValidateLexical ranges over
-// them polymorphically, so the interface satisfaction has real call sites.
+// Compile-time assertions that the concrete checkers satisfy the pipeline-stage
+// interfaces (backend.go): compile builds []LexicalFacet and []ValueFacet and
+// ValidateLexical ranges over them polymorphically, so the interface
+// satisfaction has real call sites.
 var (
-	_ value.LexicalFacet = patternFacet{}
-	_ value.ValueFacet   = enumFacet{}
-	_ value.ValueFacet   = boundFacet{}
-	_ value.ValueFacet   = digitsFacet{}
-	_ value.ValueFacet   = lengthFacet{}
+	_ LexicalFacet = patternFacet{}
+	_ ValueFacet   = enumFacet{}
+	_ ValueFacet   = boundFacet{}
+	_ ValueFacet   = digitsFacet{}
+	_ ValueFacet   = lengthFacet{}
 )
 
 // ValidateLexical validates the lexical string rawLexical against st's effective
@@ -42,36 +41,36 @@ var (
 // → value facets), returning the parsed value on success or the first
 // *xsderr.Error a stage produces (stop-on-first-failure; this does not collect
 // all facet violations). ctx is the VALIDATED INSTANCE's context, threaded to
-// the governing mapping's Parse for the candidate value; the strict cohort
-// (decimal/boolean/string) is context-free, so nil is fine here.
+// the governing mapping's Parse for the candidate value; a context-free cohort
+// (decimal/boolean/string) passes nil here.
 //
 // PRECONDITION (caller-guarded, NOT checked here): every facet on st must be
-// APPLICABLE to st's primitive ancestor (cos-applicable-facets §4.1.5), and st
-// must have a primitive ancestor b maps (the decimal/boolean/string cohort).
-// ValidateLexical PANICS — it does not return an error — when a value facet is
-// paired with a value lacking the capability that facet needs (a bound facet on
-// a non-Ordered value, a length facet on a non-Lengthed value, a digit facet on
-// a non-DigitCounted value), or when st has no primitive ancestor. Those are
+// APPLICABLE to st's primitive ancestor (cos-applicable-facets §4.1.5), st must
+// be an atomic type whose effective facets carry a whiteSpace facet (§3.16.7.4),
+// and b must map st's primitive ancestor. ValidateLexical PANICS — it does not
+// return an error — when a value facet is paired with a value lacking the
+// capability that facet needs (a bound facet on a non-Ordered value, a length
+// facet on a non-Lengthed value, a digit facet on a non-DigitCounted value), or
+// when st has no whiteSpace facet in force (see effectiveWhiteSpace). Those are
 // schema-construction errors (st-restrict-facets / cos-applicable-facets) the
 // caller must have already rejected, never instance data, so they surface as
 // programming-error panics, not validity verdicts.
 //
 // Facet {value} parsing is a separate concern with its own scope: an inherited
 // enumeration/bound facet's lexical {value} is parsed in the DECLARING SCHEMA's
-// context (see newEnumFacet/newBoundFacet), which for this cohort is also
-// context-free (nil). Future QName/NOTATION enumeration facets must not
-// silently inherit the instance context here — that would resolve a facet
-// literal's prefixes against the wrong scope.
-func ValidateLexical(b value.Backend, st *xsd.SimpleType, rawLexical string, ctx value.Context) (value.Value, error) {
+// context (see newEnumFacet/newBoundFacet), which for a context-free cohort is
+// also nil. Future QName/NOTATION enumeration facets must not silently inherit
+// the instance context here — that would resolve a facet literal's prefixes
+// against the wrong scope.
+func ValidateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, error) {
 	lexFacets, valFacets, err := compile(b, st)
 	if err != nil {
 		return nil, err
 	}
 
-	// whiteSpace stage (§4.3.6): normalize using st's cohort mode, resolved from
-	// its primitive ancestor (whiteSpace is fixed at the primitive for this
-	// cohort — string=preserve, decimal/boolean=collapse).
-	normalized := normalizeWhiteSpace(rawLexical, whiteSpaceOfType(st))
+	// whiteSpace stage (§4.3.6): normalize using st's effective whiteSpace facet,
+	// resolved off EffectiveFacets (the ordinary same-kind overlay, §3.16.6.4).
+	normalized := normalizeWhiteSpace(rawLexical, effectiveWhiteSpace(st))
 
 	// pattern (lexical) stage (cvc-pattern-valid, §4.3.4.4): checked on the
 	// normalized lexical, before the value even exists.
@@ -87,7 +86,7 @@ func ValidateLexical(b value.Backend, st *xsd.SimpleType, rawLexical string, ctx
 	m, ok := governingMapping(b, st)
 	if !ok {
 		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
-			"strict: no backend mapping governs type %s", st.Name())
+			"value: no backend mapping governs type %s", st.Name())
 	}
 	v, err := m.Parse(normalized, ctx)
 	if err != nil {
@@ -109,12 +108,12 @@ func ValidateLexical(b value.Backend, st *xsd.SimpleType, rawLexical string, ctx
 // or an unmappable declaring type surfaces here as an *xsderr.Error.
 //
 // The whiteSpace facet is consumed by the normalize stage, not as a checker;
-// assertions and explicitTimezone are out of this cohort's scope (they never
-// apply to decimal/boolean/string, cos-applicable-facets §4.1.5) and are
-// skipped.
-func compile(b value.Backend, st *xsd.SimpleType) ([]value.LexicalFacet, []value.ValueFacet, error) {
-	var lexFacets []value.LexicalFacet
-	var valFacets []value.ValueFacet
+// assertions and explicitTimezone are out of the atomic-facet scope this runner
+// covers (they never apply to decimal/boolean/string, cos-applicable-facets
+// §4.1.5) and are skipped.
+func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error) {
+	var lexFacets []LexicalFacet
+	var valFacets []ValueFacet
 	for _, ef := range st.EffectiveFacets() {
 		switch ef.Facet().Kind() {
 		case xsd.FacetWhiteSpace:
@@ -150,55 +149,28 @@ func compile(b value.Backend, st *xsd.SimpleType) ([]value.LexicalFacet, []value
 			}
 			valFacets = append(valFacets, lf)
 		case xsd.FacetAssertions, xsd.FacetExplicitTimezone:
-			// Out of this cohort's scope (never applicable to decimal/boolean/
+			// Out of this runner's scope (never applicable to decimal/boolean/
 			// string; assertions are a separate later stage).
 		}
 	}
 	return lexFacets, valFacets, nil
 }
 
-// primitiveOf returns st's primitive ancestor by walking the base chain until
-// IsPrimitive (§2.4.2). It is nil only for the anySimpleType/anyAtomicType
-// anchors, which are not in this cohort.
-func primitiveOf(st *xsd.SimpleType) *xsd.SimpleType {
-	for s := st; s != nil; s = s.Base() {
-		if s.IsPrimitive() {
-			return s
-		}
-	}
-	return nil
-}
-
-// whiteSpaceOfType resolves st's whiteSpace mode from its primitive ancestor's
-// per-type default in builtin.Types (§4.3.6). For this cohort whiteSpace is
-// fixed at the primitive, so a derived type never overrides it; reading it off
-// the primitive keeps the fact in one place (STYLE D3) rather than requiring a
-// whiteSpace facet on every hand-built derived node. A type with no primitive
-// ancestor is an internal-consistency failure (not a cohort type), never user
-// input, so it panics.
-func whiteSpaceOfType(st *xsd.SimpleType) whiteSpace {
-	prim := primitiveOf(st)
-	if prim == nil {
-		panic(fmt.Sprintf("strict: type %s has no primitive ancestor", st.Name()))
-	}
-	return whiteSpaceOf(prim.Name().Local)
-}
-
 // governingMapping walks from node (inclusive) up the base chain and returns
 // the first ancestor's Mapping the backend supplies. This is the widest-space
-// resolution (value/backend.go, st-restrict-facets §3.16.6.4): a derived type
-// without its own mapping is governed by its nearest mapped ancestor's.
-func governingMapping(b value.Backend, node *xsd.SimpleType) (value.Mapping, bool) {
+// resolution (backend.go, st-restrict-facets §3.16.6.4): a derived type without
+// its own mapping is governed by its nearest mapped ancestor's.
+func governingMapping(b Backend, node *xsd.SimpleType) (Mapping, bool) {
 	for s := node; s != nil; s = s.Base() {
 		if m, ok := b.Mapping(s.Name()); ok {
 			return m, true
 		}
 	}
-	return value.Mapping{}, false
+	return Mapping{}, false
 }
 
 // declaringMapping implements the widest-space rule (st-restrict-facets
-// §3.16.6.4, value/backend.go) for an inherited facet: it finds the type named
+// §3.16.6.4, backend.go) for an inherited facet: it finds the type named
 // declaring on leaf's base chain, then returns the governing mapping FROM that
 // type (its own, or its nearest mapped ancestor's) — never leaf's. A facet's
 // lexical {value} is parsed in the value space of the type that DECLARES it, so
@@ -206,14 +178,14 @@ func governingMapping(b value.Backend, node *xsd.SimpleType) (value.Mapping, boo
 // comparison (overflow, collapsed precision, different ordering).
 //
 // Types are matched by QName; anonymous declaring types (the zero QName) are
-// outside this cohort's manually-built scope.
-func declaringMapping(b value.Backend, leaf *xsd.SimpleType, declaring xsd.QName) (value.Mapping, bool) {
+// outside this runner's manually-built scope.
+func declaringMapping(b Backend, leaf *xsd.SimpleType, declaring xsd.QName) (Mapping, bool) {
 	for s := leaf; s != nil; s = s.Base() {
 		if s.Name() == declaring {
 			return governingMapping(b, s)
 		}
 	}
-	return value.Mapping{}, false
+	return Mapping{}, false
 }
 
 // patternFacet is the pattern (lexical) stage (cvc-pattern-valid, §4.3.4.4).
@@ -267,20 +239,20 @@ func (p patternFacet) CheckLexical(normalized string) error {
 // values specified in {value}". The members are parsed once, in the value space
 // of the type that DECLARES the enumeration (widest-space rule).
 type enumFacet struct {
-	members []value.Value
+	members []Value
 }
 
 // newEnumFacet parses each enumeration {value} lexical via the declaring type's
 // mapping (widest-space rule, st-restrict-facets §3.16.6.4). The declaring
-// schema's context is nil for this context-free cohort (see ValidateLexical).
-func newEnumFacet(b value.Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (enumFacet, error) {
+// schema's context is nil for a context-free cohort (see ValidateLexical).
+func newEnumFacet(b Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (enumFacet, error) {
 	m, ok := declaringMapping(b, st, ef.Declaring())
 	if !ok {
 		return enumFacet{}, xsderr.New("cvc-enumeration-valid", xsderr.Loc{},
 			"enumeration: no backend mapping governs declaring type %s", ef.Declaring())
 	}
 	values := ef.Facet().Values()
-	members := make([]value.Value, 0, len(values))
+	members := make([]Value, 0, len(values))
 	for _, lex := range values {
 		v, err := m.Parse(lex, nil)
 		if err != nil {
@@ -293,7 +265,7 @@ func newEnumFacet(b value.Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (e
 
 // CheckValue accepts v iff it is equal or identical to a member
 // (cvc-enumeration-valid, §4.3.5.4).
-func (e enumFacet) CheckValue(v value.Value) error {
+func (e enumFacet) CheckValue(v Value) error {
 	for _, member := range e.members {
 		if enumMatch(v, member) {
 			return nil
@@ -304,16 +276,15 @@ func (e enumFacet) CheckValue(v value.Value) error {
 }
 
 // enumMatch reports the "equal or identical" relation cvc-enumeration-valid
-// needs (§4.3.5.4). It prefers value.Identical (the identity relation:
-// NaN identical to itself, +0 not identical to -0 — value/doc.go) when the
-// candidate implements it, and unions it with value.Eq so an equal-but-not-
-// identical member (e.g. +0 vs -0) still matches. A candidate with neither
-// capability matches nothing.
-func enumMatch(candidate, member value.Value) bool {
-	if id, ok := candidate.(value.Identical); ok && id.Identical(member) {
+// needs (§4.3.5.4). It prefers Identical (the identity relation: NaN identical
+// to itself, +0 not identical to -0 — doc.go) when the candidate implements it,
+// and unions it with Eq so an equal-but-not-identical member (e.g. +0 vs -0)
+// still matches. A candidate with neither capability matches nothing.
+func enumMatch(candidate, member Value) bool {
+	if id, ok := candidate.(Identical); ok && id.Identical(member) {
 		return true
 	}
-	if eq, ok := candidate.(value.Eq); ok && eq.Eq(member) {
+	if eq, ok := candidate.(Eq); ok && eq.Eq(member) {
 		return true
 	}
 	return false
@@ -321,21 +292,21 @@ func enumMatch(candidate, member value.Value) bool {
 
 // boundFacet is one of the four bound value-facet stages
 // (cvc-maxInclusive/maxExclusive/minInclusive/minExclusive-valid, §4.3.7–4.3.10).
-// The limit and candidate both assert value.Ordered (every bound-applicable
-// primitive is ordered, cos-applicable-facets §4.1.5). An Incomparable Cmp is a
-// legitimate spec outcome for a PARTIALLY ordered primitive (float/double): a
-// value incomparable with a bounding facet's value is EXCLUDED from the
-// restricted value space (§3.3.4.3/§3.3.5.3 Note — e.g. NaN against any numeric
-// bound, or any value when the bound itself is NaN), so CheckValue REJECTS it
-// rather than panicking.
+// The limit and candidate both assert Ordered (every bound-applicable primitive
+// is ordered, cos-applicable-facets §4.1.5). An Incomparable Cmp is a legitimate
+// spec outcome for a PARTIALLY ordered primitive (float/double): a value
+// incomparable with a bounding facet's value is EXCLUDED from the restricted
+// value space (§3.3.4.3/§3.3.5.3 Note — e.g. NaN against any numeric bound, or
+// any value when the bound itself is NaN), so CheckValue REJECTS it rather than
+// panicking.
 type boundFacet struct {
-	limit value.Ordered
+	limit Ordered
 	kind  xsd.FacetKind
 }
 
 // newBoundFacet parses the single bound {value} via the declaring type's
-// mapping (widest-space rule) and requires it to be value.Ordered.
-func newBoundFacet(b value.Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (boundFacet, error) {
+// mapping (widest-space rule) and requires it to be Ordered.
+func newBoundFacet(b Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (boundFacet, error) {
 	kind := ef.Facet().Kind()
 	rule := boundRule(kind)
 	m, ok := declaringMapping(b, st, ef.Declaring())
@@ -352,21 +323,21 @@ func newBoundFacet(b value.Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (
 	if err != nil {
 		return boundFacet{}, err
 	}
-	ord, ok := v.(value.Ordered)
+	ord, ok := v.(Ordered)
 	if !ok {
-		panic(fmt.Sprintf("strict: %s facet value %q is not value.Ordered (cos-applicable-facets §4.1.5 not enforced upstream)", kind, values[0]))
+		panic(fmt.Sprintf("value: %s facet value %q is not Ordered (cos-applicable-facets §4.1.5 not enforced upstream)", kind, values[0]))
 	}
 	return boundFacet{limit: ord, kind: kind}, nil
 }
 
 // CheckValue rejects a candidate that violates the bound (§4.3.7–4.3.10).
-func (bf boundFacet) CheckValue(v value.Value) error {
-	cand, ok := v.(value.Ordered)
+func (bf boundFacet) CheckValue(v Value) error {
+	cand, ok := v.(Ordered)
 	if !ok {
-		panic(fmt.Sprintf("strict: candidate %T under a %s facet is not value.Ordered (cos-applicable-facets §4.1.5 not enforced upstream)", v, bf.kind))
+		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Ordered (cos-applicable-facets §4.1.5 not enforced upstream)", v, bf.kind))
 	}
 	ord := cand.Cmp(bf.limit)
-	if ord == value.Incomparable {
+	if ord == Incomparable {
 		// A value incomparable with the bound is excluded from the restricted
 		// value space (§3.3.4.3/§3.3.5.3 Note): a real facet rejection, e.g. a
 		// NaN candidate against a numeric bound, or any candidate when the bound
@@ -382,18 +353,18 @@ func (bf boundFacet) CheckValue(v value.Value) error {
 }
 
 // violates maps the candidate-vs-limit ordering to a bound violation per kind.
-func (bf boundFacet) violates(ord value.Ordering) bool {
+func (bf boundFacet) violates(ord Ordering) bool {
 	switch bf.kind {
 	case xsd.FacetMaxInclusive:
-		return ord == value.Greater
+		return ord == Greater
 	case xsd.FacetMaxExclusive:
-		return ord == value.Greater || ord == value.Equal
+		return ord == Greater || ord == Equal
 	case xsd.FacetMinInclusive:
-		return ord == value.Less
+		return ord == Less
 	case xsd.FacetMinExclusive:
-		return ord == value.Less || ord == value.Equal
+		return ord == Less || ord == Equal
 	default:
-		panic(fmt.Sprintf("strict: violates: %s is not a bound facet", bf.kind))
+		panic(fmt.Sprintf("value: violates: %s is not a bound facet", bf.kind))
 	}
 }
 
@@ -409,7 +380,7 @@ func boundRule(k xsd.FacetKind) xsderr.Rule {
 	case xsd.FacetMinExclusive:
 		return "cvc-minExclusive-valid"
 	default:
-		panic(fmt.Sprintf("strict: boundRule: %s is not a bound facet", k))
+		panic(fmt.Sprintf("value: boundRule: %s is not a bound facet", k))
 	}
 }
 
@@ -435,10 +406,10 @@ func newDigitsFacet(f xsd.Facet) (digitsFacet, error) {
 
 // CheckValue rejects a candidate whose digit count exceeds the limit
 // (§4.3.11.3/§4.3.12.3).
-func (df digitsFacet) CheckValue(v value.Value) error {
-	dc, ok := v.(value.DigitCounted)
+func (df digitsFacet) CheckValue(v Value) error {
+	dc, ok := v.(DigitCounted)
 	if !ok {
-		panic(fmt.Sprintf("strict: candidate %T under a %s facet is not value.DigitCounted (cos-applicable-facets §4.1.5 not enforced upstream)", v, df.kind))
+		panic(fmt.Sprintf("value: candidate %T under a %s facet is not DigitCounted (cos-applicable-facets §4.1.5 not enforced upstream)", v, df.kind))
 	}
 	got := dc.TotalDigits()
 	if df.kind == xsd.FacetFractionDigits {
@@ -459,13 +430,13 @@ func digitsRule(k xsd.FacetKind) xsderr.Rule {
 	case xsd.FacetFractionDigits:
 		return "cvc-fractionDigits-valid"
 	default:
-		panic(fmt.Sprintf("strict: digitsRule: %s is not a digit facet", k))
+		panic(fmt.Sprintf("value: digitsRule: %s is not a digit facet", k))
 	}
 }
 
 // lengthFacet is the length/minLength/maxLength value-facet stage
 // (cvc-length-valid §4.3.1.3, cvc-minLength-valid §4.3.2.3, cvc-maxLength-valid
-// §4.3.3.3). For string the unit is Unicode codepoints (value.Lengthed.Len).
+// §4.3.3.3). For string the unit is Unicode codepoints (Lengthed.Len).
 type lengthFacet struct {
 	limit int
 	kind  xsd.FacetKind
@@ -484,10 +455,10 @@ func newLengthFacet(f xsd.Facet) (lengthFacet, error) {
 
 // CheckValue rejects a candidate whose length violates the facet
 // (§4.3.1.3–4.3.3.3).
-func (lf lengthFacet) CheckValue(v value.Value) error {
-	l, ok := v.(value.Lengthed)
+func (lf lengthFacet) CheckValue(v Value) error {
+	l, ok := v.(Lengthed)
 	if !ok {
-		panic(fmt.Sprintf("strict: candidate %T under a %s facet is not value.Lengthed (cos-applicable-facets §4.1.5 not enforced upstream)", v, lf.kind))
+		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Lengthed (cos-applicable-facets §4.1.5 not enforced upstream)", v, lf.kind))
 	}
 	if lf.violates(l.Len()) {
 		return xsderr.New(lengthRule(lf.kind), xsderr.Loc{},
@@ -506,7 +477,7 @@ func (lf lengthFacet) violates(n int) bool {
 	case xsd.FacetMaxLength:
 		return n > lf.limit
 	default:
-		panic(fmt.Sprintf("strict: violates: %s is not a length facet", lf.kind))
+		panic(fmt.Sprintf("value: violates: %s is not a length facet", lf.kind))
 	}
 }
 
@@ -520,7 +491,7 @@ func lengthRule(k xsd.FacetKind) xsderr.Rule {
 	case xsd.FacetMaxLength:
 		return "cvc-maxLength-valid"
 	default:
-		panic(fmt.Sprintf("strict: lengthRule: %s is not a length facet", k))
+		panic(fmt.Sprintf("value: lengthRule: %s is not a length facet", k))
 	}
 }
 

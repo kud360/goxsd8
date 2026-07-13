@@ -1,10 +1,10 @@
-package strict
+package value
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/kud360/goxsd8/builtin"
+	"github.com/kud360/goxsd8/xsd"
 )
 
 // whiteSpace is the value of the whiteSpace facet (Datatypes §4.3.6,
@@ -12,7 +12,7 @@ import (
 // before the pattern and lexical-mapping stages run (key-nv, §3.1.4: whiteSpace
 // is applied first among the pre-lexical facets). iota+1 leaves the zero value
 // an invalid sentinel that catches an unset mode (STYLE T1, matching
-// builtin.Ordered and regex.Flavor).
+// regex.Flavor).
 type whiteSpace uint8
 
 const (
@@ -26,7 +26,7 @@ const (
 // tab (#x9), line feed (#xA) and carriage return (#xD) to a space (#x20);
 // collapse does the replace step, then collapses every run of #x20 to a single
 // space and trims leading and trailing spaces. It is a transform that PRODUCES
-// the normalized lexical, not a value.LexicalFacet check (which only accepts or
+// the normalized lexical, not a LexicalFacet check (which only accepts or
 // rejects) — the two are kept structurally separate (warden pre-flight).
 func normalizeWhiteSpace(s string, ws whiteSpace) string {
 	switch ws {
@@ -38,7 +38,7 @@ func normalizeWhiteSpace(s string, ws whiteSpace) string {
 		return collapseSpace(replaceSpace(s))
 	}
 	// The zero value (or any unlisted mode) is an internal bug, never user input.
-	panic(fmt.Sprintf("strict: invalid whiteSpace mode %d", ws))
+	panic(fmt.Sprintf("value: invalid whiteSpace mode %d", ws))
 }
 
 // replaceSpace maps #x9/#xA/#xD to #x20 (the replace step of §4.3.6), leaving
@@ -77,51 +77,40 @@ func collapseSpace(s string) string {
 	return b.String()
 }
 
-// whiteSpaceOf resolves the cohort type named local to its whiteSpace mode,
-// reading the mode from its generated TypeSpec in builtin.Types — the single
-// source of the per-type whiteSpace default (§4.3.6: string=preserve,
-// boolean/decimal=collapse fixed). The fact is never hand-duplicated here
-// (STYLE D3, warden pre-flight). An unknown local name, a type with no
-// whiteSpace facet, or an unrecognized default string is an internal-consistency
-// failure (the generated table and this cohort disagree), not user input, so it
-// panics rather than returning an error.
-func whiteSpaceOf(local string) whiteSpace {
-	for i := range builtin.Types {
-		t := builtin.Types[i]
-		if t.Name != local {
+// effectiveWhiteSpace resolves st's whiteSpace mode by scanning its
+// EffectiveFacets for the whiteSpace facet and mapping its {value}
+// ("preserve"/"replace"/"collapse") to the typed mode (§4.3.6). Reading the
+// facet off EffectiveFacets — rather than the primitive's per-type default in a
+// side table — honors a legal derived whiteSpace override under the ordinary
+// same-kind replace overlay (key-facets-overlay §3.16.6.4): a more-derived
+// whiteSpace facet supersedes the primitive's, and EffectiveFacets surfaces the
+// winner. For the atomic cohort the primitive node's own {facets} always carries
+// a whiteSpace entry (§3.16.7.4), so a derived type that does not itself declare
+// one still resolves through the inherited primitive facet.
+//
+// A type with NO whiteSpace facet in force (e.g. a union variety, to which
+// whiteSpace "does not apply directly", §4.3.6) is outside this atomic-only
+// cohort — the precondition ValidateLexical documents — never instance data, so
+// it panics rather than returning an error. An unrecognized {value} is likewise
+// an internal-consistency failure between a generated table and this code.
+func effectiveWhiteSpace(st *xsd.SimpleType) whiteSpace {
+	for _, ef := range st.EffectiveFacets() {
+		if ef.Facet().Kind() != xsd.FacetWhiteSpace {
 			continue
 		}
-		for j := range t.Facets {
-			if t.Facets[j].Name != "whiteSpace" {
-				continue
-			}
-			return parseWhiteSpace(t.Facets[j].Default)
+		values := ef.Facet().Values()
+		if len(values) != 1 {
+			panic(fmt.Sprintf("value: whiteSpace facet on %s must carry exactly one value, has %d", st.Name(), len(values)))
 		}
-		panic(fmt.Sprintf("strict: builtin %q has no whiteSpace facet in builtin.Types", local))
+		switch values[0] {
+		case "preserve":
+			return preserveWS
+		case "replace":
+			return replaceWS
+		case "collapse":
+			return collapseWS
+		}
+		panic(fmt.Sprintf("value: unrecognized whiteSpace facet value %q on %s", values[0], st.Name()))
 	}
-	panic(fmt.Sprintf("strict: no builtin TypeSpec named %q", local))
-}
-
-// parseWhiteSpace maps a whiteSpace facet default string to the typed mode.
-func parseWhiteSpace(def string) whiteSpace {
-	switch def {
-	case "preserve":
-		return preserveWS
-	case "replace":
-		return replaceWS
-	case "collapse":
-		return collapseWS
-	}
-	panic(fmt.Sprintf("strict: unrecognized whiteSpace default %q in builtin.Types", def))
-}
-
-// normalizeForParse runs the whiteSpace pre-lexical stage (§4.3.6) for the
-// cohort type named local over the raw instance literal, returning the
-// normalized lexical ready to feed to that type's Parse. It is the stage that
-// runs BEFORE the lexical mapping: value/backend.go's Mapping.Parse contract
-// expects already-normalized input, so parseDecimal/parseBoolean/parseString are
-// unchanged — this composes ahead of them rather than folding normalization into
-// them.
-func normalizeForParse(local, raw string) string {
-	return normalizeWhiteSpace(raw, whiteSpaceOf(local))
+	panic(fmt.Sprintf("value: type %s has no whiteSpace facet in force", st.Name()))
 }

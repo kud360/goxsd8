@@ -9,7 +9,7 @@ Value implementations, parsing, validation, and generation live above them.
 ```
                  xsderr          (leaf: errors, rule IDs, locations)
                  xsd             (leaf: component model + query/walk APIs; imports xsderr only)
-                 value           (value-space contracts, facet pipeline; imports xsd, xsderr)
+                 value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
    builtin/strict  builtin/native  <user backends>   (implement value contracts)
                  regex           (one engine, XSD + F&O flavors)

@@ -39,12 +39,15 @@
 // interfaces its applicable facets require (cos-applicable-facets), documented
 // per type on [New].
 //
-// # whiteSpace stage
+// # Facet pipeline
 //
-// The whiteSpace pre-lexical normalization (Datatypes §4.3.6) is applied before
-// a type's lexical mapping: decimal, boolean, float and double fix
-// whiteSpace=collapse, string is whiteSpace=preserve. The per-type mode is
-// read from the generated builtin.Types table, not hand-duplicated. The pattern and value-facet pipeline
-// stages await the derived-SimpleType facet model (#33), since only whiteSpace
-// has a spec-mandated value at the primitive level.
+// The backend-generic facet pipeline (whiteSpace normalization, pattern, lexical
+// mapping, value facets; Datatypes §4.3.6 and §4.3.1–4.3.12) is owned by the
+// shared value package — value.ValidateLexical — not this backend, since none of
+// it is strict-specific (issue #87). strict supplies only the per-type lexical
+// mappings that pipeline drives: decimal, boolean, float and double fix
+// whiteSpace=collapse and string is whiteSpace=preserve, carried as each
+// primitive's own whiteSpace Constraining Facet (§3.16.7.4) so
+// value.ValidateLexical resolves the mode off EffectiveFacets (§3.16.6.4
+// overlay), never from a side table.
 package strict
