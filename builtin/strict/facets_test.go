@@ -133,6 +133,31 @@ func TestPatternFacet(t *testing.T) {
 	wantRule(t, err, "cvc-pattern-valid")
 }
 
+// TestPatternFacetTwoStepAND is the end-to-end guard for #94: a pattern facet
+// declared at TWO derivation steps must be ANDed, not superseded (§4.3.4.2
+// xr-pattern; §4.3.4.4 cvc-pattern-valid). base restricts string to [a-z]+;
+// derived restricts base to ".{3}" (exactly three chars). A literal matching
+// the derived pattern but VIOLATING the base's ("a1z" — three chars, but the 1
+// is not [a-z]) must be REJECTED. Before the overlayFacet keep-both fix the base
+// pattern was silently dropped and this literal was a false-accept.
+func TestPatternFacetTwoStepAND(t *testing.T) {
+	stringPrim := newPrim(t, "string")
+	base := derive(t, "lowerBase", stringPrim, xsd.NewFacet(xsd.FacetPattern, []string{"[a-z]+"}, false))
+	derived := derive(t, "threeChars", base, xsd.NewFacet(xsd.FacetPattern, []string{".{3}"}, false))
+
+	// Matches both patterns: three chars, all lowercase.
+	_, err := ValidateLexical(New(), derived, "abc", nil)
+	wantAccept(t, err)
+
+	// Matches derived (three chars) but violates base ([a-z]+): rejected.
+	_, err = ValidateLexical(New(), derived, "a1z", nil)
+	wantRule(t, err, "cvc-pattern-valid")
+
+	// Matches base ([a-z]+) but violates derived (not three chars): rejected.
+	_, err = ValidateLexical(New(), derived, "abcd", nil)
+	wantRule(t, err, "cvc-pattern-valid")
+}
+
 // TestEnumerationFacet exercises the enumeration value-facet stage on a string
 // restricted to a small set (cvc-enumeration-valid).
 func TestEnumerationFacet(t *testing.T) {

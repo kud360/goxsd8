@@ -217,9 +217,15 @@ func declaringMapping(b value.Backend, leaf *xsd.SimpleType, declaring xsd.QName
 }
 
 // patternFacet is the pattern (lexical) stage (cvc-pattern-valid, §4.3.4.4).
-// EffectiveFacets folds every derivation step's pattern union into at most one
-// pattern facet whose {value} is the full OR-set; a literal is pattern-valid if
-// it matches ANY member. The RE2 regexes are compiled once at construction.
+// Each FacetPattern EffectiveFacet returned by EffectiveFacets represents ONE
+// derivation step's OR-set (the branches declared at that step, ORed within its
+// Values()); patterns at different steps are NOT folded into one facet — they
+// stay as separate EffectiveFacets (§4.3.4.2 xr-pattern: cross-step patterns
+// are ANDed, never merged into one flat OR-set). compile() builds one
+// patternFacet per such EffectiveFacet, and ValidateLexical requires EVERY one
+// to pass (AND-across-steps); within a single patternFacet a literal is
+// pattern-valid if it matches ANY member (the same-step OR-set). The RE2
+// regexes are compiled once at construction.
 type patternFacet struct {
 	res []*regexp.Regexp
 }
