@@ -37,25 +37,44 @@ import (
 // "-INF"/"NaN" case-sensitively, while rejecting "Infinity"/"nan"
 // (xmlschema11-2.md §3.3.4.2/§3.3.5.2)).
 //
-// # The facet cohort (issue #57, widened by issue #80)
+// # The facet cohort (issue #57, widened by issues #80 and #81)
 //
 // The lane additionally claims the Microsoft *Facets* instance cases under
-// msData/datatypes/Facets/{string,decimal,float,double}/<prim>_<facet>NNN.xml.
-// Each such schema restricts a strict-mapped primitive (xsd:string, xsd:decimal,
-// xsd:float or xsd:double) by one or more constraining facets (length/minLength/
-// maxLength/pattern/enumeration on string; minInclusive/maxInclusive/
-// minExclusive/maxExclusive/totalDigits/pattern/enumeration on decimal; the
-// bound facets minInclusive/maxInclusive/minExclusive/maxExclusive plus pattern/
-// enumeration on float/double). The float/double bound facets are checked over
-// the PARTIAL order (NaN is incomparable to every value, so a NaN bound yields an
-// empty value space and any bound comparison against NaN excludes — §2.2.3;
-// §3.3.4.1 Note), which the existing boundFacet path already decides
-// (incomparable ⇒ reject, spec-correct per §4.3.7.3–§4.3.10.3). Validity there
+// msData/datatypes/Facets/<base>/<base>_<facet>NNN.xml where <base> is a
+// strict-mapped primitive (string, decimal, float, double) or an integer-family
+// builtin (issue #81): integer, int, long, short, byte, unsignedInt/Long/Short/
+// Byte, nonNegativeInteger, nonPositiveInteger, positiveInteger, negativeInteger.
+// Each such schema restricts <base> by one or more constraining facets
+// (length/minLength/maxLength/pattern/enumeration on string; minInclusive/
+// maxInclusive/minExclusive/maxExclusive/totalDigits/pattern/enumeration on
+// decimal; the bound facets plus pattern/enumeration on float/double). The
+// float/double bound facets are checked over the PARTIAL order (NaN is
+// incomparable to every value, so a NaN bound yields an empty value space and any
+// bound comparison against NaN excludes — §2.2.3; §3.3.4.1 Note), which the
+// existing boundFacet path already decides (incomparable ⇒ reject, spec-correct
+// per §4.3.7.3–§4.3.10.3).
+//
+// The integer family is NOT a set of new primitives: xs:integer fixes decimal's
+// fractionDigits to 0 and its lexical space to [\-+]?[0-9]+, and each narrowing
+// adds only min/maxInclusive bounds (§3.4.13–§3.4.25); all thirteen share
+// decimal's value space, order and identity (Datatypes §2.2.1 Identity note). So
+// the generated builtin table already carries their fixed fractionDigits=0,
+// fixed pattern and per-type bounds as EffectiveFacets, and strict's decimal
+// mapping (walked to via the widest-space rule) parses their arbitrary-precision
+// values unchanged — the same generic <restriction base="xsd:decimal"> pipeline.
+// A fraction-point literal like "5.0" is rejected by the fixed pattern
+// (cvc-pattern-valid §4.3.4.4), NOT cvc-fractionDigits-valid, since the pattern
+// gate runs before the value facets; an out-of-range value (e.g. int 2147483648)
+// is rejected by the type's own maxInclusive/minInclusive bound
+// (cvc-max/minInclusive-valid §4.3.7.3/§4.3.10.3).
+//
+// Validity in this cohort
 // depends on FACET checking, not
 // just primitive lexical-space membership: an instance can be lexically valid
 // yet facet-invalid (e.g. a 5-character string under length=4). The executor
-// synthesizes the corresponding xsd.SimpleType (the seeded primitive as base,
-// the schema's facet children as ownFacets) and decides validity through the
+// synthesizes the corresponding xsd.SimpleType (the seeded builtin as base, its
+// primitive ancestor as {primitive type definition}, the schema's facet children
+// as ownFacets) and decides validity through the
 // now-complete facet pipeline (strict.ValidateLexical, issue #45) — pattern
 // (cvc-pattern-valid §4.3.4.4), lexical mapping (cvc-datatype-valid §4.1.4),
 // then the value facets cvc-enumeration-valid (§4.3.5.4),
@@ -74,13 +93,17 @@ import (
 //
 // # Still deferred
 //
-// Facets over primitives strict.New() does not map (the int/integer/long/token/
-// normalizedString/… dirs, whose narrower lexical spaces and own facets a
+// Facets over builtins whose value space strict.New() does not yet govern (the
+// token/normalizedString/date/time/… dirs, whose narrower lexical spaces a
 // decimal/string mapping would mis-decide), xsd:boolean facets (no Facets dir
 // exists for it), the NIST corpus, and list/union varieties remain out of
-// scope until their backends land. boolean018 (a list-of-boolean + enumeration
-// on a user-defined "myList") resolves to a non-seeded type and is honestly
-// recorded as a gap (Fail); it flips only when list variety is reachable here.
+// scope until their backends land. Within the integer family, the odd
+// multi-element cases (e.g. Facets/int/test111092.xml, two named restriction
+// steps under distinct elements) do not fit the single-<foo> instance shape and
+// fall through to the instance lane as recorded gaps. boolean018 (a list-of-
+// boolean + enumeration on a user-defined "myList") resolves to a non-seeded
+// type and is honestly recorded as a gap (Fail); it flips only when list variety
+// is reachable here.
 
 // synthNS namespaces the anonymous leaf types the facet cohort synthesizes. It
 // is deliberately outside xsd.XMLSchemaNS so a synthesized leaf is never mistaken
@@ -91,9 +114,23 @@ const synthNS = "urn:goxsd8:conformance:facets"
 // datatypesCase matches an instance case in the lexical cohort.
 var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double)[0-9]+\.xml$`)
 
+// facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
+// the lane decides: the strict-mapped primitives (string/decimal/float/double)
+// plus the integer family (xs:integer and its twelve narrowings, issue #81).
+// Every integer-family type is a facet restriction of xs:decimal (§3.4.13–
+// §3.4.25) that shares decimal's value space, order and identity (Datatypes
+// §2.2.1 Identity note), so strict's decimal mapping governs it unchanged and no
+// new backend mapping is introduced. The list feeds both the directory and the
+// filename-prefix alternation of facetsCase.
+const facetsBaseTypes = `string|decimal|float|double|integer|int|long|short|byte|` +
+	`unsignedInt|unsignedLong|unsignedShort|unsignedByte|` +
+	`nonNegativeInteger|nonPositiveInteger|positiveInteger|negativeInteger`
+
 // facetsCase matches an instance case in the facet cohort: an MS Facets instance
-// restricting a strict-mapped primitive (string, decimal, float, or double).
-var facetsCase = regexp.MustCompile(`msData/datatypes/Facets/(string|decimal|float|double)/(string|decimal|float|double)_[A-Za-z]+[0-9]+\.xml$`)
+// under a facetsBaseTypes directory whose filename prefixes the same type name
+// (e.g. Facets/int/int_maxInclusive001.xml).
+var facetsCase = regexp.MustCompile(
+	`msData/datatypes/Facets/(` + facetsBaseTypes + `)/(` + facetsBaseTypes + `)_[A-Za-z]+[0-9]+\.xml$`)
 
 // selectsDatatypes claims the instance cases of both cohorts. It is a cheap path
 // predicate; the executor does the real document reading.
@@ -183,14 +220,17 @@ func execFacetsCase(backend, strictBackend value.Backend, sym map[xsd.QName]*xsd
 		return Fail()
 	}
 	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: base}
-	// Authoritative cohort guard: ask strict itself whether it maps base, so the
-	// no-op fallback (which "maps" every primitive) can never route a non-strict
-	// primitive through ValidateLexical and mis-decide it.
-	if _, mapped := strictBackend.Mapping(qn); !mapped {
+	builtinType, seeded := sym[qn]
+	if !seeded {
 		return Fail()
 	}
-	prim, seeded := sym[qn]
-	if !seeded {
+	// Authoritative cohort guard: the leaf's governing mapping (its own or a base
+	// ancestor's, widest-space rule st-restrict-facets §3.16.6.4) must be strict's,
+	// so ValidateLexical parses through a spec-exact mapping and the no-op fallback
+	// (which "maps" every primitive) can never route a case through and mis-decide
+	// it. Directly-mapped primitives (string/decimal/float/double) satisfy this at
+	// the first step; the integer family resolves to its xs:decimal ancestor (#81).
+	if !strictGoverns(strictBackend, builtinType) {
 		return Fail()
 	}
 	ownFacets, ok := buildOwnFacets(base, children)
@@ -199,7 +239,7 @@ func execFacetsCase(backend, strictBackend value.Backend, sym map[xsd.QName]*xsd
 	}
 	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 		xsd.QName{Space: synthNS, Local: base + "-facets"},
-		xsd.Atomic{Primitive: prim}, prim, ownFacets, nil)
+		xsd.Atomic{Primitive: primitiveOfType(builtinType)}, builtinType, ownFacets, nil)
 	if err != nil {
 		return Fail()
 	}
@@ -209,6 +249,35 @@ func execFacetsCase(backend, strictBackend value.Backend, sym map[xsd.QName]*xsd
 		return Pass()
 	}
 	return Fail()
+}
+
+// strictGoverns reports whether st's governing mapping — its own or that of a
+// base ancestor (widest-space rule, st-restrict-facets §3.16.6.4) — is supplied
+// by the strict backend, so ValidateLexical parses through a spec-exact mapping
+// rather than the no-op fallback. The integer family (xs:integer and its
+// narrowings) has no strict mapping of its own; its nearest mapped ancestor is
+// xs:decimal, which strict supplies (#81).
+func strictGoverns(strictBackend value.Backend, st *xsd.SimpleType) bool {
+	for s := st; s != nil; s = s.Base() {
+		if _, ok := strictBackend.Mapping(s.Name()); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// primitiveOfType returns st's primitive ancestor (§2.4.2) by walking Base(), so
+// a synthesized leaf's {primitive type definition} points at the real primitive
+// (xs:decimal for the integer family) rather than st's immediate builtin base. A
+// directly-mapped primitive returns itself; the anySimpleType/anyAtomicType
+// anchors (never in this cohort) yield nil.
+func primitiveOfType(st *xsd.SimpleType) *xsd.SimpleType {
+	for s := st; s != nil; s = s.Base() {
+		if s.IsPrimitive() {
+			return s
+		}
+	}
+	return nil
 }
 
 // fallbackPrimitives maps every builtin primitive with a no-op identity mapping.
