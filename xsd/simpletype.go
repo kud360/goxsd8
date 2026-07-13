@@ -494,9 +494,12 @@ func (f EffectiveFacet) Declaring() QName {
 // xs:anySimpleType and overlaying each level's OwnFacets per the §3.16.6.4
 // overlay rule: a facet contributed by a more-derived level supersedes any
 // same-kind facet from a less-derived level, and every non-superseded facet
-// survives. FacetAssertions is the one exception — its {value} accumulates
-// (the base's Assertions then the restriction's own, appended, §4.3.13.2)
-// instead of being superseded; see overlayFacet.
+// survives. Two facet kinds are exceptions to the supersede rule (see
+// overlayFacet): FacetAssertions accumulates — its {value} is the base's
+// Assertions then the restriction's own, appended into one facet (§4.3.13.2);
+// FacetPattern keeps both — the base's pattern facet and the restriction's own
+// survive as two separate entries (§4.3.4.2 xr-pattern), because patterns at
+// different derivation steps are ANDed, not superseded and not merged.
 //
 // Each result element is an EffectiveFacet, pairing the surviving Facet with
 // the {name} QName of the type on the chain that declared it. That provenance
@@ -508,8 +511,12 @@ func (f EffectiveFacet) Declaring() QName {
 // The result is deterministic (STYLE D2/D3) and ordered base-to-derived:
 // facets from a less-derived type come first, and within one type in declared
 // order; when a more-derived type overrides a facet kind, the overriding facet
-// replaces the base one and takes its own (more-derived) position. It returns a
-// fresh slice each call; mutating it does not affect t.
+// replaces the base one and takes its own (more-derived) position. FacetPattern
+// is the carve-out to that replace: a pattern facet from a more-derived step
+// does NOT replace the base's — both survive as separate entries, base before
+// derived (§4.3.4.2 xr-pattern), so EffectiveFacets can return several
+// FacetPattern entries for a multi-step-pattern chain. It returns a fresh slice
+// each call; mutating it does not affect t.
 func (t *SimpleType) EffectiveFacets() []EffectiveFacet {
 	// Collect the base chain most-derived first (t, then its base, ...).
 	var chain []*SimpleType
@@ -537,8 +544,29 @@ func (t *SimpleType) EffectiveFacets() []EffectiveFacet {
 // same-kind facet already in acc is dropped, and f is appended, so f both wins
 // and takes the more-derived position.
 //
-// FacetAssertions is the sole exception: its {value} ACCUMULATES rather than
-// replacing (Datatypes §4.3.13.2, id="xr-assertions"). The assertions {value}
+// Two facet kinds are exceptions to that replace rule: FacetAssertions merges,
+// and FacetPattern keeps both. They differ because their spec combine rules
+// differ. FacetAssertions concatenates into ONE facet: the assertions {value}
+// is a single sequence whose members are all ANDed, so appending the
+// restriction's own onto the base's yields the correct combined {value}.
+// FacetPattern must instead keep the base and derived facets as SEPARATE
+// entries: each pattern facet's {value} is an OR-set (the branches declared at
+// one step), and patterns at DIFFERENT steps are ANDed, not ORed (§4.3.4.2
+// xr-pattern, and its summary Note: same-step OR, cross-step AND). Merging the
+// base's OR-set into the derived facet's {value} the way assertions merge would
+// wrongly OR the two steps together, collapsing the cross-step AND into an OR
+// and false-accepting a literal that matches the derived pattern but violates
+// the base's. So when acc already holds a FacetPattern entry and f is also
+// FacetPattern, the base entry is kept in place (base before derived, for
+// determinism) and f is appended after it — both survive, each independently
+// checked by the consumer. cos-pattern-restriction (§4.3.4.5,
+// id="cos-pattern-restriction"; cataloged in xsderr/catalog.go) — every member
+// of the base pattern facet's {value} must remain a member of the derived's —
+// holds by construction here: the base entry survives verbatim, so its {value}
+// members are trivially still present. No runtime rejection path is needed.
+//
+// FacetAssertions ACCUMULATES rather than replacing (Datatypes §4.3.13.2,
+// id="xr-assertions"). The assertions {value}
 // on a restriction is the base type's Assertions followed by the restriction's
 // own new Assertions, in that order — an append, never a set-union and never
 // deduplicated. So when acc already holds a FacetAssertions entry (the base's
@@ -567,8 +595,18 @@ func overlayFacet(acc []EffectiveFacet, f EffectiveFacet) []EffectiveFacet {
 			out = append(out, existing)
 			continue
 		}
-		if f.facet.kind == FacetAssertions {
+		switch f.facet.kind {
+		case FacetAssertions:
 			f.facet = mergeAssertions(existing.facet, f.facet)
+		case FacetPattern:
+			// keep-both: the base pattern facet survives as a separate entry so
+			// it stays independently checkable (AND-across-steps, §4.3.4.2
+			// xr-pattern). f (the more-derived step) is appended below.
+			out = append(out, existing)
+		default:
+			// replace-kind (the other 12 facet kinds): the existing same-kind
+			// entry is intentionally dropped here; f is appended below and wins,
+			// taking the more-derived position.
 		}
 	}
 	return append(out, f)

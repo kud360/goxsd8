@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -458,6 +459,69 @@ func TestEffectiveFacetsAssertionsMixedWithReplaceKind(t *testing.T) {
 	}
 	if lengthCount != 1 {
 		t.Fatalf("EffectiveFacets has %d length facets, want exactly 1", lengthCount)
+	}
+}
+
+// patternValues returns the Values() of every FacetPattern EffectiveFacet in
+// eff, in order — one inner slice per surviving pattern facet.
+func patternValues(eff []EffectiveFacet) [][]string {
+	var out [][]string
+	for _, f := range eff {
+		if f.Facet().Kind() == FacetPattern {
+			out = append(out, f.Facet().Values())
+		}
+	}
+	return out
+}
+
+// TestEffectiveFacetsPatternKeepsBothTwoLevel exercises §4.3.4.2 (xr-pattern):
+// a derived type that re-declares pattern does NOT supersede the base's pattern
+// (unlike the 12 replace-kind facets) — both survive as separate EffectiveFacet
+// entries so they can be ANDed at validation, base before derived.
+func TestEffectiveFacetsPatternKeepsBothTwoLevel(t *testing.T) {
+	base, err := NewSimpleType(xsderr.Loc{}, QName{Local: "base"}, Atomic{}, anyAtomicType,
+		[]Facet{NewFacet(FacetPattern, []string{"[a-z]+"}, false)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, Atomic{}, base,
+		[]Facet{NewFacet(FacetPattern, []string{"a.*"}, false)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := patternValues(derived.EffectiveFacets())
+	want := [][]string{{"[a-z]+"}, {"a.*"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("pattern EffectiveFacets = %v, want %v (both survive, base then derived)", got, want)
+	}
+}
+
+// TestEffectiveFacetsPatternKeepsBothThreeLevel mirrors the assertions
+// three-level accumulation: A <- B <- C each with its own pattern facet yields
+// three separate surviving FacetPattern EffectiveFacets, in base-to-derived
+// order (§4.3.4.2 cross-step AND).
+func TestEffectiveFacetsPatternKeepsBothThreeLevel(t *testing.T) {
+	a, err := NewSimpleType(xsderr.Loc{}, QName{Local: "A"}, Atomic{}, anyAtomicType,
+		[]Facet{NewFacet(FacetPattern, []string{"a1"}, false)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := NewSimpleType(xsderr.Loc{}, QName{Local: "B"}, Atomic{}, a,
+		[]Facet{NewFacet(FacetPattern, []string{"b1"}, false)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewSimpleType(xsderr.Loc{}, QName{Local: "C"}, Atomic{}, b,
+		[]Facet{NewFacet(FacetPattern, []string{"c1"}, false)}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := patternValues(c.EffectiveFacets())
+	want := [][]string{{"a1"}, {"b1"}, {"c1"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("pattern EffectiveFacets = %v, want %v (all three survive, oldest first)", got, want)
 	}
 }
 
