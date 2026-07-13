@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -479,6 +481,166 @@ func floatingCanonical(f float64, bitSize int) string {
 		exp = "-" + exp
 	}
 	return mantissa + "E" + exp
+}
+
+// parseHexBinary derives the hexBinary vectors from the Datatypes spec (§3.3.15):
+// the lexical space is exactly the regular expression '`([0-9a-fA-F]{2})*`' the
+// production gives (nt-hexBinary, §3.3.15.2), extracted here so a spec edit that
+// moved it would drop a now-mismatched sample rather than mislabel it. The valid
+// sample is a deterministic representative set — like string (§3.3.1.2) the space
+// is unbounded — exercising the empty sequence, lowercase input, uppercase input
+// and a multi-octet value; each is canonicalised by hexBinaryCanonicalOf, an
+// INDEPENDENT oracle implementing f-hexBinaryCanonical (uppercase A–F, E.4.1),
+// never an echo of the backend. Invalid near-misses (odd length, a non-hex digit)
+// are kept only if the extracted regex rejects them.
+func parseHexBinary(spec string) (typeVectors, error) {
+	re, err := hexBinaryLexicalRegex(spec)
+	if err != nil {
+		return typeVectors{}, err
+	}
+
+	sample := []string{"", "0FB7", "0fb7", "deadBEEF", "ff"}
+	valid := make([]roundtrip, 0, len(sample))
+	for _, lex := range sample {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("hexBinary: sample lexical %q does not match its own production regex", lex)
+		}
+		canon, err := hexBinaryCanonicalOf(lex)
+		if err != nil {
+			return typeVectors{}, fmt.Errorf("hexBinary: canonical of %q: %w", lex, err)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: canon})
+	}
+
+	return typeVectors{
+		Local:   "hexBinary",
+		Valid:   valid,
+		Invalid: binaryInvalids(re, []string{"F", "0FB", "0G", "gg"}),
+	}, nil
+}
+
+// hexBinaryLexicalRegex extracts hexBinary's lexical-space regular expression
+// ('`([0-9a-fA-F]{2})*`', nt-hexBinary) from the production prose and returns it
+// anchored (^…$). It matches the backtick span carrying the '{2})*' quantifier so
+// the neighbouring bare hexDigit class ('[0-9a-fA-F]') is never picked instead.
+func hexBinaryLexicalRegex(spec string) (*regexp.Regexp, error) {
+	for _, line := range strings.Split(spec, "\n") {
+		if !strings.Contains(line, `{2})*`) || !strings.Contains(line, "0-9a-fA-F") {
+			continue
+		}
+		for _, m := range backtickRE.FindAllStringSubmatch(line, -1) {
+			if !strings.Contains(m[1], `{2})*`) {
+				continue
+			}
+			re, err := regexp.Compile("^(?:" + m[1] + ")$")
+			if err != nil {
+				return nil, fmt.Errorf("hexBinary: compiling extracted lexical regex %q: %w", m[1], err)
+			}
+			return re, nil
+		}
+	}
+	return nil, fmt.Errorf("hexBinary: lexical-space regular expression not found")
+}
+
+// hexBinaryCanonicalOf computes the canonical form of a hexBinary lexical, the
+// independent oracle the vectors pin: hexBinaryCanonical uppercases the octets'
+// hex digits (E.4.1). Its input is a lexical the production regex already
+// accepted, so hex.DecodeString cannot fail.
+func hexBinaryCanonicalOf(lex string) (string, error) {
+	octets, err := hex.DecodeString(lex)
+	if err != nil {
+		return "", err
+	}
+	return strings.ToUpper(hex.EncodeToString(octets)), nil
+}
+
+// parseBase64Binary derives the base64Binary vectors from the Datatypes spec
+// (§3.3.16): the lexical space is exactly the equivalent regular expression the
+// production gives (nt-Base64Binary, §3.3.16.2), extracted here so its
+// restricted-final-character constraint (B16char/B04char) is pinned to the spec.
+// The valid sample is a deterministic representative set exercising the empty
+// sequence, an unpadded quad, single-'=' (two-octet) and double-'=' (one-octet)
+// padding; each is canonicalised by base64CanonicalOf, an INDEPENDENT oracle
+// implementing the §3.3.16.2 encoding (the whitespace-free Base64 form). Invalid
+// near-misses (a non-multiple-of-four count, a bad restricted final char under
+// each padding width) are kept only if the extracted regex rejects them.
+func parseBase64Binary(spec string) (typeVectors, error) {
+	re, err := base64LexicalRegex(spec)
+	if err != nil {
+		return typeVectors{}, err
+	}
+
+	sample := []string{"", "AQID", "AQI=", "AQ==", "TWFu"}
+	valid := make([]roundtrip, 0, len(sample))
+	for _, lex := range sample {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("base64Binary: sample lexical %q does not match its own production regex", lex)
+		}
+		canon, err := base64CanonicalOf(lex)
+		if err != nil {
+			return typeVectors{}, fmt.Errorf("base64Binary: canonical of %q: %w", lex, err)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: canon})
+	}
+
+	return typeVectors{
+		Local:   "base64Binary",
+		Valid:   valid,
+		Invalid: binaryInvalids(re, []string{"AQI", "AQJ=", "AB==", "A==="}),
+	}, nil
+}
+
+// base64LexicalRegex extracts base64Binary's equivalent regular expression
+// (nt-Base64Binary, §3.3.16.2) from the production prose and returns it anchored
+// (^…$). Unlike the float/decimal regexes, its single spaces are the grammar's
+// inter-character #x20? and are kept verbatim; the B04char class '[AQgw]' pins the
+// line so the wrong backtick span is never picked.
+func base64LexicalRegex(spec string) (*regexp.Regexp, error) {
+	for _, line := range strings.Split(spec, "\n") {
+		if !strings.Contains(line, "A-Za-z0-9+/") || !strings.Contains(line, "){4}") {
+			continue
+		}
+		for _, m := range backtickRE.FindAllStringSubmatch(line, -1) {
+			if !strings.Contains(m[1], "){4}") {
+				continue
+			}
+			re, err := regexp.Compile("^(?:" + m[1] + ")$")
+			if err != nil {
+				return nil, fmt.Errorf("base64Binary: compiling extracted lexical regex %q: %w", m[1], err)
+			}
+			return re, nil
+		}
+	}
+	return nil, fmt.Errorf("base64Binary: lexical-space regular expression not found")
+}
+
+// base64CanonicalOf computes the canonical form of a base64Binary lexical, the
+// independent oracle the vectors pin: the §3.3.16.2 encoding is StdEncoding of the
+// decoded octets (standard alphabet, '=' padding, no line breaks). Its input is a
+// lexical the production regex already accepted, so DecodeString cannot fail.
+func base64CanonicalOf(lex string) (string, error) {
+	octets, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(lex, " ", ""))
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(octets), nil
+}
+
+// binaryInvalids keeps the near-miss candidates the extracted regex actually
+// rejects, deduplicated and in order — the same discipline decimalInvalids and
+// floatingInvalids use, so a spec change that widened the space would drop a
+// now-valid candidate rather than let it masquerade as invalid.
+func binaryInvalids(re *regexp.Regexp, candidates []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, c := range candidates {
+		if seen[c] || re.MatchString(c) {
+			continue
+		}
+		seen[c] = true
+		out = append(out, c)
+	}
+	return out
 }
 
 // literalsIn returns every '`X`' literal in text, in order.

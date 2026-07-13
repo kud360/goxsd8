@@ -170,6 +170,70 @@ func checkFloatingVectors(t *testing.T, local string, bitSize int) {
 	}
 }
 
+// TestHexBinaryVectors pins the spec-derived hexBinary corpus (§3.3.15.2,
+// nt-hexBinary, f-hexBinaryCanonical): the representative round-trips — empty,
+// lowercase and uppercase input, a multi-octet value — canonicalising to
+// uppercase A–F, and the regex-verified invalid near-misses (odd length, a
+// non-hex digit).
+func TestHexBinaryVectors(t *testing.T) {
+	h, err := parseHexBinary(readSpec(t))
+	if err != nil {
+		t.Fatalf("parseHexBinary: %v", err)
+	}
+	wantValid := []roundtrip{
+		{"", ""}, {"0FB7", "0FB7"}, {"0fb7", "0FB7"}, {"deadBEEF", "DEADBEEF"}, {"ff", "FF"},
+	}
+	if len(h.Valid) != len(wantValid) {
+		t.Fatalf("valid: got %v, want %v", h.Valid, wantValid)
+	}
+	for i, w := range wantValid {
+		if h.Valid[i] != w {
+			t.Errorf("valid[%d]: got %v, want %v", i, h.Valid[i], w)
+		}
+	}
+	wantInvalid := []string{"F", "0FB", "0G", "gg"} // odd length, odd length, non-hex, non-hex
+	if len(h.Invalid) != len(wantInvalid) {
+		t.Fatalf("invalid: got %q, want %q", h.Invalid, wantInvalid)
+	}
+	for i, w := range wantInvalid {
+		if h.Invalid[i] != w {
+			t.Errorf("invalid[%d]: got %q, want %q", i, h.Invalid[i], w)
+		}
+	}
+}
+
+// TestBase64BinaryVectors pins the spec-derived base64Binary corpus (§3.3.16.2,
+// nt-Base64Binary): representative round-trips exercising the empty sequence, an
+// unpadded quad and both padding widths, and the regex-verified invalids — a
+// non-multiple-of-four count and a bad restricted final character under single
+// ("AQJ=") and double ("AB==") padding.
+func TestBase64BinaryVectors(t *testing.T) {
+	b, err := parseBase64Binary(readSpec(t))
+	if err != nil {
+		t.Fatalf("parseBase64Binary: %v", err)
+	}
+	wantValid := []roundtrip{
+		{"", ""}, {"AQID", "AQID"}, {"AQI=", "AQI="}, {"AQ==", "AQ=="}, {"TWFu", "TWFu"},
+	}
+	if len(b.Valid) != len(wantValid) {
+		t.Fatalf("valid: got %v, want %v", b.Valid, wantValid)
+	}
+	for i, w := range wantValid {
+		if b.Valid[i] != w {
+			t.Errorf("valid[%d]: got %v, want %v", i, b.Valid[i], w)
+		}
+	}
+	wantInvalid := []string{"AQI", "AQJ=", "AB==", "A==="}
+	if len(b.Invalid) != len(wantInvalid) {
+		t.Fatalf("invalid: got %q, want %q", b.Invalid, wantInvalid)
+	}
+	for i, w := range wantInvalid {
+		if b.Invalid[i] != w {
+			t.Errorf("invalid[%d]: got %q, want %q", i, b.Invalid[i], w)
+		}
+	}
+}
+
 // TestApplicableFacets pins that each cohort type carries its cos-applicable-facets
 // list in spec order (§4.1.5), sourced from the shared builtin spec parser.
 func TestApplicableFacets(t *testing.T) {
@@ -178,11 +242,13 @@ func TestApplicableFacets(t *testing.T) {
 		t.Fatalf("applicableFacets: %v", err)
 	}
 	want := map[string][]string{
-		"boolean": {"whiteSpace", "pattern", "assertions"},
-		"string":  {"whiteSpace", "length", "minLength", "maxLength", "pattern", "enumeration", "assertions"},
-		"decimal": {"whiteSpace", "totalDigits", "fractionDigits", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
-		"float":   {"whiteSpace", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
-		"double":  {"whiteSpace", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"boolean":      {"whiteSpace", "pattern", "assertions"},
+		"string":       {"whiteSpace", "length", "minLength", "maxLength", "pattern", "enumeration", "assertions"},
+		"decimal":      {"whiteSpace", "totalDigits", "fractionDigits", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"float":        {"whiteSpace", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"double":       {"whiteSpace", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"hexBinary":    {"whiteSpace", "length", "minLength", "maxLength", "pattern", "enumeration", "assertions"},
+		"base64Binary": {"whiteSpace", "length", "minLength", "maxLength", "pattern", "enumeration", "assertions"},
 	}
 	for name, w := range want {
 		got := facets[name]
