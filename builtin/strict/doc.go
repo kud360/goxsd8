@@ -30,10 +30,11 @@
 // # Current coverage
 //
 // [New] returns a backend covering the primitive cohort so far — xs:decimal,
-// xs:boolean, xs:string, xs:anyURI, xs:float and xs:double — with spec-exact
+// xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary and
+// xs:base64Binary — with spec-exact
 // parse, canonical and comparison. The remaining representations above
 // (precisionDecimal, the date/time family, duration, the rest of the string
-// family, QName/NOTATION, hexBinary/base64Binary) and the
+// family, QName/NOTATION) and the
 // value.Emitter fast path remain future milestones. The cohort is certified
 // by value/backendtest.Run: each type's value carries exactly the capability
 // interfaces its applicable facets require (cos-applicable-facets), documented

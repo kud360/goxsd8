@@ -7,8 +7,8 @@ import "github.com/kud360/goxsd8/xsd"
 // vectors is the spec-derived conformance corpus value/backendtest.Run
 // drives every value.Backend through (PRINCIPLES 26). Each row is one
 // builtin type's lexical/canonical vectors plus its applicable constraining
-// facets in spec order (cos-applicable-facets). M3 covers boolean, decimal,
-// string, float and double.
+// facets in spec order (cos-applicable-facets). The cohort covers boolean,
+// decimal, string, float, double, hexBinary and base64Binary.
 var vectors = []typeVectors{
 	{
 		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"},
@@ -150,6 +150,56 @@ var vectors = []typeVectors{
 			"maxExclusive",
 			"minInclusive",
 			"minExclusive",
+			"assertions",
+		},
+	},
+	{
+		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "hexBinary"},
+		valid: []roundtrip{
+			{lexical: "", canonical: ""},
+			{lexical: "0FB7", canonical: "0FB7"},
+			{lexical: "0fb7", canonical: "0FB7"},
+			{lexical: "deadBEEF", canonical: "DEADBEEF"},
+			{lexical: "ff", canonical: "FF"},
+		},
+		invalid: []string{
+			"F",
+			"0FB",
+			"0G",
+			"gg",
+		},
+		applicableFacets: []string{
+			"whiteSpace",
+			"length",
+			"minLength",
+			"maxLength",
+			"pattern",
+			"enumeration",
+			"assertions",
+		},
+	},
+	{
+		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "base64Binary"},
+		valid: []roundtrip{
+			{lexical: "", canonical: ""},
+			{lexical: "AQID", canonical: "AQID"},
+			{lexical: "AQI=", canonical: "AQI="},
+			{lexical: "AQ==", canonical: "AQ=="},
+			{lexical: "TWFu", canonical: "TWFu"},
+		},
+		invalid: []string{
+			"AQI",
+			"AQJ=",
+			"AB==",
+			"A===",
+		},
+		applicableFacets: []string{
+			"whiteSpace",
+			"length",
+			"minLength",
+			"maxLength",
+			"pattern",
+			"enumeration",
 			"assertions",
 		},
 	},

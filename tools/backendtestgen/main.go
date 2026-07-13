@@ -72,6 +72,14 @@ func build(datatypesPath, precisionPath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s: double: %w", datatypesPath, err)
 	}
+	hexBin, err := parseHexBinary(spec)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: hexBinary: %w", datatypesPath, err)
+	}
+	b64Bin, err := parseBase64Binary(spec)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: base64Binary: %w", datatypesPath, err)
+	}
 
 	facets, err := applicableFacets(datatypesPath, precisionPath)
 	if err != nil {
@@ -82,8 +90,10 @@ func build(datatypesPath, precisionPath string) ([]byte, error) {
 	str.ApplicableFacets = facets["string"]
 	flt.ApplicableFacets = facets["float"]
 	dbl.ApplicableFacets = facets["double"]
+	hexBin.ApplicableFacets = facets["hexBinary"]
+	b64Bin.ApplicableFacets = facets["base64Binary"]
 
-	return emit([]typeVectors{boolean, decimal, str, flt, dbl})
+	return emit([]typeVectors{boolean, decimal, str, flt, dbl, hexBin, b64Bin})
 }
 
 // applicableFacets reads each cohort type's applicable constraining facets in
@@ -96,7 +106,7 @@ func applicableFacets(datatypesPath, precisionPath string) (map[string][]string,
 	if err != nil {
 		return nil, fmt.Errorf("applicable facets: %w", err)
 	}
-	want := map[string]bool{"boolean": true, "decimal": true, "string": true, "float": true, "double": true}
+	want := map[string]bool{"boolean": true, "decimal": true, "string": true, "float": true, "double": true, "hexBinary": true, "base64Binary": true}
 	out := make(map[string][]string, len(want))
 	for _, b := range types {
 		if !want[b.Name] {

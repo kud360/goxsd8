@@ -23,7 +23,7 @@ func TestBackendtestCertification(t *testing.T) {
 
 func TestBackendCoverage(t *testing.T) {
 	backend := strict.New()
-	for _, local := range []string{"decimal", "boolean", "string", "anyURI", "float", "double"} {
+	for _, local := range []string{"decimal", "boolean", "string", "anyURI", "float", "double", "hexBinary", "base64Binary"} {
 		m, ok := backend.Mapping(xsd.QName{Space: xsd.XMLSchemaNS, Local: local})
 		if !ok {
 			t.Errorf("Mapping(xs:%s): ok=false, want true", local)
@@ -74,7 +74,7 @@ func TestSeedMissingShrinksByFloatDouble(t *testing.T) {
 		}
 		return false
 	}
-	for _, mapped := range []string{"decimal", "boolean", "string", "anyURI", "float", "double"} {
+	for _, mapped := range []string{"decimal", "boolean", "string", "anyURI", "float", "double", "hexBinary", "base64Binary"} {
 		if inMissing(mapped) {
 			t.Errorf("primitive %q must NOT be in the missing set (strict maps it)", mapped)
 		}
