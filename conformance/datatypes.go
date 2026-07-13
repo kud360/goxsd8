@@ -24,18 +24,20 @@ import (
 // # The lexical cohort (issue #15, widened by issue #80)
 //
 // The lane claims the Microsoft datatype LEXICAL cases under
-// msData/datatypes/{boolean,decimal,string,float,double}NNN.xml. Each such
-// schema declares an element of an UNRESTRICTED builtin primitive (xsd:boolean /
-// xsd:decimal / xsd:string / xsd:float / xsd:double — comp_foo directly,
-// simpleTest via a facet-free restriction), so an instance is valid iff its
-// content lies in that primitive's lexical space. That is exactly what
-// value.Mapping.Parse decides, so the executor is a genuine, complete check:
+// msData/datatypes/{boolean,decimal,string,float,double,anyURI}NNN.xml. Each
+// such schema declares an element of an UNRESTRICTED builtin primitive
+// (xsd:boolean / xsd:decimal / xsd:string / xsd:float / xsd:double / xsd:anyURI —
+// comp_foo directly, simpleTest via a facet-free restriction), so an instance is
+// valid iff its content lies in that primitive's lexical space. That is exactly
+// what value.Mapping.Parse decides, so the executor is a genuine, complete check:
 // both polarities are decided for the right reason, and Parse really
 // discriminates (boolean rejects "True"/"+1"/""; decimal rejects
 // "1E2"/"INF"/"NaN"/"13.1513.561"/"ABCDEF"; float/double admit scientific
 // notation and bare exponents like "1E2" and the special values "INF"/"+INF"/
 // "-INF"/"NaN" case-sensitively, while rejecting "Infinity"/"nan"
-// (xmlschema11-2.md §3.3.4.2/§3.3.5.2)).
+// (xmlschema11-2.md §3.3.4.2/§3.3.5.2)). anyURI's lexical space is every Char*
+// sequence — its Parse is the identity and rejects nothing, matching xs:string's
+// permissiveness (§3.3.17.1/§3.3.17.2).
 //
 // # The facet cohort (issue #57, widened by issues #80 and #81)
 //
@@ -101,9 +103,10 @@ import (
 // multi-element cases (e.g. Facets/int/test111092.xml, two named restriction
 // steps under distinct elements) do not fit the single-<foo> instance shape and
 // fall through to the instance lane as recorded gaps. boolean018 (a list-of-
-// boolean + enumeration on a user-defined "myList") resolves to a non-seeded
-// type and is honestly recorded as a gap (Fail); it flips only when list variety
-// is reachable here.
+// boolean + enumeration on a user-defined "myList") and anyURI011 (a list-of-
+// anyURI, whose simplefooType restricts the "myList" list type) resolve to a
+// non-seeded type and are honestly recorded as gaps (Fail); they flip only when
+// list variety is reachable here.
 
 // synthNS namespaces the anonymous leaf types the facet cohort synthesizes. It
 // is deliberately outside xsd.XMLSchemaNS so a synthesized leaf is never mistaken
@@ -112,7 +115,7 @@ import (
 const synthNS = "urn:goxsd8:conformance:facets"
 
 // datatypesCase matches an instance case in the lexical cohort.
-var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double)[0-9]+\.xml$`)
+var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI)[0-9]+\.xml$`)
 
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
 // the lane decides: the strict-mapped primitives (string/decimal/float/double)
@@ -148,13 +151,13 @@ func selectsDatatypes(c caseSpec) bool {
 // backend plus the seeded symbol table in the returned closure.
 func newDatatypesExec() executor {
 	// strict.New() maps the primitive cohort so far (decimal/boolean/string/
-	// float/double); Seed requires all 20 primitives, so the fallback covers the
-	// remaining ones with a no-op mapping. strict wins where it maps (Override
+	// anyURI/float/double); Seed requires all 20 primitives, so the fallback covers
+	// the remaining ones with a no-op mapping. strict wins where it maps (Override
 	// yields partial first), so those fallback mappings are never actually
-	// exercised: the lane now claims boolean/decimal/string/float/double (lexical
-	// cohort) and string/decimal/float/double (facet cohort) cases (float/double
-	// added in #80), every one of which strict maps — the no-op fallback still
-	// never runs for a claimed case.
+	// exercised: the lane now claims boolean/decimal/string/float/double/anyURI
+	// (lexical cohort) and string/decimal/float/double (facet cohort) cases
+	// (float/double added in #80, anyURI in #82), every one of which strict maps —
+	// the no-op fallback still never runs for a claimed case.
 	strictBackend := strict.New()
 	backend := value.Override(fallbackPrimitives{}, strictBackend)
 
@@ -282,7 +285,7 @@ func primitiveOfType(st *xsd.SimpleType) *xsd.SimpleType {
 
 // fallbackPrimitives maps every builtin primitive with a no-op identity mapping.
 // It exists ONLY to satisfy builtin.Seed's all-primitives precondition for the
-// 17 primitives strict.New() does not cover; the datatypes selector never
+// 16 primitives strict.New() does not cover; the datatypes selector never
 // claims a case that would exercise these mappings.
 type fallbackPrimitives struct{}
 

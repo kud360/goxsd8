@@ -30,10 +30,10 @@
 // # Current coverage
 //
 // [New] returns a backend covering the primitive cohort so far — xs:decimal,
-// xs:boolean, xs:string, xs:float and xs:double — with spec-exact parse,
-// canonical and comparison. The remaining representations above
+// xs:boolean, xs:string, xs:anyURI, xs:float and xs:double — with spec-exact
+// parse, canonical and comparison. The remaining representations above
 // (precisionDecimal, the date/time family, duration, the rest of the string
-// family, anyURI, QName/NOTATION, hexBinary/base64Binary) and the
+// family, QName/NOTATION, hexBinary/base64Binary) and the
 // value.Emitter fast path remain future milestones. The cohort is certified
 // by value/backendtest.Run: each type's value carries exactly the capability
 // interfaces its applicable facets require (cos-applicable-facets), documented
@@ -45,7 +45,7 @@
 // mapping, value facets; Datatypes §4.3.6 and §4.3.1–4.3.12) is owned by the
 // shared value package — value.ValidateLexical — not this backend, since none of
 // it is strict-specific (issue #87). strict supplies only the per-type lexical
-// mappings that pipeline drives: decimal, boolean, float and double fix
+// mappings that pipeline drives: decimal, boolean, float, double and anyURI fix
 // whiteSpace=collapse and string is whiteSpace=preserve, carried as each
 // primitive's own whiteSpace Constraining Facet (§3.16.7.4) so
 // value.ValidateLexical resolves the mode off EffectiveFacets (§3.16.6.4
