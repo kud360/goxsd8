@@ -75,7 +75,7 @@ import (
 // synthesizes the corresponding xsd.SimpleType (the seeded builtin as base, its
 // primitive ancestor as {primitive type definition}, the schema's facet children
 // as ownFacets) and decides validity through the
-// now-complete facet pipeline (strict.ValidateLexical, issue #45) — pattern
+// now-complete facet pipeline (value.ValidateLexical, issue #45) — pattern
 // (cvc-pattern-valid §4.3.4.4), lexical mapping (cvc-datatype-valid §4.1.4),
 // then the value facets cvc-enumeration-valid (§4.3.5.4),
 // cvc-min/maxInclusive/Exclusive-valid (§4.3.7–4.3.10), cvc-totalDigits-valid
@@ -211,7 +211,7 @@ func execLexicalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c
 
 // execFacetsCase decides a facet-cohort case: it synthesizes the schema's
 // faceted leaf type and runs the tested value through the real facet pipeline
-// (strict.ValidateLexical). A case whose base is not strict-mapped, whose schema
+// (value.ValidateLexical). A case whose base is not strict-mapped, whose schema
 // cannot be read, or that pairs an inapplicable facet with its primitive is
 // declined (Fail, a recorded gap) rather than mis-decided or crashed.
 func execFacetsCase(backend, strictBackend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
@@ -243,7 +243,7 @@ func execFacetsCase(backend, strictBackend value.Backend, sym map[xsd.QName]*xsd
 	if err != nil {
 		return Fail()
 	}
-	_, verr := strict.ValidateLexical(backend, leaf, raw, nil)
+	_, verr := value.ValidateLexical(backend, leaf, raw, nil)
 	observedValid := verr == nil
 	if observedValid == c.expectValid {
 		return Pass()
@@ -303,7 +303,7 @@ func (fallbackPrimitives) Mapping(typ xsd.QName) (value.Mapping, bool) {
 // parseOK reports whether raw is in prim's lexical space, after applying prim's
 // whiteSpace normalization (Datatypes §4.3.6) — collapse for boolean/decimal
 // (their fixed whiteSpace facet), preserve for string. This is the lexical
-// cohort's path only; the facet cohort normalizes inside strict.ValidateLexical.
+// cohort's path only; the facet cohort normalizes inside value.ValidateLexical.
 func parseOK(m value.Mapping, prim, raw string) bool {
 	_, err := m.Parse(normalizeWhiteSpace(prim, raw), nil)
 	return err == nil
@@ -311,7 +311,7 @@ func parseOK(m value.Mapping, prim, raw string) bool {
 
 // normalizeWhiteSpace applies prim's whiteSpace facet (read from the generated
 // builtin table) to raw. Used only by the lexical cohort (parseOK); the facet
-// cohort's normalization lives in strict.ValidateLexical's whiteSpace stage, so
+// cohort's normalization lives in value.ValidateLexical's whiteSpace stage, so
 // there is exactly one normalization per path and no double-normalizing.
 func normalizeWhiteSpace(prim, raw string) string {
 	switch whiteSpaceOf(prim) {
@@ -425,7 +425,7 @@ type facetChild struct {
 }
 
 // facetKinds is the set of facet kinds the facet cohort recognizes: the value-
-// and pattern-facet kinds strict.ValidateLexical decides for
+// and pattern-facet kinds value.ValidateLexical decides for
 // string/decimal/float/double (the bound facets also serve the
 // partially-ordered float/double).
 // whiteSpace (normalization, no cvc-* rule), assertions and explicitTimezone are

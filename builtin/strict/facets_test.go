@@ -3,6 +3,7 @@ package strict
 import (
 	"testing"
 
+	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -30,11 +31,19 @@ func wantAccept(t *testing.T, err error) {
 	}
 }
 
-// newPrim builds a cohort primitive by its spec local name (decimal/string),
-// mirroring builtin.Seed's NewPrimitiveType path so whiteSpaceOf resolves it.
+// newPrim builds a cohort primitive by its spec local name (decimal/string/
+// float), carrying the primitive's own whiteSpace facet (§3.16.7.4: string is
+// preserve, every other atomic is collapse) exactly as builtin.Seed materializes
+// it, so value.ValidateLexical's whiteSpace stage (effectiveWhiteSpace, reading
+// EffectiveFacets) resolves it.
 func newPrim(t *testing.T, local string) *xsd.SimpleType {
 	t.Helper()
-	p, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: local}, nil, nil)
+	ws := "collapse"
+	if local == "string" {
+		ws = "preserve"
+	}
+	p, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: local},
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{ws}, ws != "preserve")}, nil)
 	if err != nil {
 		t.Fatalf("NewPrimitiveType(%q): %v", local, err)
 	}
@@ -42,11 +51,20 @@ func newPrim(t *testing.T, local string) *xsd.SimpleType {
 }
 
 // derive builds an atomic restriction of base named {urn:test, name} carrying
-// ownFacets, for the hand-built graphs these tests validate against.
+// ownFacets, for the hand-built graphs these tests validate against. Its
+// {primitive type definition} is base's primitive ancestor, found by walking
+// Base() to IsPrimitive (§2.4.2).
 func derive(t *testing.T, name string, base *xsd.SimpleType, ownFacets ...xsd.Facet) *xsd.SimpleType {
 	t.Helper()
+	var prim *xsd.SimpleType
+	for s := base; s != nil; s = s.Base() {
+		if s.IsPrimitive() {
+			prim = s
+			break
+		}
+	}
 	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: name},
-		xsd.Atomic{Primitive: primitiveOf(base)}, base, ownFacets, nil)
+		xsd.Atomic{Primitive: prim}, base, ownFacets, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(%q): %v", name, err)
 	}
@@ -70,11 +88,20 @@ func TestWidestSpaceInheritedBound(t *testing.T) {
 
 	// Premise: the effective maxInclusive on leaf is DECLARED by lvl1 (urn:test),
 	// which is not in xsd.XMLSchemaNS and so is not directly mapped by strict.New().
-	facets := leaf.EffectiveFacets()
-	if len(facets) != 1 {
-		t.Fatalf("leaf effective facets = %d, want 1 (the inherited maxInclusive)", len(facets))
+	// leaf's effective facets are the inherited whiteSpace (from the decimal
+	// primitive, §3.16.7.4) and this maxInclusive; isolate the latter.
+	var maxIncl xsd.EffectiveFacet
+	var found bool
+	for _, ef := range leaf.EffectiveFacets() {
+		if ef.Facet().Kind() == xsd.FacetMaxInclusive {
+			maxIncl = ef
+			found = true
+		}
 	}
-	declaring := facets[0].Declaring()
+	if !found {
+		t.Fatalf("leaf has no effective maxInclusive facet")
+	}
+	declaring := maxIncl.Declaring()
 	if declaring != (xsd.QName{Space: "urn:test", Local: "level1"}) {
 		t.Fatalf("declaring type = %s, want {urn:test}level1", declaring)
 	}
@@ -83,11 +110,11 @@ func TestWidestSpaceInheritedBound(t *testing.T) {
 	}
 
 	// "150" > 100: rejected via the declaring type's decimal space.
-	_, err := ValidateLexical(New(), leaf, "150", nil)
+	_, err := value.ValidateLexical(New(), leaf, "150", nil)
 	wantRule(t, err, "cvc-maxInclusive-valid")
 
 	// "50" ≤ 100: accepted.
-	_, err = ValidateLexical(New(), leaf, "50", nil)
+	_, err = value.ValidateLexical(New(), leaf, "50", nil)
 	wantAccept(t, err)
 }
 
@@ -105,16 +132,16 @@ func TestBoundFacetNaNExcluded(t *testing.T) {
 
 	// (1) NaN instance, numeric bound: NaN is incomparable with 10, so excluded.
 	maxTen := derive(t, "maxTen", floatPrim, xsd.NewFacet(xsd.FacetMaxInclusive, []string{"10"}, false))
-	_, err := ValidateLexical(New(), maxTen, "NaN", nil)
+	_, err := value.ValidateLexical(New(), maxTen, "NaN", nil)
 	wantRule(t, err, "cvc-maxInclusive-valid")
 	// A comparable in-range instance still passes the same facet.
-	_, err = ValidateLexical(New(), maxTen, "5", nil)
+	_, err = value.ValidateLexical(New(), maxTen, "5", nil)
 	wantAccept(t, err)
 
 	// (2) NaN bound value: no float is comparable with NaN, so the restricted
 	// value space is empty and every instance — even 5 — is excluded.
 	maxNaN := derive(t, "maxNaN", floatPrim, xsd.NewFacet(xsd.FacetMinInclusive, []string{"NaN"}, false))
-	_, err = ValidateLexical(New(), maxNaN, "5", nil)
+	_, err = value.ValidateLexical(New(), maxNaN, "5", nil)
 	wantRule(t, err, "cvc-minInclusive-valid")
 }
 
@@ -126,10 +153,10 @@ func TestPatternFacet(t *testing.T) {
 	stringPrim := newPrim(t, "string")
 	lower := derive(t, "lower", stringPrim, xsd.NewFacet(xsd.FacetPattern, []string{"[a-z]+"}, false))
 
-	_, err := ValidateLexical(New(), lower, "abc", nil)
+	_, err := value.ValidateLexical(New(), lower, "abc", nil)
 	wantAccept(t, err)
 
-	_, err = ValidateLexical(New(), lower, "ab3", nil)
+	_, err = value.ValidateLexical(New(), lower, "ab3", nil)
 	wantRule(t, err, "cvc-pattern-valid")
 }
 
@@ -146,15 +173,15 @@ func TestPatternFacetTwoStepAND(t *testing.T) {
 	derived := derive(t, "threeChars", base, xsd.NewFacet(xsd.FacetPattern, []string{".{3}"}, false))
 
 	// Matches both patterns: three chars, all lowercase.
-	_, err := ValidateLexical(New(), derived, "abc", nil)
+	_, err := value.ValidateLexical(New(), derived, "abc", nil)
 	wantAccept(t, err)
 
 	// Matches derived (three chars) but violates base ([a-z]+): rejected.
-	_, err = ValidateLexical(New(), derived, "a1z", nil)
+	_, err = value.ValidateLexical(New(), derived, "a1z", nil)
 	wantRule(t, err, "cvc-pattern-valid")
 
 	// Matches base ([a-z]+) but violates derived (not three chars): rejected.
-	_, err = ValidateLexical(New(), derived, "abcd", nil)
+	_, err = value.ValidateLexical(New(), derived, "abcd", nil)
 	wantRule(t, err, "cvc-pattern-valid")
 }
 
@@ -164,10 +191,10 @@ func TestEnumerationFacet(t *testing.T) {
 	stringPrim := newPrim(t, "string")
 	colors := derive(t, "color", stringPrim, xsd.NewFacet(xsd.FacetEnumeration, []string{"red", "green", "blue"}, false))
 
-	_, err := ValidateLexical(New(), colors, "green", nil)
+	_, err := value.ValidateLexical(New(), colors, "green", nil)
 	wantAccept(t, err)
 
-	_, err = ValidateLexical(New(), colors, "purple", nil)
+	_, err = value.ValidateLexical(New(), colors, "purple", nil)
 	wantRule(t, err, "cvc-enumeration-valid")
 }
 
@@ -177,17 +204,17 @@ func TestDigitsFacets(t *testing.T) {
 	decimalPrim := newPrim(t, "decimal")
 
 	total3 := derive(t, "total3", decimalPrim, xsd.NewFacet(xsd.FacetTotalDigits, []string{"3"}, false))
-	if _, err := ValidateLexical(New(), total3, "123", nil); err != nil {
+	if _, err := value.ValidateLexical(New(), total3, "123", nil); err != nil {
 		t.Fatalf("totalDigits=3 should accept 123: %v", err)
 	}
-	_, err := ValidateLexical(New(), total3, "1234", nil)
+	_, err := value.ValidateLexical(New(), total3, "1234", nil)
 	wantRule(t, err, "cvc-totalDigits-valid")
 
 	frac2 := derive(t, "frac2", decimalPrim, xsd.NewFacet(xsd.FacetFractionDigits, []string{"2"}, false))
-	if _, err := ValidateLexical(New(), frac2, "1.23", nil); err != nil {
+	if _, err := value.ValidateLexical(New(), frac2, "1.23", nil); err != nil {
 		t.Fatalf("fractionDigits=2 should accept 1.23: %v", err)
 	}
-	_, err = ValidateLexical(New(), frac2, "1.234", nil)
+	_, err = value.ValidateLexical(New(), frac2, "1.234", nil)
 	wantRule(t, err, "cvc-fractionDigits-valid")
 }
 
@@ -197,17 +224,17 @@ func TestLengthFacets(t *testing.T) {
 	stringPrim := newPrim(t, "string")
 
 	len3 := derive(t, "len3", stringPrim, xsd.NewFacet(xsd.FacetLength, []string{"3"}, false))
-	if _, err := ValidateLexical(New(), len3, "abc", nil); err != nil {
+	if _, err := value.ValidateLexical(New(), len3, "abc", nil); err != nil {
 		t.Fatalf("length=3 should accept abc: %v", err)
 	}
-	_, err := ValidateLexical(New(), len3, "abcd", nil)
+	_, err := value.ValidateLexical(New(), len3, "abcd", nil)
 	wantRule(t, err, "cvc-length-valid")
 
 	min3 := derive(t, "min3", stringPrim, xsd.NewFacet(xsd.FacetMinLength, []string{"3"}, false))
-	_, err = ValidateLexical(New(), min3, "ab", nil)
+	_, err = value.ValidateLexical(New(), min3, "ab", nil)
 	wantRule(t, err, "cvc-minLength-valid")
 
 	max3 := derive(t, "max3", stringPrim, xsd.NewFacet(xsd.FacetMaxLength, []string{"3"}, false))
-	_, err = ValidateLexical(New(), max3, "abcd", nil)
+	_, err = value.ValidateLexical(New(), max3, "abcd", nil)
 	wantRule(t, err, "cvc-maxLength-valid")
 }
