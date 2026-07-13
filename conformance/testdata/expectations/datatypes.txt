@@ -1,3 +1,14 @@
+MS-DataTypes2006-07-15/anyURI001_2073/instance/anyURI001_2073.v pass
+MS-DataTypes2006-07-15/anyURI002_2074/instance/anyURI002_2074.v pass
+MS-DataTypes2006-07-15/anyURI003_2075/instance/anyURI003_2075.v pass
+MS-DataTypes2006-07-15/anyURI004_2076/instance/anyURI004_2076.v pass
+MS-DataTypes2006-07-15/anyURI005_2077/instance/anyURI005_2077.v pass
+MS-DataTypes2006-07-15/anyURI006_2078/instance/anyURI006_2078.v pass
+MS-DataTypes2006-07-15/anyURI007_2079/instance/anyURI007_2079.v pass
+MS-DataTypes2006-07-15/anyURI008_2080/instance/anyURI008_2080.v pass
+MS-DataTypes2006-07-15/anyURI009_2081/instance/anyURI009_2081.v pass
+MS-DataTypes2006-07-15/anyURI010_2082/instance/anyURI010_2082.v pass
+MS-DataTypes2006-07-15/anyURI011_2083/instance/anyURI011_2083.v fail
 MS-DataTypes2006-07-15/boolean001_1857/instance/boolean001_1857.i pass
 MS-DataTypes2006-07-15/boolean002_1858/instance/boolean002_1858.v pass
 MS-DataTypes2006-07-15/boolean003_1859/instance/boolean003_1859.v pass
