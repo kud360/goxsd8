@@ -6,9 +6,9 @@ import (
 )
 
 // New returns the spec-exact value.Backend for the primitive cohort so far:
-// xs:decimal, xs:boolean, xs:string, xs:float and xs:double. Each type's value
+// xs:decimal, xs:boolean, xs:string, xs:anyURI, xs:float and xs:double. Each type's value
 // space is represented with full fidelity to the Datatypes spec (§3.3.3,
-// §3.3.2, §3.3.1, §3.3.4, §3.3.5); a [value.Mapping.Parse] rejects any lexical
+// §3.3.2, §3.3.1, §3.3.17, §3.3.4, §3.3.5); a [value.Mapping.Parse] rejects any lexical
 // outside the type's lexical space as an *xsderr.Error with rule
 // "cvc-datatype-valid" (§4.1.4), never a false validity verdict.
 //
@@ -26,6 +26,9 @@ import (
 //   - xs:string — [value.Eq], [value.Lengthed] (character count) and
 //     [value.Canonical]. It is deliberately NOT [value.Ordered]
 //     (ordered=false, §3.3.1.3).
+//   - xs:anyURI — [value.Eq], [value.Lengthed] (character count) and
+//     [value.Canonical]. It is deliberately NOT [value.Ordered]
+//     (ordered=false, §3.3.17.3).
 //   - xs:float, xs:double — [value.Ordered] (PARTIAL order, §3.3.4.3/§3.3.5.3:
 //     NaN is incomparable with every value, itself included), [value.Eq],
 //     [value.Identical] and [value.Canonical]. Equality and identity genuinely
@@ -53,6 +56,8 @@ func (backend) Mapping(typ xsd.QName) (value.Mapping, bool) {
 		return value.Mapping{Parse: parseBoolean, Canonical: canonicalBoolean}, true
 	case "string":
 		return value.Mapping{Parse: parseString, Canonical: canonicalString}, true
+	case "anyURI":
+		return value.Mapping{Parse: parseAnyURI, Canonical: canonicalAnyURI}, true
 	case "float":
 		return value.Mapping{Parse: parseFloat, Canonical: canonicalFloat}, true
 	case "double":
