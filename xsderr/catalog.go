@@ -4,7 +4,12 @@ package xsderr
 
 // ruleCatalog contains all normative validation rule IDs extracted from the specs.
 var ruleCatalog = map[Rule]struct{}{
+	"a-props-correct": {},
+	"ag-props-correct": {},
 	"an-props-correct": {},
+	"as-props-correct": {},
+	"au-props-correct": {},
+	"c-props-correct": {},
 	"cos-all-limited": {},
 	"cos-applicable-facets": {},
 	"cos-assertions-restriction": {},
@@ -28,6 +33,7 @@ var ruleCatalog = map[Rule]struct{}{
 	"cos-st-restricts": {},
 	"cos-valid-default": {},
 	"cos-valid-simple-default": {},
+	"ct-props-correct": {},
 	"cvc-accept": {},
 	"cvc-agd": {},
 	"cvc-annotation": {},
@@ -75,6 +81,7 @@ var ruleCatalog = map[Rule]struct{}{
 	"cvc-wildcard-namespace": {},
 	"cvc-xpath": {},
 	"derivation-ok-restriction": {},
+	"e-props-correct": {},
 	"enumeration-valid-restriction": {},
 	"err:FOAR0001": {},
 	"err:FOAR0002": {},
@@ -132,6 +139,8 @@ var ruleCatalog = map[Rule]struct{}{
 	"err:XPTY0020": {},
 	"length-minLength-maxLength": {},
 	"length-valid-restriction": {},
+	"mg-props-correct": {},
+	"mgd-props-correct": {},
 	"n-props-correct": {},
 	"p-props-correct": {},
 	"sch-props-correct": {},
@@ -193,6 +202,7 @@ var ruleCatalog = map[Rule]struct{}{
 	"src-union-memberTypes-or-simpleTypes": {},
 	"src-wildcard": {},
 	"st-props-correct": {},
+	"ta-props-correct": {},
 	"timezone-valid-restriction": {},
 	"w-props-correct": {},
 }
