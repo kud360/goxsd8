@@ -84,6 +84,10 @@ func build(datatypesPath, precisionPath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s: duration: %w", datatypesPath, err)
 	}
+	dt, err := parseDateTime(spec)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: dateTime: %w", datatypesPath, err)
+	}
 
 	facets, err := applicableFacets(datatypesPath, precisionPath)
 	if err != nil {
@@ -97,8 +101,9 @@ func build(datatypesPath, precisionPath string) ([]byte, error) {
 	hexBin.ApplicableFacets = facets["hexBinary"]
 	b64Bin.ApplicableFacets = facets["base64Binary"]
 	dur.ApplicableFacets = facets["duration"]
+	dt.ApplicableFacets = facets["dateTime"]
 
-	return emit([]typeVectors{boolean, decimal, str, flt, dbl, hexBin, b64Bin, dur})
+	return emit([]typeVectors{boolean, decimal, str, flt, dbl, hexBin, b64Bin, dur, dt})
 }
 
 // applicableFacets reads each cohort type's applicable constraining facets in
@@ -111,7 +116,7 @@ func applicableFacets(datatypesPath, precisionPath string) (map[string][]string,
 	if err != nil {
 		return nil, fmt.Errorf("applicable facets: %w", err)
 	}
-	want := map[string]bool{"boolean": true, "decimal": true, "string": true, "float": true, "double": true, "hexBinary": true, "base64Binary": true, "duration": true}
+	want := map[string]bool{"boolean": true, "decimal": true, "string": true, "float": true, "double": true, "hexBinary": true, "base64Binary": true, "duration": true, "dateTime": true}
 	out := make(map[string][]string, len(want))
 	for _, b := range types {
 		if !want[b.Name] {

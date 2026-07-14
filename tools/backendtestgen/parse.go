@@ -875,6 +875,274 @@ func durRatDivMod(r *big.Rat, w int64) (*big.Int, *big.Rat) {
 	return q, rem
 }
 
+// parseDateTime derives the dateTime vectors from the Datatypes spec (§3.3.7):
+// the grammar's lexical space is the combined regular expression nt-dateTimeRep
+// gives (extracted verbatim from the "equivalent to this regular expression"
+// block, legibility whitespace removed as the spec instructs), so a spec edit
+// that moved it would drop a now-mismatched sample rather than mislabel it. Like
+// string the space is unbounded, so the valid sample is a deterministic
+// representative set — a plain instant, a fractional-second, the three timezone
+// spellings (+hh:mm, Z, −hh:mm), a leap-day, an endOfDayFrag that carries into
+// the next day, a negative year, and a year needing four-digit padding — each
+// canonicalised by dateTimeCanonicalOf, an INDEPENDENT oracle implementing
+// dateTimeLexicalMap + dateTimeCanonicalMap (vp-dateTimeLexRep/vp-dateTimeCanRep,
+// §E.3.5/§E.3.6), never an echo of the backend. Invalid near-misses are kept via
+// dateTimeInvalids (not binaryInvalids): the day-of-month constraint
+// con-dateTime-dayValue (§3.3.7.1) is BEYOND the grammar regex, so validity is
+// decided by the full oracle, letting bad-day cases like 2023-02-30 count as
+// invalid even though the pure regex accepts them.
+func parseDateTime(spec string) (typeVectors, error) {
+	re, err := dateTimeLexicalRegex(spec)
+	if err != nil {
+		return typeVectors{}, err
+	}
+
+	sample := []string{
+		"2001-10-26T21:32:52",
+		"2001-10-26T21:32:52.125",
+		"2001-10-26T21:32:52+02:00",
+		"2001-10-26T19:32:52Z",
+		"2001-10-26T21:32:52-05:00",
+		"2024-02-29T00:00:00", // leap-year February 29 is valid
+		"2023-01-01T24:00:00", // endOfDayFrag carries into the next day
+		"-0045-03-15T00:00:00Z",
+		"0001-01-01T00:00:00",
+	}
+	valid := make([]roundtrip, 0, len(sample))
+	for _, lex := range sample {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("dateTime: sample lexical %q does not match its own production regex", lex)
+		}
+		canon, err := dateTimeCanonicalOf(lex)
+		if err != nil {
+			return typeVectors{}, fmt.Errorf("dateTime: canonical of %q: %w", lex, err)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: canon})
+	}
+
+	return typeVectors{
+		Local: "dateTime",
+		Valid: valid,
+		Invalid: dateTimeInvalids([]string{
+			"2023-13-01T00:00:00",       // month out of range
+			"2023-02-30T00:00:00",       // day beyond February (regex-valid, value-invalid)
+			"2023-02-29T00:00:00",       // February 29 in a non-leap year
+			"2023-01-01T25:00:00",       // hour out of range
+			"2023-01-01T00:60:00",       // minute out of range
+			"2023-01-0100:00:00",        // missing 'T' separator
+			"2023-01-01T00:00:00+15:00", // timezone offset beyond ±14:00
+			"2023-1-01T00:00:00",        // month not two digits
+		}),
+	}, nil
+}
+
+// dateTimeLexicalRegex extracts dateTime's combined lexical-space regular
+// expression (nt-dateTimeRep, §3.3.7.2) from the fenced block the spec gives as
+// "The dateTimeLexicalRep production is equivalent to this regular expression once
+// whitespace is removed" and returns it anchored (^…$) with that legibility
+// whitespace removed exactly as the spec instructs.
+func dateTimeLexicalRegex(spec string) (*regexp.Regexp, error) {
+	i := strings.Index(spec, "regular expression once whitespace is removed")
+	if i == -1 {
+		return nil, fmt.Errorf("dateTime: combined lexical regex marker not found")
+	}
+	rest := spec[i:]
+	open := strings.Index(rest, "```")
+	if open == -1 {
+		return nil, fmt.Errorf("dateTime: opening code fence not found")
+	}
+	rest = rest[open+len("```"):]
+	end := strings.Index(rest, "```")
+	if end == -1 {
+		return nil, fmt.Errorf("dateTime: closing code fence not found")
+	}
+	expr := strings.Join(strings.FieldsFunc(rest[:end], func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+	}), "")
+	compiled, err := regexp.Compile("^(?:" + expr + ")$")
+	if err != nil {
+		return nil, fmt.Errorf("dateTime: compiling extracted lexical regex %q: %w", expr, err)
+	}
+	return compiled, nil
+}
+
+// dateTimeFieldRE extracts the fragments of a dateTimeLexicalRep. Applied only to
+// a lexical the combined regex already accepted, it mirrors builtin/strict's
+// dateTimeLexical; the generator cannot import the private backend, so it carries
+// its own copy (the same discipline the duration/hexBinary oracles use). Groups:
+// 1 year, 2 month, 3 day, 4 hour, 5 minute, 6 second-int, 7 second-frac,
+// 8 endOfDayFrag, 9 timezoneFrag.
+var dateTimeFieldRE = regexp.MustCompile(
+	`^(-?(?:[1-9][0-9]{3,}|0[0-9]{3}))-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])` +
+		`T(?:([01][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])(\.[0-9]+)?|(24:00:00(?:\.0+)?))` +
+		`(Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))?$`)
+
+// dateTimeCanonicalOf is the independent oracle the vectors pin: dateTimeLexicalMap
+// (vp-dateTimeLexRep) into the seven-property value, then dateTimeCanonicalMap
+// (vp-dateTimeCanRep) back to a lexical. It returns an error when the lexical is
+// not in the value space — a regex mismatch OR a day-of-month value violation
+// (con-dateTime-dayValue) — so dateTimeInvalids can decide validity through it.
+func dateTimeCanonicalOf(lex string) (string, error) {
+	m := dateTimeFieldRE.FindStringSubmatch(lex)
+	if m == nil {
+		return "", fmt.Errorf("%q does not match dateTimeLexicalRep", lex)
+	}
+	year, _ := new(big.Int).SetString(m[1], 10)
+	month, _ := strconv.Atoi(m[2])
+	day, _ := strconv.Atoi(m[3])
+	if day > dtDaysInMonth(year, month) {
+		return "", fmt.Errorf("%q has day %d out of range for month %d", lex, day, month)
+	}
+
+	var tz *int
+	if m[9] != "" {
+		off := dtTimezoneOffset(m[9])
+		tz = &off
+	}
+
+	var hour, minute int
+	second := new(big.Rat)
+	if m[8] != "" { // endOfDayFrag: hour 24 carries into the next calendar day
+		year, month, day = dtNextDay(year, month, day)
+	} else {
+		hour, _ = strconv.Atoi(m[4])
+		minute, _ = strconv.Atoi(m[5])
+		second, _ = new(big.Rat).SetString(m[6] + m[7])
+	}
+
+	var b strings.Builder
+	b.WriteString(dtYearCanon(year))
+	fmt.Fprintf(&b, "-%02d-%02dT%02d:%02d:", month, day, hour, minute)
+	b.WriteString(dtSecondCanon(second))
+	if tz != nil {
+		b.WriteString(dtTzCanon(*tz))
+	}
+	return b.String(), nil
+}
+
+// dateTimeInvalids keeps the near-miss candidates the oracle rejects,
+// deduplicated and in order. Unlike binaryInvalids it filters through the FULL
+// validity oracle (dateTimeCanonicalOf), not the grammar regex alone, so a
+// day-of-month violation (con-dateTime-dayValue, §3.3.7.1) — which the regex
+// cannot express — still counts as invalid.
+func dateTimeInvalids(candidates []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, c := range candidates {
+		if seen[c] {
+			continue
+		}
+		if _, err := dateTimeCanonicalOf(c); err == nil {
+			continue // the oracle accepts it — not an invalid lexical
+		}
+		seen[c] = true
+		out = append(out, c)
+	}
+	return out
+}
+
+// dtTimezoneOffset maps a timezoneFrag to ·timezoneOffset· minutes (f-dt-tzMap):
+// 'Z' is 0, else the signed hh:mm.
+func dtTimezoneOffset(frag string) int {
+	if frag == "Z" {
+		return 0
+	}
+	hh, _ := strconv.Atoi(frag[1:3])
+	mm, _ := strconv.Atoi(frag[4:6])
+	off := hh*60 + mm
+	if frag[0] == '-' {
+		return -off
+	}
+	return off
+}
+
+// dtNextDay rolls (year, month, day) forward one calendar day for the endOfDayFrag
+// carry (§3.3.7.2), overflowing month and year at a month boundary.
+func dtNextDay(year *big.Int, month, day int) (*big.Int, int, int) {
+	if day < dtDaysInMonth(year, month) {
+		return year, month, day + 1
+	}
+	if month < 12 {
+		return year, month + 1, 1
+	}
+	return new(big.Int).Add(year, big.NewInt(1)), 1, 1
+}
+
+// dtDaysInMonth is the month length in year (con-dateTime-dayValue, §3.3.7.1),
+// leap-year aware for February.
+func dtDaysInMonth(year *big.Int, month int) int {
+	switch month {
+	case 1, 3, 5, 7, 8, 10, 12:
+		return 31
+	case 4, 6, 9, 11:
+		return 30
+	}
+	if dtIsLeap(year) {
+		return 29
+	}
+	return 28
+}
+
+// dtIsLeap applies the proleptic-Gregorian leap rule (divisible by 4, except
+// centuries not divisible by 400); divisibility is sign-independent.
+func dtIsLeap(year *big.Int) bool {
+	div := func(n int64) bool { return new(big.Int).Rem(year, big.NewInt(n)).Sign() == 0 }
+	if !div(4) {
+		return false
+	}
+	if !div(100) {
+		return true
+	}
+	return div(400)
+}
+
+// dtYearCanon implements yearCanonicalFragmentMap (f-yrCanFragMap): a plain signed
+// numeral when |year| > 9999, else a four-digit numeral with the sign preserved.
+func dtYearCanon(year *big.Int) string {
+	abs := new(big.Int).Abs(year)
+	if abs.Cmp(big.NewInt(9999)) > 0 {
+		return year.String()
+	}
+	if year.Sign() < 0 {
+		return fmt.Sprintf("-%04d", abs.Int64())
+	}
+	return fmt.Sprintf("%04d", abs.Int64())
+}
+
+// dtSecondCanon implements secondCanonicalFragmentMap (f-seCanFragMap): a
+// two-digit integer part plus the exact terminating fractional digits when the
+// value is not integral.
+func dtSecondCanon(second *big.Rat) string {
+	intPart, rem := new(big.Int), new(big.Int)
+	intPart.QuoRem(second.Num(), second.Denom(), rem)
+	whole := fmt.Sprintf("%02d", intPart.Int64())
+	if rem.Sign() == 0 {
+		return whole
+	}
+	den := second.Denom()
+	var frac []byte
+	for rem.Sign() != 0 {
+		rem.Mul(rem, big.NewInt(10))
+		digit, mod := new(big.Int), new(big.Int)
+		digit.QuoRem(rem, den, mod)
+		frac = append(frac, byte('0'+digit.Int64()))
+		rem = mod
+	}
+	return whole + "." + string(frac)
+}
+
+// dtTzCanon implements timezoneCanonicalFragmentMap (f-tzCanFragMap): 'Z' for
+// offset 0, else the signed hh:mm.
+func dtTzCanon(offset int) string {
+	if offset == 0 {
+		return "Z"
+	}
+	if offset < 0 {
+		return fmt.Sprintf("-%02d:%02d", -offset/60, -offset%60)
+	}
+	return fmt.Sprintf("+%02d:%02d", offset/60, offset%60)
+}
+
 // literalsIn returns every '`X`' literal in text, in order.
 func literalsIn(text string) []string {
 	ms := litRE.FindAllStringSubmatch(text, -1)

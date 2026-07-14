@@ -23,7 +23,7 @@ func TestBackendtestCertification(t *testing.T) {
 
 func TestBackendCoverage(t *testing.T) {
 	backend := strict.New()
-	for _, local := range []string{"decimal", "boolean", "string", "anyURI", "float", "double", "hexBinary", "base64Binary", "duration"} {
+	for _, local := range []string{"decimal", "boolean", "string", "anyURI", "float", "double", "hexBinary", "base64Binary", "duration", "dateTime"} {
 		m, ok := backend.Mapping(xsd.QName{Space: xsd.XMLSchemaNS, Local: local})
 		if !ok {
 			t.Errorf("Mapping(xs:%s): ok=false, want true", local)
@@ -44,7 +44,7 @@ func TestBackendUnmapped(t *testing.T) {
 	// are both unmapped.
 	for _, q := range []xsd.QName{
 		{Space: xsd.XMLSchemaNS, Local: "integer"},
-		{Space: xsd.XMLSchemaNS, Local: "dateTime"},
+		{Space: xsd.XMLSchemaNS, Local: "time"},
 		{Space: "urn:other", Local: "decimal"},
 		{Local: "decimal"},
 	} {
@@ -59,7 +59,7 @@ func TestBackendUnmapped(t *testing.T) {
 // MissingPrimitivesError (the later cohorts remain unmapped), but float and
 // double are no longer in it, while an earlier-unmapped primitive (integer's
 // primitive ancestor is decimal, so check a genuinely unmapped one, e.g. the
-// dateTime primitive) still is.
+// time primitive) still is.
 func TestSeedMissingShrinksByFloatDouble(t *testing.T) {
 	_, err := builtin.Seed(strict.New())
 	var missing *builtin.MissingPrimitivesError
@@ -74,15 +74,15 @@ func TestSeedMissingShrinksByFloatDouble(t *testing.T) {
 		}
 		return false
 	}
-	for _, mapped := range []string{"decimal", "boolean", "string", "anyURI", "float", "double", "hexBinary", "base64Binary", "duration"} {
+	for _, mapped := range []string{"decimal", "boolean", "string", "anyURI", "float", "double", "hexBinary", "base64Binary", "duration", "dateTime"} {
 		if inMissing(mapped) {
 			t.Errorf("primitive %q must NOT be in the missing set (strict maps it)", mapped)
 		}
 	}
 	// A primitive strict does not yet map must still be reported, so the test
 	// cannot pass by strict suddenly mapping everything.
-	if !inMissing("dateTime") {
-		t.Error("dateTime must still be in the missing set (strict does not map it yet)")
+	if !inMissing("time") {
+		t.Error("time must still be in the missing set (strict does not map it yet)")
 	}
 }
 

@@ -140,6 +140,7 @@ const (
 	capLengthed
 	capScaled
 	capEq
+	capTimezoneAware
 )
 
 // requiredCapability classifies one applicable constraining facet by the value
@@ -165,6 +166,8 @@ func requiredCapability(facet string) (capability, bool) {
 		return capScaled, true
 	case "enumeration": // §4.3.5, cvc-enumeration-valid — "equal or identical"
 		return capEq, true
+	case "explicitTimezone": // §4.3.15, cvc-explicitTimezone-valid — reads HasTimezone
+		return capTimezoneAware, true
 	case "whiteSpace", "pattern", "assertions": // pre-lexical / lexical / assertion stages
 		return capNone, true
 	}
@@ -220,6 +223,9 @@ func hasCapability(v value.Value, c capability) bool {
 	case capEq:
 		_, ok := v.(value.Eq)
 		return ok
+	case capTimezoneAware:
+		_, ok := v.(value.TimezoneAware)
+		return ok
 	}
 	return false
 }
@@ -239,6 +245,8 @@ func capabilityName(c capability) string {
 		return "value.Scaled"
 	case capEq:
 		return "value.Eq"
+	case capTimezoneAware:
+		return "value.TimezoneAware"
 	}
 	return "no capability"
 }

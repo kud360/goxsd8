@@ -272,6 +272,52 @@ func TestDurationVectors(t *testing.T) {
 	}
 }
 
+// TestDateTimeVectors pins the spec-derived dateTime corpus (§3.3.7.2,
+// nt-dateTimeRep; vp-dateTimeLexRep/vp-dateTimeCanRep, §E.3.5/§E.3.6): the
+// representative round-trips — a plain instant, a fractional-second, the three
+// timezone spellings, a leap-day, an endOfDayFrag that carries into the next day
+// ("…T24:00:00" → next-day "…T00:00:00"), a negative year and a four-digit-padded
+// year — and the oracle-verified invalids, including the day-of-month violations
+// (2023-02-30, non-leap 2023-02-29) the grammar regex alone would accept.
+func TestDateTimeVectors(t *testing.T) {
+	d, err := parseDateTime(readSpec(t))
+	if err != nil {
+		t.Fatalf("parseDateTime: %v", err)
+	}
+	wantValid := []roundtrip{
+		{"2001-10-26T21:32:52", "2001-10-26T21:32:52"},
+		{"2001-10-26T21:32:52.125", "2001-10-26T21:32:52.125"},
+		{"2001-10-26T21:32:52+02:00", "2001-10-26T21:32:52+02:00"},
+		{"2001-10-26T19:32:52Z", "2001-10-26T19:32:52Z"},
+		{"2001-10-26T21:32:52-05:00", "2001-10-26T21:32:52-05:00"},
+		{"2024-02-29T00:00:00", "2024-02-29T00:00:00"},
+		{"2023-01-01T24:00:00", "2023-01-02T00:00:00"},
+		{"-0045-03-15T00:00:00Z", "-0045-03-15T00:00:00Z"},
+		{"0001-01-01T00:00:00", "0001-01-01T00:00:00"},
+	}
+	if len(d.Valid) != len(wantValid) {
+		t.Fatalf("valid: got %v, want %v", d.Valid, wantValid)
+	}
+	for i, w := range wantValid {
+		if d.Valid[i] != w {
+			t.Errorf("valid[%d]: got %v, want %v", i, d.Valid[i], w)
+		}
+	}
+	wantInvalid := []string{
+		"2023-13-01T00:00:00", "2023-02-30T00:00:00", "2023-02-29T00:00:00",
+		"2023-01-01T25:00:00", "2023-01-01T00:60:00", "2023-01-0100:00:00",
+		"2023-01-01T00:00:00+15:00", "2023-1-01T00:00:00",
+	}
+	if len(d.Invalid) != len(wantInvalid) {
+		t.Fatalf("invalid: got %q, want %q", d.Invalid, wantInvalid)
+	}
+	for i, w := range wantInvalid {
+		if d.Invalid[i] != w {
+			t.Errorf("invalid[%d]: got %q, want %q", i, d.Invalid[i], w)
+		}
+	}
+}
+
 // TestApplicableFacets pins that each cohort type carries its cos-applicable-facets
 // list in spec order (§4.1.5), sourced from the shared builtin spec parser.
 func TestApplicableFacets(t *testing.T) {
@@ -288,6 +334,7 @@ func TestApplicableFacets(t *testing.T) {
 		"hexBinary":    {"whiteSpace", "length", "minLength", "maxLength", "pattern", "enumeration", "assertions"},
 		"base64Binary": {"whiteSpace", "length", "minLength", "maxLength", "pattern", "enumeration", "assertions"},
 		"duration":     {"whiteSpace", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"dateTime":     {"whiteSpace", "explicitTimezone", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
 	}
 	for name, w := range want {
 		got := facets[name]
