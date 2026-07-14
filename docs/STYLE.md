@@ -118,6 +118,20 @@ justification). The exported surface IS the product the library user sees
 via `go doc`; every addition is a compatibility promise. Reviews inspect
 the exported-surface diff of every change.
 
+**T6. Package-doc status tells the truth about what ships today.** A
+package `doc.go`'s status prose — "Current coverage", "Contract (implemented
+in M…)", coverage lists, "ships in-repo" claims — describes what `go doc`
+renders *now*, not the roadmap. Prose describing surface that does not yet
+exist says so in its heading ("Planned contract (M… — not yet implemented)");
+never date unshipped prose "implemented". Any diff that changes a package's
+exported or implemented surface reconciles that package's status prose in the
+*same commit* — render `go doc` for every package you touch and confirm the
+coverage claim matches before you report it updated. The forward-looking
+design prose is valuable: relabel it planned, don't delete it. (Rationale:
+one change cost a repair round on a stale "Current coverage" section its own
+commit message claimed to have updated; separate sweeps had to walk back
+"implemented in M…" headings sitting over packages that export nothing.)
+
 ## Spec fidelity
 
 **P1. Stick to the spec.** The local specs in `docs/specs/md/` are ground

@@ -23,8 +23,10 @@ ratchet (arbiter), never answer spec questions from memory (oracle).
 
 - The STYLE rules you are most likely to violate: S1/S2 (else blocks),
   S3 (dropped loop errors), E2 (missing rule ID), D2 (map iteration into
-  output), D3 (redundant state), T5 (unjustified exports), P3 (untracked
-  fail-open). Check the diff against these before handoff.
+  output), D3 (redundant state), T5 (unjustified exports), T6 (stale
+  doc.go "Current coverage"/"Contract" prose — render `go doc` for every
+  package you touch before claiming its status section updated), P3
+  (untracked fail-open). Check the diff against these before handoff.
 - Spec-derived data tables (builtin properties, hfn definitions, regex/
   facet tables, rule catalogs) are NEVER hand-typed: write or extend a
   deterministic generator under tools/, wire it to `go generate`, commit

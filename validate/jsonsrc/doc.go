@@ -5,7 +5,7 @@
 // values (using the stdlib streaming Decoder token walk — member order
 // preserved, positions tagged) and hands them over.
 //
-// # Mapping (contract; implemented in M8)
+// # Planned mapping (M8 — not yet implemented)
 //
 //   - Object members match by LOCAL NAME against the enclosing complex
 //     type, schema-aware: a member resolves to a named attribute use OR
