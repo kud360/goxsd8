@@ -6,10 +6,10 @@ import (
 )
 
 // New returns the spec-exact value.Backend for the primitive cohort so far:
-// xs:decimal, xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary
-// and xs:base64Binary. Each type's value
+// xs:decimal, xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary,
+// xs:base64Binary and xs:duration. Each type's value
 // space is represented with full fidelity to the Datatypes spec (§3.3.3,
-// §3.3.2, §3.3.1, §3.3.17, §3.3.4, §3.3.5, §3.3.15, §3.3.16); a [value.Mapping.Parse]
+// §3.3.2, §3.3.1, §3.3.17, §3.3.4, §3.3.5, §3.3.15, §3.3.16, §3.3.6); a [value.Mapping.Parse]
 // rejects any lexical
 // outside the type's lexical space as an *xsderr.Error with rule
 // "cvc-datatype-valid" (§4.1.4), never a false validity verdict.
@@ -41,6 +41,12 @@ import (
 //     §4.3.1.3 clause 1.2 — measured in octets of binary data, never lexical
 //     characters) and [value.Canonical]. They are deliberately NOT [value.Ordered]
 //     (ordered=false, §3.3.15/§3.3.16), so no bound facet applies to them.
+//   - xs:duration — [value.Ordered] (PARTIAL order, §3.3.6.1: the
+//     four-reference-dateTime algorithm, so e.g. P1M and P30D are incomparable),
+//     [value.Eq] and [value.Identical] (both structural over the (·months·,
+//     ·seconds·) tuple) and [value.Canonical]. Deliberately NOT [value.Lengthed]/
+//     [value.DigitCounted]/[value.Scaled]/[value.TimezoneAware]: no
+//     duration-applicable facet needs them (cos-applicable-facets §4.1.5).
 func New() value.Backend { return backend{} }
 
 // backend is the spec-exact primitive-cohort mapping. It carries no state: the
@@ -72,6 +78,8 @@ func (backend) Mapping(typ xsd.QName) (value.Mapping, bool) {
 		return value.Mapping{Parse: parseHexBinary, Canonical: canonicalHexBinary}, true
 	case "base64Binary":
 		return value.Mapping{Parse: parseBase64Binary, Canonical: canonicalBase64Binary}, true
+	case "duration":
+		return value.Mapping{Parse: parseDuration, Canonical: canonicalDuration}, true
 	}
 	return value.Mapping{}, false
 }

@@ -234,6 +234,44 @@ func TestBase64BinaryVectors(t *testing.T) {
 	}
 }
 
+// TestDurationVectors pins the spec-derived duration corpus (§3.3.6.2,
+// nt-durationRep; f-durationMap/f-durationCanMap, §E.2): the representative
+// round-trips — a year, year+month, month, the zero duration ("PT0S"), a day, a
+// minute, an hour value that normalizes into days ("PT36H" → "P1DT12H"), a
+// seconds value that normalizes into minutes ("PT60S" → "PT1M"), an all-fields
+// value, a fractional-seconds value and a negative — and the regex-verified
+// invalids (a missing 'P', bare "P"/"PT", an out-of-place 'S', a sign inside a
+// field).
+func TestDurationVectors(t *testing.T) {
+	d, err := parseDuration(readSpec(t))
+	if err != nil {
+		t.Fatalf("parseDuration: %v", err)
+	}
+	wantValid := []roundtrip{
+		{"P1Y", "P1Y"}, {"P1Y2M", "P1Y2M"}, {"P1M", "P1M"}, {"P0M", "PT0S"},
+		{"P1D", "P1D"}, {"PT1M", "PT1M"}, {"PT36H", "P1DT12H"}, {"PT60S", "PT1M"},
+		{"P1DT2H3M4S", "P1DT2H3M4S"}, {"PT1.5S", "PT1.5S"},
+		{"-P1Y2M3DT4H5M6S", "-P1Y2M3DT4H5M6S"},
+	}
+	if len(d.Valid) != len(wantValid) {
+		t.Fatalf("valid: got %v, want %v", d.Valid, wantValid)
+	}
+	for i, w := range wantValid {
+		if d.Valid[i] != w {
+			t.Errorf("valid[%d]: got %v, want %v", i, d.Valid[i], w)
+		}
+	}
+	wantInvalid := []string{"P", "PT", "P1S", "1Y", "PT1D", "PY"}
+	if len(d.Invalid) != len(wantInvalid) {
+		t.Fatalf("invalid: got %q, want %q", d.Invalid, wantInvalid)
+	}
+	for i, w := range wantInvalid {
+		if d.Invalid[i] != w {
+			t.Errorf("invalid[%d]: got %q, want %q", i, d.Invalid[i], w)
+		}
+	}
+}
+
 // TestApplicableFacets pins that each cohort type carries its cos-applicable-facets
 // list in spec order (§4.1.5), sourced from the shared builtin spec parser.
 func TestApplicableFacets(t *testing.T) {
@@ -249,6 +287,7 @@ func TestApplicableFacets(t *testing.T) {
 		"double":       {"whiteSpace", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
 		"hexBinary":    {"whiteSpace", "length", "minLength", "maxLength", "pattern", "enumeration", "assertions"},
 		"base64Binary": {"whiteSpace", "length", "minLength", "maxLength", "pattern", "enumeration", "assertions"},
+		"duration":     {"whiteSpace", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
 	}
 	for name, w := range want {
 		got := facets[name]
