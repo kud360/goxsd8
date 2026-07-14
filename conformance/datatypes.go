@@ -47,13 +47,14 @@ import (
 // or "PT", a sign inside a field, out-of-order or 'T'-final fields
 // (nt-durationRep §3.3.6.2).
 //
-// # The facet cohort (issue #57, widened by issues #80 and #81)
+// # The facet cohort (issue #57, widened by issues #80, #81 and #85)
 //
 // The lane additionally claims the Microsoft *Facets* instance cases under
 // msData/datatypes/Facets/<base>/<base>_<facet>NNN.xml where <base> is a
-// strict-mapped primitive (string, decimal, float, double) or an integer-family
+// strict-mapped primitive (string, decimal, float, double), an integer-family
 // builtin (issue #81): integer, int, long, short, byte, unsignedInt/Long/Short/
-// Byte, nonNegativeInteger, nonPositiveInteger, positiveInteger, negativeInteger.
+// Byte, nonNegativeInteger, nonPositiveInteger, positiveInteger, negativeInteger,
+// or a derived string-family builtin (issue #85): normalizedString, token.
 // Each such schema restricts <base> by one or more constraining facets
 // (length/minLength/maxLength/pattern/enumeration on string; minInclusive/
 // maxInclusive/minExclusive/maxExclusive/totalDigits/pattern/enumeration on
@@ -77,6 +78,20 @@ import (
 // gate runs before the value facets; an out-of-range value (e.g. int 2147483648)
 // is rejected by the type's own maxInclusive/minInclusive bound
 // (cvc-max/minInclusive-valid §4.3.7.3/§4.3.10.3).
+//
+// The derived string family (normalizedString, token) is likewise NOT a set of
+// new primitives: both share xs:string's value space and differ only by their
+// fixed whiteSpace facet — normalizedString fixes it to replace, token to
+// collapse (§3.4.1.1/§3.4.2.1) — with the chain token → normalizedString →
+// string (§3.4.2/§3.4.1). So strict's string mapping (walked to via the
+// widest-space rule) parses their values unchanged, and the leaf's overlaid
+// whiteSpace (token's collapse replaces normalizedString's replace, the standard
+// same-kind overlay of st-restrict-facets §3.16.6.4) normalizes the value once,
+// as a pre-lexical step with no cvc-* rule (§4.1.4/§4.3.6.3), BEFORE the string
+// lexical/length/pattern checks. A token instance carrying interior whitespace
+// runs is collapsed, then length/pattern-checked on the normalized form; a value
+// violating an own length/pattern/enumeration facet is rejected through the
+// ordinary cvc-length/pattern/enumeration path.
 //
 // Validity in this cohort
 // depends on FACET checking, not
@@ -104,10 +119,9 @@ import (
 // # Still deferred
 //
 // Facets over builtins whose value space strict.New() does not yet govern (the
-// token/normalizedString/date/time/… dirs, whose narrower lexical spaces a
-// decimal/string mapping would mis-decide), xsd:boolean facets (no Facets dir
-// exists for it), the NIST corpus, and list/union varieties remain out of
-// scope until their backends land. Within the integer family, the odd
+// date/time/… dirs, whose narrower lexical spaces a decimal/string mapping would
+// mis-decide), xsd:boolean facets (no Facets dir exists for it), the NIST corpus,
+// and list/union varieties remain out of scope until their backends land. Within the integer family, the odd
 // multi-element cases (e.g. Facets/int/test111092.xml, two named restriction
 // steps under distinct elements) do not fit the single-<foo> instance shape and
 // fall through to the instance lane as recorded gaps. boolean018 (a list-of-
@@ -126,14 +140,19 @@ const synthNS = "urn:goxsd8:conformance:facets"
 var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration)[0-9]+\.xml$`)
 
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
-// the lane decides: the strict-mapped primitives (string/decimal/float/double)
-// plus the integer family (xs:integer and its twelve narrowings, issue #81).
-// Every integer-family type is a facet restriction of xs:decimal (§3.4.13–
-// §3.4.25) that shares decimal's value space, order and identity (Datatypes
-// §2.2.1 Identity note), so strict's decimal mapping governs it unchanged and no
-// new backend mapping is introduced. The list feeds both the directory and the
-// filename-prefix alternation of facetsCase.
-const facetsBaseTypes = `string|decimal|float|double|integer|int|long|short|byte|` +
+// the lane decides: the strict-mapped primitives (string/decimal/float/double),
+// the integer family (xs:integer and its twelve narrowings, issue #81) and the
+// derived string family normalizedString/token (issue #85). Every integer-family
+// type is a facet restriction of xs:decimal (§3.4.13–§3.4.25) that shares
+// decimal's value space, order and identity (Datatypes §2.2.1 Identity note), so
+// strict's decimal mapping governs it unchanged; normalizedString and token are
+// facet restrictions of xs:string (chain token → normalizedString → string,
+// §3.4.1/§3.4.2) that share string's value space and differ only by their fixed
+// whiteSpace facet (replace/collapse), so strict's string mapping governs them
+// unchanged. No new backend mapping is introduced in either case. The list feeds
+// both the directory and the filename-prefix alternation of facetsCase.
+const facetsBaseTypes = `string|normalizedString|token|decimal|float|double|` +
+	`integer|int|long|short|byte|` +
 	`unsignedInt|unsignedLong|unsignedShort|unsignedByte|` +
 	`nonNegativeInteger|nonPositiveInteger|positiveInteger|negativeInteger`
 
@@ -165,11 +184,12 @@ func newDatatypesExec() executor {
 	// yields partial first), so those fallback mappings are never actually
 	// exercised: the lane now claims boolean/decimal/string/float/double/anyURI/
 	// hexBinary/base64Binary/duration
-	// (lexical cohort) and string/decimal/float/double (facet cohort) cases
+	// (lexical cohort) and string/decimal/float/double plus the integer and
+	// derived-string (normalizedString/token, #85) families (facet cohort) cases
 	// (float/double added in #80, anyURI in #82, hexBinary/base64Binary in #83,
 	// duration in #84),
-	// every one of which strict maps — the no-op fallback still never runs for a
-	// claimed case.
+	// every one of which resolves (directly or via a base ancestor) to a strict
+	// mapping — the no-op fallback still never runs for a claimed case.
 	strictBackend := strict.New()
 	backend := value.Override(fallbackPrimitives{}, strictBackend)
 
