@@ -38,6 +38,9 @@ func TestDatatypesSelectorClaimsOnlyCohort(t *testing.T) {
 		{caseSpec{kind: kindSchema, doc: "../testdata/xsdtests/msData/datatypes/decimal.xsd"}, false},
 		// A facet-restricted NIST instance is out of the cohort.
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/nistData/atomic/decimal/Schema+Instance/NISTXML-SV-IV-atomic-decimal-minExclusive-1-1.xml"}, false},
+		// The derived string family's Facets instances are claimed (issue #85).
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/Facets/token/token_length001.xml"}, true},
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/Facets/normalizedString/normalizedString_pattern001.xml"}, true},
 	}
 	for _, tc := range cases {
 		if got := selectsDatatypes(tc.c); got != tc.want {
@@ -89,5 +92,55 @@ func TestDatatypesExecutorAgreesWithSuite(t *testing.T) {
 	wrong := caseSpec{kind: kindInstance, doc: filepath.Join(dir, "decimal017.xml"), expectValid: true}
 	if exec(wrong).IsPass() {
 		t.Errorf("executor must Fail when the declared expectation is wrong (decimal017 'e' is not valid)")
+	}
+}
+
+// TestDatatypesFacetsStringFamily drives the executor over real derived
+// string-family Facets cases (issue #85): normalizedString and token restrictions
+// resolve to their xs:string primitive ancestor (strictGoverns/primitiveOfType,
+// reused from #81) and the seeded type's inherited whiteSpace (replace/collapse)
+// normalizes the value before the string length/pattern checks. It asserts
+// agreement for both polarities and that a wrong expectation yields Fail, so the
+// test can actually fail if the cohort is mis-decided. Skips when the submodule
+// is absent.
+func TestDatatypesFacetsStringFamily(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	exec := newDatatypesExec()
+
+	facetsDir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets")
+	cases := []struct {
+		rel         string
+		expectValid bool // the suite's declared XSD 1.1 validity
+	}{
+		{"token/token_length001.xml", false},                         // length=4, value "foofo" (5)
+		{"token/token_length002.xml", true},                          // length=5, value "foofo" (5)
+		{"token/token_pattern001.xml", true},                         // [a-z]{3}, value "abc"
+		{"token/token_minLength001.xml", true},                       // minLength=4, value "foofo"
+		{"normalizedString/normalizedString_length001.xml", false},   // length=4, value "foofo"
+		{"normalizedString/normalizedString_minLength001.xml", true}, // minLength=4, value "foofo"
+		{"normalizedString/normalizedString_pattern001.xml", true},   // [a-z]{3}, value "abc"
+	}
+	for _, tc := range cases {
+		c := caseSpec{
+			kind:        kindInstance,
+			doc:         filepath.Join(facetsDir, filepath.FromSlash(tc.rel)),
+			expectValid: tc.expectValid,
+		}
+		if got := exec(c); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", tc.rel, tc.expectValid)
+		}
+	}
+
+	// A deliberately WRONG expectation must Fail: token_length001 ("foofo", 5) is
+	// invalid under length=4, so claiming it valid must not pass.
+	wrong := caseSpec{
+		kind:        kindInstance,
+		doc:         filepath.Join(facetsDir, "token", "token_length001.xml"),
+		expectValid: true,
+	}
+	if exec(wrong).IsPass() {
+		t.Errorf("executor must Fail when the declared expectation is wrong (token_length001 'foofo' is not length 4)")
 	}
 }
