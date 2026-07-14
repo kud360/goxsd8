@@ -2,8 +2,9 @@
 
 ## Dependency rule
 
-Packages form a strict DAG. `xsd` (the component model) and `xsderr` (the
-error currency) are **pure leaves**: they import nothing from this module.
+Packages form a strict DAG. `xsderr` (the error currency) is the **pure
+leaf**: it imports nothing from this module. `xsd` (the component model)
+imports only `xsderr`; every other package builds above the two of them.
 Value implementations, parsing, validation, and generation live above them.
 
 ```
@@ -176,7 +177,9 @@ flag** (PRINCIPLES 10):
   `err:FORX0002`, surfaced, never silently accepted.
 
 Character-class handling (`\d \w \p{…}`, subtraction `[a-z-[m]]`) is
-shared. The package is a pure leaf (stdlib only).
+shared. The package sits just above the leaves: it imports only `xsderr`
+(so its `FORX0001`/`FORX0002`/`src-pattern-value` failures are rule-tagged
+per STYLE T2), otherwise stdlib.
 
 ## XPath (`xpath`)
 

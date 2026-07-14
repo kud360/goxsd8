@@ -4,7 +4,9 @@
 // The F&O (XPath/XQuery Functions and Operators) regex grammar is a
 // superset of the XSD pattern-facet grammar, so a single recursive-
 // descent parser/translator core serves both; a flavor flag selects the
-// semantics (PRINCIPLES 10). The package is a pure leaf: stdlib only.
+// semantics (PRINCIPLES 10). The package sits just above the leaves: it
+// imports only xsderr (so its FORX0001/FORX0002/src-pattern-value failures
+// are rule-tagged per STYLE T2), otherwise stdlib.
 //
 // # Flavors
 //

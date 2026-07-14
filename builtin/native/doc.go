@@ -22,6 +22,7 @@
 // touch); use strict when verdict-grade fidelity matters. Mix per type
 // with value.Override.
 //
-// The package passes value/backendtest (with its declared deviations)
-// and implements value.Emitter for zero-allocation scalar decode paths.
+// The package is designed to pass value/backendtest (with its declared
+// deviations) and to implement value.Emitter for zero-allocation scalar
+// decode paths.
 package native
