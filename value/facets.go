@@ -34,6 +34,7 @@ var (
 	_ ValueFacet   = boundFacet{}
 	_ ValueFacet   = digitsFacet{}
 	_ ValueFacet   = lengthFacet{}
+	_ ValueFacet   = explicitTimezoneFacet{}
 )
 
 // ValidateLexical validates the lexical string rawLexical against st's effective
@@ -108,9 +109,9 @@ func ValidateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Conte
 // or an unmappable declaring type surfaces here as an *xsderr.Error.
 //
 // The whiteSpace facet is consumed by the normalize stage, not as a checker;
-// assertions and explicitTimezone are out of the atomic-facet scope this runner
-// covers (they never apply to decimal/boolean/string, cos-applicable-facets
-// §4.1.5) and are skipped.
+// explicitTimezone is a value facet handled here (cvc-explicitTimezone-valid,
+// §4.3.14.3). assertions remain out of this runner's scope — they are a separate
+// later stage, not an atomic value facet — and are skipped.
 func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error) {
 	var lexFacets []LexicalFacet
 	var valFacets []ValueFacet
@@ -148,9 +149,15 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 				return nil, nil, err
 			}
 			valFacets = append(valFacets, lf)
-		case xsd.FacetAssertions, xsd.FacetExplicitTimezone:
-			// Out of this runner's scope (never applicable to decimal/boolean/
-			// string; assertions are a separate later stage).
+		case xsd.FacetExplicitTimezone:
+			tf, err := newExplicitTimezoneFacet(ef.Facet())
+			if err != nil {
+				return nil, nil, err
+			}
+			valFacets = append(valFacets, tf)
+		case xsd.FacetAssertions:
+			// Out of this runner's scope: assertions are a separate later stage,
+			// not an atomic value facet.
 		}
 	}
 	return lexFacets, valFacets, nil
@@ -493,6 +500,74 @@ func lengthRule(k xsd.FacetKind) xsderr.Rule {
 	default:
 		panic(fmt.Sprintf("value: lengthRule: %s is not a length facet", k))
 	}
+}
+
+// tzRequirement is the explicitTimezone {value} domain — exactly the three
+// tokens required/prohibited/optional (§4.3.14.1), normalized from the facet's
+// single NCName {value} at construction so CheckValue never re-parses a string.
+type tzRequirement int
+
+const (
+	tzRequired tzRequirement = iota
+	tzProhibited
+	tzOptional
+)
+
+// explicitTimezoneFacet is the explicitTimezone value-facet stage
+// (cvc-explicitTimezone-valid, §4.3.14.3), applicable to the date/time family
+// only (cos-applicable-facets §4.1.5). Its {value} is one of required/prohibited/
+// optional (§4.3.14.1), resolved once at construction into a tzRequirement.
+type explicitTimezoneFacet struct {
+	requirement tzRequirement
+}
+
+// newExplicitTimezoneFacet reads the facet's single {value} token
+// (required/prohibited/optional) — a plain NCName from the facet's XML
+// representation (§4.3.14.2), not a value in the declaring type's space, so no
+// declaring-mapping lookup (the digitsFacet/lengthFacet shape). Any other shape
+// is a malformed facet, rejected here as an *xsderr.Error, not at check time.
+func newExplicitTimezoneFacet(f xsd.Facet) (explicitTimezoneFacet, error) {
+	values := f.Values()
+	if len(values) != 1 {
+		return explicitTimezoneFacet{}, xsderr.New("cvc-explicitTimezone-valid", xsderr.Loc{},
+			"explicitTimezone facet must carry exactly one value, has %d", len(values))
+	}
+	switch values[0] {
+	case "required":
+		return explicitTimezoneFacet{requirement: tzRequired}, nil
+	case "prohibited":
+		return explicitTimezoneFacet{requirement: tzProhibited}, nil
+	case "optional":
+		return explicitTimezoneFacet{requirement: tzOptional}, nil
+	}
+	return explicitTimezoneFacet{}, xsderr.New("cvc-explicitTimezone-valid", xsderr.Loc{},
+		"explicitTimezone facet value %q is not one of required/prohibited/optional (§4.3.14.1)", values[0])
+}
+
+// CheckValue enforces cvc-explicitTimezone-valid (§4.3.14.3): required demands a
+// non-absent ·timezoneOffset·, prohibited demands an absent one, optional always
+// passes (a real always-succeeding branch, not a dropped stage). The candidate
+// must be TimezoneAware for the required/prohibited cases; a non-TimezoneAware
+// value under an explicitTimezone facet is a schema-construction error (the facet
+// is not applicable to it, cos-applicable-facets §4.1.5), never instance data, so
+// it PANICS rather than returning a validity verdict — the boundFacet convention.
+func (tf explicitTimezoneFacet) CheckValue(v Value) error {
+	if tf.requirement == tzOptional {
+		return nil
+	}
+	ta, ok := v.(TimezoneAware)
+	if !ok {
+		panic(fmt.Sprintf("value: candidate %T under an explicitTimezone facet is not TimezoneAware (cos-applicable-facets §4.1.5 not enforced upstream)", v))
+	}
+	if tf.requirement == tzRequired && !ta.HasTimezone() {
+		return xsderr.New("cvc-explicitTimezone-valid", xsderr.Loc{},
+			"value has no explicit timezone but the explicitTimezone facet is required (cvc-explicitTimezone-valid, §4.3.14.3)")
+	}
+	if tf.requirement == tzProhibited && ta.HasTimezone() {
+		return xsderr.New("cvc-explicitTimezone-valid", xsderr.Loc{},
+			"value has an explicit timezone but the explicitTimezone facet prohibits one (cvc-explicitTimezone-valid, §4.3.14.3)")
+	}
+	return nil
 }
 
 // facetCount parses a single-valued facet's plain xs:nonNegativeInteger {value}

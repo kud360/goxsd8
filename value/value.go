@@ -90,7 +90,7 @@ type Scaled interface {
 }
 
 // TimezoneAware is a date/time-family value the explicitTimezone facet
-// constrains (Datatypes §4.3.15).
+// constrains (Datatypes §4.3.14).
 type TimezoneAware interface {
 	// HasTimezone reports whether the value carries an explicit timezone.
 	HasTimezone() bool

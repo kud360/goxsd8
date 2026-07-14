@@ -156,7 +156,7 @@ func TestDateTimeOrderAndEqIdentical(t *testing.T) {
 }
 
 // TestDateTimeHasTimezone pins value.TimezoneAware (the explicitTimezone facet,
-// §4.3.15, reads it): a value with a timezoneFrag reports HasTimezone true; one
+// §4.3.14, reads it): a value with a timezoneFrag reports HasTimezone true; one
 // without reports false. Both the Z spelling and an offset carry a timezone.
 func TestDateTimeHasTimezone(t *testing.T) {
 	m := mappingFor(t, "dateTime")

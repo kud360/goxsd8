@@ -166,7 +166,7 @@ func requiredCapability(facet string) (capability, bool) {
 		return capScaled, true
 	case "enumeration": // §4.3.5, cvc-enumeration-valid — "equal or identical"
 		return capEq, true
-	case "explicitTimezone": // §4.3.15, cvc-explicitTimezone-valid — reads HasTimezone
+	case "explicitTimezone": // §4.3.14, cvc-explicitTimezone-valid — reads HasTimezone
 		return capTimezoneAware, true
 	case "whiteSpace", "pattern", "assertions": // pre-lexical / lexical / assertion stages
 		return capNone, true

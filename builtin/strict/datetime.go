@@ -348,7 +348,7 @@ func flipOrdering(o value.Ordering) value.Ordering {
 }
 
 // HasTimezone reports whether the value carries an explicit ·timezoneOffset·
-// (value.TimezoneAware; the explicitTimezone facet, §4.3.15, reads it).
+// (value.TimezoneAware; the explicitTimezone facet, §4.3.14, reads it).
 func (d dateTimeVal) HasTimezone() bool {
 	return d.tzOffset != nil
 }
