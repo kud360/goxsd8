@@ -26,21 +26,30 @@ const (
 	// attach to *xsderr.Error values, so they belong in the catalog alongside
 	// the schema-side cvc-/cos-/src-/sic- families.
 	foErrCodeRegex = `\berr:[A-Z]{4}[0-9]{4}\b`
+	// propsCorrectRegex matches the "<X>-props-correct" Schema Component
+	// Constraint family (xmlschema11-1.md), whose anchors all share the
+	// identical "<a id="X-props-correct"></a>**Schema Component Constraint: ...**"
+	// form but do NOT use the cvc-/cos-/src-/sic- prefix convention. This is a
+	// pattern rather than a hand-listed literal (as the rest of irregularRules
+	// is) precisely because the family is open-ended: the spec already defines
+	// 16 members (prefixes a, ag, an, as, au, c, ct, e, mg, mgd, n, p, sch, st,
+	// ta, w), and a future xsd component leaf citing a fresh "-props-correct"
+	// rule must land in the catalog without a hand-edit here + regenerate. The
+	// prefix is bounded to 1–3 lowercase letters (longest existing is "mgd") so
+	// the pattern cannot over-match unrelated "-props-correct"-suffixed noise.
+	propsCorrectRegex = `\b[a-z]{1,3}-props-correct\b`
 )
 
 // irregularRules are genuine "Schema Component Constraint:"-labeled rule IDs
-// whose anchors do not follow the cvc-/cos-/src-/sic- prefix convention. They
-// are matched as whole words, so they only enter the catalog when they actually
-// appear in the specs. doc.go's own contract cites derivation-ok-restriction as
-// a valid Rule; see .agent/grounding-issue-3.md for the exhaustive list.
+// whose anchors do not follow the cvc-/cos-/src-/sic- prefix convention and are
+// not part of a recognizable open-ended family. They are matched as whole
+// words, so they only enter the catalog when they actually appear in the specs.
+// doc.go's own contract cites derivation-ok-restriction as a valid Rule; see
+// .agent/grounding-issue-3.md for the exhaustive list. The "-props-correct"
+// family is deliberately NOT listed here — it is a pattern (propsCorrectRegex)
+// so new family members are caught automatically without a hand-edit.
 var irregularRules = []string{
 	"derivation-ok-restriction",
-	"sch-props-correct",
-	"p-props-correct",
-	"n-props-correct",
-	"an-props-correct",
-	"st-props-correct",
-	"w-props-correct",
 	"length-valid-restriction",
 	"enumeration-valid-restriction",
 	"timezone-valid-restriction",
@@ -131,7 +140,7 @@ func moduleRoot() (string, error) {
 // buildRuleRegex combines the canonical prefix families with whole-word
 // alternations for each irregular literal rule ID.
 func buildRuleRegex() string {
-	parts := []string{rulePrefixRegex, foErrCodeRegex}
+	parts := []string{rulePrefixRegex, foErrCodeRegex, propsCorrectRegex}
 	for _, id := range irregularRules {
 		parts = append(parts, `\b`+regexp.QuoteMeta(id)+`\b`)
 	}
