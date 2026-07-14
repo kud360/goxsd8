@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"regexp"
 	"strconv"
 	"strings"
@@ -641,6 +642,237 @@ func binaryInvalids(re *regexp.Regexp, candidates []string) []string {
 		out = append(out, c)
 	}
 	return out
+}
+
+// parseDuration derives the duration vectors from the Datatypes spec (§3.3.6):
+// the lexical space is exactly the combined regular expression nt-durationRep
+// gives (extracted verbatim, legibility whitespace removed as the spec
+// instructs), so a spec edit that moved it would drop a now-mismatched sample
+// rather than mislabel it. Like string (§3.3.1.2) the space is unbounded, so the
+// valid sample is a deterministic representative set — a year, a year+month, a
+// month, the zero duration, a day, a minute, an hour value that normalizes into
+// days, a seconds value that normalizes into minutes, an all-fields value, a
+// fractional-seconds value, and a negative — each canonicalised by
+// durationCanonicalOf, an INDEPENDENT oracle implementing durationCanonicalMap
+// (f-durationCanMap, §E.2), never an echo of the backend. Invalid near-misses (a
+// missing 'P', bare "P"/"PT", an out-of-place 'S', and a sign inside a field) are
+// kept only if the extracted regex rejects them.
+func parseDuration(spec string) (typeVectors, error) {
+	re, err := durationLexicalRegex(spec)
+	if err != nil {
+		return typeVectors{}, err
+	}
+
+	sample := []string{
+		"P1Y", "P1Y2M", "P1M", "P0M", "P1D", "PT1M",
+		"PT36H", "PT60S", "P1DT2H3M4S", "PT1.5S", "-P1Y2M3DT4H5M6S",
+	}
+	valid := make([]roundtrip, 0, len(sample))
+	for _, lex := range sample {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("duration: sample lexical %q does not match its own production regex", lex)
+		}
+		canon, err := durationCanonicalOf(lex)
+		if err != nil {
+			return typeVectors{}, fmt.Errorf("duration: canonical of %q: %w", lex, err)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: canon})
+	}
+
+	return typeVectors{
+		Local:   "duration",
+		Valid:   valid,
+		Invalid: binaryInvalids(re, []string{"P", "PT", "P1S", "1Y", "PT1D", "PY"}),
+	}, nil
+}
+
+// durationLexicalRegex extracts duration's combined lexical-space regular
+// expression (nt-durationRep, §3.3.6.2) from the fenced block the spec gives as
+// "equivalent to the following (after removal of the white space inserted here
+// for legibility)" and returns it anchored (^…$) with that legibility whitespace
+// removed exactly as the spec instructs.
+func durationLexicalRegex(spec string) (*regexp.Regexp, error) {
+	i := strings.Index(spec, "equivalent to the following")
+	if i == -1 {
+		return nil, fmt.Errorf("duration: combined lexical regex marker not found")
+	}
+	rest := spec[i:]
+	open := strings.Index(rest, "```")
+	if open == -1 {
+		return nil, fmt.Errorf("duration: opening code fence not found")
+	}
+	rest = rest[open+len("```"):]
+	end := strings.Index(rest, "```")
+	if end == -1 {
+		return nil, fmt.Errorf("duration: closing code fence not found")
+	}
+	expr := strings.Join(strings.FieldsFunc(rest[:end], func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+	}), "")
+	re, err := regexp.Compile("^(?:" + expr + ")$")
+	if err != nil {
+		return nil, fmt.Errorf("duration: compiling extracted lexical regex %q: %w", expr, err)
+	}
+	return re, nil
+}
+
+// durationFieldRE extracts the six numeric fragments of a durationLexicalRep in
+// order (year, month, day, then post-'T' hour, minute, second). Applied only to
+// a lexical the combined regex already accepted, so its all-optional shape is
+// safe. It mirrors builtin/strict's durationFields; the generator cannot import
+// the private backend, so it carries its own copy (the same discipline the
+// float/hexBinary oracles use).
+var durationFieldRE = regexp.MustCompile(`^(-)?P(?:([0-9]+)Y)?(?:([0-9]+)M)?(?:([0-9]+)D)?(?:T(?:([0-9]+)H)?(?:([0-9]+)M)?(?:([0-9]+(?:\.[0-9]+)?)S)?)?$`)
+
+// durationCanonicalOf computes the canonical form of a duration lexical, the
+// independent oracle the vectors pin: durationMap (f-durationMap) into the
+// (months, seconds) tuple, then durationCanonicalMap (f-durationCanMap) back to
+// a lexical.
+func durationCanonicalOf(lex string) (string, error) {
+	neg, months, seconds, err := durationValueOf(lex)
+	if err != nil {
+		return "", err
+	}
+	sgn := ""
+	if neg {
+		sgn = "-"
+	}
+	monthsZero := months.Sign() == 0
+	secondsZero := seconds.Sign() == 0
+	switch {
+	case !monthsZero && !secondsZero:
+		return sgn + "P" + duYearMonthCanon(months) + duDayTimeCanon(seconds), nil
+	case !monthsZero:
+		return sgn + "P" + duYearMonthCanon(months), nil
+	default:
+		return sgn + "P" + duDayTimeCanon(seconds), nil
+	}
+}
+
+// durationValueOf maps a duration lexical to its (negative, months, seconds)
+// value tuple (durationMap, f-durationMap): the two halves are computed
+// independently and the single leading '-' negates both together; the zero
+// duration is signless.
+func durationValueOf(lex string) (bool, *big.Int, *big.Rat, error) {
+	f := durationFieldRE.FindStringSubmatch(lex)
+	if f == nil {
+		return false, nil, nil, fmt.Errorf("%q does not parse into duration fields", lex)
+	}
+	neg := f[1] == "-"
+	months := new(big.Int)
+	addDurMonths(months, f[2], 12)
+	addDurMonths(months, f[3], 1)
+	seconds := new(big.Rat)
+	addDurSeconds(seconds, f[4], 86400)
+	addDurSeconds(seconds, f[5], 3600)
+	addDurSeconds(seconds, f[6], 60)
+	if f[7] != "" {
+		s, ok := new(big.Rat).SetString(f[7])
+		if !ok {
+			return false, nil, nil, fmt.Errorf("bad second numeral %q", f[7])
+		}
+		seconds.Add(seconds, s)
+	}
+	if months.Sign() == 0 && seconds.Sign() == 0 {
+		neg = false
+	}
+	return neg, months, seconds, nil
+}
+
+func addDurMonths(acc *big.Int, field string, weight int64) {
+	if field == "" {
+		return
+	}
+	n, _ := new(big.Int).SetString(field, 10)
+	acc.Add(acc, n.Mul(n, big.NewInt(weight)))
+}
+
+func addDurSeconds(acc *big.Rat, field string, weight int64) {
+	if field == "" {
+		return
+	}
+	n, _ := new(big.Int).SetString(field, 10)
+	term := new(big.Rat).SetInt(n)
+	acc.Add(acc, term.Mul(term, new(big.Rat).SetInt64(weight)))
+}
+
+// duYearMonthCanon implements duYearMonthCanonicalFragmentMap (f-duYMCan) for a
+// nonzero months magnitude.
+func duYearMonthCanon(months *big.Int) string {
+	y, m := new(big.Int), new(big.Int)
+	y.DivMod(months, big.NewInt(12), m)
+	switch {
+	case y.Sign() != 0 && m.Sign() != 0:
+		return y.String() + "Y" + m.String() + "M"
+	case y.Sign() != 0:
+		return y.String() + "Y"
+	default:
+		return m.String() + "M"
+	}
+}
+
+// duDayTimeCanon implements duDayTimeCanonicalFragmentMap (f-duDTCan): "T0S" for
+// a zero magnitude, else days plus the time fragment.
+func duDayTimeCanon(seconds *big.Rat) string {
+	if seconds.Sign() == 0 {
+		return "T0S"
+	}
+	day, rem := durRatDivMod(seconds, 86400)
+	hour, rem := durRatDivMod(rem, 3600)
+	minute, second := durRatDivMod(rem, 60)
+	dayFrag := ""
+	if day.Sign() != 0 {
+		dayFrag = day.String() + "D"
+	}
+	return dayFrag + duTimeCanon(hour, minute, second)
+}
+
+// duTimeCanon implements duTimeCanonicalFragmentMap (f-duTCan): 'T' then each
+// nonzero component, or "" when all three are zero.
+func duTimeCanon(hour, minute *big.Int, second *big.Rat) string {
+	if hour.Sign() == 0 && minute.Sign() == 0 && second.Sign() == 0 {
+		return ""
+	}
+	out := "T"
+	if hour.Sign() != 0 {
+		out += hour.String() + "H"
+	}
+	if minute.Sign() != 0 {
+		out += minute.String() + "M"
+	}
+	if second.Sign() != 0 {
+		out += duSecondCanon(second) + "S"
+	}
+	return out
+}
+
+// duSecondCanon implements duSecondCanonicalFragmentMap (f-duSCan) without the
+// trailing 'S': a bare integer or a terminating decimal.
+func duSecondCanon(second *big.Rat) string {
+	if second.IsInt() {
+		return second.Num().String()
+	}
+	num, den := new(big.Int).Set(second.Num()), second.Denom()
+	intPart, rem := new(big.Int), new(big.Int)
+	intPart.QuoRem(num, den, rem)
+	var frac []byte
+	for rem.Sign() != 0 {
+		rem.Mul(rem, big.NewInt(10))
+		digit, mod := new(big.Int), new(big.Int)
+		digit.QuoRem(rem, den, mod)
+		frac = append(frac, byte('0'+digit.Int64()))
+		rem = mod
+	}
+	return intPart.String() + "." + string(frac)
+}
+
+// durRatDivMod splits a nonnegative rational r as q·w + rem with q integer and
+// 0 ≤ rem < w (the spec's ·div·/·mod· on decimals).
+func durRatDivMod(r *big.Rat, w int64) (*big.Int, *big.Rat) {
+	weight := big.NewInt(w)
+	q := new(big.Int).Quo(r.Num(), new(big.Int).Mul(r.Denom(), weight))
+	rem := new(big.Rat).Sub(r, new(big.Rat).SetInt(new(big.Int).Mul(q, weight)))
+	return q, rem
 }
 
 // literalsIn returns every '`X`' literal in text, in order.

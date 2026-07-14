@@ -16,8 +16,10 @@
 //     hour, minute, second, timezoneOffset), NOT time.Time: proleptic
 //     calendar math, optional timezone, partial order across
 //     timezone-less and timezone-aware values.
-//   - duration — six-component model with the four-reference-dateTime
-//     partial order.
+//   - duration — the (·months·, ·seconds·) two-property model (§3.3.6.1),
+//     an integer month count and an arbitrary-precision decimal second
+//     count sharing one sign, with the four-reference-dateTime partial
+//     order.
 //   - float/double — XSD-exact semantics (signed zeros, INF, NaN
 //     identity for enumeration).
 //   - string family, anyURI, QName/NOTATION (context-resolved),
@@ -30,10 +32,10 @@
 // # Current coverage
 //
 // [New] returns a backend covering the primitive cohort so far — xs:decimal,
-// xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary and
-// xs:base64Binary — with spec-exact
+// xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary,
+// xs:base64Binary and xs:duration — with spec-exact
 // parse, canonical and comparison. The remaining representations above
-// (precisionDecimal, the date/time family, duration, the rest of the string
+// (precisionDecimal, the date/time family, the rest of the string
 // family, QName/NOTATION) and the
 // value.Emitter fast path remain future milestones. The cohort is certified
 // by value/backendtest.Run: each type's value carries exactly the capability

@@ -8,7 +8,7 @@ import "github.com/kud360/goxsd8/xsd"
 // drives every value.Backend through (PRINCIPLES 26). Each row is one
 // builtin type's lexical/canonical vectors plus its applicable constraining
 // facets in spec order (cos-applicable-facets). The cohort covers boolean,
-// decimal, string, float, double, hexBinary and base64Binary.
+// decimal, string, float, double, hexBinary, base64Binary and duration.
 var vectors = []typeVectors{
 	{
 		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"},
@@ -200,6 +200,40 @@ var vectors = []typeVectors{
 			"maxLength",
 			"pattern",
 			"enumeration",
+			"assertions",
+		},
+	},
+	{
+		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "duration"},
+		valid: []roundtrip{
+			{lexical: "P1Y", canonical: "P1Y"},
+			{lexical: "P1Y2M", canonical: "P1Y2M"},
+			{lexical: "P1M", canonical: "P1M"},
+			{lexical: "P0M", canonical: "PT0S"},
+			{lexical: "P1D", canonical: "P1D"},
+			{lexical: "PT1M", canonical: "PT1M"},
+			{lexical: "PT36H", canonical: "P1DT12H"},
+			{lexical: "PT60S", canonical: "PT1M"},
+			{lexical: "P1DT2H3M4S", canonical: "P1DT2H3M4S"},
+			{lexical: "PT1.5S", canonical: "PT1.5S"},
+			{lexical: "-P1Y2M3DT4H5M6S", canonical: "-P1Y2M3DT4H5M6S"},
+		},
+		invalid: []string{
+			"P",
+			"PT",
+			"P1S",
+			"1Y",
+			"PT1D",
+			"PY",
+		},
+		applicableFacets: []string{
+			"whiteSpace",
+			"pattern",
+			"enumeration",
+			"maxInclusive",
+			"maxExclusive",
+			"minInclusive",
+			"minExclusive",
 			"assertions",
 		},
 	},
