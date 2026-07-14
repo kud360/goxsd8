@@ -22,13 +22,16 @@ func base64BinaryQName() xsd.QName {
 func durationQName() xsd.QName {
 	return xsd.QName{Space: xsd.XMLSchemaNS, Local: "duration"}
 }
+func dateTimeQName() xsd.QName {
+	return xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTime"}
+}
 
 // othersAbsent declares the cohort types other than boolean absent, so the
 // boolean-only test backends below are checked purely on boolean without Run
 // reporting the (intentionally) unmapped
-// decimal/string/float/double/hexBinary/base64Binary/duration vectors.
+// decimal/string/float/double/hexBinary/base64Binary/duration/dateTime vectors.
 func othersAbsent() []Option {
-	return []Option{Absent(decimalQName(), stringQName(), floatQName(), doubleQName(), hexBinaryQName(), base64BinaryQName(), durationQName())}
+	return []Option{Absent(decimalQName(), stringQName(), floatQName(), doubleQName(), hexBinaryQName(), base64BinaryQName(), durationQName(), dateTimeQName())}
 }
 
 // mapBackend is a test value.Backend over an explicit table.
@@ -107,7 +110,7 @@ func TestRunAbsentSkipsUnmapped(t *testing.T) {
 	}
 
 	var r2 recordT
-	run(&r2, empty, []Option{Absent(booleanQName(), decimalQName(), stringQName(), floatQName(), doubleQName(), hexBinaryQName(), base64BinaryQName(), durationQName())})
+	run(&r2, empty, []Option{Absent(booleanQName(), decimalQName(), stringQName(), floatQName(), doubleQName(), hexBinaryQName(), base64BinaryQName(), durationQName(), dateTimeQName())})
 	if r2.errs != 0 {
 		t.Fatalf("Absent(all cohort): run reported %d failures, want 0", r2.errs)
 	}
@@ -133,18 +136,19 @@ func TestRequiredCapabilityClassification(t *testing.T) {
 		cap capability
 		ok  bool
 	}{
-		"minInclusive":   {capOrdered, true},
-		"maxExclusive":   {capOrdered, true},
-		"totalDigits":    {capDigitCounted, true},
-		"fractionDigits": {capDigitCounted, true},
-		"length":         {capLengthed, true},
-		"maxLength":      {capLengthed, true},
-		"maxScale":       {capScaled, true},
-		"enumeration":    {capEq, true},
-		"whiteSpace":     {capNone, true},
-		"pattern":        {capNone, true},
-		"assertions":     {capNone, true},
-		"bogusFacet":     {capNone, false},
+		"minInclusive":     {capOrdered, true},
+		"maxExclusive":     {capOrdered, true},
+		"totalDigits":      {capDigitCounted, true},
+		"fractionDigits":   {capDigitCounted, true},
+		"length":           {capLengthed, true},
+		"maxLength":        {capLengthed, true},
+		"maxScale":         {capScaled, true},
+		"enumeration":      {capEq, true},
+		"explicitTimezone": {capTimezoneAware, true},
+		"whiteSpace":       {capNone, true},
+		"pattern":          {capNone, true},
+		"assertions":       {capNone, true},
+		"bogusFacet":       {capNone, false},
 	}
 	for facet, want := range cases {
 		gotCap, gotOK := requiredCapability(facet)

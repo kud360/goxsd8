@@ -7,9 +7,9 @@ import (
 
 // New returns the spec-exact value.Backend for the primitive cohort so far:
 // xs:decimal, xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary,
-// xs:base64Binary and xs:duration. Each type's value
+// xs:base64Binary, xs:duration and xs:dateTime. Each type's value
 // space is represented with full fidelity to the Datatypes spec (§3.3.3,
-// §3.3.2, §3.3.1, §3.3.17, §3.3.4, §3.3.5, §3.3.15, §3.3.16, §3.3.6); a [value.Mapping.Parse]
+// §3.3.2, §3.3.1, §3.3.17, §3.3.4, §3.3.5, §3.3.15, §3.3.16, §3.3.6, §3.3.7); a [value.Mapping.Parse]
 // rejects any lexical
 // outside the type's lexical space as an *xsderr.Error with rule
 // "cvc-datatype-valid" (§4.1.4), never a false validity verdict.
@@ -47,6 +47,16 @@ import (
 //     ·seconds·) tuple) and [value.Canonical]. Deliberately NOT [value.Lengthed]/
 //     [value.DigitCounted]/[value.Scaled]/[value.TimezoneAware]: no
 //     duration-applicable facet needs them (cos-applicable-facets §4.1.5).
+//   - xs:dateTime — the seven-property temporal model (§3.3.7.1/§D.2.1).
+//     [value.Ordered] (PARTIAL order, §D.2.1: instants compare over
+//     ·timeOnTimeline·, but a timezone-less value is Incomparable to a
+//     timezone-aware one whose ±14h-imputed instants straddle it),
+//     [value.Eq] and [value.Identical] (which genuinely diverge: a
+//     timezone-shifted pair denoting the same instant is Eq but not Identical,
+//     since Identical compares the stored ·timezoneOffset· exactly),
+//     [value.Canonical] and [value.TimezoneAware] (the explicitTimezone facet,
+//     §4.3.15, reads HasTimezone). Deliberately NOT [value.Lengthed]/
+//     [value.DigitCounted]/[value.Scaled].
 func New() value.Backend { return backend{} }
 
 // backend is the spec-exact primitive-cohort mapping. It carries no state: the
@@ -80,6 +90,8 @@ func (backend) Mapping(typ xsd.QName) (value.Mapping, bool) {
 		return value.Mapping{Parse: parseBase64Binary, Canonical: canonicalBase64Binary}, true
 	case "duration":
 		return value.Mapping{Parse: parseDuration, Canonical: canonicalDuration}, true
+	case "dateTime":
+		return value.Mapping{Parse: parseDateTime, Canonical: canonicalDateTime}, true
 	}
 	return value.Mapping{}, false
 }

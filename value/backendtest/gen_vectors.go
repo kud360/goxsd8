@@ -8,7 +8,8 @@ import "github.com/kud360/goxsd8/xsd"
 // drives every value.Backend through (PRINCIPLES 26). Each row is one
 // builtin type's lexical/canonical vectors plus its applicable constraining
 // facets in spec order (cos-applicable-facets). The cohort covers boolean,
-// decimal, string, float, double, hexBinary, base64Binary and duration.
+// decimal, string, float, double, hexBinary, base64Binary, duration and
+// dateTime.
 var vectors = []typeVectors{
 	{
 		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "boolean"},
@@ -228,6 +229,41 @@ var vectors = []typeVectors{
 		},
 		applicableFacets: []string{
 			"whiteSpace",
+			"pattern",
+			"enumeration",
+			"maxInclusive",
+			"maxExclusive",
+			"minInclusive",
+			"minExclusive",
+			"assertions",
+		},
+	},
+	{
+		typ: xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTime"},
+		valid: []roundtrip{
+			{lexical: "2001-10-26T21:32:52", canonical: "2001-10-26T21:32:52"},
+			{lexical: "2001-10-26T21:32:52.125", canonical: "2001-10-26T21:32:52.125"},
+			{lexical: "2001-10-26T21:32:52+02:00", canonical: "2001-10-26T21:32:52+02:00"},
+			{lexical: "2001-10-26T19:32:52Z", canonical: "2001-10-26T19:32:52Z"},
+			{lexical: "2001-10-26T21:32:52-05:00", canonical: "2001-10-26T21:32:52-05:00"},
+			{lexical: "2024-02-29T00:00:00", canonical: "2024-02-29T00:00:00"},
+			{lexical: "2023-01-01T24:00:00", canonical: "2023-01-02T00:00:00"},
+			{lexical: "-0045-03-15T00:00:00Z", canonical: "-0045-03-15T00:00:00Z"},
+			{lexical: "0001-01-01T00:00:00", canonical: "0001-01-01T00:00:00"},
+		},
+		invalid: []string{
+			"2023-13-01T00:00:00",
+			"2023-02-30T00:00:00",
+			"2023-02-29T00:00:00",
+			"2023-01-01T25:00:00",
+			"2023-01-01T00:60:00",
+			"2023-01-0100:00:00",
+			"2023-01-01T00:00:00+15:00",
+			"2023-1-01T00:00:00",
+		},
+		applicableFacets: []string{
+			"whiteSpace",
+			"explicitTimezone",
 			"pattern",
 			"enumeration",
 			"maxInclusive",
