@@ -53,6 +53,17 @@ MS-DataTypes2006-07-15/byte_pattern001_1682/instance/byte_pattern001_1682.v pass
 MS-DataTypes2006-07-15/byte_totalDigits001_1703/instance/byte_totalDigits001_1703.i pass
 MS-DataTypes2006-07-15/byte_totalDigits002_1704/instance/byte_totalDigits002_1704.v pass
 MS-DataTypes2006-07-15/byte_totalDigits003_1705/instance/byte_totalDigits003_1705.v pass
+MS-DataTypes2006-07-15/dateTime001_1999/instance/dateTime001_1999.i pass
+MS-DataTypes2006-07-15/dateTime002_2000/instance/dateTime002_2000.v pass
+MS-DataTypes2006-07-15/dateTime003_2001/instance/dateTime003_2001.v pass
+MS-DataTypes2006-07-15/dateTime004_2002/instance/dateTime004_2002.i pass
+MS-DataTypes2006-07-15/dateTime005_2003/instance/dateTime005_2003.v pass
+MS-DataTypes2006-07-15/dateTime006_2004/instance/dateTime006_2004.v pass
+MS-DataTypes2006-07-15/dateTime007_2005/instance/dateTime007_2005.v pass
+MS-DataTypes2006-07-15/dateTime008_2006/instance/dateTime008_2006.v pass
+MS-DataTypes2006-07-15/dateTime010_2007/instance/dateTime010_2007.v pass
+MS-DataTypes2006-07-15/dateTime011_2008/instance/dateTime011_2008.i pass
+MS-DataTypes2006-07-15/dateTime013_2009/instance/dateTime013_2009.i fail
 MS-DataTypes2006-07-15/decimal001_1875/instance/decimal001_1875.i pass
 MS-DataTypes2006-07-15/decimal002_1876/instance/decimal002_1876.v pass
 MS-DataTypes2006-07-15/decimal003_1877/instance/decimal003_1877.v pass
