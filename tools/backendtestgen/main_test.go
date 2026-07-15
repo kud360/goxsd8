@@ -318,6 +318,135 @@ func TestDateTimeVectors(t *testing.T) {
 	}
 }
 
+// checkVectors is the shared body of the per-type vector pin tests: it asserts
+// the parser produced exactly wantValid/wantInvalid in order.
+func checkVectors(t *testing.T, local string, got typeVectors, wantValid []roundtrip, wantInvalid []string) {
+	t.Helper()
+	if len(got.Valid) != len(wantValid) {
+		t.Fatalf("%s valid: got %v, want %v", local, got.Valid, wantValid)
+	}
+	for i, w := range wantValid {
+		if got.Valid[i] != w {
+			t.Errorf("%s valid[%d]: got %v, want %v", local, i, got.Valid[i], w)
+		}
+	}
+	if len(got.Invalid) != len(wantInvalid) {
+		t.Fatalf("%s invalid: got %q, want %q", local, got.Invalid, wantInvalid)
+	}
+	for i, w := range wantInvalid {
+		if got.Invalid[i] != w {
+			t.Errorf("%s invalid[%d]: got %q, want %q", local, i, got.Invalid[i], w)
+		}
+	}
+}
+
+// TestTimeVectors pins the spec-derived time corpus (§3.3.8.2, nt-timeRep;
+// vp-timeLexRep/vp-timeCanRep): the timezone spellings, fractional seconds and
+// the endOfDayFrag "24:00:00" that maps to midnight (no day carry).
+func TestTimeVectors(t *testing.T) {
+	tv, err := parseTime(readSpec(t))
+	if err != nil {
+		t.Fatalf("parseTime: %v", err)
+	}
+	checkVectors(t, "time", tv,
+		[]roundtrip{
+			{"13:20:00", "13:20:00"}, {"13:20:00.125", "13:20:00.125"},
+			{"13:20:00Z", "13:20:00Z"}, {"13:20:00+02:00", "13:20:00+02:00"},
+			{"13:20:00-05:00", "13:20:00-05:00"}, {"24:00:00", "00:00:00"},
+		},
+		[]string{"13:20", "25:00:00", "13:60:00", "1:20:00", "13:20:00+15:00", ""})
+}
+
+// TestDateVectors pins the date corpus (§3.3.9.2, nt-dateRep) including the
+// oracle-verified year-dependent day violation (non-leap 2023-02-29).
+func TestDateVectors(t *testing.T) {
+	tv, err := parseDate(readSpec(t))
+	if err != nil {
+		t.Fatalf("parseDate: %v", err)
+	}
+	checkVectors(t, "date", tv,
+		[]roundtrip{
+			{"2002-10-10", "2002-10-10"}, {"2002-10-10Z", "2002-10-10Z"},
+			{"2002-10-10+02:00", "2002-10-10+02:00"}, {"2002-10-10-05:00", "2002-10-10-05:00"},
+			{"2024-02-29", "2024-02-29"}, {"-0045-03-15", "-0045-03-15"}, {"0001-01-01", "0001-01-01"},
+		},
+		[]string{"2002-13-01", "2002-10-32", "2023-02-29", "2023-02-30", "2002-10-10T00:00:00", "2002-1-01"})
+}
+
+// TestGYearMonthVectors pins the gYearMonth corpus (§3.3.10.2, nt-gYearMonthRep).
+func TestGYearMonthVectors(t *testing.T) {
+	tv, err := parseGYearMonth(readSpec(t))
+	if err != nil {
+		t.Fatalf("parseGYearMonth: %v", err)
+	}
+	checkVectors(t, "gYearMonth", tv,
+		[]roundtrip{
+			{"2002-10", "2002-10"}, {"2002-10Z", "2002-10Z"}, {"2002-10+02:00", "2002-10+02:00"},
+			{"2002-10-05:00", "2002-10-05:00"}, {"-0045-03", "-0045-03"}, {"0001-01", "0001-01"},
+		},
+		[]string{"2002", "2002-13", "2002-10-10", "2002-1", ""})
+}
+
+// TestGYearVectors pins the gYear corpus (§3.3.11.2, nt-gYearRep): gYear permits
+// a timezone (§3.3.11.1).
+func TestGYearVectors(t *testing.T) {
+	tv, err := parseGYear(readSpec(t))
+	if err != nil {
+		t.Fatalf("parseGYear: %v", err)
+	}
+	checkVectors(t, "gYear", tv,
+		[]roundtrip{
+			{"2002", "2002"}, {"2002Z", "2002Z"}, {"2002+02:00", "2002+02:00"},
+			{"2002-05:00", "2002-05:00"}, {"-0045", "-0045"}, {"12345", "12345"},
+		},
+		[]string{"999", "2002-10", "02002", ""})
+}
+
+// TestGMonthDayVectors pins the gMonthDay corpus (§3.3.12.2, nt-gMonthDayRep):
+// the unconditional leap-day --02-29 and the oracle-verified year-free day
+// violations (--02-30, --04-31).
+func TestGMonthDayVectors(t *testing.T) {
+	tv, err := parseGMonthDay(readSpec(t))
+	if err != nil {
+		t.Fatalf("parseGMonthDay: %v", err)
+	}
+	checkVectors(t, "gMonthDay", tv,
+		[]roundtrip{
+			{"--10-10", "--10-10"}, {"--02-29", "--02-29"}, {"--12-31", "--12-31"},
+			{"--01-01Z", "--01-01Z"}, {"--12-12+13:00", "--12-12+13:00"}, {"--12-12-05:00", "--12-12-05:00"},
+		},
+		[]string{"--13-01", "--02-30", "--04-31", "--10-10-", "10-10", "--1-01"})
+}
+
+// TestGDayVectors pins the gDay corpus (§3.3.13.2, nt-gDayRep): day 31 valid, no
+// day-of-month representation constraint.
+func TestGDayVectors(t *testing.T) {
+	tv, err := parseGDay(readSpec(t))
+	if err != nil {
+		t.Fatalf("parseGDay: %v", err)
+	}
+	checkVectors(t, "gDay", tv,
+		[]roundtrip{
+			{"---15", "---15"}, {"---31", "---31"}, {"---15Z", "---15Z"},
+			{"---15-13:00", "---15-13:00"}, {"---16+13:00", "---16+13:00"}, {"---01", "---01"},
+		},
+		[]string{"---00", "---32", "--15", "15", "---1", ""})
+}
+
+// TestGMonthVectors pins the gMonth corpus (§3.3.14.2, nt-gMonthRep).
+func TestGMonthVectors(t *testing.T) {
+	tv, err := parseGMonth(readSpec(t))
+	if err != nil {
+		t.Fatalf("parseGMonth: %v", err)
+	}
+	checkVectors(t, "gMonth", tv,
+		[]roundtrip{
+			{"--10", "--10"}, {"--01", "--01"}, {"--12", "--12"},
+			{"--05Z", "--05Z"}, {"--11+13:00", "--11+13:00"}, {"--10-05:00", "--10-05:00"},
+		},
+		[]string{"--13", "--00", "10", "--10-10", "--1", ""})
+}
+
 // TestApplicableFacets pins that each cohort type carries its cos-applicable-facets
 // list in spec order (§4.1.5), sourced from the shared builtin spec parser.
 func TestApplicableFacets(t *testing.T) {
@@ -335,6 +464,13 @@ func TestApplicableFacets(t *testing.T) {
 		"base64Binary": {"whiteSpace", "length", "minLength", "maxLength", "pattern", "enumeration", "assertions"},
 		"duration":     {"whiteSpace", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
 		"dateTime":     {"whiteSpace", "explicitTimezone", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"time":         {"whiteSpace", "explicitTimezone", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"date":         {"whiteSpace", "explicitTimezone", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"gYearMonth":   {"whiteSpace", "explicitTimezone", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"gYear":        {"whiteSpace", "explicitTimezone", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"gMonthDay":    {"whiteSpace", "explicitTimezone", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"gDay":         {"whiteSpace", "explicitTimezone", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
+		"gMonth":       {"whiteSpace", "explicitTimezone", "pattern", "enumeration", "maxInclusive", "maxExclusive", "minInclusive", "minExclusive", "assertions"},
 	}
 	for name, w := range want {
 		got := facets[name]

@@ -33,10 +33,12 @@
 //
 // [New] returns a backend covering the primitive cohort so far — xs:decimal,
 // xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary,
-// xs:base64Binary, xs:duration and xs:dateTime — with spec-exact
+// xs:base64Binary, xs:duration, xs:dateTime and the six remaining
+// seven-property date/time siblings xs:time, xs:date, xs:gYearMonth, xs:gYear,
+// xs:gMonthDay, xs:gDay and xs:gMonth — with spec-exact
 // parse, canonical and comparison. The remaining representations above
-// (precisionDecimal, the rest of the date/time family, the rest of the string
-// family, QName/NOTATION) and the
+// (precisionDecimal, xs:dateTimeStamp, the rest of the string family,
+// QName/NOTATION) and the
 // value.Emitter fast path remain future milestones. The cohort is certified
 // by value/backendtest.Run: each type's value carries exactly the capability
 // interfaces its applicable facets require (cos-applicable-facets), documented

@@ -1143,6 +1143,399 @@ func dtTzCanon(offset int) string {
 	return fmt.Sprintf("+%02d:%02d", offset/60, offset%60)
 }
 
+// gregorianRegex extracts a seven-property sibling type's lexical-space regular
+// expression from the spec (§3.3.8–§3.3.14). Each type gives its regex as a
+// single backtick span on the blockquote line ("> `…`") that follows its
+// production; that line is uniquely identified among the type's section by
+// containing the timezone alternative "14:00" (which every one of the seven
+// regexes carries). The scan starts at the type's nt-*Rep id anchor so the wrong
+// type's regex is never picked, and returns it anchored (^…$).
+func gregorianRegex(spec, anchorID string) (*regexp.Regexp, error) {
+	i := strings.Index(spec, anchorID)
+	if i == -1 {
+		return nil, fmt.Errorf("regex anchor %q not found", anchorID)
+	}
+	for _, line := range strings.Split(spec[i:], "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), ">") || !strings.Contains(line, "14:00") {
+			continue
+		}
+		m := backtickRE.FindStringSubmatch(line)
+		if m == nil {
+			return nil, fmt.Errorf("%s: regex line has no backtick span: %q", anchorID, line)
+		}
+		re, err := regexp.Compile("^(?:" + m[1] + ")$")
+		if err != nil {
+			return nil, fmt.Errorf("%s: compiling extracted lexical regex %q: %w", anchorID, m[1], err)
+		}
+		return re, nil
+	}
+	return nil, fmt.Errorf("%s: lexical-space regular expression not found", anchorID)
+}
+
+// The seven per-type field regexes below mirror builtin/strict's per-type
+// grammars; the generator cannot import the private backend, so it carries its
+// own copies (the discipline the dateTime/duration oracles use). Each is applied
+// only to a lexical the type's own gregorianRegex already accepted.
+
+// timeFieldRE extracts a timeLexicalRep's fragments (§3.3.8.2). Groups: 1 hour,
+// 2 minute, 3 second-int, 4 second-frac, 5 endOfDay, 6 timezoneFrag.
+var timeFieldRE = regexp.MustCompile(
+	`^(?:([01][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])(\.[0-9]+)?|(24:00:00(?:\.0+)?))` +
+		`(Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))?$`)
+
+// dateFieldRE extracts a dateLexicalRep's fragments (§3.3.9.2). Groups: 1 year,
+// 2 month, 3 day, 4 timezoneFrag.
+var dateFieldRE = regexp.MustCompile(
+	`^(-?(?:[1-9][0-9]{3,}|0[0-9]{3}))-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])` +
+		`(Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))?$`)
+
+// gYearMonthFieldRE. Groups: 1 year, 2 month, 3 timezoneFrag.
+var gYearMonthFieldRE = regexp.MustCompile(
+	`^(-?(?:[1-9][0-9]{3,}|0[0-9]{3}))-(0[1-9]|1[0-2])` +
+		`(Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))?$`)
+
+// gYearFieldRE. Groups: 1 year, 2 timezoneFrag.
+var gYearFieldRE = regexp.MustCompile(
+	`^(-?(?:[1-9][0-9]{3,}|0[0-9]{3}))(Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))?$`)
+
+// gMonthDayFieldRE. Groups: 1 month, 2 day, 3 timezoneFrag.
+var gMonthDayFieldRE = regexp.MustCompile(
+	`^--(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])` +
+		`(Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))?$`)
+
+// gDayFieldRE. Groups: 1 day, 2 timezoneFrag.
+var gDayFieldRE = regexp.MustCompile(
+	`^---(0[1-9]|[12][0-9]|3[01])(Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))?$`)
+
+// gMonthFieldRE. Groups: 1 month, 2 timezoneFrag.
+var gMonthFieldRE = regexp.MustCompile(
+	`^--(0[1-9]|1[0-2])(Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))?$`)
+
+// parseTime derives the time vectors (§3.3.8): a plain instant, fractional
+// seconds, the three timezone spellings and the endOfDayFrag that maps to
+// midnight ("24:00:00" → "00:00:00", no day carry — time has no day). Each is
+// canonicalised by timeCanonicalOf, an independent oracle implementing
+// timeLexicalMap + timeCanonicalMap (§E.3.5/§E.3.6). Invalid near-misses are
+// kept only if the extracted regex rejects them.
+func parseTime(spec string) (typeVectors, error) {
+	re, err := gregorianRegex(spec, `id="nt-timeRep"`)
+	if err != nil {
+		return typeVectors{}, fmt.Errorf("time: %w", err)
+	}
+	sample := []string{"13:20:00", "13:20:00.125", "13:20:00Z", "13:20:00+02:00", "13:20:00-05:00", "24:00:00"}
+	valid := make([]roundtrip, 0, len(sample))
+	for _, lex := range sample {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("time: sample lexical %q does not match its own production regex", lex)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: timeCanonicalOf(lex)})
+	}
+	return typeVectors{
+		Local:   "time",
+		Valid:   valid,
+		Invalid: binaryInvalids(re, []string{"13:20", "25:00:00", "13:60:00", "1:20:00", "13:20:00+15:00", ""}),
+	}, nil
+}
+
+// parseDate derives the date vectors (§3.3.9): timezone spellings, a leap-year
+// Feb 29, a negative and a padded year — canonicalised by dateCanonicalOf, an
+// independent oracle implementing dateLexicalMap + dateCanonicalMap. Invalids are
+// kept via gregorianInvalids through the FULL oracle (not the regex alone), so
+// the year-dependent day-of-month violation (con-date-dayValue §3.3.9.1) —
+// non-leap 2023-02-29 — counts as invalid even though the pure regex accepts it.
+func parseDate(spec string) (typeVectors, error) {
+	re, err := gregorianRegex(spec, `id="nt-dateRep"`)
+	if err != nil {
+		return typeVectors{}, fmt.Errorf("date: %w", err)
+	}
+	sample := []string{"2002-10-10", "2002-10-10Z", "2002-10-10+02:00", "2002-10-10-05:00", "2024-02-29", "-0045-03-15", "0001-01-01"}
+	valid := make([]roundtrip, 0, len(sample))
+	for _, lex := range sample {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("date: sample lexical %q does not match its own production regex", lex)
+		}
+		canon, err := dateCanonicalOf(lex)
+		if err != nil {
+			return typeVectors{}, fmt.Errorf("date: canonical of %q: %w", lex, err)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: canon})
+	}
+	return typeVectors{
+		Local: "date",
+		Valid: valid,
+		Invalid: gregorianInvalids([]string{
+			"2002-13-01", "2002-10-32", "2023-02-29", "2023-02-30", "2002-10-10T00:00:00", "2002-1-01",
+		}, dateCanonicalOf),
+	}, nil
+}
+
+// parseGYearMonth derives the gYearMonth vectors (§3.3.10).
+func parseGYearMonth(spec string) (typeVectors, error) {
+	re, err := gregorianRegex(spec, `id="nt-gYearMonthRep"`)
+	if err != nil {
+		return typeVectors{}, fmt.Errorf("gYearMonth: %w", err)
+	}
+	sample := []string{"2002-10", "2002-10Z", "2002-10+02:00", "2002-10-05:00", "-0045-03", "0001-01"}
+	valid := make([]roundtrip, 0, len(sample))
+	for _, lex := range sample {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("gYearMonth: sample lexical %q does not match its own production regex", lex)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: gYearMonthCanonicalOf(lex)})
+	}
+	return typeVectors{
+		Local:   "gYearMonth",
+		Valid:   valid,
+		Invalid: binaryInvalids(re, []string{"2002", "2002-13", "2002-10-10", "2002-1", ""}),
+	}, nil
+}
+
+// parseGYear derives the gYear vectors (§3.3.11). gYear permits a timezone
+// (§3.3.11.1: ·timezoneOffset· stays optional).
+func parseGYear(spec string) (typeVectors, error) {
+	re, err := gregorianRegex(spec, `id="nt-gYearRep"`)
+	if err != nil {
+		return typeVectors{}, fmt.Errorf("gYear: %w", err)
+	}
+	sample := []string{"2002", "2002Z", "2002+02:00", "2002-05:00", "-0045", "12345"}
+	valid := make([]roundtrip, 0, len(sample))
+	for _, lex := range sample {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("gYear: sample lexical %q does not match its own production regex", lex)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: gYearCanonicalOf(lex)})
+	}
+	return typeVectors{
+		Local:   "gYear",
+		Valid:   valid,
+		Invalid: binaryInvalids(re, []string{"999", "2002-10", "02002", ""}),
+	}, nil
+}
+
+// parseGMonthDay derives the gMonthDay vectors (§3.3.12): including the leap-day
+// --02-29, unconditionally valid because gMonthDay has no ·year· to check
+// (con-gMonthDay-dayValue §3.3.12.1 is year-free). Invalids go through the full
+// oracle so a per-month day violation (--02-30, --04-31) counts even though the
+// regex accepts day up to 31.
+func parseGMonthDay(spec string) (typeVectors, error) {
+	re, err := gregorianRegex(spec, `id="nt-gMonthDayRep"`)
+	if err != nil {
+		return typeVectors{}, fmt.Errorf("gMonthDay: %w", err)
+	}
+	sample := []string{"--10-10", "--02-29", "--12-31", "--01-01Z", "--12-12+13:00", "--12-12-05:00"}
+	valid := make([]roundtrip, 0, len(sample))
+	for _, lex := range sample {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("gMonthDay: sample lexical %q does not match its own production regex", lex)
+		}
+		canon, err := gMonthDayCanonicalOf(lex)
+		if err != nil {
+			return typeVectors{}, fmt.Errorf("gMonthDay: canonical of %q: %w", lex, err)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: canon})
+	}
+	return typeVectors{
+		Local: "gMonthDay",
+		Valid: valid,
+		Invalid: gregorianInvalids([]string{
+			"--13-01", "--02-30", "--04-31", "--10-10-", "10-10", "--1-01",
+		}, gMonthDayCanonicalOf),
+	}, nil
+}
+
+// parseGDay derives the gDay vectors (§3.3.13): including day 31 (valid — gDay
+// has no month to bound it) and the worked-example timezone offsets. gDay has no
+// day-of-month representation constraint, so invalids are regex-decided.
+func parseGDay(spec string) (typeVectors, error) {
+	re, err := gregorianRegex(spec, `id="nt-gDayRep"`)
+	if err != nil {
+		return typeVectors{}, fmt.Errorf("gDay: %w", err)
+	}
+	sample := []string{"---15", "---31", "---15Z", "---15-13:00", "---16+13:00", "---01"}
+	valid := make([]roundtrip, 0, len(sample))
+	for _, lex := range sample {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("gDay: sample lexical %q does not match its own production regex", lex)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: gDayCanonicalOf(lex)})
+	}
+	return typeVectors{
+		Local:   "gDay",
+		Valid:   valid,
+		Invalid: binaryInvalids(re, []string{"---00", "---32", "--15", "15", "---1", ""}),
+	}, nil
+}
+
+// parseGMonth derives the gMonth vectors (§3.3.14).
+func parseGMonth(spec string) (typeVectors, error) {
+	re, err := gregorianRegex(spec, `id="nt-gMonthRep"`)
+	if err != nil {
+		return typeVectors{}, fmt.Errorf("gMonth: %w", err)
+	}
+	sample := []string{"--10", "--01", "--12", "--05Z", "--11+13:00", "--10-05:00"}
+	valid := make([]roundtrip, 0, len(sample))
+	for _, lex := range sample {
+		if !re.MatchString(lex) {
+			return typeVectors{}, fmt.Errorf("gMonth: sample lexical %q does not match its own production regex", lex)
+		}
+		valid = append(valid, roundtrip{Lexical: lex, Canonical: gMonthCanonicalOf(lex)})
+	}
+	return typeVectors{
+		Local:   "gMonth",
+		Valid:   valid,
+		Invalid: binaryInvalids(re, []string{"--13", "--00", "10", "--10-10", "--1", ""}),
+	}, nil
+}
+
+// gregorianInvalids keeps the candidates the full validity oracle rejects,
+// deduplicated and in order — the discipline dateTimeInvalids uses. Unlike
+// binaryInvalids it filters through the day-value oracle (canonicalOf returns an
+// error for a con-*-dayValue violation the regex cannot express), so a bad-day
+// case still counts as invalid.
+func gregorianInvalids(candidates []string, canonicalOf func(string) (string, error)) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, c := range candidates {
+		if seen[c] {
+			continue
+		}
+		if _, err := canonicalOf(c); err == nil {
+			continue // the oracle accepts it — not an invalid lexical
+		}
+		seen[c] = true
+		out = append(out, c)
+	}
+	return out
+}
+
+// timeCanonicalOf is the independent time oracle: timeLexicalMap into the value,
+// then timeCanonicalMap back (§E.3.5/§E.3.6). The endOfDayFrag maps to midnight.
+// Its input is a lexical the regex already accepted, so it never errors.
+func timeCanonicalOf(lex string) string {
+	m := timeFieldRE.FindStringSubmatch(lex)
+	var b strings.Builder
+	if m[5] != "" { // endOfDayFrag → 00:00:00
+		b.WriteString("00:00:")
+		b.WriteString(dtSecondCanon(new(big.Rat)))
+	} else {
+		hour, _ := strconv.Atoi(m[1])
+		minute, _ := strconv.Atoi(m[2])
+		second, _ := new(big.Rat).SetString(m[3] + m[4])
+		fmt.Fprintf(&b, "%02d:%02d:", hour, minute)
+		b.WriteString(dtSecondCanon(second))
+	}
+	if m[6] != "" {
+		b.WriteString(dtTzCanon(dtTimezoneOffset(m[6])))
+	}
+	return b.String()
+}
+
+// dateCanonicalOf is the independent date oracle: dateLexicalMap + dateCanonicalMap.
+// It returns an error when the day-of-month value is out of range for the month
+// and (leap) year (con-date-dayValue §3.3.9.1), which the regex cannot express.
+func dateCanonicalOf(lex string) (string, error) {
+	m := dateFieldRE.FindStringSubmatch(lex)
+	if m == nil {
+		return "", fmt.Errorf("%q does not match dateLexicalRep", lex)
+	}
+	year, _ := new(big.Int).SetString(m[1], 10)
+	month, _ := strconv.Atoi(m[2])
+	day, _ := strconv.Atoi(m[3])
+	if day > dtDaysInMonth(year, month) {
+		return "", fmt.Errorf("%q has day %d out of range for month %d", lex, day, month)
+	}
+	var b strings.Builder
+	b.WriteString(dtYearCanon(year))
+	fmt.Fprintf(&b, "-%02d-%02d", month, day)
+	if m[4] != "" {
+		b.WriteString(dtTzCanon(dtTimezoneOffset(m[4])))
+	}
+	return b.String(), nil
+}
+
+// gYearMonthCanonicalOf is the independent gYearMonth oracle.
+func gYearMonthCanonicalOf(lex string) string {
+	m := gYearMonthFieldRE.FindStringSubmatch(lex)
+	year, _ := new(big.Int).SetString(m[1], 10)
+	month, _ := strconv.Atoi(m[2])
+	var b strings.Builder
+	b.WriteString(dtYearCanon(year))
+	fmt.Fprintf(&b, "-%02d", month)
+	if m[3] != "" {
+		b.WriteString(dtTzCanon(dtTimezoneOffset(m[3])))
+	}
+	return b.String()
+}
+
+// gYearCanonicalOf is the independent gYear oracle.
+func gYearCanonicalOf(lex string) string {
+	m := gYearFieldRE.FindStringSubmatch(lex)
+	year, _ := new(big.Int).SetString(m[1], 10)
+	s := dtYearCanon(year)
+	if m[2] != "" {
+		s += dtTzCanon(dtTimezoneOffset(m[2]))
+	}
+	return s
+}
+
+// gMonthDayCanonicalOf is the independent gMonthDay oracle. It errors on a
+// year-free per-month day violation (con-gMonthDay-dayValue §3.3.12.1): day > 30
+// for a 30-day month, or day > 29 for February.
+func gMonthDayCanonicalOf(lex string) (string, error) {
+	m := gMonthDayFieldRE.FindStringSubmatch(lex)
+	if m == nil {
+		return "", fmt.Errorf("%q does not match gMonthDayLexicalRep", lex)
+	}
+	month, _ := strconv.Atoi(m[1])
+	day, _ := strconv.Atoi(m[2])
+	if day > gMonthDayMaxDayGen(month) {
+		return "", fmt.Errorf("%q has day %d out of range for month %d", lex, day, month)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "--%02d-%02d", month, day)
+	if m[3] != "" {
+		b.WriteString(dtTzCanon(dtTimezoneOffset(m[3])))
+	}
+	return b.String(), nil
+}
+
+// gMonthDayMaxDayGen is the generator's copy of gMonthDayMaxDay (con-gMonthDay-
+// dayValue §3.3.12.1): 30 for April/June/September/November, 29 for February
+// (year-free), 31 otherwise. The generator cannot import the private backend.
+func gMonthDayMaxDayGen(month int) int {
+	switch month {
+	case 4, 6, 9, 11:
+		return 30
+	case 2:
+		return 29
+	}
+	return 31
+}
+
+// gDayCanonicalOf is the independent gDay oracle.
+func gDayCanonicalOf(lex string) string {
+	m := gDayFieldRE.FindStringSubmatch(lex)
+	day, _ := strconv.Atoi(m[1])
+	s := fmt.Sprintf("---%02d", day)
+	if m[2] != "" {
+		s += dtTzCanon(dtTimezoneOffset(m[2]))
+	}
+	return s
+}
+
+// gMonthCanonicalOf is the independent gMonth oracle. The canonical map uses
+// gMonth's ·month· (the spec's literal "gM's ·day·" is a transcription artifact;
+// gMonth has no day — PRINCIPLES 25).
+func gMonthCanonicalOf(lex string) string {
+	m := gMonthFieldRE.FindStringSubmatch(lex)
+	month, _ := strconv.Atoi(m[1])
+	s := fmt.Sprintf("--%02d", month)
+	if m[2] != "" {
+		s += dtTzCanon(dtTimezoneOffset(m[2]))
+	}
+	return s
+}
+
 // literalsIn returns every '`X`' literal in text, in order.
 func literalsIn(text string) []string {
 	ms := litRE.FindAllStringSubmatch(text, -1)

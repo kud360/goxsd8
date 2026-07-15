@@ -26,12 +26,24 @@ func dateTimeQName() xsd.QName {
 	return xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTime"}
 }
 
+// gregorianQNames are the seven-property date/time siblings (issue #109), a
+// separate group so othersAbsent and the all-cohort Absent list stay one source.
+func gregorianQNames() []xsd.QName {
+	locals := []string{"time", "date", "gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth"}
+	out := make([]xsd.QName, len(locals))
+	for i, l := range locals {
+		out[i] = xsd.QName{Space: xsd.XMLSchemaNS, Local: l}
+	}
+	return out
+}
+
 // othersAbsent declares the cohort types other than boolean absent, so the
 // boolean-only test backends below are checked purely on boolean without Run
-// reporting the (intentionally) unmapped
-// decimal/string/float/double/hexBinary/base64Binary/duration/dateTime vectors.
+// reporting the (intentionally) unmapped decimal/string/float/double/hexBinary/
+// base64Binary/duration/dateTime and seven-property sibling vectors.
 func othersAbsent() []Option {
-	return []Option{Absent(decimalQName(), stringQName(), floatQName(), doubleQName(), hexBinaryQName(), base64BinaryQName(), durationQName(), dateTimeQName())}
+	absent := append([]xsd.QName{decimalQName(), stringQName(), floatQName(), doubleQName(), hexBinaryQName(), base64BinaryQName(), durationQName(), dateTimeQName()}, gregorianQNames()...)
+	return []Option{Absent(absent...)}
 }
 
 // mapBackend is a test value.Backend over an explicit table.
@@ -110,7 +122,8 @@ func TestRunAbsentSkipsUnmapped(t *testing.T) {
 	}
 
 	var r2 recordT
-	run(&r2, empty, []Option{Absent(booleanQName(), decimalQName(), stringQName(), floatQName(), doubleQName(), hexBinaryQName(), base64BinaryQName(), durationQName(), dateTimeQName())})
+	allCohort := append([]xsd.QName{booleanQName(), decimalQName(), stringQName(), floatQName(), doubleQName(), hexBinaryQName(), base64BinaryQName(), durationQName(), dateTimeQName()}, gregorianQNames()...)
+	run(&r2, empty, []Option{Absent(allCohort...)})
 	if r2.errs != 0 {
 		t.Fatalf("Absent(all cohort): run reported %d failures, want 0", r2.errs)
 	}

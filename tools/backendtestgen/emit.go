@@ -16,8 +16,9 @@ func emit(types []typeVectors) ([]byte, error) {
 	b.WriteString("// drives every value.Backend through (PRINCIPLES 26). Each row is one\n")
 	b.WriteString("// builtin type's lexical/canonical vectors plus its applicable constraining\n")
 	b.WriteString("// facets in spec order (cos-applicable-facets). The cohort covers boolean,\n")
-	b.WriteString("// decimal, string, float, double, hexBinary, base64Binary, duration and\n")
-	b.WriteString("// dateTime.\n")
+	b.WriteString("// decimal, string, float, double, hexBinary, base64Binary, duration, dateTime\n")
+	b.WriteString("// and the seven-property siblings time, date, gYearMonth, gYear, gMonthDay,\n")
+	b.WriteString("// gDay and gMonth.\n")
 	b.WriteString("var vectors = []typeVectors{\n")
 	for _, t := range types {
 		emitType(&b, t)
