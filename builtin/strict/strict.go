@@ -55,7 +55,7 @@ import (
 //     timezone-shifted pair denoting the same instant is Eq but not Identical,
 //     since Identical compares the stored ·timezoneOffset· exactly),
 //     [value.Canonical] and [value.TimezoneAware] (the explicitTimezone facet,
-//     §4.3.15, reads HasTimezone). Deliberately NOT [value.Lengthed]/
+//     §4.3.14, reads HasTimezone). Deliberately NOT [value.Lengthed]/
 //     [value.DigitCounted]/[value.Scaled].
 func New() value.Backend { return backend{} }
 

@@ -198,6 +198,53 @@ func TestEnumerationFacet(t *testing.T) {
 	wantRule(t, err, "cvc-enumeration-valid")
 }
 
+// TestExplicitTimezoneFacet exercises the explicitTimezone value-facet stage on
+// dateTime (cvc-explicitTimezone-valid, §4.3.14.3): required demands a non-absent
+// timezone, prohibited demands an absent one, optional always passes. dateTime is
+// the first cohort primitive that is value.TimezoneAware, so this facet check
+// (§4.1.5 cos-applicable-facets) is exercisable here for the first time.
+func TestExplicitTimezoneFacet(t *testing.T) {
+	dtPrim := newPrim(t, "dateTime")
+	const withTZ = "2002-10-10T12:00:00Z"
+	const noTZ = "2002-10-10T12:00:00"
+
+	// required: a value WITH a timezone passes; one WITHOUT is rejected.
+	required := derive(t, "tzRequired", dtPrim, xsd.NewFacet(xsd.FacetExplicitTimezone, []string{"required"}, false))
+	if _, err := value.ValidateLexical(New(), required, withTZ, nil); err != nil {
+		t.Fatalf("required should accept a value with a timezone: %v", err)
+	}
+	_, err := value.ValidateLexical(New(), required, noTZ, nil)
+	wantRule(t, err, "cvc-explicitTimezone-valid")
+
+	// prohibited: a value WITHOUT a timezone passes; one WITH is rejected.
+	prohibited := derive(t, "tzProhibited", dtPrim, xsd.NewFacet(xsd.FacetExplicitTimezone, []string{"prohibited"}, false))
+	if _, err := value.ValidateLexical(New(), prohibited, noTZ, nil); err != nil {
+		t.Fatalf("prohibited should accept a value without a timezone: %v", err)
+	}
+	_, err = value.ValidateLexical(New(), prohibited, withTZ, nil)
+	wantRule(t, err, "cvc-explicitTimezone-valid")
+
+	// optional: both accepted.
+	optional := derive(t, "tzOptional", dtPrim, xsd.NewFacet(xsd.FacetExplicitTimezone, []string{"optional"}, false))
+	if _, err := value.ValidateLexical(New(), optional, withTZ, nil); err != nil {
+		t.Fatalf("optional should accept a value with a timezone: %v", err)
+	}
+	if _, err := value.ValidateLexical(New(), optional, noTZ, nil); err != nil {
+		t.Fatalf("optional should accept a value without a timezone: %v", err)
+	}
+}
+
+// TestExplicitTimezoneFacetMalformed guards construction-time rejection: an
+// explicitTimezone facet whose {value} is not one of required/prohibited/optional
+// (§4.3.14.1) is a malformed facet, rejected by compile() as
+// cvc-explicitTimezone-valid before any value is parsed.
+func TestExplicitTimezoneFacetMalformed(t *testing.T) {
+	dtPrim := newPrim(t, "dateTime")
+	bad := derive(t, "tzBad", dtPrim, xsd.NewFacet(xsd.FacetExplicitTimezone, []string{"maybe"}, false))
+	_, err := value.ValidateLexical(New(), bad, "2002-10-10T12:00:00Z", nil)
+	wantRule(t, err, "cvc-explicitTimezone-valid")
+}
+
 // TestDigitsFacets exercises totalDigits and fractionDigits on decimal as
 // upper-bound constraints (cvc-totalDigits-valid, cvc-fractionDigits-valid).
 func TestDigitsFacets(t *testing.T) {
