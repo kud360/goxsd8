@@ -7,9 +7,12 @@ import (
 
 // New returns the spec-exact value.Backend for the primitive cohort so far:
 // xs:decimal, xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary,
-// xs:base64Binary, xs:duration and xs:dateTime. Each type's value
+// xs:base64Binary, xs:duration, xs:dateTime and the six remaining
+// seven-property date/time siblings xs:time, xs:date, xs:gYearMonth, xs:gYear,
+// xs:gMonthDay, xs:gDay and xs:gMonth. Each type's value
 // space is represented with full fidelity to the Datatypes spec (§3.3.3,
-// §3.3.2, §3.3.1, §3.3.17, §3.3.4, §3.3.5, §3.3.15, §3.3.16, §3.3.6, §3.3.7); a [value.Mapping.Parse]
+// §3.3.2, §3.3.1, §3.3.17, §3.3.4, §3.3.5, §3.3.15, §3.3.16, §3.3.6, §3.3.7,
+// §3.3.8–§3.3.14); a [value.Mapping.Parse]
 // rejects any lexical
 // outside the type's lexical space as an *xsderr.Error with rule
 // "cvc-datatype-valid" (§4.1.4), never a false validity verdict.
@@ -57,6 +60,17 @@ import (
 //     [value.Canonical] and [value.TimezoneAware] (the explicitTimezone facet,
 //     §4.3.14, reads HasTimezone). Deliberately NOT [value.Lengthed]/
 //     [value.DigitCounted]/[value.Scaled].
+//   - xs:time, xs:date, xs:gYearMonth, xs:gYear, xs:gMonthDay, xs:gDay, xs:gMonth
+//     — the same seven-property model as xs:dateTime (§3.3.8–§3.3.14/§D.2.1),
+//     each a lexical "projection" that forces a per-type subset of the seven
+//     properties ·absent· (e.g. time drops year/month/day, gYear keeps only
+//     year). Same capability set and rationale as xs:dateTime: [value.Ordered]
+//     (PARTIAL order over ·timeOnTimeline·, ordered=partial for all seven),
+//     [value.Eq] and [value.Identical] (Eq/Identical diverge on a
+//     timezone-shifted pair as for dateTime), [value.Canonical] and
+//     [value.TimezoneAware]. Deliberately NOT [value.Lengthed]/
+//     [value.DigitCounted]/[value.Scaled] — no applicable facet needs them
+//     (cos-applicable-facets §4.1.5: no length family).
 func New() value.Backend { return backend{} }
 
 // backend is the spec-exact primitive-cohort mapping. It carries no state: the
@@ -92,6 +106,20 @@ func (backend) Mapping(typ xsd.QName) (value.Mapping, bool) {
 		return value.Mapping{Parse: parseDuration, Canonical: canonicalDuration}, true
 	case "dateTime":
 		return value.Mapping{Parse: parseDateTime, Canonical: canonicalDateTime}, true
+	case "time":
+		return value.Mapping{Parse: parseTime, Canonical: canonicalTime}, true
+	case "date":
+		return value.Mapping{Parse: parseDate, Canonical: canonicalDate}, true
+	case "gYearMonth":
+		return value.Mapping{Parse: parseGYearMonth, Canonical: canonicalGYearMonth}, true
+	case "gYear":
+		return value.Mapping{Parse: parseGYear, Canonical: canonicalGYear}, true
+	case "gMonthDay":
+		return value.Mapping{Parse: parseGMonthDay, Canonical: canonicalGMonthDay}, true
+	case "gDay":
+		return value.Mapping{Parse: parseGDay, Canonical: canonicalGDay}, true
+	case "gMonth":
+		return value.Mapping{Parse: parseGMonth, Canonical: canonicalGMonth}, true
 	}
 	return value.Mapping{}, false
 }

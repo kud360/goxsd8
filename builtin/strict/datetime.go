@@ -202,7 +202,7 @@ func yearCanonicalFragment(year *big.Int) string {
 	return fmt.Sprintf("%04d", abs.Int64())
 }
 
-// secondCanonicalFragment maps a ·second· decimal to a secondFrag
+// dateTimeSecondFragment maps a ·second· decimal to a secondFrag
 // (·secondCanonicalFragmentMap·, f-seCanFragMap, §E.3.6): an always-two-digit
 // integer part, followed by '.' and the exact fractional digits (with no trailing
 // zeros, ·fractionDigitsCanonicalFragmentMap·) when the value is not integral.
@@ -286,31 +286,93 @@ func (d dateTimeVal) Cmp(other value.Value) value.Ordering {
 	if !ok {
 		return value.Incomparable
 	}
-	dHas := d.tzOffset != nil
-	oHas := o.tzOffset != nil
+	return cmpInstants(d.instant(), o.instant(), d.tzOffset != nil, o.tzOffset != nil)
+}
+
+// cmpInstants applies the seven-property PARTIAL order (§D.2.1) to two
+// ·timeOnTimeline· instants given whether each operand carries a timezone. When
+// both agree on timezone presence the instants compare directly; when exactly one
+// lacks a timezone the spec imputes the ±840-minute extremes to the absent
+// operand and the pair is ordered only if both imputations agree
+// (imputedOrdering), otherwise Incomparable. Shared by every seven-property
+// type's Cmp so the incomparability rule is written once (PRINCIPLES 4).
+func cmpInstants(d, o *big.Rat, dHas, oHas bool) value.Ordering {
 	if dHas == oHas {
-		return ratOrdering(d.instant(), o.instant())
+		return ratOrdering(d, o)
 	}
 	if !dHas { // d absent, o timezoned: order the absent operand against o
-		return imputedOrdering(d.instant(), o.instant())
+		return imputedOrdering(d, o)
 	}
 	// d timezoned, o absent: order o against d, then flip to d-relative.
-	return flipOrdering(imputedOrdering(o.instant(), d.instant()))
+	return flipOrdering(imputedOrdering(o, d))
 }
 
 // instant is the value's ·timeOnTimeline· (vp-dt-timeOnTimeline, §E.3.4) as exact
-// seconds: the proleptic-Gregorian day ordinal (daysFromCivil, reused from
-// duration.go per PRINCIPLES 4) times 86400, plus hour/minute/second, minus
-// ·timezoneOffset· seconds when present (the spec subtracts the offset from
-// minutes). An absent offset leaves the raw local instant, which is exactly the
-// quantity the ±840 imputations then shift.
+// seconds. dateTime has every property present, so it builds an all-present
+// sevenProp whose fillers are no-ops: its instant is bit-identical to a direct
+// daysFromCivil computation (the ratchet-safety invariant for the already-
+// certified dateTime vectors).
 func (d dateTimeVal) instant() *big.Rat {
-	ordinal := daysFromCivil(d.year, d.month, d.day)
+	return sevenProp{
+		year: d.year, month: &d.month, day: &d.day,
+		hour: &d.hour, minute: &d.minute, second: d.second, tz: d.tzOffset,
+	}.instant()
+}
+
+// sevenProp is a date/timeSevenPropertyModel value projected onto the inputs of
+// ·timeOnTimeline· (§E.3.4) with nil-as-absence: a nil pointer is the spec's
+// ·absent· for that property, a non-nil pointer its present value — no parallel
+// presence flag (STYLE D6/T7, matching dateTimeVal.tzOffset's precedent). Each
+// per-type value builds one to reach the shared timeline computation.
+type sevenProp struct {
+	year         *big.Int // nil ⇒ absent (filler year 1972)
+	month, day   *int     // nil ⇒ absent (filler month 12; filler day = last of the filler month)
+	hour, minute *int     // nil ⇒ absent (filler 0)
+	second       *big.Rat // nil ⇒ absent (filler 0)
+	tz           *int     // nil ⇒ absent ·timezoneOffset· (no subtraction)
+}
+
+// instant is the shared ·timeOnTimeline· (vp-dt-timeOnTimeline, §E.3.4) for every
+// seven-property type. It resolves each ·absent· property to the spec's
+// 1972-12-31T00:00:00 civil filler — year→1972, month→12, day→daysInMonth of the
+// resolved (year, month), i.e. the last day of the filler month (the spec's
+// da = ·daysInMonth·(yr+1,mo) − 1 in civil, 1-based terms), hour/minute/second→0
+// — then feeds the completed civil seven-tuple into duration.go's daysFromCivil
+// core, NOT §E.3.4's alternate ordinal arithmetic (which would risk drifting
+// dateTime's certified instants). A fully-present value fills nothing, so its
+// instant is bit-identical to a direct daysFromCivil computation. A
+// partially-absent value's instant differs from the raw dateTime epoch by a
+// constant that is the SAME for every value of its type; the difference-only
+// order and same-type-only comparison (each Cmp type-asserts to its own type)
+// never observe that constant.
+func (p sevenProp) instant() *big.Rat {
+	year := big.NewInt(1972)
+	if p.year != nil {
+		year = p.year
+	}
+	month := 12
+	if p.month != nil {
+		month = *p.month
+	}
+	day := daysInMonth(year, month)
+	if p.day != nil {
+		day = *p.day
+	}
+	ordinal := daysFromCivil(year, month, day)
 	secs := new(big.Rat).SetInt(new(big.Int).Mul(ordinal, big.NewInt(86400)))
-	secs.Add(secs, new(big.Rat).SetInt64(int64(d.hour)*3600+int64(d.minute)*60))
-	secs.Add(secs, d.second)
-	if d.tzOffset != nil {
-		secs.Sub(secs, new(big.Rat).SetInt64(int64(*d.tzOffset)*60))
+	var hour, minute int
+	if p.hour != nil {
+		hour = *p.hour
+	}
+	if p.minute != nil {
+		minute = *p.minute
+	}
+	secs.Add(secs, new(big.Rat).SetInt64(int64(hour)*3600+int64(minute)*60))
+	if p.second != nil {
+		secs.Add(secs, p.second)
+	}
+	if p.tz != nil {
+		secs.Sub(secs, new(big.Rat).SetInt64(int64(*p.tz)*60))
 	}
 	return secs
 }

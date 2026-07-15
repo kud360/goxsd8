@@ -88,6 +88,34 @@ func build(datatypesPath, precisionPath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s: dateTime: %w", datatypesPath, err)
 	}
+	tm, err := parseTime(spec)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: time: %w", datatypesPath, err)
+	}
+	da, err := parseDate(spec)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: date: %w", datatypesPath, err)
+	}
+	gym, err := parseGYearMonth(spec)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: gYearMonth: %w", datatypesPath, err)
+	}
+	gy, err := parseGYear(spec)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: gYear: %w", datatypesPath, err)
+	}
+	gmd, err := parseGMonthDay(spec)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: gMonthDay: %w", datatypesPath, err)
+	}
+	gd, err := parseGDay(spec)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: gDay: %w", datatypesPath, err)
+	}
+	gm, err := parseGMonth(spec)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: gMonth: %w", datatypesPath, err)
+	}
 
 	facets, err := applicableFacets(datatypesPath, precisionPath)
 	if err != nil {
@@ -102,8 +130,15 @@ func build(datatypesPath, precisionPath string) ([]byte, error) {
 	b64Bin.ApplicableFacets = facets["base64Binary"]
 	dur.ApplicableFacets = facets["duration"]
 	dt.ApplicableFacets = facets["dateTime"]
+	tm.ApplicableFacets = facets["time"]
+	da.ApplicableFacets = facets["date"]
+	gym.ApplicableFacets = facets["gYearMonth"]
+	gy.ApplicableFacets = facets["gYear"]
+	gmd.ApplicableFacets = facets["gMonthDay"]
+	gd.ApplicableFacets = facets["gDay"]
+	gm.ApplicableFacets = facets["gMonth"]
 
-	return emit([]typeVectors{boolean, decimal, str, flt, dbl, hexBin, b64Bin, dur, dt})
+	return emit([]typeVectors{boolean, decimal, str, flt, dbl, hexBin, b64Bin, dur, dt, tm, da, gym, gy, gmd, gd, gm})
 }
 
 // applicableFacets reads each cohort type's applicable constraining facets in
@@ -116,7 +151,7 @@ func applicableFacets(datatypesPath, precisionPath string) (map[string][]string,
 	if err != nil {
 		return nil, fmt.Errorf("applicable facets: %w", err)
 	}
-	want := map[string]bool{"boolean": true, "decimal": true, "string": true, "float": true, "double": true, "hexBinary": true, "base64Binary": true, "duration": true, "dateTime": true}
+	want := map[string]bool{"boolean": true, "decimal": true, "string": true, "float": true, "double": true, "hexBinary": true, "base64Binary": true, "duration": true, "dateTime": true, "time": true, "date": true, "gYearMonth": true, "gYear": true, "gMonthDay": true, "gDay": true, "gMonth": true}
 	out := make(map[string][]string, len(want))
 	for _, b := range types {
 		if !want[b.Name] {

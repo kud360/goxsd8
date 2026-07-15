@@ -25,10 +25,13 @@ import (
 //
 // The lane claims the Microsoft datatype LEXICAL cases under
 // msData/datatypes/{boolean,decimal,string,float,double,anyURI,hexBinary,
-// base64Binary,duration,dateTime}NNN.xml. Each
+// base64Binary,duration,dateTime,time,date,gYearMonth,gYear,gMonthDay,gDay,
+// gMonth}NNN.xml. Each
 // such schema declares an element of an UNRESTRICTED builtin primitive
 // (xsd:boolean / xsd:decimal / xsd:string / xsd:float / xsd:double / xsd:anyURI /
-// xsd:hexBinary / xsd:base64Binary / xsd:duration / xsd:dateTime —
+// xsd:hexBinary / xsd:base64Binary / xsd:duration / xsd:dateTime and the six
+// remaining seven-property date/time siblings xsd:time / xsd:date /
+// xsd:gYearMonth / xsd:gYear / xsd:gMonthDay / xsd:gDay / xsd:gMonth —
 // comp_foo directly, simpleTest via a facet-free restriction), so an instance is
 // valid iff its content lies in that primitive's lexical space. That is exactly
 // what value.Mapping.Parse decides, so the executor is a genuine, complete check:
@@ -49,7 +52,12 @@ import (
 // out-of-range month/hour/minute/second, a malformed timezone, and — beyond the
 // grammar regex — a day-of-month that its month and (leap) year forbid, e.g.
 // 2023-02-29 (con-dateTime-day/con-dateTime-dayValue §3.3.7.1, nt-dateTimeRep
-// §3.3.7.2).
+// §3.3.7.2). The six seven-property siblings are thin lexical projections of the
+// same model (§3.3.8–§3.3.14): each has its own nt-*Rep grammar (e.g. time drops
+// the date fields, gYear keeps only the year) and, for date and gMonthDay, the
+// day-of-month value constraint (con-date-dayValue §3.3.9.1, year-dependent;
+// con-gMonthDay-dayValue §3.3.12.1, year-free so --02-29 is always valid) beyond
+// the grammar regex; gDay/gMonth/gYear/gYearMonth carry no day-value rule.
 //
 // # The facet cohort (issue #57, widened by issues #80, #81, #85 and #106)
 //
@@ -156,7 +164,7 @@ import (
 const synthNS = "urn:goxsd8:conformance:facets"
 
 // datatypesCase matches an instance case in the lexical cohort.
-var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime)[0-9]+\.xml$`)
+var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth)[0-9]+\.xml$`)
 
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
 // the lane decides: the strict-mapped primitives (string/decimal/float/double),
@@ -200,17 +208,19 @@ func selectsDatatypes(c caseSpec) bool {
 // backend plus the seeded symbol table in the returned closure.
 func newDatatypesExec() executor {
 	// strict.New() maps the primitive cohort so far (decimal/boolean/string/
-	// anyURI/float/double/hexBinary/base64Binary/duration/dateTime); Seed requires
-	// all 20 primitives, so the fallback covers
+	// anyURI/float/double/hexBinary/base64Binary/duration/dateTime plus the six
+	// seven-property siblings time/date/gYearMonth/gYear/gMonthDay/gDay/gMonth);
+	// Seed requires all 20 primitives, so the fallback covers
 	// the remaining ones with a no-op mapping. strict wins where it maps (Override
 	// yields partial first), so those fallback mappings are never actually
 	// exercised: the lane now claims boolean/decimal/string/float/double/anyURI/
-	// hexBinary/base64Binary/duration/dateTime
+	// hexBinary/base64Binary/duration/dateTime/time/date/gYearMonth/gYear/
+	// gMonthDay/gDay/gMonth
 	// (lexical cohort) and string/decimal/float/double plus the integer and
 	// derived-string (normalizedString/token, #85; language/Name/NCName/NMTOKEN,
 	// #106) families (facet cohort) cases
 	// (float/double added in #80, anyURI in #82, hexBinary/base64Binary in #83,
-	// duration in #84, dateTime in #103),
+	// duration in #84, dateTime in #103, the seven-property siblings in #109),
 	// every one of which resolves (directly or via a base ancestor) to a strict
 	// mapping — the no-op fallback still never runs for a claimed case.
 	strictBackend := strict.New()
@@ -340,9 +350,11 @@ func primitiveOfType(st *xsd.SimpleType) *xsd.SimpleType {
 
 // fallbackPrimitives maps every builtin primitive with a no-op identity mapping.
 // It exists ONLY to satisfy builtin.Seed's all-primitives precondition for the
-// 10 primitives strict.New() does not cover (strict maps 10 of the 20:
+// 3 primitives strict.New() does not cover (strict maps 17 of the 20:
 // decimal/boolean/string/anyURI/float/double/hexBinary/base64Binary/duration/
-// dateTime); the
+// dateTime plus the six seven-property siblings time/date/gYearMonth/gYear/
+// gMonthDay/gDay/gMonth; the remaining three are precisionDecimal, QName and
+// NOTATION); the
 // datatypes selector never claims a case that would exercise these mappings.
 type fallbackPrimitives struct{}
 
