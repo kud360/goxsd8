@@ -14,5 +14,7 @@ For API- or CLI-facing milestones, have the cartographer consult
 issue bodies.
 
 Then delegate a session log entry to **chronicler**, commit any PLAN.md/
-doc edits (`meta: backlog <date>`), and push. No code changes in this
-trigger.
+doc edits (`meta: backlog <date>`), and land them the same way `wip/issue-`
+work lands — open a PR and squash-merge it via the GitHub Merge API in this
+same session (never leave the commit sitting on an unmerged branch). No code
+changes in this trigger.

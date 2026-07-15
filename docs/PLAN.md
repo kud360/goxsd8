@@ -1,4 +1,4 @@
-to# goxsd8 Roadmap
+# goxsd8 Roadmap
 
 Milestones map one-to-one to GitHub milestones. The cartographer carves
 each into session-sized `ready` issues; the develop loop closes them one
@@ -11,7 +11,7 @@ Repo layout, docs (STYLE/PRINCIPLES/ARCHITECTURE/WORKFLOW/ROUTINES/PLAN),
 local specs + conversion tooling, W3C suite submodule, package contracts
 (`doc.go` per package), agent personas and commands, lint gate.
 
-## M1 — Spec infrastructure
+## M1 — Spec infrastructure (done)
 
 - **hfn → TypeSpec generator**: extend `tools/hfnextract` with a generator
   that emits `builtin/gen_typespec.go` — the backend-neutral data table for
@@ -27,7 +27,7 @@ local specs + conversion tooling, W3C suite submodule, package contracts
 - **Rule catalog**: `xsderr` gains its `Rule`/catalog wiring so
   `tools/rulecat` output compiles and `go generate ./...` is green.
 
-## M2 — Foundation leaves
+## M2 — Foundation leaves (done)
 
 `xsderr` (Error/Rule/Loc + narrowing helpers), `loader` (Resolver +
 Dir/FS/HTTP/Map/Chain), `parser/xmltree` (streaming position-tracking
@@ -37,7 +37,7 @@ decoder), and the `xsd.QName` expanded-name value type that
 `xsd` component model waits for M4). Full unit tests; fuzz targets for
 xmltree.
 
-## M3 — Datatypes vertical slice
+## M3 — Datatypes vertical slice (in progress — tail: 3 primitives + cohort widening)
 
 `value` contracts finalized; `builtin/strict` primitive mappings + the
 facet pipeline (pattern facets via package `regex`, XSD flavor) +
@@ -46,7 +46,19 @@ that `Seed` builds one of per builtin (the rest of the `xsd` component
 model stays M4); `value/backendtest` kit running against strict. First
 **`datatypes` ratchet lane** produces real numbers.
 
-## M4 — Schema parsing
+Status (2026-07-15): the shared facet pipeline hoisted into `value` (#87);
+`builtin/strict` maps 17 of 20 primitives — decimal/float/double, the
+string family, anyURI, hex/base64Binary, duration, and the seven-property
+temporal family incl. dateTime (#103/#109). The `datatypes` lane claims
+~716 cases (~700 pass). **Remaining tail:** map `precisionDecimal` (#115),
+`QName`/`NOTATION` (#114), and the derived `dateTimeStamp` (#122); widen the
+Facets cohort to the temporal (#123), binary/anyURI (#124), name-type (#116),
+and QName/NOTATION (#125, blocked on #114) cases; the list/union-variety
+executor + `value.effectiveWhiteSpace` not-applicable path (#98/#75) waits on
+the `xsd` list/union variety shape (M4, #46). The NIST corpus and full
+list/union cohort are tracked under the umbrella #75.
+
+## M4 — Schema parsing (next — epic #79)
 
 Three-phase parser over the composition model (include/import/redefine/
 override, chameleon coercion), UPA/EDC/particle-restriction designed into
