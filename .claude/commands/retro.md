@@ -22,7 +22,9 @@ Two delegations, in order — process first, architecture second.
    Repeated manual toil becomes a `kind/tooling` issue instead.
 5. Log metric trends vs the previous retro (sessions/commit, repair
    rounds/accept, rejects/accept, ratchet slope, ready-queue depth)
-   in the session log entry, commit, push.
+   in the session log entry, then land the commit(s) via a PR opened and
+   squash-merged in the same session (as `wip/issue-` work lands), not just
+   a push.
 
 **Part 2 — architecture audit.** Delegate to the **steward** (its
 full audit procedure — see its agent file): import graph and exported

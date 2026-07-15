@@ -18,4 +18,5 @@ Delegate to the **arbiter** (no other agent touches the ratchet):
    commit, file a `kind/bug` issue with the case IDs and the suspect
    commit, and leave the failing gate as the alarm.
 5. Delegate a log entry to **chronicler**, commit (log rides with any
-   lane updates), push.
+   lane updates), then land it via a PR opened and squash-merged in the
+   same session (as `wip/issue-` work lands), not just a push.

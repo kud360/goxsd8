@@ -28,7 +28,7 @@ kinds of branches exist; nothing else is ever pushed:
 
 | Branch | Meaning | Lifecycle |
 |---|---|---|
-| `main` | always green; receives only squash-landed, arbiter-accepted develop work plus the maintenance triggers' own commits (`meta:`/`conformance:` from /backlog, /retro, /ratchet) | permanent |
+| `main` | always green; receives only squash-merged PRs — develop-loop `wip/issue-` work and the maintenance triggers' `meta:`/`conformance:` commits (/backlog, /retro, /ratchet) land the same way | permanent |
 | `wip/issue-<N>` | THE work branch for issue #N — at most one, its name is stable | created when work starts; auto-deleted by GitHub when its PR squash-merges; retired in place if the attempt is abandoned |
 | `parked/untriaged-<YYYYMMDD-HHMMSS>` | unattributable work found in a dirty local tree | kept for human triage |
 
@@ -228,6 +228,14 @@ a replacement; the fresh attempt starts as `wip/issue-<M>` under the
 new number, from `origin/main`.
 
 ## Other triggers
+
+Every maintenance trigger lands the same way `wip/issue-` work does: it
+commits on whatever branch it is on, then opens a PR and squash-merges it
+via the GitHub Merge API in the SAME session, before that session ends. A
+trigger session must NOT end with a commit sitting on an unmerged branch —
+that is how commits get stranded off `main`. These sessions land
+same-session, so they need no `wip/*`-style lease or branch-discovery
+machinery; just don't leave the merge undone.
 
 - **`/ratchet`** — arbiter only: run conformance, report movement per
   lane, ratchet upward, investigate & file issues for any regression.
