@@ -51,14 +51,15 @@ import (
 // 2023-02-29 (con-dateTime-day/con-dateTime-dayValue §3.3.7.1, nt-dateTimeRep
 // §3.3.7.2).
 //
-// # The facet cohort (issue #57, widened by issues #80, #81 and #85)
+// # The facet cohort (issue #57, widened by issues #80, #81, #85 and #106)
 //
 // The lane additionally claims the Microsoft *Facets* instance cases under
 // msData/datatypes/Facets/<base>/<base>_<facet>NNN.xml where <base> is a
 // strict-mapped primitive (string, decimal, float, double), an integer-family
 // builtin (issue #81): integer, int, long, short, byte, unsignedInt/Long/Short/
 // Byte, nonNegativeInteger, nonPositiveInteger, positiveInteger, negativeInteger,
-// or a derived string-family builtin (issue #85): normalizedString, token.
+// or a derived string-family builtin: normalizedString, token (issue #85) and the
+// pattern-restricted string family language, Name, NCName, NMTOKEN (issue #106).
 // Each such schema restricts <base> by one or more constraining facets
 // (length/minLength/maxLength/pattern/enumeration on string; minInclusive/
 // maxInclusive/minExclusive/maxExclusive/totalDigits/pattern/enumeration on
@@ -96,6 +97,20 @@ import (
 // runs is collapsed, then length/pattern-checked on the normalized form; a value
 // violating an own length/pattern/enumeration facet is rejected through the
 // ordinary cvc-length/pattern/enumeration path.
+//
+// The wider string family (language, Name, NCName, NMTOKEN, issue #106) extends
+// this the same way: all four derive from token (NCName via Name) and resolve to
+// the xs:string primitive, so strict's string mapping governs them unchanged.
+// They differ from normalizedString/token only by carrying an intrinsic pattern
+// facet in the generated builtin table (language [a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*,
+// NMTOKEN \c+, Name \i\c*, NCName's own [\i-[:]][\c-[:]]* ANDed across the
+// Name→NCName step with Name's \i\c* — §4.3.4.2 xr-pattern, the cross-step pattern
+// AND EffectiveFacets already realizes) plus inherited whiteSpace=collapse. A
+// value violating an intrinsic pattern (e.g. an NCName with a colon) is rejected
+// via cvc-pattern-valid before the own length/pattern/enumeration facets. Unlike
+// the other cohorts, the NMTOKEN cases carry the tested value in a named
+// attribute of <foo> rather than its content, so readFacetsCase reads the value
+// named by the enclosing xsd:attribute.
 //
 // Validity in this cohort
 // depends on FACET checking, not
@@ -146,16 +161,19 @@ var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
 // the lane decides: the strict-mapped primitives (string/decimal/float/double),
 // the integer family (xs:integer and its twelve narrowings, issue #81) and the
-// derived string family normalizedString/token (issue #85). Every integer-family
-// type is a facet restriction of xs:decimal (§3.4.13–§3.4.25) that shares
-// decimal's value space, order and identity (Datatypes §2.2.1 Identity note), so
-// strict's decimal mapping governs it unchanged; normalizedString and token are
-// facet restrictions of xs:string (chain token → normalizedString → string,
-// §3.4.1/§3.4.2) that share string's value space and differ only by their fixed
-// whiteSpace facet (replace/collapse), so strict's string mapping governs them
-// unchanged. No new backend mapping is introduced in either case. The list feeds
-// both the directory and the filename-prefix alternation of facetsCase.
-const facetsBaseTypes = `string|normalizedString|token|decimal|float|double|` +
+// derived string family — normalizedString/token (issue #85) plus the
+// pattern-restricted language/Name/NCName/NMTOKEN (issue #106). Every
+// integer-family type is a facet restriction of xs:decimal (§3.4.13–§3.4.25) that
+// shares decimal's value space, order and identity (Datatypes §2.2.1 Identity
+// note), so strict's decimal mapping governs it unchanged; the derived string
+// types are facet restrictions of xs:string (chain token → normalizedString →
+// string, §3.4.1/§3.4.2; language/Name/NMTOKEN off token, NCName off Name) that
+// share string's value space and differ only by inherited whiteSpace and their
+// intrinsic pattern facets, so strict's string mapping governs them unchanged. No
+// new backend mapping is introduced in any case. The list feeds both the
+// directory and the filename-prefix alternation of facetsCase.
+const facetsBaseTypes = `string|normalizedString|token|language|Name|NCName|NMTOKEN|` +
+	`decimal|float|double|` +
 	`integer|int|long|short|byte|` +
 	`unsignedInt|unsignedLong|unsignedShort|unsignedByte|` +
 	`nonNegativeInteger|nonPositiveInteger|positiveInteger|negativeInteger`
@@ -189,7 +207,8 @@ func newDatatypesExec() executor {
 	// exercised: the lane now claims boolean/decimal/string/float/double/anyURI/
 	// hexBinary/base64Binary/duration/dateTime
 	// (lexical cohort) and string/decimal/float/double plus the integer and
-	// derived-string (normalizedString/token, #85) families (facet cohort) cases
+	// derived-string (normalizedString/token, #85; language/Name/NCName/NMTOKEN,
+	// #106) families (facet cohort) cases
 	// (float/double added in #80, anyURI in #82, hexBinary/base64Binary in #83,
 	// duration in #84, dateTime in #103),
 	// every one of which resolves (directly or via a base ancestor) to a strict
@@ -548,18 +567,49 @@ func readFacetsCase(instancePath string) (raw, base string, children []facetChil
 		return "", "", nil, false
 	}
 	schemaPath := filepath.Join(filepath.Dir(instancePath), filepath.FromSlash(inst.SchemaLoc))
-	base, children, ok = decodeRestriction(schemaPath)
+	base, attrName, children, ok := decodeRestriction(schemaPath)
 	if !ok || base == "" || len(children) == 0 {
 		return "", "", nil, false
 	}
-	return inst.Foo, base, children, true
+	// The NMTOKEN cohort (unlike language/Name/NCName) carries the tested value
+	// in a named attribute of <foo> rather than its content: the restriction is
+	// declared on an <xsd:attribute>. When decodeRestriction reports that
+	// attribute's name, read the matching instance attribute; otherwise the value
+	// is <foo>'s element content.
+	if attrName != "" {
+		v, found := inst.Foo.attr(attrName)
+		if !found {
+			return "", "", nil, false
+		}
+		return v, base, children, true
+	}
+	return inst.Foo.Text, base, children, true
 }
 
 // facetsInstance mirrors the Facets cohort's instance shape: a <test> root whose
-// single <foo> child holds the tested value.
+// single <foo> child holds the tested value in its content or a named attribute.
 type facetsInstance struct {
-	SchemaLoc string `xml:"http://www.w3.org/2001/XMLSchema-instance noNamespaceSchemaLocation,attr"`
-	Foo       string `xml:"foo"`
+	SchemaLoc string  `xml:"http://www.w3.org/2001/XMLSchema-instance noNamespaceSchemaLocation,attr"`
+	Foo       fooElem `xml:"foo"`
+}
+
+// fooElem is the <foo> element: its text content plus any attributes, so a case
+// carrying the tested value in an attribute can be read as well as one carrying
+// it in element content.
+type fooElem struct {
+	Text  string     `xml:",chardata"`
+	Attrs []xml.Attr `xml:",any,attr"`
+}
+
+// attr returns the value of the unqualified attribute named local, and whether
+// it was present.
+func (f fooElem) attr(local string) (string, bool) {
+	for _, a := range f.Attrs {
+		if a.Name.Local == local {
+			return a.Value, true
+		}
+	}
+	return "", false
 }
 
 func decodeFacetsInstance(path string) (facetsInstance, error) {
@@ -575,18 +625,21 @@ func decodeFacetsInstance(path string) (facetsInstance, error) {
 }
 
 // decodeRestriction streams the schema and returns the base primitive (prefix
-// stripped) and the constraining-facet children of its first xsd:restriction.
-// Facet children are the restriction's direct element children in the XML Schema
-// namespace, in document order (P4: token stream, no whole-document buffer). ok
-// is false when no restriction is found.
-func decodeRestriction(path string) (base string, children []facetChild, ok bool) {
+// stripped), the name of the enclosing xsd:attribute if the restriction is
+// declared on one (empty when it constrains element content), and the
+// constraining-facet children of its first xsd:restriction. Facet children are
+// the restriction's direct element children in the XML Schema namespace, in
+// document order (P4: token stream, no whole-document buffer). ok is false when
+// no restriction is found.
+func decodeRestriction(path string) (base, attrName string, children []facetChild, ok bool) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", nil, false
+		return "", "", nil, false
 	}
 	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the parsed result
 	dec := xml.NewDecoder(bufio.NewReader(f))
 	inRestriction := false
+	lastAttr := ""
 	for {
 		tok, err := dec.Token()
 		if err != nil {
@@ -594,7 +647,7 @@ func decodeRestriction(path string) (base string, children []facetChild, ok bool
 		}
 		if end, isEnd := tok.(xml.EndElement); isEnd {
 			if inRestriction && end.Name.Local == "restriction" && end.Name.Space == xsd.XMLSchemaNS {
-				return base, children, true
+				return base, attrName, children, true
 			}
 			continue
 		}
@@ -603,9 +656,13 @@ func decodeRestriction(path string) (base string, children []facetChild, ok bool
 			continue
 		}
 		if !inRestriction {
+			if se.Name.Local == "attribute" && se.Name.Space == xsd.XMLSchemaNS {
+				lastAttr = attrValue(se, "name")
+			}
 			if se.Name.Local == "restriction" && se.Name.Space == xsd.XMLSchemaNS {
 				inRestriction = true
 				base = localName(attrValue(se, "base"))
+				attrName = lastAttr
 			}
 			continue
 		}
@@ -614,9 +671,9 @@ func decodeRestriction(path string) (base string, children []facetChild, ok bool
 		}
 	}
 	if inRestriction {
-		return base, children, true
+		return base, attrName, children, true
 	}
-	return "", nil, false
+	return "", "", nil, false
 }
 
 // attrValue returns the value of se's unqualified attribute local, or "".

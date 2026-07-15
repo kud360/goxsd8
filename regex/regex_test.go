@@ -130,6 +130,62 @@ func TestUnicodeBlockEscapes(t *testing.T) {
 	}
 }
 
+// TestNameCharEscapes covers the XML name-character multi-character escapes
+// \i (NameStartChar), \c (NameChar) and their complements \I/\C (Datatypes
+// §G.4.2.5), both standalone and as the base of a character-class subtraction —
+// the exact constructs the intrinsic pattern facets of xs:Name (\i\c*),
+// xs:NMTOKEN (\c+) and xs:NCName ([\i-[:]][\c-[:]]*) require.
+func TestNameCharEscapes(t *testing.T) {
+	// \i is NameStartChar: a letter/'_'/':' but not a digit or '-'.
+	name := mustCompile(t, mustTranslate(t, `\i\c*`, FlavorXSD, ""))
+	for _, ok := range []string{"a", "abc", "a:b", "_x", "a-b.c9"} {
+		if !name.MatchString(ok) {
+			t.Errorf(`\i\c* should match %q`, ok)
+		}
+	}
+	for _, bad := range []string{"1abc", "-a", ".x", ""} {
+		if name.MatchString(bad) {
+			t.Errorf(`\i\c* should not match %q`, bad)
+		}
+	}
+
+	// \c is NameChar: also matches leading digits and '-'.
+	nmtoken := mustCompile(t, mustTranslate(t, `\c+`, FlavorXSD, ""))
+	for _, ok := range []string{"1abc", "-x", "a.b:c", "9"} {
+		if !nmtoken.MatchString(ok) {
+			t.Errorf(`\c+ should match %q`, ok)
+		}
+	}
+	for _, bad := range []string{"a b", "a/b", ""} {
+		if nmtoken.MatchString(bad) {
+			t.Errorf(`\c+ should not match %q`, bad)
+		}
+	}
+
+	// NCName's own pattern: \i/\c minus the colon, via class subtraction.
+	ncname := mustCompile(t, mustTranslate(t, `[\i-[:]][\c-[:]]*`, FlavorXSD, ""))
+	for _, ok := range []string{"abc", "a-b.c", "_x9"} {
+		if !ncname.MatchString(ok) {
+			t.Errorf(`NCName pattern should match %q`, ok)
+		}
+	}
+	for _, bad := range []string{"a:b", ":ab", "ab:", "1ab"} {
+		if ncname.MatchString(bad) {
+			t.Errorf(`NCName pattern should not match %q`, bad)
+		}
+	}
+
+	// Complements \I/\C match exactly what \i/\c reject.
+	notStart := mustCompile(t, mustTranslate(t, `\I`, FlavorXSD, ""))
+	if notStart.MatchString("a") || !notStart.MatchString("1") {
+		t.Errorf(`\I should reject a name-start char and accept a digit`)
+	}
+	notChar := mustCompile(t, mustTranslate(t, `\C`, FlavorXSD, ""))
+	if notChar.MatchString("9") || !notChar.MatchString(" ") {
+		t.Errorf(`\C should reject a name char and accept a space`)
+	}
+}
+
 func TestFlagsHonoredInFO(t *testing.T) {
 	// s: dot-all lets . match a newline.
 	dotAll := mustCompile(t, mustTranslate(t, "a.b", FlavorFO, "s"))
@@ -169,7 +225,6 @@ func TestErrorsSurfaceNeverSilentlyAccepted(t *testing.T) {
 		{"fo-rejects-unknown-flag", "abc", FlavorFO, "z", ruleFOFlags},
 		{"fo-backreference", `(a)\1`, FlavorFO, "", ruleFOPattern},
 		{"xsd-backreference", `(a)\1`, FlavorXSD, "", ruleXSDPattern},
-		{"unsupported-name-escape", `a\i`, FlavorXSD, "", ruleXSDPattern},
 		{"unknown-block", `\p{IsNoSuchBlock}`, FlavorXSD, "", ruleXSDPattern},
 		{"unknown-category", `\p{Xy}`, FlavorFO, "", ruleFOPattern},
 		{"counted-repeat-over-limit", "a{1001}", FlavorXSD, "", ruleXSDPattern},

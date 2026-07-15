@@ -150,8 +150,9 @@ func wordExcludedSet() runeSet {
 }
 
 // multiEscSet returns the set matched by a multi-character escape letter
-// (\d \D \s \S \w \W) as it appears inside a character-class expression, where
-// no symbolic RE2 form is available and the set must be materialized.
+// (\d \D \s \S \w \W \i \I \c \C) as it appears inside a character-class
+// expression, where no symbolic RE2 form is available and the set must be
+// materialized.
 func multiEscSet(c byte) runeSet {
 	switch c {
 	case 'd':
@@ -166,8 +167,39 @@ func multiEscSet(c byte) runeSet {
 		return wordExcludedSet().complement()
 	case 'W':
 		return wordExcludedSet()
+	case 'i':
+		return nameStartSet()
+	case 'I':
+		return nameStartSet().complement()
+	case 'c':
+		return nameCharSet()
+	case 'C':
+		return nameCharSet().complement()
 	}
 	return nil
+}
+
+// nameStartSet is the set \i denotes: the XML NameStartChar (production [4] of
+// [XML 1.0] Fifth Edition, docs/specs/md/xml.md), i.e. the initial characters
+// of a name (Datatypes §G.4.2.5: "\i | the set of initial name characters,
+// those matched by NameStartChar"). \I is its complement.
+func nameStartSet() runeSet {
+	return runeSet{}.
+		add(':', ':').add('A', 'Z').add('_', '_').add('a', 'z').
+		add(0xC0, 0xD6).add(0xD8, 0xF6).add(0xF8, 0x2FF).
+		add(0x370, 0x37D).add(0x37F, 0x1FFF).add(0x200C, 0x200D).
+		add(0x2070, 0x218F).add(0x2C00, 0x2FEF).add(0x3001, 0xD7FF).
+		add(0xF900, 0xFDCF).add(0xFDF0, 0xFFFD).add(0x10000, 0xEFFFF)
+}
+
+// nameCharSet is the set \c denotes: the XML NameChar (production [4a] of
+// [XML 1.0] Fifth Edition, docs/specs/md/xml.md), i.e. NameStartChar plus the
+// continuation characters (Datatypes §G.4.2.5: "\c | the set of name
+// characters, those matched by NameChar"). \C is its complement.
+func nameCharSet() runeSet {
+	return nameStartSet().
+		add('-', '-').add('.', '.').add('0', '9').
+		add(0xB7, 0xB7).add(0x300, 0x36F).add(0x203F, 0x2040)
 }
 
 // propSet returns the code-point set named by a \p{...}/\P{...} property body

@@ -407,7 +407,7 @@ var Types = []TypeSpec{
 		Variety:     Atomic{},
 		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
-			{Name: "pattern", Default: "\\i\\c* ∩ [\\i-[:]][\\c-[:]]*"},
+			{Name: "pattern", Default: "[\\i-[:]][\\c-[:]]*"},
 			{Name: "whiteSpace", Default: "collapse"},
 			{Name: "length"},
 			{Name: "minLength"},
@@ -422,7 +422,7 @@ var Types = []TypeSpec{
 		Variety:     Atomic{},
 		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
-			{Name: "pattern", Default: "\\i\\c* ∩ [\\i-[:]][\\c-[:]]*"},
+			{Name: "pattern"},
 			{Name: "whiteSpace", Default: "collapse"},
 			{Name: "length"},
 			{Name: "minLength"},
@@ -437,7 +437,7 @@ var Types = []TypeSpec{
 		Variety:     Atomic{},
 		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
-			{Name: "pattern", Default: "\\i\\c* ∩ [\\i-[:]][\\c-[:]]*"},
+			{Name: "pattern"},
 			{Name: "whiteSpace", Default: "collapse"},
 			{Name: "length"},
 			{Name: "minLength"},
@@ -467,7 +467,7 @@ var Types = []TypeSpec{
 		Variety:     Atomic{},
 		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
-			{Name: "pattern", Default: "\\i\\c* ∩ [\\i-[:]][\\c-[:]]*"},
+			{Name: "pattern"},
 			{Name: "whiteSpace", Default: "collapse"},
 			{Name: "length"},
 			{Name: "minLength"},

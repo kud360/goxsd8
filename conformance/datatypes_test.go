@@ -8,6 +8,8 @@ import (
 	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/value"
+	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // TestDatatypesBackendSeeds guards the lane's precondition loudly: the composed
@@ -142,5 +144,93 @@ func TestDatatypesFacetsStringFamily(t *testing.T) {
 	}
 	if exec(wrong).IsPass() {
 		t.Errorf("executor must Fail when the declared expectation is wrong (token_length001 'foofo' is not length 4)")
+	}
+}
+
+// TestDatatypesFacetsWideStringFamily drives the executor over the wider
+// string-family Facets cohort (issue #106): language/Name/NCName/NMTOKEN
+// restrictions resolve to their xs:string primitive ancestor through the token
+// chain (strictGoverns/primitiveOfType, reused from #81), and the seeded type's
+// intrinsic pattern + whiteSpace=collapse apply before the own facets. It also
+// asserts the NCName cross-step pattern AND directly (§4.3.4.2 xr-pattern): a
+// colon-bearing value passes Name's \i\c* but must be rejected by NCName's own
+// [\i-[:]][\c-[:]]* via cvc-pattern-valid — no corpus case carries a colon, so
+// this exercises the composition through the real value pipeline. Both
+// polarities are asserted, and a wrong expectation must yield Fail. The NMTOKEN
+// cases carry the tested value in an attribute, exercising the reader path.
+func TestDatatypesFacetsWideStringFamily(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	exec := newDatatypesExec()
+
+	facetsDir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets")
+	cases := []struct {
+		rel         string
+		expectValid bool // the suite's declared XSD 1.1 validity
+	}{
+		{"language/language_pattern001.xml", true},
+		{"language/language_enumeration001.xml", false},
+		{"Name/Name_pattern001.xml", true},
+		{"Name/Name_length002.xml", true},  // length=5, value "foofo"
+		{"Name/Name_length001.xml", false}, // length=4, value "foofo"
+		{"NCName/NCName_pattern001.xml", true},
+		{"NCName/NCName_length001.xml", false},
+		{"NCName/NCName_enumeration001.xml", false},
+		{"NMTOKEN/NMTOKEN_pattern001.xml", true}, // value in attrTest attribute
+		{"NMTOKEN/NMTOKEN_length002.xml", true},  // length=5, value "foofo" (attribute)
+		{"NMTOKEN/NMTOKEN_length001.xml", false}, // length=4, value "foofo" (attribute)
+	}
+	for _, tc := range cases {
+		c := caseSpec{
+			kind:        kindInstance,
+			doc:         filepath.Join(facetsDir, filepath.FromSlash(tc.rel)),
+			expectValid: tc.expectValid,
+		}
+		if got := exec(c); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", tc.rel, tc.expectValid)
+		}
+	}
+
+	// A deliberately WRONG expectation must Fail: NMTOKEN_length001 ("foofo", 5)
+	// is invalid under length=4, so claiming it valid must not pass — this also
+	// proves the executor reads the ATTRIBUTE value, not the <foo> element text.
+	wrong := caseSpec{
+		kind:        kindInstance,
+		doc:         filepath.Join(facetsDir, "NMTOKEN", "NMTOKEN_length001.xml"),
+		expectValid: true,
+	}
+	if exec(wrong).IsPass() {
+		t.Errorf("executor must Fail when the declared expectation is wrong (NMTOKEN_length001 'foofo' is not length 4)")
+	}
+
+	// NCName cross-step pattern AND, verified through the real value pipeline.
+	strictBackend := strict.New()
+	backend := value.Override(fallbackPrimitives{}, strictBackend)
+	types, err := builtin.Seed(backend)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	var ncname *xsd.SimpleType
+	want := xsd.QName{Space: xsd.XMLSchemaNS, Local: "NCName"}
+	for _, ty := range types {
+		if ty.Name() == want {
+			ncname = ty
+			break
+		}
+	}
+	if ncname == nil {
+		t.Fatal("xs:NCName not seeded")
+	}
+	if _, verr := value.ValidateLexical(backend, ncname, "abc", nil); verr != nil {
+		t.Errorf("NCName should accept %q: %v", "abc", verr)
+	}
+	_, verr := value.ValidateLexical(backend, ncname, "a:b", nil)
+	if verr == nil {
+		t.Fatal("NCName must reject a colon-bearing value via its intrinsic pattern")
+	}
+	rule, ok := xsderr.RuleOf(verr)
+	if !ok || rule != "cvc-pattern-valid" {
+		t.Errorf("NCName colon rejection rule = %q (ok=%v), want cvc-pattern-valid", rule, ok)
 	}
 }
