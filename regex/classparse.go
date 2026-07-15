@@ -189,7 +189,8 @@ func (p *parser) parseClassEscape(open int) (rune, bool, runeSet, error) {
 		p.pos++
 		return 0, false, multiEscSet(c), nil
 	case c == 'i' || c == 'I' || c == 'c' || c == 'C':
-		return 0, false, nil, p.errf(start, "\\%c (XML NameChar class) is not supported", c)
+		p.pos++
+		return 0, false, multiEscSet(c), nil
 	case isSingleCharEscByte(c, p.flavor):
 		p.pos++
 		return singleCharEscRune(c), true, nil, nil

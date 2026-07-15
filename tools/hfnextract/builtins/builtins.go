@@ -105,7 +105,80 @@ func Parse(structuresPath, precisionPath string) ([]Builtin, error) {
 	out = append(out, ordinary...)
 	out = append(out, aat)
 	out = append(out, pd)
+	resolveOwnPatterns(out)
 	return out, nil
+}
+
+// patternIntersectionSep joins the operands of an effective cross-step pattern
+// as the per-type prose renders it (Datatypes §3.4.7.1: NCName's
+// "\i\c* ∩ [\i-[:]][\c-[:]]*"): a U+2229 INTERSECTION flanked by single spaces.
+const patternIntersectionSep = " ∩ "
+
+// resolveOwnPatterns rewrites each pattern facet whose spec value is the
+// effective cross-step intersection (rendered "A ∩ B" in a type's Facets prose,
+// e.g. NCName's "\i\c* ∩ [\i-[:]][\c-[:]]*", §3.4.7.1) down to the type's OWN
+// pattern at its declaration step. A TypeSpec row carries only own facets;
+// EffectiveFacets re-ANDs the inherited base pattern across derivation steps
+// (§4.3.4.2 xr-pattern), so the own pattern is exactly the intersection
+// operands the base type does not already contribute. A type whose effective
+// pattern equals its base's (ID/IDREF/ENTITY, derived from NCName without a new
+// pattern) is left with an empty own value, i.e. it declares no own pattern.
+// The prose intersection is spec description of composed value spaces, never a
+// single regex — the ∩ must not survive into a compilable pattern facet.
+func resolveOwnPatterns(types []Builtin) {
+	effective := make(map[string][]string, len(types))
+	for _, t := range types {
+		if v, ok := patternValue(t); ok && v != "" {
+			effective[t.Name] = strings.Split(v, patternIntersectionSep)
+		}
+	}
+	for i := range types {
+		v, ok := patternValue(types[i])
+		if !ok || !strings.Contains(v, patternIntersectionSep) {
+			continue
+		}
+		own := subtractOperands(strings.Split(v, patternIntersectionSep), effective[types[i].Base])
+		setPatternValue(&types[i], strings.Join(own, patternIntersectionSep))
+	}
+}
+
+// patternValue returns the value of b's pattern facet, if b declares one.
+func patternValue(b Builtin) (string, bool) {
+	for _, f := range b.Facets {
+		if f.Name == "pattern" {
+			return f.Value, true
+		}
+	}
+	return "", false
+}
+
+// setPatternValue overwrites b's pattern facet value in place. b is known to
+// carry a pattern facet (patternValue reported it).
+func setPatternValue(b *Builtin, value string) {
+	for i := range b.Facets {
+		if b.Facets[i].Name == "pattern" {
+			b.Facets[i].Value = value
+			return
+		}
+	}
+}
+
+// subtractOperands returns the members of a not present in b, preserving a's
+// order — the own-step pattern operands once the inherited base operands are
+// removed.
+func subtractOperands(a, b []string) []string {
+	inBase := make(map[string]bool, len(b))
+	for _, s := range b {
+		inBase[s] = true
+	}
+	var out []string
+	for _, s := range a {
+		if inBase[s] {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // parseStructures walks the Datatypes spec once, slicing each builtin's

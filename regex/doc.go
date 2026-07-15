@@ -34,8 +34,10 @@
 //	    wrong answer is worse than a refusal);
 //	  - . excludes only \n by default (it matches \r); the s flag lifts that.
 //
-// Character-class handling — \d \w \s, \p{…}/\P{…} including Unicode
-// blocks (\p{IsBasicLatin}), and class subtraction ([a-z-[m]]) — is
+// Character-class handling — \d \w \s, the XML name-character escapes
+// \i \c (NameStartChar/NameChar, §G.4.2.5) and their complements \I \C,
+// \p{…}/\P{…} including Unicode blocks (\p{IsBasicLatin}), and class
+// subtraction ([a-z-[m]], including name-escape bases like [\i-[:]]) — is
 // shared between flavors. Go RE2's counted-repeat limit (1000) is a
 // documented deviation surfaced as a translation error, not a silent
 // truncation.

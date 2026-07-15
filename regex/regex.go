@@ -319,7 +319,11 @@ func (p *parser) atomEscape() error {
 		p.out.WriteString(atomMultiEsc(c))
 		return nil
 	case c == 'i' || c == 'I' || c == 'c' || c == 'C':
-		return p.errf(start, "\\%c (XML NameChar class) is not supported", c)
+		// No symbolic RE2 form exists for the XML name-character classes, so
+		// materialize the set as an explicit RE2 class (Datatypes §G.4.2.5).
+		p.pos++
+		emitClass(&p.out, multiEscSet(c), false)
+		return nil
 	case isSingleCharEscByte(c, p.flavor):
 		p.pos++
 		writeLiteralRune(&p.out, singleCharEscRune(c))
