@@ -350,11 +350,11 @@ func primitiveOfType(st *xsd.SimpleType) *xsd.SimpleType {
 
 // fallbackPrimitives maps every builtin primitive with a no-op identity mapping.
 // It exists ONLY to satisfy builtin.Seed's all-primitives precondition for the
-// 3 primitives strict.New() does not cover (strict maps 17 of the 20:
+// 1 primitive strict.New() does not cover (strict maps 19 of the 20:
 // decimal/boolean/string/anyURI/float/double/hexBinary/base64Binary/duration/
-// dateTime plus the six seven-property siblings time/date/gYearMonth/gYear/
-// gMonthDay/gDay/gMonth; the remaining three are precisionDecimal, QName and
-// NOTATION); the
+// dateTime, the six seven-property siblings time/date/gYearMonth/gYear/
+// gMonthDay/gDay/gMonth, and QName/NOTATION; the remaining one is
+// precisionDecimal); the
 // datatypes selector never claims a case that would exercise these mappings.
 type fallbackPrimitives struct{}
 

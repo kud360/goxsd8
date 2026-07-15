@@ -7,12 +7,13 @@ import (
 
 // New returns the spec-exact value.Backend for the primitive cohort so far:
 // xs:decimal, xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary,
-// xs:base64Binary, xs:duration, xs:dateTime and the six remaining
+// xs:base64Binary, xs:duration, xs:dateTime, the six remaining
 // seven-property date/time siblings xs:time, xs:date, xs:gYearMonth, xs:gYear,
-// xs:gMonthDay, xs:gDay and xs:gMonth. Each type's value
+// xs:gMonthDay, xs:gDay and xs:gMonth, and xs:QName and xs:NOTATION. Each type's
+// value
 // space is represented with full fidelity to the Datatypes spec (§3.3.3,
 // §3.3.2, §3.3.1, §3.3.17, §3.3.4, §3.3.5, §3.3.15, §3.3.16, §3.3.6, §3.3.7,
-// §3.3.8–§3.3.14); a [value.Mapping.Parse]
+// §3.3.8–§3.3.14, §3.3.18, §3.3.19); a [value.Mapping.Parse]
 // rejects any lexical
 // outside the type's lexical space as an *xsderr.Error with rule
 // "cvc-datatype-valid" (§4.1.4), never a false validity verdict.
@@ -71,6 +72,19 @@ import (
 //     [value.TimezoneAware]. Deliberately NOT [value.Lengthed]/
 //     [value.DigitCounted]/[value.Scaled] — no applicable facet needs them
 //     (cos-applicable-facets §4.1.5: no length family).
+//   - xs:QName, xs:NOTATION — the {namespace name, local part} tuple
+//     (§3.3.18/§3.3.19). Their lexical mapping is CONTEXT-DEPENDENT: Parse
+//     resolves the prefix (empty prefix = default namespace) against the
+//     [value.Context]'s in-scope namespace bindings, rejecting an unresolvable
+//     prefix or malformed grammar as cvc-datatype-valid (§4.1.4). [value.Eq]
+//     (value-space tuple equality; a QName never equals a same-tuple NOTATION,
+//     they are distinct value types) and [value.Lengthed] (rune count of the
+//     local part — length is applicable but deprecated, and §4.3.1.3 clause 1.3
+//     makes any value length-facet-valid, so the count never gates validity).
+//     Deliberately NOT [value.Ordered] (ordered=false, §3.3.18/§3.3.19) and,
+//     uniquely in this cohort, their [value.Mapping.Canonical] is nil: the spec
+//     defines NO canonical representation for either (their lexical forms vary
+//     with context).
 func New() value.Backend { return backend{} }
 
 // backend is the spec-exact primitive-cohort mapping. It carries no state: the
@@ -120,6 +134,13 @@ func (backend) Mapping(typ xsd.QName) (value.Mapping, bool) {
 		return value.Mapping{Parse: parseGDay, Canonical: canonicalGDay}, true
 	case "gMonth":
 		return value.Mapping{Parse: parseGMonth, Canonical: canonicalGMonth}, true
+	case "QName":
+		// No canonical mapping: the spec defines none for QName (§3.3.18), so
+		// Canonical is nil (value.Mapping documents nil Canonical as legitimate).
+		return value.Mapping{Parse: parseQName, Canonical: nil}, true
+	case "NOTATION":
+		// No canonical mapping either (§3.3.19), so Canonical is nil.
+		return value.Mapping{Parse: parseNOTATION, Canonical: nil}, true
 	}
 	return value.Mapping{}, false
 }

@@ -33,7 +33,22 @@ func TestBackendCoverage(t *testing.T) {
 			t.Errorf("Mapping(xs:%s): Parse is nil", local)
 		}
 		if m.Canonical == nil {
-			t.Errorf("Mapping(xs:%s): Canonical is nil (all three define a canonical map)", local)
+			t.Errorf("Mapping(xs:%s): Canonical is nil (this cohort defines a canonical map)", local)
+		}
+	}
+	// QName and NOTATION are mapped too, but legitimately have a nil Canonical:
+	// the spec defines no canonical representation for either (§3.3.18/§3.3.19).
+	for _, local := range []string{"QName", "NOTATION"} {
+		m, ok := backend.Mapping(xsd.QName{Space: xsd.XMLSchemaNS, Local: local})
+		if !ok {
+			t.Errorf("Mapping(xs:%s): ok=false, want true", local)
+			continue
+		}
+		if m.Parse == nil {
+			t.Errorf("Mapping(xs:%s): Parse is nil", local)
+		}
+		if m.Canonical != nil {
+			t.Errorf("Mapping(xs:%s): Canonical is non-nil; the spec defines no canonical form (§3.3.18/§3.3.19)", local)
 		}
 	}
 }
@@ -44,7 +59,7 @@ func TestBackendUnmapped(t *testing.T) {
 	// are both unmapped.
 	for _, q := range []xsd.QName{
 		{Space: xsd.XMLSchemaNS, Local: "integer"},
-		{Space: xsd.XMLSchemaNS, Local: "QName"},
+		{Space: xsd.XMLSchemaNS, Local: "precisionDecimal"},
 		{Space: "urn:other", Local: "decimal"},
 		{Local: "decimal"},
 	} {
@@ -56,9 +71,9 @@ func TestBackendUnmapped(t *testing.T) {
 
 // TestSeedMissingShrinksByFloatDouble proves float and double have joined the
 // mapped primitives: builtin.Seed(strict.New()) still reports a
-// MissingPrimitivesError (the later cohorts remain unmapped), but float and
-// double are no longer in it, while a genuinely-unmapped primitive (xs:QName,
-// one of the three strict still does not map) still is.
+// MissingPrimitivesError (precisionDecimal remains unmapped), but float and
+// double are no longer in it, while the sole genuinely-unmapped primitive
+// (xs:precisionDecimal) still is.
 func TestSeedMissingShrinksByFloatDouble(t *testing.T) {
 	_, err := builtin.Seed(strict.New())
 	var missing *builtin.MissingPrimitivesError
@@ -73,15 +88,15 @@ func TestSeedMissingShrinksByFloatDouble(t *testing.T) {
 		}
 		return false
 	}
-	for _, mapped := range []string{"decimal", "boolean", "string", "anyURI", "float", "double", "hexBinary", "base64Binary", "duration", "dateTime", "time", "date", "gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth"} {
+	for _, mapped := range []string{"decimal", "boolean", "string", "anyURI", "float", "double", "hexBinary", "base64Binary", "duration", "dateTime", "time", "date", "gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth", "QName", "NOTATION"} {
 		if inMissing(mapped) {
 			t.Errorf("primitive %q must NOT be in the missing set (strict maps it)", mapped)
 		}
 	}
 	// A primitive strict does not yet map must still be reported, so the test
 	// cannot pass by strict suddenly mapping everything.
-	if !inMissing("QName") {
-		t.Error("QName must still be in the missing set (strict does not map it yet)")
+	if !inMissing("precisionDecimal") {
+		t.Error("precisionDecimal must still be in the missing set (strict does not map it yet)")
 	}
 }
 
