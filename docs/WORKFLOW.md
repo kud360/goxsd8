@@ -274,6 +274,16 @@ you can also run locally on demand.
   criteria (which conformance cases / tests prove it), and dependencies
   (`Depends on #N`). If an agent can't start it from the body alone, the
   body is incomplete.
+- For an issue that regenerates a spec-derived table (`xsderr/catalog.go`,
+  the spec `.md` files, any generated Go table), do NOT make "regenerated
+  output is byte-identical to the committed file" an acceptance criterion
+  unless a spec grep first confirms the committed table already contains
+  every member the widened generator will admit. Regeneration frequently
+  and correctly ADDS previously-missed entries — catching those is often
+  the whole point — so a byte-identical criterion is usually vacuous or
+  self-contradictory. The right criterion is "the regenerated diff is
+  additive-only and every added entry is a genuine spec member," verified
+  by grep.
 - `// GAP(...)` comments and fail-open sites get tracking issues
   (`kind/gap`) so nothing fails open silently forever.
 
