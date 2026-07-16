@@ -39,13 +39,20 @@ func TestDateTimeStampMappingAliasesDateTime(t *testing.T) {
 	}
 }
 
-// TestDateTimeStampSeededExplicitTimezone is the load-bearing acceptance test for
-// #122: the REAL seeded builtin xs:dateTimeStamp type — carrying the generated
-// typespec's fixed explicitTimezone=required facet (§3.4.28) — enforces the
-// mandatory timezone through value.ValidateLexical. A tz-bearing literal is
-// accepted; a tz-absent one is rejected as cvc-explicitTimezone-valid (§4.3.14.3).
-// This proves the fixed facet reaches enforcement for the actual seeded type, not
-// only for the synthetic derive()-built type TestExplicitTimezoneFacet exercises.
+// TestDateTimeStampSeededExplicitTimezone is corroborating coverage — it does NOT
+// pin this issue's new registration (TestDateTimeStampMappingAliasesDateTime does
+// that, and only that one fails if the strict.go alias case is reverted). What this
+// test proves is orthogonal: the REAL seeded builtin xs:dateTimeStamp type —
+// carrying the generated typespec's fixed explicitTimezone=required facet (§3.4.28)
+// — enforces the mandatory timezone through value.ValidateLexical. It stands even
+// without the direct-Mapping alias, because ValidateLexical resolves dateTimeStamp
+// via governingMapping's base-chain walk (dateTimeStamp.Base() → dateTime, whose
+// mapping the already-existing typespec table already supplies), so this exercises
+// #108's explicitTimezone facet pipeline over the seeded type, not #122's alias. A
+// tz-bearing literal is accepted; a tz-absent one is rejected as
+// cvc-explicitTimezone-valid (§4.3.14.3). Useful because it shows the fixed facet
+// reaches enforcement for the actual seeded type, not only for the synthetic
+// derive()-built type TestExplicitTimezoneFacet exercises.
 func TestDateTimeStampSeededExplicitTimezone(t *testing.T) {
 	components, err := builtin.Seed(strict.New())
 	if err != nil {

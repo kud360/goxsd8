@@ -183,12 +183,13 @@ const synthNS = "urn:goxsd8:conformance:facets"
 
 // datatypesCase matches an instance case in the lexical cohort.
 //
-// dateTimeStamp (§3.4.28) is listed but has ZERO cases in the current W3C
-// checkout (no msData/datatypes/dateTimeStampNNN.xml), so the alternative is inert
-// today. Unlike every other cohort type, its Parse-only path is NOT a complete
-// check: dateTimeStamp fixes explicitTimezone=required, but execLexicalCase decides
-// validity purely via parseDateTime (parseOK), which does not enforce the timezone
-// (that check lives only in the facet cohort's value.ValidateLexical). So a
+// GAP(datatypes): dateTimeStamp (§3.4.28) is listed but has ZERO cases in the
+// current W3C checkout (no msData/datatypes/dateTimeStampNNN.xml), so the
+// alternative is inert today. Unlike every other cohort type, its Parse-only path
+// is NOT a complete check: dateTimeStamp fixes explicitTimezone=required, but
+// execLexicalCase decides validity purely via parseDateTime (parseOK), which does
+// not enforce the timezone (that check lives only in the facet cohort's
+// value.ValidateLexical). So a
 // tz-ABSENT dateTimeStamp literal would be FALSE-ACCEPTED here — a fail-open gap,
 // currently unexercised because no such case exists. Should the suite ever add a
 // tz-absent dateTimeStamp case, it must move to the facet cohort (or execLexicalCase
