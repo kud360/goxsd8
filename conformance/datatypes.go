@@ -59,15 +59,16 @@ import (
 // con-gMonthDay-dayValue §3.3.12.1, year-free so --02-29 is always valid) beyond
 // the grammar regex; gDay/gMonth/gYear/gYearMonth carry no day-value rule.
 //
-// # The facet cohort (issue #57, widened by issues #80, #81, #85 and #106)
+// # The facet cohort (issue #57, widened by issues #80, #81, #85, #106 and #116)
 //
 // The lane additionally claims the Microsoft *Facets* instance cases under
 // msData/datatypes/Facets/<base>/<base>_<facet>NNN.xml where <base> is a
 // strict-mapped primitive (string, decimal, float, double), an integer-family
 // builtin (issue #81): integer, int, long, short, byte, unsignedInt/Long/Short/
 // Byte, nonNegativeInteger, nonPositiveInteger, positiveInteger, negativeInteger,
-// or a derived string-family builtin: normalizedString, token (issue #85) and the
-// pattern-restricted string family language, Name, NCName, NMTOKEN (issue #106).
+// or a derived string-family builtin: normalizedString, token (issue #85), the
+// pattern-restricted string family language, Name, NCName, NMTOKEN (issue #106)
+// and the NCName-derived ID, IDREF, ENTITY (issue #116).
 // Each such schema restricts <base> by one or more constraining facets
 // (length/minLength/maxLength/pattern/enumeration on string; minInclusive/
 // maxInclusive/minExclusive/maxExclusive/totalDigits/pattern/enumeration on
@@ -106,17 +107,25 @@ import (
 // violating an own length/pattern/enumeration facet is rejected through the
 // ordinary cvc-length/pattern/enumeration path.
 //
-// The wider string family (language, Name, NCName, NMTOKEN, issue #106) extends
-// this the same way: all four derive from token (NCName via Name) and resolve to
+// The wider string family (language, Name, NCName, NMTOKEN, issue #106; ID,
+// IDREF, ENTITY, issue #116) extends
+// this the same way: all derive from token (NCName via Name; ID/IDREF/ENTITY via
+// NCName, §3.4.8/§3.4.9/§3.4.11 dt-ID/dt-IDREF/dt-ENTITY) and resolve to
 // the xs:string primitive, so strict's string mapping governs them unchanged.
 // They differ from normalizedString/token only by carrying an intrinsic pattern
 // facet in the generated builtin table (language [a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*,
 // NMTOKEN \c+, Name \i\c*, NCName's own [\i-[:]][\c-[:]]* ANDed across the
 // Name→NCName step with Name's \i\c* — §4.3.4.2 xr-pattern, the cross-step pattern
-// AND EffectiveFacets already realizes) plus inherited whiteSpace=collapse. A
-// value violating an intrinsic pattern (e.g. an NCName with a colon) is rejected
-// via cvc-pattern-valid before the own length/pattern/enumeration facets. Unlike
-// the other cohorts, the NMTOKEN cases carry the tested value in a named
+// AND EffectiveFacets already realizes; ID/IDREF/ENTITY inherit NCName's pattern
+// verbatim, adding none of their own) plus inherited whiteSpace=collapse. A
+// value violating an intrinsic pattern (e.g. an NCName or ID with a colon) is
+// rejected via cvc-pattern-valid before the own length/pattern/enumeration facets.
+// ID-uniqueness and IDREF-target-existence are Structures-level checks (cvc-id,
+// xmlschema11-1.md §3.3.4.5), NOT part of cvc-datatype-valid/cvc-facet-valid, so
+// this cohort decides only per-value lexical+facet validity, exactly as it does
+// for NCName. Unlike
+// the string-content cohorts, the NMTOKEN and ID/IDREF cases carry the tested
+// value in a named
 // attribute of <foo> rather than its content, so readFacetsCase reads the value
 // named by the enclosing xsd:attribute.
 //
@@ -169,18 +178,25 @@ var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
 // the lane decides: the strict-mapped primitives (string/decimal/float/double),
 // the integer family (xs:integer and its twelve narrowings, issue #81) and the
-// derived string family — normalizedString/token (issue #85) plus the
-// pattern-restricted language/Name/NCName/NMTOKEN (issue #106). Every
+// derived string family — normalizedString/token (issue #85), the
+// pattern-restricted language/Name/NCName/NMTOKEN (issue #106) and the
+// NCName-derived ID/IDREF/ENTITY (issue #116). Every
 // integer-family type is a facet restriction of xs:decimal (§3.4.13–§3.4.25) that
 // shares decimal's value space, order and identity (Datatypes §2.2.1 Identity
 // note), so strict's decimal mapping governs it unchanged; the derived string
 // types are facet restrictions of xs:string (chain token → normalizedString →
-// string, §3.4.1/§3.4.2; language/Name/NMTOKEN off token, NCName off Name) that
+// string, §3.4.1/§3.4.2; language/Name/NMTOKEN off token, NCName off Name,
+// ID/IDREF/ENTITY off NCName — §3.4.8/§3.4.9/§3.4.11) that
 // share string's value space and differ only by inherited whiteSpace and their
 // intrinsic pattern facets, so strict's string mapping governs them unchanged. No
-// new backend mapping is introduced in any case. The list feeds both the
+// new backend mapping is introduced in any case. ENTITY has no Facets cases in the
+// current W3C checkout (no msData/datatypes/Facets/ENTITY dir); it is listed for
+// spec parity and mechanism reuse (a zero-case regex alternative is harmless), so
+// a future suite update carrying such cases is decided with no further code change.
+// The list feeds both the
 // directory and the filename-prefix alternation of facetsCase.
 const facetsBaseTypes = `string|normalizedString|token|language|Name|NCName|NMTOKEN|` +
+	`ID|IDREF|ENTITY|` +
 	`decimal|float|double|` +
 	`integer|int|long|short|byte|` +
 	`unsignedInt|unsignedLong|unsignedShort|unsignedByte|` +
@@ -219,7 +235,7 @@ func newDatatypesExec() executor {
 	// gMonthDay/gDay/gMonth
 	// (lexical cohort) and string/decimal/float/double plus the integer and
 	// derived-string (normalizedString/token, #85; language/Name/NCName/NMTOKEN,
-	// #106) families (facet cohort) cases
+	// #106; ID/IDREF/ENTITY, #116) families (facet cohort) cases
 	// (float/double added in #80, anyURI in #82, hexBinary/base64Binary in #83,
 	// duration in #84, dateTime in #103, the seven-property siblings in #109),
 	// every one of which resolves (directly or via a base ancestor) to a strict
