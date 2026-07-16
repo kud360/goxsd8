@@ -23,7 +23,7 @@ func TestBackendtestCertification(t *testing.T) {
 
 func TestBackendCoverage(t *testing.T) {
 	backend := strict.New()
-	for _, local := range []string{"decimal", "boolean", "string", "anyURI", "float", "double", "hexBinary", "base64Binary", "duration", "dateTime", "time", "date", "gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth"} {
+	for _, local := range []string{"decimal", "precisionDecimal", "boolean", "string", "anyURI", "float", "double", "hexBinary", "base64Binary", "duration", "dateTime", "time", "date", "gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth"} {
 		m, ok := backend.Mapping(xsd.QName{Space: xsd.XMLSchemaNS, Local: local})
 		if !ok {
 			t.Errorf("Mapping(xs:%s): ok=false, want true", local)
@@ -59,7 +59,6 @@ func TestBackendUnmapped(t *testing.T) {
 	// are both unmapped.
 	for _, q := range []xsd.QName{
 		{Space: xsd.XMLSchemaNS, Local: "integer"},
-		{Space: xsd.XMLSchemaNS, Local: "precisionDecimal"},
 		{Space: "urn:other", Local: "decimal"},
 		{Local: "decimal"},
 	} {
@@ -69,34 +68,21 @@ func TestBackendUnmapped(t *testing.T) {
 	}
 }
 
-// TestSeedMissingShrinksByFloatDouble proves float and double have joined the
-// mapped primitives: builtin.Seed(strict.New()) still reports a
-// MissingPrimitivesError (precisionDecimal remains unmapped), but float and
-// double are no longer in it, while the sole genuinely-unmapped primitive
-// (xs:precisionDecimal) still is.
-func TestSeedMissingShrinksByFloatDouble(t *testing.T) {
-	_, err := builtin.Seed(strict.New())
+// TestSeedCoversAllPrimitives proves precisionDecimal was the last unmapped
+// primitive: with it mapped, builtin.Seed(strict.New()) reports NO
+// MissingPrimitivesError — strict now supplies a spec-exact mapping for every one
+// of the 20 builtin primitives, so Seed succeeds and returns the full component set.
+func TestSeedCoversAllPrimitives(t *testing.T) {
+	components, err := builtin.Seed(strict.New())
 	var missing *builtin.MissingPrimitivesError
-	if !errors.As(err, &missing) {
-		t.Fatalf("Seed(strict.New()) error = %v, want a *MissingPrimitivesError (later cohorts still unmapped)", err)
+	if errors.As(err, &missing) {
+		t.Fatalf("Seed(strict.New()) still reports missing primitives %v; strict must map all 20", missing.Missing)
 	}
-	inMissing := func(local string) bool {
-		for _, q := range missing.Missing {
-			if q == (xsd.QName{Space: xsd.XMLSchemaNS, Local: local}) {
-				return true
-			}
-		}
-		return false
+	if err != nil {
+		t.Fatalf("Seed(strict.New()) error = %v, want nil", err)
 	}
-	for _, mapped := range []string{"decimal", "boolean", "string", "anyURI", "float", "double", "hexBinary", "base64Binary", "duration", "dateTime", "time", "date", "gYearMonth", "gYear", "gMonthDay", "gDay", "gMonth", "QName", "NOTATION"} {
-		if inMissing(mapped) {
-			t.Errorf("primitive %q must NOT be in the missing set (strict maps it)", mapped)
-		}
-	}
-	// A primitive strict does not yet map must still be reported, so the test
-	// cannot pass by strict suddenly mapping everything.
-	if !inMissing("precisionDecimal") {
-		t.Error("precisionDecimal must still be in the missing set (strict does not map it yet)")
+	if len(components) != len(builtin.Types)+1 {
+		t.Errorf("Seed returned %d components, want %d (len(Types)+1 for anySimpleType)", len(components), len(builtin.Types)+1)
 	}
 }
 

@@ -6,7 +6,8 @@ import (
 )
 
 // New returns the spec-exact value.Backend for the primitive cohort so far:
-// xs:decimal, xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary,
+// xs:decimal, xs:precisionDecimal,
+// xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary,
 // xs:base64Binary, xs:duration, xs:dateTime, the six remaining
 // seven-property date/time siblings xs:time, xs:date, xs:gYearMonth, xs:gYear,
 // xs:gMonthDay, xs:gDay and xs:gMonth, and xs:QName and xs:NOTATION. Each type's
@@ -27,6 +28,17 @@ import (
 //     [value.DigitCounted] (totalDigits/fractionDigits) and [value.Canonical].
 //     It is deliberately NOT [value.Scaled]: decimal collapses precision, so
 //     1.0 and 1.00 are the same value.
+//   - xs:precisionDecimal — the (·numericalValue·, ·scale·, ·sign·) triple
+//     (xsd-precisionDecimal §3.1). [value.Ordered] (PARTIAL order, §3.1: −INF <
+//     numeric < +INF, NaN incomparable with everything including itself),
+//     [value.Eq] (scale-blind: 1.0 = 1.00), [value.Identical] (scale-SENSITIVE:
+//     3, 3.0, 3.00 are distinct and +0 ≠ −0, yet NaN ≡ NaN — PRINCIPLES 18),
+//     [value.Scaled] (·scale· kept verbatim), [value.DigitCounted] (totalDigits
+//     counts the coefficient's digits, trailing zeros included; fractionDigits is
+//     inert — not an applicable facet, §3.3) and [value.Canonical]. Deliberately
+//     NOT [value.Lengthed]/[value.TimezoneAware]. The maxScale/minScale facets are
+//     applicable per spec but not yet enforced (see the GAP marker in
+//     precisiondecimal.go).
 //   - xs:boolean — [value.Eq], [value.Identical] and [value.Canonical]. It is
 //     deliberately NOT [value.Ordered] (ordered=false, §3.3.2.3).
 //   - xs:string — [value.Eq], [value.Lengthed] (character count) and
@@ -102,6 +114,8 @@ func (backend) Mapping(typ xsd.QName) (value.Mapping, bool) {
 	switch typ.Local {
 	case "decimal":
 		return value.Mapping{Parse: parseDecimal, Canonical: canonicalDecimal}, true
+	case "precisionDecimal":
+		return value.Mapping{Parse: parsePrecisionDecimal, Canonical: canonicalPrecisionDecimal}, true
 	case "boolean":
 		return value.Mapping{Parse: parseBoolean, Canonical: canonicalBoolean}, true
 	case "string":
