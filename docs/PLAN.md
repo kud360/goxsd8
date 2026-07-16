@@ -37,7 +37,7 @@ decoder), and the `xsd.QName` expanded-name value type that
 `xsd` component model waits for M4). Full unit tests; fuzz targets for
 xmltree.
 
-## M3 — Datatypes vertical slice (in progress — tail: 3 primitives + cohort widening)
+## M3 — Datatypes vertical slice (in progress — all 20 primitives mapped; tail: dateTimeStamp + Facets-cohort widening)
 
 `value` contracts finalized; `builtin/strict` primitive mappings + the
 facet pipeline (pattern facets via package `regex`, XSD flavor) +
@@ -46,17 +46,22 @@ that `Seed` builds one of per builtin (the rest of the `xsd` component
 model stays M4); `value/backendtest` kit running against strict. First
 **`datatypes` ratchet lane** produces real numbers.
 
-Status (2026-07-15): the shared facet pipeline hoisted into `value` (#87);
-`builtin/strict` maps 17 of 20 primitives — decimal/float/double, the
-string family, anyURI, hex/base64Binary, duration, and the seven-property
-temporal family incl. dateTime (#103/#109). The `datatypes` lane claims
-~716 cases (~700 pass). **Remaining tail:** map `precisionDecimal` (#115),
-`QName`/`NOTATION` (#114), and the derived `dateTimeStamp` (#122); widen the
-Facets cohort to the temporal (#123), binary/anyURI (#124), name-type (#116),
-and QName/NOTATION (#125, blocked on #114) cases; the list/union-variety
-executor + `value.effectiveWhiteSpace` not-applicable path (#98/#75) waits on
-the `xsd` list/union variety shape (M4, #46). The NIST corpus and full
-list/union cohort are tracked under the umbrella #75.
+Status (2026-07-16): the shared facet pipeline is hoisted into `value` (#87);
+`builtin/strict` now maps **all 20 builtin primitives** — decimal/float/double,
+the string family, anyURI, hex/base64Binary, duration, the seven-property
+temporal family incl. dateTime (#103/#109), QName/NOTATION (#114), and
+precisionDecimal (#115). The `datatypes` lane stands at **730 pass / 16 fail**
+(746 cases), most recently widened to the ID/IDREF/ENTITY name-type Facets
+cohort (#116). **Remaining tail:** map the derived `dateTimeStamp` (#122, ready);
+widen the Facets cohort to the temporal (#123, ready) and binary/anyURI (#124,
+ready) primitives; enforce precisionDecimal `maxScale`/`minScale` (#133, ready —
+`GAP(facet)` at `precisiondecimal.go:68`) and then claim the precisionDecimal
+selectors (#135, blocked on #133); fix `lengthFacet` §4.3.1.3 clause 1.3 (#130,
+ready — bug), which unblocks the QName/NOTATION namespace-context adapter (#131,
+blocked on #130) and in turn the QName/NOTATION lexical + Facets cohorts (#125,
+blocked on #131). The list/union-variety executor + `value.effectiveWhiteSpace`
+not-applicable path (#98/#75) still waits on the `xsd` list/union variety shape
+(M4, #46). The NIST corpus and full list/union cohort remain under umbrella #75.
 
 ## M4 — Schema parsing (next — epic #79)
 
