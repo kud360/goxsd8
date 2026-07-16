@@ -68,25 +68,32 @@ import (
 // does), so a tz-ABSENT dateTimeStamp literal would be false-ACCEPTED here. That is
 // a fail-open risk, flagged at the datatypesCase regex, not a decided case today.
 //
-// # The facet cohort (issue #57, widened by issues #80, #81, #85, #106 and #116)
+// # The facet cohort (issue #57, widened by issues #80, #81, #85, #106, #116 and #123)
 //
 // The lane additionally claims the Microsoft *Facets* instance cases under
 // msData/datatypes/Facets/<base>/<base>_<facet>NNN.xml where <base> is a
 // strict-mapped primitive (string, decimal, float, double), an integer-family
 // builtin (issue #81): integer, int, long, short, byte, unsignedInt/Long/Short/
 // Byte, nonNegativeInteger, nonPositiveInteger, positiveInteger, negativeInteger,
-// or a derived string-family builtin: normalizedString, token (issue #85), the
+// a derived string-family builtin: normalizedString, token (issue #85), the
 // pattern-restricted string family language, Name, NCName, NMTOKEN (issue #106)
-// and the NCName-derived ID, IDREF, ENTITY (issue #116).
+// and the NCName-derived ID, IDREF, ENTITY (issue #116), or a temporal primitive
+// (issue #123): dateTime, time, date, gYearMonth, gYear, gMonthDay, gDay, gMonth,
+// duration.
 // Each such schema restricts <base> by one or more constraining facets
 // (length/minLength/maxLength/pattern/enumeration on string; minInclusive/
 // maxInclusive/minExclusive/maxExclusive/totalDigits/pattern/enumeration on
-// decimal; the bound facets plus pattern/enumeration on float/double). The
+// decimal; the bound facets plus pattern/enumeration on float/double; pattern/
+// enumeration/bounds on the temporal types). The
 // float/double bound facets are checked over the PARTIAL order (NaN is
 // incomparable to every value, so a NaN bound yields an empty value space and any
 // bound comparison against NaN excludes — §2.2.3; §3.3.4.1 Note), which the
 // existing boundFacet path already decides (incomparable ⇒ reject, spec-correct
-// per §4.3.7.3–§4.3.10.3).
+// per §4.3.7.3–§4.3.10.3). The temporal bound facets ride that SAME incomparable ⇒
+// reject path over the timeline's partial order (§3.3.6.3 for duration, e.g.
+// P1M vs P31D; §3.2.7.3-style timezone-straddling incomparability for the
+// date/time siblings), so an incomparable candidate is a genuine rejection, never
+// a vacuous pass.
 //
 // The integer family is NOT a set of new primitives: xs:integer fixes decimal's
 // fractionDigits to 0 and its lexical space to [\-+]?[0-9]+, and each narrowing
@@ -163,9 +170,9 @@ import (
 //
 // # Still deferred
 //
-// Facets over builtins whose value space strict.New() does not yet govern (the
-// date/time/… dirs, whose narrower lexical spaces a decimal/string mapping would
-// mis-decide), xsd:boolean facets (no Facets dir exists for it), the NIST corpus,
+// Facets over the remaining primitive dirs not yet claimed here (anyURI,
+// hexBinary, base64Binary, QName, NOTATION), xsd:boolean facets (no Facets dir
+// exists for it), the plural list-typed dirs (IDREFS, NMTOKENS), the NIST corpus,
 // and list/union varieties remain out of scope until their backends land. Within the integer family, the odd
 // multi-element cases (e.g. Facets/int/test111092.xml, two named restriction
 // steps under distinct elements) do not fit the single-<foo> instance shape and
@@ -173,7 +180,11 @@ import (
 // boolean + enumeration on a user-defined "myList") and anyURI011 (a list-of-
 // anyURI, whose simplefooType restricts the "myList" list type) resolve to a
 // non-seeded type and are honestly recorded as gaps (Fail); they flip only when
-// list variety is reachable here.
+// list variety is reachable here. time_minInclusive006_1163.i (issue #123) is a
+// recorded gap for a different reason: its instance file carries no
+// xsi:noNamespaceSchemaLocation (a defect in that one suite file), so
+// readFacetsCase cannot resolve its schema and declines it (Fail) rather than
+// guessing the base — an honest decline, not a false accept.
 
 // synthNS namespaces the anonymous leaf types the facet cohort synthesizes. It
 // is deliberately outside xsd.XMLSchemaNS so a synthesized leaf is never mistaken
@@ -198,10 +209,12 @@ var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string
 
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
 // the lane decides: the strict-mapped primitives (string/decimal/float/double),
-// the integer family (xs:integer and its twelve narrowings, issue #81) and the
+// the integer family (xs:integer and its twelve narrowings, issue #81), the
 // derived string family — normalizedString/token (issue #85), the
 // pattern-restricted language/Name/NCName/NMTOKEN (issue #106) and the
-// NCName-derived ID/IDREF/ENTITY (issue #116). Every
+// NCName-derived ID/IDREF/ENTITY (issue #116) — and the temporal primitives
+// dateTime/time/date/gYearMonth/gYear/gMonthDay/gDay/gMonth/duration (issue #123).
+// Every
 // integer-family type is a facet restriction of xs:decimal (§3.4.13–§3.4.25) that
 // shares decimal's value space, order and identity (Datatypes §2.2.1 Identity
 // note), so strict's decimal mapping governs it unchanged; the derived string
@@ -209,7 +222,19 @@ var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string
 // string, §3.4.1/§3.4.2; language/Name/NMTOKEN off token, NCName off Name,
 // ID/IDREF/ENTITY off NCName — §3.4.8/§3.4.9/§3.4.11) that
 // share string's value space and differ only by inherited whiteSpace and their
-// intrinsic pattern facets, so strict's string mapping governs them unchanged. No
+// intrinsic pattern facets, so strict's string mapping governs them unchanged. The
+// nine temporal types are themselves primitives (§3.3.6–§3.3.14), each mapped
+// directly by strict, so their Facets restrictions resolve to their own primitive
+// mapping (the string/numeric cohorts' widest-space pattern) with no derivation
+// walk. Their applicable facets (cos-applicable-facets §4.1.5) admit pattern,
+// enumeration and the four bound facets — exactly the kinds the present suite's
+// temporal Facets schemas carry (no length, no explicitTimezone cases exist), all
+// already in facetKinds — and the bound facets are decided over the temporal
+// primitives' PARTIAL timeline order, where an incomparable candidate-vs-bound
+// comparison (common for duration, §3.3.6.3) is a real rejection, exactly as the
+// existing boundFacet path already decides it (cvc-*Inclusive/Exclusive-valid
+// §4.3.7.3–§4.3.10.3; duration lacks explicitTimezone per §4.1.5, immaterial here
+// since no such case exists). No
 // new backend mapping is introduced in any case. ENTITY has no Facets cases in the
 // current W3C checkout (no msData/datatypes/Facets/ENTITY dir); it is listed for
 // spec parity and mechanism reuse (a zero-case regex alternative is harmless), so
@@ -221,7 +246,8 @@ const facetsBaseTypes = `string|normalizedString|token|language|Name|NCName|NMTO
 	`decimal|float|double|` +
 	`integer|int|long|short|byte|` +
 	`unsignedInt|unsignedLong|unsignedShort|unsignedByte|` +
-	`nonNegativeInteger|nonPositiveInteger|positiveInteger|negativeInteger`
+	`nonNegativeInteger|nonPositiveInteger|positiveInteger|negativeInteger|` +
+	`dateTime|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth|duration`
 
 // facetsCase matches an instance case in the facet cohort: an MS Facets instance
 // under a facetsBaseTypes directory whose filename prefixes the same type name
