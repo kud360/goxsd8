@@ -207,11 +207,12 @@ func selectsDatatypes(c caseSpec) bool {
 // Seeds the builtins once (the M3 composition step), and captures the composed
 // backend plus the seeded symbol table in the returned closure.
 func newDatatypesExec() executor {
-	// strict.New() maps the primitive cohort so far (decimal/boolean/string/
-	// anyURI/float/double/hexBinary/base64Binary/duration/dateTime plus the six
-	// seven-property siblings time/date/gYearMonth/gYear/gMonthDay/gDay/gMonth);
-	// Seed requires all 20 primitives, so the fallback covers
-	// the remaining ones with a no-op mapping. strict wins where it maps (Override
+	// strict.New() now maps all 20 builtin primitives (decimal/precisionDecimal/
+	// boolean/string/anyURI/float/double/hexBinary/base64Binary/duration/dateTime
+	// plus the six seven-property siblings time/date/gYearMonth/gYear/gMonthDay/
+	// gDay/gMonth and QName/NOTATION); Seed requires all 20, so the fallback — once
+	// needed to cover precisionDecimal — is now fully redundant, retained only as a
+	// defensive floor. strict wins where it maps (Override
 	// yields partial first), so those fallback mappings are never actually
 	// exercised: the lane now claims boolean/decimal/string/float/double/anyURI/
 	// hexBinary/base64Binary/duration/dateTime/time/date/gYearMonth/gYear/
@@ -349,13 +350,12 @@ func primitiveOfType(st *xsd.SimpleType) *xsd.SimpleType {
 }
 
 // fallbackPrimitives maps every builtin primitive with a no-op identity mapping.
-// It exists ONLY to satisfy builtin.Seed's all-primitives precondition for the
-// 1 primitive strict.New() does not cover (strict maps 19 of the 20:
-// decimal/boolean/string/anyURI/float/double/hexBinary/base64Binary/duration/
-// dateTime, the six seven-property siblings time/date/gYearMonth/gYear/
-// gMonthDay/gDay/gMonth, and QName/NOTATION; the remaining one is
-// precisionDecimal); the
-// datatypes selector never claims a case that would exercise these mappings.
+// It once satisfied builtin.Seed's all-primitives precondition for the single
+// primitive strict.New() did not cover (precisionDecimal, mapped as of #115). Now
+// that strict maps all 20 primitives it is fully redundant — retained as a
+// defensive floor beneath Override so Seed's precondition holds structurally rather
+// than by relying on the strict cohort being complete. The datatypes selector never
+// claims a case that would exercise these no-op mappings.
 type fallbackPrimitives struct{}
 
 func (fallbackPrimitives) Mapping(typ xsd.QName) (value.Mapping, bool) {
