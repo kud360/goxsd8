@@ -84,6 +84,12 @@ import (
 //     [value.TimezoneAware]. Deliberately NOT [value.Lengthed]/
 //     [value.DigitCounted]/[value.Scaled] — no applicable facet needs them
 //     (cos-applicable-facets §4.1.5: no length family).
+//   - xs:dateTimeStamp — a restriction of xs:dateTime (§3.4.28) fixing
+//     explicitTimezone=required; its value representation, order, and canonical
+//     mapping are dateTime's UNCHANGED (the spec defines no separate canonical
+//     mapping for it, §3.4.28.1), so it aliases dateTime's Mapping verbatim; the
+//     mandatory timezone is enforced by the generic explicitTimezone facet
+//     pipeline (#108), not by this backend.
 //   - xs:QName, xs:NOTATION — the {namespace name, local part} tuple
 //     (§3.3.18/§3.3.19). Their lexical mapping is CONTEXT-DEPENDENT: Parse
 //     resolves the prefix (empty prefix = default namespace) against the
@@ -133,6 +139,19 @@ func (backend) Mapping(typ xsd.QName) (value.Mapping, bool) {
 	case "duration":
 		return value.Mapping{Parse: parseDuration, Canonical: canonicalDuration}, true
 	case "dateTime":
+		return value.Mapping{Parse: parseDateTime, Canonical: canonicalDateTime}, true
+	case "dateTimeStamp":
+		// dateTimeStamp (§3.4.28) is a restriction of dateTime whose lexical/canonical
+		// mapping IS dateTime's, restricted to the tz-present value subset (§3.4.28.1);
+		// no independent representation exists, so this aliases dateTime's Mapping
+		// verbatim. The tz-required constraint is enforced generically by the
+		// explicitTimezone facet pipeline (§4.3.14, cvc-explicitTimezone-valid),
+		// reading dateTimeVal's value.TimezoneAware — NOT re-checked here, to avoid
+		// encoding the same constraint twice (PRINCIPLES 4). Do NOT copy this alias
+		// reflexively for the next derived type (e.g. yearMonthDuration/
+		// dayTimeDuration): their canonical forms genuinely differ from duration's,
+		// so they will need their own Canonical — re-ground each case against the
+		// spec, don't assume aliasing is always correct.
 		return value.Mapping{Parse: parseDateTime, Canonical: canonicalDateTime}, true
 	case "time":
 		return value.Mapping{Parse: parseTime, Canonical: canonicalTime}, true
