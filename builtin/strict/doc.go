@@ -40,8 +40,12 @@
 // (context-resolved, no canonical form) — with spec-exact
 // parse, canonical and comparison. With xs:precisionDecimal mapped, strict now
 // covers all 20 builtin primitives; its maxScale/minScale facets are applicable
-// but not yet enforced (GAP(facet) in precisiondecimal.go). The remaining
-// representations above (xs:dateTimeStamp, the rest of the string family) and the
+// but not yet enforced (GAP(facet) in precisiondecimal.go). xs:dateTimeStamp
+// (§3.4.28) is also covered: a restriction of xs:dateTime fixing
+// explicitTimezone=required, it reuses dateTimeVal through dateTime's mapping
+// verbatim (no separate canonical mapping exists, §3.4.28.1), its mandatory
+// timezone enforced by the generic explicitTimezone facet pipeline. The remaining
+// representations above (the rest of the string family) and the
 // value.Emitter fast path remain future milestones. The cohort is certified
 // by value/backendtest.Run: each type's value carries exactly the capability
 // interfaces its applicable facets require (cos-applicable-facets), documented

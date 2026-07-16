@@ -25,8 +25,8 @@ import (
 //
 // The lane claims the Microsoft datatype LEXICAL cases under
 // msData/datatypes/{boolean,decimal,string,float,double,anyURI,hexBinary,
-// base64Binary,duration,dateTime,time,date,gYearMonth,gYear,gMonthDay,gDay,
-// gMonth}NNN.xml. Each
+// base64Binary,duration,dateTime,dateTimeStamp,time,date,gYearMonth,gYear,
+// gMonthDay,gDay,gMonth}NNN.xml. Each
 // such schema declares an element of an UNRESTRICTED builtin primitive
 // (xsd:boolean / xsd:decimal / xsd:string / xsd:float / xsd:double / xsd:anyURI /
 // xsd:hexBinary / xsd:base64Binary / xsd:duration / xsd:dateTime and the six
@@ -58,6 +58,15 @@ import (
 // day-of-month value constraint (con-date-dayValue §3.3.9.1, year-dependent;
 // con-gMonthDay-dayValue §3.3.12.1, year-free so --02-29 is always valid) beyond
 // the grammar regex; gDay/gMonth/gYear/gYearMonth carry no day-value rule.
+//
+// dateTimeStamp (§3.4.28) is listed for forward parity but is the one member of
+// this cohort whose Parse-only path is NOT a complete check, and it has ZERO cases
+// in the current checkout so the gap is unexercised. Being a restriction of
+// dateTime that fixes explicitTimezone=required, its validity also depends on the
+// timezone being present — but execLexicalCase decides via parseDateTime alone,
+// which does not enforce that facet (only the facet cohort's value.ValidateLexical
+// does), so a tz-ABSENT dateTimeStamp literal would be false-ACCEPTED here. That is
+// a fail-open risk, flagged at the datatypesCase regex, not a decided case today.
 //
 // # The facet cohort (issue #57, widened by issues #80, #81, #85, #106 and #116)
 //
@@ -173,7 +182,18 @@ import (
 const synthNS = "urn:goxsd8:conformance:facets"
 
 // datatypesCase matches an instance case in the lexical cohort.
-var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth)[0-9]+\.xml$`)
+//
+// dateTimeStamp (§3.4.28) is listed but has ZERO cases in the current W3C
+// checkout (no msData/datatypes/dateTimeStampNNN.xml), so the alternative is inert
+// today. Unlike every other cohort type, its Parse-only path is NOT a complete
+// check: dateTimeStamp fixes explicitTimezone=required, but execLexicalCase decides
+// validity purely via parseDateTime (parseOK), which does not enforce the timezone
+// (that check lives only in the facet cohort's value.ValidateLexical). So a
+// tz-ABSENT dateTimeStamp literal would be FALSE-ACCEPTED here — a fail-open gap,
+// currently unexercised because no such case exists. Should the suite ever add a
+// tz-absent dateTimeStamp case, it must move to the facet cohort (or execLexicalCase
+// must run the explicitTimezone facet) rather than be decided by this Parse-only path.
+var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|dateTimeStamp|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth)[0-9]+\.xml$`)
 
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
 // the lane decides: the strict-mapped primitives (string/decimal/float/double),
