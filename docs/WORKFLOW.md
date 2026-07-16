@@ -331,3 +331,9 @@ part of the same commit as the fix that earned them.
   issues and commits.
 - Friction with a manual process twice in a row? File a `kind/tooling`
   issue proposing a repo tool (PRINCIPLES 27).
+- Never snapshot or copy the working tree with ad-hoc `cp`/backup commands
+  into or beside the repo root during conformance review — a stray
+  `cp conformance/testdata/expectations/* .` once clobbered the tracked
+  root `README.md` and littered lane `*.txt` files at repo root (#104). If
+  you genuinely need a working copy, put it well outside the repo (the
+  scratchpad dir) or use `git worktree`.
