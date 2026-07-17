@@ -46,28 +46,43 @@ that `Seed` builds one of per builtin (the rest of the `xsd` component
 model stays M4); `value/backendtest` kit running against strict. First
 **`datatypes` ratchet lane** produces real numbers.
 
-Status (2026-07-16): the shared facet pipeline is hoisted into `value` (#87);
+Status (2026-07-17): the shared facet pipeline is hoisted into `value` (#87);
 `builtin/strict` now maps **all 20 builtin primitives** — decimal/float/double,
 the string family, anyURI, hex/base64Binary, duration, the seven-property
 temporal family incl. dateTime (#103/#109), QName/NOTATION (#114), and
-precisionDecimal (#115). The `datatypes` lane stands at **730 pass / 16 fail**
-(746 cases), most recently widened to the ID/IDREF/ENTITY name-type Facets
-cohort (#116). **Remaining tail:** map the derived `dateTimeStamp` (#122, ready);
-widen the Facets cohort to the temporal (#123, ready) and binary/anyURI (#124,
-ready) primitives; enforce precisionDecimal `maxScale`/`minScale` (#133, ready —
-`GAP(facet)` at `precisiondecimal.go:68`) and then claim the precisionDecimal
-selectors (#135, blocked on #133); fix `lengthFacet` §4.3.1.3 clause 1.3 (#130,
-ready — bug), which unblocks the QName/NOTATION namespace-context adapter (#131,
-blocked on #130) and in turn the QName/NOTATION lexical + Facets cohorts (#125,
-blocked on #131). The list/union-variety executor + `value.effectiveWhiteSpace`
-not-applicable path (#98/#75) still waits on the `xsd` list/union variety shape
-(M4, #46). The NIST corpus and full list/union cohort remain under umbrella #75.
+precisionDecimal (#115). The `datatypes` lane stands at **939 pass / 25 fail**
+(964 cases), widened through the ID/IDREF/ENTITY name-type (#116), temporal
+(#123), and anyURI/hex/base64Binary (#124) Facets cohorts; the derived
+`dateTimeStamp` is mapped (#122) and the `lengthFacet` §4.3.1.3 clause-1.3
+QName/NOTATION exemption is fixed (#130). **Remaining tail:** map the derived
+`yearMonthDuration`/`dayTimeDuration` (#141, ready); enforce precisionDecimal
+`maxScale`/`minScale` (#133, ready — `GAP(facet)` at `precisiondecimal.go:68`)
+and then claim the precisionDecimal selectors (#135, blocked on #133); land the
+QName/NOTATION namespace-context adapter (#131, now ready — #130 landed) and in
+turn the QName/NOTATION lexical + Facets cohorts (#125, blocked on #131); fix the
+dateTimeStamp lexical-cohort Parse-only false-accept (#140, ready); remove the
+redundant `fallbackPrimitives` shim (#134, ready); widen the lane to the
+wider-primitive / native-space Facets cohort (#145, ready); and triage the
+non-anyURI recorded-fail invalid cases for the false-accept polarity (#146,
+ready). The list/union-variety executor + `value.effectiveWhiteSpace`
+not-applicable path (#98 / rescoped #75) still waits on the `xsd` list/union
+variety shape (M4, #46). The NIST corpus is a follow-up once #145 lands; the
+list/union Facets cohort remains under the rescoped umbrella #75 (blocked on
+#46/#98).
 
-## M4 — Schema parsing (next — epic #79)
+## M4 — Schema parsing (next — epic #79, human-gated)
 
 Three-phase parser over the composition model (include/import/redefine/
 override, chameleon coercion), UPA/EDC/particle-restriction designed into
 the model shape from the start. **`schema` lane.**
+
+Epic #79 is **human-gated**: do not carve it into `ready` sub-slices or
+start the develop loop on it ahead of finishing the M3 datatypes vertical
+slice unless a human reprioritizes. Its five leaf follow-ups (#72, #70,
+#63, #51, #46) plus the sibling #52 today list their long-closed seed deps;
+repointing their `## Depends on` to the #79 epic is **deferred to the M4
+carve** (an epic does not close per-slice, so repointing now would not drive
+the post-land unblock pass).
 
 ## M5 — Instance validation (XML)
 
