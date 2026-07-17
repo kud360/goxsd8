@@ -285,3 +285,37 @@ func TestLengthFacets(t *testing.T) {
 	_, err = value.ValidateLexical(New(), max3, "abcd", nil)
 	wantRule(t, err, "cvc-maxLength-valid")
 }
+
+// nsContext is a minimal value.Context backing the QName/NOTATION exemption
+// test: an unprefixed local part resolves to the default namespace.
+type nsContext map[string]string
+
+func (c nsContext) LookupNamespace(prefix string) (string, bool) {
+	ns, ok := c[prefix]
+	return ns, ok
+}
+
+// TestLengthFacetsQNameNotationExempt exercises clause 1.3 of cvc-length-valid
+// (§4.3.1.3), cvc-minLength-valid (§4.3.2.3), and cvc-maxLength-valid
+// (§4.3.3.3): when the {primitive type definition} is QName or NOTATION, any
+// {value} is facet-valid regardless of the bound. Each facet here is set to a
+// bound the local part's rune count ("abcde", 5 runes) violates under the
+// general measure, so acceptance proves the exemption short-circuits Len().
+func TestLengthFacetsQNameNotationExempt(t *testing.T) {
+	ctx := nsContext{"": "urn:default"}
+	for _, prim := range []string{"QName", "NOTATION"} {
+		p := newPrim(t, prim)
+		len3 := derive(t, prim+"-len3", p, xsd.NewFacet(xsd.FacetLength, []string{"3"}, false))
+		if _, err := value.ValidateLexical(New(), len3, "abcde", ctx); err != nil {
+			t.Errorf("%s length=3 must accept abcde (clause 1.3 exemption), got %v", prim, err)
+		}
+		min6 := derive(t, prim+"-min6", p, xsd.NewFacet(xsd.FacetMinLength, []string{"6"}, false))
+		if _, err := value.ValidateLexical(New(), min6, "abcde", ctx); err != nil {
+			t.Errorf("%s minLength=6 must accept abcde (clause 1.3 exemption), got %v", prim, err)
+		}
+		max2 := derive(t, prim+"-max2", p, xsd.NewFacet(xsd.FacetMaxLength, []string{"2"}, false))
+		if _, err := value.ValidateLexical(New(), max2, "abcde", ctx); err != nil {
+			t.Errorf("%s maxLength=2 must accept abcde (clause 1.3 exemption), got %v", prim, err)
+		}
+	}
+}

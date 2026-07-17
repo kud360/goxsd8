@@ -144,7 +144,7 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 			}
 			valFacets = append(valFacets, df)
 		case xsd.FacetLength, xsd.FacetMinLength, xsd.FacetMaxLength:
-			lf, err := newLengthFacet(ef.Facet())
+			lf, err := newLengthFacet(st, ef.Facet())
 			if err != nil {
 				return nil, nil, err
 			}
@@ -443,26 +443,70 @@ func digitsRule(k xsd.FacetKind) xsderr.Rule {
 
 // lengthFacet is the length/minLength/maxLength value-facet stage
 // (cvc-length-valid §4.3.1.3, cvc-minLength-valid §4.3.2.3, cvc-maxLength-valid
-// §4.3.3.3). For string the unit is Unicode codepoints (Lengthed.Len).
+// §4.3.3.3). For string the unit is Unicode codepoints (Lengthed.Len). Clause
+// 1.3 of each rule is an unconditional exemption: when the {primitive type
+// definition} is QName or NOTATION, "any {value} is facet-valid" regardless of
+// the bound — captured in exempt at construction so CheckValue never measures
+// such a value (see lengthExemptPrimitive).
 type lengthFacet struct {
 	limit int
 	kind  xsd.FacetKind
+	// exempt makes CheckValue accept any value unconditionally when st's
+	// {primitive type definition} is QName or NOTATION (clause 1.3 of
+	// cvc-length-valid §4.3.1.3, cvc-minLength-valid §4.3.2.3, cvc-maxLength-valid
+	// §4.3.3.3), independent of limit and of Lengthed.Len.
+	exempt bool
 }
 
 // newLengthFacet reads the facet's plain nonNegativeInteger {value} (a count),
-// so no declaring-mapping lookup.
-func newLengthFacet(f xsd.Facet) (lengthFacet, error) {
+// so no declaring-mapping lookup. It records st's clause-1.3 exemption
+// (QName/NOTATION {primitive type definition}) via lengthExemptPrimitive.
+func newLengthFacet(st *xsd.SimpleType, f xsd.Facet) (lengthFacet, error) {
 	rule := lengthRule(f.Kind())
 	n, err := facetCount(f, rule)
 	if err != nil {
 		return lengthFacet{}, err
 	}
-	return lengthFacet{limit: n, kind: f.Kind()}, nil
+	return lengthFacet{limit: n, kind: f.Kind(), exempt: lengthExemptPrimitive(st)}, nil
 }
 
+// lengthExemptPrimitive reports whether st's resolved {primitive type
+// definition} is QName or NOTATION, the two atomic primitives whose
+// length/minLength/maxLength facets are an unconditional no-op — "any {value}
+// is facet-valid" — per clause 1.3 of cvc-length-valid (§4.3.1.3),
+// cvc-minLength-valid (§4.3.2.3), and cvc-maxLength-valid (§4.3.3.3). It keys
+// off the atomic {variety}'s Primitive (the resolved primitive, §3.16.1), not
+// the value's Go type nor a blanket "is atomic" test: clause 1.3 is a case
+// split on the primitive, and the list case (clause 2) carries no such
+// exemption. A non-atomic {variety} (nil / list / union) or an absent primitive
+// (xs:anyAtomicType) is not exempt; this predicate never panics.
+func lengthExemptPrimitive(st *xsd.SimpleType) bool {
+	at, ok := st.Variety().(xsd.Atomic)
+	if !ok || at.Primitive == nil {
+		return false
+	}
+	name := at.Primitive.Name()
+	return name == qnameName || name == notationName
+}
+
+// qnameName and notationName are the two {primitive type definition} QNames
+// clause 1.3 exempts (see lengthExemptPrimitive). Written as plain struct
+// literals because package value carries no reusable builtin-name constants;
+// xsd.XMLSchemaNS is the XML Schema namespace.
+var (
+	qnameName    = xsd.QName{Space: xsd.XMLSchemaNS, Local: "QName"}
+	notationName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "NOTATION"}
+)
+
 // CheckValue rejects a candidate whose length violates the facet
-// (§4.3.1.3–4.3.3.3).
+// (§4.3.1.3–4.3.3.3), except when the {primitive type definition} is QName or
+// NOTATION: clause 1.3 makes any value facet-valid, so an exempt facet
+// short-circuits BEFORE the Lengthed path — the exemption is unconditional and
+// must not depend on the value implementing Lengthed.
 func (lf lengthFacet) CheckValue(v Value) error {
+	if lf.exempt {
+		return nil
+	}
 	l, ok := v.(Lengthed)
 	if !ok {
 		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Lengthed (cos-applicable-facets §4.1.5 not enforced upstream)", v, lf.kind))
