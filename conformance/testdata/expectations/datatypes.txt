@@ -73,6 +73,17 @@ MS-DataTypes2006-07-15/Name_minLength002_1481/instance/Name_minLength002_1481.v 
 MS-DataTypes2006-07-15/Name_minLength003_1482/instance/Name_minLength003_1482.i pass
 MS-DataTypes2006-07-15/Name_minLength004_1483/instance/Name_minLength004_1483.v pass
 MS-DataTypes2006-07-15/Name_pattern001_1487/instance/Name_pattern001_1487.v pass
+MS-DataTypes2006-07-15/QName001_2084/instance/QName001_2084.i pass
+MS-DataTypes2006-07-15/QName002_2085/instance/QName002_2085.v pass
+MS-DataTypes2006-07-15/QName003_2086/instance/QName003_2086.v pass
+MS-DataTypes2006-07-15/QName004_2087/instance/QName004_2087.i pass
+MS-DataTypes2006-07-15/QName005_2088/instance/QName005_2088.i pass
+MS-DataTypes2006-07-15/QName006_2089/instance/QName006_2089.v pass
+MS-DataTypes2006-07-15/QName007_2090/instance/QName007_2090.i pass
+MS-DataTypes2006-07-15/QName008_2091/instance/QName008_2091.i pass
+MS-DataTypes2006-07-15/QName009_2092/instance/QName009_2092.v pass
+MS-DataTypes2006-07-15/QName010_2093/instance/QName010_2093.i pass
+MS-DataTypes2006-07-15/QName011_2094/instance/QName011_2094.i pass
 MS-DataTypes2006-07-15/anyURI001_2073/instance/anyURI001_2073.v pass
 MS-DataTypes2006-07-15/anyURI002_2074/instance/anyURI002_2074.v pass
 MS-DataTypes2006-07-15/anyURI003_2075/instance/anyURI003_2075.v pass
