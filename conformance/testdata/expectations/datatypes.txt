@@ -181,7 +181,7 @@ MS-DataTypes2006-07-15/dateTime007_2005/instance/dateTime007_2005.v pass
 MS-DataTypes2006-07-15/dateTime008_2006/instance/dateTime008_2006.v pass
 MS-DataTypes2006-07-15/dateTime010_2007/instance/dateTime010_2007.v pass
 MS-DataTypes2006-07-15/dateTime011_2008/instance/dateTime011_2008.i pass
-MS-DataTypes2006-07-15/dateTime013_2009/instance/dateTime013_2009.i fail
+MS-DataTypes2006-07-15/dateTime013_2009/instance/dateTime013_2009.i pass
 MS-DataTypes2006-07-15/dateTime_enumeration001_1125/instance/dateTime_enumeration001_1125.i pass
 MS-DataTypes2006-07-15/dateTime_enumeration002_1126/instance/dateTime_enumeration002_1126.v pass
 MS-DataTypes2006-07-15/dateTime_enumeration003_1127/instance/dateTime_enumeration003_1127.i pass
@@ -352,9 +352,9 @@ MS-DataTypes2006-07-15/duration024_1992/instance/duration024_1992.v pass
 MS-DataTypes2006-07-15/duration025_1993/instance/duration025_1993.v pass
 MS-DataTypes2006-07-15/duration026_1994/instance/duration026_1994.v pass
 MS-DataTypes2006-07-15/duration027_1995/instance/duration027_1995.v fail
-MS-DataTypes2006-07-15/duration028_1996/instance/duration028_1996.i fail
-MS-DataTypes2006-07-15/duration029_1997/instance/duration029_1997.i fail
-MS-DataTypes2006-07-15/duration030_1998/instance/duration030_1998.i fail
+MS-DataTypes2006-07-15/duration028_1996/instance/duration028_1996.i pass
+MS-DataTypes2006-07-15/duration029_1997/instance/duration029_1997.i pass
+MS-DataTypes2006-07-15/duration030_1998/instance/duration030_1998.i pass
 MS-DataTypes2006-07-15/duration_enumeration001_1104/instance/duration_enumeration001_1104.i pass
 MS-DataTypes2006-07-15/duration_enumeration002_1105/instance/duration_enumeration002_1105.v pass
 MS-DataTypes2006-07-15/duration_enumeration003_1106/instance/duration_enumeration003_1106.i pass
@@ -474,7 +474,7 @@ MS-DataTypes2006-07-15/gMonthDay002_2050/instance/gMonthDay002_2050.v pass
 MS-DataTypes2006-07-15/gMonthDay003_2051/instance/gMonthDay003_2051.v pass
 MS-DataTypes2006-07-15/gMonthDay004_2052/instance/gMonthDay004_2052.v pass
 MS-DataTypes2006-07-15/gMonthDay005_2053/instance/gMonthDay005_2053.i pass
-MS-DataTypes2006-07-15/gMonthDay006_2054/instance/gMonthDay006_2054.i fail
+MS-DataTypes2006-07-15/gMonthDay006_2054/instance/gMonthDay006_2054.i pass
 MS-DataTypes2006-07-15/gMonthDay_enumeration001_1233/instance/gMonthDay_enumeration001_1233.i pass
 MS-DataTypes2006-07-15/gMonthDay_enumeration002_1234/instance/gMonthDay_enumeration002_1234.v pass
 MS-DataTypes2006-07-15/gMonthDay_enumeration003_1235/instance/gMonthDay_enumeration003_1235.i pass
