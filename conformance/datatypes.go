@@ -3,6 +3,7 @@ package conformance
 import (
 	"bufio"
 	"encoding/xml"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -58,6 +59,32 @@ import (
 // day-of-month value constraint (con-date-dayValue §3.3.9.1, year-dependent;
 // con-gMonthDay-dayValue §3.3.12.1, year-free so --02-29 is always valid) beyond
 // the grammar regex; gDay/gMonth/gYear/gYearMonth carry no day-value rule.
+//
+// ## The context-dependent QName/NOTATION sub-cohort (issue #131)
+//
+// The lane also claims the QName lexical cases under msData/datatypes/QNameNNN.xml
+// (and, for spec/mechanism parity, NOTATIONNNN.xml — of which the current checkout
+// has none; NOTATION's cases are all facet-cohort under Facets/NOTATION). Unlike
+// every other lexical member, QName's and NOTATION's lexical→value mapping is
+// CONTEXT-DEPENDENT: a literal "prefix:local" resolves the prefix against the
+// XML namespace bindings in scope where the literal occurs (§3.3.18; NOTATION's
+// mapping is "as given for QName", §3.3.19). So execLexicalCase routes these
+// (isContextDependent) to execContextualCase, which reads each comp_foo/simpleTest
+// literal WITH the in-scope bindings the harness decodes from the instance
+// (readQNameContexts builds an nsContext by tracking xmlns declarations down the
+// ancestor chain — a raw literal's prefix is character content, not an XML name
+// the decoder resolves) and threads that real value.Context to strict's Parse
+// instead of the context-free path's nil. An unprefixed name binds to the default
+// namespace (element-name semantics, no namespace when undeclared); a declared or
+// reserved (only "xml", bound by definition — Namespaces in XML §3; "xmlns" is a
+// declaration-attribute name, not a bindable prefix, WG ruling bugzilla 4053) prefix
+// resolves; an unbound non-empty prefix or malformed grammar is a genuine
+// rejection (cvc-datatype-valid §4.1.4), never a value fabricated with a guessed
+// namespace (PRINCIPLES 19). This is a complete lexical check: QName/NOTATION have
+// no spec-defined canonical form, and the declared-notation SCC of NOTATION
+// (§3.3.19) is a Structures concern above this leaf mapping, out of scope here.
+// The value's whiteSpace is fixed to collapse for both, applied by the shared
+// normalizeWhiteSpace before Parse.
 //
 // ## The <item>-attribute sub-shape (issue #146)
 //
@@ -192,10 +219,13 @@ import (
 //
 // # Still deferred
 //
-// Facets over the remaining primitive dirs not yet claimed here (QName,
-// NOTATION), xsd:boolean facets (no Facets dir
-// exists for it), the plural list-typed dirs (IDREFS, NMTOKENS), the NIST corpus,
-// and list/union varieties remain out of scope until their backends land.
+// Facets over QName/NOTATION (the Facets/QName and Facets/NOTATION dirs) are not
+// yet claimed — the QName/NOTATION lexical cases are (issue #131), but their facet
+// restrictions need the length-facet clause-1.3 exemption and enumeration over
+// the context-resolved tuple, deferred to a later issue. xsd:boolean facets (no
+// Facets dir exists for it), the plural list-typed dirs (IDREFS, NMTOKENS), the
+// NIST corpus, and list/union varieties remain out of scope until their backends
+// land.
 // string_pattern002_1031.i (issue #146) falls under that list-variety exclusion:
 // its Facets/string/string_pattern002.xml restricts via <xsd:list itemType="Hex"/>
 // (a per-token pattern facet decided by cvc-datatype-valid §4.1.4 clause dv_list,
@@ -232,7 +262,12 @@ import (
 // primitive base's mapping, never the leaf's own).
 const synthNS = "urn:goxsd8:conformance:facets"
 
-// datatypesCase matches an instance case in the lexical cohort.
+// datatypesCase matches an instance case in the lexical cohort. QName and
+// NOTATION are the context-dependent members (their Parse resolves a prefix
+// against the in-scope namespace bindings); execLexicalCase routes them to
+// execContextualCase. NOTATION has ZERO plain lexical cases in the current
+// checkout (all its cases are facet-cohort under Facets/NOTATION), so it is
+// listed for parity and exercised only by QName today.
 //
 // GAP(datatypes): dateTimeStamp (§3.4.28) is listed but has ZERO cases in the
 // current W3C checkout (no msData/datatypes/dateTimeStampNNN.xml), so the
@@ -245,7 +280,7 @@ const synthNS = "urn:goxsd8:conformance:facets"
 // currently unexercised because no such case exists. Should the suite ever add a
 // tz-absent dateTimeStamp case, it must move to the facet cohort (or execLexicalCase
 // must run the explicitTimezone facet) rather than be decided by this Parse-only path.
-var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|dateTimeStamp|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth)[0-9]+\.xml$`)
+var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|dateTimeStamp|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth|QName|NOTATION)[0-9]+\.xml$`)
 
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
 // the lane decides: the strict-mapped primitives (string/decimal/float/double),
@@ -332,7 +367,7 @@ func newDatatypesExec() executor {
 	// yields partial first), so those fallback mappings are never actually
 	// exercised: the lane now claims boolean/decimal/string/float/double/anyURI/
 	// hexBinary/base64Binary/duration/dateTime/time/date/gYearMonth/gYear/
-	// gMonthDay/gDay/gMonth
+	// gMonthDay/gDay/gMonth and the context-dependent QName/NOTATION (#131)
 	// (lexical cohort) and string/decimal/float/double plus the integer and
 	// derived-string (normalizedString/token, #85; language/Name/NCName/NMTOKEN,
 	// #106; ID/IDREF/ENTITY, #116) families, anyURI/hexBinary/base64Binary (#124)
@@ -386,9 +421,56 @@ func execLexicalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c
 	if !mapped {
 		return Fail()
 	}
+	// Context-dependent primitives (QName/NOTATION, §3.3.18/§3.3.19) resolve a
+	// prefix against the in-scope namespace bindings at the literal, so they take
+	// the contextual path with a real value.Context rather than the nil-context
+	// value scan below (whose whiteSpace-only reading suffices for the
+	// context-free primitives).
+	if isContextDependent(prim) {
+		return execContextualCase(m, prim, c)
+	}
 	observedValid := true
 	for _, v := range values {
-		if !parseOK(m, prim, v) {
+		if !parseOK(m, prim, v, nil) {
+			observedValid = false
+			break
+		}
+	}
+	if observedValid == c.expectValid {
+		return Pass()
+	}
+	return Fail()
+}
+
+// isContextDependent reports whether prim's lexical→value mapping depends on the
+// in-scope XML namespace bindings at the literal (§3.3.18 for QName, §3.3.19 for
+// NOTATION, whose lexical mapping is "as given for QName"). These are the only
+// primitives whose Parse consumes a value.Context; every other cohort member
+// maps context-free, so the harness passes them a nil context (strict's Parse
+// tolerates nil for those). NOTATION carries no plain lexical case in the current
+// W3C checkout (its cases are all facet-cohort under Facets/NOTATION), so it is
+// listed for spec/mechanism parity and exercised only by QName today.
+func isContextDependent(prim string) bool {
+	return prim == "QName" || prim == "NOTATION"
+}
+
+// execContextualCase decides a lexical-cohort case for a context-dependent
+// primitive (QName/NOTATION): each tested leaf literal resolves its prefix
+// against the in-scope XML namespace bindings at the element carrying it
+// (readQNameContexts), and the instance is valid iff every leaf lies in the
+// primitive's lexical space under that REAL context. An unbound prefix, an
+// unprefixed name that is not an NCName, or malformed grammar is a genuine
+// rejection through strict's Parse (cvc-datatype-valid §4.1.4), never a value
+// fabricated with a guessed namespace (PRINCIPLES 19). A case whose instance
+// shape does not decode is declined (Fail), an honest recorded gap.
+func execContextualCase(m value.Mapping, prim string, c caseSpec) Status {
+	lits, ok := readQNameContexts(c.doc)
+	if !ok {
+		return Fail()
+	}
+	observedValid := true
+	for _, lit := range lits {
+		if !parseOK(m, prim, lit.value, lit.ctx) {
 			observedValid = false
 			break
 		}
@@ -429,7 +511,7 @@ func execItemCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 			continue
 		}
 		decided = true
-		if !parseOK(m, lit.prim, lit.value) {
+		if !parseOK(m, lit.prim, lit.value, nil) {
 			observedValid = false
 			break
 		}
@@ -538,11 +620,15 @@ func (fallbackPrimitives) Mapping(typ xsd.QName) (value.Mapping, bool) {
 }
 
 // parseOK reports whether raw is in prim's lexical space, after applying prim's
-// whiteSpace normalization (Datatypes §4.3.6) — collapse for boolean/decimal
-// (their fixed whiteSpace facet), preserve for string. This is the lexical
-// cohort's path only; the facet cohort normalizes inside value.ValidateLexical.
-func parseOK(m value.Mapping, prim, raw string) bool {
-	_, err := m.Parse(normalizeWhiteSpace(prim, raw), nil)
+// whiteSpace normalization (Datatypes §4.3.6) — collapse for boolean/decimal/
+// QName/NOTATION (their fixed whiteSpace facet), preserve for string. ctx is the
+// namespace context threaded to Parse: nil for the context-free primitives
+// (whose Parse ignores it), a real value.Context for QName/NOTATION so a
+// prefixed literal resolves against the bindings in scope (§3.3.18). This is the
+// lexical cohort's path only; the facet cohort normalizes inside
+// value.ValidateLexical.
+func parseOK(m value.Mapping, prim, raw string, ctx value.Context) bool {
+	_, err := m.Parse(normalizeWhiteSpace(prim, raw), ctx)
 	return err == nil
 }
 
@@ -759,6 +845,152 @@ func decodeItemAttrTypes(path string) (map[string]string, error) {
 		out[a.Name] = localName(a.Type)
 	}
 	return out, nil
+}
+
+// The single reserved, implicitly-bound XML namespace prefix (Namespaces in XML,
+// §3): "xml" is bound by definition without any declaration. "xmlns" is NOT a
+// resolvable QName prefix — it is the name of namespace-declaration attributes,
+// not a binding for the prefix "xmlns" itself. The WG confirmed this (2010-02-05
+// telcon, bugzilla 4053), reflected in the W3C suite's QName009_2092 expecting
+// invalid for the literal "xmlns:xsi": its "xmlns" prefix has no in-scope binding.
+const xmlPrefixNS = "http://www.w3.org/XML/1998/namespace"
+
+// nsContext is the QName/NOTATION lexical cohort's value.Context: it resolves a
+// prefix to the namespace name bound in scope at the point of a tested literal
+// (§3.3.18: "the bindings to be used in the lexical mapping are those in the
+// [in-scope namespaces] property of the relevant element"). bindings is an
+// innermost-wins snapshot of the xmlns declarations on the literal's element and
+// its ancestors, captured immutably during the streaming decode so each leaf
+// keeps the bindings live where it occurred. It is an internal lookup, never
+// ranged into output (STYLE D2).
+type nsContext struct {
+	bindings map[string]string
+}
+
+// LookupNamespace resolves prefix per §3.3.18's rules. The reserved prefix "xml"
+// is always bound (Namespaces in XML §3); "xmlns" is deliberately NOT bound — it
+// names namespace-declaration attributes, not a resolvable prefix (WG ruling,
+// bugzilla 4053; the suite's QName009_2092 expects "xmlns:xsi" invalid on exactly
+// this ground). A declared prefix resolves to its snapshot binding. The empty
+// prefix (an unprefixed name) binds
+// to the default namespace if declared, else to no namespace (ok=true, "") —
+// element-name semantics, so an unprefixed QName is never rejected as unbound. A
+// non-empty prefix with no declaration is genuinely unbound (ok=false), which
+// strict's Parse turns into a cvc-datatype-valid rejection (§4.1.4).
+func (c nsContext) LookupNamespace(prefix string) (namespace string, ok bool) {
+	if prefix == "xml" {
+		return xmlPrefixNS, true
+	}
+	if uri, bound := c.bindings[prefix]; bound {
+		return uri, true
+	}
+	if prefix == "" {
+		return "", true
+	}
+	return "", false
+}
+
+// qnameLiteral pairs a tested QName/NOTATION leaf value with the namespace
+// context in scope at its element, so execContextualCase resolves each literal
+// against the bindings live where it occurs.
+type qnameLiteral struct {
+	value string
+	ctx   value.Context
+}
+
+// readQNameContexts streams a QName/NOTATION lexical-cohort instance and returns
+// each tested leaf value (the comp_foo and simpleTest content, the same shape
+// readLexicalCase decodes) paired with the in-scope namespace context at its
+// element. It tracks the xmlns declarations down the ancestor chain itself (a raw
+// literal's prefix is character content, not an XML name the decoder resolves),
+// snapshotting the accumulated bindings when a leaf opens. ok is false when the
+// instance cannot be read or carries no tested leaf — an honest decline.
+func readQNameContexts(instancePath string) (lits []qnameLiteral, ok bool) {
+	f, err := os.Open(instancePath)
+	if err != nil {
+		return nil, false
+	}
+	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the parsed result
+	dec := xml.NewDecoder(bufio.NewReader(f))
+	var frames []map[string]string // one innermost-wins snapshot per open element
+	capturing := false
+	var capText strings.Builder
+	var capCtx nsContext
+	for {
+		tok, terr := dec.Token()
+		if terr != nil {
+			break // io.EOF or malformed: stop; a partial decode yields no leaves and declines
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			frames = append(frames, childBindings(frames, t.Attr))
+			if !capturing && isQNameLeaf(t.Name.Local) {
+				capturing = true
+				capText.Reset()
+				capCtx = nsContext{bindings: frames[len(frames)-1]}
+			}
+		case xml.EndElement:
+			if capturing && isQNameLeaf(t.Name.Local) {
+				lits = append(lits, qnameLiteral{value: capText.String(), ctx: capCtx})
+				capturing = false
+			}
+			if len(frames) > 0 {
+				frames = frames[:len(frames)-1]
+			}
+		case xml.CharData:
+			if capturing {
+				capText.Write(t)
+			}
+		}
+	}
+	if len(lits) == 0 {
+		return nil, false
+	}
+	return lits, true
+}
+
+// isQNameLeaf reports whether an element local name carries a tested QName/
+// NOTATION literal in the lexical cohort's instance shape (comp_foo under
+// complexTest, and simpleTest), mirroring readLexicalCase's decoded value set.
+func isQNameLeaf(local string) bool {
+	return local == "comp_foo" || local == "simpleTest"
+}
+
+// childBindings returns the namespace snapshot for an element: its parent's
+// snapshot (the innermost frame, or empty at the root) overlaid with this
+// element's own xmlns declarations. The clone keeps each snapshot immutable so a
+// captured leaf's context is unaffected by later siblings (maps.Clone/overlay is
+// an internal state copy, order-independent, never output — STYLE D2).
+func childBindings(frames []map[string]string, attrs []xml.Attr) map[string]string {
+	var snap map[string]string
+	if n := len(frames); n > 0 {
+		snap = maps.Clone(frames[n-1])
+	}
+	if snap == nil {
+		snap = map[string]string{}
+	}
+	for _, a := range attrs {
+		prefix, isNS := nsDeclaration(a)
+		if !isNS {
+			continue
+		}
+		snap[prefix] = a.Value
+	}
+	return snap
+}
+
+// nsDeclaration reports whether attribute a is an XML namespace declaration and,
+// if so, the prefix it binds: xmlns:p="…" binds p (Go models it as Name.Space
+// "xmlns", Name.Local the prefix); xmlns="…" binds the empty (default) prefix
+// (Name.Space "", Name.Local "xmlns"). Any other attribute is not a declaration.
+func nsDeclaration(a xml.Attr) (prefix string, ok bool) {
+	if a.Name.Space == "xmlns" {
+		return a.Name.Local, true
+	}
+	if a.Name.Space == "" && a.Name.Local == "xmlns" {
+		return "", true
+	}
+	return "", false
 }
 
 // facetChild is one constraining-facet element read from a Facets-cohort schema:

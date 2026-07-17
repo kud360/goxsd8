@@ -36,6 +36,12 @@ func TestDatatypesSelectorClaimsOnlyCohort(t *testing.T) {
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/decimal017.xml"}, true},
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/boolean001.xml"}, true},
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/string006.xml"}, true},
+		// The context-dependent QName/NOTATION lexical cases are claimed (issue #131).
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/QName006.xml"}, true},
+		// A NOTATION facet case is NOT a plain lexical case: NOTATION_enumeration
+		// carries an underscore, not a digit, so datatypesCase does not claim it and
+		// NOTATION is not in facetsBaseTypes either.
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/Facets/NOTATION/NOTATION_enumeration001.xml"}, false},
 		// A schema case for the same file is not claimed (we cannot validate schemas).
 		{caseSpec{kind: kindSchema, doc: "../testdata/xsdtests/msData/datatypes/decimal.xsd"}, false},
 		// A facet-restricted NIST instance is out of the cohort.
@@ -391,5 +397,108 @@ func TestDatatypesLexicalItemShape(t *testing.T) {
 	// declines it (the comp_foo path owns it) rather than mis-reading it.
 	if _, ok := readItemCase(filepath.Join(dir, "decimal010.xml")); ok {
 		t.Error("readItemCase(decimal010) must decline the non-<item> comp_foo shape")
+	}
+}
+
+// TestDatatypesLexicalQNameCohort drives the executor over the context-dependent
+// QName lexical cohort (issue #131): each comp_foo/simpleTest literal resolves
+// its prefix against the in-scope XML namespace bindings the harness decodes from
+// the instance (readQNameContexts/nsContext), so strict's parseQName decides
+// lexical-space membership under a real value.Context (§3.3.18). Both polarities
+// are asserted against the suite's declared validity, and a wrong expectation
+// must yield Fail, so the test can actually fail if the adapter mis-resolves.
+// NOTATION carries no plain lexical case in the checkout (its cases are all
+// facet-cohort under Facets/NOTATION), so this cohort is QName-only today. Skips
+// when the submodule is absent.
+func TestDatatypesLexicalQNameCohort(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	exec := newDatatypesExec()
+
+	dir := filepath.Join(suiteRoot, "msData", "datatypes")
+	cases := []struct {
+		file        string
+		expectValid bool // the suite's declared XSD 1.1 validity (.v/.i case suffix)
+	}{
+		{"QName001.xml", false}, // ""         empty, not an NCName
+		{"QName002.xml", true},  // "_foo"     unprefixed, binds to the default namespace
+		{"QName003.xml", true},  // "fo124"    unprefixed NCName
+		{"QName004.xml", false}, // "1fo"      not an NCName (leading digit)
+		{"QName005.xml", false}, // "-foo"     not an NCName (leading hyphen)
+		{"QName006.xml", true},  // "fo:foo"   prefix fo bound to "myNamespace" on root
+		{"QName007.xml", false}, // ":foo"     empty prefix part
+		{"QName008.xml", false}, // "fo:1fo"   local part not an NCName
+		{"QName009.xml", false}, // "xmlns:xsi" prefix xmlns is not bindable, so unbound (bugzilla 4053)
+		{"QName010.xml", false}, // "@test"    not an NCName
+		{"QName011.xml", false}, // "//foo"    not an NCName
+	}
+	for _, tc := range cases {
+		c := caseSpec{
+			kind:        kindInstance,
+			doc:         filepath.Join(dir, tc.file),
+			expectValid: tc.expectValid,
+		}
+		if got := exec(c); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", tc.file, tc.expectValid)
+		}
+	}
+
+	// A deliberately WRONG expectation must Fail: QName006 ("fo:foo", a bound
+	// prefix) is valid, so claiming it invalid must not pass — proving the executor
+	// actually resolves the prefix rather than always passing.
+	wrong := caseSpec{kind: kindInstance, doc: filepath.Join(dir, "QName006.xml"), expectValid: false}
+	if exec(wrong).IsPass() {
+		t.Errorf("executor must Fail when the declared expectation is wrong (QName006 'fo:foo' is valid)")
+	}
+
+	// readQNameContexts must capture the fo binding declared on <root> and read
+	// both comp_foo and simpleTest as "fo:foo" with a context that resolves fo.
+	lits, ok := readQNameContexts(filepath.Join(dir, "QName006.xml"))
+	if !ok {
+		t.Fatal("readQNameContexts must accept the QName006 comp_foo/simpleTest shape")
+	}
+	if len(lits) != 2 || lits[0].value != "fo:foo" || lits[1].value != "fo:foo" {
+		t.Fatalf("readQNameContexts(QName006) values = %+v, want two \"fo:foo\"", lits)
+	}
+	if ns, bound := lits[0].ctx.LookupNamespace("fo"); !bound || ns != "myNamespace" {
+		t.Errorf("comp_foo context LookupNamespace(fo) = (%q,%v), want (\"myNamespace\",true)", ns, bound)
+	}
+}
+
+// TestNSContextLookup proves nsContext resolves prefixes exactly as §3.3.18
+// requires: a declared prefix resolves to its binding; the reserved xml prefix is
+// bound without a declaration (Namespaces in XML §3) while xmlns is not a bindable
+// prefix (WG ruling bugzilla 4053, unbound → ok=false); the empty
+// prefix binds to the default namespace when declared and to no namespace
+// otherwise (ok=true, element-name semantics); a never-declared non-empty prefix
+// is genuinely unbound (ok=false), which strict's Parse turns into a rejection.
+func TestNSContextLookup(t *testing.T) {
+	c := nsContext{bindings: map[string]string{"fo": "myNamespace", "": "defaultNS"}}
+	cases := []struct {
+		prefix   string
+		wantNS   string
+		wantBnd  bool
+		describe string
+	}{
+		{"fo", "myNamespace", true, "declared prefix"},
+		{"", "defaultNS", true, "empty prefix with a declared default"},
+		{"xml", xmlPrefixNS, true, "reserved xml prefix"},
+		{"xmlns", "", false, "xmlns is not a resolvable prefix"},
+		{"zzz", "", false, "undeclared non-empty prefix is unbound"},
+	}
+	for _, tc := range cases {
+		ns, bound := c.LookupNamespace(tc.prefix)
+		if ns != tc.wantNS || bound != tc.wantBnd {
+			t.Errorf("%s: LookupNamespace(%q) = (%q,%v), want (%q,%v)",
+				tc.describe, tc.prefix, ns, bound, tc.wantNS, tc.wantBnd)
+		}
+	}
+
+	// With no default declared, an unprefixed name still resolves — to no
+	// namespace — so an unprefixed QName is never rejected as unbound.
+	empty := nsContext{bindings: map[string]string{}}
+	if ns, bound := empty.LookupNamespace(""); !bound || ns != "" {
+		t.Errorf("empty prefix with no default: LookupNamespace(\"\") = (%q,%v), want (\"\",true)", ns, bound)
 	}
 }
