@@ -335,3 +335,61 @@ func TestDatatypesFacetsShapeGuard(t *testing.T) {
 		}
 	}
 }
+
+// TestDatatypesLexicalItemShape drives the executor over the real
+// <data><item SOMITEM_DATATYPE_X="value"/></data> fixtures (issue #146) that carry
+// their tested value in an attribute and declare their schema out-of-band (no
+// noNamespaceSchemaLocation, resolved to the sibling datatypes.xsd). Every one is
+// suite-invalid because its tested value is out of its primitive's lexical space —
+// duration "P"/"P1Y2M3DT"/"P1" (durationLexicalRep §3.3.6.2), gMonthDay
+// "--02-30"/"--02-31" (con-gMonthDay-dayValue §3.3.12.1) and dateTime/date with a
+// leading '+' before the year (§3.3.7.2/§3.3.9.2). The executor must agree (Pass),
+// and a wrong expectation must yield Fail, so the test can actually fail if the
+// item shape is mis-read. Skips when the submodule is absent.
+func TestDatatypesLexicalItemShape(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	exec := newDatatypesExec()
+
+	dir := filepath.Join(suiteRoot, "msData", "datatypes")
+	// All five suite-declared invalid: at least one tested value is out-of-space.
+	files := []string{
+		"dateTime013.xml",  // +2001-07-11T12:23:45 (dateTime) and +2001-07-11 (date)
+		"duration028.xml",  // "P"        (no field)
+		"duration029.xml",  // "P1Y2M3DT" (dangling T)
+		"duration030.xml",  // "P1"       (bare numeral)
+		"gMonthDay006.xml", // --02-30 and --02-31 (day > 29 for month 2)
+	}
+	for _, f := range files {
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(dir, f), expectValid: false}
+		if got := exec(c); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with suite (expectValid=false)", f)
+		}
+	}
+
+	// A deliberately WRONG expectation must Fail: gMonthDay006 ("--02-30"/"--02-31")
+	// is invalid, so claiming it valid must not pass — proving the executor actually
+	// reads and parses the <item> attribute values rather than always passing.
+	wrong := caseSpec{kind: kindInstance, doc: filepath.Join(dir, "gMonthDay006.xml"), expectValid: true}
+	if exec(wrong).IsPass() {
+		t.Errorf("executor must Fail when the declared expectation is wrong (gMonthDay006 --02-30/--02-31 are invalid)")
+	}
+
+	// readItemCase resolves each attribute to its primitive (from the sibling
+	// datatypes.xsd) in document order, and declines a shape with no <item> children.
+	lits, ok := readItemCase(filepath.Join(dir, "dateTime013.xml"))
+	if !ok {
+		t.Fatal("readItemCase must accept the two-item dateTime013 shape")
+	}
+	if len(lits) != 2 ||
+		lits[0].prim != "dateTime" || lits[0].value != "+2001-07-11T12:23:45" ||
+		lits[1].prim != "date" || lits[1].value != "+2001-07-11" {
+		t.Errorf("readItemCase(dateTime013) = %+v, want [{dateTime +2001-07-11T12:23:45} {date +2001-07-11}]", lits)
+	}
+	// A comp_foo/simpleTest lexical case has no <item> children, so readItemCase
+	// declines it (the comp_foo path owns it) rather than mis-reading it.
+	if _, ok := readItemCase(filepath.Join(dir, "decimal010.xml")); ok {
+		t.Error("readItemCase(decimal010) must decline the non-<item> comp_foo shape")
+	}
+}

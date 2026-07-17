@@ -59,6 +59,27 @@ import (
 // con-gMonthDay-dayValue §3.3.12.1, year-free so --02-29 is always valid) beyond
 // the grammar regex; gDay/gMonth/gYear/gYearMonth carry no day-value rule.
 //
+// ## The <item>-attribute sub-shape (issue #146)
+//
+// A few lexical-cohort instances use a different document shape than
+// comp_foo/simpleTest: <data><item SOMITEM_DATATYPE_X="value"/></data>, with the
+// tested value in an attribute (some documents carry two <item> children testing
+// two attributes/types at once). These declare their schema OUT-OF-BAND in the
+// suite's testGroup metadata, so the instance carries no
+// noNamespaceSchemaLocation for readLexicalCase to follow; the schema is always the
+// sibling datatypes.xsd, which types each SOMITEM_DATATYPE_* attribute directly as
+// an UNRESTRICTED builtin primitive (SOMITEM_DATATYPE_DURATION as xsd:duration,
+// _DATETIME as xsd:dateTime, _MONTHDAY as xsd:gMonthDay, _DATE as xsd:date, …). So
+// this sub-shape has exactly the lexical cohort's semantics — validity is
+// lexical-space membership (value.Parse) of each tested value — merely a different
+// carrier. execLexicalCase falls back to execItemCase when the comp_foo decode
+// declines, which reads the sibling datatypes.xsd (parsed, never hand-typed — same
+// discipline as decodeTestedPrimitive) to resolve each attribute's primitive and
+// ANDs parseOK across every recognized tested value. Only attributes typed as a
+// seeded, directly-mapped primitive are decided (the same guard the comp_foo path
+// applies); an attribute typed as a non-directly-mapped builtin (integer/derived-
+// string family) is skipped, since Parse alone is not a complete check for those.
+//
 // dateTimeStamp (§3.4.28) is listed for forward parity but is the one member of
 // this cohort whose Parse-only path is NOT a complete check, and it has ZERO cases
 // in the current checkout so the gap is unexercised. Being a restriction of
@@ -174,7 +195,14 @@ import (
 // Facets over the remaining primitive dirs not yet claimed here (QName,
 // NOTATION), xsd:boolean facets (no Facets dir
 // exists for it), the plural list-typed dirs (IDREFS, NMTOKENS), the NIST corpus,
-// and list/union varieties remain out of scope until their backends land. Within the integer family, the odd
+// and list/union varieties remain out of scope until their backends land.
+// string_pattern002_1031.i (issue #146) falls under that list-variety exclusion:
+// its Facets/string/string_pattern002.xml restricts via <xsd:list itemType="Hex"/>
+// (a per-token pattern facet decided by cvc-datatype-valid §4.1.4 clause dv_list,
+// unimplemented here), and its instance shape (a <Xml xmlns="TestNamespace"> root
+// with three <Hex> list-valued children) does not match readFacetsCase's single-
+// <foo> shape either, so it is honestly declined (Fail), never false-accepted.
+// Within the integer family, the odd
 // multi-element cases (e.g. Facets/int/test111092.xml, two named restriction
 // steps under distinct elements) do not fit the single-<foo> instance shape and
 // fall through to the instance lane as recorded gaps. boolean018 (a list-of-
@@ -341,10 +369,14 @@ func newDatatypesExec() executor {
 
 // execLexicalCase decides a lexical-cohort case: an instance is valid iff every
 // tested leaf value lies in the tested primitive's lexical space (value.Parse).
+// The comp_foo/simpleTest shape is decided directly; the alternate
+// <data><item ATTR="value"/></data> shape (issue #146), which declares its schema
+// out-of-band and so has no noNamespaceSchemaLocation for readLexicalCase to
+// resolve, falls through to execItemCase rather than being mis-declined here.
 func execLexicalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
 	prim, values, ok := readLexicalCase(c.doc)
 	if !ok {
-		return Fail()
+		return execItemCase(backend, sym, c)
 	}
 	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: prim}
 	if _, seeded := sym[qn]; !seeded {
@@ -360,6 +392,50 @@ func execLexicalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c
 			observedValid = false
 			break
 		}
+	}
+	if observedValid == c.expectValid {
+		return Pass()
+	}
+	return Fail()
+}
+
+// execItemCase decides a lexical-cohort case in the <data><item ATTR="value"/>
+// shape (issue #146): each <item> carries a tested value in a SOMITEM_DATATYPE_*
+// attribute whose builtin primitive the sibling datatypes.xsd declares. The
+// instance is valid iff every tested value lies in its primitive's lexical space
+// (value.Parse), AND across every recognized attribute of every <item> — mirroring
+// execLexicalCase's polarity, since any invalid tested value makes the whole
+// instance invalid. Only attributes whose declared primitive is a seeded,
+// backend-mapped builtin are decided (the same sym/backend.Mapping guards the
+// comp_foo path uses); an attribute typed as a non-directly-mapped builtin (e.g.
+// the integer/derived-string families, whose validity needs the facet pipeline,
+// not Parse alone) is skipped, not guessed. A case whose shape does not decode,
+// whose sibling schema is unreadable, or that references no recognized attribute
+// at all is declined (Fail, an honest recorded gap) rather than mis-decided.
+func execItemCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
+	lits, ok := readItemCase(c.doc)
+	if !ok {
+		return Fail()
+	}
+	observedValid := true
+	decided := false
+	for _, lit := range lits {
+		qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: lit.prim}
+		if _, seeded := sym[qn]; !seeded {
+			continue
+		}
+		m, mapped := backend.Mapping(qn)
+		if !mapped {
+			continue
+		}
+		decided = true
+		if !parseOK(m, lit.prim, lit.value) {
+			observedValid = false
+			break
+		}
+	}
+	if !decided {
+		return Fail()
 	}
 	if observedValid == c.expectValid {
 		return Pass()
@@ -576,6 +652,113 @@ func decodeTestedPrimitive(path string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// typedLiteral pairs a tested value with the local name of the builtin primitive
+// its attribute is declared as (from the sibling datatypes.xsd), so execItemCase
+// can decide each <item>-attribute value against the right primitive.
+type typedLiteral struct {
+	prim  string
+	value string
+}
+
+// readItemCase reads one lexical-cohort instance in the alternate
+// <data><item ATTR="value"/></data> shape (issue #146): a handful of
+// msData/datatypes/{dateTime013,duration028,duration029,duration030,gMonthDay006}
+// .xml cases carry their tested values in SOMITEM_DATATYPE_* attributes of <item>
+// children (some in two items, testing two attributes/types in one document)
+// rather than the comp_foo/simpleTest shape. Their schema is declared out-of-band
+// in the suite's testGroup metadata — the instance carries no
+// noNamespaceSchemaLocation — and is always the sibling datatypes.xsd, which types
+// each SOMITEM_DATATYPE_* attribute directly as an UNRESTRICTED builtin primitive
+// (e.g. SOMITEM_DATATYPE_DURATION as xsd:duration). readItemCase resolves each
+// present attribute name through that schema, returning one typedLiteral per
+// recognized attribute in document order (the map is only a lookup; output order
+// comes from the item/attribute document order, D3). ok is false when the shape
+// does not decode, the sibling schema is unreadable, or no attribute matches a
+// declared name — an honest decline, never a guess.
+func readItemCase(instancePath string) (lits []typedLiteral, ok bool) {
+	inst, err := decodeItemInstance(instancePath)
+	if err != nil || len(inst.Items) == 0 {
+		return nil, false
+	}
+	schemaPath := filepath.Join(filepath.Dir(instancePath), "datatypes.xsd")
+	attrTypes, err := decodeItemAttrTypes(schemaPath)
+	if err != nil || len(attrTypes) == 0 {
+		return nil, false
+	}
+	for _, item := range inst.Items {
+		for _, a := range item.Attrs {
+			prim, known := attrTypes[a.Name.Local]
+			if !known {
+				continue
+			}
+			lits = append(lits, typedLiteral{prim: prim, value: a.Value})
+		}
+	}
+	if len(lits) == 0 {
+		return nil, false
+	}
+	return lits, true
+}
+
+// itemInstance mirrors the alternate lexical shape: a <data> root whose <item>
+// children each carry the tested value(s) in arbitrary attributes (,any,attr,
+// mirroring fooElem), read positionally so a document testing several attributes
+// or several items is decoded whole.
+type itemInstance struct {
+	Items []itemElem `xml:"item"`
+}
+
+// itemElem is one <item>: its attributes, each a candidate tested value keyed by
+// the attribute's local name.
+type itemElem struct {
+	Attrs []xml.Attr `xml:",any,attr"`
+}
+
+func decodeItemInstance(path string) (itemInstance, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return itemInstance{}, err
+	}
+	var inst itemInstance
+	if err := xml.Unmarshal(data, &inst); err != nil {
+		return itemInstance{}, err
+	}
+	return inst, nil
+}
+
+// itemSchema mirrors datatypes.xsd's shape: top-level <xsd:attribute name type>
+// declarations, each binding a SOMITEM_DATATYPE_* name to a builtin type.
+type itemSchema struct {
+	Attributes []struct {
+		Name string `xml:"name,attr"`
+		Type string `xml:"type,attr"`
+	} `xml:"attribute"`
+}
+
+// decodeItemAttrTypes parses the sibling datatypes.xsd into a name -> primitive
+// local-name lookup, reading the fixture itself rather than hand-typing the
+// name->type table (STYLE 10; the same fixture-parsing discipline as
+// decodeTestedPrimitive). Attributes with no type (e.g. SOMITEM_DATATYPE_ANYTYPE)
+// are omitted, so an untyped attribute is never treated as a tested value.
+func decodeItemAttrTypes(path string) (map[string]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var s itemSchema
+	if err := xml.Unmarshal(data, &s); err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(s.Attributes))
+	for _, a := range s.Attributes {
+		if a.Name == "" || a.Type == "" {
+			continue
+		}
+		out[a.Name] = localName(a.Type)
+	}
+	return out, nil
 }
 
 // facetChild is one constraining-facet element read from a Facets-cohort schema:
