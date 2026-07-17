@@ -429,7 +429,7 @@ func TestDatatypesLexicalQNameCohort(t *testing.T) {
 		{"QName006.xml", true},  // "fo:foo"   prefix fo bound to "myNamespace" on root
 		{"QName007.xml", false}, // ":foo"     empty prefix part
 		{"QName008.xml", false}, // "fo:1fo"   local part not an NCName
-		{"QName009.xml", true},  // "xmlns:xsi" reserved prefix xmlns is bound by definition
+		{"QName009.xml", false}, // "xmlns:xsi" prefix xmlns is not bindable, so unbound (bugzilla 4053)
 		{"QName010.xml", false}, // "@test"    not an NCName
 		{"QName011.xml", false}, // "//foo"    not an NCName
 	}
@@ -467,8 +467,9 @@ func TestDatatypesLexicalQNameCohort(t *testing.T) {
 }
 
 // TestNSContextLookup proves nsContext resolves prefixes exactly as §3.3.18
-// requires: a declared prefix resolves to its binding; the reserved xml/xmlns
-// prefixes are bound without a declaration (Namespaces in XML §3); the empty
+// requires: a declared prefix resolves to its binding; the reserved xml prefix is
+// bound without a declaration (Namespaces in XML §3) while xmlns is not a bindable
+// prefix (WG ruling bugzilla 4053, unbound → ok=false); the empty
 // prefix binds to the default namespace when declared and to no namespace
 // otherwise (ok=true, element-name semantics); a never-declared non-empty prefix
 // is genuinely unbound (ok=false), which strict's Parse turns into a rejection.
@@ -483,7 +484,7 @@ func TestNSContextLookup(t *testing.T) {
 		{"fo", "myNamespace", true, "declared prefix"},
 		{"", "defaultNS", true, "empty prefix with a declared default"},
 		{"xml", xmlPrefixNS, true, "reserved xml prefix"},
-		{"xmlns", xmlnsPrefixNS, true, "reserved xmlns prefix"},
+		{"xmlns", "", false, "xmlns is not a resolvable prefix"},
 		{"zzz", "", false, "undeclared non-empty prefix is unbound"},
 	}
 	for _, tc := range cases {

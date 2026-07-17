@@ -76,7 +76,8 @@ import (
 // the decoder resolves) and threads that real value.Context to strict's Parse
 // instead of the context-free path's nil. An unprefixed name binds to the default
 // namespace (element-name semantics, no namespace when undeclared); a declared or
-// reserved (xml/xmlns, bound by definition — Namespaces in XML §3) prefix
+// reserved (only "xml", bound by definition — Namespaces in XML §3; "xmlns" is a
+// declaration-attribute name, not a bindable prefix, WG ruling bugzilla 4053) prefix
 // resolves; an unbound non-empty prefix or malformed grammar is a genuine
 // rejection (cvc-datatype-valid §4.1.4), never a value fabricated with a guessed
 // namespace (PRINCIPLES 19). This is a complete lexical check: QName/NOTATION have
@@ -846,13 +847,13 @@ func decodeItemAttrTypes(path string) (map[string]string, error) {
 	return out, nil
 }
 
-// The two reserved XML namespace prefixes (Namespaces in XML, §3): "xml" and
-// "xmlns" are bound by definition without any xmlns declaration, so a QName using
-// them (e.g. QName009's "xmlns:xsi") resolves rather than failing as unbound.
-const (
-	xmlPrefixNS   = "http://www.w3.org/XML/1998/namespace"
-	xmlnsPrefixNS = "http://www.w3.org/2000/xmlns/"
-)
+// The single reserved, implicitly-bound XML namespace prefix (Namespaces in XML,
+// §3): "xml" is bound by definition without any declaration. "xmlns" is NOT a
+// resolvable QName prefix — it is the name of namespace-declaration attributes,
+// not a binding for the prefix "xmlns" itself. The WG confirmed this (2010-02-05
+// telcon, bugzilla 4053), reflected in the W3C suite's QName009_2092 expecting
+// invalid for the literal "xmlns:xsi": its "xmlns" prefix has no in-scope binding.
+const xmlPrefixNS = "http://www.w3.org/XML/1998/namespace"
 
 // nsContext is the QName/NOTATION lexical cohort's value.Context: it resolves a
 // prefix to the namespace name bound in scope at the point of a tested literal
@@ -866,19 +867,19 @@ type nsContext struct {
 	bindings map[string]string
 }
 
-// LookupNamespace resolves prefix per §3.3.18's rules. The reserved prefixes
-// "xml"/"xmlns" are always bound (Namespaces in XML §3). A declared prefix
-// resolves to its snapshot binding. The empty prefix (an unprefixed name) binds
+// LookupNamespace resolves prefix per §3.3.18's rules. The reserved prefix "xml"
+// is always bound (Namespaces in XML §3); "xmlns" is deliberately NOT bound — it
+// names namespace-declaration attributes, not a resolvable prefix (WG ruling,
+// bugzilla 4053; the suite's QName009_2092 expects "xmlns:xsi" invalid on exactly
+// this ground). A declared prefix resolves to its snapshot binding. The empty
+// prefix (an unprefixed name) binds
 // to the default namespace if declared, else to no namespace (ok=true, "") —
 // element-name semantics, so an unprefixed QName is never rejected as unbound. A
 // non-empty prefix with no declaration is genuinely unbound (ok=false), which
 // strict's Parse turns into a cvc-datatype-valid rejection (§4.1.4).
 func (c nsContext) LookupNamespace(prefix string) (namespace string, ok bool) {
-	switch prefix {
-	case "xml":
+	if prefix == "xml" {
 		return xmlPrefixNS, true
-	case "xmlns":
-		return xmlnsPrefixNS, true
 	}
 	if uri, bound := c.bindings[prefix]; bound {
 		return uri, true
