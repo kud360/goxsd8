@@ -68,7 +68,7 @@ import (
 // does), so a tz-ABSENT dateTimeStamp literal would be false-ACCEPTED here. That is
 // a fail-open risk, flagged at the datatypesCase regex, not a decided case today.
 //
-// # The facet cohort (issue #57, widened by issues #80, #81, #85, #106, #116 and #123)
+// # The facet cohort (issue #57, widened by issues #80, #81, #85, #106, #116, #123 and #124)
 //
 // The lane additionally claims the Microsoft *Facets* instance cases under
 // msData/datatypes/Facets/<base>/<base>_<facet>NNN.xml where <base> is a
@@ -77,9 +77,10 @@ import (
 // Byte, nonNegativeInteger, nonPositiveInteger, positiveInteger, negativeInteger,
 // a derived string-family builtin: normalizedString, token (issue #85), the
 // pattern-restricted string family language, Name, NCName, NMTOKEN (issue #106)
-// and the NCName-derived ID, IDREF, ENTITY (issue #116), or a temporal primitive
-// (issue #123): dateTime, time, date, gYearMonth, gYear, gMonthDay, gDay, gMonth,
-// duration.
+// and the NCName-derived ID, IDREF, ENTITY (issue #116), one of the length-facet-
+// carrying primitives anyURI, hexBinary, base64Binary (issue #124), or a temporal
+// primitive (issue #123): dateTime, time, date, gYearMonth, gYear, gMonthDay, gDay,
+// gMonth, duration.
 // Each such schema restricts <base> by one or more constraining facets
 // (length/minLength/maxLength/pattern/enumeration on string; minInclusive/
 // maxInclusive/minExclusive/maxExclusive/totalDigits/pattern/enumeration on
@@ -170,8 +171,8 @@ import (
 //
 // # Still deferred
 //
-// Facets over the remaining primitive dirs not yet claimed here (anyURI,
-// hexBinary, base64Binary, QName, NOTATION), xsd:boolean facets (no Facets dir
+// Facets over the remaining primitive dirs not yet claimed here (QName,
+// NOTATION), xsd:boolean facets (no Facets dir
 // exists for it), the plural list-typed dirs (IDREFS, NMTOKENS), the NIST corpus,
 // and list/union varieties remain out of scope until their backends land. Within the integer family, the odd
 // multi-element cases (e.g. Facets/int/test111092.xml, two named restriction
@@ -184,7 +185,18 @@ import (
 // recorded gap for a different reason: its instance file carries no
 // xsi:noNamespaceSchemaLocation (a defect in that one suite file), so
 // readFacetsCase cannot resolve its schema and declines it (Fail) rather than
-// guessing the base — an honest decline, not a false accept.
+// guessing the base — an honest decline, not a false accept. The anyURI
+// Facets/anyURI/anyURI_a*.xml and anyURI_b*.xml cases (issue #124) are honest
+// gaps for the same class of reason: the a* instances carry the value in a
+// namespace-qualified <bar> reached via xsi:schemaLocation (not
+// noNamespaceSchemaLocation), and the b* instances hold zero or several <foo>
+// leaves (b001 puts the values in repeated <bar> children; b006 repeats many
+// <foo> values against one enumeration, a list-style shape), so neither fits the
+// single-<foo> instance shape readFacetsCase decodes — all are declined (Fail,
+// readFacetsCase requires exactly one <foo>) rather than mis-read as an empty or
+// last-wins tested value. Only the anyURI/hexBinary/base64Binary length/
+// minLength/maxLength/enumeration cases in the canonical <test><foo> shape are
+// decided here.
 
 // synthNS namespaces the anonymous leaf types the facet cohort synthesizes. It
 // is deliberately outside xsd.XMLSchemaNS so a synthesized leaf is never mistaken
@@ -212,8 +224,10 @@ var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string
 // the integer family (xs:integer and its twelve narrowings, issue #81), the
 // derived string family — normalizedString/token (issue #85), the
 // pattern-restricted language/Name/NCName/NMTOKEN (issue #106) and the
-// NCName-derived ID/IDREF/ENTITY (issue #116) — and the temporal primitives
-// dateTime/time/date/gYearMonth/gYear/gMonthDay/gDay/gMonth/duration (issue #123).
+// NCName-derived ID/IDREF/ENTITY (issue #116) — the length-facet-carrying
+// primitives anyURI/hexBinary/base64Binary (issue #124), and the temporal
+// primitives dateTime/time/date/gYearMonth/gYear/gMonthDay/gDay/gMonth/duration
+// (issue #123).
 // Every
 // integer-family type is a facet restriction of xs:decimal (§3.4.13–§3.4.25) that
 // shares decimal's value space, order and identity (Datatypes §2.2.1 Identity
@@ -234,7 +248,17 @@ var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string
 // comparison (common for duration, §3.3.6.3) is a real rejection, exactly as the
 // existing boundFacet path already decides it (cvc-*Inclusive/Exclusive-valid
 // §4.3.7.3–§4.3.10.3; duration lacks explicitTimezone per §4.1.5, immaterial here
-// since no such case exists). No
+// since no such case exists). anyURI, hexBinary and base64Binary (issue #124) are
+// likewise primitives strict maps directly (#82, #83), so their Facets restrictions
+// resolve to their own mapping. All three are unordered (ordered=false,
+// §3.3.15.3/§3.3.16.3/§3.3.17.3) and share xs:string's applicable-facet set —
+// length/minLength/maxLength/pattern/enumeration (cos-applicable-facets §4.1.5), all
+// in facetKinds — with NO bound facets. The length facets measure the value's
+// intrinsic size, which is unit-aware per type (§4.3.1.3 clauses 1.1/1.2): rune count
+// for anyURI (like string) but decoded-OCTET count for the two binary types, a split
+// value.Lengthed already realizes through each mapping's Len() (anyURIVal.Len over
+// runes; hexBinaryVal/base64BinaryVal.Len over decoded []byte), so no length-unit
+// special-casing is needed here. No
 // new backend mapping is introduced in any case. ENTITY has no Facets cases in the
 // current W3C checkout (no msData/datatypes/Facets/ENTITY dir); it is listed for
 // spec parity and mechanism reuse (a zero-case regex alternative is harmless), so
@@ -243,6 +267,7 @@ var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string
 // directory and the filename-prefix alternation of facetsCase.
 const facetsBaseTypes = `string|normalizedString|token|language|Name|NCName|NMTOKEN|` +
 	`ID|IDREF|ENTITY|` +
+	`anyURI|hexBinary|base64Binary|` +
 	`decimal|float|double|` +
 	`integer|int|long|short|byte|` +
 	`unsignedInt|unsignedLong|unsignedShort|unsignedByte|` +
@@ -282,7 +307,8 @@ func newDatatypesExec() executor {
 	// gMonthDay/gDay/gMonth
 	// (lexical cohort) and string/decimal/float/double plus the integer and
 	// derived-string (normalizedString/token, #85; language/Name/NCName/NMTOKEN,
-	// #106; ID/IDREF/ENTITY, #116) families (facet cohort) cases
+	// #106; ID/IDREF/ENTITY, #116) families, anyURI/hexBinary/base64Binary (#124)
+	// and the temporal primitives (#123) (facet cohort) cases
 	// (float/double added in #80, anyURI in #82, hexBinary/base64Binary in #83,
 	// duration in #84, dateTime in #103, the seven-property siblings in #109),
 	// every one of which resolves (directly or via a base ancestor) to a strict
@@ -638,9 +664,10 @@ func buildOwnFacets(base string, children []facetChild) ([]xsd.Facet, bool) {
 // document cannot be read for this shape.
 func readFacetsCase(instancePath string) (raw, base string, children []facetChild, ok bool) {
 	inst, err := decodeFacetsInstance(instancePath)
-	if err != nil || inst.SchemaLoc == "" {
+	if err != nil || inst.SchemaLoc == "" || len(inst.Foos) != 1 {
 		return "", "", nil, false
 	}
+	foo := inst.Foos[0]
 	schemaPath := filepath.Join(filepath.Dir(instancePath), filepath.FromSlash(inst.SchemaLoc))
 	base, attrName, children, ok := decodeRestriction(schemaPath)
 	if !ok || base == "" || len(children) == 0 {
@@ -652,20 +679,26 @@ func readFacetsCase(instancePath string) (raw, base string, children []facetChil
 	// attribute's name, read the matching instance attribute; otherwise the value
 	// is <foo>'s element content.
 	if attrName != "" {
-		v, found := inst.Foo.attr(attrName)
+		v, found := foo.attr(attrName)
 		if !found {
 			return "", "", nil, false
 		}
 		return v, base, children, true
 	}
-	return inst.Foo.Text, base, children, true
+	return foo.Text, base, children, true
 }
 
 // facetsInstance mirrors the Facets cohort's instance shape: a <test> root whose
 // single <foo> child holds the tested value in its content or a named attribute.
+// Foos collects every <foo> child so readFacetsCase can require EXACTLY ONE: an
+// out-of-cohort shape carrying zero <foo> leaves (e.g. the anyURI
+// Facets/anyURI/anyURI_b001.xml case whose values live in repeated <bar>
+// children) or several (e.g. anyURI_b006.xml, a list-style instance repeating
+// many <foo> values against one enumeration) is honestly declined rather than
+// mis-read as a single empty or last-wins tested value.
 type facetsInstance struct {
-	SchemaLoc string  `xml:"http://www.w3.org/2001/XMLSchema-instance noNamespaceSchemaLocation,attr"`
-	Foo       fooElem `xml:"foo"`
+	SchemaLoc string    `xml:"http://www.w3.org/2001/XMLSchema-instance noNamespaceSchemaLocation,attr"`
+	Foos      []fooElem `xml:"foo"`
 }
 
 // fooElem is the <foo> element: its text content plus any attributes, so a case
