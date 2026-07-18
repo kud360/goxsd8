@@ -219,13 +219,22 @@ import (
 //
 // # Still deferred
 //
-// Facets over QName/NOTATION (the Facets/QName and Facets/NOTATION dirs) are not
-// yet claimed — the QName/NOTATION lexical cases are (issue #131), but their facet
-// restrictions need the length-facet clause-1.3 exemption and enumeration over
-// the context-resolved tuple, deferred to a later issue. xsd:boolean facets (no
-// Facets dir exists for it), the plural list-typed dirs (IDREFS, NMTOKENS), the
-// NIST corpus, and list/union varieties remain out of scope until their backends
-// land.
+// Facets over QName (the Facets/QName dir) are now PARTIALLY claimed (issue #125):
+// the length/minLength/maxLength cases (vacuous per clause 1.3) and the pattern case
+// decide through the ordinary pipeline, but the enumeration cases are declined
+// pending schema-declaring-context threading — a QName enumeration member's prefix
+// must resolve against the schema's in-scope bindings, which xsd.Facet/
+// value.newEnumFacet cannot yet carry (value/facets.go flags this) — an honest gap
+// buildOwnFacets records, promised as a warden-gated follow-up issue. Facets over
+// NOTATION (the Facets/NOTATION dir) are NOT claimed at all: unlike every other
+// cohort member their fixtures use a two-step restriction through a locally-named
+// simpleType, paired with <xsd:notation> component declarations, with the tested
+// value in an attribute of a complexType (not the single-step xsd:NOTATION
+// restriction of a <foo> element's content this cohort decodes) — a shape
+// readFacetsCase/decodeRestriction does not model — deferred to its own follow-up
+// issue. xsd:boolean facets (no Facets dir exists for it), the plural list-typed
+// dirs (IDREFS, NMTOKENS), the NIST corpus, and list/union varieties remain out of
+// scope until their backends land.
 // string_pattern002_1031.i (issue #146) falls under that list-variety exclusion:
 // its Facets/string/string_pattern002.xml restricts via <xsd:list itemType="Hex"/>
 // (a per-token pattern facet decided by cvc-datatype-valid §4.1.4 clause dv_list,
@@ -321,8 +330,32 @@ var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string
 // for anyURI (like string) but decoded-OCTET count for the two binary types, a split
 // value.Lengthed already realizes through each mapping's Len() (anyURIVal.Len over
 // runes; hexBinaryVal/base64BinaryVal.Len over decoded []byte), so no length-unit
-// special-casing is needed here. No
-// new backend mapping is introduced in any case. ENTITY has no Facets cases in the
+// special-casing is needed here.
+//
+// xsd:QName (issue #125) is likewise a primitive strict maps directly (#131), so its
+// Facets restrictions resolve to its own CONTEXT-DEPENDENT mapping. Its applicable
+// facets (cos-applicable-facets §4.1.5) are length/minLength/maxLength/pattern/
+// enumeration/whiteSpace/assertions — the same shape as string — but the cohort
+// admits QName with two carve-outs. First, length/minLength/maxLength ARE applicable
+// (schema-valid to declare), yet §4.3.1.3/§4.3.2.3/§4.3.3.3 clause 1.3 makes EVERY
+// value facet-valid when {primitive type definition} is QName — a
+// deprecated-but-still-legal no-op — which value.lengthFacet's lengthExemptPrimitive
+// exemption (#130) already realizes, so those cases decide through the ordinary
+// pipeline as vacuous passes with no QName-specific code here. Second, enumeration
+// over QName compares §3.2.18 {namespace name, local name} tuples, so a prefixed enum
+// member (e.g. "foo:fo") must resolve against the DECLARING SCHEMA's in-scope
+// bindings — a context xsd.Facet/value.newEnumFacet cannot yet carry (value/facets.go
+// flags exactly this hazard), so a QName case carrying an enumeration facet child is
+// explicitly declined by buildOwnFacets as an honest recorded gap (see the issue #125
+// GROUNDING comment; the schema-declaring-context threading is a warden-gated
+// follow-up). QName's TESTED literals, by contrast, resolve their prefixes against the
+// INSTANCE's bindings, which execFacetsCase threads to value.ValidateLexical as a real
+// value.Context: strict's parseQName rejects a nil context UNCONDITIONALLY, even for an
+// unprefixed name (qname.go resolveQNameLexical), so this threading is required for
+// every claimed QName case (all 11 carry unprefixed literals like "foofo"/"abc"), not
+// only hypothetical prefixed ones. NOTATION is deliberately NOT admitted (its fixtures
+// use an incompatible two-step/locally-named-type shape — see "Still deferred").
+// No new backend mapping is introduced in any case. ENTITY has no Facets cases in the
 // current W3C checkout (no msData/datatypes/Facets/ENTITY dir); it is listed for
 // spec parity and mechanism reuse (a zero-case regex alternative is harmless), so
 // a future suite update carrying such cases is decided with no further code change.
@@ -331,6 +364,7 @@ var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string
 const facetsBaseTypes = `string|normalizedString|token|language|Name|NCName|NMTOKEN|` +
 	`ID|IDREF|ENTITY|` +
 	`anyURI|hexBinary|base64Binary|` +
+	`QName|` +
 	`decimal|float|double|` +
 	`integer|int|long|short|byte|` +
 	`unsignedInt|unsignedLong|unsignedShort|unsignedByte|` +
@@ -531,7 +565,7 @@ func execItemCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 // cannot be read, or that pairs an inapplicable facet with its primitive is
 // declined (Fail, a recorded gap) rather than mis-decided or crashed.
 func execFacetsCase(backend, strictBackend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
-	raw, base, children, ok := readFacetsCase(c.doc)
+	raw, base, children, ctx, ok := readFacetsCase(c.doc)
 	if !ok {
 		return Fail()
 	}
@@ -559,7 +593,7 @@ func execFacetsCase(backend, strictBackend value.Backend, sym map[xsd.QName]*xsd
 	if err != nil {
 		return Fail()
 	}
-	_, verr := value.ValidateLexical(backend, leaf, raw, nil)
+	_, verr := value.ValidateLexical(backend, leaf, raw, ctx)
 	observedValid := verr == nil
 	if observedValid == c.expectValid {
 		return Pass()
@@ -1050,6 +1084,21 @@ func buildOwnFacets(base string, children []facetChild) ([]xsd.Facet, bool) {
 	if !ok {
 		return nil, false
 	}
+	// EXPLICIT decline (issue #125): enumeration over QName compares §3.2.18
+	// {namespace name, local name} tuples, so a prefixed enum member must resolve
+	// against the DECLARING SCHEMA's in-scope bindings — a context xsd.Facet/
+	// value.newEnumFacet cannot yet carry (value/facets.go parses each enum lexical
+	// with a hardcoded nil context). Building that threading is a warden-gated
+	// follow-up (see the issue #125 GROUNDING comment); until then a QName
+	// enumeration case is an honest recorded gap, declined here rather than fed
+	// through and mis-decided against the wrong (instance) context.
+	if base == "QName" {
+		for _, ch := range children {
+			if ch.name == xsd.FacetEnumeration.String() {
+				return nil, false
+			}
+		}
+	}
 	var order []xsd.FacetKind
 	values := map[xsd.FacetKind][]string{}
 	for _, ch := range children {
@@ -1077,17 +1126,22 @@ func buildOwnFacets(base string, children []facetChild) ([]xsd.Facet, bool) {
 // and, from the schema at the instance's noNamespaceSchemaLocation, the
 // restriction's base primitive and facet children. ok is false when either
 // document cannot be read for this shape.
-func readFacetsCase(instancePath string) (raw, base string, children []facetChild, ok bool) {
+func readFacetsCase(instancePath string) (raw, base string, children []facetChild, ctx value.Context, ok bool) {
 	inst, err := decodeFacetsInstance(instancePath)
 	if err != nil || inst.SchemaLoc == "" || len(inst.Foos) != 1 {
-		return "", "", nil, false
+		return "", "", nil, nil, false
 	}
 	foo := inst.Foos[0]
 	schemaPath := filepath.Join(filepath.Dir(instancePath), filepath.FromSlash(inst.SchemaLoc))
 	base, attrName, children, ok := decodeRestriction(schemaPath)
 	if !ok || base == "" || len(children) == 0 {
-		return "", "", nil, false
+		return "", "", nil, nil, false
 	}
+	// The instance's root-level namespace bindings, threaded to ValidateLexical so a
+	// context-dependent primitive's Parse (QName, §3.3.18) can resolve prefixes.
+	// childBindings(nil, ...) reuses the lexical cohort's declaration reader; the
+	// result is a lookup-only map, never ranged into output (STYLE D2).
+	ctx = nsContext{bindings: childBindings(nil, inst.Attrs)}
 	// The NMTOKEN cohort (unlike language/Name/NCName) carries the tested value
 	// in a named attribute of <foo> rather than its content: the restriction is
 	// declared on an <xsd:attribute>. When decodeRestriction reports that
@@ -1096,11 +1150,11 @@ func readFacetsCase(instancePath string) (raw, base string, children []facetChil
 	if attrName != "" {
 		v, found := foo.attr(attrName)
 		if !found {
-			return "", "", nil, false
+			return "", "", nil, nil, false
 		}
-		return v, base, children, true
+		return v, base, children, ctx, true
 	}
-	return foo.Text, base, children, true
+	return foo.Text, base, children, ctx, true
 }
 
 // facetsInstance mirrors the Facets cohort's instance shape: a <test> root whose
@@ -1111,9 +1165,17 @@ func readFacetsCase(instancePath string) (raw, base string, children []facetChil
 // children) or several (e.g. anyURI_b006.xml, a list-style instance repeating
 // many <foo> values against one enumeration) is honestly declined rather than
 // mis-read as a single empty or last-wins tested value.
+// Attrs captures the <test> root's raw attributes (mirroring fooElem.Attrs) so the
+// QName cohort (issue #125) can build the instance's root-level namespace context.
+// Every Facets/QName fixture in the current checkout declares its xmlns bindings
+// only on this root (verified), so a root-only snapshot is a complete context for
+// the tested <foo> literal — no ancestor-chain streaming (readQNameContexts) is
+// needed here. The field is inert for every other base type (their Parse ignores
+// the threaded context).
 type facetsInstance struct {
-	SchemaLoc string    `xml:"http://www.w3.org/2001/XMLSchema-instance noNamespaceSchemaLocation,attr"`
-	Foos      []fooElem `xml:"foo"`
+	SchemaLoc string     `xml:"http://www.w3.org/2001/XMLSchema-instance noNamespaceSchemaLocation,attr"`
+	Attrs     []xml.Attr `xml:",any,attr"`
+	Foos      []fooElem  `xml:"foo"`
 }
 
 // fooElem is the <foo> element: its text content plus any attributes, so a case

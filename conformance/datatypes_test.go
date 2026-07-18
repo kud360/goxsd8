@@ -325,7 +325,7 @@ func TestDatatypesFacetsShapeGuard(t *testing.T) {
 	anyURIDir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets", "anyURI")
 
 	// The canonical single-<foo> shape is read: value and base recovered.
-	raw, base, children, ok := readFacetsCase(filepath.Join(anyURIDir, "anyURI_length001.xml"))
+	raw, base, children, _, ok := readFacetsCase(filepath.Join(anyURIDir, "anyURI_length001.xml"))
 	if !ok {
 		t.Fatal("readFacetsCase must accept the canonical single-<foo> anyURI_length001 shape")
 	}
@@ -336,9 +336,39 @@ func TestDatatypesFacetsShapeGuard(t *testing.T) {
 	// The out-of-cohort shapes are declined: zero <foo> (b001) and multiple <foo>
 	// (b006) both fail the exactly-one guard.
 	for _, rel := range []string{"anyURI_b001.xml", "anyURI_b006.xml"} {
-		if _, _, _, ok := readFacetsCase(filepath.Join(anyURIDir, rel)); ok {
+		if _, _, _, _, ok := readFacetsCase(filepath.Join(anyURIDir, rel)); ok {
 			t.Errorf("readFacetsCase(%s) must decline the out-of-cohort shape (not exactly one <foo>)", rel)
 		}
+	}
+}
+
+// TestDatatypesQNameFacets proves the QName carve-outs of issue #125: the
+// length-family cases decide as vacuous passes through a real (non-nil) instance
+// context (a nil context would fail parseQName even for the unprefixed literal
+// "foofo"), and buildOwnFacets explicitly declines the enumeration cases pending
+// schema-declaring-context threading. Skips when the submodule is absent.
+func TestDatatypesQNameFacets(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	qnameDir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets", "QName")
+
+	// A real root-level context is built and the length case is read whole.
+	raw, base, children, ctx, ok := readFacetsCase(filepath.Join(qnameDir, "QName_length001.xml"))
+	if !ok || base != "QName" || raw != "foofo" || len(children) == 0 {
+		t.Fatalf("readFacetsCase(QName_length001) = raw=%q base=%q children=%d ok=%v, want raw=foofo base=QName children>0 ok=true", raw, base, len(children), ok)
+	}
+	if ctx == nil {
+		t.Fatal("readFacetsCase must thread a non-nil context for the QName cohort")
+	}
+
+	// buildOwnFacets admits the length facet but declines an enumeration facet on
+	// QName (the schema-declaring-context gap).
+	if _, ok := buildOwnFacets("QName", []facetChild{{name: "length", value: "4"}}); !ok {
+		t.Error("buildOwnFacets(QName, length) must be admitted (vacuous per clause 1.3)")
+	}
+	if _, ok := buildOwnFacets("QName", []facetChild{{name: "enumeration", value: "foo:fo"}}); ok {
+		t.Error("buildOwnFacets(QName, enumeration) must be declined pending schema-declaring-context threading")
 	}
 }
 
