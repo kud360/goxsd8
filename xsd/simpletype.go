@@ -72,7 +72,9 @@ func (Union) variety()  {}
 // verbatim spec token, returned by String().
 type FacetKind uint8
 
-// The FacetKind values (Datatypes §4.3.1–4.3.14, in spec order).
+// The FacetKind values: the 14 core facets (Datatypes §4.3.1–4.3.14), then the
+// two precisionDecimal extension facets (xsd-precisionDecimal.md §4.2/§4.3), in
+// spec order.
 const (
 	// FacetLength is the "length" facet (§4.3.1).
 	FacetLength FacetKind = iota + 1
