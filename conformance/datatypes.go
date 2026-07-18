@@ -387,21 +387,18 @@ func selectsDatatypes(c caseSpec) bool {
 	return datatypesCase.MatchString(doc) || facetsCase.MatchString(doc)
 }
 
-// newDatatypesExec builds the lane's executor: it composes builtin/strict with
-// a trivial fallback so builtin.Seed's all-primitives precondition is met,
-// Seeds the builtins once (the M3 composition step), and captures the composed
+// newDatatypesExec builds the lane's executor: it Seeds the builtins once (the
+// M3 composition step) from builtin/strict — which maps all 20 primitives, so
+// builtin.Seed's all-primitives precondition holds — and captures the strict
 // backend plus the seeded symbol table in the returned closure.
 func newDatatypesExec() executor {
-	// strict.New() now maps all 20 builtin primitives (decimal/precisionDecimal/
+	// strict.New() maps all 20 builtin primitives (decimal/precisionDecimal/
 	// boolean/string/anyURI/float/double/hexBinary/base64Binary/duration/dateTime
 	// plus the six seven-property siblings time/date/gYearMonth/gYear/gMonthDay/
-	// gDay/gMonth and QName/NOTATION); Seed requires all 20, so the fallback — once
-	// needed to cover precisionDecimal — is now fully redundant, retained only as a
-	// defensive floor. strict wins where it maps (Override
-	// yields partial first), so those fallback mappings are never actually
-	// exercised: the lane now claims boolean/decimal/string/float/double/anyURI/
-	// hexBinary/base64Binary/duration/dateTime/time/date/gYearMonth/gYear/
-	// gMonthDay/gDay/gMonth and the context-dependent QName/NOTATION (#131)
+	// gDay/gMonth and QName/NOTATION), which is exactly builtin.Seed's precondition,
+	// so it feeds Seed directly. The lane claims boolean/decimal/string/float/
+	// double/anyURI/hexBinary/base64Binary/duration/dateTime/time/date/gYearMonth/
+	// gYear/gMonthDay/gDay/gMonth and the context-dependent QName/NOTATION (#131)
 	// (lexical cohort) and string/decimal/float/double plus the integer and
 	// derived-string (normalizedString/token, #85; language/Name/NCName/NMTOKEN,
 	// #106; ID/IDREF/ENTITY, #116) families, anyURI/hexBinary/base64Binary (#124)
@@ -409,17 +406,16 @@ func newDatatypesExec() executor {
 	// (float/double added in #80, anyURI in #82, hexBinary/base64Binary in #83,
 	// duration in #84, dateTime in #103, the seven-property siblings in #109),
 	// every one of which resolves (directly or via a base ancestor) to a strict
-	// mapping — the no-op fallback still never runs for a claimed case.
+	// mapping.
 	strictBackend := strict.New()
-	backend := value.Override(fallbackPrimitives{}, strictBackend)
 
-	// Seed proves the composed backend satisfies the precondition and yields
-	// the builtin components; the executor confirms a claimed case's type is a
-	// seeded builtin before validating it. The composed backend is complete by
-	// construction (every primitive covered by the fallback, guarded by
-	// TestDatatypesBackendSeeds), so a Seed error here is a programming error,
-	// not a runtime condition — panic rather than drop it.
-	types, err := builtin.Seed(backend)
+	// Seed proves the strict backend satisfies the all-primitives precondition —
+	// else it returns a typed *builtin.MissingPrimitivesError naming the gaps — and
+	// yields the builtin components; the executor confirms a claimed case's type is
+	// a seeded builtin before validating it. strict maps all 20 primitives by
+	// construction (guarded by TestDatatypesBackendSeeds), so a Seed error here is a
+	// programming error, not a runtime condition — panic rather than drop it.
+	types, err := builtin.Seed(strictBackend)
 	if err != nil {
 		panic("conformance: datatypes lane backend must Seed by construction: " + err.Error())
 	}
@@ -430,9 +426,9 @@ func newDatatypesExec() executor {
 
 	return func(c caseSpec) Status {
 		if facetsCase.MatchString(filepath.ToSlash(c.doc)) {
-			return execFacetsCase(backend, strictBackend, sym, c)
+			return execFacetsCase(strictBackend, sym, c)
 		}
-		return execLexicalCase(backend, sym, c)
+		return execLexicalCase(strictBackend, sym, c)
 	}
 }
 
@@ -564,7 +560,7 @@ func execItemCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 // (value.ValidateLexical). A case whose base is not strict-mapped, whose schema
 // cannot be read, or that pairs an inapplicable facet with its primitive is
 // declined (Fail, a recorded gap) rather than mis-decided or crashed.
-func execFacetsCase(backend, strictBackend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
+func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
 	raw, base, children, ctx, ok := readFacetsCase(c.doc)
 	if !ok {
 		return Fail()
@@ -575,12 +571,11 @@ func execFacetsCase(backend, strictBackend value.Backend, sym map[xsd.QName]*xsd
 		return Fail()
 	}
 	// Authoritative cohort guard: the leaf's governing mapping (its own or a base
-	// ancestor's, widest-space rule st-restrict-facets §3.16.6.4) must be strict's,
-	// so ValidateLexical parses through a spec-exact mapping and the no-op fallback
-	// (which "maps" every primitive) can never route a case through and mis-decide
-	// it. Directly-mapped primitives (string/decimal/float/double) satisfy this at
-	// the first step; the integer family resolves to its xs:decimal ancestor (#81).
-	if !strictGoverns(strictBackend, builtinType) {
+	// ancestor's, widest-space rule st-restrict-facets §3.16.6.4) must be supplied
+	// by the strict backend, so ValidateLexical parses through a spec-exact mapping.
+	// Directly-mapped primitives (string/decimal/float/double) satisfy this at the
+	// first step; the integer family resolves to its xs:decimal ancestor (#81).
+	if !strictGoverns(backend, builtinType) {
 		return Fail()
 	}
 	ownFacets, ok := buildOwnFacets(base, children)
@@ -603,10 +598,9 @@ func execFacetsCase(backend, strictBackend value.Backend, sym map[xsd.QName]*xsd
 
 // strictGoverns reports whether st's governing mapping — its own or that of a
 // base ancestor (widest-space rule, st-restrict-facets §3.16.6.4) — is supplied
-// by the strict backend, so ValidateLexical parses through a spec-exact mapping
-// rather than the no-op fallback. The integer family (xs:integer and its
-// narrowings) has no strict mapping of its own; its nearest mapped ancestor is
-// xs:decimal, which strict supplies (#81).
+// by the strict backend, so ValidateLexical parses through a spec-exact mapping.
+// The integer family (xs:integer and its narrowings) has no strict mapping of its
+// own; its nearest mapped ancestor is xs:decimal, which strict supplies (#81).
 func strictGoverns(strictBackend value.Backend, st *xsd.SimpleType) bool {
 	for s := st; s != nil; s = s.Base() {
 		if _, ok := strictBackend.Mapping(s.Name()); ok {
@@ -628,29 +622,6 @@ func primitiveOfType(st *xsd.SimpleType) *xsd.SimpleType {
 		}
 	}
 	return nil
-}
-
-// fallbackPrimitives maps every builtin primitive with a no-op identity mapping.
-// It once satisfied builtin.Seed's all-primitives precondition for the single
-// primitive strict.New() did not cover (precisionDecimal, mapped as of #115). Now
-// that strict maps all 20 primitives it is fully redundant — retained as a
-// defensive floor beneath Override so Seed's precondition holds structurally rather
-// than by relying on the strict cohort being complete. The datatypes selector never
-// claims a case that would exercise these no-op mappings.
-type fallbackPrimitives struct{}
-
-func (fallbackPrimitives) Mapping(typ xsd.QName) (value.Mapping, bool) {
-	if typ.Space != xsd.XMLSchemaNS {
-		return value.Mapping{}, false
-	}
-	for _, t := range builtin.Types {
-		if t.IsPrimitive() && t.Name == typ.Local {
-			return value.Mapping{
-				Parse: func(lexical string, _ value.Context) (value.Value, error) { return lexical, nil },
-			}, true
-		}
-	}
-	return value.Mapping{}, false
 }
 
 // parseOK reports whether raw is in prim's lexical space, after applying prim's

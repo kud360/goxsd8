@@ -12,14 +12,14 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// TestDatatypesBackendSeeds guards the lane's precondition loudly: the composed
-// strict+fallback backend must satisfy builtin.Seed (all primitives mapped), or
-// the executor's symbol table is empty and every claimed case fails.
+// TestDatatypesBackendSeeds guards the lane's precondition loudly: the strict
+// backend must satisfy builtin.Seed (all primitives mapped), or the executor's
+// symbol table is empty and every claimed case fails.
 func TestDatatypesBackendSeeds(t *testing.T) {
-	backend := value.Override(fallbackPrimitives{}, strict.New())
+	backend := strict.New()
 	types, err := builtin.Seed(backend)
 	if err != nil {
-		t.Fatalf("Seed(strict+fallback) must succeed, got %v", err)
+		t.Fatalf("Seed(strict) must succeed, got %v", err)
 	}
 	if got, want := len(types), len(builtin.Types)+1; got != want {
 		t.Fatalf("Seed returned %d components, want %d", got, want)
@@ -215,8 +215,7 @@ func TestDatatypesFacetsWideStringFamily(t *testing.T) {
 	}
 
 	// NCName cross-step pattern AND, verified through the real value pipeline.
-	strictBackend := strict.New()
-	backend := value.Override(fallbackPrimitives{}, strictBackend)
+	backend := strict.New()
 	types, err := builtin.Seed(backend)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
