@@ -434,6 +434,118 @@ func TestDatatypesLexicalItemShape(t *testing.T) {
 	}
 }
 
+// TestDatatypesLexicalDateTimeStampTimezone proves issue #140: a lexical-cohort
+// dateTimeStamp literal is decided by the VALUE-based explicitTimezone facet
+// (cvc-explicitTimezone-valid §4.3.14.3, checked at cvc-datatype-valid §4.1.4
+// clause 3), not by lexical-space membership alone. The current W3C checkout has
+// ZERO msData/datatypes/dateTimeStampNNN.xml cases, so this drives SYNTHETIC
+// fixtures (a facet-free xs:dateTimeStamp restriction, the lexical cohort's exact
+// comp_foo/simpleTest shape) through the real executor: a tz-bearing literal is
+// accepted, a tz-ABSENT one is REJECTED. The tz-absent-claimed-valid assertion is
+// load-bearing — the pre-#140 Parse-only path would false-ACCEPT it (making that
+// wrong claim spuriously Pass); the fix routes dateTimeStamp through the facet
+// pipeline so it Fails. It also pins the routing decision itself (fixesTimezone)
+// and the rejection rule.
+func TestDatatypesLexicalDateTimeStampTimezone(t *testing.T) {
+	exec := newDatatypesExec()
+	dir := t.TempDir()
+
+	const schema = `<?xml version='1.0'?>
+<xsd:schema xmlns:xsd='http://www.w3.org/2001/XMLSchema'>
+  <xsd:element name='complexTest' type='complexfooType'/>
+  <xsd:element name='simpleTest' type='simplefooType'/>
+  <xsd:complexType name='complexfooType'>
+    <xsd:sequence>
+      <xsd:element name='comp_foo' type='xsd:dateTimeStamp'/>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:simpleType name='simplefooType'>
+    <xsd:restriction base='xsd:dateTimeStamp'/>
+  </xsd:simpleType>
+</xsd:schema>`
+	if err := os.WriteFile(filepath.Join(dir, "dateTimeStamp.xsd"), []byte(schema), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	instancePath := func(name, lexical string) string {
+		doc := `<?xml version='1.0'?>
+<root xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' xsi:noNamespaceSchemaLocation='dateTimeStamp.xsd'>
+  <complexTest><comp_foo>` + lexical + `</comp_foo></complexTest>
+  <simpleTest>` + lexical + `</simpleTest>
+</root>`
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(doc), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	// A tz-bearing literal is in dateTimeStamp's value space AND satisfies the
+	// required-timezone facet, so it is VALID; a tz-absent one is lexically a
+	// dateTime but violates cvc-explicitTimezone-valid, so it is INVALID.
+	bearing := instancePath("bearing.xml", "2002-10-10T12:00:00Z")
+	absent := instancePath("absent.xml", "2002-10-10T12:00:00")
+
+	cases := []struct {
+		name       string
+		doc        string
+		suiteValid bool // the spec-correct validity of the literal
+	}{
+		{"tz-bearing", bearing, true},
+		{"tz-absent", absent, false},
+	}
+	for _, tc := range cases {
+		// The executor agrees with the spec-correct validity...
+		right := caseSpec{kind: kindInstance, doc: tc.doc, expectValid: tc.suiteValid}
+		if got := exec(right); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with spec-correct validity (expectValid=%v)", tc.name, tc.suiteValid)
+		}
+		// ...and DISAGREES with the opposite claim, so the test can actually fail.
+		// For tz-absent this is the #140 anti-regression: the Parse-only path would
+		// false-accept it and this wrong "valid" claim would spuriously Pass.
+		wrong := caseSpec{kind: kindInstance, doc: tc.doc, expectValid: !tc.suiteValid}
+		if exec(wrong).IsPass() {
+			t.Errorf("%s: executor must Fail against the wrong expectation (expectValid=%v)", tc.name, !tc.suiteValid)
+		}
+	}
+
+	// Pin the routing decision itself: fixesTimezone is true for the seeded
+	// dateTimeStamp (explicitTimezone=required) and false for plain dateTime
+	// (explicitTimezone=optional), so only the former leaves the parseOK path.
+	backend := strict.New()
+	types, err := builtin.Seed(backend)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	var dts, dt *xsd.SimpleType
+	for _, ty := range types {
+		switch ty.Name() {
+		case xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTimeStamp"}:
+			dts = ty
+		case xsd.QName{Space: xsd.XMLSchemaNS, Local: "dateTime"}:
+			dt = ty
+		}
+	}
+	if dts == nil || dt == nil {
+		t.Fatal("Seed did not return xs:dateTimeStamp and xs:dateTime")
+	}
+	if !fixesTimezone(dts) {
+		t.Error("fixesTimezone(dateTimeStamp) = false, want true (explicitTimezone=required)")
+	}
+	if fixesTimezone(dt) {
+		t.Error("fixesTimezone(dateTime) = true, want false (explicitTimezone=optional)")
+	}
+
+	// The rejection reason is cvc-explicitTimezone-valid, not a lexical failure —
+	// proving the value-based facet, not Parse, decides the tz-absent literal.
+	_, verr := value.ValidateLexical(backend, dts, "2002-10-10T12:00:00", nil)
+	if verr == nil {
+		t.Fatal("tz-absent dateTimeStamp must be rejected via value.ValidateLexical, got nil")
+	}
+	if rule, ok := xsderr.RuleOf(verr); !ok || rule != "cvc-explicitTimezone-valid" {
+		t.Errorf("tz-absent dateTimeStamp rejection rule = %q (ok=%v), want cvc-explicitTimezone-valid", rule, ok)
+	}
+}
+
 // TestDatatypesLexicalQNameCohort drives the executor over the context-dependent
 // QName lexical cohort (issue #131): each comp_foo/simpleTest literal resolves
 // its prefix against the in-scope XML namespace bindings the harness decodes from

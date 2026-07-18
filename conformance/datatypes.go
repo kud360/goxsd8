@@ -107,14 +107,19 @@ import (
 // applies); an attribute typed as a non-directly-mapped builtin (integer/derived-
 // string family) is skipped, since Parse alone is not a complete check for those.
 //
-// dateTimeStamp (§3.4.28) is listed for forward parity but is the one member of
-// this cohort whose Parse-only path is NOT a complete check, and it has ZERO cases
-// in the current checkout so the gap is unexercised. Being a restriction of
-// dateTime that fixes explicitTimezone=required, its validity also depends on the
-// timezone being present — but execLexicalCase decides via parseDateTime alone,
-// which does not enforce that facet (only the facet cohort's value.ValidateLexical
-// does), so a tz-ABSENT dateTimeStamp literal would be false-ACCEPTED here. That is
-// a fail-open risk, flagged at the datatypesCase regex, not a decided case today.
+// dateTimeStamp (§3.4.28) is listed and decided completely, though it has ZERO
+// cases in the current checkout. Being a restriction of dateTime that fixes
+// explicitTimezone=required, its validity ALSO depends on the timezone being
+// present — a VALUE-based facet (cvc-explicitTimezone-valid §4.3.14.3) checked at
+// cvc-datatype-valid §4.1.4 clause 3, AFTER the lexical mapping, so parseDateTime
+// alone would false-ACCEPT a tz-absent literal. execLexicalCase therefore routes
+// any type whose EffectiveFacets fix a non-optional explicitTimezone (fixesTimezone
+// — read from the fact, never a dateTimeStamp type-name special case, so a
+// user-defined date/time restriction that fixes explicitTimezone per §4.3.14.4 is
+// covered too) through the SAME facet pipeline the facet cohort uses
+// (value.ValidateLexical, decideLexicalByFacets), which enforces the timezone. A
+// tz-absent dateTimeStamp literal is thus correctly REJECTED (issue #140), so a
+// future msData/datatypes/dateTimeStampNNN.xml case cannot regress the ratchet.
 //
 // # The facet cohort (issue #57, widened by issues #80, #81, #85, #106, #116, #123 and #124)
 //
@@ -325,17 +330,16 @@ const synthNS = "urn:goxsd8:conformance:facets"
 // checkout (all its cases are facet-cohort under Facets/NOTATION), so it is
 // listed for parity and exercised only by QName today.
 //
-// GAP(datatypes): dateTimeStamp (§3.4.28) is listed but has ZERO cases in the
-// current W3C checkout (no msData/datatypes/dateTimeStampNNN.xml), so the
-// alternative is inert today. Unlike every other cohort type, its Parse-only path
-// is NOT a complete check: dateTimeStamp fixes explicitTimezone=required, but
-// execLexicalCase decides validity purely via parseDateTime (parseOK), which does
-// not enforce the timezone (that check lives only in the facet cohort's
-// value.ValidateLexical). So a
-// tz-ABSENT dateTimeStamp literal would be FALSE-ACCEPTED here — a fail-open gap,
-// currently unexercised because no such case exists. Should the suite ever add a
-// tz-absent dateTimeStamp case, it must move to the facet cohort (or execLexicalCase
-// must run the explicitTimezone facet) rather than be decided by this Parse-only path.
+// dateTimeStamp (§3.4.28) is listed and, though it has ZERO cases in the current
+// W3C checkout (no msData/datatypes/dateTimeStampNNN.xml), is now decided
+// COMPLETELY: unlike every other cohort type its Parse-only path is not a complete
+// check (it fixes explicitTimezone=required, a VALUE-based facet checked at
+// cvc-datatype-valid §4.1.4 clause 3, cvc-explicitTimezone-valid §4.3.14.3, not a
+// lexical/pattern check), so execLexicalCase routes any type whose EffectiveFacets
+// fix a non-optional explicitTimezone (fixesTimezone) through the facet cohort's
+// value.ValidateLexical path (decideLexicalByFacets) rather than parseOK. A
+// tz-ABSENT dateTimeStamp literal is therefore correctly REJECTED (issue #140),
+// closing the former fail-open; a future tz-absent case cannot regress the ratchet.
 var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|dateTimeStamp|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth|QName|NOTATION)[0-9]+\.xml$`)
 
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
@@ -508,7 +512,8 @@ func execLexicalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c
 		return execItemCase(backend, sym, c)
 	}
 	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: prim}
-	if _, seeded := sym[qn]; !seeded {
+	st, seeded := sym[qn]
+	if !seeded {
 		return Fail()
 	}
 	m, mapped := backend.Mapping(qn)
@@ -523,9 +528,68 @@ func execLexicalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c
 	if isContextDependent(prim) {
 		return execContextualCase(m, prim, c)
 	}
+	// A type whose effective facets fix explicitTimezone to a non-optional value
+	// (xs:dateTimeStamp fixes it to required, §3.4.28; §4.3.14.4 permits any
+	// date/time restriction to fix it too) is NOT decided by lexical-space
+	// membership alone. cvc-explicitTimezone-valid (§4.3.14.3) is a VALUE-based
+	// facet, checked at cvc-datatype-valid §4.1.4 clause 3 AFTER the lexical
+	// mapping produces a value — exactly the facet cohort's value.ValidateLexical
+	// path — so parseOK (Parse only) would FALSE-ACCEPT a tz-absent literal. Route
+	// such a type through the same facet pipeline instead (fixesTimezone reads the
+	// fact from EffectiveFacets, never a dateTimeStamp type-name special case).
+	if fixesTimezone(st) {
+		return decideLexicalByFacets(backend, st, values, c)
+	}
 	observedValid := true
 	for _, v := range values {
 		if !parseOK(m, prim, v, nil) {
+			observedValid = false
+			break
+		}
+	}
+	if observedValid == c.expectValid {
+		return Pass()
+	}
+	return Fail()
+}
+
+// fixesTimezone reports whether st's effective facets fix explicitTimezone to a
+// non-optional value (required or prohibited) — the class (xs:dateTimeStamp
+// §3.4.28, or any date/time restriction that fixes it, §4.3.14.4) whose validity
+// is NOT decided by lexical-space membership alone. cvc-explicitTimezone-valid
+// (§4.3.14.3) is a VALUE-based facet, checked at cvc-datatype-valid §4.1.4 clause
+// 3 after the lexical mapping, so the lexical cohort's parseOK does not enforce
+// it. The fact "does this type constrain the timezone" already lives in
+// EffectiveFacets (the seeded builtin carries the generated typespec's fixed
+// facet), so this reads it there rather than re-deriving it from a type name
+// (STYLE D1/D3). explicitTimezone is a supersede-kind facet, so at most one
+// effective entry survives; an "optional" value (the date/time primitives'
+// default) leaves lexical membership complete and takes the ordinary parseOK path.
+func fixesTimezone(st *xsd.SimpleType) bool {
+	for _, ef := range st.EffectiveFacets() {
+		f := ef.Facet()
+		if f.Kind() != xsd.FacetExplicitTimezone {
+			continue
+		}
+		vals := f.Values()
+		return len(vals) == 1 && vals[0] != "optional"
+	}
+	return false
+}
+
+// decideLexicalByFacets decides a lexical-cohort case whose type fixes a
+// non-optional explicitTimezone (fixesTimezone): each tested value runs through
+// the SAME value-based facet pipeline the facet cohort uses (value.ValidateLexical),
+// which enforces cvc-explicitTimezone-valid (§4.3.14.3) after the lexical mapping,
+// rather than the Parse-only parseOK that cannot. The seeded builtin type already
+// carries the fixed facet in its EffectiveFacets, so no leaf synthesis is needed.
+// The date/time primitives map context-free (§3.3.7), so a nil value.Context
+// suffices. The instance is valid iff every tested value validates, mirroring the
+// parseOK path's whole-instance polarity.
+func decideLexicalByFacets(backend value.Backend, st *xsd.SimpleType, values []string, c caseSpec) Status {
+	observedValid := true
+	for _, v := range values {
+		if _, err := value.ValidateLexical(backend, st, v, nil); err != nil {
 			observedValid = false
 			break
 		}
