@@ -82,19 +82,35 @@ The list/union-variety executor + `value.effectiveWhiteSpace` not-applicable pat
 shapes — still waits on the `xsd` list/union variety shape (M4, #46). The NIST
 corpus is a follow-up once #145 lands.
 
-## M4 — Schema parsing (next — epic #79, human-gated)
+## M4 — Schema parsing (epic #79 — gate lifted 2026-07-18, carved)
 
 Three-phase parser over the composition model (include/import/redefine/
 override, chameleon coercion), UPA/EDC/particle-restriction designed into
 the model shape from the start. **`schema` lane.**
 
-Epic #79 is **human-gated**: do not carve it into `ready` sub-slices or
-start the develop loop on it ahead of finishing the M3 datatypes vertical
-slice unless a human reprioritizes. Its five leaf follow-ups (#72, #70,
-#63, #51, #46) plus the sibling #52 today list their long-closed seed deps;
-repointing their `## Depends on` to the #79 epic is **deferred to the M4
-carve** (an epic does not close per-slice, so repointing now would not drive
-the post-land unblock pass).
+The human owner **lifted the human gate on 2026-07-18** and epic #79 was
+carved into 17 session-sized sub-slices (#167–#183) in dependency order:
+parse phase (#167); `xsd` model shapes (#168 element decl, #169 attribute
+decl/group/use, #170 particle/model-group, #171 complex type); schema
+container + phase seam (#172) and finalize/resolve — `src-resolve`,
+dependency-ordered finalization, named-circularity rejection (#173);
+producer spine (#174) and the **first `schema`-lane movement** via the
+`conformance/schema.go` driver + first ratchet (#175); producer widening
+(#176 complex-type/content-model, #177 attribute-group/model-group defs,
+#178 IDC/assertion/notation/wildcard); composition loader (#179 include +
+chameleon, #182 import, #183 redefine/override); and finalize model-validity
+(#180 UPA/EDC, #181 complex-type derivation validity incl. particle
+restriction §3.9.6). Ready first wave (no open deps): #167, #168, #169,
+#170. Each new-exported-surface slice carries a warden pre-flight
+(esp. the `parser` package shape #167 and `xsd` additions #168–#172).
+
+The five leaf follow-ups (#72, #70, #63, #51, #46) plus siblings #52 and
+#157 have had their `## Depends on` **repointed** from the unfiled-phase
+placeholders / bare #79 to the concrete sub-slice numbers above (done in the
+carve); they stay `blocked` and flip `ready` via the post-land unblock pass
+as their named producer/finalize sub-slices land. Do not divert the develop
+loop off the M3 datatypes tail to start M4 — the carve fills the queue for
+when M3 drains.
 
 ## M5 — Instance validation (XML)
 
