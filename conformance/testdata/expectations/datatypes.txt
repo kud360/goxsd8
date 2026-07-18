@@ -84,10 +84,10 @@ MS-DataTypes2006-07-15/QName008_2091/instance/QName008_2091.i pass
 MS-DataTypes2006-07-15/QName009_2092/instance/QName009_2092.v pass
 MS-DataTypes2006-07-15/QName010_2093/instance/QName010_2093.i pass
 MS-DataTypes2006-07-15/QName011_2094/instance/QName011_2094.i pass
-MS-DataTypes2006-07-15/QName_enumeration001_1368/instance/QName_enumeration001_1368.i fail
-MS-DataTypes2006-07-15/QName_enumeration002_1369/instance/QName_enumeration002_1369.v fail
-MS-DataTypes2006-07-15/QName_enumeration003_1370/instance/QName_enumeration003_1370.i fail
-MS-DataTypes2006-07-15/QName_enumeration004_1371/instance/QName_enumeration004_1371.v fail
+MS-DataTypes2006-07-15/QName_enumeration001_1368/instance/QName_enumeration001_1368.i pass
+MS-DataTypes2006-07-15/QName_enumeration002_1369/instance/QName_enumeration002_1369.v pass
+MS-DataTypes2006-07-15/QName_enumeration003_1370/instance/QName_enumeration003_1370.i pass
+MS-DataTypes2006-07-15/QName_enumeration004_1371/instance/QName_enumeration004_1371.v pass
 MS-DataTypes2006-07-15/QName_length001_1357/instance/QName_length001_1357.i pass
 MS-DataTypes2006-07-15/QName_length002_1358/instance/QName_length002_1358.v pass
 MS-DataTypes2006-07-15/QName_length003_1359/instance/QName_length003_1359.i pass

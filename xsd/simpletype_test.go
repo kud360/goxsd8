@@ -20,10 +20,10 @@ func TestNewFacetFixedNormalization(t *testing.T) {
 		{FacetLength, true, true, true},
 		{FacetWhiteSpace, false, false, true},
 		{FacetExplicitTimezone, true, true, true},
-		{FacetPattern, true, false, false},     // normalized: pattern has no {fixed}
-		{FacetEnumeration, true, false, false}, // normalized: enumeration has no {fixed}
-		// FacetAssertions (also fixed-less) is excluded: NewFacet panics for it;
-		// see TestNewFacetAssertionsPanics and NewAssertionsFacet.
+		{FacetPattern, true, false, false}, // normalized: pattern has no {fixed}
+		// FacetEnumeration and FacetAssertions (also fixed-less) are excluded:
+		// NewFacet panics for both; see TestNewFacetEnumerationPanics /
+		// TestNewFacetAssertionsPanics and NewEnumerationFacet / NewAssertionsFacet.
 	}
 	for _, c := range cases {
 		f := NewFacet(c.kind, []string{"x"}, c.fixedIn)
@@ -41,7 +41,7 @@ func TestNewFacetFixedNormalization(t *testing.T) {
 // Values returns a copy, so no caller aliases the facet's backing array.
 func TestNewFacetValuesCopied(t *testing.T) {
 	in := []string{"a", "b"}
-	f := NewFacet(FacetEnumeration, in, false)
+	f := NewFacet(FacetPattern, in, false)
 	in[0] = "mutated"
 	got := f.Values()
 	if got[0] != "a" {
@@ -120,6 +120,109 @@ func TestAssertionsOnNonAssertionsFacet(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("Assertions() = %v for a length facet, want nil", got)
+	}
+}
+
+// TestNewFacetEnumerationPanics confirms NewFacet rejects FacetEnumeration: the
+// enumeration facet models {value} as EnumerationMembers carrying namespace
+// context (§4.3.5/§3.3.18), so it must go through NewEnumerationFacet, and using
+// the wrong constructor is a caught programmer error, not a silent mis-build.
+func TestNewFacetEnumerationPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("NewFacet(FacetEnumeration, ...): want panic, got none")
+		}
+	}()
+	_ = NewFacet(FacetEnumeration, []string{"red"}, false)
+}
+
+// TestNewEnumerationFacetRoundTrip verifies NewEnumerationFacet builds an
+// enumeration-kind Facet whose EnumerationMembers round-trips in document order
+// with no {fixed} property, whose Values derives the plain lexical strings from
+// the members (STYLE D3, not stored twice), and with defensive-copy semantics on
+// both the input slice and the returned slice.
+func TestNewEnumerationFacetRoundTrip(t *testing.T) {
+	ns := "myNamespace"
+	m0 := NewEnumerationMember("foo:fo", []NamespaceBinding{NewNamespaceBinding("foo", ns)}, nil)
+	m1 := NewEnumerationMember("bar", nil, &ns)
+	in := []EnumerationMember{m0, m1}
+	f := NewEnumerationFacet(in)
+
+	if f.Kind() != FacetEnumeration {
+		t.Fatalf("Kind() = %s, want enumeration", f.Kind())
+	}
+	if _, ok := f.Fixed(); ok {
+		t.Error("Fixed() ok = true, want false (enumeration has no {fixed})")
+	}
+
+	// Values is derived from the members' Lexical() in document order.
+	if got := f.Values(); !reflect.DeepEqual(got, []string{"foo:fo", "bar"}) {
+		t.Errorf("Values() = %v, want [foo:fo bar]", got)
+	}
+
+	got, ok := f.EnumerationMembers()
+	if !ok {
+		t.Fatal("EnumerationMembers() ok = false, want true for an enumeration facet")
+	}
+	if len(got) != 2 {
+		t.Fatalf("EnumerationMembers() len = %d, want 2", len(got))
+	}
+	if got[0].Lexical() != "foo:fo" || got[1].Lexical() != "bar" {
+		t.Errorf("EnumerationMembers() document order wrong: got %q, %q",
+			got[0].Lexical(), got[1].Lexical())
+	}
+	// Member 0 carries a "foo" binding and no default; member 1 carries a default.
+	if binds := got[0].NamespaceBindings(); len(binds) != 1 || binds[0].Prefix() != "foo" || binds[0].Namespace() != ns {
+		t.Errorf("member 0 NamespaceBindings() = %v, want one foo=%s binding", binds, ns)
+	}
+	if _, ok := got[0].DefaultNamespace(); ok {
+		t.Error("member 0 DefaultNamespace() ok = true, want false (absent)")
+	}
+	if d, ok := got[1].DefaultNamespace(); !ok || d != ns {
+		t.Errorf("member 1 DefaultNamespace() = %q,%v, want %q,true", d, ok, ns)
+	}
+
+	// Mutating the caller's input slice must not affect the facet.
+	in[0] = m1
+	if again, _ := f.EnumerationMembers(); again[0].Lexical() != "foo:fo" {
+		t.Errorf("NewEnumerationFacet aliased caller slice: got %q, want %q",
+			again[0].Lexical(), "foo:fo")
+	}
+	// Mutating the returned slice must not affect the facet.
+	got[0] = m1
+	if again, _ := f.EnumerationMembers(); again[0].Lexical() != "foo:fo" {
+		t.Errorf("EnumerationMembers() aliased internal slice: got %q, want %q",
+			again[0].Lexical(), "foo:fo")
+	}
+}
+
+// TestEnumerationMembersOnNonEnumerationFacet verifies EnumerationMembers reports
+// ok == false and nil for a facet whose kind is not FacetEnumeration.
+func TestEnumerationMembersOnNonEnumerationFacet(t *testing.T) {
+	f := NewFacet(FacetLength, []string{"3"}, false)
+	got, ok := f.EnumerationMembers()
+	if ok {
+		t.Error("EnumerationMembers() ok = true for a length facet, want false")
+	}
+	if got != nil {
+		t.Errorf("EnumerationMembers() = %v for a length facet, want nil", got)
+	}
+}
+
+// TestEnumerationMemberBindingCopied verifies NewEnumerationMember copies the
+// input bindings slice and NamespaceBindings returns a copy, so no caller aliases
+// the member's backing array (mirroring XPathExpression's discipline).
+func TestEnumerationMemberBindingCopied(t *testing.T) {
+	in := []NamespaceBinding{NewNamespaceBinding("a", "urn:a"), NewNamespaceBinding("b", "urn:b")}
+	m := NewEnumerationMember("a:x", in, nil)
+	in[0] = NewNamespaceBinding("a", "mutated")
+	got := m.NamespaceBindings()
+	if got[0].Namespace() != "urn:a" {
+		t.Fatalf("NewEnumerationMember aliased caller slice: got %q, want %q", got[0].Namespace(), "urn:a")
+	}
+	got[1] = NewNamespaceBinding("b", "clobber")
+	if again := m.NamespaceBindings(); again[1].Namespace() != "urn:b" {
+		t.Fatalf("NamespaceBindings() aliased internal slice: got %q, want %q", again[1].Namespace(), "urn:b")
 	}
 }
 

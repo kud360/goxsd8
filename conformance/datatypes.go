@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/kud360/goxsd8/builtin"
@@ -271,13 +272,16 @@ import (
 //
 // # Still deferred
 //
-// Facets over QName (the Facets/QName dir) are now PARTIALLY claimed (issue #125):
-// the length/minLength/maxLength cases (vacuous per clause 1.3) and the pattern case
-// decide through the ordinary pipeline, but the enumeration cases are declined
-// pending schema-declaring-context threading — a QName enumeration member's prefix
-// must resolve against the schema's in-scope bindings, which xsd.Facet/
-// value.newEnumFacet cannot yet carry (value/facets.go flags this) — an honest gap
-// buildOwnFacets records, promised as a warden-gated follow-up issue. Facets over
+// Facets over QName (the Facets/QName dir) are now FULLY claimed (issue #125,
+// completed by #152): the length/minLength/maxLength cases (vacuous per clause 1.3),
+// the pattern case, AND the enumeration cases all decide through the ordinary
+// pipeline. A QName enumeration member's prefix resolves against the DECLARING
+// schema's in-scope bindings (§3.3.18), which the facet now carries per member
+// (xsd.EnumerationMember): decodeRestriction snapshots each <enumeration>
+// element's namespace context down the schema document's ancestor chain, and
+// buildOwnFacets threads it into xsd.NewEnumerationMember, so value.newEnumFacet
+// resolves each member against the right scope (an unresolvable member is a
+// src-enumeration-value schema-construction defect, §4.3.5.3). Facets over
 // NOTATION (the Facets/NOTATION dir) are NOT claimed at all: unlike every other
 // cohort member their fixtures use a two-step restriction through a locally-named
 // simpleType, paired with <xsd:notation> component declarations, with the tested
@@ -395,11 +399,11 @@ var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string
 // pipeline as vacuous passes with no QName-specific code here. Second, enumeration
 // over QName compares §3.2.18 {namespace name, local name} tuples, so a prefixed enum
 // member (e.g. "foo:fo") must resolve against the DECLARING SCHEMA's in-scope
-// bindings — a context xsd.Facet/value.newEnumFacet cannot yet carry (value/facets.go
-// flags exactly this hazard), so a QName case carrying an enumeration facet child is
-// explicitly declined by buildOwnFacets as an honest recorded gap (see the issue #125
-// GROUNDING comment; the schema-declaring-context threading is a warden-gated
-// follow-up). QName's TESTED literals, by contrast, resolve their prefixes against the
+// bindings — a context now carried per member on the facet (issue #152,
+// xsd.EnumerationMember): decodeRestriction snapshots each <enumeration>'s namespace
+// context down the schema document's ancestor chain and buildOwnFacets threads it
+// into xsd.NewEnumerationMember, so value.newEnumFacet resolves each member against
+// the right scope. QName's TESTED literals, by contrast, resolve their prefixes against the
 // INSTANCE's bindings, which execFacetsCase threads to value.ValidateLexical as a real
 // value.Context: strict's parseQName rejects a nil context UNCONDITIONALLY, even for an
 // unprefixed name (qname.go resolveQNameLexical), so this threading is required for
@@ -1189,10 +1193,19 @@ func nsDeclaration(a xml.Attr) (prefix string, ok bool) {
 }
 
 // facetChild is one constraining-facet element read from a Facets-cohort schema:
-// its element local name (e.g. "length") and its value attribute.
+// its element local name (e.g. "length"), its value attribute, and — for an
+// <enumeration> over QName/NOTATION — the namespace bindings in scope where that
+// element was written (§3.3.18), so buildOwnFacets can build an
+// xsd.EnumerationMember carrying the DECLARING schema's context. bindings is the
+// innermost-wins snapshot decodeRestriction accumulates down the schema
+// document's ancestor chain (empty-prefix key "" holds the default namespace); it
+// is nil for facet children that carry no context (every non-enumeration facet,
+// and the precisionDecimal path, whose members are context-free). It is a
+// lookup-only map, never ranged into output (STYLE D2).
 type facetChild struct {
-	name  string
-	value string
+	name     string
+	value    string
+	bindings map[string]string
 }
 
 // facetKinds is the set of facet kinds the facet cohort recognizes: the value-
@@ -1249,23 +1262,18 @@ func buildOwnFacets(base string, children []facetChild) ([]xsd.Facet, bool) {
 	if !ok {
 		return nil, false
 	}
-	// EXPLICIT decline (issue #125): enumeration over QName compares §3.2.18
-	// {namespace name, local name} tuples, so a prefixed enum member must resolve
-	// against the DECLARING SCHEMA's in-scope bindings — a context xsd.Facet/
-	// value.newEnumFacet cannot yet carry (value/facets.go parses each enum lexical
-	// with a hardcoded nil context). Building that threading is a warden-gated
-	// follow-up (see the issue #125 GROUNDING comment); until then a QName
-	// enumeration case is an honest recorded gap, declined here rather than fed
-	// through and mis-decided against the wrong (instance) context.
-	if base == "QName" {
-		for _, ch := range children {
-			if ch.name == xsd.FacetEnumeration.String() {
-				return nil, false
-			}
-		}
-	}
+	// Enumeration over QName/NOTATION compares §3.2.18 {namespace name, local name}
+	// tuples, so a prefixed enum member (e.g. "foo:fo") must resolve against the
+	// DECLARING SCHEMA's in-scope bindings — now carried per member on the facet
+	// (issue #152, xsd.EnumerationMember). Each enumeration child brings its own
+	// snapshot of those bindings (facetChild.bindings, decoded from the schema
+	// document's ancestor chain), which enumerationMember threads into the member.
+	// A context-free base (string/decimal/precisionDecimal/…) simply carries no
+	// bindings and resolves identically to before.
 	var order []xsd.FacetKind
+	seen := map[xsd.FacetKind]bool{}
 	values := map[xsd.FacetKind][]string{}
+	var enumMembers []xsd.EnumerationMember
 	for _, ch := range children {
 		kind, ok := facetKindOf(ch.name)
 		if !ok {
@@ -1274,16 +1282,53 @@ func buildOwnFacets(base string, children []facetChild) ([]xsd.Facet, bool) {
 		if !spec.Applies(builtin.FacetName(kind.String())) {
 			return nil, false
 		}
-		if _, seen := values[kind]; !seen {
+		if !seen[kind] {
+			seen[kind] = true
 			order = append(order, kind)
+		}
+		if kind == xsd.FacetEnumeration {
+			enumMembers = append(enumMembers, enumerationMember(ch))
+			continue
 		}
 		values[kind] = append(values[kind], ch.value)
 	}
 	facets := make([]xsd.Facet, 0, len(order))
 	for _, kind := range order {
+		if kind == xsd.FacetEnumeration {
+			facets = append(facets, xsd.NewEnumerationFacet(enumMembers))
+			continue
+		}
 		facets = append(facets, xsd.NewFacet(kind, values[kind], false))
 	}
 	return facets, true
+}
+
+// enumerationMember builds an xsd.EnumerationMember from an <enumeration> facet
+// child: its lexical {value} plus the namespace context in scope where the
+// element was written (§3.3.18). ch.bindings is the innermost-wins snapshot
+// decodeRestriction accumulates down the schema document; its empty-prefix key ""
+// is the {default namespace}, split out from the named-prefix bindings. The named
+// bindings are emitted in a deterministic prefix-sorted order (STYLE D2 — the map
+// is a lookup, not output, and QName resolution is order-independent, so any
+// stable order serves). A context-free child (no bindings) yields a member with
+// empty context, resolving identically to a nil context.
+func enumerationMember(ch facetChild) xsd.EnumerationMember {
+	var def *string
+	prefixes := make([]string, 0, len(ch.bindings))
+	for p := range ch.bindings {
+		if p == "" {
+			ns := ch.bindings[""]
+			def = &ns
+			continue
+		}
+		prefixes = append(prefixes, p)
+	}
+	sort.Strings(prefixes)
+	var binds []xsd.NamespaceBinding
+	for _, p := range prefixes {
+		binds = append(binds, xsd.NewNamespaceBinding(p, ch.bindings[p]))
+	}
+	return xsd.NewEnumerationMember(ch.value, binds, def)
 }
 
 // readFacetsCase reads one facet-cohort instance: the tested value (the <foo>
@@ -1379,8 +1424,13 @@ func decodeFacetsInstance(path string) (facetsInstance, error) {
 // declared on one (empty when it constrains element content), and the
 // constraining-facet children of its first xsd:restriction. Facet children are
 // the restriction's direct element children in the XML Schema namespace, in
-// document order (P4: token stream, no whole-document buffer). ok is false when
-// no restriction is found.
+// document order (P4: token stream, no whole-document buffer). Each facet child
+// captures the namespace bindings in scope where it was written — accumulated
+// down the schema document's ancestor chain including the child's own xmlns
+// declarations (§3.3.18) — so buildOwnFacets can resolve a QName/NOTATION
+// enumeration member's prefix against the DECLARING schema's context (issue
+// #152), the schema-side analogue of readQNameContexts' instance-side walk. ok is
+// false when no restriction is found.
 func decodeRestriction(path string) (base, attrName string, children []facetChild, ok bool) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -1388,6 +1438,7 @@ func decodeRestriction(path string) (base, attrName string, children []facetChil
 	}
 	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the parsed result
 	dec := xml.NewDecoder(bufio.NewReader(f))
+	var frames []map[string]string // one innermost-wins snapshot per open element
 	inRestriction := false
 	lastAttr := ""
 	for {
@@ -1399,12 +1450,16 @@ func decodeRestriction(path string) (base, attrName string, children []facetChil
 			if inRestriction && end.Name.Local == "restriction" && end.Name.Space == xsd.XMLSchemaNS {
 				return base, attrName, children, true
 			}
+			if len(frames) > 0 {
+				frames = frames[:len(frames)-1]
+			}
 			continue
 		}
 		se, isStart := tok.(xml.StartElement)
 		if !isStart {
 			continue
 		}
+		frames = append(frames, childBindings(frames, se.Attr))
 		if !inRestriction {
 			if se.Name.Local == "attribute" && se.Name.Space == xsd.XMLSchemaNS {
 				lastAttr = attrValue(se, "name")
@@ -1417,7 +1472,11 @@ func decodeRestriction(path string) (base, attrName string, children []facetChil
 			continue
 		}
 		if se.Name.Space == xsd.XMLSchemaNS {
-			children = append(children, facetChild{name: se.Name.Local, value: attrValue(se, "value")})
+			children = append(children, facetChild{
+				name:     se.Name.Local,
+				value:    attrValue(se, "value"),
+				bindings: frames[len(frames)-1],
+			})
 		}
 	}
 	if inRestriction {

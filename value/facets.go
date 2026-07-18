@@ -61,9 +61,10 @@ var (
 // Facet {value} parsing is a separate concern with its own scope: an inherited
 // enumeration/bound facet's lexical {value} is parsed in the DECLARING SCHEMA's
 // context (see newEnumFacet/newBoundFacet), which for a context-free cohort is
-// also nil. Future QName/NOTATION enumeration facets must not silently inherit
-// the instance context here — that would resolve a facet literal's prefixes
-// against the wrong scope.
+// nil-equivalent. A QName/NOTATION enumeration member does NOT inherit ctx (the
+// validated instance's context): newEnumFacet resolves each member's prefixes
+// against the bindings in scope where its <enumeration> was written (§3.3.18),
+// carried per member on the facet, never against this instance scope.
 func ValidateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, error) {
 	lexFacets, valFacets, err := compile(b, st)
 	if err != nil {
@@ -256,25 +257,103 @@ type enumFacet struct {
 	members []Value
 }
 
-// newEnumFacet parses each enumeration {value} lexical via the declaring type's
-// mapping (widest-space rule, st-restrict-facets §3.16.6.4). The declaring
-// schema's context is nil for a context-free cohort (see ValidateLexical).
+// newEnumFacet parses each enumeration {value} member via the declaring type's
+// mapping (widest-space rule, st-restrict-facets §3.16.6.4). Each member carries
+// its own namespace context — the bindings in scope where its <enumeration> was
+// written (§3.3.18) — so a QName/NOTATION member's prefix resolves against the
+// DECLARING schema's scope, threaded through a per-member memberContext rather
+// than the hardcoded nil that mis-resolved it. A context-free member (every
+// non-QName/NOTATION cohort) carries an empty context that resolves identically
+// to nil, so those cohorts are unchanged.
+//
+// A member whose Parse fails — an unresolvable prefix, or otherwise not in the
+// declaring type's value space — makes the SimpleType/facet itself malformed AT
+// SCHEMA CONSTRUCTION, a Schema Representation Constraint (src-enumeration-value,
+// §4.3.5.3), so the bare cvc-datatype-valid Parse returns is remapped to that
+// construction-time rule — the sibling of src-pattern-value newPatternFacet
+// already uses.
 func newEnumFacet(b Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (enumFacet, error) {
 	m, ok := declaringMapping(b, st, ef.Declaring())
 	if !ok {
 		return enumFacet{}, xsderr.New("cvc-enumeration-valid", xsderr.Loc{},
 			"enumeration: no backend mapping governs declaring type %s", ef.Declaring())
 	}
-	values := ef.Facet().Values()
-	members := make([]Value, 0, len(values))
-	for _, lex := range values {
-		v, err := m.Parse(lex, nil)
+	// compile() routes only FacetEnumeration facets here, so EnumerationMembers
+	// always reports ok=true; the second result is discarded deliberately.
+	enumMembers, _ := ef.Facet().EnumerationMembers()
+	members := make([]Value, 0, len(enumMembers))
+	for _, em := range enumMembers {
+		v, err := m.Parse(em.Lexical(), newMemberContext(em))
 		if err != nil {
-			return enumFacet{}, err
+			return enumFacet{}, xsderr.Wrap("src-enumeration-value", xsderr.Loc{}, err)
 		}
 		members = append(members, v)
 	}
 	return enumFacet{members: members}, nil
+}
+
+// xmlNamespaceURI is the single reserved, implicitly-bound XML namespace prefix
+// (Namespaces in XML §3): "xml" is bound by definition with no declaration.
+// "xmlns" is deliberately NOT a resolvable prefix — it names
+// namespace-declaration attributes, not a binding (WG ruling, bugzilla 4053).
+const xmlNamespaceURI = "http://www.w3.org/XML/1998/namespace"
+
+// memberContext adapts an xsd.EnumerationMember's namespace context to the
+// value.Context a QName/NOTATION Mapping.Parse consumes, so a prefixed member
+// resolves against the bindings in scope where its <enumeration> was written
+// (§3.3.18). Its reserved-prefix rules match conformance.nsContext exactly
+// (value cannot import the test-only conformance package, so this is a small
+// second implementation of the same logic): "xml" is always bound, "xmlns" is
+// never bindable, and the empty prefix resolves to the {default namespace} if one
+// is in scope (element-name semantics) else to no namespace. It is an internal
+// lookup, never ranged into output (STYLE D2).
+type memberContext struct {
+	bindings   map[string]string // non-empty prefix -> namespace name
+	defaultNS  string
+	hasDefault bool
+}
+
+// newMemberContext builds the per-member context from a member's namespace
+// bindings and {default namespace}. The empty prefix is modeled by the member's
+// DefaultNamespace, not a "" binding, so the bindings map holds only non-empty
+// prefixes.
+func newMemberContext(m xsd.EnumerationMember) memberContext {
+	binds := m.NamespaceBindings()
+	mc := memberContext{}
+	if len(binds) > 0 {
+		mc.bindings = make(map[string]string, len(binds))
+		for _, b := range binds {
+			mc.bindings[b.Prefix()] = b.Namespace()
+		}
+	}
+	if ns, ok := m.DefaultNamespace(); ok {
+		mc.defaultNS, mc.hasDefault = ns, true
+	}
+	return mc
+}
+
+// LookupNamespace resolves prefix per §3.3.18. The reserved prefix "xml" is
+// always bound (Namespaces in XML §3); "xmlns" is never bound (it falls through
+// to the unbound branch). The empty prefix (an unprefixed member) binds to the
+// {default namespace} if in scope, else to no namespace (ok=true, "") —
+// element-name semantics, so an unprefixed member is never rejected as unbound. A
+// declared non-empty prefix resolves to its binding; any other non-empty prefix
+// is genuinely unbound (ok=false), which the mapping's Parse turns into a
+// rejection remapped to src-enumeration-value (§4.3.5.3).
+func (mc memberContext) LookupNamespace(prefix string) (namespace string, ok bool) {
+	if prefix == "xml" {
+		return xmlNamespaceURI, true
+	}
+	if prefix == "" {
+		if mc.hasDefault {
+			return mc.defaultNS, true
+		}
+		return "", true
+	}
+	if ns, bound := mc.bindings[prefix]; bound {
+		return ns, true
+	}
+	return "", false
 }
 
 // CheckValue accepts v iff it is equal or identical to a member
