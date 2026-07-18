@@ -58,18 +58,23 @@ func (Atomic) variety() {}
 func (List) variety()   {}
 func (Union) variety()  {}
 
-// FacetKind is the kind of a Constraining Facet, the closed 14-member set of
-// Datatypes §4.3.1–4.3.14. The zero value is invalid (an unset field is a
-// caught bug, STYLE T1/T7); constants start at iota+1 and carry the verbatim
-// §4.3 token, returned by String().
-//
-// The two precisionDecimal-only extension facets maxScale and minScale
-// (xsd-precisionDecimal.md §4.2/§4.3) are deliberately NOT members: they are
-// defined by a separate spec document, not by xmlschema11-2.md §4.3, and do not
-// belong in this core enum.
+// FacetKind is the closed set of facet kinds the Facet/EffectiveFacets/
+// restriction-merging machinery treats uniformly — 16 members: the 14 core
+// Constraining Facets of Datatypes §4.3.1–4.3.14, plus the two
+// precisionDecimal-only extension facets maxScale and minScale
+// (xsd-precisionDecimal.md §4.2/§4.3). The two extension facets are a
+// deliberate, documented cross-spec inclusion: they combine, overlay, and check
+// through the very same generic path as the core kinds (NewFacet,
+// EffectiveFacets, the value/facets.go pipeline), so excluding them would force
+// a parallel mechanism for no gain — the constants themselves cite
+// xsd-precisionDecimal.md for provenance. The zero value is invalid (an unset
+// field is a caught bug, STYLE T1/T7); constants start at iota+1 and carry the
+// verbatim spec token, returned by String().
 type FacetKind uint8
 
-// The FacetKind values (Datatypes §4.3.1–4.3.14, in spec order).
+// The FacetKind values: the 14 core facets (Datatypes §4.3.1–4.3.14), then the
+// two precisionDecimal extension facets (xsd-precisionDecimal.md §4.2/§4.3), in
+// spec order.
 const (
 	// FacetLength is the "length" facet (§4.3.1).
 	FacetLength FacetKind = iota + 1
@@ -99,6 +104,16 @@ const (
 	FacetAssertions
 	// FacetExplicitTimezone is the "explicitTimezone" facet (§4.3.14).
 	FacetExplicitTimezone
+	// FacetMaxScale is the "maxScale" facet (xsd-precisionDecimal.md §4.2,
+	// dc-maxScale), a precisionDecimal-only extension facet — not one of the
+	// core §4.3 facets. Its {value} is a REQUIRED xs:integer (may be negative)
+	// and it carries a REQUIRED {fixed} xs:boolean.
+	FacetMaxScale
+	// FacetMinScale is the "minScale" facet (xsd-precisionDecimal.md §4.3,
+	// dc-minScale), a precisionDecimal-only extension facet — not one of the
+	// core §4.3 facets. Its {value} is a REQUIRED xs:integer (may be negative)
+	// and it carries a REQUIRED {fixed} xs:boolean.
+	FacetMinScale
 )
 
 // String returns the verbatim §4.3 token, or a diagnostic form for an invalid
@@ -133,6 +148,10 @@ func (k FacetKind) String() string {
 		return "assertions"
 	case FacetExplicitTimezone:
 		return "explicitTimezone"
+	case FacetMaxScale:
+		return "maxScale"
+	case FacetMinScale:
+		return "minScale"
 	default:
 		return "FacetKind(" + strconv.Itoa(int(k)) + ")"
 	}
@@ -142,7 +161,10 @@ func (k FacetKind) String() string {
 // derived from the kind, never stored (STYLE D3). It is false only for
 // FacetPattern, FacetEnumeration, and FacetAssertions: their tableaux (§4.3.4,
 // §4.3.5, §4.3.13) give only {annotations} and {value}, with no {fixed}. Every
-// other kind's tableau carries a required {fixed} xs:boolean.
+// other kind's tableau carries a required {fixed} xs:boolean — including the two
+// precisionDecimal extension facets FacetMaxScale and FacetMinScale
+// (xsd-precisionDecimal.md §4.2/§4.3 both give a REQUIRED {fixed}), which fall
+// into the default branch deliberately.
 func (k FacetKind) HasFixed() bool {
 	switch k {
 	case FacetPattern, FacetEnumeration, FacetAssertions:

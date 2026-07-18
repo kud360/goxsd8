@@ -65,13 +65,11 @@ const (
 // deliberately NOT value.Lengthed/TimezoneAware: no precisionDecimal-applicable
 // facet needs them (§3.3).
 //
-// GAP(facet): maxScale/minScale not enforced (tracked in follow-up issue, filed
-// post-land). They are precisionDecimal's two extension facets (§4.2/§4.3) but are
-// excluded from the closed xsd.FacetKind enum (xsd/simpletype.go) and have no case
-// in value/facets.go compile(), so a <maxScale>/<minScale> facet is silently dropped
-// before instance validation. Enforcing them is cross-cutting machinery beyond this
-// mapping; the value model here already carries value.Scaled so the checker can read
-// ·scale· once that enum is extended.
+// maxScale/minScale, precisionDecimal's two extension facets (§4.2/§4.3), are
+// enforced at instance validation by value/facets.go's scaleFacet, which reads
+// ·scale· through the value.Scaled capability this value model implements below
+// (cvc-maxScale-valid, cvc-minScale-valid; #133). This mapping supplies the
+// value; the facet check lives in the backend-generic pipeline.
 type precisionDecimalVal struct {
 	kind pdKind
 	// coefficient is the integer significand magnitude (≥ 0); numeric arm only.

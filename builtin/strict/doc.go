@@ -40,7 +40,9 @@
 // (context-resolved, no canonical form) — with spec-exact
 // parse, canonical and comparison. With xs:precisionDecimal mapped, strict now
 // covers all 20 builtin primitives; its maxScale/minScale facets are applicable
-// but not yet enforced (GAP(facet) in precisiondecimal.go). xs:dateTimeStamp
+// AND enforced at instance validation (cvc-maxScale-valid, cvc-minScale-valid)
+// by value/facets.go's scaleFacet, which reads ·scale· through this cohort's
+// value.Scaled capability (#133). xs:dateTimeStamp
 // (§3.4.28) is also covered: a restriction of xs:dateTime fixing
 // explicitTimezone=required, it reuses dateTimeVal through dateTime's mapping
 // verbatim (no separate canonical mapping exists, §3.4.28.1), its mandatory
