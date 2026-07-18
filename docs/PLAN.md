@@ -46,7 +46,7 @@ that `Seed` builds one of per builtin (the rest of the `xsd` component
 model stays M4); `value/backendtest` kit running against strict. First
 **`datatypes` ratchet lane** produces real numbers.
 
-Status (2026-07-17): the shared facet pipeline is hoisted into `value` (#87);
+Status (2026-07-18): the shared facet pipeline is hoisted into `value` (#87);
 `builtin/strict` now maps **all 20 builtin primitives** — decimal/float/double,
 the string family, anyURI, hex/base64Binary, duration, the seven-property
 temporal family incl. dateTime (#103/#109), QName/NOTATION (#114), and
@@ -55,9 +55,14 @@ precisionDecimal (#115). The `datatypes` lane stands at **939 pass / 25 fail**
 (#123), and anyURI/hex/base64Binary (#124) Facets cohorts; the derived
 `dateTimeStamp` is mapped (#122) and the `lengthFacet` §4.3.1.3 clause-1.3
 QName/NOTATION exemption is fixed (#130). **Remaining tail:** map the derived
-`yearMonthDuration`/`dayTimeDuration` (#141, ready); enforce precisionDecimal
-`maxScale`/`minScale` (#133, ready — `GAP(facet)` at `precisiondecimal.go:68`)
-and then claim the precisionDecimal selectors (#135, blocked on #133); land the
+`yearMonthDuration`/`dayTimeDuration` (#141, ready); precisionDecimal
+`maxScale`/`minScale` instance-time enforcement landed (#133, 2026-07-18 —
+`cvc-maxScale-valid`/`cvc-minScale-valid`, `GAP(facet)` at `precisiondecimal.go:68`
+retired), so the precisionDecimal selectors are now claimable (#135, ready —
+unblocked by #133); the four out-of-scope schema-construction SCCs
+(valid-restriction narrowing, minScale≤maxScale, {fixed} inheritance) are tracked
+in #157 (blocked on the M4 producer #79, sibling of #46) and a `compile()`
+fail-loud-on-unhandled-FacetKind hardening in #158 (ready); land the
 QName/NOTATION namespace-context adapter (#131, now ready — #130 landed) and in
 turn the QName/NOTATION lexical + Facets cohorts (#125, blocked on #131); fix the
 dateTimeStamp lexical-cohort Parse-only false-accept (#140, ready); remove the
