@@ -138,6 +138,18 @@ func (backend) Mapping(typ xsd.QName) (value.Mapping, bool) {
 		return value.Mapping{Parse: parseBase64Binary, Canonical: canonicalBase64Binary}, true
 	case "duration":
 		return value.Mapping{Parse: parseDuration, Canonical: canonicalDuration}, true
+	// yearMonthDuration (§3.4.26) and dayTimeDuration (§3.4.27) are restrictions
+	// of duration to its year-month / day-time half. They do NOT alias
+	// parseDuration/canonicalDuration: per value.Mapping's contract Parse must gate
+	// each type's OWN narrower lexical space (value/backend.go), which
+	// parseDuration's wide §3.3.6.2 grammar would not; and the canonical forms
+	// genuinely differ — yearMonthDuration's zero value has NO canonical
+	// representation ("PT0S" is outside its [^DT]* space, §3.4.26.1 Note), which
+	// durationVal.Canonical cannot express. Each carries its own Parse/Canonical.
+	case "yearMonthDuration":
+		return value.Mapping{Parse: parseYearMonthDuration, Canonical: canonicalYearMonthDuration}, true
+	case "dayTimeDuration":
+		return value.Mapping{Parse: parseDayTimeDuration, Canonical: canonicalDayTimeDuration}, true
 	case "dateTime":
 		return value.Mapping{Parse: parseDateTime, Canonical: canonicalDateTime}, true
 	case "dateTimeStamp":

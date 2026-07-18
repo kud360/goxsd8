@@ -46,7 +46,15 @@
 // (§3.4.28) is also covered: a restriction of xs:dateTime fixing
 // explicitTimezone=required, it reuses dateTimeVal through dateTime's mapping
 // verbatim (no separate canonical mapping exists, §3.4.28.1), its mandatory
-// timezone enforced by the generic explicitTimezone facet pipeline. The remaining
+// timezone enforced by the generic explicitTimezone facet pipeline.
+// xs:yearMonthDuration (§3.4.26) and xs:dayTimeDuration (§3.4.27) are also
+// covered: restrictions of xs:duration to its year-month / day-time half, each
+// with its OWN Parse gating the narrower lexical space (a cross-half literal is
+// cvc-datatype-valid) and its own Canonical. dayTimeDuration reuses durationVal's
+// canonical rendering (its ·months· is always 0); yearMonthDuration cannot, and
+// its zero value (·months·=0) has no canonical representation at all (§3.4.26.1
+// Note), surfaced as a plain, non-verdict error rather than a fabricated lexical.
+// The remaining
 // representations above (the rest of the string family) and the
 // value.Emitter fast path remain future milestones. The cohort is certified
 // by value/backendtest.Run: each type's value carries exactly the capability
