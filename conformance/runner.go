@@ -11,7 +11,9 @@ import (
 )
 
 // This file is the M1 harness seam (issue #6): it discovers the W3C suite's
-// cases from suite.xml and routes each to exactly one lane's executor. It is
+// cases from suite.xml (and its auxiliary extra-suite.xml sibling, which carries
+// the precisionDecimal test sets, issue #135) and routes each to exactly one
+// lane's executor. It is
 // test-only support code — nothing outside package conformance references it —
 // so it exports nothing; a later milestone wires in a real lane by extending
 // defaultLanes, never by touching the runner's control flow.
@@ -173,22 +175,65 @@ type expected struct {
 	Version  string `xml:"version,attr"`
 }
 
-// parseSuite discovers every case reachable from the suite index, sorted by ID
-// (STYLE D1). It errors on a malformed reference, an unreadable set, a case
-// with no declared expectation, or a duplicate case ID.
+// parseSuite discovers every case reachable from the suite index (and its
+// auxiliary extra-suite sibling), sorted by ID (STYLE D1). It errors on a
+// malformed reference, an unreadable set, a case with no declared expectation,
+// or a duplicate case ID.
 func parseSuite(indexPath string) ([]caseSpec, error) {
+	seen := map[string]struct{}{}
+	seenSets := map[string]struct{}{}
+	var cases []caseSpec
+	for _, index := range suiteIndexPaths(indexPath) {
+		found, err := casesFromIndex(index, seen, seenSets)
+		if err != nil {
+			return nil, err
+		}
+		cases = append(cases, found...)
+	}
+	slices.SortFunc(cases, func(a, b caseSpec) int { return strings.Compare(a.id, b.id) })
+	return cases, nil
+}
+
+// suiteIndexPaths returns the discovery indices rooted at primary: the primary
+// suite index, plus the auxiliary extra-suite.xml sibling when it is present.
+// The auxiliary index carries the precisionDecimal test sets (saxonData/PDecimal,
+// ibmData/D3_3_4), which the W3C suite moved out of the main suite.xml when
+// precisionDecimal was withdrawn from XSD 1.1 but retained as a Working Group
+// Note (extra-suite.xml's own documentation). goxsd8 implements precisionDecimal
+// as an implementation-defined primitive (xsd-precisionDecimal.md; strict #115,
+// maxScale/minScale #133), so those cases are in scope. A missing auxiliary index
+// is not an error — discovery falls back to the primary index alone.
+func suiteIndexPaths(primary string) []string {
+	paths := []string{primary}
+	extra := filepath.Join(filepath.Dir(primary), "extra-suite.xml")
+	if _, err := os.Stat(extra); err == nil {
+		paths = append(paths, extra)
+	}
+	return paths
+}
+
+// casesFromIndex discovers every case reachable from one suite index, sharing
+// the suite-wide seen (case-ID uniqueness) and seenSets (resolved set-path
+// de-duplication) maps with any sibling index. A test set referenced by more
+// than one index — common/introspection.testSet is listed in both suite.xml and
+// extra-suite.xml — is processed by the FIRST index to reach it, so its cases are
+// discovered once rather than surfacing as a spurious duplicate-ID error.
+func casesFromIndex(indexPath string, seen, seenSets map[string]struct{}) ([]caseSpec, error) {
 	idx, err := decodeSuiteIndex(indexPath)
 	if err != nil {
 		return nil, err
 	}
 	baseDir := filepath.Dir(indexPath)
-	seen := map[string]struct{}{}
 	var cases []caseSpec
 	for _, ref := range idx.Refs {
 		if ref.Href == "" {
 			continue
 		}
 		setPath := filepath.Join(baseDir, filepath.FromSlash(ref.Href))
+		if _, done := seenSets[setPath]; done {
+			continue
+		}
+		seenSets[setPath] = struct{}{}
 		set, err := decodeTestSet(setPath)
 		if err != nil {
 			return nil, fmt.Errorf("test set %s: %w", ref.Href, err)
@@ -199,7 +244,6 @@ func parseSuite(indexPath string) ([]caseSpec, error) {
 		}
 		cases = append(cases, found...)
 	}
-	slices.SortFunc(cases, func(a, b caseSpec) int { return strings.Compare(a.id, b.id) })
 	return cases, nil
 }
 

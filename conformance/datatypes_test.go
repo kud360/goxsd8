@@ -53,6 +53,11 @@ func TestDatatypesSelectorClaimsOnlyCohort(t *testing.T) {
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/Facets/anyURI/anyURI_length001.xml"}, true},
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/Facets/hexBinary/hexBinary_maxLength001.xml"}, true},
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/Facets/base64Binary/base64Binary_length002.xml"}, true},
+		// The Saxon precisionDecimal instance cases are claimed (issue #135).
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/saxonData/PDecimal/pdecimal001.v1.xml"}, true},
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/saxonData/PDecimal/pdecimal010.n1.xml"}, true},
+		// A precisionDecimal SCHEMA case is not claimed (we cannot validate schemas).
+		{caseSpec{kind: kindSchema, doc: "../testdata/xsdtests/saxonData/PDecimal/pdecimal001.xsd"}, false},
 	}
 	for _, tc := range cases {
 		if got := selectsDatatypes(tc.c); got != tc.want {
@@ -492,6 +497,93 @@ func TestDatatypesLexicalQNameCohort(t *testing.T) {
 	}
 	if ns, bound := lits[0].ctx.LookupNamespace("fo"); !bound || ns != "myNamespace" {
 		t.Errorf("comp_foo context LookupNamespace(fo) = (%q,%v), want (\"myNamespace\",true)", ns, bound)
+	}
+}
+
+// TestDatatypesPDecimalCohort drives the executor over the real Saxon PDecimal
+// precisionDecimal cohort (issue #135): each <doc> carries repeated
+// <e value="…"/> literals validated against ONE synthesized leaf (precisionDecimal
+// restricted by the sibling schema's facets), through the real facet pipeline.
+// Both polarities are asserted for the right reason — a wrong expectation must
+// yield Fail, exercised on the NaN-vs-bound case so a regression to accepting NaN
+// under a bound facet (violating the partial order) would surface. The two-step
+// chain / list / union shapes (pdecimal016/019/020) are declined by readPDecimalCase,
+// and the pdecimal006.n2 suite quirk (NaN matching a NaN enumeration member) is
+// pinned as spec-correct-VALID. Skips when the submodule is absent.
+func TestDatatypesPDecimalCohort(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	exec := newDatatypesExec()
+
+	dir := filepath.Join(suiteRoot, "saxonData", "PDecimal")
+	cases := []struct {
+		file        string
+		expectValid bool // the suite's declared XSD 1.1 validity
+	}{
+		{"pdecimal001.v1.xml", true},  // unrestricted precisionDecimal: numerals, specials, -0
+		{"pdecimal001.v2.xml", true},  // same values with leading/trailing whitespace (collapse)
+		{"pdecimal001.n1.xml", false}, // " fried chicken " not in the lexical space
+		{"pdecimal001.n2.xml", false}, // "Infinity" (only INF is a special literal)
+		{"pdecimal002.v1.xml", true},  // minInclusive=0
+		{"pdecimal002.n1.xml", false}, // "-12" < 0
+		{"pdecimal002.n2.xml", false}, // "-INF" < 0
+		{"pdecimal002.n3.xml", false}, // "NaN" incomparable with the bound ⇒ excluded
+		{"pdecimal006.v1.xml", true},  // enumeration {-INF,+INF,0.0,1.0,NaN}, value-space match
+		{"pdecimal006.n1.xml", false}, // "17.3" not an enumeration member
+		{"pdecimal007.v1.xml", true},  // pattern "NaN"
+		{"pdecimal007.n1.xml", false}, // "13" fails the pattern
+		{"pdecimal008.v1.xml", true},  // totalDigits=4, zero + specials vacuously pass
+		{"pdecimal008.n1.xml", false}, // "12345" has 5 total digits
+		{"pdecimal010.v1.xml", true},  // minScale=4,maxScale=8
+		{"pdecimal010.n1.xml", false}, // "0.003" scale 3 < minScale 4
+	}
+	for _, tc := range cases {
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(dir, tc.file), expectValid: tc.expectValid}
+		if got := exec(c); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", tc.file, tc.expectValid)
+		}
+	}
+
+	// A deliberately WRONG expectation must Fail, and it is partial-order-load-bearing:
+	// pdecimal002.n3 ("NaN" under minInclusive=0) is INVALID because NaN is
+	// incomparable with every bound (§3.1), so claiming it valid must not pass. A
+	// regression to treating NaN as satisfying (or vacuously passing) a bound facet
+	// would compute valid and this wrong claim would spuriously pass.
+	wrong := caseSpec{kind: kindInstance, doc: filepath.Join(dir, "pdecimal002.n3.xml"), expectValid: true}
+	if exec(wrong).IsPass() {
+		t.Errorf("executor must Fail when the declared expectation is wrong (pdecimal002.n3 'NaN' fails minInclusive=0)")
+	}
+
+	// readPDecimalCase reads the direct-primitive shape whole and resolves the base.
+	children, values, ok := readPDecimalCase(filepath.Join(dir, "pdecimal001.v1.xml"))
+	if !ok {
+		t.Fatal("readPDecimalCase must accept the direct-precisionDecimal pdecimal001.v1 shape")
+	}
+	if len(children) != 0 || len(values) != 18 {
+		t.Errorf("readPDecimalCase(pdecimal001.v1) = children=%d values=%d, want children=0 values=18", len(children), len(values))
+	}
+
+	// The multi-step chain (016), list (019) and union (020) varieties are declined:
+	// this single-synthesized-leaf model cannot decide them, so they are honest gaps
+	// rather than mis-decided cases.
+	for _, rel := range []string{"pdecimal016.v1.xml", "pdecimal019.v1.xml", "pdecimal020.v1.xml"} {
+		if _, _, ok := readPDecimalCase(filepath.Join(dir, rel)); ok {
+			t.Errorf("readPDecimalCase(%s) must decline the multi-step/list/union shape", rel)
+		}
+	}
+
+	// pdecimal006.n2 is a KNOWN suite quirk: "NaN" against an enumeration containing
+	// a "NaN" member is VALID per cvc-enumeration-valid's identity branch (§4.3.5.4;
+	// NaN is identical to itself). The executor keeps the spec-correct verdict, so it
+	// computes VALID: a claim of valid Passes (proving the identity match), and the
+	// suite's own invalid expectation yields a Fail (the honest recorded gap).
+	n2 := filepath.Join(dir, "pdecimal006.n2.xml")
+	if !exec(caseSpec{kind: kindInstance, doc: n2, expectValid: true}).IsPass() {
+		t.Error("pdecimal006.n2 'NaN' must be computed VALID (matches the NaN enumeration member by identity, §4.3.5.4)")
+	}
+	if exec(caseSpec{kind: kindInstance, doc: n2, expectValid: false}).IsPass() {
+		t.Error("pdecimal006.n2 must Fail against the suite's invalid expectation (spec-correct disagreement, not a false pass)")
 	}
 }
 

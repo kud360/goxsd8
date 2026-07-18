@@ -217,6 +217,53 @@ import (
 // an inapplicable facet with a primitive (a schema-construction error, not an
 // instance validity case) is declined rather than fed through and crashed.
 //
+// # The precisionDecimal cohort (issue #135)
+//
+// The lane additionally claims the Saxon precisionDecimal instance cases under
+// saxonData/PDecimal/pdecimalNNN.{vK,nK}.xml (discovered via the auxiliary
+// extra-suite.xml index, runner.go — the W3C suite moved the precisionDecimal sets
+// out of suite.xml when the type was withdrawn from XSD 1.1 but retained as a
+// Working Group Note; goxsd8 implements it as an implementation-defined primitive,
+// strict #115, maxScale/minScale #133). Unlike every prior cohort, the instance
+// shape is a <doc> root with REPEATED <e value="…"/> children, all validated
+// against ONE tested type — the attribute value's type in the sibling
+// pdecimalNNN.xsd (schema-out-of-band, no noNamespaceSchemaLocation: derived from
+// the case-prefix filename, like the #146 item shape). execPDecimalCase synthesizes
+// that leaf (precisionDecimal as {primitive type definition}, its schema facets as
+// ownFacets) once and ANDs value.ValidateLexical over every literal, so the
+// instance is valid iff EVERY literal is — the suite's whole-document polarity.
+//
+// precisionDecimal's spec-exact facet semantics fall out of the existing pipeline
+// with no new value code: totalDigits vacuously passes zero AND the specials
+// (value.TotalDigits reports 1, xsd-precisionDecimal.md §4.1, a rule DISTINCT from
+// decimal's — the pD value model owns the zero special-case, not this lane); the
+// four bound facets ride the boundFacet incomparable⇒reject path over the PARTIAL
+// order, so NaN — incomparable with every value including itself (§3.1) — fails
+// EVERY bound symmetrically (cvc-min/maxInclusive/Exclusive-valid §4.3.7–4.3.10);
+// maxScale/minScale skip the specials' absent ·scale· (#133, cvc-maxScale/minScale-
+// valid §4.2.3/§4.3.3); enumeration matches value-space "equal or identical" on
+// ·numericalValue· (10 == 1.0E1; NaN matches a NaN member via identity, §4.3.5.4),
+// via the shared enumMatch Identical-then-Eq path; pattern checks the literal
+// unchanged. whiteSpace=collapse (fixed, §3.3) is inherited from the seeded
+// precisionDecimal builtin, so the .v2 leading/trailing-whitespace instances
+// normalize before the lexical check.
+//
+// Only the directly-mapped and SINGLE-STEP restriction shapes are decided:
+// pdecimal001–008,010 (attribute typed xs:precisionDecimal, or a named simpleType
+// restricting it with one facet kind). The two-step chain (pdecimal016, a
+// restriction of a restriction), the list variety (pdecimal019, <list itemType>)
+// and the union variety (pdecimal020, <union memberTypes>) are DECLINED by
+// decodePDecimalSchema — a synthesized single leaf cannot carry a multi-step
+// effective-facet set nor a list/union variety — and honestly recorded as gaps
+// (Fail) rather than mis-decided. One further gap is a suite quirk, not a shape
+// limit: pdecimal006.n2 ("NaN" against a NaN-bearing enumeration) is spec-VALID
+// (identity match) but suite-declared invalid, so the spec-correct verdict records
+// a Fail against it (see execPDecimalCase). The IBM ibmData/D3_3_4 precisionDecimal
+// shape (several named types per schema, each tested by a dedicated element) is
+// NOT claimed here — its multi-type document shape is a distinct, larger executor,
+// left to a follow-up issue; those instance cases route to the inert instance lane
+// as recorded gaps meanwhile.
+//
 // # Still deferred
 //
 // Facets over QName (the Facets/QName dir) are now PARTIALLY claimed (issue #125):
@@ -377,14 +424,27 @@ const facetsBaseTypes = `string|normalizedString|token|language|Name|NCName|NMTO
 var facetsCase = regexp.MustCompile(
 	`msData/datatypes/Facets/(` + facetsBaseTypes + `)/(` + facetsBaseTypes + `)_[A-Za-z]+[0-9]+\.xml$`)
 
-// selectsDatatypes claims the instance cases of both cohorts. It is a cheap path
-// predicate; the executor does the real document reading.
+// pdecimalCase matches a precisionDecimal instance case in the Saxon PDecimal
+// cohort (issue #135): saxonData/PDecimal/pdecimalNNN.{vK,nK}.xml. Each such
+// document is a <doc> root with repeated <e value="…"/> children, all validated
+// against ONE type — the attribute value's type declared in the sibling
+// pdecimalNNN.xsd (either xs:precisionDecimal directly or a single-step
+// restriction of it). The executor (execPDecimalCase) declines a case whose type
+// is a multi-step chain, list or union variety (pdecimal016/019/020), which this
+// synthesized-single-leaf model cannot decide — an honest recorded gap, never a
+// mis-decided one. The IBM ibmData/D3_3_4 precisionDecimal shape (several named
+// types per schema) is NOT claimed here and remains a deferred follow-up.
+var pdecimalCase = regexp.MustCompile(`saxonData/PDecimal/pdecimal[0-9]+\.[vn][0-9]+\.xml$`)
+
+// selectsDatatypes claims the instance cases of the lexical, facet and
+// precisionDecimal cohorts. It is a cheap path predicate; the executor does the
+// real document reading.
 func selectsDatatypes(c caseSpec) bool {
 	if c.kind != kindInstance {
 		return false
 	}
 	doc := filepath.ToSlash(c.doc)
-	return datatypesCase.MatchString(doc) || facetsCase.MatchString(doc)
+	return datatypesCase.MatchString(doc) || facetsCase.MatchString(doc) || pdecimalCase.MatchString(doc)
 }
 
 // newDatatypesExec builds the lane's executor: it Seeds the builtins once (the
@@ -425,7 +485,11 @@ func newDatatypesExec() executor {
 	}
 
 	return func(c caseSpec) Status {
-		if facetsCase.MatchString(filepath.ToSlash(c.doc)) {
+		doc := filepath.ToSlash(c.doc)
+		if pdecimalCase.MatchString(doc) {
+			return execPDecimalCase(strictBackend, sym, c)
+		}
+		if facetsCase.MatchString(doc) {
 			return execFacetsCase(strictBackend, sym, c)
 		}
 		return execLexicalCase(strictBackend, sym, c)
@@ -590,6 +654,68 @@ func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c 
 	}
 	_, verr := value.ValidateLexical(backend, leaf, raw, ctx)
 	observedValid := verr == nil
+	if observedValid == c.expectValid {
+		return Pass()
+	}
+	return Fail()
+}
+
+// execPDecimalCase decides a Saxon PDecimal cohort case (issue #135): every
+// tested <e value="…"/> literal is validated against ONE synthesized leaf — the
+// precisionDecimal primitive restricted by the attribute value's declared facets
+// — through the real facet pipeline (value.ValidateLexical). The instance is
+// valid iff EVERY literal is, mirroring the suite's whole-document polarity (a
+// .nK document carries at least one out-of-space or facet-invalid literal). The
+// pipeline already realizes precisionDecimal's spec-exact semantics: NaN fails
+// every bound facet (partial order, incomparable ⇒ excluded, §3.1), totalDigits
+// vacuously passes zero and the specials (value.TotalDigits reports 1, §4.1),
+// maxScale/minScale skip the specials' absent ·scale· (#133), and enumeration is
+// value-space "equal or identical" on ·numericalValue· (10 == 1.0E1; NaN matches
+// NaN via identity, §4.3.5.4). A case whose type is not a directly-mapped or
+// single-step precisionDecimal restriction (a multi-step chain, list or union —
+// pdecimal016/019/020), whose schema cannot be read, or that pairs an
+// inapplicable facet with the primitive is declined (Fail, a recorded gap).
+//
+// One claimed case, pdecimal006.n2 (a lone "NaN" against an enumeration whose
+// members include "NaN"), is a KNOWN suite quirk: cvc-enumeration-valid matches
+// on "equal OR identical" (§4.3.5.4) and NaN is identical to itself (§3.1, the
+// single notANumber value), so the strict pipeline decides it VALID — yet the
+// Saxon suite declares it invalid. Per the issue #135 GROUNDING (don't bend the
+// spec to a fixture bug), the executor keeps the spec-correct verdict, so the
+// harness honestly records this one case as a Fail (a New gap reflecting the suite
+// bug, never a false Pass) rather than mis-implementing enumeration identity.
+func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
+	children, values, ok := readPDecimalCase(c.doc)
+	if !ok {
+		return Fail()
+	}
+	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: "precisionDecimal"}
+	builtinType, seeded := sym[qn]
+	if !seeded {
+		return Fail()
+	}
+	if !strictGoverns(backend, builtinType) {
+		return Fail()
+	}
+	ownFacets, ok := buildOwnFacets("precisionDecimal", children)
+	if !ok {
+		return Fail()
+	}
+	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
+		xsd.QName{Space: synthNS, Local: "precisionDecimal-facets"},
+		xsd.Atomic{Primitive: primitiveOfType(builtinType)}, builtinType, ownFacets, nil)
+	if err != nil {
+		return Fail()
+	}
+	// precisionDecimal maps context-free (§3.2), so a nil value.Context suffices —
+	// unlike the QName cohort, no prefix resolution is involved.
+	observedValid := true
+	for _, v := range values {
+		if _, verr := value.ValidateLexical(backend, leaf, v, nil); verr != nil {
+			observedValid = false
+			break
+		}
+	}
 	if observedValid == c.expectValid {
 		return Pass()
 	}
@@ -1008,7 +1134,10 @@ type facetChild struct {
 // facetKinds is the set of facet kinds the facet cohort recognizes: the value-
 // and pattern-facet kinds value.ValidateLexical decides for
 // string/decimal/float/double (the bound facets also serve the
-// partially-ordered float/double).
+// partially-ordered float/double) plus precisionDecimal's two extension facets
+// maxScale/minScale (issue #135, applicable ONLY to precisionDecimal per
+// xsd-precisionDecimal.md §3.3; harmless for the msData cohort, whose bases never
+// carry them and whose Applies metadata rejects them regardless).
 // whiteSpace (normalization, no cvc-* rule), assertions and explicitTimezone are
 // deliberately excluded, so a schema carrying one is declined rather than
 // silently ignored.
@@ -1018,6 +1147,7 @@ var facetKinds = []xsd.FacetKind{
 	xsd.FacetMaxInclusive, xsd.FacetMaxExclusive,
 	xsd.FacetMinExclusive, xsd.FacetMinInclusive,
 	xsd.FacetTotalDigits, xsd.FacetFractionDigits,
+	xsd.FacetMaxScale, xsd.FacetMinScale,
 }
 
 // facetKindOf maps a facet element's local name to its xsd.FacetKind by matching
@@ -1230,6 +1360,153 @@ func decodeRestriction(path string) (base, attrName string, children []facetChil
 		return base, attrName, children, true
 	}
 	return "", "", nil, false
+}
+
+// readPDecimalCase reads one Saxon PDecimal cohort instance (issue #135): the
+// tested <e value="…"/> literals and the sole tested precisionDecimal type's
+// facet children. The schema is out-of-band (the instance carries no
+// noNamespaceSchemaLocation — the suite's testGroup pairs pdecimalNNN.{vK,nK}.xml
+// with the sibling pdecimalNNN.xsd), so pdecimalSchemaPath derives it from the
+// instance filename's case prefix. ok is false when the instance decodes to no
+// <e> value, the schema cannot be read, or the attribute value's type is not a
+// directly-mapped or single-step precisionDecimal restriction (a multi-step
+// chain, list or union — pdecimal016/019/020 — which this single-leaf model
+// cannot decide) — an honest decline, never a guess.
+func readPDecimalCase(instancePath string) (children []facetChild, values []string, ok bool) {
+	values, ok = decodePDecimalValues(instancePath)
+	if !ok {
+		return nil, nil, false
+	}
+	base, children, ok := decodePDecimalSchema(pdecimalSchemaPath(instancePath))
+	if !ok || base != "precisionDecimal" {
+		return nil, nil, false
+	}
+	return children, values, true
+}
+
+// pdecimalSchemaPath derives the sibling schema path for a PDecimal instance from
+// its filename's case prefix: pdecimal001.v1.xml → pdecimal001.xsd (the schema
+// the suite's testGroup pairs with every instance of that case). The prefix is
+// the basename up to its first '.', so the .vK/.nK/.xml suffixes are stripped.
+func pdecimalSchemaPath(instancePath string) string {
+	base := filepath.Base(instancePath)
+	prefix := base
+	if i := strings.IndexByte(base, '.'); i >= 0 {
+		prefix = base[:i]
+	}
+	return filepath.Join(filepath.Dir(instancePath), prefix+".xsd")
+}
+
+// pdecimalInstance mirrors the PDecimal cohort's instance shape: a root (<doc>)
+// whose repeated <e value="…"/> children each carry one tested literal in an
+// unqualified value attribute.
+type pdecimalInstance struct {
+	Es []struct {
+		Value string `xml:"value,attr"`
+	} `xml:"e"`
+}
+
+// decodePDecimalValues reads every <e value="…"/> literal in document order. ok
+// is false when the document cannot be read or carries no <e> child (an empty or
+// out-of-shape document is declined rather than treated as a vacuous pass).
+func decodePDecimalValues(path string) (values []string, ok bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var inst pdecimalInstance
+	if err := xml.Unmarshal(data, &inst); err != nil {
+		return nil, false
+	}
+	if len(inst.Es) == 0 {
+		return nil, false
+	}
+	for _, e := range inst.Es {
+		values = append(values, e.Value)
+	}
+	return values, true
+}
+
+// pdecimalSchema mirrors the PDecimal cohort's schema shape: an <element name="e">
+// whose complexType declares the tested attribute "value", and the named
+// simpleTypes it may reference. Only the value attribute's own type matters.
+type pdecimalSchema struct {
+	Elements []struct {
+		Name        string `xml:"name,attr"`
+		ComplexType struct {
+			Attributes []struct {
+				Name string `xml:"name,attr"`
+				Type string `xml:"type,attr"`
+			} `xml:"attribute"`
+		} `xml:"complexType"`
+	} `xml:"element"`
+	SimpleTypes []struct {
+		Name        string `xml:"name,attr"`
+		Restriction struct {
+			Base   string `xml:"base,attr"`
+			Facets []struct {
+				XMLName xml.Name
+				Value   string `xml:"value,attr"`
+			} `xml:",any"`
+		} `xml:"restriction"`
+	} `xml:"simpleType"`
+}
+
+// decodePDecimalSchema resolves the type of the tested attribute "value" on
+// element "e" and returns its precisionDecimal base plus facet children. Two
+// shapes are decided: an attribute typed xs:precisionDecimal directly (base
+// "precisionDecimal", no facets), or one typed as a named simpleType that is a
+// SINGLE-STEP restriction of precisionDecimal (base "precisionDecimal", its facet
+// children). Any other shape — a restriction of another named type (a multi-step
+// chain), or a list/union variety (whose simpleType carries no precisionDecimal
+// restriction, so its Restriction.Base is empty) — yields ok=false, declining the
+// case. ok is false too when the schema cannot be read or has no such attribute.
+func decodePDecimalSchema(path string) (base string, children []facetChild, ok bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", nil, false
+	}
+	var s pdecimalSchema
+	if err := xml.Unmarshal(data, &s); err != nil {
+		return "", nil, false
+	}
+	attrType, found := pdecimalValueType(s)
+	if !found {
+		return "", nil, false
+	}
+	if localName(attrType) == "precisionDecimal" {
+		return "precisionDecimal", nil, true
+	}
+	for _, st := range s.SimpleTypes {
+		if st.Name != attrType {
+			continue
+		}
+		if localName(st.Restriction.Base) != "precisionDecimal" {
+			return "", nil, false
+		}
+		for _, f := range st.Restriction.Facets {
+			children = append(children, facetChild{name: f.XMLName.Local, value: f.Value})
+		}
+		return "precisionDecimal", children, true
+	}
+	return "", nil, false
+}
+
+// pdecimalValueType returns the type QName (prefix intact) of the tested
+// attribute "value" declared on element "e". found is false when the schema
+// declares no such element/attribute.
+func pdecimalValueType(s pdecimalSchema) (attrType string, found bool) {
+	for _, el := range s.Elements {
+		if el.Name != "e" {
+			continue
+		}
+		for _, a := range el.ComplexType.Attributes {
+			if a.Name == "value" {
+				return a.Type, true
+			}
+		}
+	}
+	return "", false
 }
 
 // attrValue returns the value of se's unqualified attribute local, or "".

@@ -8,7 +8,11 @@
 // The W3C suite lives at testdata/xsdtests (a pinned git submodule;
 // populate with `git submodule update --init testdata/xsdtests`). Its
 // index is suite.xml, which references test sets; each test group carries
-// schema tests and instance tests with declared expected outcomes.
+// schema tests and instance tests with declared expected outcomes. The
+// auxiliary extra-suite.xml sibling is discovered alongside it (issue #135):
+// it carries the precisionDecimal test sets the W3C suite moved out of
+// suite.xml when the type left XSD 1.1, and shares one test set
+// (common/introspection.testSet) with the main index, discovered once.
 //
 // # Lanes and expectation files
 //
