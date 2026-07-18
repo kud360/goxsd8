@@ -78,8 +78,11 @@
 // facets) comes from the precisionDecimal spec's applicability list.
 // Applicability is answered by the generated table via TypeSpec.Applies,
 // not by the seeded xsd.SimpleType's {facets}: maxScale/minScale carry no
-// spec default, so ownFacets never materializes them as an xsd.Facet (and
-// xsd.FacetKind excludes them by design). cos-applicable-facets therefore
-// fires on misuse by querying TypeSpec.Applies, not the component's
-// {facets}/EffectiveFacets.
+// spec default, so ownFacets never materializes them as an xsd.Facet on the
+// seeded component. cos-applicable-facets therefore fires on misuse by querying
+// TypeSpec.Applies, not the component's {facets}/EffectiveFacets. When a user
+// schema DOES declare a maxScale/minScale restriction, those facets ARE
+// enforced at instance validation (cvc-maxScale-valid, cvc-minScale-valid) by
+// value/facets.go's scaleFacet, over the FacetMaxScale/FacetMinScale kinds
+// xsd.FacetKind now carries (#133).
 package builtin

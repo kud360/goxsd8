@@ -35,6 +35,7 @@ var (
 	_ ValueFacet   = digitsFacet{}
 	_ ValueFacet   = lengthFacet{}
 	_ ValueFacet   = explicitTimezoneFacet{}
+	_ ValueFacet   = scaleFacet{}
 )
 
 // ValidateLexical validates the lexical string rawLexical against st's effective
@@ -155,6 +156,12 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 				return nil, nil, err
 			}
 			valFacets = append(valFacets, tf)
+		case xsd.FacetMaxScale, xsd.FacetMinScale:
+			sf, err := newScaleFacet(ef.Facet())
+			if err != nil {
+				return nil, nil, err
+			}
+			valFacets = append(valFacets, sf)
 		case xsd.FacetAssertions:
 			// Out of this runner's scope: assertions are a separate later stage,
 			// not an atomic value facet.
@@ -612,6 +619,100 @@ func (tf explicitTimezoneFacet) CheckValue(v Value) error {
 			"value has an explicit timezone but the explicitTimezone facet prohibits one (cvc-explicitTimezone-valid, §4.3.14.3)")
 	}
 	return nil
+}
+
+// scaleFacet is the maxScale/minScale value-facet stage (cvc-maxScale-valid
+// xsd-precisionDecimal.md §4.2.3, cvc-minScale-valid §4.3.3), applicable to
+// precisionDecimal and its restrictions ONLY (§3.3) — no other primitive. Both
+// facets' {value} is a plain xs:integer that may be NEGATIVE (unlike the
+// nonNegativeInteger of totalDigits/fractionDigits/length), held in limit. One
+// struct serves both kinds, discriminated by kind, mirroring digitsFacet.
+//
+// The two rules share a vacuous-pass clause: a value whose ·scale· is ABSENT —
+// the specials NaN/±INF, which carry no scale (value.Scaled reports ok=false) —
+// is facet-valid w.r.t. both facets regardless of {value} (clause 2 of each
+// rule). Only a numeric value's ·scale· is compared against limit (clause 1):
+// maxScale bounds it above (violation is scale > limit), minScale bounds it
+// below (violation is scale < limit).
+type scaleFacet struct {
+	limit int
+	kind  xsd.FacetKind
+}
+
+// newScaleFacet reads the facet's plain xs:integer {value} (a scale bound that
+// may be negative, so facetInt not facetCount), keyed to the per-facet rule.
+func newScaleFacet(f xsd.Facet) (scaleFacet, error) {
+	n, err := facetInt(f, scaleRule(f.Kind()))
+	if err != nil {
+		return scaleFacet{}, err
+	}
+	return scaleFacet{limit: n, kind: f.Kind()}, nil
+}
+
+// CheckValue rejects a candidate whose ·scale· violates the facet
+// (cvc-maxScale-valid §4.2.3, cvc-minScale-valid §4.3.3). A value with an absent
+// ·scale· (a special: NaN/±INF) passes vacuously — clause 2 of both rules — so
+// the Scale() ok=false path returns nil before any comparison. The candidate
+// must be Scaled: maxScale/minScale apply to precisionDecimal only (§3.3), so a
+// non-Scaled value under one of these facets is a schema-construction error
+// (cos-applicable-facets §4.1.5 not enforced upstream), never instance data, and
+// PANICS rather than returning a validity verdict — the boundFacet convention.
+func (sf scaleFacet) CheckValue(v Value) error {
+	sc, ok := v.(Scaled)
+	if !ok {
+		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Scaled (cos-applicable-facets §4.1.5 not enforced upstream)", v, sf.kind))
+	}
+	scale, ok := sc.Scale()
+	if !ok {
+		return nil
+	}
+	if sf.violates(scale) {
+		return xsderr.New(scaleRule(sf.kind), xsderr.Loc{},
+			"value scale %d violates the %s facet limit %d (%s)", scale, sf.kind, sf.limit, scaleRule(sf.kind))
+	}
+	return nil
+}
+
+// violates maps a ·scale· to a violation per kind (clause 1 of each rule).
+func (sf scaleFacet) violates(scale int) bool {
+	switch sf.kind {
+	case xsd.FacetMaxScale:
+		return scale > sf.limit
+	case xsd.FacetMinScale:
+		return scale < sf.limit
+	default:
+		panic(fmt.Sprintf("value: violates: %s is not a scale facet", sf.kind))
+	}
+}
+
+// scaleRule maps a scale facet kind to its per-facet rule ID
+// (xsd-precisionDecimal.md §4.2.3/§4.3.3).
+func scaleRule(k xsd.FacetKind) xsderr.Rule {
+	switch k {
+	case xsd.FacetMaxScale:
+		return "cvc-maxScale-valid"
+	case xsd.FacetMinScale:
+		return "cvc-minScale-valid"
+	default:
+		panic(fmt.Sprintf("value: scaleRule: %s is not a scale facet", k))
+	}
+}
+
+// facetInt parses a single-valued facet's plain xs:integer {value} (a scale
+// bound that MAY be negative — no nonNegativeInteger constraint, unlike
+// facetCount), charging rule on a wrong value count or a non-integer literal.
+func facetInt(f xsd.Facet, rule xsderr.Rule) (int, error) {
+	values := f.Values()
+	if len(values) != 1 {
+		return 0, xsderr.New(rule, xsderr.Loc{},
+			"%s facet must carry exactly one value, has %d", f.Kind(), len(values))
+	}
+	n, err := strconv.Atoi(values[0])
+	if err != nil {
+		return 0, xsderr.New(rule, xsderr.Loc{},
+			"%s facet value %q is not an integer", f.Kind(), values[0])
+	}
+	return n, nil
 }
 
 // facetCount parses a single-valued facet's plain xs:nonNegativeInteger {value}

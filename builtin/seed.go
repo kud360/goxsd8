@@ -238,9 +238,11 @@ func ownFacets(spec TypeSpec) ([]xsd.Facet, error) {
 		}
 		kind, ok := facetKind(f.Name)
 		if !ok {
-			// A value-bearing facet with no xsd.FacetKind (maxScale/minScale
-			// are precisionDecimal-only and carry no default, so they never
-			// reach here) would silently drop a constraint: refuse instead.
+			// A value-bearing facet with an unknown name would silently drop a
+			// constraint: refuse instead. The precisionDecimal-only maxScale/
+			// minScale ARE known to facetKind (xsd.FacetKind now includes them),
+			// but the seed rows carry no Default for them, so they are skipped by
+			// the f.Default == "" guard above and never reach this branch.
 			return nil, fmt.Errorf("builtin: type %q has value-bearing facet %q with no FacetKind", spec.Name, f.Name)
 		}
 		facets = append(facets, xsd.NewFacet(kind, []string{f.Default}, f.Fixed))
@@ -249,8 +251,12 @@ func ownFacets(spec TypeSpec) ([]xsd.Facet, error) {
 }
 
 // facetKind maps a builtin facet name to its xsd.FacetKind. ok is false for the
-// precisionDecimal-only maxScale/minScale, which xsd.FacetKind excludes by
-// design; those carry no spec default, so ownFacets never asks for their kind.
+// precisionDecimal-only maxScale/minScale — but NOT because xsd.FacetKind lacks
+// those kinds (it now has FacetMaxScale/FacetMinScale). It is because this switch
+// has no case for them, which is harmless: the precisionDecimal seed rows carry
+// no Default for maxScale/minScale, so ownFacets' f.Default == "" guard skips
+// them before ever calling facetKind. Their instance-time enforcement lives in
+// value/facets.go's scaleFacet, independent of this seeding path (#133).
 func facetKind(name FacetName) (xsd.FacetKind, bool) {
 	switch name {
 	case "length":
