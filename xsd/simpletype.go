@@ -178,23 +178,32 @@ func (k FacetKind) HasFixed() bool {
 // {value}, and its {fixed} flag where the kind has one. How {value} is modeled
 // depends on the kind:
 //
-//   - For every kind except FacetAssertions, {value} is one or more normalized
-//     lexical strings — a single string for the single-valued kinds such as
-//     length or whiteSpace, or several for the set/sequence-valued kinds pattern
-//     and enumeration — held in values and read through Values.
+//   - For every kind except FacetEnumeration and FacetAssertions, {value} is one
+//     or more normalized lexical strings — a single string for the single-valued
+//     kinds such as length or whiteSpace, or several for the set-valued kind
+//     pattern — held in values and read through Values.
+//   - For FacetEnumeration (§4.3.5) {value} is a set of EnumerationMembers: each
+//     is a lexical {value} member PLUS the namespace context in scope where that
+//     <enumeration> was written, which a QName/NOTATION member needs to resolve
+//     its prefixes (§3.3.18). The lexical strings are still read through Values
+//     (derived from the members, STYLE D3 — not stored twice); the members,
+//     with their context, are read through EnumerationMembers. It is held in
+//     members and read through EnumerationMembers; values stays nil.
 //   - For FacetAssertions (§4.3.13) {value} is "a sequence of Assertion
 //     components" (Structures §3.13.1, id="as"), each carrying a Required {test}
 //     XPathExpression that a lexical string cannot represent. It is held in
 //     assertions and read through Assertions; values stays nil. kind is the sole
-//     discriminant between the two representations.
+//     discriminant among the three representations.
 //
-// Construct a non-assertions facet through NewFacet and an assertions facet
-// through NewAssertionsFacet; NewFacet normalizes away the illegal combination
-// of a set {fixed} on a kind that has no {fixed} property, so that state is
-// unrepresentable (STYLE T1). Facet is immutable after construction.
+// Construct a plain-lexical facet through NewFacet, an enumeration facet through
+// NewEnumerationFacet, and an assertions facet through NewAssertionsFacet;
+// NewFacet normalizes away the illegal combination of a set {fixed} on a kind
+// that has no {fixed} property, so that state is unrepresentable (STYLE T1).
+// Facet is immutable after construction.
 type Facet struct {
 	kind       FacetKind
 	values     []string
+	members    []EnumerationMember
 	assertions []Assertion
 	fixed      bool
 }
@@ -202,19 +211,25 @@ type Facet struct {
 // NewFacet builds a Facet of the given kind carrying values as its {value}. The
 // values slice is copied; the caller's backing array is not aliased.
 //
-// It panics if kind is FacetAssertions: the assertions facet models {value} as
-// a sequence of Assertion components, not lexical strings, so it must be built
-// through NewAssertionsFacet. That is a programmer error (the wrong
+// It panics if kind is FacetEnumeration or FacetAssertions: those kinds model
+// {value} as richer components than lexical strings — an enumeration facet's
+// members carry the namespace context a QName/NOTATION member needs
+// (EnumerationMember), and an assertions facet's {value} is a sequence of
+// Assertion components — so they must be built through NewEnumerationFacet and
+// NewAssertionsFacet respectively. That is a programmer error (the wrong
 // constructor), not user-supplied invalid data, so a panic — not an xsderr
 // validation error — is the right guard per this package's convention.
 //
-// fixed is honored only when kind.HasFixed() is true; for FacetPattern and
-// FacetEnumeration (which have no {fixed} property, §4.3.4/.5) it is normalized
-// to false so that "fixed set on a kind with no {fixed}" cannot be stored
-// (STYLE T1). FacetAssertions likewise has no {fixed} (§4.3.13) but is
-// unreachable here. Read {fixed} back through Fixed, whose second result
-// reports whether the kind has the property at all.
+// fixed is honored only when kind.HasFixed() is true; for FacetPattern (which
+// has no {fixed} property, §4.3.4) it is normalized to false so that "fixed set
+// on a kind with no {fixed}" cannot be stored (STYLE T1). FacetEnumeration and
+// FacetAssertions likewise have no {fixed} (§4.3.5/.13) but are unreachable
+// here. Read {fixed} back through Fixed, whose second result reports whether the
+// kind has the property at all.
 func NewFacet(kind FacetKind, values []string, fixed bool) Facet {
+	if kind == FacetEnumeration {
+		panic("xsd: NewFacet cannot build an enumeration facet; use NewEnumerationFacet")
+	}
 	if kind == FacetAssertions {
 		panic("xsd: NewFacet cannot build an assertions facet; use NewAssertionsFacet")
 	}
@@ -243,14 +258,54 @@ func NewAssertionsFacet(assertions []Assertion) Facet {
 	return f
 }
 
+// NewEnumerationFacet builds the enumeration Constraining Facet (Datatypes
+// §4.3.5) whose {value} is a set of EnumerationMembers rather than bare lexical
+// strings. Each member pairs a lexical {value} member with the namespace context
+// in force where its <enumeration> was written, so a QName/NOTATION member can
+// resolve its prefixes against the DECLARING schema's in-scope bindings (§3.3.18)
+// rather than the wrong scope. The members slice is copied in document order;
+// the caller's backing array is not aliased. The result's kind is
+// FacetEnumeration, its values stays nil (Values derives the lexical strings
+// from the members, STYLE D3), and its {fixed} is false — §4.3.5 gives the
+// enumeration facet no {fixed} property (HasFixed reports false for it). Read the
+// members back through EnumerationMembers and their lexical forms through Values.
+//
+// A context-free member (every non-QName/NOTATION cohort) simply carries empty
+// NamespaceBindings and an absent DefaultNamespace, which resolves identically to
+// a nil context — so routing every enumeration facet through members changes
+// nothing for the context-free kinds.
+func NewEnumerationFacet(members []EnumerationMember) Facet {
+	f := Facet{kind: FacetEnumeration}
+	if len(members) > 0 {
+		f.members = append([]EnumerationMember(nil), members...)
+	}
+	return f
+}
+
 // Kind returns the facet's kind.
 func (f Facet) Kind() FacetKind {
 	return f.kind
 }
 
-// Values returns the facet's {value} in document order. It returns a copy:
-// mutating the result does not affect f. An empty {value} yields nil.
+// Values returns the facet's {value} as lexical strings in document order. It
+// returns a copy: mutating the result does not affect f. An empty {value} yields
+// nil.
+//
+// For an enumeration facet (Kind() == FacetEnumeration) the lexical strings are
+// DERIVED from the members' Lexical() forms (STYLE D3 — not stored twice), so an
+// existing consumer that only reads Values keeps its behavior; a consumer that
+// also needs each member's namespace context reads EnumerationMembers instead.
 func (f Facet) Values() []string {
+	if f.kind == FacetEnumeration {
+		if len(f.members) == 0 {
+			return nil
+		}
+		out := make([]string, len(f.members))
+		for i, m := range f.members {
+			out[i] = m.lexical
+		}
+		return out
+	}
 	if len(f.values) == 0 {
 		return nil
 	}
@@ -273,11 +328,112 @@ func (f Facet) Assertions() (assertions []Assertion, ok bool) {
 	return append([]Assertion(nil), f.assertions...), true
 }
 
+// EnumerationMembers returns the facet's {value} as a set of EnumerationMembers
+// in document order. The second result reports whether this is an enumeration
+// facet (Kind() == FacetEnumeration): when it is false the facet models {value}
+// differently (use Values, or Assertions for FacetAssertions), and the first
+// result is nil. It returns a copy: mutating the result does not affect f. An
+// enumeration facet with no members yields nil.
+//
+// Each member carries the namespace context in force where its <enumeration> was
+// written, which a downstream QName/NOTATION value-space consumer needs to
+// resolve a prefixed member against the DECLARING schema's in-scope bindings
+// (§3.3.18); the lexical strings alone are still available through Values.
+func (f Facet) EnumerationMembers() (members []EnumerationMember, ok bool) {
+	if f.kind != FacetEnumeration {
+		return nil, false
+	}
+	if len(f.members) == 0 {
+		return nil, true
+	}
+	return append([]EnumerationMember(nil), f.members...), true
+}
+
 // Fixed returns the {fixed} property. The second result is Kind().HasFixed():
 // when it is false the kind has no {fixed} property (FacetPattern,
 // FacetEnumeration, FacetAssertions) and the first result is not meaningful.
 func (f Facet) Fixed() (fixed bool, ok bool) {
 	return f.fixed, f.kind.HasFixed()
+}
+
+// EnumerationMember is one member of an enumeration facet's {value} (Datatypes
+// §4.3.5): a lexical {value} member paired with the namespace context in force
+// where its <enumeration> element was written. That context is load-bearing for
+// a QName or NOTATION member, whose lexical→value mapping resolves the member's
+// prefix against the in-scope namespace bindings at the point of the literal
+// (§3.3.18): a member "foo:fo" denotes {namespace name, local name} only once its
+// "foo" prefix is resolved, and §3.3.18 fixes the scope to the <enumeration>
+// element's own [in-scope namespaces], NOT the validated instance's. Because a
+// facet's {value} is computed once at schema-construction time and rides the
+// §3.16.6.4 overlay unchanged, that context must travel WITH the member; this
+// package carries it opaquely (like XPathExpression's {namespace bindings}) and
+// defers the actual prefix resolution to a value-space consumer.
+//
+// The context is modeled exactly as XPathExpression models its own: a
+// document-order slice of NamespaceBinding (the SAME shared record, STYLE D3),
+// plus an optional {default namespace}. Unlike XPathExpression there is no {base
+// URI} — QName resolution is prefix→namespace only, with no base-URI dependency.
+//
+// A context-free member (every non-QName/NOTATION cohort) carries no bindings and
+// an absent {default namespace}, which resolves identically to a nil context, so
+// routing all enumeration facets through members leaves the context-free kinds
+// unchanged.
+//
+// Construct only through NewEnumerationMember. EnumerationMember is immutable
+// after construction.
+type EnumerationMember struct {
+	lexical             string
+	namespaceBindings   []NamespaceBinding
+	defaultNamespace    string
+	hasDefaultNamespace bool
+}
+
+// NewEnumerationMember builds an EnumerationMember pairing the lexical {value}
+// member with its namespace context. namespaceBindings is copied in document
+// order; the caller's backing array is not aliased. A nil defaultNamespace means
+// the {default namespace} is absent; a non-nil pointer (including to "") means it
+// is present, because "" is a legal anyURI and cannot double as an absence
+// sentinel (mirrors NewXPathExpression's discipline).
+//
+// There is no rejectable state at this structural layer: whether a QName/NOTATION
+// member's prefix actually resolves is a value-space verdict a consumer makes
+// (charged to src-enumeration-value, §4.3.5.3), not something this pure-leaf
+// package can or should reject.
+func NewEnumerationMember(lexical string, namespaceBindings []NamespaceBinding, defaultNamespace *string) EnumerationMember {
+	m := EnumerationMember{lexical: lexical}
+	if len(namespaceBindings) > 0 {
+		m.namespaceBindings = append([]NamespaceBinding(nil), namespaceBindings...)
+	}
+	if defaultNamespace != nil {
+		m.defaultNamespace, m.hasDefaultNamespace = *defaultNamespace, true
+	}
+	return m
+}
+
+// Lexical returns the member's raw lexical {value} — the normalized value of the
+// <enumeration> element's value attribute (§4.3.5.2), before any QName prefix
+// resolution.
+func (m EnumerationMember) Lexical() string {
+	return m.lexical
+}
+
+// NamespaceBindings returns the member's namespace context in document order:
+// the in-scope namespace bindings at its <enumeration> element (§3.3.18). It
+// returns a copy: mutating the result does not affect m. An empty context yields
+// nil.
+func (m EnumerationMember) NamespaceBindings() []NamespaceBinding {
+	if len(m.namespaceBindings) == 0 {
+		return nil
+	}
+	return append([]NamespaceBinding(nil), m.namespaceBindings...)
+}
+
+// DefaultNamespace returns the member's {default namespace} — the namespace an
+// unprefixed member name binds to in scope at its <enumeration> element. The
+// second result is false when it is absent (no default namespace in scope), in
+// which case the first result is not meaningful.
+func (m EnumerationMember) DefaultNamespace() (string, bool) {
+	return m.defaultNamespace, m.hasDefaultNamespace
 }
 
 // SimpleType is a Simple Type Definition component (Structures §3.16.1,

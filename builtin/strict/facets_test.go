@@ -189,7 +189,11 @@ func TestPatternFacetTwoStepAND(t *testing.T) {
 // restricted to a small set (cvc-enumeration-valid).
 func TestEnumerationFacet(t *testing.T) {
 	stringPrim := newPrim(t, "string")
-	colors := derive(t, "color", stringPrim, xsd.NewFacet(xsd.FacetEnumeration, []string{"red", "green", "blue"}, false))
+	colors := derive(t, "color", stringPrim, xsd.NewEnumerationFacet([]xsd.EnumerationMember{
+		xsd.NewEnumerationMember("red", nil, nil),
+		xsd.NewEnumerationMember("green", nil, nil),
+		xsd.NewEnumerationMember("blue", nil, nil),
+	}))
 
 	_, err := value.ValidateLexical(New(), colors, "green", nil)
 	wantAccept(t, err)
@@ -318,4 +322,47 @@ func TestLengthFacetsQNameNotationExempt(t *testing.T) {
 			t.Errorf("%s maxLength=2 must accept abcde (clause 1.3 exemption), got %v", prim, err)
 		}
 	}
+}
+
+// TestQNameEnumerationSchemaContext exercises a QName enumeration facet whose
+// member "foo:fo" resolves its "foo" prefix against the DECLARING schema's
+// namespace context (§3.3.18), carried per member on the facet, NOT the validated
+// instance's context — the fix for issue #152. The enumeration member binds
+// foo=myNamespace at the schema; the instance value resolves against its OWN
+// (instance) context, and the two match iff both resolve to the same expanded
+// {namespace name, local name}.
+func TestQNameEnumerationSchemaContext(t *testing.T) {
+	const schemaNS = "myNamespace"
+	fooBinding := []xsd.NamespaceBinding{xsd.NewNamespaceBinding("foo", schemaNS)}
+	qnamePrim := newPrim(t, "QName")
+	colors := derive(t, "qcolor", qnamePrim, xsd.NewEnumerationFacet([]xsd.EnumerationMember{
+		xsd.NewEnumerationMember("foo:fo", fooBinding, nil),
+	}))
+
+	// Instance value "foo:fo" under an instance context binding foo=myNamespace
+	// resolves to {myNamespace, fo}, matching the member's {myNamespace, fo}.
+	if _, err := value.ValidateLexical(New(), colors, "foo:fo", nsContext{"foo": schemaNS}); err != nil {
+		t.Errorf("foo:fo (instance foo=myNamespace) must match member {myNamespace, fo}, got %v", err)
+	}
+
+	// Same lexical value, but the instance binds foo to a DIFFERENT namespace, so it
+	// resolves to {otherNS, fo} and does not match the member — the member context
+	// is the schema's, decided independently of the instance's binding.
+	_, err := value.ValidateLexical(New(), colors, "foo:fo", nsContext{"foo": "otherNS"})
+	wantRule(t, err, "cvc-enumeration-valid")
+}
+
+// TestQNameEnumerationUnresolvableMember exercises the src-enumeration-value
+// remap (§4.3.5.3): an enumeration member whose prefix has no binding in its
+// schema context is a malformed facet AT SCHEMA CONSTRUCTION, so the pipeline
+// rejects with src-enumeration-value (not the bare cvc-datatype-valid Parse
+// returns), mirroring newPatternFacet's src-pattern-value remap.
+func TestQNameEnumerationUnresolvableMember(t *testing.T) {
+	qnamePrim := newPrim(t, "QName")
+	bad := derive(t, "qbad", qnamePrim, xsd.NewEnumerationFacet([]xsd.EnumerationMember{
+		// "bar" is unbound: no NamespaceBindings, no default namespace.
+		xsd.NewEnumerationMember("bar:x", nil, nil),
+	}))
+	_, err := value.ValidateLexical(New(), bad, "bar:x", nsContext{"bar": "urn:bar"})
+	wantRule(t, err, "src-enumeration-value")
 }

@@ -346,11 +346,14 @@ func TestDatatypesFacetsShapeGuard(t *testing.T) {
 	}
 }
 
-// TestDatatypesQNameFacets proves the QName carve-outs of issue #125: the
-// length-family cases decide as vacuous passes through a real (non-nil) instance
-// context (a nil context would fail parseQName even for the unprefixed literal
-// "foofo"), and buildOwnFacets explicitly declines the enumeration cases pending
-// schema-declaring-context threading. Skips when the submodule is absent.
+// TestDatatypesQNameFacets proves the QName carve-outs of issue #125 as widened
+// by issue #152: the length-family cases decide as vacuous passes through a real
+// (non-nil) instance context (a nil context would fail parseQName even for the
+// unprefixed literal "foofo"), and buildOwnFacets now ADMITS an enumeration facet
+// on QName, building xsd.EnumerationMembers that carry the declaring schema's
+// namespace context so a prefixed member resolves (§3.3.18). The four
+// QName_enumeration001-004 fixtures are driven end-to-end and must decide
+// correctly in both polarities. Skips when the submodule is absent.
 func TestDatatypesQNameFacets(t *testing.T) {
 	if _, err := os.Stat(suitePath()); err != nil {
 		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
@@ -366,13 +369,48 @@ func TestDatatypesQNameFacets(t *testing.T) {
 		t.Fatal("readFacetsCase must thread a non-nil context for the QName cohort")
 	}
 
-	// buildOwnFacets admits the length facet but declines an enumeration facet on
-	// QName (the schema-declaring-context gap).
+	// buildOwnFacets admits both the length facet (vacuous per clause 1.3) and,
+	// now, an enumeration facet on QName — the member carries the declaring
+	// schema's context (issue #152), so it is no longer declined.
 	if _, ok := buildOwnFacets("QName", []facetChild{{name: "length", value: "4"}}); !ok {
 		t.Error("buildOwnFacets(QName, length) must be admitted (vacuous per clause 1.3)")
 	}
-	if _, ok := buildOwnFacets("QName", []facetChild{{name: "enumeration", value: "foo:fo"}}); ok {
-		t.Error("buildOwnFacets(QName, enumeration) must be declined pending schema-declaring-context threading")
+	enumChild := facetChild{name: "enumeration", value: "foo:fo", bindings: map[string]string{"foo": "foobar"}}
+	facets, ok := buildOwnFacets("QName", []facetChild{enumChild})
+	if !ok || len(facets) != 1 {
+		t.Fatalf("buildOwnFacets(QName, enumeration) must now be admitted (issue #152), got ok=%v facets=%d", ok, len(facets))
+	}
+	members, isEnum := facets[0].EnumerationMembers()
+	if !isEnum || len(members) != 1 || members[0].Lexical() != "foo:fo" {
+		t.Fatalf("enumeration facet members = %v (isEnum=%v), want one member foo:fo", members, isEnum)
+	}
+	if binds := members[0].NamespaceBindings(); len(binds) != 1 || binds[0].Prefix() != "foo" || binds[0].Namespace() != "foobar" {
+		t.Errorf("enumeration member bindings = %v, want one foo=foobar binding", binds)
+	}
+
+	// End-to-end: the four QName_enumeration fixtures decide correctly. 001/003
+	// carry an empty instance value (invalid); 002/004 carry "foo:fo" resolving to
+	// the same expanded QName as the schema's member (valid).
+	exec := newDatatypesExec()
+	enumCases := []struct {
+		file        string
+		expectValid bool
+	}{
+		{"QName_enumeration001.xml", false},
+		{"QName_enumeration002.xml", true},
+		{"QName_enumeration003.xml", false},
+		{"QName_enumeration004.xml", true},
+	}
+	for _, ec := range enumCases {
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(qnameDir, ec.file), expectValid: ec.expectValid}
+		if got := exec(c); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", ec.file, ec.expectValid)
+		}
+		// A flipped expectation must yield Fail, proving the executor really decides.
+		flipped := caseSpec{kind: kindInstance, doc: filepath.Join(qnameDir, ec.file), expectValid: !ec.expectValid}
+		if got := exec(flipped); got.IsPass() {
+			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", ec.file)
+		}
 	}
 }
 
