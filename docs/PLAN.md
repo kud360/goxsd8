@@ -37,7 +37,7 @@ decoder), and the `xsd.QName` expanded-name value type that
 `xsd` component model waits for M4). Full unit tests; fuzz targets for
 xmltree.
 
-## M3 — Datatypes vertical slice (in progress — all 20 primitives mapped; tail: dateTimeStamp + Facets-cohort widening)
+## M3 — Datatypes vertical slice (in progress — all 20 primitives mapped; tail: derived durations, remaining Facets/precisionDecimal cohorts, NOTATION shape)
 
 `value` contracts finalized; `builtin/strict` primitive mappings + the
 facet pipeline (pattern facets via package `regex`, XSD flavor) +
@@ -46,34 +46,41 @@ that `Seed` builds one of per builtin (the rest of the `xsd` component
 model stays M4); `value/backendtest` kit running against strict. First
 **`datatypes` ratchet lane** produces real numbers.
 
-Status (2026-07-18): the shared facet pipeline is hoisted into `value` (#87);
-`builtin/strict` now maps **all 20 builtin primitives** — decimal/float/double,
-the string family, anyURI, hex/base64Binary, duration, the seven-property
-temporal family incl. dateTime (#103/#109), QName/NOTATION (#114), and
-precisionDecimal (#115). The `datatypes` lane stands at **939 pass / 25 fail**
-(964 cases), widened through the ID/IDREF/ENTITY name-type (#116), temporal
-(#123), and anyURI/hex/base64Binary (#124) Facets cohorts; the derived
-`dateTimeStamp` is mapped (#122) and the `lengthFacet` §4.3.1.3 clause-1.3
-QName/NOTATION exemption is fixed (#130). **Remaining tail:** map the derived
-`yearMonthDuration`/`dayTimeDuration` (#141, ready); precisionDecimal
-`maxScale`/`minScale` instance-time enforcement landed (#133, 2026-07-18 —
-`cvc-maxScale-valid`/`cvc-minScale-valid`, `GAP(facet)` at `precisiondecimal.go:68`
-retired), so the precisionDecimal selectors are now claimable (#135, ready —
-unblocked by #133); the four out-of-scope schema-construction SCCs
-(valid-restriction narrowing, minScale≤maxScale, {fixed} inheritance) are tracked
-in #157 (blocked on the M4 producer #79, sibling of #46) and a `compile()`
-fail-loud-on-unhandled-FacetKind hardening in #158 (ready); land the
-QName/NOTATION namespace-context adapter (#131, now ready — #130 landed) and in
-turn the QName/NOTATION lexical + Facets cohorts (#125, blocked on #131); fix the
-dateTimeStamp lexical-cohort Parse-only false-accept (#140, ready); remove the
-redundant `fallbackPrimitives` shim (#134, ready); widen the lane to the
-wider-primitive / native-space Facets cohort (#145, ready); and triage the
-non-anyURI recorded-fail invalid cases for the false-accept polarity (#146,
-ready). The list/union-variety executor + `value.effectiveWhiteSpace`
-not-applicable path (#98 / rescoped #75) still waits on the `xsd` list/union
-variety shape (M4, #46). The NIST corpus is a follow-up once #145 lands; the
-list/union Facets cohort remains under the rescoped umbrella #75 (blocked on
-#46/#98).
+Status (2026-07-18, weekly backlog): the shared facet pipeline is hoisted into
+`value` (#87); `builtin/strict` now maps **all 20 builtin primitives** —
+decimal/float/double, the string family, anyURI, hex/base64Binary, duration, the
+seven-property temporal family incl. dateTime (#103/#109), QName/NOTATION (#114),
+and precisionDecimal (#115). The `datatypes` lane now stands at **1006 pass / 34
+fail** (1040 cases), up from 939/25/964 the prior week; the +76 cases are the
+Saxon `PDecimal` precisionDecimal instance cohort discovered and claimed via the
+new `extra-suite.xml` discovery path (#135) plus the QName lexical/Facets cohorts.
+It was widened through the ID/IDREF/ENTITY name-type (#116), temporal (#123),
+anyURI/hex/base64Binary (#124), and QName (#125) Facets cohorts; the derived
+`dateTimeStamp` is mapped (#122), the `lengthFacet` §4.3.1.3 clause-1.3
+QName/NOTATION exemption is fixed (#130), the QName/NOTATION namespace-context
+adapter for the lexical cohort landed (#131), the redundant `fallbackPrimitives`
+shim was removed (#134), and the `<item>` lexical sub-shape is routed (#146).
+precisionDecimal `maxScale`/`minScale` instance-time enforcement landed (#133 —
+`cvc-maxScale-valid`/`cvc-minScale-valid`, `GAP(facet)` retired), which unblocked
+and closed the precisionDecimal instance selectors (#135).
+
+**Remaining tail (all `ready`):** map the derived `yearMonthDuration`/
+`dayTimeDuration` (#141); fix the dateTimeStamp lexical-cohort Parse-only
+false-accept (#140, latent — no tz-absent case in the pinned checkout yet); widen
+the lane to the wider-primitive / native-space Facets cohort (#145); thread the
+declaring-schema namespace context into enumeration-facet `{value}` parsing for
+QName/NOTATION (#152, new library surface — warden pre-flight); model the NOTATION
+Facets-cohort two-step-restriction shape (#153, expect to split once scoped);
+claim the IBM `D3_3_4` multi-type-per-schema precisionDecimal cohort (#162);
+harden `value/facets.go` `compile()` with a fail-loud default on unhandled
+FacetKind (#158); and establish the "LOG-entry-not-expectations-comment is the
+dismissal record" process rule (#149). **Blocked tail:** the four out-of-scope
+precisionDecimal schema-construction SCCs (valid-restriction narrowing,
+minScale≤maxScale, {fixed} inheritance) are #157 (blocked on the M4 producer #79).
+The list/union-variety executor + `value.effectiveWhiteSpace` not-applicable path
+(#98 / rescoped #75) — including the pdecimal016/019/020 two-step/list/union
+shapes — still waits on the `xsd` list/union variety shape (M4, #46). The NIST
+corpus is a follow-up once #145 lands.
 
 ## M4 — Schema parsing (next — epic #79, human-gated)
 
