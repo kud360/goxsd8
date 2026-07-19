@@ -106,6 +106,15 @@ type TimezoneAware interface {
 // but it is not mandatory infrastructure. A backend whose type has no canonical
 // mapping (e.g. QName, see [Mapping]) simply does not implement it, and a nil
 // [Mapping.Canonical] is legitimate.
+//
+// This capability reports only the whole-type "has / has no canonical form"
+// distinction: its string-only signature carries no error channel, so the
+// partial-domain case — a VALID value of a type that DOES have a canonical
+// mapping but whose own would-be canonical form falls outside its lexical space
+// (dt-canonical-mapping, §2.3.1's "(where possible)"; e.g. yearMonthDuration
+// ·months·=0∧·seconds·=0, §3.4.26.1 Note) — is expressible only through
+// [Mapping.Canonical]'s (string, error) return, never here. The two are
+// therefore not redundant encodings of the same thing.
 type Canonical interface {
 	// Canonical returns the value's canonical lexical representation.
 	Canonical() string
