@@ -830,3 +830,85 @@ func TestNSContextLookup(t *testing.T) {
 		t.Errorf("empty prefix with no default: LookupNamespace(\"\") = (%q,%v), want (\"\",true)", ns, bound)
 	}
 }
+
+// TestDatatypesD34Cohort drives the executor over the real IBM D3_3_4
+// precisionDecimal cohort (issue #162): one schema declares SEVERAL named
+// simpleTypes (each a direct single-step precisionDecimal restriction) and the
+// instance's <root> carries MULTIPLE children, each dispatched to its own named
+// type by the child's declared type= attribute. Both polarities are asserted for
+// the decidable cases (v14/v23/v24, ii01[,a-f], ii02); the structurally
+// out-of-reach shapes (v15 type-reference root, v16 list, v17 union, v18 ref=
+// children, v19-v22 multi-step chains) must be DECLINED by readD34Case (ok=false)
+// so they remain honest gaps rather than mis-decided cases. Skips when the
+// submodule is absent.
+func TestDatatypesD34Cohort(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	exec := newDatatypesExec()
+
+	validDir := filepath.Join(suiteRoot, "ibmData", "valid", "D3_3_4")
+	invalidDir := filepath.Join(suiteRoot, "ibmData", "instance_invalid", "D3_3_4")
+
+	// The valid cases are decided VALID and Pass against their true expectation.
+	for _, f := range []string{"d3_3_4v14.xml", "d3_3_4v23.xml", "d3_3_4v24.xml"} {
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(validDir, f), expectValid: true}
+		if got := exec(c); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with suite (expectValid=true)", f)
+		}
+		// A wrong (invalid) expectation must Fail, proving the executor really
+		// computed VALID rather than declining.
+		wrong := caseSpec{kind: kindInstance, doc: filepath.Join(validDir, f), expectValid: false}
+		if exec(wrong).IsPass() {
+			t.Errorf("%s: a wrong invalid expectation must Fail (executor must compute VALID)", f)
+		}
+	}
+
+	// The instance_invalid cases are decided INVALID and Pass against their true
+	// (invalid) expectation — a shared-schema instance (ii01a..f reuse ii01.xsd)
+	// resolves its schema from xsi:schemaLocation, not a filename-derived path.
+	for _, f := range []string{
+		"d3_3_4ii01.xml", "d3_3_4ii01a.xml", "d3_3_4ii01b.xml", "d3_3_4ii01c.xml",
+		"d3_3_4ii01d.xml", "d3_3_4ii01e.xml", "d3_3_4ii01f.xml", "d3_3_4ii02.xml",
+	} {
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(invalidDir, f), expectValid: false}
+		if got := exec(c); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with suite (expectValid=false)", f)
+		}
+		// A wrong (valid) expectation must Fail, proving a genuine INVALID verdict
+		// (some child's value violates its type's facet), not a decline.
+		wrong := caseSpec{kind: kindInstance, doc: filepath.Join(invalidDir, f), expectValid: true}
+		if exec(wrong).IsPass() {
+			t.Errorf("%s: a wrong valid expectation must Fail (executor must compute INVALID)", f)
+		}
+	}
+
+	// readD34Case accepts the decidable multi-type shape whole: v14 binds seven
+	// named types via its inline sequence and its instance children all resolve.
+	typeFacets, elems, ok := readD34Case(filepath.Join(validDir, "d3_3_4v14.xml"))
+	if !ok {
+		t.Fatal("readD34Case must accept the decidable d3_3_4v14 multi-type shape")
+	}
+	if len(elems) == 0 || len(typeFacets) == 0 {
+		t.Fatalf("readD34Case(v14) = typeFacets=%d elems=%d, want both non-empty", len(typeFacets), len(elems))
+	}
+	// Every instance child resolves to an indexed named type carried in typeFacets.
+	for _, e := range elems {
+		if _, indexed := typeFacets[e.typeName]; !indexed {
+			t.Errorf("readD34Case(v14): child bound to un-indexed type %q", e.typeName)
+		}
+	}
+
+	// The structurally out-of-reach shapes are DECLINED (ok=false), each for its
+	// own reason, so they remain honest gaps rather than mis-decided cases:
+	// v15 type-reference root, v16 list, v17 union, v18 ref= children, v19-v22
+	// multi-step restriction chains.
+	for _, f := range []string{
+		"d3_3_4v15.xml", "d3_3_4v16.xml", "d3_3_4v17.xml", "d3_3_4v18.xml",
+		"d3_3_4v19.xml", "d3_3_4v20.xml", "d3_3_4v21.xml", "d3_3_4v22.xml",
+	} {
+		if _, _, ok := readD34Case(filepath.Join(validDir, f)); ok {
+			t.Errorf("readD34Case(%s) must decline the out-of-reach shape (honest gap)", f)
+		}
+	}
+}
