@@ -166,6 +166,21 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 		case xsd.FacetAssertions:
 			// Out of this runner's scope: assertions are a separate later stage,
 			// not an atomic value facet.
+		default:
+			// A FacetKind with no case above is a package-internal completeness
+			// bug, not instance data: the enum was extended without wiring its
+			// checker here. Per this file's kind-dispatch convention
+			// (boundFacet.violates, boundRule, digitsRule, lengthRule, scaleRule)
+			// and ValidateLexical's panic doc — schema-construction/programmer
+			// errors the caller must already have rejected surface as panics, not
+			// *xsderr validity verdicts — this fails loud rather than silently
+			// dropping the facet (the #133 silent-drop bug class). Trade-off:
+			// adding this default disables golangci `exhaustive`'s compile-time
+			// FacetKind-coverage check for this switch, so a future kind is caught
+			// here at test/runtime instead of at lint time — still strictly better
+			// than a silent no-op drop. FacetKind.String() never panics on an
+			// unknown value, so %s below is always safe.
+			panic(fmt.Sprintf("value: compile: unhandled FacetKind %s", ef.Facet().Kind()))
 		}
 	}
 	return lexFacets, valFacets, nil
