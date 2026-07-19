@@ -299,6 +299,32 @@ a debugger (extending E1–E3):
   the same command under `GOXSD_RATCHET=1` re-baselines **upward only**.
   A regression fails loudly and must never be committed.
 
+### Cohort isolation is deliberate (a steward ruling, 2026-07-19)
+
+`conformance/datatypes.go` claims its cases as separate **cohorts** —
+lexical, `<item>`, QName/NOTATION-context, Facets, NOTATION-Facets,
+Saxon `PDecimal` — each with its own reader/decoder/executor triple and
+its own XML decode structs (`lexicalInstance`, `itemInstance`,
+`facetsInstance`, `notationStep`, …). This is isolation-over-DRY **by
+design**, not accreted duplication, and future audits should leave it be:
+
+- Each triple decodes a *distinct, static* W3C fixture shape. Those shapes
+  are frozen input data, so the triples never have to change together — the
+  upkeep coupling that makes duplication expensive is absent.
+- All the actual datatype *semantics* funnel into shared library entry
+  points (`value.ValidateLexical`, `value.Mapping`); a spec or pipeline
+  change flows through the library, not through N decoders. Genuinely
+  shared harness machinery (`childBindings`, `nsContext`, `facetChild`,
+  `buildOwnFacets`) is already factored out and reused.
+- The separation is a **regression firewall** serving the one rule: a new
+  cohort (a new issue claiming a new suite directory) adds a triple without
+  touching landed ones, so it cannot silently regress the ratchet.
+
+The cost of merging the triples into one "universal" decoder — coupling
+unrelated fixture shapes so one cohort's change can break another — exceeds
+the cost of the parallel shapes. Re-flag only if a semantic rule ever has
+to be edited in two triples to stay correct.
+
 ## Logging
 
 `log/slog` injected at construction, namespaced groups, silent by default.
