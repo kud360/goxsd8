@@ -37,7 +37,7 @@ decoder), and the `xsd.QName` expanded-name value type that
 `xsd` component model waits for M4). Full unit tests; fuzz targets for
 xmltree.
 
-## M3 — Datatypes vertical slice (in progress — all 20 primitives mapped; tail: derived durations, remaining Facets/precisionDecimal cohorts, NOTATION shape)
+## M3 — Datatypes vertical slice (essentially complete — all 20 primitives mapped, `datatypes` lane 1025 pass / 30 fail (1055); only the IBM precisionDecimal cohort + doc/triage cleanup remain)
 
 `value` contracts finalized; `builtin/strict` primitive mappings + the
 facet pipeline (pattern facets via package `regex`, XSD flavor) +
@@ -64,17 +64,22 @@ precisionDecimal `maxScale`/`minScale` instance-time enforcement landed (#133 �
 `cvc-maxScale-valid`/`cvc-minScale-valid`, `GAP(facet)` retired), which unblocked
 and closed the precisionDecimal instance selectors (#135).
 
-**Remaining tail (all `ready`):** map the derived `yearMonthDuration`/
-`dayTimeDuration` (#141); fix the dateTimeStamp lexical-cohort Parse-only
-false-accept (#140, latent — no tz-absent case in the pinned checkout yet); widen
-the lane to the wider-primitive / native-space Facets cohort (#145); thread the
-declaring-schema namespace context into enumeration-facet `{value}` parsing for
-QName/NOTATION (#152, new library surface — warden pre-flight); model the NOTATION
-Facets-cohort two-step-restriction shape (#153, expect to split once scoped);
-claim the IBM `D3_3_4` multi-type-per-schema precisionDecimal cohort (#162);
-harden `value/facets.go` `compile()` with a fail-loud default on unhandled
-FacetKind (#158); and establish the "LOG-entry-not-expectations-comment is the
-dismissal record" process rule (#149). **Blocked tail:** the four out-of-scope
+Update (2026-07-19, weekly backlog): the M3 datatypes tail has **drained**.
+Since 2026-07-18 the following landed — derived `yearMonthDuration`/
+`dayTimeDuration` (#141), dateTimeStamp lexical Parse-only false-accept fix (#140),
+enumeration-facet namespace context for QName/NOTATION (#152), the NOTATION
+Facets two-step shape (#153), `compile()` fail-loud default (#158), and the
+"LOG-is-the-dismissal-record" process rule (#149); #145 (wider-primitive Facets
+cohort) was **closed as already-satisfied** (no boolean fixtures in the checkout).
+The `datatypes` lane now stands at **1025 pass / 30 fail** (1055 cases).
+**Remaining datatypes cleanup (all `ready`):** claim the IBM `D3_3_4`
+multi-type-per-schema precisionDecimal cohort (#162); document
+`value.Mapping.Canonical`'s per-value partial-domain error (#166, doc-only,
+harvested from #141); and triage the 8 untracked MS-DataTypes
+`anyURI_a*`/`anyURI_b*` lane fails — real gap vs spec-correct suite disagreement
+(#190, filed this backlog). With the tail drained the develop loop has rolled
+onto the M4 first wave. A cross-cutting README-to-published-surface doc sync
+(#189, cliuser+libuser harvested) is also `ready`. **Blocked tail:** the four out-of-scope
 precisionDecimal schema-construction SCCs (valid-restriction narrowing,
 minScale≤maxScale, {fixed} inheritance) are #157 (blocked on the M4 producer #79).
 The list/union-variety executor + `value.effectiveWhiteSpace` not-applicable path
@@ -108,9 +113,12 @@ The five leaf follow-ups (#72, #70, #63, #51, #46) plus siblings #52 and
 #157 have had their `## Depends on` **repointed** from the unfiled-phase
 placeholders / bare #79 to the concrete sub-slice numbers above (done in the
 carve); they stay `blocked` and flip `ready` via the post-land unblock pass
-as their named producer/finalize sub-slices land. Do not divert the develop
-loop off the M3 datatypes tail to start M4 — the carve fills the queue for
-when M3 drains.
+as their named producer/finalize sub-slices land. As of 2026-07-19 the M3
+datatypes tail has drained, so the develop loop is now on the M4 first wave
+(#167, #168, #169, #170). The ready frontier is dependency-capped at that wave
+plus the residual M3/doc cleanup (#162, #166, #189, #190) — #171/#172 and the
+rest of the DAG unblock as #168-#170 land, so the shallow-looking queue has a
+deep cascade behind it, not a planning gap.
 
 ## M5 — Instance validation (XML)
 
