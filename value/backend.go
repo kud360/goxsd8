@@ -25,16 +25,33 @@ type Context interface {
 // verdict.
 //
 // Canonical renders a value back to its canonical lexical form. It MAY be nil:
-// some types have no canonical mapping (QName's is context-dependent and the
-// spec defines none per dt-canonical-representation). Callers must treat a nil
-// Canonical as "this type has no canonical form", not as an error.
+// some types have no canonical mapping at all (QName's is context-dependent and
+// the spec defines none per dt-canonical-representation). Callers must treat a
+// nil Canonical as "this whole type has no canonical form", not as an error.
+//
+// Distinct from that whole-type case: even when Canonical is non-nil, it may
+// return a plain (non-*xsderr.Error) error for one specific VALID value that has
+// no canonical lexical form of its own. A canonical mapping's domain is only
+// "(where possible)" the entire value space (dt-canonical-mapping, §2.3.1), so a
+// type that inherits a base's canonical mapping under a narrowing pattern facet
+// can hold a value whose would-be canonical form falls outside its own lexical
+// space (e.g. yearMonthDuration's ·months·=0∧·seconds·=0, whose duration
+// canonical "PT0S" is outside the [^DT]* lexical space, §3.4.26.1 Note; any type
+// restricting a base's canonical mapping by a pattern facet can hit the same
+// trap). Unlike the Parse-side mapping error above, this is NEVER a validity
+// verdict — no cvc-* rule reads canonical form (§2.3.1 Note) — so it is a plain
+// fmt.Errorf, not an *xsderr.Error. This per-value "valid, no canonical form"
+// case stays textually separate from the whole-type "no Canonical func" case.
 type Mapping struct {
 	// Parse maps a normalized lexical form to a value, or returns an
 	// *xsderr.Error describing why the lexical is not in the type's space.
 	// Parse MUST be non-nil: a Mapping is meaningless without it.
 	Parse func(lexical string, ctx Context) (Value, error)
 	// Canonical maps a value back to its canonical lexical form. It is nil for
-	// types that have no canonical mapping.
+	// types that have no canonical mapping (whole-type case); when non-nil it may
+	// still return a plain non-*xsderr.Error for one valid value that has no
+	// canonical form of its own (partial-domain case, §2.3.1's "(where possible)").
+	// Such an error is not a validity verdict — see the [Mapping] doc.
 	Canonical func(v Value) (string, error)
 }
 
