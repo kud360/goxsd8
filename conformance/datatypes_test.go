@@ -38,10 +38,10 @@ func TestDatatypesSelectorClaimsOnlyCohort(t *testing.T) {
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/string006.xml"}, true},
 		// The context-dependent QName/NOTATION lexical cases are claimed (issue #131).
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/QName006.xml"}, true},
-		// A NOTATION facet case is NOT a plain lexical case: NOTATION_enumeration
-		// carries an underscore, not a digit, so datatypesCase does not claim it and
-		// NOTATION is not in facetsBaseTypes either.
-		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/Facets/NOTATION/NOTATION_enumeration001.xml"}, false},
+		// The NOTATION Facets-cohort cases are claimed by their own selector (issue
+		// #153): datatypesCase/facetsCase do not match (NOTATION is not in
+		// facetsBaseTypes), but notationFacetsCase does.
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/Facets/NOTATION/NOTATION_enumeration001.xml"}, true},
 		// A schema case for the same file is not claimed (we cannot validate schemas).
 		{caseSpec{kind: kindSchema, doc: "../testdata/xsdtests/msData/datatypes/decimal.xsd"}, false},
 		// A facet-restricted NIST instance is out of the cohort.
@@ -410,6 +410,63 @@ func TestDatatypesQNameFacets(t *testing.T) {
 		flipped := caseSpec{kind: kindInstance, doc: filepath.Join(qnameDir, ec.file), expectValid: !ec.expectValid}
 		if got := exec(flipped); got.IsPass() {
 			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", ec.file)
+		}
+	}
+}
+
+// TestDatatypesNotationFacets drives the executor over the real NOTATION
+// Facets-cohort fixtures (issue #153), whose two-step restriction shape (a named
+// simpleType restricting xsd:NOTATION with jpeg/mpeg/g, then an attribute
+// simpleType restricting THAT with one tested facet, tested value in <foo>'s
+// attrTest attribute) is decoded by decodeNotationRestriction and decided by
+// execNotationFacetsCase. Skips when the submodule is absent.
+func TestDatatypesNotationFacets(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	dir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets", "NOTATION")
+
+	// The decoder must find both restriction steps: the outer base step restricting
+	// NOTATION with the three enumerations, and the inner attrTest leaf step.
+	baseStep, leafStep, ok := decodeNotationRestriction(filepath.Join(dir, "NOTATION_enumeration004.xsd"))
+	if !ok || baseStep.base != "NOTATION" || len(baseStep.children) != 3 {
+		t.Fatalf("decodeNotationRestriction base step = base=%q children=%d ok=%v, want base=NOTATION children=3 ok=true", baseStep.base, len(baseStep.children), ok)
+	}
+	if leafStep.attrName != "attrTest" || len(leafStep.children) != 2 {
+		t.Fatalf("decodeNotationRestriction leaf step = attrName=%q children=%d, want attrTest children=2 (mpeg,g)", leafStep.attrName, len(leafStep.children))
+	}
+	raw, baseChildren, leafChildren, ctx, ok := readNotationFacetsCase(filepath.Join(dir, "NOTATION_enumeration004.xml"))
+	if !ok || raw != "g" || len(baseChildren) != 3 || len(leafChildren) != 2 || ctx == nil {
+		t.Fatalf("readNotationFacetsCase(enumeration004) = raw=%q base=%d leaf=%d ok=%v ctx=%v, want raw=g base=3 leaf=2 ok=true ctx!=nil", raw, len(baseChildren), len(leafChildren), ok, ctx)
+	}
+
+	// End-to-end over all 15 fixtures. Per the catalog, enumeration001/003 carry an
+	// empty attrTest against a non-empty leaf enumeration (invalid); every other
+	// case is valid — the length family is vacuous over NOTATION (§4.3.1.3 clause
+	// 1.3), pattern001 matches, and the enumeration cases resolve their bare notation
+	// name against the effective (superseded) enumeration set.
+	exec := newDatatypesExec()
+	cases := []struct {
+		file        string
+		expectValid bool
+	}{
+		{"NOTATION_length001.xml", true}, {"NOTATION_length002.xml", true}, {"NOTATION_length003.xml", true},
+		{"NOTATION_minLength001.xml", true}, {"NOTATION_minLength002.xml", true},
+		{"NOTATION_minLength003.xml", true}, {"NOTATION_minLength004.xml", true},
+		{"NOTATION_maxLength001.xml", true}, {"NOTATION_maxLength002.xml", true}, {"NOTATION_maxLength003.xml", true},
+		{"NOTATION_pattern001.xml", true},
+		{"NOTATION_enumeration001.xml", false}, {"NOTATION_enumeration002.xml", true},
+		{"NOTATION_enumeration003.xml", false}, {"NOTATION_enumeration004.xml", true},
+	}
+	for _, tc := range cases {
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(dir, tc.file), expectValid: tc.expectValid}
+		if got := exec(c); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", tc.file, tc.expectValid)
+		}
+		// A flipped expectation must yield Fail, proving the executor really decides.
+		flipped := caseSpec{kind: kindInstance, doc: filepath.Join(dir, tc.file), expectValid: !tc.expectValid}
+		if got := exec(flipped); got.IsPass() {
+			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", tc.file)
 		}
 	}
 }

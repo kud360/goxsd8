@@ -282,13 +282,20 @@ import (
 // buildOwnFacets threads it into xsd.NewEnumerationMember, so value.newEnumFacet
 // resolves each member against the right scope (an unresolvable member is a
 // src-enumeration-value schema-construction defect, §4.3.5.3). Facets over
-// NOTATION (the Facets/NOTATION dir) are NOT claimed at all: unlike every other
-// cohort member their fixtures use a two-step restriction through a locally-named
-// simpleType, paired with <xsd:notation> component declarations, with the tested
-// value in an attribute of a complexType (not the single-step xsd:NOTATION
-// restriction of a <foo> element's content this cohort decodes) — a shape
-// readFacetsCase/decodeRestriction does not model — deferred to its own follow-up
-// issue. xsd:boolean facets (no Facets dir exists for it), the plural list-typed
+// NOTATION (the Facets/NOTATION dir) are now claimed too (issue #153): unlike
+// every other cohort member their fixtures use a TWO-STEP restriction — a named
+// simpleType restricts xsd:NOTATION with the jpeg/mpeg/g enumerations (the only
+// way to make NOTATION usable, §3.3.19 enumeration-required-notation), then an
+// anonymous attribute simpleType restricts THAT with one more tested facet
+// (length/minLength/maxLength/pattern/enumeration), with the tested value carried
+// in the <foo> element's attrTest attribute. A bespoke reader+decoder+executor
+// (readNotationFacetsCase/decodeNotationRestriction/execNotationFacetsCase, kept
+// separate from readFacetsCase/decodeRestriction/execFacetsCase to avoid any
+// regression to the single-step cohort) synthesizes the two-level chain and
+// decides it through the ordinary value.ValidateLexical pipeline; the sibling
+// <xsd:notation> declarations are not load-bearing for any instance verdict
+// (§3.14.1 is a schema-construction SCC satisfied by every fixture) and are not
+// parsed (STYLE D4). xsd:boolean facets (no Facets dir exists for it), the plural list-typed
 // dirs (IDREFS, NMTOKENS), the NIST corpus, and list/union varieties remain out of
 // scope until their backends land.
 // string_pattern002_1031.i (issue #146) falls under that list-variety exclusion:
@@ -444,15 +451,27 @@ var facetsCase = regexp.MustCompile(
 // types per schema) is NOT claimed here and remains a deferred follow-up.
 var pdecimalCase = regexp.MustCompile(`saxonData/PDecimal/pdecimal[0-9]+\.[vn][0-9]+\.xml$`)
 
-// selectsDatatypes claims the instance cases of the lexical, facet and
-// precisionDecimal cohorts. It is a cheap path predicate; the executor does the
-// real document reading.
+// notationFacetsCase matches a NOTATION Facets-cohort instance (issue #153):
+// msData/datatypes/Facets/NOTATION/NOTATION_<facet>NNN.xml. These fixtures use a
+// two-step restriction shape (a named simpleType restricts xsd:NOTATION with the
+// three enumerations jpeg/mpeg/g — §3.3.19 enumeration-required-notation makes a
+// bare xsd:NOTATION unusable, so only such a derived type may be restricted
+// further — then an anonymous attribute simpleType restricts THAT named type with
+// one more tested facet), incompatible with facetsCase/decodeRestriction's
+// single-step builtin-base shape, so they get their own selector and executor
+// (execNotationFacetsCase) rather than being folded into facetsBaseTypes.
+var notationFacetsCase = regexp.MustCompile(`msData/datatypes/Facets/NOTATION/NOTATION_[A-Za-z]+[0-9]+\.xml$`)
+
+// selectsDatatypes claims the instance cases of the lexical, facet,
+// precisionDecimal and NOTATION-facet cohorts. It is a cheap path predicate; the
+// executor does the real document reading.
 func selectsDatatypes(c caseSpec) bool {
 	if c.kind != kindInstance {
 		return false
 	}
 	doc := filepath.ToSlash(c.doc)
-	return datatypesCase.MatchString(doc) || facetsCase.MatchString(doc) || pdecimalCase.MatchString(doc)
+	return datatypesCase.MatchString(doc) || facetsCase.MatchString(doc) ||
+		pdecimalCase.MatchString(doc) || notationFacetsCase.MatchString(doc)
 }
 
 // newDatatypesExec builds the lane's executor: it Seeds the builtins once (the
@@ -496,6 +515,9 @@ func newDatatypesExec() executor {
 		doc := filepath.ToSlash(c.doc)
 		if pdecimalCase.MatchString(doc) {
 			return execPDecimalCase(strictBackend, sym, c)
+		}
+		if notationFacetsCase.MatchString(doc) {
+			return execNotationFacetsCase(strictBackend, sym, c)
 		}
 		if facetsCase.MatchString(doc) {
 			return execFacetsCase(strictBackend, sym, c)
@@ -717,6 +739,75 @@ func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c 
 	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 		xsd.QName{Space: synthNS, Local: base + "-facets"},
 		xsd.Atomic{Primitive: primitiveOfType(builtinType)}, builtinType, ownFacets, nil)
+	if err != nil {
+		return Fail()
+	}
+	_, verr := value.ValidateLexical(backend, leaf, raw, ctx)
+	observedValid := verr == nil
+	if observedValid == c.expectValid {
+		return Pass()
+	}
+	return Fail()
+}
+
+// execNotationFacetsCase decides a NOTATION Facets-cohort case (issue #153). The
+// fixture shape is a two-step restriction: a named simpleType restricts
+// xsd:NOTATION with the enumerations jpeg/mpeg/g (the ONLY way to make NOTATION
+// usable, §3.3.19 enumeration-required-notation), and an anonymous attribute
+// simpleType restricts THAT with one more tested facet
+// (length/minLength/maxLength/pattern/enumeration). The tested value lives in the
+// <foo> element's attrTest attribute. The executor synthesizes the corresponding
+// two-level chain — a middle type (seeded NOTATION as base and {primitive type
+// definition}, the step-0 enumerations as ownFacets) and a leaf (middle as base,
+// the step-1 tested facet as ownFacets) — and decides validity through the real
+// facet pipeline (value.ValidateLexical). xsd.EffectiveFacets' existing
+// supersede-overlay realizes every verdict: an own enumeration supersedes the
+// middle's (so a leaf enumeration=[mpeg] narrows to {mpeg} alone), while a
+// length/pattern leaf inherits the middle's {jpeg,mpeg,g} enumeration unchanged;
+// the length facets are vacuous over NOTATION (§4.3.1.3 clause 1.3, the QName/
+// NOTATION exemption value.lengthFacet already realizes). No cvc-* rule is new:
+// cvc-datatype-valid (§4.1.4), cvc-pattern-valid (§4.3.4.4) and
+// cvc-enumeration-valid (§4.3.5.4) are the only rules in play, all already wired.
+// The <xsd:notation> component declarations are NOT load-bearing for any instance
+// verdict (§3.14.1's "must name a declared notation" is a schema-construction SCC
+// satisfied by every fixture and irrelevant to instance-side membership), so they
+// are deliberately not parsed (STYLE D4). A case whose schema does not decode to
+// the two-step shape, whose base step does not restrict NOTATION, or that pairs an
+// inapplicable facet with NOTATION is declined (Fail, a recorded gap).
+func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
+	raw, baseChildren, leafChildren, ctx, ok := readNotationFacetsCase(c.doc)
+	if !ok {
+		return Fail()
+	}
+	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: "NOTATION"}
+	notationType, seeded := sym[qn]
+	if !seeded {
+		return Fail()
+	}
+	if !strictGoverns(backend, notationType) {
+		return Fail()
+	}
+	// Middle: the named simpleType restricting xsd:NOTATION with jpeg/mpeg/g. Its
+	// own facets and the leaf's are both governed by NOTATION's applicable-facet set
+	// (cos-applicable-facets §4.1.5 — a restriction never widens what applies,
+	// §3.16.6.3), so both buildOwnFacets calls check against "NOTATION".
+	middleFacets, ok := buildOwnFacets("NOTATION", baseChildren)
+	if !ok {
+		return Fail()
+	}
+	middle, err := xsd.NewSimpleType(xsderr.Loc{},
+		xsd.QName{Space: synthNS, Local: "NOTATION-notation"},
+		xsd.Atomic{Primitive: primitiveOfType(notationType)}, notationType, middleFacets, nil)
+	if err != nil {
+		return Fail()
+	}
+	leafFacets, ok := buildOwnFacets("NOTATION", leafChildren)
+	if !ok {
+		return Fail()
+	}
+	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
+		xsd.QName{Space: synthNS, Local: "NOTATION-facets"},
+		xsd.Atomic{Primitive: primitiveOfType(notationType)}, middle, leafFacets, nil)
 	if err != nil {
 		return Fail()
 	}
@@ -1483,6 +1574,116 @@ func decodeRestriction(path string) (base, attrName string, children []facetChil
 		return base, attrName, children, true
 	}
 	return "", "", nil, false
+}
+
+// notationStep is one <xsd:restriction> step of a NOTATION Facets-cohort schema
+// (issue #153): its base primitive (prefix stripped), the name of the enclosing
+// <xsd:attribute> if any (empty for the outer named-type step, "attrTest" for the
+// inner attribute step), and its constraining-facet children in document order.
+type notationStep struct {
+	base     string
+	attrName string
+	children []facetChild
+}
+
+// readNotationFacetsCase reads one NOTATION Facets-cohort instance (issue #153):
+// the tested value (the <foo> element's attrTest attribute — never its text
+// content, which is a fixed placeholder) and, from the schema at the instance's
+// noNamespaceSchemaLocation, the two restriction steps' facet children. ok is
+// false when either document does not decode to this shape, the base step does not
+// restrict NOTATION, or the leaf step carries no attribute name (so no instance
+// attribute names the tested value) — an honest decline, never a guess.
+func readNotationFacetsCase(instancePath string) (raw string, baseChildren, leafChildren []facetChild, ctx value.Context, ok bool) {
+	inst, err := decodeFacetsInstance(instancePath)
+	if err != nil || inst.SchemaLoc == "" || len(inst.Foos) != 1 {
+		return "", nil, nil, nil, false
+	}
+	foo := inst.Foos[0]
+	schemaPath := filepath.Join(filepath.Dir(instancePath), filepath.FromSlash(inst.SchemaLoc))
+	baseStep, leafStep, ok := decodeNotationRestriction(schemaPath)
+	if !ok || baseStep.base != "NOTATION" || leafStep.attrName == "" {
+		return "", nil, nil, nil, false
+	}
+	// The instance's root-level namespace bindings, threaded to ValidateLexical so
+	// NOTATION's context-dependent Parse (§3.3.19, "as given for QName", §3.3.18) can
+	// resolve the tested value's prefix — the same root-only snapshot the QName facet
+	// cohort proved sufficient (childBindings is a lookup-only map, never output).
+	ctx = nsContext{bindings: childBindings(nil, inst.Attrs)}
+	v, found := foo.attr(leafStep.attrName)
+	if !found {
+		return "", nil, nil, nil, false
+	}
+	return v, baseStep.children, leafStep.children, ctx, true
+}
+
+// decodeNotationRestriction streams a NOTATION Facets-cohort schema and returns
+// its two <xsd:restriction> steps: the outer named-type step (restricting
+// xsd:NOTATION with the jpeg/mpeg/g enumerations) and the inner attribute step
+// (restricting the named type with the one tested facet). Modeled on
+// decodeRestriction's single forward streaming pass (P4: token stream, no
+// whole-document buffer), but instead of returning at the FIRST </restriction>
+// close it collects EVERY restriction step in document order — the shape
+// guarantees exactly two in fixed order, so no local-name symbol table is needed
+// (grounding #153). Each facet child captures the namespace bindings in scope
+// where it was written (§3.3.18), so buildOwnFacets can resolve a NOTATION
+// enumeration member's prefix against the declaring schema's context, exactly as
+// decodeRestriction does. ok is false unless exactly two steps are found with the
+// second carrying a non-empty attrName (the leaf) — an honest decline.
+func decodeNotationRestriction(path string) (baseStep, leafStep notationStep, ok bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return notationStep{}, notationStep{}, false
+	}
+	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the parsed result
+	dec := xml.NewDecoder(bufio.NewReader(f))
+	var frames []map[string]string // one innermost-wins snapshot per open element
+	var steps []notationStep
+	inRestriction := false
+	lastAttr := ""
+	var cur notationStep
+	for {
+		tok, terr := dec.Token()
+		if terr != nil {
+			break
+		}
+		if end, isEnd := tok.(xml.EndElement); isEnd {
+			if inRestriction && end.Name.Local == "restriction" && end.Name.Space == xsd.XMLSchemaNS {
+				steps = append(steps, cur)
+				inRestriction = false
+				lastAttr = "" // consumed: never leak this attribute name to a later step
+			}
+			if len(frames) > 0 {
+				frames = frames[:len(frames)-1]
+			}
+			continue
+		}
+		se, isStart := tok.(xml.StartElement)
+		if !isStart {
+			continue
+		}
+		frames = append(frames, childBindings(frames, se.Attr))
+		if inRestriction {
+			if se.Name.Space == xsd.XMLSchemaNS {
+				cur.children = append(cur.children, facetChild{
+					name:     se.Name.Local,
+					value:    attrValue(se, "value"),
+					bindings: frames[len(frames)-1],
+				})
+			}
+			continue
+		}
+		if se.Name.Local == "attribute" && se.Name.Space == xsd.XMLSchemaNS {
+			lastAttr = attrValue(se, "name")
+		}
+		if se.Name.Local == "restriction" && se.Name.Space == xsd.XMLSchemaNS {
+			inRestriction = true
+			cur = notationStep{base: localName(attrValue(se, "base")), attrName: lastAttr}
+		}
+	}
+	if len(steps) != 2 || steps[1].attrName == "" {
+		return notationStep{}, notationStep{}, false
+	}
+	return steps[0], steps[1], true
 }
 
 // readPDecimalCase reads one Saxon PDecimal cohort instance (issue #135): the
