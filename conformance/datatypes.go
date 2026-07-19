@@ -265,10 +265,12 @@ import (
 // limit: pdecimal006.n2 ("NaN" against a NaN-bearing enumeration) is spec-VALID
 // (identity match) but suite-declared invalid, so the spec-correct verdict records
 // a Fail against it (see execPDecimalCase). The IBM ibmData/D3_3_4 precisionDecimal
-// shape (several named types per schema, each tested by a dedicated element) is
-// NOT claimed here — its multi-type document shape is a distinct, larger executor,
-// left to a follow-up issue; those instance cases route to the inert instance lane
-// as recorded gaps meanwhile.
+// shape (several named types per schema, each tested by a dedicated element) is a
+// distinct, larger executor, now claimed by execD34Case (issue #162 — see its doc
+// comment for the multi-type dispatch, the decidable/declined split and the shared
+// spec rules); the structurally out-of-reach D3_3_4 shapes (v15 type-reference
+// root, v16 list, v17 union, v18 ref= children, v19–v22 multi-step chains) are
+// declined honestly and route to the inert instance lane as recorded gaps.
 //
 // # Still deferred
 //
@@ -448,8 +450,21 @@ var facetsCase = regexp.MustCompile(
 // is a multi-step chain, list or union variety (pdecimal016/019/020), which this
 // synthesized-single-leaf model cannot decide — an honest recorded gap, never a
 // mis-decided one. The IBM ibmData/D3_3_4 precisionDecimal shape (several named
-// types per schema) is NOT claimed here and remains a deferred follow-up.
+// types per schema) is a distinct multi-type shape, claimed separately by
+// d34Case/execD34Case (issue #162), not this selector.
 var pdecimalCase = regexp.MustCompile(`saxonData/PDecimal/pdecimal[0-9]+\.[vn][0-9]+\.xml$`)
+
+// d34Case matches an IBM D3_3_4 precisionDecimal instance case (issue #162):
+// ibmData/{valid,instance_invalid}/D3_3_4/*.xml, discovered via the
+// ibmMeta/precisionDecimal.testSet auxiliary index (runner.go). Unlike the Saxon
+// PDecimal cohort's single-leaf model, one such schema declares SEVERAL named
+// simpleTypes (each a direct single-step precisionDecimal restriction) and the
+// instance's <root> carries MULTIPLE children, each dispatched to its own named
+// type by the child's declared type= attribute; execD34Case reads and decides
+// that multi-type shape. The schema_invalid D3_3_4 cases are schema-kind and never
+// reach this selector (kindInstance gate). NaN.xml in valid/D3_3_4 is referenced
+// by no testGroup, so parseSuite emits no case for it and it never reaches here.
+var d34Case = regexp.MustCompile(`ibmData/(valid|instance_invalid)/D3_3_4/.*\.xml$`)
 
 // notationFacetsCase matches a NOTATION Facets-cohort instance (issue #153):
 // msData/datatypes/Facets/NOTATION/NOTATION_<facet>NNN.xml. These fixtures use a
@@ -471,7 +486,8 @@ func selectsDatatypes(c caseSpec) bool {
 	}
 	doc := filepath.ToSlash(c.doc)
 	return datatypesCase.MatchString(doc) || facetsCase.MatchString(doc) ||
-		pdecimalCase.MatchString(doc) || notationFacetsCase.MatchString(doc)
+		pdecimalCase.MatchString(doc) || notationFacetsCase.MatchString(doc) ||
+		d34Case.MatchString(doc)
 }
 
 // newDatatypesExec builds the lane's executor: it Seeds the builtins once (the
@@ -515,6 +531,9 @@ func newDatatypesExec() executor {
 		doc := filepath.ToSlash(c.doc)
 		if pdecimalCase.MatchString(doc) {
 			return execPDecimalCase(strictBackend, sym, c)
+		}
+		if d34Case.MatchString(doc) {
+			return execD34Case(strictBackend, sym, c)
 		}
 		if notationFacetsCase.MatchString(doc) {
 			return execNotationFacetsCase(strictBackend, sym, c)
@@ -843,6 +862,49 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 // spec to a fixture bug), the executor keeps the spec-correct verdict, so the
 // harness honestly records this one case as a Fail (a New gap reflecting the suite
 // bug, never a false Pass) rather than mis-implementing enumeration identity.
+//
+// # The IBM D3_3_4 precisionDecimal cohort (issue #162)
+//
+// The lane also claims the IBM precisionDecimal instance cases under
+// ibmData/{valid,instance_invalid}/D3_3_4/*.xml (discovered via the same
+// ibmMeta/precisionDecimal.testSet auxiliary index, runner.go). This is a
+// SECOND, materially larger precisionDecimal shape than the Saxon cohort's
+// single-leaf model: ONE schema declares SEVERAL named simpleTypes, each a
+// DIRECT single-step <restriction base="precisionDecimal"> with one facet kind
+// (decType/decTotalDigits/decEnumeration/decPattern/decMinMaxInclusive/
+// decMinMaxExclusive/decMinMaxScale), and the instance's <root> carries MULTIPLE
+// children, each dispatched to its OWN named type by the element's declared
+// type= attribute (the element→type binding is NOT a naming convention — v14's
+// decMinMaxScale type is carried by element elMinMaxScale — so the reader
+// resolves each child's real declared type=, never guesses from the element
+// name). readD34Case resolves the schema from the instance's own
+// xsi:schemaLocation (a namespace+location pair, unlike the Saxon cohort's
+// filename-derived path — d3_3_4ii01a.xml shares d3_3_4ii01.xsd), indexes every
+// direct-precisionDecimal named type by local name, requires <element name="root">
+// to carry an INLINE <complexType><sequence> whose every child binds a type= in
+// that index, and routes each instance child to its type. execD34Case synthesizes
+// ONE leaf per DISTINCT named type in use (buildOwnFacets/xsd.NewSimpleType,
+// exactly as execPDecimalCase does for its single leaf) and ANDs
+// value.ValidateLexical over every child's value — the document is valid iff EVERY
+// child validates, the same whole-document polarity. The spec rules are exactly
+// those the Saxon cohort already enforces, no new library rule ID:
+// cvc-datatype-valid (§4.1.4), cvc-pattern-valid (§4.3.4.4), cvc-enumeration-valid
+// (§4.3.5.4, value-space equal-or-identical on ·numericalValue·: 10 == 1.0e1, NaN
+// matches NaN by identity), the four bound facets over the PARTIAL order
+// (cvc-min/maxInclusive/Exclusive-valid §4.3.7–4.3.10; NaN incomparable ⇒ fails
+// every bound, §3.1), cvc-totalDigits-valid (xsd-precisionDecimal.md §4.1.1,
+// zero AND the specials vacuously pass) and cvc-maxScale/minScale-valid
+// (§4.2.3/§4.3.3; the specials' absent ·scale· is exempt, but zero is NOT — #133).
+// Decidable: d3_3_4v14/v23/v24, d3_3_4ii01[,a-f] and d3_3_4ii02 (the ii01/ii02
+// schemas are shared across sibling instance files). Declined honestly (ok=false,
+// recorded gaps in the inert instance lane, never mis-decided): v15 (element root
+// is a type reference, not an inline complexType), v16 (<list>), v17 (<union>),
+// v18 (children use ref= not type=), v19–v22 (multi-step restriction chains whose
+// types are not direct precisionDecimal restrictions) — each falls out of scope
+// naturally, without special-casing, because its named types are not in the
+// direct-restriction index or its root is not the inline-sequence shape. NaN.xml
+// in valid/D3_3_4 is not referenced by any testGroup, so parseSuite never emits a
+// case for it and the selector never sees it.
 func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
 	children, values, ok := readPDecimalCase(c.doc)
 	if !ok {
@@ -871,6 +933,76 @@ func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, 
 	observedValid := true
 	for _, v := range values {
 		if _, verr := value.ValidateLexical(backend, leaf, v, nil); verr != nil {
+			observedValid = false
+			break
+		}
+	}
+	if observedValid == c.expectValid {
+		return Pass()
+	}
+	return Fail()
+}
+
+// execD34Case decides an IBM D3_3_4 precisionDecimal cohort case (issue #162).
+// Unlike execPDecimalCase's single-leaf model, one schema declares SEVERAL named
+// simpleTypes (each a direct single-step precisionDecimal restriction) and the
+// instance's <root> holds MULTIPLE children, each bound to its OWN named type by
+// the child's declared type= attribute. readD34Case resolves that binding and
+// returns each instance child paired with its named type plus the facet children
+// per named type; execD34Case synthesizes ONE leaf per DISTINCT named type in use
+// (buildOwnFacets/xsd.NewSimpleType against the seeded precisionDecimal primitive,
+// exactly as execPDecimalCase builds its single leaf) and ANDs
+// value.ValidateLexical over every child's value. The instance is valid iff EVERY
+// child validates — the suite's whole-document polarity. The pipeline realizes
+// precisionDecimal's spec-exact facet semantics unchanged (the same rules the
+// Saxon cohort enforces, no new library rule ID): totalDigits vacuously passes
+// zero and the specials (§4.1.1), the four bound facets fail NaN over the partial
+// order (§3.1), maxScale/minScale skip the specials' absent ·scale· (#133), and
+// enumeration matches value-space equal-or-identical on ·numericalValue·
+// (§4.3.5.4). A case whose shape readD34Case declines (a type-reference root, a
+// list/union type, ref= children, a multi-step chain, or an instance child with
+// no matching named type — v15–v22), or whose leaf synthesis fails for any named
+// type in use, is declined (Fail, a recorded gap) rather than partially decided.
+func execD34Case(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
+	typeFacets, elems, ok := readD34Case(c.doc)
+	if !ok {
+		return Fail()
+	}
+	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: "precisionDecimal"}
+	builtinType, seeded := sym[qn]
+	if !seeded {
+		return Fail()
+	}
+	if !strictGoverns(backend, builtinType) {
+		return Fail()
+	}
+	// Synthesize one leaf per DISTINCT named type in use, keyed by name. Built up
+	// front over the document-ordered elems so a construction failure for any named
+	// type in use declines the whole case (ok=false) before any value is decided,
+	// never silently skipping that type. leaves is a lookup, never ranged into
+	// output (STYLE D2); the validation loop below ranges elems, a slice in document
+	// order.
+	leaves := make(map[string]*xsd.SimpleType, len(typeFacets))
+	for _, e := range elems {
+		if _, built := leaves[e.typeName]; built {
+			continue
+		}
+		ownFacets, ok := buildOwnFacets("precisionDecimal", typeFacets[e.typeName])
+		if !ok {
+			return Fail()
+		}
+		leaf, err := xsd.NewSimpleType(xsderr.Loc{},
+			xsd.QName{Space: synthNS, Local: "precisionDecimal-" + e.typeName},
+			xsd.Atomic{Primitive: primitiveOfType(builtinType)}, builtinType, ownFacets, nil)
+		if err != nil {
+			return Fail()
+		}
+		leaves[e.typeName] = leaf
+	}
+	// precisionDecimal maps context-free (§3.2), so a nil value.Context suffices.
+	observedValid := true
+	for _, e := range elems {
+		if _, verr := value.ValidateLexical(backend, leaves[e.typeName], e.value, nil); verr != nil {
 			observedValid = false
 			break
 		}
@@ -1831,6 +1963,208 @@ func pdecimalValueType(s pdecimalSchema) (attrType string, found bool) {
 		}
 	}
 	return "", false
+}
+
+// d34Element pairs one instance child of an IBM D3_3_4 <root> (issue #162) with
+// the local name of the named simpleType it is declared as (resolved from the
+// schema's inline sequence via the child's type= attribute) and its text value,
+// so execD34Case validates each child against the leaf synthesized for its type.
+type d34Element struct {
+	typeName string
+	value    string
+}
+
+// readD34Case reads one IBM D3_3_4 precisionDecimal cohort instance (issue #162)
+// and returns, per named type actually referenced by the schema's <root>
+// sequence, its facet children (typeFacets, keyed by the named type's local name),
+// plus every instance child paired with its resolved named type in document order
+// (elems). The schema is resolved from the instance's own xsi:schemaLocation (a
+// whitespace-separated namespace/location pair — NOT the Saxon cohort's
+// filename-derived path, since d3_3_4ii01a.xml shares d3_3_4ii01.xsd), located
+// relative to the instance's directory.
+//
+// ok is false — declining the WHOLE case, never partially deciding — when: the
+// instance or schema cannot be read; the schema has no <element name="root"> with
+// an INLINE <complexType><sequence> (v15's type-reference root); that sequence is
+// empty, any child uses ref= instead of type= (v18), or any child's type is not a
+// direct single-step precisionDecimal restriction indexed from the schema (v16
+// list, v17 union, v19–v22 multi-step chains — their types simply never enter the
+// index); or an instance child's local name is not bound by the sequence (an
+// unexpected element that could carry an undecidable literal). Only when EVERY
+// instance child resolves to an indexed named type does it return ok=true.
+func readD34Case(instancePath string) (typeFacets map[string][]facetChild, elems []d34Element, ok bool) {
+	inst, err := decodeD34Instance(instancePath)
+	if err != nil {
+		return nil, nil, false
+	}
+	loc, ok := d34SchemaLocation(inst.XMLName.Space, inst.SchemaLoc)
+	if !ok {
+		return nil, nil, false
+	}
+	schemaPath := filepath.Join(filepath.Dir(instancePath), filepath.FromSlash(loc))
+	schema, err := decodeD34Schema(schemaPath)
+	if err != nil {
+		return nil, nil, false
+	}
+	index := indexD34Types(schema)
+	elemTypes, ok := d34RootElemTypes(schema, index)
+	if !ok {
+		return nil, nil, false
+	}
+	if len(inst.Children) == 0 {
+		return nil, nil, false
+	}
+	for _, ch := range inst.Children {
+		tn, bound := elemTypes[ch.XMLName.Local]
+		if !bound {
+			return nil, nil, false
+		}
+		elems = append(elems, d34Element{typeName: tn, value: ch.Text})
+	}
+	return index, elems, true
+}
+
+// d34SchemaLocation extracts the schema location for the root element's namespace
+// from an xsi:schemaLocation value (whitespace-separated namespace/location pairs,
+// §2.6.3). It returns the location paired with rootNS, or — since the D3_3_4
+// fixtures always carry exactly one pair for the instance's own namespace — the
+// first pair's location as a fallback. ok is false when no pair is present.
+func d34SchemaLocation(rootNS, schemaLoc string) (loc string, ok bool) {
+	fields := strings.Fields(schemaLoc)
+	for i := 0; i+1 < len(fields); i += 2 {
+		if fields[i] == rootNS {
+			return fields[i+1], true
+		}
+	}
+	if len(fields) >= 2 {
+		return fields[1], true
+	}
+	return "", false
+}
+
+// d34Instance mirrors an IBM D3_3_4 instance: a namespace-qualified <root> whose
+// xsi:schemaLocation names the schema and whose direct child elements each carry
+// one tested literal in their text content. XMLName captures the root's namespace
+// (to pick the matching schemaLocation pair); Children collects every direct child
+// element (,any) in document order, keyed by local name to the schema's sequence.
+type d34Instance struct {
+	XMLName   xml.Name
+	SchemaLoc string     `xml:"http://www.w3.org/2001/XMLSchema-instance schemaLocation,attr"`
+	Children  []d34Child `xml:",any"`
+}
+
+// d34Child is one direct child of the D3_3_4 <root>: its qualified name (its local
+// part binds to the schema sequence's element name) and its text value.
+type d34Child struct {
+	XMLName xml.Name
+	Text    string `xml:",chardata"`
+}
+
+func decodeD34Instance(path string) (d34Instance, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return d34Instance{}, err
+	}
+	var inst d34Instance
+	if err := xml.Unmarshal(data, &inst); err != nil {
+		return d34Instance{}, err
+	}
+	return inst, nil
+}
+
+// d34Schema mirrors a D3_3_4 schema: its named simpleTypes (each a candidate
+// direct precisionDecimal restriction) and its top-level element declarations,
+// one of which is <element name="root"> carrying the inline complexType/sequence
+// that binds child element names to named types.
+type d34Schema struct {
+	SimpleTypes []struct {
+		Name        string `xml:"name,attr"`
+		Restriction struct {
+			Base   string `xml:"base,attr"`
+			Facets []struct {
+				XMLName xml.Name
+				Value   string `xml:"value,attr"`
+			} `xml:",any"`
+		} `xml:"restriction"`
+	} `xml:"simpleType"`
+	Elements []struct {
+		Name        string `xml:"name,attr"`
+		ComplexType struct {
+			Sequence struct {
+				Elements []struct {
+					Name string `xml:"name,attr"`
+					Type string `xml:"type,attr"`
+				} `xml:"element"`
+			} `xml:"sequence"`
+		} `xml:"complexType"`
+	} `xml:"element"`
+}
+
+func decodeD34Schema(path string) (d34Schema, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return d34Schema{}, err
+	}
+	var s d34Schema
+	if err := xml.Unmarshal(data, &s); err != nil {
+		return d34Schema{}, err
+	}
+	return s, nil
+}
+
+// indexD34Types indexes every named simpleType that is a DIRECT single-step
+// <restriction base="(prefix:)?precisionDecimal"> by its local name, carrying its
+// facet children. A named type whose restriction base's local name is anything
+// else — another named type (a multi-step chain, v19–v22) or a list/union variety
+// (whose simpleType carries no such restriction, so Base is empty, v16/v17) — is
+// NOT indexed, which is how those shapes fall out of scope with no special-casing.
+// A direct restriction with no facets (decType) is indexed with a nil facet slice.
+func indexD34Types(s d34Schema) map[string][]facetChild {
+	index := make(map[string][]facetChild, len(s.SimpleTypes))
+	for _, st := range s.SimpleTypes {
+		if st.Name == "" || localName(st.Restriction.Base) != "precisionDecimal" {
+			continue
+		}
+		var children []facetChild
+		for _, f := range st.Restriction.Facets {
+			children = append(children, facetChild{name: f.XMLName.Local, value: f.Value})
+		}
+		index[st.Name] = children
+	}
+	return index
+}
+
+// d34RootElemTypes maps each child element name of <element name="root">'s inline
+// complexType/sequence to the local name of its declared type, resolved against
+// index (the direct-precisionDecimal named types). ok is false — declining the
+// case — when root has no inline sequence or the sequence is empty (v15's
+// type-reference root, whose complexType decodes empty), any child carries no
+// type= (a ref= child, v18), or any child's type is not indexed (v16/v17/v19–v22).
+// Only a sequence whose EVERY child binds an indexed type yields ok=true, so the
+// case is never partially decided.
+func d34RootElemTypes(s d34Schema, index map[string][]facetChild) (map[string]string, bool) {
+	for _, el := range s.Elements {
+		if el.Name != "root" {
+			continue
+		}
+		seq := el.ComplexType.Sequence.Elements
+		if len(seq) == 0 {
+			return nil, false
+		}
+		elemTypes := make(map[string]string, len(seq))
+		for _, child := range seq {
+			if child.Type == "" {
+				return nil, false
+			}
+			tn := localName(child.Type)
+			if _, indexed := index[tn]; !indexed {
+				return nil, false
+			}
+			elemTypes[child.Name] = tn
+		}
+		return elemTypes, true
+	}
+	return nil, false
 }
 
 // attrValue returns the value of se's unqualified attribute local, or "".
