@@ -33,14 +33,14 @@ func (s *scope) child(bindings []binding) *scope {
 // lookup resolves a prefix to its namespace URI in scope s (which may be
 // nil, the empty base scope).
 //
-// The reserved prefix "xml" always resolves to xmlNamespaceURI without a
+// The reserved prefix "xml" always resolves to XMLNamespaceURI without a
 // declaration. The empty prefix resolves to the default namespace, or to ""
 // (no namespace) when no default is in scope. A non-empty prefix explicitly
 // undeclared with xmlns:p="" (Namespaces in XML 1.1) or never declared is
 // unbound: ok is false and the caller reports an error with location.
 func (s *scope) lookup(prefix string) (uri string, ok bool) {
 	if prefix == xmlPrefix {
-		return xmlNamespaceURI, true
+		return XMLNamespaceURI, true
 	}
 	for cur := s; cur != nil; cur = cur.parent {
 		for i := len(cur.bindings) - 1; i >= 0; i-- {
