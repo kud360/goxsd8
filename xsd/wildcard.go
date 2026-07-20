@@ -69,6 +69,9 @@ func NewWildcard(loc xsderr.Loc, namespaceConstraint NamespaceConstraint, proces
 	return w, nil
 }
 
+// term marks Wildcard as a Term (§3.10.1: "a kind of Term"); see term.go.
+func (Wildcard) term() {}
+
 // ProcessContents returns the {process contents} property.
 func (w Wildcard) ProcessContents() ProcessContents {
 	return w.processContents
