@@ -37,7 +37,7 @@ decoder), and the `xsd.QName` expanded-name value type that
 `xsd` component model waits for M4). Full unit tests; fuzz targets for
 xmltree.
 
-## M3 — Datatypes vertical slice (essentially complete — all 20 primitives mapped, `datatypes` lane 1025 pass / 30 fail (1055); only the IBM precisionDecimal cohort + doc/triage cleanup remain)
+## M3 — Datatypes vertical slice (complete — all 20 primitives mapped, `datatypes` lane 1036 pass / 38 fail (1074); the IBM precisionDecimal cohort (#162) and the `Mapping.Canonical` doc (#166) landed 2026-07-19; only the independent anyURI-triage #190 remains as optional follow-up)
 
 `value` contracts finalized; `builtin/strict` primitive mappings + the
 facet pipeline (pattern facets via package `regex`, XSD flavor) +
@@ -85,7 +85,15 @@ minScale≤maxScale, {fixed} inheritance) are #157 (blocked on the M4 producer #
 The list/union-variety executor + `value.effectiveWhiteSpace` not-applicable path
 (#98 / rescoped #75) — including the pdecimal016/019/020 two-step/list/union
 shapes — still waits on the `xsd` list/union variety shape (M4, #46). The NIST
-corpus is a follow-up once #145 lands.
+corpus is a follow-up (#145 was closed as already-satisfied, not landed — no
+boolean fixtures in the checkout).
+
+Update (2026-07-20, weekly backlog): the M3 datatypes tail is fully drained. #162
+(IBM `D3_3_4` multi-type-per-schema precisionDecimal cohort, +11 pass / +8
+honestly-declined-fail) and #166 (`Mapping.Canonical` doc) landed 2026-07-19, so
+the `datatypes` lane now stands at **1036 pass / 38 fail** (1074 cases). The only
+open M3-adjacent cleanup is the independent anyURI-triage #190 (`ready`); it is not
+on any milestone critical path. The develop loop has moved fully onto M4.
 
 ## M4 — Schema parsing (epic #79 — gate lifted 2026-07-18, carved)
 
@@ -113,12 +121,28 @@ The five leaf follow-ups (#72, #70, #63, #51, #46) plus siblings #52 and
 #157 have had their `## Depends on` **repointed** from the unfiled-phase
 placeholders / bare #79 to the concrete sub-slice numbers above (done in the
 carve); they stay `blocked` and flip `ready` via the post-land unblock pass
-as their named producer/finalize sub-slices land. As of 2026-07-19 the M3
-datatypes tail has drained, so the develop loop is now on the M4 first wave
-(#167, #168, #169, #170). The ready frontier is dependency-capped at that wave
-plus the residual M3/doc cleanup (#162, #166, #189, #190) — #171/#172 and the
-rest of the DAG unblock as #168-#170 land, so the shallow-looking queue has a
-deep cascade behind it, not a planning gap.
+as their named producer/finalize sub-slices land.
+
+Update (2026-07-20, weekly backlog): the M4 **first wave (#167 parse phase,
+#168 element decl, #169 attribute decl/group/use, #170 particle/model-group)
+is all landed.** The next actionable M4 leaf is **#171** (Complex Type
+Definition — its deps #168/#169/#170 are all closed, so it is `ready`); it is
+the single item on the M4 critical path right now. The chain behind it is a
+strict serial spine — #172 (schema container) unblocks only when #171 lands,
+#173 (finalize/resolve) when #172 lands, then the producer fan-out
+(#174→#175/#176/#177/#178/#179) and the finalize-validity/composition tail
+(#180/#181/#182/#183) — each link flips `ready` via the post-land unblock pass
+as its named producer lands. So the ready frontier is **dependency-capped**:
+#171 (critical path) plus independent, off-critical-path cleanup that can run in
+parallel — three `xsd`-leaf/doc items harvested this backlog from the #170
+landing and a libuser godoc review (#201 the `ResolvedTerm{Term: nil}` guard,
+#202 the absent-zero-QName gap in the M4 Required-name/ref constructors, #203 a
+worked M4-shape Example + not-implemented markers on the `xsd` Query/Walk doc
+sections), plus #190 (anyURI datatypes-lane triage), #189 (README surface sync),
+and #195 (mason docs/LOG guard, process/tooling). The **`schema` lane is still
+at 0 pass / 15432 fail** (`stubFail`); its first real movement lands with #175.
+The shallow-looking `ready` count is the serial M4 spine, not a planning gap —
+the deep cascade is behind #171 and self-feeds through the post-land passes.
 
 ## M5 — Instance validation (XML)
 
