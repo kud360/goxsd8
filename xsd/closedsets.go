@@ -11,38 +11,41 @@ import "strconv"
 // panics, because String() is reached from logging and error-formatting paths.
 // Names are type-prefixed to avoid collisions as the xsd namespace grows.
 
-// AttributeUse is the value of the lexical use XML attribute of an
+// AttributeUseToken is the value of the lexical use XML attribute of an
 // <attribute> in a complex type (§3.2.2). Legal tokens: "optional",
 // "prohibited", "required". The zero value is invalid (see builtin.Ordered).
 //
 // This models the XML-representation attribute only. It is NOT the Attribute
-// Use component's {required} boolean property (§3.5.1), which is a distinct
-// fact derived from this attribute at parse time and lands in a later issue;
-// do not conflate the two.
-type AttributeUse uint8
+// Use component (§3.5.1, xsd.AttributeUse) nor that component's {required}
+// boolean property, which is a distinct fact derived from this token at parse
+// time (a "required" token yields {required} = true); do not conflate the two.
+// This type is deliberately named with the ...Token suffix so the bare name
+// AttributeUse denotes the §3.5 component, matching this package's convention
+// that every schema component is named bare (attributeuse.go).
+type AttributeUseToken uint8
 
-// The AttributeUse values.
+// The AttributeUseToken values.
 const (
-	// AttributeUseOptional is the "optional" token (§3.2.2).
-	AttributeUseOptional AttributeUse = iota + 1
-	// AttributeUseProhibited is the "prohibited" token (§3.2.2).
-	AttributeUseProhibited
-	// AttributeUseRequired is the "required" token (§3.2.2).
-	AttributeUseRequired
+	// AttributeUseTokenOptional is the "optional" token (§3.2.2).
+	AttributeUseTokenOptional AttributeUseToken = iota + 1
+	// AttributeUseTokenProhibited is the "prohibited" token (§3.2.2).
+	AttributeUseTokenProhibited
+	// AttributeUseTokenRequired is the "required" token (§3.2.2).
+	AttributeUseTokenRequired
 )
 
 // String returns the verbatim §3.2.2 token, or a diagnostic form for an
 // invalid value (never panics).
-func (u AttributeUse) String() string {
+func (u AttributeUseToken) String() string {
 	switch u {
-	case AttributeUseOptional:
+	case AttributeUseTokenOptional:
 		return "optional"
-	case AttributeUseProhibited:
+	case AttributeUseTokenProhibited:
 		return "prohibited"
-	case AttributeUseRequired:
+	case AttributeUseTokenRequired:
 		return "required"
 	default:
-		return "AttributeUse(" + strconv.Itoa(int(u)) + ")"
+		return "AttributeUseToken(" + strconv.Itoa(int(u)) + ")"
 	}
 }
 

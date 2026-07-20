@@ -5,20 +5,20 @@ import "testing"
 // Each table pins every constant to its exact verbatim spec token, and checks
 // that the invalid zero value yields a non-panicking diagnostic string.
 
-func TestAttributeUseString(t *testing.T) {
+func TestAttributeUseTokenString(t *testing.T) {
 	cases := []struct {
-		u    AttributeUse
+		u    AttributeUseToken
 		want string
 	}{
-		{AttributeUseOptional, "optional"},
-		{AttributeUseProhibited, "prohibited"},
-		{AttributeUseRequired, "required"},
-		{0, "AttributeUse(0)"},
-		{99, "AttributeUse(99)"},
+		{AttributeUseTokenOptional, "optional"},
+		{AttributeUseTokenProhibited, "prohibited"},
+		{AttributeUseTokenRequired, "required"},
+		{0, "AttributeUseToken(0)"},
+		{99, "AttributeUseToken(99)"},
 	}
 	for _, c := range cases {
 		if got := c.u.String(); got != c.want {
-			t.Errorf("AttributeUse(%d).String() = %q, want %q", uint8(c.u), got, c.want)
+			t.Errorf("AttributeUseToken(%d).String() = %q, want %q", uint8(c.u), got, c.want)
 		}
 	}
 }
