@@ -216,6 +216,10 @@ func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QName,
 	return e, nil
 }
 
+// term marks ElementDeclaration as a Term (§3.3.1: "a kind of Term"); see
+// term.go.
+func (ElementDeclaration) term() {}
+
 // Name returns the {name} property, bundled with {target namespace} as a QName.
 func (e ElementDeclaration) Name() QName {
 	return e.name
