@@ -115,6 +115,23 @@ func TestProcessContentsString(t *testing.T) {
 	}
 }
 
+func TestScopeVarietyString(t *testing.T) {
+	cases := []struct {
+		v    ScopeVariety
+		want string
+	}{
+		{ScopeGlobal, "global"},
+		{ScopeLocal, "local"},
+		{0, "ScopeVariety(0)"},
+		{99, "ScopeVariety(99)"},
+	}
+	for _, c := range cases {
+		if got := c.v.String(); got != c.want {
+			t.Errorf("ScopeVariety(%d).String() = %q, want %q", uint8(c.v), got, c.want)
+		}
+	}
+}
+
 func TestValueConstraintKindString(t *testing.T) {
 	cases := []struct {
 		k    ValueConstraintKind
