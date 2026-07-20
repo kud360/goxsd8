@@ -254,6 +254,42 @@ func (k ValueConstraintKind) String() string {
 	}
 }
 
+// ScopeVariety is the {variety} property of a Scope property record, identical
+// across the two components that carry one: element declaration (§3.3.1, Scope
+// record id="sc_e") and attribute declaration (§3.2.1, Scope record id="sc_a").
+// Legal tokens: "global", "local". The zero value is invalid (see
+// builtin.Ordered).
+//
+// The two Scope records differ only in {parent} — the Complex Type Definition /
+// Model Group Definition (element) versus Complex Type Definition (attribute)
+// that a local declaration lives in; that property is NOT modeled by this enum,
+// and only {variety} is shared. Sharing one type across both components follows
+// the ValueConstraintKind precedent above (one enum for the identical {variety}
+// of three Value Constraint records). The attribute-declaration issue (#169) is
+// expected to reuse this same type for its own {scope}.{variety}.
+type ScopeVariety uint8
+
+// The ScopeVariety values.
+const (
+	// ScopeGlobal is the "global" token (§3.3.1 sc_e; identical in §3.2.1 sc_a).
+	ScopeGlobal ScopeVariety = iota + 1
+	// ScopeLocal is the "local" token (§3.3.1 sc_e; identical in §3.2.1 sc_a).
+	ScopeLocal
+)
+
+// String returns the verbatim §3.3.1 token, or a diagnostic form for an
+// invalid value (never panics).
+func (v ScopeVariety) String() string {
+	switch v {
+	case ScopeGlobal:
+		return "global"
+	case ScopeLocal:
+		return "local"
+	default:
+		return "ScopeVariety(" + strconv.Itoa(int(v)) + ")"
+	}
+}
+
 // IdentityConstraintCategory is the {identity-constraint category} property
 // of an Identity-Constraint Definition (§3.11.1). Legal tokens: "key",
 // "keyref", "unique". The zero value is invalid (see builtin.Ordered).
