@@ -133,9 +133,12 @@ strict serial spine — #172 (schema container) unblocks only when #171 lands,
 (#174→#175/#176/#177/#178/#179) and the finalize-validity/composition tail
 (#180/#181/#182/#183) — each link flips `ready` via the post-land unblock pass
 as its named producer lands. So the ready frontier is **dependency-capped**:
-#171 (critical path) plus the independent, off-critical-path cleanup that can
-run in parallel — #201 (the #170-harvested `ResolvedTerm{Term: nil}` guard,
-`xsd` leaf), #190 (anyURI datatypes-lane triage), #189 (README surface sync),
+#171 (critical path) plus independent, off-critical-path cleanup that can run in
+parallel — three `xsd`-leaf/doc items harvested this backlog from the #170
+landing and a libuser godoc review (#201 the `ResolvedTerm{Term: nil}` guard,
+#202 the absent-zero-QName gap in the M4 Required-name/ref constructors, #203 a
+worked M4-shape Example + not-implemented markers on the `xsd` Query/Walk doc
+sections), plus #190 (anyURI datatypes-lane triage), #189 (README surface sync),
 and #195 (mason docs/LOG guard, process/tooling). The **`schema` lane is still
 at 0 pass / 15432 fail** (`stubFail`); its first real movement lands with #175.
 The shallow-looking `ready` count is the serial M4 spine, not a planning gap —
