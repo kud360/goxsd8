@@ -7,10 +7,10 @@ import "github.com/kud360/goxsd8/xsderr"
 // property tableau. This file enforces only clause 1's cheap structural part —
 // {compositor} is one of {all, choice, sequence} (the zero Compositor is
 // invalid). Clause 2 (no circular groups: no particle at any depth whose {term}
-// is the group itself) is a finalize-phase concern needing the resolved
-// reference graph; per PRINCIPLES 9 / STYLE 5 it is NOT enforced here (no
-// seen-set traversal in the constructor) and is deferred to the finalize-phase
-// issue (#173/#176).
+// is the group itself) needs the resolved <group ref> graph, which only exists
+// once the schema set is assembled; per PRINCIPLES 5 it is NOT checked in this
+// constructor (no seen-set traversal here) but at finalize (resolve.go's
+// checkModelGroupsAcyclic, #173).
 const ruleMgPropsCorrect xsderr.Rule = "mg-props-correct"
 
 // ModelGroup is the Model Group component (Structures §3.8.1, id="mg"): a kind
@@ -42,8 +42,8 @@ type ModelGroup struct {
 // Compositor included), mirroring NewWildcard's {process contents} check.
 //
 // mg-props-correct clause 2 (no circular groups) is a finalize-phase concern
-// (PRINCIPLES 9); it is deliberately NOT checked here — the constructor performs
-// no traversal of nested particles.
+// (resolve.go, #173); it is deliberately NOT checked here — the constructor
+// performs no traversal of nested particles.
 //
 // particles and annotations are copied; the caller's backing arrays are not
 // aliased, and an empty input is held as nil.

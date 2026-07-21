@@ -20,10 +20,12 @@ import "github.com/kud360/goxsd8/xsderr"
 // The substantive, cross-component clauses are NOT enforced here — this
 // constructor is deliberately not the full property-correctness check:
 //
-//   - clause 1's resolved-component parts, clause 2 ({base type definition} a
-//     simple type forces {derivation method} = extension), and clause 3 (no
-//     circular {base type definition} chain except xs:anyType) all need the
-//     {base type definition} RESOLVED, which this package does not do yet;
+//   - clause 1's resolved-component parts and clause 2 ({base type definition} a
+//     simple type forces {derivation method} = extension) need the {base type
+//     definition} RESOLVED, which this constructor does not do. Clause 3 (no
+//     circular {base type definition} chain except xs:anyType) IS enforced, but
+//     at finalize (resolve.go's checkComplexBaseAcyclic, #173) — it needs the
+//     whole base graph, which only exists once the schema set is assembled;
 //   - clause 4 (no two {attribute uses} share an {attribute declaration}
 //     expanded name) is left to the producer/finalize layer for this component
 //     (unlike AttributeGroupDefinition, whose own ag-props-correct clause 2 is
@@ -187,12 +189,14 @@ func (o OpenContent) Wildcard() Wildcard {
 // Like the other §3 component shapes in this package, ComplexType is a
 // STRUCTURAL holder built before resolution. {base type definition} is carried
 // as a pre-resolution QName REFERENCE (baseTypeDefinitionName), not a resolved
-// simple-or-complex type: its resolution, and the ct-props-correct clauses that
-// need it (clauses 2 and 3, and clause 1's resolved parts) plus the derivation-
-// validity rules (cos-ct-extends §3.4.6.2, derivation-ok-restriction §3.4.6.3),
-// are deferred to the finalize-phase issue (#173) and the producer (#176),
-// mirroring ElementDeclaration.typeDefinitionName. This package resolves nothing
-// yet.
+// simple-or-complex type. Finalize (resolve.go, #173) VALIDATES that the
+// reference resolves to a type definition (src-resolve clause 1.1) and that the
+// complex-type base chain is acyclic except xs:anyType's self-derivation
+// (ct-props-correct clause 3), but does NOT rewrite it into a resolved
+// component: the QName is retained, and a consumer follows it by a read-time
+// schema.Type(name) lookup. Clause 2 and clause 1's resolved parts, plus the
+// derivation-validity rules (cos-ct-extends §3.4.6.2, derivation-ok-restriction
+// §3.4.6.3), stay deferred to the producer (#176) and later finalize work.
 //
 // {context} (§3.4.1 ctd-context — the component an anonymous type appears in) is
 // entirely UNMODELED by this issue, exactly as ElementDeclaration leaves
@@ -342,11 +346,12 @@ func (c ComplexType) Name() QName {
 // BaseTypeDefinitionName returns the {base type definition} property (Required)
 // as a pre-resolution QName reference.
 //
-// This is NOT the resolved {base type definition} component (§3.4.1). The
-// resolved-component accessor, and its resolution, are deferred to the future
-// finalize-phase issue that first introduces phased construction (#173, per
-// doc.go's "parse → resolve → finalize"); nothing in this package resolves it
-// yet, mirroring ElementDeclaration.TypeDefinitionName.
+// This is NOT the resolved {base type definition} component (§3.4.1). Finalize
+// (#173) validates the name resolves to a type definition (src-resolve clause
+// 1.1) and that the base chain is acyclic (ct-props-correct clause 3), but adds
+// no resolved-component accessor: the QName is retained, and a consumer obtains
+// the component by a read-time schema.Type(name) lookup, mirroring
+// ElementDeclaration.TypeDefinitionName.
 func (c ComplexType) BaseTypeDefinitionName() QName {
 	return c.baseTypeDefinitionName
 }
