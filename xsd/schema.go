@@ -4,14 +4,14 @@ import "github.com/kud360/goxsd8/xsderr"
 
 // ruleSchPropsCorrect is Schema Properties Correct (Structures §3.17.6.1,
 // id="sch-props-correct"): a schema's properties must match the §3.17.1 Schema
-// property tableau. Finalize enforces ONLY clause 2 — no two schema components
-// of the same kind (the same {…definitions}/{…declarations} property) share an
-// expanded name (target namespace + local name) — because that is locally
-// decidable without any cross-reference resolution. Clause 1's
-// cross-reference-dependent requirements, and all reference resolution
-// (src-resolve, §4.2.4), are deferred to the finalize resolution pass (#173);
-// the instance-time cvc-resolve-instance (§3.17.6.3) lookups the Query views
-// serve are a still-later consumer's concern.
+// property tableau. Finalize enforces clause 2 — no two schema components of the
+// same kind (the same {…definitions}/{…declarations} property) share an expanded
+// name (target namespace + local name), locally decidable without any
+// cross-reference resolution — and then runs the resolution pass (resolve.go,
+// #173) that discharges cross-component QName resolution (src-resolve, §3.17.6.2)
+// and the named-circularity rejections. Clause 1's remaining cross-reference-
+// dependent requirements stay deferred; the instance-time cvc-resolve-instance
+// (§3.17.6.3) lookups the Query views serve are a still-later consumer's concern.
 const ruleSchPropsCorrect xsderr.Rule = "sch-props-correct"
 
 // SchemaBuilder accumulates the schema components discovered during the
@@ -19,9 +19,9 @@ const ruleSchPropsCorrect xsderr.Rule = "sch-props-correct"
 // retain QName values for such references … until an appropriately-named
 // component becomes available"). It performs no cross-reference resolution and
 // no sch-props-correct enforcement beyond the per-kind duplicate detection
-// Finalize runs — construction order is deliberately unconstrained per §4.2.4's
-// "lazy/just-in-time" note. Call Finalize to obtain the immutable compiled
-// Schema.
+// Finalize runs — construction order is deliberately unconstrained per §4.1
+// Layer 1's "lazy/just-in-time" note (§4.2.4 is <redefine>, a distinct topic).
+// Call Finalize to obtain the immutable compiled Schema.
 //
 // Each slice holds its kind's components in the document order they were added
 // (STYLE D2/D3); that order is the source of truth the Finalize indexes are
@@ -106,11 +106,15 @@ func (b *SchemaBuilder) AddAnnotation(a Annotation) {
 // lookup — they never determine iteration order (STYLE D2/D3; see xsd/doc.go's
 // "Maps exist only as internal lookup indexes and never determine order").
 //
-// Cross-reference resolution (turning a retained QName reference into a resolved
-// component pointer, src-resolve §4.2.4) and the remaining sch-props-correct
-// clauses are the finalize resolution pass's responsibility (#173), not this
-// component's; Finalize here enforces only sch-props-correct §3.17.6.1 clause 2,
-// the one clause locally decidable without any cross-reference resolution.
+// Cross-reference resolution (src-resolve §3.17.6.2) is a VALIDATION pass run at
+// Finalize (resolve.go, #173): it verifies every retained QName reference
+// resolves against these indexes and that no spec-forbidden circularity exists,
+// but it stores no resolved-component pointer — a consumer follows a reference by
+// a read-time index lookup (schema.Type/Element/Attribute), because a stored
+// pointer would be state derivable from the QName plus the index (STYLE D3). The
+// remaining sch-props-correct clause-1 requirements stay deferred; Finalize's own
+// duplicate-name check is sch-props-correct §3.17.6.1 clause 2, locally decidable
+// without any cross-reference resolution.
 type Schema struct {
 	types               []TypeDefinition
 	elements            []ElementDeclaration
@@ -148,10 +152,17 @@ type Schema struct {
 // location accessor, a rejection is charged the zero xsderr.Loc{}, exactly as
 // the synthesized-component convention throughout this package permits.
 //
-// Every OTHER sch-props-correct clause (in particular clause 1's
-// cross-reference-dependent requirements) and all cross-reference resolution
-// are the caller's responsibility through further passes (#173) — Finalize
-// chases no reference.
+// After the indexes are built, Finalize runs the resolution pass (resolve.go):
+// it walks the assembled components in document order and rejects any
+// unresolvable QName reference (src-resolve, §3.17.6.2) or spec-forbidden named
+// circularity. HARD-FAIL POLICY: §5.3 (Missing Sub-components) permits an
+// unresolved *required* reference to degrade assessment to lax rather than
+// reject the schema; goxsd8 deliberately hard-fails instead, as the right stance
+// for a conformance processor validated against the W3C test suite. That is an
+// implementation policy choice, not something §5.3 mandates.
+//
+// Every OTHER sch-props-correct clause (in particular clause 1's remaining
+// cross-reference-dependent requirements) stays deferred to later passes.
 func (b *SchemaBuilder) Finalize() (*Schema, error) {
 	typeIndex, err := indexByName(b.types, TypeDefinition.Name, "type definitions")
 	if err != nil {
@@ -181,7 +192,7 @@ func (b *SchemaBuilder) Finalize() (*Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Schema{
+	s := &Schema{
 		types:               cloneSlice(b.types),
 		elements:            cloneSlice(b.elements),
 		attributes:          cloneSlice(b.attributes),
@@ -197,7 +208,11 @@ func (b *SchemaBuilder) Finalize() (*Schema, error) {
 		modelGroupIndex:     modelGroupIndex,
 		notationIndex:       notationIndex,
 		idcIndex:            idcIndex,
-	}, nil
+	}
+	if err := s.resolve(); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // indexByName builds the by-expanded-name lookup index for one kind's

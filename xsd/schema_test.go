@@ -246,6 +246,134 @@ func TestFinalizeDecouplesBuilderFromSchema(t *testing.T) {
 	}
 }
 
+// attributeGroupNamed builds a minimal attribute group definition for the Add*
+// wrapper tests.
+func attributeGroupNamed(t *testing.T, name xsd.QName) xsd.AttributeGroupDefinition {
+	t.Helper()
+	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, name, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAttributeGroupDefinition(%v): %v", name, err)
+	}
+	return g
+}
+
+// modelGroupNamed builds a minimal (empty-sequence) model group definition for
+// the Add* wrapper tests.
+func modelGroupNamed(t *testing.T, name xsd.QName) xsd.ModelGroupDefinition {
+	t.Helper()
+	g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, nil, nil)
+	if err != nil {
+		t.Fatalf("NewModelGroup: %v", err)
+	}
+	d, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, name, g, nil)
+	if err != nil {
+		t.Fatalf("NewModelGroupDefinition(%v): %v", name, err)
+	}
+	return d
+}
+
+// notationNamed builds a minimal notation declaration for the Add* wrapper tests.
+func notationNamed(t *testing.T, name xsd.QName) xsd.Notation {
+	t.Helper()
+	sys := "urn:sys"
+	n, err := xsd.NewNotation(xsderr.Loc{}, name, &sys, nil, nil)
+	if err != nil {
+		t.Fatalf("NewNotation(%v): %v", name, err)
+	}
+	return n
+}
+
+// TestAddWrappersAcceptedByFinalize exercises the four append-only builder
+// wrappers (AddAttributeGroup/AddModelGroup/AddNotation/AddAnnotation): each
+// component a wrapper adds must survive Finalize (the resolution pass must not
+// reject a well-formed one). None of these four kinds has an exported *Schema
+// lookup accessor yet, so observability is: Finalize succeeds.
+func TestAddWrappersAcceptedByFinalize(t *testing.T) {
+	name := xsd.QName{Space: "urn:ns", Local: "w"}
+	cases := []struct {
+		label string
+		add   func(b *xsd.SchemaBuilder)
+	}{
+		{"AddAttributeGroup", func(b *xsd.SchemaBuilder) { b.AddAttributeGroup(attributeGroupNamed(t, name)) }},
+		{"AddModelGroup", func(b *xsd.SchemaBuilder) { b.AddModelGroup(modelGroupNamed(t, name)) }},
+		{"AddNotation", func(b *xsd.SchemaBuilder) { b.AddNotation(notationNamed(t, name)) }},
+		{"AddAnnotation", func(b *xsd.SchemaBuilder) { b.AddAnnotation(xsd.NewAnnotation(nil, nil, nil)) }},
+	}
+	for _, c := range cases {
+		t.Run(c.label, func(t *testing.T) {
+			b := xsd.NewSchemaBuilder()
+			c.add(b)
+			if _, err := b.Finalize(); err != nil {
+				t.Fatalf("Finalize after %s: %v", c.label, err)
+			}
+		})
+	}
+}
+
+// TestAddModelGroupObservableViaResolution proves an added model group
+// definition is actually indexed (not silently dropped): a <group ref> to it
+// resolves, so Finalize succeeds; without AddModelGroup wiring the ref would
+// dangle and be rejected.
+func TestAddModelGroupObservableViaResolution(t *testing.T) {
+	target := xsd.QName{Space: "urn:ns", Local: "target"}
+	refParticle, err := xsd.NewParticle(xsderr.Loc{}, mustOccurs11(t), xsd.ModelGroupRef{Name: target}, nil)
+	if err != nil {
+		t.Fatalf("NewParticle: %v", err)
+	}
+	refGroup, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{refParticle}, nil)
+	if err != nil {
+		t.Fatalf("NewModelGroup: %v", err)
+	}
+	referrer, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "referrer"}, refGroup, nil)
+	if err != nil {
+		t.Fatalf("NewModelGroupDefinition: %v", err)
+	}
+
+	b := xsd.NewSchemaBuilder()
+	b.AddModelGroup(modelGroupNamed(t, target))
+	b.AddModelGroup(referrer)
+	if _, err := b.Finalize(); err != nil {
+		t.Fatalf("Finalize(group ref to an added model group): %v", err)
+	}
+}
+
+// TestAddWrapperDuplicateRejected proves the appended components are indexed by
+// expanded name: two attribute groups, two model groups, or two notations
+// sharing a name collide under sch-props-correct clause 2.
+func TestAddWrapperDuplicateRejected(t *testing.T) {
+	dup := xsd.QName{Space: "urn:ns", Local: "dup"}
+	cases := []struct {
+		label string
+		add   func(b *xsd.SchemaBuilder)
+	}{
+		{"AddAttributeGroup", func(b *xsd.SchemaBuilder) { b.AddAttributeGroup(attributeGroupNamed(t, dup)) }},
+		{"AddModelGroup", func(b *xsd.SchemaBuilder) { b.AddModelGroup(modelGroupNamed(t, dup)) }},
+		{"AddNotation", func(b *xsd.SchemaBuilder) { b.AddNotation(notationNamed(t, dup)) }},
+	}
+	for _, c := range cases {
+		t.Run(c.label, func(t *testing.T) {
+			b := xsd.NewSchemaBuilder()
+			c.add(b)
+			c.add(b)
+			if _, err := b.Finalize(); err == nil {
+				t.Fatalf("Finalize(duplicate %s name) succeeded, want sch-props-correct error", c.label)
+			} else {
+				assertRule(t, err, "sch-props-correct")
+			}
+		})
+	}
+}
+
+// mustOccurs11 builds the {1,1} occurrence range for schema_test helpers.
+func mustOccurs11(t *testing.T) xsd.Occurs {
+	t.Helper()
+	o, err := xsd.NewOccurs(xsderr.Loc{}, 1, 1)
+	if err != nil {
+		t.Fatalf("NewOccurs: %v", err)
+	}
+	return o
+}
+
 func TestAddTypeNilInterfacePanics(t *testing.T) {
 	defer func() {
 		if recover() == nil {

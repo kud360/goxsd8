@@ -17,12 +17,13 @@ import "github.com/kud360/goxsd8/xsderr"
 //   - clause 3: a non-empty {substitution group affiliations} forces
 //     {scope}.{variety} = global.
 //
-// Clauses 2 (Element Default Valid), 4/5 (validly-substitutable and circular
-// substitution groups), and 7 (type-table alternatives validly substitutable)
-// are cross-component / finalize-phase constraints needing resolved type and
-// element components, which this package does not resolve yet; they are
-// deferred to the schema-assembly issue that introduces phased construction
-// (per doc.go's "parse → resolve → finalize") and are NOT enforced here.
+// Clauses 2 (Element Default Valid), 4 (validly-substitutable), and 7
+// (type-table alternatives validly substitutable) are cross-component
+// finalize-phase constraints needing resolved type and element components; they
+// are NOT enforced here. Clause 5 (no circular substitution groups) IS enforced,
+// but at finalize (resolve.go's checkSubstitutionGroupsAcyclic, #173), not in
+// this constructor — it needs the whole {substitution group affiliations} graph,
+// which only exists once the schema set is assembled.
 const ruleEPropsCorrect xsderr.Rule = "e-props-correct"
 
 // TypeTable is the {type table} property record of an element declaration
@@ -100,11 +101,13 @@ func (t TypeTable) DefaultTypeDefinition() TypeAlternative {
 // STRUCTURAL holder built before resolution. Two properties are carried as
 // pre-resolution QName REFERENCES, not resolved components: {type definition}
 // (a single reference — the type/@type name of §3.3.2) and {substitution group
-// affiliations} (a list of references — the substitutionGroup names). Their
-// resolved-component accessors, and the cross-component clauses of
-// e-props-correct that need them (clauses 2, 4, 5, 7), are deferred to the
-// finalize-phase issue (#173) that first introduces phased construction; this
-// package resolves neither yet.
+// affiliations} (a list of references — the substitutionGroup names). Finalize
+// (resolve.go, #173) VALIDATES that both resolve against the schema indexes
+// (src-resolve clauses 1.1 and 1.3) and that the substitution-group graph is
+// acyclic (e-props-correct clause 5), but does NOT rewrite them into resolved
+// components: the QNames are retained, and a consumer follows them by read-time
+// schema.Type/schema.Element lookups. The remaining cross-component clauses that
+// need resolved components (clauses 2, 4, 7) stay deferred.
 //
 // {scope}.{parent} (§3.3.1 sc_e-parent) is entirely UNMODELED by this issue.
 // Only {scope}.{variety} is carried (as a ScopeVariety). A ScopeLocal element
@@ -228,11 +231,10 @@ func (e ElementDeclaration) Name() QName {
 // TypeDefinitionName returns the {type definition} property (Required) as a
 // pre-resolution QName reference — the type/@type name of §3.3.2.
 //
-// This is NOT the resolved {type definition} component (§3.3.1). The resolved
-// component accessor, and its resolution, are deferred to the future
-// finalize-phase issue that first introduces phased construction (#173, per
-// doc.go's "parse → resolve → finalize"); nothing in this package resolves it
-// yet.
+// This is NOT the resolved {type definition} component (§3.3.1). Finalize (#173)
+// validates the name resolves to a type definition (src-resolve clause 1.1) but
+// adds no resolved-component accessor: the QName is retained, and a consumer
+// obtains the component by a read-time schema.Type(name) lookup.
 func (e ElementDeclaration) TypeDefinitionName() QName {
 	return e.typeDefinitionName
 }
@@ -282,11 +284,11 @@ func (e ElementDeclaration) IdentityConstraints() []IdentityConstraint {
 // mutating the result does not affect e. An empty set yields nil.
 //
 // These are NOT the resolved {substitution group affiliations} Element
-// Declaration components (§3.3.1). The resolved-component accessor, and
-// e-props-correct clauses 4/5 (validly-substitutable and circular substitution
-// groups), are deferred to the future finalize-phase issue that first
-// introduces phased construction (#173, per doc.go's "parse → resolve →
-// finalize"); nothing in this package resolves them yet.
+// Declaration components (§3.3.1). Finalize (#173) validates each name resolves
+// to an element declaration (src-resolve clause 1.3) and that the affiliation
+// graph is acyclic (e-props-correct clause 5), but adds no resolved-component
+// accessor: the QNames are retained, followed by read-time schema.Element
+// lookups. Clause 4 (validly-substitutable) stays deferred.
 func (e ElementDeclaration) SubstitutionGroupAffiliationNames() []QName {
 	if len(e.substitutionGroupAffiliations) == 0 {
 		return nil

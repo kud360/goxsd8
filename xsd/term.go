@@ -25,13 +25,14 @@ type Term interface{ term() }
 // The split exists because two XML mappings — <element ref="..."> (§3.3.2.4,
 // ref.elt.global) and <group ref="..."> (§3.7.2, declare-namedModelGroup) — may
 // forward-reference a top-level declaration not yet parsed, so only the ref
-// QName is available at shape-construction time. At finalize each ref variant is
-// replaced by the live component it names — never persisting as a permanent
-// branch: an ElementDeclarationRef by the referenced Element Declaration, a
-// ModelGroupRef by the referenced Model Group Definition's {model group} (§3.7.2:
-// the referencing particle's {term} IS that shared Model Group component
-// directly, not a wrapper). There is no WildcardRef: a wildcard is never
-// referenced by QName, only declared inline.
+// QName is available at shape-construction time. Finalize (#173) VALIDATES that
+// each ref variant resolves against the schema indexes — an ElementDeclarationRef
+// to a top-level Element Declaration (src-resolve clause 1.3), a ModelGroupRef to
+// a top-level Model Group Definition (clause 1.5) — and rejects an unresolvable
+// or circular target. It does NOT rewrite the slot: the ref is retained and a
+// consumer follows it by a read-time lookup through the schema (for a
+// ModelGroupRef, the referenced definition's {model group} per §3.7.2). There is
+// no WildcardRef: a wildcard is never referenced by QName, only declared inline.
 type TermOrRef interface{ termOrRef() }
 
 // ResolvedTerm is the TermOrRef variant wrapping an already-known Term: an
@@ -42,17 +43,19 @@ type ResolvedTerm struct{ Term Term }
 
 // ElementDeclarationRef is the TermOrRef variant for the <element ref="...">
 // mapping (§3.3.2.4, ref.elt.global): a pre-resolution QName reference to a
-// possibly-forward-referenced top-level Element Declaration, resolved to the
-// live component at finalize (#173). The field is read-only by convention; do
-// not mutate it after construction.
+// possibly-forward-referenced top-level Element Declaration. Finalize (#173)
+// validates it resolves (src-resolve clause 1.3) but retains it; a consumer
+// follows it by a read-time schema.Element(Name) lookup. The field is read-only
+// by convention; do not mutate it after construction.
 type ElementDeclarationRef struct{ Name QName }
 
 // ModelGroupRef is the TermOrRef variant for the <group ref="..."> mapping
 // (§3.7.2, declare-namedModelGroup): a pre-resolution QName reference to a
-// possibly-forward-referenced top-level Model Group Definition. At finalize
-// (#173) it is replaced by that definition's {model group} — the referencing
-// particle's {term} becomes the shared Model Group component directly (§3.7.2),
-// not a wrapper. The field is read-only by convention; do not mutate it after
+// possibly-forward-referenced top-level Model Group Definition. Finalize (#173)
+// validates it resolves (src-resolve clause 1.5) and that the group-reference
+// graph is acyclic (mg-props-correct clause 2), but retains it; a consumer
+// follows it by a read-time lookup, reading the referenced definition's {model
+// group} (§3.7.2). The field is read-only by convention; do not mutate it after
 // construction.
 type ModelGroupRef struct{ Name QName }
 

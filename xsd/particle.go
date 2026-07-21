@@ -11,8 +11,11 @@ import "github.com/kud360/goxsd8/xsderr"
 //
 // {term} is a TermOrRef (term.go), NOT a resolved Term: it is either an inline
 // component (ResolvedTerm) or a deferred <element ref>/<group ref> QName
-// (ElementDeclarationRef/ModelGroupRef) resolved to the live component at
-// finalize (#173).
+// (ElementDeclarationRef/ModelGroupRef). Finalize (#173) VALIDATES that each
+// such ref resolves against the schema indexes — rejecting an unresolvable or
+// circular target with src-resolve (or a named-circularity rule) — but it does
+// not rewrite the slot: Term() keeps returning the ref, and a consumer follows
+// it by a read-time lookup through the schema (e.g. schema.Element(ref.Name)).
 //
 // A max occurs of 0 is representable through Occurs{0,0} and NOT rejected here:
 // occurs.go (#29) documents {0,0} as a legal vacuous range and enforces
@@ -36,9 +39,12 @@ type Particle struct {
 }
 
 // NewParticle builds a Particle, rejecting the state Particle Correct (§3.9.6.1,
-// p-props-correct) clause 1 forbids at this layer: an absent {term} (a nil
-// TermOrRef). The property is Required, so a nil interface is illegal (STYLE T1),
-// mirroring NewAttributeUse's clause-1 nil check.
+// p-props-correct) clause 1 forbids at this layer: an absent {term}. That
+// covers two representable absences — a nil TermOrRef interface, and a
+// ResolvedTerm wrapping a nil Term (the one sealed-sum variant that wraps an
+// interface, so ResolvedTerm{Term: nil} slips past the outer nil check yet is an
+// equally absent {term}). The property is Required, so either is illegal (STYLE
+// T1), mirroring NewAttributeUse's clause-1 nil check.
 //
 // The occurrence-range invariants (p-props-correct clauses 1 and 2.1) are
 // already enforced by the Occurs constructors, so occurs is trusted here; a
@@ -54,6 +60,10 @@ func NewParticle(loc xsderr.Loc, occurs Occurs, term TermOrRef, annotations []An
 	if term == nil {
 		return Particle{}, xsderr.New(ruleParticleCorrect, loc,
 			"particle has an absent {term}, but it is Required (p-props-correct clause 1)")
+	}
+	if rt, ok := term.(ResolvedTerm); ok && rt.Term == nil {
+		return Particle{}, xsderr.New(ruleParticleCorrect, loc,
+			"particle {term} is a ResolvedTerm wrapping a nil Term, but {term} is Required (p-props-correct clause 1)")
 	}
 	p := Particle{occurs: occurs, term: term}
 	if len(annotations) > 0 {
