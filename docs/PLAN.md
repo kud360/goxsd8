@@ -144,6 +144,37 @@ at 0 pass / 15432 fail** (`stubFail`); its first real movement lands with #175.
 The shallow-looking `ready` count is the serial M4 spine, not a planning gap —
 the deep cascade is behind #171 and self-feeds through the post-land passes.
 
+Update (2026-07-21, weekly backlog): **#171, #172, and #173 all landed since the
+prior backlog**, so the spine has moved a full link further: Complex Type
+Definition + {content type}/derivation shapes (#171), the `Schema`/`SchemaBuilder`
+container + symbol tables + Query views (#172), and finalize/resolve —
+`src-resolve` QName resolution, dependency-ordered finalization, named-circularity
+rejection (#173) — are done. #201 (the `ResolvedTerm{Term: nil}` guard) closed
+as done-there, absorbed by #173's landing exactly as its own Notes anticipated.
+The develop loop's own post-land pass already unblocked **#174** (producer
+spine — top-level simpleType/element/attribute → `xsd` components) the same
+session #173 landed; it is now the single item on the M4 critical path. #175
+(schema-lane bring-up — the first real `schema`-lane movement) stays `blocked`
+on #174, and the rest of the fan-out/finalize-validity tail stays blocked
+behind it — this is still the same dependency-capped spine, not a planning
+gap. A fresh libuser pass over the newly-landed `Schema`/`SchemaBuilder`/
+`Finalize`/Query-view surface (the first review of that surface, mirroring the
+#170→#201/#202/#203 harvest) surfaced a real bug — **#210**: `Finalize`'s
+`sch-props-correct` clause-2 duplicate-name check false-rejects two legitimately
+anonymous (zero-QName) components (e.g. two anonymous `ComplexType`s), which
+will very likely block #176 in practice since inline/anonymous complex types are
+common — recommend landing #210 before or alongside #176. The same pass also
+produced **#211** (worked construct→Finalize→query `Example` + a
+`Schema`-implements-`{Type,Element,Attribute}Resolver` doc cross-reference), and
+folded a README omission (Library quickstart never mentions `SchemaBuilder`/
+`Finalize` despite it being real, working surface) into **#189**'s scope rather
+than filing a fourth issue. Ready queue: #210, #211, #208, #203, #202, #195,
+#190, #189, #174 (9, within the 8–10 band). **Branch-namespace note:**
+`wip/issue-145` is a stale leftover ref (tip `ea21ecd`, 2026-07-18, no unique
+commits vs `origin/main` — its issue #145 was closed 2026-07-18 as
+already-satisfied and its tip commit is already on `main`); flagged here for
+human triage, not deleted by this session.
+
 ## M5 — Instance validation (XML)
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
