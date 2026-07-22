@@ -175,6 +175,51 @@ commits vs `origin/main` — its issue #145 was closed 2026-07-18 as
 already-satisfied and its tip commit is already on `main`); flagged here for
 human triage, not deleted by this session.
 
+Update (2026-07-22, weekly backlog): **#174 (producer spine), #46 (cross-type
+variety/base shape + `st-props-correct`/`cos-st-restricts`), and #157
+(precisionDecimal maxScale/minScale schema-construction SCCs) all landed since
+the prior backlog.** The M4 critical path has therefore advanced to **#176**
+(complex-type + content-model producer) — its dependency #174 is closed, so it
+is `ready`; it is the single spine item that gates the whole producer fan-out
+(#177/#178) and the finalize-validity tail (#180/#181/#206) and composition
+(#183). **#175** (schema-lane bring-up — the first real `schema`-lane movement,
+the driver that flips `schema.txt` fail→pass) also flipped `ready` (its only dep
+#174 is closed) and is the highest-conformance-value item in the queue; #176 and
+#175 are the two M4 priorities. The `schema` lane is still **0 pass / 15432
+fail** (`stubFail`) until #175 lands.
+
+The develop loop's post-land passes kept the follow-up ledger clean: #214
+(producer must OR multiple same-step `<pattern>` facets into one FacetPattern,
+§4.3.4.2 — harvested from #174's arbiter advisory), #219 (producer `facetKindOf`
+silently drops `maxScale`/`minScale`, leaving #157's new construction-time scale
+SCCs unreachable from real schema documents), #215 (tighten
+`Atomic.Primitive`/`List.Item`/`Union.Members` to unexported+accessors, T1 — from
+#46's warden pre-flight), and #217 (the `cos-st-restricts` facet-value
+sub-clauses #46 deferred as out of pure-leaf `xsd`'s reach, needs `value`) are
+all filed and `ready`. No untracked GAP debt (both `xsd/namespaceconstraint.go`
+GAP markers remain owned by #51).
+
+**#46's landing resolved the long-standing #98/#75 tangle:** #98 (`value`
+effectiveWhiteSpace not-applicable path for union/list varieties) was unblocked
+`blocked`→`ready` this backlog — #46 makes a non-atomic-variety `SimpleType`
+constructible and routable through `value.ValidateLexical` leaf-only, which was
+#98's real (previously "unfiled") precondition. Landing #98 then flips **#75**
+(datatypes-lane widening to list/union Facets cohorts) to `ready` — a genuine
+datatypes-lane vertical slice. #75 stays `blocked` on #98 for now.
+
+Ready queue (16, deep by design — over the 8–10 band but every item is a
+well-specified single-session issue, and the depth guards against a stall given
+the develop loop's multi-issue/day throughput and the self-feeding M4 spine):
+**#176, #175** (M4 spine, top priority), then the independent pool #210, #214,
+#219, #98, #179, #217, #215, #211, #208, #203, #202, #189, #195, #190. Persona
+coverage: the `xsd` `Schema`/`SchemaBuilder`/`Finalize` surface had a fresh
+libuser pass last backlog (#210/#211/#203/#202); a dedicated libuser review of
+the newly-published `parser.Produce` surface is **deferred until #176/#178
+stabilize the producer** — reviewing the intentionally-partial top-level-only
+surface now would mostly re-derive #176. **Branch-namespace note:** `wip/issue-145`
+remains the only non-`main` ref (still stale, unchanged since 2026-07-18, issue
+#145 closed, tip already on `main`) — still flagged for human triage, not deleted.
+
 ## M5 — Instance validation (XML)
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
