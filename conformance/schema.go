@@ -46,10 +46,15 @@ import (
 // execSchemaCase therefore decides a case only after confirming its whole shape
 // is confined to what the producer checks, and DECLINES (Fail) anything else:
 //
-//  1. Schema-well-formedness. parser.ReadDocument is run first. A malformed-XML
-//     or rootless document is a genuine schema-well-formedness failure (observed
-//     = invalid), decided against the suite's expectation directly — this is the
-//     schema-well-formedness sub-cohort.
+//  1. Readability. parser.ReadDocument is run first. ANY error DECLINES the case
+//     (Fail), never a validity verdict: a ReadDocument error does not distinguish
+//     a genuine XML well-formedness fault from a parser encoding LIMITATION.
+//     Well-formed UTF-16 input (BOM FF FE) is currently rejected as "invalid
+//     UTF-8" because UTF-16 decoding is not yet implemented, so treating that as
+//     observed-invalid would fabricate an "invalid" verdict for a well-formed
+//     document — a wrong-reason pass that would flip pass→fail once UTF-16
+//     decoding lands (a separate change). So malformed XML is NOT a claimed
+//     schema-well-formedness sub-cohort here; it is a declined recorded gap.
 //  2. Root identity. If the root is not <schema> (IsSchema false) the case is
 //     DECLINED: §3.17.2 explicitly does NOT require <schema> to be the document
 //     root, so Produce's error there is a plain non-xsderr Go precondition fault,
@@ -106,6 +111,13 @@ import (
 //
 // # Why no false ratchet-corrupting pass is possible
 //
+// Every "invalid" verdict this lane emits comes from ONE source: parser.Produce
+// rejecting a document whose shape already passed the allowlist. ReadDocument
+// errors never produce an "invalid" verdict — they decline (step 1) — precisely
+// because a ReadDocument error can be a parser encoding limitation (well-formed
+// UTF-16 misread as invalid UTF-8) rather than a real violation, and turning that
+// into "invalid" would fabricate a verdict for a well-formed document.
+//
 // A "valid" verdict coincides only with a truly-valid ground truth: a truly-valid
 // document (by definition) has none of the checked violations, so Produce
 // correctly finds none. An "invalid" verdict coincides only with truly-invalid
@@ -139,10 +151,11 @@ func newSchemaExec() executor {
 }
 
 // execSchemaCase decides one schemaTest case, or honestly declines it (Fail). It
-// reads the document, gates on well-formedness and the decidable top-level shape
-// (schemaShapeDecidable), then runs parser.Produce and agrees or disagrees with
-// the suite's declared validity. A document it cannot open, whose root is not
-// <schema>, or whose shape falls outside the producer's decidable subset is
+// reads the document, gates on the decidable top-level shape (schemaShapeDecidable),
+// then runs parser.Produce and agrees or disagrees with the suite's declared
+// validity. A document it cannot open OR cannot read (any ReadDocument error,
+// including a parser encoding limitation such as unsupported UTF-16), whose root is
+// not <schema>, or whose shape falls outside the producer's decidable subset is
 // DECLINED (Fail) as a recorded gap, never guessed.
 func execSchemaCase(backend value.Backend, c caseSpec) Status {
 	f, err := os.Open(c.doc)
@@ -153,9 +166,15 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the verdict
 	doc, err := parser.ReadDocument(c.doc, f)
 	if err != nil {
-		// A malformed-XML or rootless document is a genuine schema-well-formedness
-		// failure (§3.17.2 schema documents are XML documents): observed = invalid.
-		return decideSchema(false, c.expectValid)
+		// A ReadDocument error is DECLINED, never treated as an observed-invalid
+		// verdict. The error does not distinguish a genuine XML well-formedness
+		// fault from a parser encoding LIMITATION: well-formed UTF-16 input (BOM
+		// FF FE) is currently rejected as "[xml-wf] invalid UTF-8" because UTF-16
+		// decoding is not yet implemented, so an "invalid" verdict here would be
+		// fabricated for a well-formed document — a wrong-reason pass that would
+		// silently flip pass→fail once UTF-16 decoding lands (a separate change).
+		// Declining on ANY ReadDocument error keeps the lane's verdicts honest.
+		return Fail()
 	}
 	// §3.17.2 does not require <schema> to be the document root, so a non-schema
 	// root is a producer precondition fault (a plain Go error, not a

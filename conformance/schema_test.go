@@ -72,22 +72,23 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 	}
 }
 
-// TestSchemaExecutorWellFormedness proves the schema-well-formedness sub-cohort: a
-// malformed-XML schema document is observed invalid, so it agrees with a suite
-// invalid expectation (Pass) and disagrees with a wrong valid one (Fail).
-func TestSchemaExecutorWellFormedness(t *testing.T) {
+// TestSchemaExecutorReadErrorDeclines proves a ReadDocument failure is DECLINED
+// (Fail) for BOTH polarities, never turned into an observed-invalid verdict: the
+// error cannot distinguish a genuine XML well-formedness fault from a parser
+// encoding limitation (e.g. well-formed UTF-16 misread as invalid UTF-8), so
+// claiming "invalid" would fabricate a verdict for a possibly-well-formed document.
+func TestSchemaExecutorReadErrorDeclines(t *testing.T) {
 	exec := newSchemaExec()
 	dir := t.TempDir()
 	malformed := filepath.Join(dir, "malformed.xsd")
-	// Unclosed root element: an XML well-formedness fault ReadDocument rejects.
+	// Unclosed root element: a ReadDocument error (here an XML well-formedness fault).
 	if err := os.WriteFile(malformed, []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e"`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := exec(caseSpec{kind: kindSchema, doc: malformed, expectValid: false}); !got.IsPass() {
-		t.Error("malformed schema declared invalid must Pass (observed invalid)")
-	}
-	if exec(caseSpec{kind: kindSchema, doc: malformed, expectValid: true}).IsPass() {
-		t.Error("malformed schema wrongly declared valid must Fail (observed invalid)")
+	for _, ev := range []bool{true, false} {
+		if exec(caseSpec{kind: kindSchema, doc: malformed, expectValid: ev}).IsPass() {
+			t.Errorf("a ReadDocument error must Fail (decline) regardless of expectValid=%v", ev)
+		}
 	}
 }
 
