@@ -1,7 +1,6 @@
 package xsd
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -394,7 +393,14 @@ func checkScaleValueRestriction(loc xsderr.Loc, t *SimpleType, baseEff []Effecti
 	if !ok {
 		return nil
 	}
-	ownV, baseV := scaleValue(ownF), scaleValue(baseF)
+	ownV, err := scaleValue(ownF, loc, rule)
+	if err != nil {
+		return err
+	}
+	baseV, err := scaleValue(baseF, loc, rule)
+	if err != nil {
+		return err
+	}
 	if !scaleRelaxes(kind, ownV, baseV) {
 		return nil
 	}
@@ -432,7 +438,14 @@ func checkScaleFixed(loc xsderr.Loc, t *SimpleType, baseEff []EffectiveFacet, ki
 	if !ok {
 		return nil
 	}
-	ownV, baseV := scaleValue(ownF), scaleValue(baseF)
+	ownV, err := scaleValue(ownF, loc, rule)
+	if err != nil {
+		return err
+	}
+	baseV, err := scaleValue(baseF, loc, rule)
+	if err != nil {
+		return err
+	}
 	if ownV == baseV {
 		return nil
 	}
@@ -454,7 +467,16 @@ func checkScaleConsistency(loc xsderr.Loc, t *SimpleType) error {
 	if !hasMin || !hasMax {
 		return nil
 	}
-	minV, maxV := scaleValue(minF), scaleValue(maxF)
+	// A malformed {value} on either facet is charged under that facet's own
+	// valid-restriction rule (the rule a bad literal on it would otherwise hit).
+	minV, err := scaleValue(minF, loc, ruleMinScaleValidRestriction)
+	if err != nil {
+		return err
+	}
+	maxV, err := scaleValue(maxF, loc, ruleMaxScaleValidRestriction)
+	if err != nil {
+		return err
+	}
 	if minV <= maxV {
 		return nil
 	}
@@ -485,19 +507,24 @@ func findEffectiveFacet(facets []EffectiveFacet, kind FacetKind) (Facet, bool) {
 }
 
 // scaleValue reads a scale facet's single xs:integer {value} (which may be
-// negative). A value only reaches a Facet through this package's own
-// constructors, so a wrong value count or non-integer literal here is a package
-// logic error, not user-supplied data — it panics per the NewFacet/boundFacet
-// programmer-error convention rather than returning an xsderr validity verdict.
-func scaleValue(f Facet) int {
+// negative — no nonNegativeInteger constraint). That {value} is user-supplied
+// schema lexical data reachable through the public NewFacet/NewSimpleType API,
+// which accepts arbitrary lexical strings for scale kinds, so a wrong value count
+// or non-integer literal is a real validity rejection charged as an
+// *xsderr.Error, not a package logic error — mirroring value/facets.go's facetInt
+// for the exact same maxScale/minScale {value} parsing at instance-validation
+// time.
+func scaleValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (int, error) {
 	if len(f.values) != 1 {
-		panic(fmt.Sprintf("xsd: %s facet must carry exactly one value, has %d", f.kind, len(f.values)))
+		return 0, xsderr.New(rule, loc,
+			"%s facet must carry exactly one value, has %d", f.kind, len(f.values))
 	}
 	n, err := strconv.Atoi(f.values[0])
 	if err != nil {
-		panic(fmt.Sprintf("xsd: %s facet value %q is not an integer", f.kind, f.values[0]))
+		return 0, xsderr.New(rule, loc,
+			"%s facet value %q is not an integer", f.kind, f.values[0])
 	}
-	return n
+	return n, nil
 }
 
 // unionMembershipHasList reports whether any type in u's transitive membership

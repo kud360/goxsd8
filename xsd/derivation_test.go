@@ -241,6 +241,14 @@ func TestScaleFacetSCCs(t *testing.T) {
 				[]Facet{scaleFacet(FacetMaxScale, "9", false)}, nil)
 			return e
 		}, ""},
+		{"maxScale non-integer literal rejected not panic", func() error {
+			// A malformed scale {value} ("abc") reaches scaleValue through the
+			// public NewFacet/NewSimpleType API; it must charge a real *xsderr.Error,
+			// not panic (regression guard for #157).
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMax5,
+				[]Facet{scaleFacet(FacetMaxScale, "abc", false)}, nil)
+			return e
+		}, ruleMaxScaleValidRestriction},
 
 		// --- minScale-valid-restriction (§4.3.4): may only move up ---
 		{"minScale above base ok", func() error {
