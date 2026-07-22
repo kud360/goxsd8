@@ -272,6 +272,43 @@ import (
 // root, v16 list, v17 union, v18 ref= children, v19–v22 multi-step chains) are
 // declined honestly and route to the inert instance lane as recorded gaps.
 //
+// # The list-variety cohort (issue #75)
+//
+// The lane also decides the LIST-variety Facets cases under
+// msData/datatypes/{boolean018,float038,float039,anyURI011,hexBinary002,
+// base64Binary002,duration027}.xml. Each such schema declares a user-defined
+// "myList" (<xsd:list itemType="xsd:PRIM"/>) reached through comp_foo (either
+// type="myList" directly or an inline anonymous restriction of it) and one-or-more
+// simpleTest elements (a named restriction of "myList"); the restriction may carry
+// <xsd:enumeration> children (boolean018 enumerates 0/1 on comp_foo and true/false
+// on simpleTest; the other six are facet-free). Because comp_foo and simpleTest can
+// carry DIFFERENT own facets, execListCase reads each element's type graph
+// independently (readListCohortCase), synthesizing one leaf per tested element
+// (the item primitive as {item type definition}, xs:anySimpleType as base, the
+// mandatory fixed whiteSpace=collapse §4.3.6.1 plus any enumeration as own facets)
+// and deciding every tested value through the ordinary value.ValidateLexical
+// pipeline. That pipeline now resolves a list-variety type end to end (issue #75):
+// value.governingMapping wraps the item type's mapping in a generic list mapping
+// (cvc-datatype-valid clause dv_list §4.1.4 cl.2.2), so each lexical is split into
+// items, each item is Datatype-Valid against the item primitive, and the leaf's
+// enumeration is checked over the LIST value space by "equal or identical"
+// (cvc-enumeration-valid §4.3.5.4, §2.2.1/§2.2.2 pairwise over items; length, had
+// any fixture one, would count list items §4.3.1.3). The case is valid iff every
+// value across comp_foo and every simpleTest sibling validates (float039.xml's
+// nine simpleTest siblings — spanning ±MIN/MAX float, NaN, ±INF, ±0 — are each
+// checked). No new backend mapping and no new exported identifier: the list
+// mapping is unexported (value.listMapping/listValue), consuming the existing
+// strict primitive mappings via the item type.
+//
+// In scope here are only the seven fixtures whose item primitive is in
+// datatypesCase's lexical cohort (boolean/float/anyURI/hexBinary/base64Binary/
+// duration). The byte/long/short/unsignedByte/unsignedInt/unsignedLong/
+// unsignedShort item-type siblings (byte009/long009/short009/unsignedByte007/
+// unsignedInt007/unsignedLong007/unsignedShort007.xml) are NOT: their item
+// primitives are the integer family, outside datatypesCase's primitives-only
+// regex, so they remain unclaimed (a natural follow-up, not this issue). Union
+// variety stays out of scope too (value/facets.go SCOPE(union)).
+//
 // # Still deferred
 //
 // Facets over QName (the Facets/QName dir) are now FULLY claimed (issue #125,
@@ -297,23 +334,29 @@ import (
 // decides it through the ordinary value.ValidateLexical pipeline; the sibling
 // <xsd:notation> declarations are not load-bearing for any instance verdict
 // (§3.14.1 is a schema-construction SCC satisfied by every fixture) and are not
-// parsed (STYLE D4). xsd:boolean facets (no Facets dir exists for it), the plural list-typed
-// dirs (IDREFS, NMTOKENS), the NIST corpus, and list/union varieties remain out of
-// scope until their backends land.
-// string_pattern002_1031.i (issue #146) falls under that list-variety exclusion:
-// its Facets/string/string_pattern002.xml restricts via <xsd:list itemType="Hex"/>
-// (a per-token pattern facet decided by cvc-datatype-valid §4.1.4 clause dv_list,
-// unimplemented here), and its instance shape (a <Xml xmlns="TestNamespace"> root
-// with three <Hex> list-valued children) does not match readFacetsCase's single-
-// <foo> shape either, so it is honestly declined (Fail), never false-accepted.
+// parsed (STYLE D4). xsd:boolean facets (no Facets dir exists for it), the plural
+// list-typed dirs (IDREFS, NMTOKENS), the NIST corpus, and UNION variety remain
+// out of scope until their backends land. LIST variety over a lexical-cohort item
+// primitive is now decided (issue #75, "The list-variety cohort" above): the
+// boolean018/float038/float039/anyURI011/hexBinary002/base64Binary002/duration027
+// fixtures flipped from recorded gaps to decided passes.
+// string_pattern002_1031.i (issue #146) is a list-variety case that stays deferred
+// for two reasons: its Facets/string/string_pattern002.xml restricts via
+// <xsd:list itemType="Hex"/> where "Hex" is a USER-DEFINED pattern-restricted
+// simpleType, not a seeded strict-mapped primitive (execListCase declines a
+// non-seeded item type), and its instance shape (a <Xml xmlns="TestNamespace">
+// root with three <Hex> list-valued children) matches neither readFacetsCase's
+// single-<foo> shape nor readListCohortCase's comp_foo/simpleTest shape, so it is
+// honestly declined (Fail), never false-accepted.
 // Within the integer family, the odd
 // multi-element cases (e.g. Facets/int/test111092.xml, two named restriction
 // steps under distinct elements) do not fit the single-<foo> instance shape and
-// fall through to the instance lane as recorded gaps. boolean018 (a list-of-
-// boolean + enumeration on a user-defined "myList") and anyURI011 (a list-of-
-// anyURI, whose simplefooType restricts the "myList" list type) resolve to a
-// non-seeded type and are honestly recorded as gaps (Fail); they flip only when
-// list variety is reachable here. time_minInclusive006_1163.i (issue #123) is a
+// fall through to the instance lane as recorded gaps. The list-variety fixtures
+// whose item primitive is an integer-family builtin (byte009/long009/short009/
+// unsignedByte007/unsignedInt007/unsignedLong007/unsignedShort007.xml) stay
+// unclaimed for the same reason those primitives are outside datatypesCase's
+// primitives-only regex — a natural follow-up to issue #75, not part of it.
+// time_minInclusive006_1163.i (issue #123) is a
 // recorded gap for a different reason: its instance file carries no
 // xsi:noNamespaceSchemaLocation (a defect in that one suite file), so
 // readFacetsCase cannot resolve its schema and declines it (Fail) rather than
@@ -559,7 +602,15 @@ func execLexicalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c
 	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: prim}
 	st, seeded := sym[qn]
 	if !seeded {
-		return Fail()
+		// A non-seeded tested type is the list-variety cohort's signature: these
+		// fixtures restrict a user-defined "myList" (an <xsd:list itemType=..>),
+		// so decodeTestedPrimitive returns "myList" (or another non-builtin) here.
+		// Fall back to execListCase, which does its own independent read of the
+		// instance+schema (comp_foo and simpleTest can carry DIFFERENT own facets,
+		// so each resolves its own type graph). A shape that is not a list case
+		// declines there (Fail), so a genuinely non-list non-seeded case is
+		// unaffected — the same honest-decline the other fallbacks use.
+		return execListCase(backend, sym, c)
 	}
 	m, mapped := backend.Mapping(qn)
 	if !mapped {
@@ -726,6 +777,111 @@ func execItemCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 		return Pass()
 	}
 	return Fail()
+}
+
+// listTest is one tested element of a list-variety cohort case (issue #75): the
+// local name of the list's item primitive (itemPrim), the leaf restriction's own
+// enumeration facet children (children, empty for the facet-free fixtures), and
+// every tested lexical carried by that element (values). comp_foo carries one
+// value; a simpleTest element may repeat (float039.xml has nine siblings), each
+// captured so none is silently under-tested.
+type listTest struct {
+	itemPrim string
+	children []facetChild
+	values   []string
+}
+
+// execListCase decides a list-variety Facets cohort case (issue #75): the
+// msData/datatypes/{boolean018,float038,float039,anyURI011,hexBinary002,
+// base64Binary002,duration027}.xml fixtures, each a <list itemType=..> (a
+// user-defined "myList") reached through comp_foo and one-or-more simpleTest
+// elements. For each tested element it resolves the item primitive to a seeded,
+// strict-governed *xsd.SimpleType, synthesizes the list leaf (the item type as
+// {item type definition}, xs:anySimpleType as base, the mandatory fixed
+// whiteSpace=collapse plus any enumeration as own facets), and decides every
+// tested value through the real facet pipeline (value.ValidateLexical): the
+// list-variety mapping (cvc-datatype-valid clause dv_list §4.1.4, list.go)
+// splits each lexical into items, each item is Datatype-Valid against the item
+// type, and the leaf's enumeration is checked over the list value space by
+// value-space "equal or identical" (cvc-enumeration-valid §4.3.5.4, §2.2.1/
+// §2.2.2), its length (had any fixture one) in list items (cvc-length-valid
+// §4.3.1.3). The whole case is valid iff EVERY tested value across comp_foo and
+// every simpleTest sibling validates — the suite's whole-instance polarity. A
+// case whose schema does not decode to the list shape, whose item primitive is
+// not a seeded strict-mapped builtin, or that carries an unrecognized facet is
+// declined (Fail, an honest recorded gap) rather than mis-decided.
+//
+// Only the seven fixtures whose item primitive is in datatypesCase's lexical
+// cohort (boolean/float/anyURI/hexBinary/base64Binary/duration) are decidable
+// here; the byte/long/short/unsignedXxx item-type siblings are NOT — their item
+// primitives are the integer family, outside datatypesCase's primitives-only
+// regex — and, like union variety (still deferred per value/facets.go's
+// SCOPE(union) note), remain out of scope for this issue.
+func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
+	tests, ok := readListCohortCase(c.doc)
+	if !ok {
+		return Fail()
+	}
+	observedValid := true
+	for _, lt := range tests {
+		qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: lt.itemPrim}
+		itemType, seeded := sym[qn]
+		if !seeded {
+			return Fail()
+		}
+		if !strictGoverns(backend, itemType) {
+			return Fail()
+		}
+		ownFacets, ok := buildListOwnFacets(lt.children)
+		if !ok {
+			return Fail()
+		}
+		leaf, err := xsd.NewSimpleType(xsderr.Loc{},
+			xsd.QName{Space: synthNS, Local: "myList-" + lt.itemPrim},
+			xsd.List{Item: itemType}, xsd.AnySimpleType(), ownFacets, nil)
+		if err != nil {
+			return Fail()
+		}
+		for _, v := range lt.values {
+			if _, verr := value.ValidateLexical(backend, leaf, v, nil); verr != nil {
+				observedValid = false
+				break
+			}
+		}
+		if !observedValid {
+			break
+		}
+	}
+	if observedValid == c.expectValid {
+		return Pass()
+	}
+	return Fail()
+}
+
+// buildListOwnFacets translates a list leaf restriction's facet children into
+// its own facets. It always starts with the fixed whiteSpace=collapse facet
+// EVERY list carries (§4.3.6.1 f-w-fixed) — mandatory here because this cohort
+// does not route through the generated builtin table, and value.effectiveWhiteSpace
+// panics on a list-variety type whose EffectiveFacets carry no whiteSpace entry.
+// Each enumeration child is collected via the shared enumerationMember helper and
+// folded into one xsd.NewEnumerationFacet (§4.3.5.4); the fixtures' item primitives
+// (boolean/float/anyURI/hexBinary/base64Binary/duration) are never QName/NOTATION,
+// so an enumeration member needs no namespace context (facetChild.bindings is
+// nil here). Any non-enumeration facet kind is declined (ok=false), the cohort's
+// honest-decline convention — no other facet kind appears in these seven fixtures.
+func buildListOwnFacets(children []facetChild) ([]xsd.Facet, bool) {
+	facets := []xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}
+	var enumMembers []xsd.EnumerationMember
+	for _, ch := range children {
+		if ch.name != "enumeration" {
+			return nil, false
+		}
+		enumMembers = append(enumMembers, enumerationMember(ch))
+	}
+	if len(enumMembers) > 0 {
+		facets = append(facets, xsd.NewEnumerationFacet(enumMembers))
+	}
+	return facets, true
 }
 
 // execFacetsCase decides a facet-cohort case: it synthesizes the schema's
@@ -1160,6 +1316,209 @@ func decodeTestedPrimitive(path string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// readListCohortCase reads one list-variety cohort instance+schema (issue #75)
+// into one listTest per tested element (comp_foo and every simpleTest sibling).
+// It does its OWN independent read — not readLexicalCase's shared prim — because
+// comp_foo and simpleTest can resolve to DIFFERENT own facets (boolean018:
+// comp_foo enumerates 0/1, simpleTest enumerates true/false), so each type graph
+// must be resolved independently. ok is false when the instance or schema does
+// not decode to this cohort's shape, an honest decline rather than a guess.
+//
+// The schema is a whole-document xml.Unmarshal (these fixtures are tiny). Type
+// resolution walks: complexTest's type → its named complexType → the single
+// comp_foo sequence child → either its inline anonymous simpleType or its named
+// type; simpleTest's type → the named simpleType. Each then resolves to the
+// <list itemType=..> through AT MOST one <restriction base=..> hop
+// (resolveListLeaf), collecting that leaf restriction's own <enumeration>
+// children; an intermediate step's facets are not merged (none of the seven
+// in-scope fixtures need more than the single leaf restriction level with facets).
+func readListCohortCase(instancePath string) (tests []listTest, ok bool) {
+	inst, err := decodeListInstance(instancePath)
+	if err != nil || inst.SchemaLoc == "" {
+		return nil, false
+	}
+	schemaPath := filepath.Join(filepath.Dir(instancePath), filepath.FromSlash(inst.SchemaLoc))
+	sch, err := decodeListSchema(schemaPath)
+	if err != nil {
+		return nil, false
+	}
+	// Lookups built once from the parsed document (D2: maps are pure lookups; the
+	// output order comes from appending comp_foo then simpleTest below).
+	elementType := map[string]string{}
+	for _, e := range sch.Elements {
+		elementType[e.Name] = e.Type
+	}
+	complexTypes := map[string]listSchemaComplexType{}
+	for _, ct := range sch.ComplexTypes {
+		complexTypes[ct.Name] = ct
+	}
+	simpleTypes := map[string]listSchemaSimpleType{}
+	for _, st := range sch.SimpleTypes {
+		simpleTypes[st.Name] = st
+	}
+
+	// comp_foo: complexTest's complexType, its comp_foo sequence child, then that
+	// child's inline simpleType or its named type.
+	ct, found := complexTypes[localName(elementType["complexTest"])]
+	if !found {
+		return nil, false
+	}
+	var compStart listSchemaSimpleType
+	switch {
+	case ct.Element.SimpleType != nil:
+		compStart = *ct.Element.SimpleType
+	default:
+		compStart, found = simpleTypes[localName(ct.Element.Type)]
+		if !found {
+			return nil, false
+		}
+	}
+	compPrim, compChildren, ok := resolveListLeaf(compStart, simpleTypes)
+	if !ok {
+		return nil, false
+	}
+
+	// simpleTest: its named simpleType.
+	simpStart, found := simpleTypes[localName(elementType["simpleTest"])]
+	if !found {
+		return nil, false
+	}
+	simpPrim, simpChildren, ok := resolveListLeaf(simpStart, simpleTypes)
+	if !ok {
+		return nil, false
+	}
+
+	return []listTest{
+		{itemPrim: compPrim, children: compChildren, values: []string{inst.ComplexTest.CompFoo}},
+		{itemPrim: simpPrim, children: simpChildren, values: inst.SimpleTest},
+	}, true
+}
+
+// resolveListLeaf resolves a starting simpleType node (inline or named) to its
+// list item primitive and the leaf restriction's own enumeration facet children.
+// It collects the leaf's own <enumeration> children (only the first restriction
+// step, never an intermediate one — §3.16.1: the item type is never itself a
+// list, so the chain is a single restriction hop to the <list> in this cohort),
+// then walks the <restriction base=..> chain (capped at a small fixed depth as a
+// defensive guard against a malformed/cyclic fixture — trusted test inputs, so
+// this is not load-bearing) until it reaches the <list itemType=..> declaration.
+// ok is false for a node that is neither a list nor a recognized restriction, a
+// restriction carrying a non-enumeration facet child, an unresolvable base, or an
+// absent itemType.
+func resolveListLeaf(start listSchemaSimpleType, simpleTypes map[string]listSchemaSimpleType) (itemPrim string, children []facetChild, ok bool) {
+	cur := start
+	collectedLeaf := false
+	for depth := 0; depth < 4; depth++ {
+		if cur.List != nil {
+			item := localName(cur.List.ItemType)
+			if item == "" {
+				return "", nil, false
+			}
+			return item, children, true
+		}
+		if cur.Restriction == nil {
+			return "", nil, false
+		}
+		if len(cur.Restriction.Other) > 0 {
+			return "", nil, false
+		}
+		if !collectedLeaf {
+			for _, e := range cur.Restriction.Enumerations {
+				children = append(children, facetChild{name: "enumeration", value: e.Value})
+			}
+			collectedLeaf = true
+		}
+		next, found := simpleTypes[localName(cur.Restriction.Base)]
+		if !found {
+			return "", nil, false
+		}
+		cur = next
+	}
+	return "", nil, false
+}
+
+// listInstance mirrors the list-variety cohort's instance shape: a root carrying
+// one complexTest/comp_foo value and one-or-more simpleTest values. SimpleTest is
+// a []string so EVERY sibling is captured (float039.xml has nine); a scalar field
+// would silently keep only the last, under-testing the case.
+type listInstance struct {
+	SchemaLoc   string `xml:"http://www.w3.org/2001/XMLSchema-instance noNamespaceSchemaLocation,attr"`
+	ComplexTest struct {
+		CompFoo string `xml:"comp_foo"`
+	} `xml:"complexTest"`
+	SimpleTest []string `xml:"simpleTest"`
+}
+
+func decodeListInstance(path string) (listInstance, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return listInstance{}, err
+	}
+	var inst listInstance
+	if err := xml.Unmarshal(data, &inst); err != nil {
+		return listInstance{}, err
+	}
+	return inst, nil
+}
+
+// listSchema mirrors the list-variety cohort's schema shape: top-level element
+// declarations, named complexTypes (each a sequence with one element child that
+// carries a type= or an inline simpleType), and named simpleTypes (each a <list>
+// or a <restriction>). Only direct schema children are captured, so the anonymous
+// complexType nested inside <element name='root'> is not (it carries element
+// refs, not a tested type). Slice fields preserve document order (D2).
+type listSchema struct {
+	Elements []struct {
+		Name string `xml:"name,attr"`
+		Type string `xml:"type,attr"`
+	} `xml:"element"`
+	ComplexTypes []listSchemaComplexType `xml:"complexType"`
+	SimpleTypes  []listSchemaSimpleType  `xml:"simpleType"`
+}
+
+// listSchemaComplexType is a named complexType whose one sequence element child
+// (comp_foo) carries either a named type= or an inline anonymous simpleType.
+type listSchemaComplexType struct {
+	Name    string `xml:"name,attr"`
+	Element struct {
+		Name       string                `xml:"name,attr"`
+		Type       string                `xml:"type,attr"`
+		SimpleType *listSchemaSimpleType `xml:"simpleType"`
+	} `xml:"sequence>element"`
+}
+
+// listSchemaSimpleType is a named-or-inline simpleType: either a <list itemType=..>
+// or a <restriction base=..> with zero-or-more <enumeration> children. Other
+// captures any restriction child that is NOT an enumeration, so resolveListLeaf can
+// decline a fixture carrying an unrecognized facet rather than guess.
+type listSchemaSimpleType struct {
+	Name string `xml:"name,attr"`
+	List *struct {
+		ItemType string `xml:"itemType,attr"`
+	} `xml:"list"`
+	Restriction *struct {
+		Base         string `xml:"base,attr"`
+		Enumerations []struct {
+			Value string `xml:"value,attr"`
+		} `xml:"enumeration"`
+		Other []struct {
+			XMLName xml.Name
+		} `xml:",any"`
+	} `xml:"restriction"`
+}
+
+func decodeListSchema(path string) (listSchema, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return listSchema{}, err
+	}
+	var s listSchema
+	if err := xml.Unmarshal(data, &s); err != nil {
+		return listSchema{}, err
+	}
+	return s, nil
 }
 
 // typedLiteral pairs a tested value with the local name of the builtin primitive
