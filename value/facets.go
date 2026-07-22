@@ -46,17 +46,31 @@ var (
 // the governing mapping's Parse for the candidate value; a context-free cohort
 // (decimal/boolean/string) passes nil here.
 //
-// PRECONDITION (caller-guarded, NOT checked here): every facet on st must be
-// APPLICABLE to st's primitive ancestor (cos-applicable-facets §4.1.5), st must
-// be an atomic type whose effective facets carry a whiteSpace facet (§3.16.7.4),
-// and b must map st's primitive ancestor. ValidateLexical PANICS — it does not
-// return an error — when a value facet is paired with a value lacking the
-// capability that facet needs (a bound facet on a non-Ordered value, a length
-// facet on a non-Lengthed value, a digit facet on a non-DigitCounted value), or
-// when st has no whiteSpace facet in force (see effectiveWhiteSpace). Those are
+// PRECONDITION (caller-guarded, NOT checked here): every facet on st is
+// applicable to st per cos-applicable-facets (§4.1.5), and b maps st's governing
+// type. st may be atomic, list, or union variety. Atomic and list resolve their
+// in-force whiteSpace facet; a union carries none (categorically not applicable,
+// §4.1.5), so the whiteSpace stage is skipped and the raw lexical passes through
+// unchanged to the pattern stage. ValidateLexical PANICS — it does not return an
+// error — when a value facet is paired with a value lacking the capability that
+// facet needs (a bound facet on a non-Ordered value, a length facet on a
+// non-Lengthed value, a digit facet on a non-DigitCounted value). Those are
 // schema-construction errors (st-restrict-facets / cos-applicable-facets) the
 // caller must have already rejected, never instance data, so they surface as
-// programming-error panics, not validity verdicts.
+// programming-error panics, not validity verdicts. (The absent-whiteSpace case
+// splits: a union skips the stage via effectiveWhiteSpace's comma-ok result; an
+// atomic or list with no whiteSpace facet in force is still a construction-error
+// panic inside effectiveWhiteSpace itself, §3.16.7.4/§4.3.6.1.)
+//
+// SCOPE (union): relaxing the whiteSpace stage does NOT make ValidateLexical a
+// complete union validator. cvc-datatype-valid (§4.1.4 cl.2.3 + cl.3 note)
+// defers a union instance's whiteSpace normalization and lexical/value-facet
+// checks PER ACTIVE BASIC MEMBER; different members may carry different
+// whiteSpace facets. The remaining stages run against st itself, not a
+// dispatched member, so for a union st they do NOT produce a spec-correct
+// end-to-end verdict. Member-dispatch is out of scope for this function. A union
+// with no governing mapping still returns its normal cvc-datatype-valid error
+// here (never a panic, never a false accept).
 //
 // Facet {value} parsing is a separate concern with its own scope: an inherited
 // enumeration/bound facet's lexical {value} is parsed in the DECLARING SCHEMA's
@@ -73,12 +87,19 @@ func ValidateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Conte
 
 	// whiteSpace stage (§4.3.6): normalize using st's effective whiteSpace facet,
 	// resolved off EffectiveFacets (the ordinary same-kind overlay, §3.16.6.4).
-	normalized := normalizeWhiteSpace(rawLexical, effectiveWhiteSpace(st))
+	// A union carries no whiteSpace facet (categorically not applicable,
+	// cos-applicable-facets §4.1.5), so the stage is skipped and the raw lexical
+	// passes through unchanged — hence the name lexical, not normalized: on the
+	// union path the string is genuinely un-normalized here (T7).
+	lexical := rawLexical
+	if ws, applicable := effectiveWhiteSpace(st); applicable {
+		lexical = normalizeWhiteSpace(rawLexical, ws)
+	}
 
 	// pattern (lexical) stage (cvc-pattern-valid, §4.3.4.4): checked on the
-	// normalized lexical, before the value even exists.
+	// (possibly whiteSpace-normalized) lexical, before the value even exists.
 	for _, lf := range lexFacets {
-		if err := lf.CheckLexical(normalized); err != nil {
+		if err := lf.CheckLexical(lexical); err != nil {
 			return nil, err
 		}
 	}
@@ -91,7 +112,7 @@ func ValidateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Conte
 		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
 			"value: no backend mapping governs type %s", st.Name())
 	}
-	v, err := m.Parse(normalized, ctx)
+	v, err := m.Parse(lexical, ctx)
 	if err != nil {
 		return nil, err
 	}
