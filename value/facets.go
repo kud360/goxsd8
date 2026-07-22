@@ -51,7 +51,11 @@ var (
 // type. st may be atomic, list, or union variety. Atomic and list resolve their
 // in-force whiteSpace facet; a union carries none (categorically not applicable,
 // §4.1.5), so the whiteSpace stage is skipped and the raw lexical passes through
-// unchanged to the pattern stage. ValidateLexical PANICS — it does not return an
+// unchanged to the pattern stage. A list-variety st resolves its value the same
+// way an atomic one does — governingMapping wraps the item type's mapping in a
+// listMapping (cvc-datatype-valid clause dv_list, §4.1.4 cl.2.2, list.go), so
+// the value/mapping resolution, not just the whiteSpace stage, is now backed by
+// code for the list case. ValidateLexical PANICS — it does not return an
 // error — when a value facet is paired with a value lacking the capability that
 // facet needs (a bound facet on a non-Ordered value, a length facet on a
 // non-Lengthed value, a digit facet on a non-DigitCounted value). Those are
@@ -207,11 +211,29 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 	return lexFacets, valFacets, nil
 }
 
-// governingMapping walks from node (inclusive) up the base chain and returns
-// the first ancestor's Mapping the backend supplies. This is the widest-space
-// resolution (backend.go, st-restrict-facets §3.16.6.4): a derived type without
-// its own mapping is governed by its nearest mapped ancestor's.
+// governingMapping resolves the Mapping that governs node's value space. For a
+// list {variety} it wraps the item type's own governing mapping in a
+// listMapping (cvc-datatype-valid clause dv_list, §4.1.4 cl.2.2, list.go);
+// otherwise it walks from node (inclusive) up the base chain and returns the
+// first ancestor's Mapping the backend supplies — the widest-space resolution
+// (backend.go, st-restrict-facets §3.16.6.4): a derived type without its own
+// mapping is governed by its nearest mapped ancestor's.
+//
+// The list check is applied only to node itself, never to every ancestor in the
+// base-chain walk: a list-variety type's whole derivation chain is list-variety
+// by construction (Structures §3.16.1, std-item_type_definition: the {item type
+// definition} is never itself a list), so if node is not list-variety, none of
+// its ancestors are either, and the atomic loop below is unchanged. If the
+// item type has no governing mapping, the list is likewise ungoverned — the same
+// (Mapping{}, false) "ungoverned" outcome the atomic case returns.
 func governingMapping(b Backend, node *xsd.SimpleType) (Mapping, bool) {
+	if lst, ok := node.Variety().(xsd.List); ok {
+		item, ok := governingMapping(b, lst.Item)
+		if !ok {
+			return Mapping{}, false
+		}
+		return listMapping(item), true
+	}
 	for s := node; s != nil; s = s.Base() {
 		if m, ok := b.Mapping(s.Name()); ok {
 			return m, true
