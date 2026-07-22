@@ -7,12 +7,17 @@ import (
 )
 
 // ruleSTPropsCorrect is Simple Type Definition Properties Correct (Structures
-// §3.16.6.1, id="st-props-correct"). Clause 4 forbids more than one member of
-// {facets} of the same kind; clause 5 requires each facet be supported. This
-// package charges it to two construction-time rejections in NewSimpleType: a
+// §3.16.6.1, id="st-props-correct"). The package charges it across two layers:
+// checkSTProps (below) makes the pure-property rejections at construction — a
 // {final} token outside the legal simple-type subset (restriction, extension,
-// list, union — §3.16.1 / Datatypes §4.1.1 tableau), and two own facets of the
-// same FacetKind (clause 4).
+// list, union — §3.16.1 / Datatypes §4.1.1 tableau) and two own facets of the
+// same FacetKind (clause 4) — while checkSTGraph (derivation.go) makes the
+// cross-reference rejections once the {base}/{item}/{member} pointers are wired:
+// clause 3 (the {base type definition}'s {final} must not contain restriction),
+// clause 5 (every member of {facets} is processor-supported), and the Datatypes
+// §4.1.1 per-variety shape prose. Clause 2 (no circular derivation) is a
+// documented no-op — a cyclic base chain is unconstructible via this package's
+// constructors (see checkSTGraph).
 const ruleSTPropsCorrect xsderr.Rule = "st-props-correct"
 
 // Variety is a Simple Type Definition's {variety} (Structures §3.16.1,
@@ -486,6 +491,9 @@ func NewSimpleType(loc xsderr.Loc, name QName, variety Variety, base *SimpleType
 	}
 	t := &SimpleType{name: name, variety: variety, base: base}
 	t.setOwnFacetsFinal(ownFacets, final)
+	if err := checkSTGraph(loc, t); err != nil {
+		return nil, err
+	}
 	return t, nil
 }
 
@@ -510,6 +518,9 @@ func NewPrimitiveType(loc xsderr.Loc, name QName, ownFacets []Facet, final []Der
 	t := &SimpleType{name: name, base: anyAtomicType}
 	t.variety = Atomic{Primitive: t}
 	t.setOwnFacetsFinal(ownFacets, final)
+	if err := checkSTGraph(loc, t); err != nil {
+		return nil, err
+	}
 	return t, nil
 }
 
