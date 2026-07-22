@@ -124,7 +124,7 @@ MS-DataTypes2006-07-15/anyURI007_2079/instance/anyURI007_2079.v pass
 MS-DataTypes2006-07-15/anyURI008_2080/instance/anyURI008_2080.v pass
 MS-DataTypes2006-07-15/anyURI009_2081/instance/anyURI009_2081.v pass
 MS-DataTypes2006-07-15/anyURI010_2082/instance/anyURI010_2082.v pass
-MS-DataTypes2006-07-15/anyURI011_2083/instance/anyURI011_2083.v fail
+MS-DataTypes2006-07-15/anyURI011_2083/instance/anyURI011_2083.v pass
 MS-DataTypes2006-07-15/anyURI_a001_1336/instance/anyURI_a001_1336.v fail
 MS-DataTypes2006-07-15/anyURI_a002_1337/instance/anyURI_a002_1337.v fail
 MS-DataTypes2006-07-15/anyURI_a004_1339/instance/anyURI_a004_1339.i fail
@@ -148,7 +148,7 @@ MS-DataTypes2006-07-15/anyURI_minLength002_1326/instance/anyURI_minLength002_132
 MS-DataTypes2006-07-15/anyURI_minLength003_1327/instance/anyURI_minLength003_1327.i pass
 MS-DataTypes2006-07-15/anyURI_minLength004_1328/instance/anyURI_minLength004_1328.v pass
 MS-DataTypes2006-07-15/base64Binary001_2071/instance/base64Binary001_2071.v pass
-MS-DataTypes2006-07-15/base64Binary002_2072/instance/base64Binary002_2072.v fail
+MS-DataTypes2006-07-15/base64Binary002_2072/instance/base64Binary002_2072.v pass
 MS-DataTypes2006-07-15/base64Binary_enumeration001_1319/instance/base64Binary_enumeration001_1319.i pass
 MS-DataTypes2006-07-15/base64Binary_enumeration002_1320/instance/base64Binary_enumeration002_1320.v pass
 MS-DataTypes2006-07-15/base64Binary_length001_1309/instance/base64Binary_length001_1309.i pass
@@ -178,7 +178,7 @@ MS-DataTypes2006-07-15/boolean014_1870/instance/boolean014_1870.i pass
 MS-DataTypes2006-07-15/boolean015_1871/instance/boolean015_1871.i pass
 MS-DataTypes2006-07-15/boolean016_1872/instance/boolean016_1872.i pass
 MS-DataTypes2006-07-15/boolean017_1873/instance/boolean017_1873.i pass
-MS-DataTypes2006-07-15/boolean018_1874/instance/boolean018_1874.v fail
+MS-DataTypes2006-07-15/boolean018_1874/instance/boolean018_1874.v pass
 MS-DataTypes2006-07-15/byte_enumeration001_1683/instance/byte_enumeration001_1683.i pass
 MS-DataTypes2006-07-15/byte_enumeration002_1684/instance/byte_enumeration002_1684.v pass
 MS-DataTypes2006-07-15/byte_enumeration003_1685/instance/byte_enumeration003_1685.i pass
@@ -392,7 +392,7 @@ MS-DataTypes2006-07-15/duration023_1991/instance/duration023_1991.v pass
 MS-DataTypes2006-07-15/duration024_1992/instance/duration024_1992.v pass
 MS-DataTypes2006-07-15/duration025_1993/instance/duration025_1993.v pass
 MS-DataTypes2006-07-15/duration026_1994/instance/duration026_1994.v pass
-MS-DataTypes2006-07-15/duration027_1995/instance/duration027_1995.v fail
+MS-DataTypes2006-07-15/duration027_1995/instance/duration027_1995.v pass
 MS-DataTypes2006-07-15/duration028_1996/instance/duration028_1996.i pass
 MS-DataTypes2006-07-15/duration029_1997/instance/duration029_1997.i pass
 MS-DataTypes2006-07-15/duration030_1998/instance/duration030_1998.i pass
@@ -454,8 +454,8 @@ MS-DataTypes2006-07-15/float034_1933/instance/float034_1933.v pass
 MS-DataTypes2006-07-15/float035_1934/instance/float035_1934.i pass
 MS-DataTypes2006-07-15/float036_1935/instance/float036_1935.i pass
 MS-DataTypes2006-07-15/float037_1936/instance/float037_1936.i pass
-MS-DataTypes2006-07-15/float038_1937/instance/float038_1937.v fail
-MS-DataTypes2006-07-15/float039_1938/instance/float039_1938.v fail
+MS-DataTypes2006-07-15/float038_1937/instance/float038_1937.v pass
+MS-DataTypes2006-07-15/float039_1938/instance/float039_1938.v pass
 MS-DataTypes2006-07-15/float_enumeration001_1062/instance/float_enumeration001_1062.i pass
 MS-DataTypes2006-07-15/float_enumeration002_1063/instance/float_enumeration002_1063.v pass
 MS-DataTypes2006-07-15/float_enumeration003_1064/instance/float_enumeration003_1064.i pass
@@ -590,7 +590,7 @@ MS-DataTypes2006-07-15/gYear_minInclusive004_1225/instance/gYear_minInclusive004
 MS-DataTypes2006-07-15/gYear_minInclusive005_1226/instance/gYear_minInclusive005_1226.v pass
 MS-DataTypes2006-07-15/gYear_pattern001_1211/instance/gYear_pattern001_1211.v pass
 MS-DataTypes2006-07-15/hexBinary001_2067/instance/hexBinary001_2067.v pass
-MS-DataTypes2006-07-15/hexBinary002_2068/instance/hexBinary002_2068.v fail
+MS-DataTypes2006-07-15/hexBinary002_2068/instance/hexBinary002_2068.v pass
 MS-DataTypes2006-07-15/hexBinary003_2069/instance/hexBinary003_2069.v pass
 MS-DataTypes2006-07-15/hexBinary004_2070/instance/hexBinary004_2070.i pass
 MS-DataTypes2006-07-15/hexBinary_enumeration001_1305/instance/hexBinary_enumeration001_1305.i pass
