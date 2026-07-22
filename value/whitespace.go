@@ -88,12 +88,25 @@ func collapseSpace(s string) string {
 // a whiteSpace entry (§3.16.7.4), so a derived type that does not itself declare
 // one still resolves through the inherited primitive facet.
 //
-// A type with NO whiteSpace facet in force (e.g. a union variety, to which
-// whiteSpace "does not apply directly", §4.3.6) is outside this atomic-only
-// cohort — the precondition ValidateLexical documents — never instance data, so
-// it panics rather than returning an error. An unrecognized {value} is likewise
-// an internal-consistency failure between a generated table and this code.
-func effectiveWhiteSpace(st *xsd.SimpleType) whiteSpace {
+// The comma-ok result models whether a whiteSpace facet is in force at all.
+// applicable=true returns the resolved mode. applicable=false (ws is the zero
+// value) means whiteSpace is CATEGORICALLY not applicable to st: this happens
+// only for a union {variety}, whose applicable facets are pattern, enumeration
+// and assertions — whiteSpace is conspicuously absent (cos-applicable-facets
+// §4.1.5), and a union's normalization is instead deferred per active basic
+// member (§4.3.6). A caller that ignores the bool and feeds the zero ws to
+// normalizeWhiteSpace still panics there, so the false result cannot silently
+// degrade into a wrong normalization.
+//
+// The two OTHER panic paths below are UNCHANGED internal-consistency guards,
+// not relaxed: a whiteSpace facet whose Values() is multi-valued (a malformed
+// generated table) and an unrecognized {value} string (table/code drift). An
+// ABSENT facet on a non-union (atomic or list) type is ALSO still a panic: an
+// atomic type's {facets} always carries a whiteSpace entry (§3.16.7.4) and a
+// list's carries the materialized fixed collapse facet (§4.3.6.1), so its
+// absence there is a schema-construction bug, never a legitimate "not
+// applicable" case — only the confirmed-union case is relaxed to (0, false).
+func effectiveWhiteSpace(st *xsd.SimpleType) (ws whiteSpace, applicable bool) {
 	for _, ef := range st.EffectiveFacets() {
 		if ef.Facet().Kind() != xsd.FacetWhiteSpace {
 			continue
@@ -104,13 +117,23 @@ func effectiveWhiteSpace(st *xsd.SimpleType) whiteSpace {
 		}
 		switch values[0] {
 		case "preserve":
-			return preserveWS
+			return preserveWS, true
 		case "replace":
-			return replaceWS
+			return replaceWS, true
 		case "collapse":
-			return collapseWS
+			return collapseWS, true
 		}
 		panic(fmt.Sprintf("value: unrecognized whiteSpace facet value %q on %s", values[0], st.Name()))
 	}
+	// No whiteSpace facet in force. For a union {variety} this is spec-mandated
+	// (whiteSpace is not an applicable facet, cos-applicable-facets §4.1.5), so
+	// the stage is "not applicable" rather than an error. Drive it off the
+	// sealed xsd.Variety sum, matching lengthExemptPrimitive's .(xsd.Atomic)
+	// idiom.
+	if _, isUnion := st.Variety().(xsd.Union); isUnion {
+		return 0, false
+	}
+	// Atomic/list: an absent whiteSpace facet is a construction bug (§3.16.7.4,
+	// §4.3.6.1), never instance data — fail loud, do not weaken to (0, false).
 	panic(fmt.Sprintf("value: type %s has no whiteSpace facet in force", st.Name()))
 }
