@@ -1,6 +1,10 @@
 package xsd
 
-import "github.com/kud360/goxsd8/xsderr"
+import (
+	"strconv"
+
+	"github.com/kud360/goxsd8/xsderr"
+)
 
 // ruleCosSTRestricts is Derivation Valid (Restriction, Simple) (Structures
 // §3.16.6.2, id="cos-st-restricts"): the per-variety constraints relating a
@@ -9,6 +13,46 @@ import "github.com/kud360/goxsd8/xsderr"
 // 3.1, 3.2.1.1, 3.2.2.1, 3.2.2.3) at construction time; the facet-value
 // sub-clauses are deferred (see checkSTGraph).
 const ruleCosSTRestricts xsderr.Rule = "cos-st-restricts"
+
+// The precisionDecimal scale-facet Schema Component Constraints, charged at
+// schema construction against the abstract-model {facets} property
+// (SimpleType.EffectiveFacets) — the construction-time complements of the
+// instance-time cvc-maxScale-valid / cvc-minScale-valid facet stages (#133,
+// package value). Only precisionDecimal and its restrictions carry maxScale /
+// minScale (xsd-precisionDecimal.md §3.3), so these are vacuous on every other
+// type.
+const (
+	// ruleMaxScaleValidRestriction is maxScale valid restriction
+	// (xsd-precisionDecimal.md §4.2.4, id="maxScale-valid-restriction"): a
+	// restriction's maxScale {value} may not be greater than the {value} of the
+	// {base type definition}'s effective maxScale — maxScale may only move down.
+	ruleMaxScaleValidRestriction xsderr.Rule = "maxScale-valid-restriction"
+	// ruleMinScaleValidRestriction is minScale valid restriction
+	// (xsd-precisionDecimal.md §4.3.4, id="minScale-valid-restriction"): the
+	// mirror image — a restriction's minScale {value} may not be less than the
+	// base's effective minScale — minScale may only move up.
+	ruleMinScaleValidRestriction xsderr.Rule = "minScale-valid-restriction"
+	// ruleMinScaleLEMaxScale is the "minScale less than or equal to maxScale"
+	// consistency SCC (xsd-precisionDecimal.md §4.3.4). It is NOT
+	// restriction-specific: it constrains any type's {facets}. WHY the constant
+	// carries the string "minScale-totalDigits": the spec's anchor id for this
+	// SCC is a copy-paste bug that names the totalDigits constraint, so that is
+	// the only string extractable from the spec text for the catalog; error
+	// messages cite the SCC by its true title instead, and the spec's own Note
+	// disclaims any relation to totalDigits.
+	ruleMinScaleLEMaxScale xsderr.Rule = "minScale-totalDigits"
+	// ruleMaxScaleFixed is the maxScale {fixed}-inheritance SCC
+	// (xsd-precisionDecimal.md §4.2.1 dc-maxScale, id="f-ms-fixed"): if the base's
+	// effective maxScale is {fixed}, a restriction may not specify any maxScale
+	// {value} other than the base's — checked independently of the value SCC, as a
+	// further-narrowing value satisfies maxScale-valid-restriction yet still
+	// violates {fixed}.
+	ruleMaxScaleFixed xsderr.Rule = "f-ms-fixed"
+	// ruleMinScaleFixed is the minScale {fixed}-inheritance SCC
+	// (xsd-precisionDecimal.md §4.3.1 dc-minScale, id="f-mns-fixed"): the mirror
+	// of ruleMaxScaleFixed for minScale.
+	ruleMinScaleFixed xsderr.Rule = "f-mns-fixed"
+)
 
 // checkSTGraph enforces the cross-reference Simple Type Definition constraints
 // that need t's resolved {base type definition}, {item type definition}, and
@@ -31,6 +75,10 @@ const ruleCosSTRestricts xsderr.Rule = "cos-st-restricts"
 //     (STYLE E2).
 //   - the per-variety shape and cos-st-restricts case constraints — via
 //     checkAtomicGraph / checkListGraph / checkUnionGraph.
+//   - the precisionDecimal scale-facet Schema Component Constraints
+//     (maxScale-valid-restriction, minScale-valid-restriction, minScale ≤
+//     maxScale, f-ms-fixed, f-mns-fixed) — via checkScaleFacets, which compares
+//     t's {facets} against the base's through EffectiveFacets.
 //
 // st-props-correct clause 2 (the {base} chain terminates at a primitive or
 // xs:anySimpleType — no circular derivation) is a documented no-op: a cyclic
@@ -58,6 +106,9 @@ func checkSTGraph(loc xsderr.Loc, t *SimpleType) error {
 	if t.base != nil && finalContains(t.base.final, DerivationRestriction) {
 		return xsderr.New(ruleSTPropsCorrect, loc,
 			"simple type {base type definition} %s has restriction in its {final}, which blocks derivation (st-props-correct clause 3)", t.base.name)
+	}
+	if err := checkScaleFacets(loc, t); err != nil {
+		return err
 	}
 	switch t.variety.(type) {
 	case Atomic:
@@ -297,6 +348,183 @@ func finalContains(final []DerivationMethod, d DerivationMethod) bool {
 		}
 	}
 	return false
+}
+
+// checkScaleFacets enforces the five precisionDecimal scale-facet Schema
+// Component Constraints at construction (see the rule constants above). It reads
+// the {facets} property directly through SimpleType.EffectiveFacets (the
+// §3.16.6.4 overlay), so a facet inherited unchanged through several restriction
+// levels is compared transitively with no manual ancestor walk. t.base is nil
+// only for xs:anySimpleType, which carries no facets, so the base-relative SCCs
+// are vacuous there; the minScale ≤ maxScale consistency SCC is not
+// restriction-specific and runs on every type's own effective {facets}.
+func checkScaleFacets(loc xsderr.Loc, t *SimpleType) error {
+	if t.base != nil {
+		baseEff := t.base.EffectiveFacets()
+		if err := checkScaleValueRestriction(loc, t, baseEff, FacetMaxScale, ruleMaxScaleValidRestriction); err != nil {
+			return err
+		}
+		if err := checkScaleValueRestriction(loc, t, baseEff, FacetMinScale, ruleMinScaleValidRestriction); err != nil {
+			return err
+		}
+		if err := checkScaleFixed(loc, t, baseEff, FacetMaxScale, ruleMaxScaleFixed); err != nil {
+			return err
+		}
+		if err := checkScaleFixed(loc, t, baseEff, FacetMinScale, ruleMinScaleFixed); err != nil {
+			return err
+		}
+	}
+	return checkScaleConsistency(loc, t)
+}
+
+// checkScaleValueRestriction charges maxScale-valid-restriction (§4.2.4) or
+// minScale-valid-restriction (§4.3.4): a restriction's own scale facet {value}
+// may not relax the base's effective same-kind {value}. maxScale may only move
+// down (own > base is the violation), minScale only up (own < base). Both are
+// vacuous when the base has no effective facet of this kind, or when t declares
+// no own facet of this kind (an inherited-only facet equals the base's effective
+// value and cannot cross it).
+func checkScaleValueRestriction(loc xsderr.Loc, t *SimpleType, baseEff []EffectiveFacet, kind FacetKind, rule xsderr.Rule) error {
+	baseF, ok := findEffectiveFacet(baseEff, kind)
+	if !ok {
+		return nil
+	}
+	ownF, ok := findFacet(t.ownFacets, kind)
+	if !ok {
+		return nil
+	}
+	ownV, err := scaleValue(ownF, loc, rule)
+	if err != nil {
+		return err
+	}
+	baseV, err := scaleValue(baseF, loc, rule)
+	if err != nil {
+		return err
+	}
+	if !scaleRelaxes(kind, ownV, baseV) {
+		return nil
+	}
+	return xsderr.New(rule, loc,
+		"simple type restriction's own %s {value} %d relaxes the {base type definition}'s effective %s {value} %d, which restriction may not do (%s)",
+		kind, ownV, kind, baseV, rule)
+}
+
+// scaleRelaxes reports whether an own scale {value} widens (relaxes) the base's,
+// which restriction forbids: for maxScale a larger value widens the space, for
+// minScale a smaller value does.
+func scaleRelaxes(kind FacetKind, own, base int) bool {
+	if kind == FacetMaxScale {
+		return own > base
+	}
+	return own < base
+}
+
+// checkScaleFixed charges f-ms-fixed (§4.2.1) or f-mns-fixed (§4.3.1): if the
+// base's effective scale facet of this kind is {fixed}, a restriction may not
+// specify its own scale facet with ANY value other than the base's — this is
+// distinct from checkScaleValueRestriction, which a further-narrowing value can
+// satisfy while still overriding a {fixed} base facet. Vacuous when the base has
+// no such effective facet, the base facet is not {fixed}, or t declares no own
+// facet of this kind.
+func checkScaleFixed(loc xsderr.Loc, t *SimpleType, baseEff []EffectiveFacet, kind FacetKind, rule xsderr.Rule) error {
+	baseF, ok := findEffectiveFacet(baseEff, kind)
+	if !ok {
+		return nil
+	}
+	if fixed, _ := baseF.Fixed(); !fixed {
+		return nil
+	}
+	ownF, ok := findFacet(t.ownFacets, kind)
+	if !ok {
+		return nil
+	}
+	ownV, err := scaleValue(ownF, loc, rule)
+	if err != nil {
+		return err
+	}
+	baseV, err := scaleValue(baseF, loc, rule)
+	if err != nil {
+		return err
+	}
+	if ownV == baseV {
+		return nil
+	}
+	return xsderr.New(rule, loc,
+		"simple type restriction sets %s {value} %d but the {base type definition}'s effective %s is {fixed} at %d and may not be overridden (%s)",
+		kind, ownV, kind, baseV, rule)
+}
+
+// checkScaleConsistency charges the "minScale less than or equal to maxScale"
+// SCC (spec anchor id minScale-totalDigits, a copy-paste bug — see
+// ruleMinScaleLEMaxScale): it is not restriction-specific, so it runs against
+// t's OWN effective {facets} after overlay. It rejects when both facets are in
+// force and minScale's {value} exceeds maxScale's. The spec's Note explicitly
+// disclaims any cross-check against totalDigits.
+func checkScaleConsistency(loc xsderr.Loc, t *SimpleType) error {
+	eff := t.EffectiveFacets()
+	minF, hasMin := findEffectiveFacet(eff, FacetMinScale)
+	maxF, hasMax := findEffectiveFacet(eff, FacetMaxScale)
+	if !hasMin || !hasMax {
+		return nil
+	}
+	// A malformed {value} on either facet is charged under that facet's own
+	// valid-restriction rule (the rule a bad literal on it would otherwise hit).
+	minV, err := scaleValue(minF, loc, ruleMinScaleValidRestriction)
+	if err != nil {
+		return err
+	}
+	maxV, err := scaleValue(maxF, loc, ruleMaxScaleValidRestriction)
+	if err != nil {
+		return err
+	}
+	if minV <= maxV {
+		return nil
+	}
+	return xsderr.New(ruleMinScaleLEMaxScale, loc,
+		"simple type {facets} has minScale {value} %d greater than maxScale {value} %d, violating \"minScale less than or equal to maxScale\" (its spec anchor id %s is a copy-paste bug)",
+		minV, maxV, ruleMinScaleLEMaxScale)
+}
+
+// findFacet returns the own Facet of the given kind and whether it is present.
+func findFacet(facets []Facet, kind FacetKind) (Facet, bool) {
+	for _, f := range facets {
+		if f.kind == kind {
+			return f, true
+		}
+	}
+	return Facet{}, false
+}
+
+// findEffectiveFacet returns the in-force Facet of the given kind from an
+// EffectiveFacets result and whether it is present.
+func findEffectiveFacet(facets []EffectiveFacet, kind FacetKind) (Facet, bool) {
+	for _, ef := range facets {
+		if ef.facet.kind == kind {
+			return ef.facet, true
+		}
+	}
+	return Facet{}, false
+}
+
+// scaleValue reads a scale facet's single xs:integer {value} (which may be
+// negative — no nonNegativeInteger constraint). That {value} is user-supplied
+// schema lexical data reachable through the public NewFacet/NewSimpleType API,
+// which accepts arbitrary lexical strings for scale kinds, so a wrong value count
+// or non-integer literal is a real validity rejection charged as an
+// *xsderr.Error, not a package logic error — mirroring value/facets.go's facetInt
+// for the exact same maxScale/minScale {value} parsing at instance-validation
+// time.
+func scaleValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (int, error) {
+	if len(f.values) != 1 {
+		return 0, xsderr.New(rule, loc,
+			"%s facet must carry exactly one value, has %d", f.kind, len(f.values))
+	}
+	n, err := strconv.Atoi(f.values[0])
+	if err != nil {
+		return 0, xsderr.New(rule, loc,
+			"%s facet value %q is not an integer", f.kind, f.values[0])
+	}
+	return n, nil
 }
 
 // unionMembershipHasList reports whether any type in u's transitive membership

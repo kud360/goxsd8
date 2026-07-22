@@ -184,6 +184,169 @@ func TestSTGraphChecks(t *testing.T) {
 	}
 }
 
+// scaleFacet is a test shorthand for a maxScale/minScale Facet with a lexical
+// integer {value} and a {fixed} flag.
+func scaleFacet(kind FacetKind, value string, fixed bool) Facet {
+	return NewFacet(kind, []string{value}, fixed)
+}
+
+// TestScaleFacetSCCs exercises checkScaleFacets: the value-restriction SCCs
+// (maxScale-valid-restriction §4.2.4, minScale-valid-restriction §4.3.4), the
+// minScale ≤ maxScale consistency SCC (spec anchor minScale-totalDigits), and
+// the {fixed}-inheritance SCCs (f-ms-fixed §4.2.1, f-mns-fixed §4.3.1). Every
+// prerequisite type is built through the real constructors.
+func TestScaleFacetSCCs(t *testing.T) {
+	pdec := mustPrim(t, "precisionDecimal")
+
+	// Bases carrying effective scale facets for the restriction SCCs.
+	baseMax5 := mustST(t, "baseMax5", Atomic{Primitive: pdec}, pdec,
+		[]Facet{scaleFacet(FacetMaxScale, "5", false)}, nil)
+	baseMin2 := mustST(t, "baseMin2", Atomic{Primitive: pdec}, pdec,
+		[]Facet{scaleFacet(FacetMinScale, "2", false)}, nil)
+	baseMaxFixed5 := mustST(t, "baseMaxFixed5", Atomic{Primitive: pdec}, pdec,
+		[]Facet{scaleFacet(FacetMaxScale, "5", true)}, nil)
+	baseMinFixed2 := mustST(t, "baseMinFixed2", Atomic{Primitive: pdec}, pdec,
+		[]Facet{scaleFacet(FacetMinScale, "2", true)}, nil)
+
+	// Multi-level chain A(fixed maxScale=5) <- B(no own scale) for the transitive
+	// {fixed} check through EffectiveFacets.
+	chainB := mustST(t, "chainB", Atomic{Primitive: pdec}, baseMaxFixed5, nil, nil)
+
+	loc := xsderr.Loc{}
+	qn := QName{Local: "D"}
+
+	tests := []struct {
+		name     string
+		build    func() error
+		wantRule xsderr.Rule // "" => success expected
+	}{
+		// --- maxScale-valid-restriction (§4.2.4): may only move down ---
+		{"maxScale narrows below base ok", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMax5,
+				[]Facet{scaleFacet(FacetMaxScale, "3", false)}, nil)
+			return e
+		}, ""},
+		{"maxScale equals base ok", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMax5,
+				[]Facet{scaleFacet(FacetMaxScale, "5", false)}, nil)
+			return e
+		}, ""},
+		{"maxScale above base rejected", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMax5,
+				[]Facet{scaleFacet(FacetMaxScale, "7", false)}, nil)
+			return e
+		}, ruleMaxScaleValidRestriction},
+		{"maxScale vacuous no base maxScale ok", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, pdec,
+				[]Facet{scaleFacet(FacetMaxScale, "9", false)}, nil)
+			return e
+		}, ""},
+		{"maxScale non-integer literal rejected not panic", func() error {
+			// A malformed scale {value} ("abc") reaches scaleValue through the
+			// public NewFacet/NewSimpleType API; it must charge a real *xsderr.Error,
+			// not panic (regression guard for #157).
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMax5,
+				[]Facet{scaleFacet(FacetMaxScale, "abc", false)}, nil)
+			return e
+		}, ruleMaxScaleValidRestriction},
+
+		// --- minScale-valid-restriction (§4.3.4): may only move up ---
+		{"minScale above base ok", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMin2,
+				[]Facet{scaleFacet(FacetMinScale, "4", false)}, nil)
+			return e
+		}, ""},
+		{"minScale equals base ok", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMin2,
+				[]Facet{scaleFacet(FacetMinScale, "2", false)}, nil)
+			return e
+		}, ""},
+		{"minScale below base rejected", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMin2,
+				[]Facet{scaleFacet(FacetMinScale, "1", false)}, nil)
+			return e
+		}, ruleMinScaleValidRestriction},
+
+		// --- minScale ≤ maxScale consistency (anchor minScale-totalDigits) ---
+		{"minScale gt maxScale rejected", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, pdec,
+				[]Facet{
+					scaleFacet(FacetMinScale, "5", false),
+					scaleFacet(FacetMaxScale, "2", false),
+				}, nil)
+			return e
+		}, ruleMinScaleLEMaxScale},
+		{"minScale eq maxScale ok", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, pdec,
+				[]Facet{
+					scaleFacet(FacetMinScale, "3", false),
+					scaleFacet(FacetMaxScale, "3", false),
+				}, nil)
+			return e
+		}, ""},
+
+		// --- f-ms-fixed (§4.2.1): fixed base maxScale may not be overridden ---
+		{"fixed maxScale repeated identical ok", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMaxFixed5,
+				[]Facet{scaleFacet(FacetMaxScale, "5", true)}, nil)
+			return e
+		}, ""},
+		{"fixed maxScale further-narrowing rejected", func() error {
+			// value 3 satisfies maxScale-valid-restriction (3 < 5) yet still
+			// overrides the {fixed} base facet — proves f-ms-fixed is independent.
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMaxFixed5,
+				[]Facet{scaleFacet(FacetMaxScale, "3", true)}, nil)
+			return e
+		}, ruleMaxScaleFixed},
+
+		// --- f-mns-fixed (§4.3.1): fixed base minScale may not be overridden ---
+		{"fixed minScale repeated identical ok", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMinFixed2,
+				[]Facet{scaleFacet(FacetMinScale, "2", true)}, nil)
+			return e
+		}, ""},
+		{"fixed minScale further-widening rejected", func() error {
+			// value 4 satisfies minScale-valid-restriction (4 > 2) yet still
+			// overrides the {fixed} base facet — proves f-mns-fixed is independent.
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMinFixed2,
+				[]Facet{scaleFacet(FacetMinScale, "4", true)}, nil)
+			return e
+		}, ruleMinScaleFixed},
+
+		// --- multi-level transitive {fixed} through EffectiveFacets ---
+		{"chain C overrides inherited fixed maxScale rejected", func() error {
+			// C restricts B which restricts A; A fixes maxScale=5, B declares no
+			// own scale facet, so C inherits the fixed facet transitively.
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, chainB,
+				[]Facet{scaleFacet(FacetMaxScale, "4", true)}, nil)
+			return e
+		}, ruleMaxScaleFixed},
+		{"chain C inherits fixed maxScale unchanged ok", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, chainB, nil, nil)
+			return e
+		}, ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.build()
+			if tc.wantRule == "" {
+				if err != nil {
+					t.Fatalf("build() = %v, want success", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("build() = nil, want rejection %s", tc.wantRule)
+			}
+			gotRule, ok := xsderr.RuleOf(err)
+			if !ok || gotRule != tc.wantRule {
+				t.Fatalf("build() rule = %q (ok=%v), want %q; err=%v", gotRule, ok, tc.wantRule, err)
+			}
+		})
+	}
+}
+
 // TestDerivedOKSimple pins the cos-st-derived-ok (§3.16.6.3) relation directly:
 // identity (clause 1), the base-chain walk (clause 2.2.1/2.2.2), the
 // list/union-of-anySimpleType shortcut (clause 2.2.3), and the union-member

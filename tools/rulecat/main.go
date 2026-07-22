@@ -54,6 +54,15 @@ var irregularRules = []string{
 	"enumeration-valid-restriction",
 	"timezone-valid-restriction",
 	"length-minLength-maxLength",
+	"maxScale-valid-restriction",
+	"minScale-valid-restriction",
+	// minScale-totalDigits is the spec's own copy-paste-bug anchor id for the
+	// "minScale less than or equal to maxScale" SCC (xsd-precisionDecimal.md
+	// §4.3.4). The Rule constant/catalog entry must be the string actually
+	// extractable from the spec text; error messages cite it by its true title.
+	"minScale-totalDigits",
+	"f-ms-fixed",
+	"f-mns-fixed",
 }
 
 func main() {
