@@ -1,8 +1,6 @@
 package value
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -125,34 +123,23 @@ func TestScaleFacetNonScaledPanics(t *testing.T) {
 	_ = sf.CheckValue("not scaled")
 }
 
-// TestCompileUnhandledFacetKindPanics confirms compile()'s fail-loud default
-// (#158): a FacetKind reaching the facet-kind switch with no checker case is a
-// package-internal completeness bug (the enum was extended without wiring its
-// checker), so it panics — the boundFacet/scaleFacet kind-dispatch convention —
-// rather than silently dropping the facet (the #133 silent-drop bug class).
-// FacetKind is a closed enum with all 16 members handled today, so the
-// unhandled state is unreachable through the public API; the test forges it with
-// an out-of-range numeric FacetKind carried as an own facet, which
-// EffectiveFacets surfaces straight into compile()'s switch. Removing the
-// default case turns this back into a silent no-op and fails this test.
-func TestCompileUnhandledFacetKindPanics(t *testing.T) {
-	const unhandled = xsd.FacetKind(99) // no case in compile()'s switch
-	st, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "forged"},
-		[]xsd.Facet{xsd.NewFacet(unhandled, []string{"x"}, false)}, nil)
-	if err != nil {
-		t.Fatalf("NewPrimitiveType(forged): %v", err)
+// TestUnsupportedFacetKindRejected confirms an out-of-range numeric FacetKind —
+// one outside the closed 16-member enum, hence unsupported by the processor — is
+// now rejected at schema construction by st-props-correct clause 5 (#46), so it
+// can never reach compile()'s facet-kind switch. This defends the #158/#133
+// bug class (a facet the processor cannot check must not be silently dropped)
+// one layer earlier than compile()'s fail-loud default, which remains in place
+// as defense-in-depth for a future in-range-but-unwired enum extension.
+func TestUnsupportedFacetKindRejected(t *testing.T) {
+	const unsupported = xsd.FacetKind(99) // outside the FacetKind enum
+	_, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "forged"},
+		[]xsd.Facet{xsd.NewFacet(unsupported, []string{"x"}, false)}, nil)
+	if err == nil {
+		t.Fatal("NewPrimitiveType(unsupported facet): want rejection, got nil")
 	}
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatal("compile(unhandled FacetKind): want panic, got none")
-		}
-		if msg := fmt.Sprint(r); !strings.Contains(msg, "unhandled FacetKind") {
-			t.Errorf("compile panic = %q, want it to mention %q", msg, "unhandled FacetKind")
-		}
-	}()
-	// nil Backend is safe: the default case panics before any backend use.
-	_, _, _ = compile(nil, st)
+	if r, _ := xsderr.RuleOf(err); r != "st-props-correct" {
+		t.Errorf("NewPrimitiveType(unsupported facet) charged %s, want st-props-correct (clause 5)", r)
+	}
 }
 
 // TestNewScaleFacetRejectsBadValue confirms facetInt charges the per-facet rule
