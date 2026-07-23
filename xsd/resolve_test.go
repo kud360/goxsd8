@@ -116,7 +116,7 @@ func TestResolveDanglingElementRef(t *testing.T) {
 
 func TestResolveDanglingAttributeRef(t *testing.T) {
 	// A complex type's attribute use is an <attribute ref> to a missing attribute.
-	use, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: qn("nope")}, false, nil)
+	use, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: qn("nope")}, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}

@@ -435,7 +435,7 @@ func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
 		if err != nil {
 			return nil, err
 		}
-		au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.AttributeDeclarationRef{Name: qn}, inheritable, nil)
+		au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.AttributeDeclarationRef{Name: qn}, nil, inheritable, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -449,7 +449,7 @@ func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
 	if err != nil {
 		return nil, err
 	}
-	au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.LocalAttributeDeclaration{Declaration: decl}, inheritable, nil)
+	au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.LocalAttributeDeclaration{Declaration: decl}, nil, inheritable, nil)
 	if err != nil {
 		return nil, err
 	}

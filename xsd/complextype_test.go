@@ -32,7 +32,7 @@ func mustParticleWithTerm(t *testing.T) xsd.Particle {
 // declaration by name.
 func mustAttributeUse(t *testing.T) xsd.AttributeUse {
 	t.Helper()
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: xsd.QName{Local: "a"}}, false, nil)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: xsd.QName{Local: "a"}}, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse unexpected error: %v", err)
 	}
