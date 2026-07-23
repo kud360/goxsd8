@@ -37,7 +37,7 @@ decoder), and the `xsd.QName` expanded-name value type that
 `xsd` component model waits for M4). Full unit tests; fuzz targets for
 xmltree.
 
-## M3 — Datatypes vertical slice (complete — all 20 primitives mapped, `datatypes` lane 1036 pass / 38 fail (1074); the IBM precisionDecimal cohort (#162) and the `Mapping.Canonical` doc (#166) landed 2026-07-19; only the independent anyURI-triage #190 remains as optional follow-up)
+## M3 — Datatypes vertical slice (complete — all 20 primitives mapped, `datatypes` lane 1043 pass / 31 fail (1074) after the list-variety Facets cohort #75 and the `value.effectiveWhiteSpace` union not-applicable path #98 landed 2026-07-23; the IBM precisionDecimal cohort (#162) and the `Mapping.Canonical` doc (#166) landed 2026-07-19; open datatypes-lane follow-ups: anyURI-triage #190, union member-dispatch #223, integer-family list fixtures #224)
 
 `value` contracts finalized; `builtin/strict` primitive mappings + the
 facet pipeline (pattern facets via package `regex`, XSD flavor) +
@@ -219,6 +219,40 @@ stabilize the producer** — reviewing the intentionally-partial top-level-only
 surface now would mostly re-derive #176. **Branch-namespace note:** `wip/issue-145`
 remains the only non-`main` ref (still stale, unchanged since 2026-07-18, issue
 #145 closed, tip already on `main`) — still flagged for human triage, not deleted.
+
+Update (2026-07-23, weekly backlog): **the `schema` lane is now live and
+moving.** #175 (schema-lane bring-up — the `conformance/schema.go` driver +
+first ratchet) and #176 (complex-type + content-model producer, +715 cases)
+both landed since the prior backlog, taking the `schema` lane from 0 to
+**2731 pass / 12701 fail** (15432). The strictly-serial M4 spine is over; the
+producer/finalize fan-out is open and the ready frontier is genuinely
+parallel now. Also landed since 2026-07-22: #75 (datatypes list-variety
+Facets) and #98 (`value.effectiveWhiteSpace` union not-applicable), draining
+the last list/union tangle — `datatypes` now stands at 1043 pass / 31 fail.
+The develop loop's post-land passes filed the #176 deferred scope as
+#228/#229/#230/#231 and #177's group-ref work, plus #223/#224/#226; this
+backlog filed the one remaining #176 arbiter advisory as **#232** (producer
+drops an unresolvable `notQName` member — latent false-accept). **No blocked
+issue unblocked this pass** — #51/#52/#63/#72/#182/#183/#229 all remain
+correctly gated on still-open #178/#179/#181/#210. **Highest-value ready
+frontier** (conformance + unblock order): #178 (IDC/assertion/notation/
+wildcard producers — also unblocks #51/#63/#72), #210 (Finalize
+anonymous-QName false-reject bug — unblocks #229, clears the common
+inline-anonymous path), #228 (resolved-base simpleContent/extension content),
+#177 (attribute-group/model-group producers), #180 + #181 (finalize UPA/EDC +
+derivation validity), #229 (inline anonymous types), #230 (open content),
+#231 (`&lt;all&gt;` {0,1}), #179 (composition include — unblocks #182/#183). Ready
+queue is **26** — deep by design and above the 8–10 band, but every item is a
+well-specified single-session issue and the depth is self-fed by the develop
+loop's multi-issue/day harvest, not a planning gap; all labels verified
+honest (deps checked). **Branch-namespace note:** two stale leftover refs
+remain for human triage — `wip/issue-145` (issue closed 2026-07-18, content on
+`main`, unchanged) and now **`wip/issue-98`** (issue #98 closed this cycle, its
+work squash-merged onto `main` as `9eac00d`; the branch is a pre-squash
+leftover). No `parked/*` refs. No untracked GAP debt: the two
+`xsd/namespaceconstraint.go` markers plus the newly-noted
+`parser/produce_complex.go:571-574` producer skip are all owned by #51; the
+literal-QName drop below it is #232.
 
 ## M5 — Instance validation (XML)
 
