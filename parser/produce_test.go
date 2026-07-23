@@ -201,17 +201,34 @@ func TestProduceUnresolvableBaseRejected(t *testing.T) {
 
 func TestProduceElementNoTypeDefaultsAnyType(t *testing.T) {
 	// A bare <element> defaults its {type definition} to xs:anyType (§3.3.2.1
-	// case 4). xs:anyType is a Complex Type Definition and is NOT produced by this
-	// slice (builtin.Seed yields only simple types), so the deferred reference does
-	// not discharge at finalize: the schema is rejected with src-resolve whose
-	// message names anyType, proving the default mapping fired. This limitation
-	// lifts once complex types (and xs:anyType) are produced.
-	_, err := produce(t, wrap("", `<xs:element name="e"/>`))
-	assertRule(t, err, "src-resolve")
-	if !strings.Contains(err.Error(), "anyType") {
-		t.Fatalf("error %v does not name anyType; default mapping may not have fired", err)
+	// case 4). xs:anyType is now seeded as a Complex Type Definition (§3.4.7), so
+	// the deferred reference discharges at finalize and the schema is accepted;
+	// the element's {type definition} resolves to the seeded xs:anyType.
+	s, err := produce(t, wrap("", `<xs:element name="e"/>`))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	ed, ok := s.Element(xsd.QName{Local: "e"})
+	if !ok {
+		t.Fatalf("element e not found")
+	}
+	if got := ed.TypeDefinitionName(); got != anyTypeQN {
+		t.Fatalf("type = %s, want {xs}anyType", got)
+	}
+	td, ok := s.Type(anyTypeQN)
+	if !ok {
+		t.Fatalf("xs:anyType not present in {type definitions}")
+	}
+	ct, ok := td.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("xs:anyType is %T, want xsd.ComplexType", td)
+	}
+	if ct.ContentType().Variety() != xsd.ContentMixed {
+		t.Fatalf("xs:anyType {content type} variety = %s, want mixed", ct.ContentType().Variety())
 	}
 }
+
+var anyTypeQN = xsd.QName{Space: xsdNS, Local: "anyType"}
 
 func TestProduceAttributeNoTypeDefaultsAnySimpleType(t *testing.T) {
 	s, err := produce(t, wrap("", `<xs:attribute name="a"/>`))
@@ -253,9 +270,10 @@ func TestProduceNonSchemaRootRejected(t *testing.T) {
 }
 
 func TestProduceSkipsOutOfScope(t *testing.T) {
-	// annotation, complexType, group and friends are skipped, not rejected.
+	// annotation, group and friends are skipped, not rejected. (complexType is no
+	// longer out of scope — it is produced; see the complex-type tests below.)
 	body := `<xs:annotation><xs:documentation>hi</xs:documentation></xs:annotation>` +
-		`<xs:complexType name="CT"/>` +
+		`<xs:group name="g"><xs:sequence/></xs:group>` +
 		`<xs:element name="e" type="xs:string"/>`
 	s, err := produce(t, wrap("", body))
 	if err != nil {
@@ -264,8 +282,288 @@ func TestProduceSkipsOutOfScope(t *testing.T) {
 	if _, ok := s.Element(xsd.QName{Local: "e"}); !ok {
 		t.Fatalf("element e not produced alongside skipped out-of-scope elements")
 	}
-	if _, ok := s.Type(xsd.QName{Local: "CT"}); ok {
-		t.Fatalf("complexType CT should have been skipped, not produced")
+	if _, ok := s.Type(xsd.QName{Local: "g"}); ok {
+		t.Fatalf("group g should have been skipped, not produced")
+	}
+}
+
+// complexType reads the produced complex type named local (no namespace) from a
+// schema built from body, failing on any Produce error or a missing/ wrong-kind
+// type.
+func complexType(t *testing.T, body, local string) xsd.ComplexType {
+	t.Helper()
+	s, err := produce(t, wrap("", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, ok := s.Type(xsd.QName{Local: local})
+	if !ok {
+		t.Fatalf("complexType %s not found", local)
+	}
+	ct, ok := td.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("%s is %T, want xsd.ComplexType", local, td)
+	}
+	return ct
+}
+
+// topGroup extracts the top model group of an element-content complex type.
+func topGroup(t *testing.T, ct xsd.ComplexType) xsd.ModelGroup {
+	t.Helper()
+	ec, ok := ct.ContentType().(xsd.ElementContent)
+	if !ok {
+		t.Fatalf("content type = %T, want ElementContent", ct.ContentType())
+	}
+	rt, ok := ec.Particle.Term().(xsd.ResolvedTerm)
+	if !ok {
+		t.Fatalf("top term = %T, want ResolvedTerm", ec.Particle.Term())
+	}
+	mg, ok := rt.Term.(xsd.ModelGroup)
+	if !ok {
+		t.Fatalf("top term inner = %T, want ModelGroup", rt.Term)
+	}
+	return mg
+}
+
+func TestProduceComplexTypeEmpty(t *testing.T) {
+	ct := complexType(t, `<xs:complexType name="CT"/>`, "CT")
+	if ct.ContentType().Variety() != xsd.ContentEmpty {
+		t.Fatalf("variety = %s, want empty", ct.ContentType().Variety())
+	}
+	if ct.DerivationMethod() != xsd.DerivationRestriction {
+		t.Fatalf("derivation = %s, want restriction", ct.DerivationMethod())
+	}
+	if ct.BaseTypeDefinitionName() != anyTypeQN {
+		t.Fatalf("base = %s, want xs:anyType", ct.BaseTypeDefinitionName())
+	}
+}
+
+func TestProduceComplexTypeSequence(t *testing.T) {
+	body := `<xs:complexType name="CT"><xs:sequence>` +
+		`<xs:element name="a" type="xs:string"/>` +
+		`<xs:element name="b" type="xs:int" minOccurs="0" maxOccurs="unbounded"/>` +
+		`</xs:sequence></xs:complexType>`
+	ct := complexType(t, body, "CT")
+	if ct.ContentType().Variety() != xsd.ContentElementOnly {
+		t.Fatalf("variety = %s, want element-only", ct.ContentType().Variety())
+	}
+	mg := topGroup(t, ct)
+	if mg.Compositor() != xsd.CompositorSequence {
+		t.Fatalf("compositor = %s, want sequence", mg.Compositor())
+	}
+	ps := mg.Particles()
+	if len(ps) != 2 {
+		t.Fatalf("particles = %d, want 2", len(ps))
+	}
+	// Second particle b: 0..unbounded, local element decl.
+	if ps[1].Occurs().Min() != 0 || !ps[1].Occurs().IsUnbounded() {
+		t.Fatalf("b occurs = %s, want 0..unbounded", ps[1].Occurs())
+	}
+	rt := ps[0].Term().(xsd.ResolvedTerm)
+	ed := rt.Term.(xsd.ElementDeclaration)
+	if ed.Name() != (xsd.QName{Local: "a"}) || ed.ScopeVariety() != xsd.ScopeLocal {
+		t.Fatalf("a decl = %s / %s, want {}a / local", ed.Name(), ed.ScopeVariety())
+	}
+}
+
+func TestProduceComplexTypeChoiceAndAll(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		body       string
+		compositor xsd.Compositor
+	}{
+		{"choice", `<xs:complexType name="CT"><xs:choice><xs:element name="a" type="xs:string"/></xs:choice></xs:complexType>`, xsd.CompositorChoice},
+		{"all", `<xs:complexType name="CT"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>`, xsd.CompositorAll},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mg := topGroup(t, complexType(t, tc.body, "CT"))
+			if mg.Compositor() != tc.compositor {
+				t.Fatalf("compositor = %s, want %s", mg.Compositor(), tc.compositor)
+			}
+		})
+	}
+}
+
+func TestProduceComplexTypeMixed(t *testing.T) {
+	body := `<xs:complexType name="CT" mixed="true"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`
+	ct := complexType(t, body, "CT")
+	if ct.ContentType().Variety() != xsd.ContentMixed {
+		t.Fatalf("variety = %s, want mixed", ct.ContentType().Variety())
+	}
+}
+
+func TestProduceComplexTypeMixedEmptySynthesizesSequence(t *testing.T) {
+	// mixed with no content model → an empty 1..1 sequence stands in (§3.4.2.3.3
+	// clause 3.1.1), and the variety is mixed, not empty.
+	ct := complexType(t, `<xs:complexType name="CT" mixed="true"/>`, "CT")
+	if ct.ContentType().Variety() != xsd.ContentMixed {
+		t.Fatalf("variety = %s, want mixed", ct.ContentType().Variety())
+	}
+	mg := topGroup(t, ct)
+	if mg.Compositor() != xsd.CompositorSequence || len(mg.Particles()) != 0 {
+		t.Fatalf("mixed-empty group = %s/%d, want empty sequence", mg.Compositor(), len(mg.Particles()))
+	}
+}
+
+func TestProduceComplexContentRestriction(t *testing.T) {
+	body := `<xs:complexType name="Base"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>` +
+		`<xs:complexType name="CT"><xs:complexContent><xs:restriction base="tns:Base"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction></xs:complexContent></xs:complexType>`
+	s, err := produce(t, wrap("urn:x", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, _ := s.Type(xsd.QName{Space: "urn:x", Local: "CT"})
+	ct := td.(xsd.ComplexType)
+	if ct.BaseTypeDefinitionName() != (xsd.QName{Space: "urn:x", Local: "Base"}) {
+		t.Fatalf("base = %s, want {urn:x}Base", ct.BaseTypeDefinitionName())
+	}
+	if ct.ContentType().Variety() != xsd.ContentElementOnly {
+		t.Fatalf("variety = %s, want element-only", ct.ContentType().Variety())
+	}
+}
+
+func TestProduceElementZeroOccursElided(t *testing.T) {
+	// An element and a nested group each with minOccurs=maxOccurs=0 map to no
+	// component at all (§3.9.2/§3.8.2): they must not appear in {particles}.
+	body := `<xs:complexType name="CT"><xs:sequence>` +
+		`<xs:element name="keep" type="xs:string"/>` +
+		`<xs:element name="drop" type="xs:string" minOccurs="0" maxOccurs="0"/>` +
+		`<xs:choice minOccurs="0" maxOccurs="0"><xs:element name="x" type="xs:string"/></xs:choice>` +
+		`</xs:sequence></xs:complexType>`
+	mg := topGroup(t, complexType(t, body, "CT"))
+	ps := mg.Particles()
+	if len(ps) != 1 {
+		t.Fatalf("particles = %d, want 1 (zero-occurs element and group elided)", len(ps))
+	}
+	ed := ps[0].Term().(xsd.ResolvedTerm).Term.(xsd.ElementDeclaration)
+	if ed.Name() != (xsd.QName{Local: "keep"}) {
+		t.Fatalf("surviving particle = %s, want keep", ed.Name())
+	}
+}
+
+func TestProduceLocalAttributeUses(t *testing.T) {
+	body := `<xs:complexType name="CT"><xs:sequence/>` +
+		`<xs:attribute name="a" type="xs:string" use="required"/>` +
+		`<xs:attribute name="b" type="xs:int"/>` +
+		`<xs:attribute name="gone" type="xs:string" use="prohibited"/>` +
+		`</xs:complexType>`
+	ct := complexType(t, body, "CT")
+	uses := ct.AttributeUses()
+	if len(uses) != 2 {
+		t.Fatalf("attribute uses = %d, want 2 (prohibited elided)", len(uses))
+	}
+	if !uses[0].Required() {
+		t.Fatalf("use a should be required")
+	}
+	if uses[1].Required() {
+		t.Fatalf("use b should be optional")
+	}
+	decl := uses[0].AttributeDeclaration().(xsd.LocalAttributeDeclaration).Declaration
+	if decl.ScopeVariety() != xsd.ScopeLocal || decl.Name() != (xsd.QName{Local: "a"}) {
+		t.Fatalf("a decl = %s / %s, want {}a / local", decl.Name(), decl.ScopeVariety())
+	}
+}
+
+func TestProduceAttributeRefUse(t *testing.T) {
+	body := `<xs:attribute name="g" type="xs:string"/>` +
+		`<xs:complexType name="CT"><xs:sequence/><xs:attribute ref="tns:g"/></xs:complexType>`
+	s, err := produce(t, wrap("urn:x", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, _ := s.Type(xsd.QName{Space: "urn:x", Local: "CT"})
+	uses := td.(xsd.ComplexType).AttributeUses()
+	if len(uses) != 1 {
+		t.Fatalf("uses = %d, want 1", len(uses))
+	}
+	ref, ok := uses[0].AttributeDeclaration().(xsd.AttributeDeclarationRef)
+	if !ok || ref.Name != (xsd.QName{Space: "urn:x", Local: "g"}) {
+		t.Fatalf("attr use decl = %v, want ref {urn:x}g", uses[0].AttributeDeclaration())
+	}
+}
+
+func TestProduceAnyAttributeWildcard(t *testing.T) {
+	body := `<xs:complexType name="CT"><xs:sequence/><xs:anyAttribute namespace="##other" processContents="lax"/></xs:complexType>`
+	ct := complexType(t, body, "CT")
+	wc, ok := ct.AttributeWildcard()
+	if !ok {
+		t.Fatalf("attribute wildcard absent, want present")
+	}
+	if wc.ProcessContents() != xsd.ProcessLax {
+		t.Fatalf("processContents = %s, want lax", wc.ProcessContents())
+	}
+	// ##other in a no-target-namespace schema admits any present namespace but not
+	// ·absent· (unqualified) names.
+	if wc.AllowsName(xsd.QName{Local: "x"}) {
+		t.Fatalf("##other should reject an unqualified (absent-namespace) name")
+	}
+	if !wc.AllowsName(xsd.QName{Space: "urn:z", Local: "x"}) {
+		t.Fatalf("##other should admit a foreign-namespace name")
+	}
+}
+
+func TestProduceAnyElementWildcardParticle(t *testing.T) {
+	body := `<xs:complexType name="CT"><xs:sequence><xs:any namespace="##any" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>`
+	mg := topGroup(t, complexType(t, body, "CT"))
+	ps := mg.Particles()
+	if len(ps) != 1 {
+		t.Fatalf("particles = %d, want 1", len(ps))
+	}
+	wc, ok := ps[0].Term().(xsd.ResolvedTerm).Term.(xsd.Wildcard)
+	if !ok {
+		t.Fatalf("term = %T, want Wildcard", ps[0].Term().(xsd.ResolvedTerm).Term)
+	}
+	if !wc.AllowsName(xsd.QName{Space: "urn:z", Local: "x"}) {
+		t.Fatalf("##any wildcard should admit any name")
+	}
+}
+
+func TestProduceComplexContentMixedMismatchRejected(t *testing.T) {
+	// src-ct clause 5: mixed on both <complexType> and <complexContent> must agree.
+	body := `<xs:complexType name="Base"><xs:sequence/></xs:complexType>` +
+		`<xs:complexType name="CT" mixed="true"><xs:complexContent mixed="false"><xs:restriction base="tns:Base"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`
+	_, err := produce(t, wrap("urn:x", body))
+	assertRule(t, err, "src-ct")
+}
+
+func TestProduceAllNestedRejected(t *testing.T) {
+	// cos-all-limited: an <all> may not be nested inside a <sequence>/<choice>.
+	body := `<xs:complexType name="CT"><xs:sequence><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:sequence></xs:complexType>`
+	_, err := produce(t, wrap("", body))
+	assertRule(t, err, "cos-all-limited")
+}
+
+func TestProduceWildcardBothNamespaceFormsRejected(t *testing.T) {
+	// src-wildcard: namespace and notNamespace must not both be present.
+	body := `<xs:complexType name="CT"><xs:sequence><xs:any namespace="##any" notNamespace="urn:z"/></xs:sequence></xs:complexType>`
+	_, err := produce(t, wrap("", body))
+	assertRule(t, err, "src-wildcard")
+}
+
+func TestProduceSimpleContentDeclined(t *testing.T) {
+	// <simpleContent> needs the resolved base for its {simple type definition}
+	// (§3.4.2.2) — not yet produced. Declined with a non-xsderr limitation error.
+	body := `<xs:complexType name="CT"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`
+	_, err := produce(t, wrap("", body))
+	if err == nil {
+		t.Fatalf("expected a decline error for <simpleContent>, got nil")
+	}
+	if _, ok := xsderr.RuleOf(err); ok {
+		t.Fatalf("simpleContent decline should be a plain limitation error, not an xsderr rule: %v", err)
+	}
+}
+
+func TestProduceComplexContentExtensionDeclined(t *testing.T) {
+	// <complexContent><extension> needs the resolved base particle (§3.4.2.3.3
+	// clause 4.2) — not yet produced. Declined with a non-xsderr limitation error.
+	body := `<xs:complexType name="Base"><xs:sequence/></xs:complexType>` +
+		`<xs:complexType name="CT"><xs:complexContent><xs:extension base="tns:Base"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`
+	_, err := produce(t, wrap("urn:x", body))
+	if err == nil {
+		t.Fatalf("expected a decline error for <complexContent><extension>, got nil")
+	}
+	if _, ok := xsderr.RuleOf(err); ok {
+		t.Fatalf("extension decline should be a plain limitation error: %v", err)
 	}
 }
 

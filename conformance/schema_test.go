@@ -36,6 +36,11 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"restriction simpleType with pattern", `<xs:simpleType name="T"><xs:restriction base="xs:string"><xs:pattern value="1|2"/></xs:restriction></xs:simpleType>`},
 		{"annotation", `<xs:annotation><xs:documentation>hi</xs:documentation></xs:annotation>`},
 		{"anonymous inline base (recursed)", `<xs:simpleType name="N"><xs:restriction><xs:simpleType><xs:restriction base="xs:string"><xs:pattern value="1*"/></xs:restriction></xs:simpleType><xs:minLength value="1"/></xs:restriction></xs:simpleType>`},
+		{"bare element (defaults to anyType, now seeded)", `<xs:element name="e"/>`},
+		{"empty complexType", `<xs:complexType name="CT"/>`},
+		{"complexType with sequence + local element + attribute", `<xs:complexType name="CT"><xs:sequence><xs:element name="a" type="xs:string"/><xs:any/></xs:sequence><xs:attribute name="at" type="xs:int"/></xs:complexType>`},
+		{"complexType with choice + anyAttribute", `<xs:complexType name="CT"><xs:choice><xs:element name="a" type="xs:string"/></xs:choice><xs:anyAttribute namespace="##other"/></xs:complexType>`},
+		{"complexContent restriction", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="CT"><xs:complexContent><xs:restriction base="B"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`},
 		{"all decidable kinds together", `<xs:element name="e" type="T"/><xs:attribute name="a"/><xs:simpleType name="T"><xs:restriction base="xs:string"><xs:maxLength value="3"/></xs:restriction></xs:simpleType>`},
 	}
 	for _, tc := range cases {
@@ -53,9 +58,13 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		name string
 		body string
 	}{
-		{"top-level complexType (silently skipped)", `<xs:complexType name="T"><xs:sequence/></xs:complexType>`},
 		{"top-level group (silently skipped)", `<xs:group name="g"><xs:sequence/></xs:group>`},
-		{"bare element (would false-reject at src-resolve)", `<xs:element name="e"/>`},
+		{"complexType with simpleContent (needs resolved base)", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`},
+		{"complexType with complexContent extension (needs resolved base)", `<xs:complexType name="T"><xs:complexContent><xs:extension base="xs:anyType"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`},
+		{"complexType with group reference content", `<xs:complexType name="T"><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType>`},
+		{"complexType with attributeGroup reference", `<xs:complexType name="T"><xs:sequence/><xs:attributeGroup ref="ag"/></xs:complexType>`},
+		{"complexType with inline anonymous element type", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType/></xs:element></xs:sequence></xs:complexType>`},
+		{"complexType with openContent", `<xs:complexType name="T"><xs:openContent mode="interleave"><xs:any/></xs:openContent><xs:sequence/></xs:complexType>`},
 		{"element with inline anonymous type", `<xs:element name="e"><xs:complexType/></xs:element>`},
 		{"element with both type= and inline type", `<xs:element name="e" type="xs:string"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:element>`},
 		{"attribute with inline simpleType", `<xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`},
@@ -63,7 +72,7 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"union-variety simpleType", `<xs:simpleType name="U"><xs:union memberTypes="xs:string"/></xs:simpleType>`},
 		{"restriction with enumeration facet", `<xs:simpleType name="E"><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType>`},
 		{"anonymous inline base with enumeration (recursed decline)", `<xs:simpleType name="N"><xs:restriction><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType></xs:restriction></xs:simpleType>`},
-		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:complexType name="T"><xs:sequence/></xs:complexType>`},
+		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:group name="g"><xs:sequence/></xs:group>`},
 	}
 	for _, tc := range cases {
 		if schemaShapeDecidable(schemaDoc(t, tc.body)) {
@@ -149,18 +158,20 @@ func TestSchemaExecutorAgreesWithSuite(t *testing.T) {
 }
 
 // TestSchemaExecutorDeclinesUndecidableSuiteCase proves the false-accept guard on a
-// real fixture: abstract00101m.xsd is suite-VALID but carries a top-level
-// <complexType> Produce silently skips, so the executor must DECLINE (Fail) rather
-// than vacuously pass — a valid-declared case the executor refuses to claim,
-// recording an honest gap. Skips when the submodule is absent.
+// real fixture: abstract00101m.xsd is suite-VALID but its <element name="root">
+// carries an inline anonymous <complexType>, a form the producer does not yet
+// build, so the executor must DECLINE (Fail) rather than vacuously pass — a
+// valid-declared case the executor refuses to claim, recording an honest gap.
+// Skips when the submodule is absent.
 func TestSchemaExecutorDeclinesUndecidableSuiteCase(t *testing.T) {
 	if _, err := os.Stat(suitePath()); err != nil {
 		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
 	}
 	exec := newSchemaExec()
 	doc := filepath.Join(suiteRoot, "sunData", "ElemDecl", "abstract", "abstract00101m", "abstract00101m.xsd")
-	// Suite-valid, but undecidable (contains complexType): the executor must not
-	// claim it — Fail against the true valid expectation is the honest gap.
+	// Suite-valid, but undecidable (an element with an inline anonymous complexType):
+	// the executor must not claim it — Fail against the true valid expectation is
+	// the honest gap.
 	if exec(caseSpec{kind: kindSchema, doc: doc, expectValid: true}).IsPass() {
 		t.Error("a suite-valid case with a skipped top-level complexType must be DECLINED (Fail), never vacuously passed")
 	}

@@ -18,6 +18,11 @@ const (
 	ruleSrcSimpleType xsderr.Rule = "src-simple-type"
 	ruleSrcResolve    xsderr.Rule = "src-resolve"
 	ruleSTPropsCorr   xsderr.Rule = "st-props-correct"
+	ruleSrcCT         xsderr.Rule = "src-ct"
+	ruleCosAllLimited xsderr.Rule = "cos-all-limited"
+	ruleSrcWildcard   xsderr.Rule = "src-wildcard"
+	ruleParticleCorr  xsderr.Rule = "p-props-correct"
+	ruleWildcardCorr  xsderr.Rule = "w-props-correct"
 )
 
 // Produce maps the TOP-LEVEL <simpleType>, <element>, and <attribute>
@@ -64,6 +69,17 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 		builder.AddType(b)
 		built[b.Name()] = b
 	}
+	// Seed xs:anyType, the ur-type Complex Type Definition (§3.4.7). builtin.Seed
+	// yields only simple types (its doc defers anyType to M4 as "a parser-level
+	// structural concern"), so without this a bare type=-less <element>/<attribute>
+	// — which defaults to xs:anyType (§3.3.2.1 case 4) — would fail src-resolve at
+	// finalize. It is added to {type definitions} exactly like a produced complex
+	// type, so a type= reference to it resolves.
+	anyType, err := seedAnyType()
+	if err != nil {
+		return nil, err
+	}
+	builder.AddType(anyType)
 
 	p := &producer{
 		schemaElem:       root,
@@ -147,9 +163,16 @@ func (p *producer) run() error {
 				return err
 			}
 			p.builder.AddAttribute(ad)
+		case "complexType":
+			name, _ := attrValue(el, "name")
+			ct, err := p.produceComplexType(xsd.QName{Space: p.target, Local: name}, el)
+			if err != nil {
+				return err
+			}
+			p.builder.AddType(ct)
 		default:
-			// annotation, complexType, group, import, include, … — not this
-			// slice's scope (§3.1.2), skipped, not invalid.
+			// annotation, group, import, include, … — not this slice's scope
+			// (§3.1.2), skipped, not invalid.
 		}
 	}
 	return nil
