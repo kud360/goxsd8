@@ -7,7 +7,7 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// localDecl builds a LocalAttributeDeclaration wrapping a global-scope
+// localDecl builds a LocalAttributeDeclaration wrapping a local-scope
 // declaration with the given name, for use in Attribute Use tests.
 func localDecl(t *testing.T, name xsd.QName) xsd.LocalAttributeDeclaration {
 	t.Helper()
@@ -18,9 +18,21 @@ func localDecl(t *testing.T, name xsd.QName) xsd.LocalAttributeDeclaration {
 	return xsd.LocalAttributeDeclaration{Declaration: d}
 }
 
+// localDeclVC builds a LocalAttributeDeclaration whose declaration carries the
+// given {value constraint} variety, for exercising au-props-correct clause 3.
+func localDeclVC(t *testing.T, kind xsd.ValueConstraintKind) xsd.LocalAttributeDeclaration {
+	t.Helper()
+	vc := xsd.NewValueConstraint(kind, "v")
+	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.QName{Local: "T"}, xsd.ScopeLocal, &vc, false, nil)
+	if err != nil {
+		t.Fatalf("NewAttributeDeclaration: %v", err)
+	}
+	return xsd.LocalAttributeDeclaration{Declaration: d}
+}
+
 func TestNewAttributeUseValidLocalDeclaration(t *testing.T) {
 	decl := localDecl(t, xsd.QName{Space: "urn:ns", Local: "a"})
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, true, decl, true, nil)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, true, decl, nil, true, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse unexpected error: %v", err)
 	}
@@ -40,11 +52,14 @@ func TestNewAttributeUseValidLocalDeclaration(t *testing.T) {
 	if u.Annotations() != nil {
 		t.Errorf("Annotations() = %v, want nil", u.Annotations())
 	}
+	if _, ok := u.ValueConstraint(); ok {
+		t.Error("ValueConstraint() ok = true for a nil-valueConstraint use, want false")
+	}
 }
 
 func TestNewAttributeUseValidRef(t *testing.T) {
 	ref := xsd.AttributeDeclarationRef{Name: xsd.QName{Space: "urn:ns", Local: "b"}}
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, ref, false, nil)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, ref, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse unexpected error: %v", err)
 	}
@@ -61,18 +76,67 @@ func TestNewAttributeUseValidRef(t *testing.T) {
 }
 
 func TestNewAttributeUseRejectsNilDeclaration(t *testing.T) {
-	_, err := xsd.NewAttributeUse(xsderr.Loc{}, false, nil, false, nil)
+	_, err := xsd.NewAttributeUse(xsderr.Loc{}, false, nil, nil, false, nil)
 	if err == nil {
 		t.Fatal("NewAttributeUse(nil declaration) succeeded, want au-props-correct error")
 	}
 	assertRule(t, err, "au-props-correct")
 }
 
+func TestNewAttributeUseValueConstraintRoundTrip(t *testing.T) {
+	vc := xsd.NewValueConstraint(xsd.ValueDefault, "d")
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, localDecl(t, xsd.QName{Local: "a"}), &vc, false, nil)
+	if err != nil {
+		t.Fatalf("NewAttributeUse: %v", err)
+	}
+	got, ok := u.ValueConstraint()
+	if !ok {
+		t.Fatal("ValueConstraint() ok = false, want true")
+	}
+	if got.Kind() != xsd.ValueDefault || got.LexicalForm() != "d" {
+		t.Errorf("ValueConstraint() = {%s %q}, want {default \"d\"}", got.Kind(), got.LexicalForm())
+	}
+}
+
+// TestNewAttributeUseClause3 exercises au-props-correct clause 3's variety half
+// for the Local case: a fixed declaration constrains the use's own variety.
+func TestNewAttributeUseClause3(t *testing.T) {
+	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "v")
+	deflt := xsd.NewValueConstraint(xsd.ValueDefault, "v")
+	tests := []struct {
+		name    string
+		decl    xsd.AttributeDeclarationOrRef
+		useVC   *xsd.ValueConstraint
+		wantErr bool
+	}{
+		{"local fixed decl, fixed use", localDeclVC(t, xsd.ValueFixed), &fixed, false},
+		{"local fixed decl, default use", localDeclVC(t, xsd.ValueFixed), &deflt, true},
+		{"local fixed decl, no use vc", localDeclVC(t, xsd.ValueFixed), nil, false},
+		{"local default decl, default use", localDeclVC(t, xsd.ValueDefault), &deflt, false},
+		{"ref decl, default use", xsd.AttributeDeclarationRef{Name: xsd.QName{Local: "a"}}, &deflt, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xsd.NewAttributeUse(xsderr.Loc{}, false, tc.decl, tc.useVC, false, nil)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("NewAttributeUse succeeded, want au-props-correct clause 3 error")
+				}
+				assertRule(t, err, "au-props-correct")
+				return
+			}
+			if err != nil {
+				t.Fatalf("NewAttributeUse unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestAttributeUseAnnotationsRoundTripAndAlias(t *testing.T) {
 	anns := []xsd.Annotation{
 		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "u")}, nil),
 	}
-	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, localDecl(t, xsd.QName{Local: "a"}), false, anns)
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, localDecl(t, xsd.QName{Local: "a"}), nil, false, anns)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
