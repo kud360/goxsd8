@@ -21,17 +21,17 @@ import (
 //
 // A schemaTest asks: is THIS schema document itself schema-valid? The lane
 // decides that with the end-to-end producer (parser.Produce + Finalize, issues
-// #174/#176), which maps top-level <simpleType>/<element>/<attribute> and the
-// produce-time-decidable subset of <complexType> (implicit and <complexContent>
-// <restriction> content, its particles, local element/attribute declarations,
-// attribute uses, and wildcards) into xsd components, seeds the ur-type
+// #174/#176/#177), which maps top-level <simpleType>/<element>/<attribute>/
+// <attributeGroup>/<group> and the produce-time-decidable subset of <complexType>
+// (implicit and <complexContent> <restriction> content, its particles including
+// <group ref>, local element/attribute declarations, attribute uses including
+// <attributeGroup ref>, and wildcards) into xsd components, seeds the ur-type
 // xs:anyType, resolves cross-references, and rejects duplicate top-level names
-// within a kind. The remaining top-level representations (group/attributeGroup/
-// notation/import/include/redefine/override) and the not-yet-produced complexType
-// forms (<simpleContent>, <complexContent> <extension>, group/attributeGroup
-// references, inline anonymous local types, <openContent>) are SILENTLY SKIPPED
-// or declined by Produce (§3.1.2 permits ignoring a not-yet-produced
-// representation), NOT rejected.
+// within a kind. The remaining top-level representations (notation/import/include/
+// redefine/override) and the not-yet-produced complexType forms (<simpleContent>,
+// <complexContent> <extension>, inline anonymous local types, <openContent>) are
+// SILENTLY SKIPPED or declined by Produce (§3.1.2 permits ignoring a
+// not-yet-produced representation), NOT rejected.
 //
 // # Why "Produce returns nil" is not, by itself, evidence of validity
 //
@@ -67,11 +67,12 @@ import (
 //     not a sch-props-correct rejection — not decidable for this lane. Inventing
 //     a "root must be <schema>" rejection would overreach (oracle grounding).
 //  3. Top-level allowlist. Every top-level child element must be xsd:annotation,
-//     xsd:simpleType, xsd:element, xsd:attribute, or xsd:complexType — anything
-//     else at top level (group/attributeGroup/notation/import/include/redefine/
-//     override/defaultOpenContent, any non-xsd element, or an out-of-set local
-//     name) closes the false-accept gap above by DECLINING the whole case. Within
-//     the allowed kinds:
+//     xsd:simpleType, xsd:element, xsd:attribute, xsd:complexType,
+//     xsd:attributeGroup (named definition), or xsd:group (named definition) —
+//     anything else at top level (notation/import/include/redefine/override/
+//     defaultOpenContent, any non-xsd element, or an out-of-set local name) closes
+//     the false-accept gap above by DECLINING the whole case. Within the allowed
+//     kinds:
 //     - element: must have no inline <simpleType>/<complexType> child. A bare
 //       element (no type=) defaults to xs:anyType (§3.3.2.1 case 4), now seeded as
 //       a Complex Type Definition (§3.4.7), so it resolves and is decided
@@ -82,14 +83,24 @@ import (
 //     - complexType (top-level, or a <complexContent> <restriction> reached
 //       transitively): must lie within the producer's decidable subset per
 //       complexTypeDecidable — implicit or <restriction> complex content whose
-//       content model is element/any/sequence/choice/all and whose attributes are
-//       local <attribute>/<anyAttribute>, with no <simpleContent>, no
-//       <complexContent> <extension>, no <openContent>, no group/attributeGroup
-//       reference, and no inline anonymous local type. Those excluded forms need
-//       the resolved base or a later slice, so Produce declines them with a plain
-//       limitation error, not a spec verdict — DECLINED to avoid a wrong-reason
-//       pass. A real structural violation inside an admitted shape (src-ct,
-//       cos-all-limited, src-wildcard, …) flows through as a genuine rejection.
+//       content model is element/any/sequence/choice/all/<group ref> and whose
+//       attributes are local <attribute>/<anyAttribute>/<attributeGroup ref>, with
+//       no <simpleContent>, no <complexContent> <extension>, no <openContent>, and
+//       no inline anonymous local type. Those excluded forms need the resolved base
+//       or a later slice, so Produce declines them with a plain limitation error,
+//       not a spec verdict — DECLINED to avoid a wrong-reason pass. A <group ref>/
+//       <attributeGroup ref> IS produced (#177): its target resolves (or fails
+//       src-resolve) genuinely. A real structural violation inside an admitted
+//       shape (src-ct, cos-all-limited, src-wildcard, …) flows through as a genuine
+//       rejection.
+//     - attributeGroup (top-level named definition, §3.6.2): children only
+//       <attribute> (no inline anonymous type), <attributeGroup ref>, and
+//       <anyAttribute> — the shapes the producer folds in (§3.6.2.1/§3.6.2.2). A
+//       dangling ref (src-resolve clause 1.4) and a circular ref chain (spec-legal,
+//       §3.6.2.1) are both decided genuinely.
+//     - group (top-level named definition, §3.7.2): must carry a name and a single
+//       all/choice/sequence body whose particles are decidable; the body maps to
+//       {model group} genuinely (mgd-props-correct rejects a missing body).
 //     - attribute: must have no inline <simpleType> child (src-attribute clause 4,
 //       §3.2.3). A bare attribute is FINE: it defaults to xs:anySimpleType
 //       (§3.2.2.1), which builtin.Seed always seeds, so type= is NOT required.
@@ -143,9 +154,9 @@ import (
 // ground truth via a REAL implemented violation — never a fabricated one, since
 // the shape allowlist excludes every form (inline element/attribute types,
 // list/union/enumeration/assertion simpleTypes, and the not-yet-produced
-// complexType forms — <simpleContent>, <complexContent> <extension>, group/
-// attributeGroup references, inline anonymous local types, <openContent>) where
-// Produce's rejection would be a limitation rather than a spec violation. A
+// complexType forms — <simpleContent>, <complexContent> <extension>, inline
+// anonymous local types, <openContent>) where Produce's rejection would be a
+// limitation rather than a spec violation. A
 // suite-invalid case whose only defect is a rule this slice does NOT yet check
 // (UPA cos-nonambig, EDC, derivation-ok-restriction) is produced cleanly, so the
 // lane observes "valid", disagrees with the suite, and records a still-failing
@@ -262,11 +273,18 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			if !complexTypeDecidable(el) {
 				return false
 			}
+		case "group":
+			if !groupDecidable(el) {
+				return false
+			}
+		case "attributeGroup":
+			if !attributeGroupDecidable(el) {
+				return false
+			}
 		default:
-			// group/attributeGroup/notation/import/include/redefine/override,
-			// defaultOpenContent, or any other local name: silently skipped by
-			// Produce, so a nil verdict there would be vacuous — decline the whole
-			// case.
+			// notation/import/include/redefine/override, defaultOpenContent, or any
+			// other local name: silently skipped by Produce, so a nil verdict there
+			// would be vacuous — decline the whole case.
 			return false
 		}
 	}
@@ -297,11 +315,13 @@ func elementDecidable(el *parser.Element) bool {
 //     {content type} needs the resolved base particle, §3.4.2.3.3 clause 4.2);
 //   - <openContent> anywhere (its {open content} needs <defaultOpenContent>
 //     fallback, §3.4.2.3.3, not yet built);
-//   - a <group> reference, an <attributeGroup> reference, or an inline anonymous
-//     <simpleType>/<complexType> on a local element/attribute (all not yet
-//     produced).
+//   - an inline anonymous <simpleType>/<complexType> on a local element/attribute
+//     (not yet produced), or a bare <group>/<attributeGroup> lacking a ref (a
+//     nested one is always a reference, so a bare one is malformed — declined).
 //
-// Real structural violations the producer DOES reject (a nested <all>, a mixed
+// A <group ref>/<attributeGroup ref> IS produced (#177) and admitted: its target
+// resolves genuinely at finalize (or fails src-resolve). Real structural
+// violations the producer DOES reject (a nested <all>, a mixed
 // mismatch, a both-namespace-forms wildcard, a bad occurrence) are NOT declined:
 // admitting them is safe because the producer's rejection is the right reason.
 func complexTypeDecidable(el *parser.Element) bool {
@@ -323,9 +343,10 @@ func complexTypeDecidable(el *parser.Element) bool {
 
 // contentDecidable reports whether the content-model child and attribute children
 // of a <complexType> (implicit content) or <restriction> (explicit complex
-// content) are all within the producer's decidable subset. Anything unexpected at
-// this level — a <group> content reference, an <attributeGroup>, a stray
-// <simpleContent>/<openContent> — declines.
+// content) are all within the producer's decidable subset. A <group ref> content
+// child and an <attributeGroup ref> are admitted (produced, #177); a bare
+// <group>/<attributeGroup> without a ref, or a stray <simpleContent>/<openContent>
+// at this level, declines.
 func contentDecidable(parent *parser.Element) bool {
 	for _, child := range parent.Children() {
 		el, ok := child.(*parser.Element)
@@ -345,9 +366,17 @@ func contentDecidable(parent *parser.Element) bool {
 			}
 		case "anyAttribute":
 			// An attribute wildcard is produced.
+		case "group":
+			if !hasAttr(el, "ref") {
+				return false // a content <group> is always a reference; a bare one is malformed — decline
+			}
+		case "attributeGroup":
+			if !hasAttr(el, "ref") {
+				return false // a nested <attributeGroup> is always a reference; a bare one is malformed — decline
+			}
 		default:
-			// group/attributeGroup/simpleContent/complexContent/openContent or any
-			// other name at this level: not produced — decline.
+			// simpleContent/complexContent/openContent or any other name at this
+			// level: not produced — decline.
 			return false
 		}
 	}
@@ -356,8 +385,9 @@ func contentDecidable(parent *parser.Element) bool {
 
 // modelGroupDecidable reports whether every particle child of a model group
 // (<sequence>/<choice>/<all>) is within the producer's decidable subset: nested
-// model groups recurse, <element> must carry no inline anonymous type, and <any>
-// is fine. A <group> reference or any other child declines.
+// model groups recurse, <element> must carry no inline anonymous type, <any> is
+// fine, and a <group ref> is produced (#177). A bare <group> without a ref (a
+// nested group is always a reference) or any other child declines.
 func modelGroupDecidable(group *parser.Element) bool {
 	for _, child := range group.Children() {
 		el, ok := child.(*parser.Element)
@@ -375,8 +405,75 @@ func modelGroupDecidable(group *parser.Element) bool {
 			if !modelGroupDecidable(el) {
 				return false
 			}
+		case "group":
+			if !hasAttr(el, "ref") {
+				return false // a nested <group> is always a reference; a bare one is malformed — decline
+			}
 		default:
-			// group reference or any other child: not produced — decline.
+			// any other child: not produced — decline.
+			return false
+		}
+	}
+	return true
+}
+
+// groupDecidable reports whether a top-level named <group> definition (§3.7.2) is
+// within the producer's decidable subset: it must carry a name (the definition
+// form; a top-level <group ref> is malformed) and its single all/choice/sequence
+// body's particles must all be decidable. A missing body still produces genuinely
+// (mgd-props-correct rejects it), so it is admitted.
+func groupDecidable(el *parser.Element) bool {
+	if !hasAttr(el, "name") || hasAttr(el, "ref") {
+		return false
+	}
+	for _, child := range el.Children() {
+		c, ok := child.(*parser.Element)
+		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		switch c.Name().Local() {
+		case "annotation":
+			// Harmless.
+		case "all", "sequence", "choice":
+			if !modelGroupDecidable(c) {
+				return false
+			}
+		default:
+			// A <group> body is only all/choice/sequence; anything else is out of
+			// the produced shape — decline.
+			return false
+		}
+	}
+	return true
+}
+
+// attributeGroupDecidable reports whether a top-level named <attributeGroup>
+// definition (§3.6.2) is within the producer's decidable subset: it must carry a
+// name, and its children must be only <attribute> (no inline anonymous type),
+// <attributeGroup ref>, or <anyAttribute> — the shapes the producer folds in
+// (§3.6.2.1/§3.6.2.2). A dangling or circular ref is decided genuinely at
+// producer/finalize time, so it is admitted.
+func attributeGroupDecidable(el *parser.Element) bool {
+	if !hasAttr(el, "name") || hasAttr(el, "ref") {
+		return false
+	}
+	for _, child := range el.Children() {
+		c, ok := child.(*parser.Element)
+		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		switch c.Name().Local() {
+		case "annotation", "anyAttribute":
+			// Harmless / produced.
+		case "attribute":
+			if childXSD(c, "simpleType") != nil {
+				return false // inline anonymous attribute type — not yet produced
+			}
+		case "attributeGroup":
+			if !hasAttr(c, "ref") {
+				return false // a nested <attributeGroup> is always a reference; a bare one is malformed — decline
+			}
+		default:
 			return false
 		}
 	}
@@ -421,6 +518,17 @@ func simpleTypeDecidable(el *parser.Element) bool {
 		}
 	}
 	return true
+}
+
+// hasAttr reports whether el carries the unprefixed (no-namespace) attribute
+// local, as XSD schema-element attributes (name, ref, …) carry no namespace.
+func hasAttr(el *parser.Element, local string) bool {
+	for _, a := range el.Attributes() {
+		if a.Name().Space() == "" && a.Name().Local() == local {
+			return true
+		}
+	}
+	return false
 }
 
 // childXSD returns el's first child element with expanded name {XMLSchemaNS}local,

@@ -25,13 +25,13 @@ const (
 	ruleWildcardCorr  xsderr.Rule = "w-props-correct"
 )
 
-// Produce maps the TOP-LEVEL <simpleType>, <element>, and <attribute>
-// declarations of a single already-parsed schema document into xsd components,
-// in document order, and returns the finalized [xsd.Schema]. It is the first
-// end-to-end producer (M4): complex types, groups, attribute groups, notations,
-// identity constraints, and multi-document composition are out of scope and
-// their top-level elements are silently skipped (§3.1.2 permits ignoring
-// not-yet-produced representations), not rejected.
+// Produce maps the TOP-LEVEL <simpleType>, <element>, <attribute>,
+// <complexType>, <attributeGroup>, and <group> declarations of a single
+// already-parsed schema document into xsd components, in document order, and
+// returns the finalized [xsd.Schema]. Notations, identity constraints, and
+// multi-document composition remain out of scope and their top-level elements are
+// silently skipped (§3.1.2 permits ignoring not-yet-produced representations),
+// not rejected.
 //
 // backend is passed explicitly rather than defaulted to a builtin/strict policy
 // here: that default belongs to the eventual Parse wrapper (parser/doc.go's
@@ -82,11 +82,12 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 	builder.AddType(anyType)
 
 	p := &producer{
-		schemaElem:       root,
-		target:           target,
-		builder:          builder,
-		localSimpleTypes: make(map[xsd.QName]*Element),
-		built:            built,
+		schemaElem:           root,
+		target:               target,
+		builder:              builder,
+		localSimpleTypes:     make(map[xsd.QName]*Element),
+		localAttributeGroups: make(map[xsd.QName]*Element),
+		built:                built,
 	}
 	if err := p.run(); err != nil {
 		return nil, err
@@ -107,6 +108,13 @@ type producer struct {
 	// local simple types resolve (Structures §3.1.3).
 	localSimpleTypes map[xsd.QName]*Element
 
+	// localAttributeGroups maps each top-level named <attributeGroup>'s expanded
+	// name to its raw element, filled by the pre-scan so an <attributeGroup ref>
+	// (from a <complexType>/<restriction> or another <attributeGroup>) resolves
+	// and is inlined at mapping time regardless of document order (§3.6.2.1). It
+	// is a lookup index only, never ranged to produce output (STYLE D2).
+	localAttributeGroups map[xsd.QName]*Element
+
 	// built is the memo + cycle guard for simple-type construction, mirroring
 	// xsd/resolve.go's color-map idiom collapsed into one map: an ABSENT key is
 	// unstarted, a PRESENT-nil value is on the build stack (being built), and a
@@ -117,21 +125,24 @@ type producer struct {
 // run walks the <schema> children once to register local simple types, then
 // again in strict document order to produce each in-scope declaration.
 func (p *producer) run() error {
-	// Pre-scan: register every top-level named <simpleType> so forward base=
-	// references resolve (§3.1.3). Build nothing yet.
+	// Pre-scan: register every top-level named <simpleType> (forward base=
+	// references, §3.1.3) and every top-level named <attributeGroup> (forward
+	// <attributeGroup ref> inlining, §3.6.2.1). Build nothing yet.
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
 		if !ok {
-			continue
-		}
-		if !isXSD(el, "simpleType") {
 			continue
 		}
 		name, ok := attrValue(el, "name")
 		if !ok {
 			continue
 		}
-		p.localSimpleTypes[xsd.QName{Space: p.target, Local: name}] = el
+		switch {
+		case isXSD(el, "simpleType"):
+			p.localSimpleTypes[xsd.QName{Space: p.target, Local: name}] = el
+		case isXSD(el, "attributeGroup"):
+			p.localAttributeGroups[xsd.QName{Space: p.target, Local: name}] = el
+		}
 	}
 
 	// Main pass: dispatch by expanded element name in document order.
@@ -170,8 +181,22 @@ func (p *producer) run() error {
 				return err
 			}
 			p.builder.AddType(ct)
+		case "attributeGroup":
+			name, _ := attrValue(el, "name")
+			ag, err := p.buildAttributeGroup(xsd.QName{Space: p.target, Local: name}, el)
+			if err != nil {
+				return err
+			}
+			p.builder.AddAttributeGroup(ag)
+		case "group":
+			name, _ := attrValue(el, "name")
+			mgd, err := p.produceModelGroupDefinition(xsd.QName{Space: p.target, Local: name}, el)
+			if err != nil {
+				return err
+			}
+			p.builder.AddModelGroup(mgd)
 		default:
-			// annotation, group, import, include, … — not this slice's scope
+			// annotation, import, include, notation, … — not this slice's scope
 			// (§3.1.2), skipped, not invalid.
 		}
 	}

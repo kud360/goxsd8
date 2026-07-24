@@ -41,6 +41,13 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"complexType with sequence + local element + attribute", `<xs:complexType name="CT"><xs:sequence><xs:element name="a" type="xs:string"/><xs:any/></xs:sequence><xs:attribute name="at" type="xs:int"/></xs:complexType>`},
 		{"complexType with choice + anyAttribute", `<xs:complexType name="CT"><xs:choice><xs:element name="a" type="xs:string"/></xs:choice><xs:anyAttribute namespace="##other"/></xs:complexType>`},
 		{"complexContent restriction", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="CT"><xs:complexContent><xs:restriction base="B"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`},
+		{"top-level group definition (§3.7.2)", `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`},
+		{"top-level group with choice + any", `<xs:group name="g"><xs:choice><xs:element name="a" type="xs:string"/><xs:any/></xs:choice></xs:group>`},
+		{"top-level attributeGroup definition (§3.6.2)", `<xs:attributeGroup name="ag"><xs:attribute name="a" type="xs:string"/><xs:anyAttribute namespace="##other"/></xs:attributeGroup>`},
+		{"attributeGroup referencing another group", `<xs:attributeGroup name="ag"><xs:attributeGroup ref="base"/><xs:attribute name="a"/></xs:attributeGroup>`},
+		{"complexType with group ref content", `<xs:complexType name="T"><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType>`},
+		{"complexType with top-level group ref as content", `<xs:complexType name="T"><xs:group ref="g"/></xs:complexType>`},
+		{"complexType with attributeGroup ref", `<xs:complexType name="T"><xs:sequence/><xs:attributeGroup ref="ag"/></xs:complexType>`},
 		{"all decidable kinds together", `<xs:element name="e" type="T"/><xs:attribute name="a"/><xs:simpleType name="T"><xs:restriction base="xs:string"><xs:maxLength value="3"/></xs:restriction></xs:simpleType>`},
 	}
 	for _, tc := range cases {
@@ -58,11 +65,11 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		name string
 		body string
 	}{
-		{"top-level group (silently skipped)", `<xs:group name="g"><xs:sequence/></xs:group>`},
+		{"top-level group without name (reference form is malformed)", `<xs:group ref="g"/>`},
+		{"top-level attributeGroup with inline anonymous attribute type", `<xs:attributeGroup name="ag"><xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute></xs:attributeGroup>`},
+		{"complexType with bare nested group (no ref)", `<xs:complexType name="T"><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:complexType>`},
 		{"complexType with simpleContent (needs resolved base)", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`},
 		{"complexType with complexContent extension (needs resolved base)", `<xs:complexType name="T"><xs:complexContent><xs:extension base="xs:anyType"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`},
-		{"complexType with group reference content", `<xs:complexType name="T"><xs:sequence><xs:group ref="g"/></xs:sequence></xs:complexType>`},
-		{"complexType with attributeGroup reference", `<xs:complexType name="T"><xs:sequence/><xs:attributeGroup ref="ag"/></xs:complexType>`},
 		{"complexType with inline anonymous element type", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType/></xs:element></xs:sequence></xs:complexType>`},
 		{"complexType with openContent", `<xs:complexType name="T"><xs:openContent mode="interleave"><xs:any/></xs:openContent><xs:sequence/></xs:complexType>`},
 		{"element with inline anonymous type", `<xs:element name="e"><xs:complexType/></xs:element>`},
@@ -72,7 +79,7 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"union-variety simpleType", `<xs:simpleType name="U"><xs:union memberTypes="xs:string"/></xs:simpleType>`},
 		{"restriction with enumeration facet", `<xs:simpleType name="E"><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType>`},
 		{"anonymous inline base with enumeration (recursed decline)", `<xs:simpleType name="N"><xs:restriction><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType></xs:restriction></xs:simpleType>`},
-		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:group name="g"><xs:sequence/></xs:group>`},
+		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
 	}
 	for _, tc := range cases {
 		if schemaShapeDecidable(schemaDoc(t, tc.body)) {

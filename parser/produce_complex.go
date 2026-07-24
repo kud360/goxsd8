@@ -182,9 +182,6 @@ func (p *producer) explicitContent(group *Element) (*xsd.Particle, error) {
 		return nil, nil // 2.1.1
 	}
 	local := group.Name().Local()
-	if local == "group" {
-		return nil, fmt.Errorf("parser: <group ref> content is not yet produced (needs a top-level model group definition, §3.7.2)")
-	}
 	hasChildren := hasParticleChild(group)
 	if (local == "all" || local == "sequence") && !hasChildren {
 		return nil, nil // 2.1.2
@@ -194,6 +191,9 @@ func (p *producer) explicitContent(group *Element) (*xsd.Particle, error) {
 	}
 	if maxOccursZero(group) {
 		return nil, nil // 2.1.4
+	}
+	if local == "group" {
+		return p.produceGroupRefParticle(group) // 2.2, <group ref> content-model child
 	}
 	return p.produceGroupParticle(group, true) // 2.2
 }
@@ -210,7 +210,9 @@ func (p *producer) produceGroupParticle(group *Element, top bool) (*xsd.Particle
 	local := group.Name().Local()
 	compositor, ok := compositorOf(local)
 	if !ok {
-		return nil, fmt.Errorf("parser: <group ref> content is not yet produced (needs a top-level model group definition, §3.7.2)")
+		// A <group> reference is mapped by produceGroupRefParticle before it
+		// reaches here; any other name is an unexpected model-group child.
+		return nil, fmt.Errorf("parser: model group child <%s> is not a compositor (all/choice/sequence)", local)
 	}
 	if compositor == xsd.CompositorAll && !top {
 		return nil, xsderr.New(ruleCosAllLimited, group.Loc(),
@@ -238,6 +240,93 @@ func (p *producer) produceGroupParticle(group *Element, top bool) (*xsd.Particle
 	return &part, nil
 }
 
+// produceGroupRefParticle maps a <group ref> to a Particle whose {term} is a
+// deferred ModelGroupRef (§3.7.2, xr.mgd3), mirroring produceElementParticle's
+// <element ref> → ElementDeclarationRef mapping. A minOccurs=maxOccurs=0 <group
+// ref> maps to no component at all (returns nil, §3.7.2). Resolution and the
+// no-circular-groups check happen at finalize (#173: src-resolve clause 1.5,
+// mg-props-correct clause 2), never duplicated here; occurs-range correctness
+// (p-props-correct §3.9.6.1 clause 2.1) is enforced inside xsd.NewParticle.
+func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
+	occ, elided, err := occursOf(el)
+	if err != nil {
+		return nil, err
+	}
+	if elided {
+		return nil, nil
+	}
+	ref, ok := attrValue(el, "ref")
+	if !ok {
+		// A <group> in a content model is always a reference (§3.8.2: the named
+		// definition form appears only as a top-level <schema> child). ref/name
+		// mutual exclusion has no dedicated SCC (§3.7.3 "None as such", Q6), so a
+		// missing ref is a plain well-formedness fault, not an xsderr rule.
+		return nil, fmt.Errorf("parser: a <group> in a content model must be a reference (carry a ref attribute), but none is present")
+	}
+	qn, err := resolveQName(el, ref)
+	if err != nil {
+		return nil, err
+	}
+	part, err := xsd.NewParticle(el.Loc(), occ, xsd.ModelGroupRef{Name: qn}, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &part, nil
+}
+
+// produceModelGroupDefinition maps a top-level named <group> (§3.7.2, xr.mgd1)
+// into a Model Group Definition. The named form has exactly one <all>/<choice>/
+// <sequence> child, whose Model Group becomes {model group}; an absent child
+// yields the zero ModelGroup that NewModelGroupDefinition rejects
+// (mgd-props-correct §3.7.6, {model group} Required). Occurrence on the child is
+// irrelevant here — a model group definition carries no {min occurs}/{max occurs}
+// (§3.7.2 note); those live solely on a <group ref> particle.
+func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd.ModelGroupDefinition, error) {
+	mg, err := p.buildDefinitionModelGroup(el)
+	if err != nil {
+		return xsd.ModelGroupDefinition{}, err
+	}
+	return xsd.NewModelGroupDefinition(el.Loc(), name, mg, nil)
+}
+
+// buildDefinitionModelGroup builds the {model group} of a top-level <group>
+// definition from its single <all>/<choice>/<sequence> child (§3.7.2, xr.mgd1):
+// the Model Group term itself, not a Particle (a definition carries no
+// occurrence). An absent compositor child returns the zero ModelGroup, deferring
+// the {model group}-Required rejection to NewModelGroupDefinition
+// (mgd-props-correct). cos-all-limited is not charged here: an <all> definition
+// body is legal; its limitation to a complex-type content particle is a usage-site
+// concern, mirroring produceGroupParticle's top-level treatment.
+func (p *producer) buildDefinitionModelGroup(el *Element) (xsd.ModelGroup, error) {
+	group := compositorChild(el)
+	if group == nil {
+		return xsd.ModelGroup{}, nil // absent → NewModelGroupDefinition rejects
+	}
+	compositor, _ := compositorOf(group.Name().Local()) // compositorChild guarantees ok
+	particles, err := p.groupParticles(group)
+	if err != nil {
+		return xsd.ModelGroup{}, err
+	}
+	return xsd.NewModelGroup(group.Loc(), compositor, particles, nil)
+}
+
+// compositorChild returns el's first <all>/<choice>/<sequence> child (a model
+// group definition's body, §3.7.2), or nil. Unlike modelGroupChild it excludes
+// <group>: a top-level <group> definition's body is never a nested reference.
+func compositorChild(el *Element) *Element {
+	for _, child := range el.Children() {
+		c, ok := child.(*Element)
+		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		switch c.Name().Local() {
+		case "all", "choice", "sequence":
+			return c
+		}
+	}
+	return nil
+}
+
 // groupParticles maps the particle children of a model group in document order,
 // omitting each minOccurs=maxOccurs=0 child (which maps to no component, §3.9.2).
 func (p *producer) groupParticles(group *Element) ([]xsd.Particle, error) {
@@ -262,7 +351,7 @@ func (p *producer) groupParticles(group *Element) ([]xsd.Particle, error) {
 		case "sequence", "choice", "all":
 			part, err = p.produceGroupParticle(el, false)
 		case "group":
-			return nil, fmt.Errorf("parser: <group ref> content is not yet produced (needs a top-level model group definition, §3.7.2)")
+			part, err = p.produceGroupRefParticle(el)
 		default:
 			return nil, fmt.Errorf("parser: unexpected model group child <%s>", el.Name().Local())
 		}
@@ -359,41 +448,142 @@ func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
 }
 
 // produceAttributeUses maps the attribute-bearing children of parent (a
-// <complexType> or <restriction>) in document order into {attribute uses} plus an
-// optional {attribute wildcard} from a single <anyAttribute> (§3.4.2.5, the
-// inline case; the union-with-base/attributeGroup computation is finalize-time
-// and out of scope). An <attributeGroup> reference is declined (not yet produced).
+// <complexType>, <restriction>, or top-level <attributeGroup>) into {attribute
+// uses} and an optional {attribute wildcard}, following <attributeGroup ref>
+// children transitively (§3.6.2.1/§3.6.2.2, the inline case). {attribute uses} is
+// the union of parent's own <attribute> uses with the uses of every referenced
+// attribute group (§3.6.2.1); {attribute wildcard} is the intersection of
+// parent's own <anyAttribute> with the referenced groups' wildcards (§3.6.2.2,
+// always intersection at one container). The base-type union (§3.4.2.5 clause 2,
+// cos-aw-union) stays out of scope: <extension> is declined upstream.
 func (p *producer) produceAttributeUses(parent *Element) ([]xsd.AttributeUse, *xsd.Wildcard, error) {
 	var uses []xsd.AttributeUse
-	var wildcard *xsd.Wildcard
-	for _, child := range parent.Children() {
-		el, ok := child.(*Element)
-		if !ok {
-			continue
+	var wildcards []xsd.Wildcard
+	if err := p.collectAttributeContent(parent, map[xsd.QName]struct{}{}, &uses, &wildcards); err != nil {
+		return nil, nil, err
+	}
+	wildcard, err := combineAttributeWildcards(parent.Loc(), wildcards)
+	if err != nil {
+		return nil, nil, err
+	}
+	return uses, wildcard, nil
+}
+
+// buildAttributeGroup maps a top-level <attributeGroup> (§3.6.2) into an
+// Attribute Group Definition: its {attribute uses}/{attribute wildcard} fold in
+// every referenced group transitively (§3.6.2.1/§3.6.2.2). The visited set is
+// seeded with name so a reference chain that loops back to this group terminates
+// — a circular <attributeGroup> reference is SPEC-LEGAL (§3.6.2.1), taking the
+// transitive closure, never an error (grounding Q3). ag-props-correct (§3.6.6)
+// clause 2 fires inside NewAttributeGroupDefinition only on a genuine
+// duplicate-name collision among the folded uses.
+func (p *producer) buildAttributeGroup(name xsd.QName, elem *Element) (xsd.AttributeGroupDefinition, error) {
+	var uses []xsd.AttributeUse
+	var wildcards []xsd.Wildcard
+	visited := map[xsd.QName]struct{}{name: {}}
+	if err := p.collectAttributeContent(elem, visited, &uses, &wildcards); err != nil {
+		return xsd.AttributeGroupDefinition{}, err
+	}
+	wildcard, err := combineAttributeWildcards(elem.Loc(), wildcards)
+	if err != nil {
+		return xsd.AttributeGroupDefinition{}, err
+	}
+	return xsd.NewAttributeGroupDefinition(elem.Loc(), name, uses, wildcard, nil)
+}
+
+// collectAttributeContent appends container's own <attribute> uses and its own
+// <anyAttribute> wildcard, then descends every <attributeGroup ref> child
+// transitively (§3.6.2.1), appending each reached group's uses and own wildcard.
+// wildcards are collected in §3.6.2.2 pre-order — a container's own <anyAttribute>
+// (L) before its referenced groups' wildcards (W, in document order) — so
+// wildcards[0] is the wildcard whose {process contents} the combination takes
+// (L if present, else the first of W). visited guards against the spec-legal
+// circular <attributeGroup> reference chains (§3.6.2.1, Q3): an already-visited
+// name is not re-descended, so a cycle contributes each element once.
+func (p *producer) collectAttributeContent(container *Element, visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
+	if any := childElement(container, xsd.XMLSchemaNS, "anyAttribute"); any != nil {
+		wc, err := p.produceWildcard(any)
+		if err != nil {
+			return err
 		}
-		if el.Name().Space() != xsd.XMLSchemaNS {
+		*wildcards = append(*wildcards, wc)
+	}
+	for _, child := range container.Children() {
+		el, ok := child.(*Element)
+		if !ok || el.Name().Space() != xsd.XMLSchemaNS {
 			continue
 		}
 		switch el.Name().Local() {
 		case "attribute":
 			use, err := p.produceAttributeUse(el)
 			if err != nil {
-				return nil, nil, err
+				return err
 			}
 			if use != nil {
-				uses = append(uses, *use)
+				*uses = append(*uses, *use)
 			}
-		case "anyAttribute":
-			wc, err := p.produceWildcard(el)
-			if err != nil {
-				return nil, nil, err
-			}
-			wildcard = &wc
 		case "attributeGroup":
-			return nil, nil, fmt.Errorf("parser: <attributeGroup ref> is not yet produced (needs a top-level attribute group definition, §3.6.2)")
+			if err := p.collectReferencedGroup(el, visited, uses, wildcards); err != nil {
+				return err
+			}
 		}
 	}
-	return uses, wildcard, nil
+	return nil
+}
+
+// collectReferencedGroup resolves one <attributeGroup ref> child and descends
+// into the referenced top-level definition, splicing in its uses and wildcards
+// (§3.6.2.1). A ref whose name resolves to no top-level <attributeGroup> is a
+// dangling reference charged src-resolve clause 1.4 (§3.17.6.2); a nested
+// <attributeGroup> with no ref is a well-formedness fault with no dedicated SCC
+// (§3.6.3 "None as such", grounding Q6), reported as a plain error. An
+// already-visited target is skipped, tolerating the spec-legal cycle (Q3).
+func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
+	ref, ok := attrValue(el, "ref")
+	if !ok {
+		return fmt.Errorf("parser: a nested <attributeGroup> must be a reference (carry a ref attribute), but none is present")
+	}
+	qn, err := resolveQName(el, ref)
+	if err != nil {
+		return err
+	}
+	if _, seen := visited[qn]; seen {
+		return nil
+	}
+	visited[qn] = struct{}{}
+	def, ok := p.localAttributeGroups[qn]
+	if !ok {
+		return xsderr.New(ruleSrcResolve, el.Loc(),
+			"<attributeGroup ref> %s does not resolve to any top-level attribute group definition (src-resolve clause 1.4)", qn)
+	}
+	return p.collectAttributeContent(def, visited, uses, wildcards)
+}
+
+// combineAttributeWildcards folds a §3.6.2.2 pre-order sequence of collected
+// wildcards into the single {attribute wildcard} (or absent, nil): an empty
+// sequence is absent; otherwise the result's {namespace constraint} is the left
+// fold of IntersectNamespaceConstraint over every member (§3.10.6.4
+// cos-aw-intersect — combination at one container is always intersection), and
+// its {process contents} comes from the first member (L if the container had its
+// own <anyAttribute>, else the first referenced group's wildcard). {annotations}
+// is absent, matching the producer's uniform nil-annotation mapping.
+func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.Wildcard, error) {
+	if len(wildcards) == 0 {
+		return nil, nil
+	}
+	nc := wildcards[0].NamespaceConstraint()
+	for _, w := range wildcards[1:] {
+		combined, err := xsd.IntersectNamespaceConstraint(loc, nc, w.NamespaceConstraint())
+		if err != nil {
+			return nil, err
+		}
+		nc = combined
+	}
+	result, err := xsd.NewWildcard(loc, nc, wildcards[0].ProcessContents(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 // produceAttributeUse maps a local <attribute> to an Attribute Use (§3.2.2.2,
@@ -665,7 +855,8 @@ func processContentsOf(lexical string, loc xsderr.Loc) (xsd.ProcessContents, err
 }
 
 // compositorOf maps an <all>/<choice>/<sequence> local name to its Compositor.
-// ok is false for <group> (a reference, out of scope) and any other name.
+// ok is false for <group> (a reference, mapped by produceGroupRefParticle) and
+// any other name.
 func compositorOf(local string) (xsd.Compositor, bool) {
 	switch local {
 	case "all":

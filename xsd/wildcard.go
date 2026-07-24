@@ -77,6 +77,18 @@ func (w Wildcard) ProcessContents() ProcessContents {
 	return w.processContents
 }
 
+// NamespaceConstraint returns the {namespace constraint} property. It is exposed
+// for the §3.6.2.2 "Common Rules for Attribute Wildcards" combination
+// (declare-attributeGroup-wildcard): the parser's <attributeGroup>/<complexType>
+// attribute-wildcard producer reads the constraint out of each referenced group's
+// already-built {attribute wildcard}, folds them through
+// IntersectNamespaceConstraint, and rebuilds via NewWildcard. It mirrors the
+// inspection getters NamespaceConstraint.Variety/Namespaces; to decide whether a
+// name is admitted, call AllowsName rather than inspecting this.
+func (w Wildcard) NamespaceConstraint() NamespaceConstraint {
+	return w.namespaceConstraint
+}
+
 // Annotations returns the {annotations} property in document order. It
 // returns a copy: mutating the result does not affect w. An empty
 // {annotations} yields nil.
