@@ -229,6 +229,48 @@ func TestProduceXPathDefaultNamespace(t *testing.T) {
 	}
 }
 
+func TestProduceXPathDefaultNamespaceInScope(t *testing.T) {
+	// §3.13.2 {default namespace} clause 1: ##defaultNamespace is the namespace
+	// name of the in-scope-namespaces entry whose prefix is absent (clause 1.1),
+	// and ·absent· when there is no such entry (clause 1.2) — both when nothing
+	// declares a default namespace and when xmlns="" undeclares one.
+	tests := []struct {
+		name        string
+		schemaXMLNS string
+		hostXMLNS   string
+		want        string
+		wantOK      bool
+	}{{
+		name: "no default namespace anywhere is clause 1.2",
+	}, {
+		name:        "default namespace undeclared on host is clause 1.2",
+		schemaXMLNS: ` xmlns="urn:d"`,
+		hostXMLNS:   ` xmlns=""`,
+	}, {
+		name:      "default namespace declared on host is clause 1.1",
+		hostXMLNS: ` xmlns="urn:h"`,
+		want:      "urn:h",
+		wantOK:    true,
+	}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			constraints := idcOf(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"`+
+				tt.schemaXMLNS+`>`+
+				`<xs:element name="root"><xs:unique name="u">`+
+				`<xs:selector xpath="a" xpathDefaultNamespace="##defaultNamespace"`+tt.hostXMLNS+`/>`+
+				`<xs:field xpath="@x"/>`+
+				`</xs:unique></xs:element></xs:schema>`, xsd.QName{Local: "root"})
+			got, ok := constraints[0].Selector().DefaultNamespace()
+			if ok != tt.wantOK {
+				t.Fatalf("{default namespace} = %q, present = %v; want present = %v", got, ok, tt.wantOK)
+			}
+			if ok && got != tt.want {
+				t.Errorf("{default namespace} = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestProduceXPathDefaultNamespaceTargetAbsent(t *testing.T) {
 	// ##targetNamespace with no targetNamespace on <schema> is ·absent·, not "".
 	constraints := idcOf(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"`+

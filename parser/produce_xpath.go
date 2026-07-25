@@ -51,9 +51,13 @@ func (p *producer) buildXPathExpression(hostElem *Element, exprAttr string) xsd.
 // target namespace (absent when <schema> carries no targetNamespace), and any
 // other value is a literal xs:anyURI taken as-is.
 //
-// The ##defaultNamespace case returns a non-nil pointer to "" when no default
-// namespace is in scope: "" is the no-namespace name, a legitimate present
-// value, not an absence sentinel.
+// The ##defaultNamespace case follows clause 1 exactly: the [[namespace name]]
+// of the host element's in-scope-namespaces entry whose [[prefix]] is absent
+// (clause 1.1), and ·absent· when there is no such entry (clause 1.2). A
+// declared default namespace always has a non-empty namespace name, and
+// xmlns="" undeclares one (Namespaces in XML 1.1), so an empty LookupPrefix("")
+// result means exactly "no absent-prefix entry in scope" — both clause 1.2
+// shapes — and yields nil, never a present "".
 func (p *producer) xpathDefaultNamespace(hostElem *Element) *string {
 	d, ok := attrValue(hostElem, "xpathDefaultNamespace")
 	if !ok {
@@ -66,7 +70,12 @@ func (p *producer) xpathDefaultNamespace(hostElem *Element) *string {
 	case "##local":
 		return nil
 	case "##defaultNamespace":
-		uri, _ := hostElem.LookupPrefix("") // the empty prefix always resolves
+		// ok is no signal here: the empty prefix always resolves (scope.lookup).
+		// An empty URI is clause 1.2 — no default namespace bound, so ·absent·.
+		uri, _ := hostElem.LookupPrefix("")
+		if uri == "" {
+			return nil
+		}
 		return &uri
 	case "##targetNamespace":
 		if _, hasTarget := attrValue(p.schemaElem, "targetNamespace"); !hasTarget {
