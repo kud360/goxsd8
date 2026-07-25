@@ -32,8 +32,11 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // reported failure is deterministic):
 //
 //   - Phase A (existence): walk every in-scope QName reference site and reject an
-//     unresolvable target with src-resolve (or, for a keyref pointing at another
-//     keyref, c-props-correct clause 1).
+//     unresolvable target with src-resolve. At the keyref site it also folds in
+//     the two c-props-correct checks that only the resolved target makes
+//     decidable — clause 1 for a keyref pointing at another keyref, and clause 2,
+//     which is not an existence check at all but the {fields} cardinality match
+//     between keyref and {referenced key} (resolveKeyref).
 //   - Phase B (circularity): reject the spec-forbidden named circularities that
 //     become representable only across the assembled set — the complex-type base
 //     chain (ct-props-correct clause 3), <group ref> graph (mg-props-correct
@@ -181,10 +184,23 @@ func (s *Schema) resolveModelGroupName(ref QName, ctx string) error {
 
 // resolveKeyref resolves an identity constraint's {referenced key} (src-resolve
 // clause 1.7) against idcIndex directly, but only for a keyref (a key/unique
-// carries no reference). Beyond existence, it enforces the c-props-correct clause
-// 1 tableau requirement that the referenced constraint be a key or unique, NOT
-// another keyref: a same-kind lookup passes src-resolve (both are IDCs), so the
-// keyref→keyref category mismatch is charged c-props-correct, not src-resolve.
+// carries no reference). Beyond existence it enforces both c-props-correct
+// (§3.11.6.1) requirements that need the RESOLVED target — the split with
+// NewIdentityConstraint is: the constructor owns clause 1's LOCAL
+// presence-iff-keyref shape only, and finalize (here) owns clause 1's
+// resolvability plus category and clause 2's cardinality.
+//
+//   - clause 1 (category): the referenced constraint must be a key or unique, NOT
+//     another keyref. A same-kind lookup passes src-resolve (both are IDCs), so
+//     the keyref→keyref mismatch is charged c-props-correct, not src-resolve.
+//   - clause 2 (cardinality): the keyref's {fields} count must equal the
+//     {referenced key}'s.
+//
+// The category check runs first, so a target that is both the wrong category and
+// the wrong cardinality reports the category failure — one deterministic first
+// failure (STYLE D1). The lengths are read off the unexported fields of two
+// same-package values rather than through Fields(), whose defensive copy would
+// be allocated only to be discarded.
 func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 	ref, isKeyref := ic.ReferencedKeyName()
 	if !isKeyref || ref == (QName{}) {
@@ -198,6 +214,10 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 	if target.Category() == IdentityConstraintKeyref {
 		return xsderr.New(ruleICProps, xsderr.Loc{},
 			"keyref %s references %s, which is itself a keyref, but c-props-correct clause 1 requires a keyref's {referenced key} to be a key or unique", ic.Name(), ref)
+	}
+	if len(ic.fields) != len(target.fields) {
+		return xsderr.New(ruleICProps, xsderr.Loc{},
+			"keyref %s has %d {fields} but its {referenced key} %s has %d, and c-props-correct clause 2 requires equal cardinality", ic.Name(), len(ic.fields), ref, len(target.fields))
 	}
 	return nil
 }
