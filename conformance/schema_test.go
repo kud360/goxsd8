@@ -49,6 +49,12 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"complexType with top-level group ref as content", `<xs:complexType name="T"><xs:group ref="g"/></xs:complexType>`},
 		{"complexType with attributeGroup ref", `<xs:complexType name="T"><xs:sequence/><xs:attributeGroup ref="ag"/></xs:complexType>`},
 		{"all decidable kinds together", `<xs:element name="e" type="T"/><xs:attribute name="a"/><xs:simpleType name="T"><xs:restriction base="xs:string"><xs:maxLength value="3"/></xs:restriction></xs:simpleType>`},
+		{"top-level notation (§3.14.2)", `<xs:notation name="n" public="-//x//y" system="x.dtd"/>`},
+		{"element with name= identity constraint", `<xs:element name="e"><xs:key name="k"><xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key></xs:element>`},
+		{"local element with name= identity constraint", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:unique name="u"><xs:selector xpath="b"/><xs:field xpath="@x"/></xs:unique></xs:element></xs:sequence></xs:complexType>`},
+		{"complexType with assert", `<xs:complexType name="T"><xs:sequence/><xs:assert test="true()"/></xs:complexType>`},
+		{"complexContent restriction with assert", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:restriction base="B"><xs:sequence/><xs:assert test="true()"/></xs:restriction></xs:complexContent></xs:complexType>`},
+		{"restriction with assertion facet", `<xs:simpleType name="A"><xs:restriction base="xs:int"><xs:assertion test="$value > 0"/></xs:restriction></xs:simpleType>`},
 	}
 	for _, tc := range cases {
 		if !schemaShapeDecidable(schemaDoc(t, tc.body)) {
@@ -80,6 +86,8 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"restriction with enumeration facet", `<xs:simpleType name="E"><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType>`},
 		{"anonymous inline base with enumeration (recursed decline)", `<xs:simpleType name="N"><xs:restriction><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType></xs:restriction></xs:simpleType>`},
 		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
+		{"element with ref= identity constraint (names an existing definition)", `<xs:element name="e"><xs:key ref="k"/></xs:element>`},
+		{"local element with ref= identity constraint", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:keyref ref="kr"/></xs:element></xs:sequence></xs:complexType>`},
 	}
 	for _, tc := range cases {
 		if schemaShapeDecidable(schemaDoc(t, tc.body)) {
