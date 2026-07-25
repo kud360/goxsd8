@@ -55,6 +55,11 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"complexType with assert", `<xs:complexType name="T"><xs:sequence/><xs:assert test="true()"/></xs:complexType>`},
 		{"complexContent restriction with assert", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:restriction base="B"><xs:sequence/><xs:assert test="true()"/></xs:restriction></xs:complexContent></xs:complexType>`},
 		{"restriction with assertion facet", `<xs:simpleType name="A"><xs:restriction base="xs:int"><xs:assertion test="$value > 0"/></xs:restriction></xs:simpleType>`},
+		// #242: <include> contributes no component of its own, so it is admitted
+		// here; the decidability of what it points at is the closure walk's job
+		// (closureScan.decidable), not this allowlist's.
+		{"top-level include", `<xs:include schemaLocation="lib.xsd"/>`},
+		{"include beside decidable kinds", `<xs:include schemaLocation="lib.xsd"/><xs:element name="e" type="xs:string"/>`},
 	}
 	for _, tc := range cases {
 		if !schemaShapeDecidable(schemaDoc(t, tc.body)) {
@@ -88,6 +93,14 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
 		{"element with ref= identity constraint (names an existing definition)", `<xs:element name="e"><xs:key ref="k"/></xs:element>`},
 		{"local element with ref= identity constraint", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:keyref ref="kr"/></xs:element></xs:sequence></xs:complexType>`},
+		// The composition kinds parser.Parse does not follow (#182/#183 unlanded):
+		// a document carrying one assembles SHORT, so admitting it would be the
+		// vacuous pass the allowlist exists to refuse. Unlike <include> (#242).
+		{"top-level import (not followed by the assembly)", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`},
+		{"top-level redefine (not followed by the assembly)", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType name="T"><xs:restriction base="xs:string"/></xs:simpleType></xs:redefine>`},
+		{"top-level override (not followed by the assembly)", `<xs:override schemaLocation="b.xsd"><xs:element name="e" type="xs:string"/></xs:override>`},
+		{"include beside an undecidable kind still declines", `<xs:include schemaLocation="lib.xsd"/><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
+		{"top-level defaultOpenContent", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent>`},
 	}
 	for _, tc := range cases {
 		if schemaShapeDecidable(schemaDoc(t, tc.body)) {

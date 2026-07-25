@@ -1,9 +1,10 @@
 package conformance
 
 import (
-	"os"
+	"path/filepath"
 
 	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -20,41 +21,60 @@ import (
 // # What a schemaTest asserts
 //
 // A schemaTest asks: is THIS schema document itself schema-valid? The lane
-// decides that with the end-to-end producer (parser.Produce + Finalize, issues
-// #174/#176/#177/#178), which maps top-level <simpleType>/<element>/<attribute>/
-// <attributeGroup>/<group>/<notation> and the produce-time-decidable subset of
-// <complexType> (implicit and <complexContent> <restriction> content, its
-// particles including <group ref>, local element/attribute declarations,
-// attribute uses including <attributeGroup ref>, wildcards, and <assert>
-// assertions) into xsd components, maps the name= identity constraints of global
-// and local <element>s (#178), seeds the ur-type xs:anyType, resolves
-// cross-references, and rejects duplicate top-level names within a kind. The
-// remaining top-level representations (import/include/redefine/override), the
-// ref= identity-constraint form, and the not-yet-produced complexType forms
-// (<simpleContent>, <complexContent> <extension>, inline anonymous local types,
-// <openContent>) are SILENTLY SKIPPED or declined by Produce (§3.1.2 permits
-// ignoring a not-yet-produced representation), NOT rejected.
+// decides that with the end-to-end assembler (parser.Parse, issue #179, which
+// subsumes the producer and Finalize of issues #174/#176/#177/#178). Parse
+// implements §4.2.1's schema(D) — the root document's components plus,
+// transitively, those of every document reached through an <xs:include> child
+// (§4.2.3), chameleon coercion included (§F.1) — and maps top-level
+// <simpleType>/<element>/<attribute>/<attributeGroup>/<group>/<notation> and the
+// produce-time-decidable subset of <complexType> (implicit and <complexContent>
+// <restriction> content, its particles including <group ref>, local
+// element/attribute declarations, attribute uses including <attributeGroup ref>,
+// wildcards, and <assert> assertions) into xsd components, maps the name=
+// identity constraints of global and local <element>s (#178), seeds the ur-type
+// xs:anyType, resolves cross-references, and rejects duplicate top-level names
+// within a kind. The remaining top-level representations
+// (import/redefine/override), the ref= identity-constraint form, and the
+// not-yet-produced complexType forms (<simpleContent>, <complexContent>
+// <extension>, inline anonymous local types, <openContent>) are SILENTLY SKIPPED
+// or declined (§3.1.2 permits ignoring a not-yet-produced representation), NOT
+// rejected.
 //
-// # Why "Produce returns nil" is not, by itself, evidence of validity
+// # Why "Parse returns nil" is not, by itself, evidence of validity
 //
-// Because Produce silently skips the representations it does not yet build, a
-// document whose top-level content includes (say) an invalid <group> or an
+// Because the producer silently skips the representations it does not yet build,
+// a document whose top-level content includes (say) an invalid <group> or an
 // undecidable <complexType> form alongside valid simpleType/element/attribute
-// would still Produce+Finalize with no error — a FALSE ACCEPT. §3.1.2's licence
+// would still assemble with no error — a FALSE ACCEPT. §3.1.2's licence
 // to ignore a representation is an
 // implementation choice about what to BUILD; it does not make the spec consider
 // such a document valid: the invalid complexType still makes the document
 // schema-INVALID under sch-props-correct clause 1 (§3.17.6.1), whichever
 // cvc-complex-type/cos-* rule it violates (oracle grounding, issue #175). So
-// "Produce returns nil" is genuine evidence of validity ONLY when the document's
-// top-level content is PROVABLY CONFINED to what Produce actually processes.
+// "Parse returns nil" is genuine evidence of validity ONLY when the top-level
+// content is PROVABLY CONFINED to what the producer actually processes.
+//
+// Since #242 that qualifier binds over a CLOSURE, not one document. Parse reads
+// the whole <include> closure, so an included document holding a skipped
+// representation false-accepts exactly as a root one would — and Parse cannot be
+// asked which documents it read (its discovery is unexported, and the *xsd.Schema
+// it returns carries components, not provenance). The harness therefore performs
+// its OWN discovery walk first (closureScan, conformance/schema_closure.go),
+// independently finding every document of the closure and gating each one on the
+// allowlist below. Only when the whole closure is decidable does the case reach
+// parser.Parse. That walk resolves every schemaLocation exactly as the parser
+// does — same resolver, same root location string, same §4.3.2 clause 4
+// base-URI algorithm — because a document it under-discovered would be a document
+// whose shape was never gated, which is the false accept back again.
 //
 // # The decidable shape (the strict top-level allowlist)
 //
-// execSchemaCase therefore decides a case only after confirming its whole shape
-// is confined to what the producer checks, and DECLINES (Fail) anything else:
+// execSchemaCase therefore decides a case only after confirming the whole shape
+// of every document in its closure is confined to what the producer checks, and
+// DECLINES (Fail) anything else:
 //
-//  1. Readability. parser.ReadDocument is run first. ANY error DECLINES the case
+//  1. Readability. parser.ReadDocument is run first — on the root, and again on
+//     every document the discovery walk reaches. ANY error DECLINES the case
 //     (Fail), never a validity verdict: a ReadDocument error does not distinguish
 //     a genuine XML well-formedness fault from a parser encoding LIMITATION.
 //     Well-formed UTF-16 input (BOM FF FE) is currently rejected as "invalid
@@ -65,16 +85,27 @@ import (
 //     schema-well-formedness sub-cohort here; it is a declined recorded gap.
 //  2. Root identity. If the root is not <schema> (IsSchema false) the case is
 //     DECLINED: §3.17.2 explicitly does NOT require <schema> to be the document
-//     root, so Produce's error there is a plain non-xsderr Go precondition fault,
+//     root, so Parse's error there is a plain non-xsderr Go precondition fault,
 //     not a sch-props-correct rejection — not decidable for this lane. Inventing
-//     a "root must be <schema>" rejection would overreach (oracle grounding).
+//     a "root must be <schema>" rejection would overreach (oracle grounding). An
+//     INCLUDED document that is not a <schema> is the opposite case and is NOT
+//     declined: src-include clause 1 makes that a genuine rejection, which Parse
+//     emits, so the walk leaves it alone (schema_closure.go).
 //  3. Top-level allowlist. Every top-level child element must be xsd:annotation,
-//     xsd:simpleType, xsd:element, xsd:attribute, xsd:complexType,
+//     xsd:include, xsd:simpleType, xsd:element, xsd:attribute, xsd:complexType,
 //     xsd:attributeGroup (named definition), xsd:group (named definition), or
-//     xsd:notation — anything else at top level (import/include/redefine/override/
+//     xsd:notation — anything else at top level (import/redefine/override/
 //     defaultOpenContent, any non-xsd element, or an out-of-set local name) closes
 //     the false-accept gap above by DECLINING the whole case. Within the allowed
 //     kinds:
+//     - include: always admitted (#242). Its own content model is (annotation?),
+//       so it contributes nothing the producer could silently skip; the
+//       decidability of the document it POINTS AT is established by the discovery
+//       walk, which reads that document and runs this same allowlist over it
+//       (and over its own <include>s, transitively) before anything is decided —
+//       not by this allowlist entry. src-include (§4.2.3) itself imposes no shape
+//       constraint on the included document, only existence and targetNamespace
+//       agreement, both of which Parse decides genuinely.
 //     - element: must have no inline <simpleType>/<complexType> child, and every
 //       <unique>/<key>/<keyref> child must use the name= form. A bare
 //       element (no type=) defaults to xs:anyType (§3.3.2.1 case 4), now seeded as
@@ -129,10 +160,11 @@ import (
 //       src-simple-type clause 2 rule Produce correctly enforces, so a violation
 //       flows through as a real decidable rejection.
 //     - annotation: always allowed, no further check.
-//  4. Decide. When the whole shape passes, parser.Produce is run and observed =
-//     (err == nil): a nil error is genuine evidence of validity (the shape has
-//     none of the violations checked above, so a real one would surface), and a
-//     non-nil error is a REAL, implemented rejection (sch-props-correct clause 2
+//  4. Decide. When every document of the closure passes, parser.Parse is run and
+//     observed = (err == nil): a nil error is genuine evidence of validity (no
+//     document of the assembly has any of the violations checked above, so a real
+//     one would surface), and a non-nil error is a REAL, implemented rejection
+//     (src-include §4.2.3, sch-props-correct clause 2
 //     duplicate-name §3.17.6.1, src-element §3.3.3, src-attribute §3.2.3,
 //     src-simple-type §3.16.3, src-resolve §3.17.6.2, st-props-correct,
 //     src-identity-constraint §3.11.3, c-props-correct §3.11.6.1,
@@ -142,6 +174,15 @@ import (
 //     allowlist excludes every case whose rejection would be a
 //     limitation-in-disguise. The case Passes iff observed agrees with the suite's
 //     declared validity.
+//
+//     No error-type discrimination (errors.As over *xsderr.Error) is needed to
+//     make that trustworthy, because step 1-3's walk has already ruled out the
+//     non-verdict failure modes ACROSS THE WHOLE CLOSURE: every document Parse
+//     will read has been independently confirmed resolvable, readable,
+//     <schema>-rooted (or deliberately left to src-include clause 1) and
+//     shape-decidable. The plain non-xsderr errors Parse can otherwise return —
+//     an unresolvable root, an I/O or encoding failure, a non-schema root — are
+//     exactly what the walk already eliminated, so what remains is spec verdicts.
 //
 // # sch-props-correct clause 2 is per-kind
 //
@@ -160,48 +201,69 @@ import (
 //
 // # Why no false ratchet-corrupting pass is possible
 //
-// Every "invalid" verdict this lane emits comes from ONE source: parser.Produce
-// rejecting a document whose shape already passed the allowlist. ReadDocument
+// Every "invalid" verdict this lane emits comes from ONE source: parser.Parse
+// rejecting an assembly EVERY document of which already passed the allowlist.
+// ReadDocument
 // errors never produce an "invalid" verdict — they decline (step 1) — precisely
 // because a ReadDocument error can be a parser encoding limitation (well-formed
 // UTF-16 misread as invalid UTF-8) rather than a real violation, and turning that
 // into "invalid" would fabricate a verdict for a well-formed document.
 //
 // A "valid" verdict coincides only with a truly-valid ground truth: a truly-valid
-// document (by definition) has none of the checked violations, so Produce
+// assembly (by definition) has none of the checked violations, so Parse
 // correctly finds none. An "invalid" verdict coincides only with truly-invalid
 // ground truth via a REAL implemented violation — never a fabricated one, since
 // the shape allowlist excludes every form (inline element/attribute types,
 // list/union/enumeration simpleTypes, ref= identity constraints, and the
 // not-yet-produced complexType forms — <simpleContent>, <complexContent>
-// <extension>, inline anonymous local types, <openContent>) where Produce's
+// <extension>, inline anonymous local types, <openContent>) where the producer's
 // rejection would be a limitation rather than a spec violation. A
 // suite-invalid case whose only defect is a rule this slice does NOT yet check
 // (UPA cos-nonambig, EDC, derivation-ok-restriction) is produced cleanly, so the
 // lane observes "valid", disagrees with the suite, and records a still-failing
 // gap — never a wrong "invalid" pass. The remaining risk the allowlist closes is
 // the VACUOUS pass — a document of entirely skipped top-level content that would
-// otherwise always "pass" through Produce doing nothing — which is why step 3
-// confines the whole top level to the processed kinds and the decidable
-// complexType subset.
+// otherwise always "pass" through a producer doing nothing — which is why step 3
+// confines the whole top level of EVERY document in the closure to the processed
+// kinds and the decidable complexType subset.
+//
+// # Composition: <include> decided, import/redefine/override still deferred
+//
+// <xs:include>, chameleon inclusion included, is DECIDED as of #242: parser.Parse
+// follows the closure (#179) and the harness's discovery walk gates every document
+// in it, so an include/chameleon case is now decided for the same reason a
+// single-document case is, not guessed.
+//
+// <xs:import>, <xs:redefine> and <xs:override> stay DECLINED. Parse does not
+// follow them — like any other not-yet-produced representation they are skipped,
+// not rejected (§3.1.2, #182/#183 unlanded) — so a document carrying one
+// assembles SHORT: the components of the document it names never enter the
+// builder, and any violation among them is invisible. That is precisely the
+// vacuous pass step 3 exists to refuse, so their mere presence at top level
+// declines the case until the parser follows them.
 //
 // # Still deferred
 //
 // Inline anonymous types on element/attribute, list/union/enumeration
-// simpleTypes, ref= identity constraints, the not-yet-produced complexType forms
-// named above, and the composition top-level kinds (import/include/redefine/
-// override) widen in with later producer slices (exactly
+// simpleTypes, ref= identity constraints, and the not-yet-produced complexType
+// forms named above widen in with later producer slices (exactly
 // as the datatypes lane grew across #15/#57/#80); they stay DECLINED (Fail)
 // recorded gaps here, never guessed. The derivation-validity, UPA, and EDC rules
 // (#180/#181) that would newly reject some admitted complexType cases as invalid
 // are separate slices; until they land, those suite-invalid cases stay failing
 // gaps rather than wins.
+//
+// A schemaTest with MORE THAN ONE <ts:schemaDocument> child is decided against the
+// wrong document (the runner keeps only one, #238, unlanded). That defect is
+// orthogonal to the closure walk — those cases were mis-decided before #242 and
+// still are; assembling a case's several root documents is the runner's business,
+// not this lane's.
 
 // newSchemaExec builds the schema lane's executor. The strict backend is built
 // once here (mirroring newDatatypesExec's strictBackend := strict.New()): it maps
-// all 20 primitives, so parser.Produce's internal builtin.Seed precondition holds
-// for every case. Produce seeds from the backend on each call, so no symbol table
-// is captured here — the executor only threads the backend and reads the document.
+// all 20 primitives, so parser.Parse's internal builtin.Seed precondition holds
+// for every case. Parse seeds from the backend on each call, so no symbol table is
+// captured here — the executor only threads the backend and reads the documents.
 func newSchemaExec() executor {
 	backend := strict.New()
 	return func(c caseSpec) Status {
@@ -210,20 +272,33 @@ func newSchemaExec() executor {
 }
 
 // execSchemaCase decides one schemaTest case, or honestly declines it (Fail). It
-// reads the document, gates on the decidable top-level shape (schemaShapeDecidable),
-// then runs parser.Produce and agrees or disagrees with the suite's declared
-// validity. A document it cannot open OR cannot read (any ReadDocument error,
-// including a parser encoding limitation such as unsupported UTF-16), whose root is
-// not <schema>, or whose shape falls outside the producer's decidable subset is
-// DECLINED (Fail) as a recorded gap, never guessed.
+// reads the root document, gates the WHOLE <xs:include> closure on the decidable
+// top-level shape (closureScan.decidable, which runs schemaShapeDecidable on every
+// document it discovers), then runs parser.Parse and agrees or disagrees with the
+// suite's declared validity. A document it cannot resolve OR cannot read (any
+// ReadDocument error, including a parser encoding limitation such as unsupported
+// UTF-16), whose root is not <schema>, or any document of whose closure falls
+// outside the producer's decidable subset is DECLINED (Fail) as a recorded gap,
+// never guessed.
+//
+// The resolver is a loader.Dir rooted at the case document's own directory and the
+// root is named by its BASE name, because parser.Parse reads the root under
+// exactly the location string it is handed (readRootDocument in parser/parse.go):
+// passing the full path would give the root document a base URI of
+// "…/sunData/SType/x" instead of "x", and every <include> in it would then resolve
+// one directory tree away from where the resolver serves. The harness's own read
+// below therefore uses the SAME resolver and the SAME location string, so its
+// closure walk resolves byte-identically to the assembly Parse builds.
 func execSchemaCase(backend value.Backend, c caseSpec) Status {
-	f, err := os.Open(c.doc)
+	resolver := loader.Dir(filepath.Dir(c.doc))
+	location := filepath.Base(c.doc)
+	rc, resolved, err := resolver.Resolve("", location)
 	if err != nil {
 		// Unreadable document: an honest recorded gap, not a validity verdict.
 		return Fail()
 	}
-	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the verdict
-	doc, err := parser.ReadDocument(c.doc, f)
+	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
+	doc, err := parser.ReadDocument(location, rc)
 	if err != nil {
 		// A ReadDocument error is DECLINED, never treated as an observed-invalid
 		// verdict. The error does not distinguish a genuine XML well-formedness
@@ -236,17 +311,18 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 		return Fail()
 	}
 	// §3.17.2 does not require <schema> to be the document root, so a non-schema
-	// root is a producer precondition fault (a plain Go error, not a
+	// root is a Parse precondition fault (a plain Go error, not a
 	// sch-props-correct rejection), not decidable for this lane — decline.
 	if !doc.IsSchema() {
 		return Fail()
 	}
-	// Only decide when the whole top level is confined to what Produce processes;
-	// otherwise a silently-skipped invalid representation could false-accept.
-	if !schemaShapeDecidable(doc) {
+	// Only decide when EVERY document of the <include> closure is confined to what
+	// the producer processes; otherwise a silently-skipped invalid representation,
+	// in the root or in any included document, could false-accept.
+	if !newClosureScan(resolver, doc, resolved).decidable(doc) {
 		return Fail()
 	}
-	_, perr := parser.Produce(doc, backend)
+	_, perr := parser.Parse(location, parser.WithResolver(resolver), parser.WithBackend(backend))
 	return decideSchema(perr == nil, c.expectValid)
 }
 
@@ -290,6 +366,14 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 		switch name.Local() {
 		case "annotation":
 			// Harmless, always allowed.
+		case "include":
+			// Admitted (#242). <include> contributes no component of its own — its
+			// content model is (annotation?) — so there is nothing here for the
+			// producer to silently skip. What it POINTS AT is the thing that could
+			// be skipped, and that is gated by closureScan.decidable, which reads
+			// the included document and runs this same function over it before any
+			// case is decided. src-include's own clauses (§4.2.3) are then enforced
+			// genuinely by parser.Parse.
 		case "element":
 			if !elementDecidable(el) {
 				return false
@@ -320,9 +404,10 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			// (n-props-correct §3.14.6 rejects both identifiers absent), so it is
 			// always admitted, like annotation.
 		default:
-			// import/include/redefine/override, defaultOpenContent, or any other local
-			// name: silently skipped by Produce, so a nil verdict there would be
-			// vacuous — decline the whole case.
+			// import/redefine/override, defaultOpenContent, or any other local name:
+			// silently skipped by the producer AND not followed by the assembly
+			// (#182/#183 unlanded), so a nil verdict there would be vacuous —
+			// decline the whole case.
 			return false
 		}
 	}
@@ -595,14 +680,12 @@ func simpleTypeDecidable(el *parser.Element) bool {
 }
 
 // hasAttr reports whether el carries the unprefixed (no-namespace) attribute
-// local, as XSD schema-element attributes (name, ref, …) carry no namespace.
+// local, as XSD schema-element attributes (name, ref, …) carry no namespace. It
+// is the presence-only face of elementAttr, not a second scan of its own (STYLE
+// D3).
 func hasAttr(el *parser.Element, local string) bool {
-	for _, a := range el.Attributes() {
-		if a.Name().Space() == "" && a.Name().Local() == local {
-			return true
-		}
-	}
-	return false
+	_, ok := elementAttr(el, local)
+	return ok
 }
 
 // childXSD returns el's first child element with expanded name {XMLSchemaNS}local,
