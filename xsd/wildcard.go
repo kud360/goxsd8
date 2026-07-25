@@ -38,11 +38,11 @@ type Wildcard struct {
 //     Wildcard representable.
 //
 // w-props-correct clauses 2-4 are the NamespaceConstraint sub-record's own
-// invariants, already enforced by NewNamespaceConstraint; clause 5
-// (attribute wildcards must not carry the sibling keyword) is vacuously
-// satisfied because NamespaceConstraint does not represent the
-// defined/sibling keywords at all (see the GAP marker on
-// NewNamespaceConstraint).
+// invariants, already enforced by NewNamespaceConstraint; clause 5 (attribute
+// wildcards must not carry the sibling keyword) is NOT checkable here either,
+// because a Wildcard does not know which tableau slot holds it — element
+// wildcard, {attribute wildcard}, or open content {wildcard}. It is enforced by
+// rejectSiblingOnAttributeWildcard at the two attribute-wildcard slots.
 //
 // annotations is copied; the caller's backing array is not aliased.
 //
@@ -104,15 +104,55 @@ func (w Wildcard) Annotations() []Annotation {
 // canonical wildcard-admission entry point (xsd/doc.go); callers must never
 // re-derive the allowance algorithm by reaching past this method.
 //
-// This implements cvc-wildcard (§3.10.4.1) clause 1 ONLY (expanded name
-// valid per cvc-wildcard-name, §3.10.4.2). Clauses 2-3 (the defined/sibling
-// keyword exclusions against the live declaration graph) are OUT of scope
-// for this pure-leaf package — see the identical GAP(xsd) marker on
-// NamespaceConstraint.AllowsName.
+// GAP(xsd): this implements cvc-wildcard (§3.10.4.1) clause 1 ONLY (expanded
+// name ·valid· per cvc-wildcard-name, §3.10.4.2). Clauses 2-3 — the
+// defined/sibling keyword exclusions, which need the live declaration graph —
+// are answered in-package by (*Schema).allowsElementWildcardName and
+// (*Schema).allowsAttributeWildcardName (wildcardadmit.go), which this method
+// cannot reach from a bare Wildcard value. So for a wildcard whose {namespace
+// constraint} carries a keyword, AllowsName answers true for names cvc-wildcard
+// rejects: it is NECESSARY but not SUFFICIENT for wildcard admission, and an
+// external caller using it alone can false-accept. The marker is retired when
+// M5 ships a cvc-wildcard-complete exported entry point over the declaration
+// graph (#51 keeps the resolution half unexported until that caller exists).
 //
 // {process contents} plays no part in this decision: even a skip wildcard
 // admits everything {namespace constraint} admits; ProcessContents tells the
 // validator what to do with an admitted item, not whether to admit it.
 func (w Wildcard) AllowsName(name QName) bool {
 	return w.namespaceConstraint.AllowsName(name)
+}
+
+// rejectSiblingOnAttributeWildcard enforces Wildcard Properties Correct
+// (§3.10.6.1, w-props-correct) clause 5: "Attribute wildcards do not contain
+// sibling in their {namespace constraint}.{disallowed names}." A nil w is the
+// absent {attribute wildcard} and passes.
+//
+// It is the SINGLE enforcement point for clause 5 (STYLE T4), called from the
+// two tableau slots at which "this is an attribute wildcard" first becomes a
+// fact: NewComplexType's {attribute wildcard} and NewAttributeGroupDefinition's
+// {attribute wildcard}. It is deliberately NOT called from NewOpenContent — an
+// open-content {wildcard} is an ELEMENT wildcard and legitimately carries
+// sibling — nor from NewWildcard or NewNamespaceConstraint, neither of which
+// knows which slot will hold the value. Element-versus-attribute is positional,
+// so no kind property is stored on Wildcard (STYLE D3).
+//
+// The parser does not repeat this check: a schema document spelling
+// notQName="##definedSibling" on <anyAttribute> is already rejected upstream as
+// a datatype-validity failure of that attribute against xs:qnameListA, whose
+// enumeration admits only ##defined (§3.10.2, the machine-checkable form of
+// clause 5). This helper covers the programmatic-construction path that bypasses
+// the parser.
+func rejectSiblingOnAttributeWildcard(loc xsderr.Loc, w *Wildcard) error {
+	if w == nil {
+		return nil
+	}
+	for _, k := range w.namespaceConstraint.disallowedNameKeywords {
+		if k != DisallowedNameSibling {
+			continue
+		}
+		return xsderr.New(ruleWildcardCorrect, loc,
+			"attribute wildcard {namespace constraint}.{disallowed names} contains the keyword sibling, but w-props-correct clause 5 forbids it on an attribute wildcard")
+	}
+	return nil
 }

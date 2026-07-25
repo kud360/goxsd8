@@ -242,6 +242,12 @@ type ComplexType struct {
 //     carry a {particle} with a present {term} (a zero Particle{} is rejected,
 //     mirroring NewParticle's own p-props-correct clause 1 nil-{term} check).
 //
+// It also rejects one state Wildcard Properties Correct (§3.10.6.1,
+// w-props-correct) clause 5 forbids, charged to that rule rather than to
+// ct-props-correct: an {attribute wildcard} whose {namespace constraint}
+// carries the sibling keyword. This slot is one of the two places an attribute
+// wildcard is identifiable as such; see rejectSiblingOnAttributeWildcard.
+//
 // The substantive cross-component clauses (base-type resolution, circularity,
 // attribute-use expanded-name uniqueness) and the derivation-validity rules are
 // NOT checked here — see ruleCTPropsCorrect's doc.
@@ -282,6 +288,9 @@ func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, fi
 		}
 	}
 	if err := checkContentType(loc, contentType); err != nil {
+		return ComplexType{}, err
+	}
+	if err := rejectSiblingOnAttributeWildcard(loc, attributeWildcard); err != nil {
 		return ComplexType{}, err
 	}
 	c := ComplexType{

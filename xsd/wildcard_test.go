@@ -162,3 +162,72 @@ func TestWildcardAllowsNameRespectsDisallowedNames(t *testing.T) {
 		t.Errorf("Wildcard.AllowsName disagrees with NamespaceConstraint.AllowsName")
 	}
 }
+
+// keywordWildcard builds an ##any wildcard whose {namespace constraint} carries
+// the given {disallowed names} keywords.
+func keywordWildcard(t *testing.T, keywords ...xsd.DisallowedNameKeyword) xsd.Wildcard {
+	t.Helper()
+	nc, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintAny, nil, nil, keywords)
+	if err != nil {
+		t.Fatalf("NewNamespaceConstraint: %v", err)
+	}
+	return mustWildcard(t, nc, xsd.ProcessStrict, nil)
+}
+
+// TestWPropsCorrectClause5 pins w-props-correct (§3.10.6.1) clause 5 at the two
+// tableau slots that identify a wildcard as an ATTRIBUTE wildcard, and pins that
+// the check does NOT fire where sibling is legitimate.
+func TestWPropsCorrectClause5(t *testing.T) {
+	sibling := keywordWildcard(t, xsd.DisallowedNameSibling)
+	defined := keywordWildcard(t, xsd.DisallowedNameDefined)
+
+	newCT := func(w *xsd.Wildcard) error {
+		_, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: "urn:t", Local: "ct"}, xsd.QName{}, nil,
+			xsd.DerivationRestriction, false, nil, w, xsd.EmptyContent{}, nil, nil, nil)
+		return err
+	}
+	newAG := func(w *xsd.Wildcard) error {
+		_, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, xsd.QName{Space: "urn:t", Local: "ag"}, nil, w, nil)
+		return err
+	}
+
+	for _, c := range []struct {
+		name string
+		ctor func(*xsd.Wildcard) error
+	}{
+		{"complex-type-attribute-wildcard", newCT},
+		{"attribute-group-attribute-wildcard", newAG},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.ctor(&sibling)
+			if err == nil {
+				t.Fatal("an attribute wildcard carrying sibling was accepted, want w-props-correct clause 5 rejection")
+			}
+			if got, ok := xsderr.RuleOf(err); !ok || got != xsderr.Rule("w-props-correct") {
+				t.Errorf("RuleOf = (%q, %v), want (%q, true)", got, ok, "w-props-correct")
+			}
+			// defined is legal on an attribute wildcard (cvc-wildcard clause 2.2),
+			// and so is an absent {attribute wildcard}.
+			if err := c.ctor(&defined); err != nil {
+				t.Errorf("an attribute wildcard carrying defined was rejected: %v", err)
+			}
+			if err := c.ctor(nil); err != nil {
+				t.Errorf("an absent {attribute wildcard} was rejected: %v", err)
+			}
+		})
+	}
+
+	// An open-content {wildcard} is an ELEMENT wildcard: sibling is legitimate
+	// there and clause 5 must not fire (cvc-wildcard clause 3.2).
+	if _, err := xsd.NewOpenContent(xsderr.Loc{}, xsd.OpenContentInterleave, sibling); err != nil {
+		t.Errorf("NewOpenContent rejected an element wildcard carrying sibling: %v", err)
+	}
+	// An element wildcard reached as a particle {term} likewise carries it.
+	occ, err := xsd.NewOccurs(xsderr.Loc{}, 1, 1)
+	if err != nil {
+		t.Fatalf("NewOccurs: %v", err)
+	}
+	if _, err := xsd.NewParticle(xsderr.Loc{}, occ, xsd.ResolvedTerm{Term: sibling}, nil); err != nil {
+		t.Errorf("NewParticle rejected an element wildcard carrying sibling: %v", err)
+	}
+}

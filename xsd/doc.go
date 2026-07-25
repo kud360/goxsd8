@@ -50,7 +50,11 @@
 // Traversal of a type's effective content model. The reusable core is an
 // algebra — type-derivation validity, substitution-group acceptance,
 // wildcard admission (one canonical implementation, context supplied by
-// the caller), attribute-use lookup — with two drivers built on it:
+// the caller: Wildcard.AllowsName answers cvc-wildcard clause 1 from the
+// {namespace constraint} alone, while clauses 2-3 resolve the
+// defined/sibling keywords against the declaration graph and the
+// containing complex type the caller supplies), attribute-use lookup —
+// with two drivers built on it:
 //
 //   - the push driver: an exhaustive, schema-only Walker that visits
 //     every particle reachable through sequences, choices, all-groups,

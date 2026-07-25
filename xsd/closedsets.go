@@ -195,6 +195,51 @@ func (d DerivationMethod) String() string {
 	}
 }
 
+// DisallowedNameKeyword is a non-QName member of a Namespace Constraint's
+// {disallowed names} property (§3.10.1): the component-level keywords
+// "defined" and "sibling", the two members of that property which are NOT
+// expanded names. The zero value is invalid (see builtin.Ordered).
+//
+// Component keyword versus schema-document token: the §3.10.1 COMPONENT
+// keywords are "defined" and "sibling"; the §3.10.2.2 XML tokens that map to
+// them are ##defined and ##definedSibling, and ##definedSibling maps to the
+// keyword sibling ALONE — never to both keywords. That token→keyword mapping
+// belongs to the parser; String() here returns the component keyword, per this
+// file's convention that each token type carries the verbatim spec token it
+// denotes.
+type DisallowedNameKeyword uint8
+
+// The DisallowedNameKeyword values.
+const (
+	// DisallowedNameDefined is the "defined" keyword (§3.10.1): the wildcard
+	// disallows every expanded name that ·resolves· to a top-level element
+	// declaration (when the wildcard is an element wildcard) or to a top-level
+	// attribute declaration (when it is an attribute wildcard) — Item Valid
+	// (Wildcard) (§3.10.4.1, cvc-wildcard) clause 2.
+	DisallowedNameDefined DisallowedNameKeyword = iota + 1
+	// DisallowedNameSibling is the "sibling" keyword (§3.10.1): the wildcard
+	// disallows every expanded name ·matching· an element declaration
+	// ·contained· — directly, indirectly, or implicitly — in the content model
+	// of the complex type containing the wildcard (cvc-wildcard clause 3). It
+	// is legal only on an ELEMENT wildcard: w-props-correct (§3.10.6.1) clause
+	// 5 forbids an attribute wildcard from carrying it.
+	DisallowedNameSibling
+)
+
+// String returns the verbatim §3.10.1 component keyword — "defined" or
+// "sibling", NOT the ##defined/##definedSibling schema-document tokens — or a
+// diagnostic form for an invalid value (never panics).
+func (k DisallowedNameKeyword) String() string {
+	switch k {
+	case DisallowedNameDefined:
+		return "defined"
+	case DisallowedNameSibling:
+		return "sibling"
+	default:
+		return "DisallowedNameKeyword(" + strconv.Itoa(int(k)) + ")"
+	}
+}
+
 // ProcessContents is the {process contents} property of a Wildcard (§3.10.1).
 // Legal tokens: "skip", "strict", "lax". The zero value is invalid (see
 // builtin.Ordered).

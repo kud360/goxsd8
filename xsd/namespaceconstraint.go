@@ -11,9 +11,12 @@ import (
 // match the §3.10.1 tableau. NewNamespaceConstraint rejects every state its
 // clauses 1-4 forbid at construction time, so an ill-formed record is
 // unrepresentable (STYLE T1). Clause 5 (attribute wildcards must not carry the
-// sibling keyword) is not reachable here: this value type does not represent
-// the defined/sibling keywords at all — see the GAP marker on
-// NewNamespaceConstraint.
+// sibling keyword) is NOT enforceable here — a Namespace Constraint does not
+// know whether the wildcard holding it is an element or an attribute wildcard,
+// which is positional, not a property of either record (§3.10.1 has no such
+// property). It is enforced at the two tableau slots where "this is an
+// attribute wildcard" first becomes a fact, by rejectSiblingOnAttributeWildcard
+// (wildcard.go), called from NewComplexType and NewAttributeGroupDefinition.
 const ruleWildcardCorrect xsderr.Rule = "w-props-correct"
 
 // NamespaceConstraintVariety is the {variety} property of a Namespace
@@ -106,8 +109,9 @@ func (n Namespace) URI() (string, bool) {
 
 // NamespaceConstraint is the Namespace Constraint property record (Structures
 // §3.10.1): the {namespace constraint} property of a Wildcard. It carries a
-// {variety}, a {namespaces} set, and the literal-QName members of
-// {disallowed names}. It is an immutable value; construct it only through
+// {variety}, a {namespaces} set, and both halves of {disallowed names} — its
+// literal-QName members and its defined/sibling keyword members. It is an
+// immutable value; construct it only through
 // NewNamespaceConstraint, which rejects every state Wildcard Properties Correct
 // (§3.10.6.1) forbids, so an ill-formed record is unrepresentable (STYLE T1).
 //
@@ -127,11 +131,19 @@ type NamespaceConstraint struct {
 	// namespaces is the {namespaces} set in document order, deduplicated by
 	// first occurrence. It is never produced by ranging a map (STYLE D2).
 	namespaces []Namespace
-	// disallowedNames holds ONLY the literal xs:QName members of
-	// {disallowed names} (§3.10.1), in document order, deduplicated by first
-	// occurrence. The defined/sibling keywords are deliberately not
-	// represented — see the GAP marker on NewNamespaceConstraint.
-	disallowedNames []QName
+	// disallowedNames and disallowedNameKeywords are a PARTITION of the single
+	// §3.10.1 {disallowed names} property — one spec property, not two facts
+	// (STYLE D3): the first holds its literal xs:QName members, the second its
+	// defined/sibling keyword members, which are not expanded names. They are
+	// split into two fields because the two halves are consumed by two
+	// DIFFERENT rules at two different layers: the QName half by
+	// cvc-wildcard-name (§3.10.4.2) clause 2, decidable in this pure leaf
+	// package by AllowsName; the keyword half by cvc-wildcard (§3.10.4.1)
+	// clauses 2-3, decidable only against the live declaration graph (see
+	// wildcardadmit.go). Both are in document order, deduplicated by first
+	// occurrence, and never produced by ranging a map (STYLE D2).
+	disallowedNames        []QName
+	disallowedNameKeywords []DisallowedNameKeyword
 }
 
 // NewNamespaceConstraint builds a Namespace Constraint record, rejecting the
@@ -139,7 +151,9 @@ type NamespaceConstraint struct {
 //
 //   - clause 1: {variety} must be one of the three §3.10.1 tokens (a zero or
 //     out-of-range NamespaceConstraintVariety is not a value the tableau
-//     admits);
+//     admits), and every {disallowed names} keyword member must be one of the
+//     two §3.10.1 keywords (a zero or out-of-range DisallowedNameKeyword is
+//     likewise not a value the tableau admits);
 //   - clause 2: a not constraint has at least one {namespaces} member;
 //   - clause 3: an any constraint has an empty {namespaces} set;
 //   - clause 4: the namespace name of every {disallowed names} QName member is
@@ -147,20 +161,22 @@ type NamespaceConstraint struct {
 //     via AllowsNamespace, §3.10.4.3).
 //
 // Each violation returns an *xsderr.Error carrying rule w-props-correct at loc.
-// The namespaces and disallowedNames slices are copied (the caller's backing
-// arrays are never aliased) and deduplicated by first occurrence, preserving
-// document order.
+// The namespaces, disallowedNames, and disallowedNameKeywords slices are copied
+// (the caller's backing arrays are never aliased) and deduplicated by first
+// occurrence, preserving document order — {disallowed names} is a SET, so a
+// repeated keyword is collapsed rather than stored twice.
 //
-// GAP(xsd): ##defined/##definedSibling (§3.10.1 cl.5-6, cvc-wildcard §3.10.4.1
-// cl.2-3) need the live declaration graph, which this pure leaf package does
-// not have; deferred to the M4/M5 validator that owns it. There is therefore no
-// parameter, field, or keyword for them, and w-props-correct clause 5
-// (attribute wildcards must not carry sibling) is vacuously satisfied.
+// disallowedNames and disallowedNameKeywords are the two halves of the ONE
+// §3.10.1 {disallowed names} property (see the type doc). Clause 5 (attribute
+// wildcards must not carry sibling) is not checkable here — element-versus-
+// attribute is positional, not a property of this record — and is enforced by
+// rejectSiblingOnAttributeWildcard at the two attribute-wildcard tableau slots
+// (see ruleWildcardCorrect).
 //
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built wildcard — may
 // legitimately pass the zero xsderr.Loc{}.
-func NewNamespaceConstraint(loc xsderr.Loc, variety NamespaceConstraintVariety, namespaces []Namespace, disallowedNames []QName) (NamespaceConstraint, error) {
+func NewNamespaceConstraint(loc xsderr.Loc, variety NamespaceConstraintVariety, namespaces []Namespace, disallowedNames []QName, disallowedNameKeywords []DisallowedNameKeyword) (NamespaceConstraint, error) {
 	switch variety {
 	case NamespaceConstraintAny, NamespaceConstraintEnumeration, NamespaceConstraintNot:
 	default:
@@ -175,10 +191,19 @@ func NewNamespaceConstraint(loc xsderr.Loc, variety NamespaceConstraintVariety, 
 		return NamespaceConstraint{}, xsderr.New(ruleWildcardCorrect, loc,
 			"namespace constraint {variety} any requires an empty {namespaces} set, got %d member(s) (w-props-correct clause 3)", len(namespaces))
 	}
+	for i, k := range disallowedNameKeywords {
+		switch k {
+		case DisallowedNameDefined, DisallowedNameSibling:
+		default:
+			return NamespaceConstraint{}, xsderr.New(ruleWildcardCorrect, loc,
+				"namespace constraint {disallowed names} keyword member[%d] is %s, but only defined or sibling are legal (w-props-correct clause 1)", i, k)
+		}
+	}
 	c := NamespaceConstraint{
-		variety:         variety,
-		namespaces:      dedupNamespaces(namespaces),
-		disallowedNames: dedupQNames(disallowedNames),
+		variety:                variety,
+		namespaces:             dedupSlice(namespaces),
+		disallowedNames:        dedupSlice(disallowedNames),
+		disallowedNameKeywords: dedupSlice(disallowedNameKeywords),
 	}
 	for _, name := range c.disallowedNames {
 		// Bridge the QName's namespace-name axis exactly as AllowsName does.
@@ -258,6 +283,22 @@ func (c NamespaceConstraint) hasNamespace(v Namespace) bool {
 	return false
 }
 
+// hasDisallowedNameKeyword reports whether k is a member of the keyword half of
+// {disallowed names}, by == identity in document order (never via a map, STYLE
+// D2/D3). It is the in-package membership test for the keywords: the resolution
+// of what a member MEANS is cvc-wildcard's (§3.10.4.1 clauses 2-3), and lives in
+// wildcardadmit.go, not here — this record has no declaration graph. No exported
+// accessor for the keyword slice exists: every reader is in-package (STYLE T5/T8);
+// M5 adds one with its caller.
+func (c NamespaceConstraint) hasDisallowedNameKeyword(k DisallowedNameKeyword) bool {
+	for _, m := range c.disallowedNameKeywords {
+		if m == k {
+			return true
+		}
+	}
+	return false
+}
+
 // AllowsName reports whether the expanded name is ·valid· with respect to this
 // constraint, per Wildcard allows Expanded Name (§3.10.4.2, cvc-wildcard-name):
 // its namespace name must be allowed by AllowsNamespace (clause 1) AND the name
@@ -273,10 +314,15 @@ func (c NamespaceConstraint) hasNamespace(v Namespace) bool {
 // testing it. That bridge is local to this method (there is no exported
 // QName→Namespace conversion).
 //
-// GAP(xsd): this checks only the literal xs:QName members of {disallowed names}.
-// The ##defined/##definedSibling keywords require the live declaration graph and
-// are deferred to the M4/M5 validator (see NewNamespaceConstraint); their
-// exclusion is not applied here.
+// RULE BOUNDARY (not a gap): this tests only the literal xs:QName half of
+// {disallowed names}, and that is cvc-wildcard-name COMPLETE. Clause 2 of
+// §3.10.4.2 reads "C.{disallowed names} does not contain E", where E is an
+// EXPANDED NAME; the defined/sibling keywords are not expanded names, so no E
+// can ever be one of them and no keyword test belongs to this rule. The
+// keywords are operationalized by a DIFFERENT rule — Item Valid (Wildcard)
+// (§3.10.4.1, cvc-wildcard) clauses 2-3 — against the live declaration graph,
+// at the *Schema layer that owns it (wildcardadmit.go). Do not fold the two
+// rule IDs together.
 func (c NamespaceConstraint) AllowsName(name QName) bool {
 	if !c.AllowsNamespace(NamespaceName(name.Space)) {
 		return false
@@ -289,42 +335,24 @@ func (c NamespaceConstraint) AllowsName(name QName) bool {
 	return true
 }
 
-// dedupNamespaces copies in, dropping members equal to an earlier one and
-// preserving document order. The seen map is a lookup set only; output order is
-// the input's, never a map iteration order (STYLE D2). An empty input yields
-// nil.
-func dedupNamespaces(in []Namespace) []Namespace {
+// dedupSlice copies in, dropping members equal to an earlier one and preserving
+// document order. It is the ONE deduplication path for every set-valued
+// property of this record — {namespaces} and both halves of {disallowed names}
+// (STYLE T4: one implementation, not one per member type). The seen map is a
+// lookup set only; output order is the input's, never a map iteration order
+// (STYLE D2). An empty input yields nil.
+func dedupSlice[T comparable](in []T) []T {
 	if len(in) == 0 {
 		return nil
 	}
-	seen := make(map[Namespace]struct{}, len(in))
-	out := make([]Namespace, 0, len(in))
-	for _, n := range in {
-		if _, ok := seen[n]; ok {
+	seen := make(map[T]struct{}, len(in))
+	out := make([]T, 0, len(in))
+	for _, v := range in {
+		if _, ok := seen[v]; ok {
 			continue
 		}
-		seen[n] = struct{}{}
-		out = append(out, n)
-	}
-	return out
-}
-
-// dedupQNames copies in, dropping members equal to an earlier one and
-// preserving document order. The seen map is a lookup set only; output order is
-// the input's, never a map iteration order (STYLE D2). An empty input yields
-// nil.
-func dedupQNames(in []QName) []QName {
-	if len(in) == 0 {
-		return nil
-	}
-	seen := make(map[QName]struct{}, len(in))
-	out := make([]QName, 0, len(in))
-	for _, q := range in {
-		if _, ok := seen[q]; ok {
-			continue
-		}
-		seen[q] = struct{}{}
-		out = append(out, q)
+		seen[v] = struct{}{}
+		out = append(out, v)
 	}
 	return out
 }

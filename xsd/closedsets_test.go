@@ -97,6 +97,25 @@ func TestDerivationMethodString(t *testing.T) {
 	}
 }
 
+func TestDisallowedNameKeywordString(t *testing.T) {
+	// The COMPONENT keywords (§3.10.1), never the ##defined/##definedSibling
+	// schema-document tokens the parser maps from (§3.10.2.2).
+	cases := []struct {
+		k    DisallowedNameKeyword
+		want string
+	}{
+		{DisallowedNameDefined, "defined"},
+		{DisallowedNameSibling, "sibling"},
+		{0, "DisallowedNameKeyword(0)"},
+		{99, "DisallowedNameKeyword(99)"},
+	}
+	for _, c := range cases {
+		if got := c.k.String(); got != c.want {
+			t.Errorf("DisallowedNameKeyword(%d).String() = %q, want %q", uint8(c.k), got, c.want)
+		}
+	}
+}
+
 func TestProcessContentsString(t *testing.T) {
 	cases := []struct {
 		p    ProcessContents

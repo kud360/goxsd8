@@ -19,7 +19,7 @@ var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 // permitted self-derivation, any-type-itself). checkComplexBaseAcyclic (#173)
 // recognises that self-derivation by name, so the seeded value passes finalize.
 func seedAnyType() (xsd.ComplexType, error) {
-	anyNS, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintAny, nil, nil)
+	anyNS, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintAny, nil, nil, nil)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -720,10 +720,12 @@ func (p *producer) namespaceConstraint(el *Element) (xsd.NamespaceConstraint, er
 		return xsd.NamespaceConstraint{}, xsderr.New(ruleSrcWildcard, el.Loc(),
 			"wildcard has both namespace and notNamespace, but src-wildcard forbids both")
 	}
-	disallowed := p.disallowedNames(el)
-
+	disallowed, keywords, err := p.disallowedNames(el)
+	if err != nil {
+		return xsd.NamespaceConstraint{}, err
+	}
 	variety, namespaces := p.namespaceVarietyAndSet(ns, hasNS, notNS, hasNotNS)
-	return xsd.NewNamespaceConstraint(el.Loc(), variety, namespaces, disallowed)
+	return xsd.NewNamespaceConstraint(el.Loc(), variety, namespaces, disallowed, keywords)
 }
 
 // namespaceVarietyAndSet computes {variety} and {namespaces} (§3.10.2.2):
@@ -766,29 +768,73 @@ func (p *producer) namespaceVarietyAndSet(ns string, hasNS bool, notNS string, h
 	return variety, set
 }
 
-// disallowedNames maps the literal QName items of a notQName attribute to
-// {disallowed names} (§3.10.2.2). The ##defined/##definedSibling keyword tokens
-// are not modelled by xsd.NamespaceConstraint (its documented GAP) and are
-// skipped here rather than mis-mapped.
-func (p *producer) disallowedNames(el *Element) []xsd.QName {
+// disallowedNames maps a notQName attribute to the two halves of {disallowed
+// names} (§3.10.2.2): its literal QName items, and its ##defined/##definedSibling
+// keyword tokens mapped to the component keywords defined/sibling. Note the
+// asymmetry the spec fixes at §3.10.2.2: ##definedSibling maps to the keyword
+// sibling ALONE, not to both keywords.
+//
+// An unrecognized ##-prefixed token is rejected. That is not a bespoke Structures
+// constraint — src-wildcard (§3.10.3) says nothing about notQName's content — but
+// an ordinary datatype-validity failure of the attribute against the type the
+// schema for schema documents declares for it (§3.10.2): xs:qnameList for <any>,
+// whose token member type enumerates exactly ##defined and ##definedSibling, and
+// xs:qnameListA for <anyAttribute>, which enumerates only ##defined. So
+// notQName="##definedSibling" on an <anyAttribute> is rejected HERE, by that
+// enumeration, and is the machine-checkable form of w-props-correct clause 5 —
+// the parser deliberately does not also repeat clause 5 as a component check (one
+// enforcement point); xsd.NewComplexType/NewAttributeGroupDefinition still charge
+// clause 5 on the programmatic-construction path that bypasses this producer.
+//
+// The literal-QName arm still drops a member whose prefix does not resolve; that
+// distinct swallowed error is tracked as #232 and deliberately untouched here.
+func (p *producer) disallowedNames(el *Element) ([]xsd.QName, []xsd.DisallowedNameKeyword, error) {
 	notQName, ok := attrValue(el, "notQName")
 	if !ok {
-		return nil
+		return nil, nil, nil
 	}
+	attributeWildcard := el.Name().Local() == "anyAttribute"
 	var names []xsd.QName
+	var keywords []xsd.DisallowedNameKeyword
 	for _, tok := range strings.Fields(notQName) {
 		if strings.HasPrefix(tok, "##") {
-			// GAP: ##defined/##definedSibling need the live declaration graph; the
-			// xsd package does not model the keywords, so they are not applied here.
+			kw, err := disallowedNameKeywordOf(tok, attributeWildcard, el.Loc())
+			if err != nil {
+				return nil, nil, err
+			}
+			keywords = append(keywords, kw)
 			continue
 		}
 		qn, err := p.resolveQName(el, tok)
 		if err != nil {
-			continue // an unresolvable notQName member is dropped, not fatal
+			continue // an unresolvable notQName member is dropped, not fatal (#232)
 		}
 		names = append(names, qn)
 	}
-	return names
+	return names, keywords, nil
+}
+
+// disallowedNameKeywordOf maps one ##-prefixed notQName token to its §3.10.1
+// component keyword. attributeWildcard selects the declared type of the notQName
+// attribute being validated (§3.10.2): xs:qnameListA for <anyAttribute>, which
+// enumerates only ##defined, versus xs:qnameList for <any>, which also enumerates
+// ##definedSibling. A token outside the applicable enumeration fails that type,
+// charged cvc-datatype-valid — the generic "attribute value is not valid against
+// its declared simple type" rule, not a wildcard-specific one.
+func disallowedNameKeywordOf(tok string, attributeWildcard bool, loc xsderr.Loc) (xsd.DisallowedNameKeyword, error) {
+	if tok == "##defined" {
+		return xsd.DisallowedNameDefined, nil
+	}
+	if tok == "##definedSibling" && !attributeWildcard {
+		return xsd.DisallowedNameSibling, nil
+	}
+	declaredType := "xs:qnameList"
+	enumerated := "##defined or ##definedSibling"
+	if attributeWildcard {
+		declaredType, enumerated = "xs:qnameListA", "##defined"
+	}
+	return 0, xsderr.New(ruleDatatypeValid, loc,
+		"notQName token %q is not valid against %s, whose keyword member type enumerates only %s", tok, declaredType, enumerated)
 }
 
 // localTargetNS computes a local element/attribute declaration's {target

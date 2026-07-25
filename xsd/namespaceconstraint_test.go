@@ -58,7 +58,7 @@ func TestNamespacePresent(t *testing.T) {
 // cases use NewNamespaceConstraint directly.
 func mustConstraint(t *testing.T, v xsd.NamespaceConstraintVariety, ns []xsd.Namespace, dn []xsd.QName) xsd.NamespaceConstraint {
 	t.Helper()
-	c, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, v, ns, dn)
+	c, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, v, ns, dn, nil)
 	if err != nil {
 		t.Fatalf("NewNamespaceConstraint(%s, %+v, %+v) unexpected error: %v", v, ns, dn, err)
 	}
@@ -156,7 +156,7 @@ func TestNewNamespaceConstraintRejects(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, c.variety, c.ns, c.dn)
+			_, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, c.variety, c.ns, c.dn, nil)
 			if err == nil {
 				t.Fatalf("NewNamespaceConstraint accepted an illegal record, want w-props-correct error")
 			}
@@ -224,7 +224,7 @@ func ExampleNamespaceConstraint_AllowsNamespace() {
 	// (§3.10.2.2) to not { absent, target }.
 	target := xsd.NamespaceName("http://example.com/t")
 	c, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintNot,
-		[]xsd.Namespace{{}, target}, nil)
+		[]xsd.Namespace{{}, target}, nil, nil)
 	if err != nil {
 		panic(err)
 	}
