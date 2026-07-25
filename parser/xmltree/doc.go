@@ -13,7 +13,11 @@
 //     document content.
 //   - Namespace-scoped: prefixes resolve against in-scope bindings at
 //     each node; unbound prefixes are reported as errors with location,
-//     never passed through as if they were namespaces.
+//     never passed through as if they were namespaces. A start tag's
+//     whole set of PREFIXED in-scope bindings is enumerable in a
+//     deterministic order (StartElement.InScopePrefixes), for consumers
+//     that must carry a namespace context forward rather than resolve one
+//     name; the default namespace stays a separate LookupPrefix("") fact.
 //   - Every node (element, attribute, character data) answers Loc()
 //     (URI, line, column) and, for character content, the byte offset —
 //     decode errors downstream cite it.

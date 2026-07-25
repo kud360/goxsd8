@@ -21,17 +21,19 @@ import (
 //
 // A schemaTest asks: is THIS schema document itself schema-valid? The lane
 // decides that with the end-to-end producer (parser.Produce + Finalize, issues
-// #174/#176/#177), which maps top-level <simpleType>/<element>/<attribute>/
-// <attributeGroup>/<group> and the produce-time-decidable subset of <complexType>
-// (implicit and <complexContent> <restriction> content, its particles including
-// <group ref>, local element/attribute declarations, attribute uses including
-// <attributeGroup ref>, and wildcards) into xsd components, seeds the ur-type
-// xs:anyType, resolves cross-references, and rejects duplicate top-level names
-// within a kind. The remaining top-level representations (notation/import/include/
-// redefine/override) and the not-yet-produced complexType forms (<simpleContent>,
-// <complexContent> <extension>, inline anonymous local types, <openContent>) are
-// SILENTLY SKIPPED or declined by Produce (§3.1.2 permits ignoring a
-// not-yet-produced representation), NOT rejected.
+// #174/#176/#177/#178), which maps top-level <simpleType>/<element>/<attribute>/
+// <attributeGroup>/<group>/<notation> and the produce-time-decidable subset of
+// <complexType> (implicit and <complexContent> <restriction> content, its
+// particles including <group ref>, local element/attribute declarations,
+// attribute uses including <attributeGroup ref>, wildcards, and <assert>
+// assertions) into xsd components, maps the name= identity constraints of global
+// and local <element>s (#178), seeds the ur-type xs:anyType, resolves
+// cross-references, and rejects duplicate top-level names within a kind. The
+// remaining top-level representations (import/include/redefine/override), the
+// ref= identity-constraint form, and the not-yet-produced complexType forms
+// (<simpleContent>, <complexContent> <extension>, inline anonymous local types,
+// <openContent>) are SILENTLY SKIPPED or declined by Produce (§3.1.2 permits
+// ignoring a not-yet-produced representation), NOT rejected.
 //
 // # Why "Produce returns nil" is not, by itself, evidence of validity
 //
@@ -68,23 +70,32 @@ import (
 //     a "root must be <schema>" rejection would overreach (oracle grounding).
 //  3. Top-level allowlist. Every top-level child element must be xsd:annotation,
 //     xsd:simpleType, xsd:element, xsd:attribute, xsd:complexType,
-//     xsd:attributeGroup (named definition), or xsd:group (named definition) —
-//     anything else at top level (notation/import/include/redefine/override/
+//     xsd:attributeGroup (named definition), xsd:group (named definition), or
+//     xsd:notation — anything else at top level (import/include/redefine/override/
 //     defaultOpenContent, any non-xsd element, or an out-of-set local name) closes
 //     the false-accept gap above by DECLINING the whole case. Within the allowed
 //     kinds:
-//     - element: must have no inline <simpleType>/<complexType> child. A bare
+//     - element: must have no inline <simpleType>/<complexType> child, and every
+//       <unique>/<key>/<keyref> child must use the name= form. A bare
 //       element (no type=) defaults to xs:anyType (§3.3.2.1 case 4), now seeded as
 //       a Complex Type Definition (§3.4.7), so it resolves and is decided
 //       genuinely; type= is no longer required. An inline anonymous type is an
 //       explicit src-element clause 3 (§3.3.3) rejection that conflates a genuine
 //       both-present violation with a mere not-yet-supported inline-only form —
-//       indistinguishable here, DECLINED.
+//       indistinguishable here, DECLINED. A name= identity constraint IS produced
+//       (#178) — its src-identity-constraint (§3.11.3) and c-props-correct
+//       (§3.11.6.1) rejections and its finalize-time keyref resolution
+//       (src-resolve clause 1.7) are all genuine — while the ref= form names an
+//       existing definition the producer does not yet resolve, so it is DECLINED.
+//     - notation: always allowed. Its content is (annotation?) and its whole
+//       tableau is decided at produce time (n-props-correct §3.14.6 rejects both
+//       identifiers absent), so nothing is silently skipped.
 //     - complexType (top-level, or a <complexContent> <restriction> reached
 //       transitively): must lie within the producer's decidable subset per
 //       complexTypeDecidable — implicit or <restriction> complex content whose
 //       content model is element/any/sequence/choice/all/<group ref> and whose
-//       attributes are local <attribute>/<anyAttribute>/<attributeGroup ref>, with
+//       attributes are local <attribute>/<anyAttribute>/<attributeGroup ref> and
+//       whose <assert> children map to {assertions} (#178), with
 //       no <simpleContent>, no <complexContent> <extension>, no <openContent>, and
 //       no inline anonymous local type. Those excluded forms need the resolved base
 //       or a later slice, so Produce declines them with a plain limitation error,
@@ -108,9 +119,10 @@ import (
 //       through a restriction chain): must have exactly one <restriction> child
 //       (no <list>/<union> — their absence of a <restriction> is an explicit
 //       src-simple-type rejection that conflates genuine invalidity with an
-//       unsupported variety, DECLINED) whose children include no <enumeration>/
-//       <assertion> (likewise not-yet-produced facets rejected by src-simple-type
-//       §3.16.3 clause; DECLINED). An inline <simpleType> base child (the
+//       unsupported variety, DECLINED) whose children include no <enumeration>
+//       (still a not-yet-produced facet rejected by src-simple-type §3.16.3;
+//       DECLINED). An <assertion> facet IS produced (#178, one assertions facet
+//       per restriction, Datatypes §4.3.13) and is admitted. An inline <simpleType> base child (the
 //       genuinely-supported anonymous nested base, §3.16.3 clause 2) is recursed
 //       into with the same two checks. The restriction's base=/inline-child
 //       exactly-one arrangement is NOT pre-checked: that IS the genuine
@@ -122,7 +134,9 @@ import (
 //     none of the violations checked above, so a real one would surface), and a
 //     non-nil error is a REAL, implemented rejection (sch-props-correct clause 2
 //     duplicate-name §3.17.6.1, src-element §3.3.3, src-attribute §3.2.3,
-//     src-simple-type §3.16.3, src-resolve §3.17.6.2, st-props-correct, and for
+//     src-simple-type §3.16.3, src-resolve §3.17.6.2, st-props-correct,
+//     src-identity-constraint §3.11.3, c-props-correct §3.11.6.1,
+//     n-props-correct §3.14.6, and for
 //     the complex-type subset src-ct §3.4.3, cos-all-limited §3.8.6, src-wildcard
 //     §3.10.3, p-props-correct §3.9.6), never a fabricated one — the shape
 //     allowlist excludes every case whose rejection would be a
@@ -134,7 +148,12 @@ import (
 // The duplicate-name rejection (sch-props-correct §3.17.6.1 clause 2) is checked
 // PER KIND ({type definitions}, {element declarations}, {attribute declarations}
 // are distinct properties, §3.17.1): two simpleTypes sharing an expanded name
-// collide, but a simpleType and an element sharing a name do NOT. The executor
+// collide, but a simpleType and an element sharing a name do NOT.
+// {identity-constraint definitions} is one such property too, and it collects the
+// constraints of every <key>/<keyref>/<unique> ANYWHERE in the document
+// (§3.17.1), so two identically-named identity constraints under two different
+// element declarations DO collide — a genuine clause-2 rejection, not a
+// producer artifact. The executor
 // relies on Finalize's per-kind indexByName for exactly this, so no cross-kind
 // duplicate check is done here (that would be a false-INVALID verdict, a ratchet
 // regression risk).
@@ -153,10 +172,10 @@ import (
 // correctly finds none. An "invalid" verdict coincides only with truly-invalid
 // ground truth via a REAL implemented violation — never a fabricated one, since
 // the shape allowlist excludes every form (inline element/attribute types,
-// list/union/enumeration/assertion simpleTypes, and the not-yet-produced
-// complexType forms — <simpleContent>, <complexContent> <extension>, inline
-// anonymous local types, <openContent>) where Produce's rejection would be a
-// limitation rather than a spec violation. A
+// list/union/enumeration simpleTypes, ref= identity constraints, and the
+// not-yet-produced complexType forms — <simpleContent>, <complexContent>
+// <extension>, inline anonymous local types, <openContent>) where Produce's
+// rejection would be a limitation rather than a spec violation. A
 // suite-invalid case whose only defect is a rule this slice does NOT yet check
 // (UPA cos-nonambig, EDC, derivation-ok-restriction) is produced cleanly, so the
 // lane observes "valid", disagrees with the suite, and records a still-failing
@@ -168,9 +187,10 @@ import (
 //
 // # Still deferred
 //
-// Inline anonymous types on element/attribute, list/union/enumeration/assertion
-// simpleTypes, the not-yet-produced complexType forms named above, and every
-// other top-level declaration kind widen in with later producer slices (exactly
+// Inline anonymous types on element/attribute, list/union/enumeration
+// simpleTypes, ref= identity constraints, the not-yet-produced complexType forms
+// named above, and the composition top-level kinds (import/include/redefine/
+// override) widen in with later producer slices (exactly
 // as the datatypes lane grew across #15/#57/#80); they stay DECLINED (Fail)
 // recorded gaps here, never guessed. The derivation-validity, UPA, and EDC rules
 // (#180/#181) that would newly reject some admitted complexType cases as invalid
@@ -294,10 +314,15 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			if !attributeGroupDecidable(el) {
 				return false
 			}
+		case "notation":
+			// Produced (#178) with no undecidable sub-shape: <notation>'s content is
+			// (annotation?) and its whole property tableau is settled at produce time
+			// (n-props-correct §3.14.6 rejects both identifiers absent), so it is
+			// always admitted, like annotation.
 		default:
-			// notation/import/include/redefine/override, defaultOpenContent, or any
-			// other local name: silently skipped by Produce, so a nil verdict there
-			// would be vacuous — decline the whole case.
+			// import/include/redefine/override, defaultOpenContent, or any other local
+			// name: silently skipped by Produce, so a nil verdict there would be
+			// vacuous — decline the whole case.
 			return false
 		}
 	}
@@ -311,8 +336,34 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 // at finalize and is decided genuinely — type= is no longer required. An inline
 // anonymous type is an explicit src-element clause 3 rejection (§3.3.3) that
 // conflates a genuine violation with an unsupported form, so it stays declined.
+// Its <unique>/<key>/<keyref> children must also be decidable (#178).
 func elementDecidable(el *parser.Element) bool {
-	return childXSD(el, "simpleType") == nil && childXSD(el, "complexType") == nil
+	return childXSD(el, "simpleType") == nil && childXSD(el, "complexType") == nil &&
+		identityConstraintsDecidable(el)
+}
+
+// identityConstraintsDecidable reports whether every <unique>/<key>/<keyref>
+// child of an <element> (global or local) is in the form the producer builds
+// (#178): the name= form, whose whole mapping — category, selector, fields,
+// refer — is settled at produce time, so src-identity-constraint (§3.11.3) and
+// c-props-correct (§3.11.6.1) rejections on it are genuine. The ref= form
+// corresponds to no new component (§3.11.2: it names an existing definition,
+// resolved at finalize) and the producer declines it as not yet produced, so its
+// presence declines the case rather than risking a limitation-shaped verdict.
+func identityConstraintsDecidable(el *parser.Element) bool {
+	for _, child := range el.Children() {
+		c, ok := child.(*parser.Element)
+		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		switch c.Name().Local() {
+		case "unique", "key", "keyref":
+			if hasAttr(c, "ref") {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // complexTypeDecidable reports whether a <complexType> (top-level, or a nested
@@ -379,6 +430,10 @@ func contentDecidable(parent *parser.Element) bool {
 			}
 		case "anyAttribute":
 			// An attribute wildcard is produced.
+		case "assert":
+			// Produced (#178) into {assertions}. An Assertion carries only an opaque
+			// XPath Expression record with no rejectable state, so admitting it can
+			// never turn into a fabricated "invalid" verdict.
 		case "group":
 			if !hasAttr(el, "ref") {
 				return false // a content <group> is always a reference; a bare one is malformed — decline
@@ -398,9 +453,10 @@ func contentDecidable(parent *parser.Element) bool {
 
 // modelGroupDecidable reports whether every particle child of a model group
 // (<sequence>/<choice>/<all>) is within the producer's decidable subset: nested
-// model groups recurse, <element> must carry no inline anonymous type, <any> is
-// fine, and a <group ref> is produced (#177). A bare <group> without a ref (a
-// nested group is always a reference) or any other child declines.
+// model groups recurse, <element> must carry no inline anonymous type and only
+// decidable identity constraints (produced for local declarations too, #178),
+// <any> is fine, and a <group ref> is produced (#177). A bare <group> without a
+// ref (a nested group is always a reference) or any other child declines.
 func modelGroupDecidable(group *parser.Element) bool {
 	for _, child := range group.Children() {
 		el, ok := child.(*parser.Element)
@@ -413,6 +469,9 @@ func modelGroupDecidable(group *parser.Element) bool {
 		case "element":
 			if childXSD(el, "simpleType") != nil || childXSD(el, "complexType") != nil {
 				return false // inline anonymous element type — not yet produced
+			}
+			if !identityConstraintsDecidable(el) {
+				return false // ref= identity constraint — not yet produced (#178)
 			}
 		case "sequence", "choice", "all":
 			if !modelGroupDecidable(el) {
@@ -505,9 +564,11 @@ func attributeDecidable(el *parser.Element) bool {
 // inline base reached through a restriction chain) is decidable: it must have
 // exactly one <restriction> child (no <list>/<union>, whose absence of a
 // <restriction> is an unsupported-variety rejection) whose children carry no
-// <enumeration>/<assertion> facet (not-yet-produced facets). An inline <simpleType>
-// base child (the supported anonymous nested base, §3.16.3 clause 2) is recursed
-// into with the same checks. src-simple-type §3.16.3.
+// <enumeration> facet (still not produced). An <assertion> facet IS produced
+// (#178, one assertions facet per restriction, Datatypes §4.3.13) and is
+// admitted. An inline <simpleType> base child (the supported anonymous nested
+// base, §3.16.3 clause 2) is recursed into with the same checks.
+// src-simple-type §3.16.3.
 func simpleTypeDecidable(el *parser.Element) bool {
 	restriction := childXSD(el, "restriction")
 	if restriction == nil {
@@ -522,7 +583,7 @@ func simpleTypeDecidable(el *parser.Element) bool {
 			continue
 		}
 		switch r.Name().Local() {
-		case "enumeration", "assertion":
+		case "enumeration":
 			return false
 		case "simpleType":
 			if !simpleTypeDecidable(r) {

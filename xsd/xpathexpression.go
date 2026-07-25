@@ -30,8 +30,10 @@ func (b NamespaceBinding) Namespace() string {
 
 // XPathExpression is the XPath Expression property record (Structures
 // §3.13.1, id="x"): {namespace bindings} (a set of NamespaceBinding,
-// modeled as a document-order slice per STYLE D2 — order carries no spec
-// weight but determinism demands it), {default namespace} (an optional
+// modeled as a slice in a deterministic order — by {prefix}, as the
+// parser supplies it — per STYLE D2; order carries no spec weight, since
+// the property is a set, but determinism demands one), {default
+// namespace} (an optional
 // anyURI), {base URI} (an optional anyURI), and {expression} (the raw
 // XPath 2.0 expression text, Required).
 //
@@ -98,9 +100,10 @@ func (x XPathExpression) Expression() string {
 	return x.expression
 }
 
-// NamespaceBindings returns the {namespace bindings} property in document
-// order. It returns a copy: mutating the result does not affect x. An empty
-// {namespace bindings} yields nil.
+// NamespaceBindings returns the {namespace bindings} property in the
+// deterministic order it was constructed with (by {prefix} for a
+// parser-built expression). It returns a copy: mutating the result does not
+// affect x. An empty {namespace bindings} yields nil.
 func (x XPathExpression) NamespaceBindings() []NamespaceBinding {
 	if len(x.namespaceBindings) == 0 {
 		return nil

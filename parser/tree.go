@@ -49,6 +49,16 @@ func (e *Element) LookupPrefix(prefix string) (uri string, ok bool) {
 	return e.src.LookupPrefix(prefix)
 }
 
+// InScopePrefixes returns every prefixed namespace binding in scope at this
+// element, sorted by prefix, so a consumer can materialize the whole in-scope
+// namespace context an XPath expression written here must be interpreted
+// against (Structures §3.13.2's {namespace bindings}). It delegates to the
+// underlying start tag; the default namespace is not among them — it is
+// obtained from LookupPrefix("").
+func (e *Element) InScopePrefixes() []xmltree.Namespace {
+	return e.src.InScopePrefixes()
+}
+
 // Loc reports the position of the element's opening "<", delegating to the
 // underlying start tag.
 func (e *Element) Loc() xsderr.Loc { return e.src.Loc() }
