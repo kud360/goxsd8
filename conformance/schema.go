@@ -244,7 +244,20 @@ func decideSchema(observed, expected bool) Status {
 // above). A single out-of-subset child declines the whole case, since Produce
 // would silently skip it (or reject it for a not-yet-supported reason) rather
 // than decide it genuinely.
+//
+// The root ELEMENT itself is checked first for defaultAttributes (§3.4.2.4): that
+// attribute names an attribute group whose {attribute uses} must be folded into
+// every complex type that does not set defaultAttributesApply="false". The
+// producer does not model defaultAttributes at all, so the fold is silently
+// skipped and a document invalid only because of the folded-in uses (a duplicate
+// attribute, an ID clash, a src-resolve failure on the named group) would
+// false-ACCEPT. Declining on the attribute's mere presence closes the gap: with
+// no defaultAttributes on <schema>, defaultAttributesApply on any complexType has
+// nothing to apply and skips nothing.
 func schemaShapeDecidable(doc *parser.Document) bool {
+	if hasAttr(doc.Root(), "defaultAttributes") {
+		return false
+	}
 	for _, child := range doc.Root().Children() {
 		el, ok := child.(*parser.Element)
 		if !ok {

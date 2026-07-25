@@ -21,8 +21,13 @@
 //	                    particle-restriction, and EDC checks run against
 //	                    the finalized shape.
 //
-// No traversal anywhere in the parser carries a `seen` set; the phase
-// structure makes cycles impossible at traversal time.
+// The phase structure makes cycle REJECTION unnecessary at traversal
+// time — no traversal carries a `seen` set in order to detect a
+// forbidden circularity. The one exception is where the spec itself
+// declares the cycle legal: attribute-group references may form cycles
+// (§3.6.2.1), and the transitive-closure fold of {attribute uses}
+// carries a visited set purely to bound the walk and avoid re-descending
+// a group already folded in — it rejects nothing.
 //
 // # Determinism
 //

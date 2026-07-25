@@ -21,6 +21,8 @@ func TestIntersectNamespaceConstraintSemantics(t *testing.T) {
 	any := mustConstraint(t, xsd.NamespaceConstraintAny, nil, nil)
 	enumAB := mustConstraint(t, xsd.NamespaceConstraintEnumeration, []xsd.Namespace{nsA, nsB}, nil)
 	enumBC := mustConstraint(t, xsd.NamespaceConstraintEnumeration, []xsd.Namespace{nsB, nsC}, nil)
+	// Disjoint from enum{A,B}: their intersection is the EMPTY enumeration.
+	enumC := mustConstraint(t, xsd.NamespaceConstraintEnumeration, []xsd.Namespace{nsC}, nil)
 	notA := mustConstraint(t, xsd.NamespaceConstraintNot, []xsd.Namespace{nsA}, nil)
 	notB := mustConstraint(t, xsd.NamespaceConstraintNot, []xsd.Namespace{nsB}, nil)
 	// enum with a disallowed name in nsA (allowed by enum{A,B}): intersecting with
@@ -41,7 +43,7 @@ func TestIntersectNamespaceConstraintSemantics(t *testing.T) {
 		{"enum∩enum", enumAB, enumBC},
 		{"not∩not", notA, notB},
 		{"not∩enum", notA, enumAB},
-		{"enum∩enum-empty", enumAB, enumBC}, // {B}
+		{"enum∩enum-empty", enumAB, enumC}, // {A,B} ∩ {C} = ∅
 		{"identical-enum", enumAB, enumAB},
 		{"identical-not", notA, notA},
 		{"identical-any", any, any},
