@@ -11,9 +11,10 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// The Schema Representation Constraints (§3.x.3) and other rules this producer
+// The Schema Representation Constraints (§3.x.3) and other rules this package
 // charges. Each string is a live entry in xsderr's generated catalog.
 const (
+	ruleSrcInclude            xsderr.Rule = "src-include"
 	ruleSrcElement            xsderr.Rule = "src-element"
 	ruleSrcAttribute          xsderr.Rule = "src-attribute"
 	ruleSrcSimpleType         xsderr.Rule = "src-simple-type"
@@ -32,18 +33,20 @@ const (
 // single already-parsed schema document into xsd components, in document order,
 // and returns the finalized [xsd.Schema]. The identity constraints of an
 // <element> (global or local) are produced with it and registered as schema-level
-// {identity-constraint definitions} (§3.17.1). Multi-document composition remains
-// out of scope and its top-level elements (<import>/<include>/<redefine>/
-// <override>) are silently skipped (§3.1.2 permits ignoring not-yet-produced
-// representations), not rejected.
+// {identity-constraint definitions} (§3.17.1).
+//
+// Produce is the SINGLE-DOCUMENT entry point: it never dereferences an
+// <include>/<import>/<redefine>/<override>, so schema(D) here is immed(D) alone
+// (§4.2.1). Multi-document assembly through <include> — and with it chameleon
+// coercion (§4.2.3 clause 3.2, §F.1) — is [Parse]'s job; a caller holding only a
+// document and a backend, with no resolver, keeps this entry point.
 //
 // backend is passed explicitly rather than defaulted to a builtin/strict policy
-// here: that default belongs to the eventual Parse wrapper (parser/doc.go's
-// planned contract), keeping this leaf free of a builtin/strict edge. Produce
-// seeds the builtin datatypes from backend ([builtin.Seed]) so a type="xs:…"
-// reference resolves at finalize; the SAME *[xsd.SimpleType] pointer identity is
-// both AddType'd into the builder and used as a simple-type base, as
-// [xsd.SimpleType] requires.
+// here: that default belongs to [Parse], keeping this leaf free of a
+// builtin/strict edge. Produce seeds the builtin datatypes from backend
+// ([builtin.Seed]) so a type="xs:…" reference resolves at finalize; the SAME
+// *[xsd.SimpleType] pointer identity is both AddType'd into the builder and used
+// as a simple-type base, as [xsd.SimpleType] requires.
 //
 // DEVIATION from parser/doc.go's "the parser collects them in document order
 // rather than stopping at the first": Produce returns only the FIRST error. That
@@ -60,10 +63,60 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 	if !doc.IsSchema() {
 		return nil, fmt.Errorf("parser: Produce requires a <schema> document root, got %s", doc.Root().Name().Local())
 	}
-	root := doc.Root()
-	target, _ := attrValue(root, "targetNamespace")
-
 	builder := xsd.NewSchemaBuilder()
+	sym, err := newSymbols(builder, backend)
+	if err != nil {
+		return nil, err
+	}
+	// A lone document is its own assembly, so its effective target namespace is
+	// its own targetNamespace and it is never a chameleon (§4.2.3 clause 2.3
+	// needs an including document to borrow a namespace from).
+	p := newProducer(doc, attrOr(doc.Root(), "targetNamespace"), builder, sym)
+	p.prescan()
+	if err := p.run(); err != nil {
+		return nil, err
+	}
+	return builder.Finalize()
+}
+
+// symbols is the ASSEMBLY-WIDE symbol table: one set of indexes shared by every
+// document's producer across an entire <include> closure, so a base= or
+// <attributeGroup ref> in one document reaches a definition contributed by
+// another (§4.2.3 clause 3.1.2, c-incl-incl). All three are pure lookup indexes,
+// never ranged to produce user-visible order (STYLE D2).
+type symbols struct {
+	// simpleTypes maps each top-level named <simpleType>'s expanded name to its
+	// raw element, filled by the pre-scan so forward base= references between
+	// simple types resolve (Structures §3.1.3).
+	simpleTypes map[xsd.QName]*Element
+
+	// attributeGroups maps each top-level named <attributeGroup>'s expanded name
+	// to its raw element, filled by the pre-scan so an <attributeGroup ref> (from
+	// a <complexType>/<restriction> or another <attributeGroup>) resolves and is
+	// inlined at mapping time regardless of document order (§3.6.2.1).
+	attributeGroups map[xsd.QName]*Element
+
+	// built is the memo + cycle guard for simple-type construction, mirroring
+	// xsd/resolve.go's color-map idiom collapsed into one map: an ABSENT key is
+	// unstarted, a PRESENT-nil value is on the build stack (being built), and a
+	// PRESENT-non-nil value is done. The pre-seeded builtins start out done.
+	built map[xsd.QName]*xsd.SimpleType
+}
+
+// newSymbols returns the empty assembly-wide symbol table, having seeded the
+// builtin datatypes and xs:anyType into builder — EXACTLY ONCE for the whole
+// assembly, which is why seeding lives here and not in the per-document
+// producer: seeding per document would add xs:string (and every other builtin)
+// once per <include>d document and trip sch-props-correct (§3.17.6.1) clause 2
+// on any schema assembled from two or more documents.
+//
+// xs:anyType is the ur-type Complex Type Definition (§3.4.7). [builtin.Seed]
+// yields only simple types (its doc defers anyType to M4 as "a parser-level
+// structural concern"), so without it a bare type=-less <element>/<attribute> —
+// which defaults to xs:anyType (§3.3.2.1 case 4) — would fail src-resolve at
+// finalize. It is added to {type definitions} exactly like a produced complex
+// type, so a type= reference to it resolves.
+func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, error) {
 	builtins, err := builtin.Seed(backend)
 	if err != nil {
 		return nil, err
@@ -73,65 +126,62 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 		builder.AddType(b)
 		built[b.Name()] = b
 	}
-	// Seed xs:anyType, the ur-type Complex Type Definition (§3.4.7). builtin.Seed
-	// yields only simple types (its doc defers anyType to M4 as "a parser-level
-	// structural concern"), so without this a bare type=-less <element>/<attribute>
-	// — which defaults to xs:anyType (§3.3.2.1 case 4) — would fail src-resolve at
-	// finalize. It is added to {type definitions} exactly like a produced complex
-	// type, so a type= reference to it resolves.
 	anyType, err := seedAnyType()
 	if err != nil {
 		return nil, err
 	}
 	builder.AddType(anyType)
-
-	p := &producer{
-		schemaElem:           root,
-		target:               target,
-		builder:              builder,
-		localSimpleTypes:     make(map[xsd.QName]*Element),
-		localAttributeGroups: make(map[xsd.QName]*Element),
-		built:                built,
-	}
-	if err := p.run(); err != nil {
-		return nil, err
-	}
-	return builder.Finalize()
+	return &symbols{
+		simpleTypes:     make(map[xsd.QName]*Element),
+		attributeGroups: make(map[xsd.QName]*Element),
+		built:           built,
+	}, nil
 }
 
-// producer is the build context for one schema document. localSimpleTypes and
-// built are pure lookup indexes, never ranged to produce user-visible order
-// (STYLE D2); document order comes solely from walking schemaElem.Children().
+// producer is the build context for ONE schema document within an assembly.
+// Document order comes solely from walking schemaElem.Children(); the shared
+// symbol table holds no order (STYLE D2).
 type producer struct {
 	schemaElem *Element
-	target     string
-	builder    *xsd.SchemaBuilder
-
-	// localSimpleTypes maps each top-level named <simpleType>'s expanded name to
-	// its raw element, filled by the pre-scan so forward base= references between
-	// local simple types resolve (Structures §3.1.3).
-	localSimpleTypes map[xsd.QName]*Element
-
-	// localAttributeGroups maps each top-level named <attributeGroup>'s expanded
-	// name to its raw element, filled by the pre-scan so an <attributeGroup ref>
-	// (from a <complexType>/<restriction> or another <attributeGroup>) resolves
-	// and is inlined at mapping time regardless of document order (§3.6.2.1). It
-	// is a lookup index only, never ranged to produce output (STYLE D2).
-	localAttributeGroups map[xsd.QName]*Element
-
-	// built is the memo + cycle guard for simple-type construction, mirroring
-	// xsd/resolve.go's color-map idiom collapsed into one map: an ABSENT key is
-	// unstarted, a PRESENT-nil value is on the build stack (being built), and a
-	// PRESENT-non-nil value is done. The pre-seeded builtins start out done.
-	built map[xsd.QName]*xsd.SimpleType
+	// target is the EFFECTIVE target namespace this document's components are
+	// minted in — the assembly's, not necessarily the document's own: under
+	// chameleon inclusion (§4.2.3 clause 2.3) a document with no targetNamespace
+	// of its own contributes its components to the including namespace (§F.1
+	// task a). The document's own targetNamespace attribute stays readable on
+	// schemaElem, so chameleon is derived, never stored twice (STYLE D3).
+	target  string
+	builder *xsd.SchemaBuilder
+	symbols *symbols
 }
 
-// run walks the <schema> children once to register local simple types, then
-// again in strict document order to produce each in-scope declaration.
-func (p *producer) run() error {
-	// Pre-scan: register every top-level named <simpleType> (forward base=
-	// references, §3.1.3) and every top-level named <attributeGroup> (forward
-	// <attributeGroup ref> inlining, §3.6.2.1). Build nothing yet.
+// newProducer returns the build context for one document of an assembly. target
+// is the assembly's effective target namespace and sym its shared symbol table;
+// both are set at construction and never mutated into validity afterward
+// (STYLE T1).
+func newProducer(doc *Document, target string, builder *xsd.SchemaBuilder, sym *symbols) *producer {
+	return &producer{schemaElem: doc.Root(), target: target, builder: builder, symbols: sym}
+}
+
+// chameleon reports whether this document is produced under chameleon coercion
+// (§4.2.3 clause 2.3 / §F.1): it declares no targetNamespace of its own, yet the
+// assembly that <include>d it has one. It is a derived predicate computed on
+// each call, never a stored field (STYLE D3), mirroring [Document.IsSchema].
+func (p *producer) chameleon() bool {
+	if p.target == "" {
+		return false
+	}
+	_, own := attrValue(p.schemaElem, "targetNamespace")
+	return !own
+}
+
+// prescan registers this document's top-level named <simpleType>s (forward base=
+// references, §3.1.3) and named <attributeGroup>s (forward <attributeGroup ref>
+// inlining, §3.6.2.1) in the assembly-wide symbol table, building nothing yet.
+// EVERY document's prescan runs before ANY document's run, so a reference in one
+// document reaches a definition in another (§4.2.3 c-incl-incl). Names are
+// minted in the effective target namespace, so a chameleon document's
+// definitions are registered under the including namespace (§F.1 task a).
+func (p *producer) prescan() {
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
 		if !ok {
@@ -143,13 +193,17 @@ func (p *producer) run() error {
 		}
 		switch {
 		case isXSD(el, "simpleType"):
-			p.localSimpleTypes[xsd.QName{Space: p.target, Local: name}] = el
+			p.symbols.simpleTypes[xsd.QName{Space: p.target, Local: name}] = el
 		case isXSD(el, "attributeGroup"):
-			p.localAttributeGroups[xsd.QName{Space: p.target, Local: name}] = el
+			p.symbols.attributeGroups[xsd.QName{Space: p.target, Local: name}] = el
 		}
 	}
+}
 
-	// Main pass: dispatch by expanded element name in document order.
+// run walks the <schema> children in strict document order, producing each
+// in-scope top-level declaration into the shared builder. prescan must already
+// have run — for every document of the assembly, not just this one.
+func (p *producer) run() error {
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
 		if !ok {
@@ -205,6 +259,10 @@ func (p *producer) run() error {
 				return err
 			}
 			p.builder.AddModelGroup(mgd)
+		case "include":
+			// Consumed by the assembler (parse.go) during discovery, BEFORE any
+			// document is produced: an <include> contributes no component of its
+			// own (§4.2.3), only the components of the document it names.
 		case "notation":
 			n, err := p.produceNotation(el)
 			if err != nil {
@@ -212,8 +270,8 @@ func (p *producer) run() error {
 			}
 			p.builder.AddNotation(n)
 		default:
-			// annotation, import, include, redefine, override, … — not this slice's
-			// scope (§3.1.2), skipped, not invalid.
+			// annotation, import, redefine, override, … — not this slice's scope
+			// (§3.1.2), skipped, not invalid.
 		}
 	}
 	return nil
@@ -224,7 +282,7 @@ func (p *producer) run() error {
 // QName only via constructSimpleType for anonymous inline types, which never
 // enter this memoized path.
 func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleType, error) {
-	if st, started := p.built[name]; started {
+	if st, started := p.symbols.built[name]; started {
 		if st != nil {
 			return st, nil
 		}
@@ -232,13 +290,13 @@ func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleTy
 		return nil, xsderr.New(ruleSTPropsCorr, elem.Loc(),
 			"circular simple type definition: %s derives ultimately from itself, but st-props-correct clause 2 requires every simple type derive from xs:anySimpleType", name)
 	}
-	p.built[name] = nil // mark on-stack
+	p.symbols.built[name] = nil // mark on-stack
 
 	st, err := p.constructSimpleType(name, elem)
 	if err != nil {
 		return nil, err
 	}
-	p.built[name] = st // replace the on-stack sentinel with the finished node
+	p.symbols.built[name] = st // replace the on-stack sentinel with the finished node
 	return st, nil
 }
 
@@ -303,17 +361,17 @@ func (p *producer) resolveBase(restriction *Element) (*xsd.SimpleType, error) {
 		return p.constructSimpleType(xsd.QName{}, inline)
 	}
 
-	qn, err := resolveQName(restriction, baseLex)
+	qn, err := p.resolveQName(restriction, baseLex)
 	if err != nil {
 		return nil, err
 	}
 	// Pre-seeded builtins and already-finished locals resolve directly.
-	if st, ok := p.built[qn]; ok && st != nil {
+	if st, ok := p.symbols.built[qn]; ok && st != nil {
 		return st, nil
 	}
 	// A local (unbuilt or on-stack) recurses; buildSimpleType handles memo hit
 	// and cycle rejection.
-	if localElem, ok := p.localSimpleTypes[qn]; ok {
+	if localElem, ok := p.symbols.simpleTypes[qn]; ok {
 		return p.buildSimpleType(qn, localElem)
 	}
 	return nil, xsderr.New(ruleSrcResolve, restriction.Loc(),
@@ -400,7 +458,7 @@ func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error)
 
 	typeName := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"} // §3.3.2.1 case 4
 	if hasType {
-		typeName, err = resolveQName(elem, typeLex)
+		typeName, err = p.resolveQName(elem, typeLex)
 		if err != nil {
 			return xsd.ElementDeclaration{}, err
 		}
@@ -458,7 +516,7 @@ func (p *producer) produceAttribute(elem *Element) (xsd.AttributeDeclaration, er
 
 	typeName := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"} // §3.2.2.1
 	if hasType {
-		typeName, err = resolveQName(elem, typeLex)
+		typeName, err = p.resolveQName(elem, typeLex)
 		if err != nil {
 			return xsd.AttributeDeclaration{}, err
 		}
@@ -487,13 +545,14 @@ func valueConstraintOf(elem *Element, rule xsderr.Rule) (*xsd.ValueConstraint, e
 	return nil, nil
 }
 
-// resolveQName resolves a QName-valued lexical (a type=/base= value) against the
-// namespace bindings in scope at elem (§3.17.6.2 src-resolve clause 4). A
-// prefixed name whose prefix is unbound is rejected. An unprefixed name binds to
-// the in-scope default namespace, or — when none is declared — to the
-// no-namespace name (clause 4.1.1), deliberately NOT the schema's own
-// targetNamespace.
-func resolveQName(elem *Element, lexical string) (xsd.QName, error) {
+// resolveQName resolves a QName-valued lexical (a type=/base=/ref= value)
+// against the namespace bindings in scope at elem (§3.17.6.2 src-resolve clause
+// 4). A prefixed name whose prefix is unbound is rejected. An unprefixed name
+// binds to the in-scope default namespace, or — when none is declared (or the
+// default is declared empty) — to unqualifiedRefNS: the no-namespace name
+// (clause 4.1.1) normally, the assembly's namespace under chameleon coercion,
+// deliberately never the schema's own targetNamespace otherwise.
+func (p *producer) resolveQName(elem *Element, lexical string) (xsd.QName, error) {
 	before, after, found := strings.Cut(lexical, ":")
 	prefix, local := "", before
 	if found {
@@ -501,9 +560,11 @@ func resolveQName(elem *Element, lexical string) (xsd.QName, error) {
 	}
 
 	if prefix == "" {
-		uri, ok := elem.LookupPrefix("")
-		if !ok {
-			return xsd.QName{Space: "", Local: local}, nil
+		// An absent default binding and an explicitly empty one (xmlns="") both
+		// leave the reference's namespace name ·absent·, so both take the same path.
+		uri, _ := elem.LookupPrefix("")
+		if uri == "" {
+			return xsd.QName{Space: p.unqualifiedRefNS(), Local: local}, nil
 		}
 		return xsd.QName{Space: uri, Local: local}, nil
 	}
@@ -514,6 +575,21 @@ func resolveQName(elem *Element, lexical string) (xsd.QName, error) {
 			"the QName prefix %q of %q does not resolve to an in-scope namespace (src-resolve)", prefix, lexical)
 	}
 	return xsd.QName{Space: uri, Local: local}, nil
+}
+
+// unqualifiedRefNS is the namespace name an unqualified QName REFERENCE in this
+// document resolves to. Normally that is the ·absent· namespace (src-resolve
+// clause 4.1.1). Under chameleon coercion it is the assembly's target namespace:
+// §F.1 task (b) "updates all unqualified QName references so that their
+// namespace names become the actual value of the targetNamespace attribute" —
+// every reference in the document, including one naming a sibling component of
+// the same document — and §4.2.3's closing paragraph extends the conversion to
+// still-unresolved reference QNames retained for finalize.
+func (p *producer) unqualifiedRefNS() string {
+	if p.chameleon() {
+		return p.target
+	}
+	return ""
 }
 
 // facetKindOf maps a plain-lexical constraining-facet element's local name to its
