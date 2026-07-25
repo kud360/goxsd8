@@ -254,6 +254,44 @@ leftover). No `parked/*` refs. No untracked GAP debt: the two
 `parser/produce_complex.go:571-574` producer skip are all owned by #51; the
 literal-QName drop below it is #232.
 
+Update (2026-07-25, post-land pass for #178 — not a full backlog sweep):
+**#177 and #178 both landed**, taking the `schema` lane 2731 → 2866 (+135,
+attribute-group/model-group producers) → **2936 / 15432** (+70,
+IDC/assertion/notation producers). `datatypes` unchanged at 1043/1074. The
+producer fan-out of the M4 carve is now **complete**: #174–#178 are all
+closed, and every remaining M4 sub-slice is either composition (#179 include
++ chameleon — **in flight**, #182 import, #183 redefine/override) or
+finalize-validity (#180 UPA/EDC, #181 derivation validity). This corrects the
+2026-07-23 paragraph above on two points that have gone stale: #178 is no
+longer on the ready frontier (it landed), and its claim that
+"#51/#52/#63/#72 … all remain correctly gated on still-open #178" no longer
+holds for three of those four. **Three of the five M4 leaf follow-ups
+resolved this pass:** #51 (`##defined`/`##definedSibling` resolution — deps
+#173/#176/#178 now all closed) and #63 (IDC `{referenced key}` +
+`c-props-correct` cl.2) flipped `blocked` → `ready`; **#72 closed as
+subsumed** — #178 folded in the assertions-facet producer outright, exactly
+as #72's own Notes anticipated ("co-schedule with, or fold into, #178"), so
+queueing it would have sent a session to rebuild what is already on `main`.
+#52 correctly stays `blocked` on still-open #181. Note that #178 touched **no
+wildcard code**: the oracle grounding established `produceWildcard` /
+`src-wildcard` were already discharged by #176/#177, so the "wildcard
+producer" quarter of that issue was a no-op — worth knowing when reading
+#51's dependency list, which names #178 for exactly that reason. Post-land
+harvest filed **#240** (the `ref=` form of `<unique>/<key>/<keyref>`, declined
+honestly by #178 and gated in `conformance/schema.go` so it cannot pass for
+the wrong reason) and **#241** (settle the `parser.Element` tree-API export
+convention — an arbiter non-blocking note); #177's carried-forward
+`conformance/runner.go:164` defect was already filed as **#238**, so nothing
+from either landing is left unfiled. Ready queue is **29** — still well above
+the 8–10 band and still self-fed by the develop loop's harvest rather than a
+planning gap. **Branch-namespace note: the namespace is clean for the first
+time in a week** — the two stale refs flagged in the prior two backlogs
+(`wip/issue-145`, `wip/issue-98`) are both gone, and `wip/issue-179` is the
+only non-`main` ref, live (tip minutes old) and correctly claimed by open
+issue #179. No `parked/*` refs. No untracked GAP debt: the three real
+`GAP(` sites (`xsd/namespaceconstraint.go:154`/`:276`, `xsd/wildcard.go:110`)
+remain owned by #51, which is now `ready` and chartered to retire them.
+
 ## M5 — Instance validation (XML)
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,

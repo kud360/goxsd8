@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/kud360/goxsd8/builtin"
@@ -13,25 +14,26 @@ import (
 // The Schema Representation Constraints (§3.x.3) and other rules this package
 // charges. Each string is a live entry in xsderr's generated catalog.
 const (
-	ruleSrcInclude    xsderr.Rule = "src-include"
-	ruleSrcElement    xsderr.Rule = "src-element"
-	ruleSrcAttribute  xsderr.Rule = "src-attribute"
-	ruleSrcSimpleType xsderr.Rule = "src-simple-type"
-	ruleSrcResolve    xsderr.Rule = "src-resolve"
-	ruleSTPropsCorr   xsderr.Rule = "st-props-correct"
-	ruleSrcCT         xsderr.Rule = "src-ct"
-	ruleCosAllLimited xsderr.Rule = "cos-all-limited"
-	ruleSrcWildcard   xsderr.Rule = "src-wildcard"
-	ruleParticleCorr  xsderr.Rule = "p-props-correct"
-	ruleWildcardCorr  xsderr.Rule = "w-props-correct"
+	ruleSrcInclude            xsderr.Rule = "src-include"
+	ruleSrcElement            xsderr.Rule = "src-element"
+	ruleSrcAttribute          xsderr.Rule = "src-attribute"
+	ruleSrcSimpleType         xsderr.Rule = "src-simple-type"
+	ruleSrcResolve            xsderr.Rule = "src-resolve"
+	ruleSTPropsCorr           xsderr.Rule = "st-props-correct"
+	ruleSrcCT                 xsderr.Rule = "src-ct"
+	ruleCosAllLimited         xsderr.Rule = "cos-all-limited"
+	ruleSrcWildcard           xsderr.Rule = "src-wildcard"
+	ruleParticleCorr          xsderr.Rule = "p-props-correct"
+	ruleWildcardCorr          xsderr.Rule = "w-props-correct"
+	ruleSrcIdentityConstraint xsderr.Rule = "src-identity-constraint"
 )
 
 // Produce maps the TOP-LEVEL <simpleType>, <element>, <attribute>,
-// <complexType>, <attributeGroup>, and <group> declarations of a single
-// already-parsed schema document into xsd components, in document order, and
-// returns the finalized [xsd.Schema]. Notations and identity constraints remain
-// out of scope and their top-level elements are silently skipped (§3.1.2 permits
-// ignoring not-yet-produced representations), not rejected.
+// <complexType>, <attributeGroup>, <group>, and <notation> declarations of a
+// single already-parsed schema document into xsd components, in document order,
+// and returns the finalized [xsd.Schema]. The identity constraints of an
+// <element> (global or local) are produced with it and registered as schema-level
+// {identity-constraint definitions} (§3.17.1).
 //
 // Produce is the SINGLE-DOCUMENT entry point: it never dereferences an
 // <include>/<import>/<redefine>/<override>, so schema(D) here is immed(D) alone
@@ -224,6 +226,12 @@ func (p *producer) run() error {
 				return err
 			}
 			p.builder.AddElement(ed)
+			// A schema's {identity-constraint definitions} collects the definitions
+			// of every <key>/<keyref>/<unique> anywhere in the document (§3.17.1),
+			// so each one produced with a declaration is registered here too.
+			for _, ic := range ed.IdentityConstraints() {
+				p.builder.AddIdentityConstraint(ic)
+			}
 		case "attribute":
 			ad, err := p.produceAttribute(el)
 			if err != nil {
@@ -255,9 +263,15 @@ func (p *producer) run() error {
 			// Consumed by the assembler (parse.go) during discovery, BEFORE any
 			// document is produced: an <include> contributes no component of its
 			// own (§4.2.3), only the components of the document it names.
+		case "notation":
+			n, err := p.produceNotation(el)
+			if err != nil {
+				return err
+			}
+			p.builder.AddNotation(n)
 		default:
-			// annotation, import, notation, redefine, override, … — not this
-			// slice's scope (§3.1.2), skipped, not invalid.
+			// annotation, import, redefine, override, … — not this slice's scope
+			// (§3.1.2), skipped, not invalid.
 		}
 	}
 	return nil
@@ -300,7 +314,7 @@ func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.Simp
 	if err != nil {
 		return nil, err
 	}
-	facets, err := restrictionFacets(restriction)
+	facets, err := p.restrictionFacets(restriction)
 	if err != nil {
 		return nil, err
 	}
@@ -364,13 +378,19 @@ func (p *producer) resolveBase(restriction *Element) (*xsd.SimpleType, error) {
 		"base type %s does not resolve to any simple type in scope (src-resolve clause 1.1)", qn)
 }
 
-// restrictionFacets maps the plain-lexical constraining-facet children of a
-// <restriction> in document order. enumeration and assertion facets need richer
-// sub-shapes and are not yet produced: rather than silently dropping a constraint
-// (a false-accept), an actual <enumeration>/<assertion> child is rejected. The
-// non-facet children <annotation> and the inline base <simpleType> are skipped.
-func restrictionFacets(restriction *Element) ([]xsd.Facet, error) {
+// restrictionFacets maps the constraining-facet children of a <restriction> in
+// document order. The plain-lexical facets map one-to-one; every <assertion>
+// child (Datatypes §4.3.13.2) folds into the SINGLE assertions facet the §4.3.13
+// {value} rule describes — "a sequence of Assertion components" — inserted at the
+// position of the first <assertion> so the returned slice stays in document order
+// (STYLE D2). enumeration needs a richer sub-shape and is not yet produced:
+// rather than silently dropping a constraint (a false-accept), an actual
+// <enumeration> child is rejected. The non-facet children <annotation> and the
+// inline base <simpleType> are skipped.
+func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) {
 	var facets []xsd.Facet
+	var assertions []xsd.Assertion
+	assertionsAt := 0
 	for _, child := range restriction.Children() {
 		el, ok := child.(*Element)
 		if !ok {
@@ -383,9 +403,16 @@ func restrictionFacets(restriction *Element) ([]xsd.Facet, error) {
 		if local == "annotation" || local == "simpleType" {
 			continue
 		}
-		if local == "enumeration" || local == "assertion" {
+		if local == "enumeration" {
 			return nil, xsderr.New(ruleSrcSimpleType, el.Loc(),
-				"restriction has a <%s> facet, which this producer does not yet support; refusing to silently drop it", local)
+				"restriction has an <enumeration> facet, which this producer does not yet support; refusing to silently drop it")
+		}
+		if local == "assertion" {
+			if len(assertions) == 0 {
+				assertionsAt = len(facets)
+			}
+			assertions = append(assertions, xsd.NewAssertion(p.buildXPathExpression(el, "test"), nil))
+			continue
 		}
 		kind, ok := facetKindOf(local)
 		if !ok {
@@ -395,12 +422,18 @@ func restrictionFacets(restriction *Element) ([]xsd.Facet, error) {
 		fixed := xsdBool(el)
 		facets = append(facets, xsd.NewFacet(kind, []string{val}, fixed))
 	}
-	return facets, nil
+	if len(assertions) == 0 {
+		return facets, nil
+	}
+	return slices.Insert(facets, assertionsAt, xsd.NewAssertionsFacet(assertions)), nil
 }
 
 // produceElement maps a top-level <element> into a global Element Declaration
-// (§3.3.2.2 dcl.elt.global). type= form only: an inline <simpleType>/<complexType>
-// child is not wired in this slice.
+// (§3.3.2.2 dcl.elt.global), including its {identity-constraint definitions}
+// (§3.3.2.1). type= form only: an inline <simpleType>/<complexType> child is not
+// wired in this slice. Registering the produced identity constraints with the
+// schema builder is the caller's job (run), keeping this one focused on building
+// the declaration.
 func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error) {
 	name, _ := attrValue(elem, "name")
 	qname := xsd.QName{Space: p.target, Local: name}
@@ -430,8 +463,32 @@ func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error)
 			return xsd.ElementDeclaration{}, err
 		}
 	}
+	constraints, err := p.identityConstraintsOf(elem)
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
 	return xsd.NewElementDeclaration(elem.Loc(), qname, typeName, nil, xsd.ScopeGlobal, vc,
-		false, nil, nil, nil, false, nil, nil)
+		false, constraints, nil, nil, false, nil, nil)
+}
+
+// produceNotation maps a top-level <notation> into a Notation Declaration
+// (§3.14.2): {name} bundled with the schema's target namespace, {system
+// identifier} from system= and {public identifier} from public=, each absent
+// when its attribute is. Both absent is rejected inside [xsd.NewNotation]
+// (n-props-correct, §3.14.6) — §3.14.3 defines no Schema Representation
+// Constraint of its own. <notation> occurs only as a <schema> child (§3.17.2),
+// so there is no nested form to map.
+func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
+	name, _ := attrValue(elem, "name")
+	qname := xsd.QName{Space: p.target, Local: name}
+	var systemID, publicID *string
+	if v, ok := attrValue(elem, "system"); ok {
+		systemID = &v
+	}
+	if v, ok := attrValue(elem, "public"); ok {
+		publicID = &v
+	}
+	return xsd.NewNotation(elem.Loc(), qname, systemID, publicID, nil)
 }
 
 // produceAttribute maps a top-level <attribute> into a global Attribute
@@ -536,8 +593,9 @@ func (p *producer) unqualifiedRefNS() string {
 }
 
 // facetKindOf maps a plain-lexical constraining-facet element's local name to its
-// [xsd.FacetKind]. enumeration and assertion are deliberately absent — they need
-// richer sub-shapes and are handled (rejected) by restrictionFacets.
+// [xsd.FacetKind]. enumeration and assertion are deliberately absent — their
+// {value} is not a lexical string, so restrictionFacets handles them separately
+// (assertion through xsd.NewAssertionsFacet, enumeration by rejection).
 func facetKindOf(local string) (xsd.FacetKind, bool) {
 	switch local {
 	case "length":

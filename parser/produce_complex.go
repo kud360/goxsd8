@@ -89,8 +89,11 @@ func (p *producer) produceImplicitContent(name xsd.QName, el *Element) (xsd.Comp
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
+	// {assertions} (§3.4.2.1 clause 2) come from the <assert> children of the
+	// <complexType> itself in this implicit-content form; clause 1's fold of the
+	// base type's own assertions needs the resolved base and stays deferred.
 	return xsd.NewComplexType(el.Loc(), name, anyTypeName, nil,
-		xsd.DerivationRestriction, abstract, uses, wildcard, content, nil, nil, nil)
+		xsd.DerivationRestriction, abstract, uses, wildcard, content, nil, p.assertionsOf(el), nil)
 }
 
 // produceComplexContent maps a <complexType><complexContent> (§3.4.2.3). Only the
@@ -128,8 +131,10 @@ func (p *producer) produceComplexContent(name xsd.QName, ctElem, cc *Element) (x
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
+	// {assertions} (§3.4.2.1 clause 2): the <assert> children of <restriction>,
+	// not of the enclosing <complexType>, in this explicit complex-content form.
 	return xsd.NewComplexType(ctElem.Loc(), name, base, nil,
-		xsd.DerivationRestriction, abstract, uses, wildcard, content, nil, nil, nil)
+		xsd.DerivationRestriction, abstract, uses, wildcard, content, nil, p.assertionsOf(restriction), nil)
 }
 
 // buildComplexContentType computes the {content type} of a restriction-derived
@@ -392,6 +397,12 @@ func (p *producer) produceElementParticle(el *Element) (*xsd.Particle, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A schema's {identity-constraint definitions} collects the definitions of
+	// every <key>/<keyref>/<unique> ANYWHERE in the document (§3.17.1), so a local
+	// declaration's constraints are registered exactly like a global one's.
+	for _, ic := range decl.IdentityConstraints() {
+		p.builder.AddIdentityConstraint(ic)
+	}
 	part, err := xsd.NewParticle(el.Loc(), occ, xsd.ResolvedTerm{Term: decl}, nil)
 	if err != nil {
 		return nil, err
@@ -400,10 +411,14 @@ func (p *producer) produceElementParticle(el *Element) (*xsd.Particle, error) {
 }
 
 // produceLocalElement maps a local inline <element name="..."> to a local
-// Element Declaration (§3.3.2.3, dcl.elt.local, {scope} = local). type= form
-// only: an inline <simpleType>/<complexType> child is declined (not yet
-// produced). A type=-less element defaults its {type definition} to xs:anyType
-// (§3.3.2.1 case 4), now resolvable.
+// Element Declaration (§3.3.2.3, dcl.elt.local, {scope} = local), including its
+// {identity-constraint definitions}: §3.3.2.1's Common Mapping Rules apply
+// uniformly to global and local declarations, so <key>/<keyref>/<unique> children
+// are mapped here exactly as in produceElement. Registering them with the schema
+// builder is the caller's job (produceElementParticle). type= form only: an
+// inline <simpleType>/<complexType> child is declined (not yet produced). A
+// type=-less element defaults its {type definition} to xs:anyType (§3.3.2.1
+// case 4), now resolvable.
 func (p *producer) produceLocalElement(el *Element) (xsd.ElementDeclaration, error) {
 	if childElement(el, xsd.XMLSchemaNS, "simpleType") != nil || childElement(el, xsd.XMLSchemaNS, "complexType") != nil {
 		return xsd.ElementDeclaration{}, fmt.Errorf("parser: a local <element> with an inline <simpleType>/<complexType> is not yet produced (type= form only)")
@@ -422,8 +437,12 @@ func (p *producer) produceLocalElement(el *Element) (xsd.ElementDeclaration, err
 		}
 	}
 	nillable, _ := boolAttr(el, "nillable")
+	constraints, err := p.identityConstraintsOf(el)
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
 	return xsd.NewElementDeclaration(el.Loc(), qname, typeName, nil, xsd.ScopeLocal, vc,
-		nillable, nil, nil, nil, false, nil, nil)
+		nillable, constraints, nil, nil, false, nil, nil)
 }
 
 // produceAnyParticle maps an <any> to a Particle whose {term} is a Wildcard
