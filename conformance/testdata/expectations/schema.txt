@@ -796,8 +796,8 @@ MGroupDef/name00101m1/schema/name00101m1 pass
 MGroupDef/name00101m2/schema/name00101m2 pass
 MGroupDef/targetns00101m1/schema/targetNS00101m1 pass
 MGroupDef/targetns00101m2/schema/targetNS00101m2 fail
-MS-Additional2006-07-15/addA001/schema/addA001 fail
-MS-Additional2006-07-15/addA002/schema/addA002 fail
+MS-Additional2006-07-15/addA001/schema/addA001 pass
+MS-Additional2006-07-15/addA002/schema/addA002 pass
 MS-Additional2006-07-15/addA003/schema/addA003 fail
 MS-Additional2006-07-15/addA005/schema/addA005 pass
 MS-Additional2006-07-15/addB001/schema/addB001 pass
@@ -1066,7 +1066,7 @@ MS-Annotations2006-07-15/annotA010/schema/annotA010 pass
 MS-Annotations2006-07-15/annotA011/schema/annotA011 pass
 MS-Annotations2006-07-15/annotA012/schema/annotA012 pass
 MS-Annotations2006-07-15/annotA013/schema/annotA013 fail
-MS-Annotations2006-07-15/annotA014/schema/annotA014 fail
+MS-Annotations2006-07-15/annotA014/schema/annotA014 pass
 MS-Annotations2006-07-15/annotA015/schema/annotA015 pass
 MS-Annotations2006-07-15/annotA016/schema/annotA016 pass
 MS-Annotations2006-07-15/annotA017/schema/annotA017 fail
@@ -1439,7 +1439,7 @@ MS-AttributeGroup2006-07-15/attgB015/schema/attgB015 fail
 MS-AttributeGroup2006-07-15/attgC001/schema/attgC001 fail
 MS-AttributeGroup2006-07-15/attgC002/schema/attgC002 pass
 MS-AttributeGroup2006-07-15/attgC003/schema/attgC003 fail
-MS-AttributeGroup2006-07-15/attgC004/schema/attgC004 fail
+MS-AttributeGroup2006-07-15/attgC004/schema/attgC004 pass
 MS-AttributeGroup2006-07-15/attgC005/schema/attgC005 pass
 MS-AttributeGroup2006-07-15/attgC006/schema/attgC006 fail
 MS-AttributeGroup2006-07-15/attgC007/schema/attgC007 fail
@@ -1450,7 +1450,7 @@ MS-AttributeGroup2006-07-15/attgC011/schema/attgC011 pass
 MS-AttributeGroup2006-07-15/attgC012/schema/attgC012 pass
 MS-AttributeGroup2006-07-15/attgC013/schema/attgC013 pass
 MS-AttributeGroup2006-07-15/attgC014/schema/attgC014 fail
-MS-AttributeGroup2006-07-15/attgC015/schema/attgC015 fail
+MS-AttributeGroup2006-07-15/attgC015/schema/attgC015 pass
 MS-AttributeGroup2006-07-15/attgC016/schema/attgC016 pass
 MS-AttributeGroup2006-07-15/attgC017/schema/attgC017 fail
 MS-AttributeGroup2006-07-15/attgC018/schema/attgC018 pass
@@ -1554,7 +1554,7 @@ MS-ComplexType2006-07-15/ctA025/schema/ctA025 fail
 MS-ComplexType2006-07-15/ctA026/schema/ctA026 pass
 MS-ComplexType2006-07-15/ctA027/schema/ctA027 pass
 MS-ComplexType2006-07-15/ctA028/schema/ctA028 fail
-MS-ComplexType2006-07-15/ctA029/schema/ctA029 fail
+MS-ComplexType2006-07-15/ctA029/schema/ctA029 pass
 MS-ComplexType2006-07-15/ctA030/schema/ctA030 fail
 MS-ComplexType2006-07-15/ctA031/schema/ctA031 fail
 MS-ComplexType2006-07-15/ctA032/schema/ctA032 pass
@@ -2465,7 +2465,7 @@ MS-DataTypes2006-07-15/anyURI_a002_1337/schema/anyURI_a002_1337 fail
 MS-DataTypes2006-07-15/anyURI_a003_1338/schema/anyURI_a003_1338 fail
 MS-DataTypes2006-07-15/anyURI_a004_1339/schema/anyURI_a004_1339 fail
 MS-DataTypes2006-07-15/anyURI_a005_1340/schema/anyURI_a005_1340 pass
-MS-DataTypes2006-07-15/anyURI_a006_1341/schema/anyURI_a006_1341 fail
+MS-DataTypes2006-07-15/anyURI_a006_1341/schema/anyURI_a006_1341 pass
 MS-DataTypes2006-07-15/anyURI_a007_1342/schema/anyURI_a007_1342 fail
 MS-DataTypes2006-07-15/anyURI_a008_1343/schema/anyURI_a008_1343 fail
 MS-DataTypes2006-07-15/anyURI_a009_1344/schema/anyURI_a009_1344 fail
@@ -6588,9 +6588,9 @@ MS-Particles2006-07-15/particlesIc001/schema/particlesIc001 pass
 MS-Particles2006-07-15/particlesIc002/schema/particlesIc002 fail
 MS-Particles2006-07-15/particlesIc003/schema/particlesIc003 fail
 MS-Particles2006-07-15/particlesIc004/schema/particlesIc004 fail
-MS-Particles2006-07-15/particlesIc005/schema/particlesIc005 fail
-MS-Particles2006-07-15/particlesIc006/schema/particlesIc006 fail
-MS-Particles2006-07-15/particlesIc007/schema/particlesIc007 fail
+MS-Particles2006-07-15/particlesIc005/schema/particlesIc005 pass
+MS-Particles2006-07-15/particlesIc006/schema/particlesIc006 pass
+MS-Particles2006-07-15/particlesIc007/schema/particlesIc007 pass
 MS-Particles2006-07-15/particlesId001/schema/particlesId001 pass
 MS-Particles2006-07-15/particlesId002/schema/particlesId002 pass
 MS-Particles2006-07-15/particlesId003/schema/particlesId003 fail
@@ -9723,8 +9723,8 @@ MS-Schema2006-07-15/schB1i/schema/schB1i fail
 MS-Schema2006-07-15/schB2/schema/schB2 fail
 MS-Schema2006-07-15/schB3/schema/schB3 fail
 MS-Schema2006-07-15/schB4/schema/schB4 fail
-MS-Schema2006-07-15/schB5/schema/schB5 fail
-MS-Schema2006-07-15/schB8/schema/schB8 fail
+MS-Schema2006-07-15/schB5/schema/schB5 pass
+MS-Schema2006-07-15/schB8/schema/schB8 pass
 MS-Schema2006-07-15/schC2/schema/schC2 fail
 MS-Schema2006-07-15/schC3/schema/schC3 fail
 MS-Schema2006-07-15/schC4/schema/schC4 fail
@@ -9733,7 +9733,7 @@ MS-Schema2006-07-15/schD10/schema/schD10 fail
 MS-Schema2006-07-15/schD11/schema/schD11 fail
 MS-Schema2006-07-15/schD5/schema/schD5 fail
 MS-Schema2006-07-15/schD7/schema/schD7 fail
-MS-Schema2006-07-15/schD8/schema/schD8 fail
+MS-Schema2006-07-15/schD8/schema/schD8 pass
 MS-Schema2006-07-15/schE1/schema/schE1 fail
 MS-Schema2006-07-15/schE10/schema/schE10 fail
 MS-Schema2006-07-15/schE1i/schema/schE1i fail
@@ -9845,7 +9845,7 @@ MS-Schema2006-07-15/schZ014_b/schema/schZ014_b fail
 MS-Schema2006-07-15/schZ015/schema/schZ015 fail
 MS-SimpleType2006-07-15/stA001/schema/stA001 pass
 MS-SimpleType2006-07-15/stA002/schema/stA002 fail
-MS-SimpleType2006-07-15/stA003/schema/stA003 fail
+MS-SimpleType2006-07-15/stA003/schema/stA003 pass
 MS-SimpleType2006-07-15/stA004/schema/stA004 fail
 MS-SimpleType2006-07-15/stA005/schema/stA005 fail
 MS-SimpleType2006-07-15/stA006/schema/stA006 pass
@@ -9893,7 +9893,7 @@ MS-SimpleType2006-07-15/stC003/schema/stC003 pass
 MS-SimpleType2006-07-15/stC004/schema/stC004 pass
 MS-SimpleType2006-07-15/stC005/schema/stC005 pass
 MS-SimpleType2006-07-15/stC006/schema/stC006 fail
-MS-SimpleType2006-07-15/stC007/schema/stC007 fail
+MS-SimpleType2006-07-15/stC007/schema/stC007 pass
 MS-SimpleType2006-07-15/stC008/schema/stC008 fail
 MS-SimpleType2006-07-15/stC009/schema/stC009 fail
 MS-SimpleType2006-07-15/stC010/schema/stC010 pass
