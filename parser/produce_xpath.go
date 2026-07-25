@@ -161,7 +161,7 @@ func (p *producer) produceIdentityConstraint(el *Element, category xsd.IdentityC
 		}
 		// Only the QName is retained: the link to the referenced definition is a
 		// finalize-phase resolution (src-resolve clause 1.7), never made here.
-		qn, err := resolveQName(el, referLex)
+		qn, err := p.resolveQName(el, referLex)
 		if err != nil {
 			return xsd.IdentityConstraint{}, err
 		}
