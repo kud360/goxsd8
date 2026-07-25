@@ -116,7 +116,7 @@ func (p *producer) produceComplexContent(name xsd.QName, ctElem, cc *Element) (x
 		mixed = ccMixed
 	}
 	abstract, _ := boolAttr(ctElem, "abstract")
-	base, err := resolveQName(restriction, attrOr(restriction, "base"))
+	base, err := p.resolveQName(restriction, attrOr(restriction, "base"))
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -263,7 +263,7 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 		// missing ref is a plain well-formedness fault, not an xsderr rule.
 		return nil, fmt.Errorf("parser: a <group> in a content model must be a reference (carry a ref attribute), but none is present")
 	}
-	qn, err := resolveQName(el, ref)
+	qn, err := p.resolveQName(el, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +378,7 @@ func (p *producer) produceElementParticle(el *Element) (*xsd.Particle, error) {
 		return nil, nil
 	}
 	if ref, hasRef := attrValue(el, "ref"); hasRef {
-		qn, err := resolveQName(el, ref)
+		qn, err := p.resolveQName(el, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -416,7 +416,7 @@ func (p *producer) produceLocalElement(el *Element) (xsd.ElementDeclaration, err
 	}
 	typeName := anyTypeName
 	if typeLex, hasType := attrValue(el, "type"); hasType {
-		typeName, err = resolveQName(el, typeLex)
+		typeName, err = p.resolveQName(el, typeLex)
 		if err != nil {
 			return xsd.ElementDeclaration{}, err
 		}
@@ -543,7 +543,7 @@ func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]str
 	if !ok {
 		return fmt.Errorf("parser: a nested <attributeGroup> must be a reference (carry a ref attribute), but none is present")
 	}
-	qn, err := resolveQName(el, ref)
+	qn, err := p.resolveQName(el, ref)
 	if err != nil {
 		return err
 	}
@@ -551,7 +551,7 @@ func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]str
 		return nil
 	}
 	visited[qn] = struct{}{}
-	def, ok := p.localAttributeGroups[qn]
+	def, ok := p.symbols.attributeGroups[qn]
 	if !ok {
 		return xsderr.New(ruleSrcResolve, el.Loc(),
 			"<attributeGroup ref> %s does not resolve to any top-level attribute group definition (src-resolve clause 1.4)", qn)
@@ -621,7 +621,7 @@ func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
 			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
 				"attribute has both ref and type, but src-attribute clause 3 forbids a type with ref")
 		}
-		qn, err := resolveQName(el, ref)
+		qn, err := p.resolveQName(el, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -664,7 +664,7 @@ func (p *producer) produceLocalAttribute(el *Element) (xsd.AttributeDeclaration,
 	qname := xsd.QName{Space: p.localTargetNS(el, "attributeFormDefault"), Local: name}
 	typeName := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"}
 	if typeLex, hasType := attrValue(el, "type"); hasType {
-		qn, err := resolveQName(el, typeLex)
+		qn, err := p.resolveQName(el, typeLex)
 		if err != nil {
 			return xsd.AttributeDeclaration{}, err
 		}
@@ -763,7 +763,7 @@ func (p *producer) disallowedNames(el *Element) []xsd.QName {
 			// xsd package does not model the keywords, so they are not applied here.
 			continue
 		}
-		qn, err := resolveQName(el, tok)
+		qn, err := p.resolveQName(el, tok)
 		if err != nil {
 			continue // an unresolvable notQName member is dropped, not fatal
 		}

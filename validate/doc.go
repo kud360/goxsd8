@@ -40,8 +40,11 @@
 //
 // # Planned contract (M5 — not yet implemented)
 //
-//	func New(set *xsd.SchemaSet, opts ...Option) (*Validator, error)
+//	func New(schema *xsd.Schema, opts ...Option) (*Validator, error)
 //	    Options: WithLogger. The Validator is immutable and reusable.
+//	    It takes the one finalized [xsd.Schema] parser.Parse assembles —
+//	    the §3.17.1 Schema component is already multi-namespace-capable,
+//	    so there is no separate schema-set type.
 //
 //	func (v *Validator) Assess(root Element) *Result
 //	    Result carries every violation as an *xsderr.Error (cvc-* rule +

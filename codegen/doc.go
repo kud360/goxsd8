@@ -32,12 +32,16 @@
 //
 // # Multiple schemas, multiple output dirs
 //
-//	type Target struct { Set *xsd.SchemaSet; Dir, Package string }
+//	type Target struct { Schema *xsd.Schema; Dir, Package string }
 //	func Generate(targets []Target, opts ...Option) error
 //
-// Each target emits one package into its own directory; cross-target
-// type references import across the generated packages. The CLI maps
-// its repeated -schema/-out flag pairs onto targets.
+// Each target carries one finalized [xsd.Schema] — what parser.Parse
+// assembles from a root location and its composition closure; the
+// §3.17.1 Schema component is already multi-namespace-capable, so there
+// is no separate schema-set type. Each target emits one package into its
+// own directory; cross-target type references import across the
+// generated packages. The CLI maps its repeated -schema/-out flag pairs
+// onto targets.
 //
 // # The Emitter seam (value.Emitter; API frozen in M9)
 //
