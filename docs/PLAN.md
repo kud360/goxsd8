@@ -292,15 +292,166 @@ issue #179. No `parked/*` refs. No untracked GAP debt: the three real
 `GAP(` sites (`xsd/namespaceconstraint.go:154`/`:276`, `xsd/wildcard.go:110`)
 remain owned by #51, which is now `ready` and chartered to retire them.
 
-## M5 — Instance validation (XML)
+Update (2026-07-25, weekly backlog): **the M4 carve is down to four
+sub-slices.** #179 (multi-document assembly via `<xs:include>` + §F.1
+chameleon coercion) and #51 (`##defined`/`##definedSibling` resolution)
+landed since the post-land pass above, along with #70 (Attribute Use
+`{value constraint}`) and the `cc0397b` index-fix for #244. Of the 17
+sub-slices #79 was carved into, only **#180** (UPA/EDC), **#181**
+(derivation validity incl. particle restriction §3.9.6), **#182**
+(`<xs:import>`) and **#183** (`<xs:redefine>`/`<xs:override>`) remain
+open, and none of the four blocks another — the serial spine is fully
+behind us. Of the five M4 leaf follow-ups the carve repointed (#72, #70,
+#63, #51, #46), **four are now closed** and only **#63** (IDC
+`{referenced key}` + `c-props-correct` cl.2) is left, `ready`; #52
+correctly stays `blocked` on #181, its only open dependency.
+
+**The `schema` lane has not moved since #178 — 2936 pass / 12496 fail
+(15432) — and that is structural, not a quality signal.** #179 moved it
+by design zero (the harness still runs `os.Open` → `ReadDocument` →
+`parser.Produce` per document, and `schemaShapeDecidable` declines any
+top-level `<include>`, so no include or chameleon case is decidable
+however correct `Parse` is), and #51's resolution half has no caller
+until M5. **#242 is therefore the single highest-conformance-value issue
+in the queue**: it reroutes the lane onto `parser.Parse` with a rooted
+`loader.Dir` and admits the include/chameleon cohort, converting #179's
+22 unit tests into lane evidence. Treat it as the top of the frontier.
+Other lanes: `datatypes` unchanged at 1043 / 31 (1074); `instance` at 0 /
+26426; `xpath`, `json`, `ber` still empty by design.
+
+**Priority order for the ready frontier** (lane movement first, per this
+file's own preamble — the queue is deep enough that an explicit order is
+the useful output of a backlog). All 34 `ready` issues appear exactly
+once, so a session can take the first item it can do rather than scan:
+
+1. **Schema-lane movers.** **#242** (reroute the lane onto `parser.Parse`
+   — largest single cohort available), **#180** + **#181** (finalize
+   validity; the only things that unblock #52, and #181 is what licenses
+   the M5 matcher's no-backtracking guarantee), **#210** (the `Finalize`
+   anonymous-QName false-reject — unblocks both #229 and #249 and clears
+   the common inline-anonymous path), **#228** (resolved-base
+   simpleContent/extension `{content type}`), **#230** (open content),
+   **#231** (`<all>` {0,1} occurrence grammar), **#182** → **#183**
+   (composition tail, in that order).
+2. **Correctness / false-accept debt.** **#214** (patterns wrongly
+   AND-ed), **#219** (scale facets dropped, making #157's SCCs
+   unreachable), **#232** (unresolvable `notQName` dropped), **#240**
+   (`ref=` form of `<unique>`/`<key>`/`<keyref>`), **#238** (multiple
+   `<ts:schemaDocument>` children — wrong-document decisions), **#226**
+   (UTF-16 BOM misread as invalid UTF-8), **#202** (Required name/ref
+   slots accept the absent zero-QName), **#253** (silent short assembly).
+3. **Remaining feature leaves.** **#63** (IDC `{referenced key}` +
+   `c-props-correct` cl.2 — the last open M4 leaf follow-up, and an M5
+   prerequisite per #250), **#206** ({context} / {scope}.{parent}
+   containment back-pointers), **#217** (`cos-st-restricts` facet-value
+   sub-clauses), **#235** → **#236** (attribute default/fixed producer
+   wiring, then the §3.5.4 effective value constraint — #236 is a soft
+   sibling of #235, not gated on it, but landing #235 first is cheaper).
+4. **Datatypes-lane widening.** **#223** (union member-dispatch),
+   **#224** (integer-family list fixtures), **#190** (anyURI triage).
+5. **Surface, docs, process — real work, but it moves no lane, so it
+   should be picked deliberately rather than by falling off the top of a
+   list.** **#252** (Schema enumeration accessors — a prerequisite for
+   the first `goxsd8 parse`), **#251** (`-help`), **#189** (README sync),
+   **#203** (the consolidated `xsd` doc/example session), **#208**
+   (`Loc()` accessors), **#215** + **#241** (exported-surface tightening),
+   **#195** + **#246** (process guards).
+
+**Ready queue is 34 — over the 8–10 band for the fourth backlog running,
+and this is now a standing condition rather than a one-off.** Every item
+was re-checked this pass and every `ready`/`blocked` label is honest (no
+`ready` issue has an open hard dependency; #236's open reference to #235
+is a soft sibling, not a gate). The cause is structural: the develop
+loop's post-land harvest files follow-ups faster than one-issue-per-
+session consumes them, which is the harvest working as designed. The
+mitigation is the explicit priority order above, not deletion of real
+work — but note that **10 of the 34 move no conformance lane**
+(#189, #195, #203, #208, #215, #241, #246, #251, #252 and the doc half of
+#253), so a session picking off the top of an unordered list will tend to
+drift away from the lanes.
+
+Filed this backlog: **#250** (the M5 epic — see below), **#251**
+(`-help` prints the not-implemented stub and exits 2; cliuser),
+**#252** (`*xsd.Schema` has point lookups but no document-order
+enumeration accessors, so `goxsd8 parse`'s summary cannot be written
+against the published surface — libuser and cliuser converged on this
+independently), **#253** (`parser.Parse` assembles short on
+import/redefine/override with no observable signal; libuser).
+Consolidated: **#211 closed as a duplicate of #203** — both were
+libuser-harvested doc-only `area/xsd` issues adding an `Example*` to the
+same example-test file and editing the same package doc, so they are one
+session; #203 now carries all of #211's criteria plus two new libuser
+gaps (the manual `ContentType`→`Particle`→`TermOrRef`→`Term` traversal
+example, and naming `SchemaBuilder`'s intended caller). **#16** was the
+only open issue carrying neither `ready` nor `blocked` nor
+`needs-replan` — now `blocked`, which is the honest encoding of its own
+"a reference, not a session" note, with today's cliuser criteria for the
+first working `goxsd8 parse` folded into its thread.
+
+**GAP debt: exactly ONE real site, which corrects the paragraph above.**
+That paragraph's "three real `GAP(` sites ... remain owned by #51" is
+stale in both halves: #51 *landed*, retiring both
+`xsd/namespaceconstraint.go` markers substantively, and the surviving
+marker is at `xsd/wildcard.go:107` (not `:110`), owned by **#248**.
+`xpath/doc.go:29` is the convention's own template, not a site. The
+marker's text still names #51 rather than #248; repointing it is an
+acceptance criterion of #249.
+
+**Branch-namespace reconciliation: clean.** `git ls-remote --heads
+origin` returns `main` alone — no `wip/*`, no `parked/*`, nothing to
+retire, and no closed issue references a branch that never landed
+(#179's work is `547b42f` and #51's is `566ef1f`, both on `main`).
+
+**Known drift this session could not fix:** none of the 39 open issues
+carries a GitHub milestone, so the preamble's "milestones map one-to-one
+to GitHub milestones" is currently aspirational — issue labels and this
+file are doing that work alone. This session's GitHub toolset can neither
+enumerate nor create milestones (no milestone tool; the REST fallback is
+unauthorized), so it is flagged for a human or a session with a broader
+token rather than guessed at.
+
+## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
-xsi:type/nil, wildcards, default/fixed values. **`instance` lane.**
+xsi:type/nil, wildcards, default/fixed values. **`instance` lane** (0 pass
+/ 26426 fail today).
+
+The epic was filed as **#250** in the 2026-07-25 backlog, `blocked` on
+#79's tail, deliberately **uncarved**: M4 still has four sub-slices open
+and the ready queue is at 34, so carving now would deepen a queue that is
+already over band. **Carving M5 is the next planning action once #180 /
+#181 / #182 / #183 drain**, and it should follow the M4 pattern that
+worked (#79 → #167–#183): model/infoset shape slices first, then a
+lane-bring-up slice that produces the first real `instance` number early
+(the #175 analogue), then the validator fan-out.
+
+Filing it was not bookkeeping for its own sake — #248 had been `blocked`
+on "the M5 epic, NOT yet filed" and is now repointed at #250. The
+signatures in `validate/doc.go` and `validate/xmlsrc/doc.go` under
+"Planned contract (M5 — not yet implemented)" are the contract the epic
+discharges, and the design constraints there (PRINCIPLES 8, 11, 13, 14,
+15) are settled — the carve implements them, it does not reopen them.
+Known M5-time debts to fold in rather than rediscover: #248 (the
+wildcard-admission entry point that retires the last `GAP(`), #236
+(`cvc-au`'s effective value constraint), #63 (`cvc-identity-constraint`'s
+`{referenced key}`), and the deferred memoization measurement on
+`inSubstitutionGroupOf`.
 
 ## M6 — XPath required subset
 
 CTA restricted subset + assertion essentials; fail-open with GAP markers;
 IDC selector/field paths. Dynamic-error direction per PRINCIPLES 20.
+
+Not carved, and deliberately not filed as an epic yet (2026-07-25
+backlog): M5 is the next carve and speculative epics two milestones out
+earn nothing. One dangling placeholder is outstanding and is recorded
+here so it is not lost — **#56** (per-assertion/CTA results must
+distinguish a genuine PASS from a fail-open "unevaluated", i.e. an
+`Evaluated bool`) is `blocked` on "the M6 assertion/CTA XPath evaluator
+issue, NOT yet filed". Repoint it at the concrete `#N` at the M6 carve.
+It is the same situation #248 was in for M5 until #250 was filed, and it
+matters for the same reason: STYLE 9's fail-open discipline is only
+honest if a fail-open answer is distinguishable from a real pass.
 
 ## M7 — XPath 2.0 growth
 
