@@ -318,21 +318,24 @@ in the queue**: it reroutes the lane onto `parser.Parse` with a rooted
 22 unit tests into lane evidence. Treat it as the top of the frontier.
 Other lanes: `datatypes` unchanged at 1043 / 31 (1074); `instance` at 0 /
 26426; `xpath`, `json`, `ber` still empty by design.
+*(Superseded 2026-07-25 by the post-land paragraph at the end of this
+section: #242 landed, and the lane now stands at 2951 / 12481.)*
 
 **Priority order for the ready frontier** (lane movement first, per this
 file's own preamble — the queue is deep enough that an explicit order is
 the useful output of a backlog). All 34 `ready` issues appear exactly
 once, so a session can take the first item it can do rather than scan:
 
-1. **Schema-lane movers.** **#242** (reroute the lane onto `parser.Parse`
-   — largest single cohort available), **#180** + **#181** (finalize
+1. **Schema-lane movers.** ~~#242~~ (**LANDED** 2026-07-25, `71b07a2`),
+   **#180** + **#181** (finalize
    validity; the only things that unblock #52, and #181 is what licenses
    the M5 matcher's no-backtracking guarantee), **#210** (the `Finalize`
    anonymous-QName false-reject — unblocks both #229 and #249 and clears
    the common inline-anonymous path), **#228** (resolved-base
    simpleContent/extension `{content type}`), **#230** (open content),
-   **#231** (`<all>` {0,1} occurrence grammar), **#182** → **#183**
-   (composition tail, in that order).
+   **#231** (`<all>` {0,1} occurrence grammar), then **#257** → **#182**
+   → **#183** (composition tail, in that order — see the post-land
+   paragraph below for why #257 precedes #182).
 2. **Correctness / false-accept debt.** **#214** (patterns wrongly
    AND-ed), **#219** (scale facets dropped, making #157's SCCs
    unreachable), **#232** (unresolvable `notQName` dropped), **#240**
@@ -409,6 +412,93 @@ file are doing that work alone. This session's GitHub toolset can neither
 enumerate nor create milestones (no milestone tool; the REST fallback is
 unauthorized), so it is flagged for a human or a session with a broader
 token rather than guessed at.
+
+Update (2026-07-25, post-land pass for #242 — not a full backlog sweep):
+**#242 landed** (PR #258, squash-merged `71b07a2`), taking the `schema`
+lane **2936 → 2951 pass / 12481 fail (15432)** — the first movement since
+#178, and the discharge of the paragraph above that called the lane's
+stasis "structural, not a quality signal". `execSchemaCase` now decides
+via `parser.Parse` over a rooted `loader.Dir` (multi-document
+`<xs:include>` assembly) instead of single-document `parser.Produce`, and
+a new independent closure-discovery walk (`conformance/schema_closure.go`)
+runs `schemaShapeDecidable` over **every** document of the assembly rather
+than only the root, so a silently-skipped representation inside an
+`<include>`d document cannot false-accept. The 15 flipped cases span
+MS-Schema, MS-Particles, MS-SimpleType, MS-AttributeGroup, MS-Additional
+(the include-the-same-schema-twice diamond), MS-DataTypes, MS-ComplexType
+and MS-Annotations. Zero regressions on any lane. Other lanes unchanged:
+`datatypes` 1043 / 31 (1074); `instance` 0 / 26426; `xpath`, `json`, `ber`
+empty by design.
+
+**Two in-place edits were made above rather than left to be superseded,
+because that text is operational and would misdirect a session:** the
+"#242 is therefore the single highest-conformance-value issue" sentence is
+marked superseded, and #242 is struck from priority band 1. Nothing else
+in the 2026-07-25 weekly backlog paragraph was rewritten.
+
+**Nothing was unblocked by this landing.** All 8 open `blocked` issues
+were checked; none names #242 in its `## Depends on` (#250→#79, #249→#210
++#229, #248→#250, #229→#210, #79→none, #56→the unfiled M6 evaluator,
+#52→#176/#181, #16→none). #242 was a harness-wiring change with no issue
+gated behind it — expected, and recorded so the next pass does not re-derive it.
+
+**Post-land harvest: one issue filed, one folded, one confirmed.** #257
+(the `loader.Dir` `..`-confinement vs. `src-include` clause 2.4
+indistinguishability) was filed *during* landing as an explicit
+precondition of the arbiter's ACCEPT, not as routine harvest;
+re-checked this pass and confirmed correctly labeled and scoped
+(`ready`, `kind/gap`, `area/conformance`, no dependency). Of the two
+non-blocking arbiter findings the log records as "deliberately not
+filed", the judgment **split**:
+
+- **Filed as #259** — the duplicated `resolveSchemaLocation`
+  (`parser/parse.go:312` and a verbatim copy at
+  `conformance/schema_closure.go:204`). Re-reading both copies changed
+  the assessment from the "small T4 concern" framing: the sync
+  obligation is asserted only on the copy, `parser/parse.go` carries no
+  back-reference, and the drift consequence is not a red test but the
+  closure walk under-discovering — i.e. a document `Parse` reads whose
+  shape was never gated, which is the exact false accept the walk
+  exists to close. **A false accept moves the lane UP, and the ratchet
+  only guards downward movement, so drift would be recorded as progress
+  and locked in.** That is priority band 2 (false-accept debt), not
+  band 5. The T5 "exporting adds public surface" justification in the
+  copy's comment is also a false dichotomy — a module-`internal/`
+  package satisfies T4 and T5 at once (there is no `internal/` tree
+  today, so placement wants a steward/warden read). The concrete drift
+  trigger is near-term: **#182** resolves import hints through the same
+  §4.3.2 clause-4 path and must add an import edge to the closure walk.
+- **Not filed; folded into #257 as a rider** — the doc-completeness nit
+  in `conformance/schema.go`'s step-4 comment (its list of eliminated
+  plain-error types omits the missing-`schemaLocation` grammar fault,
+  which `closureScan.include` does correctly decline). Verified against
+  the landed code: genuinely cosmetic, the conclusion it supports still
+  holds, and it is a one-line edit in a file #257 already opens — filing
+  a session for it would cost more than the fix. Precedent: #249 carries
+  #248's one-line marker repoint the same way.
+
+**Next priority, and a correction to the log entry's speculation.** The
+log entry suggested #182 (`<xs:import>`) as the natural successor. Its
+dependency #179 is indeed closed (`547b42f`) and it is correctly `ready`
+— but it is **not** promoted over #180/#181, which keep the top of band 1:
+they are the last non-composition M4 slices, #181 is the only thing that
+unblocks #52 and is what licenses the M5 matcher's no-backtracking
+guarantee, and nothing in #242's landing weakened either. More
+importantly, the log's second argument for #182 — that it is "the
+scenario under which #257's latent path could become live" — is an
+argument for **sequencing #257 first**, not for promoting #182: closing a
+latent false-accept path before the change that activates it is the cheap
+order, and the reverse ships #182 with a live gap and no test watching it.
+Band 1 is therefore ordered **#180 / #181 / #210 / #228 / #230 / #231,
+then #257 → #182 → #183**, with **#259 landing before #182** for the same
+reason (so #182 extends one resolver instead of remembering to edit two).
+
+Ready queue is **35** (34 + #259) — still well above the 8–10 band, still
+self-fed by the develop loop's harvest rather than a planning gap. Branch
+namespace: `git ls-remote --heads origin` returns `main` alone; `wip/issue-242`
+was auto-deleted at merge and its content is on `main` as `71b07a2`. No
+`parked/*` refs. GAP debt unchanged: one real site
+(`xsd/wildcard.go:107`, owned by #248).
 
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
