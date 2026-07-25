@@ -10,12 +10,11 @@ import "github.com/kud360/goxsd8/xsderr"
 // exactly when the category is "keyref").
 //
 // This constructor enforces only clause 1's LOCAL part (the presence-iff-keyref
-// shape). The clause-1 requirement that a resolved {referenced key} actually
-// exist and be a key/unique (not another keyref) is a finalize-phase check
-// (resolve.go's resolveKeyref, #173), as is clause 2 (the "keyref"'s {fields}
-// cardinality matching its resolved {referenced key}'s {fields}) — both need the
-// resolved {referenced key}, and clause 2 in particular stays deferred beyond
-// #173; neither is enforced in this constructor.
+// shape). Everything that needs the RESOLVED {referenced key} is enforced at
+// finalize instead, by resolve.go's resolveKeyref: the rest of clause 1 (the
+// referenced name must resolve, and must resolve to a key/unique rather than
+// another keyref) and clause 2 (a keyref's {fields} cardinality must equal its
+// {referenced key}'s). Neither is enforced in this constructor.
 const ruleICProps xsderr.Rule = "c-props-correct"
 
 // IdentityConstraint is the Identity-Constraint Definition component
@@ -118,12 +117,13 @@ func (c IdentityConstraint) Fields() []XPathExpression {
 // §3.11.2's refer attribute — and whether it is present (true exactly when
 // the category is "keyref"); when false the first result is not meaningful.
 //
-// This is NOT the resolved {referenced key} component (§3.11.1). Finalize (#173)
-// validates the name resolves to an identity-constraint definition (src-resolve
-// clause 1.7) that is a key or unique, not another keyref (c-props-correct
-// clause 1), but adds no resolved-component accessor: the QName is retained, and
-// a consumer follows it by a read-time lookup. c-props-correct clause 2 (the
-// {fields} cardinality match) stays deferred.
+// This is NOT the resolved {referenced key} component (§3.11.1). Finalize
+// validates that the name resolves to an identity-constraint definition
+// (src-resolve clause 1.7) that is a key or unique, not another keyref
+// (c-props-correct clause 1), and that this constraint's {fields} cardinality
+// equals that resolved target's (c-props-correct clause 2). It adds no
+// resolved-component accessor: the QName is retained, and a consumer follows it
+// by a read-time lookup.
 func (c IdentityConstraint) ReferencedKeyName() (QName, bool) {
 	return c.referencedKey, c.category == IdentityConstraintKeyref
 }

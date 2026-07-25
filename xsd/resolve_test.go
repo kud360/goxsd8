@@ -1,6 +1,8 @@
 package xsd_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -75,21 +77,31 @@ func elementTyped(t *testing.T, name, typeName xsd.QName) xsd.ElementDeclaration
 	return e
 }
 
-// keyOrRef builds an identity constraint of the given category; refer, when
-// non-empty, is the {referenced key} (required for keyref).
-func keyOrRef(t *testing.T, name xsd.QName, category xsd.IdentityConstraintCategory, refer xsd.QName) xsd.IdentityConstraint {
+// keyOrRefFields builds an identity constraint of the given category with
+// fieldCount distinct {fields}; refer, when non-empty, is the {referenced key}
+// (required for keyref).
+func keyOrRefFields(t *testing.T, name xsd.QName, category xsd.IdentityConstraintCategory, refer xsd.QName, fieldCount int) xsd.IdentityConstraint {
 	t.Helper()
 	sel := xsd.NewXPathExpression(".", nil, nil, nil)
-	field := xsd.NewXPathExpression("@x", nil, nil, nil)
+	fields := make([]xsd.XPathExpression, 0, fieldCount)
+	for i := range fieldCount {
+		fields = append(fields, xsd.NewXPathExpression(fmt.Sprintf("@x%d", i), nil, nil, nil))
+	}
 	var referPtr *xsd.QName
 	if category == xsd.IdentityConstraintKeyref {
 		referPtr = &refer
 	}
-	c, err := xsd.NewIdentityConstraint(xsderr.Loc{}, name, category, sel, []xsd.XPathExpression{field}, referPtr, nil)
+	c, err := xsd.NewIdentityConstraint(xsderr.Loc{}, name, category, sel, fields, referPtr, nil)
 	if err != nil {
 		t.Fatalf("NewIdentityConstraint: %v", err)
 	}
 	return c
+}
+
+// keyOrRef builds a single-{field} identity constraint of the given category.
+func keyOrRef(t *testing.T, name xsd.QName, category xsd.IdentityConstraintCategory, refer xsd.QName) xsd.IdentityConstraint {
+	t.Helper()
+	return keyOrRefFields(t, name, category, refer, 1)
 }
 
 func TestResolveDanglingType(t *testing.T) {
@@ -182,6 +194,89 @@ func TestResolveKeyrefToKeyref(t *testing.T) {
 	} else {
 		assertRule(t, err, "c-props-correct")
 	}
+}
+
+func TestResolveKeyrefFieldCardinalityMismatch(t *testing.T) {
+	// src-resolve clause 1.7 and c-props-correct clause 1 both pass — the target
+	// exists and is a key — but the {fields} cardinalities differ, which
+	// c-props-correct clause 2 forbids. Checked in both directions so a check
+	// written with the wrong comparison would still be caught.
+	for _, tc := range []struct {
+		name                 string
+		keyFields, refFields int
+	}{
+		{"keyref wider than key", 1, 2},
+		{"keyref narrower than key", 3, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := xsd.NewSchemaBuilder()
+			b.AddIdentityConstraint(keyOrRefFields(t, qn("k"), xsd.IdentityConstraintKey, xsd.QName{}, tc.keyFields))
+			b.AddIdentityConstraint(keyOrRefFields(t, qn("kr"), xsd.IdentityConstraintKeyref, qn("k"), tc.refFields))
+			_, err := b.Finalize()
+			if err == nil {
+				t.Fatal("Finalize(keyref {fields} cardinality mismatch) succeeded, want c-props-correct error")
+			}
+			assertRule(t, err, "c-props-correct")
+			// Both clauses charge c-props-correct, so the rule alone does not say
+			// which one fired; the message must name clause 2.
+			if !strings.Contains(err.Error(), "clause 2") {
+				t.Errorf("Finalize error = %q, want it to cite c-props-correct clause 2", err)
+			}
+		})
+	}
+}
+
+func TestResolveKeyrefFieldCardinalityMatch(t *testing.T) {
+	// The same shape with equal cardinality satisfies clause 2 and finalizes.
+	b := xsd.NewSchemaBuilder()
+	b.AddIdentityConstraint(keyOrRefFields(t, qn("k"), xsd.IdentityConstraintKey, xsd.QName{}, 3))
+	b.AddIdentityConstraint(keyOrRefFields(t, qn("kr"), xsd.IdentityConstraintKeyref, qn("k"), 3))
+	if _, err := b.Finalize(); err != nil {
+		t.Fatalf("Finalize(keyref {fields} cardinality match): %v", err)
+	}
+}
+
+func TestResolveKeyrefReachedByBothWalks(t *testing.T) {
+	// resolveKeyref is reached from two places: resolveReferences' direct walk over
+	// the top-level {identity-constraint definitions}, and resolveElementDecl's
+	// walk over an element's nested ones. An IDC that sits in both — nested under
+	// element e AND registered top-level, as a <key>/<keyref> declared inside an
+	// <element> is — is therefore visited twice. That must be idempotent: two
+	// clean passes, not a duplicate-name or double-registration failure.
+	k := keyOrRefFields(t, qn("k"), xsd.IdentityConstraintKey, xsd.QName{}, 2)
+	kr := keyOrRefFields(t, qn("kr"), xsd.IdentityConstraintKeyref, qn("k"), 2)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("e"), xsd.QName{}, nil, xsd.ScopeGlobal, nil, false,
+		[]xsd.IdentityConstraint{k, kr}, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("NewElementDeclaration: %v", err)
+	}
+	if got := len(e.IdentityConstraints()); got != 2 {
+		t.Fatalf("element {identity-constraint definitions} count = %d, want 2", got)
+	}
+	b := xsd.NewSchemaBuilder()
+	b.AddElement(e)
+	b.AddIdentityConstraint(k)
+	b.AddIdentityConstraint(kr)
+	if _, err := b.Finalize(); err != nil {
+		t.Fatalf("Finalize(keyref reached by both walks): %v", err)
+	}
+
+	// And the element walk enforces clause 2 too: widening only the nested keyref
+	// (leaving the top-level pair matched) must still be rejected.
+	wide := keyOrRefFields(t, qn("kr"), xsd.IdentityConstraintKeyref, qn("k"), 5)
+	eWide, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("e"), xsd.QName{}, nil, xsd.ScopeGlobal, nil, false,
+		[]xsd.IdentityConstraint{wide}, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("NewElementDeclaration (wide): %v", err)
+	}
+	b2 := xsd.NewSchemaBuilder()
+	b2.AddElement(eWide)
+	b2.AddIdentityConstraint(k)
+	_, err = b2.Finalize()
+	if err == nil {
+		t.Fatal("Finalize(nested keyref cardinality mismatch) succeeded, want c-props-correct error")
+	}
+	assertRule(t, err, "c-props-correct")
 }
 
 func TestResolveSelfCircularComplexBase(t *testing.T) {
