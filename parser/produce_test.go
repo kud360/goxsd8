@@ -582,3 +582,67 @@ func assertRule(t *testing.T, err error, want xsderr.Rule) {
 		t.Fatalf("error charged %s, want %s (%v)", got, want, err)
 	}
 }
+
+// TestProduceNotQNameKeywords pins the §3.10.2.2 notQName mapping: the ##defined
+// and ##definedSibling keyword tokens are mapped (no longer skipped) alongside
+// the literal QName members, which keep their cvc-wildcard-name clause-2 effect.
+func TestProduceNotQNameKeywords(t *testing.T) {
+	// A target namespace is needed so the tns: prefix of the literal member
+	// resolves (an unresolvable prefix is dropped — #232, out of scope here).
+	body := `<xs:complexType name="CT"><xs:sequence>` +
+		`<xs:any notQName="##defined ##definedSibling tns:foo"/>` +
+		`</xs:sequence></xs:complexType>`
+	s, err := produce(t, wrap("urn:x", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, ok := s.Type(xsd.QName{Space: "urn:x", Local: "CT"})
+	if !ok {
+		t.Fatalf("complex type CT not found")
+	}
+	mg := topGroup(t, td.(xsd.ComplexType))
+	wc, ok := mg.Particles()[0].Term().(xsd.ResolvedTerm).Term.(xsd.Wildcard)
+	if !ok {
+		t.Fatalf("term = %T, want Wildcard", mg.Particles()[0].Term())
+	}
+	// The literal member still governs cvc-wildcard-name (§3.10.4.2) clause 2;
+	// the keywords are resolved by cvc-wildcard (§3.10.4.1) clauses 2-3, a
+	// different rule at the declaration-graph layer, so they leave AllowsName
+	// alone.
+	if wc.AllowsName(xsd.QName{Space: "urn:x", Local: "foo"}) {
+		t.Errorf("AllowsName admitted the literal notQName member {urn:x}foo")
+	}
+	if !wc.AllowsName(xsd.QName{Space: "urn:x", Local: "bar"}) {
+		t.Errorf("AllowsName rejected a name in no half of {disallowed names}")
+	}
+}
+
+// TestProduceNotQNameRejections pins that an unrecognized ## token — including
+// ##definedSibling on an <anyAttribute>, whose notQName is typed xs:qnameListA
+// (§3.10.2, the machine-checkable form of w-props-correct clause 5) — is a
+// datatype-validity rejection, never a silent skip.
+func TestProduceNotQNameRejections(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"unknown-token-on-any", `<xs:complexType name="CT"><xs:sequence><xs:any notQName="##foo"/></xs:sequence></xs:complexType>`},
+		{"unknown-token-on-anyAttribute", `<xs:complexType name="CT"><xs:sequence/><xs:anyAttribute notQName="##foo"/></xs:complexType>`},
+		{"definedSibling-on-anyAttribute", `<xs:complexType name="CT"><xs:sequence/><xs:anyAttribute notQName="##definedSibling"/></xs:complexType>`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:x", c.body))
+			if err == nil {
+				t.Fatalf("Produce accepted %s, want a cvc-datatype-valid rejection", c.body)
+			}
+			if rule, ok := xsderr.RuleOf(err); !ok || rule != xsderr.Rule("cvc-datatype-valid") {
+				t.Errorf("RuleOf = (%q, %v), want (%q, true)", rule, ok, "cvc-datatype-valid")
+			}
+		})
+	}
+	// ##defined stays legal on an attribute wildcard (cvc-wildcard clause 2.2).
+	if _, err := produce(t, wrap("urn:x", `<xs:complexType name="CT"><xs:sequence/><xs:anyAttribute notQName="##defined"/></xs:complexType>`)); err != nil {
+		t.Errorf("Produce rejected notQName=\"##defined\" on <anyAttribute>: %v", err)
+	}
+}

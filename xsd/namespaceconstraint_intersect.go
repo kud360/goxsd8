@@ -25,14 +25,21 @@ import "github.com/kud360/goxsd8/xsderr"
 // Case 1 needs no special arm: two identical enumeration sets intersect to that
 // set (case 3) and two identical not sets union to that set (case 4).
 //
-// The result's {disallowed names} is the union of a's members whose namespace
-// name b admits with b's members whose namespace name a admits (§3.10.6.4). This
-// filter is applied EXPLICITLY here — never by handing the unfiltered union to
+// The result's {disallowed names} is built from the §3.10.6.4 three-bullet list.
+// Bullets 1-2 (the QName half): a's members whose namespace name b admits,
+// followed by b's members whose namespace name a admits. That filter is applied
+// EXPLICITLY here — never by handing the unfiltered union to
 // NewNamespaceConstraint, whose w-props-correct clause-4 check REJECTS a
-// disallowed name the spec would silently drop rather than dropping it. The
-// ##defined keyword clause of that union is inapplicable: this package does not
-// represent the defined/sibling keywords at all (the GAP marker on
-// NewNamespaceConstraint), so it contributes nothing.
+// disallowed name the spec would silently drop rather than dropping it.
+// Bullet 3 (the keyword half): "the keyword defined if it is a member of EITHER
+// {disallowed names}" — set UNION, so an operand carrying defined imposes it on
+// the intersection. Do NOT transpose this with cos-aw-union (§3.10.6.3), whose
+// corresponding clause is an AND ("contained in BOTH"): wildcard intersection is
+// OR for defined, wildcard union is AND. The keyword sibling has no bullet in
+// this formula and is never propagated, because cos-aw-intersect combines
+// ATTRIBUTE wildcards only and w-props-correct clause 5 forbids sibling on one —
+// so an operand carrying it is unreachable here, and no defensive branch guards
+// against it.
 //
 // The result is built through NewNamespaceConstraint, so w-props-correct clauses
 // 1-4 (§3.10.6.1) are re-checked and {namespaces}/{disallowed names} are
@@ -51,7 +58,7 @@ import "github.com/kud360/goxsd8/xsderr"
 func IntersectNamespaceConstraint(loc xsderr.Loc, a, b NamespaceConstraint) (NamespaceConstraint, error) {
 	variety, namespaces := intersectVarietyAndSet(a, b)
 	disallowed := intersectDisallowedNames(a, b)
-	return NewNamespaceConstraint(loc, variety, namespaces, disallowed)
+	return NewNamespaceConstraint(loc, variety, namespaces, disallowed, intersectDisallowedNameKeywords(a, b))
 }
 
 // intersectVarietyAndSet computes the {variety}/{namespaces} of the intersection
@@ -84,7 +91,7 @@ func intersectVarietyAndSet(a, b NamespaceConstraint) (NamespaceConstraintVariet
 // A member the OTHER operand's namespace test rejects is silently DROPPED (the
 // spec's filter) rather than carried into NewNamespaceConstraint, whose clause-4
 // check would reject it. The seen-free append may leave a cross-operand duplicate;
-// NewNamespaceConstraint's dedupQNames removes it (STYLE T4).
+// NewNamespaceConstraint's dedupSlice removes it (STYLE T4).
 func intersectDisallowedNames(a, b NamespaceConstraint) []QName {
 	var out []QName
 	for _, name := range a.disallowedNames {
@@ -98,6 +105,23 @@ func intersectDisallowedNames(a, b NamespaceConstraint) []QName {
 		}
 	}
 	return out
+}
+
+// intersectDisallowedNameKeywords computes the keyword half of the
+// intersection's {disallowed names} (§3.10.6.4 bullet 3): the keyword defined if
+// it is a member of EITHER operand's {disallowed names} — a set union, NOT the
+// intersection the surrounding operation's name suggests, and NOT the "member of
+// both" that cos-aw-union (§3.10.6.3) specifies for the union operation.
+//
+// sibling is never propagated: this formula combines attribute wildcards only,
+// and w-props-correct clause 5 forbids sibling on one, so an operand carrying it
+// cannot reach here (rejectSiblingOnAttributeWildcard rejects it at the tableau
+// slot). Nothing therefore reads the operands' sibling membership.
+func intersectDisallowedNameKeywords(a, b NamespaceConstraint) []DisallowedNameKeyword {
+	if !a.hasDisallowedNameKeyword(DisallowedNameDefined) && !b.hasDisallowedNameKeyword(DisallowedNameDefined) {
+		return nil
+	}
+	return []DisallowedNameKeyword{DisallowedNameDefined}
 }
 
 // intersectNamespaces returns the members of a that are also members of b, in a's

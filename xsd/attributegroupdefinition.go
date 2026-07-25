@@ -66,6 +66,12 @@ type AttributeGroupDefinition struct {
 // union is folded in by the producer (§3.6.2.1, mapping time) before it calls
 // this constructor, so the members passed here are already complete.
 //
+// It also rejects one state Wildcard Properties Correct (§3.10.6.1,
+// w-props-correct) clause 5 forbids, charged to that rule rather than to
+// ag-props-correct: an {attribute wildcard} whose {namespace constraint}
+// carries the sibling keyword. This slot is one of the two places an attribute
+// wildcard is identifiable as such; see rejectSiblingOnAttributeWildcard.
+//
 // attributeUses and annotations are copied; the caller's backing arrays are not
 // aliased, and an empty input is held as nil. wildcard is a pointer so absence
 // (nil) is distinct from a present zero record (mirroring elementdeclaration.go's
@@ -85,6 +91,9 @@ func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []Att
 				"attribute group definition {attribute uses}[%d] repeats the expanded name %s, but ag-props-correct clause 2 forbids two attribute uses whose {attribute declaration}s share an expanded name", i, expanded)
 		}
 		seen[expanded] = struct{}{}
+	}
+	if err := rejectSiblingOnAttributeWildcard(loc, wildcard); err != nil {
+		return AttributeGroupDefinition{}, err
 	}
 	g := AttributeGroupDefinition{name: name}
 	if len(attributeUses) > 0 {

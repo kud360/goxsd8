@@ -103,7 +103,7 @@ func TestNewAttributeGroupDefinitionDistinctNamespacesNotDuplicate(t *testing.T)
 }
 
 func TestNewAttributeGroupDefinitionWildcardPresent(t *testing.T) {
-	nc, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintAny, nil, nil)
+	nc, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintAny, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewNamespaceConstraint: %v", err)
 	}

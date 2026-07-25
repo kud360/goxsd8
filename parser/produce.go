@@ -26,6 +26,14 @@ const (
 	ruleParticleCorr          xsderr.Rule = "p-props-correct"
 	ruleWildcardCorr          xsderr.Rule = "w-props-correct"
 	ruleSrcIdentityConstraint xsderr.Rule = "src-identity-constraint"
+	// ruleDatatypeValid is the generic "this attribute's value is not valid
+	// against the simple type the schema for schema documents declares for it"
+	// rule (Datatypes §4.1.4, cvc-datatype-valid). It is charged where a schema
+	// document attribute fails its own declared type and no Structures Schema
+	// Representation Constraint covers the case — notably an unrecognized ##
+	// token in notQName, whose value space is fixed by xs:qnameList/xs:qnameListA
+	// (§3.10.2) rather than by any src-wildcard clause.
+	ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 )
 
 // Produce maps the TOP-LEVEL <simpleType>, <element>, <attribute>,

@@ -88,7 +88,11 @@
 //	    Resolver as root schemas.
 //
 // Schema-validity violations are *xsderr.Error values carrying src-*/
-// cos-*/derivation-ok-* rules. PLANNED (not yet implemented): collecting
+// cos-*/derivation-ok-* rules — plus cvc-datatype-valid where a schema
+// document attribute is simply not valid against the type the schema for
+// schema documents declares for it (e.g. an unrecognized ## token in
+// notQName, §3.10.2), which no Schema Representation Constraint covers.
+// PLANNED (not yet implemented): collecting
 // them in document order rather than stopping at the first — [Parse] and
 // [Produce] both return only the first error today.
 package parser
