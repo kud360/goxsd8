@@ -42,6 +42,21 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     chain (ct-props-correct clause 3), <group ref> graph (mg-props-correct
 //     clause 2), and substitution-group affiliation graph (e-props-correct clause
 //     5).
+//   - Phase C (content-model validity): reject the two §3.8.6 Model Group
+//     constraints that read a whole content model with its <group ref>s expanded
+//     and its <element ref>s and substitution groups followed — Unique Particle
+//     Attribution (cos-nonambig, particleattribution.go) and Element Declarations
+//     Consistent (cos-element-consistent, elementconsistent.go).
+//
+// Phase C runs strictly after Phase B, and that ordering is load-bearing rather
+// than cosmetic: both checks expand <group ref>s and walk {substitution group
+// affiliations} with NO cycle guard, which is licensed only because
+// checkModelGroupsAcyclic and checkSubstitutionGroupsAcyclic have already
+// rejected a circular graph of each kind (PRINCIPLES 5). Neither follows {base
+// type definition}, which §3.4.7 permits to be self-referential. The two
+// schema-global substitution-group facts both checks need are computed once here
+// and threaded as a parameter, never stored on the Schema (STYLE D3); see
+// substitutiongroup.go.
 //
 // resolve stores nothing: it returns no value and mutates no component. A
 // consumer that later wants the component behind a reference obtains it by a
@@ -76,7 +91,14 @@ func (s *Schema) resolve() error {
 	if err := s.checkModelGroupsAcyclic(); err != nil {
 		return err
 	}
-	return s.checkSubstitutionGroupsAcyclic()
+	if err := s.checkSubstitutionGroupsAcyclic(); err != nil {
+		return err
+	}
+	facts := s.substitutionFacts()
+	if err := s.checkContentModelsUnambiguous(facts); err != nil {
+		return err
+	}
+	return s.checkElementDeclarationsConsistent(facts)
 }
 
 // resolveReferences is Phase A: it walks every reference site in document order,

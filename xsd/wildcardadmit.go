@@ -194,7 +194,7 @@ func (s *Schema) topLevelDeclarationMatchesName(declared, name QName) bool {
 	if declared == name {
 		return true
 	}
-	return s.inSubstitutionGroupOf(name, declared)
+	return s.mayBeInSubstitutionGroupOf(name, declared)
 }
 
 // inlineDeclarationMatchesName is topLevelDeclarationMatchesName for a
@@ -211,75 +211,5 @@ func (s *Schema) inlineDeclarationMatchesName(d ElementDeclaration, name QName) 
 	if d.ScopeVariety() != ScopeGlobal {
 		return false
 	}
-	return s.inSubstitutionGroupOf(name, d.Name())
-}
-
-// inSubstitutionGroupOf reports whether the top-level element declaration named
-// member is ·substitutable· for the declaration named head, i.e. whether member
-// is in head's ·substitution group· (§3.3.6.4, key-eq), per Substitution Group OK
-// (Transitive) (§3.3.6.3, cos-equiv-derived-ok-rec):
-//
-//   - clause 1 (same declaration) is the caller's == test;
-//   - clause 2.1: head's {disallowed substitutions} must not contain
-//     substitution. The rule tests HEAD's property only — intermediate
-//     declarations on the affiliation chain are not consulted, and the spec says
-//     "intermediate" only in clause 2.3, about type definitions;
-//   - clause 2.2: there is a chain of {substitution group affiliations} from
-//     member to head. The chain is walked with no visited set: Finalize's
-//     checkSubstitutionGroupsAcyclic (e-props-correct clause 5) has already
-//     rejected a circular affiliation graph.
-//
-// {abstract} plays NO part: it appears nowhere in cos-equiv-derived-ok-rec, so an
-// abstract declaration genuinely in the substitution group still counts as
-// implicitly contained for cvc-wildcard clause 3.
-//
-// Membership is decided by walking the affiliation chain UPWARD from member (one
-// index point lookup per hop), not by scanning {element declarations} for every
-// member of head's group: the question here is membership of ONE name, and the
-// upward walk answers exactly that. No map is ever ranged, and no iteration order
-// reaches the result (STYLE D2).
-//
-// PARTIAL (fail-closed, not fail-open): clause 2.3 — the {derivation method}s
-// involved in deriving member's {type definition} from head's must not intersect
-// head's {disallowed substitutions}, head's type's {prohibited substitutions}, or
-// any intermediate type's — is NOT implemented. It needs a type-derivation walk
-// over resolved type definitions, which anonymous types (a zero {type definition}
-// QName) cannot supply here. Omitting a blocking clause OVER-approximates
-// membership, so the substitution group computed here is a superset of the true
-// one: for cvc-wildcard clause 3 that means a name may be disallowed that the
-// spec would admit — a false-reject, never a false-accept (the direction #51's
-// acceptance criteria forbid). No caller exists until M5, so nothing observes it
-// yet.
-func (s *Schema) inSubstitutionGroupOf(member, head QName) bool {
-	h, ok := s.Element(head)
-	if !ok {
-		return false // a local declaration heads no substitution group
-	}
-	for _, m := range h.DisallowedSubstitutions() {
-		if m == DerivationSubstitution {
-			return false // clause 2.1
-		}
-	}
-	return s.affiliationChainReaches(member, head)
-}
-
-// affiliationChainReaches reports whether a chain of {substitution group
-// affiliations} runs from the top-level element declaration named member to head
-// (cos-equiv-derived-ok-rec clause 2.2). Affiliations are followed in document
-// order (STYLE D2); the walk terminates without a visited set because Finalize
-// rejected a circular affiliation graph (e-props-correct clause 5).
-func (s *Schema) affiliationChainReaches(member, head QName) bool {
-	m, ok := s.Element(member)
-	if !ok {
-		return false
-	}
-	for _, aff := range m.SubstitutionGroupAffiliationNames() {
-		if aff == head {
-			return true
-		}
-		if s.affiliationChainReaches(aff, head) {
-			return true
-		}
-	}
-	return false
+	return s.mayBeInSubstitutionGroupOf(name, d.Name())
 }
