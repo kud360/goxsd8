@@ -37,3 +37,6 @@ go.work.sum
 
 # Build output
 bin/
+
+# Isolated agent worktrees (Agent tool isolation:"worktree" scratch checkouts)
+.claude/worktrees/

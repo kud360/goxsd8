@@ -16,9 +16,12 @@ import "github.com/kud360/goxsd8/xsderr"
 //     paralleling NewTypeTable enforcing e-props-correct clause 6.
 //
 // The §3.6.2.2 aspect of {attribute uses} — the union that folds in the
-// {attribute uses} of referenced <attributeGroup>s — is a cross-component
-// finalize-phase concern (it needs the referenced groups resolved) and is
-// deferred to #173; this constructor validates only the direct members in hand.
+// {attribute uses} of referenced <attributeGroup>s — is resolved at PRODUCER
+// mapping time, not finalize: §3.6.2.1 inlines each <attributeGroup ref> when the
+// group is mapped, so the producer hands this constructor the already-computed
+// union (matching xsd/resolve.go's "inlined at producer mapping time with no
+// persistent ref component"). This constructor therefore validates the complete
+// members it is given, not just a container's direct <attribute> children.
 const ruleAgPropsCorrect xsderr.Rule = "ag-props-correct"
 
 // AttributeGroupDefinition is the Attribute Group Definition component
@@ -59,8 +62,9 @@ type AttributeGroupDefinition struct {
 // Declaration.Name(), an AttributeDeclarationRef via its Name.
 //
 // clause 1 is satisfied by construction (the sum and optional-slot machinery
-// already make ill-formed members unrepresentable), and the §3.6.2.2
-// referenced-group union is deferred to finalize (#173).
+// already make ill-formed members unrepresentable); the §3.6.2.2 referenced-group
+// union is folded in by the producer (§3.6.2.1, mapping time) before it calls
+// this constructor, so the members passed here are already complete.
 //
 // attributeUses and annotations are copied; the caller's backing arrays are not
 // aliased, and an empty input is held as nil. wildcard is a pointer so absence
