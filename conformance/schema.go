@@ -170,7 +170,9 @@ import (
 //     src-identity-constraint §3.11.3, c-props-correct §3.11.6.1,
 //     n-props-correct §3.14.6, and for
 //     the complex-type subset src-ct §3.4.3, cos-all-limited §3.8.6, src-wildcard
-//     §3.10.3, p-props-correct §3.9.6), never a fabricated one — the shape
+//     §3.10.3, p-props-correct §3.9.6, cos-nonambig §3.8.6.4,
+//     cos-element-consistent §3.8.6.3, ct-props-correct §3.4.6.1 and
+//     derivation-ok-restriction §3.4.6.3), never a fabricated one — the shape
 //     allowlist excludes every case whose rejection would be a
 //     limitation-in-disguise. The case Passes iff observed agrees with the suite's
 //     declared validity.
@@ -218,10 +220,11 @@ import (
 // not-yet-produced complexType forms — <simpleContent>, <complexContent>
 // <extension>, inline anonymous local types, <openContent>) where the producer's
 // rejection would be a limitation rather than a spec violation. A
-// suite-invalid case whose only defect is a rule this slice does NOT yet check
-// (UPA cos-nonambig, EDC, derivation-ok-restriction) is produced cleanly, so the
-// lane observes "valid", disagrees with the suite, and records a still-failing
-// gap — never a wrong "invalid" pass. The remaining risk the allowlist closes is
+// suite-invalid case whose only defect is a rule finalize does NOT yet check
+// (cos-content-act-restrict — derivation-ok-restriction clause 2.4.2, #263 — or
+// cos-ns-subset, #265) is produced cleanly, so the lane observes "valid",
+// disagrees with the suite, and records a still-failing gap — never a wrong
+// "invalid" pass. The remaining risk the allowlist closes is
 // the VACUOUS pass — a document of entirely skipped top-level content that would
 // otherwise always "pass" through a producer doing nothing — which is why step 3
 // confines the whole top level of EVERY document in the closure to the processed
@@ -248,10 +251,11 @@ import (
 // simpleTypes, ref= identity constraints, and the not-yet-produced complexType
 // forms named above widen in with later producer slices (exactly
 // as the datatypes lane grew across #15/#57/#80); they stay DECLINED (Fail)
-// recorded gaps here, never guessed. The derivation-validity, UPA, and EDC rules
-// (#180/#181) that would newly reject some admitted complexType cases as invalid
-// are separate slices; until they land, those suite-invalid cases stay failing
-// gaps rather than wins.
+// recorded gaps here, never guessed. UPA and EDC landed with #180 and
+// derivation-ok-restriction with #262, so the admitted complexType cases those
+// rules reject are now decided; the restriction cases still turning on
+// cos-content-act-restrict (#263) or cos-ns-subset (#265) stay failing gaps
+// rather than wins until those land.
 //
 // A schemaTest with MORE THAN ONE <ts:schemaDocument> child is decided against the
 // wrong document (the runner keeps only one, #238, unlanded). That defect is

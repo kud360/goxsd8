@@ -22,23 +22,32 @@ import "github.com/kud360/goxsd8/xsderr"
 //
 //   - clause 1's resolved-component parts and clause 2 ({base type definition} a
 //     simple type forces {derivation method} = extension) need the {base type
-//     definition} RESOLVED, which this constructor does not do. Clause 3 (no
-//     circular {base type definition} chain except xs:anyType) IS enforced, but
-//     at finalize (resolve.go's checkComplexBaseAcyclic, #173) — it needs the
-//     whole base graph, which only exists once the schema set is assembled;
+//     definition} RESOLVED, which this constructor does not do. Clause 2 IS
+//     enforced, but at finalize (Phase D, complexderivation.go's
+//     checkSimpleBaseIsExtension, #262). Clause 3 (no circular {base type
+//     definition} chain except xs:anyType) is likewise enforced at finalize
+//     (Phase B, resolve.go's checkComplexBaseAcyclic, #173) — it needs the whole
+//     base graph, which only exists once the schema set is assembled;
 //   - clause 4 (no two {attribute uses} share an {attribute declaration}
-//     expanded name) is left to the producer/finalize layer for this component
-//     (unlike AttributeGroupDefinition, whose own ag-props-correct clause 2 is
-//     enforced at shape time);
+//     expanded name) needs the Ref variant of {attribute declaration} resolved,
+//     so it too is enforced at finalize (Phase D,
+//     checkAttributeUseNamesUnique, #262) rather than at shape time (unlike
+//     AttributeGroupDefinition, whose own ag-props-correct clause 2 is enforced
+//     at shape time over uses it already owns);
 //   - clause 5 ({content type}.{open content} non-absent ⇒ {variety} is
-//     element-only or mixed) is satisfied BY CONSTRUCTION: {open content} is a
-//     field only of ElementContent, whose {variety} is always element-only or
-//     mixed, so the forbidden state is unrepresentable.
+//     element-only or mixed) is satisfied BY CONSTRUCTION and gets no runtime
+//     check anywhere, at shape time or at finalize: {open content} is a field
+//     only of ElementContent, whose Variety() is a total function over one bool
+//     returning element-only or mixed and nothing else, so the forbidden state is
+//     unrepresentable and a test for it would be dead code.
 //
-// The derivation-validity rules cos-ct-extends (§3.4.6.2), derivation-ok-restriction
-// (§3.4.6.3), and cos-content-act-restrict (§3.4.6.4) are cross-component
-// finalize-phase concerns and are likewise NOT touched here; they are deferred
-// to the producer (#176) and finalize (#173/#181).
+// Of the derivation-validity rules, derivation-ok-restriction (§3.4.6.3) IS
+// enforced, at finalize (Phase D, complexderivation.go, #262) — every clause but
+// 2.4.2, whose cos-content-act-restrict (§3.4.6.4) delegate is #263 and is
+// provisionally accepted under §3.4.6.3's own implementation-defined licence.
+// cos-ct-extends (§3.4.6.2) is untouched: no producer builds an
+// extension-derived complex type yet (#264). None of them is touched HERE — they
+// are cross-component finalize-phase concerns, not tableau shape.
 const ruleCTPropsCorrect xsderr.Rule = "ct-props-correct"
 
 // ContentType is the sealed sum of the four Content Type varieties of a Complex
@@ -194,9 +203,11 @@ func (o OpenContent) Wildcard() Wildcard {
 // complex-type base chain is acyclic except xs:anyType's self-derivation
 // (ct-props-correct clause 3), but does NOT rewrite it into a resolved
 // component: the QName is retained, and a consumer follows it by a read-time
-// schema.Type(name) lookup. Clause 2 and clause 1's resolved parts, plus the
-// derivation-validity rules (cos-ct-extends §3.4.6.2, derivation-ok-restriction
-// §3.4.6.3), stay deferred to the producer (#176) and later finalize work.
+// schema.Type(name) lookup. Finalize also charges ct-props-correct clauses 2 and
+// 4 and, for a restriction, derivation-ok-restriction (§3.4.6.3) against the
+// resolved base (Phase D, complexderivation.go, #262). Clause 1's remaining
+// resolved parts and cos-ct-extends (§3.4.6.2) stay deferred: no producer builds
+// an extension-derived complex type yet (#264).
 //
 // {context} (§3.4.1 ctd-context — the component an anonymous type appears in) is
 // entirely UNMODELED by this issue, exactly as ElementDeclaration leaves

@@ -47,6 +47,11 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     and its <element ref>s and substitution groups followed — Unique Particle
 //     Attribution (cos-nonambig, particleattribution.go) and Element Declarations
 //     Consistent (cos-element-consistent, elementconsistent.go).
+//   - Phase D (complex-type derivation validity): reject the derivation-relative
+//     constraints that need the resolved {base type definition} — the
+//     ct-props-correct (§3.4.6.1) clauses 2 and 4, and
+//     derivation-ok-restriction (§3.4.6.3) for every restriction-derived complex
+//     type (complexderivation.go, defaultbinding.go, effectivetotalrange.go).
 //
 // Phase C runs strictly after Phase B, and that ordering is load-bearing rather
 // than cosmetic: both checks expand <group ref>s and walk {substitution group
@@ -57,6 +62,14 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // schema-global substitution-group facts both checks need are computed once here
 // and threaded as a parameter, never stored on the Schema (STYLE D3); see
 // substitutiongroup.go.
+//
+// Phase D runs last, and its position after each earlier phase is load-bearing
+// too — it needs Phase A's resolvability, Phase B's acyclicity (it walks {base
+// type definition} chains and <group ref> edges with no visited set), and Phase
+// C's cos-element-consistent (which is what makes the ·locally declared type· of
+// an element name within one content model a function rather than a relation,
+// without which derivation-ok-restriction clause 4 would not be statable). See
+// checkComplexDerivations' own doc for the full statement.
 //
 // resolve stores nothing: it returns no value and mutates no component. A
 // consumer that later wants the component behind a reference obtains it by a
@@ -98,7 +111,10 @@ func (s *Schema) resolve() error {
 	if err := s.checkContentModelsUnambiguous(facts); err != nil {
 		return err
 	}
-	return s.checkElementDeclarationsConsistent(facts)
+	if err := s.checkElementDeclarationsConsistent(facts); err != nil {
+		return err
+	}
+	return s.checkComplexDerivations()
 }
 
 // resolveReferences is Phase A: it walks every reference site in document order,
