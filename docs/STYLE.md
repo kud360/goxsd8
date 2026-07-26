@@ -142,9 +142,19 @@ quote the clause in the commit message.
 spec rule being implemented, invariants, why a spec-deviation is deliberate.
 Never narrate the next line.
 
-**P3. Fail-open XPath gaps are tracked.** Every unsupported-construct
-fallback carries `// GAP(<area>): <construct>` so gaps are greppable and
-ratchetable.
+**P3. Deliberate gaps are tracked, and `GAP(` is the only token that
+tracks them.** Every unsupported-construct fallback — fail-open XPath
+first, but any deliberate incompleteness anywhere — carries
+`// GAP(<area>): <construct>` so gaps are greppable and ratchetable. The
+parenthesis is load-bearing: the debt sweep is `grep -rn "GAP("`, so
+`// GAP:` without parens, or a marker spelled `PARTIAL`/`TODO`/`XXX`, is
+invisible to it and does not count as tracked debt no matter how honest
+the prose around it is. `<area>` is the package or spec area
+(`GAP(xpath)`, `GAP(xsd)`, `GAP(datatypes)`), never a rule ID or clause
+number — rule IDs go in the text after the colon. A gap whose retirement
+is owned by an issue names that issue in the text, and the issue must
+still be open: a marker pointing at a closed issue is a dead end, so
+repoint it in the landing that closes the owner.
 
 **P4. Stream from the start.** Bounded memory on every input path: no
 `io.ReadAll`, no whole-document buffering. Position tracking uses an
