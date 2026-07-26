@@ -16,7 +16,9 @@ Value implementations, parsing, validation, and generation live above them.
                  regex           (one engine, XSD + F&O flavors)
                  parser/xmltree  (position-tracking XML; independent)
                  loader          (schema resolution interfaces)
-                 parser          (schema docs -> xsd components)
+                 parser          (schema docs -> xsd components; imports xmltree, loader,
+                                  xsd, value, builtin — and builtin/strict, as the DEFAULT
+                                  backend Parse seeds when the caller supplies none)
                  xpath           (XPath 2.0 engine; imports value)
                  validate        (instance validation; adapters xmlsrc, jsonsrc, bersrc)
                  codegen  codec  (generation; dataset ser/de)
@@ -121,9 +123,26 @@ represents it**:
   cycle check (STYLE D4): (1) parse schema documents into raw form,
   (2) resolve QName references through a symbol table,
   (3) finalize in dependency order — a component's base/item/member types
-  are complete before it is. Spec-forbidden circularities (`st-props-correct`
-  circular unions, circular substitution groups, …) are rejected at phase 3
-  with their named rule.
+  are complete before it is. Spec-forbidden circularities are rejected with
+  their named rule, once.
+
+  **Where they are rejected is currently split, and that split is not the
+  design — it is drift to be repaired** (steward audit 2026-07-26). The phase-3
+  home holds the references `xsd` stores as QNames: the complex-type base
+  chain (`ct-props-correct` cl. 3), the `<group ref>` graph
+  (`mg-props-correct` cl. 2), and substitution-group affiliation
+  (`e-props-correct` cl. 5), all in `xsd/resolve.go`. But `xsd` stores a
+  simple type's `{base type definition}` as a **live pointer**, not a QName,
+  and inlines `<attributeGroup ref>` at mapping time with no ref component —
+  so those two must be resolved eagerly by the producer, and their
+  circularity rejection (`st-props-correct` cl. 2) lives in
+  `parser/produce.go`, carrying its own copy of `resolve.go`'s color-map
+  idiom. One spec concern, two homes, chosen by per-component representation
+  accident; `src-resolve` cl. 1.1 is consequently charged from both packages.
+  Unifying on the QName-plus-index representation is a pre-1.0 refactor
+  (finding F1 of the 2026-07-26 audit, docs/LOG) and should land before `<list>`/`<union>` (which add item/member
+  pointers) and before `<import>`/`<redefine>`/`<override>` (which re-point
+  base references).
 - All child collections are slices in document order. Maps exist only as
   internal indexes and never determine any order.
 - Nothing derivable is stored (STYLE D3): no effective-facet caches —
@@ -161,6 +180,32 @@ Two access styles over the compiled model, one shared core:
   instance hints route through the same interface so multi-schema loading
   stays in one place. Multiple root schemas load into one set; the loader
   dedupes by resolved location.
+
+- `parser`: the schema-document compiler — the M4 spine, and the only
+  writer of `xsd` components. `Parse(location, opts…)` reads the root
+  document through one `loader.Resolver`, walks the `<xs:include>` closure
+  (§4.2.3) depth-first in document order with a load-once index keyed by
+  resolved location (document identity, *not* a cycle guard — include
+  cycles are spec-legal), applies chameleon coercion to a
+  no-`targetNamespace` document (§F.1), then produces every document into
+  one shared `xsd.SchemaBuilder` and finalizes. `Produce(doc, backend)` is
+  the single-document entry point and follows no inter-document reference.
+  `<import>`, `<redefine>` and `<override>` are skipped, not rejected
+  (§3.1.2), so a schema needing them assembles short rather than wrongly.
+  The assembly-wide symbol table is seeded with the builtins exactly once
+  (`builtin.Seed`), which is why seeding is assembly-scoped and not
+  per-document: per-document seeding would re-add `xs:string` per included
+  document and trip `sch-props-correct` cl. 2.
+
+  Two properties of this seam are worth stating because consumers depend on
+  them: the backend is a caller-supplied `value.Backend` (`Produce` demands
+  it explicitly; only `Parse` defaults it to `builtin/strict`, which is the
+  one policy edge from `parser` to a concrete backend), and the assembled
+  **document set is not reported** — `Parse` returns components, not the
+  list of documents they came from. The conformance schema lane needs that
+  list to gate every document in a closure, so it re-walks the closure
+  itself, duplicating the parser's own location-resolution verbatim; closing
+  that gap is a pre-1.0 refactor (finding F2 of the 2026-07-26 audit).
 
 ## Regex (`regex`)
 
