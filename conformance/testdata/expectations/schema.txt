@@ -42,7 +42,7 @@ All/all223/schema/all223.xsd fail
 All/all224/schema/all224.xsd fail
 All/all225/schema/all225.xsd pass
 All/all226/schema/all226.xsd pass
-All/all227/schema/all227.xsd fail
+All/all227/schema/all227.xsd pass
 All/all228/schema/all228.xsd pass
 All/all229/schema/all229.xsd fail
 All/all230/schema/all230.xsd pass
@@ -272,8 +272,8 @@ CTA/cta0045/schema/cta0042 pass
 CTA/cta9001err/schema/cta9001err fail
 CTA/cta9002err/schema/cta9002err fail
 CTA/cta9003err/schema/cta9003err fail
-CTA/cta9004err/schema/cta9004err fail
-CTA/cta9005err/schema/cta9005err fail
+CTA/cta9004err/schema/cta9004err pass
+CTA/cta9005err/schema/cta9005err pass
 CTA/cta9006err/schema/cta9006err fail
 CTA/cta9007err/schema/cta9007err fail
 CTA/cta9008err/schema/cta9008err fail
@@ -1390,7 +1390,7 @@ MS-Attribute2006-07-15/attZ001/schema/attZ001 fail
 MS-Attribute2006-07-15/attZ002/schema/attZ002 fail
 MS-Attribute2006-07-15/attZ004/schema/attZ004 fail
 MS-Attribute2006-07-15/attZ005/schema/attZ005 fail
-MS-Attribute2006-07-15/attZ006/schema/attZ006 fail
+MS-Attribute2006-07-15/attZ006/schema/attZ006 pass
 MS-Attribute2006-07-15/attZ007i/schema/attZ007i fail
 MS-Attribute2006-07-15/attZ007v/schema/attZ007v fail
 MS-Attribute2006-07-15/attZ008_a/schema/attZ008_a pass
@@ -1405,7 +1405,7 @@ MS-Attribute2006-07-15/attZ009/schema/attZ009 fail
 MS-Attribute2006-07-15/attZ010a/schema/attZ010a fail
 MS-Attribute2006-07-15/attZ010b/schema/attZ010b fail
 MS-Attribute2006-07-15/attZ010c/schema/attZ010c fail
-MS-Attribute2006-07-15/attZ011/schema/attZ011 fail
+MS-Attribute2006-07-15/attZ011/schema/attZ011 pass
 MS-Attribute2006-07-15/attZ012/schema/attZ012 fail
 MS-Attribute2006-07-15/attZ013a/schema/attZ013a pass
 MS-Attribute2006-07-15/attZ013b/schema/attZ013b pass
@@ -1779,7 +1779,7 @@ MS-ComplexType2006-07-15/ctF002/schema/ctF002 fail
 MS-ComplexType2006-07-15/ctF003/schema/ctF003 fail
 MS-ComplexType2006-07-15/ctF004/schema/ctF004 fail
 MS-ComplexType2006-07-15/ctF005/schema/ctF005 fail
-MS-ComplexType2006-07-15/ctF006/schema/ctF006 fail
+MS-ComplexType2006-07-15/ctF006/schema/ctF006 pass
 MS-ComplexType2006-07-15/ctF007/schema/ctF007 pass
 MS-ComplexType2006-07-15/ctF008/schema/ctF008 fail
 MS-ComplexType2006-07-15/ctF009/schema/ctF009 fail
@@ -2042,7 +2042,7 @@ MS-ComplexType2006-07-15/ctN004/schema/ctN004 fail
 MS-ComplexType2006-07-15/ctO001/schema/ctO001 pass
 MS-ComplexType2006-07-15/ctO002/schema/ctO002 fail
 MS-ComplexType2006-07-15/ctO003/schema/ctO003 pass
-MS-ComplexType2006-07-15/ctO004/schema/ctO004 fail
+MS-ComplexType2006-07-15/ctO004/schema/ctO004 pass
 MS-ComplexType2006-07-15/ctO005/schema/ctO005 fail
 MS-ComplexType2006-07-15/ctO006/schema/ctO006 fail
 MS-ComplexType2006-07-15/ctO007/schema/ctO007 fail
@@ -4670,7 +4670,7 @@ MS-Element2006-07-15/elemZ028a/schema/elemZ028a pass
 MS-Element2006-07-15/elemZ028b/schema/elemZ028b fail
 MS-Element2006-07-15/elemZ028c/schema/elemZ028c fail
 MS-Element2006-07-15/elemZ028d/schema/elemZ028d fail
-MS-Element2006-07-15/elemZ028e/schema/elemZ028e fail
+MS-Element2006-07-15/elemZ028e/schema/elemZ028e pass
 MS-Element2006-07-15/elemZ028f1/schema/elemZ028f1 fail
 MS-Element2006-07-15/elemZ028f2/schema/elemZ028f2 fail
 MS-Element2006-07-15/elemZ028f3/schema/elemZ028f3 fail
@@ -7089,7 +7089,7 @@ MS-Particles2006-07-15/particlesZ013/schema/particlesZ013 fail
 MS-Particles2006-07-15/particlesZ014/schema/particlesZ014 fail
 MS-Particles2006-07-15/particlesZ015/schema/particlesZ015 fail
 MS-Particles2006-07-15/particlesZ016/schema/particlesZ016 fail
-MS-Particles2006-07-15/particlesZ017/schema/particlesZ017 fail
+MS-Particles2006-07-15/particlesZ017/schema/particlesZ017 pass
 MS-Particles2006-07-15/particlesZ018/schema/particlesZ018 fail
 MS-Particles2006-07-15/particlesZ020/schema/particlesZ020 fail
 MS-Particles2006-07-15/particlesZ021/schema/particlesZ021 fail
