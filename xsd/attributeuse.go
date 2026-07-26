@@ -25,8 +25,10 @@ import "github.com/kud360/goxsd8/xsderr"
 // resolved {attribute declaration}.{type definition} to validate the {value
 // constraint}'s {lexical form}, which this package does not resolve yet; it is
 // deferred to finalize (#173). The §3.5.4 key-evc effective value constraint
-// (EffectiveValueConstraint) also needs the resolved declaration for the Ref
-// variant and is deferred to #173; NOT modeled here.
+// needs the resolved declaration for the Ref variant, so it is NOT modeled on
+// this component: it lives at finalize as (*Schema).effectiveValueConstraint
+// (defaultbinding.go, #262), unexported until an external consumer justifies
+// exporting it (STYLE T5).
 const ruleAuPropsCorrect xsderr.Rule = "au-props-correct"
 
 // AttributeDeclarationOrRef is the {attribute declaration} slot of an Attribute
@@ -81,9 +83,10 @@ func (AttributeDeclarationRef) attributeDeclarationRef()   {}
 // Use's {value constraint}, so absence must be representable independently of
 // the sibling declaration. au-props-correct clause 3's variety-agreement half is
 // enforced now for the Local case (see ruleAuPropsCorrect); its {value}-identity
-// half, the Ref case, clause 2 (Simple Default Valid, needs a resolved {type
-// definition}), and the §3.5.4 key-evc EffectiveValueConstraint (needs the
-// resolved declaration for the Ref variant) are deferred to finalize (#173).
+// half, the Ref case, and clause 2 (Simple Default Valid, needs a resolved {type
+// definition}) are deferred to finalize (#173). The §3.5.4 key-evc effective
+// value constraint is computed at finalize instead of here, for the same reason
+// (defaultbinding.go, #262).
 //
 // {required} is the derived boolean fact (true for a "required" use= token,
 // §3.5.1). The §3.2.2 use= XML token itself (AttributeUseToken) is a parse-time
@@ -178,9 +181,10 @@ func (u AttributeUse) AttributeDeclaration() AttributeDeclarationOrRef {
 // Optional); the second result is false when it is absent, in which case the
 // first result is not meaningful.
 //
-// This is the Use's OWN {value constraint}, not the §3.5.4 effective value
-// constraint (key-evc), which falls back to the {attribute declaration}'s and
-// needs the resolved declaration for the Ref variant (deferred to #173).
+// This is the Use's OWN {value constraint}, not the §3.5.4 ·effective value
+// constraint· (key-evc), which falls back to the {attribute declaration}'s and
+// needs the resolved declaration for the Ref variant; that one is computed at
+// finalize by (*Schema).effectiveValueConstraint (defaultbinding.go).
 func (u AttributeUse) ValueConstraint() (ValueConstraint, bool) {
 	return u.valueConstraint, u.hasValueConstraint
 }
