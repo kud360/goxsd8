@@ -360,6 +360,14 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType) bool {
 // The uses are walked in document order, so the first reported failure is
 // deterministic (STYLE D2).
 //
+// What B admits is asked of attributeDefaultBinding, which reads B.{attribute
+// uses} as §3.4.2.4 clause 3 defines it — the base chain folded in, not just the
+// uses the producer mapped onto B itself (foldedAttributeUse, defaultbinding.go).
+// That fold is load-bearing in the REJECT direction and is NOT a gap: in a chain
+// A(@x) ← B(inheriting @x, redeclaring nothing) ← C(re-declaring @x), x is in
+// B.{attribute uses} by inheritance, and charging C for it would be a FALSE
+// REJECT of a valid schema.
+//
 // GAP(xsd): the half of clause 3 that quantifies over the names admitted only by
 // T's {attribute wildcard} is NOT decided. Comparing T's {attribute
 // wildcard}.{namespace constraint} against B's needs Wildcard Subset (§3.10.6.2,
@@ -389,15 +397,16 @@ func (s *Schema) checkRestrictionAttributes(t, b ComplexType) error {
 // with respect to B.
 //
 // GAP(xsd): a required base use with NO same-named use in T at all is skipped
-// rather than charged. §3.4.2.4 clause 3.2 folds the base's uses into a
-// restriction's {attribute uses}, so under a faithful mapping the absent use
-// would be present — and required — while an <attribute use="prohibited"> child,
-// the one thing that removes it (clause 3.2.2), corresponds to no component at
-// all and so leaves no trace to test. No producer in this repo performs that
-// fold yet, so an absent use cannot be distinguished from an inherited one, and
-// charging it would be a FALSE REJECT. Skipping is fail-open (#265). What is
-// charged is the unambiguous case: T declares the name itself and relaxes it to
-// optional, which §3.4.2.4 clause 3.2.1 makes T's own use, inherited nothing.
+// rather than charged. The lookup is findAttributeUse — T's OWN uses, NOT
+// foldedAttributeUse — deliberately: §3.4.2.4 clause 3.2 folds the base's uses
+// into a restriction's {attribute uses}, so a name missing from T's own uses is
+// one T inherits, still required, and charging it would be a FALSE REJECT. The
+// one shape that would deserve charging is clause 3.2.2's <attribute
+// use="prohibited">, which removes the inherited use — but it corresponds to no
+// component at all and so leaves no trace to test. Skipping is fail-open (#265).
+// What is charged is the unambiguous case: T declares the name itself and
+// relaxes it to optional, which §3.4.2.4 clause 3.2.1 makes T's own use,
+// inherited nothing.
 func checkRestrictionRequiredAttributes(t, b ComplexType) error {
 	for _, bu := range b.attributeUses {
 		if !bu.Required() {

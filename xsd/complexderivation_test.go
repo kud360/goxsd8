@@ -272,6 +272,51 @@ func TestDerivationOKRestrictionClause3WildcardAdmits(t *testing.T) {
 	}
 }
 
+// TestDerivationOKRestrictionClause3InheritedAttribute pins the §3.4.2.4 clause
+// 3 fold clause 3 (c-ran) reads B.{attribute uses} through: in the chain
+// A(@x) ← B(inheriting @x, re-declaring nothing) ← C, x IS a member of
+// B.{attribute uses}, even though the producer maps only B's own <attribute>
+// children onto B. Charging C for it would be a false reject.
+//
+// The table's rejecting rows are what keep the passing rows honest: a widened
+// type is still charged (so the inherited use is really found and compared under
+// loc-testSubP clause 5, not waved through), and a name absent from the WHOLE
+// chain is still charged (so the walk does not simply admit everything once it
+// reaches xs:anyType).
+func TestDerivationOKRestrictionClause3InheritedAttribute(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		use    AttributeUse
+		wantOK bool
+	}{
+		{"re-declaring an attribute the base only inherits is valid",
+			dAttr(t, uq("x"), uq("str")), true},
+		{"re-declaring the inherited attribute as required is valid",
+			dAttrUse(t, uq("x"), uq("str"), true, nil), true},
+		{"narrowing the inherited attribute's type is valid",
+			dAttr(t, uq("x"), uq("narrow")), true},
+		{"widening the inherited attribute's type is still charged",
+			dAttr(t, uq("x"), uq("other")), false},
+		{"a name absent from the whole base chain is still charged",
+			dAttr(t, uq("z"), uq("str")), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := dFinalize(t, func(b *SchemaBuilder) {
+				b.AddType(dType(t, uq("A"), anyTypeName, EmptyContent{},
+					[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, nil))
+				b.AddType(dType(t, uq("B"), uq("A"), EmptyContent{}, nil, nil))
+				b.AddType(dType(t, uq("C"), uq("B"), EmptyContent{}, []AttributeUse{tc.use}, nil))
+			})
+			if tc.wantOK && err != nil {
+				t.Fatalf("an attribute the base inherits was rejected: %v", err)
+			}
+			if !tc.wantOK {
+				expectRule(t, err, ruleDerivationOKRestriction)
+			}
+		})
+	}
+}
+
 // TestDerivationOKRestrictionClause3WidenedType pins clause 3 via loc-testSubP
 // clause 5.1: a restriction may narrow an attribute's type but not widen it.
 func TestDerivationOKRestrictionClause3WidenedType(t *testing.T) {
