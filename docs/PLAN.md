@@ -500,6 +500,82 @@ was auto-deleted at merge and its content is on `main` as `71b07a2`. No
 `parked/*` refs. GAP debt unchanged: one real site
 (`xsd/wildcard.go:107`, owned by #248).
 
+Update (2026-07-25/26, develop loop — #63, #180, #262 — not a full backlog
+sweep): **the `schema` lane moved twice more since the paragraph above.** #63
+(`c-props-correct` clause 2 — keyref `{fields}` cardinality vs. the resolved
+`{referenced key}`, the last open M4 leaf follow-up) landed 2026-07-25 with no
+lane movement (no driver exercises keyref resolution yet). #180 (Unique
+Particle Attribution `cos-nonambig` + Element Declarations Consistent
+`cos-element-consistent`, a Glushkov position-automaton reduction of Appendix
+J's non-normative guidance) landed the same day, taking `schema`
+**2951 → 2988 (+37)** — the session's highest-stakes change, closed with a
+first-pass arbiter ACCEPT after a design pre-flight and three grounding
+rounds; see `docs/LOG/2026-07.md`'s 2026-07-25 #180 entry for the full
+account, including the non-blocking finding that the `<all>`-emptiability
+carve-out it introduced was correct but unpinned (filed as **#261**). #262
+(`derivation-ok-restriction` §3.4.6.3 clauses 1/2.1–2.3/2.4.1/3/4/5 plus the
+remaining `ct-props-correct` clauses 2/4) landed 2026-07-26, taking `schema`
+**2988 → 2997 (+9)**, zero new exported identifiers. **#181 is formally
+retired**, split three ways as its own closing comment records: #262
+(closed, above), **#263** (`cos-content-act-restrict` §3.4.6.4 — clause
+2.4.2's delegate, the marathon slice, `ready`), and **#264**
+(`cos-ct-extends` §3.4.6.2 — `blocked` on #228, since nothing produces
+`<extension>` content yet to validate). #52 and #265 were repointed off the
+retired #181 onto #263/#264 as their real `cos-ns-subset` consumers.
+`datatypes` unchanged at 1043/31 (1074); `instance` 0/26426; `xpath`/`json`/
+`ber` empty by design.
+
+**Post-land harvest, both landings:** #180's harvest is #249 (rewritten to
+absorb #180's substitution-group split — `mayBe`/`certainlyInSubstitutionGroupOf`
+— rather than filed twice) and #261 (the emptiability regression test) — both
+already `ready`/`blocked` correctly, re-verified this pass. #262's harvest is
+**#265** (three attribute-side seams: `cos-ns-subset` for clause 3's wildcard
+half, the §3.4.2.4 clause-3 attribute-use inheritance fold, and — added by a
+same-day post-land amendment — the §3.4.2.5 clause-2.2 extension
+base-wildcard fold; `blocked` on #52, though its section 2 is independently
+`ready`-shaped per its own body). Two of #262's four disclosed GAPs were
+already routed to existing issues by same-day post-land comments before this
+backlog ran: `xsd/defaultbinding.go:323` (the fixed-value lexical-mismatch
+outcome) to **#236**, and the assertions-prefix vacuity note folded into
+**#265**'s body. **This backlog's own GAP sweep found the one disclosed GAP
+that neither post-land pass had adopted**: `xsd/defaultbinding.go:81`
+(`key-dft-binding` case 3 — a wildcard-attributed item with a ·governing
+attribute declaration· synthesizes an Attribute Use, which needs
+assessment-episode information the static `xsd` layer does not have) —
+filed as **#267**, `blocked` on #250, since the likely resolution is a
+documented permanent-fail-open ruling once the M5 instance validator exists
+to decide case 3 correctly at assessment time, not new schema-static code.
+**GAP debt is otherwise clean**: of the 13 `GAP(` sites in the tree
+(`xpath/doc.go:29` is the convention's own template, not a site), 12 are
+now owned by an open issue (#248, #249, #263, #265, #267 — #236 and #265
+each own one via a post-land comment rather than their body) and zero are
+unowned.
+
+**Ready-queue reconciliation:** net effect of the two landings plus the
+retirement is a wash — #262 and #63 left the queue, #263/#264/#265/#267
+joined it (three `blocked`, one `ready`) — so the queue is **35** open
+`ready` issues, unchanged in size from the paragraph above, still
+self-fed rather than a planning gap. **Priority band 1 is amended in
+place** (the stale text otherwise misdirects the next session): strike
+`#180` (landed) and replace the unified `#181` line with **`#263`**
+(the direct continuation of #262's restriction-validity work — same
+finalize phase, same file, already `ready`), keeping the rest of the
+order — band 1 is now **#263, #210, #228, #230, #231, then #257 → #182 →
+#183** (`#259` still lands before `#182` for the same reason as before).
+`#264` and `#265` stay off band 1 pending #228/#52. Band 3 drops `#63`
+(landed). No other band changes.
+
+**Branch namespace: still clean.** `git ls-remote --heads origin` returns
+`main` alone — no `wip/*`, no `parked/*`. `wip/issue-262` was auto-deleted
+at merge; its content is on `main` as `f02e934`.
+
+**#250's own body is now slightly stale** (its `## Depends on` says "in
+practice the blocking tail is #180 UPA/EDC and #181 derivation validity" —
+both true when #250 was filed, both since resolved/retired) — flagged with
+a clarifying comment on the issue rather than rewritten, since #250 is an
+epic body and the rewrite would lose the original filing rationale; the
+comment names the current tail (#182, #183, #263, #264, #265) instead.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
