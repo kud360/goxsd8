@@ -23,8 +23,11 @@ work.
 
 ## The branch scheme (the WIP discovery index)
 
-The remote branch namespace is a machine-readable index. Exactly three
-kinds of branches exist; nothing else is ever pushed:
+The remote branch namespace is a machine-readable index. Three kinds of
+branches carry develop-loop state; nothing else is ever pushed except the
+short-lived branch a maintenance trigger lands from (see "Other
+triggers" — it opens and squash-merges its PR in the same session, so it
+holds no lease and never appears in a survey):
 
 | Branch | Meaning | Lifecycle |
 |---|---|---|
@@ -75,6 +78,17 @@ Invariants the scheme encodes:
   dies loses at most the work since its last checkpoint — and its lease
   expires on its own, so the next session recovers the branch without
   human help.
+- **Freshly-fetched `origin/main` is the only base.** Every diff, merge,
+  and branch point is taken against `origin/main` after an explicit
+  `git fetch origin main` in THIS session. A local `main` is never
+  authoritative — sessions run in ephemeral containers whose refs are
+  stale from clone time, and even `origin/main` is only as fresh as the
+  last fetch. Judging or branching against a stale base invents changes
+  that are not there and hides changes that are (`git diff main..HEAD`
+  is the shape that fails; `git diff origin/main...HEAD` after a fetch is
+  the shape that works). The same rule in the other direction: judge the
+  COMMITTED tree, not the working tree — if `git status --porcelain` is
+  non-empty, what was verified is not what will land.
 - **Landing is atomic.** Accept → open a PR for the WIP branch and
   squash-merge it via the GitHub Merge API: the squash is the session's
   ONE commit (code + log entry), `Closes #<N>` in the PR body closes
@@ -147,9 +161,10 @@ work itself and never skips the arbiter.
    on the issue). **Checkpoint.**
 5. **Judge** — **arbiter** runs the gate
    (`go build ./... && go test ./... && go vet ./...` + the lint gate +
-   the conformance run), reviews the branch diff against main per
-   STYLE.md including the exported-surface diff (T5), and posts a
-   verdict on the issue. **Checkpoint after each verdict.**
+   the conformance run), reviews the branch's committed diff against
+   freshly-fetched `origin/main` (never a local `main` — see the branch
+   scheme) per STYLE.md including the exported-surface diff (T5), and
+   posts a verdict on the issue. **Checkpoint after each verdict.**
    - *accept* → arbiter runs the ratchet (`GOXSD_RATCHET=1`, upward only).
    - *reject* → one repair round by mason (edit the flagged lines, don't
      rewrite), then re-judge. Second reject → **park** (see below),

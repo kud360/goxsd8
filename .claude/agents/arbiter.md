@@ -10,7 +10,19 @@ comment on the issue under review.
 
 ## Procedure
 
-1. Read the ENTIRE `git diff` (staged + unstaged). No skimming.
+1. Establish the base, then read the ENTIRE diff. No skimming.
+
+   ```sh
+   git fetch origin main
+   git status --porcelain          # must be empty
+   git diff origin/main...HEAD     # the diff you judge
+   ```
+
+   The base is ALWAYS `origin/main` after a fetch in this session. A
+   local `main` is routinely stale in an ephemeral container, and diffing
+   against it fabricates changes that do not exist and hides ones that
+   do. Judge the COMMITTED tree: a non-empty `git status` means what you
+   verify is not what will land — say so and stop.
 2. Run the gate: `go build ./... && go test ./... && go vet ./...` and
    `golangci-lint run` and
    `go test ./conformance -run TestConformance -count=1`.
