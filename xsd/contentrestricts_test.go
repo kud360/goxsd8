@@ -183,8 +183,11 @@ func TestContentRestrictsProcessContentsSubsumption(t *testing.T) {
 // splits every expanded name across two non-overlapping ·wildcard particles·
 // (##local beside not-##local, which cos-nonambig leaves both live because they
 // do not ·overlap·) admits a restriction carrying one ##any wildcard, even
-// though neither base wildcard alone is a cos-ns-subset superset of it. The
-// single-wildcard control alongside is what keeps the exact relation exact.
+// though neither base wildcard alone is a cos-ns-subset superset of it. This is
+// W3C saxonData/Wild wild049's shape, and cos-aw-union (§3.10.6.3) case 5.1
+// decides it: the difference of the not set and the enumeration set is empty, so
+// the union is ##any, of which the restriction's ##any is a ·wildcard subset·.
+// The single-wildcard control alongside is what keeps the exact relation exact.
 func TestContentRestrictsWildcardUnion(t *testing.T) {
 	local := []Namespace{NamespaceName("")}
 	optional := func(w Wildcard) Particle {
@@ -200,6 +203,31 @@ func TestContentRestrictsWildcardUnion(t *testing.T) {
 	halfOnly := uGroup(t, CompositorSequence,
 		optional(uWildcard(t, NamespaceConstraintEnumeration, local, ProcessSkip)))
 	expectRule(t, cRestricts(t, halfOnly, anyOne), ruleDerivationOKRestriction)
+}
+
+// TestContentRestrictsWildcardUnionShortfall is the other side of
+// coveringWildcardUnion, and the half a union that is merely ASSUMED to cover
+// cannot decide: two live base wildcards whose cos-aw-union is a bounded
+// enumeration (case 3, ##local beside one other namespace) do not admit a ##any
+// restriction, so the walk reports the empty matched set and clause 1 rejects.
+// The paired acceptance narrows the restriction to one of the two enumerated
+// namespaces, which the same union does cover — without it, a coveringWildcardUnion
+// that simply returned nil whenever two wildcards were live would pass this test.
+func TestContentRestrictsWildcardUnionShortfall(t *testing.T) {
+	local := []Namespace{NamespaceName("")}
+	other := []Namespace{NamespaceName(uns)}
+	optional := func(w Wildcard) Particle {
+		return uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: w})
+	}
+	split := uGroup(t, CompositorSequence,
+		optional(uWildcard(t, NamespaceConstraintEnumeration, local, ProcessSkip)),
+		optional(uWildcard(t, NamespaceConstraintEnumeration, other, ProcessSkip)))
+	anyOne := uGroup(t, CompositorSequence, cAny(t, NamespaceConstraintAny, nil, ProcessSkip))
+	expectRule(t, cRestricts(t, split, anyOne), ruleDerivationOKRestriction)
+	within := uGroup(t, CompositorSequence, cAny(t, NamespaceConstraintEnumeration, other, ProcessSkip))
+	if err := cRestricts(t, split, within); err != nil {
+		t.Fatalf("a wildcard inside the union of two base wildcards was rejected: %v", err)
+	}
 }
 
 // cNillableElem is a once-occurring particle over a local element declaration

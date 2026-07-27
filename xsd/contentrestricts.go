@@ -3,6 +3,8 @@ package xsd
 import (
 	"slices"
 	"strconv"
+
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // This file decides Content type restricts (Complex Content) (Structures
@@ -325,10 +327,11 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live []int) []in
 	if len(matched) > 0 {
 		return matched
 	}
-	if _, isWildcard := p.term.(Wildcard); !isWildcard {
+	w, isWildcard := p.term.(Wildcard)
+	if !isWildcard {
 		return nil
 	}
-	return coveringWildcardUnion(b, live)
+	return coveringWildcardUnion(w.NamespaceConstraint(), b, live)
 }
 
 // coveringWildcardUnion is the one place positionAdmits is too weak to be used
@@ -339,23 +342,70 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live []int) []in
 // against a single ##any wildcard in the restriction — and the two base
 // wildcards are non-overlapping, so cos-nonambig leaves them both live.
 //
-// GAP(xsd): the union is not computed. When no single base wildcard is a
-// ·wildcard subset· superset and more than one is live, every live wildcard is
-// returned as the matched set, i.e. the union is ASSUMED to cover. That is
-// fail-open — the walk continues into all of them and can still reject later —
-// and never a false reject. A single live wildcard is left to cos-ns-subset
-// alone, where the relation is exact, so the common narrow-the-wildcard
-// rejection is unaffected. Closing this needs Attribute Wildcard Union
-// (§3.10.6.3, cos-aw-union), whose own definition is partial ("not expressible")
-// and which belongs with the exported wildcard-set surface (#52, #265).
-func coveringWildcardUnion(b contentAutomaton, live []int) []int {
+// The union is COMPUTED, not assumed: the live wildcards' {namespace
+// constraint}s are folded left through Attribute Wildcard Union (§3.10.6.3,
+// cos-aw-union) — the same left fold the constraint's own final paragraph
+// prescribes for more than two operands — and sub is then tested against the
+// result by the same cos-ns-subset relation positionAdmits uses for one base
+// wildcard. Both §3.10.6 relations are therefore exercised here: a covering union
+// returns every live wildcard as the matched set (each is a run B may take, and
+// none may be singled out — see matchPositions), while a union that does not cover
+// sub is a clause-1 failure, reported as the empty result matchPositions and
+// contentModelRestricts already read that way.
+//
+// GAP(xsd): the verdict is exact for {namespaces} and for the defined/QName half
+// of {disallowed names}, but §3.10.6.3 has no sibling bullet, so the fold silently
+// drops a sibling keyword a live base wildcard carried (see
+// unionNamespaceConstraint). A base set that collectively disallows a
+// sibling-excluded name can therefore be read as COVERING a restriction that
+// should be rejected on that basis — fail-open, never a false reject, in the
+// direction this file's header fixes for every approximation.
+//
+// A single live wildcard is left to cos-ns-subset alone in positionAdmits, where
+// the relation is already exact; folding it here would only restate that verdict.
+//
+// The fold is written out rather than delegated to an N-ary helper: it has one
+// caller, and cos-aw-union's binary primitive plus the caller's own loop is how
+// parser/produce_complex.go folds the intersection too (STYLE T4/T5).
+//
+// The positions and their constraints are gathered in ONE pass into two locals —
+// the {term} assertion is made once per live position, never repeated to recover
+// a constraint the fold needs — and both die with the call; nothing derivable is
+// stored (STYLE D3).
+func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live []int) []int {
 	var wildcards []int
+	var constraints []NamespaceConstraint
 	for _, q := range live {
-		if _, ok := b.positions[q].term.(Wildcard); ok {
-			wildcards = append(wildcards, q)
+		w, ok := b.positions[q].term.(Wildcard)
+		if !ok {
+			continue
 		}
+		wildcards = append(wildcards, q)
+		constraints = append(constraints, w.NamespaceConstraint())
 	}
 	if len(wildcards) < 2 {
+		return nil
+	}
+	union := constraints[0]
+	for _, next := range constraints[1:] {
+		folded, err := unionNamespaceConstraint(xsderr.Loc{}, union, next)
+		if err != nil {
+			// Unreachable: every operand is the {namespace constraint} of an
+			// already-built Wildcard, and the union of two such records always
+			// satisfies w-props-correct (see unionNamespaceConstraint). Should a
+			// future divergence reach it, the union is undecided, so the arm
+			// resolves the way every approximation in this file resolves —
+			// towards accepting, i.e. the union is assumed to cover — and the
+			// error DECIDES that verdict rather than being dropped (STYLE S3),
+			// exactly as contentTypeRestricts treats contentAutomatonOf's own
+			// unreachable error slot. The loc is the zero xsderr.Loc{} because
+			// this is a finalize-time decision with no source position of its
+			// own; nothing user-visible is charged to it.
+			return wildcards
+		}
+		union = folded
+	}
+	if !wildcardSubset(sub, union) {
 		return nil
 	}
 	return wildcards
