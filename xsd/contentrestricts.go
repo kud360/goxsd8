@@ -347,12 +347,19 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live []int) []in
 // cos-aw-union) — the same left fold the constraint's own final paragraph
 // prescribes for more than two operands — and sub is then tested against the
 // result by the same cos-ns-subset relation positionAdmits uses for one base
-// wildcard. Both §3.10.6 relations are therefore exercised here, and the verdict
-// stays exact: a covering union returns every live wildcard as the matched set
-// (each is a run B may take, and none may be singled out — see matchPositions),
-// while a union that does not cover sub is a genuine clause-1 failure, reported
-// as the empty result matchPositions and contentModelRestricts already read that
-// way.
+// wildcard. Both §3.10.6 relations are therefore exercised here: a covering union
+// returns every live wildcard as the matched set (each is a run B may take, and
+// none may be singled out — see matchPositions), while a union that does not cover
+// sub is a clause-1 failure, reported as the empty result matchPositions and
+// contentModelRestricts already read that way.
+//
+// GAP(xsd): the verdict is exact for {namespaces} and for the defined/QName half
+// of {disallowed names}, but §3.10.6.3 has no sibling bullet, so the fold silently
+// drops a sibling keyword a live base wildcard carried (see
+// unionNamespaceConstraint). A base set that collectively disallows a
+// sibling-excluded name can therefore be read as COVERING a restriction that
+// should be rejected on that basis — fail-open, never a false reject, in the
+// direction this file's header fixes for every approximation.
 //
 // A single live wildcard is left to cos-ns-subset alone in positionAdmits, where
 // the relation is already exact; folding it here would only restate that verdict.

@@ -54,10 +54,14 @@ import "github.com/kud360/goxsd8/xsderr"
 // spec's own Note licenses the resulting over-approximation — dropping defined
 // "may allow QNames that are not allowed by either wildcard[;] this is to ensure
 // that all unions are expressible" — so the asymmetry is deliberate, not a
-// simplification taken here. The keyword sibling has no bullet in this formula
-// and is never propagated, because cos-aw-union combines ATTRIBUTE wildcards only
-// and w-props-correct clause 5 forbids sibling on one, so an operand carrying it
-// is unreachable here and no defensive branch guards against it.
+// simplification taken here. The keyword sibling has NO bullet in this formula at
+// all, so an operand carrying it has it dropped from the result — silently, with
+// no defensive branch, because that is exactly what §3.10.6.3 defines. Operands do
+// reach here carrying it: coveringWildcardUnion folds the {namespace constraint}s
+// of ELEMENT wildcards, on which sibling is legal (parser/produce_complex.go maps
+// ##definedSibling to it in the non-attribute-wildcard case). Dropping it only
+// ever WIDENS the union — one fewer excluded name — so the loss is fail-open at
+// every call site, attribute or element, and can never cause a false reject.
 //
 // The result is built through NewNamespaceConstraint, so w-props-correct clauses
 // 1-4 (§3.10.6.1) are re-checked and {namespaces}/{disallowed names} are
@@ -149,10 +153,11 @@ func unionDisallowedNames(a, b NamespaceConstraint) []QName {
 // surrounding operation's name suggests, and NOT the "member of either" that
 // cos-aw-intersect (§3.10.6.4) specifies for the intersection operation.
 //
-// sibling is never propagated: this formula combines attribute wildcards only,
-// and w-props-correct clause 5 forbids sibling on one, so an operand carrying it
-// cannot reach here (rejectSiblingOnAttributeWildcard rejects it at the tableau
-// slot). Nothing therefore reads the operands' sibling membership.
+// sibling is never propagated because §3.10.6.3's bullet list has no sibling
+// bullet — not because no operand can carry one. An element wildcard's constraint
+// legally carries sibling and reaches here through coveringWildcardUnion, and the
+// keyword is then dropped. Nothing reads the operands' sibling membership; the
+// drop widens the union, so it is fail-open wherever it happens.
 func unionDisallowedNameKeywords(a, b NamespaceConstraint) []DisallowedNameKeyword {
 	if !a.hasDisallowedNameKeyword(DisallowedNameDefined) || !b.hasDisallowedNameKeyword(DisallowedNameDefined) {
 		return nil
