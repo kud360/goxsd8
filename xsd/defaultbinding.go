@@ -11,9 +11,17 @@ import "github.com/kud360/goxsd8/xsderr"
 // derivation-ok-restriction clause 3 (c-ran) needs: the clause quantifies over
 // every element information item whose attributes are valid against T, which for
 // attributes reduces to "for each expanded name T admits, compare the bindings".
+//
 // The ELEMENT half (key-dft-binding case 1, loc-testSubP clause 4) is
-// cos-content-act-restrict's business and belongs to #263; the sum below carries
-// its variant so #263 adds a case, not a type.
+// cos-content-act-restrict's business (derivation-ok-restriction clause 2.4.2)
+// and lives here too, but is reached from contentrestricts.go rather than from
+// this file: that constraint walks a content model to learn WHICH declaration or
+// wildcard an item binds to, while the two halves share the ·subsumes· relation
+// below. The two entry points differ only in what they return — the attribute
+// half charges an error per sub-clause, the element half answers a bool, because
+// it is one conjunct of derivation-ok-restriction clause 2's disjunction and so
+// is not yet a verdict where it is evaluated. The wildcard-bucket lattice
+// (clauses 1-3) has ONE encoding, keywordSubsumes, which both reach (STYLE T4).
 
 // defaultBinding is the ·default binding· a Content Type or Complex Type
 // Definition gives an information item (Structures §3.4.6.4, key-dft-binding):
@@ -26,11 +34,11 @@ import "github.com/kud360/goxsd8/xsderr"
 type defaultBinding interface{ defaultBinding() }
 
 // elementDeclarationBinding is key-dft-binding case 1: the item has a ·governing
-// element declaration·, and the binding is that Element Declaration. Nothing in
-// this issue constructs one — attributeDefaultBinding decides the attribute half
-// only — and loc-testSubP clause 4, the sub-test that reads it, is
-// cos-content-act-restrict's (#263). The variant exists so that work adds a case
-// to checkBindingSubsumes rather than reshaping the sum.
+// element declaration·, and the binding is that Element Declaration. It is
+// constructed by contentrestricts.go's elementPositionBinding, for an item
+// ·attributed· to an ·element particle· of a content model, and read by
+// elementDeclarationSubsumes (loc-testSubP clause 4). attributeDefaultBinding
+// never produces one: cases 2 and 3 are the attribute half.
 type elementDeclarationBinding struct{ decl ElementDeclaration }
 
 // attributeUseBinding is key-dft-binding case 2 (the item has a ·governing
@@ -204,7 +212,7 @@ func (s *Schema) effectiveValueConstraint(u AttributeUse) (ValueConstraint, bool
 //   - clause 2: G is lax and S is not skip.
 //   - clause 3: both are strict.
 //   - clause 4: both are Element Declarations — unreachable from an attribute
-//     binding; cos-content-act-restrict (#263) fills it in.
+//     binding, and decided by bindingSubsumes on the element side.
 //   - clause 5: both are Attribute Uses (checkAttributeUseSubsumes).
 //
 // Anything else fails to subsume: G strict against an Attribute Use S, for
@@ -225,35 +233,229 @@ func (s *Schema) checkBindingSubsumes(n QName, t, b ComplexType, general, specif
 }
 
 // checkKeywordSubsumes decides loc-testSubP clauses 1-3, where the base's
-// binding G is one of the three keywords.
+// binding G is one of the three keywords, and charges the one way they can fail.
+// The predicate itself is keywordSubsumes, which the element half of the
+// definition shares (STYLE T4); only the message is built here, and only the
+// lax-versus-skip pairing of clause 2 can reach it.
 func checkKeywordSubsumes(n QName, t, b ComplexType, general wildcardKeywordBinding, specific defaultBinding) error {
+	if keywordSubsumes(general, specific) {
+		return nil
+	}
+	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+		"complex type %s restricts %s, but %s binds attribute %s to a lax wildcard while the restriction binds it to a skip wildcard, and loc-testSubP clause 2 requires the specific binding not to be skip (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), b.Name(), n)
+}
+
+// keywordSubsumes is loc-testSubP clauses 1-3, where the general binding G is
+// one of the three keywords. It is the ONE encoding of the wildcard-bucket
+// lattice (STYLE T4): both halves of ·subsumes· reach it — the attribute half
+// through checkKeywordSubsumes (derivation-ok-restriction clause 3) and the
+// element half through bindingSubsumes (clause 2.4.2's
+// cos-content-act-restrict) — and neither re-derives it.
+//
+//   - clause 1: G is skip, which subsumes anything.
+//   - clause 2: G is lax and S is not skip.
+//   - clause 3: both G and S are strict; see the GAP below for the reading taken.
+func keywordSubsumes(general wildcardKeywordBinding, specific defaultBinding) bool {
 	switch general.keyword {
 	case ProcessSkip:
-		return nil // clause 1: skip subsumes anything
+		return true // clause 1
 	case ProcessLax:
-		if k, ok := specific.(wildcardKeywordBinding); ok && k.keyword == ProcessSkip {
-			return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-				"complex type %s restricts %s, but %s binds attribute %s to a lax wildcard while the restriction binds it to a skip wildcard, and loc-testSubP clause 2 requires the specific binding not to be skip (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), b.Name(), n)
-		}
-		return nil // clause 2
+		k, ok := specific.(wildcardKeywordBinding)
+		return !ok || k.keyword != ProcessSkip // clause 2
 	case ProcessStrict:
 		// GAP(xsd): loc-testSubP clause 3 says a strict G ·subsumes· only another
-		// strict S, so a restriction that replaces a base's strict attribute
-		// wildcard with a named {attribute use} reads as a violation. That reading
-		// is not statically sound and is not what conforming processors do: the
-		// keyword is reached only through key-dft-binding case 4, whose "does not
-		// have a ·governing attribute declaration·" qualifier is an
-		// assessment-episode fact this check cannot fix (see
+		// strict S, so a restriction that replaces a base's strict wildcard with a
+		// named {attribute use} — or, on the element side, with a named element
+		// particle — reads as a violation. That reading is not statically sound
+		// and is not what conforming processors do: the keyword is reached only
+		// through key-dft-binding cases 4/5, whose "does not have a ·governing
+		// element declaration· or a ·governing attribute declaration·" qualifier
+		// is an assessment-episode fact this check cannot settle (see
 		// attributeDefaultBinding's GAP), and XSD 1.0's derivation-ok-restriction
-		// decided this branch by namespace allowance alone. Rejecting would decline
-		// the canonical valid pattern "base carries <anyAttribute namespace='##any'/>,
-		// restriction names specific attributes" — W3C suite MS-ComplexType ctG007
-		// and ctO003 declare exactly that VALID. Accepting is FAIL-OPEN, never a
-		// false reject (#265).
-		return nil
+		// decided this branch by namespace allowance alone. Rejecting would
+		// decline the canonical valid pattern "base carries a ##any wildcard,
+		// restriction names specific attributes or elements" — W3C suite
+		// MS-ComplexType ctG007 and ctO003 declare exactly that VALID. Accepting
+		// is FAIL-OPEN, never a false reject (#265).
+		return true
 	default:
-		panic("xsd: checkKeywordSubsumes: non-exhaustive ProcessContents switch")
+		panic("xsd: keywordSubsumes: non-exhaustive ProcessContents switch")
 	}
+}
+
+// bindingSubsumes is the bool-valued rendering of ·subsumes· (loc-testSubP) the
+// ELEMENT half needs: cos-content-act-restrict clause 2
+// (ctr-child-type-subsumption) is one conjunct of a DISJUNCTION —
+// derivation-ok-restriction clause 2 — so a failure inside it is a verdict, not
+// yet an error, and contentTypeRestricts (complexderivation.go) answers a bool
+// all the way up to the one site that charges the rule.
+//
+//   - G a keyword: clauses 1-3, keywordSubsumes.
+//   - both Element Declarations: clause 4, elementDeclarationSubsumes.
+//   - anything else fails to subsume. An Element Declaration G against a keyword
+//     S is the pairing loc-testSubP deliberately leaves uncovered — clause 3
+//     requires BOTH sides strict — so a wildcard-matched item in the restriction
+//     is never subsumed by an explicitly named element declaration in the base.
+//     Attribute Uses cannot reach here: key-dft-binding cases 2 and 3 are
+//     attribute-only, and the element sequences this predicate serves produce
+//     only cases 1 and 4-6.
+func (s *Schema) bindingSubsumes(general, specific defaultBinding) bool {
+	if g, ok := general.(wildcardKeywordBinding); ok {
+		return keywordSubsumes(g, specific) // clauses 1-3
+	}
+	g, gIsElement := general.(elementDeclarationBinding)
+	sp, sIsElement := specific.(elementDeclarationBinding)
+	if gIsElement && sIsElement {
+		return s.elementDeclarationSubsumes(g.decl, sp.decl) // clause 4
+	}
+	return false
+}
+
+// elementDeclarationSubsumes is loc-testSubP clause 4, where both bindings are
+// Element Declarations. All six sub-clauses must hold; they are tested in spec
+// order so the verdict does not depend on evaluation order.
+//
+//   - 4.1: G.{nillable} = true or S.{nillable} = false.
+//   - 4.2: G has no {value constraint}, or it is not fixed, or S has a fixed
+//     {value constraint} with an equal or identical value.
+//   - 4.3: S.{identity-constraint definitions} ⊇ G.{identity-constraint definitions}.
+//   - 4.4: S disallows a superset of the substitutions G does.
+//   - 4.5 (c-vs-ct): S's declared {type definition} is ·validly substitutable as
+//     a restriction· for G's (key-val-sub-type-restricts: ·validly
+//     substitutable· subject to the blocking keywords {extension, list, union},
+//     which is exactly restrictionBlockingKeywords).
+//   - 4.6 (c-tt-equiv): the two {type table}s are both ·absent· or both present
+//     and ·equivalent· (key-equiv-tt, typeTablesEquivalent).
+func (s *Schema) elementDeclarationSubsumes(general, specific ElementDeclaration) bool {
+	if !general.Nillable() && specific.Nillable() {
+		return false // clause 4.1
+	}
+	if !fixedValueConstraintSubsumes(general, specific) {
+		return false // clause 4.2
+	}
+	if !identityConstraintsSuperset(specific, general) {
+		return false // clause 4.3
+	}
+	if !disallowedSubstitutionsSuperset(specific, general) {
+		return false // clause 4.4
+	}
+	if !s.declaredTypeRestricts(specific, general) {
+		return false // clause 4.5
+	}
+	return typeTablesAgree(general, specific) // clause 4.6
+}
+
+// fixedValueConstraintSubsumes is loc-testSubP clause 4.2. An absent or
+// non-fixed G {value constraint} discharges it outright; a fixed G against an
+// absent or default S is an exact rejection, since no reading of "S has a fixed
+// {value constraint}" can hold.
+//
+// GAP(xsd): two fixed {value constraint}s with DIFFERENT {lexical form}s are
+// accepted. 4.2 compares values, a value-space test: "1" and "01" are the same
+// xs:integer value. ValueConstraint carries only {lexical form}
+// (valueconstraint.go) and this package must not depend on package value, so a
+// lexical mismatch is not evidence of a value mismatch. This is the same
+// fail-open checkAttributeValueConstraintSubsumes takes for clause 5.2.2, for
+// the same reason; closing both needs the lexical mapping of the declaration's
+// {type definition}, and belongs with the instance validator that first needs
+// it.
+func fixedValueConstraintSubsumes(general, specific ElementDeclaration) bool {
+	gvc, present := general.ValueConstraint()
+	if !present || gvc.Kind() != ValueFixed {
+		return true
+	}
+	svc, present := specific.ValueConstraint()
+	return present && svc.Kind() == ValueFixed
+}
+
+// identityConstraintsSuperset is loc-testSubP clause 4.3: every member of
+// general's {identity-constraint definitions} must also be a member of
+// specific's. Component identity is the expanded {name}, the same reading
+// sameTypeDefinition (complexderivation.go) takes for type definitions —
+// sch-props-correct clause 2 keeps {identity-constraint definitions} unique by
+// expanded name across the schema, so a name is a component key.
+//
+// Both sets are walked in document order; no map is consulted (STYLE D2).
+func identityConstraintsSuperset(specific, general ElementDeclaration) bool {
+	for _, g := range general.identityConstraints {
+		if !hasIdentityConstraintNamed(specific, g.Name()) {
+			return false
+		}
+	}
+	return true
+}
+
+// hasIdentityConstraintNamed reports whether e's {identity-constraint
+// definitions} contains one with the expanded name.
+func hasIdentityConstraintNamed(e ElementDeclaration, name QName) bool {
+	for _, c := range e.identityConstraints {
+		if c.Name() == name {
+			return true
+		}
+	}
+	return false
+}
+
+// disallowedSubstitutionsSuperset is loc-testSubP clause 4.4, "S disallows a
+// superset of the substitutions that G does": every member of general's
+// {disallowed substitutions} must also be a member of specific's.
+func disallowedSubstitutionsSuperset(specific, general ElementDeclaration) bool {
+	for _, m := range general.disallowedSubstitutions {
+		if !containsDerivationMethod(specific.disallowedSubstitutions, m) {
+			return false
+		}
+	}
+	return true
+}
+
+// declaredTypeRestricts is loc-testSubP clause 4.5 (c-vs-ct), delegating to
+// validlySubstitutable (key-val-sub-type) under the {extension, list, union}
+// blocking keywords that ·validly substitutable as a restriction·
+// (key-val-sub-type-restricts) names — the same set derivation-ok-restriction
+// clause 4 works under, and the same slice, so the two clauses cannot drift.
+//
+// An absent (anonymous, zero-QName) or unresolvable {type definition} on either
+// side is SKIPPED rather than rejected, exactly as
+// checkLocallyDeclaredElementTypes skips it: this package carries an anonymous
+// type as the zero name, which names no component, so the clause has nothing to
+// compare and is not competent to charge a failure. Skipping is fail-open, never
+// a false reject.
+func (s *Schema) declaredTypeRestricts(specific, general ElementDeclaration) bool {
+	sub, ok := s.typeNamed(specific.TypeDefinitionName())
+	if !ok {
+		return true
+	}
+	super, ok := s.typeNamed(general.TypeDefinitionName())
+	if !ok {
+		return true
+	}
+	return s.validlySubstitutable(sub, super, restrictionBlockingKeywords)
+}
+
+// typeNamed resolves a {type definition} reference to its component, treating an
+// absent (zero) name as unresolvable — the anonymous-type case
+// declaredTypeRestricts must skip. It is simpleTypeNamed's unnarrowed sibling.
+func (s *Schema) typeNamed(name QName) (TypeDefinition, bool) {
+	if name == (QName{}) {
+		return nil, false
+	}
+	return s.Type(name)
+}
+
+// typeTablesAgree is loc-testSubP clause 4.6 (c-tt-equiv): the two {type table}s
+// are both ·absent·, or both present and ·equivalent· per key-equiv-tt. The
+// equivalence itself is elementconsistent.go's typeTablesEquivalent, the one
+// canonical §3.8.6.3 implementation (STYLE T4).
+func typeTablesAgree(general, specific ElementDeclaration) bool {
+	gt, gPresent := general.TypeTable()
+	st, sPresent := specific.TypeTable()
+	if gPresent != sPresent {
+		return false
+	}
+	if !gPresent {
+		return true
+	}
+	return typeTablesEquivalent(st, gt)
 }
 
 // checkAttributeUseSubsumes decides loc-testSubP clause 5, where both bindings

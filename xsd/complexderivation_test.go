@@ -227,22 +227,20 @@ func TestDerivationOKRestrictionClause241(t *testing.T) {
 	expectRule(t, err, ruleDerivationOKRestriction)
 }
 
-// TestDerivationOKRestriction242SeamAccepts pins the deliberate fail-open at
-// clause 2.4.2: an element-only restriction of an element-only base passes
-// 2.4.1, and cos-content-act-restrict (#263) is not yet decided, so a content
-// model that plainly does NOT restrict the base's is still accepted. The test
-// exists so that landing #263 shows up as a deliberate change here, not a
-// surprise.
-func TestDerivationOKRestriction242SeamAccepts(t *testing.T) {
+// TestDerivationOKRestrictionClause242 pins that clause 2.4.2 is now DECIDED
+// (cos-content-act-restrict, contentrestricts.go) rather than provisionally
+// accepted: an element-only restriction of an element-only base passes 2.4.1 and
+// is then rejected because its content model admits sequences the base does not.
+// The shape is the one the pre-#263 seam test asserted must be accepted, so the
+// landing shows up as a deliberate change here.
+func TestDerivationOKRestrictionClause242(t *testing.T) {
 	err := dFinalize(t, func(b *SchemaBuilder) {
 		b.AddType(dType(t, uq("base"), anyTypeName,
 			dElementContent(t, false, uGroup(t, CompositorSequence, rElem(t, 1, 1))), nil, nil))
 		b.AddType(dType(t, uq("derived"), uq("base"),
 			dElementContent(t, false, uGroup(t, CompositorSequence, rElem(t, 5, 9))), nil, nil))
 	})
-	if err != nil {
-		t.Fatalf("the clause 2.4.2 seam declined a case it must provisionally accept: %v", err)
-	}
+	expectRule(t, err, ruleDerivationOKRestriction)
 }
 
 // TestDerivationOKRestrictionClause3UnknownAttribute pins clause 3 (c-ran): a
