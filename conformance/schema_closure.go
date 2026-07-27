@@ -11,7 +11,8 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// This file holds the schema lane's OWN <xs:include> closure walk (issue #242).
+// This file holds the schema lane's OWN <xs:include>/<xs:import> closure walk
+// (issues #242, #182).
 // It exists for one reason: schema.go's false-accept guard (schemaShapeDecidable)
 // must hold for EVERY document parser.Parse assembles, not just the root, and
 // parser.Parse cannot be asked which documents those were.
@@ -63,63 +64,73 @@ import (
 // case (declined on a shape Parse would never have seen) — a lost win, never a
 // fabricated verdict.
 
-// closureScan is one schema case's <xs:include> closure walk. It mirrors
-// parser.assembly's discovery state and nothing else: the resolver every document
-// is fetched through, the assembly's effective target namespace (the ROOT
-// document's — every document of the closure ends up in it, §4.2.3 clause 2), and
-// the load-once index.
+// scanKey is the walk's load-once document identity, mirroring parser's docKey
+// exactly: the resolved location paired with the namespace the document was
+// reached under. The pair, not the location alone, because one document can be
+// reached both as a chameleon <include> (coerced into the includer's namespace)
+// and as a bare <import> (staying in no namespace), and the parser walks both.
+type scanKey struct {
+	resolved  string
+	namespace string
+}
+
+// closureScan is one schema case's <xs:include>/<xs:import> closure walk. It
+// mirrors parser.assembly's discovery state and nothing else: the resolver every
+// document is fetched through, and the load-once index. The effective target
+// namespace is NOT a field, exactly as it is not one on parser.assembly: it is
+// per-document (a chameleon include borrows the includer's, an import keeps its
+// own) and is threaded as a parameter.
 type closureScan struct {
 	resolver loader.Resolver
 
-	// tns is what the resolver is asked under for an <include>d location, exactly
-	// as parser.assembly.fetch asks. It is the root document's targetNamespace,
-	// since the parser fixes the assembly's namespace there.
-	tns string
-
-	// loaded indexes the RESOLVED locations already walked. It is spec-mandated
-	// document identity, not a defensive hack: §4.2.3 states that two <include>
-	// elements specifying the same schema location (after resolving relative URI
+	// loaded indexes the documents already walked. It is spec-mandated document
+	// identity, not a defensive hack: §4.2.3 states that two <include> elements
+	// specifying the same schema location (after resolving relative URI
 	// references) refer to the same schema document, and <include> CYCLES are
-	// legal — "processors should guard against infinite loops", not reject them.
+	// legal — "processors should guard against infinite loops", not reject them;
+	// §4.2.6.2's note wants repeated <import>s of one document treated the same.
 	// It is scan-scoped: created per case, never threaded anywhere else
 	// (STYLE D4, like xsd/resolve.go's acyclic-scan sets).
-	loaded map[string]struct{}
+	loaded map[scanKey]struct{}
 }
 
 // newClosureScan returns the scan for a root schema document already read from
-// rootResolved. Seeding loaded with the root's own resolved location mirrors
-// parser.newAssembly, so a legal <include> cycle pointing back at the root is
-// recognized as already-walked rather than re-read.
-func newClosureScan(resolver loader.Resolver, root *parser.Document, rootResolved string) *closureScan {
-	tns, _ := elementAttr(root.Root(), "targetNamespace")
+// rootResolved under rootTNS, its own target namespace. Seeding loaded with that
+// pair mirrors parser.newAssembly, so a legal <include> cycle pointing back at
+// the root is recognized as already-walked rather than re-read.
+func newClosureScan(resolver loader.Resolver, rootResolved, rootTNS string) *closureScan {
 	return &closureScan{
 		resolver: resolver,
-		tns:      tns,
-		loaded:   map[string]struct{}{rootResolved: {}},
+		loaded:   map[scanKey]struct{}{{resolved: rootResolved, namespace: rootTNS}: {}},
 	}
 }
 
-// decidable reports whether doc and every document transitively reachable from it
-// through a top-level <xs:include> lies within the producer's decidable subset. It
-// is the root's entry point too: the root is checked through the same code path as
-// every included document, so no shape is gated differently for being the root.
-func (s *closureScan) decidable(doc *parser.Document) bool {
+// decidable reports whether doc — reached under the effective target namespace
+// tns — and every document transitively reachable from it through a top-level
+// <xs:include> or <xs:import> lies within the producer's decidable subset. It is
+// the root's entry point too: the root is checked through the same code path as
+// every composed document, so no shape is gated differently for being the root.
+func (s *closureScan) decidable(doc *parser.Document, tns string) bool {
 	if !schemaShapeDecidable(doc) {
 		return false
 	}
-	// Document order, depth-first, pre-order — the same order parser.assembly
-	// discovers in, so the load-once index dedups the same documents (STYLE D1).
+	// ONE document-order pass, depth-first, pre-order — the same single pass
+	// parser.assembly.discover makes, so the load-once index dedups the same
+	// documents in the same order (STYLE D1).
 	for _, child := range doc.Root().Children() {
 		el, ok := child.(*parser.Element)
-		if !ok {
+		if !ok || el.Name().Space() != xsd.XMLSchemaNS {
 			continue
 		}
-		name := el.Name()
-		if name.Space() != xsd.XMLSchemaNS || name.Local() != "include" {
-			continue
-		}
-		if !s.include(el) {
-			return false
+		switch el.Name().Local() {
+		case "include":
+			if !s.include(el, tns) {
+				return false
+			}
+		case "import":
+			if !s.importDirective(el) {
+				return false
+			}
 		}
 	}
 	return true
@@ -147,7 +158,7 @@ func (s *closureScan) decidable(doc *parser.Document) bool {
 //     is no top-level content to shape-check, and parser.Parse rejects this
 //     independently as a genuine src-include clause 1 violation — a real decided
 //     rejection, not a skipped representation.
-func (s *closureScan) include(el *parser.Element) bool {
+func (s *closureScan) include(el *parser.Element, tns string) bool {
 	hint, ok := elementAttr(el, "schemaLocation")
 	if !ok {
 		return false
@@ -156,7 +167,7 @@ func (s *closureScan) include(el *parser.Element) bool {
 	// the <include> element itself (xml:base-aware), not the document URI.
 	requested := resolveSchemaLocation(el.BaseURI(), hint)
 
-	rc, resolved, err := s.resolver.Resolve(s.tns, requested)
+	rc, resolved, err := s.resolver.Resolve(tns, requested)
 	if errors.Is(err, loader.ErrNotFound) {
 		return true
 	}
@@ -167,10 +178,11 @@ func (s *closureScan) include(el *parser.Element) bool {
 	// cannot affect the verdict (STYLE S3).
 	defer func() { _ = rc.Close() }()
 
-	if _, done := s.loaded[resolved]; done {
+	key := scanKey{resolved: resolved, namespace: tns}
+	if _, done := s.loaded[key]; done {
 		return true
 	}
-	s.loaded[resolved] = struct{}{}
+	s.loaded[key] = struct{}{}
 
 	d2, err := parser.ReadDocument(requested, rc)
 	if err != nil {
@@ -179,7 +191,74 @@ func (s *closureScan) include(el *parser.Element) bool {
 	if !d2.IsSchema() {
 		return true
 	}
-	return s.decidable(d2)
+	// Whether D2 declares tns itself or is coerced into it (§4.2.3 clause 2.3), the
+	// parser discovers it under the INCLUDING document's effective namespace.
+	return s.decidable(d2, tns)
+}
+
+// importDirective follows one <import> element and reports whether what it names
+// is decidable. Its outcomes differ from include's in exactly one way, and that
+// difference is a RATCHET-INTEGRITY requirement, not conservatism for its own
+// sake: an <import> that yields no D2 DECLINES.
+//
+//   - no schemaLocation attribute (the bare <import> §4.2.6.2 calls legal), or a
+//     schemaLocation that does not resolve: DECLINE. Both are non-errors for the
+//     parser (§4.2.6.2: "It is not an error for the application schema component
+//     reference strategy to fail"), so the imported namespace contributes NO
+//     components — and every reference into it then fails src-resolve at finalize.
+//     That is a FABRICATED "invalid" verdict, the one direction that can corrupt
+//     the ratchet by agreeing with a suite-invalid case for the wrong reason. An
+//     unresolvable <include> is not the same hazard in kind but is the same in
+//     shape; it is admitted only because §4.2.3 clause 2.4 makes the included
+//     document's components part of the SAME namespace, which the including
+//     document also populates, whereas an unimported namespace is empty outright.
+//   - any resolver error at all: DECLINE, for the same reason and for include's
+//     (a permission or transport failure may not become a verdict).
+//   - already loaded under this namespace: NOT a decline, and not re-walked. It
+//     was shape-checked when first reached.
+//   - a ReadDocument error on the fetched document: DECLINE — ambiguous between a
+//     well-formedness fault and a parser encoding LIMITATION, exactly as for
+//     include.
+//   - the document is not a <schema>: NOT a decline. src-import clause 2 makes
+//     that a genuine rejection parser.Parse emits, and there is no top-level
+//     content to shape-check.
+//
+// A src-import clause 1 or clause 3 violation needs no special handling here:
+// those are genuine, implemented rejections on documents this walk has gated.
+func (s *closureScan) importDirective(el *parser.Element) bool {
+	hint, hasHint := elementAttr(el, "schemaLocation")
+	if !hasHint {
+		return false
+	}
+	// The resolver is asked under the IMPORT's namespace, as parser.assembly does:
+	// that (namespace, location) pair is the reference strategy's input.
+	namespace, _ := elementAttr(el, "namespace")
+	requested := resolveSchemaLocation(el.BaseURI(), hint)
+
+	rc, resolved, err := s.resolver.Resolve(namespace, requested)
+	if err != nil {
+		return false
+	}
+	// Read-only reader (STYLE S3).
+	defer func() { _ = rc.Close() }()
+
+	key := scanKey{resolved: resolved, namespace: namespace}
+	if _, done := s.loaded[key]; done {
+		return true
+	}
+	s.loaded[key] = struct{}{}
+
+	d2, err := parser.ReadDocument(requested, rc)
+	if err != nil {
+		return false
+	}
+	if !d2.IsSchema() {
+		return true
+	}
+	// No §F.1 coercion on an import: D2 is walked under its OWN target namespace,
+	// the namespace the parser discovers it under.
+	own, _ := elementAttr(d2.Root(), "targetNamespace")
+	return s.decidable(d2, own)
 }
 
 // resolveSchemaLocation resolves a schemaLocation URI reference against the base

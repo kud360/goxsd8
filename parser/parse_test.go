@@ -2,6 +2,8 @@ package parser_test
 
 import (
 	"errors"
+	"io"
+	"slices"
 	"testing"
 
 	"github.com/kud360/goxsd8/loader"
@@ -446,5 +448,319 @@ func TestWithLoggerNilIsSilent(t *testing.T) {
 		parser.WithLogger(nil))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
+	}
+}
+
+// wrapImporting wraps body inside a <schema> with targetNamespace target — the
+// xs and tns prefixes bound exactly as wrap binds them — plus the prefix "imp"
+// bound to imported, so a cross-namespace QName reference can be written.
+func wrapImporting(target, imported, body string) string {
+	return `<xs:schema xmlns:xs="` + xsdNS + `" targetNamespace="` + target +
+		`" xmlns:tns="` + target + `" xmlns:imp="` + imported + `">` + body + `</xs:schema>`
+}
+
+// mustXSDRule fails unless err is an *xsderr.Error charging rule and positioned
+// in the document wantURI — the offending <import> is always in a NAMED document,
+// so pinning it keeps a test from passing on a verdict reached elsewhere in the
+// assembly.
+func mustXSDRule(t *testing.T, err error, rule xsderr.Rule, wantURI string) {
+	t.Helper()
+	var xe *xsderr.Error
+	if !errors.As(err, &xe) {
+		t.Fatalf("Parse error = %v, want an *xsderr.Error charging %s", err, rule)
+	}
+	if xe.Rule != rule {
+		t.Fatalf("rule = %q, want %s", xe.Rule, rule)
+	}
+	if xe.Loc.URI != wantURI {
+		t.Fatalf("loc = %s, want the offending element in %s", xe.Loc, wantURI)
+	}
+}
+
+// TestParseImportCrossNamespace is src-import's whole point (§4.2.6.2): the
+// imported document's components enter the assembly IN THEIR OWN namespace, so a
+// cross-namespace type= reference in the importing document resolves at finalize.
+func TestParseImportCrossNamespace(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrapImporting("urn:a", "urn:b",
+			`<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`+
+				`<xs:element name="root" type="imp:code"/>`),
+		"b.xsd": wrap("urn:b", `<xs:simpleType name="code">`+
+			`<xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction>`+
+			`</xs:simpleType>`+
+			`<xs:element name="inB" type="tns:code"/>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	mustType(t, s, xsd.QName{Space: "urn:b", Local: "code"})
+	if _, ok := s.Type(xsd.QName{Space: "urn:a", Local: "code"}); ok {
+		t.Fatalf("type {urn:a}code exists: an <import> must not mint D2's components in the importer's namespace")
+	}
+	ed, ok := s.Element(xsd.QName{Space: "urn:a", Local: "root"})
+	if !ok {
+		t.Fatalf("element {urn:a}root not found")
+	}
+	if got := ed.TypeDefinitionName(); got != (xsd.QName{Space: "urn:b", Local: "code"}) {
+		t.Fatalf("root type = %s, want {urn:b}code", got)
+	}
+	// D2's own components and its own intra-namespace reference are unaffected.
+	if _, ok := s.Element(xsd.QName{Space: "urn:b", Local: "inB"}); !ok {
+		t.Fatalf("element {urn:b}inB not found")
+	}
+}
+
+// TestParseImportNoChameleonCoercion pins the difference between <import> and
+// <include>: §F.1's coercion is src-include clause 2.3's alone. A bare <import>
+// (no namespace attribute, src-import clause 1.2 satisfied by the importer's own
+// targetNamespace) of a no-targetNamespace document leaves that document's
+// components — and its unqualified QName references — in NO namespace, even
+// though the importing document has one.
+func TestParseImportNoChameleonCoercion(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:import schemaLocation="lib.xsd"/>`+
+			`<xs:element name="root" type="xs:string"/>`),
+		"lib.xsd": wrap("", `<xs:simpleType name="code">`+
+			`<xs:restriction base="xs:string"/></xs:simpleType>`+
+			`<xs:element name="e" type="code"/>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	mustType(t, s, xsd.QName{Local: "code"})
+	if _, ok := s.Type(xsd.QName{Space: "urn:a", Local: "code"}); ok {
+		t.Fatalf("type {urn:a}code exists: <import> must never apply §F.1 chameleon coercion")
+	}
+	ed, ok := s.Element(xsd.QName{Local: "e"})
+	if !ok {
+		t.Fatalf("element {}e not found")
+	}
+	if got := ed.TypeDefinitionName(); got != (xsd.QName{Local: "code"}) {
+		t.Fatalf("imported unqualified reference = %s, want the no-namespace {}code", got)
+	}
+}
+
+// TestParseImportSelfNamespace covers src-import clause 1.1
+// (src-import-noselfimport): the namespace attribute must not name the importing
+// schema's own target namespace.
+func TestParseImportSelfNamespace(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:import namespace="urn:a" schemaLocation="lib.xsd"/>`),
+		"lib.xsd":  wrap("urn:a", `<xs:element name="e" type="xs:string"/>`),
+	})
+	mustXSDRule(t, err, "src-import-noselfimport", "main.xsd")
+}
+
+// TestParseImportSelfNamespaceUnderChameleon pins that clause 1.1 is judged
+// against the EFFECTIVE (post-§F.1) target namespace: a chameleon-included
+// document is produced as if it declared the includer's targetNamespace, so its
+// <import> of that namespace is a self-import (§4.2.3's note on the coercion).
+func TestParseImportSelfNamespaceUnderChameleon(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd":  wrap("urn:a", `<xs:include schemaLocation="cham.xsd"/>`),
+		"cham.xsd":  wrap("", `<xs:import namespace="urn:a" schemaLocation="other.xsd"/>`),
+		"other.xsd": wrap("urn:a", `<xs:element name="e" type="xs:string"/>`),
+	})
+	mustXSDRule(t, err, "src-import-noselfimport", "cham.xsd")
+}
+
+// TestParseImportBareFromNoNamespaceDocument covers src-import clause 1.2: with
+// no namespace attribute the enclosing <schema> must have a targetNamespace,
+// since a bare <import> from a no-namespace document would import the
+// no-namespace it is already in.
+func TestParseImportBareFromNoNamespaceDocument(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("", `<xs:import schemaLocation="lib.xsd"/>`),
+		"lib.xsd":  wrap("", `<xs:element name="e" type="xs:string"/>`),
+	})
+	mustXSDRule(t, err, "src-import-noselfimport", "main.xsd")
+}
+
+// TestParseImportNamespaceMismatch covers src-import clause 3.1: the namespace
+// attribute's value must be identical to the resolved document's own
+// targetNamespace.
+func TestParseImportNamespaceMismatch(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:import namespace="urn:b" schemaLocation="c.xsd"/>`),
+		"c.xsd":    wrap("urn:c", `<xs:element name="e" type="xs:string"/>`),
+	})
+	mustXSDRule(t, err, "src-import", "main.xsd")
+}
+
+// TestParseImportNamespaceAbsentButD2HasOne covers src-import clause 3.2: with
+// no namespace attribute the resolved document must have no targetNamespace.
+// Clause 3 branches on the PRESENCE of namespace, not on its value.
+func TestParseImportNamespaceAbsentButD2HasOne(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:import schemaLocation="b.xsd"/>`),
+		"b.xsd":    wrap("urn:b", `<xs:element name="e" type="xs:string"/>`),
+	})
+	mustXSDRule(t, err, "src-import", "main.xsd")
+}
+
+// TestParseImportWithoutSchemaLocation covers the bare <import> §4.2.6.2 calls
+// out as legal: with no schemaLocation there is nothing for the reference
+// strategy to succeed at, so clauses 2 and 3 do not apply and no document is
+// read — in particular the importing document must NOT be re-read as its own D2.
+func TestParseImportWithoutSchemaLocation(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:import namespace="urn:b"/>`+
+			`<xs:element name="root" type="xs:string"/>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if _, ok := s.Element(xsd.QName{Space: "urn:a", Local: "root"}); !ok {
+		t.Fatalf("element {urn:a}root not found")
+	}
+}
+
+// TestParseImportUnresolvable covers §4.2.6.2's "It is not an error for the
+// application schema component reference strategy to fail": a schemaLocation
+// that does not resolve leaves clauses 2 and 3 vacuous, so the import is simply
+// not performed.
+func TestParseImportUnresolvable(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:import namespace="urn:b" schemaLocation="missing.xsd"/>`+
+			`<xs:element name="root" type="xs:string"/>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v, want the unresolvable import to be skipped silently", err)
+	}
+	if _, ok := s.Element(xsd.QName{Space: "urn:a", Local: "root"}); !ok {
+		t.Fatalf("element {urn:a}root not found")
+	}
+}
+
+// TestParseImportNotWellFormed covers the other half of src-import clause 2: a
+// location that DOES resolve must yield a <schema> in a well-formed information
+// set, so a well-formedness fault there is a real violation — unlike a location
+// that fails to resolve.
+func TestParseImportNotWellFormed(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:import namespace="urn:b" schemaLocation="broken.xsd"/>`),
+		"broken.xsd": `<xs:schema xmlns:xs="` + xsdNS + `" targetNamespace="urn:b">` +
+			`<xs:element name="e"/>`, // unclosed <xs:schema>
+	})
+	mustXSDRule(t, err, "src-import", "main.xsd")
+}
+
+// TestParseImportNotASchema covers src-import clause 2 as well: the resolved
+// document element must be <schema>.
+func TestParseImportNotASchema(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd":       wrap("urn:a", `<xs:import namespace="urn:b" schemaLocation="notaschema.xsd"/>`),
+		"notaschema.xsd": `<html/>`,
+	})
+	mustXSDRule(t, err, "src-import", "main.xsd")
+}
+
+// TestParseImportIdempotent covers §4.2.6.2's note that the component-inclusion
+// wording is "carefully worded so that multiple <import>ing of the same schema
+// document will not constitute a violation of clause 2 [c-nmd] of Schema
+// Properties Correct": the same document reached twice contributes its
+// components ONCE, whether from one document, from two, or around a cycle.
+func TestParseImportIdempotent(t *testing.T) {
+	bImportingA := wrapImporting("urn:b", "urn:a",
+		`<xs:import namespace="urn:a" schemaLocation="main.xsd"/>`+
+			`<xs:element name="shared" type="xs:string"/>`)
+	for _, tc := range []struct {
+		name string
+		docs map[string]string
+	}{
+		{
+			name: "twice from one document",
+			docs: map[string]string{
+				"main.xsd": wrap("urn:a", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`+
+					`<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`),
+				"b.xsd": wrap("urn:b", `<xs:element name="shared" type="xs:string"/>`),
+			},
+		},
+		{
+			name: "through a cycle",
+			docs: map[string]string{
+				"main.xsd": wrap("urn:a", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`),
+				"b.xsd":    bImportingA,
+			},
+		},
+		{
+			name: "diamond through an include",
+			docs: map[string]string{
+				"main.xsd": wrap("urn:a", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`+
+					`<xs:include schemaLocation="lib.xsd"/>`),
+				"lib.xsd": wrap("urn:a", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`),
+				"b.xsd":   wrap("urn:b", `<xs:element name="shared" type="xs:string"/>`),
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := parseMap(t, "main.xsd", tc.docs)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if _, ok := s.Element(xsd.QName{Space: "urn:b", Local: "shared"}); !ok {
+				t.Fatalf("element {urn:b}shared not found")
+			}
+		})
+	}
+}
+
+// TestParseSameDocumentIncludedAndImported is why the load-once key is a
+// (resolved location, namespace) pair and not a location alone: ONE
+// no-targetNamespace document reached both as a chameleon <include> (coerced into
+// the includer's namespace, §F.1) and as a bare <import> (staying in no
+// namespace) is two different component sets, and both are part of the assembly.
+func TestParseSameDocumentIncludedAndImported(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:include schemaLocation="lib.xsd"/>`+
+			`<xs:import schemaLocation="lib.xsd"/>`),
+		"lib.xsd": wrap("", `<xs:simpleType name="code">`+
+			`<xs:restriction base="xs:string"/></xs:simpleType>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	mustType(t, s, xsd.QName{Space: "urn:a", Local: "code"})
+	mustType(t, s, xsd.QName{Local: "code"})
+}
+
+// TestParseDirectiveDocumentOrder pins that <include> and <import> are followed
+// in ONE document-order pass, depth-first and pre-order, rather than in two
+// kind-segregated passes. The order documents enter the assembly is the order
+// their components enter the builder, so it is user-visible in sch-props-correct
+// duplicate reports and must not depend on which KIND of directive named a
+// document (STYLE D1/D2).
+func TestParseDirectiveDocumentOrder(t *testing.T) {
+	docs := map[string]string{
+		// import, include, import — interleaved, so a kind-segregated pass would
+		// reorder them.
+		"main.xsd": wrapImporting("urn:a", "urn:b",
+			`<xs:import namespace="urn:b" schemaLocation="b1.xsd"/>`+
+				`<xs:include schemaLocation="lib.xsd"/>`+
+				`<xs:import namespace="urn:b" schemaLocation="b2.xsd"/>`),
+		"lib.xsd": wrapImporting("urn:a", "urn:b",
+			`<xs:import namespace="urn:b" schemaLocation="b3.xsd"/>`),
+		"b1.xsd": wrap("urn:b", `<xs:element name="e1" type="xs:string"/>`),
+		"b2.xsd": wrap("urn:b", `<xs:element name="e2" type="xs:string"/>`),
+		"b3.xsd": wrap("urn:b", `<xs:element name="e3" type="xs:string"/>`),
+	}
+	var requested []string
+	inner := loader.Map(docs)
+	recording := loader.ResolverFunc(func(namespace, location string) (io.ReadCloser, string, error) {
+		requested = append(requested, location)
+		return inner.Resolve(namespace, location)
+	})
+	s, err := parser.Parse("main.xsd", parser.WithResolver(recording))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	want := []string{"main.xsd", "b1.xsd", "lib.xsd", "b3.xsd", "b2.xsd"}
+	if !slices.Equal(requested, want) {
+		t.Fatalf("resolution order = %v, want %v (single document-order pass, depth-first)", requested, want)
+	}
+	for _, local := range []string{"e1", "e2", "e3"} {
+		if _, ok := s.Element(xsd.QName{Space: "urn:b", Local: local}); !ok {
+			t.Fatalf("element {urn:b}%s not found", local)
+		}
 	}
 }

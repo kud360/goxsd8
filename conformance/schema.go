@@ -25,7 +25,9 @@ import (
 // subsumes the producer and Finalize of issues #174/#176/#177/#178). Parse
 // implements §4.2.1's schema(D) — the root document's components plus,
 // transitively, those of every document reached through an <xs:include> child
-// (§4.2.3), chameleon coercion included (§F.1) — and maps top-level
+// (§4.2.3), chameleon coercion included (§F.1), or an <xs:import> child (§4.2.6.2,
+// which coerces nothing: the imported document keeps its own namespace) — and
+// maps top-level
 // <simpleType>/<element>/<attribute>/<attributeGroup>/<group>/<notation> and the
 // produce-time-decidable subset of <complexType> (implicit and <complexContent>
 // <restriction> content, its particles including <group ref>, local
@@ -34,7 +36,7 @@ import (
 // identity constraints of global and local <element>s (#178), seeds the ur-type
 // xs:anyType, resolves cross-references, and rejects duplicate top-level names
 // within a kind. The remaining top-level representations
-// (import/redefine/override), the ref= identity-constraint form, and the
+// (redefine/override), the ref= identity-constraint form, and the
 // not-yet-produced complexType forms (<simpleContent>, <complexContent>
 // <extension>, inline anonymous local types, <openContent>) are SILENTLY SKIPPED
 // or declined (§3.1.2 permits ignoring a not-yet-produced representation), NOT
@@ -55,7 +57,7 @@ import (
 // content is PROVABLY CONFINED to what the producer actually processes.
 //
 // Since #242 that qualifier binds over a CLOSURE, not one document. Parse reads
-// the whole <include> closure, so an included document holding a skipped
+// the whole <include>/<import> closure, so a composed document holding a skipped
 // representation false-accepts exactly as a root one would — and Parse cannot be
 // asked which documents it read (its discovery is unexported, and the *xsd.Schema
 // it returns carries components, not provenance). The harness therefore performs
@@ -92,9 +94,10 @@ import (
 //     declined: src-include clause 1 makes that a genuine rejection, which Parse
 //     emits, so the walk leaves it alone (schema_closure.go).
 //  3. Top-level allowlist. Every top-level child element must be xsd:annotation,
-//     xsd:include, xsd:simpleType, xsd:element, xsd:attribute, xsd:complexType,
+//     xsd:include, xsd:import, xsd:simpleType, xsd:element, xsd:attribute,
+//     xsd:complexType,
 //     xsd:attributeGroup (named definition), xsd:group (named definition), or
-//     xsd:notation — anything else at top level (import/redefine/override/
+//     xsd:notation — anything else at top level (redefine/override/
 //     defaultOpenContent, any non-xsd element, or an out-of-set local name) closes
 //     the false-accept gap above by DECLINING the whole case. Within the allowed
 //     kinds:
@@ -102,10 +105,17 @@ import (
 //       so it contributes nothing the producer could silently skip; the
 //       decidability of the document it POINTS AT is established by the discovery
 //       walk, which reads that document and runs this same allowlist over it
-//       (and over its own <include>s, transitively) before anything is decided —
+//       (and over its own <include>s and <import>s, transitively) before anything
+//       is decided —
 //       not by this allowlist entry. src-include (§4.2.3) itself imposes no shape
 //       constraint on the included document, only existence and targetNamespace
 //       agreement, both of which Parse decides genuinely.
+//     - import: admitted at top level (#182) on the same reasoning, but the
+//       discovery walk is STRICTER for it than for include — an <import> that
+//       yields no D2 (no schemaLocation, or one that does not resolve) declines the
+//       case, because an empty imported namespace turns every reference into it
+//       into a fabricated src-resolve rejection. See the Composition section below
+//       and closureScan.importDirective.
 //     - element: must have no inline <simpleType>/<complexType> child, and every
 //       <unique>/<key>/<keyref> child must use the name= form. A bare
 //       element (no type=) defaults to xs:anyType (§3.3.2.1 case 4), now seeded as
@@ -164,7 +174,8 @@ import (
 //     observed = (err == nil): a nil error is genuine evidence of validity (no
 //     document of the assembly has any of the violations checked above, so a real
 //     one would surface), and a non-nil error is a REAL, implemented rejection
-//     (src-include §4.2.3, sch-props-correct clause 2
+//     (src-include §4.2.3, src-import and src-import-noselfimport §4.2.6.2,
+//     sch-props-correct clause 2
 //     duplicate-name §3.17.6.1, src-element §3.3.3, src-attribute §3.2.3,
 //     src-simple-type §3.16.3, src-resolve §3.17.6.2, st-props-correct,
 //     src-identity-constraint §3.11.3, c-props-correct §3.11.6.1,
@@ -230,20 +241,34 @@ import (
 // confines the whole top level of EVERY document in the closure to the processed
 // kinds and the decidable complexType subset.
 //
-// # Composition: <include> decided, import/redefine/override still deferred
+// # Composition: <include> and <import> decided, redefine/override still deferred
 //
-// <xs:include>, chameleon inclusion included, is DECIDED as of #242: parser.Parse
-// follows the closure (#179) and the harness's discovery walk gates every document
-// in it, so an include/chameleon case is now decided for the same reason a
-// single-document case is, not guessed.
+// <xs:include>, chameleon inclusion included, is DECIDED as of #242, and
+// <xs:import> as of #182: parser.Parse follows both closures (#179/#182) and the
+// harness's discovery walk gates every document in them, so an
+// include/chameleon/import case is now decided for the same reason a
+// single-document case is, not guessed. An <import> is admitted only when it
+// actually yields a D2 — one with no schemaLocation, or one whose schemaLocation
+// does not resolve, DECLINES (closureScan.importDirective), because then the
+// imported namespace contributes no components and every reference into it fails
+// src-resolve at finalize: a FABRICATED "invalid" verdict, the one direction that
+// can corrupt the ratchet.
 //
-// <xs:import>, <xs:redefine> and <xs:override> stay DECLINED. Parse does not
-// follow them — like any other not-yet-produced representation they are skipped,
-// not rejected (§3.1.2, #182/#183 unlanded) — so a document carrying one
-// assembles SHORT: the components of the document it names never enter the
-// builder, and any violation among them is invisible. That is precisely the
-// vacuous pass step 3 exists to refuse, so their mere presence at top level
-// declines the case until the parser follows them.
+// Two import-adjacent gaps are the OTHER direction — fabricated "valid" — which
+// can only cost wins, never corrupt: src-resolve clause 4 (cl.qnr.nsdeclared,
+// §3.17.6.2) is not enforced, so a reference into a namespace the containing
+// document never imported still resolves if another document of the assembly
+// contributed it; and a namespace whose components are genuinely missing is not
+// reported as a §5.3 missing component. Both make the lane observe "valid" where
+// the suite says "invalid", which records a gap rather than a pass.
+//
+// <xs:redefine> and <xs:override> stay DECLINED. Parse does not follow them —
+// like any other not-yet-produced representation they are skipped, not rejected
+// (§3.1.2, #183 unlanded) — so a document carrying one assembles SHORT: the
+// components of the document it names never enter the builder, and any violation
+// among them is invisible. That is precisely the vacuous pass step 3 exists to
+// refuse, so their mere presence at top level declines the case until the parser
+// follows them.
 //
 // # Still deferred
 //
@@ -276,7 +301,8 @@ func newSchemaExec() executor {
 }
 
 // execSchemaCase decides one schemaTest case, or honestly declines it (Fail). It
-// reads the root document, gates the WHOLE <xs:include> closure on the decidable
+// reads the root document, gates the WHOLE <xs:include>/<xs:import> closure on
+// the decidable
 // top-level shape (closureScan.decidable, which runs schemaShapeDecidable on every
 // document it discovers), then runs parser.Parse and agrees or disagrees with the
 // suite's declared validity. A document it cannot resolve OR cannot read (any
@@ -320,10 +346,13 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 	if !doc.IsSchema() {
 		return Fail()
 	}
-	// Only decide when EVERY document of the <include> closure is confined to what
-	// the producer processes; otherwise a silently-skipped invalid representation,
-	// in the root or in any included document, could false-accept.
-	if !newClosureScan(resolver, doc, resolved).decidable(doc) {
+	// Only decide when EVERY document of the <include>/<import> closure is confined
+	// to what the producer processes; otherwise a silently-skipped invalid
+	// representation, in the root or in any composed document, could false-accept.
+	// The root's own targetNamespace seeds the walk exactly as it seeds
+	// parser.Parse's assembly.
+	rootTNS, _ := elementAttr(doc.Root(), "targetNamespace")
+	if !newClosureScan(resolver, resolved, rootTNS).decidable(doc, rootTNS) {
 		return Fail()
 	}
 	_, perr := parser.Parse(location, parser.WithResolver(resolver), parser.WithBackend(backend))
@@ -370,14 +399,17 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 		switch name.Local() {
 		case "annotation":
 			// Harmless, always allowed.
-		case "include":
-			// Admitted (#242). <include> contributes no component of its own — its
-			// content model is (annotation?) — so there is nothing here for the
-			// producer to silently skip. What it POINTS AT is the thing that could
-			// be skipped, and that is gated by closureScan.decidable, which reads
-			// the included document and runs this same function over it before any
-			// case is decided. src-include's own clauses (§4.2.3) are then enforced
-			// genuinely by parser.Parse.
+		case "include", "import":
+			// Admitted (#242 for include, #182 for import). Neither contributes a
+			// component of its own — <include>'s content model is (annotation?) and
+			// <import>'s likewise — so there is nothing here for the producer to
+			// silently skip. What each POINTS AT is the thing that could be skipped,
+			// and that is gated by closureScan.decidable, which reads the composed
+			// document and runs this same function over it before any case is
+			// decided. src-include's (§4.2.3) and src-import's (§4.2.6.2) own clauses
+			// are then enforced genuinely by parser.Parse. An <import> that yields no
+			// D2 at all — no schemaLocation, or one that does not resolve — is
+			// declined by the walk, not here: see closureScan.importDirective.
 		case "element":
 			if !elementDecidable(el) {
 				return false
@@ -408,10 +440,10 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			// (n-props-correct §3.14.6 rejects both identifiers absent), so it is
 			// always admitted, like annotation.
 		default:
-			// import/redefine/override, defaultOpenContent, or any other local name:
+			// redefine/override, defaultOpenContent, or any other local name:
 			// silently skipped by the producer AND not followed by the assembly
-			// (#182/#183 unlanded), so a nil verdict there would be vacuous —
-			// decline the whole case.
+			// (#183 unlanded), so a nil verdict there would be vacuous — decline
+			// the whole case.
 			return false
 		}
 	}

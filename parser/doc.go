@@ -7,12 +7,12 @@
 //	phase 1  parse    — each schema document → raw form via parser/xmltree;
 //	                    every raw node keeps its Loc, so every later error
 //	                    can cite file:line:column.
-//	phase 2  resolve  — schema composition (include ships; import /
+//	phase 2  resolve  — schema composition (include and import ship;
 //	                    redefine / override do not yet) through ONE
 //	                    loader.Resolver, with chameleon namespace
-//	                    coercion, and QName reference resolution through
-//	                    a symbol table seeded once per assembly with the
-//	                    builtins (builtin.Seed).
+//	                    coercion on include only, and QName reference
+//	                    resolution through a symbol table seeded once per
+//	                    assembly with the builtins (builtin.Seed).
 //	phase 3  finalize — components completed in dependency order: a
 //	                    component's base/item/member types are finished
 //	                    before it is. Spec-forbidden circularities
@@ -29,10 +29,14 @@
 // (§3.6.2.1), and the transitive-closure fold of {attribute uses}
 // carries a visited set purely to bound the walk and avoid re-descending
 // a group already folded in — it rejects nothing. Likewise the
-// composition index keyed by resolved location is DOCUMENT IDENTITY, not
-// a cycle guard: §4.2.3 makes two xs:includes of the same resolved
-// location the same schema document, and declares include cycles legal,
-// so each distinct document is loaded once and nothing is rejected.
+// composition index keyed by resolved location AND the namespace the
+// document was reached under is DOCUMENT IDENTITY, not a cycle guard:
+// §4.2.3 makes two xs:includes of the same resolved location the same
+// schema document and declares include cycles legal, §4.2.6.2 says as
+// much for repeated xs:imports, and the namespace is part of the key
+// because one document reached as a chameleon include and as an import
+// yields two different component sets. Each distinct document is loaded
+// once and nothing is rejected.
 //
 // # Determinism
 //
@@ -55,11 +59,15 @@
 //	    WithBackend(value.Backend) (default builtin/strict),
 //	    WithLogger(*slog.Logger) (default silent).
 //
-// Parse assembles the <xs:include> closure of the root document
-// (§4.2.3), including chameleon coercion of a no-targetNamespace
-// document into the including namespace (§F.1) — both the components it
-// declares and the unqualified QName references inside it. Documents are
-// loaded once, keyed by resolved location, so a repeated include, a
+// Parse assembles the <xs:include> and <xs:import> closure of the root
+// document (§4.2.3, §4.2.6.2), including chameleon coercion of a
+// no-targetNamespace <xs:include>d document into the including namespace
+// (§F.1) — both the components it declares and the unqualified QName
+// references inside it. An <xs:import>ed document is never coerced: it
+// contributes its components in its OWN target namespace (absent
+// included), which is what makes a cross-namespace reference resolve.
+// Documents are loaded once, keyed by resolved location and the
+// namespace they were reached under, so a repeated include or import, a
 // diamond, or a (spec-legal) cycle contributes its components once.
 //
 // [Produce] remains the single-document entry point: it maps one
@@ -67,9 +75,24 @@
 //
 // # Planned composition (not yet implemented)
 //
-//   - xs:import, xs:redefine and xs:override are skipped, not followed:
-//     they are top-level representations this slice does not yet produce
+//   - xs:redefine and xs:override are skipped, not followed: they are
+//     top-level representations this slice does not yet produce
 //     (§3.1.2), so a schema needing them assembles short.
+//   - GAP(xsd): src-resolve clause 4 (cl.qnr.nsdeclared, §3.17.6.2) is
+//     not enforced: a QName reference into a namespace the containing
+//     document never <xs:import>ed still resolves if some other document
+//     of the assembly contributed that namespace. That direction
+//     under-rejects (never false-rejects a valid schema), so it is a
+//     recorded gap rather than a correctness hazard.
+//   - GAP(xsd): §5.3 (Missing Sub-components) is never reported as such.
+//     A namespace an <xs:import> declares but no document of the
+//     assembly supplies — a bare import, or one whose schemaLocation
+//     does not resolve — leaves that namespace's components genuinely
+//     missing, and the only way that surfaces is an actual QName
+//     reference into it failing src-resolve at finalize (which this
+//     package hard-fails, see [xsd.SchemaBuilder.Finalize]); an assembly
+//     that makes no such reference is accepted. Under-rejects in the
+//     same direction as the clause 4 gap above.
 //   - xs:override will track its target document explicitly: components
 //     declared inside an override belong to the OVERRIDDEN document
 //     (its schema-level defaults apply), and suppression of replaced
