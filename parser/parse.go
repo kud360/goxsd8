@@ -341,7 +341,12 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 // tns is the importing document's EFFECTIVE target namespace, not its raw
 // targetNamespace attribute: §4.2.3's note on chameleon inclusion makes the
 // including document's namespace the coerced document's own, so a chameleon
-// document importing the includer's namespace is a self-import too.
+// document importing the includer's namespace is a self-import too. tns is ""
+// for the ·absent· namespace — the sentinel [loader.Resolver] documents — so a
+// literal targetNamespace="" arrives here as absent and a bare <import> from
+// such a document is charged clause 1.2, where a strict-literal reading of "has
+// no targetNamespace" would not charge it; tracking literal presence would be a
+// second encoding of namespace-absence (STYLE D3).
 func checkNoSelfImport(el *Element, namespace string, hasNamespace bool, tns string) error {
 	if hasNamespace {
 		// Clause 1.1: the namespace attribute's value must NOT match the enclosing

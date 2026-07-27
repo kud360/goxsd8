@@ -78,12 +78,21 @@
 //   - xs:redefine and xs:override are skipped, not followed: they are
 //     top-level representations this slice does not yet produce
 //     (§3.1.2), so a schema needing them assembles short.
-//   - src-resolve clause 4 (cl.qnr.nsdeclared, §3.17.6.2) is not
-//     enforced: a QName reference into a namespace the containing
+//   - GAP(xsd): src-resolve clause 4 (cl.qnr.nsdeclared, §3.17.6.2) is
+//     not enforced: a QName reference into a namespace the containing
 //     document never <xs:import>ed still resolves if some other document
 //     of the assembly contributed that namespace. That direction
 //     under-rejects (never false-rejects a valid schema), so it is a
 //     recorded gap rather than a correctness hazard.
+//   - GAP(xsd): §5.3 (Missing Sub-components) is never reported as such.
+//     A namespace an <xs:import> declares but no document of the
+//     assembly supplies — a bare import, or one whose schemaLocation
+//     does not resolve — leaves that namespace's components genuinely
+//     missing, and the only way that surfaces is an actual QName
+//     reference into it failing src-resolve at finalize (which this
+//     package hard-fails, see [xsd.SchemaBuilder.Finalize]); an assembly
+//     that makes no such reference is accepted. Under-rejects in the
+//     same direction as the clause 4 gap above.
 //   - xs:override will track its target document explicitly: components
 //     declared inside an override belong to the OVERRIDDEN document
 //     (its schema-level defaults apply), and suppression of replaced
