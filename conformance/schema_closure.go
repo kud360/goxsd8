@@ -11,8 +11,8 @@ import (
 	"github.com/kud360/goxsd8/xsd"
 )
 
-// This file holds the schema lane's OWN <xs:include>/<xs:import> closure walk
-// (issues #242, #182).
+// This file holds the schema lane's OWN <xs:include>/<xs:override>/<xs:import>
+// closure walk (issues #242, #182, #183).
 // It exists for one reason: schema.go's false-accept guard (schemaShapeDecidable)
 // must hold for EVERY document parser.Parse assembles, not just the root, and
 // parser.Parse cannot be asked which documents those were.
@@ -74,8 +74,8 @@ type scanKey struct {
 	namespace string
 }
 
-// closureScan is one schema case's <xs:include>/<xs:import> closure walk. It
-// mirrors parser.assembly's discovery state and nothing else: the resolver every
+// closureScan is one schema case's <xs:include>/<xs:override>/<xs:import> closure
+// walk. It mirrors parser.assembly's discovery state and nothing else: the resolver every
 // document is fetched through, and the load-once index. The effective target
 // namespace is NOT a field, exactly as it is not one on parser.assembly: it is
 // per-document (a chameleon include borrows the includer's, an import keeps its
@@ -123,8 +123,8 @@ func (s *closureScan) decidable(doc *parser.Document, tns string) bool {
 			continue
 		}
 		switch el.Name().Local() {
-		case "include":
-			if !s.include(el, tns) {
+		case "include", "override":
+			if !s.compose(el, tns) {
 				return false
 			}
 		case "import":
@@ -136,8 +136,24 @@ func (s *closureScan) decidable(doc *parser.Document, tns string) bool {
 	return true
 }
 
-// include follows one <include> element and reports whether what it names is
-// decidable. Its outcomes:
+// compose follows one <include> or <override> element and reports whether what it
+// names is decidable. The two share this walk because §4.2.5 clause 3.1.2 defines
+// an <override> as "replaced by an <include> element pointing to Dold′", with the
+// inclusion "handled as described in [§4.2.3]" — the parser composes both through
+// one method for the same reason (parser.assembly.compose).
+//
+// The walk deliberately carries NO override state. §F.2's transformation
+// substitutes declarations inside the documents of the ·target set·; it never
+// changes which schemaLocations they name, so the DOCUMENT SET is the same
+// whether or not an override is in force, and it is the document set this walk
+// exists to enumerate. The parser may read one document several times (once per
+// distinct override applied to it, see parser's docKey) where this walk reads it
+// once; that is not under-discovery, because every one of those readings has the
+// same raw top-level shape, which was gated on the single visit — and the
+// substituted declarations, which come from the <override> elements themselves,
+// are gated by overrideDecidable where those elements occur (schema.go).
+//
+// Its outcomes:
 //
 //   - no schemaLocation attribute: DECLINE. The attribute is required by the
 //     schema for schema documents and parser.Parse reports its absence as a plain
@@ -147,7 +163,10 @@ func (s *closureScan) decidable(doc *parser.Document, tns string) bool {
 //     that "it is not an error for the ·actual value· of the schemaLocation
 //     [attribute] to fail to resolve at all, in which case the corresponding
 //     inclusion must not be performed" — parser.Parse performs no inclusion
-//     either, so there is nothing left to shape-check. Keep walking the siblings.
+//     either, so there is nothing left to shape-check. §4.3.2 says the same of
+//     <override> ("the attempt must be made but it is not an error for it to
+//     fail"; only a non-empty <redefine> makes failure an error). Keep walking
+//     the siblings.
 //   - any OTHER resolver error, or a ReadDocument error on the fetched document:
 //     DECLINE. Both are ambiguous — a permission or transport failure, or a parser
 //     encoding LIMITATION (well-formed UTF-16 read as invalid UTF-8) — and neither
@@ -156,15 +175,15 @@ func (s *closureScan) decidable(doc *parser.Document, tns string) bool {
 //     shape-checked when first reached.
 //   - the document is not a <schema>: NOT a decline, and not recursed into. There
 //     is no top-level content to shape-check, and parser.Parse rejects this
-//     independently as a genuine src-include clause 1 violation — a real decided
-//     rejection, not a skipped representation.
-func (s *closureScan) include(el *parser.Element, tns string) bool {
+//     independently as a genuine src-include (or src-override) clause 1 violation
+//     — a real decided rejection, not a skipped representation.
+func (s *closureScan) compose(el *parser.Element, tns string) bool {
 	hint, ok := elementAttr(el, "schemaLocation")
 	if !ok {
 		return false
 	}
 	// §4.3.2 clause 4: a URI reference resolved against the base URI in scope at
-	// the <include> element itself (xml:base-aware), not the document URI.
+	// the directive element itself (xml:base-aware), not the document URI.
 	requested := resolveSchemaLocation(el.BaseURI(), hint)
 
 	rc, resolved, err := s.resolver.Resolve(tns, requested)
@@ -191,8 +210,9 @@ func (s *closureScan) include(el *parser.Element, tns string) bool {
 	if !d2.IsSchema() {
 		return true
 	}
-	// Whether D2 declares tns itself or is coerced into it (§4.2.3 clause 2.3), the
-	// parser discovers it under the INCLUDING document's effective namespace.
+	// Whether D2 declares tns itself or is coerced into it (§4.2.3 clause 2.3,
+	// §4.2.5 clause 2.3), the parser discovers it under the COMPOSING document's
+	// effective namespace.
 	return s.decidable(d2, tns)
 }
 

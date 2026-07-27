@@ -25,7 +25,9 @@ import (
 // subsumes the producer and Finalize of issues #174/#176/#177/#178). Parse
 // implements §4.2.1's schema(D) — the root document's components plus,
 // transitively, those of every document reached through an <xs:include> child
-// (§4.2.3), chameleon coercion included (§F.1), or an <xs:import> child (§4.2.6.2,
+// (§4.2.3), chameleon coercion included (§F.1), an <xs:override> child (§4.2.5,
+// which composes the overridden document as an include of its §F.2-transformed
+// self), or an <xs:import> child (§4.2.6.2,
 // which coerces nothing: the imported document keeps its own namespace) — and
 // maps top-level
 // <simpleType>/<element>/<attribute>/<attributeGroup>/<group>/<notation> and the
@@ -35,8 +37,8 @@ import (
 // wildcards, and <assert> assertions) into xsd components, maps the name=
 // identity constraints of global and local <element>s (#178), seeds the ur-type
 // xs:anyType, resolves cross-references, and rejects duplicate top-level names
-// within a kind. The remaining top-level representations
-// (redefine/override), the ref= identity-constraint form, and the
+// within a kind. The one remaining top-level representation
+// (redefine), the ref= identity-constraint form, and the
 // not-yet-produced complexType forms (<simpleContent>, <complexContent>
 // <extension>, inline anonymous local types, <openContent>) are SILENTLY SKIPPED
 // or declined (§3.1.2 permits ignoring a not-yet-produced representation), NOT
@@ -94,10 +96,10 @@ import (
 //     declined: src-include clause 1 makes that a genuine rejection, which Parse
 //     emits, so the walk leaves it alone (schema_closure.go).
 //  3. Top-level allowlist. Every top-level child element must be xsd:annotation,
-//     xsd:include, xsd:import, xsd:simpleType, xsd:element, xsd:attribute,
-//     xsd:complexType,
+//     xsd:include, xsd:import, xsd:override, xsd:simpleType, xsd:element,
+//     xsd:attribute, xsd:complexType,
 //     xsd:attributeGroup (named definition), xsd:group (named definition), or
-//     xsd:notation — anything else at top level (redefine/override/
+//     xsd:notation — anything else at top level (redefine,
 //     defaultOpenContent, any non-xsd element, or an out-of-set local name) closes
 //     the false-accept gap above by DECLINING the whole case. Within the allowed
 //     kinds:
@@ -110,6 +112,13 @@ import (
 //       not by this allowlist entry. src-include (§4.2.3) itself imposes no shape
 //       constraint on the included document, only existence and targetNamespace
 //       agreement, both of which Parse decides genuinely.
+//     - override: admitted (#183) when every child of it is a decidable source
+//       declaration in its own right (overrideDecidable), because §F.2 clause 1
+//       makes those children top-level declarations of the OVERRIDDEN document.
+//       The document it points at, and the rest of §4.2.5's ·target set·, is
+//       gated by the same discovery walk that gates an <include>'s target
+//       (closureScan.compose); src-override's own clauses are then enforced
+//       genuinely by parser.Parse.
 //     - import: admitted at top level (#182) on the same reasoning, but the
 //       discovery walk is STRICTER for it than for include — an <import> that
 //       yields no D2 (no schemaLocation, or one that does not resolve) declines the
@@ -177,7 +186,8 @@ import (
 //     (src-include §4.2.3, src-import and src-import-noselfimport §4.2.6.2,
 //     sch-props-correct clause 2
 //     duplicate-name §3.17.6.1, src-element §3.3.3, src-attribute §3.2.3,
-//     src-simple-type §3.16.3, src-resolve §3.17.6.2, st-props-correct,
+//     src-simple-type §3.16.3, src-override §4.2.5, src-resolve §3.17.6.2,
+//     st-props-correct,
 //     src-identity-constraint §3.11.3, c-props-correct §3.11.6.1,
 //     n-props-correct §3.14.6, and for
 //     the complex-type subset src-ct §3.4.3, cos-all-limited §3.8.6, src-wildcard
@@ -241,12 +251,13 @@ import (
 // confines the whole top level of EVERY document in the closure to the processed
 // kinds and the decidable complexType subset.
 //
-// # Composition: <include> and <import> decided, redefine/override still deferred
+// # Composition: <include>, <import> and <override> decided, redefine deferred
 //
-// <xs:include>, chameleon inclusion included, is DECIDED as of #242, and
-// <xs:import> as of #182: parser.Parse follows both closures (#179/#182) and the
+// <xs:include>, chameleon inclusion included, is DECIDED as of #242,
+// <xs:import> as of #182 and <xs:override> as of #183: parser.Parse follows all
+// three closures (#179/#182/#183) and the
 // harness's discovery walk gates every document in them, so an
-// include/chameleon/import case is now decided for the same reason a
+// include/chameleon/import/override case is now decided for the same reason a
 // single-document case is, not guessed. An <import> is admitted only when it
 // actually yields a D2 — one with no schemaLocation, or one whose schemaLocation
 // does not resolve, DECLINES (closureScan.importDirective), because then the
@@ -262,13 +273,28 @@ import (
 // reported as a §5.3 missing component. Both make the lane observe "valid" where
 // the suite says "invalid", which records a gap rather than a pass.
 //
-// <xs:redefine> and <xs:override> stay DECLINED. Parse does not follow them —
-// like any other not-yet-produced representation they are skipped, not rejected
-// (§3.1.2, #183 unlanded) — so a document carrying one assembles SHORT: the
+// An <xs:override> is admitted when every one of its children is itself a
+// decidable source declaration (overrideDecidable): those children become
+// top-level declarations of the overridden document (§F.2 clause 1), so an
+// undecidable one would be an undecidable top-level declaration by another route.
+// The document it points at, and every document that one <include>s or
+// <override>s — §4.2.5's ·target set· — is gated by the same closure walk that
+// gates an <include>'s target, since the override transformation changes which
+// DECLARATIONS a document contributes but never which schemaLocations it names.
+// Verdicts on an admitted override case are genuine in both directions: the
+// substituted declarations are really produced (a violation among them, such as
+// a simple type left restricting itself, surfaces as the rule it breaks), and an
+// unmatched override child is really ignored (§4.2.5) rather than added.
+//
+// <xs:redefine> stays DECLINED. Parse does not follow it —
+// like any other not-yet-produced representation it is skipped, not rejected
+// (§3.1.2, the second half of #183 unlanded) — so a document carrying one
+// assembles SHORT: the
 // components of the document it names never enter the builder, and any violation
 // among them is invisible. That is precisely the vacuous pass step 3 exists to
-// refuse, so their mere presence at top level declines the case until the parser
-// follows them.
+// refuse, so its mere presence at top level declines the case until the parser
+// follows it. §F.2 clause 1's "or <redefine>" scope is empty for the same reason:
+// an <override> never substitutes into a <redefine> the parser does not read.
 //
 // # Still deferred
 //
@@ -439,11 +465,84 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			// (annotation?) and its whole property tableau is settled at produce time
 			// (n-props-correct §3.14.6 rejects both identifiers absent), so it is
 			// always admitted, like annotation.
+		case "override":
+			// Admitted (#183). The document it points at is gated by the closure
+			// walk, exactly as an <include>'s target is; its own children become top-
+			// level declarations of THAT document (§4.2.5, §F.2 clause 1) and are
+			// gated here.
+			if !overrideDecidable(el) {
+				return false
+			}
 		default:
-			// redefine/override, defaultOpenContent, or any other local name:
+			// redefine, defaultOpenContent, or any other local name:
 			// silently skipped by the producer AND not followed by the assembly
-			// (#183 unlanded), so a nil verdict there would be vacuous — decline
-			// the whole case.
+			// (redefine awaits the second half of #183), so a nil verdict there
+			// would be vacuous — decline the whole case.
+			return false
+		}
+	}
+	return true
+}
+
+// overrideDecidable reports whether every child of an <xs:override> (§4.2.5) is a
+// source declaration the producer decides genuinely once ·override
+// pre-processing· has substituted it into the overridden document (#183). A child
+// that overrides something "will become a top-level declaration" of that document
+// (§3.1.2's note on <override> children), so each is gated by the very predicate
+// a top-level child of any document is gated by — the substituted declaration is
+// produced by the overridden document's producer, through the same code path.
+//
+// A child with no name= declines rather than being waved through: §F.2 clause 1
+// matches on (element type, name), so the parser can only ignore such a child,
+// and ignoring a declaration is precisely the vacuous shape this allowlist
+// exists to refuse. Any other element type declines for the same reason.
+//
+// The document the <override> POINTS AT is NOT gated here; that is the closure
+// walk's job (closureScan.compose), which reads it and runs schemaShapeDecidable
+// over it exactly as it does for an <include>'s target.
+func overrideDecidable(el *parser.Element) bool {
+	for _, child := range el.Children() {
+		c, ok := child.(*parser.Element)
+		if !ok {
+			continue
+		}
+		if c.Name().Space() != xsd.XMLSchemaNS {
+			return false
+		}
+		if c.Name().Local() == "annotation" {
+			continue
+		}
+		if !hasAttr(c, "name") {
+			return false
+		}
+		switch c.Name().Local() {
+		case "notation":
+			// Always decidable, as at top level.
+		case "element":
+			if !elementDecidable(c) {
+				return false
+			}
+		case "attribute":
+			if !attributeDecidable(c) {
+				return false
+			}
+		case "simpleType":
+			if !simpleTypeDecidable(c) {
+				return false
+			}
+		case "complexType":
+			if !complexTypeDecidable(c) {
+				return false
+			}
+		case "group":
+			if !groupDecidable(c) {
+				return false
+			}
+		case "attributeGroup":
+			if !attributeGroupDecidable(c) {
+				return false
+			}
+		default:
 			return false
 		}
 	}

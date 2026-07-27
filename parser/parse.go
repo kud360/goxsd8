@@ -97,12 +97,20 @@ func WithLogger(l *slog.Logger) Option {
 // contributes its components once and does not trip sch-props-correct
 // (§3.17.6.1) clause 2.
 //
-// <redefine> and <override> are NOT yet followed: like every other
-// not-yet-produced top-level representation they are skipped, not rejected
-// (§3.1.2), so a schema needing them assembles short rather than wrongly.
+// An <xs:override> child (§4.2.5) is followed too: the document it names is
+// composed exactly as an <include>d one — §4.2.5 clause 3.1.2 defines an override
+// AS an <include> of the transformed document — after ·override pre-processing·
+// substitutes the override's own children for the identically-named source
+// declarations of that document and of every document it in turn <include>s or
+// <override>s (§F.2, parser/override.go).
+//
+// <redefine> is NOT yet followed: like every other not-yet-produced top-level
+// representation it is skipped, not rejected (§3.1.2), so a schema needing it
+// assembles short rather than wrongly.
 //
 // Errors are schema-validity verdicts as *[xsderr.Error] values (src-include,
-// src-import, src-import-noselfimport, src-resolve, sch-props-correct, …)
+// src-import, src-import-noselfimport, src-override, src-resolve,
+// sch-props-correct, …)
 // carrying the offending construct's location; a failure to resolve the ROOT
 // location, by contrast, is a plain I/O error, since the caller named a document
 // that must exist. Like [Produce], Parse returns only the first error.
@@ -119,7 +127,9 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 	// including document to borrow one from (§4.2.3 clause 2.3 needs one).
 	rootTNS := attrOr(root.Root(), "targetNamespace")
 	a := newAssembly(resolved, rootTNS, cfg)
-	if err := a.discover(root, rootTNS); err != nil {
+	// The root is discovered under the nil (identity) override set: no <override>
+	// element points at it, so nothing substitutes for its own declarations.
+	if err := a.discover(root, rootTNS, nil); err != nil {
 		return nil, err
 	}
 	return a.compile(cfg.backend)
@@ -145,19 +155,34 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 type discovered struct {
 	doc *Document
 	tns string
+
+	// ov is the ·override pre-processing· in force over THIS document's own top
+	// level (§4.2.5, §F.2), nil when it was reached plainly. Like tns it is
+	// established at discovery time and is a property of the PATH the document was
+	// reached by, not of the document (STYLE D3): the same document can be reached
+	// once plainly and once under an <override>, and each reading contributes its
+	// own component set — which is precisely why §4.2.5 says such a schema "will
+	// have duplicate and conflicting versions of some components".
+	ov *overrideSet
 }
 
 // docKey is the load-once identity of one discovered document: its RESOLVED
-// location together with the namespace it was reached under. The location alone
-// does not suffice once <import> exists, because the SAME document can
-// legitimately be reached twice under two different namespaces — once as a
-// chameleon <include> coerced into the includer's namespace, once as a bare
-// <import> staying in no namespace — and each of those contributes its own
-// component set. In an include-only closure the namespace component is constant,
-// so it changes no include behavior.
+// location together with the namespace it was reached under and the ·override
+// pre-processing· applied to it. The location alone does not suffice once
+// <import> exists, because the SAME document can legitimately be reached twice
+// under two different namespaces — once as a chameleon <include> coerced into the
+// includer's namespace, once as a bare <import> staying in no namespace — and
+// each of those contributes its own component set. The override half is there for
+// the same reason: one document overridden two different ways yields two
+// different component sets (§4.2.5), while overriding it the same way twice, or
+// reaching it again around an <include>/<override> cycle, must contribute its
+// components once (§4.2.5's note on sch-props-correct clause 2). In an
+// include-only closure both extra components are constant, so neither changes any
+// include behavior.
 type docKey struct {
 	resolved  string
 	namespace string
+	override  string
 }
 
 // assembly is the multi-document build context for one [Parse] call: the
@@ -177,8 +202,9 @@ type assembly struct {
 	loaded map[docKey]struct{}
 
 	// docs holds every discovered document in discovery order: depth-first,
-	// pre-order, over each <schema>'s <include> and <import> children in a single
-	// document-order pass. That order is the order components enter the builder,
+	// pre-order, over each <schema>'s <include>, <override> and <import> children
+	// in a single document-order pass. That order is the order components enter
+	// the builder,
 	// so it is user-visible in sch-props-correct duplicate reports (STYLE D1/D2)
 	// and must not be made to depend on which KIND of directive was seen.
 	docs []discovered
@@ -196,14 +222,16 @@ func newAssembly(rootResolved, rootTNS string, cfg config) *assembly {
 }
 
 // discover appends doc to the assembly under tns — its effective target
-// namespace — and then, in ONE document-order pass, follows each of its
-// top-level <include> (§4.2.3: schema(D1) contains immed(D1) plus the components
-// of schema(D2) for each <include>d D2) and <import> (§4.2.6.2: plus a set of
-// components identical to those of each imported S2) children depth-first. The
-// two directive kinds share the pass so that component entry order stays
-// document order rather than becoming directive-kind-dependent (STYLE D1).
-func (a *assembly) discover(doc *Document, tns string) error {
-	a.docs = append(a.docs, discovered{doc: doc, tns: tns})
+// namespace — and ov — the ·override pre-processing· in force over it — and then,
+// in ONE document-order pass, follows each of its top-level <include> (§4.2.3:
+// schema(D1) contains immed(D1) plus the components of schema(D2) for each
+// <include>d D2), <override> (§4.2.5: plus the components of
+// schema(override(E,Dold))) and <import> (§4.2.6.2: plus a set of components
+// identical to those of each imported S2) children depth-first. The three
+// directive kinds share the pass so that component entry order stays document
+// order rather than becoming directive-kind-dependent (STYLE D1).
+func (a *assembly) discover(doc *Document, tns string, ov *overrideSet) error {
+	a.docs = append(a.docs, discovered{doc: doc, tns: tns, ov: ov})
 	for _, child := range doc.Root().Children() {
 		el, ok := child.(*Element)
 		if !ok {
@@ -211,10 +239,21 @@ func (a *assembly) discover(doc *Document, tns string) error {
 		}
 		switch {
 		case isXSD(el, "include"):
-			if err := a.include(el, tns); err != nil {
+			// §F.2 clause 3: an <include> inside an overridden document becomes an
+			// <override> carrying the same children, so ov CASCADES into the included
+			// document — that is what makes §4.2.5's ·target set· transitive over
+			// inclusion.
+			if err := a.compose(el, tns, ov, ruleSrcInclude); err != nil {
+				return err
+			}
+		case isXSD(el, "override"):
+			if err := a.override(el, tns, ov); err != nil {
 				return err
 			}
 		case isXSD(el, "import"):
+			// §F.2 clause 5: an <import> is copied unchanged, so ov does NOT cascade
+			// through it — §4.2.5's ·target set· "does not include schema documents
+			// which are pointed to by <import> or <redefine> elements".
 			if err := a.importDocument(el, tns); err != nil {
 				return err
 			}
@@ -223,28 +262,54 @@ func (a *assembly) discover(doc *Document, tns string) error {
 	return nil
 }
 
-// include follows one <include> element: it resolves the schemaLocation, reads
-// the document it names, enforces src-include (§4.2.3) clauses 1 and 2 on it,
-// and recurses into its own directives. tns is the INCLUDING document's
+// override follows one <override> element (§4.2.5). It reads the substitutions
+// the element itself declares, composes them with ov — whatever override is
+// already in force over the containing document — per §F.2 clause 4, and hands
+// the result to compose, which fetches the overridden document and enforces
+// src-override clauses 1 and 2 on it.
+//
+// Those two clauses are src-include clauses 1 and 2 in every particular, which is
+// no coincidence: §4.2.5 clause 3.1.2 (and 3.2.2 for the chameleon case) define
+// the <override> as "replaced by an <include> element pointing to Dold′", with
+// "the inclusion … handled as described in [§4.2.3]". Hence one composer for
+// both, told only which rule to charge.
+//
+// The merged set is handed ONLY to the overridden document; the document that
+// CONTAINS this <override> keeps ov, the override in force over it. Substitution
+// therefore cannot leak back into the overriding document, whatever cycle of
+// mutual overrides the schema documents form (PRINCIPLES 16).
+func (a *assembly) override(el *Element, tns string, ov *overrideSet) error {
+	own, err := newOverrideSet(el)
+	if err != nil {
+		return err
+	}
+	return a.compose(el, tns, own.mergedUnder(ov), ruleSrcOverride)
+}
+
+// compose follows one <include> or <override> element: it resolves the
+// schemaLocation, reads the document it names, enforces clauses 1 and 2 of rule —
+// src-include (§4.2.3) or src-override (§4.2.5), whose clauses coincide — on it,
+// and recurses into its own directives under ov. tns is the COMPOSING document's
 // effective target namespace, which is both what clause 2 is judged against and
-// what the included document is discovered under (§F.1 coercion for the
-// chameleon case).
-func (a *assembly) include(el *Element, tns string) error {
+// what the composed document is discovered under (§F.1 coercion for the chameleon
+// case).
+func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rule xsderr.Rule) error {
 	hint, ok := attrValue(el, "schemaLocation")
 	if !ok {
-		// schemaLocation is REQUIRED on <include> by the schema for schema
-		// documents, and src-include governs only what its actual value resolves
-		// to. A missing required attribute is therefore a grammar fault with no
-		// dedicated Schema Representation Constraint, reported as a plain error —
-		// the same treatment a <group> with no ref gets in produce_complex.go.
-		return fmt.Errorf("parser: <include> at %s has no schemaLocation attribute, which the schema for schema documents requires", el.Loc())
+		// schemaLocation is REQUIRED on <include> and <override> by the schema for
+		// schema documents, and src-include/src-override govern only what its actual
+		// value resolves to. A missing required attribute is therefore a grammar
+		// fault with no dedicated Schema Representation Constraint, reported as a
+		// plain error — the same treatment a <group> with no ref gets in
+		// produce_complex.go.
+		return fmt.Errorf("parser: <%s> at %s has no schemaLocation attribute, which the schema for schema documents requires", el.Name().Local(), el.Loc())
 	}
 	// §4.3.2 clause 4: the location is a URI REFERENCE, resolved against the base
-	// URI in scope at the <include> element itself (xml:base-aware), not against
+	// URI in scope at the directive element itself (xml:base-aware), not against
 	// the document URI.
 	requested := resolveSchemaLocation(el.BaseURI(), hint)
 
-	d2, err := a.fetch(requested, tns, el, ruleSrcInclude)
+	d2, err := a.fetch(requested, tns, ov, el, rule)
 	if err != nil {
 		return err
 	}
@@ -252,28 +317,31 @@ func (a *assembly) include(el *Element, tns string) error {
 		return nil
 	}
 	if !d2.IsSchema() {
-		return xsderr.New(ruleSrcInclude, el.Loc(),
-			"schemaLocation %q resolves to a <%s> document element, but src-include clause 1 requires it to resolve to a <schema> element information item", hint, d2.Root().Name().Local())
+		return xsderr.New(rule, el.Loc(),
+			"schemaLocation %q resolves to a <%s> document element, but %s clause 1 requires it to resolve to a <schema> element information item", hint, d2.Root().Name().Local(), rule)
 	}
-	// D2 is compared against the including document's EFFECTIVE namespace rather
+	// D2 is compared against the composing document's EFFECTIVE namespace rather
 	// than its raw targetNamespace attribute. Under chameleon inclusion the §F.1
-	// transformation is applied to the whole including document before its own
+	// transformation is applied to the whole composing document before its own
 	// schema is computed, so its <include>s are evaluated as the coerced
 	// document's: §4.2.3's recursion note spells out that "if A includes B and B
 	// includes C … the effect is as if A included B' and B' included C'", with B'
 	// carrying A's targetNamespace.
 	own, hasOwn := attrValue(d2.Root(), "targetNamespace")
 	if hasOwn && own != tns {
-		// Clause 2.1 (c-normi) fails (the two targetNamespaces differ, or the
-		// including document has none), 2.2 (c-normi2) fails (D2 has one), 2.3
-		// (c-chami) fails (D2 has one), and 2.4 fails (D2 exists).
-		return xsderr.New(ruleSrcInclude, el.Loc(),
-			"<include>d schema document %q has targetNamespace %q, but src-include clause 2 requires it to be identical to the including schema's %q or absent", requested, own, tns)
+		// src-include clause 2.1 (c-normi) fails (the two targetNamespaces differ,
+		// or the composing document has none), 2.2 (c-normi2) fails (D2 has one),
+		// 2.3 (c-chami) fails (D2 has one), and 2.4 fails (D2 exists); src-override
+		// clause 2.1 (c-o-normir), 2.2 (c-o-normi2r) and 2.3 (c-o-chamir) fail for
+		// exactly the same three reasons.
+		return xsderr.New(rule, el.Loc(),
+			"the schema document %q named by this <%s> has targetNamespace %q, but %s clause 2 requires it to be identical to the composing schema's %q or absent", requested, el.Name().Local(), own, rule, tns)
 	}
-	// Clause 2.1, 2.2, or — when D2 declares no targetNamespace and the includer
-	// has one — 2.3, whose §F.1 coercion is applied at production time: either way
-	// D2 is discovered under the including document's effective namespace.
-	return a.discover(d2, tns)
+	// Clause 2.1, 2.2, or — when D2 declares no targetNamespace and the composing
+	// document has one — 2.3, whose §F.1 coercion is applied at production time:
+	// either way D2 is discovered under the composing document's effective
+	// namespace, carrying whatever override is in force over it.
+	return a.discover(d2, tns, ov)
 }
 
 // importDocument follows one <import> element (§4.2.6.2). It enforces
@@ -313,7 +381,7 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 	// The resolver is asked under the IMPORT's namespace, not the importing
 	// document's: that pair — target namespace and location hint — is exactly the
 	// "application schema reference strategy" input clause 2 describes.
-	d2, err := a.fetch(requested, namespace, el, ruleSrcImport)
+	d2, err := a.fetch(requested, namespace, nil, el, ruleSrcImport)
 	if err != nil {
 		return err
 	}
@@ -330,8 +398,9 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 	}
 	// Clause 3 holds, so own is the namespace the import declared. D2 is
 	// discovered under it: import applies NO §F.1 coercion, which is src-include
-	// clause 2.3's alone.
-	return a.discover(d2, own)
+	// clause 2.3's alone, and no ·override pre-processing· either, since §F.2
+	// clause 5 copies an <import> unchanged.
+	return a.discover(d2, own, nil)
 }
 
 // checkNoSelfImport enforces src-import clause 1 (src-import-noselfimport,
@@ -389,15 +458,17 @@ func checkImportedNamespace(el *Element, requested, namespace string, hasNamespa
 }
 
 // fetch resolves requested through the assembly's resolver, under namespace, and
-// reads the schema document it names. It serves both <include> and <import>, so
-// it is handed the rule the calling directive answers to and reads the directive's
-// element name off el rather than carrying a second, stringly-typed kind.
+// reads the schema document it names. It serves <include>, <override> and
+// <import> alike, so it is handed the rule the calling directive answers to and
+// reads the directive's element name off el rather than carrying a second,
+// stringly-typed kind.
 //
 // namespace is what the resolver is asked under AND the namespace half of the
-// load-once key: for <include> the including document's effective target
-// namespace (which is also what the included document is discovered under), for
-// <import> the import's own namespace attribute (which clause 3 then requires D2
-// to agree with).
+// load-once key: for <include>/<override> the composing document's effective
+// target namespace (which is also what the composed document is discovered
+// under), for <import> the import's own namespace attribute (which clause 3 then
+// requires D2 to agree with). ov is the override half of that key and is nil for
+// every directive but <override> (§F.2 clause 5 leaves an <import> unchanged).
 //
 // It returns a nil *Document, and no error, for the two outcomes that mean
 // "perform no composition here":
@@ -407,14 +478,16 @@ func checkImportedNamespace(el *Element, requested, namespace string, hasNamespa
 //     which case the corresponding inclusion must not be performed" (src-include
 //     clause 2.4), and §4.2.6.2 equally: "It is not an error for the application
 //     schema component reference strategy to fail";
-//   - the document was already loaded under this namespace — the same schema
-//     location names the same schema document (§4.2.3), and §4.2.6.2's note
-//     requires repeated <import>s of one document not to trip sch-props-correct
-//     clause 2 either, so it contributes its components exactly once.
+//   - the document was already loaded under this namespace and this override —
+//     the same schema location names the same schema document (§4.2.3), §4.2.6.2's
+//     note requires repeated <import>s of one document not to trip
+//     sch-props-correct clause 2 either, and §4.2.5's note wants the same of
+//     "multiple equivalent overrides of the same schema document", so it
+//     contributes its components exactly once.
 //
 // Any OTHER resolver failure is real: a permission or transport error is not
 // silently downgraded to "absent".
-func (a *assembly) fetch(requested, namespace string, el *Element, rule xsderr.Rule) (*Document, error) {
+func (a *assembly) fetch(requested, namespace string, ov *overrideSet, el *Element, rule xsderr.Rule) (*Document, error) {
 	rc, resolved, err := a.resolver.Resolve(namespace, requested)
 	if errors.Is(err, loader.ErrNotFound) {
 		a.log.Debug("composition skipped: schemaLocation does not resolve",
@@ -429,7 +502,7 @@ func (a *assembly) fetch(requested, namespace string, el *Element, rule xsderr.R
 	// it cannot affect the parse verdict (STYLE S3).
 	defer func() { _ = rc.Close() }()
 
-	key := docKey{resolved: resolved, namespace: namespace}
+	key := docKey{resolved: resolved, namespace: namespace, override: ov.key()}
 	if _, done := a.loaded[key]; done {
 		a.log.Debug("schema document already loaded", "directive", el.Name().Local(),
 			"namespace", namespace, "location", requested, "resolved", resolved, "at", el.Loc().String())
@@ -464,7 +537,7 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 	}
 	producers := make([]*producer, 0, len(a.docs))
 	for _, d := range a.docs {
-		p := newProducer(d.doc, d.tns, builder, sym)
+		p := newProducer(d.doc, d.tns, d.ov, builder, sym)
 		p.prescan()
 		producers = append(producers, p)
 	}

@@ -28,6 +28,12 @@ func include(location string) string {
 	return `<xs:include schemaLocation="` + location + `"/>`
 }
 
+// override is the top-level <xs:override> naming location and carrying body as
+// its substituting children.
+func override(location, body string) string {
+	return `<xs:override schemaLocation="` + location + `">` + body + `</xs:override>`
+}
+
 // closureDecidableIn runs the harness's own discovery walk over an in-memory
 // document set (loader.Map is keyed by the exact location string, so it pins the
 // resolution chain the walk computes) and reports its verdict for root.
@@ -171,6 +177,69 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 			name: "non-schema <import>ed document is left to src-import clause 2",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="html.xsd"/>`),
+				"html.xsd": `<html/>`,
+			},
+			want: true,
+		},
+		{
+			name: "<override> with a decidable Dold is walked and admitted (#183)",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", override("lib.xsd", `<xs:element name="e" type="xs:string"/>`)),
+				"lib.xsd":  schemaSrc("urn:a", `<xs:element name="e" type="xs:int"/>`),
+			},
+			want: true,
+		},
+		{
+			name: "undecidable shape in the <override>n document declines",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", override("lib.xsd", `<xs:element name="e" type="xs:string"/>`)),
+				"lib.xsd":  schemaSrc("urn:a", undecidable),
+			},
+			want: false,
+		},
+		{
+			name: "undecidable shape reached through the ·target set· (§F.2 clause 3)",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", override("mid.xsd", `<xs:element name="e" type="xs:string"/>`)),
+				"mid.xsd":  schemaSrc("urn:a", include("deep.xsd")),
+				"deep.xsd": schemaSrc("urn:a", undecidable),
+			},
+			want: false,
+		},
+		{
+			name: "undecidable shape reached through a nested <override> (§F.2 clause 4)",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", override("mid.xsd", `<xs:element name="e" type="xs:string"/>`)),
+				"mid.xsd":  schemaSrc("urn:a", override("deep.xsd", `<xs:element name="f" type="xs:string"/>`)),
+				"deep.xsd": schemaSrc("urn:a", undecidable),
+			},
+			want: false,
+		},
+		{
+			name: "undecidable shape in a chameleon <override>n document",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", override("cham.xsd", `<xs:element name="e" type="xs:string"/>`)),
+				"cham.xsd": schemaSrc("", undecidable),
+			},
+			want: false,
+		},
+		{
+			name: "<override> whose schemaLocation does not resolve is not an error (§4.3.2)",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", override("missing.xsd", `<xs:element name="e" type="xs:string"/>`)+
+					`<xs:element name="root" type="xs:string"/>`),
+			},
+			want: true,
+		},
+		{
+			name: "<override> without schemaLocation declines (target cannot be named)",
+			docs: map[string]string{"main.xsd": schemaSrc("urn:a", `<xs:override><xs:element name="e" type="xs:string"/></xs:override>`)},
+			want: false,
+		},
+		{
+			name: "non-schema <override>n document is left to src-override clause 1",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", override("html.xsd", `<xs:element name="e" type="xs:string"/>`)),
 				"html.xsd": `<html/>`,
 			},
 			want: true,

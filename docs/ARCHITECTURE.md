@@ -183,15 +183,19 @@ Two access styles over the compiled model, one shared core:
 
 - `parser`: the schema-document compiler — the M4 spine, and the only
   writer of `xsd` components. `Parse(location, opts…)` reads the root
-  document through one `loader.Resolver`, walks the `<xs:include>` closure
-  (§4.2.3) depth-first in document order with a load-once index keyed by
-  resolved location (document identity, *not* a cycle guard — include
+  document through one `loader.Resolver`, walks the
+  `<xs:include>`/`<xs:import>`/`<xs:override>` closure (§4.2.3, §4.2.6.2,
+  §4.2.5) depth-first in document order with a load-once index keyed by
+  resolved location, the namespace the document was reached under and the
+  override applied to it (document identity, *not* a cycle guard — include
   cycles are spec-legal), applies chameleon coercion to a
-  no-`targetNamespace` document (§F.1), then produces every document into
+  no-`targetNamespace` included or overridden document (§F.1), carries
+  override pre-processing (§F.2) as data beside the effective namespace,
+  then produces every document into
   one shared `xsd.SchemaBuilder` and finalizes. `Produce(doc, backend)` is
   the single-document entry point and follows no inter-document reference.
-  `<import>`, `<redefine>` and `<override>` are skipped, not rejected
-  (§3.1.2), so a schema needing them assembles short rather than wrongly.
+  `<redefine>` is skipped, not rejected
+  (§3.1.2), so a schema needing it assembles short rather than wrongly.
   The assembly-wide symbol table is seeded with the builtins exactly once
   (`builtin.Seed`), which is why seeding is assembly-scoped and not
   per-document: per-document seeding would re-add `xs:string` per included

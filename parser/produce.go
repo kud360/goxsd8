@@ -17,6 +17,7 @@ const (
 	ruleSrcInclude            xsderr.Rule = "src-include"
 	ruleSrcImport             xsderr.Rule = "src-import"
 	ruleSrcImportNoSelfImport xsderr.Rule = "src-import-noselfimport"
+	ruleSrcOverride           xsderr.Rule = "src-override"
 	ruleSrcElement            xsderr.Rule = "src-element"
 	ruleSrcAttribute          xsderr.Rule = "src-attribute"
 	ruleSrcSimpleType         xsderr.Rule = "src-simple-type"
@@ -81,7 +82,7 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 	// A lone document is its own assembly, so its effective target namespace is
 	// its own targetNamespace and it is never a chameleon (§4.2.3 clause 2.3
 	// needs an including document to borrow a namespace from).
-	p := newProducer(doc, attrOr(doc.Root(), "targetNamespace"), builder, sym)
+	p := newProducer(doc, attrOr(doc.Root(), "targetNamespace"), nil, builder, sym)
 	p.prescan()
 	if err := p.run(); err != nil {
 		return nil, err
@@ -161,17 +162,28 @@ type producer struct {
 	// always minted in its own namespace, since §4.2.6.2 applies no coercion. The
 	// document's own targetNamespace attribute stays readable on schemaElem, so
 	// chameleon is derived, never stored twice (STYLE D3).
-	target  string
+	target string
+	// ov is the ·override pre-processing· in force over this document (§4.2.5,
+	// §F.2), nil when it was reached plainly or is the root. It substitutes for
+	// this document's OWN top-level source declarations; the substituted
+	// declarations are nonetheless produced by THIS producer, so they take this
+	// document's target namespace and schema-level defaults, which is what §4.2.5's
+	// document-level-defaults note requires (PRINCIPLES 16). The one thing they do
+	// NOT take is this document's §F.1 chameleon coercion of unqualified QName
+	// references, which §4.2.5 clause 3.2.1 orders BEFORE the substitution — see
+	// unqualifiedRefNS.
+	ov      *overrideSet
 	builder *xsd.SchemaBuilder
 	symbols *symbols
 }
 
 // newProducer returns the build context for one document of an assembly. target
-// is THIS document's effective target namespace (see [producer].target) and sym
-// the assembly's shared symbol table; both are set at construction and never
-// mutated into validity afterward (STYLE T1).
-func newProducer(doc *Document, target string, builder *xsd.SchemaBuilder, sym *symbols) *producer {
-	return &producer{schemaElem: doc.Root(), target: target, builder: builder, symbols: sym}
+// is THIS document's effective target namespace (see [producer].target), ov the
+// override in force over it (nil for none) and sym the assembly's shared symbol
+// table; all three are set at construction and never mutated into validity
+// afterward (STYLE T1).
+func newProducer(doc *Document, target string, ov *overrideSet, builder *xsd.SchemaBuilder, sym *symbols) *producer {
+	return &producer{schemaElem: doc.Root(), target: target, ov: ov, builder: builder, symbols: sym}
 }
 
 // chameleon reports whether this document is produced under chameleon coercion
@@ -195,6 +207,12 @@ func (p *producer) chameleon() bool {
 // document reaches a definition in another (§4.2.3 c-incl-incl). Names are
 // minted in the effective target namespace, so a chameleon document's
 // definitions are registered under the including namespace (§F.1 task a).
+//
+// A name an <override> in force over this document substitutes for is registered
+// with the OVERRIDING declaration (§F.2 clause 1), so a base= or
+// <attributeGroup ref> naming it reaches the replacement rather than the
+// replaced definition — "overriding components are constructed as if the
+// overridden components had never existed" (§4.2.5).
 func (p *producer) prescan() {
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
@@ -205,11 +223,12 @@ func (p *producer) prescan() {
 		if !ok {
 			continue
 		}
+		decl := p.ov.replacement(el)
 		switch {
 		case isXSD(el, "simpleType"):
-			p.symbols.simpleTypes[xsd.QName{Space: p.target, Local: name}] = el
+			p.symbols.simpleTypes[xsd.QName{Space: p.target, Local: name}] = decl
 		case isXSD(el, "attributeGroup"):
-			p.symbols.attributeGroups[xsd.QName{Space: p.target, Local: name}] = el
+			p.symbols.attributeGroups[xsd.QName{Space: p.target, Local: name}] = decl
 		}
 	}
 }
@@ -217,6 +236,13 @@ func (p *producer) prescan() {
 // run walks the <schema> children in strict document order, producing each
 // in-scope top-level declaration into the shared builder. prescan must already
 // have run — for every document of the assembly, not just this one.
+//
+// Each child is first passed through the override in force over this document
+// (§F.2 clauses 1 and 2): a top-level source declaration an <override> names is
+// produced from the OVERRIDING declaration in the overridden one's place, and
+// every other child is produced as written. The substitution never changes the
+// element TYPE — it is half of the matching key — so the switch below is the same
+// whichever declaration is produced.
 func (p *producer) run() error {
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
@@ -226,16 +252,17 @@ func (p *producer) run() error {
 		if el.Name().Space() != xsd.XMLSchemaNS {
 			continue
 		}
-		switch el.Name().Local() {
+		decl := p.ov.replacement(el)
+		switch decl.Name().Local() {
 		case "simpleType":
-			name, _ := attrValue(el, "name")
-			st, err := p.buildSimpleType(xsd.QName{Space: p.target, Local: name}, el)
+			name, _ := attrValue(decl, "name")
+			st, err := p.buildSimpleType(xsd.QName{Space: p.target, Local: name}, decl)
 			if err != nil {
 				return err
 			}
 			p.builder.AddType(st)
 		case "element":
-			ed, err := p.produceElement(el)
+			ed, err := p.produceElement(decl)
 			if err != nil {
 				return err
 			}
@@ -247,45 +274,46 @@ func (p *producer) run() error {
 				p.builder.AddIdentityConstraint(ic)
 			}
 		case "attribute":
-			ad, err := p.produceAttribute(el)
+			ad, err := p.produceAttribute(decl)
 			if err != nil {
 				return err
 			}
 			p.builder.AddAttribute(ad)
 		case "complexType":
-			name, _ := attrValue(el, "name")
-			ct, err := p.produceComplexType(xsd.QName{Space: p.target, Local: name}, el)
+			name, _ := attrValue(decl, "name")
+			ct, err := p.produceComplexType(xsd.QName{Space: p.target, Local: name}, decl)
 			if err != nil {
 				return err
 			}
 			p.builder.AddType(ct)
 		case "attributeGroup":
-			name, _ := attrValue(el, "name")
-			ag, err := p.buildAttributeGroup(xsd.QName{Space: p.target, Local: name}, el)
+			name, _ := attrValue(decl, "name")
+			ag, err := p.buildAttributeGroup(xsd.QName{Space: p.target, Local: name}, decl)
 			if err != nil {
 				return err
 			}
 			p.builder.AddAttributeGroup(ag)
 		case "group":
-			name, _ := attrValue(el, "name")
-			mgd, err := p.produceModelGroupDefinition(xsd.QName{Space: p.target, Local: name}, el)
+			name, _ := attrValue(decl, "name")
+			mgd, err := p.produceModelGroupDefinition(xsd.QName{Space: p.target, Local: name}, decl)
 			if err != nil {
 				return err
 			}
 			p.builder.AddModelGroup(mgd)
-		case "include", "import":
+		case "include", "import", "override":
 			// Consumed by the assembler (parse.go) during discovery, BEFORE any
-			// document is produced: neither contributes a component of its own
-			// (§4.2.3, §4.2.6.2), only the components of the document it names,
-			// which reach the builder through that document's own producer.
+			// document is produced: none contributes a component of its own
+			// (§4.2.3, §4.2.5, §4.2.6.2), only the components of the document it
+			// names, which reach the builder through that document's own producer.
+			// [Produce], which follows no inter-document reference, skips them.
 		case "notation":
-			n, err := p.produceNotation(el)
+			n, err := p.produceNotation(decl)
 			if err != nil {
 				return err
 			}
 			p.builder.AddNotation(n)
 		default:
-			// annotation, redefine, override, … — not this slice's scope
+			// annotation, redefine, defaultOpenContent, … — not this slice's scope
 			// (§3.1.2), skipped, not invalid.
 		}
 	}
@@ -579,7 +607,7 @@ func (p *producer) resolveQName(elem *Element, lexical string) (xsd.QName, error
 		// leave the reference's namespace name ·absent·, so both take the same path.
 		uri, _ := elem.LookupPrefix("")
 		if uri == "" {
-			return xsd.QName{Space: p.unqualifiedRefNS(), Local: local}, nil
+			return xsd.QName{Space: p.unqualifiedRefNS(elem), Local: local}, nil
 		}
 		return xsd.QName{Space: uri, Local: local}, nil
 	}
@@ -592,19 +620,41 @@ func (p *producer) resolveQName(elem *Element, lexical string) (xsd.QName, error
 	return xsd.QName{Space: uri, Local: local}, nil
 }
 
-// unqualifiedRefNS is the namespace name an unqualified QName REFERENCE in this
-// document resolves to. Normally that is the ·absent· namespace (src-resolve
+// unqualifiedRefNS is the namespace name the unqualified QName REFERENCE carried
+// by elem resolves to. Normally that is the ·absent· namespace (src-resolve
 // clause 4.1.1). Under chameleon coercion it is the assembly's target namespace:
 // §F.1 task (b) "updates all unqualified QName references so that their
 // namespace names become the actual value of the targetNamespace attribute" —
 // every reference in the document, including one naming a sibling component of
 // the same document — and §4.2.3's closing paragraph extends the conversion to
 // still-unresolved reference QNames retained for finalize.
-func (p *producer) unqualifiedRefNS() string {
-	if p.chameleon() {
+//
+// elem is needed because a chameleon document's top level can hold a declaration
+// that is NOT its own: §4.2.5 clause 3.2.1 orders the two transformations "first
+// [§F.1] and then [§F.2]", so an <override>'s children are substituted into Dold
+// AFTER §F.1 has run over it and are therefore untouched by task (b). They keep
+// the ·absent· namespace for their unqualified references, even though the
+// components they define are minted in the coerced target namespace.
+func (p *producer) unqualifiedRefNS(elem *Element) string {
+	if p.chameleon() && p.declares(elem) {
 		return p.target
 	}
 	return ""
+}
+
+// declares reports whether elem is part of THIS document's tree, as opposed to a
+// declaration substituted into its top level by an <override> in a different
+// document (§F.2 clause 1). It walks the parent chain rather than storing
+// provenance on the element, since provenance is a property of the producer's
+// question, not of the raw node (STYLE D3), and the walk runs only for the
+// chameleon documents whose answer can differ.
+func (p *producer) declares(elem *Element) bool {
+	for e := elem; e != nil; e = e.Parent() {
+		if e == p.schemaElem {
+			return true
+		}
+	}
+	return false
 }
 
 // facetKindOf maps a plain-lexical constraining-facet element's local name to its
