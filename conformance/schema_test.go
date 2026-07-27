@@ -66,6 +66,14 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		// THERE.
 		{"top-level import", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`},
 		{"import beside include and decidable kinds", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/><xs:include schemaLocation="lib.xsd"/><xs:element name="e" type="xs:string"/>`},
+		// #183: an <override> is admitted when each of its children is a decidable
+		// source declaration, since §F.2 clause 1 makes those children top-level
+		// declarations of the OVERRIDDEN document. What it points at is the closure
+		// walk's job (closureScan.compose), not this allowlist's.
+		{"override with decidable children", `<xs:override schemaLocation="b.xsd"><xs:element name="e" type="xs:string"/><xs:simpleType name="T"><xs:restriction base="xs:string"/></xs:simpleType></xs:override>`},
+		{"override with only an annotation", `<xs:override schemaLocation="b.xsd"><xs:annotation><xs:documentation>hi</xs:documentation></xs:annotation></xs:override>`},
+		{"empty override", `<xs:override schemaLocation="b.xsd"/>`},
+		{"override beside decidable kinds", `<xs:override schemaLocation="b.xsd"><xs:notation name="n" public="p"/></xs:override><xs:element name="e" type="xs:string"/>`},
 	}
 	for _, tc := range cases {
 		if !schemaShapeDecidable(schemaDoc(t, tc.body)) {
@@ -99,12 +107,18 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
 		{"element with ref= identity constraint (names an existing definition)", `<xs:element name="e"><xs:key ref="k"/></xs:element>`},
 		{"local element with ref= identity constraint", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:keyref ref="kr"/></xs:element></xs:sequence></xs:complexType>`},
-		// The composition kinds parser.Parse does not follow (#183 unlanded): a
-		// document carrying one assembles SHORT, so admitting it would be the
-		// vacuous pass the allowlist exists to refuse. Unlike <include> (#242) and
-		// <import> (#182).
+		// The one composition kind parser.Parse does not follow (the redefine half
+		// of #183 is unlanded): a document carrying it assembles SHORT, so admitting
+		// it would be the vacuous pass the allowlist exists to refuse. Unlike
+		// <include> (#242), <import> (#182) and <override> (#183).
 		{"top-level redefine (not followed by the assembly)", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType name="T"><xs:restriction base="xs:string"/></xs:simpleType></xs:redefine>`},
-		{"top-level override (not followed by the assembly)", `<xs:override schemaLocation="b.xsd"><xs:element name="e" type="xs:string"/></xs:override>`},
+		// An <override> child the parser can only ignore, or one whose own shape is
+		// outside the decidable subset, declines the whole case: after substitution
+		// it would be an unmapped or undecidable TOP-LEVEL declaration.
+		{"override child with no name (matches nothing, silently ignored)", `<xs:override schemaLocation="b.xsd"><xs:element type="xs:string"/></xs:override>`},
+		{"override child with an inline anonymous type", `<xs:override schemaLocation="b.xsd"><xs:element name="e"><xs:complexType/></xs:element></xs:override>`},
+		{"override child that is a list-variety simpleType", `<xs:override schemaLocation="b.xsd"><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType></xs:override>`},
+		{"override child of an out-of-model kind", `<xs:override schemaLocation="b.xsd"><xs:include schemaLocation="c.xsd"/></xs:override>`},
 		{"include beside an undecidable kind still declines", `<xs:include schemaLocation="lib.xsd"/><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
 		{"top-level defaultOpenContent", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent>`},
 	}
