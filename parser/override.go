@@ -126,8 +126,19 @@ func newOverrideSet(el *Element) (*overrideSet, error) {
 		}
 		key := componentKey{kind: c.Name().Local(), name: name}
 		if prev, dup := seen[key]; dup {
+			// GAP(xsd): this over-rejects a case §F.2 DOES define. The stylesheet is
+			// the NORMATIVE statement of the transformation — "the transformation can
+			// also be described (non-normatively) in prose" — and its clause 1
+			// template selects ($replacement, $original)[1], so a repeated (element
+			// type, name) pair simply means first match wins and the Dold′ it yields
+			// is conforming. Reporting it instead is a deliberate simplification:
+			// first-match-wins silently discards one of two conflicting declarations,
+			// and this set's index is keyed by exactly that pair, so carrying the
+			// loser would be a second encoding of one substitution (STYLE D3). The
+			// direction is safe — this can lose a valid assembly, never accept an
+			// invalid one.
 			return nil, xsderr.New(ruleSrcOverride, c.Loc(),
-				"<override> has two <%s> children named %q (the first at %s); §F.2 clause 1 identifies the overriding declaration by element type and name, so the transformation src-override clause 3 requires is not defined for a repeated pair",
+				"<override> has two <%s> children named %q (the first at %s): an ambiguous duplicate override target, which this implementation reports rather than resolving to the first (§F.2 clause 1 keys the substitution on element type and name)",
 				key.kind, key.name, prev.Loc())
 		}
 		seen[key] = c

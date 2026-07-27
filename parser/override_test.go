@@ -315,10 +315,12 @@ func TestParseOverrideNotWellFormed(t *testing.T) {
 	mustXSDRule(t, err, "src-override", "main.xsd")
 }
 
-// TestParseOverrideDuplicateChildren rejects two children of one <override> with
-// the same element type and name: §F.2 clause 1 identifies the overriding
-// declaration by that pair, so the transformation src-override clause 3 demands
-// is undefined for a repeated one.
+// TestParseOverrideDuplicateChildren pins newOverrideSet's GAP(xsd): two children
+// of one <override> with the same element type and name are reported under
+// src-override even though §F.2's normative stylesheet defines the case, its
+// clause 1 template resolving the pair as first-match-wins via
+// ($replacement, $original)[1]. The rejection is the documented over-rejection,
+// not a reading of the spec as silent.
 func TestParseOverrideDuplicateChildren(t *testing.T) {
 	_, err := parseMap(t, "main.xsd", map[string]string{
 		"main.xsd": wrap("urn:a", `<xs:override schemaLocation="lib.xsd">`+
