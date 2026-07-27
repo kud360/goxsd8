@@ -14974,10 +14974,10 @@ Wild/wild044/schema/wild044.xsd pass
 Wild/wild045/schema/wild045.xsd fail
 Wild/wild046/schema/wild046.xsd fail
 Wild/wild047/schema/wild047.xsd pass
-Wild/wild048/schema/wild048.xsd fail
+Wild/wild048/schema/wild048.xsd pass
 Wild/wild049/schema/wild049.xsd pass
 Wild/wild050/schema/wild050.xsd pass
-Wild/wild051/schema/wild051.xsd fail
+Wild/wild051/schema/wild051.xsd pass
 Wild/wild052/schema/wild052.xsd pass
 Wild/wild053/schema/wild053.xsd pass
 Wild/wild054/schema/wild054.xsd pass
