@@ -15,6 +15,8 @@ import (
 // charges. Each string is a live entry in xsderr's generated catalog.
 const (
 	ruleSrcInclude            xsderr.Rule = "src-include"
+	ruleSrcImport             xsderr.Rule = "src-import"
+	ruleSrcImportNoSelfImport xsderr.Rule = "src-import-noselfimport"
 	ruleSrcElement            xsderr.Rule = "src-element"
 	ruleSrcAttribute          xsderr.Rule = "src-attribute"
 	ruleSrcSimpleType         xsderr.Rule = "src-simple-type"
@@ -152,28 +154,32 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 type producer struct {
 	schemaElem *Element
 	// target is the EFFECTIVE target namespace this document's components are
-	// minted in — the assembly's, not necessarily the document's own: under
-	// chameleon inclusion (§4.2.3 clause 2.3) a document with no targetNamespace
-	// of its own contributes its components to the including namespace (§F.1
-	// task a). The document's own targetNamespace attribute stays readable on
-	// schemaElem, so chameleon is derived, never stored twice (STYLE D3).
+	// minted in, which is per-DOCUMENT and not necessarily the document's own:
+	// under chameleon inclusion (§4.2.3 clause 2.3) a document with no
+	// targetNamespace of its own contributes its components to the INCLUDING
+	// namespace (§F.1 task a). An <import>ed document is the opposite case — it is
+	// always minted in its own namespace, since §4.2.6.2 applies no coercion. The
+	// document's own targetNamespace attribute stays readable on schemaElem, so
+	// chameleon is derived, never stored twice (STYLE D3).
 	target  string
 	builder *xsd.SchemaBuilder
 	symbols *symbols
 }
 
 // newProducer returns the build context for one document of an assembly. target
-// is the assembly's effective target namespace and sym its shared symbol table;
-// both are set at construction and never mutated into validity afterward
-// (STYLE T1).
+// is THIS document's effective target namespace (see [producer].target) and sym
+// the assembly's shared symbol table; both are set at construction and never
+// mutated into validity afterward (STYLE T1).
 func newProducer(doc *Document, target string, builder *xsd.SchemaBuilder, sym *symbols) *producer {
 	return &producer{schemaElem: doc.Root(), target: target, builder: builder, symbols: sym}
 }
 
 // chameleon reports whether this document is produced under chameleon coercion
 // (§4.2.3 clause 2.3 / §F.1): it declares no targetNamespace of its own, yet the
-// assembly that <include>d it has one. It is a derived predicate computed on
-// each call, never a stored field (STYLE D3), mirroring [Document.IsSchema].
+// document that <include>d it has one. An <import>ed no-namespace document is
+// therefore NOT a chameleon — the assembler discovers it under its own (absent)
+// namespace, leaving target empty. It is a derived predicate computed on each
+// call, never a stored field (STYLE D3), mirroring [Document.IsSchema].
 func (p *producer) chameleon() bool {
 	if p.target == "" {
 		return false
@@ -267,10 +273,11 @@ func (p *producer) run() error {
 				return err
 			}
 			p.builder.AddModelGroup(mgd)
-		case "include":
+		case "include", "import":
 			// Consumed by the assembler (parse.go) during discovery, BEFORE any
-			// document is produced: an <include> contributes no component of its
-			// own (§4.2.3), only the components of the document it names.
+			// document is produced: neither contributes a component of its own
+			// (§4.2.3, §4.2.6.2), only the components of the document it names,
+			// which reach the builder through that document's own producer.
 		case "notation":
 			n, err := p.produceNotation(el)
 			if err != nil {
@@ -278,7 +285,7 @@ func (p *producer) run() error {
 			}
 			p.builder.AddNotation(n)
 		default:
-			// annotation, import, redefine, override, … — not this slice's scope
+			// annotation, redefine, override, … — not this slice's scope
 			// (§3.1.2), skipped, not invalid.
 		}
 	}

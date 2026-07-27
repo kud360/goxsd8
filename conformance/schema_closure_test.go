@@ -43,7 +43,8 @@ func closureDecidableIn(t *testing.T, root string, docs map[string]string) bool 
 	if err != nil {
 		t.Fatalf("ReadDocument(%q): %v", root, err)
 	}
-	return newClosureScan(resolver, doc, resolved).decidable(doc)
+	rootTNS, _ := elementAttr(doc.Root(), "targetNamespace")
+	return newClosureScan(resolver, resolved, rootTNS).decidable(doc, rootTNS)
 }
 
 // undecidable is a top-level list-variety simpleType: a shape schemaShapeDecidable
@@ -120,12 +121,59 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "top-level <import> still declines (assembly does not follow it)",
+			name: "<import> with a decidable D2 is walked and admitted (#182)",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="lib.xsd"/>`),
 				"lib.xsd":  schemaSrc("urn:b", decidableType),
 			},
+			want: true,
+		},
+		{
+			name: "undecidable shape in the <import>ed document declines",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="lib.xsd"/>`),
+				"lib.xsd":  schemaSrc("urn:b", undecidable),
+			},
 			want: false,
+		},
+		{
+			name: "undecidable shape reached through an <import>ed document's own <include>",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="lib.xsd"/>`),
+				"lib.xsd":  schemaSrc("urn:b", include("deep.xsd")),
+				"deep.xsd": schemaSrc("urn:b", undecidable),
+			},
+			want: false,
+		},
+		{
+			name: "bare <import> with no schemaLocation declines (no D2: the namespace stays empty)",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b"/>`),
+			},
+			want: false,
+		},
+		{
+			name: "<import> whose schemaLocation does not resolve declines (no D2)",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="missing.xsd"/>`),
+			},
+			want: false,
+		},
+		{
+			name: "malformed <import>ed document declines (could be an encoding limitation)",
+			docs: map[string]string{
+				"main.xsd":   schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="broken.xsd"/>`),
+				"broken.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e"/>`,
+			},
+			want: false,
+		},
+		{
+			name: "non-schema <import>ed document is left to src-import clause 2",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="html.xsd"/>`),
+				"html.xsd": `<html/>`,
+			},
+			want: true,
 		},
 	}
 	for _, tc := range cases {

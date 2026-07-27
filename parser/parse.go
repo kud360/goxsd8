@@ -87,20 +87,25 @@ func WithLogger(l *slog.Logger) Option {
 // transitively, those of every schema document reached through an <xs:include>
 // child (§4.2.3) — including chameleon inclusion, where a document with no
 // targetNamespace of its own contributes its components, and its unqualified
-// QName references, to the including namespace (§4.2.3 clause 3.2, §F.1).
-// Documents are read once each, keyed by resolved location, so a diamond or a
-// (spec-legal) cycle of <include>s contributes its components once and does not
-// trip sch-props-correct (§3.17.6.1) clause 2.
+// QName references, to the including namespace (§4.2.3 clause 3.2, §F.1) — or
+// through an <xs:import> child (§4.2.6), which brings a DIFFERENT namespace's
+// components in unchanged: import never coerces, so an imported document's
+// components stay in its own target namespace and a cross-namespace reference
+// resolves against them at finalize. Documents are read once each, keyed by
+// resolved location AND the namespace they were reached under, so a diamond or a
+// (spec-legal) cycle of <include>s, or a namespace imported repeatedly,
+// contributes its components once and does not trip sch-props-correct
+// (§3.17.6.1) clause 2.
 //
-// <import>, <redefine> and <override> are NOT yet followed: like every other
+// <redefine> and <override> are NOT yet followed: like every other
 // not-yet-produced top-level representation they are skipped, not rejected
 // (§3.1.2), so a schema needing them assembles short rather than wrongly.
 //
 // Errors are schema-validity verdicts as *[xsderr.Error] values (src-include,
-// src-resolve, sch-props-correct, …) carrying the offending construct's
-// location; a failure to resolve the ROOT location, by contrast, is a plain I/O
-// error, since the caller named a document that must exist. Like [Produce],
-// Parse returns only the first error.
+// src-import, src-import-noselfimport, src-resolve, sch-props-correct, …)
+// carrying the offending construct's location; a failure to resolve the ROOT
+// location, by contrast, is a plain I/O error, since the caller named a document
+// that must exist. Like [Produce], Parse returns only the first error.
 func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 	cfg := newConfig(opts)
 	root, resolved, err := readRootDocument(cfg.resolver, location)
@@ -110,66 +115,109 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 	if !root.IsSchema() {
 		return nil, fmt.Errorf("parser: Parse requires a <schema> document root at %q, got %s", location, root.Root().Name().Local())
 	}
-	a := newAssembly(root, resolved, cfg)
-	if err := a.discover(root); err != nil {
+	// The root document's effective target namespace is its own: there is no
+	// including document to borrow one from (§4.2.3 clause 2.3 needs one).
+	rootTNS := attrOr(root.Root(), "targetNamespace")
+	a := newAssembly(resolved, rootTNS, cfg)
+	if err := a.discover(root, rootTNS); err != nil {
 		return nil, err
 	}
 	return a.compile(cfg.backend)
 }
 
+// discovered is one schema document of an assembly paired with the EFFECTIVE
+// target namespace its components are minted in. That namespace is established
+// at discovery time and differs per document, so it cannot be derived from any
+// other assembly state and is not redundant with the document's own
+// targetNamespace attribute (STYLE D3):
+//
+//   - the root document, and any <include>d document that declares a
+//     targetNamespace, is minted in its own;
+//   - a chameleon <include>d document (none of its own) is minted in the
+//     INCLUDER's effective namespace (§4.2.3 clause 2.3, §F.1);
+//   - an <import>ed document is ALWAYS minted in its own, coerced never — §F.1's
+//     transformation belongs to src-include clause 2.3 alone, so a bare
+//     <import> of a no-namespace document leaves its components in no namespace
+//     even when the importing document has one.
+//
+// Do not collapse this back into a single assembly-wide namespace: that field
+// was only ever true of an include-only closure.
+type discovered struct {
+	doc *Document
+	tns string
+}
+
+// docKey is the load-once identity of one discovered document: its RESOLVED
+// location together with the namespace it was reached under. The location alone
+// does not suffice once <import> exists, because the SAME document can
+// legitimately be reached twice under two different namespaces — once as a
+// chameleon <include> coerced into the includer's namespace, once as a bare
+// <import> staying in no namespace — and each of those contributes its own
+// component set. In an include-only closure the namespace component is constant,
+// so it changes no include behavior.
+type docKey struct {
+	resolved  string
+	namespace string
+}
+
 // assembly is the multi-document build context for one [Parse] call: the
-// <include> closure of a root schema document, and the single builder every one
-// of those documents produces into.
+// <include>/<import> closure of a root schema document, and the single builder
+// every one of those documents produces into.
 type assembly struct {
 	resolver loader.Resolver
 	log      *slog.Logger
 
-	// tns is the assembly's effective target namespace — the ROOT document's
-	// targetNamespace. Every document of the closure ends up in it, by induction
-	// over src-include clause 2: 2.1 and 2.2 require the included document to
-	// agree, and 2.3 coerces it (§F.1). That is why one namespace, and one
-	// location-keyed dedup index, suffice for the whole assembly (STYLE D3).
-	tns string
-
-	// loaded indexes the RESOLVED locations already read (§4.2.3: "If two
-	// <include> elements specify the same schema location (after resolving
-	// relative URI references) then they refer to the same schema document"). It
-	// is a LOAD-ONCE index, not a cycle guard (STYLE D4): <include> cycles are
-	// spec-legal — §4.2.3 states the same schema corresponds to every document in
-	// the cycle — and are not detected, merely loaded once.
-	loaded map[string]struct{}
+	// loaded indexes the documents already read (§4.2.3: "If two <include>
+	// elements specify the same schema location (after resolving relative URI
+	// references) then they refer to the same schema document"; §4.2.6.2's note
+	// wants repeated <import>s of one document not to trip sch-props-correct
+	// clause 2 either). It is a LOAD-ONCE index, not a cycle guard (STYLE D4):
+	// <include> cycles are spec-legal — §4.2.3 states the same schema corresponds
+	// to every document in the cycle — and are not detected, merely loaded once.
+	loaded map[docKey]struct{}
 
 	// docs holds every discovered document in discovery order: depth-first,
-	// pre-order, over each <schema>'s <include> children in document order. That
-	// order is the order components enter the builder, so it is user-visible in
-	// sch-props-correct duplicate reports (STYLE D1/D2).
-	docs []*Document
+	// pre-order, over each <schema>'s <include> and <import> children in a single
+	// document-order pass. That order is the order components enter the builder,
+	// so it is user-visible in sch-props-correct duplicate reports (STYLE D1/D2)
+	// and must not be made to depend on which KIND of directive was seen.
+	docs []discovered
 }
 
 // newAssembly returns the assembly for a root schema document already read from
-// rootResolved, with its effective target namespace fixed at construction
-// (STYLE T1). root must be a <schema> document.
-func newAssembly(root *Document, rootResolved string, cfg config) *assembly {
+// rootResolved under rootTNS, its own effective target namespace, seeding the
+// load-once index with it (STYLE T1).
+func newAssembly(rootResolved, rootTNS string, cfg config) *assembly {
 	return &assembly{
 		resolver: cfg.resolver,
 		log:      cfg.log,
-		tns:      attrOr(root.Root(), "targetNamespace"),
-		loaded:   map[string]struct{}{rootResolved: {}},
+		loaded:   map[docKey]struct{}{{resolved: rootResolved, namespace: rootTNS}: {}},
 	}
 }
 
-// discover appends doc to the assembly and then, in document order, follows each
-// of its top-level <include> children depth-first (§4.2.3: schema(D1) contains
-// immed(D1) plus the components of schema(D2) for each <include>d D2).
-func (a *assembly) discover(doc *Document) error {
-	a.docs = append(a.docs, doc)
+// discover appends doc to the assembly under tns — its effective target
+// namespace — and then, in ONE document-order pass, follows each of its
+// top-level <include> (§4.2.3: schema(D1) contains immed(D1) plus the components
+// of schema(D2) for each <include>d D2) and <import> (§4.2.6.2: plus a set of
+// components identical to those of each imported S2) children depth-first. The
+// two directive kinds share the pass so that component entry order stays
+// document order rather than becoming directive-kind-dependent (STYLE D1).
+func (a *assembly) discover(doc *Document, tns string) error {
+	a.docs = append(a.docs, discovered{doc: doc, tns: tns})
 	for _, child := range doc.Root().Children() {
 		el, ok := child.(*Element)
-		if !ok || !isXSD(el, "include") {
+		if !ok {
 			continue
 		}
-		if err := a.include(el); err != nil {
-			return err
+		switch {
+		case isXSD(el, "include"):
+			if err := a.include(el, tns); err != nil {
+				return err
+			}
+		case isXSD(el, "import"):
+			if err := a.importDocument(el, tns); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -177,8 +225,11 @@ func (a *assembly) discover(doc *Document) error {
 
 // include follows one <include> element: it resolves the schemaLocation, reads
 // the document it names, enforces src-include (§4.2.3) clauses 1 and 2 on it,
-// and recurses into its own <include>s.
-func (a *assembly) include(el *Element) error {
+// and recurses into its own directives. tns is the INCLUDING document's
+// effective target namespace, which is both what clause 2 is judged against and
+// what the included document is discovered under (§F.1 coercion for the
+// chameleon case).
+func (a *assembly) include(el *Element, tns string) error {
 	hint, ok := attrValue(el, "schemaLocation")
 	if !ok {
 		// schemaLocation is REQUIRED on <include> by the schema for schema
@@ -193,7 +244,7 @@ func (a *assembly) include(el *Element) error {
 	// the document URI.
 	requested := resolveSchemaLocation(el.BaseURI(), hint)
 
-	d2, err := a.fetch(requested, el)
+	d2, err := a.fetch(requested, tns, el, ruleSrcInclude)
 	if err != nil {
 		return err
 	}
@@ -204,73 +255,199 @@ func (a *assembly) include(el *Element) error {
 		return xsderr.New(ruleSrcInclude, el.Loc(),
 			"schemaLocation %q resolves to a <%s> document element, but src-include clause 1 requires it to resolve to a <schema> element information item", hint, d2.Root().Name().Local())
 	}
-	// D2 is compared against the ASSEMBLY's namespace rather than the raw
-	// targetNamespace of the document physically containing this <include>. Under
-	// chameleon inclusion the §F.1 transformation is applied to the whole
-	// including document before its own schema is computed, so its <include>s are
-	// evaluated as the coerced document's: §4.2.3's recursion note spells out that
-	// "if A includes B and B includes C … the effect is as if A included B' and B'
-	// included C'", with B' carrying A's targetNamespace.
+	// D2 is compared against the including document's EFFECTIVE namespace rather
+	// than its raw targetNamespace attribute. Under chameleon inclusion the §F.1
+	// transformation is applied to the whole including document before its own
+	// schema is computed, so its <include>s are evaluated as the coerced
+	// document's: §4.2.3's recursion note spells out that "if A includes B and B
+	// includes C … the effect is as if A included B' and B' included C'", with B'
+	// carrying A's targetNamespace.
 	own, hasOwn := attrValue(d2.Root(), "targetNamespace")
-	if hasOwn && own != a.tns {
+	if hasOwn && own != tns {
 		// Clause 2.1 (c-normi) fails (the two targetNamespaces differ, or the
 		// including document has none), 2.2 (c-normi2) fails (D2 has one), 2.3
 		// (c-chami) fails (D2 has one), and 2.4 fails (D2 exists).
 		return xsderr.New(ruleSrcInclude, el.Loc(),
-			"<include>d schema document %q has targetNamespace %q, but src-include clause 2 requires it to be identical to the including schema's %q or absent", requested, own, a.tns)
+			"<include>d schema document %q has targetNamespace %q, but src-include clause 2 requires it to be identical to the including schema's %q or absent", requested, own, tns)
 	}
-	// Clause 2.1, 2.2, or — when D2 declares no targetNamespace and the assembly
-	// has one — 2.3, whose §F.1 coercion is applied at production time.
-	return a.discover(d2)
+	// Clause 2.1, 2.2, or — when D2 declares no targetNamespace and the includer
+	// has one — 2.3, whose §F.1 coercion is applied at production time: either way
+	// D2 is discovered under the including document's effective namespace.
+	return a.discover(d2, tns)
 }
 
-// fetch resolves requested through the assembly's resolver and reads the schema
-// document it names. It returns a nil *Document, and no error, for the two
-// outcomes that mean "perform no inclusion here":
+// importDocument follows one <import> element (§4.2.6.2). It enforces
+// src-import-noselfimport (clause 1) against tns — the IMPORTING document's
+// effective target namespace — resolves the schemaLocation hint if there is one,
+// enforces src-import clauses 2 and 3 on what comes back, and discovers D2 under
+// D2's OWN target namespace, never a coerced one.
+//
+// The ·absent· namespace is encoded as the empty string throughout, the same
+// sentinel [loader.Resolver] documents, so clause 1's and clause 3's namespace
+// comparisons are string comparisons; only the PRESENCE of the namespace
+// attribute selects which sub-clause applies, since namespace="" is a legal (if
+// unusual) xs:anyURI value and is not the same thing as no attribute at all.
+func (a *assembly) importDocument(el *Element, tns string) error {
+	namespace, hasNamespace := attrValue(el, "namespace")
+	if err := checkNoSelfImport(el, namespace, hasNamespace, tns); err != nil {
+		return err
+	}
+	hint, hasHint := attrValue(el, "schemaLocation")
+	if !hasHint {
+		// A bare <import> — namespace but no schemaLocation — is explicitly legal
+		// (§4.2.6.2): it declares that references into namespace are expected
+		// (src-resolve clause 4.2.2 / 4.1.2) without naming a document to satisfy
+		// them from. There is nothing for the reference strategy to succeed at, so
+		// clauses 2 and 3 do not apply and there is no D2 to discover. Deliberately
+		// NOT routed through resolveSchemaLocation: that returns the IMPORTING
+		// document's own base URI for an empty location, which would make a bare
+		// import re-read the importer.
+		a.log.Debug("import declares a namespace with no schemaLocation hint",
+			"rule", string(ruleSrcImport), "namespace", namespace, "at", el.Loc().String())
+		return nil
+	}
+	// §4.3.2 clause 4: a URI REFERENCE resolved against the base URI in scope at
+	// the <import> element itself (xml:base-aware).
+	requested := resolveSchemaLocation(el.BaseURI(), hint)
+
+	// The resolver is asked under the IMPORT's namespace, not the importing
+	// document's: that pair — target namespace and location hint — is exactly the
+	// "application schema reference strategy" input clause 2 describes.
+	d2, err := a.fetch(requested, namespace, el, ruleSrcImport)
+	if err != nil {
+		return err
+	}
+	if d2 == nil {
+		return nil
+	}
+	if !d2.IsSchema() {
+		return xsderr.New(ruleSrcImport, el.Loc(),
+			"schemaLocation %q resolves to a <%s> document element, but src-import clause 2 requires it to resolve to a <schema> element information item", hint, d2.Root().Name().Local())
+	}
+	own := attrOr(d2.Root(), "targetNamespace")
+	if err := checkImportedNamespace(el, requested, namespace, hasNamespace, own); err != nil {
+		return err
+	}
+	// Clause 3 holds, so own is the namespace the import declared. D2 is
+	// discovered under it: import applies NO §F.1 coercion, which is src-include
+	// clause 2.3's alone.
+	return a.discover(d2, own)
+}
+
+// checkNoSelfImport enforces src-import clause 1 (src-import-noselfimport,
+// §4.2.6.2) on one <import>: a document may not import the namespace it is
+// already in.
+//
+// tns is the importing document's EFFECTIVE target namespace, not its raw
+// targetNamespace attribute: §4.2.3's note on chameleon inclusion makes the
+// including document's namespace the coerced document's own, so a chameleon
+// document importing the includer's namespace is a self-import too.
+func checkNoSelfImport(el *Element, namespace string, hasNamespace bool, tns string) error {
+	if hasNamespace {
+		// Clause 1.1: the namespace attribute's value must NOT match the enclosing
+		// <schema>'s effective targetNamespace.
+		if namespace != tns {
+			return nil
+		}
+		return xsderr.New(ruleSrcImportNoSelfImport, el.Loc(),
+			"<import> names namespace %q, which is the importing schema's own target namespace; src-import clause 1.1 requires them to differ", namespace)
+	}
+	// Clause 1.2: with no namespace attribute the enclosing <schema> must have a
+	// targetNamespace — a bare <import> from a no-namespace document would import
+	// the no-namespace it is already in.
+	if tns != "" {
+		return nil
+	}
+	return xsderr.New(ruleSrcImportNoSelfImport, el.Loc(),
+		"<import> has no namespace attribute, but the importing schema has no target namespace either; src-import clause 1.2 requires one")
+}
+
+// checkImportedNamespace enforces src-import clause 3 (§4.2.6.2) on a D2 that
+// the reference strategy did produce: the namespace the <import> declared and
+// the one D2 actually declares must agree. own is D2's targetNamespace with the
+// ·absent· namespace encoded as "".
+func checkImportedNamespace(el *Element, requested, namespace string, hasNamespace bool, own string) error {
+	if hasNamespace {
+		// Clause 3.1: identical to D2's targetNamespace.
+		if own == namespace {
+			return nil
+		}
+		return xsderr.New(ruleSrcImport, el.Loc(),
+			"<import>ed schema document %q has target namespace %q, but src-import clause 3.1 requires it to be identical to the namespace attribute's %q", requested, own, namespace)
+	}
+	// Clause 3.2: with no namespace attribute, D2 must have no targetNamespace.
+	if own == "" {
+		return nil
+	}
+	return xsderr.New(ruleSrcImport, el.Loc(),
+		"<import> has no namespace attribute, but the schema document %q it names has target namespace %q; src-import clause 3.2 requires it to have none", requested, own)
+}
+
+// fetch resolves requested through the assembly's resolver, under namespace, and
+// reads the schema document it names. It serves both <include> and <import>, so
+// it is handed the rule the calling directive answers to and reads the directive's
+// element name off el rather than carrying a second, stringly-typed kind.
+//
+// namespace is what the resolver is asked under AND the namespace half of the
+// load-once key: for <include> the including document's effective target
+// namespace (which is also what the included document is discovered under), for
+// <import> the import's own namespace attribute (which clause 3 then requires D2
+// to agree with).
+//
+// It returns a nil *Document, and no error, for the two outcomes that mean
+// "perform no composition here":
 //
 //   - the location does not resolve at all — §4.2.3: "It is not an error for the
 //     actual value of the schemaLocation attribute to fail to resolve at all, in
 //     which case the corresponding inclusion must not be performed" (src-include
-//     clause 2.4);
-//   - the resolved location was already loaded — the same schema location names
-//     the same schema document (§4.2.3), which therefore contributes its
-//     components exactly once.
+//     clause 2.4), and §4.2.6.2 equally: "It is not an error for the application
+//     schema component reference strategy to fail";
+//   - the document was already loaded under this namespace — the same schema
+//     location names the same schema document (§4.2.3), and §4.2.6.2's note
+//     requires repeated <import>s of one document not to trip sch-props-correct
+//     clause 2 either, so it contributes its components exactly once.
 //
 // Any OTHER resolver failure is real: a permission or transport error is not
 // silently downgraded to "absent".
-func (a *assembly) fetch(requested string, el *Element) (*Document, error) {
-	rc, resolved, err := a.resolver.Resolve(a.tns, requested)
+func (a *assembly) fetch(requested, namespace string, el *Element, rule xsderr.Rule) (*Document, error) {
+	rc, resolved, err := a.resolver.Resolve(namespace, requested)
 	if errors.Is(err, loader.ErrNotFound) {
-		a.log.Debug("include skipped: schemaLocation does not resolve",
-			"rule", string(ruleSrcInclude), "location", requested, "at", el.Loc().String())
+		a.log.Debug("composition skipped: schemaLocation does not resolve",
+			"rule", string(rule), "directive", el.Name().Local(),
+			"namespace", namespace, "location", requested, "at", el.Loc().String())
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("parser: resolving <include> schemaLocation %q at %s: %w", requested, el.Loc(), err)
+		return nil, fmt.Errorf("parser: resolving <%s> schemaLocation %q at %s: %w", el.Name().Local(), requested, el.Loc(), err)
 	}
 	// A read-only reader: a close failure cannot change what was already read, so
 	// it cannot affect the parse verdict (STYLE S3).
 	defer func() { _ = rc.Close() }()
 
-	if _, done := a.loaded[resolved]; done {
-		a.log.Debug("include already loaded", "location", requested, "resolved", resolved, "at", el.Loc().String())
+	key := docKey{resolved: resolved, namespace: namespace}
+	if _, done := a.loaded[key]; done {
+		a.log.Debug("schema document already loaded", "directive", el.Name().Local(),
+			"namespace", namespace, "location", requested, "resolved", resolved, "at", el.Loc().String())
 		return nil, nil
 	}
-	a.loaded[resolved] = struct{}{}
+	a.loaded[key] = struct{}{}
 
 	doc, err := ReadDocument(requested, rc)
 	if err != nil {
-		// Clause 1.1 requires the resolved resource to correspond to a <schema>
-		// item "in a well-formed information set"; a well-formedness fault in an
-		// <include>d document is thus an inclusion violation, not a bare XML error.
-		return nil, xsderr.Wrap(ruleSrcInclude, el.Loc(),
-			fmt.Errorf("<include>d schema document %q is not well-formed, but src-include clause 1.1 requires a well-formed information set: %w", requested, err))
+		// src-include clause 1.1 and src-import clause 2 alike require the resolved
+		// resource to correspond to a <schema> item "in a well-formed information
+		// set", so a well-formedness fault in a document that DID resolve is a
+		// composition violation, not a bare XML error.
+		return nil, xsderr.Wrap(rule, el.Loc(),
+			fmt.Errorf("the schema document %q named by this <%s> is not well-formed, but %s requires a well-formed information set: %w", requested, el.Name().Local(), rule, err))
 	}
 	return doc, nil
 }
 
-// compile produces every discovered document into ONE builder and finalizes it.
-// Every document's pre-scan runs before any document is produced, so a base= or
+// compile produces every discovered document into ONE builder — each under its
+// OWN effective target namespace, so an imported document's components land in
+// the namespace it declares rather than the root's — and finalizes it. Every
+// document's pre-scan runs before any document is produced, so a base= or
 // <attributeGroup ref> in one document reaches a definition contributed by
 // another (§4.2.3 clause 3.1.2, c-incl-incl); the builtins are seeded once, by
 // newSymbols, for the whole assembly.
@@ -281,14 +458,14 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 		return nil, err
 	}
 	producers := make([]*producer, 0, len(a.docs))
-	for _, doc := range a.docs {
-		p := newProducer(doc, a.tns, builder, sym)
+	for _, d := range a.docs {
+		p := newProducer(d.doc, d.tns, builder, sym)
 		p.prescan()
 		producers = append(producers, p)
 	}
 	for i, p := range producers {
 		a.log.Debug("producing schema document",
-			"uri", a.docs[i].URI(), "targetNamespace", a.tns, "chameleon", p.chameleon())
+			"uri", a.docs[i].doc.URI(), "targetNamespace", a.docs[i].tns, "chameleon", p.chameleon())
 		if err := p.run(); err != nil {
 			return nil, err
 		}

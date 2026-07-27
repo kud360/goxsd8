@@ -60,6 +60,12 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		// (closureScan.decidable), not this allowlist's.
 		{"top-level include", `<xs:include schemaLocation="lib.xsd"/>`},
 		{"include beside decidable kinds", `<xs:include schemaLocation="lib.xsd"/><xs:element name="e" type="xs:string"/>`},
+		// #182: <import> likewise contributes no component of its own. The stricter
+		// no-D2 rule that governs it lives in closureScan.importDirective, not in
+		// this shape allowlist, so a bare <import> is admitted HERE and declined
+		// THERE.
+		{"top-level import", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`},
+		{"import beside include and decidable kinds", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/><xs:include schemaLocation="lib.xsd"/><xs:element name="e" type="xs:string"/>`},
 	}
 	for _, tc := range cases {
 		if !schemaShapeDecidable(schemaDoc(t, tc.body)) {
@@ -93,10 +99,10 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
 		{"element with ref= identity constraint (names an existing definition)", `<xs:element name="e"><xs:key ref="k"/></xs:element>`},
 		{"local element with ref= identity constraint", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:keyref ref="kr"/></xs:element></xs:sequence></xs:complexType>`},
-		// The composition kinds parser.Parse does not follow (#182/#183 unlanded):
-		// a document carrying one assembles SHORT, so admitting it would be the
-		// vacuous pass the allowlist exists to refuse. Unlike <include> (#242).
-		{"top-level import (not followed by the assembly)", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`},
+		// The composition kinds parser.Parse does not follow (#183 unlanded): a
+		// document carrying one assembles SHORT, so admitting it would be the
+		// vacuous pass the allowlist exists to refuse. Unlike <include> (#242) and
+		// <import> (#182).
 		{"top-level redefine (not followed by the assembly)", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType name="T"><xs:restriction base="xs:string"/></xs:simpleType></xs:redefine>`},
 		{"top-level override (not followed by the assembly)", `<xs:override schemaLocation="b.xsd"><xs:element name="e" type="xs:string"/></xs:override>`},
 		{"include beside an undecidable kind still declines", `<xs:include schemaLocation="lib.xsd"/><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
