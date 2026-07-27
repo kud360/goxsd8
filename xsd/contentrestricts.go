@@ -35,10 +35,19 @@ import (
 // copy back onto itself beside its successors. R is walked position by position,
 // which is sound because any copy R can take is a sequence R admits; B is walked
 // as a SET of positions, the standard subset construction, because picking one
-// copy of B's would commit to a continuation another copy allows. The set is not
-// a hedge against ambiguity between particles — there is none — only against
-// ambiguity between copies of one particle, which is why every member of a
-// matched set carries the same {term} and so the same ·default binding·.
+// member would commit to a continuation another member allows.
+//
+// A matched set is HETEROGENEOUS in general, and nothing here may read one member
+// as a representative of the rest. Two shapes put different {term}s into one set:
+// copies of one particle, exempt from ·compete· by particle identity; and — since
+// 1.1 stopped forbidding that pairing (Appendix G.1.3) — an ·element particle·
+// beside a ·wildcard particle· both admitting one name, which cos-nonambig
+// deliberately leaves live together. Members of the second shape carry genuinely
+// different, and possibly disagreeing, ·default bindings·. Both conditions are
+// therefore decided over the WHOLE set: clause 1 continues into the union of
+// every member's ·follow· set, and clause 2 is EXISTENTIAL (someBindingSubsumes)
+// — it passes when SOME member's binding ·subsumes· R's, which is this file's
+// fail-open direction, not a claim that the members agree.
 //
 // The walk terminates on its visited set: positions(R) is finite because
 // unfoldCopies bounds each particle's copies, and the B-sets are drawn from a
@@ -298,10 +307,14 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton) bool {
 // each item the R-position p admits. An empty result is a clause-1 failure: R
 // can consume something no run of B can.
 //
-// The result is a SET rather than one position because several copies of one B
-// particle may be live at once (see this file's determinism note). Every member
-// therefore carries the same {term}, which is what lets someBindingSubsumes read
-// a single ·default binding· off any of them.
+// The result is a SET rather than one position because several B-positions may be
+// live and admit p at once (see this file's determinism note): copies of one
+// particle, and an ·element particle· beside a ·wildcard particle·, which 1.1
+// permits to compete. Members may therefore carry different {term}s and different
+// ·default bindings·, and neither caller may single one out. The walk continues
+// into the union of their ·follow· sets, and someBindingSubsumes examines EVERY
+// member, succeeding when any one of them ·subsumes· — never reading a binding
+// off a representative.
 func (s *Schema) matchPositions(p position, b contentAutomaton, live []int) []int {
 	var matched []int
 	for _, q := range live {

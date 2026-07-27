@@ -270,6 +270,83 @@ func TestContentRestrictsAllGroupBaseDecided(t *testing.T) {
 	expectRule(t, cRestricts(t, base, uGroup(t, CompositorSequence, cElem(t, "b", 1, 1))), ruleDerivationOKRestriction)
 }
 
+// TestContentRestrictsSubsetConstruction pins the SUBSET construction itself:
+// contentModelRestricts must carry EVERY matched B-position forward, not one of
+// them. The base offers <e><a> or <any><b>; cos-nonambig leaves the ·element
+// particle· <e> and the ·wildcard particle· live together at the start, since 1.1
+// no longer forbids that pairing, so an <e> in the restriction matches BOTH. Only
+// the wildcard's branch continues into <b>, and it is the higher-indexed member —
+// a walk that committed to the first match would follow <e> into <a> alone and
+// false-reject a restriction the base plainly admits ("e b" is the second branch
+// with the wildcard taking e).
+func TestContentRestrictsSubsetConstruction(t *testing.T) {
+	base := uGroup(t, CompositorChoice,
+		uOne(t, ResolvedTerm{Term: uGroup(t, CompositorSequence, cElem(t, "e", 1, 1), cElem(t, "a", 1, 1))}),
+		uOne(t, ResolvedTerm{Term: uGroup(t, CompositorSequence, cAny(t, NamespaceConstraintAny, nil, ProcessSkip), cElem(t, "b", 1, 1))}))
+	if err := cRestricts(t, base, uGroup(t, CompositorSequence, cElem(t, "e", 1, 1), cElem(t, "b", 1, 1))); err != nil {
+		t.Fatalf("a continuation reachable only through a later matched B-position was rejected: %v", err)
+	}
+	// The control: <c> is admitted by the wildcard too, but neither branch
+	// continues into <a> after it, so the same walk still decides a rejection.
+	expectRule(t, cRestricts(t, base,
+		uGroup(t, CompositorSequence, cElem(t, "c", 1, 1), cElem(t, "a", 1, 1))), ruleDerivationOKRestriction)
+}
+
+// TestContentRestrictsMatchedSetMixedTerms pins clause 2 as an EXISTENTIAL over
+// the matched set. The base's start state holds an ·element particle· <e> that is
+// not {nillable} beside a skip ·wildcard particle·, and both admit <e>; the
+// restriction names <e> as {nillable}, which loc-testSubP clause 4.1 refuses
+// against the element particle's ·default binding· while the skip keyword subsumes
+// anything (clause 1). The element particle is the FIRST member of the matched
+// set, so reading any one member — rather than asking whether SOME member
+// subsumes — decides the opposite verdict.
+//
+// The acceptance is the fail-open reading someBindingSubsumes documents, not the
+// spec's own: ·attribution· would give the item the Element Declaration.
+func TestContentRestrictsMatchedSetMixedTerms(t *testing.T) {
+	base := uGroup(t, CompositorSequence,
+		cElem(t, "e", 0, 1),
+		uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uWildcard(t, NamespaceConstraintAny, nil, ProcessSkip)}))
+	derived := uGroup(t, CompositorSequence, cNillableElem(t, "e", true))
+	if err := cRestricts(t, base, derived); err != nil {
+		t.Fatalf("clause 2 must be decided existentially over the matched set: %v", err)
+	}
+	// The control: with the wildcard gone the matched set holds the element
+	// particle alone, and clause 4.1 is charged exactly as before.
+	expectRule(t, cRestricts(t, uGroup(t, CompositorSequence, cElem(t, "e", 0, 1)), derived), ruleDerivationOKRestriction)
+}
+
+// cGlobalRefModel is a one-particle content model over an <element ref> to a
+// top-level declaration.
+func cGlobalRefModel(t *testing.T, name string) ModelGroup {
+	t.Helper()
+	return uGroup(t, CompositorSequence, uOne(t, ElementDeclarationRef{Name: uq(name)}))
+}
+
+// TestContentRestrictsGlobalSubstitutionGap pins elementParticleAdmits's GAP(xsd)
+// arm, the only fail-open in this file with a scope narrow enough to test
+// directly: two differently-named TOP-LEVEL declarations are admitted
+// unconditionally, because no producer maps substitutionGroup= into {substitution
+// group affiliations} yet and charging the resulting non-membership would
+// false-reject the W3C suite's base <element ref="head"/> restricted to a member
+// of head's group. The scope is what the second half pins — a LOCAL declaration on
+// either side still needs the expanded names to agree — so the arm cannot quietly
+// widen into "any two element particles admit each other".
+func TestContentRestrictsGlobalSubstitutionGap(t *testing.T) {
+	globalRestriction := func(derived ModelGroup) error {
+		return dFinalize(t, func(b *SchemaBuilder) {
+			b.AddElement(uGlobal(t, uq("head"), uq("T")))
+			b.AddElement(uGlobal(t, uq("member"), uq("T")))
+			b.AddType(dType(t, uq("base"), anyTypeName, dElementContent(t, false, cGlobalRefModel(t, "head")), nil, nil))
+			b.AddType(dType(t, uq("derived"), uq("base"), dElementContent(t, false, derived), nil, nil))
+		})
+	}
+	if err := globalRestriction(cGlobalRefModel(t, "member")); err != nil {
+		t.Fatalf("a global-over-global element particle pairing was rejected, but the affiliation producer gap makes that a false reject: %v", err)
+	}
+	expectRule(t, globalRestriction(uGroup(t, CompositorSequence, cElem(t, "member", 1, 1))), ruleDerivationOKRestriction)
+}
+
 // cNC builds a Namespace Constraint for the wildcardSubset table.
 func cNC(t *testing.T, variety NamespaceConstraintVariety, namespaces []Namespace, disallowed []QName, keywords []DisallowedNameKeyword) NamespaceConstraint {
 	t.Helper()
