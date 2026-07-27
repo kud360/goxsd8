@@ -78,11 +78,15 @@ func (w Wildcard) ProcessContents() ProcessContents {
 }
 
 // NamespaceConstraint returns the {namespace constraint} property. It is exposed
-// for the §3.6.2.2 "Common Rules for Attribute Wildcards" combination
-// (declare-attributeGroup-wildcard): the parser's <attributeGroup>/<complexType>
-// attribute-wildcard producer reads the constraint out of each referenced group's
-// already-built {attribute wildcard}, folds them through
-// IntersectNamespaceConstraint, and rebuilds via NewWildcard. It mirrors the
+// for the §3.10.6 wildcard-set operations, which combine or relate the
+// constraints of wildcards that are already built and so must read them back off
+// the components: the §3.6.2.2 "Common Rules for Attribute Wildcards"
+// combination (declare-attributeGroup-wildcard), where the parser's
+// <attributeGroup>/<complexType> attribute-wildcard producer folds each
+// referenced group's constraint through IntersectNamespaceConstraint and rebuilds
+// via NewWildcard; and, in-package, the complex-content restriction walk, which
+// folds a base content model's live wildcards through unionNamespaceConstraint
+// and relates the result by wildcardSubset (contentrestricts.go). It mirrors the
 // inspection getters NamespaceConstraint.Variety/Namespaces; to decide whether a
 // name is admitted, call AllowsName rather than inspecting this.
 func (w Wildcard) NamespaceConstraint() NamespaceConstraint {
