@@ -235,6 +235,12 @@ func checkRestrictionBaseFinal(t, b ComplexType) error {
 //   - 2.3: T's {content type} is empty and either B's is too, or B is
 //     element-only/mixed with an ·emptiable· {particle}.
 //   - 2.4: the variety/mixed match of 2.4.1, then 2.4.2's delegate.
+//
+// The message names every branch that could have carried the type, because a
+// disjunction has no single failing clause to charge: 2.4.2's own two conditions
+// (cos-content-act-restrict clause 1's language containment and clause 2's
+// ctr-child-type-subsumption) are not reported apart, which is why
+// contentTypeRestricts answers a bool rather than an error (contentrestricts.go).
 func (s *Schema) checkRestrictionContentType(t, b ComplexType) error {
 	if b.Name() == anyTypeName {
 		return nil // clause 2.1
@@ -249,7 +255,7 @@ func (s *Schema) checkRestrictionContentType(t, b ComplexType) error {
 		return nil // clause 2.4
 	}
 	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-		"complex type %s restricts %s, but its %s {content type} is not a valid restriction of the base's %s {content type} under any branch of derivation-ok-restriction clause 2 (2.1 base is xs:anyType, 2.2 simple content, 2.3 empty content, 2.4.1 element-only/mixed match)", t.Name(), b.Name(), t.ContentType().Variety(), b.ContentType().Variety())
+		"complex type %s restricts %s, but its %s {content type} is not a valid restriction of the base's %s {content type} under any branch of derivation-ok-restriction clause 2 (2.1 base is xs:anyType, 2.2 simple content, 2.3 empty content, 2.4.1 element-only/mixed match, 2.4.2 the content model ·restricts· the base's per cos-content-act-restrict §3.4.6.4)", t.Name(), b.Name(), t.ContentType().Variety(), b.ContentType().Variety())
 }
 
 // restrictionSimpleContentOK is clause 2.2: 2.2.1 T's {content type}.{variety} is
@@ -313,35 +319,6 @@ func restrictionVarietyPairOK(tct, bct ContentType) bool {
 		return true // clause 2.4.1.1: B is element-only or mixed, and it is one of them
 	}
 	return bc.Mixed // clause 2.4.1.2
-}
-
-// contentTypeRestricts is clause 2.4.2's delegate: whether T's {content type}
-// ·restricts· B's as defined in Content type restricts (Complex Content)
-// (§3.4.6.4, cos-content-act-restrict).
-//
-// GAP(xsd): cos-content-act-restrict is not yet decided (#263). Returning true
-// provisionally accepts clause 2.4.2 — and clause 2.4.2 ALONE. §3.4.6.3's own
-// text makes that a licensed implementation choice rather than a conformance
-// defect: "It is ·implementation-defined· whether a processor (a) always detects
-// violations of clause 2.4.2 by examination of the schema in isolation, (b)
-// detects them only when some element information item in the input document is
-// valid against T but not against T.{base type definition}, or (c) sometimes
-// detects such violations by examination of the schema in isolation and
-// sometimes not." goxsd8 is at (b) until #263 lands. (The narrower
-// {compositor} = all leniency in the preceding paragraph is a DIFFERENT,
-// additional allowance and is not what is relied on here.)
-//
-// The direction is FAIL-OPEN: clause 2 is a disjunction and 2.4 is a
-// conjunction, so treating 2.4.2 as true can only make clause 2 easier to
-// satisfy. Nothing currently accepted can start being declined through this
-// path, and no false reject can enter through it. What clause 2 still catches
-// strictly is the case where none of 2.1/2.2/2.3 holds AND 2.4.1 fails.
-//
-// The leniency is scoped here and nowhere else: clauses 1, 2.1-2.3, 2.4.1, 3, 4
-// and 5 are all enforced strictly. #263 replaces this body — the signature
-// already takes both Content Types, so nothing above it changes.
-func (s *Schema) contentTypeRestricts(tct, bct ContentType) bool {
-	return true
 }
 
 // checkRestrictionAttributes is clause 3 (c-ran): for every element information

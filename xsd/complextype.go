@@ -42,10 +42,11 @@ import "github.com/kud360/goxsd8/xsderr"
 //     unrepresentable and a test for it would be dead code.
 //
 // Of the derivation-validity rules, derivation-ok-restriction (§3.4.6.3) IS
-// enforced, at finalize (Phase D, complexderivation.go, #262) — every clause but
-// 2.4.2, whose cos-content-act-restrict (§3.4.6.4) delegate is #263 and is
-// provisionally accepted under §3.4.6.3's own implementation-defined licence.
-// cos-ct-extends (§3.4.6.2) is untouched: no producer builds an
+// enforced, at finalize (Phase D, complexderivation.go, #262), clause 2.4.2's
+// cos-content-act-restrict (§3.4.6.4) delegate included (contentrestricts.go,
+// #263) — the exceptions there are clause 5's {assertions} prefix, and the
+// content models §3.4.6.3's own all-group leniency licenses accepting
+// provisionally. cos-ct-extends (§3.4.6.2) is untouched: no producer builds an
 // extension-derived complex type yet (#264). None of them is touched HERE — they
 // are cross-component finalize-phase concerns, not tableau shape.
 const ruleCTPropsCorrect xsderr.Rule = "ct-props-correct"
