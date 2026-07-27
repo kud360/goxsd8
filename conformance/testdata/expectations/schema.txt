@@ -14541,8 +14541,8 @@ Override/over024/schema/over024.bad.xsd fail
 Override/over025/schema/over025.bad.xsd fail
 Override/over026/schema/over026.bad.xsd fail
 Override/over027/schema/over027.xsd fail
-Override/over028/schema/over028.xsd fail
-Override/over029/schema/over029.xsd fail
+Override/over028/schema/over028.xsd pass
+Override/over029/schema/over029.xsd pass
 Override/over030/schema/over030.xsd fail
 Override/over031/schema/over031.xsd fail
 PDecimal/pdecimal001/schema/pdecimal001.xsd fail
