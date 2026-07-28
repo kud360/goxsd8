@@ -68,6 +68,11 @@ type LocalAttributeDeclaration struct{ Declaration AttributeDeclaration }
 // attribute/@ref name — to a possibly-forward-referenced top-level Attribute
 // Declaration, resolved to the live component at finalize (#173). The field is
 // read-only by convention; do not mutate it after construction.
+//
+// Name is a PRESENT reference, never the absent (zero) QName: this variant
+// exists only for the mapping branch whose precondition is "the ref attribute is
+// present". NewAttributeUse rejects a zero Name rather than deferring it (see
+// there for why).
 type AttributeDeclarationRef struct{ Name QName }
 
 func (LocalAttributeDeclaration) attributeDeclarationRef() {}
@@ -121,6 +126,13 @@ type AttributeUse struct {
 //     must be fixed too. The {value}-identity half and the Ref case are deferred
 //     to #173 (see ruleAuPropsCorrect).
 //
+// It also rejects an AttributeDeclarationRef whose Name is the absent (zero)
+// QName, charged to xsderr.RuleComponentInvariant: the Ref variant represents
+// only the ref-present mapping branch (§3.2.2.3), so an absent name is an
+// illegal representation this constructor makes unbuildable, not a resolution
+// failure to defer to finalize. See NewParticle for the full reasoning — it
+// rejects the two analogous ref {term} variants on the same footing.
+//
 // valueConstraint is a pointer so absence (nil) is distinct from a present zero
 // record (mirroring attributedeclaration.go's *ValueConstraint handling); when
 // non-nil the pointed-to value is COPIED into the struct and hasValueConstraint
@@ -135,6 +147,10 @@ func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration Attribu
 	if attributeDeclaration == nil {
 		return AttributeUse{}, xsderr.New(ruleAuPropsCorrect, loc,
 			"attribute use has an absent {attribute declaration}, but it is Required (au-props-correct clause 1)")
+	}
+	if ref, ok := attributeDeclaration.(AttributeDeclarationRef); ok && ref.Name.Local == "" {
+		return AttributeUse{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
+			"attribute use {attribute declaration} is an AttributeDeclarationRef carrying the absent (zero) QName, but that variant maps only the ref-present branch (§3.2.2.3 ref.att.local), whose attribute/@ref is an xs:QName with a non-empty local part")
 	}
 	// Clause 3 variety half fires only for the Local variant, whose declaration
 	// (and its {value constraint}) is owned by value and readable now; the Ref
@@ -172,7 +188,8 @@ func (u AttributeUse) Required() bool {
 // the sealed sum identifying either a sibling local declaration
 // (LocalAttributeDeclaration) or a pre-resolution reference to a top-level one
 // (AttributeDeclarationRef). It is never nil on a value built through
-// NewAttributeUse.
+// NewAttributeUse, and an AttributeDeclarationRef's Name is never the absent
+// (zero) QName.
 func (u AttributeUse) AttributeDeclaration() AttributeDeclarationOrRef {
 	return u.attributeDeclaration
 }

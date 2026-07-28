@@ -20,6 +20,18 @@ type Rule string
 // documented, non-spec exemption from the generated catalog.
 const RuleXMLWellFormed Rule = "xml-wf"
 
+// RuleComponentInvariant is the sentinel Rule for a component constructor
+// rejecting a state the spec never names as a numbered clause because the XML
+// mapping layer above it makes the state unrepresentable — an absent (zero)
+// QName in a slot that exists only to carry a present reference, for example.
+// Such a rejection is a representation-invariant fault of the caller, not a
+// schema- or instance-validity verdict, so citing a cvc-*/src-*/*-props-correct
+// rule would misclassify it for RuleOf/errors.As consumers. Like
+// RuleXMLWellFormed it lets the Error carry a recognizable, non-empty Rule
+// instead of "", and IsValidRule accepts it as a documented, non-spec exemption
+// from the generated catalog.
+const RuleComponentInvariant Rule = "component-invariant"
+
 // Loc identifies where an offending construct lives — the schema document or
 // the instance document. Its fields are threaded from parser positions, never
 // reconstructed. The zero Loc means the location is unknown.
@@ -109,13 +121,13 @@ func LocOf(err error) (Loc, bool) {
 
 // IsValidRule reports whether r is a Rule the module is allowed to construct:
 // any rule ID present in the generated spec catalog (ruleCatalog, emitted by
-// tools/rulecat into catalog.go), plus the hand-added RuleXMLWellFormed
-// sentinel, which is deliberately outside the catalog because XML
-// well-formedness faults have no spec-defined rule ID. It lives here rather
-// than in the generated catalog.go so the sentinel exemption survives
-// `go generate`.
+// tools/rulecat into catalog.go), plus the two hand-added non-spec sentinels,
+// RuleXMLWellFormed and RuleComponentInvariant, which are deliberately outside
+// the catalog because the faults they name have no spec-defined rule ID. It
+// lives here rather than in the generated catalog.go so the sentinel exemptions
+// survive `go generate`.
 func IsValidRule(r Rule) bool {
-	if r == RuleXMLWellFormed {
+	if r == RuleXMLWellFormed || r == RuleComponentInvariant {
 		return true
 	}
 	_, ok := ruleCatalog[r]

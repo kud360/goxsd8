@@ -83,6 +83,39 @@ func TestNewAttributeUseRejectsNilDeclaration(t *testing.T) {
 	assertRule(t, err, "au-props-correct")
 }
 
+// TestNewAttributeUseRejectsAbsentRefName proves the representation invariant
+// (STYLE T1) on AttributeDeclarationRef: the variant maps only the ref-present
+// branch (§3.2.2.3 ref.att.local), so its Name is always a present QName. An
+// empty local part — with or without a namespace name — is rejected at
+// construction rather than deferred, so finalize's "a zero QName is absent" skip
+// (resolve.go) can never swallow an unresolvable {attribute declaration}.
+func TestNewAttributeUseRejectsAbsentRefName(t *testing.T) {
+	tests := []struct {
+		name    string
+		ref     xsd.QName
+		wantErr bool
+	}{
+		{"zero QName", xsd.QName{}, true},
+		{"namespace with empty local", xsd.QName{Space: "urn:ns"}, true},
+		{"no-namespace present local", xsd.QName{Local: "a"}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: tc.ref}, nil, false, nil)
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("NewAttributeUse(ref %v) unexpected error: %v", tc.ref, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("NewAttributeUse(ref %v) succeeded, want an absent-ref-name rejection", tc.ref)
+			}
+			assertRule(t, err, xsderr.RuleComponentInvariant)
+		})
+	}
+}
+
 func TestNewAttributeUseValueConstraintRoundTrip(t *testing.T) {
 	vc := xsd.NewValueConstraint(xsd.ValueDefault, "d")
 	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, localDecl(t, xsd.QName{Local: "a"}), &vc, false, nil)

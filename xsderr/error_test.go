@@ -95,6 +95,20 @@ func TestIsValidRuleDerivationOkRestriction(t *testing.T) {
 	}
 }
 
+// TestIsValidRuleComponentInvariant guards the second non-spec sentinel
+// exemption: a component-constructor representation-invariant rejection has no
+// catalog rule ID, so RuleComponentInvariant must be accepted by IsValidRule
+// even though it is absent from the generated catalog.
+func TestIsValidRuleComponentInvariant(t *testing.T) {
+	if !IsValidRule(RuleComponentInvariant) {
+		t.Fatalf("IsValidRule(%q) = false, want true", RuleComponentInvariant)
+	}
+	// It is deliberately NOT in the generated spec catalog.
+	if _, ok := ruleCatalog[RuleComponentInvariant]; ok {
+		t.Fatalf("RuleComponentInvariant %q leaked into the generated ruleCatalog", RuleComponentInvariant)
+	}
+}
+
 // TestIsValidRuleXMLWellFormed guards the non-spec sentinel exemption: XML
 // well-formedness faults have no catalog rule ID, so RuleXMLWellFormed must be
 // accepted by IsValidRule even though it is absent from the generated catalog.

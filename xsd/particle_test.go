@@ -58,6 +58,42 @@ func TestNewParticleRejectsAbsentTerm(t *testing.T) {
 	assertRule(t, err, "p-props-correct")
 }
 
+// TestNewParticleRejectsAbsentRefName proves the representation invariant (STYLE
+// T1) on the two ref {term} variants: ElementDeclarationRef and ModelGroupRef map
+// only the ref-present branches (§3.3.2.4, §3.8.2), so their Name is always a
+// present QName. An empty local part — with or without a namespace name — is
+// rejected at construction rather than deferred, so finalize's "a zero QName is
+// absent" skip (resolve.go) can never swallow an unresolvable {term}.
+func TestNewParticleRejectsAbsentRefName(t *testing.T) {
+	tests := []struct {
+		name    string
+		term    xsd.TermOrRef
+		wantErr bool
+	}{
+		{"element-ref zero QName", xsd.ElementDeclarationRef{}, true},
+		{"element-ref namespace with empty local", xsd.ElementDeclarationRef{Name: xsd.QName{Space: "urn:ns"}}, true},
+		{"element-ref present local", xsd.ElementDeclarationRef{Name: xsd.QName{Local: "e"}}, false},
+		{"group-ref zero QName", xsd.ModelGroupRef{}, true},
+		{"group-ref namespace with empty local", xsd.ModelGroupRef{Name: xsd.QName{Space: "urn:ns"}}, true},
+		{"group-ref present local", xsd.ModelGroupRef{Name: xsd.QName{Local: "g"}}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xsd.NewParticle(xsderr.Loc{}, xsd.Occurs{}, tc.term, nil)
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("NewParticle(%v) unexpected error: %v", tc.term, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("NewParticle(%v) succeeded, want an absent-ref-name rejection", tc.term)
+			}
+			assertRule(t, err, xsderr.RuleComponentInvariant)
+		})
+	}
+}
+
 func TestNewParticleAcceptsVacuousOccurs(t *testing.T) {
 	// Occurs{0,0} is a legal vacuous range at the component level (occurs.go);
 	// Particle must not reject it — the min=max=0 "no component" rule is a
