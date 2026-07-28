@@ -79,7 +79,12 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //
 // An absent (zero) QName reference is skipped, not treated as dangling: the zero
 // QName means "no reference", which src-resolve has nothing to resolve. Only a
-// present-but-unresolvable QName is a failure.
+// present-but-unresolvable QName is a failure. That skip is reachable only from
+// the genuinely OPTIONAL reference slots (an ElementDeclaration with no {type
+// definition} name, for instance); it can never mask a mandatory reference,
+// because the three ref-only sum variants — AttributeDeclarationRef,
+// ElementDeclarationRef, ModelGroupRef — cannot hold a zero QName in the first
+// place: NewAttributeUse and NewParticle reject one at construction (STYLE T1).
 //
 // FOLLOW-COST ASYMMETRY (recorded deliberately, not silently): Phase A wires
 // present-tense readers for the three Query views (Type/Element/Attribute

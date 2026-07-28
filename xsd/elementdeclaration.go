@@ -9,11 +9,11 @@ import "github.com/kud360/goxsd8/xsderr"
 // specific clause number in each message (the rule ID is not sub-anchored per
 // clause, matching identityconstraint.go's single-rule-const convention):
 //
-//   - clause 1 (tableau shape): {scope}.{variety} is one of the legal Scope
-//     tokens; {substitution group exclusions} is a subset of {extension,
-//     restriction}; {disallowed substitutions} is a subset of {substitution,
-//     extension, restriction}. TypeTable's own tableau (clause 6) is enforced
-//     in NewTypeTable.
+//   - clause 1 (tableau shape): {name} is present; {scope}.{variety} is one of
+//     the legal Scope tokens; {substitution group exclusions} is a subset of
+//     {extension, restriction}; {disallowed substitutions} is a subset of
+//     {substitution, extension, restriction}. TypeTable's own tableau (clause 6)
+//     is enforced in NewTypeTable.
 //   - clause 3: a non-empty {substitution group affiliations} forces
 //     {scope}.{variety} = global.
 //
@@ -143,6 +143,16 @@ type ElementDeclaration struct {
 // Element Declaration Properties Correct (§3.3.6.1, e-props-correct) clauses 1
 // and 3 forbid:
 //
+//   - clause 1: name must be present — the §3.3.1 tableau types {name} as a
+//     Required xs:NCName, and NCName's value space (Datatypes §3.4.7, pattern
+//     \i\c*) excludes the empty string, so a zero-Local QName is categorically
+//     not a legal {name}. The §5.3 Missing Sub-components escape hatch does not
+//     cover it: §5.3 is scoped to properties whose value is another component
+//     reached by QName ·resolution·, and {name} is the identity other components
+//     resolve AGAINST, not a resolved reference. So an absent {name} is a
+//     construction-time defect here, unlike the deferred QName REFERENCES this
+//     component carries ({type definition}, {substitution group affiliations}),
+//     which finalize (#173) resolves.
 //   - clause 1: scopeVariety must be a legal Scope token (ScopeGlobal or
 //     ScopeLocal); every substitutionGroupExclusions member must be extension
 //     or restriction (the §3.3.1 {substitution group exclusions} subset); every
@@ -162,6 +172,10 @@ type ElementDeclaration struct {
 // parser position — a synthesized or programmatically built declaration — may
 // legitimately pass the zero xsderr.Loc{}.
 func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QName, typeTable *TypeTable, scopeVariety ScopeVariety, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
+	if name.Local == "" {
+		return ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, loc,
+			"element declaration has an absent {name}, but the §3.3.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (e-props-correct clause 1)")
+	}
 	switch scopeVariety {
 	case ScopeGlobal, ScopeLocal:
 	default:
@@ -224,6 +238,8 @@ func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QName,
 func (ElementDeclaration) term() {}
 
 // Name returns the {name} property, bundled with {target namespace} as a QName.
+// Its Local is never empty on a value built through NewElementDeclaration, which
+// rejects an absent {name} (e-props-correct clause 1).
 func (e ElementDeclaration) Name() QName {
 	return e.name
 }

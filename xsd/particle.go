@@ -29,9 +29,10 @@ import "github.com/kud360/goxsd8/xsderr"
 // Ratchet impact: unchanged. This is a leaf shape with no parser producer; the
 // schema conformance lane moves only when the producer (#176) wires it in.
 //
-// Construct only through NewParticle, which rejects an absent {term} so the
-// Required-property violation is unrepresentable (STYLE T1). Particle is
-// immutable after construction.
+// Construct only through NewParticle, which rejects an absent {term} — including
+// a ref variant carrying the absent (zero) QName — so the Required-property
+// violation is unrepresentable (STYLE T1). Particle is immutable after
+// construction.
 type Particle struct {
 	occurs      Occurs
 	term        TermOrRef
@@ -45,6 +46,24 @@ type Particle struct {
 // interface, so ResolvedTerm{Term: nil} slips past the outer nil check yet is an
 // equally absent {term}). The property is Required, so either is illegal (STYLE
 // T1), mirroring NewAttributeUse's clause-1 nil check.
+//
+// It also rejects an ElementDeclarationRef or ModelGroupRef whose Name is the
+// absent (zero) QName. That state is charged to a REPRESENTATION invariant
+// (STYLE T1), NOT to a numbered p-props-correct clause: clause 1 is already
+// satisfied by the present {term}, and no spec clause — p-props-correct,
+// ref.elt.global (§3.3.2.4), src-resolve (§3.17.6.2) — textually forbids an empty
+// ref QName, because that guarantee lives one layer earlier, in the xs:QName
+// typing of the element/@ref and group/@ref attributes (Datatypes §3.3.18: a
+// QName's local part is an NCName, so the empty string is outside its value
+// space). The two ref variants exist solely to carry a PRESENT ref (§3.3.2.4,
+// §3.8.2), so an absent one is unbuildable here rather than deferred: finalize's
+// "a zero QName is absent, so there is nothing to resolve" rule (resolve.go) is
+// right for genuinely optional QName slots but would otherwise let a permanently
+// unresolvable {term} pass unflagged through both construction and finalize. The
+// returned *xsderr.Error carries the p-props-correct rule ID only because every
+// Error carries a catalog rule; its message names the invariant and says which
+// clause it is not. NewAttributeUse rejects the analogous AttributeDeclarationRef
+// state on the same footing.
 //
 // The occurrence-range invariants (p-props-correct clauses 1 and 2.1) are
 // already enforced by the Occurs constructors, so occurs is trusted here; a
@@ -65,6 +84,18 @@ func NewParticle(loc xsderr.Loc, occurs Occurs, term TermOrRef, annotations []An
 		return Particle{}, xsderr.New(ruleParticleCorrect, loc,
 			"particle {term} is a ResolvedTerm wrapping a nil Term, but {term} is Required (p-props-correct clause 1)")
 	}
+	switch t := term.(type) {
+	case ElementDeclarationRef:
+		if t.Name.Local == "" {
+			return Particle{}, xsderr.New(ruleParticleCorrect, loc,
+				"particle {term} is an ElementDeclarationRef carrying the absent (zero) QName; that variant maps only the ref-present branch (§3.3.2.4 ref.elt.global), whose element/@ref is an xs:QName with a non-empty local part, so this is a representation invariant (STYLE T1), not a numbered p-props-correct clause")
+		}
+	case ModelGroupRef:
+		if t.Name.Local == "" {
+			return Particle{}, xsderr.New(ruleParticleCorrect, loc,
+				"particle {term} is a ModelGroupRef carrying the absent (zero) QName; that variant maps only the <group ref> branch (§3.8.2), whose group/@ref is an xs:QName with a non-empty local part, so this is a representation invariant (STYLE T1), not a numbered p-props-correct clause")
+		}
+	}
 	p := Particle{occurs: occurs, term: term}
 	if len(annotations) > 0 {
 		p.annotations = append([]Annotation(nil), annotations...)
@@ -80,7 +111,8 @@ func (p Particle) Occurs() Occurs {
 // Term returns the {term} property (Required): the TermOrRef identifying either
 // an inline Term (ResolvedTerm) or a pre-resolution <element ref>/<group ref>
 // reference (ElementDeclarationRef/ModelGroupRef). It is never nil on a value
-// built through NewParticle.
+// built through NewParticle, and a ref variant's Name is never the absent (zero)
+// QName.
 func (p Particle) Term() TermOrRef {
 	return p.term
 }

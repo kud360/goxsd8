@@ -164,6 +164,39 @@ func TestNewElementDeclarationTypeTableAndValueConstraintPresent(t *testing.T) {
 	}
 }
 
+// TestNewElementDeclarationRejectsAbsentName exercises e-props-correct clause 1
+// for the {name} slot: the §3.3.1 tableau types it as a Required xs:NCName, and
+// NCName's value space excludes the empty string, so a QName with an empty Local
+// is not a legal {name} — with or without a namespace name. A present local name
+// in no namespace stays legal (a zero Space is a present name, not an absent one).
+func TestNewElementDeclarationRejectsAbsentName(t *testing.T) {
+	tests := []struct {
+		name    string
+		qname   xsd.QName
+		wantErr bool
+	}{
+		{"zero QName", xsd.QName{}, true},
+		{"namespace with empty local", xsd.QName{Space: "urn:ns"}, true},
+		{"no-namespace present local", xsd.QName{Local: "e"}, false},
+		{"namespaced present local", xsd.QName{Space: "urn:ns", Local: "e"}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xsd.NewElementDeclaration(xsderr.Loc{}, tc.qname, xsd.QName{Local: "T"}, nil, xsd.ScopeGlobal, nil, false, nil, nil, nil, false, nil, nil)
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("NewElementDeclaration(%v) unexpected error: %v", tc.qname, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("NewElementDeclaration(%v) succeeded, want e-props-correct clause 1 error", tc.qname)
+			}
+			assertRule(t, err, "e-props-correct")
+		})
+	}
+}
+
 func TestNewElementDeclarationRejectsUnknownScope(t *testing.T) {
 	_, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.ScopeVariety(0), nil, false, nil, nil, nil, false, nil, nil)
 	if err == nil {
