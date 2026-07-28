@@ -111,7 +111,7 @@ func TestNewAttributeUseRejectsAbsentRefName(t *testing.T) {
 			if err == nil {
 				t.Fatalf("NewAttributeUse(ref %v) succeeded, want an absent-ref-name rejection", tc.ref)
 			}
-			assertRule(t, err, "au-props-correct")
+			assertRule(t, err, xsderr.RuleComponentInvariant)
 		})
 	}
 }

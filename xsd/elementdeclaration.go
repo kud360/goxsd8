@@ -149,10 +149,9 @@ type ElementDeclaration struct {
 //     not a legal {name}. The §5.3 Missing Sub-components escape hatch does not
 //     cover it: §5.3 is scoped to properties whose value is another component
 //     reached by QName ·resolution·, and {name} is the identity other components
-//     resolve AGAINST, not a resolved reference. So an absent {name} is a
-//     construction-time defect here, unlike the deferred QName REFERENCES this
-//     component carries ({type definition}, {substitution group affiliations}),
-//     which finalize (#173) resolves.
+//     resolve AGAINST — unlike the deferred QName REFERENCES this component
+//     carries ({type definition}, {substitution group affiliations}), which
+//     finalize (#173) resolves.
 //   - clause 1: scopeVariety must be a legal Scope token (ScopeGlobal or
 //     ScopeLocal); every substitutionGroupExclusions member must be extension
 //     or restriction (the §3.3.1 {substitution group exclusions} subset); every

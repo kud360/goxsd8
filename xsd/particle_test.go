@@ -89,7 +89,7 @@ func TestNewParticleRejectsAbsentRefName(t *testing.T) {
 			if err == nil {
 				t.Fatalf("NewParticle(%v) succeeded, want an absent-ref-name rejection", tc.term)
 			}
-			assertRule(t, err, "p-props-correct")
+			assertRule(t, err, xsderr.RuleComponentInvariant)
 		})
 	}
 }

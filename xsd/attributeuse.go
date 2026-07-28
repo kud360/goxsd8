@@ -21,19 +21,6 @@ import "github.com/kud360/goxsd8/xsderr"
 //     variant is unresolved, so its declaration's {value constraint} is not yet
 //     readable — deferred to #173.
 //
-// NewAttributeUse additionally rejects an AttributeDeclarationRef carrying the
-// absent (zero) QName, a rejection charged to a REPRESENTATION invariant (STYLE
-// T1), NOT to any numbered clause of this rule: no spec clause —
-// au-props-correct, ref.att.local (§3.2.2.3), src-resolve (§3.17.6.2) — textually
-// forbids an empty ref QName, because that guarantee lives one layer earlier, in
-// the xs:QName typing of the attribute/@ref attribute (Datatypes §3.3.18: a
-// QName's local part is an NCName, so the empty string is outside its value
-// space). Clause 1 is already satisfied by the non-nil interface, so it is not
-// the clause being enforced either. The resulting *xsderr.Error carries this rule
-// ID only because every Error carries a catalog rule; its message names the
-// invariant and says which clause it is not. NewParticle rejects the analogous
-// ElementDeclarationRef/ModelGroupRef state on the same footing.
-//
 // Clause 2 (Simple Default Valid — §3.2.6.2 cos-valid-simple-default) needs the
 // resolved {attribute declaration}.{type definition} to validate the {value
 // constraint}'s {lexical form}, which this package does not resolve yet; it is
@@ -82,14 +69,10 @@ type LocalAttributeDeclaration struct{ Declaration AttributeDeclaration }
 // Declaration, resolved to the live component at finalize (#173). The field is
 // read-only by convention; do not mutate it after construction.
 //
-// Name is a PRESENT reference, never the absent (zero) QName: this variant exists
-// only for the mapping branch whose precondition is "the ref attribute is
-// present" (§3.2.2.3), and ref is typed xs:QName, whose local part is an NCName.
-// NewAttributeUse rejects a zero Name (STYLE T1) rather than deferring it, so
-// finalize's "a zero QName is absent, so there is nothing to resolve" rule
-// (resolve.go) — correct for genuinely optional QName slots such as
-// ElementDeclaration's {type definition} — can never silently swallow a
-// permanently unresolvable {attribute declaration} here.
+// Name is a PRESENT reference, never the absent (zero) QName: this variant
+// exists only for the mapping branch whose precondition is "the ref attribute is
+// present". NewAttributeUse rejects a zero Name rather than deferring it (see
+// there for why).
 type AttributeDeclarationRef struct{ Name QName }
 
 func (LocalAttributeDeclaration) attributeDeclarationRef() {}
@@ -144,12 +127,11 @@ type AttributeUse struct {
 //     to #173 (see ruleAuPropsCorrect).
 //
 // It also rejects an AttributeDeclarationRef whose Name is the absent (zero)
-// QName. That state is not a numbered au-props-correct clause — clause 1 is
-// satisfied by the non-nil interface, and no spec clause names an empty ref
-// QName (see ruleAuPropsCorrect) — but the Ref variant represents only the
-// ref-present mapping branch (§3.2.2.3), so an absent name is an illegal
-// representation this constructor makes unbuildable (STYLE T1), not a
-// resolution failure to defer to finalize.
+// QName, charged to xsderr.RuleComponentInvariant: the Ref variant represents
+// only the ref-present mapping branch (§3.2.2.3), so an absent name is an
+// illegal representation this constructor makes unbuildable, not a resolution
+// failure to defer to finalize. See NewParticle for the full reasoning — it
+// rejects the two analogous ref {term} variants on the same footing.
 //
 // valueConstraint is a pointer so absence (nil) is distinct from a present zero
 // record (mirroring attributedeclaration.go's *ValueConstraint handling); when
@@ -167,8 +149,8 @@ func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration Attribu
 			"attribute use has an absent {attribute declaration}, but it is Required (au-props-correct clause 1)")
 	}
 	if ref, ok := attributeDeclaration.(AttributeDeclarationRef); ok && ref.Name.Local == "" {
-		return AttributeUse{}, xsderr.New(ruleAuPropsCorrect, loc,
-			"attribute use {attribute declaration} is an AttributeDeclarationRef carrying the absent (zero) QName; that variant maps only the ref-present branch (§3.2.2.3 ref.att.local), whose attribute/@ref is an xs:QName with a non-empty local part, so this is a representation invariant (STYLE T1), not a numbered au-props-correct clause")
+		return AttributeUse{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
+			"attribute use {attribute declaration} is an AttributeDeclarationRef carrying the absent (zero) QName, but that variant maps only the ref-present branch (§3.2.2.3 ref.att.local), whose attribute/@ref is an xs:QName with a non-empty local part")
 	}
 	// Clause 3 variety half fires only for the Local variant, whose declaration
 	// (and its {value constraint}) is owned by value and readable now; the Ref

@@ -48,11 +48,9 @@ type ResolvedTerm struct{ Term Term }
 // follows it by a read-time schema.Element(Name) lookup. The field is read-only
 // by convention; do not mutate it after construction.
 //
-// Name is a PRESENT reference, never the absent (zero) QName: this variant exists
-// only for the mapping branch whose precondition is "the ref attribute is
-// present" (§3.3.2.4), and ref is typed xs:QName, whose local part is an NCName.
-// NewParticle rejects a zero Name (STYLE T1); see NewParticle for why that is a
-// representation invariant rather than a numbered p-props-correct clause.
+// Name is a PRESENT reference, never the absent (zero) QName: this variant
+// exists only for the mapping branch whose precondition is "the ref attribute is
+// present". NewParticle rejects a zero Name (see there for why).
 type ElementDeclarationRef struct{ Name QName }
 
 // ModelGroupRef is the TermOrRef variant for the <group ref="..."> mapping
@@ -65,10 +63,8 @@ type ElementDeclarationRef struct{ Name QName }
 // construction.
 //
 // Name is a PRESENT reference, never the absent (zero) QName: a <group> inside a
-// content model is always the reference form (§3.8.2), and its ref is typed
-// xs:QName, whose local part is an NCName. NewParticle rejects a zero Name
-// (STYLE T1); see NewParticle for why that is a representation invariant rather
-// than a numbered p-props-correct clause.
+// content model is always the reference form (§3.8.2). NewParticle rejects a
+// zero Name (see there for why).
 type ModelGroupRef struct{ Name QName }
 
 func (ResolvedTerm) termOrRef()          {}
