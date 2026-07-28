@@ -3,6 +3,8 @@ package conformance
 import (
 	"bufio"
 	"encoding/xml"
+	"errors"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -309,6 +311,56 @@ import (
 // regex, so they remain unclaimed (a natural follow-up, not this issue). Union
 // variety stays out of scope too (value/facets.go SCOPE(union)).
 //
+// # The anyURI a*/b* multi-leaf cohort (issue #190)
+//
+// The lane also decides the eight anyURI instance cases under
+// msData/datatypes/Facets/anyURI/anyURI_{a001,a002,a004,b001,b002,b004,b005,b006}.xml.
+// They share the Facets directory and filename form with the single-<foo> cohort
+// but not its instance shape, which is why they were honest declines from the
+// #124 landing until now (see readFacetsCase's exactly-one-<foo> guard, still in
+// force for everything that reaches it). Two shape differences and one type
+// difference:
+//
+//   - The a* instances declare their schema with the namespace-qualified
+//     xsi:schemaLocation form (§2.6.3, a "<namespace> <location>" pair) rather than
+//     xsi:noNamespaceSchemaLocation, since their schemas have a target namespace —
+//     the same form the IBM D3_3_4 cohort uses, so qualifiedSchemaLocation resolves
+//     both.
+//   - The tested values are PLURAL and live wherever the schema puts them: a lone
+//     <bar> element's text (a001/a002), a <root> wrapper's unqualified attribute
+//     plus repeated <bar> children (a004, whose bar is a LOCAL declaration inside
+//     the wrapper's inline complexType), repeated <bar> children reached by ref=
+//     (b001/b004/b005), <bar> children of a simpleContent complexType that adds an
+//     attribute so text AND attribute are both tested (b002), or a <choice>-repeated
+//     mix of <foo> and <bar> (b006).
+//   - In b006 those <foo> and <bar> leaves have DIFFERENT types: <foo> is typed
+//     xsd:anyURI directly (facet-free) while <bar> carries the enumeration-restricted
+//     named type, so each leaf must be validated against the type its own
+//     declaration binds, not against one type for the whole document.
+//
+// readAnyURIShapeCase therefore reads element and attribute declarations from the
+// schema, resolves each instance leaf to its declared simple type, and
+// execAnyURIShapeCase ANDs value.ValidateLexical over every leaf — the same
+// whole-document polarity execPDecimalCase and execD34Case use. No new spec rule
+// and no new backend mapping is involved: all eight fixtures restrict xsd:anyURI
+// with enumeration only, so the rules in play are cvc-enumeration-valid (§4.3.5.4,
+// "equal or identical to one of the values specified in {value}") over
+// cvc-datatype-valid (§4.1.4), both already wired, decided through the strict
+// anyURI mapping whose value space is the identity on Char* (§3.3.17.2 — the reason
+// the a004/b004/b006 SCHEMAS, invalid per 1.0, are valid per 1.1). Two spec facts
+// carry specific fixtures: anyURI's fixed whiteSpace=collapse (§4.3.6) turns
+// b005's "http://a/x  y" into "http://a/x y", which is still not the enumeration's
+// "http://a/x%20y" because the mapping does no percent-decoding (§3.3.17.2 Note:
+// "if two 'equivalent' URIs or IRIs are different character sequences, they map to
+// different values"), so b005 is invalid; the same Note makes b006's "\a" distinct
+// from every enumeration member, so b006 is invalid on that ONE leaf even though
+// its twenty-five others match — exactly the reason its testGroup annotation gives.
+// anyURI_a004_1339.i is the cohort's one recorded gap and NOT a shape limit: its
+// seven leaves are all enumeration members, so the spec-correct verdict is valid
+// against a suite expectation of invalid that the fixture's own annotation
+// contradicts and that has carried status="queried" since 2010 — see
+// execAnyURIShapeCase.
+//
 // # Still deferred
 //
 // Facets over QName (the Facets/QName dir) are now FULLY claimed (issue #125,
@@ -361,17 +413,13 @@ import (
 // xsi:noNamespaceSchemaLocation (a defect in that one suite file), so
 // readFacetsCase cannot resolve its schema and declines it (Fail) rather than
 // guessing the base — an honest decline, not a false accept. The anyURI
-// Facets/anyURI/anyURI_a*.xml and anyURI_b*.xml cases (issue #124) are honest
-// gaps for the same class of reason: the a* instances carry the value in a
-// namespace-qualified <bar> reached via xsi:schemaLocation (not
-// noNamespaceSchemaLocation), and the b* instances hold zero or several <foo>
-// leaves (b001 puts the values in repeated <bar> children; b006 repeats many
-// <foo> values against one enumeration, a list-style shape), so neither fits the
-// single-<foo> instance shape readFacetsCase decodes — all are declined (Fail,
-// readFacetsCase requires exactly one <foo>) rather than mis-read as an empty or
-// last-wins tested value. Only the anyURI/hexBinary/base64Binary length/
-// minLength/maxLength/enumeration cases in the canonical <test><foo> shape are
-// decided here.
+// Facets/anyURI/anyURI_a*.xml and anyURI_b*.xml cases, honest declines from the
+// #124 landing, are now DECIDED by their own reader and executor — see "The anyURI
+// a*/b* multi-leaf cohort (issue #190)" above; readFacetsCase itself still decodes
+// only the canonical single-<foo> shape and still declines everything else,
+// including those eight files should they ever reach it. Of the anyURI/hexBinary/
+// base64Binary cases, readFacetsCase decides the length/minLength/maxLength/
+// enumeration ones in the canonical <test><foo> shape.
 
 // synthNS namespaces the anonymous leaf types the facet cohort synthesizes. It
 // is deliberately outside xsd.XMLSchemaNS so a synthesized leaf is never mistaken
@@ -520,9 +568,23 @@ var d34Case = regexp.MustCompile(`ibmData/(valid|instance_invalid)/D3_3_4/.*\.xm
 // (execNotationFacetsCase) rather than being folded into facetsBaseTypes.
 var notationFacetsCase = regexp.MustCompile(`msData/datatypes/Facets/NOTATION/NOTATION_[A-Za-z]+[0-9]+\.xml$`)
 
+// anyURIShapeCase matches an anyURI a*/b* Facets-cohort instance (issue #190):
+// msData/datatypes/Facets/anyURI/anyURI_{a,b}NNN.xml. These eight fixtures
+// (a001/a002/a004, b001/b002/b004/b005/b006) share facetsCase's directory and
+// filename form but NOT its instance shape — the tested values live in one or
+// several <bar>/<foo> elements and in unqualified attributes, and the a* files
+// declare their schema with the namespace-qualified xsi:schemaLocation — so they
+// get their own reader and executor (readAnyURIShapeCase/execAnyURIShapeCase) and
+// are dispatched BEFORE facetsCase, whose single-<foo> reader would decline them.
+// See "The anyURI a*/b* multi-leaf cohort" above.
+var anyURIShapeCase = regexp.MustCompile(`msData/datatypes/Facets/anyURI/anyURI_[ab][0-9]+\.xml$`)
+
 // selectsDatatypes claims the instance cases of the lexical, facet,
-// precisionDecimal and NOTATION-facet cohorts. It is a cheap path predicate; the
-// executor does the real document reading.
+// precisionDecimal, NOTATION-facet and anyURI-multi-leaf cohorts. It is a cheap
+// path predicate; the executor does the real document reading. The
+// anyURIShapeCase disjunct is stated even though facetsCase's pattern happens to
+// match those eight paths too, so the claim rests on the cohort's own selector
+// rather than on that overlap.
 func selectsDatatypes(c caseSpec) bool {
 	if c.kind != kindInstance {
 		return false
@@ -530,7 +592,7 @@ func selectsDatatypes(c caseSpec) bool {
 	doc := filepath.ToSlash(c.doc)
 	return datatypesCase.MatchString(doc) || facetsCase.MatchString(doc) ||
 		pdecimalCase.MatchString(doc) || notationFacetsCase.MatchString(doc) ||
-		d34Case.MatchString(doc)
+		d34Case.MatchString(doc) || anyURIShapeCase.MatchString(doc)
 }
 
 // newDatatypesExec builds the lane's executor: it Seeds the builtins once (the
@@ -580,6 +642,12 @@ func newDatatypesExec() executor {
 		}
 		if notationFacetsCase.MatchString(doc) {
 			return execNotationFacetsCase(strictBackend, sym, c)
+		}
+		// Before facetsCase: the eight anyURI a*/b* fixtures live under the Facets
+		// directory and match facetsCase's filename form, but their multi-leaf shape
+		// needs the dedicated reader (issue #190).
+		if anyURIShapeCase.MatchString(doc) {
+			return execAnyURIShapeCase(strictBackend, sym, c)
 		}
 		if facetsCase.MatchString(doc) {
 			return execFacetsCase(strictBackend, sym, c)
@@ -1159,6 +1227,86 @@ func execD34Case(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c cas
 	observedValid := true
 	for _, e := range elems {
 		if _, verr := value.ValidateLexical(backend, leaves[e.typeName], e.value, nil); verr != nil {
+			observedValid = false
+			break
+		}
+	}
+	if observedValid == c.expectValid {
+		return Pass()
+	}
+	return Fail()
+}
+
+// execAnyURIShapeCase decides an anyURI a*/b* cohort case (issue #190): every
+// tested leaf the instance carries — each element's character content and each
+// unqualified attribute's value — is validated against the simple type its own
+// declaration binds, and the instance is valid iff EVERY leaf is
+// (cvc-enumeration-valid §4.3.5.4 over cvc-datatype-valid §4.1.4, the same
+// whole-document polarity execPDecimalCase/execD34Case use). Per-leaf type
+// resolution is load-bearing rather than cosmetic: anyURI_b006's <foo> children
+// are typed xsd:anyURI DIRECTLY (facet-free, so every Char* value is valid per
+// §3.3.17.2) while its <bar> siblings carry the enumeration-restricted named type,
+// so validating both against one type would reach the right verdict for the wrong
+// reason.
+//
+// A leaf whose type is not a single-step anyURI restriction (or the bare builtin),
+// an element occurrence the schema does not declare, or an attribute the element's
+// type does not declare all DECLINE the whole case (Fail, a recorded gap) — the
+// cohort's honest-decline convention — rather than leaving a value unchecked.
+//
+// One claimed case, anyURI_a004_1339.i, is a KNOWN suite quirk: all seven of its
+// leaves (six <bar> values plus the <root> att attribute) ARE enumeration members,
+// so the spec-correct verdict is VALID, yet the suite declares the instance
+// invalid — an expectation its own testGroup annotation contradicts ("Schema doc
+// changed to guaranteed-to-fail URIs, but that does not make the schema (or
+// instance) invalid") and which has carried status="queried"
+// (bugzilla 4126) since 2010. Per the pdecimal006.n2 precedent the executor keeps
+// the spec-correct verdict, so this one case records an honest Fail rather than a
+// false Pass bought by mis-implementing the enumeration check.
+func execAnyURIShapeCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
+	typeFacets, leaves, ok := readAnyURIShapeCase(c.doc)
+	if !ok {
+		return Fail()
+	}
+	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyURI"}
+	builtinType, seeded := sym[qn]
+	if !seeded {
+		return Fail()
+	}
+	if !strictGoverns(backend, builtinType) {
+		return Fail()
+	}
+	// One synthesized leaf per DISTINCT named type in use, keyed by name and built up
+	// front over the document-ordered leaves, so a construction failure for any type
+	// in use declines the whole case before any value is decided. The bare builtin
+	// key resolves to the SEEDED anyURI type itself — a facet-free element needs no
+	// synthesis. synth is a lookup, never ranged into output (STYLE D2); the
+	// validation loop below ranges leaves, a slice in document order.
+	synth := map[string]*xsd.SimpleType{anyURIBuiltinKey: builtinType}
+	for _, l := range leaves {
+		if _, built := synth[l.typeName]; built {
+			continue
+		}
+		ownFacets, ok := buildOwnFacets("anyURI", typeFacets[l.typeName])
+		if !ok {
+			return Fail()
+		}
+		leaf, err := xsd.NewSimpleType(xsderr.Loc{},
+			xsd.QName{Space: synthNS, Local: "anyURI-" + l.typeName},
+			xsd.Atomic{Primitive: primitiveOfType(builtinType)}, builtinType, ownFacets, nil)
+		if err != nil {
+			return Fail()
+		}
+		synth[l.typeName] = leaf
+	}
+	// anyURI maps context-free (§3.3.17.2, the identity on Char*), so a nil
+	// value.Context suffices. Values are passed RAW: ValidateLexical's whiteSpace
+	// stage applies anyURI's fixed collapse (§4.3.6), which anyURI_b005 turns on —
+	// its "http://a/x  y" collapses to "http://a/x y", still not the enumeration's
+	// "http://a/x%20y" (§3.3.17.2 Note: no percent-decoding), so the case is invalid.
+	observedValid := true
+	for _, l := range leaves {
+		if _, verr := value.ValidateLexical(backend, synth[l.typeName], l.value, nil); verr != nil {
 			observedValid = false
 			break
 		}
@@ -1952,11 +2100,12 @@ func readFacetsCase(instancePath string) (raw, base string, children []facetChil
 // facetsInstance mirrors the Facets cohort's instance shape: a <test> root whose
 // single <foo> child holds the tested value in its content or a named attribute.
 // Foos collects every <foo> child so readFacetsCase can require EXACTLY ONE: an
-// out-of-cohort shape carrying zero <foo> leaves (e.g. the anyURI
-// Facets/anyURI/anyURI_b001.xml case whose values live in repeated <bar>
-// children) or several (e.g. anyURI_b006.xml, a list-style instance repeating
-// many <foo> values against one enumeration) is honestly declined rather than
-// mis-read as a single empty or last-wins tested value.
+// out-of-cohort shape carrying zero <foo> leaves or several is honestly declined
+// rather than mis-read as a single empty or last-wins tested value. The anyURI
+// a*/b* fixtures that motivated this guard are now claimed earlier, by
+// anyURIShapeCase's dedicated multi-leaf reader (issue #190), so they no longer
+// reach here; the guard stays because it is what keeps any FUTURE out-of-cohort
+// shape from being mis-read.
 // Attrs captures the <test> root's raw attributes (mirroring fooElem.Attrs) so the
 // QName cohort (issue #125) can build the instance's root-level namespace context.
 // Every Facets/QName fixture in the current checkout declares its xmlns bindings
@@ -2356,7 +2505,7 @@ func readD34Case(instancePath string) (typeFacets map[string][]facetChild, elems
 	if err != nil {
 		return nil, nil, false
 	}
-	loc, ok := d34SchemaLocation(inst.XMLName.Space, inst.SchemaLoc)
+	loc, ok := qualifiedSchemaLocation(inst.XMLName.Space, inst.SchemaLoc)
 	if !ok {
 		return nil, nil, false
 	}
@@ -2383,12 +2532,14 @@ func readD34Case(instancePath string) (typeFacets map[string][]facetChild, elems
 	return index, elems, true
 }
 
-// d34SchemaLocation extracts the schema location for the root element's namespace
-// from an xsi:schemaLocation value (whitespace-separated namespace/location pairs,
-// §2.6.3). It returns the location paired with rootNS, or — since the D3_3_4
-// fixtures always carry exactly one pair for the instance's own namespace — the
-// first pair's location as a fallback. ok is false when no pair is present.
-func d34SchemaLocation(rootNS, schemaLoc string) (loc string, ok bool) {
+// qualifiedSchemaLocation extracts the schema location for the root element's
+// namespace from an xsi:schemaLocation value (whitespace-separated
+// namespace/location pairs, §2.6.3). It returns the location paired with rootNS,
+// or — since both cohorts that use this form, IBM D3_3_4 (issue #162) and the
+// anyURI a* fixtures (issue #190), always carry exactly one pair, for the
+// instance's own namespace — the first pair's location as a fallback. ok is false
+// when no pair is present.
+func qualifiedSchemaLocation(rootNS, schemaLoc string) (loc string, ok bool) {
 	fields := strings.Fields(schemaLoc)
 	for i := 0; i+1 < len(fields); i += 2 {
 		if fields[i] == rootNS {
@@ -2524,6 +2675,443 @@ func d34RootElemTypes(s d34Schema, index map[string][]facetChild) (map[string]st
 		return elemTypes, true
 	}
 	return nil, false
+}
+
+// anyURIBuiltinKey keys the bare xsd:anyURI builtin in the anyURI a*/b* cohort's
+// type index (issue #190): anyURI_b006's <foo> children are typed xsd:anyURI
+// DIRECTLY — facet-free — while its <bar> siblings carry the enumeration-restricted
+// named type, so the two must not be conflated. The key contains a colon, which no
+// NCName type name can, so it never collides with a schema's own named type.
+const anyURIBuiltinKey = "xsd:anyURI"
+
+// anyURILeaf is one tested value in an anyURI a*/b* instance: the key of the
+// simple type governing it (a named single-step anyURI restriction, or
+// anyURIBuiltinKey) and its RAW lexical, un-normalized — ValidateLexical's
+// whiteSpace stage applies anyURI's fixed collapse.
+type anyURILeaf struct {
+	typeName string
+	value    string
+}
+
+// anyURINode is one element occurrence in an anyURI a*/b* instance: its LOCAL
+// name, its DIRECT character data (descendant text belongs to the descendant's own
+// node), and its unqualified attributes in document order. Matching on the local
+// name alone is sound for this cohort exactly as it is for readD34Case: each
+// fixture's schema has one target namespace (or none) and declares each name once,
+// a fact indexAnyURIElements re-checks rather than assumes.
+type anyURINode struct {
+	name  string
+	text  string
+	attrs []xml.Attr
+}
+
+// anyURIBinding is a resolved element (or named complexType) declaration: the key
+// of the simple type governing its TEXT content — "" when the content is
+// element-only, like the <root> wrapper — plus the simple-type key of every
+// attribute it declares, keyed by attribute name. attrTypes is a lookup, never
+// ranged into output (STYLE D2).
+type anyURIBinding struct {
+	textType  string
+	attrTypes map[string]string
+}
+
+// anyURIIndex is one cohort schema decoded and indexed for leaf resolution: every
+// named simpleType that single-step restricts xsd:anyURI (by local name, carrying
+// its facet children), every named complexType whose simpleContent resolves to
+// such a type, and every element declaration in the document — top-level or local
+// — by local name. All three are lookups, never ranged into output (STYLE D2).
+type anyURIIndex struct {
+	simpleTypes  map[string][]facetChild
+	complexTypes map[string]anyURIBinding
+	elements     map[string]anyURIElemDecl
+}
+
+// readAnyURIShapeCase reads one anyURI a*/b* cohort instance (issue #190) and
+// returns the facet children of every named anyURI restriction the schema declares
+// (typeFacets, keyed by local name — execAnyURIShapeCase synthesizes one leaf per
+// type in use) plus every tested value in document order paired with the key of
+// the type governing it (leaves): each element's character content, and each
+// unqualified attribute's value.
+//
+// ok is false — declining the WHOLE case, never partially deciding it — when: the
+// instance or its schema cannot be read; the instance root declares neither
+// xsi:noNamespaceSchemaLocation (the b* form) nor an xsi:schemaLocation pair for
+// its own namespace (the a* form); two element declarations share a name but
+// reference different types; an element occurrence is not declared by the schema;
+// an element's or attribute's type is not a single-step anyURI restriction nor the
+// bare builtin (a list/union variety or a multi-step chain never enters the index);
+// an element with element-only content carries real character data; an attribute
+// is not declared by its element's type; or no tested value is found at all.
+func readAnyURIShapeCase(instancePath string) (typeFacets map[string][]facetChild, leaves []anyURILeaf, ok bool) {
+	schemaLoc, nodes, ok := decodeAnyURIInstance(instancePath)
+	if !ok {
+		return nil, nil, false
+	}
+	schemaPath := filepath.Join(filepath.Dir(instancePath), filepath.FromSlash(schemaLoc))
+	schema, err := decodeAnyURISchema(schemaPath)
+	if err != nil {
+		return nil, nil, false
+	}
+	simpleTypes := indexAnyURISimpleTypes(schema)
+	elements, ok := indexAnyURIElements(schema)
+	if !ok {
+		return nil, nil, false
+	}
+	idx := anyURIIndex{
+		simpleTypes:  simpleTypes,
+		complexTypes: indexAnyURIComplexTypes(schema, simpleTypes),
+		elements:     elements,
+	}
+	for _, n := range nodes {
+		decl, declared := idx.elements[n.name]
+		if !declared {
+			return nil, nil, false
+		}
+		bind, resolved := bindAnyURIElem(idx, decl)
+		if !resolved {
+			return nil, nil, false
+		}
+		if bind.textType == "" && strings.TrimSpace(n.text) != "" {
+			// Element-only content carrying real character data is a shape this reader
+			// does not model: decline rather than drop a value that may decide the case.
+			// The cohort's <root> wrappers carry only inter-element whitespace, which is
+			// permitted by their element-only content type and is not a tested value.
+			return nil, nil, false
+		}
+		if bind.textType != "" {
+			leaves = append(leaves, anyURILeaf{typeName: bind.textType, value: n.text})
+		}
+		for _, a := range n.attrs {
+			key, attrDeclared := bind.attrTypes[a.Name.Local]
+			if !attrDeclared {
+				return nil, nil, false
+			}
+			leaves = append(leaves, anyURILeaf{typeName: key, value: a.Value})
+		}
+	}
+	if len(leaves) == 0 {
+		return nil, nil, false
+	}
+	return simpleTypes, leaves, true
+}
+
+// decodeAnyURIInstance streams an anyURI a*/b* instance and returns the schema
+// location its root declares plus every element occurrence in document order (P4:
+// token stream, no whole-document tree). Character data is charged to the
+// innermost open element, so a wrapper's inter-element whitespace never merges
+// into a leaf's tested value. ok is false when the file cannot be opened, is not
+// well-formed, declares no usable schema location, or carries no element at all.
+func decodeAnyURIInstance(path string) (schemaLoc string, nodes []anyURINode, ok bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", nil, false
+	}
+	defer func() { _ = f.Close() }() // read-only handle: close error cannot affect the parsed result
+	dec := xml.NewDecoder(bufio.NewReader(f))
+	var open []int // indexes into nodes, innermost last: one per currently-open element
+	for {
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return "", nil, false
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if len(nodes) == 0 {
+				loc, declared := anyURISchemaLocation(t)
+				if !declared {
+					return "", nil, false
+				}
+				schemaLoc = loc
+			}
+			nodes = append(nodes, anyURINode{name: t.Name.Local, attrs: testedAttrs(t)})
+			open = append(open, len(nodes)-1)
+		case xml.EndElement:
+			if len(open) == 0 {
+				return "", nil, false
+			}
+			open = open[:len(open)-1]
+		case xml.CharData:
+			if len(open) > 0 {
+				nodes[open[len(open)-1]].text += string(t)
+			}
+		}
+	}
+	if len(nodes) == 0 || len(open) != 0 {
+		return "", nil, false
+	}
+	return schemaLoc, nodes, true
+}
+
+// anyURISchemaLocation extracts the schema location an instance root declares. The
+// b* fixtures use xsi:noNamespaceSchemaLocation (their schema has no target
+// namespace); the a* fixtures use the namespace-qualified xsi:schemaLocation form
+// (§2.6.3), whose pair for the root's OWN namespace names the schema —
+// qualifiedSchemaLocation resolves that form. ok is false when neither is present.
+func anyURISchemaLocation(root xml.StartElement) (loc string, ok bool) {
+	noNamespace, qualified := "", ""
+	for _, a := range root.Attr {
+		if a.Name.Space != xsd.XMLSchemaInstanceNS {
+			continue
+		}
+		if a.Name.Local == "noNamespaceSchemaLocation" {
+			noNamespace = a.Value
+		}
+		if a.Name.Local == "schemaLocation" {
+			qualified = a.Value
+		}
+	}
+	if noNamespace != "" {
+		return noNamespace, true
+	}
+	if qualified != "" {
+		return qualifiedSchemaLocation(root.Name.Space, qualified)
+	}
+	return "", false
+}
+
+// testedAttrs returns se's UNQUALIFIED attributes — the ones an
+// attributeFormDefault="unqualified" schema declares and this cohort tests. The
+// xmlns declarations (default and prefixed) and the namespace-qualified xsi:*
+// instance attributes carry no tested value and are dropped.
+func testedAttrs(se xml.StartElement) []xml.Attr {
+	var attrs []xml.Attr
+	for _, a := range se.Attr {
+		if a.Name.Space != "" || a.Name.Local == "xmlns" {
+			continue
+		}
+		attrs = append(attrs, a)
+	}
+	return attrs
+}
+
+// anyURISchema mirrors an anyURI a*/b* cohort schema: its top-level element
+// declarations, its named simpleTypes (each a candidate single-step anyURI
+// restriction) and its named complexTypes (anyURI_b002's simpleContent extension,
+// which adds an attribute to a restricted anyURI content type). Everything else
+// these schemas carry — <include>/<import>/<redefine> with deliberately
+// unresolvable locations, <notation>, <annotation> — is not load-bearing for any
+// instance verdict and is deliberately not decoded (STYLE D4).
+type anyURISchema struct {
+	Elements     []anyURIElemDecl    `xml:"element"`
+	SimpleTypes  []anyURISimpleType  `xml:"simpleType"`
+	ComplexTypes []anyURIComplexType `xml:"complexType"`
+}
+
+// anyURIElemDecl is one element declaration, top-level or local: its name, the
+// type it references, and — when it declares an INLINE complexType instead (the
+// <root> wrapper) — that complexType's attribute declarations (a004's att) and its
+// local element children under a <sequence> (a004/b001/b002/b004/b005) or a
+// <choice> (b006). The nesting is recursive because a local child may declare an
+// inline complexType of its own; no cohort fixture does, but walking it costs
+// nothing and cannot mis-read one. A <element ref="…"/> child carries no name and
+// contributes nothing: the top-level declaration it references is decoded here in
+// its own right.
+type anyURIElemDecl struct {
+	Name        string `xml:"name,attr"`
+	Type        string `xml:"type,attr"`
+	ComplexType struct {
+		Attributes []anyURIAttrDecl `xml:"attribute"`
+		Sequence   []anyURIElemDecl `xml:"sequence>element"`
+		Choice     []anyURIElemDecl `xml:"choice>element"`
+	} `xml:"complexType"`
+}
+
+// anyURIAttrDecl is one <xsd:attribute name= type=> declaration: the name an
+// instance attribute must match and the simple type its value is tested against.
+type anyURIAttrDecl struct {
+	Name string `xml:"name,attr"`
+	Type string `xml:"type,attr"`
+}
+
+// anyURISimpleType is a named simpleType and its single-step restriction: the base
+// it restricts and that restriction's facet children in document order.
+type anyURISimpleType struct {
+	Name        string `xml:"name,attr"`
+	Restriction struct {
+		Base   string `xml:"base,attr"`
+		Facets []struct {
+			XMLName xml.Name
+			Value   string `xml:"value,attr"`
+		} `xml:",any"`
+	} `xml:"restriction"`
+}
+
+// anyURIComplexType is a named complexType with simpleContent (anyURI_b002's
+// "ct"): the extension's base names the simple type governing an element's TEXT,
+// and its attribute declarations name the types of the attributes it adds.
+type anyURIComplexType struct {
+	Name      string `xml:"name,attr"`
+	Extension struct {
+		Base       string           `xml:"base,attr"`
+		Attributes []anyURIAttrDecl `xml:"attribute"`
+	} `xml:"simpleContent>extension"`
+}
+
+func decodeAnyURISchema(path string) (anyURISchema, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return anyURISchema{}, err
+	}
+	var s anyURISchema
+	if err := xml.Unmarshal(data, &s); err != nil {
+		return anyURISchema{}, err
+	}
+	return s, nil
+}
+
+// indexAnyURISimpleTypes indexes every named simpleType that is a DIRECT
+// single-step <restriction base="(prefix:)?anyURI"> by its local name, carrying its
+// facet children. A named type whose restriction base's local name is anything else
+// — another named type (a multi-step chain) or a list/union variety, whose
+// simpleType carries no such restriction so Base is empty — is NOT indexed, which
+// is how those shapes fall out of scope with no special-casing: every leaf that
+// would have used one declines. The facet children carry no namespace bindings
+// (facetChild.bindings nil): anyURI maps context-free (§3.3.17.2), so an
+// enumeration member needs no declaring-schema context to resolve.
+func indexAnyURISimpleTypes(s anyURISchema) map[string][]facetChild {
+	index := make(map[string][]facetChild, len(s.SimpleTypes))
+	for _, st := range s.SimpleTypes {
+		if st.Name == "" || localName(st.Restriction.Base) != "anyURI" {
+			continue
+		}
+		var children []facetChild
+		for _, f := range st.Restriction.Facets {
+			children = append(children, facetChild{name: f.XMLName.Local, value: f.Value})
+		}
+		index[st.Name] = children
+	}
+	return index
+}
+
+// indexAnyURIComplexTypes indexes every named complexType whose simpleContent
+// extension resolves end to end: its base names an indexed anyURI restriction (or
+// the bare builtin) and each attribute it adds does too. A complexType that does
+// not — element-only content, a non-anyURI content type, an unresolvable attribute
+// type — is NOT indexed, so an element declared with it declines rather than being
+// read against a guessed type.
+func indexAnyURIComplexTypes(s anyURISchema, simpleTypes map[string][]facetChild) map[string]anyURIBinding {
+	index := make(map[string]anyURIBinding, len(s.ComplexTypes))
+	for _, ct := range s.ComplexTypes {
+		if ct.Name == "" {
+			continue
+		}
+		text, resolved := anyURISimpleKey(simpleTypes, ct.Extension.Base)
+		if !resolved {
+			continue
+		}
+		attrs, ok := anyURIAttrTypes(simpleTypes, ct.Extension.Attributes)
+		if !ok {
+			continue
+		}
+		index[ct.Name] = anyURIBinding{textType: text, attrTypes: attrs}
+	}
+	return index
+}
+
+// indexAnyURIElements indexes every element declaration in the schema document —
+// top-level and the local children of an inline complexType — by its local name.
+// ok is false when two declarations share a name but reference DIFFERENT types,
+// which would make an instance occurrence ambiguous under readAnyURIShapeCase's
+// local-name matching; no cohort fixture does, and the check makes that a verified
+// fact rather than an assumption.
+func indexAnyURIElements(s anyURISchema) (map[string]anyURIElemDecl, bool) {
+	index := map[string]anyURIElemDecl{}
+	for _, el := range s.Elements {
+		if !collectAnyURIElems(index, el) {
+			return nil, false
+		}
+	}
+	return index, true
+}
+
+// collectAnyURIElems adds el to index under its name (a ref= child, which declares
+// none, contributes only its subtree) and recurses into the local element children
+// of its inline complexType. It reports false on the conflicting-name condition
+// indexAnyURIElements documents.
+func collectAnyURIElems(index map[string]anyURIElemDecl, el anyURIElemDecl) bool {
+	if el.Name != "" {
+		prior, seen := index[el.Name]
+		if seen && prior.Type != el.Type {
+			return false
+		}
+		index[el.Name] = el
+	}
+	for _, child := range el.ComplexType.Sequence {
+		if !collectAnyURIElems(index, child) {
+			return false
+		}
+	}
+	for _, child := range el.ComplexType.Choice {
+		if !collectAnyURIElems(index, child) {
+			return false
+		}
+	}
+	return true
+}
+
+// bindAnyURIElem resolves one element declaration to its tested-value binding. A
+// declaration with type= names either a simple type (its text is the tested value)
+// or a simpleContent complexType (text plus the attributes it adds); a declaration
+// carrying an INLINE complexType instead (the <root> wrapper) has element-only
+// content, so its text is no tested value and only its own attribute declarations
+// are (a004's att). ok is false when the referenced type is not indexed, declining
+// the case rather than guessing a base.
+func bindAnyURIElem(idx anyURIIndex, decl anyURIElemDecl) (anyURIBinding, bool) {
+	if decl.Type == "" {
+		attrs, ok := anyURIAttrTypes(idx.simpleTypes, decl.ComplexType.Attributes)
+		if !ok {
+			return anyURIBinding{}, false
+		}
+		return anyURIBinding{attrTypes: attrs}, true
+	}
+	if ct, isComplex := idx.complexTypes[localName(decl.Type)]; isComplex {
+		return ct, true
+	}
+	text, resolved := anyURISimpleKey(idx.simpleTypes, decl.Type)
+	if !resolved {
+		return anyURIBinding{}, false
+	}
+	return anyURIBinding{textType: text}, true
+}
+
+// anyURISimpleKey resolves a type reference to the key of the simple type it names:
+// an indexed named anyURI restriction, or the bare xsd:anyURI builtin
+// (anyURIBuiltinKey, anyURI_b006's <foo>). Only the local part is matched — every
+// cohort schema binds its xsd: prefix to the XML Schema namespace (verified) — and
+// the schema's OWN named types are consulted first, so a user type sharing the
+// local name anyURI could not be mistaken for the builtin. ok is false for any
+// other reference (a non-anyURI base, a list/union variety, a multi-step chain),
+// which declines every leaf that would have used it.
+func anyURISimpleKey(simpleTypes map[string][]facetChild, ref string) (string, bool) {
+	local := localName(ref)
+	if _, indexed := simpleTypes[local]; indexed {
+		return local, true
+	}
+	if local == "anyURI" {
+		return anyURIBuiltinKey, true
+	}
+	return "", false
+}
+
+// anyURIAttrTypes maps each declared attribute's name to the key of the simple type
+// its value is tested against. ok is false when any declaration is nameless or its
+// type is not resolvable (anyURISimpleKey), which declines the owning type.
+func anyURIAttrTypes(simpleTypes map[string][]facetChild, decls []anyURIAttrDecl) (map[string]string, bool) {
+	if len(decls) == 0 {
+		return nil, true
+	}
+	attrs := make(map[string]string, len(decls))
+	for _, a := range decls {
+		key, resolved := anyURISimpleKey(simpleTypes, a.Type)
+		if a.Name == "" || !resolved {
+			return nil, false
+		}
+		attrs[a.Name] = key
+	}
+	return attrs, true
 }
 
 // attrValue returns the value of se's unqualified attribute local, or "".

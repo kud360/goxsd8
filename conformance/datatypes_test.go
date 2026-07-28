@@ -315,13 +315,16 @@ func TestDatatypesFacetsBinaryAndURI(t *testing.T) {
 }
 
 // TestDatatypesFacetsShapeGuard proves readFacetsCase decides only the canonical
-// single-<foo> instance shape and honestly declines the anyURI out-of-cohort
-// shapes (issue #124): anyURI_b001.xml carries its values in repeated <bar>
-// children (zero <foo>) and anyURI_b006.xml repeats many <foo> values against one
-// enumeration (a list-style shape), neither of which is a single tested value. A
-// mis-read there would coincidentally pass or fail for the wrong reason, inflating
-// the ratchet; the exactly-one-<foo> guard declines both. Skips when the submodule
-// is absent.
+// single-<foo> instance shape and still honestly declines the anyURI multi-leaf
+// shapes (issue #124's guard, unchanged by #190): anyURI_b001.xml carries its
+// values in repeated <bar> children (zero <foo>) and anyURI_b006.xml repeats many
+// <foo> values against one enumeration, neither of which is a single tested value.
+// A mis-read there would coincidentally pass or fail for the wrong reason,
+// inflating the ratchet; the exactly-one-<foo> guard declines both. Those two files
+// no longer REACH readFacetsCase (anyURIShapeCase claims them first — see
+// TestDatatypesAnyURIShapeCohort), so this test drives the reader directly to keep
+// the guard covered for any future out-of-cohort shape. Skips when the submodule is
+// absent.
 func TestDatatypesFacetsShapeGuard(t *testing.T) {
 	if _, err := os.Stat(suitePath()); err != nil {
 		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
@@ -342,6 +345,104 @@ func TestDatatypesFacetsShapeGuard(t *testing.T) {
 	for _, rel := range []string{"anyURI_b001.xml", "anyURI_b006.xml"} {
 		if _, _, _, _, ok := readFacetsCase(filepath.Join(anyURIDir, rel)); ok {
 			t.Errorf("readFacetsCase(%s) must decline the out-of-cohort shape (not exactly one <foo>)", rel)
+		}
+	}
+}
+
+// TestDatatypesAnyURIShapeCohort drives the anyURI a*/b* multi-leaf cohort (issue
+// #190) end to end over the real fixtures. It asserts three separable things.
+//
+// First, the READER recovers exactly the leaves each shape carries and binds each
+// to the right type: one <bar> text value for a001/a002 (xsi:schemaLocation form),
+// a <root> attribute plus six local <bar> children for a004, three ref='d <bar>
+// children for b001/b005, five values split across <bar> text and its simpleContent
+// attribute for b002, seven for b004, and twenty-six for b006 — twenty-two of them
+// bound to the FACET-FREE xsd:anyURI builtin (its <foo> children) and four to the
+// enumeration-restricted named type (its <bar> children). The b006 split is the
+// load-bearing one: collapsing it to a single type would decide the case for the
+// wrong reason.
+//
+// Second, the EXECUTOR agrees with the suite on the seven fixtures whose expectation
+// is spec-correct, and a flipped expectation must Fail for each — proving the
+// verdict is computed, not coincidental.
+//
+// Third, anyURI_a004's spec-correct verdict is VALID: all seven of its leaves are
+// enumeration members, so the harness must NOT manufacture agreement with the
+// suite's queried invalid expectation (bugzilla 4126). Skips when the submodule is
+// absent.
+func TestDatatypesAnyURIShapeCohort(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	dir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets", "anyURI")
+	exec := newDatatypesExec()
+
+	shapes := []struct {
+		file        string
+		leaves      int
+		builtinLeaf int  // leaves bound to the bare xsd:anyURI builtin (facet-free)
+		specValid   bool // the verdict the spec requires for this instance
+	}{
+		{"anyURI_a001.xml", 1, 0, true},
+		{"anyURI_a002.xml", 1, 0, true},
+		{"anyURI_a004.xml", 7, 0, true},
+		{"anyURI_b001.xml", 3, 0, false},
+		{"anyURI_b002.xml", 5, 0, true},
+		{"anyURI_b004.xml", 7, 0, true},
+		{"anyURI_b005.xml", 3, 0, false},
+		{"anyURI_b006.xml", 26, 22, false},
+	}
+	for _, s := range shapes {
+		typeFacets, leaves, ok := readAnyURIShapeCase(filepath.Join(dir, s.file))
+		if !ok {
+			t.Errorf("readAnyURIShapeCase(%s) must decode this cohort shape", s.file)
+			continue
+		}
+		if len(leaves) != s.leaves {
+			t.Errorf("readAnyURIShapeCase(%s) = %d leaves, want %d", s.file, len(leaves), s.leaves)
+		}
+		builtins := 0
+		for _, l := range leaves {
+			if l.typeName == anyURIBuiltinKey {
+				builtins++
+				continue
+			}
+			if _, indexed := typeFacets[l.typeName]; !indexed {
+				t.Errorf("readAnyURIShapeCase(%s): leaf type %q is not an indexed anyURI restriction", s.file, l.typeName)
+			}
+		}
+		if builtins != s.builtinLeaf {
+			t.Errorf("readAnyURIShapeCase(%s) = %d facet-free builtin leaves, want %d", s.file, builtins, s.builtinLeaf)
+		}
+		// The executor's verdict is the spec-correct one: claiming it Passes, and
+		// claiming the opposite Fails.
+		spec := caseSpec{kind: kindInstance, doc: filepath.Join(dir, s.file), expectValid: s.specValid}
+		if !exec(spec).IsPass() {
+			t.Errorf("%s: executor must decide validity=%v (the spec-correct verdict)", s.file, s.specValid)
+		}
+		flipped := caseSpec{kind: kindInstance, doc: filepath.Join(dir, s.file), expectValid: !s.specValid}
+		if exec(flipped).IsPass() {
+			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", s.file)
+		}
+	}
+
+	// b005 is the whiteSpace+no-percent-decoding case: its collapsed "http://a/x y"
+	// must NOT match the enumeration's "http://a/x%20y" (§3.3.17.2 Note). A regression
+	// to percent-decoding or to preserve-whiteSpace would make the instance valid, so
+	// pin the tested lexicals the reader hands the pipeline.
+	_, b005, ok := readAnyURIShapeCase(filepath.Join(dir, "anyURI_b005.xml"))
+	if !ok {
+		t.Fatal("readAnyURIShapeCase(anyURI_b005) must decode")
+	}
+	if b005[0].value != "http://a/x  y" {
+		t.Errorf("anyURI_b005 first leaf = %q, want the RAW two-space lexical (ValidateLexical collapses it)", b005[0].value)
+	}
+
+	// The cohort's selector must claim all eight and nothing else in the directory:
+	// the canonical single-<foo> anyURI cases keep routing to readFacetsCase.
+	for _, rel := range []string{"anyURI_length001.xml", "anyURI_enumeration001.xml", "anyURI_minLength004.xml"} {
+		if anyURIShapeCase.MatchString(filepath.ToSlash(filepath.Join(dir, rel))) {
+			t.Errorf("anyURIShapeCase must not claim the canonical single-<foo> case %s", rel)
 		}
 	}
 }
