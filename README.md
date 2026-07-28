@@ -45,7 +45,12 @@ git submodule update --init testdata/xsdtests   # W3C suite, ~215 MB
 go build ./... && go test ./...
 ```
 
-### CLI (contract; subcommands land with their milestones)
+### CLI (contract; no subcommand is implemented yet)
+
+This block is a **contract**, exactly like the Library one below: today the
+`goxsd8` binary is a stub — every invocation prints a pointer to the contract
+and exits 2 ([issue #251](https://github.com/kud360/goxsd8/issues/251)).
+Subcommands land with their milestones (`parse` M4, `validate` M5, `gen` M9).
 
 ```sh
 goxsd8 parse order.xsd items.xsd                # compile + summary, exit 0/1
@@ -55,23 +60,71 @@ goxsd8 gen -schema order.xsd -out ./gen/order \
            -schema items.xsd -out ./gen/items  # one package per -schema/-out pair
 ```
 
-Violations print one per line: `<loc>: [<rule>] <message>`.
+Beyond `-schema` and `-out`, the contract carries `-format` (force the
+instance source format instead of deriving it from the extension),
+`-no-hints` (ignore `xsi:schemaLocation` hints in XML instances),
+`-backend strict|native` (which value backend `gen` emits against), `-q`
+(quiet) and `-v` (debug logging to stderr via `slog`, scoped with
+`GOXSD_DEBUG=parser,validate,codec`).
+**`go doc github.com/kud360/goxsd8/cmd/goxsd8` is the authoritative flag
+list**; this section summarizes it.
 
-### Library (contract; APIs land with their milestones)
+Violations print one per line as `<loc>: [<rule>] <message>`, where `<loc>`
+is `<file>:<line>:<col>` (`?` when unknown) and `<rule>` is the spec
+validation rule ID:
+
+```
+order.xml:12:5: [cvc-datatype-valid] decimal: "12,50" is not in the lexical space (decimal-lexical-representation, §3.3.3.1)
+```
+
+### Library (seeding and parsing work today; validation is contract)
+
+Seeding the builtin datatypes and compiling a schema set both work TODAY:
 
 ```go
-// Seed the builtin datatypes from a value backend (compose to cover every
-// primitive). This step works TODAY — the components feed the parser's
-// symbol table. See builtin/example_test.go and builtin/strict/example_test.go.
-backend := value.Override(fallback, strict.New())  // cover all primitives
-builtins, err := builtin.Seed(backend)             // []*xsd.SimpleType
+// A value backend supplies the builtin datatypes' value spaces. builtin.Seed
+// needs one that maps all 20 builtin primitives; builtin/strict maps all 20 on
+// its own, so nothing has to be composed in.
+backend := strict.New()
 
-// The parse → validate steps below are the PLANNED contract — parser.Parse
-// (M4), validate.New / xmlsrc.Validate (M5) do not exist yet. Shown here for
-// the shape the API will take, not code you can build today.
-set, err := parser.Parse("order.xsd")           // or ParseMultiple
-v, err := validate.New(set)
-res := xmlsrc.Validate(v, r)                     // res.Errors: []*xsderr.Error
+// Seed the builtin datatype components. Call this when you want the
+// components yourself — parser.Parse seeds its own from its backend.
+builtins, err := builtin.Seed(backend)  // []*xsd.SimpleType, deterministic order
+
+// parser.Parse assembles the <xs:include> / <xs:import> / <xs:override>
+// closure of the root document — including chameleon coercion of a
+// no-targetNamespace included (or overridden) document into the including
+// namespace — and returns it finalized. Every option has a default, so
+// parser.Parse("order.xsd") alone is valid too.
+schema, err := parser.Parse("order.xsd",
+	parser.WithBackend(backend),                 // default: builtin/strict
+	parser.WithResolver(loader.Dir("schemas")),  // default: loader.Dir(".")
+	parser.WithLogger(logger),                   // default: silent
+)
+```
+
+To back one type with your own mapping and inherit the rest, compose:
+`value.Override(strict.New(), money)` yields `money`'s mapping for every
+type `money` defines and `strict`'s for all the others.
+
+Two limits of `parser.Parse` worth knowing up front: `<xs:redefine>` is
+skipped rather than followed, so a schema that needs it assembles short; and
+`Parse` returns only the FIRST error, not a list of them.
+
+The component model is also constructible directly, without a schema
+document: `xsd.NewSchemaBuilder()` → `Add*` → `Finalize()` returns an
+immutable `*xsd.Schema` you query by `xsd.QName` (`Type`, `Element`,
+`Attribute`). See `go doc github.com/kud360/goxsd8/xsd SchemaBuilder`; a
+worked example is tracked in
+[issue #203](https://github.com/kud360/goxsd8/issues/203).
+
+The instance-validation step below is still the PLANNED contract —
+`validate.New` / `xmlsrc.Validate` (M5) do not exist yet. Shown here for the
+shape the API will take, not code you can build today.
+
+```go
+v, err := validate.New(schema)
+res := xmlsrc.Validate(v, r)  // res.Errors: []*xsderr.Error
 ```
 
 Start at `go doc github.com/kud360/goxsd8` and follow the package list;
