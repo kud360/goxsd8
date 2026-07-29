@@ -1,10 +1,12 @@
 package parser_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // attrUseLocal returns the local name of an attribute use's {attribute
@@ -334,5 +336,54 @@ func TestProduceTopLevelElementHasNoScopeParent(t *testing.T) {
 	}
 	if parent, ok := ed.Scope().Parent(); ok {
 		t.Fatalf("top-level element root has {scope}.{parent} = %#v, want absent", parent)
+	}
+}
+
+// TestProduceNamelessTopLevelContainerRejected pins that a top-level
+// <complexType>/<group> with no usable name is rejected the SAME way whether or
+// not its content holds a local element declaration. name is use="required" with
+// type xs:NCName in the schema for schema documents (xs:topLevelComplexType,
+// xs:namedGroup), so an absent and an empty attribute are equally unusable, and
+// no Schema Representation Constraint states a clause of its own for either
+// (§3.4.3 src-ct incorporates the schema for schema documents by reference;
+// §3.7.3 is "None as such") — hence a plain grammar fault, not a rule verdict.
+//
+// The content-bearing rows are the regression guard: before the fix the empty
+// bodies produced silently while the bodies holding a local <element> failed
+// with a bogus e-props-correct — the missing name was judged, when judged at
+// all, by an unrelated rule and only for some content.
+func TestProduceNamelessTopLevelContainerRejected(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		decl string
+	}{
+		{"complexType empty content", `<xs:complexType><xs:sequence/></xs:complexType>`},
+		{"complexType with local element", `<xs:complexType><xs:sequence>` +
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`},
+		{"complexType with complexContent", `<xs:complexType><xs:complexContent>` +
+			`<xs:restriction base="xs:anyType"><xs:sequence>` +
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction>` +
+			`</xs:complexContent></xs:complexType>`},
+		{"complexType with empty name", `<xs:complexType name=""><xs:sequence>` +
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`},
+		{"group empty content", `<xs:group><xs:sequence/></xs:group>`},
+		{"group with local element", `<xs:group><xs:sequence>` +
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`},
+		{"group with empty name", `<xs:group name=""><xs:sequence>` +
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:po", tc.decl))
+			if err == nil {
+				t.Fatalf("Produce succeeded, want a grammar fault for the missing name")
+			}
+			var xe *xsderr.Error
+			if errors.As(err, &xe) {
+				t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+			}
+			if !strings.Contains(err.Error(), "no usable name") {
+				t.Fatalf("error = %v, want it to report the unusable name", err)
+			}
+		})
 	}
 }

@@ -210,13 +210,19 @@ func NewGlobalScope() Scope {
 //     {parent}").
 //   - a parent variant whose Name is the absent (zero) QName: this
 //     representation identifies the container BY NAME (ElementScopeParent), so an
-//     unnamed container could not be found again. Every container the mapping
-//     rules can produce is in fact named — a Model Group Definition's {name} is
-//     Required (§3.7.1), and an anonymous Complex Type Definition can only arise
-//     from an inline <complexType>, which no producer path in this module builds
-//     yet (each declines it). Should inline anonymous complex types land, this
-//     rejection is the compile-of-record that the representation must be revisited
-//     (a component handle, not a name) rather than silently mis-scoping.
+//     unnamed container could not be found again.
+//
+// The second rejection is unreachable from this module's parser; it guards
+// scopes built programmatically (a direct caller, a test) instead. Only a
+// top-level <complexType> or a top-level named <group> ever mints an
+// ElementScopeParent, and the producer rejects each as a grammar fault at the
+// top of the function that maps it — BEFORE any content is built — when its
+// name attribute is absent or empty, so no variant carrying an absent name is
+// ever constructed. The remaining source of an anonymous Complex Type
+// Definition, an inline <complexType>, is declined by every producer path that
+// could reach one. Should inline anonymous complex types land, this rejection is
+// the compile-of-record that the representation must be revisited (a component
+// handle, not a name) rather than silently mis-scoping.
 //
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built scope — may

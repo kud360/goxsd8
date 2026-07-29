@@ -70,7 +70,23 @@ func seedAnyType() (xsd.ComplexType, error) {
 // Type Definition corresponding to that item"). It is threaded down the content
 // tree as an explicit xsd.ElementScopeParent parameter rather than stashed on
 // the producer, so nesting can never mis-attribute a declaration.
+//
+// A missing name is rejected FIRST, before any content is built. The only caller
+// is the top-level <complexType> branch of run (produce.go), and the schema for
+// schema documents makes name use="required" with type xs:NCName on
+// xs:topLevelComplexType, so both an absent attribute and an empty one leave the
+// {name} property unusable. src-ct (§3.4.3) incorporates that condition by
+// reference ("In addition to the conditions imposed on <complexType> element
+// information items by the schema for schema documents") but states no clause of
+// its own for it, so this is a plain grammar fault like <include> with no
+// schemaLocation (parse.go), not an xsderr rule verdict. Rejecting it here,
+// unconditionally, is what keeps the verdict from depending on whether the
+// content happens to hold a local element — whose xsd.NewLocalScope would
+// otherwise charge e-props-correct, an unrelated rule, and only sometimes.
 func (p *producer) produceComplexType(name xsd.QName, el *Element) (xsd.ComplexType, error) {
+	if name.Local == "" {
+		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
+	}
 	if childElement(el, xsd.XMLSchemaNS, "simpleContent") != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <complexType> with <simpleContent> is not yet produced (its {simple type definition} needs the resolved base, §3.4.2.2)")
 	}
@@ -309,7 +325,17 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 // body: §3.3.2.3 dcl.elt.local's "otherwise" branch — an <element> within a
 // named <group> rather than under a <complexType> — scopes it to the Model Group
 // Definition, not to whatever complex type later references the group.
+//
+// A missing name is rejected FIRST, before the body is built, for the reason
+// produceComplexType gives: the schema for schema documents makes name
+// use="required" with type xs:NCName on xs:namedGroup, and §3.7.3 states "None
+// as such" for <group>'s Schema Representation Constraints, so the fault carries
+// no rule ID — while deferring it would let a nameless <group> be judged by
+// whether its body happens to hold a local element.
 func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd.ModelGroupDefinition, error) {
+	if name.Local == "" {
+		return xsd.ModelGroupDefinition{}, fmt.Errorf("parser: top-level <group> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
+	}
 	mg, err := p.buildDefinitionModelGroup(el, xsd.ModelGroupScopeParent{Name: name})
 	if err != nil {
 		return xsd.ModelGroupDefinition{}, err
