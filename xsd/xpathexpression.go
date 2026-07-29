@@ -51,11 +51,11 @@ func (b NamespaceBinding) Namespace() string {
 // value (or its absence, which is a legitimate spec-sanctioned outcome, not
 // an error).
 //
-// This type is shared machinery: it backs Assertion.Test() (this file's
-// consumer) and is intended for reuse by TypeAlternative.Test() (a later
-// issue, where {test} itself is Optional — unlike Assertion's Required) and
-// identity-constraint {selector}/{fields} (a later issue) — §3.13.2 defines
-// this property record once and all three XML mappings reuse it verbatim.
+// This type is shared machinery, and all three of its consumers have landed:
+// Assertion.Test(), TypeAlternative.Test() (#171, where {test} itself is
+// Optional — unlike Assertion's Required), and identity-constraint
+// {selector}/{fields} (#178) — §3.13.2 defines this property record once and
+// all three XML mappings reuse it verbatim.
 //
 // Construct only through NewXPathExpression. XPathExpression is immutable
 // after construction.
