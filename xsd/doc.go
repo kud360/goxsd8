@@ -41,10 +41,11 @@
 // and attribute declarations, complex and simple type definitions, model
 // group and attribute group definitions, notations, and identity
 // constraints — additionally report a source position through Loc. That
-// position is PROVENANCE, not a §3.17.1 component property: it is where
-// the declaring element sits in the schema document, retained from the
-// constructor so a finalize-time rejection (sch-props-correct clause 2)
-// can cite file:line:column instead of "?". The zero xsderr.Loc means
+// position is PROVENANCE, not a component property at all — no kind's
+// §3.x.1 property list has it. It is where the declaring element sits in
+// the schema document, retained from the constructor so a finalize-time
+// rejection (sch-props-correct clause 2) can cite file:line:column
+// instead of "?". The zero xsderr.Loc means
 // the position is unknown, and is the correct value for a component with
 // no schema document behind it — parser.Produce's synthesized xs:anyType
 // and package builtin's seeded built-in datatypes are the legitimate

@@ -101,7 +101,7 @@ func (c IdentityConstraint) Name() QName {
 }
 
 // Loc reports the source position of the declaring element — provenance, not a
-// §3.17.1 component property (see the package doc's Components section). The
+// §3.11.1 component property (see the package doc's Components section). The
 // zero xsderr.Loc means the position is unknown.
 func (c IdentityConstraint) Loc() xsderr.Loc {
 	return c.loc

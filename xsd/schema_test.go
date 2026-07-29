@@ -243,32 +243,32 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 	}
 	cases := []struct {
 		kind string
-		loc  func(loc xsderr.Loc) xsderr.Loc
+		loc  func(t *testing.T, loc xsderr.Loc) xsderr.Loc
 	}{
-		{"ElementDeclaration", func(l xsderr.Loc) xsderr.Loc { return elementNamedAt(t, l, name).Loc() }},
-		{"AttributeDeclaration", func(l xsderr.Loc) xsderr.Loc {
+		{"ElementDeclaration", func(t *testing.T, l xsderr.Loc) xsderr.Loc { return elementNamedAt(t, l, name).Loc() }},
+		{"AttributeDeclaration", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
 			a, err := xsd.NewAttributeDeclaration(l, name, xsd.QName{}, xsd.ScopeGlobal, nil, false, nil)
 			if err != nil {
 				t.Fatalf("NewAttributeDeclaration: %v", err)
 			}
 			return a.Loc()
 		}},
-		{"ComplexType", func(l xsderr.Loc) xsderr.Loc {
+		{"ComplexType", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
 			c, err := xsd.NewComplexType(l, name, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 			if err != nil {
 				t.Fatalf("NewComplexType: %v", err)
 			}
 			return c.Loc()
 		}},
-		{"SimpleType", func(l xsderr.Loc) xsderr.Loc {
+		{"SimpleType", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
 			st, err := xsd.NewSimpleType(l, name, nil, xsd.AnySimpleType(), nil, nil)
 			if err != nil {
 				t.Fatalf("NewSimpleType: %v", err)
 			}
 			return st.Loc()
 		}},
-		{"PrimitiveType", func(l xsderr.Loc) xsderr.Loc { return primitiveAt(t, l).Loc() }},
-		{"ModelGroupDefinition", func(l xsderr.Loc) xsderr.Loc {
+		{"PrimitiveType", func(t *testing.T, l xsderr.Loc) xsderr.Loc { return primitiveAt(t, l).Loc() }},
+		{"ModelGroupDefinition", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
 			g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, nil, nil)
 			if err != nil {
 				t.Fatalf("NewModelGroup: %v", err)
@@ -279,14 +279,14 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 			}
 			return d.Loc()
 		}},
-		{"AttributeGroupDefinition", func(l xsderr.Loc) xsderr.Loc {
+		{"AttributeGroupDefinition", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
 			g, err := xsd.NewAttributeGroupDefinition(l, name, nil, nil, nil)
 			if err != nil {
 				t.Fatalf("NewAttributeGroupDefinition: %v", err)
 			}
 			return g.Loc()
 		}},
-		{"Notation", func(l xsderr.Loc) xsderr.Loc {
+		{"Notation", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
 			sys := "urn:sys"
 			n, err := xsd.NewNotation(l, name, &sys, nil, nil)
 			if err != nil {
@@ -294,7 +294,7 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 			}
 			return n.Loc()
 		}},
-		{"IdentityConstraint", func(l xsderr.Loc) xsderr.Loc {
+		{"IdentityConstraint", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
 			sel := xsd.NewXPathExpression(".", nil, nil, nil)
 			field := xsd.NewXPathExpression("@x", nil, nil, nil)
 			c, err := xsd.NewIdentityConstraint(l, name, xsd.IdentityConstraintUnique, sel, []xsd.XPathExpression{field}, nil, nil)
@@ -306,12 +306,12 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.kind, func(t *testing.T) {
-			if got := c.loc(want); got != want {
+			if got := c.loc(t, want); got != want {
 				t.Errorf("%s.Loc() = %v, want the constructor's loc %v", c.kind, got, want)
 			}
 			// A component built with no parser position reports the zero Loc,
 			// which renders as "?" — the documented "unknown" reading.
-			if got := c.loc(xsderr.Loc{}); got != (xsderr.Loc{}) {
+			if got := c.loc(t, xsderr.Loc{}); got != (xsderr.Loc{}) {
 				t.Errorf("%s.Loc() = %v for a zero-loc build, want the zero Loc", c.kind, got)
 			}
 		})

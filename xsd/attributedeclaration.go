@@ -133,7 +133,7 @@ func (a AttributeDeclaration) Name() QName {
 }
 
 // Loc reports the source position of the declaring element — provenance, not a
-// §3.17.1 component property (see the package doc's Components section). The
+// §3.2.1 component property (see the package doc's Components section). The
 // zero xsderr.Loc means the position is unknown.
 func (a AttributeDeclaration) Loc() xsderr.Loc {
 	return a.loc
