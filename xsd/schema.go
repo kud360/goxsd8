@@ -23,6 +23,15 @@ const ruleSchPropsCorrect xsderr.Rule = "sch-props-correct"
 // Layer 1's "lazy/just-in-time" note (§4.2.4 is <redefine>, a distinct topic).
 // Call Finalize to obtain the immutable compiled Schema.
 //
+// INTENDED CALLER: a producer, not an application author. Every AddX takes an
+// already-validated component value, and building one correctly means honoring
+// every §3 tableau and cross-property invariant its constructor cannot check —
+// which is parser.Produce's job (it maps a schema document onto these
+// components and calls Finalize). An application that has a schema DOCUMENT
+// should call parser.Parse and receive the finalized *Schema; this builder is
+// for a producer synthesizing components some other way, and for the tests and
+// Examples that need one component graph without a document behind it.
+//
 // Each slice holds its kind's components in the document order they were added
 // (STYLE D2/D3); that order is the source of truth the Finalize indexes are
 // derived from, never the reverse.
@@ -101,6 +110,12 @@ func (b *SchemaBuilder) AddAnnotation(a Annotation) {
 // finalized Schema (STYLE T1/T7) — "not finalized" (SchemaBuilder) and
 // "finalized" (Schema) are distinct Go types, not two states of one type.
 //
+// *Schema is the Query API (xsd/doc.go): it satisfies TypeResolver,
+// ElementResolver, and AttributeResolver through its Type, Element, and
+// Attribute methods. Go's structural typing leaves that unprinted by go doc, so
+// it is stated here — a consumer needing only one of the three takes the
+// matching capability view rather than the whole *Schema (STYLE T3).
+//
 // The document-order slices are the source of truth; the by-expanded-QName maps
 // are indexes DERIVED from those slices at Finalize and exist only for O(1)
 // lookup — they never determine iteration order (STYLE D2/D3; see xsd/doc.go's
@@ -141,6 +156,11 @@ type Schema struct {
 // pointees a type-definition slice holds are shared, NOT deep-copied: pointer
 // identity is load-bearing for SimpleType (see its doc), so the compiled Schema
 // must reference the very same nodes.
+//
+// The two results are exclusive: on any rejection the returned *Schema is NIL,
+// so a caller must test the error before dereferencing. A partially built
+// Schema is never handed back — the resolution pass runs on an already-assembled
+// value that is dropped when it fails.
 //
 // It rejects, charging Schema Properties Correct (§3.17.6.1, sch-props-correct)
 // clause 2: two components of the same kind (the same §3.17.1 {…definitions}/

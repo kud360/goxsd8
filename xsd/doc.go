@@ -45,6 +45,11 @@
 // exactly that method, not the whole schema. Views are read-only windows
 // onto the compiled set; they never copy it.
 //
+// The views are ElementResolver, AttributeResolver, and TypeResolver;
+// *Schema satisfies all three, and SchemaBuilder.Finalize is the only way
+// to obtain one. This section is shipped surface — see the package
+// Examples for the construct → Finalize → query sequence.
+//
 // # Walk API
 //
 // Traversal of a type's effective content model. The reusable core is an
@@ -53,18 +58,31 @@
 // the caller: Wildcard.AllowsName answers cvc-wildcard clause 1 from the
 // {namespace constraint} alone, while clauses 2-3 resolve the
 // defined/sibling keywords against the declaration graph and the
-// containing complex type the caller supplies), attribute-use lookup —
-// with two drivers built on it:
+// containing complex type the caller supplies), attribute-use lookup.
+// Of that algebra only Wildcard.AllowsName is exported today; the rest is
+// in-package machinery finalize drives.
 //
-//   - the push driver: an exhaustive, schema-only Walker that visits
-//     every particle reachable through sequences, choices, all-groups,
-//     and named group references, in document order (codegen's driver);
-//   - the pull driver: an instance-guided Matcher that advances the
-//     content model one child at a time, greedily and deterministically
-//     (validation's driver).
+// Until a driver ships, a consumer traverses a content model by hand,
+// switching Particle.Term over the TermOrRef sealed sum and then, for the
+// ResolvedTerm branch, over the Term sealed sum; the package Examples walk
+// one end to end.
 //
-// Substitution groups are not expanded at walk time — instance-time
+// # Planned contract (M5/M9 — not yet implemented)
+//
+// Two drivers are designed on the algebra above. Neither exists: the
+// package declares no Walker and no Matcher.
+//
+//	type Walker   // M9, codegen's push driver
+//	    Exhaustive and schema-only: visits every particle reachable
+//	    through sequences, choices, all-groups, and named group
+//	    references, in document order.
+//
+//	type Matcher  // M5, validation's pull driver
+//	    Instance-guided: advances the content model one child at a time,
+//	    greedily and deterministically.
+//
+// Substitution groups will not be expanded at walk time — instance-time
 // concern. Recursive named-group references terminate by construction in
-// the finalized model; the Walker needs no visited set beyond the
+// the finalized model; the Walker will need no visited set beyond the
 // path-scoped guard the spec's one legal nesting requires.
 package xsd
