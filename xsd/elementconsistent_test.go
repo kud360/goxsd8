@@ -28,7 +28,7 @@ func eTypeTable(t *testing.T, expression string, altType, defaultType QName) *Ty
 // eLocalWithTable builds a LOCAL element declaration carrying a {type table}.
 func eLocalWithTable(t *testing.T, name, typeName QName, tt *TypeTable) ElementDeclaration {
 	t.Helper()
-	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeName, tt, ScopeLocal, nil, false, nil,
+	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeName, tt, uLocalScope(t), nil, false, nil,
 		nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
@@ -39,7 +39,7 @@ func eLocalWithTable(t *testing.T, name, typeName QName, tt *TypeTable) ElementD
 // eGlobalWithTable builds a TOP-LEVEL element declaration carrying a {type table}.
 func eGlobalWithTable(t *testing.T, name, typeName QName, tt *TypeTable) ElementDeclaration {
 	t.Helper()
-	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeName, tt, ScopeGlobal, nil, false, nil,
+	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeName, tt, NewGlobalScope(), nil, false, nil,
 		nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
@@ -50,7 +50,7 @@ func eGlobalWithTable(t *testing.T, name, typeName QName, tt *TypeTable) Element
 // eAnonymous builds a declaration whose declared {type definition} is anonymous
 // (a zero QName) — the state cos-element-consistent clause 1 forbids for two or
 // more same-named declarations.
-func eAnonymous(t *testing.T, name QName, scope ScopeVariety) ElementDeclaration {
+func eAnonymous(t *testing.T, name QName, scope Scope) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, QName{}, nil, scope, nil, false, nil,
 		nil, nil, false, nil, nil)
@@ -88,8 +88,8 @@ func TestEDCSameTypePasses(t *testing.T) {
 // top-level definition.
 func TestEDCAnonymousTypes(t *testing.T) {
 	g := uGroup(t, CompositorSequence,
-		uOne(t, ResolvedTerm{Term: eAnonymous(t, uq("a"), ScopeLocal)}),
-		uOne(t, ResolvedTerm{Term: eAnonymous(t, uq("a"), ScopeLocal)}),
+		uOne(t, ResolvedTerm{Term: eAnonymous(t, uq("a"), uLocalScope(t))}),
+		uOne(t, ResolvedTerm{Term: eAnonymous(t, uq("a"), uLocalScope(t))}),
 	)
 	expectRule(t, uSchemaWithModel(t, g, nil), ruleCosElementConsistent)
 }
@@ -104,7 +104,7 @@ func TestEDCSameDeclarationTwiceViaRefPasses(t *testing.T) {
 		uOne(t, ElementDeclarationRef{Name: uq("a")}),
 	)
 	err := uSchemaWithModel(t, g, func(b *SchemaBuilder) {
-		b.AddElement(eAnonymous(t, uq("a"), ScopeGlobal))
+		b.AddElement(eAnonymous(t, uq("a"), NewGlobalScope()))
 	})
 	if err != nil {
 		t.Fatalf("one element declaration reached twice was treated as two: %v", err)
@@ -116,7 +116,7 @@ func TestEDCSameDeclarationTwiceViaRefPasses(t *testing.T) {
 // definition is still one component.
 func TestEDCSameInlineDeclarationViaTwoGroupRefsPasses(t *testing.T) {
 	inner := uGroup(t, CompositorSequence,
-		uOne(t, ResolvedTerm{Term: eAnonymous(t, uq("x"), ScopeLocal)}),
+		uOne(t, ResolvedTerm{Term: eAnonymous(t, uq("x"), uLocalScope(t))}),
 	)
 	mgd, err := NewModelGroupDefinition(xsderr.Loc{}, uq("g"), inner, nil)
 	if err != nil {

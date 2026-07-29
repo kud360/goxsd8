@@ -1,10 +1,12 @@
 package parser_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // attrUseLocal returns the local name of an attribute use's {attribute
@@ -223,5 +225,165 @@ func TestProduceGroupRefElided(t *testing.T) {
 	}
 	if parts := topModelGroup(t, s, "T").Particles(); len(parts) != 0 {
 		t.Fatalf("T content model has %d particles, want 0 (the group ref elided)", len(parts))
+	}
+}
+
+// contentModelOf returns the {model group} of a top-level complex type's element
+// content particle, addressing the type by its EXPANDED name (unlike
+// topModelGroup, which assumes no target namespace).
+func contentModelOf(t *testing.T, s *xsd.Schema, name xsd.QName) xsd.ModelGroup {
+	t.Helper()
+	td, ok := s.Type(name)
+	if !ok {
+		t.Fatalf("complex type %s not found", name)
+	}
+	ct, ok := td.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("type %s is not a complex type (%T)", name, td)
+	}
+	ec, ok := ct.ContentType().(xsd.ElementContent)
+	if !ok {
+		t.Fatalf("complex type %s content is %T, want ElementContent", name, ct.ContentType())
+	}
+	return groupTermOf(t, ec.Particle)
+}
+
+// groupTermOf returns the Model Group a particle's {term} resolves to inline.
+func groupTermOf(t *testing.T, p xsd.Particle) xsd.ModelGroup {
+	t.Helper()
+	rt, ok := p.Term().(xsd.ResolvedTerm)
+	if !ok {
+		t.Fatalf("particle term is %T, want an inline ResolvedTerm", p.Term())
+	}
+	mg, ok := rt.Term.(xsd.ModelGroup)
+	if !ok {
+		t.Fatalf("particle term is %T, want ModelGroup", rt.Term)
+	}
+	return mg
+}
+
+// elementTermOf returns the local Element Declaration a particle's {term} is.
+func elementTermOf(t *testing.T, p xsd.Particle) xsd.ElementDeclaration {
+	t.Helper()
+	rt, ok := p.Term().(xsd.ResolvedTerm)
+	if !ok {
+		t.Fatalf("particle term is %T, want an inline ResolvedTerm", p.Term())
+	}
+	ed, ok := rt.Term.(xsd.ElementDeclaration)
+	if !ok {
+		t.Fatalf("particle term is %T, want ElementDeclaration", rt.Term)
+	}
+	return ed
+}
+
+// scopeParentOf returns a declaration's {scope}.{parent}, failing when absent.
+func scopeParentOf(t *testing.T, ed xsd.ElementDeclaration) xsd.ElementScopeParent {
+	t.Helper()
+	parent, ok := ed.Scope().Parent()
+	if !ok {
+		t.Fatalf("element %s has no {scope}.{parent}, want its containing component", ed.Name())
+	}
+	return parent
+}
+
+// TestProduceLocalElementScopedToComplexType proves the §3.3.2.3 dcl.elt.local
+// {parent} mapping for the <complexType>-ancestor case: a local <element>, at any
+// nesting depth of the content model, is scoped to the ENCLOSING COMPLEX TYPE by
+// expanded name — not to the nearest model group, which is not a scope boundary.
+func TestProduceLocalElementScopedToComplexType(t *testing.T) {
+	s, err := produce(t, wrap("urn:po", `
+		<xs:complexType name="T">
+			<xs:sequence>
+				<xs:element name="a" type="xs:string"/>
+				<xs:choice><xs:element name="b" type="xs:string"/></xs:choice>
+			</xs:sequence>
+		</xs:complexType>`))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	want := xsd.ComplexTypeScopeParent{Name: xsd.QName{Space: "urn:po", Local: "T"}}
+	parts := contentModelOf(t, s, xsd.QName{Space: "urn:po", Local: "T"}).Particles()
+	if len(parts) != 2 {
+		t.Fatalf("T content model has %d particles, want 2", len(parts))
+	}
+
+	direct := elementTermOf(t, parts[0])
+	if direct.ScopeVariety() != xsd.ScopeLocal {
+		t.Fatalf("element a scope = %s, want local", direct.ScopeVariety())
+	}
+	if got := scopeParentOf(t, direct); got != want {
+		t.Fatalf("element a {scope}.{parent} = %#v, want %#v", got, want)
+	}
+
+	// The nested <choice> must not shift the parent: only <complexType> and a
+	// named <group> are scope-determining ancestors.
+	deep := elementTermOf(t, groupTermOf(t, parts[1]).Particles()[0])
+	if got := scopeParentOf(t, deep); got != want {
+		t.Fatalf("element b {scope}.{parent} = %#v, want %#v", got, want)
+	}
+}
+
+// TestProduceTopLevelElementHasNoScopeParent proves the §3.3.2.2 dcl.elt.global
+// half: a top-level <element> carries {parent} ·absent·.
+func TestProduceTopLevelElementHasNoScopeParent(t *testing.T) {
+	s, err := produce(t, wrap("urn:po", `<xs:element name="root" type="xs:string"/>`))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	ed, ok := s.Element(xsd.QName{Space: "urn:po", Local: "root"})
+	if !ok {
+		t.Fatal("element root not found")
+	}
+	if parent, ok := ed.Scope().Parent(); ok {
+		t.Fatalf("top-level element root has {scope}.{parent} = %#v, want absent", parent)
+	}
+}
+
+// TestProduceNamelessTopLevelContainerRejected pins that a top-level
+// <complexType>/<group> with no usable name is rejected the SAME way whether or
+// not its content holds a local element declaration. name is use="required" with
+// type xs:NCName in the schema for schema documents (xs:topLevelComplexType,
+// xs:namedGroup), so an absent and an empty attribute are equally unusable, and
+// no Schema Representation Constraint states a clause of its own for either
+// (§3.4.3 src-ct incorporates the schema for schema documents by reference;
+// §3.7.3 is "None as such") — hence a plain grammar fault, not a rule verdict.
+//
+// The content-bearing rows are the regression guard: before the fix the empty
+// bodies produced silently while the bodies holding a local <element> failed
+// with a bogus e-props-correct — the missing name was judged, when judged at
+// all, by an unrelated rule and only for some content.
+func TestProduceNamelessTopLevelContainerRejected(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		decl string
+	}{
+		{"complexType empty content", `<xs:complexType><xs:sequence/></xs:complexType>`},
+		{"complexType with local element", `<xs:complexType><xs:sequence>` +
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`},
+		{"complexType with complexContent", `<xs:complexType><xs:complexContent>` +
+			`<xs:restriction base="xs:anyType"><xs:sequence>` +
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction>` +
+			`</xs:complexContent></xs:complexType>`},
+		{"complexType with empty name", `<xs:complexType name=""><xs:sequence>` +
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`},
+		{"group empty content", `<xs:group><xs:sequence/></xs:group>`},
+		{"group with local element", `<xs:group><xs:sequence>` +
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`},
+		{"group with empty name", `<xs:group name=""><xs:sequence>` +
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:po", tc.decl))
+			if err == nil {
+				t.Fatalf("Produce succeeded, want a grammar fault for the missing name")
+			}
+			var xe *xsderr.Error
+			if errors.As(err, &xe) {
+				t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+			}
+			if !strings.Contains(err.Error(), "no usable name") {
+				t.Fatalf("error = %v, want it to report the unusable name", err)
+			}
+		})
 	}
 }

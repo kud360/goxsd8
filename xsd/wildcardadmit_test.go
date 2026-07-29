@@ -54,7 +54,7 @@ func wCT(t *testing.T, name QName, term TermOrRef) ComplexType {
 
 // wElement builds an element declaration; affiliations forces global scope
 // (e-props-correct clause 3).
-func wElement(t *testing.T, name QName, scope ScopeVariety, affiliations []QName, disallowedSubstitutions []DerivationMethod) ElementDeclaration {
+func wElement(t *testing.T, name QName, scope Scope, affiliations []QName, disallowedSubstitutions []DerivationMethod) ElementDeclaration {
 	t.Helper()
 	e, err := NewElementDeclaration(xsderr.Loc{}, name, QName{}, nil, scope, nil, false, nil,
 		affiliations, nil, false, disallowedSubstitutions, nil)
@@ -93,11 +93,11 @@ func wFinalize(t *testing.T, b *SchemaBuilder) *Schema {
 func TestAllowsElementWildcardNameDefined(t *testing.T) {
 	w := wWildcard(t, DisallowedNameDefined)
 	plain := wWildcard(t)
-	local := wElement(t, wq("localOnly"), ScopeLocal, nil, nil)
+	local := wElement(t, wq("localOnly"), uLocalScope(t), nil, nil)
 	ct := wCT(t, wq("ct"), ResolvedTerm{Term: local})
 
 	b := NewSchemaBuilder()
-	b.AddElement(wElement(t, wq("top"), ScopeGlobal, nil, nil))
+	b.AddElement(wElement(t, wq("top"), NewGlobalScope(), nil, nil))
 	b.AddAttribute(mustAttributeDecl(t, wq("attr")))
 	b.AddType(ct)
 	s := wFinalize(t, b)
@@ -130,7 +130,7 @@ func TestAllowsAttributeWildcardNameDefined(t *testing.T) {
 	plain := wWildcard(t)
 
 	b := NewSchemaBuilder()
-	b.AddElement(wElement(t, wq("top"), ScopeGlobal, nil, nil))
+	b.AddElement(wElement(t, wq("top"), NewGlobalScope(), nil, nil))
 	b.AddAttribute(mustAttributeDecl(t, wq("attr")))
 	s := wFinalize(t, b)
 
@@ -161,7 +161,7 @@ func TestAllowsElementWildcardNameClause1(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWildcard: %v", err)
 	}
-	ct := wCT(t, wq("ct"), ResolvedTerm{Term: wElement(t, wq("a"), ScopeLocal, nil, nil)})
+	ct := wCT(t, wq("ct"), ResolvedTerm{Term: wElement(t, wq("a"), uLocalScope(t), nil, nil)})
 	s := wFinalize(t, NewSchemaBuilder())
 	if s.allowsElementWildcardName(w, ct, wq("a")) {
 		t.Error("clause 1 (cvc-wildcard-name) no longer rejects a name outside the {namespace constraint}")
@@ -176,7 +176,7 @@ func TestAllowsElementWildcardNameSibling(t *testing.T) {
 
 	// A model group definition referenced by <group ref>, holding element "g".
 	groupDef, err := NewModelGroupDefinition(xsderr.Loc{}, wq("grp"),
-		wGroup(t, CompositorSequence, wParticle(t, ResolvedTerm{Term: wElement(t, wq("g"), ScopeLocal, nil, nil)})), nil)
+		wGroup(t, CompositorSequence, wParticle(t, ResolvedTerm{Term: wElement(t, wq("g"), uLocalScope(t), nil, nil)})), nil)
 	if err != nil {
 		t.Fatalf("NewModelGroupDefinition: %v", err)
 	}
@@ -184,12 +184,12 @@ func TestAllowsElementWildcardNameSibling(t *testing.T) {
 	// depth-3 nesting: sequence > choice > all > element "deep".
 	deep := wGroup(t, CompositorSequence, wParticle(t, ResolvedTerm{Term: wGroup(t, CompositorChoice,
 		wParticle(t, ResolvedTerm{Term: wGroup(t, CompositorAll,
-			wParticle(t, ResolvedTerm{Term: wElement(t, wq("deep"), ScopeLocal, nil, nil)}))}))}))
+			wParticle(t, ResolvedTerm{Term: wElement(t, wq("deep"), uLocalScope(t), nil, nil)}))}))}))
 
 	// The content model: direct local "direct", the deep nest, a <group ref>, an
 	// <element ref> to top-level "head", and the wildcard itself.
 	model := wGroup(t, CompositorSequence,
-		wParticle(t, ResolvedTerm{Term: wElement(t, wq("direct"), ScopeLocal, nil, nil)}),
+		wParticle(t, ResolvedTerm{Term: wElement(t, wq("direct"), uLocalScope(t), nil, nil)}),
 		wParticle(t, ResolvedTerm{Term: deep}),
 		wParticle(t, ModelGroupRef{Name: wq("grp")}),
 		wParticle(t, ElementDeclarationRef{Name: wq("head")}),
@@ -200,10 +200,10 @@ func TestAllowsElementWildcardNameSibling(t *testing.T) {
 	b := NewSchemaBuilder()
 	b.AddModelGroup(groupDef)
 	b.AddType(ct)
-	b.AddElement(wElement(t, wq("head"), ScopeGlobal, nil, nil))
-	b.AddElement(wElement(t, wq("member"), ScopeGlobal, []QName{wq("head")}, nil))
-	b.AddElement(wElement(t, wq("grandchild"), ScopeGlobal, []QName{wq("member")}, nil))
-	b.AddElement(wElement(t, wq("unrelated"), ScopeGlobal, nil, nil))
+	b.AddElement(wElement(t, wq("head"), NewGlobalScope(), nil, nil))
+	b.AddElement(wElement(t, wq("member"), NewGlobalScope(), []QName{wq("head")}, nil))
+	b.AddElement(wElement(t, wq("grandchild"), NewGlobalScope(), []QName{wq("member")}, nil))
+	b.AddElement(wElement(t, wq("unrelated"), NewGlobalScope(), nil, nil))
 	s := wFinalize(t, b)
 
 	cases := []struct {
@@ -241,8 +241,8 @@ func TestSiblingSubstitutionGroupBlocked(t *testing.T) {
 
 	b := NewSchemaBuilder()
 	b.AddType(ct)
-	b.AddElement(wElement(t, wq("head"), ScopeGlobal, nil, []DerivationMethod{DerivationSubstitution}))
-	b.AddElement(wElement(t, wq("member"), ScopeGlobal, []QName{wq("head")}, nil))
+	b.AddElement(wElement(t, wq("head"), NewGlobalScope(), nil, []DerivationMethod{DerivationSubstitution}))
+	b.AddElement(wElement(t, wq("member"), NewGlobalScope(), []QName{wq("head")}, nil))
 	s := wFinalize(t, b)
 
 	if s.allowsElementWildcardName(w, ct, wq("head")) {
@@ -259,7 +259,7 @@ func TestSiblingAbstractHeadStillContains(t *testing.T) {
 	w := wWildcard(t, DisallowedNameSibling)
 	ct := wCT(t, wq("ct"), ElementDeclarationRef{Name: wq("head")})
 
-	abstractHead, err := NewElementDeclaration(xsderr.Loc{}, wq("head"), QName{}, nil, ScopeGlobal, nil, false, nil,
+	abstractHead, err := NewElementDeclaration(xsderr.Loc{}, wq("head"), QName{}, nil, NewGlobalScope(), nil, false, nil,
 		nil, nil, true /* abstract */, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
@@ -267,7 +267,7 @@ func TestSiblingAbstractHeadStillContains(t *testing.T) {
 	b := NewSchemaBuilder()
 	b.AddType(ct)
 	b.AddElement(abstractHead)
-	b.AddElement(wElement(t, wq("member"), ScopeGlobal, []QName{wq("head")}, nil))
+	b.AddElement(wElement(t, wq("member"), NewGlobalScope(), []QName{wq("head")}, nil))
 	s := wFinalize(t, b)
 
 	if s.allowsElementWildcardName(w, ct, wq("member")) {
@@ -281,12 +281,12 @@ func TestSiblingAbstractHeadStillContains(t *testing.T) {
 // top-level declaration has members.
 func TestSiblingLocalDeclarationHeadsNoGroup(t *testing.T) {
 	w := wWildcard(t, DisallowedNameSibling)
-	ct := wCT(t, wq("ct"), ResolvedTerm{Term: wElement(t, wq("head"), ScopeLocal, nil, nil)})
+	ct := wCT(t, wq("ct"), ResolvedTerm{Term: wElement(t, wq("head"), uLocalScope(t), nil, nil)})
 
 	b := NewSchemaBuilder()
 	b.AddType(ct)
-	b.AddElement(wElement(t, wq("head"), ScopeGlobal, nil, nil))
-	b.AddElement(wElement(t, wq("member"), ScopeGlobal, []QName{wq("head")}, nil))
+	b.AddElement(wElement(t, wq("head"), NewGlobalScope(), nil, nil))
+	b.AddElement(wElement(t, wq("member"), NewGlobalScope(), []QName{wq("head")}, nil))
 	s := wFinalize(t, b)
 
 	if s.allowsElementWildcardName(w, ct, wq("head")) {
@@ -306,10 +306,10 @@ func TestSiblingIsNotMemoizedPerWildcard(t *testing.T) {
 	w := wWildcard(t, DisallowedNameSibling)
 
 	withFoo := wCT(t, wq("withFoo"), ResolvedTerm{Term: wGroup(t, CompositorSequence,
-		wParticle(t, ResolvedTerm{Term: wElement(t, wq("foo"), ScopeLocal, nil, nil)}),
+		wParticle(t, ResolvedTerm{Term: wElement(t, wq("foo"), uLocalScope(t), nil, nil)}),
 		wParticle(t, ResolvedTerm{Term: w}))})
 	withoutFoo := wCT(t, wq("withoutFoo"), ResolvedTerm{Term: wGroup(t, CompositorSequence,
-		wParticle(t, ResolvedTerm{Term: wElement(t, wq("bar"), ScopeLocal, nil, nil)}),
+		wParticle(t, ResolvedTerm{Term: wElement(t, wq("bar"), uLocalScope(t), nil, nil)}),
 		wParticle(t, ResolvedTerm{Term: w}))})
 
 	b := NewSchemaBuilder()

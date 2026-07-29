@@ -64,7 +64,29 @@ func seedAnyType() (xsd.ComplexType, error) {
 // "this representation is not yet produced"). The conformance schema lane
 // (conformance/schema.go) declines these shapes, so the decline never reaches a
 // validity verdict.
+//
+// name is also the {scope}.{parent} that every local element declaration nested
+// in this type's content model reports (§3.3.2.3 dcl.elt.local: "the Complex
+// Type Definition corresponding to that item"). It is threaded down the content
+// tree as an explicit xsd.ElementScopeParent parameter rather than stashed on
+// the producer, so nesting can never mis-attribute a declaration.
+//
+// A missing name is rejected FIRST, before any content is built. The only caller
+// is the top-level <complexType> branch of run (produce.go), and the schema for
+// schema documents makes name use="required" with type xs:NCName on
+// xs:topLevelComplexType, so both an absent attribute and an empty one leave the
+// {name} property unusable. src-ct (§3.4.3) incorporates that condition by
+// reference ("In addition to the conditions imposed on <complexType> element
+// information items by the schema for schema documents") but states no clause of
+// its own for it, so this is a plain grammar fault like <include> with no
+// schemaLocation (parse.go), not an xsderr rule verdict. Rejecting it here,
+// unconditionally, is what keeps the verdict from depending on whether the
+// content happens to hold a local element — whose xsd.NewLocalScope would
+// otherwise charge e-props-correct, an unrelated rule, and only sometimes.
 func (p *producer) produceComplexType(name xsd.QName, el *Element) (xsd.ComplexType, error) {
+	if name.Local == "" {
+		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
+	}
 	if childElement(el, xsd.XMLSchemaNS, "simpleContent") != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <complexType> with <simpleContent> is not yet produced (its {simple type definition} needs the resolved base, §3.4.2.2)")
 	}
@@ -77,11 +99,12 @@ func (p *producer) produceComplexType(name xsd.QName, el *Element) (xsd.ComplexT
 // produceImplicitContent maps a <complexType> with neither <simpleContent> nor
 // <complexContent> (§3.4.2.3.2): the {base type definition} is xs:anyType and
 // {derivation method} is restriction. The explicit content, attribute uses, and
-// attribute wildcard come directly from the <complexType>'s own children.
+// attribute wildcard come directly from the <complexType>'s own children, and
+// this type is the {scope}.{parent} of every local element among them.
 func (p *producer) produceImplicitContent(name xsd.QName, el *Element) (xsd.ComplexType, error) {
 	mixed, _ := boolAttr(el, "mixed")
 	abstract, _ := boolAttr(el, "abstract")
-	content, err := p.buildComplexContentType(el, mixed)
+	content, err := p.buildComplexContentType(el, mixed, xsd.ComplexTypeScopeParent{Name: name})
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -123,7 +146,7 @@ func (p *producer) produceComplexContent(name xsd.QName, ctElem, cc *Element) (x
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	content, err := p.buildComplexContentType(restriction, mixed)
+	content, err := p.buildComplexContentType(restriction, mixed, xsd.ComplexTypeScopeParent{Name: name})
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -140,17 +163,19 @@ func (p *producer) produceComplexContent(name xsd.QName, ctElem, cc *Element) (x
 // buildComplexContentType computes the {content type} of a restriction-derived
 // (or implicit) complex content from parent's model-group child (§3.4.2.3.3
 // clauses 2-4, restriction case). parent is the <complexType> (implicit) or the
-// <restriction> (explicit complex content); effectiveMixed is clause 1's result.
+// <restriction> (explicit complex content); effectiveMixed is clause 1's result;
+// scopeParent is the enclosing Complex Type Definition every local element
+// declaration in this content model is scoped to (§3.3.2.3 dcl.elt.local).
 //
 // It declines <openContent>: computing {open content} needs <defaultOpenContent>
 // fallback support (§3.4.2.3.3 clauses 5-6) not yet built, and silently mapping it
 // to absent would be wrong (grounding: GAP/decline, never silently absent).
-func (p *producer) buildComplexContentType(parent *Element, effectiveMixed bool) (xsd.ContentType, error) {
+func (p *producer) buildComplexContentType(parent *Element, effectiveMixed bool, scopeParent xsd.ElementScopeParent) (xsd.ContentType, error) {
 	if childElement(parent, xsd.XMLSchemaNS, "openContent") != nil {
 		return nil, fmt.Errorf("parser: <openContent> is not yet produced (its {open content} needs <defaultOpenContent> fallback, §3.4.2.3.3)")
 	}
 	group := modelGroupChild(parent)
-	explicit, err := p.explicitContent(group)
+	explicit, err := p.explicitContent(group, scopeParent)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +207,13 @@ func (p *producer) buildComplexContentType(parent *Element, effectiveMixed bool)
 // (§3.4.2.3.3 clause 2), returning nil for the ***empty*** cases: no group child
 // (2.1.1), an empty <all>/<sequence> (2.1.2), a childless <choice minOccurs="0">
 // (2.1.3), or a group child with maxOccurs="0" (2.1.4).
-func (p *producer) explicitContent(group *Element) (*xsd.Particle, error) {
+//
+// scopeParent is passed through to every local element declaration built beneath
+// this content model (§3.3.2.3 dcl.elt.local). It is generic rather than a
+// ComplexTypeScopeParent because this function and the ones it calls are shared
+// with the named-<group> tree, where the same elements are scoped to a Model
+// Group Definition instead.
+func (p *producer) explicitContent(group *Element, scopeParent xsd.ElementScopeParent) (*xsd.Particle, error) {
 	if group == nil {
 		return nil, nil // 2.1.1
 	}
@@ -200,7 +231,7 @@ func (p *producer) explicitContent(group *Element) (*xsd.Particle, error) {
 	if local == "group" {
 		return p.produceGroupRefParticle(group) // 2.2, <group ref> content-model child
 	}
-	return p.produceGroupParticle(group, true) // 2.2
+	return p.produceGroupParticle(group, true, scopeParent) // 2.2
 }
 
 // produceGroupParticle maps an <all>/<choice>/<sequence> element to a Particle
@@ -211,7 +242,10 @@ func (p *producer) explicitContent(group *Element) (*xsd.Particle, error) {
 // (§3.8.2) — produceGroupParticle returns (nil, nil) — so the caller omits it.
 // The grammar's own {0,1} occurrence restriction on <all> is left to a later
 // schema-for-schemas grammar check (per the #176 grounding), not charged here.
-func (p *producer) produceGroupParticle(group *Element, top bool) (*xsd.Particle, error) {
+// scopeParent passes straight through: a model group is not a scope boundary
+// (§3.3.2.3 names only <complexType> and the named <group> as ancestors that
+// determine {scope}.{parent}).
+func (p *producer) produceGroupParticle(group *Element, top bool, scopeParent xsd.ElementScopeParent) (*xsd.Particle, error) {
 	local := group.Name().Local()
 	compositor, ok := compositorOf(local)
 	if !ok {
@@ -230,7 +264,7 @@ func (p *producer) produceGroupParticle(group *Element, top bool) (*xsd.Particle
 	if elided {
 		return nil, nil
 	}
-	particles, err := p.groupParticles(group)
+	particles, err := p.groupParticles(group, scopeParent)
 	if err != nil {
 		return nil, err
 	}
@@ -286,8 +320,23 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 // (mgd-props-correct §3.7.6, {model group} Required). Occurrence on the child is
 // irrelevant here — a model group definition carries no {min occurs}/{max occurs}
 // (§3.7.2 note); those live solely on a <group ref> particle.
+//
+// name is also the {scope}.{parent} of every local element declaration in the
+// body: §3.3.2.3 dcl.elt.local's "otherwise" branch — an <element> within a
+// named <group> rather than under a <complexType> — scopes it to the Model Group
+// Definition, not to whatever complex type later references the group.
+//
+// A missing name is rejected FIRST, before the body is built, for the reason
+// produceComplexType gives: the schema for schema documents makes name
+// use="required" with type xs:NCName on xs:namedGroup, and §3.7.3 states "None
+// as such" for <group>'s Schema Representation Constraints, so the fault carries
+// no rule ID — while deferring it would let a nameless <group> be judged by
+// whether its body happens to hold a local element.
 func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd.ModelGroupDefinition, error) {
-	mg, err := p.buildDefinitionModelGroup(el)
+	if name.Local == "" {
+		return xsd.ModelGroupDefinition{}, fmt.Errorf("parser: top-level <group> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
+	}
+	mg, err := p.buildDefinitionModelGroup(el, xsd.ModelGroupScopeParent{Name: name})
 	if err != nil {
 		return xsd.ModelGroupDefinition{}, err
 	}
@@ -301,14 +350,16 @@ func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd
 // the {model group}-Required rejection to NewModelGroupDefinition
 // (mgd-props-correct). cos-all-limited is not charged here: an <all> definition
 // body is legal; its limitation to a complex-type content particle is a usage-site
-// concern, mirroring produceGroupParticle's top-level treatment.
-func (p *producer) buildDefinitionModelGroup(el *Element) (xsd.ModelGroup, error) {
+// concern, mirroring produceGroupParticle's top-level treatment. scopeParent is
+// the enclosing definition, threaded to the local element declarations in the
+// body (§3.3.2.3 dcl.elt.local).
+func (p *producer) buildDefinitionModelGroup(el *Element, scopeParent xsd.ElementScopeParent) (xsd.ModelGroup, error) {
 	group := compositorChild(el)
 	if group == nil {
 		return xsd.ModelGroup{}, nil // absent → NewModelGroupDefinition rejects
 	}
 	compositor, _ := compositorOf(group.Name().Local()) // compositorChild guarantees ok
-	particles, err := p.groupParticles(group)
+	particles, err := p.groupParticles(group, scopeParent)
 	if err != nil {
 		return xsd.ModelGroup{}, err
 	}
@@ -334,7 +385,9 @@ func compositorChild(el *Element) *Element {
 
 // groupParticles maps the particle children of a model group in document order,
 // omitting each minOccurs=maxOccurs=0 child (which maps to no component, §3.9.2).
-func (p *producer) groupParticles(group *Element) ([]xsd.Particle, error) {
+// scopeParent is the Complex Type Definition or Model Group Definition the whole
+// content tree hangs under, threaded to each local element declaration.
+func (p *producer) groupParticles(group *Element, scopeParent xsd.ElementScopeParent) ([]xsd.Particle, error) {
 	var particles []xsd.Particle
 	for _, child := range group.Children() {
 		el, ok := child.(*Element)
@@ -350,11 +403,11 @@ func (p *producer) groupParticles(group *Element) ([]xsd.Particle, error) {
 		case "annotation":
 			continue
 		case "element":
-			part, err = p.produceElementParticle(el)
+			part, err = p.produceElementParticle(el, scopeParent)
 		case "any":
 			part, err = p.produceAnyParticle(el)
 		case "sequence", "choice", "all":
-			part, err = p.produceGroupParticle(el, false)
+			part, err = p.produceGroupParticle(el, false, scopeParent)
 		case "group":
 			part, err = p.produceGroupRefParticle(el)
 		default:
@@ -373,8 +426,11 @@ func (p *producer) groupParticles(group *Element) ([]xsd.Particle, error) {
 // produceElementParticle maps a local <element> to a Particle (§3.3.2.3). A
 // minOccurs=maxOccurs=0 element maps to no component at all (returns nil). An
 // <element ref="..."> yields a deferred ElementDeclarationRef term (resolved at
-// finalize, #173); otherwise a sibling local Element Declaration is built inline.
-func (p *producer) produceElementParticle(el *Element) (*xsd.Particle, error) {
+// finalize, #173); otherwise a sibling local Element Declaration is built inline,
+// scoped to scopeParent (§3.3.2.3 dcl.elt.local). The ref form takes no
+// scopeParent: it denotes a top-level declaration, whose own {scope} is global
+// (§3.3.2.4 ref.elt.global maps only the Particle, never a declaration).
+func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementScopeParent) (*xsd.Particle, error) {
 	occ, elided, err := occursOf(el)
 	if err != nil {
 		return nil, err
@@ -393,7 +449,7 @@ func (p *producer) produceElementParticle(el *Element) (*xsd.Particle, error) {
 		}
 		return &part, nil
 	}
-	decl, err := p.produceLocalElement(el)
+	decl, err := p.produceLocalElement(el, scopeParent)
 	if err != nil {
 		return nil, err
 	}
@@ -419,8 +475,17 @@ func (p *producer) produceElementParticle(el *Element) (*xsd.Particle, error) {
 // inline <simpleType>/<complexType> child is declined (not yet produced). A
 // type=-less element defaults its {type definition} to xs:anyType (§3.3.2.1
 // case 4), now resolvable.
-func (p *producer) produceLocalElement(el *Element) (xsd.ElementDeclaration, error) {
+//
+// scopeParent is the nearest <complexType> or named <group> ancestor's component,
+// supplied by the caller (never recomputed from the element here — the ancestor
+// axis is not walkable from an *Element). It is a required parameter, so the
+// inline-type decline below is the only path that can bypass building a scope.
+func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScopeParent) (xsd.ElementDeclaration, error) {
 	if childElement(el, xsd.XMLSchemaNS, "simpleType") != nil || childElement(el, xsd.XMLSchemaNS, "complexType") != nil {
+		// When the inline form lands, an inline <complexType>'s own nested local
+		// elements will be scoped to an ANONYMOUS complex type, which
+		// xsd.ComplexTypeScopeParent cannot name — that is #301's problem to
+		// solve before this decline can be lifted.
 		return xsd.ElementDeclaration{}, fmt.Errorf("parser: a local <element> with an inline <simpleType>/<complexType> is not yet produced (type= form only)")
 	}
 	name, _ := attrValue(el, "name")
@@ -441,7 +506,11 @@ func (p *producer) produceLocalElement(el *Element) (xsd.ElementDeclaration, err
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	return xsd.NewElementDeclaration(el.Loc(), qname, typeName, nil, xsd.ScopeLocal, vc,
+	scope, err := xsd.NewLocalScope(el.Loc(), scopeParent)
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
+	return xsd.NewElementDeclaration(el.Loc(), qname, typeName, nil, scope, vc,
 		nillable, constraints, nil, nil, false, nil, nil)
 }
 

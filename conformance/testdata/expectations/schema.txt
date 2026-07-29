@@ -446,11 +446,11 @@ ElemDecl/name00502m2/schema/name00502m2 fail
 ElemDecl/name00503m1/schema/name00503m1 fail
 ElemDecl/name00503m2/schema/name00503m2 fail
 ElemDecl/name00504m1/schema/name00504m1 pass
-ElemDecl/name00504m2/schema/name00504m2 fail
+ElemDecl/name00504m2/schema/name00504m2 pass
 ElemDecl/name00504m3/schema/name00504m3 pass
-ElemDecl/name00504m4/schema/name00504m4 fail
+ElemDecl/name00504m4/schema/name00504m4 pass
 ElemDecl/name00505m1/schema/name00505m1 pass
-ElemDecl/name00505m2/schema/name00505m2 fail
+ElemDecl/name00505m2/schema/name00505m2 pass
 ElemDecl/name00601m/schema/name00601m pass
 ElemDecl/name00801/schema/name00801 fail
 ElemDecl/name00802/schema/name00802 fail
@@ -4339,7 +4339,7 @@ MS-Element2006-07-15/QFE1700f2/schema/QFE1700f2 fail
 MS-Element2006-07-15/QFE1700f3/schema/QFE1700f3 fail
 MS-Element2006-07-15/QFE1700g1/schema/QFE1700g1 fail
 MS-Element2006-07-15/QFE1700g2/schema/QFE1700g2 fail
-MS-Element2006-07-15/elemA001/schema/elemA001 fail
+MS-Element2006-07-15/elemA001/schema/elemA001 pass
 MS-Element2006-07-15/elemA002/schema/elemA002 pass
 MS-Element2006-07-15/elemA003/schema/elemA003 pass
 MS-Element2006-07-15/elemA004/schema/elemA004 pass
@@ -4349,7 +4349,7 @@ MS-Element2006-07-15/elemA007/schema/elemA007 pass
 MS-Element2006-07-15/elemA009/schema/elemA009 fail
 MS-Element2006-07-15/elemA010/schema/elemA010 fail
 MS-Element2006-07-15/elemA011/schema/elemA011 fail
-MS-Element2006-07-15/elemA012/schema/elemA012 fail
+MS-Element2006-07-15/elemA012/schema/elemA012 pass
 MS-Element2006-07-15/elemA013/schema/elemA013 fail
 MS-Element2006-07-15/elemA014/schema/elemA014 fail
 MS-Element2006-07-15/elemA015/schema/elemA015 pass
@@ -4492,7 +4492,7 @@ MS-Element2006-07-15/elemP001/schema/elemP001 pass
 MS-Element2006-07-15/elemP002/schema/elemP002 pass
 MS-Element2006-07-15/elemP003/schema/elemP003 pass
 MS-Element2006-07-15/elemP004/schema/elemP004 pass
-MS-Element2006-07-15/elemP005/schema/elemP005 fail
+MS-Element2006-07-15/elemP005/schema/elemP005 pass
 MS-Element2006-07-15/elemP006/schema/elemP006 fail
 MS-Element2006-07-15/elemP007/schema/elemP007 fail
 MS-Element2006-07-15/elemP008/schema/elemP008 fail
@@ -4736,7 +4736,7 @@ MS-Group2006-07-15/groupC005/schema/groupC005 fail
 MS-Group2006-07-15/groupC006/schema/groupC006 fail
 MS-Group2006-07-15/groupC007/schema/groupC007 fail
 MS-Group2006-07-15/groupC008/schema/groupC008 fail
-MS-Group2006-07-15/groupC009/schema/groupC009 fail
+MS-Group2006-07-15/groupC009/schema/groupC009 pass
 MS-Group2006-07-15/groupC010/schema/groupC010 fail
 MS-Group2006-07-15/groupC011/schema/groupC011 fail
 MS-Group2006-07-15/groupC012/schema/groupC012 fail

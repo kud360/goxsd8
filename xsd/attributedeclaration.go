@@ -36,14 +36,16 @@ const ruleAPropsCorrect xsderr.Rule = "a-props-correct"
 // first introduces phased construction; this package resolves neither yet.
 //
 // {scope}.{parent} (§3.2.1 sc_a — a Complex Type Definition or Attribute Group
-// Definition) is entirely UNMODELED by this issue. Only {scope}.{variety} is
+// Definition) is entirely UNMODELED, tracked as #169. Only {scope}.{variety} is
 // carried (as a ScopeVariety, shared with element declarations per closedsets.go
 // — only the variety closed set is shared, the sc_a Scope record itself is
-// not). A ScopeLocal attribute is therefore structurally incomplete: its
-// containing Complex Type Definition or Attribute Group Definition does not
-// exist as a resolved back-reference yet, so there is nothing to point {parent}
-// at (a decl↔container back-reference deferred to finalize per STYLE 5). The gap
-// is named here rather than buried; ScopeVariety() documents it too.
+// not). A ScopeLocal attribute is therefore structurally incomplete: it does not
+// name the Complex Type Definition or Attribute Group Definition it is scoped
+// to. The element-declaration precedent is now wired (elementdeclaration.go's
+// Scope / ElementScopeParent) and is the shape to follow here, with sc_a's own
+// distinct two-member sum — the two alternations differ in their second member,
+// so they must not share one type. The gap is named here rather than buried;
+// ScopeVariety() documents it too.
 //
 // The {value constraint} is deliberately an INDEPENDENTLY-optional slot: under
 // the local mapping dcl.att.local (§3.2.2.2) a locally-declared attribute's own
@@ -140,11 +142,10 @@ func (a AttributeDeclaration) TypeDefinitionName() QName {
 // ScopeVariety returns the {scope}.{variety} property (§3.2.1 sc_a).
 //
 // It does NOT expose {scope}.{parent} (§3.2.1 sc_a — a Complex Type Definition
-// or Attribute Group Definition), which is entirely unmodeled by this issue: a
-// ScopeLocal attribute is structurally incomplete until that containing
-// component exists as a resolved back-reference (a decl↔container link deferred
-// to finalize, #173). Until then a local attribute declaration carries only its
-// variety, not the container it is scoped to.
+// or Attribute Group Definition), which is entirely unmodeled (#169): a
+// ScopeLocal attribute carries only its variety, not the container it is scoped
+// to. The element declaration's parallel {parent} IS wired
+// (ElementDeclaration.Scope), and is the precedent to follow here.
 func (a AttributeDeclaration) ScopeVariety() ScopeVariety {
 	return a.scopeVariety
 }

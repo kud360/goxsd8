@@ -58,12 +58,25 @@ func uGroup(t *testing.T, compositor Compositor, particles ...Particle) ModelGro
 	return g
 }
 
+// uLocalScope is a local {scope} whose {parent} names an arbitrary containing
+// complex type. It is shared by every package-internal test that needs a
+// non-global element declaration; those tests read only {scope}.{variety}, never
+// which container the declaration is scoped to.
+func uLocalScope(t *testing.T) Scope {
+	t.Helper()
+	s, err := NewLocalScope(xsderr.Loc{}, ComplexTypeScopeParent{Name: uq("container")})
+	if err != nil {
+		t.Fatalf("NewLocalScope: %v", err)
+	}
+	return s
+}
+
 // uLocal builds a LOCAL element declaration with a named (non-anonymous) {type
 // definition}, so that a model group holding two same-named ones exercises
 // cos-nonambig without also tripping cos-element-consistent.
 func uLocal(t *testing.T, name QName, typeName QName) ElementDeclaration {
 	t.Helper()
-	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeName, nil, ScopeLocal, nil, false, nil,
+	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeName, nil, uLocalScope(t), nil, false, nil,
 		nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
@@ -75,7 +88,7 @@ func uLocal(t *testing.T, name QName, typeName QName) ElementDeclaration {
 // and the given {substitution group affiliations}.
 func uGlobal(t *testing.T, name QName, typeName QName, affiliations ...QName) ElementDeclaration {
 	t.Helper()
-	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeName, nil, ScopeGlobal, nil, false, nil,
+	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeName, nil, NewGlobalScope(), nil, false, nil,
 		affiliations, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
