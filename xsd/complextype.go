@@ -211,11 +211,14 @@ func (o OpenContent) Wildcard() Wildcard {
 // an extension-derived complex type yet (#264).
 //
 // {context} (§3.4.1 ctd-context — the component an anonymous type appears in) is
-// entirely UNMODELED by this issue, exactly as ElementDeclaration leaves
-// {scope}.{parent} unmodeled: the containing declaration/type that would be the
-// {context} is not wired to this component yet, so an anonymous ComplexType is
-// structurally incomplete in that one respect. The gap is named here rather than
-// buried.
+// entirely UNMODELED, tracked as #301: the containing declaration/type that would
+// be the {context} is not wired to this component yet, so an anonymous
+// ComplexType is structurally incomplete in that one respect. The gap is named
+// here rather than buried. It did NOT ride along with ElementDeclaration's
+// {scope}.{parent} (now wired, see elementdeclaration.go's Scope): {parent}'s two
+// target kinds are always named, whereas §3.4.2.1 dcl.ctd.common makes {context}
+// the nearest ancestor <element>, frequently a LOCAL element declaration, which
+// is not name-unique — so it needs a component handle, not a QName reference.
 //
 // Ratchet impact: unchanged. This is a leaf shape with no parser producer; the
 // schema conformance lane moves only when the producer (#176) wires it in.

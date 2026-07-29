@@ -32,7 +32,7 @@ func complexTypeNamed(t *testing.T, name xsd.QName) xsd.ComplexType {
 // elementNamed builds a global ElementDeclaration for schema symbol-table tests.
 func elementNamed(t *testing.T, name xsd.QName) xsd.ElementDeclaration {
 	t.Helper()
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, xsd.QName{}, nil, xsd.ScopeGlobal, nil, false, nil, nil, nil, false, nil, nil)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, xsd.QName{}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration(%v): %v", name, err)
 	}

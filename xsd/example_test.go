@@ -62,7 +62,7 @@ func exampleAnyWildcard() xsd.Wildcard {
 
 // exampleElement builds an element declaration of the given scope whose {type
 // definition} reference is typeName.
-func exampleElement(name, typeName xsd.QName, scope xsd.ScopeVariety) xsd.ElementDeclaration {
+func exampleElement(name, typeName xsd.QName, scope xsd.Scope) xsd.ElementDeclaration {
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, typeName, nil, scope, nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		panic(err)
@@ -71,9 +71,14 @@ func exampleElement(name, typeName xsd.QName, scope xsd.ScopeVariety) xsd.Elemen
 }
 
 // exampleLocalElement builds a local (in-content-model) element declaration of
-// type xs:anySimpleType.
-func exampleLocalElement(local string) xsd.ElementDeclaration {
-	return exampleElement(exampleQName(local), anySimpleTypeName, xsd.ScopeLocal)
+// type xs:anySimpleType, scoped to the complex type container that holds it
+// (§3.3.1 {scope}: a local declaration is available only within its {parent}).
+func exampleLocalElement(container xsd.QName, local string) xsd.ElementDeclaration {
+	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: container})
+	if err != nil {
+		panic(err)
+	}
+	return exampleElement(exampleQName(local), anySimpleTypeName, scope)
 }
 
 // exampleElementOnlyType builds a named element-only complex type whose
@@ -95,7 +100,7 @@ func exampleElementOnlyType(name xsd.QName, term xsd.TermOrRef) xsd.ComplexType 
 // are disjoint: a Term variant does not satisfy TermOrRef, so a consumer that
 // tries to skip level 1 gets no match at all.
 func Example_termOrRefDiscrimination() {
-	shipTo := exampleLocalElement("shipTo")
+	shipTo := exampleLocalElement(exampleQName("PurchaseOrderType"), "shipTo")
 	slots := []xsd.TermOrRef{
 		xsd.ElementDeclarationRef{Name: exampleQName("billTo")},
 		xsd.ModelGroupRef{Name: exampleQName("addressGroup")},
@@ -156,12 +161,13 @@ func Example_buildFinalizeQuery() {
 	// parser.Produce); this hand-built schema needs only the one type its
 	// declarations reference.
 	b.AddType(xsd.AnySimpleType())
-	b.AddType(exampleElementOnlyType(exampleQName("AddressType"),
+	addressType := exampleQName("AddressType")
+	b.AddType(exampleElementOnlyType(addressType,
 		xsd.ResolvedTerm{Term: exampleModelGroup(xsd.CompositorSequence,
-			exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement("street")}),
-			exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement("city")}),
+			exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement(addressType, "street")}),
+			exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement(addressType, "city")}),
 		)}))
-	b.AddElement(exampleElement(exampleQName("shipTo"), exampleQName("AddressType"), xsd.ScopeGlobal))
+	b.AddElement(exampleElement(exampleQName("shipTo"), addressType, xsd.NewGlobalScope()))
 	country, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, exampleQName("country"), anySimpleTypeName, xsd.ScopeGlobal, nil, false, nil)
 	if err != nil {
 		panic(err)
@@ -208,15 +214,15 @@ func Example_contentModelTraversal() {
 	b.AddType(xsd.AnySimpleType())
 	b.AddType(exampleElementOnlyType(poType,
 		xsd.ResolvedTerm{Term: exampleModelGroup(xsd.CompositorSequence,
-			exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement("shipTo")}),
+			exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement(poType, "shipTo")}),
 			exampleParticle(xsd.ResolvedTerm{Term: exampleModelGroup(xsd.CompositorChoice,
-				exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement("comment")}),
-				exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement("note")}),
+				exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement(poType, "comment")}),
+				exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement(poType, "note")}),
 			)}),
 			exampleParticle(xsd.ElementDeclarationRef{Name: exampleQName("billTo")}),
 		)}))
-	b.AddElement(exampleElement(exampleQName("purchaseOrder"), poType, xsd.ScopeGlobal))
-	b.AddElement(exampleElement(exampleQName("billTo"), anySimpleTypeName, xsd.ScopeGlobal))
+	b.AddElement(exampleElement(exampleQName("purchaseOrder"), poType, xsd.NewGlobalScope()))
+	b.AddElement(exampleElement(exampleQName("billTo"), anySimpleTypeName, xsd.NewGlobalScope()))
 	s, err := b.Finalize()
 	if err != nil {
 		panic(err)

@@ -225,3 +225,114 @@ func TestProduceGroupRefElided(t *testing.T) {
 		t.Fatalf("T content model has %d particles, want 0 (the group ref elided)", len(parts))
 	}
 }
+
+// contentModelOf returns the {model group} of a top-level complex type's element
+// content particle, addressing the type by its EXPANDED name (unlike
+// topModelGroup, which assumes no target namespace).
+func contentModelOf(t *testing.T, s *xsd.Schema, name xsd.QName) xsd.ModelGroup {
+	t.Helper()
+	td, ok := s.Type(name)
+	if !ok {
+		t.Fatalf("complex type %s not found", name)
+	}
+	ct, ok := td.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("type %s is not a complex type (%T)", name, td)
+	}
+	ec, ok := ct.ContentType().(xsd.ElementContent)
+	if !ok {
+		t.Fatalf("complex type %s content is %T, want ElementContent", name, ct.ContentType())
+	}
+	return groupTermOf(t, ec.Particle)
+}
+
+// groupTermOf returns the Model Group a particle's {term} resolves to inline.
+func groupTermOf(t *testing.T, p xsd.Particle) xsd.ModelGroup {
+	t.Helper()
+	rt, ok := p.Term().(xsd.ResolvedTerm)
+	if !ok {
+		t.Fatalf("particle term is %T, want an inline ResolvedTerm", p.Term())
+	}
+	mg, ok := rt.Term.(xsd.ModelGroup)
+	if !ok {
+		t.Fatalf("particle term is %T, want ModelGroup", rt.Term)
+	}
+	return mg
+}
+
+// elementTermOf returns the local Element Declaration a particle's {term} is.
+func elementTermOf(t *testing.T, p xsd.Particle) xsd.ElementDeclaration {
+	t.Helper()
+	rt, ok := p.Term().(xsd.ResolvedTerm)
+	if !ok {
+		t.Fatalf("particle term is %T, want an inline ResolvedTerm", p.Term())
+	}
+	ed, ok := rt.Term.(xsd.ElementDeclaration)
+	if !ok {
+		t.Fatalf("particle term is %T, want ElementDeclaration", rt.Term)
+	}
+	return ed
+}
+
+// scopeParentOf returns a declaration's {scope}.{parent}, failing when absent.
+func scopeParentOf(t *testing.T, ed xsd.ElementDeclaration) xsd.ElementScopeParent {
+	t.Helper()
+	parent, ok := ed.Scope().Parent()
+	if !ok {
+		t.Fatalf("element %s has no {scope}.{parent}, want its containing component", ed.Name())
+	}
+	return parent
+}
+
+// TestProduceLocalElementScopedToComplexType proves the §3.3.2.3 dcl.elt.local
+// {parent} mapping for the <complexType>-ancestor case: a local <element>, at any
+// nesting depth of the content model, is scoped to the ENCLOSING COMPLEX TYPE by
+// expanded name — not to the nearest model group, which is not a scope boundary.
+func TestProduceLocalElementScopedToComplexType(t *testing.T) {
+	s, err := produce(t, wrap("urn:po", `
+		<xs:complexType name="T">
+			<xs:sequence>
+				<xs:element name="a" type="xs:string"/>
+				<xs:choice><xs:element name="b" type="xs:string"/></xs:choice>
+			</xs:sequence>
+		</xs:complexType>`))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	want := xsd.ComplexTypeScopeParent{Name: xsd.QName{Space: "urn:po", Local: "T"}}
+	parts := contentModelOf(t, s, xsd.QName{Space: "urn:po", Local: "T"}).Particles()
+	if len(parts) != 2 {
+		t.Fatalf("T content model has %d particles, want 2", len(parts))
+	}
+
+	direct := elementTermOf(t, parts[0])
+	if direct.ScopeVariety() != xsd.ScopeLocal {
+		t.Fatalf("element a scope = %s, want local", direct.ScopeVariety())
+	}
+	if got := scopeParentOf(t, direct); got != want {
+		t.Fatalf("element a {scope}.{parent} = %#v, want %#v", got, want)
+	}
+
+	// The nested <choice> must not shift the parent: only <complexType> and a
+	// named <group> are scope-determining ancestors.
+	deep := elementTermOf(t, groupTermOf(t, parts[1]).Particles()[0])
+	if got := scopeParentOf(t, deep); got != want {
+		t.Fatalf("element b {scope}.{parent} = %#v, want %#v", got, want)
+	}
+}
+
+// TestProduceTopLevelElementHasNoScopeParent proves the §3.3.2.2 dcl.elt.global
+// half: a top-level <element> carries {parent} ·absent·.
+func TestProduceTopLevelElementHasNoScopeParent(t *testing.T) {
+	s, err := produce(t, wrap("urn:po", `<xs:element name="root" type="xs:string"/>`))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	ed, ok := s.Element(xsd.QName{Space: "urn:po", Local: "root"})
+	if !ok {
+		t.Fatal("element root not found")
+	}
+	if parent, ok := ed.Scope().Parent(); ok {
+		t.Fatalf("top-level element root has {scope}.{parent} = %#v, want absent", parent)
+	}
+}

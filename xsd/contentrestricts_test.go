@@ -234,7 +234,7 @@ func TestContentRestrictsWildcardUnionShortfall(t *testing.T) {
 // with the given {nillable}.
 func cNillableElem(t *testing.T, local string, nillable bool) Particle {
 	t.Helper()
-	e, err := NewElementDeclaration(xsderr.Loc{}, uq(local), uq("T"), nil, ScopeLocal, nil, nillable,
+	e, err := NewElementDeclaration(xsderr.Loc{}, uq(local), uq("T"), nil, uLocalScope(t), nil, nillable,
 		nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)

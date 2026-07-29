@@ -7,6 +7,17 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
+// edLocalScope is a local {scope} whose {parent} names a containing complex type
+// called container, for the tests that only need a non-global declaration.
+func edLocalScope(t *testing.T) xsd.Scope {
+	t.Helper()
+	s, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: xsd.QName{Local: "container"}})
+	if err != nil {
+		t.Fatalf("NewLocalScope: %v", err)
+	}
+	return s
+}
+
 // typeAlt is a small helper: a Type Alternative with the given test expression
 // (empty string means the test-absent "otherwise" alternative).
 func typeAlt(test string, typeName xsd.QName) xsd.TypeAlternative {
@@ -85,7 +96,7 @@ func TestTypeTableDoesNotAliasConstructorAlternatives(t *testing.T) {
 func TestNewElementDeclarationValidGlobalNoAffiliations(t *testing.T) {
 	name := xsd.QName{Space: "urn:ns", Local: "root"}
 	typ := xsd.QName{Space: "urn:t", Local: "RootType"}
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, typ, nil, xsd.ScopeGlobal, nil, false, nil, nil, nil, false, nil, nil)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, typ, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration unexpected error: %v", err)
 	}
@@ -117,7 +128,7 @@ func TestNewElementDeclarationValidGlobalNoAffiliations(t *testing.T) {
 
 func TestNewElementDeclarationValidWithAffiliations(t *testing.T) {
 	head := xsd.QName{Space: "urn:ns", Local: "head"}
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "member"}, xsd.QName{Local: "T"}, nil, xsd.ScopeGlobal, nil, true, nil, []xsd.QName{head}, []xsd.DerivationMethod{xsd.DerivationExtension}, true, []xsd.DerivationMethod{xsd.DerivationSubstitution}, nil)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "member"}, xsd.QName{Local: "T"}, nil, xsd.NewGlobalScope(), nil, true, nil, []xsd.QName{head}, []xsd.DerivationMethod{xsd.DerivationExtension}, true, []xsd.DerivationMethod{xsd.DerivationSubstitution}, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration unexpected error: %v", err)
 	}
@@ -144,7 +155,7 @@ func TestNewElementDeclarationTypeTableAndValueConstraintPresent(t *testing.T) {
 		t.Fatalf("NewTypeTable: %v", err)
 	}
 	vc := xsd.NewValueConstraint(xsd.ValueFixed, "42")
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, &tt, xsd.ScopeLocal, &vc, false, nil, nil, nil, false, nil, nil)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, &tt, edLocalScope(t), &vc, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -182,7 +193,7 @@ func TestNewElementDeclarationRejectsAbsentName(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := xsd.NewElementDeclaration(xsderr.Loc{}, tc.qname, xsd.QName{Local: "T"}, nil, xsd.ScopeGlobal, nil, false, nil, nil, nil, false, nil, nil)
+			_, err := xsd.NewElementDeclaration(xsderr.Loc{}, tc.qname, xsd.QName{Local: "T"}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 			if !tc.wantErr {
 				if err != nil {
 					t.Fatalf("NewElementDeclaration(%v) unexpected error: %v", tc.qname, err)
@@ -197,17 +208,156 @@ func TestNewElementDeclarationRejectsAbsentName(t *testing.T) {
 	}
 }
 
-func TestNewElementDeclarationRejectsUnknownScope(t *testing.T) {
-	_, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.ScopeVariety(0), nil, false, nil, nil, nil, false, nil, nil)
-	if err == nil {
-		t.Fatal("NewElementDeclaration(scope=0) succeeded, want e-props-correct error")
+// TestNewGlobalScope pins §3.3.2.2 dcl.elt.global: {variety} global, {parent}
+// ·absent·.
+func TestNewGlobalScope(t *testing.T) {
+	s := xsd.NewGlobalScope()
+	if s.Variety() != xsd.ScopeGlobal {
+		t.Errorf("Variety() = %v, want global", s.Variety())
 	}
-	assertRule(t, err, "e-props-correct")
+	parent, ok := s.Parent()
+	if ok {
+		t.Errorf("Parent() ok = true, want false for a global scope (got %#v)", parent)
+	}
+	if parent != nil {
+		t.Errorf("Parent() = %#v, want nil for a global scope", parent)
+	}
+}
+
+// TestNewLocalScopeCarriesParent pins §3.3.2.3 dcl.elt.local for both target
+// kinds: {variety} is local (derived from {parent}'s presence, never stored) and
+// {parent} reads back as the very variant it was built from — a Complex Type
+// Definition for an <element> under a <complexType>, a Model Group Definition for
+// one within a named <group>.
+func TestNewLocalScopeCarriesParent(t *testing.T) {
+	ct := xsd.QName{Space: "urn:ns", Local: "AddressType"}
+	mgd := xsd.QName{Space: "urn:ns", Local: "addressGroup"}
+	for _, tc := range []struct {
+		name string
+		want xsd.ElementScopeParent
+	}{
+		{"complex type definition", xsd.ComplexTypeScopeParent{Name: ct}},
+		{"model group definition", xsd.ModelGroupScopeParent{Name: mgd}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := xsd.NewLocalScope(xsderr.Loc{}, tc.want)
+			if err != nil {
+				t.Fatalf("NewLocalScope(%#v): %v", tc.want, err)
+			}
+			if s.Variety() != xsd.ScopeLocal {
+				t.Errorf("Variety() = %v, want local", s.Variety())
+			}
+			got, ok := s.Parent()
+			if !ok {
+				t.Fatal("Parent() ok = false, want true for a local scope")
+			}
+			if got != tc.want {
+				t.Errorf("Parent() = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestNewLocalScopeRejectsUnusableParent pins the two states NewLocalScope
+// refuses (e-props-correct clause 1): an absent {parent}, which the §3.3.1
+// tableau requires to be present when {variety} is local, and a variant naming
+// nothing, which this by-name representation could never follow.
+func TestNewLocalScopeRejectsUnusableParent(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		parent xsd.ElementScopeParent
+	}{
+		{"absent parent", nil},
+		{"unnamed complex type", xsd.ComplexTypeScopeParent{}},
+		{"unnamed model group", xsd.ModelGroupScopeParent{}},
+		{"namespace but no local name", xsd.ComplexTypeScopeParent{Name: xsd.QName{Space: "urn:ns"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xsd.NewLocalScope(xsderr.Loc{}, tc.parent)
+			if err == nil {
+				t.Fatalf("NewLocalScope(%#v) succeeded, want an e-props-correct clause 1 rejection", tc.parent)
+			}
+			assertRule(t, err, "e-props-correct")
+		})
+	}
+}
+
+// TestElementDeclarationScopeRoundTrip is the containment round trip: a local
+// element declaration nested in a named container names that container back, and
+// the name is the one the container itself reports, so a consumer can go from the
+// declaration to its {scope}.{parent} component with a schema lookup. The global
+// declaration alongside it carries no {parent} at all (§3.3.2.2).
+func TestElementDeclarationScopeRoundTrip(t *testing.T) {
+	container, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "AddressType"},
+		xsd.QName{Local: "anyType"}, nil, xsd.DerivationRestriction, false, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewComplexType: %v", err)
+	}
+	group, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, nil, nil)
+	if err != nil {
+		t.Fatalf("NewModelGroup: %v", err)
+	}
+	groupDef, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "addressGroup"}, group, nil)
+	if err != nil {
+		t.Fatalf("NewModelGroupDefinition: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		parent xsd.ElementScopeParent
+		want   xsd.QName
+	}{
+		{"in a complex type", xsd.ComplexTypeScopeParent{Name: container.Name()}, container.Name()},
+		{"in a model group definition", xsd.ModelGroupScopeParent{Name: groupDef.Name()}, groupDef.Name()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			scope, err := xsd.NewLocalScope(xsderr.Loc{}, tc.parent)
+			if err != nil {
+				t.Fatalf("NewLocalScope: %v", err)
+			}
+			e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "street"},
+				xsd.QName{Local: "string"}, nil, scope, nil, false, nil, nil, nil, false, nil, nil)
+			if err != nil {
+				t.Fatalf("NewElementDeclaration: %v", err)
+			}
+			if e.ScopeVariety() != xsd.ScopeLocal {
+				t.Errorf("ScopeVariety() = %v, want local", e.ScopeVariety())
+			}
+			parent, ok := e.Scope().Parent()
+			if !ok {
+				t.Fatal("Scope().Parent() ok = false, want true for a local declaration")
+			}
+			var got xsd.QName
+			switch p := parent.(type) {
+			case xsd.ComplexTypeScopeParent:
+				got = p.Name
+			case xsd.ModelGroupScopeParent:
+				got = p.Name
+			default:
+				t.Fatalf("Scope().Parent() = %T, want one of the two ElementScopeParent variants", parent)
+			}
+			if got != tc.want {
+				t.Errorf("{scope}.{parent} names %s, want the container's own name %s", got, tc.want)
+			}
+			if parent != tc.parent {
+				t.Errorf("Scope().Parent() = %#v, want %#v (the kind discriminant must survive too)", parent, tc.parent)
+			}
+		})
+	}
+
+	global, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "shipTo"},
+		xsd.QName{Local: "AddressType"}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("NewElementDeclaration(global): %v", err)
+	}
+	if _, ok := global.Scope().Parent(); ok {
+		t.Error("a global declaration reports a {scope}.{parent}, want none (§3.3.2.2 dcl.elt.global)")
+	}
 }
 
 func TestNewElementDeclarationRejectsLocalScopeWithAffiliations(t *testing.T) {
 	head := xsd.QName{Local: "head"}
-	_, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.ScopeLocal, nil, false, nil, []xsd.QName{head}, nil, false, nil, nil)
+	_, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, edLocalScope(t), nil, false, nil, []xsd.QName{head}, nil, false, nil, nil)
 	if err == nil {
 		t.Fatal("NewElementDeclaration(local scope + affiliations) succeeded, want e-props-correct clause 3 error")
 	}
@@ -216,7 +366,7 @@ func TestNewElementDeclarationRejectsLocalScopeWithAffiliations(t *testing.T) {
 
 func TestNewElementDeclarationRejectsIllegalExclusion(t *testing.T) {
 	// substitution is not a legal {substitution group exclusions} token.
-	_, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.ScopeGlobal, nil, false, nil, nil, []xsd.DerivationMethod{xsd.DerivationSubstitution}, false, nil, nil)
+	_, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, []xsd.DerivationMethod{xsd.DerivationSubstitution}, false, nil, nil)
 	if err == nil {
 		t.Fatal("NewElementDeclaration(exclusion=substitution) succeeded, want e-props-correct error")
 	}
@@ -225,7 +375,7 @@ func TestNewElementDeclarationRejectsIllegalExclusion(t *testing.T) {
 
 func TestNewElementDeclarationRejectsIllegalDisallowedSubstitution(t *testing.T) {
 	// list is not a legal {disallowed substitutions} token.
-	_, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.ScopeGlobal, nil, false, nil, nil, nil, false, []xsd.DerivationMethod{xsd.DerivationList}, nil)
+	_, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, []xsd.DerivationMethod{xsd.DerivationList}, nil)
 	if err == nil {
 		t.Fatal("NewElementDeclaration(disallowed=list) succeeded, want e-props-correct error")
 	}
@@ -237,7 +387,7 @@ func TestElementDeclarationIdentityConstraintsAccessorDoesNotAlias(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewIdentityConstraint: %v", err)
 	}
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.ScopeGlobal, nil, false, []xsd.IdentityConstraint{ic}, nil, nil, false, nil, nil)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.NewGlobalScope(), nil, false, []xsd.IdentityConstraint{ic}, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -250,7 +400,7 @@ func TestElementDeclarationIdentityConstraintsAccessorDoesNotAlias(t *testing.T)
 
 func TestElementDeclarationSliceAccessorsDoNotAlias(t *testing.T) {
 	head := xsd.QName{Local: "head"}
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.ScopeGlobal, nil, false, nil, []xsd.QName{head}, []xsd.DerivationMethod{xsd.DerivationExtension}, false, []xsd.DerivationMethod{xsd.DerivationRestriction}, nil)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.NewGlobalScope(), nil, false, nil, []xsd.QName{head}, []xsd.DerivationMethod{xsd.DerivationExtension}, false, []xsd.DerivationMethod{xsd.DerivationRestriction}, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -270,7 +420,7 @@ func TestElementDeclarationSliceAccessorsDoNotAlias(t *testing.T) {
 
 func TestElementDeclarationDoesNotAliasConstructorSlices(t *testing.T) {
 	affs := []xsd.QName{{Local: "head"}}
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.ScopeGlobal, nil, false, nil, affs, nil, false, nil, nil)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.NewGlobalScope(), nil, false, nil, affs, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -284,7 +434,7 @@ func TestElementDeclarationAnnotationsRoundTripAndNil(t *testing.T) {
 	anns := []xsd.Annotation{
 		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "first")}, nil),
 	}
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.ScopeGlobal, nil, false, nil, nil, nil, false, nil, anns)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, anns)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -292,7 +442,7 @@ func TestElementDeclarationAnnotationsRoundTripAndNil(t *testing.T) {
 		t.Errorf("Annotations() = %+v, want one with content first", got)
 	}
 
-	bare, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.ScopeGlobal, nil, false, nil, nil, nil, false, nil, nil)
+	bare, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.QName{Local: "T"}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}

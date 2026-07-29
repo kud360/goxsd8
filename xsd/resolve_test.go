@@ -70,7 +70,7 @@ func elementContentCT(t *testing.T, name xsd.QName, term xsd.TermOrRef) xsd.Comp
 // typeName (may be zero for absent).
 func elementTyped(t *testing.T, name, typeName xsd.QName) xsd.ElementDeclaration {
 	t.Helper()
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, typeName, nil, xsd.ScopeGlobal, nil, false, nil, nil, nil, false, nil, nil)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, typeName, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestResolveKeyrefReachedByBothWalks(t *testing.T) {
 	// clean passes, not a duplicate-name or double-registration failure.
 	k := keyOrRefFields(t, qn("k"), xsd.IdentityConstraintKey, xsd.QName{}, 2)
 	kr := keyOrRefFields(t, qn("kr"), xsd.IdentityConstraintKeyref, qn("k"), 2)
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("e"), xsd.QName{}, nil, xsd.ScopeGlobal, nil, false,
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("e"), xsd.QName{}, nil, xsd.NewGlobalScope(), nil, false,
 		[]xsd.IdentityConstraint{k, kr}, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
@@ -264,7 +264,7 @@ func TestResolveKeyrefReachedByBothWalks(t *testing.T) {
 	// And the element walk enforces clause 2 too: widening only the nested keyref
 	// (leaving the top-level pair matched) must still be rejected.
 	wide := keyOrRefFields(t, qn("kr"), xsd.IdentityConstraintKeyref, qn("k"), 5)
-	eWide, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("e"), xsd.QName{}, nil, xsd.ScopeGlobal, nil, false,
+	eWide, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("e"), xsd.QName{}, nil, xsd.NewGlobalScope(), nil, false,
 		[]xsd.IdentityConstraint{wide}, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration (wide): %v", err)
@@ -347,12 +347,12 @@ func TestResolveCircularModelGroups(t *testing.T) {
 
 func TestResolveCircularSubstitutionGroups(t *testing.T) {
 	// Element A affiliates to B, element B affiliates to A.
-	ea, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("A"), xsd.QName{}, nil, xsd.ScopeGlobal, nil, false, nil,
+	ea, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("A"), xsd.QName{}, nil, xsd.NewGlobalScope(), nil, false, nil,
 		[]xsd.QName{qn("B")}, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration A: %v", err)
 	}
-	eb, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("B"), xsd.QName{}, nil, xsd.ScopeGlobal, nil, false, nil,
+	eb, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("B"), xsd.QName{}, nil, xsd.NewGlobalScope(), nil, false, nil,
 		[]xsd.QName{qn("A")}, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration B: %v", err)

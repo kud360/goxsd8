@@ -9,11 +9,12 @@ import "github.com/kud360/goxsd8/xsderr"
 // specific clause number in each message (the rule ID is not sub-anchored per
 // clause, matching identityconstraint.go's single-rule-const convention):
 //
-//   - clause 1 (tableau shape): {name} is present; {scope}.{variety} is one of
-//     the legal Scope tokens; {substitution group exclusions} is a subset of
-//     {extension, restriction}; {disallowed substitutions} is a subset of
-//     {substitution, extension, restriction}. TypeTable's own tableau (clause 6)
-//     is enforced in NewTypeTable.
+//   - clause 1 (tableau shape): {name} is present; {substitution group
+//     exclusions} is a subset of {extension, restriction}; {disallowed
+//     substitutions} is a subset of {substitution, extension, restriction}.
+//     TypeTable's own tableau (clause 6) is enforced in NewTypeTable, and the
+//     {scope} record's own shape — {variety} a legal token, {parent} present iff
+//     local — in NewGlobalScope/NewLocalScope (see Scope).
 //   - clause 3: a non-empty {substitution group affiliations} forces
 //     {scope}.{variety} = global.
 //
@@ -89,6 +90,170 @@ func (t TypeTable) DefaultTypeDefinition() TypeAlternative {
 	return t.defaultTypeDefinition
 }
 
+// ElementScopeParent is the sealed sum of the two component kinds an element
+// declaration's {scope}.{parent} may name (Structures §3.3.1, Scope record
+// id="sc_e", {parent}: "Either a Complex Type Definition or a Model Group
+// Definition"). The spec's alternation is closed at two, so the set of variant
+// shapes is closed; the unexported elementScopeParent marker method seals it
+// (STYLE T2/T7, the PRINCIPLES 7 sealed-sum exception), mirroring term.go's
+// TermOrRef, so consumers exhaustively switch these two variants and no third is
+// representable.
+//
+// It is named for the ELEMENT declaration deliberately. The attribute
+// declaration's own {scope}.{parent} (§3.2.1, record id="sc_a") is a DIFFERENT
+// two-member alternation — Complex Type Definition or Attribute Group Definition
+// — and must get its own sealed sum rather than share this one: merging the two
+// into a single three-variant sum would make "an element scoped to an attribute
+// group" representable.
+//
+// Both variants carry a QName REFERENCE to the container, not the container
+// component itself. Embedding the value is impossible here: construction is
+// bottom-up (a complex type's content model, which owns the local declaration,
+// is built before the complex type is), so the parent does not exist when the
+// child is made. A bare QName without the variant's kind discriminant would not
+// do either: Complex Type Definitions and Model Group Definitions occupy
+// INDEPENDENT symbol spaces on Schema (§3.17.1 {type definitions} versus {model
+// group definitions}), so a CTD and an MGD may share one expanded name. The kind
+// therefore lives in the variant type, and a consumer follows the reference with
+// a read-time lookup in the index that kind selects — the same
+// pre-resolution-reference convention as TypeDefinitionName, which Schema.Type
+// serves. A ComplexTypeScopeParent is followable today; a ModelGroupScopeParent
+// waits on the Schema.ModelGroup(QName) accessor this package does not export
+// yet (STYLE T5 — no consumer justifies one, the same follow-cost asymmetry
+// resolve.go already records for ModelGroupRef).
+//
+// Unlike those reference slots, this one is NOT checked by finalize: resolve.go
+// adds no src-resolve (§3.17.6.2) clause for it. src-resolve governs QNames
+// supplied by a schema document; {scope}.{parent} is synthesized by the producer
+// from the ancestor axis of the very item it is producing, so its target exists
+// by construction and there is nothing to dangle.
+type ElementScopeParent interface{ elementScopeParent() }
+
+// ComplexTypeScopeParent is the ElementScopeParent variant naming the containing
+// Complex Type Definition (§3.3.2.3 dcl.elt.local: "If the <element> element
+// information item has <complexType> as an ancestor, the Complex Type Definition
+// corresponding to that item"). Name is that definition's expanded {name}; it is
+// a PRESENT reference, never the absent (zero) QName — NewLocalScope rejects a
+// zero Name (see there for why). The field is read-only by convention; do not
+// mutate it after construction.
+type ComplexTypeScopeParent struct{ Name QName }
+
+// ModelGroupScopeParent is the ElementScopeParent variant naming the containing
+// Model Group Definition (§3.3.2.3 dcl.elt.local: "otherwise (the <element>
+// element information item is within a named <group> element information item),
+// the Model Group Definition corresponding to that item"). Name is that
+// definition's expanded {name}, which §3.7.1 types as a Required xs:NCName, so it
+// is always present; NewLocalScope rejects a zero Name. The field is read-only by
+// convention; do not mutate it after construction.
+type ModelGroupScopeParent struct{ Name QName }
+
+// elementScopeParent marks ComplexTypeScopeParent as an ElementScopeParent
+// (§3.3.1 sc_e-parent); see the ElementScopeParent doc.
+func (ComplexTypeScopeParent) elementScopeParent() {}
+
+// elementScopeParent marks ModelGroupScopeParent as an ElementScopeParent
+// (§3.3.1 sc_e-parent); see the ElementScopeParent doc.
+func (ModelGroupScopeParent) elementScopeParent() {}
+
+// elementScopeParentName returns the expanded name a variant references. The
+// default arm asserts the sealed-sum invariant and is unreachable for any value
+// an outside package can produce: elementScopeParent is unexported, so the two
+// variants above are the only implementations that exist (mirroring resolve.go's
+// non-exhaustive-switch assertions).
+func elementScopeParentName(parent ElementScopeParent) QName {
+	switch p := parent.(type) {
+	case ComplexTypeScopeParent:
+		return p.Name
+	case ModelGroupScopeParent:
+		return p.Name
+	default:
+		panic("xsd: elementScopeParentName: non-exhaustive ElementScopeParent switch")
+	}
+}
+
+// Scope is the {scope} property record of an element declaration (Structures
+// §3.3.1, id="sc_e"): a Required {variety} in {global, local} and a {parent}
+// that is "Required if {variety} is local, otherwise must be ·absent·".
+//
+// The two properties are one fact, so only {parent} is stored and Variety() is
+// DERIVED from its presence (STYLE D3), exactly as complextype.go's
+// ElementContent derives element-only-versus-mixed from its Mixed bool. The
+// tableau's correlation therefore needs no runtime check anywhere: a global scope
+// carrying a parent, and a local scope missing one, are both unrepresentable.
+//
+// The zero Scope is the global scope, matching NewGlobalScope; the two
+// constructors are the only way to obtain a local one, since parent is
+// unexported.
+//
+// A local Scope names its {parent} rather than embedding it, and requires that
+// name to be present — see ElementScopeParent for why the reference is a
+// discriminated QName and NewLocalScope for why the name may not be absent.
+type Scope struct {
+	parent ElementScopeParent // nil ⇔ {variety} = global
+}
+
+// NewGlobalScope returns the global {scope} of a top-level element declaration
+// (§3.3.2.2 dcl.elt.global: {variety} global, {parent} ·absent·). It cannot fail:
+// the record has no other property to get wrong.
+func NewGlobalScope() Scope {
+	return Scope{}
+}
+
+// NewLocalScope returns the local {scope} of an element declaration nested in a
+// <complexType> or a named <group> (§3.3.2.3 dcl.elt.local), naming the container
+// it is scoped to. It rejects the two states the §3.3.1 tableau and this
+// representation forbid, citing e-props-correct clause 1 (§3.3.6.1):
+//
+//   - a nil parent: {parent} is Required when {variety} is local, and a local
+//     scope with no container to be available within contradicts §3.3.1's
+//     availability prose ("E is available for use only within ... E.{scope}.
+//     {parent}").
+//   - a parent variant whose Name is the absent (zero) QName: this
+//     representation identifies the container BY NAME (ElementScopeParent), so an
+//     unnamed container could not be found again. Every container the mapping
+//     rules can produce is in fact named — a Model Group Definition's {name} is
+//     Required (§3.7.1), and an anonymous Complex Type Definition can only arise
+//     from an inline <complexType>, which no producer path in this module builds
+//     yet (each declines it). Should inline anonymous complex types land, this
+//     rejection is the compile-of-record that the representation must be revisited
+//     (a component handle, not a name) rather than silently mis-scoping.
+//
+// loc is the source position charged to any rejection. A caller with no real
+// parser position — a synthesized or programmatically built scope — may
+// legitimately pass the zero xsderr.Loc{}.
+func NewLocalScope(loc xsderr.Loc, parent ElementScopeParent) (Scope, error) {
+	if parent == nil {
+		return Scope{}, xsderr.New(ruleEPropsCorrect, loc,
+			"element declaration has {scope}.{variety} = local but an absent {scope}.{parent}, which the §3.3.1 tableau requires to be present when the variety is local (e-props-correct clause 1)")
+	}
+	if name := elementScopeParentName(parent); name.Local == "" {
+		return Scope{}, xsderr.New(ruleEPropsCorrect, loc,
+			"element declaration's {scope}.{parent} names no container: the %T variant carries an absent name, but this representation identifies the containing complex type or model group definition by name (e-props-correct clause 1)", parent)
+	}
+	return Scope{parent: parent}, nil
+}
+
+// Variety returns the {variety} property (§3.3.1 sc_e-variety): ScopeLocal when
+// a {parent} is present, ScopeGlobal otherwise. The token is derived from
+// {parent}'s presence, never stored (STYLE D3).
+func (s Scope) Variety() ScopeVariety {
+	if s.parent == nil {
+		return ScopeGlobal
+	}
+	return ScopeLocal
+}
+
+// Parent returns the {parent} property (§3.3.1 sc_e-parent) as a discriminated
+// QName reference to the containing Complex Type Definition or Model Group
+// Definition; the second result is false when it is absent (a global scope), in
+// which case the first result is nil.
+//
+// This is NOT the resolved container component: see ElementScopeParent for why
+// the reference is carried by name and how a consumer follows it.
+func (s Scope) Parent() (ElementScopeParent, bool) {
+	return s.parent, s.parent != nil
+}
+
 // ElementDeclaration is the Element Declaration component (Structures §3.3.1,
 // id="Element_Declaration_details"): a kind of Term with {name} (bundled with
 // {target namespace} as an xsd.QName per this package's "Names are expanded
@@ -109,15 +274,18 @@ func (t TypeTable) DefaultTypeDefinition() TypeAlternative {
 // schema.Type/schema.Element lookups. The remaining cross-component clauses that
 // need resolved components (clauses 2, 4, 7) stay deferred.
 //
-// {scope}.{parent} (§3.3.1 sc_e-parent) is entirely UNMODELED by this issue.
-// Only {scope}.{variety} is carried (as a ScopeVariety). A ScopeLocal element
-// is therefore structurally incomplete: its containing Complex Type Definition
-// or Model Group Definition (issue #171 and later) does not exist as a type
-// yet, so there is nothing to point {parent} at. The gap is named here rather
-// than buried; ScopeVariety() documents it too.
+// The whole {scope} record is carried, {parent} included (a Scope value, not a
+// bare ScopeVariety): a local declaration names the Complex Type Definition or
+// Model Group Definition it is scoped to, a global one names none, and the
+// producer populates the reference from the ancestor axis (§3.3.2.3
+// dcl.elt.local / §3.3.2.2 dcl.elt.global). {parent} is a THIRD pre-resolution
+// reference alongside {type definition} and {substitution group affiliations},
+// but unlike them it is producer-synthesized rather than schema-document-
+// supplied, so finalize adds no src-resolve check for it — see
+// ElementScopeParent.
 //
-// Ratchet impact: unchanged. This is a leaf shape with no parser producer; the
-// schema conformance lane moves only when the producer (#174/#175) wires it in.
+// Ratchet impact: unchanged. Wiring {scope}.{parent} adds a component property
+// no validation rule reads yet, so no conformance lane moves.
 //
 // Construct only through NewElementDeclaration, which rejects the states
 // e-props-correct (§3.3.6.1) clauses 1 and 3 forbid so they are unrepresentable
@@ -127,7 +295,7 @@ type ElementDeclaration struct {
 	typeDefinitionName            QName
 	typeTable                     TypeTable
 	hasTypeTable                  bool
-	scopeVariety                  ScopeVariety
+	scope                         Scope
 	valueConstraint               ValueConstraint
 	hasValueConstraint            bool
 	nillable                      bool
@@ -152,13 +320,17 @@ type ElementDeclaration struct {
 //     resolve AGAINST — unlike the deferred QName REFERENCES this component
 //     carries ({type definition}, {substitution group affiliations}), which
 //     finalize (#173) resolves.
-//   - clause 1: scopeVariety must be a legal Scope token (ScopeGlobal or
-//     ScopeLocal); every substitutionGroupExclusions member must be extension
-//     or restriction (the §3.3.1 {substitution group exclusions} subset); every
+//   - clause 1: every substitutionGroupExclusions member must be extension or
+//     restriction (the §3.3.1 {substitution group exclusions} subset); every
 //     disallowedSubstitutions member must be substitution, extension, or
 //     restriction (the §3.3.1 {disallowed substitutions} subset).
 //   - clause 3: a non-empty substitutionGroupAffiliations forces
-//     scopeVariety = ScopeGlobal.
+//     scope.Variety() = ScopeGlobal.
+//
+// The rest of clause 1's {scope} shape is not checked here because it is
+// unrepresentable: scope is a Scope, obtainable only from NewGlobalScope or
+// NewLocalScope, so its {variety} is always a legal token and its {parent} is
+// present exactly when the variety is local (see Scope).
 //
 // typeTable and valueConstraint are pointers so absence (nil) is distinct from
 // a present zero record (mirroring identityconstraint.go's referencedKey); when
@@ -170,16 +342,10 @@ type ElementDeclaration struct {
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built declaration — may
 // legitimately pass the zero xsderr.Loc{}.
-func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QName, typeTable *TypeTable, scopeVariety ScopeVariety, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
+func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QName, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
 	if name.Local == "" {
 		return ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, loc,
 			"element declaration has an absent {name}, but the §3.3.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (e-props-correct clause 1)")
-	}
-	switch scopeVariety {
-	case ScopeGlobal, ScopeLocal:
-	default:
-		return ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, loc,
-			"element declaration has an unknown {scope}.{variety}: %s (e-props-correct clause 1)", scopeVariety)
 	}
 	for i, m := range substitutionGroupExclusions {
 		switch m {
@@ -197,14 +363,14 @@ func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QName,
 				"element declaration {disallowed substitutions}[%d] is %s, but only substitution, extension, or restriction are legal (e-props-correct clause 1)", i, m)
 		}
 	}
-	if len(substitutionGroupAffiliations) > 0 && scopeVariety != ScopeGlobal {
+	if len(substitutionGroupAffiliations) > 0 && scope.Variety() != ScopeGlobal {
 		return ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, loc,
-			"element declaration has a non-empty {substitution group affiliations} but its {scope}.{variety} is %s, not global (e-props-correct clause 3)", scopeVariety)
+			"element declaration has a non-empty {substitution group affiliations} but its {scope}.{variety} is %s, not global (e-props-correct clause 3)", scope.Variety())
 	}
 	e := ElementDeclaration{
 		name:               name,
 		typeDefinitionName: typeDefinitionName,
-		scopeVariety:       scopeVariety,
+		scope:              scope,
 		nillable:           nillable,
 		abstract:           abstract,
 	}
@@ -260,15 +426,18 @@ func (e ElementDeclaration) TypeTable() (TypeTable, bool) {
 	return e.typeTable, e.hasTypeTable
 }
 
-// ScopeVariety returns the {scope}.{variety} property (§3.3.1 sc_e).
-//
-// It does NOT expose {scope}.{parent} (§3.3.1 sc_e-parent), which is entirely
-// unmodeled by this issue: a ScopeLocal element is structurally incomplete
-// until the Complex Type Definition / Model Group Definition components exist
-// to be its {parent} (issue #171 and later). Until then a local element
-// declaration carries only its variety, not the container it is scoped to.
+// Scope returns the {scope} property record (§3.3.1 sc_e): its {variety} and,
+// for a local declaration, the {parent} naming the Complex Type Definition or
+// Model Group Definition the declaration is scoped to.
+func (e ElementDeclaration) Scope() Scope {
+	return e.scope
+}
+
+// ScopeVariety returns the {scope}.{variety} property (§3.3.1 sc_e-variety), a
+// shorthand for e.Scope().Variety() kept for the many callers that only ask
+// global-versus-local. Read {scope}.{parent} through Scope.
 func (e ElementDeclaration) ScopeVariety() ScopeVariety {
-	return e.scopeVariety
+	return e.scope.Variety()
 }
 
 // ValueConstraint returns the {value constraint} property (Optional); the

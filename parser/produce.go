@@ -490,6 +490,9 @@ func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error)
 			"element has both a type attribute and an inline <simpleType>/<complexType> child, but src-element clause 3 forbids both")
 	}
 	if inline {
+		// Lifting this decline also means giving the inline <complexType>'s own
+		// nested local elements a {scope}.{parent} naming an ANONYMOUS type, which
+		// xsd.ComplexTypeScopeParent cannot express — see #301.
 		return xsd.ElementDeclaration{}, xsderr.New(ruleSrcElement, elem.Loc(),
 			"element has an inline <simpleType>/<complexType> child, which this producer does not yet support (only the type attribute form); src-element clause 3")
 	}
@@ -510,7 +513,8 @@ func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	return xsd.NewElementDeclaration(elem.Loc(), qname, typeName, nil, xsd.ScopeGlobal, vc,
+	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
+	return xsd.NewElementDeclaration(elem.Loc(), qname, typeName, nil, xsd.NewGlobalScope(), vc,
 		false, constraints, nil, nil, false, nil, nil)
 }
 
