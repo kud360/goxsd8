@@ -224,6 +224,67 @@ func TestFinalizeDistinctKindsShareNameOK(t *testing.T) {
 	}
 }
 
+// TestFinalizeAnonymousTypesDoNotCollide proves two or more type definitions
+// with an ABSENT {name} — the zero QName — finalize cleanly instead of being
+// charged a sch-props-correct clause 2 duplicate. §3.4.1 and §3.16.1 exempt
+// anonymous type definitions ("those with no {name}") from the uniqueness
+// requirement clause 2 enforces, so absent-name components are excluded from
+// the by-name index entirely rather than all hashing to one key.
+func TestFinalizeAnonymousTypesDoNotCollide(t *testing.T) {
+	anon := xsd.QName{} // {name} absent (§3.4.2.1/§3.16.2.1)
+	cases := []struct {
+		label string
+		add   func(b *xsd.SchemaBuilder)
+	}{
+		{"ComplexType", func(b *xsd.SchemaBuilder) { b.AddType(complexTypeNamed(t, anon)) }},
+		{"SimpleType", func(b *xsd.SchemaBuilder) { b.AddType(simpleTypeNamed(t, anon)) }},
+	}
+	for _, c := range cases {
+		t.Run(c.label, func(t *testing.T) {
+			b := xsd.NewSchemaBuilder()
+			c.add(b)
+			c.add(b)
+			c.add(b)
+			if _, err := b.Finalize(); err != nil {
+				t.Fatalf("Finalize(3 anonymous %s) = %v, want success: anonymous type definitions are exempt from sch-props-correct clause 2", c.label, err)
+			}
+		})
+	}
+	t.Run("MixedKinds", func(t *testing.T) {
+		// An anonymous simple type and an anonymous complex type share the one
+		// {type definitions} bucket, so they would have collided too.
+		b := xsd.NewSchemaBuilder()
+		b.AddType(simpleTypeNamed(t, anon))
+		b.AddType(complexTypeNamed(t, anon))
+		if _, err := b.Finalize(); err != nil {
+			t.Fatalf("Finalize(anonymous simple + anonymous complex type) = %v, want success", err)
+		}
+	})
+}
+
+// TestSchemaTypeAbsentNameMisses proves the absent {name} is never a lookup key:
+// after anonymous type definitions are added, Type(QName{}) is a MISS. An
+// anonymous type is not in §3.17.1's {type definitions} symbol table, so it must
+// not be reachable by name — a hit here would leak the last-indexed anonymous
+// component to any caller that happened to resolve an absent QName.
+func TestSchemaTypeAbsentNameMisses(t *testing.T) {
+	b := xsd.NewSchemaBuilder()
+	b.AddType(complexTypeNamed(t, xsd.QName{}))
+	b.AddType(complexTypeNamed(t, xsd.QName{}))
+	b.AddType(complexTypeNamed(t, xsd.QName{Space: "urn:ns", Local: "named"}))
+
+	s, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if d, ok := s.Type(xsd.QName{}); ok {
+		t.Errorf("Type(QName{}) = (%v, true), want miss: an absent {name} is never a key", d)
+	}
+	if _, ok := s.Type(xsd.QName{Space: "urn:ns", Local: "named"}); !ok {
+		t.Error("Type(urn:ns:named) miss, want hit: named components stay indexed")
+	}
+}
+
 // TestTopLevelComponentsRetainLoc proves every top-level kind retains the
 // source position its constructor was handed and reports it through Loc — the
 // provenance the sch-props-correct clause 2 rejection cites. NewPrimitiveType

@@ -172,7 +172,11 @@ type Schema struct {
 // duplicate at the higher document-order index, whose own Loc is the position a
 // reader must edit — and names the first occurrence's position in the message.
 // A component built with no real parser position (a synthesized or seeded one)
-// reports the zero xsderr.Loc, which renders as "?".
+// reports the zero xsderr.Loc, which renders as "?". Components whose {name} is
+// ABSENT (the zero QName) take no part in that check and enter no index:
+// anonymous type definitions are exempt from the uniqueness requirement (§3.4.1,
+// §3.16.1) and belong to no §3.17.1 by-name symbol table, so any number of them
+// may be added and none is reachable through Type.
 //
 // After the indexes are built, Finalize runs the resolution pass (resolve.go):
 // it walks the assembled components in document order and rejects any
@@ -260,6 +264,15 @@ type namedComponent interface {
 // path (STYLE T4). The rejection is charged to the LATER (duplicate) component's
 // own Loc and names the first occurrence's Loc in the message; both positions
 // come from the walked slice, never from ranging the index map (STYLE D2).
+//
+// INVARIANT: the returned index holds only components whose {name} is PRESENT.
+// A component with an absent {name} — the zero QName, the sound encoding of
+// absence since NCName forbids an empty local name (see QName) — is skipped
+// entirely: not keyed, not compared for duplicates. Anonymous type definitions
+// are explicitly exempt from clause 2's uniqueness requirement (§3.4.1 and
+// §3.16.1: "Except for anonymous … type definitions (those with no {name}) …"),
+// and structurally they never belong in the §3.17.1 by-name symbol tables at
+// all, so two of them are not a collision and neither is reachable by name.
 func indexByName[T namedComponent](items []T, kind string) (map[QName]T, error) {
 	if len(items) == 0 {
 		return nil, nil
@@ -267,6 +280,9 @@ func indexByName[T namedComponent](items []T, kind string) (map[QName]T, error) 
 	index := make(map[QName]T, len(items))
 	for i, item := range items {
 		n := item.Name()
+		if n == (QName{}) {
+			continue // absent {name}: anonymous, exempt from clause 2 (§3.4.1/§3.16.1)
+		}
 		if first, dup := index[n]; dup {
 			return nil, xsderr.New(ruleSchPropsCorrect, item.Loc(),
 				"schema {%s}[%d] repeats the expanded name %s (first declared at %s), but sch-props-correct clause 2 forbids two components of the same kind sharing an expanded name", kind, i, n, first.Loc())
