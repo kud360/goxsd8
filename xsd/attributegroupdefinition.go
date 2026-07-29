@@ -44,6 +44,7 @@ const ruleAgPropsCorrect xsderr.Rule = "ag-props-correct"
 // ag-props-correct (§3.6.6) clause 2 forbids so they are unrepresentable
 // (STYLE T1). AttributeGroupDefinition is immutable after construction.
 type AttributeGroupDefinition struct {
+	loc           xsderr.Loc // source position; provenance, not a §3.6.1 property
 	name          QName
 	attributeUses []AttributeUse
 	wildcard      Wildcard
@@ -79,9 +80,12 @@ type AttributeGroupDefinition struct {
 // pointed-to value is COPIED into the struct and hasWildcard is set — the pointer
 // itself is never stored, so the caller's value is not aliased.
 //
-// loc is the source position charged to any rejection. A caller with no real
-// parser position — a synthesized or programmatically built definition — may
-// legitimately pass the zero xsderr.Loc{}.
+// loc is the source position charged to any rejection AND retained: Loc reports
+// it back as the definition's provenance. Pass the position of this
+// definition's own declaring element, never a convenient nearby one (a parent
+// element's, say) — it is observable, not merely an error-charging convenience.
+// A caller with no real parser position — a synthesized or programmatically
+// built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []AttributeUse, wildcard *Wildcard, annotations []Annotation) (AttributeGroupDefinition, error) {
 	seen := make(map[QName]struct{}, len(attributeUses))
 	for i, use := range attributeUses {
@@ -95,7 +99,7 @@ func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []Att
 	if err := rejectSiblingOnAttributeWildcard(loc, wildcard); err != nil {
 		return AttributeGroupDefinition{}, err
 	}
-	g := AttributeGroupDefinition{name: name}
+	g := AttributeGroupDefinition{loc: loc, name: name}
 	if len(attributeUses) > 0 {
 		g.attributeUses = append([]AttributeUse(nil), attributeUses...)
 	}
@@ -132,6 +136,13 @@ func attributeUseDeclarationName(use AttributeUse) QName {
 // Name returns the {name} property, bundled with {target namespace} as a QName.
 func (g AttributeGroupDefinition) Name() QName {
 	return g.name
+}
+
+// Loc reports the source position of the declaring element — provenance, not a
+// §3.17.1 component property (see the package doc's Components section). The
+// zero xsderr.Loc means the position is unknown.
+func (g AttributeGroupDefinition) Loc() xsderr.Loc {
+	return g.loc
 }
 
 // AttributeUses returns the {attribute uses} property in document order. It

@@ -61,6 +61,7 @@ const ruleAPropsCorrect xsderr.Rule = "a-props-correct"
 // a-props-correct (§3.2.6.1) clause 1 forbids so they are unrepresentable
 // (STYLE T1). AttributeDeclaration is immutable after construction.
 type AttributeDeclaration struct {
+	loc                xsderr.Loc // source position; provenance, not a §3.2.1 property
 	name               QName
 	typeDefinitionName QName
 	scopeVariety       ScopeVariety
@@ -89,9 +90,12 @@ type AttributeDeclaration struct {
 // aliased. annotations is copied; the caller's backing array is not aliased, and
 // an empty input is held as nil.
 //
-// loc is the source position charged to any rejection. A caller with no real
-// parser position — a synthesized or programmatically built declaration — may
-// legitimately pass the zero xsderr.Loc{}.
+// loc is the source position charged to any rejection AND retained: Loc reports
+// it back as the declaration's provenance. Pass the position of this
+// declaration's own declaring element, never a convenient nearby one (a parent
+// element's, say) — it is observable, not merely an error-charging convenience.
+// A caller with no real parser position — a synthesized or programmatically
+// built declaration — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QName, scopeVariety ScopeVariety, valueConstraint *ValueConstraint, inheritable bool, annotations []Annotation) (AttributeDeclaration, error) {
 	switch scopeVariety {
 	case ScopeGlobal, ScopeLocal:
@@ -108,6 +112,7 @@ func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QNam
 		}
 	}
 	a := AttributeDeclaration{
+		loc:                loc,
 		name:               name,
 		typeDefinitionName: typeDefinitionName,
 		scopeVariety:       scopeVariety,
@@ -125,6 +130,13 @@ func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QNam
 // Name returns the {name} property, bundled with {target namespace} as a QName.
 func (a AttributeDeclaration) Name() QName {
 	return a.name
+}
+
+// Loc reports the source position of the declaring element — provenance, not a
+// §3.17.1 component property (see the package doc's Components section). The
+// zero xsderr.Loc means the position is unknown.
+func (a AttributeDeclaration) Loc() xsderr.Loc {
+	return a.loc
 }
 
 // TypeDefinitionName returns the {type definition} property (Required) as a

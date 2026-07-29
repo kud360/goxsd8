@@ -297,6 +297,7 @@ func (s Scope) Parent() (ElementScopeParent, bool) {
 // e-props-correct (§3.3.6.1) clauses 1 and 3 forbid so they are unrepresentable
 // (STYLE T1). ElementDeclaration is immutable after construction.
 type ElementDeclaration struct {
+	loc                           xsderr.Loc // source position; provenance, not a §3.3.1 property
 	name                          QName
 	typeDefinitionName            QName
 	typeTable                     TypeTable
@@ -345,9 +346,12 @@ type ElementDeclaration struct {
 // is not aliased. Every slice parameter is copied; the caller's backing arrays
 // are not aliased, and an empty input is held as nil.
 //
-// loc is the source position charged to any rejection. A caller with no real
-// parser position — a synthesized or programmatically built declaration — may
-// legitimately pass the zero xsderr.Loc{}.
+// loc is the source position charged to any rejection AND retained: Loc reports
+// it back as the declaration's provenance. Pass the position of this
+// declaration's own declaring element, never a convenient nearby one (a parent
+// element's, say) — it is observable, not merely an error-charging convenience.
+// A caller with no real parser position — a synthesized or programmatically
+// built declaration — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QName, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
 	if name.Local == "" {
 		return ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, loc,
@@ -374,6 +378,7 @@ func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QName,
 			"element declaration has a non-empty {substitution group affiliations} but its {scope}.{variety} is %s, not global (e-props-correct clause 3)", scope.Variety())
 	}
 	e := ElementDeclaration{
+		loc:                loc,
 		name:               name,
 		typeDefinitionName: typeDefinitionName,
 		scope:              scope,
@@ -413,6 +418,13 @@ func (ElementDeclaration) term() {}
 // rejects an absent {name} (e-props-correct clause 1).
 func (e ElementDeclaration) Name() QName {
 	return e.name
+}
+
+// Loc reports the source position of the declaring element — provenance, not a
+// §3.17.1 component property (see the package doc's Components section). The
+// zero xsderr.Loc means the position is unknown.
+func (e ElementDeclaration) Loc() xsderr.Loc {
+	return e.loc
 }
 
 // TypeDefinitionName returns the {type definition} property (Required) as a

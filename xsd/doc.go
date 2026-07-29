@@ -37,6 +37,21 @@
 // The zero value means absent/anonymous; String() renders Clark notation
 // ("{ns}local").
 //
+// The eight component kinds a schema's §3.17.1 properties hold — element
+// and attribute declarations, complex and simple type definitions, model
+// group and attribute group definitions, notations, and identity
+// constraints — additionally report a source position through Loc. That
+// position is PROVENANCE, not a §3.17.1 component property: it is where
+// the declaring element sits in the schema document, retained from the
+// constructor so a finalize-time rejection (sch-props-correct clause 2)
+// can cite file:line:column instead of "?". The zero xsderr.Loc means
+// the position is unknown, and is the correct value for a component with
+// no schema document behind it — parser.Produce's synthesized xs:anyType
+// and package builtin's seeded built-in datatypes are the legitimate
+// zero-Loc producers. Other constructors take a loc to charge their own
+// rejections but do not retain it: nothing consumes those positions yet,
+// so no accessor is exported for them (T5).
+//
 // # Query API
 //
 // Direct lookups over a compiled schema set — element, attribute, and

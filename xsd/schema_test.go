@@ -1,6 +1,8 @@
 package xsd_test
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -29,10 +31,18 @@ func complexTypeNamed(t *testing.T, name xsd.QName) xsd.ComplexType {
 	return ct
 }
 
-// elementNamed builds a global ElementDeclaration for schema symbol-table tests.
+// elementNamed builds a global ElementDeclaration with an unknown source
+// position for schema symbol-table tests.
 func elementNamed(t *testing.T, name xsd.QName) xsd.ElementDeclaration {
 	t.Helper()
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, xsd.QName{}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+	return elementNamedAt(t, xsderr.Loc{}, name)
+}
+
+// elementNamedAt builds a global ElementDeclaration carrying loc as its source
+// position, for the tests that assert on the position a rejection cites.
+func elementNamedAt(t *testing.T, loc xsderr.Loc, name xsd.QName) xsd.ElementDeclaration {
+	t.Helper()
+	e, err := xsd.NewElementDeclaration(loc, name, xsd.QName{}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration(%v): %v", name, err)
 	}
@@ -211,6 +221,160 @@ func TestFinalizeDistinctKindsShareNameOK(t *testing.T) {
 	b.AddAttribute(attributeNamed(t, name))
 	if _, err := b.Finalize(); err != nil {
 		t.Fatalf("Finalize(distinct kinds share name): %v", err)
+	}
+}
+
+// TestTopLevelComponentsRetainLoc proves every top-level kind retains the
+// source position its constructor was handed and reports it through Loc — the
+// provenance the sch-props-correct clause 2 rejection cites. NewPrimitiveType
+// is covered alongside NewSimpleType: both build a *SimpleType, so both must
+// retain loc.
+func TestTopLevelComponentsRetainLoc(t *testing.T) {
+	name := xsd.QName{Space: "urn:ns", Local: "c"}
+	want := xsderr.Loc{URI: "s.xsd", Line: 12, Col: 4}
+
+	primitiveAt := func(t *testing.T, loc xsderr.Loc) *xsd.SimpleType {
+		t.Helper()
+		st, err := xsd.NewPrimitiveType(loc, name, nil, nil)
+		if err != nil {
+			t.Fatalf("NewPrimitiveType: %v", err)
+		}
+		return st
+	}
+	cases := []struct {
+		kind string
+		loc  func(loc xsderr.Loc) xsderr.Loc
+	}{
+		{"ElementDeclaration", func(l xsderr.Loc) xsderr.Loc { return elementNamedAt(t, l, name).Loc() }},
+		{"AttributeDeclaration", func(l xsderr.Loc) xsderr.Loc {
+			a, err := xsd.NewAttributeDeclaration(l, name, xsd.QName{}, xsd.ScopeGlobal, nil, false, nil)
+			if err != nil {
+				t.Fatalf("NewAttributeDeclaration: %v", err)
+			}
+			return a.Loc()
+		}},
+		{"ComplexType", func(l xsderr.Loc) xsderr.Loc {
+			c, err := xsd.NewComplexType(l, name, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+			if err != nil {
+				t.Fatalf("NewComplexType: %v", err)
+			}
+			return c.Loc()
+		}},
+		{"SimpleType", func(l xsderr.Loc) xsderr.Loc {
+			st, err := xsd.NewSimpleType(l, name, nil, xsd.AnySimpleType(), nil, nil)
+			if err != nil {
+				t.Fatalf("NewSimpleType: %v", err)
+			}
+			return st.Loc()
+		}},
+		{"PrimitiveType", func(l xsderr.Loc) xsderr.Loc { return primitiveAt(t, l).Loc() }},
+		{"ModelGroupDefinition", func(l xsderr.Loc) xsderr.Loc {
+			g, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, nil, nil)
+			if err != nil {
+				t.Fatalf("NewModelGroup: %v", err)
+			}
+			d, err := xsd.NewModelGroupDefinition(l, name, g, nil)
+			if err != nil {
+				t.Fatalf("NewModelGroupDefinition: %v", err)
+			}
+			return d.Loc()
+		}},
+		{"AttributeGroupDefinition", func(l xsderr.Loc) xsderr.Loc {
+			g, err := xsd.NewAttributeGroupDefinition(l, name, nil, nil, nil)
+			if err != nil {
+				t.Fatalf("NewAttributeGroupDefinition: %v", err)
+			}
+			return g.Loc()
+		}},
+		{"Notation", func(l xsderr.Loc) xsderr.Loc {
+			sys := "urn:sys"
+			n, err := xsd.NewNotation(l, name, &sys, nil, nil)
+			if err != nil {
+				t.Fatalf("NewNotation: %v", err)
+			}
+			return n.Loc()
+		}},
+		{"IdentityConstraint", func(l xsderr.Loc) xsderr.Loc {
+			sel := xsd.NewXPathExpression(".", nil, nil, nil)
+			field := xsd.NewXPathExpression("@x", nil, nil, nil)
+			c, err := xsd.NewIdentityConstraint(l, name, xsd.IdentityConstraintUnique, sel, []xsd.XPathExpression{field}, nil, nil)
+			if err != nil {
+				t.Fatalf("NewIdentityConstraint: %v", err)
+			}
+			return c.Loc()
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.kind, func(t *testing.T) {
+			if got := c.loc(want); got != want {
+				t.Errorf("%s.Loc() = %v, want the constructor's loc %v", c.kind, got, want)
+			}
+			// A component built with no parser position reports the zero Loc,
+			// which renders as "?" — the documented "unknown" reading.
+			if got := c.loc(xsderr.Loc{}); got != (xsderr.Loc{}) {
+				t.Errorf("%s.Loc() = %v for a zero-loc build, want the zero Loc", c.kind, got)
+			}
+		})
+	}
+}
+
+// TestTypeDefinitionSumPromotesLoc proves Loc is reachable through the
+// TypeDefinition sum itself — the property that keeps the unified {type
+// definitions} bucket off a type switch — for both variants.
+func TestTypeDefinitionSumPromotesLoc(t *testing.T) {
+	stLoc := xsderr.Loc{URI: "s.xsd", Line: 2, Col: 1}
+	ctLoc := xsderr.Loc{URI: "s.xsd", Line: 7, Col: 1}
+	st, err := xsd.NewSimpleType(stLoc, xsd.QName{Space: "urn:ns", Local: "st"}, nil, xsd.AnySimpleType(), nil, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType: %v", err)
+	}
+	ct, err := xsd.NewComplexType(ctLoc, xsd.QName{Space: "urn:ns", Local: "ct"}, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewComplexType: %v", err)
+	}
+	for _, c := range []struct {
+		label string
+		td    xsd.TypeDefinition
+		want  xsderr.Loc
+	}{
+		{"*SimpleType", st, stLoc},
+		{"ComplexType", ct, ctLoc},
+	} {
+		if got := c.td.Loc(); got != c.want {
+			t.Errorf("TypeDefinition(%s).Loc() = %v, want %v", c.label, got, c.want)
+		}
+	}
+}
+
+// TestFinalizeDuplicateNameCitesLocs proves the sch-props-correct clause 2
+// rejection is charged to the LATER (duplicate) component's own source position
+// — not the zero xsderr.Loc — and names the first occurrence's position in the
+// message, so a reader is pointed at the line to edit and at the line it
+// collides with.
+func TestFinalizeDuplicateNameCitesLocs(t *testing.T) {
+	dup := xsd.QName{Space: "urn:ns", Local: "e"}
+	firstLoc := xsderr.Loc{URI: "s.xsd", Line: 3, Col: 5}
+	dupLoc := xsderr.Loc{URI: "s.xsd", Line: 9, Col: 7}
+
+	b := xsd.NewSchemaBuilder()
+	b.AddElement(elementNamedAt(t, firstLoc, dup))
+	b.AddElement(elementNamedAt(t, dupLoc, dup))
+
+	_, err := b.Finalize()
+	if err == nil {
+		t.Fatal("Finalize(duplicate element name) succeeded, want sch-props-correct error")
+	}
+	assertRule(t, err, "sch-props-correct")
+
+	var e *xsderr.Error
+	if !errors.As(err, &e) {
+		t.Fatalf("error %v is not an *xsderr.Error", err)
+	}
+	if e.Loc != dupLoc {
+		t.Errorf("rejection Loc = %v, want the duplicate component's own position %v", e.Loc, dupLoc)
+	}
+	if !strings.Contains(e.Msg, firstLoc.String()) {
+		t.Errorf("rejection message %q does not name the first occurrence's position %v", e.Msg, firstLoc)
 	}
 }
 

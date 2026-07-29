@@ -40,6 +40,7 @@ const ruleICProps xsderr.Rule = "c-props-correct"
 // c-props-correct clause 1 (§3.11.6.1) forbids so they are unrepresentable
 // (STYLE T1). IdentityConstraint is immutable after construction.
 type IdentityConstraint struct {
+	loc           xsderr.Loc // source position; provenance, not a §3.11.1 property
 	name          QName
 	category      IdentityConstraintCategory
 	selector      XPathExpression
@@ -57,9 +58,12 @@ type IdentityConstraint struct {
 // fields and annotations are copied; the caller's backing arrays are not
 // aliased.
 //
-// loc is the source position charged to any rejection. A caller with no real
-// parser position — a synthesized or programmatically built definition — may
-// legitimately pass the zero xsderr.Loc{}.
+// loc is the source position charged to any rejection AND retained: Loc reports
+// it back as the definition's provenance. Pass the position of this
+// definition's own declaring element, never a convenient nearby one (a parent
+// element's, say) — it is observable, not merely an error-charging convenience.
+// A caller with no real parser position — a synthesized or programmatically
+// built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewIdentityConstraint(loc xsderr.Loc, name QName, category IdentityConstraintCategory, selector XPathExpression, fields []XPathExpression, referencedKey *QName, annotations []Annotation) (IdentityConstraint, error) {
 	switch category {
 	case IdentityConstraintKey, IdentityConstraintKeyref, IdentityConstraintUnique:
@@ -76,6 +80,7 @@ func NewIdentityConstraint(loc xsderr.Loc, name QName, category IdentityConstrai
 			"identity-constraint definition has a {referenced key} if and only if its {identity-constraint category} is keyref")
 	}
 	ic := IdentityConstraint{
+		loc:      loc,
 		name:     name,
 		category: category,
 		selector: selector,
@@ -93,6 +98,13 @@ func NewIdentityConstraint(loc xsderr.Loc, name QName, category IdentityConstrai
 // Name returns the {name} property, bundled with {target namespace} as a QName.
 func (c IdentityConstraint) Name() QName {
 	return c.name
+}
+
+// Loc reports the source position of the declaring element — provenance, not a
+// §3.17.1 component property (see the package doc's Components section). The
+// zero xsderr.Loc means the position is unknown.
+func (c IdentityConstraint) Loc() xsderr.Loc {
+	return c.loc
 }
 
 // Category returns the {identity-constraint category} property.
