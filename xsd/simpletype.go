@@ -456,6 +456,7 @@ func (m EnumerationMember) DefaultNamespace() (string, bool) {
 // interchangeable. Construct only through NewSimpleType; a SimpleType is
 // immutable after construction.
 type SimpleType struct {
+	loc       xsderr.Loc // source position; provenance, not a §3.16.1 property
 	name      QName
 	variety   Variety
 	base      *SimpleType
@@ -482,14 +483,18 @@ type SimpleType struct {
 //
 // ownFacets and final are copied; the caller's backing arrays are not aliased.
 //
-// loc is the source position charged to any rejection. A caller with no real
-// parser position — a synthesized or programmatically built type — may
-// legitimately pass the zero xsderr.Loc{}.
+// loc is the source position charged to any rejection AND retained: Loc reports
+// it back as the type's provenance. Pass the position of this type's own
+// declaring element, never a convenient nearby one (a parent element's, say) —
+// it is observable, not merely an error-charging convenience. A caller with no
+// real parser position — a synthesized or programmatically built type, as every
+// seeded built-in datatype is — passes the zero xsderr.Loc{}, which reads as
+// "unknown".
 func NewSimpleType(loc xsderr.Loc, name QName, variety Variety, base *SimpleType, ownFacets []Facet, final []DerivationMethod) (*SimpleType, error) {
 	if err := checkSTProps(loc, ownFacets, final); err != nil {
 		return nil, err
 	}
-	t := &SimpleType{name: name, variety: variety, base: base}
+	t := &SimpleType{loc: loc, name: name, variety: variety, base: base}
 	t.setOwnFacetsFinal(ownFacets, final)
 	if err := checkSTGraph(loc, t); err != nil {
 		return nil, err
@@ -509,13 +514,14 @@ func NewSimpleType(loc xsderr.Loc, name QName, variety Variety, base *SimpleType
 // The self-reference is established inside this constructor, before the node
 // escapes, so the node is immutable to every external caller. ownFacets and
 // final follow NewSimpleType's contract and are validated identically
-// (st-props-correct); they are copied, not aliased. loc is charged to any
-// rejection.
+// (st-props-correct); they are copied, not aliased. loc follows NewSimpleType's
+// contract too: it is charged to any rejection AND retained, so Loc reports it
+// back as the type's provenance.
 func NewPrimitiveType(loc xsderr.Loc, name QName, ownFacets []Facet, final []DerivationMethod) (*SimpleType, error) {
 	if err := checkSTProps(loc, ownFacets, final); err != nil {
 		return nil, err
 	}
-	t := &SimpleType{name: name, base: anyAtomicType}
+	t := &SimpleType{loc: loc, name: name, base: anyAtomicType}
 	t.variety = Atomic{Primitive: t}
 	t.setOwnFacetsFinal(ownFacets, final)
 	if err := checkSTGraph(loc, t); err != nil {
@@ -566,6 +572,14 @@ func (t *SimpleType) setOwnFacetsFinal(ownFacets []Facet, final []DerivationMeth
 // The zero QName means {name} is absent (an anonymous simple type).
 func (t *SimpleType) Name() QName {
 	return t.name
+}
+
+// Loc reports the source position of the declaring element — provenance, not a
+// §3.16.1 component property (see the package doc's Components section). The
+// zero xsderr.Loc means the position is unknown, as it is for every seeded
+// built-in datatype and for the xs:anySimpleType/xs:anyAtomicType anchors.
+func (t *SimpleType) Loc() xsderr.Loc {
+	return t.loc
 }
 
 // Variety returns the {variety} property: an Atomic, List, or Union value, or

@@ -168,9 +168,11 @@ type Schema struct {
 // local name. The scan is deterministic (STYLE D2): each kind's slice is walked
 // in document order and each name tested against a seen-set map, so the first
 // duplicate by index is the one reported (the map is never ranged to produce
-// the verdict). Because these top-level value components carry no source
-// location accessor, a rejection is charged the zero xsderr.Loc{}, exactly as
-// the synthesized-component convention throughout this package permits.
+// the verdict). The rejection is charged to the LATER of the two — the
+// duplicate at the higher document-order index, whose own Loc is the position a
+// reader must edit — and names the first occurrence's position in the message.
+// A component built with no real parser position (a synthesized or seeded one)
+// reports the zero xsderr.Loc, which renders as "?".
 //
 // After the indexes are built, Finalize runs the resolution pass (resolve.go):
 // it walks the assembled components in document order and rejects any
@@ -184,31 +186,31 @@ type Schema struct {
 // Every OTHER sch-props-correct clause (in particular clause 1's remaining
 // cross-reference-dependent requirements) stays deferred to later passes.
 func (b *SchemaBuilder) Finalize() (*Schema, error) {
-	typeIndex, err := indexByName(b.types, TypeDefinition.Name, "type definitions")
+	typeIndex, err := indexByName(b.types, "type definitions")
 	if err != nil {
 		return nil, err
 	}
-	elementIndex, err := indexByName(b.elements, ElementDeclaration.Name, "element declarations")
+	elementIndex, err := indexByName(b.elements, "element declarations")
 	if err != nil {
 		return nil, err
 	}
-	attributeIndex, err := indexByName(b.attributes, AttributeDeclaration.Name, "attribute declarations")
+	attributeIndex, err := indexByName(b.attributes, "attribute declarations")
 	if err != nil {
 		return nil, err
 	}
-	attributeGroupIndex, err := indexByName(b.attributeGroups, AttributeGroupDefinition.Name, "attribute group definitions")
+	attributeGroupIndex, err := indexByName(b.attributeGroups, "attribute group definitions")
 	if err != nil {
 		return nil, err
 	}
-	modelGroupIndex, err := indexByName(b.modelGroups, ModelGroupDefinition.Name, "model group definitions")
+	modelGroupIndex, err := indexByName(b.modelGroups, "model group definitions")
 	if err != nil {
 		return nil, err
 	}
-	notationIndex, err := indexByName(b.notations, Notation.Name, "notation declarations")
+	notationIndex, err := indexByName(b.notations, "notation declarations")
 	if err != nil {
 		return nil, err
 	}
-	idcIndex, err := indexByName(b.identityConstraints, IdentityConstraint.Name, "identity-constraint definitions")
+	idcIndex, err := indexByName(b.identityConstraints, "identity-constraint definitions")
 	if err != nil {
 		return nil, err
 	}
@@ -235,25 +237,39 @@ func (b *SchemaBuilder) Finalize() (*Schema, error) {
 	return s, nil
 }
 
+// namedComponent is what indexByName needs from a top-level component kind: the
+// expanded {name} to key its index by, and the source position to charge a
+// duplicate rejection to. Every kind a schema's §3.17.1 properties hold
+// satisfies it, including the TypeDefinition sum — which promotes both methods
+// so its two variants stay on the one generic code path with no type switch
+// (STYLE T4/T7). It stays unexported: it is a generic constraint, not a
+// capability view a consumer takes (STYLE T5).
+type namedComponent interface {
+	Name() QName
+	Loc() xsderr.Loc
+}
+
 // indexByName builds the by-expanded-name lookup index for one kind's
 // document-order slice, rejecting sch-props-correct (§3.17.6.1) clause 2: two
 // components of this kind sharing an expanded name. The slice is walked in
 // document order (STYLE D2), so the first duplicate by index is the one
 // reported; kind names the §3.17.1 property for the message. An empty slice
 // yields a nil map (a nil map reads as a miss, which is the correct lookup
-// behavior). name is the accessor promoting each component's {name}; passing a
-// method expression (e.g. ElementDeclaration.Name) keeps every kind on one code
-// path (STYLE T4).
-func indexByName[T any](items []T, name func(T) QName, kind string) (map[QName]T, error) {
+// behavior). The namedComponent constraint supplies both accessors it needs —
+// the {name} to key by and the Loc to cite — keeping every kind on one code
+// path (STYLE T4). The rejection is charged to the LATER (duplicate) component's
+// own Loc and names the first occurrence's Loc in the message; both positions
+// come from the walked slice, never from ranging the index map (STYLE D2).
+func indexByName[T namedComponent](items []T, kind string) (map[QName]T, error) {
 	if len(items) == 0 {
 		return nil, nil
 	}
 	index := make(map[QName]T, len(items))
 	for i, item := range items {
-		n := name(item)
-		if _, dup := index[n]; dup {
-			return nil, xsderr.New(ruleSchPropsCorrect, xsderr.Loc{},
-				"schema {%s}[%d] repeats the expanded name %s, but sch-props-correct clause 2 forbids two components of the same kind sharing an expanded name", kind, i, n)
+		n := item.Name()
+		if first, dup := index[n]; dup {
+			return nil, xsderr.New(ruleSchPropsCorrect, item.Loc(),
+				"schema {%s}[%d] repeats the expanded name %s (first declared at %s), but sch-props-correct clause 2 forbids two components of the same kind sharing an expanded name", kind, i, n, first.Loc())
 		}
 		index[n] = item
 	}

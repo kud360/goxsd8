@@ -29,6 +29,7 @@ const ruleMgdPropsCorrect xsderr.Rule = "mgd-props-correct"
 // {model group} so the Required-property violation is unrepresentable (STYLE T1).
 // ModelGroupDefinition is immutable after construction.
 type ModelGroupDefinition struct {
+	loc         xsderr.Loc // source position; provenance, not a §3.7.1 property
 	name        QName
 	modelGroup  ModelGroup
 	annotations []Annotation
@@ -44,9 +45,12 @@ type ModelGroupDefinition struct {
 // annotations is copied; the caller's backing array is not aliased, and an empty
 // input is held as nil.
 //
-// loc is the source position charged to any rejection. A caller with no real
-// parser position — a synthesized or programmatically built definition — may
-// legitimately pass the zero xsderr.Loc{}.
+// loc is the source position charged to any rejection AND retained: Loc reports
+// it back as the definition's provenance. Pass the position of this
+// definition's own declaring element, never a convenient nearby one (a parent
+// element's, say) — it is observable, not merely an error-charging convenience.
+// A caller with no real parser position — a synthesized or programmatically
+// built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewModelGroupDefinition(loc xsderr.Loc, name QName, modelGroup ModelGroup, annotations []Annotation) (ModelGroupDefinition, error) {
 	switch modelGroup.Compositor() {
 	case CompositorAll, CompositorChoice, CompositorSequence:
@@ -54,7 +58,7 @@ func NewModelGroupDefinition(loc xsderr.Loc, name QName, modelGroup ModelGroup, 
 		return ModelGroupDefinition{}, xsderr.New(ruleMgdPropsCorrect, loc,
 			"model group definition has an absent {model group} (a zero ModelGroup not built through NewModelGroup), but it is Required (mgd-props-correct)")
 	}
-	d := ModelGroupDefinition{name: name, modelGroup: modelGroup}
+	d := ModelGroupDefinition{loc: loc, name: name, modelGroup: modelGroup}
 	if len(annotations) > 0 {
 		d.annotations = append([]Annotation(nil), annotations...)
 	}
@@ -64,6 +68,13 @@ func NewModelGroupDefinition(loc xsderr.Loc, name QName, modelGroup ModelGroup, 
 // Name returns the {name} property, bundled with {target namespace} as a QName.
 func (d ModelGroupDefinition) Name() QName {
 	return d.name
+}
+
+// Loc reports the source position of the declaring element — provenance, not a
+// §3.7.1 component property (see the package doc's Components section). The
+// zero xsderr.Loc means the position is unknown.
+func (d ModelGroupDefinition) Loc() xsderr.Loc {
+	return d.loc
 }
 
 // ModelGroup returns the {model group} property (Required): the Model Group a

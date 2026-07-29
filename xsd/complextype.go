@@ -229,6 +229,7 @@ func (o OpenContent) Wildcard() Wildcard {
 // ruleCTPropsCorrect's doc for exactly which clauses are deferred). ComplexType
 // is immutable after construction.
 type ComplexType struct {
+	loc                     xsderr.Loc // source position; provenance, not a §3.4.1 property
 	name                    QName
 	baseTypeDefinitionName  QName
 	derivationMethod        DerivationMethod
@@ -276,9 +277,12 @@ type ComplexType struct {
 // parameter is copied; the caller's backing arrays are not aliased, and an empty
 // input is held as nil.
 //
-// loc is the source position charged to any rejection. A caller with no real
-// parser position — a synthesized or programmatically built definition — may
-// legitimately pass the zero xsderr.Loc{}.
+// loc is the source position charged to any rejection AND retained: Loc reports
+// it back as the definition's provenance. Pass the position of this
+// definition's own declaring element, never a convenient nearby one (a parent
+// element's, say) — it is observable, not merely an error-charging convenience.
+// A caller with no real parser position — a synthesized or programmatically
+// built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
 	switch derivationMethod {
 	case DerivationExtension, DerivationRestriction:
@@ -309,6 +313,7 @@ func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, fi
 		return ComplexType{}, err
 	}
 	c := ComplexType{
+		loc:                    loc,
 		name:                   name,
 		baseTypeDefinitionName: baseTypeDefinitionName,
 		derivationMethod:       derivationMethod,
@@ -365,6 +370,14 @@ func checkContentType(loc xsderr.Loc, contentType ContentType) error {
 // The zero QName denotes an anonymous complex type (§3.4.1).
 func (c ComplexType) Name() QName {
 	return c.name
+}
+
+// Loc reports the source position of the declaring element — provenance, not a
+// §3.4.1 component property (see the package doc's Components section). The
+// zero xsderr.Loc means the position is unknown, as it is for the synthesized
+// xs:anyType.
+func (c ComplexType) Loc() xsderr.Loc {
+	return c.loc
 }
 
 // BaseTypeDefinitionName returns the {base type definition} property (Required)

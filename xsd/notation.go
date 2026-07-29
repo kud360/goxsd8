@@ -24,6 +24,7 @@ const ruleNotationCorrect xsderr.Rule = "n-props-correct"
 // forbids (both identifiers absent) so it is unrepresentable (STYLE T1).
 // Notation is immutable after construction.
 type Notation struct {
+	loc         xsderr.Loc // source position; provenance, not a §3.14.1 property
 	name        QName
 	systemID    string
 	hasSystem   bool
@@ -39,15 +40,18 @@ type Notation struct {
 // is why presence is signalled by a non-nil pointer rather than a "" sentinel.
 // annotations is copied; the caller's slice is not aliased.
 //
-// loc is the source position charged to any rejection. A caller with no real
-// parser position — a synthesized or programmatically built declaration — may
-// legitimately pass the zero xsderr.Loc{}.
+// loc is the source position charged to any rejection AND retained: Loc reports
+// it back as the declaration's provenance. Pass the position of this
+// declaration's own declaring element, never a convenient nearby one (a parent
+// element's, say) — it is observable, not merely an error-charging convenience.
+// A caller with no real parser position — a synthesized or programmatically
+// built declaration — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewNotation(loc xsderr.Loc, name QName, systemID, publicID *string, annotations []Annotation) (Notation, error) {
 	if systemID == nil && publicID == nil {
 		return Notation{}, xsderr.New(ruleNotationCorrect, loc,
 			"notation declaration must have a {system identifier} or a {public identifier}, or both")
 	}
-	n := Notation{name: name}
+	n := Notation{loc: loc, name: name}
 	if systemID != nil {
 		n.systemID, n.hasSystem = *systemID, true
 	}
@@ -63,6 +67,13 @@ func NewNotation(loc xsderr.Loc, name QName, systemID, publicID *string, annotat
 // Name returns the {name} property, bundled with {target namespace} as a QName.
 func (n Notation) Name() QName {
 	return n.name
+}
+
+// Loc reports the source position of the declaring element — provenance, not a
+// §3.14.1 component property (see the package doc's Components section). The
+// zero xsderr.Loc means the position is unknown.
+func (n Notation) Loc() xsderr.Loc {
+	return n.loc
 }
 
 // SystemIdentifier returns the {system identifier} property (an anyURI); the
