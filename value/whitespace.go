@@ -115,15 +115,11 @@ func effectiveWhiteSpace(st *xsd.SimpleType) (ws whiteSpace, applicable bool) {
 		if len(values) != 1 {
 			panic(fmt.Sprintf("value: whiteSpace facet on %s must carry exactly one value, has %d", st.Name(), len(values)))
 		}
-		switch values[0] {
-		case "preserve":
-			return preserveWS, true
-		case "replace":
-			return replaceWS, true
-		case "collapse":
-			return collapseWS, true
+		ws, known := whiteSpaceOf(values[0])
+		if !known {
+			panic(fmt.Sprintf("value: unrecognized whiteSpace facet value %q on %s", values[0], st.Name()))
 		}
-		panic(fmt.Sprintf("value: unrecognized whiteSpace facet value %q on %s", values[0], st.Name()))
+		return ws, true
 	}
 	// No whiteSpace facet in force. For a union {variety} this is spec-mandated
 	// (whiteSpace is not an applicable facet, cos-applicable-facets §4.1.5), so
@@ -136,4 +132,22 @@ func effectiveWhiteSpace(st *xsd.SimpleType) (ws whiteSpace, applicable bool) {
 	// Atomic/list: an absent whiteSpace facet is a construction bug (§3.16.7.4,
 	// §4.3.6.1), never instance data — fail loud, do not weaken to (0, false).
 	panic(fmt.Sprintf("value: type %s has no whiteSpace facet in force", st.Name()))
+}
+
+// whiteSpaceOf maps a whiteSpace facet's {value} token to its typed mode
+// (§4.3.6.1: the {value} domain is exactly preserve/replace/collapse). known is
+// false for any other string. It is the single place the three spec tokens are
+// spelled, shared by effectiveWhiteSpace (which treats an unknown token as a
+// construction bug and panics) and by restriction.go's baseWhiteSpace (which
+// treats it as "no normalization to apply").
+func whiteSpaceOf(v string) (ws whiteSpace, known bool) {
+	switch v {
+	case "preserve":
+		return preserveWS, true
+	case "replace":
+		return replaceWS, true
+	case "collapse":
+		return collapseWS, true
+	}
+	return 0, false
 }

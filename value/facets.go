@@ -48,7 +48,14 @@ var (
 //
 // PRECONDITION (caller-guarded, NOT checked here): every facet on st is
 // applicable to st per cos-applicable-facets (§4.1.5), and b maps st's governing
-// type. st may be atomic, list, or union variety. Atomic and list resolve their
+// type. The applicability half of that precondition is DISCHARGED for any st
+// built through the parser, whose sole xsd.NewSimpleType call site follows
+// construction with builtin.CheckSimpleTypeRestriction (cos-st-restricts clause
+// 1.3.1 for the atomic case, clauses 2.2.2.4/3.2.2.4 inside package xsd for list
+// and union). It remains the CALLER's to honor for an st assembled by calling the
+// xsd constructors directly, which bypasses that seam entirely — so the panics
+// below stay reachable and stay panics: they mark a violated precondition, not a
+// validity verdict about instance data. st may be atomic, list, or union variety. Atomic and list resolve their
 // in-force whiteSpace facet; a union carries none (categorically not applicable,
 // §4.1.5), so the whiteSpace stage is skipped and the raw lexical passes through
 // unchanged to the pattern stage. A list-variety st resolves its value the same
@@ -476,7 +483,7 @@ func newBoundFacet(b Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (boundF
 	}
 	ord, ok := v.(Ordered)
 	if !ok {
-		panic(fmt.Sprintf("value: %s facet value %q is not Ordered (cos-applicable-facets §4.1.5 not enforced upstream)", kind, values[0]))
+		panic(fmt.Sprintf("value: %s facet value %q is not Ordered (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", kind, values[0]))
 	}
 	return boundFacet{limit: ord, kind: kind}, nil
 }
@@ -485,7 +492,7 @@ func newBoundFacet(b Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (boundF
 func (bf boundFacet) CheckValue(v Value) error {
 	cand, ok := v.(Ordered)
 	if !ok {
-		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Ordered (cos-applicable-facets §4.1.5 not enforced upstream)", v, bf.kind))
+		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Ordered (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", v, bf.kind))
 	}
 	ord := cand.Cmp(bf.limit)
 	if ord == Incomparable {
@@ -560,7 +567,7 @@ func newDigitsFacet(f xsd.Facet) (digitsFacet, error) {
 func (df digitsFacet) CheckValue(v Value) error {
 	dc, ok := v.(DigitCounted)
 	if !ok {
-		panic(fmt.Sprintf("value: candidate %T under a %s facet is not DigitCounted (cos-applicable-facets §4.1.5 not enforced upstream)", v, df.kind))
+		panic(fmt.Sprintf("value: candidate %T under a %s facet is not DigitCounted (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", v, df.kind))
 	}
 	got := dc.TotalDigits()
 	if df.kind == xsd.FacetFractionDigits {
@@ -653,7 +660,7 @@ func (lf lengthFacet) CheckValue(v Value) error {
 	}
 	l, ok := v.(Lengthed)
 	if !ok {
-		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Lengthed (cos-applicable-facets §4.1.5 not enforced upstream)", v, lf.kind))
+		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Lengthed (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", v, lf.kind))
 	}
 	if lf.violates(l.Len()) {
 		return xsderr.New(lengthRule(lf.kind), xsderr.Loc{},
@@ -745,7 +752,7 @@ func (tf explicitTimezoneFacet) CheckValue(v Value) error {
 	}
 	ta, ok := v.(TimezoneAware)
 	if !ok {
-		panic(fmt.Sprintf("value: candidate %T under an explicitTimezone facet is not TimezoneAware (cos-applicable-facets §4.1.5 not enforced upstream)", v))
+		panic(fmt.Sprintf("value: candidate %T under an explicitTimezone facet is not TimezoneAware (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", v))
 	}
 	if tf.requirement == tzRequired && !ta.HasTimezone() {
 		return xsderr.New("cvc-explicitTimezone-valid", xsderr.Loc{},
@@ -797,7 +804,7 @@ func newScaleFacet(f xsd.Facet) (scaleFacet, error) {
 func (sf scaleFacet) CheckValue(v Value) error {
 	sc, ok := v.(Scaled)
 	if !ok {
-		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Scaled (cos-applicable-facets §4.1.5 not enforced upstream)", v, sf.kind))
+		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Scaled (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", v, sf.kind))
 	}
 	scale, ok := sc.Scale()
 	if !ok {

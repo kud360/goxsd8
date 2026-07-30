@@ -85,4 +85,20 @@
 // enforced at instance validation (cvc-maxScale-valid, cvc-minScale-valid) by
 // value/facets.go's scaleFacet, over the FacetMaxScale/FacetMinScale kinds
 // xsd.FacetKind now carries (#133).
+//
+// # Restriction checking
+//
+//	func CheckSimpleTypeRestriction(b value.Backend, t *xsd.SimpleType) error
+//
+// CheckSimpleTypeRestriction is the entry point for the facet-VALUE half of
+// cos-st-restricts (§3.16.6.2) on an already-constructed xsd.SimpleType: it
+// charges clause 1.3.1 — facet applicability for an ATOMIC type, answered
+// against Types/TypeSpec.Applies rather than a second hand-typed table — and
+// then delegates the bound and enumeration value-space constraints to
+// value.CheckFacetRestriction. It lives here because it is the only package
+// holding both the generated applicability table and an edge to package value;
+// package xsd, a pure leaf, can depend on neither, so it charges only the
+// count- and token-valued facet constraints and the list/union applicable-facet
+// sets itself. Producers call this right after xsd.NewSimpleType; a caller that
+// does not gets the weaker guarantee documented on value.ValidateLexical.
 package builtin
