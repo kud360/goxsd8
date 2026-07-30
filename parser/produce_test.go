@@ -1,11 +1,13 @@
 package parser_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/parser"
+	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -106,6 +108,120 @@ func TestProduceSimpleTypeWithFacetAndBackReference(t *testing.T) {
 	}
 	if fs := st.OwnFacets(); len(fs) != 1 || fs[0].Kind() != xsd.FacetMinLength {
 		t.Fatalf("Foo own facets = %v, want one minLength", fs)
+	}
+}
+
+// simpleTypeOf produces doc's body and returns the named simple type.
+func simpleTypeOf(t *testing.T, name, body string) *xsd.SimpleType {
+	t.Helper()
+	s, err := produce(t, wrap("", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, ok := s.Type(xsd.QName{Local: name})
+	if !ok {
+		t.Fatalf("type %s not found", name)
+	}
+	st, ok := td.(*xsd.SimpleType)
+	if !ok {
+		t.Fatalf("type %s = %T, want *xsd.SimpleType", name, td)
+	}
+	return st
+}
+
+// TestProduceSiblingPatternsFoldIntoOneFacet pins xr-pattern (§4.3.4.2): the
+// <pattern> children of one <restriction> are branches of a SINGLE pattern facet
+// (same-step OR), not one facet each — one-per-sibling both misreads them as
+// separate ANDed steps (cvc-pattern-valid §4.3.4.4) and, being two same-kind
+// ownFacets, is rejected by st-props-correct clause 4 before that.
+func TestProduceSiblingPatternsFoldIntoOneFacet(t *testing.T) {
+	st := simpleTypeOf(t, "st", `<xs:simpleType name="st">
+	  <xs:restriction base="xs:string">
+	    <xs:minLength value="1"/>
+	    <xs:pattern value="[a-z]+"/>
+	    <xs:pattern value="[0-9]+"/>
+	    <xs:maxLength value="8"/>
+	  </xs:restriction>
+	</xs:simpleType>`)
+
+	facets := st.OwnFacets()
+	kinds := make([]xsd.FacetKind, 0, len(facets))
+	for _, f := range facets {
+		kinds = append(kinds, f.Kind())
+	}
+	want := []xsd.FacetKind{xsd.FacetMinLength, xsd.FacetPattern, xsd.FacetMaxLength}
+	if !slices.Equal(kinds, want) {
+		t.Fatalf("facet kinds = %v, want %v (one folded pattern facet, in document order)", kinds, want)
+	}
+	if got := facets[1].Values(); !slices.Equal(got, []string{"[a-z]+", "[0-9]+"}) {
+		t.Fatalf("pattern {value} = %q, want both branches in document order", got)
+	}
+
+	for _, lex := range []string{"abc", "123"} {
+		if _, err := value.ValidateLexical(strict.New(), st, lex, nil); err != nil {
+			t.Errorf("ValidateLexical(%q) = %v, want accept (matches one same-step pattern)", lex, err)
+		}
+	}
+	if _, err := value.ValidateLexical(strict.New(), st, "a1", nil); err == nil {
+		t.Error(`ValidateLexical("a1") = nil, want a cvc-pattern-valid rejection (matches neither branch)`)
+	}
+}
+
+// TestProduceSinglePatternUnchanged keeps the one-<pattern> case at exactly one
+// {value} member (xr-pattern case 1: R is that value).
+func TestProduceSinglePatternUnchanged(t *testing.T) {
+	st := simpleTypeOf(t, "st", `<xs:simpleType name="st">
+	  <xs:restriction base="xs:string"><xs:pattern value="[a-z]+"/></xs:restriction>
+	</xs:simpleType>`)
+
+	facets := st.OwnFacets()
+	if len(facets) != 1 || facets[0].Kind() != xsd.FacetPattern {
+		t.Fatalf("own facets = %v, want one pattern facet", facets)
+	}
+	if got := facets[0].Values(); !slices.Equal(got, []string{"[a-z]+"}) {
+		t.Fatalf("pattern {value} = %q, want [[a-z]+]", got)
+	}
+	if _, err := value.ValidateLexical(strict.New(), st, "abc", nil); err != nil {
+		t.Errorf(`ValidateLexical("abc") = %v, want accept`, err)
+	}
+	if _, err := value.ValidateLexical(strict.New(), st, "ABC", nil); err == nil {
+		t.Error(`ValidateLexical("ABC") = nil, want a cvc-pattern-valid rejection`)
+	}
+}
+
+// TestProduceCrossStepPatternsStillANDed guards the other half of xr-pattern:
+// folding same-step siblings must not fold ACROSS derivation steps, which stay
+// separate effective facets and are ANDed.
+func TestProduceCrossStepPatternsStillANDed(t *testing.T) {
+	st := simpleTypeOf(t, "derived", `<xs:simpleType name="base">
+	  <xs:restriction base="xs:string">
+	    <xs:pattern value="[a-z]+"/>
+	    <xs:pattern value="[0-9]+"/>
+	  </xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="derived">
+	  <xs:restriction base="base"><xs:pattern value=".{3}"/></xs:restriction>
+	</xs:simpleType>`)
+
+	patterns := 0
+	for _, ef := range st.EffectiveFacets() {
+		if ef.Facet().Kind() == xsd.FacetPattern {
+			patterns++
+		}
+	}
+	if patterns != 2 {
+		t.Fatalf("effective pattern facets = %d, want 2 (one per derivation step)", patterns)
+	}
+	if _, err := value.ValidateLexical(strict.New(), st, "abc", nil); err != nil {
+		t.Errorf(`ValidateLexical("abc") = %v, want accept (matches both steps)`, err)
+	}
+	// "ab" satisfies the base step's OR-set but not the derived step's .{3}.
+	if _, err := value.ValidateLexical(strict.New(), st, "ab", nil); err == nil {
+		t.Error(`ValidateLexical("ab") = nil, want rejection: cross-step patterns are ANDed`)
+	}
+	// "A1c" satisfies the derived step but neither base branch.
+	if _, err := value.ValidateLexical(strict.New(), st, "A1c", nil); err == nil {
+		t.Error(`ValidateLexical("A1c") = nil, want rejection: the base step's patterns still apply`)
 	}
 }
 
