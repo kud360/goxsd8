@@ -835,3 +835,72 @@ func TestProduceAcceptsNarrowingRestriction(t *testing.T) {
 		t.Fatalf("narrowing restriction rejected: %v", err)
 	}
 }
+
+// TestProduceScaleFacetsReachTheFacetSet pins xr-maxScale/xr-minScale
+// (xsd-precisionDecimal.md §4.2.2/§4.3.2): the two precisionDecimal extension
+// facets are plain-lexical value=/fixed= facets, so <maxScale>/<minScale>
+// children must land in {facets} carrying both properties. Before this, they hit
+// facetKindOf's unknown-name branch and were silently dropped, which also left
+// every scale Schema Component Constraint unreachable from a parsed schema.
+func TestProduceScaleFacetsReachTheFacetSet(t *testing.T) {
+	st := simpleTypeOf(t, "Scaled", `<xs:simpleType name="Scaled">
+	   <xs:restriction base="xs:precisionDecimal">
+	     <xs:maxScale value="4" fixed="true"/>
+	     <xs:minScale value="2"/>
+	   </xs:restriction>
+	 </xs:simpleType>`)
+	want := []struct {
+		kind  xsd.FacetKind
+		value string
+		fixed bool
+	}{
+		{xsd.FacetMaxScale, "4", true},
+		{xsd.FacetMinScale, "2", false},
+	}
+	facets := st.OwnFacets()
+	if len(facets) != len(want) {
+		t.Fatalf("own facets = %v, want %d (maxScale, minScale)", facets, len(want))
+	}
+	for i, w := range want {
+		got := facets[i]
+		if got.Kind() != w.kind {
+			t.Errorf("facet %d kind = %v, want %v", i, got.Kind(), w.kind)
+		}
+		if vs := got.Values(); len(vs) != 1 || vs[0] != w.value {
+			t.Errorf("facet %d {value} = %v, want [%q]", i, vs, w.value)
+		}
+		fixed, ok := got.Fixed()
+		if !ok {
+			t.Errorf("facet %d reports no {fixed}, but %v carries one", i, w.kind)
+		}
+		if fixed != w.fixed {
+			t.Errorf("facet %d {fixed} = %v, want %v", i, fixed, w.fixed)
+		}
+	}
+}
+
+// TestProduceChargesScaleRestriction is the end-to-end proof that the
+// construction-time scale SCCs (xsd/derivation.go, issue #157) now see parsed
+// input: a derived maxScale WIDER than the base's violates
+// maxScale-valid-restriction (xsd-precisionDecimal.md §4.2.4) and must be
+// rejected at produce time. While the facet was dropped in the producer this
+// schema was silently accepted.
+func TestProduceChargesScaleRestriction(t *testing.T) {
+	_, err := produce(t, wrap("urn:facets", `<xs:simpleType name="tight">
+	   <xs:restriction base="xs:precisionDecimal">
+	     <xs:maxScale value="2"/>
+	   </xs:restriction>
+	 </xs:simpleType>
+	 <xs:simpleType name="wider">
+	   <xs:restriction base="tns:tight">
+	     <xs:maxScale value="5"/>
+	   </xs:restriction>
+	 </xs:simpleType>`))
+	if err == nil {
+		t.Fatalf("Produce accepted a widening maxScale, want maxScale-valid-restriction")
+	}
+	got, ok := xsderr.RuleOf(err)
+	if !ok || got != xsderr.Rule("maxScale-valid-restriction") {
+		t.Fatalf("rule = %q (ok=%v), want %q; err=%v", got, ok, "maxScale-valid-restriction", err)
+	}
+}
