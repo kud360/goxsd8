@@ -422,18 +422,26 @@ func (p *producer) resolveBase(restriction *Element) (*xsd.SimpleType, error) {
 }
 
 // restrictionFacets maps the constraining-facet children of a <restriction> in
-// document order. The plain-lexical facets map one-to-one; every <assertion>
-// child (Datatypes §4.3.13.2) folds into the SINGLE assertions facet the §4.3.13
-// {value} rule describes — "a sequence of Assertion components" — inserted at the
-// position of the first <assertion> so the returned slice stays in document order
-// (STYLE D2). enumeration needs a richer sub-shape and is not yet produced:
-// rather than silently dropping a constraint (a false-accept), an actual
-// <enumeration> child is rejected. The non-facet children <annotation> and the
-// inline base <simpleType> are skipped.
+// document order. The plain-lexical facets map one-to-one, with two folding
+// exceptions, each landing at the position of its kind's FIRST child element so
+// the returned slice stays in document order (STYLE D2):
+//
+//   - every <assertion> child (Datatypes §4.3.13.2) folds into the SINGLE
+//     assertions facet the §4.3.13 {value} rule describes — "a sequence of
+//     Assertion components";
+//   - every <pattern> child folds into the SINGLE pattern facet xr-pattern
+//     (§4.3.4.2) describes, one {value} member per sibling, in document order.
+//
+// enumeration needs a richer sub-shape and is not yet produced: rather than
+// silently dropping a constraint (a false-accept), an actual <enumeration> child
+// is rejected. The non-facet children <annotation> and the inline base
+// <simpleType> are skipped.
 func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) {
 	var facets []xsd.Facet
 	var assertions []xsd.Assertion
 	assertionsAt := 0
+	var patterns []string
+	patternAt := 0
 	for _, child := range restriction.Children() {
 		el, ok := child.(*Element)
 		if !ok {
@@ -462,8 +470,27 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 			continue
 		}
 		val, _ := attrValue(el, "value")
-		fixed := xsdBool(el)
-		facets = append(facets, xsd.NewFacet(kind, []string{val}, fixed))
+		if kind == xsd.FacetPattern {
+			// xr-pattern (§4.3.4.2): all the <pattern> children of ONE <restriction>
+			// contribute BRANCHES of a single regular expression — patterns on the
+			// same derivation step are ORed, only patterns on DIFFERENT steps are
+			// ANDed (cvc-pattern-valid §4.3.4.4, one check per surviving facet). One
+			// facet per sibling would carry cross-step meaning: two same-kind
+			// ownFacets, which st-props-correct clause 4 rejects outright, so a
+			// two-<pattern> restriction was unconstructible. The pattern facet has no
+			// {fixed} property, and <pattern> has no fixed attribute (dc-pattern
+			// §4.3.4.1, element-pattern §4.3.4.2).
+			patterns = append(patterns, val)
+			folded := xsd.NewFacet(kind, patterns, false)
+			if len(patterns) == 1 {
+				patternAt = len(facets)
+				facets = append(facets, folded)
+				continue
+			}
+			facets[patternAt] = folded
+			continue
+		}
+		facets = append(facets, xsd.NewFacet(kind, []string{val}, xsdBool(el)))
 	}
 	if len(assertions) == 0 {
 		return facets, nil
