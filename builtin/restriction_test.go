@@ -109,6 +109,46 @@ func TestCheckSimpleTypeRestrictionDelegatesToValue(t *testing.T) {
 	}
 }
 
+// TestEnumerationMemberValueSpaceMembership pins enumeration-valid-restriction
+// (§4.3.5.5) as a VALUE-SPACE MEMBERSHIP test against the {base type
+// definition}, not a lexical-parseability test against the base's primitive
+// mapping. Both rejected members here are well-formed integer lexicals their
+// base's primitive (xs:decimal via xs:integer) parses happily; what puts them
+// outside the base's value space is the base's OWN inherited facet stack —
+// xs:byte's [-128,127] bounds, xs:positiveInteger's minInclusive 1.
+func TestEnumerationMemberValueSpaceMembership(t *testing.T) {
+	cases := []struct {
+		base     string
+		member   string
+		rejected bool
+	}{
+		{"byte", "200", true},
+		{"byte", "100", false},
+		{"byte", "-128", false},
+		{"positiveInteger", "-5", true},
+		{"positiveInteger", "0", true},
+		{"positiveInteger", "5", false},
+	}
+	for _, c := range cases {
+		t.Run(c.base+"/"+c.member, func(t *testing.T) {
+			enum := xsd.NewEnumerationFacet([]xsd.EnumerationMember{
+				xsd.NewEnumerationMember(c.member, nil, nil),
+			})
+			err := restrictBuiltin(t, c.base, enum)
+			if !c.rejected {
+				if err != nil {
+					t.Fatalf("in-space enumeration member rejected: %v", err)
+				}
+				return
+			}
+			rule, ok := xsderr.RuleOf(err)
+			if !ok || rule != "enumeration-valid-restriction" {
+				t.Fatalf("rule = %q (ok=%v), want enumeration-valid-restriction; err=%v", rule, ok, err)
+			}
+		})
+	}
+}
+
 // TestCheckSimpleTypeRestrictionSeededBuiltins is the regression guard for the
 // whole seam: every builtin datatype Seed produces must itself pass the check it
 // gates other types with, or the entry point is mis-specified rather than the
@@ -151,16 +191,22 @@ func TestStringAcceptsEveryApplicableFacet(t *testing.T) {
 		if f.Name == "assertions" {
 			continue // {value} is a sequence of Assertion components, not lexical
 		}
-		var facet xsd.Facet
-		if f.Name == "enumeration" {
-			facet = xsd.NewEnumerationFacet([]xsd.EnumerationMember{xsd.NewEnumerationMember("a", nil, nil)})
-		} else {
-			facet = xsd.NewFacet(kindOf(t, f.Name), []string{stringFacetValue(f.Name)}, false)
-		}
-		if err := restrictBuiltin(t, "string", facet); err != nil {
+		if err := restrictBuiltin(t, "string", stringApplicableFacet(t, f.Name)); err != nil {
 			t.Errorf("xs:string restriction with its own applicable facet %s rejected: %v", f.Name, err)
 		}
 	}
+}
+
+// stringApplicableFacet builds the facet component the table-driven walk
+// restricts xs:string with for one generated facet row. enumeration is the one
+// kind whose {value} is a sequence of EnumerationMember components rather than
+// lexical strings, so it takes its own constructor and returns early.
+func stringApplicableFacet(t *testing.T, name builtin.FacetName) xsd.Facet {
+	t.Helper()
+	if name == "enumeration" {
+		return xsd.NewEnumerationFacet([]xsd.EnumerationMember{xsd.NewEnumerationMember("a", nil, nil)})
+	}
+	return xsd.NewFacet(kindOf(t, name), []string{stringFacetValue(name)}, false)
 }
 
 // typeSpecByName finds a generated row by name through the exported table.

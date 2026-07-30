@@ -79,14 +79,16 @@ func CheckFacetRestriction(b Backend, t *xsd.SimpleType) error {
 	if err := rc.checkBoundRestrictions(); err != nil {
 		return err
 	}
-	return rc.checkEnumerationRestriction()
+	return rc.checkEnumerationRestriction(b)
 }
 
 // restrictionCheck is the resolved context one CheckFacetRestriction pass needs:
 // the type under construction, the base's governing mapping, and the base's
 // in-force whiteSpace mode. Resolving all three once and carrying them together
-// keeps every facet {value} in this pass parsed the same way, which is what makes
-// the resulting values comparable at all.
+// keeps every BOUND facet {value} in this pass parsed the same way, which is what
+// makes the resulting values comparable at all. (The enumeration check needs no
+// mapping of its own: membership in the base's value space is decided by running
+// each member through the base type definition itself, checkEnumerationRestriction.)
 //
 // The {base type definition} itself is deliberately NOT a field: it is exactly
 // owner.Base(), so carrying it would be a second encoding of one fact (STYLE D3).
@@ -307,18 +309,35 @@ func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 
 // checkEnumerationRestriction charges enumeration valid restriction (§4.3.5.5):
 // "it is an error if any member of {value} is not in the ·value space· of {base
-// type definition}". Each member is parsed through the BASE type's governing
-// mapping — NOT, as newEnumFacet does for the instance-time check, through the
-// mapping of the type that DECLARED the facet. The two differ exactly where this
-// SCC bites: a facet declared on the derived type D resolves to D's own governing
-// mapping, which may be narrower than the base's, so a member outside the base's
-// value space could still parse there.
+// type definition}". MEMBERSHIP in that value space is the whole test, and it is
+// strictly narrower than "the base's governing mapping can parse this lexical":
+// the base type definition's own facets carve its value space out of its
+// primitive's, so `200` is a perfectly well-formed integer lexical that is NOT in
+// xs:byte's value space (bounded to [-128,127] by inherited maxInclusive /
+// minInclusive), and `-5` is not in xs:positiveInteger's. Parsing alone accepts
+// both. Each member is therefore run through the ordinary lexical→value pipeline
+// against the BASE TYPE DEFINITION itself (ValidateLexical), which applies the
+// base's whiteSpace, its pattern facets, its governing mapping and its value
+// facets — the base's full facet stack, which is exactly what "value space of
+// {base type definition}" denotes.
+//
+// The base — not, as newEnumFacet does for the instance-time check, the type that
+// DECLARED the facet. The two differ exactly where this SCC bites: a facet
+// declared on the derived type D resolves to D's own type, whose facets may be
+// narrower than the base's, so a member outside the base's value space could
+// still validate there.
 //
 // Each member carries its own namespace context — the bindings in scope where its
 // <enumeration> was written (§3.3.18) — threaded through the same memberContext
 // newEnumFacet uses, so a QName/NOTATION member resolves its prefix against the
 // declaring schema's scope rather than against nothing.
-func (rc restrictionCheck) checkEnumerationRestriction() error {
+//
+// b is the same Backend CheckFacetRestriction was handed; it is a parameter
+// rather than a restrictionCheck field because only this check needs it, and its
+// caller has already established that b governs the base (an unmapped base
+// returns early there), so ValidateLexical's no-mapping error is unreachable from
+// here.
+func (rc restrictionCheck) checkEnumerationRestriction(b Backend) error {
 	for _, own := range rc.owner.OwnFacets() {
 		if own.Kind() != xsd.FacetEnumeration {
 			continue
@@ -327,7 +346,7 @@ func (rc restrictionCheck) checkEnumerationRestriction() error {
 		// ok=true; the second result is discarded deliberately.
 		members, _ := own.EnumerationMembers()
 		for _, em := range members {
-			if _, err := facetValue(rc.mapping, rc.whiteSpace, em.Lexical(), newMemberContext(em)); err != nil {
+			if _, err := ValidateLexical(b, rc.owner.Base(), em.Lexical(), newMemberContext(em)); err != nil {
 				return xsderr.Wrap("enumeration-valid-restriction", rc.owner.Loc(), err)
 			}
 		}

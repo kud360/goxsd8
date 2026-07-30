@@ -892,9 +892,13 @@ func checkLengthCoexistence(loc xsderr.Loc, eff []EffectiveFacet) error {
 //   - LIST runs unconditionally, including on a freshly-constructed list.
 //     cos-applicable-facets constrains {facets} unconditionally, and the
 //     constructed-list clause that would otherwise cover it, 2.2.1.2, is still
-//     deferred (see checkSTGraph) — so charging 2.2.2.4 there keeps a
-//     freshly-constructed list's facets checked against the §4.1.5 set at all,
-//     under a clause number one step off, rather than unchecked.
+//     otherwise deferred (see checkSTGraph) — so running the §4.1.5 set there
+//     keeps a freshly-constructed list's facets checked at all, rather than
+//     unchecked. On that path the rejection is CHARGED UNDER 2.2.1.2, the clause
+//     the spec's case split actually selects (applicableClause): 2.2.1.2 admits
+//     only a fixed collapse whiteSpace facet, so every facet this check rejects
+//     there — none of which is whiteSpace — violates it too, and naming 2.2.2.4
+//     would name a clause not in force (STYLE E2).
 //   - UNION skips a freshly-constructed one (B is xs:anySimpleType). There the
 //     spec's own branch is 3.2.1, whose clause 3.2.1.2 checkUnionGraph charges —
 //     and it is STRICTLY stronger, rejecting every facet rather than only the
@@ -926,18 +930,28 @@ func checkApplicableFacetSet(loc xsderr.Loc, t *SimpleType, variety string, appl
 		}
 		return xsderr.New(ruleCosSTRestricts, loc,
 			"simple type {facets} carries %s, which is not applicable to a %s simple type definition (cos-st-restricts clause %s via cos-applicable-facets §4.1.5)",
-			ef.facet.kind, variety, applicableClause(variety))
+			ef.facet.kind, variety, applicableClause(t))
 	}
 	return nil
 }
 
-// applicableClause names the cos-st-restricts sub-clause a variety's
-// applicable-facet rejection is charged under.
-func applicableClause(variety string) string {
-	if variety == "list" {
-		return "2.2.2.4"
+// applicableClause names the cos-st-restricts sub-clause t's applicable-facet
+// rejection is charged under, following the spec's own case split rather than
+// the {variety} alone: a FRESHLY-CONSTRUCTED list (B is xs:anySimpleType) is in
+// branch 2.2.1, not 2.2.2, so its facet clause is 2.2.1.2 ("{facets} contains
+// only the whiteSpace facet component with {value} = collapse and {fixed} =
+// true") — 2.2.2.4 is charged only for a list that RESTRICTS a real list. The
+// union path only ever reaches here in its restricted branch
+// (checkVarietyApplicableFacets returns early for a constructed union, whose
+// clause 3.2.1.2 checkUnionGraph charges), so union is always 3.2.2.4.
+func applicableClause(t *SimpleType) string {
+	if _, isList := t.variety.(List); !isList {
+		return "3.2.2.4"
 	}
-	return "3.2.2.4"
+	if t.base == anySimpleType {
+		return "2.2.1.2"
+	}
+	return "2.2.2.4"
 }
 
 // listApplicableFacet reports whether kind is applicable to a list-variety

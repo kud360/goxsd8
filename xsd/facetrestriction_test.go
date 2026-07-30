@@ -239,25 +239,36 @@ func TestCountFacetValueMalformed(t *testing.T) {
 	}
 }
 
-// TestListApplicableFacets covers cos-st-restricts clause 2.2.2.4: the list
-// applicable set is the §4.1.5 literal, so length/minLength/maxLength/pattern/
-// enumeration/whiteSpace/assertions pass and anything else — here a bound
-// facet — is rejected.
+// TestListApplicableFacets covers the list applicable-facet check: the set is the
+// §4.1.5 literal, so length/minLength/maxLength/pattern/enumeration/whiteSpace/
+// assertions pass and anything else — here a bound facet — is rejected. The
+// rejection is charged under the clause the §3.16.6.2 case split SELECTS, which
+// differs between the two list branches: a CONSTRUCTED list (B is
+// xs:anySimpleType) is in branch 2.2.1, so 2.2.1.2; a list RESTRICTING a real
+// list is in branch 2.2.2, so 2.2.2.4.
 func TestListApplicableFacets(t *testing.T) {
 	item := mustPrim(t, "string")
-	_, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "goodlist"},
+	baseList, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "goodlist"},
 		NewList(item), anySimpleType,
 		[]Facet{NewFacet(FacetMinLength, []string{"1"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("list with an applicable facet rejected: %v", err)
 	}
 
-	_, err = NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "badlist"},
+	_, err = NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "badconstructedlist"},
 		NewList(item), anySimpleType,
 		[]Facet{NewFacet(FacetMaxInclusive, []string{"5"}, false)}, nil)
 	wantRule(t, err, ruleCosSTRestricts)
+	if !strings.Contains(err.Error(), "2.2.1.2") {
+		t.Errorf("constructed-list message %q does not name clause 2.2.1.2", err.Error())
+	}
+
+	_, err = NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "badrestrictedlist"},
+		NewList(item), baseList,
+		[]Facet{NewFacet(FacetMaxInclusive, []string{"5"}, false)}, nil)
+	wantRule(t, err, ruleCosSTRestricts)
 	if !strings.Contains(err.Error(), "2.2.2.4") {
-		t.Errorf("message %q does not name clause 2.2.2.4", err.Error())
+		t.Errorf("restricted-list message %q does not name clause 2.2.2.4", err.Error())
 	}
 }
 

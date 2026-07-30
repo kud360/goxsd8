@@ -196,6 +196,30 @@ func TestEnumerationValidRestriction(t *testing.T) {
 	}
 }
 
+// TestEnumerationMemberOutsideBaseFacets is the discriminating case for
+// §4.3.5.5: the member is a perfectly well-formed lexical the base's mapping
+// PARSES, and it is still outside the base's ·value space· because the base's own
+// facets bound that space. Membership, not parseability, is the test — checking
+// only the mapping accepts "99" here.
+func TestEnumerationMemberOutsideBaseFacets(t *testing.T) {
+	base, b := restrictionBase(t, bound(xsd.FacetMaxInclusive, "10"))
+	inSpace := xsd.NewEnumerationFacet([]xsd.EnumerationMember{
+		xsd.NewEnumerationMember("9", nil, nil),
+	})
+	if err := restrict(t, b, base, inSpace); err != nil {
+		t.Fatalf("in-space enumeration member rejected: %v", err)
+	}
+
+	outOfSpace := xsd.NewEnumerationFacet([]xsd.EnumerationMember{
+		xsd.NewEnumerationMember("99", nil, nil),
+	})
+	err := restrict(t, b, base, outOfSpace)
+	rule, ok := xsderr.RuleOf(err)
+	if !ok || rule != "enumeration-valid-restriction" {
+		t.Fatalf("rule = %q (ok=%v), want enumeration-valid-restriction; err=%v", rule, ok, err)
+	}
+}
+
 // TestCheckFacetRestrictionNoBackendMappingFailsOpen pins the fail-open
 // decision: a backend that does not map the base type is a BACKEND gap, not a
 // schema invalidity, so the value-space comparisons are skipped rather than
