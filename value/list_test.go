@@ -54,7 +54,7 @@ func (b stubItemBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 func listType(t *testing.T, item *xsd.SimpleType, own []xsd.Facet) *xsd.SimpleType {
 	t.Helper()
 	lst, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "lst"},
-		xsd.List{Item: item}, xsd.AnySimpleType(), own, nil)
+		xsd.NewList(item), xsd.AnySimpleType(), own, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
 	}

@@ -170,16 +170,16 @@ func TestSeedBaseChainAndPrimitivePointer(t *testing.T) {
 	if !ok {
 		t.Fatalf("integer variety = %T, want xsd.Atomic", integer.Variety())
 	}
-	if at.Primitive != decimal {
-		t.Errorf("integer {primitive type definition} = %v, want the decimal node", at.Primitive)
+	if at.Primitive() != decimal {
+		t.Errorf("integer {primitive type definition} = %v, want the decimal node", at.Primitive())
 	}
 	// A primitive's own {primitive type definition} is itself (§3.16.1).
 	dat, ok := decimal.Variety().(xsd.Atomic)
 	if !ok {
 		t.Fatalf("decimal variety = %T, want xsd.Atomic", decimal.Variety())
 	}
-	if dat.Primitive != decimal {
-		t.Errorf("decimal {primitive type definition} must point at itself, got %v", dat.Primitive)
+	if dat.Primitive() != decimal {
+		t.Errorf("decimal {primitive type definition} must point at itself, got %v", dat.Primitive())
 	}
 }
 
@@ -212,8 +212,8 @@ func TestSeedPrimitivesReportIsPrimitive(t *testing.T) {
 		if !ok {
 			t.Fatalf("%q variety = %T, want xsd.Atomic", spec.Name, node.Variety())
 		}
-		if at.Primitive != node {
-			t.Errorf("%q {primitive type definition} must self-reference, got %v", spec.Name, at.Primitive)
+		if at.Primitive() != node {
+			t.Errorf("%q {primitive type definition} must self-reference, got %v", spec.Name, at.Primitive())
 		}
 	}
 
@@ -237,7 +237,7 @@ func TestSeedListVarietyWired(t *testing.T) {
 	if !ok {
 		t.Fatalf("NMTOKENS variety = %T, want xsd.List", nmtokens.Variety())
 	}
-	if lst.Item != idx["NMTOKEN"] {
+	if lst.Item() != idx["NMTOKEN"] {
 		t.Errorf("NMTOKENS list item must be the shared NMTOKEN node")
 	}
 }

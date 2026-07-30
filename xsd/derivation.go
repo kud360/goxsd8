@@ -82,16 +82,15 @@ const (
 //
 // st-props-correct clause 2 (the {base} chain terminates at a primitive or
 // xs:anySimpleType — no circular derivation) is a documented no-op: a cyclic
-// {base} chain is unconstructible via this package's constructors, because
-// NewSimpleType demands a live base pointer that must already exist, so a type
-// cannot appear on its own base chain. cos-st-restricts clause 3.3
-// (no-self-membership, checkUnionGraph) is retired by the same argument — a
-// union's members must pre-exist the union, so the union cannot be in its own
-// transitive membership. Tightening the still-exported
-// Atomic.Primitive/List.Item/Union.Members fields to make even a
-// post-construction mutation-induced cycle impossible is tracked in #215; until
-// then the honest claim is "unconstructible via constructors", not
-// "structurally unrepresentable".
+// {base} chain is structurally unrepresentable, because NewSimpleType demands a
+// live base pointer that must already exist, so a type cannot appear on its own
+// base chain, and {base} is an unexported field with no setter. cos-st-restricts
+// clause 3.3 (no-self-membership, checkUnionGraph) is retired by the same
+// argument — a union's members must pre-exist the union, so the union cannot be
+// in its own transitive membership. The Atomic/List/Union {variety} branches
+// carry unexported fields too, and NewUnion copies its membership in while
+// Union.Members copies it out, so no external caller can splice a cycle in after
+// construction either.
 //
 // Deferred, out of scope for this pure-leaf package (which does not depend on
 // package value): the facet-applicability and facet-constraint sub-clauses
@@ -152,7 +151,7 @@ func checkFacetsSupported(loc xsderr.Loc, facets []Facet) error {
 // Clause 1.2 (B.{final} does not contain restriction) is discharged by
 // checkSTGraph's clause-3 site (B is D's {base}); clause 1.3 (facet
 // applicability/constraints) is deferred (see checkSTGraph). It reads only
-// t.base — never the Atomic.Primitive pointer, which self-references on a
+// t.base — never the Atomic's primitive pointer, which self-references on a
 // primitive datatype (§3.16.1) and so cannot drive a terminating base walk.
 func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
 	if t == anyAtomicType {
@@ -183,7 +182,7 @@ func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
 //     §3.16.6.3). Clause 2.2.2.2 (B.{final}) is discharged by checkSTGraph's
 //     clause-3 site; clauses 2.2.2.4/.5 (facets) are deferred.
 func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
-	item := t.variety.(List).Item
+	item := t.variety.(List).item
 	if item == nil {
 		return xsderr.New(ruleSTPropsCorrect, loc,
 			"list simple type has an absent {item type definition} (st-props-correct clause 1)")
@@ -220,7 +219,7 @@ func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
 		return xsderr.New(ruleCosSTRestricts, loc,
 			"list simple type restricts base %s whose {variety} is not list (cos-st-restricts clause 2.2.2.1)", t.base.name)
 	}
-	if !derivedOKSimple(item, baseList.Item) {
+	if !derivedOKSimple(item, baseList.item) {
 		return xsderr.New(ruleCosSTRestricts, loc,
 			"list {item type definition} %s is not validly derived from the base list's item type (cos-st-restricts clause 2.2.2.3 via cos-st-derived-ok §3.16.6.3)", item.name)
 	}
@@ -242,7 +241,7 @@ func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
 //
 // Clause 3.3 (no-self-membership) is a documented no-op — see checkSTGraph.
 func checkUnionGraph(loc xsderr.Loc, t *SimpleType) error {
-	members := t.variety.(Union).Members
+	members := t.variety.(Union).members
 	for _, m := range members {
 		if m == nil {
 			return xsderr.New(ruleSTPropsCorrect, loc,
@@ -272,13 +271,13 @@ func checkUnionGraph(loc xsderr.Loc, t *SimpleType) error {
 		return xsderr.New(ruleCosSTRestricts, loc,
 			"union simple type restricts base %s whose {variety} is not union (cos-st-restricts clause 3.2.2.1)", t.base.name)
 	}
-	if len(members) != len(baseUnion.Members) {
+	if len(members) != len(baseUnion.members) {
 		return xsderr.New(ruleCosSTRestricts, loc,
 			"union restriction has %d member type definitions but base union %s has %d (cos-st-restricts clause 3.2.2.3)",
-			len(members), t.base.name, len(baseUnion.Members))
+			len(members), t.base.name, len(baseUnion.members))
 	}
 	for i, m := range members {
-		if !derivedOKSimple(m, baseUnion.Members[i]) {
+		if !derivedOKSimple(m, baseUnion.members[i]) {
 			return xsderr.New(ruleCosSTRestricts, loc,
 				"union member %s is not validly derived from the corresponding base member (cos-st-restricts clause 3.2.2.3 via cos-st-derived-ok §3.16.6.3)", m.name)
 		}
@@ -302,8 +301,9 @@ func checkUnionGraph(loc xsderr.Loc, t *SimpleType) error {
 // intervening union's {facets} emptiness at its own level, clause 2.2.4.3).
 //
 // It walks d's {base} chain and b's members with no visited set: both are finite
-// and acyclic on any constructor-built graph, so the recursion terminates
-// (unconstructible-via-constructors, see checkSTGraph; #215).
+// and acyclic on every graph this package can build, so the recursion terminates
+// (a cyclic {base} chain or membership is structurally unrepresentable — see
+// checkSTGraph).
 func derivedOKSimple(d, b *SimpleType) bool {
 	if d == nil || b == nil {
 		return false
@@ -324,7 +324,7 @@ func derivedOKSimple(d, b *SimpleType) bool {
 		return true
 	}
 	if bv, ok := b.variety.(Union); ok && len(b.EffectiveFacets()) == 0 {
-		for _, m := range bv.Members {
+		for _, m := range bv.members {
 			if derivedOKSimple(d, m) {
 				return true
 			}
@@ -531,16 +531,18 @@ func scaleValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (int, error) {
 // (Datatypes id="dt-transitivemembership") has {variety} = list; it is the
 // negative form of clause 2.1's "no types whose {variety} is list among the
 // union's transitive membership". u is expected to be a union; a non-union u
-// yields false. It recurses through member unions with no visited set: on any
-// constructor-built graph a union's members pre-exist the union, so the
-// transitive membership is finite and acyclic and the recursion terminates (a
-// mutation-induced cycle is unconstructible via constructors; #215).
+// yields false. It recurses through member unions with no visited set: a union's
+// members pre-exist the union, so the transitive membership is finite and
+// acyclic and the recursion terminates — and because Union's membership is an
+// unexported field that NewUnion copies in and Union.Members copies out, a
+// mutation-induced cycle is structurally unrepresentable, not merely
+// unconstructed.
 func unionMembershipHasList(u *SimpleType) bool {
 	uv, ok := u.variety.(Union)
 	if !ok {
 		return false
 	}
-	for _, m := range uv.Members {
+	for _, m := range uv.members {
 		if m == nil {
 			continue
 		}

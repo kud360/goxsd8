@@ -18,7 +18,7 @@ func TestLengthExemptPrimitive(t *testing.T) {
 	stringPrim := primType(t, "string", "preserve")
 
 	derivedQName, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "myqname"},
-		xsd.Atomic{Primitive: qnamePrim}, qnamePrim, nil, nil)
+		xsd.NewAtomic(qnamePrim), qnamePrim, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(myqname): %v", err)
 	}

@@ -39,25 +39,108 @@ const ruleSTPropsCorrect xsderr.Rule = "st-props-correct"
 // xsd.Variety is a producer's job in a later phase, not an identity.
 type Variety interface{ variety() }
 
-// Atomic is the atomic {variety} (Datatypes §2.4.1.1). Primitive is the
+// Atomic is the atomic {variety} (Datatypes §2.4.1.1). It carries the
 // {primitive type definition} (§3.16.1): a live pointer to this type's
 // primitive ancestor — which for a primitive datatype is the type itself
 // (§3.16.1: "the {primitive type definition} of a primitive datatype is that
 // datatype itself"), wired via NewPrimitiveType — or nil for the one exception,
-// xs:anyAtomicType, whose {primitive type definition} is ·absent·. The field is
-// read-only by convention; do not mutate it after construction.
-type Atomic struct{ Primitive *SimpleType }
+// xs:anyAtomicType, whose {primitive type definition} is ·absent·. Build one
+// through NewAtomic and read it back through Primitive; the field is
+// unexported, so an Atomic is immutable to every external caller by
+// construction, not by convention (STYLE T1).
+type Atomic struct{ primitive *SimpleType }
 
-// List is the list {variety} (Datatypes §2.4.1.2). Item is the {item type
-// definition} (§3.16.1), a live pointer to the list's item type. The field is
-// read-only by convention; do not mutate it after construction.
-type List struct{ Item *SimpleType }
+// NewAtomic builds the atomic {variety} carrying primitive as its {primitive
+// type definition}. A nil primitive models the ·absent· {primitive type
+// definition} that only xs:anyAtomicType has (§3.16.1), which is exactly what
+// the zero value Atomic{} denotes: that literal stays directly constructible
+// even with an unexported field (Go permits a zero composite literal of a type
+// with unexported fields from another package) and is a legal, meaningful
+// state, so NewAtomic is not the only path to a valid Atomic — it is the only
+// path that SETS a specific primitive pointer.
+//
+// It performs no validation. At {variety}-construction time the owning
+// *SimpleType may still be under construction — NewPrimitiveType wires the
+// self-referential {primitive type definition} before the node escapes — so
+// there is nothing coherent to check here. The cross-component invariants on an
+// atomic type are charged later, by checkAtomicGraph (derivation.go), once the
+// owning type's {base type definition} is wired.
+func NewAtomic(primitive *SimpleType) Atomic { return Atomic{primitive: primitive} }
 
-// Union is the union {variety} (Datatypes §2.4.1.3). Members are the {member
-// type definitions} (§3.16.1) in document order; the sequence may be empty. The
-// slice is read-only by convention; do not mutate it or its elements after
-// construction.
-type Union struct{ Members []*SimpleType }
+// Primitive returns the {primitive type definition} (§3.16.1). It is nil when
+// that property is ·absent·, which happens only for xs:anyAtomicType — nil
+// means absent is the whole contract here, so there is no second "present"
+// result to report.
+func (a Atomic) Primitive() *SimpleType { return a.primitive }
+
+// List is the list {variety} (Datatypes §2.4.1.2). It carries the {item type
+// definition} (§3.16.1), a live pointer to the list's item type. Build one
+// through NewList and read it back through Item; the field is unexported, so a
+// List is immutable to every external caller by construction, not by convention
+// (STYLE T1).
+type List struct{ item *SimpleType }
+
+// NewList builds the list {variety} carrying item as its {item type
+// definition}. A nil item models an absent one, which is exactly what the zero
+// value List{} denotes: that literal stays directly constructible even with an
+// unexported field and is a representable state, so NewList is not the only
+// path to a valid List — it is the only path that SETS a specific item pointer.
+//
+// It performs no validation. At {variety}-construction time the owning
+// *SimpleType does not exist yet, so a list's shape constraints cannot be
+// judged here; they are charged later by checkListGraph (derivation.go), which
+// rejects an absent item under st-props-correct and enforces cos-st-restricts
+// clause 2 against the owning type's {base type definition}.
+func NewList(item *SimpleType) List { return List{item: item} }
+
+// Item returns the {item type definition} (§3.16.1). It is nil when that
+// property is absent — a state checkListGraph rejects at SimpleType
+// construction, so it is not reachable on a constructor-built type.
+func (l List) Item() *SimpleType { return l.item }
+
+// Union is the union {variety} (Datatypes §2.4.1.3). It carries the {member
+// type definitions} (§3.16.1) in document order; the sequence may be empty.
+// Build one through NewUnion and read it back through Members; the field is
+// unexported and both the constructor and the accessor copy the slice, so a
+// Union's membership is immutable to every external caller by construction, not
+// by convention (STYLE T1). That is what makes a mutation-induced membership
+// cycle structurally unrepresentable, which the recursive membership walks in
+// derivation.go rely on for termination.
+type Union struct{ members []*SimpleType }
+
+// NewUnion builds the union {variety} carrying members as its {member type
+// definitions}. The members slice is COPIED in document order; the caller's
+// backing array is not aliased, so a later mutation of it cannot reach the
+// Union. The sequence is preserved verbatim: not sorted, not deduplicated, and
+// not filtered of nils — position is load-bearing (cos-st-restricts clause
+// 3.2.2.3 pairs a restriction's members with the base's POSITIONALLY,
+// PRINCIPLES 11). An empty or nil members argument yields the zero value
+// Union{}, which stays directly constructible even with an unexported field and
+// is a legal state (an empty {member type definitions}), so NewUnion is not the
+// only path to a valid Union — it is the only path that SETS a specific
+// membership.
+//
+// It performs no validation. At {variety}-construction time the owning
+// *SimpleType does not exist yet, so the membership constraints cannot be judged
+// here; they are charged later by checkUnionGraph (derivation.go), which rejects
+// a nil member under st-props-correct and enforces cos-st-restricts clause 3
+// against the owning type's {base type definition}.
+func NewUnion(members ...*SimpleType) Union {
+	if len(members) == 0 {
+		return Union{}
+	}
+	return Union{members: append([]*SimpleType(nil), members...)}
+}
+
+// Members returns the {member type definitions} (§3.16.1) in document order. It
+// returns a copy: mutating the result does not affect u. An empty membership
+// yields nil.
+func (u Union) Members() []*SimpleType {
+	if len(u.members) == 0 {
+		return nil
+	}
+	return append([]*SimpleType(nil), u.members...)
+}
 
 func (Atomic) variety() {}
 func (List) variety()   {}
@@ -508,8 +591,8 @@ func NewSimpleType(loc xsderr.Loc, name QName, variety Variety, base *SimpleType
 // AnyAtomicType) so IsPrimitive reports true and pointer identity holds across
 // every graph, and it wires the self-referential {primitive type definition} —
 // a primitive's {primitive type definition} is itself (§3.16.1) — so the
-// returned node's {variety} is an Atomic whose Primitive points back at that
-// same node.
+// returned node's {variety} is an Atomic whose Primitive() reports that same
+// node.
 //
 // The self-reference is established inside this constructor, before the node
 // escapes, so the node is immutable to every external caller. ownFacets and
@@ -522,7 +605,7 @@ func NewPrimitiveType(loc xsderr.Loc, name QName, ownFacets []Facet, final []Der
 		return nil, err
 	}
 	t := &SimpleType{loc: loc, name: name, base: anyAtomicType}
-	t.variety = Atomic{Primitive: t}
+	t.variety = Atomic{primitive: t}
 	t.setOwnFacetsFinal(ownFacets, final)
 	if err := checkSTGraph(loc, t); err != nil {
 		return nil, err
@@ -841,7 +924,7 @@ func AnySimpleType() *SimpleType { return anySimpleType }
 // primitive datatype, an immutable package singleton. A producer roots every
 // primitive on THIS node (NewPrimitiveType does so) so IsPrimitive — which tests
 // {base type definition} == xs:anyAtomicType by pointer — holds across the whole
-// graph. Its own {primitive type definition} is absent (Atomic{Primitive: nil},
+// graph. Its own {primitive type definition} is absent (the zero Atomic{},
 // §3.16.1). The returned node is read-only; do not mutate it.
 func AnyAtomicType() *SimpleType { return anyAtomicType }
 
@@ -856,10 +939,10 @@ var anySimpleType = &SimpleType{
 // anyAtomicType is the xs:anyAtomicType anchor (Datatypes §4.1.6): the special
 // atomic type that is the {base type definition} of every primitive datatype.
 // Its {base type definition} is anySimpleType, and it is the one atomic type
-// whose {primitive type definition} is itself absent (Atomic{Primitive: nil}).
+// whose {primitive type definition} is itself absent (the zero Atomic{}).
 // Exposed to producers through AnyAtomicType.
 var anyAtomicType = &SimpleType{
 	name:    QName{Space: XMLSchemaNS, Local: "anyAtomicType"},
-	variety: Atomic{Primitive: nil},
+	variety: Atomic{},
 	base:    anySimpleType,
 }
