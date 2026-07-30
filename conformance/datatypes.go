@@ -906,7 +906,7 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 		}
 		leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 			xsd.QName{Space: synthNS, Local: "myList-" + lt.itemPrim},
-			xsd.List{Item: itemType}, xsd.AnySimpleType(), ownFacets, nil)
+			xsd.NewList(itemType), xsd.AnySimpleType(), ownFacets, nil)
 		if err != nil {
 			return Fail()
 		}
@@ -981,7 +981,7 @@ func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c 
 	}
 	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 		xsd.QName{Space: synthNS, Local: base + "-facets"},
-		xsd.Atomic{Primitive: primitiveOfType(builtinType)}, builtinType, ownFacets, nil)
+		xsd.NewAtomic(primitiveOfType(builtinType)), builtinType, ownFacets, nil)
 	if err != nil {
 		return Fail()
 	}
@@ -1040,7 +1040,7 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 	}
 	middle, err := xsd.NewSimpleType(xsderr.Loc{},
 		xsd.QName{Space: synthNS, Local: "NOTATION-notation"},
-		xsd.Atomic{Primitive: primitiveOfType(notationType)}, notationType, middleFacets, nil)
+		xsd.NewAtomic(primitiveOfType(notationType)), notationType, middleFacets, nil)
 	if err != nil {
 		return Fail()
 	}
@@ -1050,7 +1050,7 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 	}
 	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 		xsd.QName{Space: synthNS, Local: "NOTATION-facets"},
-		xsd.Atomic{Primitive: primitiveOfType(notationType)}, middle, leafFacets, nil)
+		xsd.NewAtomic(primitiveOfType(notationType)), middle, leafFacets, nil)
 	if err != nil {
 		return Fail()
 	}
@@ -1148,7 +1148,7 @@ func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, 
 	}
 	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 		xsd.QName{Space: synthNS, Local: "precisionDecimal-facets"},
-		xsd.Atomic{Primitive: primitiveOfType(builtinType)}, builtinType, ownFacets, nil)
+		xsd.NewAtomic(primitiveOfType(builtinType)), builtinType, ownFacets, nil)
 	if err != nil {
 		return Fail()
 	}
@@ -1217,7 +1217,7 @@ func execD34Case(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c cas
 		}
 		leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 			xsd.QName{Space: synthNS, Local: "precisionDecimal-" + e.typeName},
-			xsd.Atomic{Primitive: primitiveOfType(builtinType)}, builtinType, ownFacets, nil)
+			xsd.NewAtomic(primitiveOfType(builtinType)), builtinType, ownFacets, nil)
 		if err != nil {
 			return Fail()
 		}
@@ -1293,7 +1293,7 @@ func execAnyURIShapeCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleTyp
 		}
 		leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 			xsd.QName{Space: synthNS, Local: "anyURI-" + l.typeName},
-			xsd.Atomic{Primitive: primitiveOfType(builtinType)}, builtinType, ownFacets, nil)
+			xsd.NewAtomic(primitiveOfType(builtinType)), builtinType, ownFacets, nil)
 		if err != nil {
 			return Fail()
 		}

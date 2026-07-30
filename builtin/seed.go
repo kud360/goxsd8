@@ -63,7 +63,7 @@ func (e *MissingPrimitivesError) Error() string {
 // [Types]/[TypeSpec.Applies], not the component's {facets}. A derived atomic type's {primitive type definition} points
 // at its primitive ancestor; a primitive datatype's own {primitive type
 // definition} is itself, wired via [xsd.NewPrimitiveType]. Only xs:anyAtomicType
-// carries an absent {primitive type definition} (Atomic{Primitive: nil}).
+// carries an absent {primitive type definition} (the zero xsd.Atomic{}).
 //
 // # Precondition and error
 //
@@ -191,7 +191,7 @@ func buildVariety(index map[string]TypeSpec, built map[string]*xsd.SimpleType, s
 		// NewPrimitiveType path in build, and xs:anyAtomicType is the pre-seeded
 		// anchor). {primitive type definition} is the nearest primitive ancestor.
 		if pn, ok := primitiveName(index, spec.Name); ok && pn != spec.Name {
-			return xsd.Atomic{Primitive: built[pn]}, nil
+			return xsd.NewAtomic(built[pn]), nil
 		}
 		return xsd.Atomic{}, nil
 	case List:
@@ -199,7 +199,7 @@ func buildVariety(index map[string]TypeSpec, built map[string]*xsd.SimpleType, s
 		if err != nil {
 			return nil, err
 		}
-		return xsd.List{Item: item}, nil
+		return xsd.NewList(item), nil
 	default:
 		return nil, fmt.Errorf("builtin: type %q has no variety", spec.Name)
 	}

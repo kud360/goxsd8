@@ -77,7 +77,7 @@ func TestEffectiveWhiteSpace(t *testing.T) {
 
 	// A derivation with no own whiteSpace facet inherits the primitive's entry.
 	derived, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "d"},
-		xsd.Atomic{Primitive: collapsePrim}, collapsePrim, nil, nil)
+		xsd.NewAtomic(collapsePrim), collapsePrim, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestEffectiveWhiteSpaceOverride(t *testing.T) {
 	stringPrim := primType(t, "string", "preserve") // primitive says preserve
 	// A derived step re-declares whiteSpace=collapse; the overlay surfaces it.
 	collapsed, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "token-like"},
-		xsd.Atomic{Primitive: stringPrim}, stringPrim,
+		xsd.NewAtomic(stringPrim), stringPrim,
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
@@ -132,7 +132,7 @@ func TestEffectiveWhiteSpaceListNoFacetPanics(t *testing.T) {
 	item := primType(t, "string", "preserve")
 	// A list with no own whiteSpace facet: EffectiveFacets surfaces none.
 	list, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "bareList"},
-		xsd.List{Item: item}, xsd.AnySimpleType(), nil, nil)
+		xsd.NewList(item), xsd.AnySimpleType(), nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
 	}
@@ -167,7 +167,7 @@ func TestEffectiveWhiteSpaceUnionNotApplicable(t *testing.T) {
 func TestEffectiveWhiteSpaceListResolvesCollapse(t *testing.T) {
 	item := primType(t, "string", "preserve")
 	list, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "collapseList"},
-		xsd.List{Item: item}, xsd.AnySimpleType(),
+		xsd.NewList(item), xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
@@ -205,7 +205,7 @@ func unionType(t *testing.T) *xsd.SimpleType {
 	strPrim := primType(t, "string", "preserve")
 	decPrim := primType(t, "decimal", "collapse")
 	union, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "u"},
-		xsd.Union{Members: []*xsd.SimpleType{strPrim, decPrim}}, xsd.AnySimpleType(), nil, nil)
+		xsd.NewUnion(strPrim, decPrim), xsd.AnySimpleType(), nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union): %v", err)
 	}

@@ -103,8 +103,8 @@ func TestProduceSimpleTypeWithFacetAndBackReference(t *testing.T) {
 	if !ok {
 		t.Fatalf("Foo variety = %T, want Atomic", st.Variety())
 	}
-	if at.Primitive == nil || at.Primitive.Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
-		t.Fatalf("Foo {primitive} = %v, want {xs}string", at.Primitive)
+	if at.Primitive() == nil || at.Primitive().Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
+		t.Fatalf("Foo {primitive} = %v, want {xs}string", at.Primitive())
 	}
 	if fs := st.OwnFacets(); len(fs) != 1 || fs[0].Kind() != xsd.FacetMinLength {
 		t.Fatalf("Foo own facets = %v, want one minLength", fs)

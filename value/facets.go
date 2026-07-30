@@ -228,7 +228,7 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 // (Mapping{}, false) "ungoverned" outcome the atomic case returns.
 func governingMapping(b Backend, node *xsd.SimpleType) (Mapping, bool) {
 	if lst, ok := node.Variety().(xsd.List); ok {
-		item, ok := governingMapping(b, lst.Item)
+		item, ok := governingMapping(b, lst.Item())
 		if !ok {
 			return Mapping{}, false
 		}
@@ -619,17 +619,17 @@ func newLengthFacet(st *xsd.SimpleType, f xsd.Facet) (lengthFacet, error) {
 // length/minLength/maxLength facets are an unconditional no-op — "any {value}
 // is facet-valid" — per clause 1.3 of cvc-length-valid (§4.3.1.3),
 // cvc-minLength-valid (§4.3.2.3), and cvc-maxLength-valid (§4.3.3.3). It keys
-// off the atomic {variety}'s Primitive (the resolved primitive, §3.16.1), not
+// off the atomic {variety}'s Primitive() (the resolved primitive, §3.16.1), not
 // the value's Go type nor a blanket "is atomic" test: clause 1.3 is a case
 // split on the primitive, and the list case (clause 2) carries no such
 // exemption. A non-atomic {variety} (nil / list / union) or an absent primitive
 // (xs:anyAtomicType) is not exempt; this predicate never panics.
 func lengthExemptPrimitive(st *xsd.SimpleType) bool {
 	at, ok := st.Variety().(xsd.Atomic)
-	if !ok || at.Primitive == nil {
+	if !ok || at.Primitive() == nil {
 		return false
 	}
-	name := at.Primitive.Name()
+	name := at.Primitive().Name()
 	return name == qnameName || name == notationName
 }
 

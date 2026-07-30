@@ -64,7 +64,7 @@ func derive(t *testing.T, name string, base *xsd.SimpleType, ownFacets ...xsd.Fa
 		}
 	}
 	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: name},
-		xsd.Atomic{Primitive: prim}, base, ownFacets, nil)
+		xsd.NewAtomic(prim), base, ownFacets, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(%q): %v", name, err)
 	}

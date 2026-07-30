@@ -41,20 +41,20 @@ func TestSTGraphChecks(t *testing.T) {
 
 	// int restricts decimal; int2 restricts int (a two-step atomic chain, for the
 	// cos-st-derived-ok clause-2.2.2 base-chain walk).
-	intT := mustST(t, "int", Atomic{Primitive: dec}, dec, nil, nil)
-	int2 := mustST(t, "int2", Atomic{Primitive: dec}, intT, nil, nil)
+	intT := mustST(t, "int", NewAtomic(dec), dec, nil, nil)
+	int2 := mustST(t, "int2", NewAtomic(dec), intT, nil, nil)
 
 	// Constructed lists/unions (base xs:anySimpleType).
-	listOverDec := mustST(t, "decList", List{Item: dec}, anySimpleType, nil, nil)
-	unionDecStr := mustST(t, "decStr", Union{Members: []*SimpleType{dec, str}}, anySimpleType, nil, nil)
-	unionAllAtomic := mustST(t, "uAtomic", Union{Members: []*SimpleType{dec, str}}, anySimpleType, nil, nil)
-	unionWithList := mustST(t, "uList", Union{Members: []*SimpleType{dec, listOverDec}}, anySimpleType, nil, nil)
+	listOverDec := mustST(t, "decList", NewList(dec), anySimpleType, nil, nil)
+	unionDecStr := mustST(t, "decStr", NewUnion(dec, str), anySimpleType, nil, nil)
+	unionAllAtomic := mustST(t, "uAtomic", NewUnion(dec, str), anySimpleType, nil, nil)
+	unionWithList := mustST(t, "uList", NewUnion(dec, listOverDec), anySimpleType, nil, nil)
 
 	// Atomic items whose own {final} blocks a use, and a base whose {final}
 	// blocks restriction (clause 3 / 1.2 / 2.2.2.2 / 3.2.2.2 shared site).
-	itemFinalList := mustST(t, "finalList", Atomic{Primitive: dec}, dec, nil, []DerivationMethod{DerivationList})
-	memberFinalUnion := mustST(t, "finalUnion", Atomic{Primitive: dec}, dec, nil, []DerivationMethod{DerivationUnion})
-	baseFinalRestrict := mustST(t, "sealed", Atomic{Primitive: dec}, dec, nil, []DerivationMethod{DerivationRestriction})
+	itemFinalList := mustST(t, "finalList", NewAtomic(dec), dec, nil, []DerivationMethod{DerivationList})
+	memberFinalUnion := mustST(t, "finalUnion", NewAtomic(dec), dec, nil, []DerivationMethod{DerivationUnion})
+	baseFinalRestrict := mustST(t, "sealed", NewAtomic(dec), dec, nil, []DerivationMethod{DerivationRestriction})
 
 	loc := xsderr.Loc{}
 	qn := QName{Local: "D"}
@@ -68,95 +68,95 @@ func TestSTGraphChecks(t *testing.T) {
 	}{
 		// --- atomic (cos-st-restricts case 1) ---
 		{"atomic ok (1.1)", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: dec}, dec, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewAtomic(dec), dec, nil, nil)
 			return e
 		}, "", ""},
 		{"atomic non-atomic base (1.1)", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: nil}, listOverDec, nil, nil)
+			_, e := NewSimpleType(loc, qn, Atomic{}, listOverDec, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 1.1"},
 
 		// --- shared {final}-blocking site (clause 3 / 1.2 / 2.2.2.2 / 3.2.2.2) ---
 		{"base {final} contains restriction (clause 3)", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: dec}, baseFinalRestrict, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewAtomic(dec), baseFinalRestrict, nil, nil)
 			return e
 		}, ruleSTPropsCorrect, "clause 3"},
 
 		// --- clause 5 (facet support) ---
 		{"unsupported facet (clause 5)", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: dec}, dec, []Facet{badFacet}, nil)
+			_, e := NewSimpleType(loc, qn, NewAtomic(dec), dec, []Facet{badFacet}, nil)
 			return e
 		}, ruleSTPropsCorrect, "clause 5"},
 
 		// --- list (cos-st-restricts case 2) ---
 		{"list ok constructed atomic item", func() error {
-			_, e := NewSimpleType(loc, qn, List{Item: dec}, anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(dec), anySimpleType, nil, nil)
 			return e
 		}, "", ""},
 		{"list ok constructed atomic-union item", func() error {
-			_, e := NewSimpleType(loc, qn, List{Item: unionAllAtomic}, anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(unionAllAtomic), anySimpleType, nil, nil)
 			return e
 		}, "", ""},
 		{"list special item (2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, List{Item: anyAtomicType}, anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(anyAtomicType), anySimpleType, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.1"},
 		{"list nested-list item (2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, List{Item: listOverDec}, anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(listOverDec), anySimpleType, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.1"},
 		{"list union-with-list item (2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, List{Item: unionWithList}, anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(unionWithList), anySimpleType, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.1"},
 		{"list constructed item {final} has list (2.2.1.1)", func() error {
-			_, e := NewSimpleType(loc, qn, List{Item: itemFinalList}, anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(itemFinalList), anySimpleType, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.1.1"},
 		{"list ok restricted same item", func() error {
-			_, e := NewSimpleType(loc, qn, List{Item: dec}, listOverDec, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(dec), listOverDec, nil, nil)
 			return e
 		}, "", ""},
 		{"list ok restricted derived item (2.2.2.3 chain)", func() error {
-			_, e := NewSimpleType(loc, qn, List{Item: int2}, listOverDec, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(int2), listOverDec, nil, nil)
 			return e
 		}, "", ""},
 		{"list restricted non-list base (2.2.2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, List{Item: dec}, dec, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(dec), dec, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.2.1"},
 		{"list restricted item not derived (2.2.2.3)", func() error {
-			_, e := NewSimpleType(loc, qn, List{Item: str}, listOverDec, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(str), listOverDec, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.2.3"},
 
 		// --- union (cos-st-restricts case 3) ---
 		{"union ok constructed", func() error {
-			_, e := NewSimpleType(loc, qn, Union{Members: []*SimpleType{dec, str}}, anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewUnion(dec, str), anySimpleType, nil, nil)
 			return e
 		}, "", ""},
 		{"union special member (3.1)", func() error {
-			_, e := NewSimpleType(loc, qn, Union{Members: []*SimpleType{dec, anyAtomicType}}, anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewUnion(dec, anyAtomicType), anySimpleType, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.1"},
 		{"union constructed member {final} has union (3.2.1.1)", func() error {
-			_, e := NewSimpleType(loc, qn, Union{Members: []*SimpleType{memberFinalUnion}}, anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewUnion(memberFinalUnion), anySimpleType, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.2.1.1"},
 		{"union ok restricted corresponding members", func() error {
-			_, e := NewSimpleType(loc, qn, Union{Members: []*SimpleType{dec, str}}, unionDecStr, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewUnion(dec, str), unionDecStr, nil, nil)
 			return e
 		}, "", ""},
 		{"union restricted non-union base (3.2.2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, Union{Members: []*SimpleType{dec, str}}, dec, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewUnion(dec, str), dec, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.2.2.1"},
 		{"union restricted member count mismatch (3.2.2.3)", func() error {
-			_, e := NewSimpleType(loc, qn, Union{Members: []*SimpleType{dec}}, unionDecStr, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewUnion(dec), unionDecStr, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.2.2.3"},
 		{"union restricted member not derived (3.2.2.3)", func() error {
-			_, e := NewSimpleType(loc, qn, Union{Members: []*SimpleType{str, dec}}, unionDecStr, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewUnion(str, dec), unionDecStr, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.2.2.3"},
 	}
@@ -199,18 +199,18 @@ func TestScaleFacetSCCs(t *testing.T) {
 	pdec := mustPrim(t, "precisionDecimal")
 
 	// Bases carrying effective scale facets for the restriction SCCs.
-	baseMax5 := mustST(t, "baseMax5", Atomic{Primitive: pdec}, pdec,
+	baseMax5 := mustST(t, "baseMax5", NewAtomic(pdec), pdec,
 		[]Facet{scaleFacet(FacetMaxScale, "5", false)}, nil)
-	baseMin2 := mustST(t, "baseMin2", Atomic{Primitive: pdec}, pdec,
+	baseMin2 := mustST(t, "baseMin2", NewAtomic(pdec), pdec,
 		[]Facet{scaleFacet(FacetMinScale, "2", false)}, nil)
-	baseMaxFixed5 := mustST(t, "baseMaxFixed5", Atomic{Primitive: pdec}, pdec,
+	baseMaxFixed5 := mustST(t, "baseMaxFixed5", NewAtomic(pdec), pdec,
 		[]Facet{scaleFacet(FacetMaxScale, "5", true)}, nil)
-	baseMinFixed2 := mustST(t, "baseMinFixed2", Atomic{Primitive: pdec}, pdec,
+	baseMinFixed2 := mustST(t, "baseMinFixed2", NewAtomic(pdec), pdec,
 		[]Facet{scaleFacet(FacetMinScale, "2", true)}, nil)
 
 	// Multi-level chain A(fixed maxScale=5) <- B(no own scale) for the transitive
 	// {fixed} check through EffectiveFacets.
-	chainB := mustST(t, "chainB", Atomic{Primitive: pdec}, baseMaxFixed5, nil, nil)
+	chainB := mustST(t, "chainB", NewAtomic(pdec), baseMaxFixed5, nil, nil)
 
 	loc := xsderr.Loc{}
 	qn := QName{Local: "D"}
@@ -222,22 +222,22 @@ func TestScaleFacetSCCs(t *testing.T) {
 	}{
 		// --- maxScale-valid-restriction (§4.2.4): may only move down ---
 		{"maxScale narrows below base ok", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMax5,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), baseMax5,
 				[]Facet{scaleFacet(FacetMaxScale, "3", false)}, nil)
 			return e
 		}, ""},
 		{"maxScale equals base ok", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMax5,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), baseMax5,
 				[]Facet{scaleFacet(FacetMaxScale, "5", false)}, nil)
 			return e
 		}, ""},
 		{"maxScale above base rejected", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMax5,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), baseMax5,
 				[]Facet{scaleFacet(FacetMaxScale, "7", false)}, nil)
 			return e
 		}, ruleMaxScaleValidRestriction},
 		{"maxScale vacuous no base maxScale ok", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, pdec,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), pdec,
 				[]Facet{scaleFacet(FacetMaxScale, "9", false)}, nil)
 			return e
 		}, ""},
@@ -245,31 +245,31 @@ func TestScaleFacetSCCs(t *testing.T) {
 			// A malformed scale {value} ("abc") reaches scaleValue through the
 			// public NewFacet/NewSimpleType API; it must charge a real *xsderr.Error,
 			// not panic (regression guard for #157).
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMax5,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), baseMax5,
 				[]Facet{scaleFacet(FacetMaxScale, "abc", false)}, nil)
 			return e
 		}, ruleMaxScaleValidRestriction},
 
 		// --- minScale-valid-restriction (§4.3.4): may only move up ---
 		{"minScale above base ok", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMin2,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), baseMin2,
 				[]Facet{scaleFacet(FacetMinScale, "4", false)}, nil)
 			return e
 		}, ""},
 		{"minScale equals base ok", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMin2,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), baseMin2,
 				[]Facet{scaleFacet(FacetMinScale, "2", false)}, nil)
 			return e
 		}, ""},
 		{"minScale below base rejected", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMin2,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), baseMin2,
 				[]Facet{scaleFacet(FacetMinScale, "1", false)}, nil)
 			return e
 		}, ruleMinScaleValidRestriction},
 
 		// --- minScale ≤ maxScale consistency (anchor minScale-totalDigits) ---
 		{"minScale gt maxScale rejected", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, pdec,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), pdec,
 				[]Facet{
 					scaleFacet(FacetMinScale, "5", false),
 					scaleFacet(FacetMaxScale, "2", false),
@@ -277,7 +277,7 @@ func TestScaleFacetSCCs(t *testing.T) {
 			return e
 		}, ruleMinScaleLEMaxScale},
 		{"minScale eq maxScale ok", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, pdec,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), pdec,
 				[]Facet{
 					scaleFacet(FacetMinScale, "3", false),
 					scaleFacet(FacetMaxScale, "3", false),
@@ -287,28 +287,28 @@ func TestScaleFacetSCCs(t *testing.T) {
 
 		// --- f-ms-fixed (§4.2.1): fixed base maxScale may not be overridden ---
 		{"fixed maxScale repeated identical ok", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMaxFixed5,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), baseMaxFixed5,
 				[]Facet{scaleFacet(FacetMaxScale, "5", true)}, nil)
 			return e
 		}, ""},
 		{"fixed maxScale further-narrowing rejected", func() error {
 			// value 3 satisfies maxScale-valid-restriction (3 < 5) yet still
 			// overrides the {fixed} base facet — proves f-ms-fixed is independent.
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMaxFixed5,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), baseMaxFixed5,
 				[]Facet{scaleFacet(FacetMaxScale, "3", true)}, nil)
 			return e
 		}, ruleMaxScaleFixed},
 
 		// --- f-mns-fixed (§4.3.1): fixed base minScale may not be overridden ---
 		{"fixed minScale repeated identical ok", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMinFixed2,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), baseMinFixed2,
 				[]Facet{scaleFacet(FacetMinScale, "2", true)}, nil)
 			return e
 		}, ""},
 		{"fixed minScale further-widening rejected", func() error {
 			// value 4 satisfies minScale-valid-restriction (4 > 2) yet still
 			// overrides the {fixed} base facet — proves f-mns-fixed is independent.
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, baseMinFixed2,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), baseMinFixed2,
 				[]Facet{scaleFacet(FacetMinScale, "4", true)}, nil)
 			return e
 		}, ruleMinScaleFixed},
@@ -317,12 +317,12 @@ func TestScaleFacetSCCs(t *testing.T) {
 		{"chain C overrides inherited fixed maxScale rejected", func() error {
 			// C restricts B which restricts A; A fixes maxScale=5, B declares no
 			// own scale facet, so C inherits the fixed facet transitively.
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, chainB,
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), chainB,
 				[]Facet{scaleFacet(FacetMaxScale, "4", true)}, nil)
 			return e
 		}, ruleMaxScaleFixed},
 		{"chain C inherits fixed maxScale unchanged ok", func() error {
-			_, e := NewSimpleType(loc, qn, Atomic{Primitive: pdec}, chainB, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewAtomic(pdec), chainB, nil, nil)
 			return e
 		}, ""},
 	}
@@ -354,10 +354,10 @@ func TestScaleFacetSCCs(t *testing.T) {
 func TestDerivedOKSimple(t *testing.T) {
 	dec := mustPrim(t, "decimal")
 	str := mustPrim(t, "string")
-	intT := mustST(t, "int", Atomic{Primitive: dec}, dec, nil, nil)
-	int2 := mustST(t, "int2", Atomic{Primitive: dec}, intT, nil, nil)
-	listOverDec := mustST(t, "decList", List{Item: dec}, anySimpleType, nil, nil)
-	unionDecStr := mustST(t, "decStr", Union{Members: []*SimpleType{dec, str}}, anySimpleType, nil, nil)
+	intT := mustST(t, "int", NewAtomic(dec), dec, nil, nil)
+	int2 := mustST(t, "int2", NewAtomic(dec), intT, nil, nil)
+	listOverDec := mustST(t, "decList", NewList(dec), anySimpleType, nil, nil)
+	unionDecStr := mustST(t, "decStr", NewUnion(dec, str), anySimpleType, nil, nil)
 
 	tests := []struct {
 		name string
