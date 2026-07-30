@@ -263,22 +263,62 @@ func TestListApplicableFacets(t *testing.T) {
 
 // TestUnionApplicableFacets covers cos-st-restricts clause 3.2.2.4: only
 // pattern, enumeration and assertions are applicable to a union, so a facet
-// applicable to a LIST but not a union (whiteSpace) is still rejected.
+// applicable to a LIST but not a union (whiteSpace) is still rejected. The
+// clause lives in the RESTRICTED branch of the §3.16.6.2 case split, so both
+// types here restrict a real union base; a union constructed straight from
+// xs:anySimpleType is governed by clause 3.2.1.2 instead
+// (TestUnionConstructedFacetsMustBeEmpty).
 func TestUnionApplicableFacets(t *testing.T) {
-	member := mustPrim(t, "string")
+	baseUnion := mustUnion(t, "baseunion")
+	member := baseUnion.variety.(Union).members[0]
 	_, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "goodunion"},
-		NewUnion(member), anySimpleType,
+		NewUnion(member), baseUnion,
 		[]Facet{NewFacet(FacetPattern, []string{"a+"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("union with an applicable facet rejected: %v", err)
 	}
 
 	_, err = NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "badunion"},
-		NewUnion(member), anySimpleType,
+		NewUnion(member), baseUnion,
 		[]Facet{NewFacet(FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	wantRule(t, err, ruleCosSTRestricts)
 	if !strings.Contains(err.Error(), "3.2.2.4") {
 		t.Errorf("message %q does not name clause 3.2.2.4", err.Error())
+	}
+}
+
+// mustUnion builds a freshly-constructed (B is xs:anySimpleType) union over one
+// string member, carrying no facets — the shape clause 3.2.1.2 demands.
+func mustUnion(t *testing.T, local string) *SimpleType {
+	t.Helper()
+	member := mustPrim(t, local+"member")
+	u, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: local},
+		NewUnion(member), anySimpleType, nil, nil)
+	if err != nil {
+		t.Fatalf("build union %s: %v", local, err)
+	}
+	return u
+}
+
+// TestUnionConstructedFacetsMustBeEmpty covers cos-st-restricts clause 3.2.1.2:
+// a union whose {base type definition} is xs:anySimpleType is FRESHLY
+// CONSTRUCTED, and its {facets} must be empty — not merely drawn from the union
+// applicable set, so even a pattern (applicable to a union under §4.1.5) is
+// rejected. Nothing inherits into such a type (xs:anySimpleType carries no
+// facets), so {facets} is exactly the own facet set.
+func TestUnionConstructedFacetsMustBeEmpty(t *testing.T) {
+	member := mustPrim(t, "cufmember")
+	if _, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "emptyunion"},
+		NewUnion(member), anySimpleType, nil, nil); err != nil {
+		t.Fatalf("facet-free constructed union rejected: %v", err)
+	}
+
+	_, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "facetedunion"},
+		NewUnion(member), anySimpleType,
+		[]Facet{NewFacet(FacetPattern, []string{"a+"}, false)}, nil)
+	wantRule(t, err, ruleCosSTRestricts)
+	if !strings.Contains(err.Error(), "3.2.1.2") {
+		t.Errorf("message %q does not name clause 3.2.1.2", err.Error())
 	}
 }
 

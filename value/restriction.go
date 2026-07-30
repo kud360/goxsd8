@@ -75,8 +75,7 @@ func CheckFacetRestriction(b Backend, t *xsd.SimpleType) error {
 	if !ok {
 		return nil
 	}
-	ws, wsKnown := baseWhiteSpace(base)
-	rc := restrictionCheck{mapping: m, whiteSpace: ws, whiteSpaceKnown: wsKnown, owner: t, base: base}
+	rc := restrictionCheck{mapping: m, whiteSpace: whiteSpaceInForce(base), owner: t}
 	if err := rc.checkBoundRestrictions(); err != nil {
 		return err
 	}
@@ -84,57 +83,23 @@ func CheckFacetRestriction(b Backend, t *xsd.SimpleType) error {
 }
 
 // restrictionCheck is the resolved context one CheckFacetRestriction pass needs:
-// the type under construction, its {base type definition}, the base's governing
-// mapping, and the base's in-force whiteSpace mode. Resolving all four once and
-// carrying them together keeps every facet {value} in this pass parsed the same
-// way, which is what makes the resulting values comparable at all.
-type restrictionCheck struct {
-	mapping    Mapping
-	whiteSpace whiteSpace
-	// whiteSpaceKnown is false when no whiteSpace facet is in force on the base
-	// (a union {variety}, or a base carrying none) or its {value} is outside the
-	// §4.3.6.1 domain — see baseWhiteSpace. A facet lexical is then passed to
-	// Parse unchanged.
-	whiteSpaceKnown bool
-	owner           *xsd.SimpleType
-	base            *xsd.SimpleType
-}
-
-// baseWhiteSpace resolves the whiteSpace mode in force on base, used to
-// normalize a facet's lexical {value} before it is parsed in base's value space.
-// The XML mapping of a facet's value [attribute] interprets it through the base
-// type's lexical mapping, whose first stage is that normalization (§4.3.6, key-nv
-// §3.1.4), so a maxInclusive written as "2002-10-10T12:00:00-05:00 " on a
-// collapse-normalized base denotes the same {value} as the untrailed spelling.
+// the type under construction, the base's governing mapping, and the base's
+// in-force whiteSpace mode. Resolving all three once and carrying them together
+// keeps every facet {value} in this pass parsed the same way, which is what makes
+// the resulting values comparable at all.
 //
-// known is false when no whiteSpace facet is in force or its {value} is outside
-// the three-token domain; the caller then leaves the lexical unchanged. It
-// deliberately does not reuse effectiveWhiteSpace, which PANICS on both of those
-// states: there they are instance-validation invariants, here they are ordinary
-// facts about a caller-supplied type being constructed (xs:anyAtomicType, for
-// one, carries no whiteSpace facet at all). Only the token table is shared, via
-// whiteSpaceOf.
-func baseWhiteSpace(base *xsd.SimpleType) (ws whiteSpace, known bool) {
-	for _, ef := range base.EffectiveFacets() {
-		if ef.Facet().Kind() != xsd.FacetWhiteSpace {
-			continue
-		}
-		values := ef.Facet().Values()
-		if len(values) != 1 {
-			return 0, false
-		}
-		return whiteSpaceOf(values[0])
-	}
-	return 0, false
-}
-
-// normalize applies the base type's whiteSpace normalization to a facet's
-// lexical {value}, or returns it unchanged when no mode is in force.
-func (rc restrictionCheck) normalize(lexical string) string {
-	if !rc.whiteSpaceKnown {
-		return lexical
-	}
-	return normalizeWhiteSpace(lexical, rc.whiteSpace)
+// The {base type definition} itself is deliberately NOT a field: it is exactly
+// owner.Base(), so carrying it would be a second encoding of one fact (STYLE D3).
+type restrictionCheck struct {
+	mapping Mapping
+	// whiteSpace is the mode in force on owner.Base() — the type whose value
+	// space every facet {value} compared in this pass must be a member of — or the
+	// zero mode when none is (a union {variety}, or a base carrying no usable
+	// whiteSpace facet). It is resolved by whiteSpaceInForce and APPLIED by
+	// facetValue, the same pair that parses facet {value}s at instance-pipeline
+	// construction; this pass adds no normalization of its own.
+	whiteSpace whiteSpace
+	owner      *xsd.SimpleType
 }
 
 // checkBoundRestrictions charges the four bound-facet valid-restriction SCCs
@@ -172,13 +137,20 @@ func (rc restrictionCheck) checkBoundRestrictions() error {
 // checkBoundAgainstBase cross-checks ONE derived bound facet {value} against
 // EVERY bound facet in the base's {facets}, per the four numbered conditions of
 // that facet's valid-restriction SCC (boundRestrictionViolates).
+//
+// A malformed BASE-side operand is charged under the base facet's OWN
+// valid-restriction rule (boundRestrictionRule(baseF.Kind())), not under rule —
+// which names the DERIVED facet's SCC. A bad {value} on the base's minExclusive
+// is a minExclusive-valid-restriction problem wherever it is noticed; reporting
+// it as, say, maxInclusive-valid-restriction would name a constraint that has
+// nothing to say about it (STYLE E2).
 func (rc restrictionCheck) checkBoundAgainstBase(own xsd.Facet, rule xsderr.Rule, ownV Ordered) error {
-	for _, ef := range rc.base.EffectiveFacets() {
+	for _, ef := range rc.owner.Base().EffectiveFacets() {
 		baseF := ef.Facet()
 		if !isBoundKind(baseF.Kind()) {
 			continue
 		}
-		baseV, ordered, err := rc.boundLimit(baseF, rule)
+		baseV, ordered, err := rc.boundLimit(baseF, boundRestrictionRule(baseF.Kind()))
 		if err != nil {
 			return err
 		}
@@ -213,7 +185,7 @@ func (rc restrictionCheck) boundLimit(f xsd.Facet, rule xsderr.Rule) (limit Orde
 		return nil, false, xsderr.New(rule, rc.owner.Loc(),
 			"%s facet must carry exactly one value, has %d", f.Kind(), len(values))
 	}
-	v, err := rc.mapping.Parse(rc.normalize(values[0]), nil)
+	v, err := facetValue(rc.mapping, rc.whiteSpace, values[0], nil)
 	if err != nil {
 		return nil, false, xsderr.Wrap(rule, rc.owner.Loc(), err)
 	}
@@ -355,7 +327,7 @@ func (rc restrictionCheck) checkEnumerationRestriction() error {
 		// ok=true; the second result is discarded deliberately.
 		members, _ := own.EnumerationMembers()
 		for _, em := range members {
-			if _, err := rc.mapping.Parse(rc.normalize(em.Lexical()), newMemberContext(em)); err != nil {
+			if _, err := facetValue(rc.mapping, rc.whiteSpace, em.Lexical(), newMemberContext(em)); err != nil {
 				return xsderr.Wrap("enumeration-valid-restriction", rc.owner.Loc(), err)
 			}
 		}

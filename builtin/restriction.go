@@ -126,49 +126,51 @@ func typeSpecOf(qn xsd.QName) (TypeSpec, bool) {
 	return TypeSpec{}, false
 }
 
+// facetNames is THE bridge between the two spellings of one closed set: the
+// FacetName strings the generated TypeSpec table is keyed by (§4.3, verbatim spec
+// names) and the xsd.FacetKind enum the component model carries. Both lookup
+// directions — facetName and seed.go's facetKind — scan this ONE ordered slice,
+// so the bijection cannot drift the way two hand-typed inverse switches did (the
+// old facetKind silently omitted maxScale/minScale, making the pair disagree on
+// two of sixteen entries).
+//
+// It is a slice scanned linearly, never a map: sixteen entries answered at schema
+// construction is no measured hot path (STYLE D3), and a slice keeps the ordering
+// deterministic (STYLE D2). It is deliberately NOT a FacetKind.String()
+// round-trip: String is a diagnostic rendering with a "FacetKind(n)" fallback for
+// an invalid value, so routing table lookups through it would silently turn a
+// future unmapped kind into a lookup miss instead of a visible gap in this table.
+var facetNames = []struct {
+	name FacetName
+	kind xsd.FacetKind
+}{
+	{"length", xsd.FacetLength},
+	{"minLength", xsd.FacetMinLength},
+	{"maxLength", xsd.FacetMaxLength},
+	{"pattern", xsd.FacetPattern},
+	{"enumeration", xsd.FacetEnumeration},
+	{"whiteSpace", xsd.FacetWhiteSpace},
+	{"maxInclusive", xsd.FacetMaxInclusive},
+	{"maxExclusive", xsd.FacetMaxExclusive},
+	{"minExclusive", xsd.FacetMinExclusive},
+	{"minInclusive", xsd.FacetMinInclusive},
+	{"totalDigits", xsd.FacetTotalDigits},
+	{"fractionDigits", xsd.FacetFractionDigits},
+	{"assertions", xsd.FacetAssertions},
+	{"explicitTimezone", xsd.FacetExplicitTimezone},
+	{"maxScale", xsd.FacetMaxScale},
+	{"minScale", xsd.FacetMinScale},
+}
+
 // facetName maps an xsd.FacetKind to the FacetName the generated table is keyed
-// by. It is an exhaustive switch over the closed FacetKind set, deliberately NOT
-// a FacetKind.String() round-trip: String is a diagnostic rendering that also has
-// a "FacetKind(n)" fallback for an invalid value, so routing table lookups
-// through it would silently turn a future unmapped kind into a lookup miss
-// instead of a compile-time gap. ok is false only for a FacetKind outside the
-// closed set, which xsd.NewSimpleType already rejects (st-props-correct clause
-// 5); a caller treats it as "not applicable".
+// by, scanning facetNames. ok is false only for a FacetKind outside the closed
+// set, which xsd.NewSimpleType already rejects (st-props-correct clause 5); a
+// caller treats it as "not applicable".
 func facetName(kind xsd.FacetKind) (FacetName, bool) {
-	switch kind {
-	case xsd.FacetLength:
-		return "length", true
-	case xsd.FacetMinLength:
-		return "minLength", true
-	case xsd.FacetMaxLength:
-		return "maxLength", true
-	case xsd.FacetPattern:
-		return "pattern", true
-	case xsd.FacetEnumeration:
-		return "enumeration", true
-	case xsd.FacetWhiteSpace:
-		return "whiteSpace", true
-	case xsd.FacetMaxInclusive:
-		return "maxInclusive", true
-	case xsd.FacetMaxExclusive:
-		return "maxExclusive", true
-	case xsd.FacetMinExclusive:
-		return "minExclusive", true
-	case xsd.FacetMinInclusive:
-		return "minInclusive", true
-	case xsd.FacetTotalDigits:
-		return "totalDigits", true
-	case xsd.FacetFractionDigits:
-		return "fractionDigits", true
-	case xsd.FacetAssertions:
-		return "assertions", true
-	case xsd.FacetExplicitTimezone:
-		return "explicitTimezone", true
-	case xsd.FacetMaxScale:
-		return "maxScale", true
-	case xsd.FacetMinScale:
-		return "minScale", true
-	default:
-		return "", false
+	for _, e := range facetNames {
+		if e.kind == kind {
+			return e.name, true
+		}
 	}
+	return "", false
 }

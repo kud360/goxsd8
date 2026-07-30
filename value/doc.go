@@ -60,6 +60,15 @@
 // an *xsderr.Error carrying the facet's rule ID and the pipeline stage that
 // rejected.
 //
+// A facet's OWN {value} goes through the same whiteSpace normalization before it
+// is parsed, once at construction: a facet's {value} property is "a value from
+// the value space of the {base type definition}" (§4.3.7.1 f-mai-value, §4.3.5.1),
+// and reaching that value space runs the base's lexical mapping, whose first
+// stage is its whiteSpace normalization (key-vv §3.1.3, key-nv §3.1.4). So
+// `<maxInclusive value=" 9 "/>` on a collapse-normalized base denotes exactly
+// what the untrailed spelling denotes, on both the validation and the
+// restriction-checking path.
+//
 // # Construction-time facet checks
 //
 //	func CheckFacetRestriction(b Backend, t *xsd.SimpleType) error

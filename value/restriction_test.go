@@ -235,13 +235,17 @@ func TestBoundRestrictionViolatesIncomparable(t *testing.T) {
 	}
 }
 
-// TestBaseWhiteSpace covers the non-panicking mode resolution restriction
-// checking needs, including the two states effectiveWhiteSpace panics on: no
-// whiteSpace facet in force at all (xs:anyAtomicType), and a {value} outside the
-// §4.3.6.1 domain.
-func TestBaseWhiteSpace(t *testing.T) {
-	if _, known := baseWhiteSpace(xsd.AnyAtomicType()); known {
-		t.Error("baseWhiteSpace(anyAtomicType) reported a mode; want known=false")
+// TestWhiteSpaceInForceNoUsableMode covers the non-panicking mode resolution
+// facet-{value} parsing needs, including the three states effectiveWhiteSpace
+// turns into a panic: a nil type, no whiteSpace facet in force at all
+// (xs:anyAtomicType), and a {value} outside the §4.3.6.1 domain. Each answers the
+// zero mode, which facetValue reads as "parse the lexical unchanged".
+func TestWhiteSpaceInForceNoUsableMode(t *testing.T) {
+	if got := whiteSpaceInForce(nil); got != 0 {
+		t.Errorf("whiteSpaceInForce(nil) = %d, want zero mode 0", got)
+	}
+	if got := whiteSpaceInForce(xsd.AnyAtomicType()); got != 0 {
+		t.Errorf("whiteSpaceInForce(anyAtomicType) = %d, want zero mode 0", got)
 	}
 
 	bogus, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "bogus"},
@@ -249,8 +253,8 @@ func TestBaseWhiteSpace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build bogus primitive: %v", err)
 	}
-	if _, known := baseWhiteSpace(bogus); known {
-		t.Error("baseWhiteSpace on an out-of-domain {value} reported a mode; want known=false")
+	if got := whiteSpaceInForce(bogus); got != 0 {
+		t.Errorf("whiteSpaceInForce(out-of-domain {value}) = %d, want zero mode 0", got)
 	}
 
 	ok, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "fine"},
@@ -258,7 +262,106 @@ func TestBaseWhiteSpace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build fine primitive: %v", err)
 	}
-	if ws, known := baseWhiteSpace(ok); !known || ws != collapseWS {
-		t.Errorf("baseWhiteSpace = (%d, %v), want (collapse %d, true)", ws, known, collapseWS)
+	if got := whiteSpaceInForce(ok); got != collapseWS {
+		t.Errorf("whiteSpaceInForce = %d, want collapse %d", got, collapseWS)
+	}
+}
+
+// enumOf builds an enumeration facet from bare lexical members (no namespace
+// context — the context-free cohort).
+func enumOf(lexicals ...string) xsd.Facet {
+	members := make([]xsd.EnumerationMember, 0, len(lexicals))
+	for _, l := range lexicals {
+		members = append(members, xsd.NewEnumerationMember(l, nil, nil))
+	}
+	return xsd.NewEnumerationFacet(members)
+}
+
+// wsPrimitive builds a primitive named "int" whose whiteSpace facet carries mode,
+// paired with a backend that maps it to the integer lexical mapping.
+func wsPrimitive(t *testing.T, mode string) (*xsd.SimpleType, Backend) {
+	t.Helper()
+	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: "int"}
+	base, err := xsd.NewPrimitiveType(xsderr.Loc{}, qn,
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{mode}, true)}, nil)
+	if err != nil {
+		t.Fatalf("build %s primitive: %v", mode, err)
+	}
+	return base, intBackend{mapped: qn}
+}
+
+// TestFacetValueNormalizedAtConstruction pins the seam Findings 1+2 moved: a
+// facet's raw {value} attribute is whiteSpace-normalized through the BASE type's
+// mode before Mapping.Parse sees it, at CONSTRUCTION time — inside
+// newBoundFacet/newEnumFacet, which drive instance validation — not only inside
+// the restriction check. A facet's {value} property is "a value from the value
+// space of the {base type definition}" (§4.3.7.1 f-mai-value, §4.3.5.1), and
+// reaching that value space runs the base's lexical mapping, whose first stage is
+// its whiteSpace normalization (key-vv §3.1.3, key-nv §3.1.4, cvc-simple-type
+// §3.16.4).
+//
+// Without the normalization the test backend's Parse rejects " 9 " / "\t7\n"
+// outright, so compile() fails and ValidateLexical returns an error instead of a
+// value — the shape this test would report before the fix.
+func TestFacetValueNormalizedAtConstruction(t *testing.T) {
+	base, b := wsPrimitive(t, "collapse")
+	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
+		base.Variety(), base,
+		[]xsd.Facet{bound(xsd.FacetMaxInclusive, " 9 "), enumOf("\t7\n", "  8  ")}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType: %v", err)
+	}
+
+	v, err := ValidateLexical(b, st, " 7 ", nil)
+	if err != nil {
+		t.Fatalf("ValidateLexical(\" 7 \") = %v, want the enumeration member 7 to match", err)
+	}
+	if v != intValue(7) {
+		t.Errorf("ValidateLexical(\" 7 \") = %v, want intValue(7)", v)
+	}
+
+	// The bound really is 9, not an unparsed string: 8 is enumerated and under
+	// the bound, so only the enumeration can reject it, and it does not.
+	if _, err := ValidateLexical(b, st, "8", nil); err != nil {
+		t.Errorf("ValidateLexical(\"8\") = %v, want valid under maxInclusive \" 9 \"", err)
+	}
+
+	// And CheckFacetRestriction agrees with the constructed facets rather than
+	// forking from them: " 9 " is a legal restriction of the base's maxInclusive 9.
+	restricted, b2 := restrictionBase(t, bound(xsd.FacetMaxInclusive, "9"))
+	if err := restrict(t, b2, restricted, bound(xsd.FacetMaxInclusive, " 9 ")); err != nil {
+		t.Errorf("CheckFacetRestriction(maxInclusive \" 9 \" under base 9) = %v, want nil", err)
+	}
+}
+
+// TestFacetValueNotNormalizedUnderPreserve is the negative half: the mode comes
+// from the base's whiteSpace facet, never a blanket collapse. Under preserve
+// (§4.3.6) the padding survives into Mapping.Parse, which rejects it — so a
+// padded facet {value} on a preserve-normalized base is a construction error, and
+// the normalization is genuinely mode-driven.
+func TestFacetValueNotNormalizedUnderPreserve(t *testing.T) {
+	base, b := wsPrimitive(t, "preserve")
+	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
+		base.Variety(), base, []xsd.Facet{bound(xsd.FacetMaxInclusive, " 9 ")}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType: %v", err)
+	}
+	if _, err := ValidateLexical(b, st, "7", nil); err == nil {
+		t.Error("ValidateLexical under a preserve base with maxInclusive \" 9 \" = nil error, want the padded facet {value} to be rejected")
+	}
+}
+
+// TestBoundRestrictionBaseSideRuleAttribution pins Finding 5: when it is the
+// BASE's bound facet whose {value} is outside the value space, the rejection is
+// charged under THAT facet's own valid-restriction rule, not under the derived
+// facet's. The base carries a malformed minExclusive while the derived facet is a
+// maxInclusive, so a "reuse the derived rule" implementation reports
+// maxInclusive-valid-restriction and fails here (STYLE E2).
+func TestBoundRestrictionBaseSideRuleAttribution(t *testing.T) {
+	base, b := restrictionBase(t, bound(xsd.FacetMinExclusive, "not-a-number"))
+	err := restrict(t, b, base, bound(xsd.FacetMaxInclusive, "5"))
+	rule, ok := xsderr.RuleOf(err)
+	if !ok || rule != "minExclusive-valid-restriction" {
+		t.Fatalf("rule = %q (ok=%v), want minExclusive-valid-restriction (the BASE operand's own rule); err=%v", rule, ok, err)
 	}
 }

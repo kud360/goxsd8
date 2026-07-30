@@ -10,7 +10,7 @@ import "strings"
 // error) regardless of instance validity. The single governingMapping list
 // branch (facets.go) now wraps the item type's own governing mapping in a
 // listMapping, so BOTH the candidate mapping in ValidateLexical AND
-// declaringMapping's enum/bound facet-{value} parsing resolve for a
+// declaringFacetSpace's enum/bound facet-{value} parsing resolve for a
 // list-variety type through the same widest-space rule the atomic cohort uses.
 //
 // The list item type is always atomic or a union-of-atomics — never itself a

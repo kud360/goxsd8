@@ -169,17 +169,23 @@ const (
 //     builtin.CheckSimpleTypeRestriction, the value-space comparisons in
 //     value.CheckFacetRestriction, wired together at the parser's sole
 //     NewSimpleType call site.
-//   - cos-st-restricts clauses 2.2.1.2 and 3.2.1.2, the FRESHLY-CONSTRUCTED
-//     (B is xs:anySimpleType) list/union facet-shape clauses: "{facets} contains
-//     only the whiteSpace facet component with {value} = collapse and {fixed} =
-//     true" and "{facets} is empty". They are not charged anywhere yet, because
-//     the component graphs this repo builds today do not yet model the anonymous
-//     intermediate list a named list datatype restricts (§4.1.1): builtin.Seed
-//     flattens xs:NMTOKENS/xs:IDREFS/xs:ENTITIES into a single list component
-//     whose {base type definition} IS xs:anySimpleType and whose {facets} carry
-//     minLength = 1, so charging 2.2.1.2 here would reject the builtin datatypes
-//     themselves. Interposing that anonymous list is a change to the generated
-//     builtin table's shape, not to this constraint, so both clauses wait on it.
+//
+//   - cos-st-restricts clause 2.2.1.2 ALONE — the FRESHLY-CONSTRUCTED (B is
+//     xs:anySimpleType) LIST facet-shape clause: "{facets} contains only the
+//     whiteSpace facet component with {value} = collapse and {fixed} = true". It
+//     is not charged anywhere yet, because the component graphs this repo builds
+//     today do not yet model the anonymous intermediate list a named list datatype
+//     restricts (§4.1.1): builtin.Seed flattens xs:NMTOKENS/xs:IDREFS/xs:ENTITIES
+//     into a single list component whose {base type definition} IS
+//     xs:anySimpleType and whose {facets} carry minLength = 1, so charging 2.2.1.2
+//     here would reject the builtin datatypes themselves. Interposing that
+//     anonymous list is a change to the generated builtin table's shape
+//     (builtin/gen_typespec.go), not to this constraint, so the clause waits on
+//     it — a follow-up worth harvesting as its own issue.
+//
+//     Its UNION sibling, clause 3.2.1.2 ("{facets} is empty"), does NOT share
+//     that blocker and is charged, in checkUnionGraph: the generated table
+//     contains no builtin union at all, so no seeded component can trip it.
 func checkSTGraph(loc xsderr.Loc, t *SimpleType) error {
 	if err := checkFacetsSupported(loc, t.ownFacets); err != nil {
 		return err
@@ -324,8 +330,12 @@ func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
 // constructed-vs-restricted discriminant B == xs:anySimpleType:
 //
 //   - constructed (B is xs:anySimpleType): clause 3.2.1.1 — every member's
-//     {final} does not contain union. Clause 3.2.1.2 (facets empty) is
-//     deferred — see checkSTGraph for why.
+//     {final} does not contain union; clause 3.2.1.2 — {facets} is empty. A
+//     freshly-constructed union has nothing to inherit (xs:anySimpleType carries
+//     no facets, §3.16.1), so its {facets} IS its own facet set and the clause
+//     reads directly off t.ownFacets. Unlike its list sibling 2.2.1.2, this
+//     clause has no blocker: the generated builtin table defines no union, so no
+//     seeded component can trip it (see checkSTGraph).
 //   - restricted (B is a real union): clause 3.2.2.1 — B.{variety} is union;
 //     clause 3.2.2.3 — each member is validly derived from the CORRESPONDING
 //     (positional, PRINCIPLES 11) base member (cos-st-derived-ok, §3.16.6.3).
@@ -357,6 +367,10 @@ func checkUnionGraph(loc xsderr.Loc, t *SimpleType) error {
 				return xsderr.New(ruleCosSTRestricts, loc,
 					"union member %s has union in its {final}, blocking its use as a union member (cos-st-restricts clause 3.2.1.1)", m.name)
 			}
+		}
+		if len(t.ownFacets) > 0 {
+			return xsderr.New(ruleCosSTRestricts, loc,
+				"union simple type constructed directly from xs:anySimpleType carries facet %s, but its {facets} must be empty (cos-st-restricts clause 3.2.1.2)", t.ownFacets[0].kind)
 		}
 		return nil
 	}
@@ -872,17 +886,32 @@ func checkLengthCoexistence(loc xsderr.Loc, eff []EffectiveFacet) error {
 // alone — no per-primitive table lookup, which is meaningful only for the atomic
 // case — so the whole clause is decidable in this pure leaf.
 //
-// It runs on every list/union type, not only on one restricting a same-variety
-// base: cos-applicable-facets constrains {facets} unconditionally, and for a
-// freshly-constructed list/union the stricter clause 2.2.1.2 / 3.2.1.2 (still
-// deferred, see checkSTGraph) is a sub-case of this same set. The ATOMIC case,
-// clause 1.3.1, is NOT charged here — its applicable set comes from the
-// generated per-primitive table, so it lives in builtin.CheckSimpleTypeRestriction.
+// Both clauses live in the RESTRICTED branch of their case split (B is a real
+// list/union), and the two varieties are therefore scoped differently here:
+//
+//   - LIST runs unconditionally, including on a freshly-constructed list.
+//     cos-applicable-facets constrains {facets} unconditionally, and the
+//     constructed-list clause that would otherwise cover it, 2.2.1.2, is still
+//     deferred (see checkSTGraph) — so charging 2.2.2.4 there keeps a
+//     freshly-constructed list's facets checked against the §4.1.5 set at all,
+//     under a clause number one step off, rather than unchecked.
+//   - UNION skips a freshly-constructed one (B is xs:anySimpleType). There the
+//     spec's own branch is 3.2.1, whose clause 3.2.1.2 checkUnionGraph charges —
+//     and it is STRICTLY stronger, rejecting every facet rather than only the
+//     inapplicable ones. Leaving 3.2.2.4 to fire first would name a clause the
+//     spec's case split has not selected (STYLE E2) while changing no verdict.
+//
+// The ATOMIC case, clause 1.3.1, is NOT charged here — its applicable set comes
+// from the generated per-primitive table, so it lives in
+// builtin.CheckSimpleTypeRestriction.
 func checkVarietyApplicableFacets(loc xsderr.Loc, t *SimpleType) error {
 	switch t.variety.(type) {
 	case List:
 		return checkApplicableFacetSet(loc, t, "list", listApplicableFacet)
 	case Union:
+		if t.base == anySimpleType {
+			return nil
+		}
 		return checkApplicableFacetSet(loc, t, "union", unionApplicableFacet)
 	}
 	return nil
