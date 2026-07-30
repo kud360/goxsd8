@@ -10,8 +10,11 @@ import (
 // §3.16.6.2, id="cos-st-restricts"): the per-variety constraints relating a
 // Simple Type Definition D to its {base type definition} B. This package charges
 // its structural/variety-shape sub-clauses (1.1, 2.1, 2.2.1.1, 2.2.2.1, 2.2.2.3,
-// 3.1, 3.2.1.1, 3.2.2.1, 3.2.2.3) at construction time; the facet-value
-// sub-clauses are deferred (see checkSTGraph).
+// 3.1, 3.2.1.1, 3.2.2.1, 3.2.2.3) at construction time, plus the list/union
+// applicable-facet clauses 2.2.2.4 and 3.2.2.4 and the count- and token-valued
+// part of the facet-constraint clauses 1.3.2 / 2.2.2.5 / 3.2.2.5. Its remaining
+// facet-value sub-clauses need an applicability table or a value space and are
+// charged above this pure leaf, or still deferred — see checkSTGraph.
 const ruleCosSTRestricts xsderr.Rule = "cos-st-restricts"
 
 // The precisionDecimal scale-facet Schema Component Constraints, charged at
@@ -54,6 +57,60 @@ const (
 	ruleMinScaleFixed xsderr.Rule = "f-mns-fixed"
 )
 
+// The §4.3 Constraining Facet Schema Component Constraints whose operands are
+// plain counts or keyword tokens — the subset of cos-st-restricts clause 1.3.2 /
+// 2.2.2.5 / 3.2.2.5 ("DF satisfies the constraints on facet components given in
+// the appropriate subsection of Constraining Facets") that this pure-leaf package
+// can decide without a value space. The rules whose operands ARE value-space
+// members — the four bound facets and enumeration — live in package value
+// (value/restriction.go), which this package must not depend on (PRINCIPLES 1).
+const (
+	// ruleLengthValidRestriction is length valid restriction (§4.3.1.4,
+	// id="length-valid-restriction"): a restriction's length {value} must EQUAL
+	// the base's — length may not move at all, in either direction.
+	ruleLengthValidRestriction xsderr.Rule = "length-valid-restriction"
+	// ruleMinLengthValidRestriction is minLength valid restriction (§4.3.2.4,
+	// id="minLength-valid-restriction"): a restriction's minLength {value} may
+	// not be less than the base's — minLength may only move up.
+	ruleMinLengthValidRestriction xsderr.Rule = "minLength-valid-restriction"
+	// ruleMaxLengthValidRestriction is maxLength valid restriction (§4.3.3.4,
+	// id="maxLength-valid-restriction"): the mirror — a restriction's maxLength
+	// {value} may not be greater than the base's.
+	ruleMaxLengthValidRestriction xsderr.Rule = "maxLength-valid-restriction"
+	// ruleTotalDigitsValidRestriction is totalDigits valid restriction
+	// (§4.3.11.4, id="totalDigits-valid-restriction"): a restriction's
+	// totalDigits {value} may not be greater than the base's.
+	ruleTotalDigitsValidRestriction xsderr.Rule = "totalDigits-valid-restriction"
+	// ruleFractionDigitsValidRestriction is fractionDigits valid restriction
+	// (§4.3.12.4, id="fractionDigits-valid-restriction"): a restriction's
+	// fractionDigits {value} may not be greater than the base's.
+	ruleFractionDigitsValidRestriction xsderr.Rule = "fractionDigits-valid-restriction"
+	// ruleWhiteSpaceValidRestriction is whiteSpace valid restriction (§4.3.6.4,
+	// id="whiteSpace-valid-restriction"): a restriction may not move whiteSpace
+	// to a LESS restrictive keyword. See whiteSpaceRank for why the ordering is
+	// preserve < replace < collapse.
+	ruleWhiteSpaceValidRestriction xsderr.Rule = "whiteSpace-valid-restriction"
+	// ruleTimezoneValidRestriction is timezone valid restriction (§4.3.14.4,
+	// id="timezone-valid-restriction"): once the base fixes explicitTimezone to
+	// required or prohibited, a restriction must repeat that same {value}; only
+	// a base {value} of optional may be narrowed.
+	ruleTimezoneValidRestriction xsderr.Rule = "timezone-valid-restriction"
+	// ruleLengthMinLengthMaxLength is "length and minLength or maxLength"
+	// (§4.3.1.4, id="length-minLength-maxLength"), a same-type consistency SCC
+	// (not restriction-specific): when length is in {facets}, any coexisting
+	// minLength may not exceed it and any coexisting maxLength may not fall below
+	// it. Only clauses 1.1 and 2.1 are charged here; see checkLengthCoexistence
+	// for the deferred derivation-history clauses 1.2 and 2.2.
+	ruleLengthMinLengthMaxLength xsderr.Rule = "length-minLength-maxLength"
+	// ruleMinLengthLEMaxLength is "minLength <= maxLength" (§4.3.2.4,
+	// id="minLength-less-than-equal-to-maxLength"), a same-type consistency SCC.
+	ruleMinLengthLEMaxLength xsderr.Rule = "minLength-less-than-equal-to-maxLength"
+	// ruleFractionDigitsLETotalDigits is "fractionDigits less than or equal to
+	// totalDigits" (§4.3.12.4, id="fractionDigits-totalDigits"), a same-type
+	// consistency SCC.
+	ruleFractionDigitsLETotalDigits xsderr.Rule = "fractionDigits-totalDigits"
+)
+
 // checkSTGraph enforces the cross-reference Simple Type Definition constraints
 // that need t's resolved {base type definition}, {item type definition}, and
 // {member type definitions} pointers — the checks checkSTProps (simpletype.go)
@@ -79,6 +136,17 @@ const (
 //     (maxScale-valid-restriction, minScale-valid-restriction, minScale ≤
 //     maxScale, f-ms-fixed, f-mns-fixed) — via checkScaleFacets, which compares
 //     t's {facets} against the base's through EffectiveFacets.
+//   - the count- and token-valued §4.3 facet Schema Component Constraints
+//     (length/minLength/maxLength/totalDigits/fractionDigits valid restriction,
+//     whiteSpace valid restriction, timezone valid restriction, and the
+//     same-type consistency SCCs minLength ≤ maxLength, fractionDigits ≤
+//     totalDigits, and length-minLength-maxLength) — via checkFacetRestrictions.
+//     These are the part of cos-st-restricts clause 1.3.2 / 2.2.2.5 / 3.2.2.5
+//     decidable without a value space.
+//   - the list- and union-variety applicable-facet sets, cos-st-restricts
+//     clauses 2.2.2.4 and 3.2.2.4 — via checkVarietyApplicableFacets, whose
+//     applicable sets are the fixed literals cos-applicable-facets (§4.1.5)
+//     gives for those two varieties.
 //
 // st-props-correct clause 2 (the {base} chain terminates at a primitive or
 // xs:anySimpleType — no circular derivation) is a documented no-op: a cyclic
@@ -92,12 +160,32 @@ const (
 // Union.Members copies it out, so no external caller can splice a cycle in after
 // construction either.
 //
-// Deferred, out of scope for this pure-leaf package (which does not depend on
-// package value): the facet-applicability and facet-constraint sub-clauses
-// cos-st-restricts 1.3, 2.2.1.2, 2.2.2.4, 2.2.2.5, 3.2.1.2, 3.2.2.4, and 3.2.2.5,
-// which compare facet {value}s in the value space (a derived minInclusive within
-// the base's range, enumeration ⊆ base, "only whiteSpace collapse fixed", "facets
-// empty", ...). They await a value-aware finalize pass.
+// Still deferred here, and why:
+//
+//   - cos-st-restricts clause 1.3.1 (a facet is applicable to an ATOMIC D) and
+//     the value-space half of 1.3.2 / 2.2.2.5 / 3.2.2.5 — the four bound facets
+//     and enumeration, which need a lexical→value mapping. Both live above this
+//     pure leaf: applicability against the generated per-primitive table in
+//     builtin.CheckSimpleTypeRestriction, the value-space comparisons in
+//     value.CheckFacetRestriction, wired together at the parser's sole
+//     NewSimpleType call site.
+//
+//   - cos-st-restricts clause 2.2.1.2 ALONE — the FRESHLY-CONSTRUCTED (B is
+//     xs:anySimpleType) LIST facet-shape clause: "{facets} contains only the
+//     whiteSpace facet component with {value} = collapse and {fixed} = true". It
+//     is not charged anywhere yet, because the component graphs this repo builds
+//     today do not yet model the anonymous intermediate list a named list datatype
+//     restricts (§4.1.1): builtin.Seed flattens xs:NMTOKENS/xs:IDREFS/xs:ENTITIES
+//     into a single list component whose {base type definition} IS
+//     xs:anySimpleType and whose {facets} carry minLength = 1, so charging 2.2.1.2
+//     here would reject the builtin datatypes themselves. Interposing that
+//     anonymous list is a change to the generated builtin table's shape
+//     (builtin/gen_typespec.go), not to this constraint, so the clause waits on
+//     it — a follow-up worth harvesting as its own issue.
+//
+//     Its UNION sibling, clause 3.2.1.2 ("{facets} is empty"), does NOT share
+//     that blocker and is charged, in checkUnionGraph: the generated table
+//     contains no builtin union at all, so no seeded component can trip it.
 func checkSTGraph(loc xsderr.Loc, t *SimpleType) error {
 	if err := checkFacetsSupported(loc, t.ownFacets); err != nil {
 		return err
@@ -107,6 +195,12 @@ func checkSTGraph(loc xsderr.Loc, t *SimpleType) error {
 			"simple type {base type definition} %s has restriction in its {final}, which blocks derivation (st-props-correct clause 3)", t.base.name)
 	}
 	if err := checkScaleFacets(loc, t); err != nil {
+		return err
+	}
+	if err := checkFacetRestrictions(loc, t); err != nil {
+		return err
+	}
+	if err := checkVarietyApplicableFacets(loc, t); err != nil {
 		return err
 	}
 	switch t.variety.(type) {
@@ -149,8 +243,9 @@ func checkFacetsSupported(loc xsderr.Loc, facets []Facet) error {
 // xs:anyAtomicType is a package singleton never built through this constructor.
 //
 // Clause 1.2 (B.{final} does not contain restriction) is discharged by
-// checkSTGraph's clause-3 site (B is D's {base}); clause 1.3 (facet
-// applicability/constraints) is deferred (see checkSTGraph). It reads only
+// checkSTGraph's clause-3 site (B is D's {base}); clause 1.3.2 is charged in
+// part by checkFacetRestrictions and clause 1.3.1 above this package (see
+// checkSTGraph). It reads only
 // t.base — never the Atomic's primitive pointer, which self-references on a
 // primitive datatype (§3.16.1) and so cannot drive a terminating base walk.
 func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
@@ -176,11 +271,14 @@ func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
 // this off the resolved base, not off which XML element produced the type):
 //
 //   - constructed (B is xs:anySimpleType): clause 2.2.1.1 — the item's {final}
-//     does not contain list. Clause 2.2.1.2 (facets shape) is deferred.
+//     does not contain list. Clause 2.2.1.2 (the "only whiteSpace collapse
+//     fixed" facets shape) is deferred — see checkSTGraph for why.
 //   - restricted (B is a real list): clause 2.2.2.1 — B.{variety} is list; clause
 //     2.2.2.3 — the item is validly derived from B's item (cos-st-derived-ok,
 //     §3.16.6.3). Clause 2.2.2.2 (B.{final}) is discharged by checkSTGraph's
-//     clause-3 site; clauses 2.2.2.4/.5 (facets) are deferred.
+//     clause-3 site; clause 2.2.2.4 (facet applicability) by
+//     checkVarietyApplicableFacets and clause 2.2.2.5 in part by
+//     checkFacetRestrictions, both from checkSTGraph.
 func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
 	item := t.variety.(List).item
 	if item == nil {
@@ -232,12 +330,18 @@ func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
 // constructed-vs-restricted discriminant B == xs:anySimpleType:
 //
 //   - constructed (B is xs:anySimpleType): clause 3.2.1.1 — every member's
-//     {final} does not contain union. Clause 3.2.1.2 (facets empty) is deferred.
+//     {final} does not contain union; clause 3.2.1.2 — {facets} is empty. A
+//     freshly-constructed union has nothing to inherit (xs:anySimpleType carries
+//     no facets, §3.16.1), so its {facets} IS its own facet set and the clause
+//     reads directly off t.ownFacets. Unlike its list sibling 2.2.1.2, this
+//     clause has no blocker: the generated builtin table defines no union, so no
+//     seeded component can trip it (see checkSTGraph).
 //   - restricted (B is a real union): clause 3.2.2.1 — B.{variety} is union;
 //     clause 3.2.2.3 — each member is validly derived from the CORRESPONDING
 //     (positional, PRINCIPLES 11) base member (cos-st-derived-ok, §3.16.6.3).
 //     Clause 3.2.2.2 (B.{final}) is discharged by checkSTGraph's clause-3 site;
-//     clauses 3.2.2.4/.5 (facets) are deferred.
+//     clause 3.2.2.4 (facet applicability) by checkVarietyApplicableFacets and
+//     clause 3.2.2.5 in part by checkFacetRestrictions, both from checkSTGraph.
 //
 // Clause 3.3 (no-self-membership) is a documented no-op — see checkSTGraph.
 func checkUnionGraph(loc xsderr.Loc, t *SimpleType) error {
@@ -263,6 +367,10 @@ func checkUnionGraph(loc xsderr.Loc, t *SimpleType) error {
 				return xsderr.New(ruleCosSTRestricts, loc,
 					"union member %s has union in its {final}, blocking its use as a union member (cos-st-restricts clause 3.2.1.1)", m.name)
 			}
+		}
+		if len(t.ownFacets) > 0 {
+			return xsderr.New(ruleCosSTRestricts, loc,
+				"union simple type constructed directly from xs:anySimpleType carries facet %s, but its {facets} must be empty (cos-st-restricts clause 3.2.1.2)", t.ownFacets[0].kind)
 		}
 		return nil
 	}
@@ -485,6 +593,425 @@ func checkScaleConsistency(loc xsderr.Loc, t *SimpleType) error {
 		minV, maxV, ruleMinScaleLEMaxScale)
 }
 
+// checkFacetRestrictions enforces the §4.3 Constraining Facet Schema Component
+// Constraints whose operands are plain counts or keyword tokens — the half of
+// cos-st-restricts clause 1.3.2 / 2.2.2.5 / 3.2.2.5 that needs no value space,
+// so it can live in this pure leaf. Like checkScaleFacets it reads the {facets}
+// property through EffectiveFacets (the §3.16.6.4 overlay), so a facet inherited
+// unchanged through several restriction levels is compared transitively with no
+// manual ancestor walk, and it compares t's OWN facets against the base's
+// EFFECTIVE ones: an inherited-only facet equals the base's effective value and
+// cannot cross it. t.base is nil only for xs:anySimpleType, which carries no
+// facets, so the base-relative SCCs are vacuous there; the same-type consistency
+// SCCs are not restriction-specific and run on every type's own effective
+// {facets}.
+func checkFacetRestrictions(loc xsderr.Loc, t *SimpleType) error {
+	if t.base != nil {
+		baseEff := t.base.EffectiveFacets()
+		if err := checkCountRestriction(loc, t, baseEff, FacetLength, ruleLengthValidRestriction); err != nil {
+			return err
+		}
+		if err := checkCountRestriction(loc, t, baseEff, FacetMinLength, ruleMinLengthValidRestriction); err != nil {
+			return err
+		}
+		if err := checkCountRestriction(loc, t, baseEff, FacetMaxLength, ruleMaxLengthValidRestriction); err != nil {
+			return err
+		}
+		if err := checkCountRestriction(loc, t, baseEff, FacetTotalDigits, ruleTotalDigitsValidRestriction); err != nil {
+			return err
+		}
+		if err := checkCountRestriction(loc, t, baseEff, FacetFractionDigits, ruleFractionDigitsValidRestriction); err != nil {
+			return err
+		}
+		if err := checkWhiteSpaceRestriction(loc, t, baseEff); err != nil {
+			return err
+		}
+		if err := checkTimezoneRestriction(loc, t, baseEff); err != nil {
+			return err
+		}
+	}
+	return checkFacetConsistency(loc, t)
+}
+
+// checkCountRestriction charges one of the five count-valued "<facet> valid
+// restriction" SCCs (§4.3.1.4, §4.3.2.4, §4.3.3.4, §4.3.11.4, §4.3.12.4): a
+// restriction's own {value} for kind may not relax the base's effective
+// same-kind {value}, where "relax" is per-kind (countRelaxes). Vacuous when the
+// base has no effective facet of this kind, or when t declares no own facet of
+// this kind.
+func checkCountRestriction(loc xsderr.Loc, t *SimpleType, baseEff []EffectiveFacet, kind FacetKind, rule xsderr.Rule) error {
+	baseF, ok := findEffectiveFacet(baseEff, kind)
+	if !ok {
+		return nil
+	}
+	ownF, ok := findFacet(t.ownFacets, kind)
+	if !ok {
+		return nil
+	}
+	ownV, err := countValue(ownF, loc, rule)
+	if err != nil {
+		return err
+	}
+	baseV, err := countValue(baseF, loc, rule)
+	if err != nil {
+		return err
+	}
+	if !countRelaxes(kind, ownV, baseV) {
+		return nil
+	}
+	return xsderr.New(rule, loc,
+		"simple type restriction's own %s {value} %d %s the {base type definition}'s effective %s {value} %d (%s)",
+		kind, ownV, countRequirement(kind), kind, baseV, rule)
+}
+
+// countRelaxes reports whether an own count {value} violates its kind's valid
+// restriction SCC against the base's. length is the odd one out: §4.3.1.4 makes
+// it an EQUALITY, not a narrowing — "it is a consequence of length valid
+// restriction that the value of the length facet cannot be changed, regardless
+// of whether {fixed} is true or false" (§4.3.1) — so any difference is a
+// violation, and length needs no separate {fixed}-inheritance check. minLength
+// may only move up; maxLength, totalDigits and fractionDigits only down.
+func countRelaxes(kind FacetKind, own, base int) bool {
+	if kind == FacetLength {
+		return own != base
+	}
+	if kind == FacetMinLength {
+		return own < base
+	}
+	return own > base
+}
+
+// countRequirement renders the requirement countRelaxes encodes, for the
+// rejection message.
+func countRequirement(kind FacetKind) string {
+	if kind == FacetLength {
+		return "does not equal"
+	}
+	if kind == FacetMinLength {
+		return "is less than"
+	}
+	return "is greater than"
+}
+
+// checkWhiteSpaceRestriction charges whiteSpace valid restriction (§4.3.6.4):
+// it is an error if the base has a whiteSpace facet and the restriction's own
+// {value} is LESS restrictive than the base's. Vacuous when either side has no
+// facet in force, and — deliberately — when either {value} is outside the
+// three-token domain: that malformed-{value} rejection belongs to the whiteSpace
+// facet's own {value} constraint (§4.3.6.1), charged by the normalization stage
+// in package value, not to this restriction SCC (STYLE E2: one rejection, one
+// rule).
+func checkWhiteSpaceRestriction(loc xsderr.Loc, t *SimpleType, baseEff []EffectiveFacet) error {
+	baseF, ok := findEffectiveFacet(baseEff, FacetWhiteSpace)
+	if !ok {
+		return nil
+	}
+	ownF, ok := findFacet(t.ownFacets, FacetWhiteSpace)
+	if !ok {
+		return nil
+	}
+	ownRank, ok := whiteSpaceRank(ownF)
+	if !ok {
+		return nil
+	}
+	baseRank, ok := whiteSpaceRank(baseF)
+	if !ok {
+		return nil
+	}
+	if ownRank >= baseRank {
+		return nil
+	}
+	ownV, _ := singleValue(ownF)
+	baseV, _ := singleValue(baseF)
+	return xsderr.New(ruleWhiteSpaceValidRestriction, loc,
+		"simple type restriction sets whiteSpace {value} %s, which is less restrictive than the {base type definition}'s effective %s (%s)",
+		ownV, baseV, ruleWhiteSpaceValidRestriction)
+}
+
+// whiteSpaceRank ranks a whiteSpace facet's {value} by restrictiveness, ok=false
+// for a {value} outside the domain. The ordering is preserve < replace <
+// collapse, read off §4.3.6.4's two numbered error conditions ("{value} is
+// replace or preserve and the parent's is collapse"; "{value} is preserve and
+// the parent's is replace"), which between them make exactly those three pairs
+// errors. The Note beneath them lists the keywords "in order of increasing
+// restrictiveness" as preserve, collapse, replace — that ordering contradicts
+// the numbered conditions it is summarizing and is read here as an editorial
+// slip; the normative numbered conditions win (PRINCIPLES 25).
+func whiteSpaceRank(f Facet) (int, bool) {
+	v, ok := singleValue(f)
+	if !ok {
+		return 0, false
+	}
+	switch v {
+	case "preserve":
+		return 0, true
+	case "replace":
+		return 1, true
+	case "collapse":
+		return 2, true
+	}
+	return 0, false
+}
+
+// checkTimezoneRestriction charges timezone valid restriction (§4.3.14.4): once
+// the base's effective explicitTimezone {value} is anything other than optional
+// (i.e. required or prohibited), a restriction's own explicitTimezone must
+// repeat that same {value}. A base {value} of optional may be narrowed to either
+// required or prohibited, which is the only derivation this facet permits. It is
+// vacuous when either side has no facet in force, and — as in
+// checkWhiteSpaceRestriction — when either {value} is outside the three-token
+// domain (§4.3.14.1), which is charged by the explicitTimezone facet stage in
+// package value.
+func checkTimezoneRestriction(loc xsderr.Loc, t *SimpleType, baseEff []EffectiveFacet) error {
+	baseF, ok := findEffectiveFacet(baseEff, FacetExplicitTimezone)
+	if !ok {
+		return nil
+	}
+	baseV, ok := singleValue(baseF)
+	if !ok || baseV == "optional" {
+		return nil
+	}
+	ownF, ok := findFacet(t.ownFacets, FacetExplicitTimezone)
+	if !ok {
+		return nil
+	}
+	ownV, ok := singleValue(ownF)
+	if !ok || ownV == baseV {
+		return nil
+	}
+	return xsderr.New(ruleTimezoneValidRestriction, loc,
+		"simple type restriction sets explicitTimezone {value} %s but the {base type definition}'s effective {value} is %s, which is not optional and so must be repeated verbatim (%s)",
+		ownV, baseV, ruleTimezoneValidRestriction)
+}
+
+// checkFacetConsistency charges the same-type count-facet consistency SCCs.
+// They are NOT restriction-specific — each constrains any single type's
+// {facets} — so they run against t's OWN effective {facets} after overlay, the
+// checkScaleConsistency shape.
+func checkFacetConsistency(loc xsderr.Loc, t *SimpleType) error {
+	eff := t.EffectiveFacets()
+	if err := checkLengthCoexistence(loc, eff); err != nil {
+		return err
+	}
+	if err := checkCountOrder(loc, eff, FacetMinLength, FacetMaxLength,
+		ruleMinLengthValidRestriction, ruleMaxLengthValidRestriction, ruleMinLengthLEMaxLength); err != nil {
+		return err
+	}
+	return checkCountOrder(loc, eff, FacetFractionDigits, FacetTotalDigits,
+		ruleFractionDigitsValidRestriction, ruleTotalDigitsValidRestriction, ruleFractionDigitsLETotalDigits)
+}
+
+// checkCountOrder charges a "lower <= upper" consistency SCC over two count
+// facets that are both in force: minLength <= maxLength (§4.3.2.4,
+// id="minLength-less-than-equal-to-maxLength") and fractionDigits <= totalDigits
+// (§4.3.12.4, id="fractionDigits-totalDigits"). lowerRule/upperRule are the
+// rules a malformed {value} on the respective facet is charged under (the rule a
+// bad literal on it would otherwise hit — checkScaleConsistency's convention).
+func checkCountOrder(loc xsderr.Loc, eff []EffectiveFacet, lower, upper FacetKind, lowerRule, upperRule, rule xsderr.Rule) error {
+	lowerF, hasLower := findEffectiveFacet(eff, lower)
+	upperF, hasUpper := findEffectiveFacet(eff, upper)
+	if !hasLower || !hasUpper {
+		return nil
+	}
+	lowerV, err := countValue(lowerF, loc, lowerRule)
+	if err != nil {
+		return err
+	}
+	upperV, err := countValue(upperF, loc, upperRule)
+	if err != nil {
+		return err
+	}
+	if lowerV <= upperV {
+		return nil
+	}
+	return xsderr.New(rule, loc,
+		"simple type {facets} has %s {value} %d greater than %s {value} %d (%s)",
+		lower, lowerV, upper, upperV, rule)
+}
+
+// checkLengthCoexistence charges "length and minLength or maxLength" (§4.3.1.4,
+// id="length-minLength-maxLength") clauses 1.1 and 2.1: when length is in
+// {facets}, a coexisting minLength may not exceed it and a coexisting maxLength
+// may not fall below it.
+//
+// DEFERRED, deliberately: clauses 1.2 and 2.2, which additionally demand that
+// the coexisting minLength/maxLength be INHERITED — "there is some type
+// definition from which this one is derived by one or more ·restriction· steps
+// in which minLength has the same {value} and length is not specified". That is
+// a derivation-HISTORY predicate over the whole base chain, not a property of
+// {facets}, and it makes newly introducing length beside minLength at one step
+// an error even when the values are consistent. It is a materially different
+// (and much sharper) rejection than 1.1/2.1 and is left to its own change so its
+// interaction with the existing corpora can be judged on its own evidence.
+func checkLengthCoexistence(loc xsderr.Loc, eff []EffectiveFacet) error {
+	lengthF, ok := findEffectiveFacet(eff, FacetLength)
+	if !ok {
+		return nil
+	}
+	lengthV, err := countValue(lengthF, loc, ruleLengthValidRestriction)
+	if err != nil {
+		return err
+	}
+	if minF, has := findEffectiveFacet(eff, FacetMinLength); has {
+		minV, err := countValue(minF, loc, ruleMinLengthValidRestriction)
+		if err != nil {
+			return err
+		}
+		if minV > lengthV {
+			return xsderr.New(ruleLengthMinLengthMaxLength, loc,
+				"simple type {facets} has minLength {value} %d greater than length {value} %d (%s clause 1.1)",
+				minV, lengthV, ruleLengthMinLengthMaxLength)
+		}
+	}
+	maxF, has := findEffectiveFacet(eff, FacetMaxLength)
+	if !has {
+		return nil
+	}
+	maxV, err := countValue(maxF, loc, ruleMaxLengthValidRestriction)
+	if err != nil {
+		return err
+	}
+	if lengthV <= maxV {
+		return nil
+	}
+	return xsderr.New(ruleLengthMinLengthMaxLength, loc,
+		"simple type {facets} has length {value} %d greater than maxLength {value} %d (%s clause 2.1)",
+		lengthV, maxV, ruleLengthMinLengthMaxLength)
+}
+
+// checkVarietyApplicableFacets enforces cos-st-restricts clauses 2.2.2.4 (list)
+// and 3.2.2.4 (union): "All facets in {facets} are applicable to D, as specified
+// in [Applicable Facets]". For those two varieties cos-applicable-facets
+// (§4.1.5) gives the applicable set as a FIXED LITERAL list keyed off {variety}
+// alone — no per-primitive table lookup, which is meaningful only for the atomic
+// case — so the whole clause is decidable in this pure leaf.
+//
+// Both clauses live in the RESTRICTED branch of their case split (B is a real
+// list/union), and the two varieties are therefore scoped differently here:
+//
+//   - LIST runs unconditionally, including on a freshly-constructed list.
+//     cos-applicable-facets constrains {facets} unconditionally, and the
+//     constructed-list clause that would otherwise cover it, 2.2.1.2, is still
+//     otherwise deferred (see checkSTGraph) — so running the §4.1.5 set there
+//     keeps a freshly-constructed list's facets checked at all, rather than
+//     unchecked. On that path the rejection is CHARGED UNDER 2.2.1.2, the clause
+//     the spec's case split actually selects (applicableClause): 2.2.1.2 admits
+//     only a fixed collapse whiteSpace facet, so every facet this check rejects
+//     there — none of which is whiteSpace — violates it too, and naming 2.2.2.4
+//     would name a clause not in force (STYLE E2).
+//   - UNION skips a freshly-constructed one (B is xs:anySimpleType). There the
+//     spec's own branch is 3.2.1, whose clause 3.2.1.2 checkUnionGraph charges —
+//     and it is STRICTLY stronger, rejecting every facet rather than only the
+//     inapplicable ones. Leaving 3.2.2.4 to fire first would name a clause the
+//     spec's case split has not selected (STYLE E2) while changing no verdict.
+//
+// The ATOMIC case, clause 1.3.1, is NOT charged here — its applicable set comes
+// from the generated per-primitive table, so it lives in
+// builtin.CheckSimpleTypeRestriction.
+func checkVarietyApplicableFacets(loc xsderr.Loc, t *SimpleType) error {
+	switch t.variety.(type) {
+	case List:
+		return checkApplicableFacetSet(loc, t, "list", listApplicableFacet)
+	case Union:
+		if t.base == anySimpleType {
+			return nil
+		}
+		return checkApplicableFacetSet(loc, t, "union", unionApplicableFacet)
+	}
+	return nil
+}
+
+// checkApplicableFacetSet rejects the FIRST facet of t's {facets}, in the
+// document order EffectiveFacets yields (STYLE D2), that applicable rejects.
+func checkApplicableFacetSet(loc xsderr.Loc, t *SimpleType, variety string, applicable func(FacetKind) bool) error {
+	for _, ef := range t.EffectiveFacets() {
+		if applicable(ef.facet.kind) {
+			continue
+		}
+		return xsderr.New(ruleCosSTRestricts, loc,
+			"simple type {facets} carries %s, which is not applicable to a %s simple type definition (cos-st-restricts clause %s via cos-applicable-facets §4.1.5)",
+			ef.facet.kind, variety, applicableClause(t))
+	}
+	return nil
+}
+
+// applicableClause names the cos-st-restricts sub-clause t's applicable-facet
+// rejection is charged under, following the spec's own case split rather than
+// the {variety} alone: a FRESHLY-CONSTRUCTED list (B is xs:anySimpleType) is in
+// branch 2.2.1, not 2.2.2, so its facet clause is 2.2.1.2 ("{facets} contains
+// only the whiteSpace facet component with {value} = collapse and {fixed} =
+// true") — 2.2.2.4 is charged only for a list that RESTRICTS a real list. The
+// union path only ever reaches here in its restricted branch
+// (checkVarietyApplicableFacets returns early for a constructed union, whose
+// clause 3.2.1.2 checkUnionGraph charges), so union is always 3.2.2.4.
+func applicableClause(t *SimpleType) string {
+	if _, isList := t.variety.(List); !isList {
+		return "3.2.2.4"
+	}
+	if t.base == anySimpleType {
+		return "2.2.1.2"
+	}
+	return "2.2.2.4"
+}
+
+// listApplicableFacet reports whether kind is applicable to a list-variety
+// simple type definition. The set is the verbatim cos-applicable-facets (§4.1.5)
+// literal: "If {variety} is list, then the applicable facets are assertions,
+// length, minLength, maxLength, pattern, enumeration, and whiteSpace."
+func listApplicableFacet(kind FacetKind) bool {
+	switch kind {
+	case FacetAssertions, FacetLength, FacetMinLength, FacetMaxLength,
+		FacetPattern, FacetEnumeration, FacetWhiteSpace:
+		return true
+	default:
+		return false
+	}
+}
+
+// unionApplicableFacet reports whether kind is applicable to a union-variety
+// simple type definition. The set is the verbatim cos-applicable-facets (§4.1.5)
+// literal: "If {variety} is union, then the applicable facets are pattern,
+// enumeration, and assertions."
+func unionApplicableFacet(kind FacetKind) bool {
+	switch kind {
+	case FacetPattern, FacetEnumeration, FacetAssertions:
+		return true
+	default:
+		return false
+	}
+}
+
+// singleValue returns a facet's sole lexical {value}, ok=false when the facet
+// does not carry exactly one — the shape every single-valued facet kind
+// requires.
+func singleValue(f Facet) (string, bool) {
+	if len(f.values) != 1 {
+		return "", false
+	}
+	return f.values[0], true
+}
+
+// countValue reads a count facet's single xs:nonNegativeInteger {value} (length,
+// minLength, maxLength, totalDigits, fractionDigits). Like scaleValue it treats
+// a wrong value count or an out-of-space literal as a real validity rejection
+// charged as an *xsderr.Error — that {value} is user-supplied schema lexical data
+// reachable through the public NewFacet/NewSimpleType API — mirroring
+// value/facets.go's facetCount, which parses the identical {value}s at
+// instance-validation time.
+func countValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (int, error) {
+	v, ok := singleValue(f)
+	if !ok {
+		return 0, xsderr.New(rule, loc,
+			"%s facet must carry exactly one value, has %d", f.kind, len(f.values))
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0, xsderr.New(rule, loc,
+			"%s facet value %q is not a nonNegativeInteger", f.kind, v)
+	}
+	return n, nil
+}
+
 // findFacet returns the own Facet of the given kind and whether it is present.
 func findFacet(facets []Facet, kind FacetKind) (Facet, bool) {
 	for _, f := range facets {
@@ -515,14 +1042,15 @@ func findEffectiveFacet(facets []EffectiveFacet, kind FacetKind) (Facet, bool) {
 // for the exact same maxScale/minScale {value} parsing at instance-validation
 // time.
 func scaleValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (int, error) {
-	if len(f.values) != 1 {
+	v, ok := singleValue(f)
+	if !ok {
 		return 0, xsderr.New(rule, loc,
 			"%s facet must carry exactly one value, has %d", f.kind, len(f.values))
 	}
-	n, err := strconv.Atoi(f.values[0])
+	n, err := strconv.Atoi(v)
 	if err != nil {
 		return 0, xsderr.New(rule, loc,
-			"%s facet value %q is not an integer", f.kind, f.values[0])
+			"%s facet value %q is not an integer", f.kind, v)
 	}
 	return n, nil
 }

@@ -616,11 +616,14 @@ func TestEffectiveFacetsReplaceKindStillReplaces(t *testing.T) {
 
 // TestEffectiveFacetsAssertionsMixedWithReplaceKind proves both behaviors
 // coexist in ONE EffectiveFacets call: on the same two types, the assertions
-// facet accumulates while a replace-kind facet (FacetLength) still replaces.
+// facet accumulates while a replace-kind facet (FacetMaxLength) still replaces.
+// maxLength, not length, carries the replace-kind role here: length may not move
+// at all across a restriction (length-valid-restriction, §4.3.1.4), so a
+// narrowing length pair no longer constructs.
 func TestEffectiveFacetsAssertionsMixedWithReplaceKind(t *testing.T) {
 	base, err := NewSimpleType(xsderr.Loc{}, QName{Local: "base"}, Atomic{}, anyAtomicType,
 		[]Facet{
-			NewFacet(FacetLength, []string{"8"}, false),
+			NewFacet(FacetMaxLength, []string{"8"}, false),
 			NewAssertionsFacet([]Assertion{mkAssertion("base1")}),
 		}, nil)
 	if err != nil {
@@ -628,7 +631,7 @@ func TestEffectiveFacetsAssertionsMixedWithReplaceKind(t *testing.T) {
 	}
 	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, Atomic{}, base,
 		[]Facet{
-			NewFacet(FacetLength, []string{"4"}, false),
+			NewFacet(FacetMaxLength, []string{"4"}, false),
 			NewAssertionsFacet([]Assertion{mkAssertion("derived1")}),
 		}, nil)
 	if err != nil {
@@ -639,18 +642,18 @@ func TestEffectiveFacetsAssertionsMixedWithReplaceKind(t *testing.T) {
 	_, got := assertionsFacet(t, eff)
 	wantExprs(t, got, []string{"base1", "derived1"})
 
-	lengthCount := 0
+	maxLengthCount := 0
 	for _, f := range eff {
-		if f.Facet().Kind() != FacetLength {
+		if f.Facet().Kind() != FacetMaxLength {
 			continue
 		}
-		lengthCount++
+		maxLengthCount++
 		if v := f.Facet().Values(); len(v) != 1 || v[0] != "4" {
-			t.Errorf("length {value} = %v, want [4] (derived replaces base)", v)
+			t.Errorf("maxLength {value} = %v, want [4] (derived replaces base)", v)
 		}
 	}
-	if lengthCount != 1 {
-		t.Fatalf("EffectiveFacets has %d length facets, want exactly 1", lengthCount)
+	if maxLengthCount != 1 {
+		t.Fatalf("EffectiveFacets has %d maxLength facets, want exactly 1", maxLengthCount)
 	}
 }
 

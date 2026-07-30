@@ -77,7 +77,7 @@ func collapseSpace(s string) string {
 	return b.String()
 }
 
-// effectiveWhiteSpace resolves st's whiteSpace mode by scanning its
+// whiteSpaceInForce resolves the whiteSpace mode in force on st by scanning its
 // EffectiveFacets for the whiteSpace facet and mapping its {value}
 // ("preserve"/"replace"/"collapse") to the typed mode (§4.3.6). Reading the
 // facet off EffectiveFacets — rather than the primitive's per-type default in a
@@ -87,6 +87,37 @@ func collapseSpace(s string) string {
 // winner. For the atomic cohort the primitive node's own {facets} always carries
 // a whiteSpace entry (§3.16.7.4), so a derived type that does not itself declare
 // one still resolves through the inherited primitive facet.
+//
+// It is THE single whiteSpace resolution in this package: the instance-validation
+// stage reaches it through effectiveWhiteSpace, and facet-{value} parsing reaches
+// it directly (facets.go's declaringFacetSpace, restriction.go's
+// CheckFacetRestriction). It returns the ZERO whiteSpace — an invalid mode by
+// construction, see the iota+1 above — for every state in which no mode applies:
+// a nil st, no whiteSpace facet in force at all, a multi-valued whiteSpace facet,
+// or a {value} outside the §4.3.6.1 three-token domain. That single "no mode"
+// encoding is what lets facetValue leave a lexical unchanged without a second
+// comma-ok flag beside the mode (STYLE D3), and what lets effectiveWhiteSpace
+// decide, from st's {variety} alone, whether the absence is spec-mandated or a
+// construction bug.
+func whiteSpaceInForce(st *xsd.SimpleType) whiteSpace {
+	if st == nil {
+		return 0
+	}
+	for _, ef := range st.EffectiveFacets() {
+		if ef.Facet().Kind() != xsd.FacetWhiteSpace {
+			continue
+		}
+		values := ef.Facet().Values()
+		if len(values) != 1 {
+			return 0
+		}
+		return whiteSpaceOf(values[0])
+	}
+	return 0
+}
+
+// effectiveWhiteSpace is the INSTANCE-VALIDATION view of whiteSpaceInForce: the
+// same resolution, but with the missing-mode states classified.
 //
 // The comma-ok result models whether a whiteSpace facet is in force at all.
 // applicable=true returns the resolved mode. applicable=false (ws is the zero
@@ -98,42 +129,44 @@ func collapseSpace(s string) string {
 // normalizeWhiteSpace still panics there, so the false result cannot silently
 // degrade into a wrong normalization.
 //
-// The two OTHER panic paths below are UNCHANGED internal-consistency guards,
-// not relaxed: a whiteSpace facet whose Values() is multi-valued (a malformed
-// generated table) and an unrecognized {value} string (table/code drift). An
-// ABSENT facet on a non-union (atomic or list) type is ALSO still a panic: an
-// atomic type's {facets} always carries a whiteSpace entry (§3.16.7.4) and a
-// list's carries the materialized fixed collapse facet (§4.3.6.1), so its
-// absence there is a schema-construction bug, never a legitimate "not
-// applicable" case — only the confirmed-union case is relaxed to (0, false).
+// Every OTHER missing-mode state is an UNCHANGED internal-consistency panic, not
+// relaxed: a whiteSpace facet whose Values() is multi-valued (a malformed
+// generated table), an unrecognized {value} string (table/code drift), and an
+// ABSENT facet on a non-union (atomic or list) type — an atomic type's {facets}
+// always carries a whiteSpace entry (§3.16.7.4) and a list's carries the
+// materialized fixed collapse facet (§4.3.6.1), so its absence there is a
+// schema-construction bug, never a legitimate "not applicable" case. Only the
+// confirmed-union case is relaxed to (0, false). The three now share one panic
+// site and so one message, naming all three causes: they are indistinguishable
+// to a caller anyway (each is "this type has no usable whiteSpace mode and is not
+// a union"), and collapsing them is what keeps the resolution itself single.
 func effectiveWhiteSpace(st *xsd.SimpleType) (ws whiteSpace, applicable bool) {
-	for _, ef := range st.EffectiveFacets() {
-		if ef.Facet().Kind() != xsd.FacetWhiteSpace {
-			continue
-		}
-		values := ef.Facet().Values()
-		if len(values) != 1 {
-			panic(fmt.Sprintf("value: whiteSpace facet on %s must carry exactly one value, has %d", st.Name(), len(values)))
-		}
-		switch values[0] {
-		case "preserve":
-			return preserveWS, true
-		case "replace":
-			return replaceWS, true
-		case "collapse":
-			return collapseWS, true
-		}
-		panic(fmt.Sprintf("value: unrecognized whiteSpace facet value %q on %s", values[0], st.Name()))
+	if ws := whiteSpaceInForce(st); ws != 0 {
+		return ws, true
 	}
-	// No whiteSpace facet in force. For a union {variety} this is spec-mandated
-	// (whiteSpace is not an applicable facet, cos-applicable-facets §4.1.5), so
-	// the stage is "not applicable" rather than an error. Drive it off the
-	// sealed xsd.Variety sum, matching lengthExemptPrimitive's .(xsd.Atomic)
-	// idiom.
+	// No usable mode. For a union {variety} this is spec-mandated (whiteSpace is
+	// not an applicable facet, cos-applicable-facets §4.1.5), so the stage is
+	// "not applicable" rather than an error. Drive it off the sealed xsd.Variety
+	// sum, matching lengthExemptPrimitive's .(xsd.Atomic) idiom.
 	if _, isUnion := st.Variety().(xsd.Union); isUnion {
 		return 0, false
 	}
-	// Atomic/list: an absent whiteSpace facet is a construction bug (§3.16.7.4,
-	// §4.3.6.1), never instance data — fail loud, do not weaken to (0, false).
-	panic(fmt.Sprintf("value: type %s has no whiteSpace facet in force", st.Name()))
+	panic(fmt.Sprintf("value: type %s has no whiteSpace facet in force with exactly one {value} drawn from preserve/replace/collapse (§3.16.7.4, §4.3.6.1)", st.Name()))
+}
+
+// whiteSpaceOf maps a whiteSpace facet's {value} token to its typed mode
+// (§4.3.6.1: the {value} domain is exactly preserve/replace/collapse), returning
+// the zero whiteSpace for any other string. It is the single place the three spec
+// tokens are spelled, kept as its own function so the token table stays one fact
+// separate from whiteSpaceInForce's facet-scan.
+func whiteSpaceOf(v string) whiteSpace {
+	switch v {
+	case "preserve":
+		return preserveWS
+	case "replace":
+		return replaceWS
+	case "collapse":
+		return collapseWS
+	}
+	return 0
 }

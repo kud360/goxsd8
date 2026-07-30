@@ -762,3 +762,76 @@ func TestProduceNotQNameRejections(t *testing.T) {
 		t.Errorf("Produce rejected notQName=\"##defined\" on <anyAttribute>: %v", err)
 	}
 }
+
+// TestProduceChargesFacetValueRestriction proves the producer's sole
+// xsd.NewSimpleType call site is followed by builtin.CheckSimpleTypeRestriction:
+// a widening bound (cos-st-restricts clause 1.3.2 via
+// minInclusive-valid-restriction §4.3.10.4) and an inapplicable facet (clause
+// 1.3.1 via cos-applicable-facets §4.1.5) are BOTH rejected here, neither of
+// which xsd.NewSimpleType can decide on its own.
+func TestProduceChargesFacetValueRestriction(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		wantRule xsderr.Rule
+	}{
+		{
+			"bound widens the base value space",
+			`<xs:simpleType name="wide">
+			   <xs:restriction base="xs:byte">
+			     <xs:minInclusive value="-200"/>
+			   </xs:restriction>
+			 </xs:simpleType>`,
+			"minInclusive-valid-restriction",
+		},
+		{
+			"facet inapplicable to the primitive",
+			`<xs:simpleType name="bad">
+			   <xs:restriction base="xs:string">
+			     <xs:maxInclusive value="5"/>
+			   </xs:restriction>
+			 </xs:simpleType>`,
+			"cos-st-restricts",
+		},
+		{
+			"length may not move across a restriction",
+			`<xs:simpleType name="lenbase">
+			   <xs:restriction base="xs:string">
+			     <xs:length value="5"/>
+			   </xs:restriction>
+			 </xs:simpleType>
+			 <xs:simpleType name="lenderived">
+			   <xs:restriction base="tns:lenbase">
+			     <xs:length value="4"/>
+			   </xs:restriction>
+			 </xs:simpleType>`,
+			"length-valid-restriction",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:facets", c.body))
+			if err == nil {
+				t.Fatalf("Produce accepted an invalid restriction, want %s", c.wantRule)
+			}
+			got, ok := xsderr.RuleOf(err)
+			if !ok || got != c.wantRule {
+				t.Fatalf("rule = %q (ok=%v), want %q; err=%v", got, ok, c.wantRule, err)
+			}
+		})
+	}
+}
+
+// TestProduceAcceptsNarrowingRestriction is the false-reject guard for the same
+// seam: a legitimately narrowing restriction of a builtin must still produce.
+func TestProduceAcceptsNarrowingRestriction(t *testing.T) {
+	_, err := produce(t, wrap("urn:facets", `<xs:simpleType name="small">
+	   <xs:restriction base="xs:byte">
+	     <xs:minInclusive value="0"/>
+	     <xs:maxInclusive value="100"/>
+	   </xs:restriction>
+	 </xs:simpleType>`))
+	if err != nil {
+		t.Fatalf("narrowing restriction rejected: %v", err)
+	}
+}

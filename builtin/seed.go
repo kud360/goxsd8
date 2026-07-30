@@ -239,10 +239,10 @@ func ownFacets(spec TypeSpec) ([]xsd.Facet, error) {
 		kind, ok := facetKind(f.Name)
 		if !ok {
 			// A value-bearing facet with an unknown name would silently drop a
-			// constraint: refuse instead. The precisionDecimal-only maxScale/
-			// minScale ARE known to facetKind (xsd.FacetKind now includes them),
-			// but the seed rows carry no Default for them, so they are skipped by
-			// the f.Default == "" guard above and never reach this branch.
+			// constraint: refuse instead. Every §4.3 facet name — including the
+			// precisionDecimal-only maxScale/minScale — is in facetNames, so this
+			// branch is reachable only from a generated row naming a facet the
+			// component model has no kind for.
 			return nil, fmt.Errorf("builtin: type %q has value-bearing facet %q with no FacetKind", spec.Name, f.Name)
 		}
 		facets = append(facets, xsd.NewFacet(kind, []string{f.Default}, f.Fixed))
@@ -250,43 +250,19 @@ func ownFacets(spec TypeSpec) ([]xsd.Facet, error) {
 	return facets, nil
 }
 
-// facetKind maps a builtin facet name to its xsd.FacetKind. ok is false for the
-// precisionDecimal-only maxScale/minScale — but NOT because xsd.FacetKind lacks
-// those kinds (it now has FacetMaxScale/FacetMinScale). It is because this switch
-// has no case for them, which is harmless: the precisionDecimal seed rows carry
-// no Default for maxScale/minScale, so ownFacets' f.Default == "" guard skips
-// them before ever calling facetKind. Their instance-time enforcement lives in
-// value/facets.go's scaleFacet, independent of this seeding path (#133).
+// facetKind maps a builtin facet name to its xsd.FacetKind by scanning
+// facetNames (restriction.go) — the SAME ordered table facetName scans in the
+// opposite direction, so the two directions of this closed bijection cannot
+// disagree. It now covers the precisionDecimal-only maxScale/minScale too, where
+// the previous hand-typed switch silently omitted them; that omission was latent
+// rather than a live bug, because the precisionDecimal seed rows carry no Default
+// for either facet and so are skipped by ownFacets' f.Default == "" guard before
+// facetKind is ever called (#133). ok is false only for a name outside §4.3.
 func facetKind(name FacetName) (xsd.FacetKind, bool) {
-	switch name {
-	case "length":
-		return xsd.FacetLength, true
-	case "minLength":
-		return xsd.FacetMinLength, true
-	case "maxLength":
-		return xsd.FacetMaxLength, true
-	case "pattern":
-		return xsd.FacetPattern, true
-	case "enumeration":
-		return xsd.FacetEnumeration, true
-	case "whiteSpace":
-		return xsd.FacetWhiteSpace, true
-	case "maxInclusive":
-		return xsd.FacetMaxInclusive, true
-	case "maxExclusive":
-		return xsd.FacetMaxExclusive, true
-	case "minExclusive":
-		return xsd.FacetMinExclusive, true
-	case "minInclusive":
-		return xsd.FacetMinInclusive, true
-	case "totalDigits":
-		return xsd.FacetTotalDigits, true
-	case "fractionDigits":
-		return xsd.FacetFractionDigits, true
-	case "assertions":
-		return xsd.FacetAssertions, true
-	case "explicitTimezone":
-		return xsd.FacetExplicitTimezone, true
+	for _, e := range facetNames {
+		if e.name == name {
+			return e.kind, true
+		}
 	}
 	return 0, false
 }

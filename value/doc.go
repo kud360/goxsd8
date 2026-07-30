@@ -60,6 +60,29 @@
 // an *xsderr.Error carrying the facet's rule ID and the pipeline stage that
 // rejected.
 //
+// A facet's OWN {value} goes through the same whiteSpace normalization before it
+// is parsed, once at construction: a facet's {value} property is "a value from
+// the value space of the {base type definition}" (§4.3.7.1 f-mai-value, §4.3.5.1),
+// and reaching that value space runs the base's lexical mapping, whose first
+// stage is its whiteSpace normalization (key-vv §3.1.3, key-nv §3.1.4). So
+// `<maxInclusive value=" 9 "/>` on a collapse-normalized base denotes exactly
+// what the untrailed spelling denotes, on both the validation and the
+// restriction-checking path.
+//
+// # Construction-time facet checks
+//
+//	func CheckFacetRestriction(b Backend, t *xsd.SimpleType) error
+//
+// [CheckFacetRestriction] is the once-per-type counterpart of that pipeline: it
+// charges the value-space Schema Component Constraints relating a simple type's
+// own bound and enumeration facets to its {base type definition}
+// (maxInclusive/maxExclusive/minInclusive/minExclusive valid restriction
+// §4.3.7.4–§4.3.10.4, enumeration valid restriction §4.3.5.5) — the half of
+// cos-st-restricts that package xsd, a pure leaf with no value spaces, cannot
+// reach. Call it through builtin.CheckSimpleTypeRestriction, which charges facet
+// APPLICABILITY first and then delegates here; a type built through the xsd
+// constructors alone gets neither.
+//
 // # Codegen seam
 //
 // A backend MAY, in a later milestone, implement an Emitter (API frozen in M9;

@@ -112,6 +112,14 @@ type symbols struct {
 	// unstarted, a PRESENT-nil value is on the build stack (being built), and a
 	// PRESENT-non-nil value is done. The pre-seeded builtins start out done.
 	built map[xsd.QName]*xsd.SimpleType
+
+	// backend is the assembly's [value.Backend], retained past the one-time
+	// [builtin.Seed] call so constructSimpleType can charge the value-space
+	// facet constraints of cos-st-restricts ([builtin.CheckSimpleTypeRestriction])
+	// on every simple type it builds. It lives here rather than on the
+	// per-document producer for the same reason the indexes do: it is
+	// assembly-wide and identical for every document.
+	backend value.Backend
 }
 
 // newSymbols returns the empty assembly-wide symbol table, having seeded the
@@ -146,6 +154,7 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 		simpleTypes:     make(map[xsd.QName]*Element),
 		attributeGroups: make(map[xsd.QName]*Element),
 		built:           built,
+		backend:         backend,
 	}, nil
 }
 
@@ -348,6 +357,15 @@ func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleTy
 // the own facets, and constructs. It does NOT memoize — the memo/cycle bookkeeping
 // lives in buildSimpleType; an anonymous inline type has no name to key on and is
 // unreferenceable, so it is built here directly, once.
+//
+// The finished component is then charged with the facet-VALUE sub-clauses of
+// cos-st-restricts (§3.16.6.2) through [builtin.CheckSimpleTypeRestriction] —
+// facet applicability against the primitive, and the bound/enumeration
+// constraints in the base type's value space. That check needs both the builtin
+// applicability table and a [value.Backend], neither of which package xsd may
+// depend on, so it cannot live inside xsd.NewSimpleType and runs here instead,
+// at this package's SOLE NewSimpleType call site. A rejection is returned as-is:
+// it is already an *xsderr.Error carrying the specific per-facet rule.
 func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleType, error) {
 	restriction, err := restrictionOf(elem)
 	if err != nil {
@@ -365,7 +383,14 @@ func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.Simp
 	// base.Variety() propagates the base's own {primitive type definition} pointer
 	// for an atomic base (warden finding #4), and the item/member pointers for a
 	// list/union base.
-	return xsd.NewSimpleType(elem.Loc(), name, base.Variety(), base, facets, nil)
+	st, err := xsd.NewSimpleType(elem.Loc(), name, base.Variety(), base, facets, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := builtin.CheckSimpleTypeRestriction(p.symbols.backend, st); err != nil {
+		return nil, err
+	}
+	return st, nil
 }
 
 // restrictionOf returns the single <restriction> child of a <simpleType>. A
