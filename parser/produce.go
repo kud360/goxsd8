@@ -743,6 +743,15 @@ func facetKindOf(local string) (xsd.FacetKind, bool) {
 		return xsd.FacetFractionDigits, true
 	case "explicitTimezone":
 		return xsd.FacetExplicitTimezone, true
+	case "maxScale":
+		// xr-maxScale/xr-minScale (xsd-precisionDecimal.md §4.2.2/§4.3.2): the two
+		// precisionDecimal extension facets have exactly the totalDigits shape —
+		// {value} is the value attribute's xs:integer lexical form, {fixed} the
+		// fixed attribute's boolean (false when absent) — so they take the generic
+		// plain-lexical path, not the enumeration rejection.
+		return xsd.FacetMaxScale, true
+	case "minScale":
+		return xsd.FacetMinScale, true
 	}
 	return 0, false
 }
