@@ -448,13 +448,18 @@ func extensionContentType(loc xsderr.Loc, base xsd.TypeDefinition, effective *xs
 // contains the base's particle, so xsd's content-model walk needs no {base type
 // definition} edge.
 //
-// LIMITATION: allGroupOf can only recognize an INLINE all group. A base particle
+// GAP(xsd): allGroupOf recognizes only an INLINE all group, so a base particle
 // or effective content whose {term} is a <group ref> to an all-bodied model group
-// definition is not resolvable at produce time, so such a source takes 4.2.3.3
-// instead of 4.2.3.1/4.2.3.2. That is deterministic and never silent — the
-// resulting content model is narrower (ordered) than the spec's, so it can only
-// under-accept instances, never fabricate a schema-validity verdict — and the
-// conformance schema lane admits no <extension> at all, so no lane observes it.
+// definition — unresolved at produce time — takes 4.2.3.3 where 4.2.3.1 or
+// 4.2.3.2 applies (#334). Missing 4.2.3.2 is not merely narrower: the
+// fallthrough synthesizes a sequence wrapping two all groups, a shape
+// cos-all-limited (§3.8.6.2) clause 1 forbids. It fabricates no verdict TODAY
+// only because that rule is charged upstream on the source XML, by
+// produceGroupParticle below, and never on the finalized component — so the
+// shape is inert rather than conservative, and would become a wrong answer the
+// moment cos-all-limited is charged componentwise. Missing 4.2.3.1 is the benign
+// half: sequence[all, empty sequence] accepts exactly what the all group does.
+// No lane observes either — the conformance schema lane admits no <extension>.
 func extensionParticle(loc xsderr.Loc, baseParticle, effective xsd.Particle, explicitEmpty bool) (xsd.Particle, error) {
 	baseGroup, baseIsAll := allGroupOf(baseParticle)
 	if baseIsAll && explicitEmpty {
@@ -488,7 +493,7 @@ func extensionParticle(loc xsderr.Loc, baseParticle, effective xsd.Particle, exp
 // allGroupOf returns the Model Group a particle's {term} is when that group's
 // {compositor} is all (§3.8.1), reporting false for every other {term}: an
 // element declaration, a wildcard, a choice/sequence group, or an unresolved
-// <element ref>/<group ref> (see extensionParticle's LIMITATION note).
+// <element ref>/<group ref> (see extensionParticle's GAP(xsd) note, #334).
 func allGroupOf(p xsd.Particle) (xsd.ModelGroup, bool) {
 	rt, ok := p.Term().(xsd.ResolvedTerm)
 	if !ok {
