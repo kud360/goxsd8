@@ -2,20 +2,24 @@ package xsd
 
 import "github.com/kud360/goxsd8/xsderr"
 
-// unionNamespaceConstraint returns the Attribute Wildcard Union (Structures
+// UnionNamespaceConstraint returns the Attribute Wildcard Union (Structures
 // §3.10.6.3, id="cos-aw-union") of a and b: the Namespace Constraint that admits
 // a namespace name iff a or b admits it. It is the mirror of
 // namespaceconstraint_intersect.go's IntersectNamespaceConstraint, over the same
 // record and the same set helpers (namespaceconstraint_sets.go), and the two must
 // be read together — several of their clauses differ only by a swapped operator.
 //
-// It stays UNEXPORTED. Its only consumer is contentrestricts.go's
-// coveringWildcardUnion, which is in-package (STYLE T5: export nothing without a
-// consumer). The spec's own uses of the operator — the §3.6.2.2 <extension>
-// attribute-wildcard combination (§3.4.2.2 clause 2.2.2.3) and the Open Content
-// wildcard merge (§3.4.2.2 clause 6.2) — both need a producer that declines
-// <extension>/<openContent> today, so no caller outside this package exists yet;
-// #265 lands them, and #52's exported wildcard-set surface waits for that.
+// Its out-of-package consumer is the parser's Open Content producer: §3.4.2.3.3
+// (dcl.ctd.ctcc.common) clause 6.2 defines a derived complex type's {open
+// content}.{wildcard} as this union of the wildcard corresponding to the
+// ·wildcard element·'s <any> child and the ·explicit content type·'s own
+// {open content}.{wildcard}, which the producer reaches when an <extension>
+// carrying an <openContent> derives from a base that already has one
+// (parser/produce_complex.go, openContentWildcard). In-package,
+// contentrestricts.go's coveringWildcardUnion folds live element wildcards
+// through it. The §3.6.2.2 <extension> attribute-wildcard combination (§3.4.2.5
+// dcl.ctd.anyatt clause 2.2.2.3 — NOT §3.4.2.2, which is the simple-content
+// mapping) is the third spec use and lands with #265.
 //
 // The {variety}/{namespaces} result is the §3.10.6.3 five-case table:
 //
@@ -78,14 +82,14 @@ import "github.com/kud360/goxsd8/xsderr"
 // Union is commutative: (loc, a, b) and (loc, b, a) yield equal results. loc
 // charges the (defensive) rejection position; a synthesized caller may pass the
 // zero xsderr.Loc{}.
-func unionNamespaceConstraint(loc xsderr.Loc, a, b NamespaceConstraint) (NamespaceConstraint, error) {
+func UnionNamespaceConstraint(loc xsderr.Loc, a, b NamespaceConstraint) (NamespaceConstraint, error) {
 	variety, namespaces := unionVarietyAndSet(a, b)
 	disallowed := unionDisallowedNames(a, b)
 	return NewNamespaceConstraint(loc, variety, namespaces, disallowed, unionDisallowedNameKeywords(a, b))
 }
 
 // unionVarietyAndSet computes the {variety}/{namespaces} of the union per the
-// §3.10.6.3 five-case table (see unionNamespaceConstraint). It reads the
+// §3.10.6.3 five-case table (see UnionNamespaceConstraint). It reads the
 // operands' sealed {variety} within its defining package, which is not a
 // forbidden type switch (STYLE T3 governs concrete switches outside the package).
 func unionVarietyAndSet(a, b NamespaceConstraint) (NamespaceConstraintVariety, []Namespace) {

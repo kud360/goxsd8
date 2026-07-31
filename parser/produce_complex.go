@@ -98,6 +98,9 @@ func (p *producer) produceComplexType(name xsd.QName, el *Element) (xsd.ComplexT
 	if name.Local == "" {
 		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
 	}
+	if oc := misplacedOpenContent(el); oc != nil {
+		return xsd.ComplexType{}, fmt.Errorf("parser: <openContent> at %s is in a position the schema for schema documents does not allow: it is a child of <complexType> only in the implicit-content form (no <simpleContent>/<complexContent>), under <complexContent> only of the <restriction>/<extension> alternant, and nowhere at all under <simpleContent>", oc.Loc())
+	}
 	if sc := childElement(el, xsd.XMLSchemaNS, "simpleContent"); sc != nil {
 		return p.produceSimpleContent(name, el, sc)
 	}
@@ -287,16 +290,12 @@ func complexContentDerivation(cc *Element) (*Element, xsd.DerivationMethod) {
 // scopeParent is the enclosing Complex Type Definition every local element
 // declaration in this content model is scoped to (§3.3.2.3 dcl.elt.local).
 //
-// Clause 6's ·wildcard element· wrap is not applied: with <openContent> declined
-// (declineOpenContent) and <defaultOpenContent> unmapped, the ·wildcard element·
-// is always ·absent· and clause 6.1 makes {content type} the ·explicit content
-// type· verbatim.
+// Clause 6's ·wildcard element· wrap is applied on top of that result by
+// openContentType, in both branches: the derivation alternant is exactly the
+// element whose <openContent> child clause 5.1 reads.
 func (p *producer) complexContentType(derivation *Element, method xsd.DerivationMethod, baseName xsd.QName, effectiveMixed bool, scopeParent xsd.ElementScopeParent) (xsd.ContentType, error) {
 	if method == xsd.DerivationRestriction {
 		return p.buildComplexContentType(derivation, effectiveMixed, scopeParent)
-	}
-	if err := declineOpenContent(derivation); err != nil {
-		return nil, err
 	}
 	base, err := p.resolveBaseType(derivation, baseName)
 	if err != nil {
@@ -306,7 +305,11 @@ func (p *producer) complexContentType(derivation *Element, method xsd.Derivation
 	if err != nil {
 		return nil, err
 	}
-	return extensionContentType(derivation.Loc(), base, effective, explicitEmpty, effectiveMixed)
+	explicit, err := extensionContentType(derivation.Loc(), base, effective, explicitEmpty, effectiveMixed)
+	if err != nil {
+		return nil, err
+	}
+	return p.openContentType(derivation, explicit)
 }
 
 // buildComplexContentType computes the {content type} of a restriction-derived
@@ -315,15 +318,15 @@ func (p *producer) complexContentType(derivation *Element, method xsd.Derivation
 // <restriction> (explicit complex content); effectiveMixed is clause 1's result;
 // scopeParent is the enclosing Complex Type Definition every local element
 // declaration in this content model is scoped to (§3.3.2.3 dcl.elt.local).
+//
+// Clauses 5-6 then fold in the ·wildcard element· (openContentType): parent is
+// also the element whose <openContent> child clause 5.1 reads.
 func (p *producer) buildComplexContentType(parent *Element, effectiveMixed bool, scopeParent xsd.ElementScopeParent) (xsd.ContentType, error) {
-	if err := declineOpenContent(parent); err != nil {
-		return nil, err
-	}
 	effective, _, err := p.effectiveContent(parent, effectiveMixed, scopeParent)
 	if err != nil {
 		return nil, err
 	}
-	return explicitContentType(effective, effectiveMixed), nil
+	return p.openContentType(parent, explicitContentType(effective, effectiveMixed))
 }
 
 // explicitContentType is §3.4.2.3.3 clause 4.1 — the restriction branch's
@@ -369,15 +372,7 @@ func (p *producer) effectiveContent(parent *Element, effectiveMixed bool, scopeP
 	}
 	// clause 3.1.1: a 1..1 particle over an empty sequence stands in, so a mixed
 	// type with no model-group child still admits character content.
-	seq, err := xsd.NewModelGroup(parent.Loc(), xsd.CompositorSequence, nil, nil)
-	if err != nil {
-		return nil, false, err
-	}
-	oneOne, err := xsd.NewOccurs(parent.Loc(), 1, 1)
-	if err != nil {
-		return nil, false, err
-	}
-	part, err := xsd.NewParticle(parent.Loc(), oneOne, xsd.ResolvedTerm{Term: seq}, nil)
+	part, err := emptySequenceParticle(parent.Loc())
 	if err != nil {
 		return nil, false, err
 	}
@@ -506,16 +501,322 @@ func allGroupOf(p xsd.Particle) (xsd.ModelGroup, bool) {
 	return mg, true
 }
 
-// declineOpenContent refuses an <openContent> child of a <complexType>,
-// <restriction> or <extension>: computing {open content} needs the
-// <defaultOpenContent> fallback of §3.4.2.3.3 clauses 5-6, which is not yet
-// built, and silently mapping it to ·absent· would be wrong (never silently
-// absent). One encoding, called from both {content type} branches.
-func declineOpenContent(parent *Element) error {
-	if childElement(parent, xsd.XMLSchemaNS, "openContent") == nil {
+// misplacedOpenContent returns the <openContent> element a <complexType> carries
+// in a position the schema for schema documents (§3.4.2) does not allow, or nil.
+// The type's own <openContent> is legal only in the IMPLICIT content form —
+// xs:complexType's content model puts it in the third alternative, beside the
+// model group, never beside <simpleContent>/<complexContent> — under
+// <complexContent> only as a child of the <restriction>/<extension> alternant,
+// since xs:complexContent's content model is (annotation?, (restriction |
+// extension)), and NOWHERE under <simpleContent>: that element's content model is
+// the same (annotation?, (restriction | extension)) shape (spec L1687), but
+// neither of ITS alternants admits an <openContent> (L1692/L1697 — the
+// simple-content <restriction> takes facets and attribute declarations, and its
+// one wildcard slot is ##other, which the XSD namespace is not).
+//
+// All three misplacements were previously invisible: the {content type} branches
+// read <openContent> from the <complexType> or the complex-content derivation
+// alternant only, so a stray one elsewhere was silently dropped and a schema a
+// complete processor rejects would have assembled clean. Like <complexContent>
+// with neither alternant (produceComplexContent), this is a plain grammar fault,
+// not an xsderr rule verdict: src-ct (§3.4.3) states no clause for it and
+// incorporates the schema for schema documents' own conditions by reference.
+func misplacedOpenContent(ctElem *Element) *Element {
+	cc := childElement(ctElem, xsd.XMLSchemaNS, "complexContent")
+	sc := childElement(ctElem, xsd.XMLSchemaNS, "simpleContent")
+	if cc == nil && sc == nil {
+		return nil // the implicit form: an <openContent> child here is in its legal position
+	}
+	if own := childElement(ctElem, xsd.XMLSchemaNS, "openContent"); own != nil {
+		return own
+	}
+	if cc != nil {
+		return childElement(cc, xsd.XMLSchemaNS, "openContent")
+	}
+	return simpleContentOpenContent(sc)
+}
+
+// simpleContentOpenContent returns the <openContent> a <simpleContent> carries
+// either directly or under its <restriction>/<extension> alternant, or nil — every
+// position inside a <simpleContent> subtree is illegal (see misplacedOpenContent).
+// The alternants are searched restriction-first, matching
+// complexContentDerivation's precedent, so a malformed source carrying both is
+// reported at the same position every run (STYLE D1).
+func simpleContentOpenContent(sc *Element) *Element {
+	if oc := childElement(sc, xsd.XMLSchemaNS, "openContent"); oc != nil {
+		return oc
+	}
+	for _, alternant := range [...]string{"restriction", "extension"} {
+		alt := childElement(sc, xsd.XMLSchemaNS, alternant)
+		if alt == nil {
+			continue
+		}
+		if oc := childElement(alt, xsd.XMLSchemaNS, "openContent"); oc != nil {
+			return oc
+		}
+	}
+	return nil
+}
+
+// openContentType applies §3.4.2.3.3 (dcl.ctd.ctcc.common) clauses 5 and 6 to an
+// already-computed ·explicit content type·, yielding the complex type's final
+// {content type}. owner is the element whose <openContent> child clause 5.1
+// looks for: the <complexType> itself (implicit content) or the <restriction>/
+// <extension> alternant. It is the single encoding of the Open Content fold, and
+// every {content type} branch ends in it.
+//
+// src-ct (§3.4.3) clauses 3-4 are charged FIRST, before clause 5 selects
+// anything: they are Schema Representation Constraints on the source
+// <openContent> element, so they hold whether or not the ·wildcard element·
+// turns out to matter — in particular for a mode="none" element, which clause
+// 6.1 otherwise discards unexamined.
+func (p *producer) openContentType(owner *Element, explicit xsd.ContentType) (xsd.ContentType, error) {
+	if err := checkOpenContentAny(owner); err != nil {
+		return nil, err
+	}
+	we, err := p.wildcardElement(owner, explicit)
+	if err != nil {
+		return nil, err
+	}
+	if we == nil {
+		return explicit, nil // clause 6.1: the ·wildcard element· is ·absent·
+	}
+	oc, err := p.openContentOf(we, explicit)
+	if err != nil {
+		return nil, err
+	}
+	if oc == nil {
+		return explicit, nil // clause 6.1: the ·wildcard element· has mode="none"
+	}
+	return wrapOpenContent(we.Loc(), explicit, *oc)
+}
+
+// checkOpenContentAny enforces src-ct (§3.4.3) clauses 3 and 4 on owner's own
+// <openContent> child: an <any> is required when mode is not "none" (clause 3,
+// since clause 6.2 has no {wildcard} to build without it) and forbidden when it
+// is (clause 4, since clause 6.1 would ignore it). The schema-level
+// <defaultOpenContent> is NOT governed by these clauses — src-ct is a constraint
+// on <complexType> — so its own mandatory <any> is checked as a grammar fault by
+// defaultOpenContentElem instead.
+func checkOpenContentAny(owner *Element) error {
+	oc := childElement(owner, xsd.XMLSchemaNS, "openContent")
+	if oc == nil {
 		return nil
 	}
-	return fmt.Errorf("parser: <openContent> is not yet produced (its {open content} needs <defaultOpenContent> fallback, §3.4.2.3.3)")
+	none := openContentModeIsNone(oc)
+	hasAny := childElement(oc, xsd.XMLSchemaNS, "any") != nil
+	if none && hasAny {
+		return xsderr.New(ruleSrcCT, oc.Loc(),
+			`<openContent mode="none"> has an <any> child, but src-ct clause 4 forbids one`)
+	}
+	if !none && !hasAny {
+		return xsderr.New(ruleSrcCT, oc.Loc(),
+			`<openContent> whose mode is not "none" has no <any> child, but src-ct clause 3 requires one`)
+	}
+	return nil
+}
+
+// wildcardElement selects §3.4.2.3.3 clause 5's ·wildcard element·, returning nil
+// for clause 5.3 (·absent·): owner's own <openContent> child when present (clause
+// 5.1 — presence alone decides, so an <openContent mode="none"> is how a type
+// opts OUT of the document's default), otherwise this document's
+// <defaultOpenContent> when the ·explicit content type· is not empty (5.2.1) or
+// is empty and that element carries appliesToEmpty="true" (5.2.2).
+//
+// appliesToEmpty is read here and nowhere else: §3.4.1's Open Content record has
+// no such property, so it must not travel past this selection (STYLE D3).
+func (p *producer) wildcardElement(owner *Element, explicit xsd.ContentType) (*Element, error) {
+	if own := childElement(owner, xsd.XMLSchemaNS, "openContent"); own != nil {
+		return own, nil // clause 5.1
+	}
+	def, err := p.defaultOpenContentElem()
+	if err != nil {
+		return nil, err
+	}
+	if def == nil {
+		return nil, nil // clause 5.3: this document declares no default
+	}
+	if explicit.Variety() != xsd.ContentEmpty {
+		return def, nil // clause 5.2.1
+	}
+	if appliesToEmpty, _ := boolAttr(def, "appliesToEmpty"); appliesToEmpty {
+		return def, nil // clause 5.2.2
+	}
+	return nil, nil // clause 5.3
+}
+
+// defaultOpenContentElem returns the <defaultOpenContent> child of THIS
+// document's <schema> (§3.4.2.3.3 clause 5.2's "the <schema> ancestor"), or nil
+// when it declares none. The <schema> is read off p.schemaElem, never by walking
+// Element.Parent() from the complex type: under ·override pre-processing· a
+// substituted declaration is a child of the OVERRIDING document's <override>,
+// so an ancestor walk would climb into that document and read ITS default,
+// whereas §4.2.5 makes the substituted declaration a top-level declaration of
+// the OVERRIDDEN document and produced by its producer (override.go, PRINCIPLES
+// 16) — the same reading targetNamespace and the *FormDefault attributes already
+// take. The two coincide for every non-override document, which is exactly why
+// the wrong one is invisible without an override fixture.
+//
+// The <schema> content model admits at most one <defaultOpenContent>; a
+// malformed document with several is mapped by its first, so the verdict is the
+// same every run (STYLE D1). Both rejections are plain grammar faults rather
+// than xsderr rule verdicts: <defaultOpenContent>'s content model makes the
+// <any> mandatory and its mode enumeration is only (interleave | suffix) —
+// "none" is legal on <openContent> alone — and no Schema Representation
+// Constraint restates either.
+func (p *producer) defaultOpenContentElem() (*Element, error) {
+	def := childElement(p.schemaElem, xsd.XMLSchemaNS, "defaultOpenContent")
+	if def == nil {
+		return nil, nil
+	}
+	if openContentModeIsNone(def) {
+		return nil, fmt.Errorf(`parser: <defaultOpenContent> at %s has mode="none", but the schema for schema documents admits only interleave or suffix there ("none" is an <openContent> mode)`, def.Loc())
+	}
+	if childElement(def, xsd.XMLSchemaNS, "any") == nil {
+		return nil, fmt.Errorf("parser: <defaultOpenContent> at %s has no <any> child, but the schema for schema documents makes it mandatory", def.Loc())
+	}
+	return def, nil
+}
+
+// openContentOf computes §3.4.2.3.3 clause 6's {open content} from the
+// ·wildcard element· we, returning nil for clause 6.1 — a mode="none" element
+// contributes NO Open Content record, which is why xsd.OpenContentMode has no
+// third member (xsd/closedsets.go) and why the "none" token dies here rather
+// than travelling as a mode.
+//
+// {mode} is the mode attribute's ·actual value·, defaulting to interleave, and
+// {wildcard} is openContentWildcard's clause-6.2 combination.
+func (p *producer) openContentOf(we *Element, explicit xsd.ContentType) (*xsd.OpenContent, error) {
+	if openContentModeIsNone(we) {
+		return nil, nil // clause 6.1
+	}
+	mode, err := openContentModeOf(we)
+	if err != nil {
+		return nil, err
+	}
+	anyElem := childElement(we, xsd.XMLSchemaNS, "any")
+	if anyElem == nil {
+		// Unreachable: a mode≠"none" <openContent> without an <any> was rejected by
+		// checkOpenContentAny (src-ct clause 3) and a <defaultOpenContent> without
+		// one by defaultOpenContentElem, and those are the only two elements clause
+		// 5 can select. Panicking names the broken invariant rather than fabricating
+		// a verdict for a source shape that cannot reach here.
+		panic("parser: openContentOf: ·wildcard element· with mode other than none has no <any> child")
+	}
+	w, err := p.produceWildcard(anyElem)
+	if err != nil {
+		return nil, err
+	}
+	wildcard, err := openContentWildcard(we.Loc(), w, explicit)
+	if err != nil {
+		return nil, err
+	}
+	oc, err := xsd.NewOpenContent(we.Loc(), mode, wildcard)
+	if err != nil {
+		return nil, err
+	}
+	return &oc, nil
+}
+
+// openContentWildcard computes clause 6.2's {wildcard}: the wildcard W
+// corresponding to the ·wildcard element·'s <any> child when the ·explicit
+// content type· carries no {open content}, and otherwise a wildcard whose
+// {process contents} and {annotations} are W's and whose {namespace constraint}
+// is the §3.10.6.3 wildcard union (xsd.UnionNamespaceConstraint) of W's with
+// that of ·explicit content type·.{open content}.{wildcard}.
+//
+// The second arm is live for an <extension> whose base already has an Open
+// Content: §3.4.2.3.3 clause 4.2.2/4.2.3 hand the base's {open content} through
+// into the ·explicit content type· (extensionContentType), and this derivation's
+// own <openContent> then widens it rather than replacing it.
+func openContentWildcard(loc xsderr.Loc, w xsd.Wildcard, explicit xsd.ContentType) (xsd.Wildcard, error) {
+	ec, ok := explicit.(xsd.ElementContent)
+	if !ok || ec.OpenContent == nil {
+		return w, nil
+	}
+	unioned, err := xsd.UnionNamespaceConstraint(loc, w.NamespaceConstraint(), ec.OpenContent.Wildcard().NamespaceConstraint())
+	if err != nil {
+		return xsd.Wildcard{}, err
+	}
+	return xsd.NewWildcard(loc, unioned, w.ProcessContents(), w.Annotations())
+}
+
+// wrapOpenContent folds oc into the ·explicit content type· per §3.4.2.3.3
+// clause 6.2's {variety}/{particle} half: an element-only or mixed explicit
+// content keeps its {variety} and {particle} and merely gains the {open
+// content}, while an ***empty*** one becomes ELEMENT-ONLY over the clause's
+// synthesized empty-sequence particle, so the Open Content has a content model
+// to interleave with or suffix. That element-only is unconditional — clause 6.2
+// names it outright, with no reading of ·effective mixed· — because the empty
+// ·explicit content type· that reaches here already answered the mixed question
+// by being empty (clause 4.1.1).
+func wrapOpenContent(loc xsderr.Loc, explicit xsd.ContentType, oc xsd.OpenContent) (xsd.ContentType, error) {
+	switch e := explicit.(type) {
+	case xsd.EmptyContent:
+		particle, err := emptySequenceParticle(loc)
+		if err != nil {
+			return nil, err
+		}
+		return xsd.ElementContent{Mixed: false, Particle: particle, OpenContent: &oc}, nil
+	case xsd.ElementContent:
+		e.OpenContent = &oc
+		return e, nil
+	default:
+		// xsd.SimpleContent, the only other member, is unreachable twice over:
+		// {open content} is a property of ElementContent alone
+		// (xsd/complextype.go), and no §3.4.2.3.3 branch feeding this function can
+		// yield simple content — the <simpleContent> forms never reach it.
+		// Panicking on the broken sealed sum matches extensionContentType above;
+		// charging a rule the type system already makes impossible would be a
+		// fabricated verdict.
+		panic("parser: wrapOpenContent: non-exhaustive ContentType switch")
+	}
+}
+
+// openContentModeIsNone reports whether an <openContent>/<defaultOpenContent>
+// element carries mode="none" — the ·actual value· of an xs:NMTOKEN-derived
+// enumeration, so surrounding whitespace is collapsed away before the compare.
+func openContentModeIsNone(we *Element) bool {
+	return strings.TrimSpace(attrOr(we, "mode")) == "none"
+}
+
+// openContentModeOf maps a ·wildcard element·'s mode attribute to the {mode} of
+// clause 6.2's Open Content: interleave when absent (the schema for schema
+// documents' default) or written out, suffix when written out. "none" never
+// reaches here — openContentOf returns clause 6.1 before calling — so an
+// out-of-enumeration token is what is left, charged to ct-props-correct clause 1
+// (§3.4.6.1), the §3.4.1 tableau the {mode} property belongs to, exactly as
+// xsd.NewOpenContent charges a mode it cannot represent.
+func openContentModeOf(we *Element) (xsd.OpenContentMode, error) {
+	mode, ok := attrValue(we, "mode")
+	if !ok {
+		return xsd.OpenContentInterleave, nil
+	}
+	switch strings.TrimSpace(mode) {
+	case "interleave":
+		return xsd.OpenContentInterleave, nil
+	case "suffix":
+		return xsd.OpenContentSuffix, nil
+	}
+	return 0, xsderr.New(ruleCTPropsCorr, we.Loc(),
+		"open content mode %q is not one of none/interleave/suffix (ct-props-correct clause 1)", mode)
+}
+
+// emptySequenceParticle builds the 1..1 particle over an empty sequence model
+// group that §3.4.2.3.3 names twice in identical words: clause 3.1.1's ·effective
+// content· for a mixed type with no model-group child, and clause 6.2's
+// {particle} when an ***empty*** ·explicit content type· has to carry an Open
+// Content. One encoding for both (STYLE T4).
+func emptySequenceParticle(loc xsderr.Loc) (xsd.Particle, error) {
+	seq, err := xsd.NewModelGroup(loc, xsd.CompositorSequence, nil, nil)
+	if err != nil {
+		return xsd.Particle{}, err
+	}
+	oneOne, err := xsd.NewOccurs(loc, 1, 1)
+	if err != nil {
+		return xsd.Particle{}, err
+	}
+	return xsd.NewParticle(loc, oneOne, xsd.ResolvedTerm{Term: seq}, nil)
 }
 
 // explicitContent maps the model-group child to the {explicit content} particle

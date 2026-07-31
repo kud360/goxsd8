@@ -85,6 +85,14 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"override with only an annotation", `<xs:override schemaLocation="b.xsd"><xs:annotation><xs:documentation>hi</xs:documentation></xs:annotation></xs:override>`},
 		{"empty override", `<xs:override schemaLocation="b.xsd"/>`},
 		{"override beside decidable kinds", `<xs:override schemaLocation="b.xsd"><xs:notation name="n" public="p"/></xs:override><xs:element name="e" type="xs:string"/>`},
+		// #230: <openContent> maps to {open content} (§3.4.2.3.3 clauses 5-6) in
+		// every position the schema for schema documents allows one, and the
+		// schema-level <defaultOpenContent> it falls back to is read rather than
+		// skipped — so all four shapes are decided rather than declined.
+		{"complexType with openContent", `<xs:complexType name="T"><xs:openContent mode="interleave"><xs:any/></xs:openContent><xs:sequence/></xs:complexType>`},
+		{"complexType with openContent mode=none", `<xs:complexType name="T"><xs:openContent mode="none"/><xs:sequence/></xs:complexType>`},
+		{"complexContent restriction with openContent", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:restriction base="B"><xs:openContent mode="suffix"><xs:any/></xs:openContent><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`},
+		{"top-level defaultOpenContent with any", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent><xs:complexType name="T"><xs:sequence/></xs:complexType>`},
 	}
 	for _, tc := range cases {
 		if !schemaShapeDecidable(schemaDoc(t, tc.body)) {
@@ -108,7 +116,6 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"complexType with simpleContent restriction (synthesizes an anonymous simple type)", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleContent></xs:complexType>`},
 		{"complexType with complexContent extension (produced, but cos-ct-extends unjudged)", `<xs:complexType name="T"><xs:complexContent><xs:extension base="xs:anyType"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`},
 		{"complexType with inline anonymous element type", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType/></xs:element></xs:sequence></xs:complexType>`},
-		{"complexType with openContent", `<xs:complexType name="T"><xs:openContent mode="interleave"><xs:any/></xs:openContent><xs:sequence/></xs:complexType>`},
 		{"element with inline anonymous type", `<xs:element name="e"><xs:complexType/></xs:element>`},
 		{"element with both type= and inline type", `<xs:element name="e" type="xs:string"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:element>`},
 		{"attribute with inline simpleType", `<xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`},
@@ -138,7 +145,17 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"override child that is a list-variety simpleType", `<xs:override schemaLocation="b.xsd"><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType></xs:override>`},
 		{"override child of an out-of-model kind", `<xs:override schemaLocation="b.xsd"><xs:include schemaLocation="c.xsd"/></xs:override>`},
 		{"include beside an undecidable kind still declines", `<xs:include schemaLocation="lib.xsd"/><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
-		{"top-level defaultOpenContent", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent>`},
+		// #230 admits <defaultOpenContent> only WITH the <any> child its content
+		// model makes mandatory: the producer rejects the childless form, but only
+		// once some complex type of the document reaches clause 5.2, so admitting it
+		// would make the verdict depend on unrelated content.
+		{"top-level defaultOpenContent with no any child", `<xs:defaultOpenContent/>`},
+		// Same lazy shape, same decline: mode="none" is legal on a type's own
+		// <openContent> but out of <defaultOpenContent>'s (interleave|suffix)
+		// enumeration, and so is any other token — both are rejected only once some
+		// complex type reaches clause 5.2.
+		{"top-level defaultOpenContent with mode=none", `<xs:defaultOpenContent mode="none"><xs:any/></xs:defaultOpenContent>`},
+		{"top-level defaultOpenContent with an out-of-enumeration mode", `<xs:defaultOpenContent mode="bogus"><xs:any/></xs:defaultOpenContent>`},
 	}
 	for _, tc := range cases {
 		if schemaShapeDecidable(schemaDoc(t, tc.body)) {

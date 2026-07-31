@@ -476,21 +476,42 @@ func TestProduceComplexContentWithoutDerivation(t *testing.T) {
 	}
 }
 
-// TestProduceExtensionOpenContentDeclined pins that <openContent> stays declined
-// on the extension path too, with the same limitation error the restriction path
-// gives — never silently mapped to an absent {open content}.
-func TestProduceExtensionOpenContentDeclined(t *testing.T) {
-	_, err := produce(t, wrap("urn:x", `
-		<xs:complexType name="B"><xs:sequence/></xs:complexType>
+// TestProduceExtensionOpenContentUnionsWithBase pins §3.4.2.3.3 clause 6.2's
+// {wildcard} on the extension path, where clause 4.2.3 has already handed the
+// base's {open content} through into the ·explicit content type·: the derived
+// type's own <openContent> does NOT replace it but widens it, the {namespace
+// constraint} being the §3.10.6.3 wildcard union of the two, with {process
+// contents} and {annotations} taken from the derivation's own W alone.
+func TestProduceExtensionOpenContentUnionsWithBase(t *testing.T) {
+	s, err := produce(t, wrap("urn:x", `
+		<xs:complexType name="B">
+			<xs:openContent mode="suffix"><xs:any namespace="urn:a" processContents="skip"/></xs:openContent>
+			<xs:sequence><xs:element name="x" type="xs:string"/></xs:sequence>
+		</xs:complexType>
 		<xs:complexType name="D"><xs:complexContent><xs:extension base="tns:B">
-			<xs:openContent mode="interleave"><xs:any/></xs:openContent>
-			<xs:sequence/>
+			<xs:openContent mode="interleave"><xs:any namespace="urn:b" processContents="lax"/></xs:openContent>
+			<xs:sequence><xs:element name="y" type="xs:string"/></xs:sequence>
 		</xs:extension></xs:complexContent></xs:complexType>`))
-	if err == nil {
-		t.Fatal("Produce accepted an <openContent> under <extension>")
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
 	}
-	if !strings.Contains(err.Error(), "<openContent> is not yet produced") {
-		t.Fatalf("error = %v, want the openContent limitation decline", err)
+	oc := elementContentOf(t, s, xq("D")).OpenContent
+	if oc == nil {
+		t.Fatal("D {open content} is absent, want the clause 6.2 record")
+	}
+	if oc.Mode() != xsd.OpenContentInterleave {
+		t.Errorf("{mode} = %s, want interleave — the derivation's own mode, not the base's", oc.Mode())
+	}
+	if got := oc.Wildcard().ProcessContents(); got != xsd.ProcessLax {
+		t.Errorf("{wildcard}.{process contents} = %v, want lax — W's own, not the base's skip", got)
+	}
+	nc := oc.Wildcard().NamespaceConstraint()
+	if nc.Variety() != xsd.NamespaceConstraintEnumeration {
+		t.Fatalf("{namespace constraint}.{variety} = %v, want enumeration", nc.Variety())
+	}
+	want := []xsd.Namespace{xsd.NamespaceName("urn:b"), xsd.NamespaceName("urn:a")}
+	if !reflect.DeepEqual(nc.Namespaces(), want) {
+		t.Errorf("{namespaces} = %v, want %v (cos-aw-union of W and the base's)", nc.Namespaces(), want)
 	}
 }
 
