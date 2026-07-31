@@ -786,22 +786,34 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 // {identity-constraint definitions}: §3.3.2.1's Common Mapping Rules apply
 // uniformly to global and local declarations, so <key>/<keyref>/<unique> children
 // are mapped here exactly as in produceElement. Registering them with the schema
-// builder is the caller's job (produceElementParticle). type= form only: an
-// inline <simpleType>/<complexType> child is declined (not yet produced). A
-// type=-less element defaults its {type definition} to xs:anyType (§3.3.2.1
-// case 4), now resolvable.
+// builder is the caller's job (produceElementParticle).
+//
+// Its {type definition} is mapped by localDeclaredType: the type= form, the
+// inline <simpleType> form (§3.3.2.1 dcl.elt.common clause 1, #229), or the
+// xs:anyType default (clause 4). An inline <complexType> child is still declined
+// (#340): the anonymous complex type it maps to would have to be the
+// {scope}.{parent} of its OWN nested local elements, which
+// xsd.ComplexTypeScopeParent — a by-NAME reference — cannot express (#301).
+//
+// src-element clause 3 (§3.3.3) is charged here for the both-present case, on the
+// same footing produceElement charges it for a global <element>: without it,
+// lifting the inline decline would let type= silently win over an inline child.
 //
 // scopeParent is the nearest <complexType> or named <group> ancestor's component,
 // supplied by the caller (never recomputed from the element here — the ancestor
 // axis is not walkable from an *Element). It is a required parameter, so the
-// inline-type decline below is the only path that can bypass building a scope.
+// inline-<complexType> decline below is the only path that can bypass building a
+// scope.
 func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScopeParent) (xsd.ElementDeclaration, error) {
-	if childElement(el, xsd.XMLSchemaNS, "simpleType") != nil || childElement(el, xsd.XMLSchemaNS, "complexType") != nil {
-		// When the inline form lands, an inline <complexType>'s own nested local
-		// elements will be scoped to an ANONYMOUS complex type, which
-		// xsd.ComplexTypeScopeParent cannot name — that is #301's problem to
-		// solve before this decline can be lifted.
-		return xsd.ElementDeclaration{}, fmt.Errorf("parser: a local <element> with an inline <simpleType>/<complexType> is not yet produced (type= form only)")
+	_, hasType := attrValue(el, "type")
+	inlineSimple := childElement(el, xsd.XMLSchemaNS, "simpleType")
+	inlineComplex := childElement(el, xsd.XMLSchemaNS, "complexType")
+	if hasType && (inlineSimple != nil || inlineComplex != nil) {
+		return xsd.ElementDeclaration{}, xsderr.New(ruleSrcElement, el.Loc(),
+			"element has both a type attribute and an inline <simpleType>/<complexType> child, but src-element clause 3 forbids both")
+	}
+	if inlineComplex != nil {
+		return xsd.ElementDeclaration{}, fmt.Errorf("parser: a local <element> with an inline <complexType> is not yet produced (#340, blocked on #301)")
 	}
 	name, _ := attrValue(el, "name")
 	qname := xsd.QName{Space: p.localTargetNS(el, "elementFormDefault"), Local: name}
@@ -809,12 +821,9 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	typeName := anyTypeName
-	if typeLex, hasType := attrValue(el, "type"); hasType {
-		typeName, err = p.resolveQName(el, typeLex)
-		if err != nil {
-			return xsd.ElementDeclaration{}, err
-		}
+	typeDef, err := p.localDeclaredType(el, anyTypeName)
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
 	}
 	nillable, _ := boolAttr(el, "nillable")
 	constraints, err := p.identityConstraintsOf(el)
@@ -825,8 +834,49 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	return xsd.NewElementDeclaration(el.Loc(), qname, typeName, nil, scope, vc,
+	return xsd.NewElementDeclaration(el.Loc(), qname, typeDef, nil, scope, vc,
 		nillable, constraints, nil, nil, false, nil, nil)
+}
+
+// localDeclaredType maps the {type definition} of a local <element> or
+// <attribute> whose both-present and inline-<complexType> cases the caller has
+// already excluded. It is the ONE implementation of the two parallel mapping
+// chains — §3.3.2.1 dcl.elt.common for an element, §3.2.2.2 dcl.att.local for an
+// attribute — which agree on every tier this producer implements (STYLE T4):
+//
+//	tier 1  the anonymous type corresponding to the inline <simpleType> child;
+//	tier 2  the type definition the type= attribute ·resolves· to;
+//	last    dflt, the caller's fallback — xs:anyType for an element (§3.3.2.1
+//	        clause 4), xs:anySimpleType for an attribute (§3.2.2.2).
+//
+// The anonymous type is built once, here, and handed to the declaration as an
+// xsd.InlineTypeDefinition: it goes into no symbol table, so the declaration is
+// its sole owner. Its {context} (§3.16.1) is not populated (#206).
+//
+// GAP(xsd): the element chain's clause 3 — "the {type definition} of the element
+// declaration ·resolved· to by the actual value of the substitutionGroup
+// attribute" — is not implemented, here or on the global path (produceElement); a
+// substitutionGroup-bearing element with no type= and no inline child falls
+// straight through to clause 4's xs:anyType, which is wider than the head's type.
+// That direction under-rejects at validation, never false-rejects a valid schema.
+// The attribute chain has no clause-3 analog, so this gap is the element's alone.
+func (p *producer) localDeclaredType(el *Element, dflt xsd.QName) (xsd.TypeDefinitionOrRef, error) {
+	if inline := childElement(el, xsd.XMLSchemaNS, "simpleType"); inline != nil {
+		st, err := p.constructSimpleType(xsd.QName{}, inline) // tier 1
+		if err != nil {
+			return nil, err
+		}
+		return xsd.InlineTypeDefinition{Definition: st}, nil
+	}
+	typeLex, hasType := attrValue(el, "type")
+	if !hasType {
+		return xsd.TypeDefinitionRef{Name: dflt}, nil
+	}
+	qn, err := p.resolveQName(el, typeLex) // tier 2
+	if err != nil {
+		return nil, err
+	}
+	return xsd.TypeDefinitionRef{Name: qn}, nil
 }
 
 // produceAnyParticle maps an <any> to a Particle whose {term} is a Wildcard
@@ -1058,30 +1108,24 @@ func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
 
 // produceLocalAttribute maps the sibling local Attribute Declaration of a local
 // <attribute> (§3.2.2.2, {scope} = local, {value constraint} always absent on the
-// declaration — any default/fixed feeds the Attribute Use, #70). type= form only:
-// an inline <simpleType> is declined (src-attribute clause 4 is the both-present
-// rule; the inline-only form is simply not yet produced). A type=-less attribute
-// defaults its {type definition} to xs:anySimpleType (§3.2.2.1).
+// declaration — any default/fixed feeds the Attribute Use, #70). Its {type
+// definition} is mapped by localDeclaredType over §3.2.2.2's three tiers: the
+// inline <simpleType> child (#229), the type= reference, or xs:anySimpleType.
+// src-attribute clause 4 (§3.2.3) rejects the both-present case first.
 func (p *producer) produceLocalAttribute(el *Element) (xsd.AttributeDeclaration, error) {
-	if childElement(el, xsd.XMLSchemaNS, "simpleType") != nil {
-		if _, hasType := attrValue(el, "type"); hasType {
-			return xsd.AttributeDeclaration{}, xsderr.New(ruleSrcAttribute, el.Loc(),
-				"attribute has both a type attribute and an inline <simpleType> child, but src-attribute clause 4 forbids both")
-		}
-		return xsd.AttributeDeclaration{}, fmt.Errorf("parser: a local <attribute> with an inline <simpleType> is not yet produced (type= form only)")
+	_, hasType := attrValue(el, "type")
+	if hasType && childElement(el, xsd.XMLSchemaNS, "simpleType") != nil {
+		return xsd.AttributeDeclaration{}, xsderr.New(ruleSrcAttribute, el.Loc(),
+			"attribute has both a type attribute and an inline <simpleType> child, but src-attribute clause 4 forbids both")
 	}
 	name, _ := attrValue(el, "name")
 	qname := xsd.QName{Space: p.localTargetNS(el, "attributeFormDefault"), Local: name}
-	typeName := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"}
-	if typeLex, hasType := attrValue(el, "type"); hasType {
-		qn, err := p.resolveQName(el, typeLex)
-		if err != nil {
-			return xsd.AttributeDeclaration{}, err
-		}
-		typeName = qn
+	typeDef, err := p.localDeclaredType(el, anySimpleTypeName)
+	if err != nil {
+		return xsd.AttributeDeclaration{}, err
 	}
 	inheritable, _ := boolAttr(el, "inheritable")
-	return xsd.NewAttributeDeclaration(el.Loc(), qname, typeName, xsd.ScopeLocal, nil, inheritable, nil)
+	return xsd.NewAttributeDeclaration(el.Loc(), qname, typeDef, xsd.ScopeLocal, nil, inheritable, nil)
 }
 
 // produceWildcard maps an <any>/<anyAttribute> to a Wildcard (§3.10.2.2). It

@@ -42,7 +42,7 @@ func elementNamed(t *testing.T, name xsd.QName) xsd.ElementDeclaration {
 // position, for the tests that assert on the position a rejection cites.
 func elementNamedAt(t *testing.T, loc xsderr.Loc, name xsd.QName) xsd.ElementDeclaration {
 	t.Helper()
-	e, err := xsd.NewElementDeclaration(loc, name, xsd.QName{}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+	e, err := xsd.NewElementDeclaration(loc, name, nil, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration(%v): %v", name, err)
 	}
@@ -53,7 +53,7 @@ func elementNamedAt(t *testing.T, loc xsderr.Loc, name xsd.QName) xsd.ElementDec
 // tests.
 func attributeNamed(t *testing.T, name xsd.QName) xsd.AttributeDeclaration {
 	t.Helper()
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, xsd.QName{}, xsd.ScopeGlobal, nil, false, nil)
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, nil, xsd.ScopeGlobal, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration(%v): %v", name, err)
 	}
@@ -308,7 +308,7 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 	}{
 		{"ElementDeclaration", func(t *testing.T, l xsderr.Loc) xsderr.Loc { return elementNamedAt(t, l, name).Loc() }},
 		{"AttributeDeclaration", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
-			a, err := xsd.NewAttributeDeclaration(l, name, xsd.QName{}, xsd.ScopeGlobal, nil, false, nil)
+			a, err := xsd.NewAttributeDeclaration(l, name, nil, xsd.ScopeGlobal, nil, false, nil)
 			if err != nil {
 				t.Fatalf("NewAttributeDeclaration: %v", err)
 			}

@@ -61,9 +61,10 @@ func exampleAnyWildcard() xsd.Wildcard {
 }
 
 // exampleElement builds an element declaration of the given scope whose {type
-// definition} reference is typeName.
+// definition} is a by-name reference to typeName (the xsd.TypeDefinitionRef arm
+// of the slot's sealed sum; the other arm owns an inline anonymous type).
 func exampleElement(name, typeName xsd.QName, scope xsd.Scope) xsd.ElementDeclaration {
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, typeName, nil, scope, nil, false, nil, nil, nil, false, nil, nil)
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: typeName}, nil, scope, nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -168,7 +169,7 @@ func Example_buildFinalizeQuery() {
 			exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement(addressType, "city")}),
 		)}))
 	b.AddElement(exampleElement(exampleQName("shipTo"), addressType, xsd.NewGlobalScope()))
-	country, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, exampleQName("country"), anySimpleTypeName, xsd.ScopeGlobal, nil, false, nil)
+	country, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, exampleQName("country"), xsd.TypeDefinitionRef{Name: anySimpleTypeName}, xsd.ScopeGlobal, nil, false, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -182,7 +183,13 @@ func Example_buildFinalizeQuery() {
 	}
 
 	e, ok := s.Element(exampleQName("shipTo"))
-	fmt.Println("element shipTo:", ok, "type", e.TypeDefinitionName())
+	// {type definition} is a sealed sum: the by-name arm here, an owned inline
+	// anonymous type for a declaration written with an inline <simpleType>.
+	shipToType, byName := e.TypeDefinition().(xsd.TypeDefinitionRef)
+	if !byName {
+		panic("shipTo's type is not a by-name reference")
+	}
+	fmt.Println("element shipTo:", ok, "type", shipToType.Name)
 	t, ok := s.Type(exampleQName("AddressType"))
 	fmt.Println("type AddressType:", ok, t.Name())
 	a, ok := s.Attribute(exampleQName("country"))
@@ -199,7 +206,7 @@ func Example_buildFinalizeQuery() {
 
 // Example_contentModelTraversal walks a global element's content model down to
 // its leaf element declarations, the five-type chain a consumer needs first:
-// Schema.Element → ElementDeclaration.TypeDefinitionName → Schema.Type →
+// Schema.Element → ElementDeclaration.TypeDefinition → Schema.Type →
 // ComplexType.ContentType → ElementContent.Particle → Particle.Term (a
 // TermOrRef) → Term → ModelGroup.Particles, recursing on each nested particle.
 //
@@ -235,7 +242,11 @@ func Example_contentModelTraversal() {
 	if !ok {
 		panic("purchaseOrder not declared")
 	}
-	def, ok := s.Type(root.TypeDefinitionName())
+	rootType, byName := root.TypeDefinition().(xsd.TypeDefinitionRef)
+	if !byName {
+		panic("purchaseOrder's type is not a by-name reference")
+	}
+	def, ok := s.Type(rootType.Name)
 	if !ok {
 		panic("purchaseOrder type not declared")
 	}

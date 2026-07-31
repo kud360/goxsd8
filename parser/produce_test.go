@@ -37,6 +37,20 @@ func wrap(target, body string) string {
 
 const xsdNS = "http://www.w3.org/2001/XMLSchema"
 
+// declaredTypeName returns the expanded name a declaration's {type definition}
+// slot references, failing the test when the slot is not the by-name arm — the
+// shape every type=/default assertion in this package makes. An inline anonymous
+// type (xsd.InlineTypeDefinition) is asserted on directly instead, never through
+// this helper.
+func declaredTypeName(t *testing.T, ref xsd.TypeDefinitionOrRef) xsd.QName {
+	t.Helper()
+	byName, ok := ref.(xsd.TypeDefinitionRef)
+	if !ok {
+		t.Fatalf("{type definition} = %#v, want a by-name xsd.TypeDefinitionRef", ref)
+	}
+	return byName.Name
+}
+
 func TestProduceTopLevelElement(t *testing.T) {
 	s, err := produce(t, wrap("", `<xs:element name="root" type="xs:string"/>`))
 	if err != nil {
@@ -46,7 +60,7 @@ func TestProduceTopLevelElement(t *testing.T) {
 	if !ok {
 		t.Fatalf("element root not found")
 	}
-	if got := ed.TypeDefinitionName(); got != (xsd.QName{Space: xsdNS, Local: "string"}) {
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != (xsd.QName{Space: xsdNS, Local: "string"}) {
 		t.Fatalf("type = %s, want {xs}string", got)
 	}
 	if ed.ScopeVariety() != xsd.ScopeGlobal {
@@ -63,7 +77,7 @@ func TestProduceTopLevelAttribute(t *testing.T) {
 	if !ok {
 		t.Fatalf("attribute count not found")
 	}
-	if got := ad.TypeDefinitionName(); got != (xsd.QName{Space: xsdNS, Local: "int"}) {
+	if got := declaredTypeName(t, ad.TypeDefinition()); got != (xsd.QName{Space: xsdNS, Local: "int"}) {
 		t.Fatalf("type = %s, want {xs}int", got)
 	}
 }
@@ -328,7 +342,7 @@ func TestProduceElementNoTypeDefaultsAnyType(t *testing.T) {
 	if !ok {
 		t.Fatalf("element e not found")
 	}
-	if got := ed.TypeDefinitionName(); got != anyTypeQN {
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != anyTypeQN {
 		t.Fatalf("type = %s, want {xs}anyType", got)
 	}
 	td, ok := s.Type(anyTypeQN)
@@ -352,7 +366,7 @@ func TestProduceAttributeNoTypeDefaultsAnySimpleType(t *testing.T) {
 		t.Fatalf("Produce: %v", err)
 	}
 	ad, _ := s.Attribute(xsd.QName{Local: "a"})
-	if got := ad.TypeDefinitionName(); got != (xsd.QName{Space: xsdNS, Local: "anySimpleType"}) {
+	if got := declaredTypeName(t, ad.TypeDefinition()); got != (xsd.QName{Space: xsdNS, Local: "anySimpleType"}) {
 		t.Fatalf("type = %s, want {xs}anySimpleType", got)
 	}
 }
@@ -893,5 +907,120 @@ func TestProduceChargesScaleRestriction(t *testing.T) {
 	got, ok := xsderr.RuleOf(err)
 	if !ok || got != xsderr.Rule("maxScale-valid-restriction") {
 		t.Fatalf("rule = %q (ok=%v), want %q; err=%v", got, ok, "maxScale-valid-restriction", err)
+	}
+}
+
+// inlineSimpleType asserts that a {type definition} slot is the InlineTypeDefinition
+// arm and returns the anonymous simple type it owns (#229).
+func inlineSimpleType(t *testing.T, ref xsd.TypeDefinitionOrRef) *xsd.SimpleType {
+	t.Helper()
+	inline, ok := ref.(xsd.InlineTypeDefinition)
+	if !ok {
+		t.Fatalf("{type definition} = %#v, want an xsd.InlineTypeDefinition", ref)
+	}
+	st, ok := inline.Definition.(*xsd.SimpleType)
+	if !ok {
+		t.Fatalf("inline {type definition} is %T, want *xsd.SimpleType", inline.Definition)
+	}
+	if st.Name() != (xsd.QName{}) {
+		t.Fatalf("inline {type definition} {name} = %s, want the absent (zero) QName", st.Name())
+	}
+	return st
+}
+
+// TestProduceLocalElementInlineSimpleType is §3.3.2.1 dcl.elt.common clause 1 for
+// a LOCAL element: the <simpleType> child maps to the anonymous type that becomes
+// the declaration's {type definition}, reachable only through the declaration
+// (it is in no symbol table).
+func TestProduceLocalElementInlineSimpleType(t *testing.T) {
+	body := `<xs:complexType name="CT"><xs:sequence>` +
+		`<xs:element name="code"><xs:simpleType><xs:restriction base="xs:string">` +
+		`<xs:maxLength value="4"/></xs:restriction></xs:simpleType></xs:element>` +
+		`</xs:sequence></xs:complexType>`
+	s, err := produce(t, wrap("", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, ok := s.Type(xsd.QName{Local: "CT"})
+	if !ok {
+		t.Fatalf("complexType CT not found")
+	}
+	mg := topGroup(t, td.(xsd.ComplexType))
+	ed := mg.Particles()[0].Term().(xsd.ResolvedTerm).Term.(xsd.ElementDeclaration)
+	if ed.Name() != (xsd.QName{Local: "code"}) {
+		t.Fatalf("local element = %s, want {}code", ed.Name())
+	}
+	st := inlineSimpleType(t, ed.TypeDefinition())
+	if st.Base() == nil || st.Base().Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
+		t.Fatalf("inline type base = %v, want {xs}string", st.Base())
+	}
+	if got := st.OwnFacets(); len(got) != 1 || got[0].Kind() != xsd.FacetMaxLength {
+		t.Fatalf("inline type own facets = %v, want one maxLength", got)
+	}
+	// The anonymous type is NOT registered in {type definitions}: it has no name
+	// to be resolved by.
+	if _, ok := s.Type(xsd.QName{}); ok {
+		t.Fatalf("the anonymous inline type was registered in {type definitions}")
+	}
+}
+
+// TestProduceLocalAttributeInlineSimpleType is the §3.2.2.2 dcl.att.local half:
+// the first tier of the attribute's three-tier {type definition} chain.
+func TestProduceLocalAttributeInlineSimpleType(t *testing.T) {
+	body := `<xs:complexType name="CT"><xs:sequence/>` +
+		`<xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:int">` +
+		`<xs:minInclusive value="1"/></xs:restriction></xs:simpleType></xs:attribute>` +
+		`</xs:complexType>`
+	ct := complexType(t, body, "CT")
+	uses := ct.AttributeUses()
+	if len(uses) != 1 {
+		t.Fatalf("attribute uses = %d, want 1", len(uses))
+	}
+	decl := uses[0].AttributeDeclaration().(xsd.LocalAttributeDeclaration).Declaration
+	if decl.ScopeVariety() != xsd.ScopeLocal {
+		t.Fatalf("decl scope = %s, want local", decl.ScopeVariety())
+	}
+	st := inlineSimpleType(t, decl.TypeDefinition())
+	if st.Base() == nil || st.Base().Name() != (xsd.QName{Space: xsdNS, Local: "int"}) {
+		t.Fatalf("inline type base = %v, want {xs}int", st.Base())
+	}
+}
+
+// TestProduceLocalElementTypeAndInlineRejected is src-element clause 3 (§3.3.3)
+// on the LOCAL path: a type= attribute and an inline <simpleType> child together
+// are a schema-representation violation, not a case where type= silently wins.
+func TestProduceLocalElementTypeAndInlineRejected(t *testing.T) {
+	body := `<xs:complexType name="CT"><xs:sequence>` +
+		`<xs:element name="e" type="xs:string"><xs:simpleType>` +
+		`<xs:restriction base="xs:string"/></xs:simpleType></xs:element>` +
+		`</xs:sequence></xs:complexType>`
+	_, err := produce(t, wrap("", body))
+	assertRule(t, err, "src-element")
+}
+
+// TestProduceLocalAttributeTypeAndInlineRejected is the src-attribute clause 4
+// (§3.2.3) half of the same rule.
+func TestProduceLocalAttributeTypeAndInlineRejected(t *testing.T) {
+	body := `<xs:complexType name="CT"><xs:sequence/>` +
+		`<xs:attribute name="a" type="xs:string"><xs:simpleType>` +
+		`<xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>` +
+		`</xs:complexType>`
+	_, err := produce(t, wrap("", body))
+	assertRule(t, err, "src-attribute")
+}
+
+// TestProduceLocalElementInlineComplexTypeStillDeclined pins the deliberate
+// asymmetry: the inline <complexType> form stays unproduced (#340, blocked on
+// #301), so it must fail as a limitation, never be silently accepted.
+func TestProduceLocalElementInlineComplexTypeStillDeclined(t *testing.T) {
+	body := `<xs:complexType name="CT"><xs:sequence>` +
+		`<xs:element name="e"><xs:complexType><xs:sequence/></xs:complexType></xs:element>` +
+		`</xs:sequence></xs:complexType>`
+	_, err := produce(t, wrap("", body))
+	if err == nil {
+		t.Fatal("Produce accepted a local <element> with an inline <complexType>")
+	}
+	if !strings.Contains(err.Error(), "inline <complexType> is not yet produced") {
+		t.Fatalf("error = %v, want the inline-<complexType> limitation", err)
 	}
 }

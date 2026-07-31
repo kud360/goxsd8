@@ -695,7 +695,7 @@ func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error)
 		return xsd.ElementDeclaration{}, err
 	}
 	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
-	return xsd.NewElementDeclaration(elem.Loc(), qname, typeName, nil, xsd.NewGlobalScope(), vc,
+	return xsd.NewElementDeclaration(elem.Loc(), qname, xsd.TypeDefinitionRef{Name: typeName}, nil, xsd.NewGlobalScope(), vc,
 		false, constraints, nil, nil, false, nil, nil)
 }
 
@@ -749,7 +749,7 @@ func (p *producer) produceAttribute(elem *Element) (xsd.AttributeDeclaration, er
 			return xsd.AttributeDeclaration{}, err
 		}
 	}
-	return xsd.NewAttributeDeclaration(elem.Loc(), qname, typeName, xsd.ScopeGlobal, vc, false, nil)
+	return xsd.NewAttributeDeclaration(elem.Loc(), qname, xsd.TypeDefinitionRef{Name: typeName}, xsd.ScopeGlobal, vc, false, nil)
 }
 
 // valueConstraintOf maps the default/fixed attributes of an <element>/<attribute>

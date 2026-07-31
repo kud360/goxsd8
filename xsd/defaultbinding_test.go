@@ -185,7 +185,7 @@ func TestEffectiveValueConstraintFallback(t *testing.T) {
 	declFixed := NewValueConstraint(ValueFixed, "7")
 	useDefault := NewValueConstraint(ValueDefault, "9")
 	s := bSchema(t, func(b *SchemaBuilder) {
-		global, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), uq("str"), ScopeGlobal, &declFixed, false, nil)
+		global, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, ScopeGlobal, &declFixed, false, nil)
 		if err != nil {
 			t.Fatalf("NewAttributeDeclaration: %v", err)
 		}

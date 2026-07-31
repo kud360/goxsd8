@@ -29,11 +29,15 @@ const ruleAPropsCorrect xsderr.Rule = "a-props-correct"
 // {annotations}.
 //
 // Like the other §3 component shapes in this package, AttributeDeclaration is a
-// STRUCTURAL holder built before resolution. Its {type definition} is carried
-// as a pre-resolution QName REFERENCE, not a resolved component (the type/@type
-// name of §3.2.2). Its resolved-component accessor, and a-props-correct clause 2
-// (Simple Default Valid), are deferred to the finalize-phase issue (#173) that
-// first introduces phased construction; this package resolves neither yet.
+// STRUCTURAL holder built before resolution. Its {type definition} is carried as
+// a TypeDefinitionOrRef: a pre-resolution QName REFERENCE for the type/@type and
+// xs:anySimpleType tiers of §3.2.2.2 dcl.att.local, or the owned anonymous
+// component itself for the inline <simpleType> tier. Note that §3.2.2.2's chain
+// has three tiers, not the four of an element's §3.3.2.1 dcl.elt.common: an
+// attribute has no substitution-group analog. A resolved-component accessor for
+// the by-name arm, and a-props-correct clause 2 (Simple Default Valid), are
+// deferred to the finalize-phase issue (#173) that first introduces phased
+// construction; this package resolves neither yet.
 //
 // {scope}.{parent} (§3.2.1 sc_a — a Complex Type Definition or Attribute Group
 // Definition) is entirely UNMODELED, tracked as #169. Only {scope}.{variety} is
@@ -54,8 +58,10 @@ const ruleAPropsCorrect xsderr.Rule = "a-props-correct"
 // dcl.att.global (§3.2.2.1) populates it here — so absence must be
 // representable on the declaration independently of the use.
 //
-// Ratchet impact: unchanged. This is a leaf shape with no parser producer; the
-// schema conformance lane moves only when the producer (#174/#175) wires it in.
+// Ratchet impact: the schema lane widens whenever the producer starts mapping a
+// {type definition} shape it used to decline — most recently the inline
+// anonymous <simpleType> of a local declaration (#229), which the
+// InlineTypeDefinition arm of the slot exists to hold.
 //
 // Construct only through NewAttributeDeclaration, which rejects the states
 // a-props-correct (§3.2.6.1) clause 1 forbids so they are unrepresentable
@@ -63,7 +69,7 @@ const ruleAPropsCorrect xsderr.Rule = "a-props-correct"
 type AttributeDeclaration struct {
 	loc                xsderr.Loc // source position; provenance, not a §3.2.1 property
 	name               QName
-	typeDefinitionName QName
+	typeDefinition     TypeDefinitionOrRef
 	scopeVariety       ScopeVariety
 	valueConstraint    ValueConstraint
 	hasValueConstraint bool
@@ -83,6 +89,13 @@ type AttributeDeclaration struct {
 // Clause 2 (Simple Default Valid, §3.2.6.2) needs the resolved {type
 // definition} and is deferred to finalize (#173); it is NOT enforced here.
 //
+// It also rejects the two illegal encodings of the typeDefinition slot — a
+// zero-named TypeDefinitionRef and an InlineTypeDefinition that is empty or
+// wraps a NAMED type — charged to xsderr.RuleComponentInvariant; see
+// TypeDefinitionOrRef and checkTypeDefinitionOrRef. A nil slot is the legal
+// encoding of an absent {type definition}, which a programmatically built
+// declaration is in before the §3.2.2.2 defaulting tiers are applied.
+//
 // valueConstraint is a pointer so absence (nil) is distinct from a present zero
 // record (mirroring elementdeclaration.go's *ValueConstraint handling); when
 // non-nil the pointed-to value is COPIED into the struct and hasValueConstraint
@@ -96,7 +109,10 @@ type AttributeDeclaration struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built declaration — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QName, scopeVariety ScopeVariety, valueConstraint *ValueConstraint, inheritable bool, annotations []Annotation) (AttributeDeclaration, error) {
+func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, scopeVariety ScopeVariety, valueConstraint *ValueConstraint, inheritable bool, annotations []Annotation) (AttributeDeclaration, error) {
+	if err := checkTypeDefinitionOrRef(loc, typeDefinition, "attribute declaration "+name.String()); err != nil {
+		return AttributeDeclaration{}, err
+	}
 	switch scopeVariety {
 	case ScopeGlobal, ScopeLocal:
 	default:
@@ -112,11 +128,11 @@ func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QNam
 		}
 	}
 	a := AttributeDeclaration{
-		loc:                loc,
-		name:               name,
-		typeDefinitionName: typeDefinitionName,
-		scopeVariety:       scopeVariety,
-		inheritable:        inheritable,
+		loc:            loc,
+		name:           name,
+		typeDefinition: typeDefinition,
+		scopeVariety:   scopeVariety,
+		inheritable:    inheritable,
 	}
 	if valueConstraint != nil {
 		a.valueConstraint, a.hasValueConstraint = *valueConstraint, true
@@ -139,16 +155,18 @@ func (a AttributeDeclaration) Loc() xsderr.Loc {
 	return a.loc
 }
 
-// TypeDefinitionName returns the {type definition} property (Required) as a
-// pre-resolution QName reference — the type/@type name of §3.2.2.
+// TypeDefinition returns the {type definition} property (Required) as the
+// TypeDefinitionOrRef sealed sum: a TypeDefinitionRef naming a top-level simple
+// type (the type/@type or xs:anySimpleType tiers of §3.2.2.2 dcl.att.local), or
+// an InlineTypeDefinition owning the anonymous type of an inline <simpleType>
+// child (its first tier). It is nil only for a declaration built with an absent
+// {type definition}.
 //
-// This is NOT the resolved {type definition} component (§3.2.1). The resolved
-// component accessor, and its resolution, are deferred to the future
-// finalize-phase issue that first introduces phased construction (#173, per
-// doc.go's "parse → resolve → finalize"); nothing in this package resolves it
-// yet.
-func (a AttributeDeclaration) TypeDefinitionName() QName {
-	return a.typeDefinitionName
+// The by-name arm is NOT resolved into a component here; a consumer obtains the
+// component by a read-time schema.Type(name) lookup, exactly as for an element
+// declaration. The inline arm needs no lookup — it carries the component.
+func (a AttributeDeclaration) TypeDefinition() TypeDefinitionOrRef {
+	return a.typeDefinition
 }
 
 // ScopeVariety returns the {scope}.{variety} property (§3.2.1 sc_a).

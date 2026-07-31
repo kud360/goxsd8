@@ -182,24 +182,32 @@ func (s *Schema) checkGroupElementsConsistent(g ModelGroup, containing ComplexTy
 //
 // The first declaration in document order is the reference every later one is
 // compared against, so the reported failure is deterministic (STYLE D1).
+//
+// Clause 1 is decided by WHICH ARM of TypeDefinitionOrRef each declaration
+// carries, not by comparing a QName against zero: only the by-name
+// TypeDefinitionRef arm has a ·non-absent· {name} at all. An InlineTypeDefinition
+// is anonymous by construction, and a nil slot has no {type definition} to name,
+// so both fail clause 1 — the two states the old zero-QName encoding conflated.
 func checkSameTypeDefinition(name QName, decls []ElementDeclaration) error {
 	if len(decls) < 2 {
 		return nil
 	}
-	head := decls[0]
-	for _, d := range decls {
-		if d.TypeDefinitionName() == (QName{}) {
+	typeNames := make([]QName, len(decls))
+	for i, d := range decls {
+		ref, byName := d.TypeDefinition().(TypeDefinitionRef)
+		if !byName {
 			return xsderr.New(ruleCosElementConsistent, xsderr.Loc{},
-				"a content model contains two or more element declarations named %s, but one of them has an anonymous declared {type definition}, and cos-element-consistent clause 1 requires every such {type definition} to have a ·non-absent· {name}", name)
+				"a content model contains two or more element declarations named %s, but one of them has an anonymous or absent declared {type definition}, and cos-element-consistent clause 1 requires every such {type definition} to have a ·non-absent· {name}", name)
 		}
+		typeNames[i] = ref.Name
 	}
-	for _, d := range decls[1:] {
+	for _, tn := range typeNames[1:] {
 		// {name} and {target namespace} (clauses 2 and 3) are bundled as one QName
 		// by this package's expanded-name convention, so one comparison covers both.
-		if d.TypeDefinitionName() != head.TypeDefinitionName() {
+		if tn != typeNames[0] {
 			return xsderr.New(ruleCosElementConsistent, xsderr.Loc{},
 				"a content model contains element declarations named %s with different declared {type definition}s (%s and %s), but cos-element-consistent clauses 2-3 require the same {name} and {target namespace}",
-				name, head.TypeDefinitionName(), d.TypeDefinitionName())
+				name, typeNames[0], tn)
 		}
 	}
 	return checkTypeTablesAgree(name, decls,
