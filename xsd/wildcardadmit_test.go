@@ -363,3 +363,40 @@ func mustAttributeDecl(t *testing.T, name QName) AttributeDeclaration {
 	}
 	return a
 }
+
+// TestDefinedSiblingSeesExtensionFoldedBaseElement is the consuming half of
+// #51's ask, restated for #228. The sibling walk answers cvc-wildcard clause 3
+// from the containing type's OWN {content type} and deliberately never follows
+// {base type definition} (xs:anyType is its own base, and STYLE D3 makes the
+// derived {content type} the single encoding of what the type contains). That is
+// correct only because §3.4.2.3.3 clause 4.2.3.3 folds the ·base particle· INTO
+// the derived {content type} — a 1..1 particle over a sequence of [base particle,
+// effective content], which is exactly the shape the parser now produces and
+// exactly the shape built here.
+//
+// So an element declared in the base must read as a sibling, with no change to
+// wildcardadmit.go. If this ever fails, the defect is in the clause-4.2 merge,
+// not in the walk.
+func TestDefinedSiblingSeesExtensionFoldedBaseElement(t *testing.T) {
+	w := wWildcard(t, DisallowedNameSibling)
+	baseParticle := wParticle(t, ResolvedTerm{Term: wGroup(t, CompositorSequence,
+		wParticle(t, ResolvedTerm{Term: wElement(t, wq("fromBase"), uLocalScope(t), nil, nil)}))})
+	effective := wParticle(t, ResolvedTerm{Term: wGroup(t, CompositorSequence,
+		wParticle(t, ResolvedTerm{Term: wElement(t, wq("fromDerived"), uLocalScope(t), nil, nil)}),
+		wParticle(t, ResolvedTerm{Term: w}))})
+	derived := wCT(t, wq("derived"), ResolvedTerm{Term: wGroup(t, CompositorSequence, baseParticle, effective)})
+
+	b := NewSchemaBuilder()
+	b.AddType(derived)
+	s := wFinalize(t, b)
+
+	if s.allowsElementWildcardName(w, derived, wq("fromBase")) {
+		t.Error("sibling admitted a name the extension folded in from its BASE particle (cvc-wildcard clause 3)")
+	}
+	if s.allowsElementWildcardName(w, derived, wq("fromDerived")) {
+		t.Error("sibling admitted a name declared in the extension's own effective content (cvc-wildcard clause 3)")
+	}
+	if !s.allowsElementWildcardName(w, derived, wq("elsewhere")) {
+		t.Error("sibling rejected a name declared nowhere in the content model")
+	}
+}

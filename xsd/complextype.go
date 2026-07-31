@@ -46,9 +46,12 @@ import "github.com/kud360/goxsd8/xsderr"
 // cos-content-act-restrict (§3.4.6.4) delegate included (contentrestricts.go,
 // #263) — the exceptions there are clause 5's {assertions} prefix, and the
 // content models §3.4.6.3's own all-group leniency licenses accepting
-// provisionally. cos-ct-extends (§3.4.6.2) is untouched: no producer builds an
-// extension-derived complex type yet (#264). None of them is touched HERE — they
-// are cross-component finalize-phase concerns, not tableau shape.
+// provisionally. cos-ct-extends (§3.4.6.2) is untouched and is now a live
+// FAIL-OPEN gap: since #228 the parser DOES build extension-derived complex
+// types (parser/produce_complex.go maps §3.4.2.2 cases 3-5 and §3.4.2.3.3 clause
+// 4.2), so an invalid extension is constructed and never rejected — a missing
+// rejection, never a false one, tracked as #264. None of them is touched HERE —
+// they are cross-component finalize-phase concerns, not tableau shape.
 const ruleCTPropsCorrect xsderr.Rule = "ct-props-correct"
 
 // ContentType is the sealed sum of the four Content Type varieties of a Complex
@@ -207,8 +210,8 @@ func (o OpenContent) Wildcard() Wildcard {
 // schema.Type(name) lookup. Finalize also charges ct-props-correct clauses 2 and
 // 4 and, for a restriction, derivation-ok-restriction (§3.4.6.3) against the
 // resolved base (Phase D, complexderivation.go, #262). Clause 1's remaining
-// resolved parts and cos-ct-extends (§3.4.6.2) stay deferred: no producer builds
-// an extension-derived complex type yet (#264).
+// resolved parts and cos-ct-extends (§3.4.6.2) stay deferred (#264) — the latter
+// fail-open over the extension-derived types the parser builds as of #228.
 //
 // {context} (§3.4.1 ctd-context — the component an anonymous type appears in) is
 // entirely UNMODELED, tracked as #301: the containing declaration/type that would

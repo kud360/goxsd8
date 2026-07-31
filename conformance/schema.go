@@ -31,7 +31,7 @@ import (
 // which coerces nothing: the imported document keeps its own namespace) — and
 // maps top-level
 // <simpleType>/<element>/<attribute>/<attributeGroup>/<group>/<notation> and the
-// produce-time-decidable subset of <complexType> (implicit and <complexContent>
+// decidable subset of <complexType> (implicit and <complexContent>
 // <restriction> content, its particles including <group ref>, local
 // element/attribute declarations, attribute uses including <attributeGroup ref>,
 // wildcards, and <assert> assertions) into xsd components, maps the name=
@@ -39,10 +39,19 @@ import (
 // xs:anyType, resolves cross-references, and rejects duplicate top-level names
 // within a kind. The one remaining top-level representation
 // (redefine), the ref= identity-constraint form, and the
-// not-yet-produced complexType forms (<simpleContent>, <complexContent>
-// <extension>, inline anonymous local types, <openContent>) are SILENTLY SKIPPED
+// not-yet-produced complexType forms (<simpleContent> <restriction>,
+// inline anonymous local types, <openContent>) are SILENTLY SKIPPED
 // or declined (§3.1.2 permits ignoring a not-yet-produced representation), NOT
 // rejected.
+//
+// The EXTENSION forms are a third category, neither produced-and-decided nor
+// skipped: since #228 Parse really does build <complexContent> <extension> and
+// <simpleContent> <extension> types (§3.4.2.3.3 clause 4.2, §3.4.2.2 cases 3-5),
+// but the constraints that judge them — cos-ct-extends §3.4.6.2 (#264) and the
+// §3.4.2.4/§3.4.2.5 base-attribute folds (#265) — are not implemented, so this
+// lane still DECLINES them (complexTypeDecidable). Producing without judging
+// would make the lane emit "valid" for schemas a complete processor rejects,
+// which is the one direction that corrupts the ratchet.
 //
 // # Why "Parse returns nil" is not, by itself, evidence of validity
 //
@@ -147,9 +156,12 @@ import (
 //       attributes are local <attribute>/<anyAttribute>/<attributeGroup ref> and
 //       whose <assert> children map to {assertions} (#178), with
 //       no <simpleContent>, no <complexContent> <extension>, no <openContent>, and
-//       no inline anonymous local type. Those excluded forms need the resolved base
-//       or a later slice, so Produce declines them with a plain limitation error,
-//       not a spec verdict — DECLINED to avoid a wrong-reason pass. A <group ref>/
+//       no inline anonymous local type. <simpleContent> <restriction> and
+//       <openContent> and the inline forms need a later producer slice, so Produce
+//       declines them with a plain limitation error, not a spec verdict; the two
+//       EXTENSION forms are produced but not judged (cos-ct-extends #264, the
+//       base-attribute folds #265) — DECLINED either way to avoid a wrong-reason
+//       pass in either direction. A <group ref>/
 //       <attributeGroup ref> IS produced (#177): its target resolves (or fails
 //       src-resolve) genuinely. A real structural violation inside an admitted
 //       shape (src-ct, cos-all-limited, src-wildcard, …) flows through as a genuine
@@ -237,10 +249,11 @@ import (
 // correctly finds none. An "invalid" verdict coincides only with truly-invalid
 // ground truth via a REAL implemented violation — never a fabricated one, since
 // the shape allowlist excludes every form (inline element/attribute types,
-// list/union/enumeration simpleTypes, ref= identity constraints, and the
-// not-yet-produced complexType forms — <simpleContent>, <complexContent>
-// <extension>, inline anonymous local types, <openContent>) where the producer's
-// rejection would be a limitation rather than a spec violation. A
+// list/union/enumeration simpleTypes, ref= identity constraints, the
+// not-yet-produced complexType forms — <simpleContent> <restriction>, inline
+// anonymous local types, <openContent> — and the produced-but-unjudged extension
+// forms) where the producer's rejection would be a limitation rather than a spec
+// violation, or its silence a missing rejection. A
 // suite-invalid case whose only defect is a rule finalize does NOT yet check
 // (cos-content-act-restrict — derivation-ok-restriction clause 2.4.2, #263 — or
 // cos-ns-subset, #265) is produced cleanly, so the lane observes "valid",
@@ -299,8 +312,9 @@ import (
 // # Still deferred
 //
 // Inline anonymous types on element/attribute, list/union/enumeration
-// simpleTypes, ref= identity constraints, and the not-yet-produced complexType
-// forms named above widen in with later producer slices (exactly
+// simpleTypes, ref= identity constraints, the not-yet-produced complexType
+// forms named above, and the extension forms awaiting #264/#265 widen in with
+// later slices (exactly
 // as the datatypes lane grew across #15/#57/#80); they stay DECLINED (Fail)
 // recorded gaps here, never guessed. UPA and EDC landed with #180 and
 // derivation-ok-restriction with #262, so the admitted complexType cases those
@@ -588,20 +602,27 @@ func identityConstraintsDecidable(el *parser.Element) bool {
 
 // complexTypeDecidable reports whether a <complexType> (top-level, or a nested
 // <restriction> reached through <complexContent>) lies within the producer's
-// decidable subset — the shapes it fully builds, so any Produce error on it is a
-// REAL structural violation (src-ct/cos-all-limited/src-wildcard/src-attribute/
-// p-props-correct/src-resolve), never a limitation-in-disguise. It declines every
-// shape the producer declines with a plain "not yet produced" limitation error:
+// decidable subset — the shapes it fully builds AND finalize fully judges, so any
+// Produce error on it is a REAL structural violation
+// (src-ct/cos-all-limited/src-wildcard/src-attribute/p-props-correct/src-resolve)
+// and its silence is a real absence of one. It declines:
 //
-//   - <simpleContent> (its {simple type definition} needs the resolved base,
-//     §3.4.2.2 — finalize-time);
-//   - <complexContent> whose derivation is <extension>, not <restriction> (its
-//     {content type} needs the resolved base particle, §3.4.2.3.3 clause 4.2);
-//   - <openContent> anywhere (its {open content} needs <defaultOpenContent>
-//     fallback, §3.4.2.3.3, not yet built);
-//   - an inline anonymous <simpleType>/<complexType> on a local element/attribute
-//     (not yet produced), or a bare <group>/<attributeGroup> lacking a ref (a
-//     nested one is always a reference, so a bare one is malformed — declined).
+//   - every shape the producer declines with a plain "not yet produced"
+//     limitation error — <simpleContent> <restriction> (§3.4.2.2 cases 1-2
+//     synthesize an anonymous simple type from the restriction's facets),
+//     <openContent> anywhere (its {open content} needs <defaultOpenContent>
+//     fallback, §3.4.2.3.3), an inline anonymous <simpleType>/<complexType> on a
+//     local element/attribute, and a bare <group>/<attributeGroup> lacking a ref
+//     (a nested one is always a reference, so a bare one is malformed);
+//   - the two EXTENSION forms, which the producer DOES build as of #228 —
+//     <simpleContent> <extension> and <complexContent> <extension> — because
+//     cos-ct-extends (§3.4.6.2) is not implemented (#264) and the base's
+//     {attribute uses}/{attribute wildcard}/{assertions} are not folded in
+//     (§3.4.2.4/§3.4.2.5, #265). Producing them without those, and admitting
+//     them here, would emit "valid" for schemas a complete processor rejects.
+//     The exclusion narrows to admit them once #264 (and #265) land, exactly as
+//     the restriction path was admitted only once derivation-ok-restriction
+//     existed (#262/#263) — a lane-widening change of its own, not this one's.
 //
 // A <group ref>/<attributeGroup ref> IS produced (#177) and admitted: its target
 // resolves genuinely at finalize (or fails src-resolve). Real structural
@@ -615,7 +636,9 @@ func complexTypeDecidable(el *parser.Element) bool {
 	if cc := childXSD(el, "complexContent"); cc != nil {
 		restriction := childXSD(cc, "restriction")
 		if restriction == nil {
-			return false // <extension> (or a bare/absent derivation) — not produced
+			// <extension> (produced since #228, but unjudged: cos-ct-extends #264)
+			// or a bare/absent derivation.
+			return false
 		}
 		if childXSD(cc, "openContent") != nil || childXSD(restriction, "openContent") != nil {
 			return false

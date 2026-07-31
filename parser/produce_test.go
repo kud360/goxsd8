@@ -656,30 +656,21 @@ func TestProduceWildcardBothNamespaceFormsRejected(t *testing.T) {
 	assertRule(t, err, "src-wildcard")
 }
 
-func TestProduceSimpleContentDeclined(t *testing.T) {
-	// <simpleContent> needs the resolved base for its {simple type definition}
-	// (§3.4.2.2) — not yet produced. Declined with a non-xsderr limitation error.
-	body := `<xs:complexType name="CT"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`
-	_, err := produce(t, wrap("", body))
-	if err == nil {
-		t.Fatalf("expected a decline error for <simpleContent>, got nil")
-	}
-	if _, ok := xsderr.RuleOf(err); ok {
-		t.Fatalf("simpleContent decline should be a plain limitation error, not an xsderr rule: %v", err)
-	}
-}
-
-func TestProduceComplexContentExtensionDeclined(t *testing.T) {
-	// <complexContent><extension> needs the resolved base particle (§3.4.2.3.3
-	// clause 4.2) — not yet produced. Declined with a non-xsderr limitation error.
-	body := `<xs:complexType name="Base"><xs:sequence/></xs:complexType>` +
-		`<xs:complexType name="CT"><xs:complexContent><xs:extension base="tns:Base"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`
+func TestProduceSimpleContentRestrictionDeclined(t *testing.T) {
+	// <simpleContent><restriction> synthesizes a NEW anonymous simple type from
+	// the <restriction>'s facet children (§3.4.2.2 cases 1-2) — not yet produced.
+	// Declined with a non-xsderr limitation error, never a fabricated rule
+	// verdict. <simpleContent><extension> (cases 3-5) IS produced; see
+	// produce_extension_test.go.
+	body := `<xs:complexType name="B"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>` +
+		`<xs:complexType name="CT"><xs:simpleContent><xs:restriction base="tns:B">` +
+		`<xs:maxLength value="4"/></xs:restriction></xs:simpleContent></xs:complexType>`
 	_, err := produce(t, wrap("urn:x", body))
 	if err == nil {
-		t.Fatalf("expected a decline error for <complexContent><extension>, got nil")
+		t.Fatalf("expected a decline error for <simpleContent><restriction>, got nil")
 	}
 	if _, ok := xsderr.RuleOf(err); ok {
-		t.Fatalf("extension decline should be a plain limitation error: %v", err)
+		t.Fatalf("simpleContent restriction decline should be a plain limitation error, not an xsderr rule: %v", err)
 	}
 }
 
