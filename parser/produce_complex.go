@@ -99,7 +99,7 @@ func (p *producer) produceComplexType(name xsd.QName, el *Element) (xsd.ComplexT
 		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
 	}
 	if oc := misplacedOpenContent(el); oc != nil {
-		return xsd.ComplexType{}, fmt.Errorf("parser: <openContent> at %s is in a position the schema for schema documents does not allow: it is a child of <complexType> only in the implicit-content form (no <simpleContent>/<complexContent>), and under <complexContent> only of the <restriction>/<extension> alternant", oc.Loc())
+		return xsd.ComplexType{}, fmt.Errorf("parser: <openContent> at %s is in a position the schema for schema documents does not allow: it is a child of <complexType> only in the implicit-content form (no <simpleContent>/<complexContent>), under <complexContent> only of the <restriction>/<extension> alternant, and nowhere at all under <simpleContent>", oc.Loc())
 	}
 	if sc := childElement(el, xsd.XMLSchemaNS, "simpleContent"); sc != nil {
 		return p.produceSimpleContent(name, el, sc)
@@ -505,30 +505,58 @@ func allGroupOf(p xsd.Particle) (xsd.ModelGroup, bool) {
 // in a position the schema for schema documents (§3.4.2) does not allow, or nil.
 // The type's own <openContent> is legal only in the IMPLICIT content form —
 // xs:complexType's content model puts it in the third alternative, beside the
-// model group, never beside <simpleContent>/<complexContent> — and under
+// model group, never beside <simpleContent>/<complexContent> — under
 // <complexContent> only as a child of the <restriction>/<extension> alternant,
 // since xs:complexContent's content model is (annotation?, (restriction |
-// extension)).
+// extension)), and NOWHERE under <simpleContent>: that element's content model is
+// the same (annotation?, (restriction | extension)) shape (spec L1687), but
+// neither of ITS alternants admits an <openContent> (L1692/L1697 — the
+// simple-content <restriction> takes facets and attribute declarations, and its
+// one wildcard slot is ##other, which the XSD namespace is not).
 //
-// Both misplacements were previously invisible: the {content type} branches read
-// <openContent> from the <complexType> or the derivation alternant only, so a
-// stray one elsewhere was silently dropped and a schema a complete processor
-// rejects would have assembled clean. Like <complexContent> with neither
-// alternant (produceComplexContent), this is a plain grammar fault, not an
-// xsderr rule verdict: src-ct (§3.4.3) states no clause for it and incorporates
-// the schema for schema documents' own conditions by reference.
+// All three misplacements were previously invisible: the {content type} branches
+// read <openContent> from the <complexType> or the complex-content derivation
+// alternant only, so a stray one elsewhere was silently dropped and a schema a
+// complete processor rejects would have assembled clean. Like <complexContent>
+// with neither alternant (produceComplexContent), this is a plain grammar fault,
+// not an xsderr rule verdict: src-ct (§3.4.3) states no clause for it and
+// incorporates the schema for schema documents' own conditions by reference.
 func misplacedOpenContent(ctElem *Element) *Element {
 	cc := childElement(ctElem, xsd.XMLSchemaNS, "complexContent")
-	if cc == nil && childElement(ctElem, xsd.XMLSchemaNS, "simpleContent") == nil {
+	sc := childElement(ctElem, xsd.XMLSchemaNS, "simpleContent")
+	if cc == nil && sc == nil {
 		return nil // the implicit form: an <openContent> child here is in its legal position
 	}
 	if own := childElement(ctElem, xsd.XMLSchemaNS, "openContent"); own != nil {
 		return own
 	}
-	if cc == nil {
-		return nil
+	if cc != nil {
+		return childElement(cc, xsd.XMLSchemaNS, "openContent")
 	}
-	return childElement(cc, xsd.XMLSchemaNS, "openContent")
+	_ = sc
+	return nil
+}
+
+// simpleContentOpenContent returns the <openContent> a <simpleContent> carries
+// either directly or under its <restriction>/<extension> alternant, or nil — every
+// position inside a <simpleContent> subtree is illegal (see misplacedOpenContent).
+// The alternants are searched restriction-first, matching
+// complexContentDerivation's precedent, so a malformed source carrying both is
+// reported at the same position every run (STYLE D1).
+func simpleContentOpenContent(sc *Element) *Element {
+	if oc := childElement(sc, xsd.XMLSchemaNS, "openContent"); oc != nil {
+		return oc
+	}
+	for _, alternant := range [...]string{"restriction", "extension"} {
+		alt := childElement(sc, xsd.XMLSchemaNS, alternant)
+		if alt == nil {
+			continue
+		}
+		if oc := childElement(alt, xsd.XMLSchemaNS, "openContent"); oc != nil {
+			return oc
+		}
+	}
+	return nil
 }
 
 // openContentType applies §3.4.2.3.3 (dcl.ctd.ctcc.common) clauses 5 and 6 to an

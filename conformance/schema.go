@@ -504,6 +504,14 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			if childXSD(el, "any") == nil {
 				return false
 			}
+			// Its mode enumeration is (interleave|suffix) — none is legal on a type's
+			// OWN <openContent> but not here, and every other token is out of the
+			// enumeration outright. Both are rejected by the same lazy path as the
+			// childless form, so the same decline applies: one principle, applied to
+			// the whole shape rather than half of it.
+			if mode, present := elementAttr(el, "mode"); false && present && mode != "interleave" && mode != "suffix" {
+				return false
+			}
 		default:
 			// redefine or any other local name:
 			// silently skipped by the producer AND not followed by the assembly

@@ -284,7 +284,7 @@ func TestProduceOpenContentBadMode(t *testing.T) {
 	}
 }
 
-// TestProduceMisplacedOpenContent pins the three positions the schema for schema
+// TestProduceMisplacedOpenContent pins the positions the schema for schema
 // documents does not allow an <openContent> in, each of which the producer
 // SILENTLY DROPPED before #230. They are plain grammar faults, not rule verdicts:
 // src-ct states no clause for them.
@@ -296,6 +296,11 @@ func TestProduceMisplacedOpenContent(t *testing.T) {
 		{"beside <simpleContent>", `<xs:complexType name="T"><xs:openContent><xs:any/></xs:openContent><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`},
 		{"beside <complexContent>", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:openContent><xs:any/></xs:openContent><xs:complexContent><xs:restriction base="tns:B"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`},
 		{"directly under <complexContent>", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:openContent><xs:any/></xs:openContent><xs:restriction base="tns:B"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`},
+		// No position inside a <simpleContent> subtree is legal: neither its
+		// <restriction> nor its <extension> alternant admits an <openContent>.
+		{"directly under <simpleContent>", `<xs:complexType name="T"><xs:simpleContent><xs:openContent><xs:any/></xs:openContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`},
+		{"under <simpleContent><extension>", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:openContent><xs:any/></xs:openContent></xs:extension></xs:simpleContent></xs:complexType>`},
+		{"under <simpleContent><restriction>", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="xs:string"><xs:openContent><xs:any/></xs:openContent></xs:restriction></xs:simpleContent></xs:complexType>`},
 	}
 	for _, tc := range cases {
 		_, err := produce(t, wrap("urn:x", tc.body))
