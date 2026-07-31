@@ -745,6 +745,22 @@ spirit as the milestone-tool gap the 2026-07-25 pass flagged — which is
 preamble's "milestones map one-to-one to GitHub milestones" remains
 aspirational and this file plus issue labels are doing that work alone.
 
+**Addendum (same date, broader-toolset session): the persona gap above
+is closed.** libuser and cliuser ran under the orchestrating session
+(which does have subagent-spawn access) against the current published
+surface — README + `go doc`, and the real binary for cliuser — never the
+source. Result: **no new scope, both confirmations posted as comments.**
+#252's gap reproduces exactly as filed (`*xsd.Schema` still exposes only
+`Element`/`Attribute`/`Type` point lookups); #251's bug reproduces
+exactly as filed (`-help`/`-h`/`--help` still exit 2 via the generic
+stub); #189 (closed 2026-07-28) has **not regressed** — the README still
+matches `go doc` in both directions, confirming the fix held. One
+genuinely new, non-blocking cross-cutting finding from cliuser, posted to
+#251 and #16: no flag is reserved for version discovery, and `-v` is
+already claimed for debug verbosity, so pin a `-version` convention
+before any subcommand's flag parsing lands rather than colliding with it
+later.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
