@@ -533,8 +533,7 @@ func misplacedOpenContent(ctElem *Element) *Element {
 	if cc != nil {
 		return childElement(cc, xsd.XMLSchemaNS, "openContent")
 	}
-	_ = sc
-	return nil
+	return simpleContentOpenContent(sc)
 }
 
 // simpleContentOpenContent returns the <openContent> a <simpleContent> carries

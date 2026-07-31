@@ -109,7 +109,9 @@ import (
 //     xsd:include, xsd:import, xsd:override, xsd:simpleType, xsd:element,
 //     xsd:attribute, xsd:complexType,
 //     xsd:attributeGroup (named definition), xsd:group (named definition),
-//     xsd:defaultOpenContent (with the <any> child its content model requires) or
+//     xsd:defaultOpenContent (only in the shape its declaration allows: with the
+//     <any> child its content model requires and, if mode= is present at all, a
+//     value from its interleave|suffix enumeration) or
 //     xsd:notation — anything else at top level (redefine,
 //     any non-xsd element, or an out-of-set local name) closes
 //     the false-accept gap above by DECLINING the whole case. Within the allowed
@@ -509,7 +511,7 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			// enumeration outright. Both are rejected by the same lazy path as the
 			// childless form, so the same decline applies: one principle, applied to
 			// the whole shape rather than half of it.
-			if mode, present := elementAttr(el, "mode"); false && present && mode != "interleave" && mode != "suffix" {
+			if mode, present := elementAttr(el, "mode"); present && mode != "interleave" && mode != "suffix" {
 				return false
 			}
 		default:

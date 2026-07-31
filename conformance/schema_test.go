@@ -150,6 +150,12 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		// once some complex type of the document reaches clause 5.2, so admitting it
 		// would make the verdict depend on unrelated content.
 		{"top-level defaultOpenContent with no any child", `<xs:defaultOpenContent/>`},
+		// Same lazy shape, same decline: mode="none" is legal on a type's own
+		// <openContent> but out of <defaultOpenContent>'s (interleave|suffix)
+		// enumeration, and so is any other token — both are rejected only once some
+		// complex type reaches clause 5.2.
+		{"top-level defaultOpenContent with mode=none", `<xs:defaultOpenContent mode="none"><xs:any/></xs:defaultOpenContent>`},
+		{"top-level defaultOpenContent with an out-of-enumeration mode", `<xs:defaultOpenContent mode="bogus"><xs:any/></xs:defaultOpenContent>`},
 	}
 	for _, tc := range cases {
 		if schemaShapeDecidable(schemaDoc(t, tc.body)) {
