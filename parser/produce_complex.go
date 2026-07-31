@@ -1364,18 +1364,22 @@ func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.W
 // dcl.att.local). use="prohibited" maps to no Attribute Use (returns nil). An
 // <attribute ref="..."> yields a deferred AttributeDeclarationRef; otherwise a
 // sibling local Attribute Declaration is built inline. It enforces the structural
-// src-attribute clauses (§3.2.3): 1 (default and fixed mutually exclusive) and 3
-// (exactly one of ref/name; ref excludes type/form).
+// src-attribute clauses (§3.2.3): 1 (default and fixed mutually exclusive, via
+// valueConstraintOf) and 3 (exactly one of ref/name; ref excludes type/form).
+//
+// default=/fixed= on the <attribute> element map to the USE's own {value
+// constraint} (§3.5.1 vc_au) for both forms: dcl.att.local (§3.2.2.2) leaves the
+// sibling local declaration's own {value constraint} ·absent· unconditionally,
+// and ref.att.local (§3.2.2.3) reads them off the ref-carrying element itself,
+// never touching the referenced top-level declaration's.
 func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
 	use, _ := attrValue(el, "use") // default "optional"
 	if use == "prohibited" {
 		return nil, nil
 	}
-	_, hasDefault := attrValue(el, "default")
-	_, hasFixed := attrValue(el, "fixed")
-	if hasDefault && hasFixed {
-		return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
-			"attribute has both default and fixed, but src-attribute clause 1 forbids both")
+	vc, err := valueConstraintOf(el, ruleSrcAttribute)
+	if err != nil {
+		return nil, err
 	}
 	required := use == "required"
 	inheritable, _ := boolAttr(el, "inheritable")
@@ -1399,7 +1403,7 @@ func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
 		if err != nil {
 			return nil, err
 		}
-		au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.AttributeDeclarationRef{Name: qn}, nil, inheritable, nil)
+		au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.AttributeDeclarationRef{Name: qn}, vc, inheritable, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -1413,7 +1417,7 @@ func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
 	if err != nil {
 		return nil, err
 	}
-	au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.LocalAttributeDeclaration{Declaration: decl}, nil, inheritable, nil)
+	au, err := xsd.NewAttributeUse(el.Loc(), required, xsd.LocalAttributeDeclaration{Declaration: decl}, vc, inheritable, nil)
 	if err != nil {
 		return nil, err
 	}
