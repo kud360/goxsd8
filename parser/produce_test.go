@@ -806,8 +806,8 @@ func TestProduceNotQNameRejections(t *testing.T) {
 // TestProduceNotQNameLiteralMembers pins the literal-QName arm of the
 // §3.10.2.2 notQName mapping: every literal member with a bound prefix lands in
 // {disallowed names}, and a member whose prefix has no in-scope binding is a
-// hard src-resolve (§3.17.6.2 clause 4) rejection rather than a silently
-// dropped member that would leave the wildcard more permissive than declared.
+// hard src-resolve (§3.17.6.2) rejection rather than a silently dropped member
+// that would leave the wildcard more permissive than declared.
 func TestProduceNotQNameLiteralMembers(t *testing.T) {
 	t.Run("all-prefixes-bound", func(t *testing.T) {
 		body := `<xs:complexType name="CT"><xs:sequence>` +
