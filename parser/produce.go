@@ -755,6 +755,10 @@ func (p *producer) produceAttribute(elem *Element) (xsd.AttributeDeclaration, er
 // valueConstraintOf maps the default/fixed attributes of an <element>/<attribute>
 // to a *ValueConstraint, rejecting the both-present case (src-element clause 1 /
 // src-attribute clause 1). rule selects which of the two constraints is charged.
+// It serves both a declaration's own {value constraint} (vc_e, vc_a) and an
+// Attribute Use's (vc_au, §3.5.1) — the mapping from the two XML attributes to
+// the {variety}/{lexical form} record is identical; which component the result is
+// attached to is the caller's decision (§3.2.2.2 / §3.2.2.3).
 func valueConstraintOf(elem *Element, rule xsderr.Rule) (*xsd.ValueConstraint, error) {
 	defLex, hasDef := attrValue(elem, "default")
 	fixLex, hasFix := attrValue(elem, "fixed")

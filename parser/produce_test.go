@@ -612,6 +612,90 @@ func TestProduceAttributeRefUse(t *testing.T) {
 	}
 }
 
+// TestProduceLocalAttributeUseValueConstraints pins §3.5.1 vc_au for the
+// dcl.att.local mapping (§3.2.2.2): default=/fixed= on a local <attribute>
+// populate the Attribute USE's own {value constraint}, in document order, while
+// the co-produced sibling local declaration's own {value constraint} stays
+// ·absent· unconditionally.
+func TestProduceLocalAttributeUseValueConstraints(t *testing.T) {
+	body := `<xs:complexType name="CT"><xs:sequence/>` +
+		`<xs:attribute name="a" type="xs:string" default="dv"/>` +
+		`<xs:attribute name="b" type="xs:string" fixed="fv"/>` +
+		`<xs:attribute name="c" type="xs:string"/>` +
+		`</xs:complexType>`
+	uses := complexType(t, body, "CT").AttributeUses()
+	want := []struct {
+		local   string
+		present bool
+		kind    xsd.ValueConstraintKind
+		lexical string
+	}{
+		{local: "a", present: true, kind: xsd.ValueDefault, lexical: "dv"},
+		{local: "b", present: true, kind: xsd.ValueFixed, lexical: "fv"},
+		{local: "c"},
+	}
+	if len(uses) != len(want) {
+		t.Fatalf("attribute uses = %d, want %d", len(uses), len(want))
+	}
+	for i, w := range want {
+		if got := attrUseLocal(uses[i]); got != w.local {
+			t.Fatalf("use %d names %q, want %q (document order)", i, got, w.local)
+		}
+		vc, ok := uses[i].ValueConstraint()
+		if ok != w.present {
+			t.Fatalf("use %s {value constraint} present = %t, want %t", w.local, ok, w.present)
+		}
+		if ok && (vc.Kind() != w.kind || vc.LexicalForm() != w.lexical) {
+			t.Fatalf("use %s {value constraint} = %s/%q, want %s/%q", w.local, vc.Kind(), vc.LexicalForm(), w.kind, w.lexical)
+		}
+		decl := uses[i].AttributeDeclaration().(xsd.LocalAttributeDeclaration).Declaration
+		if _, ok := decl.ValueConstraint(); ok {
+			t.Fatalf("local declaration %s carries a {value constraint}, but dcl.att.local leaves it absent", w.local)
+		}
+	}
+}
+
+// TestProduceAttributeRefUseValueConstraint pins §3.5.1 vc_au for the
+// ref.att.local mapping (§3.2.2.3): fixed= on the <attribute ref="..."> element
+// populates that USE's own {value constraint}, leaving the referenced top-level
+// declaration's own {value constraint} untouched.
+func TestProduceAttributeRefUseValueConstraint(t *testing.T) {
+	body := `<xs:attribute name="g" type="xs:string"/>` +
+		`<xs:complexType name="CT"><xs:sequence/><xs:attribute ref="tns:g" fixed="fv"/></xs:complexType>`
+	s, err := produce(t, wrap("urn:x", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, _ := s.Type(xsd.QName{Space: "urn:x", Local: "CT"})
+	uses := td.(xsd.ComplexType).AttributeUses()
+	if len(uses) != 1 {
+		t.Fatalf("uses = %d, want 1", len(uses))
+	}
+	vc, ok := uses[0].ValueConstraint()
+	if !ok {
+		t.Fatalf("ref use {value constraint} absent, want fixed/%q", "fv")
+	}
+	if vc.Kind() != xsd.ValueFixed || vc.LexicalForm() != "fv" {
+		t.Fatalf("ref use {value constraint} = %s/%q, want fixed/%q", vc.Kind(), vc.LexicalForm(), "fv")
+	}
+	decl, ok := s.Attribute(xsd.QName{Space: "urn:x", Local: "g"})
+	if !ok {
+		t.Fatalf("top-level attribute {urn:x}g not found")
+	}
+	if _, ok := decl.ValueConstraint(); ok {
+		t.Fatalf("top-level declaration g gained a {value constraint} from the ref use, want absent")
+	}
+}
+
+// TestProduceLocalAttributeDefaultAndFixedRejected is src-attribute clause 1
+// (§3.2.3) on the attribute-use path: default and fixed must not both appear.
+func TestProduceLocalAttributeDefaultAndFixedRejected(t *testing.T) {
+	body := `<xs:complexType name="CT"><xs:sequence/>` +
+		`<xs:attribute name="a" type="xs:string" default="dv" fixed="fv"/></xs:complexType>`
+	_, err := produce(t, wrap("", body))
+	assertRule(t, err, "src-attribute")
+}
+
 func TestProduceAnyAttributeWildcard(t *testing.T) {
 	body := `<xs:complexType name="CT"><xs:sequence/><xs:anyAttribute namespace="##other" processContents="lax"/></xs:complexType>`
 	ct := complexType(t, body, "CT")

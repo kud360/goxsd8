@@ -98,8 +98,9 @@ func (AttributeDeclarationRef) attributeDeclarationRef()   {}
 // INPUT, not a component property, and is deliberately NOT stored here alongside
 // {required} — carrying both would be redundant state (STYLE D3).
 //
-// Ratchet impact: unchanged. This is a leaf shape with no parser producer; the
-// schema conformance lane moves only when the producer (#174/#175) wires it in.
+// Ratchet impact: the producer wires real value constraints in as of #235,
+// moving the schema conformance lane (derivation-ok-restriction clause 3 via
+// key-evc, defaultbinding.go).
 //
 // Construct only through NewAttributeUse, which rejects the states
 // au-props-correct (§3.5.6) clauses 1 and 3 (variety half, Local case) forbid so
