@@ -338,11 +338,14 @@ once, so a session can take the first item it can do rather than scan:
    paragraph below for why #257 precedes #182).
 2. **Correctness / false-accept debt.** **#214** (patterns wrongly
    AND-ed), **#219** (scale facets dropped, making #157's SCCs
-   unreachable), **#232** (unresolvable `notQName` dropped), **#240**
-   (`ref=` form of `<unique>`/`<key>`/`<keyref>`), **#238** (multiple
+   unreachable), **#240** (`ref=` form of
+   `<unique>`/`<key>`/`<keyref>`), **#238** (multiple
    `<ts:schemaDocument>` children — wrong-document decisions), **#226**
    (UTF-16 BOM misread as invalid UTF-8), **#202** (Required name/ref
    slots accept the absent zero-QName), **#253** (silent short assembly).
+   *Retired: #232 (unresolvable `notQName` dropped) landed 2026-07-31 as
+   `07ca0178` (PR #355) — the literal-QName arm now propagates
+   `src-resolve`; schema lane +2 (`wild036`, `wild037`).*
 3. **Remaining feature leaves.** **#63** (IDC `{referenced key}` +
    `c-props-correct` cl.2 — the last open M4 leaf follow-up, and an M5
    prerequisite per #250), **#206** ({context} / {scope}.{parent}
