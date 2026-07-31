@@ -1,6 +1,10 @@
 package value
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kud360/goxsd8/xsd"
+)
 
 // This file adds the list {variety} to the backend-generic pipeline: the
 // lexical mapping a list-variety *xsd.SimpleType resolves to (listMapping) and
@@ -8,10 +12,9 @@ import "strings"
 // the atomic base chain, so ValidateLexical on any list-variety type returned
 // "no backend mapping governs type" unconditionally (a cvc-datatype-valid
 // error) regardless of instance validity. The single governingMapping list
-// branch (facets.go) now wraps the item type's own governing mapping in a
-// listMapping, so BOTH the candidate mapping in ValidateLexical AND
-// declaringFacetSpace's enum/bound facet-{value} parsing resolve for a
-// list-variety type through the same widest-space rule the atomic cohort uses.
+// branch (facets.go) now wraps the item TYPE in a listMapping, so BOTH the
+// candidate mapping in ValidateLexical AND declaringFacetSpace's enum/bound
+// facet-{value} parsing resolve for a list-variety type.
 //
 // The list item type is always atomic or a union-of-atomics — never itself a
 // list (Structures §3.16.1, std-item_type_definition: the {item type
@@ -33,27 +36,48 @@ var (
 )
 
 // listMapping builds the lexical mapping for a list-variety type from its item
-// type's governing mapping, implementing cvc-datatype-valid clause dv_list
-// (§4.1.4 cl.2.2): "each space-delimited substring of L is Datatype Valid with
-// respect to the {item type definition}", and V is the ordered sequence of the
-// values so identified. Parse splits the ALREADY whiteSpace-normalized lexical
-// (list's whiteSpace is fixed collapse, §4.3.6.1 f-w-fixed, applied upstream by
-// ValidateLexical's whiteSpace stage before Parse runs) on whitespace via
-// strings.Fields, then parses each token against the item mapping. A token's
-// own Parse failure — the item is itself Datatype-Valid against the item type
-// (dv_list clause 2.2) — is already the right cvc-datatype-valid-family error,
+// TYPE, implementing cvc-datatype-valid clause dv_list (§4.1.4 cl.2.2): "each
+// space-delimited substring of L is Datatype Valid with respect to the {item
+// type definition}", and V is the ordered sequence of the values so identified.
+// Parse splits the ALREADY whiteSpace-normalized lexical (list's whiteSpace is
+// fixed collapse, §4.3.6.1 f-w-fixed, applied upstream by ValidateLexical's
+// whiteSpace stage before Parse runs) on whitespace via strings.Fields, then
+// decides each token against the item type.
+//
+// Each token recurses through validateLexical — the FULL cvc-datatype-valid
+// rule against the item type — not through the item type's governing Mapping
+// alone. dv_list says "Datatype Valid with respect to the {item type
+// definition}", which is the whole rule: clause 1 (dv_pattern, the item type's
+// own ·lexical· facets), clause 2.1 (dv_atomic, the lexical mapping of the item
+// type's {primitive type definition}) AND clause 3 (dv_vfacets, the item type's
+// OWN ·value-based· facets). For an item type that IS its own {primitive type
+// definition} (boolean, float, anyURI, …) those coincide, so the item mapping
+// alone sufficed; for a DERIVED item type they do not. xs:byte's {primitive
+// type definition} is xs:decimal, so the mapping accepts every decimal literal
+// while byte's own effective facets — pattern [\-+]?[0-9]+, fractionDigits=0,
+// minInclusive=-128 (byte.minInclusive), maxInclusive=127 (byte.maxInclusive) —
+// are what reject "128", "-129" and "1.5". Parsing a token through the item
+// mapping only would FALSE-ACCEPT all three (issue #224); recursing runs the
+// same facet pipeline a standalone xs:byte value takes, so the two paths cannot
+// disagree. The recursion terminates structurally: neither the item type nor any
+// basic member of it is itself a list (§3.16.1, std-item_type_definition), so
+// validateLexical never re-enters this Parse.
+//
+// A token's rejection — whether from its Parse or from one of the item type's
+// facets — is already the right cvc-datatype-valid-family error (cvc-pattern-valid,
+// cvc-minInclusive-valid, cvc-maxInclusive-valid, cvc-fractionDigits-valid, …),
 // so it propagates unchanged with no rewrap.
 //
 // Canonical is deliberately nil: no current cohort needs a canonical list form,
 // and per the Mapping doc a nil Canonical means "this whole type has no
 // canonical form", which callers must treat as such rather than an error.
-func listMapping(item Mapping) Mapping {
+func listMapping(b Backend, item *xsd.SimpleType) Mapping {
 	return Mapping{
 		Parse: func(lexical string, ctx Context) (Value, error) {
 			tokens := strings.Fields(lexical)
 			items := make([]Value, 0, len(tokens))
 			for _, tok := range tokens {
-				v, err := item.Parse(tok, ctx)
+				v, _, err := validateLexical(b, item, tok, ctx)
 				if err != nil {
 					return nil, err
 				}

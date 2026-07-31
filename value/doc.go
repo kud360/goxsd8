@@ -61,8 +61,11 @@
 // rejected.
 //
 // The list and union varieties recurse rather than adding stages. A list runs
-// the item type's own mapping per whitespace-delimited item and then its own
-// facets over the resulting sequence. A union has no whiteSpace facet at all: it
+// this whole pipeline against the ITEM TYPE per whitespace-delimited item — the
+// item type's own facets included, which is what makes a list of a derived type
+// (a list of xs:byte, whose mapping is xs:decimal's) reject an out-of-range item
+// — and then its own facets over the resulting sequence. A union has no
+// whiteSpace facet at all: it
 // hands the RAW literal to its member types in order, and the first one that is
 // itself datatype-valid supplies both the value and the whiteSpace normalization
 // its own pattern facet then matches against — so a union's value is always some

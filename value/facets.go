@@ -61,8 +61,10 @@ var (
 // three cases of cvc-datatype-valid clause 2 (§4.1.4). Atomic (cl.2.1) and list
 // (cl.2.2) share the pipeline below: both resolve their in-force whiteSpace
 // facet, and a list resolves its value exactly as an atomic one does, because
-// governingMapping wraps the item type's mapping in a listMapping (clause
-// dv_list, list.go). A union (cl.2.3, dv_union) takes the separate dispatch path
+// governingMapping wraps the item TYPE in a listMapping whose Parse recurses
+// here per item — so an item is Datatype Valid by the whole rule, the item
+// type's own facets included (clause dv_list, list.go). A union (cl.2.3,
+// dv_union) takes the separate dispatch path
 // in union.go instead: it carries no whiteSpace facet of its own (categorically
 // not applicable, §4.1.5), and its literal is decided by its {member type
 // definitions} in order — the first member that is itself Datatype Valid is the
@@ -241,8 +243,10 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 }
 
 // governingMapping resolves the Mapping that governs node's value space. For a
-// list {variety} it wraps the item type's own governing mapping in a
-// listMapping (cvc-datatype-valid clause dv_list, §4.1.4 cl.2.2, list.go); for a
+// list {variety} it wraps the item TYPE in a listMapping, which decides each
+// item by the full cvc-datatype-valid rule against that type — its own facets
+// included, not merely its governing mapping (clause dv_list, §4.1.4 cl.2.2,
+// list.go); for a
 // union {variety} it wraps the {member type definitions} in a unionMapping
 // (clause dv_union, §4.1.4 cl.2.3, union.go); otherwise it walks from node
 // (inclusive) up the base chain and returns the first ancestor's Mapping the
@@ -261,11 +265,10 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 // (Mapping{}, false) "ungoverned" outcome the atomic case returns.
 func governingMapping(b Backend, node *xsd.SimpleType) (Mapping, bool) {
 	if lst, ok := node.Variety().(xsd.List); ok {
-		item, ok := governingMapping(b, lst.Item())
-		if !ok {
+		if _, ok := governingMapping(b, lst.Item()); !ok {
 			return Mapping{}, false
 		}
-		return listMapping(item), true
+		return listMapping(b, lst.Item()), true
 	}
 	if u, ok := node.Variety().(xsd.Union); ok {
 		if !unionGoverned(b, u) {

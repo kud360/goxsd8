@@ -58,6 +58,15 @@ func TestDatatypesSelectorClaimsOnlyCohort(t *testing.T) {
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/saxonData/PDecimal/pdecimal010.n1.xml"}, true},
 		// A precisionDecimal SCHEMA case is not claimed (we cannot validate schemas).
 		{caseSpec{kind: kindSchema, doc: "../testdata/xsdtests/saxonData/PDecimal/pdecimal001.xsd"}, false},
+		// The integer-family LIST-variety fixtures are claimed (issue #224).
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/byte009.xml"}, true},
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/unsignedShort007.xml"}, true},
+		// Their NON-list integer-family siblings stay unclaimed: they test a value
+		// against xs:byte directly, which execLexicalCase cannot decide (the strict
+		// backend maps primitives only), so claiming them would only duplicate the
+		// instance lane's recorded gaps. See integerListCase.
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/byte008.xml"}, false},
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/unsignedShort006.xml"}, false},
 	}
 	for _, tc := range cases {
 		if got := selectsDatatypes(tc.c); got != tc.want {

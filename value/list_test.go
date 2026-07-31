@@ -155,3 +155,45 @@ func TestValidateLexicalListItemErrorPropagates(t *testing.T) {
 		t.Errorf("ValidateLexical(invalid item) charged %s, want cvc-datatype-valid (dv_list item propagation)", r)
 	}
 }
+
+// TestValidateLexicalListItemTypeFacetsApply is the regression guard for issue
+// #224: dv_list (§4.1.4 cl.2.2) says each item is "Datatype Valid with respect
+// to the {item type definition}", which is the WHOLE cvc-datatype-valid rule
+// against that type — clause 3 (dv_vfacets, the item type's own value-based
+// facets) included, not just clause 2.1's lexical mapping. That distinction is
+// invisible when the item type IS its own {primitive type definition}, and
+// decisive when it is not: xs:byte maps through xs:decimal, so mapping-only item
+// parsing accepts "128" and "-129" that byte's own minInclusive/maxInclusive
+// reject.
+//
+// The item type here is a DERIVED type (a restriction of the mapped primitive)
+// carrying an enumeration the primitive does not have, mirroring that shape
+// without importing builtin/strict (which imports value). A list of accepted
+// items validates; one item outside the item type's enumeration rejects with
+// cvc-enumeration-valid — the item type's OWN facet rule, charged per item.
+func TestValidateLexicalListItemTypeFacetsApply(t *testing.T) {
+	prim := primType(t, "myitem", "collapse")
+	b := stubItemBackend{item: prim.Name()}
+	// stubItemBackend keys its value by token length, so "aa" and "bb" share a
+	// value and "ccc" does not: the enumeration admits the two-character items
+	// and excludes the three-character one.
+	item, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "enumitem"},
+		prim.Variety(), prim, []xsd.Facet{enumOf("aa")}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(item restriction): %v", err)
+	}
+	own := []xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}
+	leaf := listType(t, item, own)
+
+	if _, err := ValidateLexical(b, leaf, "aa bb", nil); err != nil {
+		t.Fatalf("ValidateLexical(list of enumerated items) = %v, want accept", err)
+	}
+
+	_, err = ValidateLexical(b, leaf, "aa ccc", nil)
+	if err == nil {
+		t.Fatal("ValidateLexical(list with out-of-enumeration item) = nil, want the item type's own facet rejection (dv_list → dv_vfacets)")
+	}
+	if r, _ := xsderr.RuleOf(err); r != "cvc-enumeration-valid" {
+		t.Errorf("out-of-enumeration item charged %s, want cvc-enumeration-valid (§4.3.5.4 on the ITEM type, not the list)", r)
+	}
+}
