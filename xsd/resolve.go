@@ -415,6 +415,13 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 // Roots are iterated in document order (STYLE D2); an anonymous root (zero name)
 // is walked but never recorded (it can be no base's target, having no name to be
 // referenced by), so the first reported cycle is deterministic.
+//
+// This is ONE of two entry points on clause 3, with identical verdicts, for the
+// two construction paths. The other is parser's buildComplexType, whose on-stack
+// memo sentinel must reject a cycle to TERMINATE demand-driven base construction
+// before a component ever reaches a builder. This one is what keeps xsd
+// self-defending on the programmatic SchemaBuilder path, which has no producer;
+// it stays whether or not the parser guards its own recursion.
 func (s *Schema) checkComplexBaseAcyclic() error {
 	for _, t := range s.types {
 		ct, ok := t.(ComplexType)

@@ -12,6 +12,12 @@ import (
 // anyTypeName is the expanded name of xs:anyType, the ur-type (§3.4.7).
 var anyTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}
 
+// anySimpleTypeName is the expanded name of xs:anySimpleType: the default
+// {type definition} of a type=-less <attribute> (§3.2.2.1) and the fallback
+// {simple type definition} of §3.4.2.2 case 5. [builtin.Seed] always seeds it,
+// so symbols.built holds it before any document is produced.
+var anySimpleTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"}
+
 // seedAnyType builds the ur-type Complex Type Definition xs:anyType (§3.4.7): a
 // mixed complex type whose {content type} is a 1..1 sequence wrapping a single
 // 0..unbounded lax ##any element wildcard, with a lax ##any attribute wildcard
@@ -53,17 +59,22 @@ func seedAnyType() (xsd.ComplexType, error) {
 }
 
 // produceComplexType maps a <complexType> element (§3.4.2) into a Complex Type
-// Definition. Only the produce-time-decidable subset is built: implicit complex
-// content (§3.4.2.3.2, restriction from xs:anyType) and explicit <complexContent>
-// with <restriction>. <simpleContent> and <complexContent> with <extension> both
-// need the resolved {base type definition} to compute their {content type}
-// (§3.4.2.2 / §3.4.2.3.3 clause 4.2) — a finalize-time dependency (PRINCIPLES 9,
-// phased construction) out of this slice's scope — so they are declined with a
-// plain "not yet supported" error rather than a fabricated rule violation
-// (mirroring Produce's non-schema-root precedent: no src-*/cos-* rule governs
-// "this representation is not yet produced"). The conformance schema lane
-// (conformance/schema.go) declines these shapes, so the decline never reaches a
-// validity verdict.
+// Definition, in all four source forms: implicit complex content (§3.4.2.3.2,
+// restriction from xs:anyType), explicit <complexContent> with <restriction> or
+// with <extension> (§3.4.2.3.3 clauses 4.1 and 4.2), and <simpleContent> with
+// <extension> (§3.4.2.2 cases 3-5). The two extension forms need the
+// {base type definition} COMPONENT, which buildComplexType/resolveBaseType supply
+// by building it on demand (§3.4.2's preamble: the mapping rules "depend upon the
+// {base type definition} having been identified before they apply").
+//
+// <simpleContent> with <restriction> is the one form still declined: §3.4.2.2
+// cases 1-2 SYNTHESIZE a new anonymous simple type restricting the base's, from
+// the <restriction>'s own facet children, which this producer does not yet build.
+// It is declined with a plain "not yet produced" error rather than a fabricated
+// rule violation (mirroring Produce's non-schema-root precedent: no src-*/cos-*
+// rule governs "this representation is not yet produced"). The conformance
+// schema lane (conformance/schema.go) declines that shape, so the decline never
+// reaches a validity verdict.
 //
 // name is also the {scope}.{parent} that every local element declaration nested
 // in this type's content model reports (§3.3.2.3 dcl.elt.local: "the Complex
@@ -87,8 +98,8 @@ func (p *producer) produceComplexType(name xsd.QName, el *Element) (xsd.ComplexT
 	if name.Local == "" {
 		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
 	}
-	if childElement(el, xsd.XMLSchemaNS, "simpleContent") != nil {
-		return xsd.ComplexType{}, fmt.Errorf("parser: <complexType> with <simpleContent> is not yet produced (its {simple type definition} needs the resolved base, §3.4.2.2)")
+	if sc := childElement(el, xsd.XMLSchemaNS, "simpleContent"); sc != nil {
+		return p.produceSimpleContent(name, el, sc)
 	}
 	if cc := childElement(el, xsd.XMLSchemaNS, "complexContent"); cc != nil {
 		return p.produceComplexContent(name, el, cc)
@@ -119,15 +130,107 @@ func (p *producer) produceImplicitContent(name xsd.QName, el *Element) (xsd.Comp
 		xsd.DerivationRestriction, abstract, uses, wildcard, content, nil, p.assertionsOf(el), nil)
 }
 
-// produceComplexContent maps a <complexType><complexContent> (§3.4.2.3). Only the
-// <restriction> alternative is produced (its {content type} is purely structural,
-// §3.4.2.3.3 clause 4.1); <extension> needs the resolved base's content type and
-// is declined. It enforces src-ct clause 5 (§3.4.3): when mixed is present on both
+// produceSimpleContent maps a <complexType><simpleContent> (§3.4.2.2) into a
+// Complex Type Definition whose {content type} has {variety} simple, {particle}
+// and {open content} ·absent·, and {simple type definition} computed by the
+// five-case tableau keyed on the resolved {base type definition} and on which
+// derivation alternant is chosen.
+//
+// Only <extension> is produced — tableau cases 3, 4 and 5, all of which REUSE an
+// already-built simple type (see simpleContentSimpleType). <restriction> (cases
+// 1-2) synthesizes a NEW anonymous simple type restricting the base's with the
+// facet children of <restriction>, which this producer does not build yet, so it
+// is declined as a limitation, not charged a rule.
+//
+// It enforces src-ct clause 1 (§3.4.3, simple-content-rules): with the
+// <simpleContent> alternative chosen, the <complexType> must not have
+// mixed="true". That is a Schema Representation Constraint on the source XML, so
+// it is charged here at the <complexType>'s own position — and it is charged
+// BEFORE the <restriction> decline, so a document that violates it gets the rule
+// verdict rather than a limitation error.
+func (p *producer) produceSimpleContent(name xsd.QName, ctElem, sc *Element) (xsd.ComplexType, error) {
+	if mixed, present := boolAttr(ctElem, "mixed"); present && mixed {
+		return xsd.ComplexType{}, xsderr.New(ruleSrcCT, ctElem.Loc(),
+			"<complexType> has mixed=\"true\" and a <simpleContent> child, but src-ct clause 1 forbids mixed=true when the <simpleContent> alternative is chosen")
+	}
+	ext := childElement(sc, xsd.XMLSchemaNS, "extension")
+	if ext == nil {
+		return xsd.ComplexType{}, fmt.Errorf("parser: <simpleContent> with <restriction> is not yet produced (§3.4.2.2 cases 1-2 synthesize a new anonymous simple type from the <restriction>'s facet children)")
+	}
+	baseName, err := p.resolveQName(ext, attrOr(ext, "base"))
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
+	base, err := p.resolveBaseType(ext, baseName)
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
+	abstract, _ := boolAttr(ctElem, "abstract")
+	uses, wildcard, err := p.produceAttributeUses(ext)
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
+	content := xsd.SimpleContent{SimpleType: simpleContentSimpleType(base, p.symbols.built[anySimpleTypeName])}
+	// {assertions} (§3.4.2.1 clause 2): the <assert> children of <extension>. The
+	// base type's own assertions (clause 1) are not folded in — that fold is
+	// uniform across restriction and extension and is tracked as a whole (#265,
+	// xsd/complexderivation.go's GAP note), never half-applied here.
+	return xsd.NewComplexType(ctElem.Loc(), name, baseName, nil,
+		xsd.DerivationExtension, abstract, uses, wildcard, content, nil, p.assertionsOf(ext), nil)
+}
+
+// simpleContentSimpleType is the §3.4.2.2 {simple type definition} tableau for
+// the <extension> alternant:
+//
+//   - case 3: the base is a complex type whose own {content type} has {variety}
+//     simple — reuse THAT content type's {simple type definition};
+//   - case 4: the base is a simple type definition — reuse it;
+//   - case 5 (c-ctsc-bad): otherwise xs:anySimpleType.
+//
+// Every arm returns an EXISTING *xsd.SimpleType pointer; nothing is rebuilt, so
+// simple-type component identity is preserved (xsd/typedefinition.go). Case 5
+// deliberately MAPS rather than rejects: the tableau names a result for the
+// base-is-a-complex-type-with-non-simple-content case, and its invalidity is
+// cos-ct-extends' (§3.4.6.2) to charge, not the mapping's.
+//
+// anySimpleType is case 5's fallback, read from the seeded builtins by the
+// caller; a nil one (an unseeded backend) is rejected downstream by
+// xsd.NewComplexType as an absent Required {simple type definition}.
+func simpleContentSimpleType(base xsd.TypeDefinition, anySimpleType *xsd.SimpleType) *xsd.SimpleType {
+	switch b := base.(type) {
+	case *xsd.SimpleType:
+		return b // case 4
+	case xsd.ComplexType:
+		switch bc := b.ContentType().(type) {
+		case xsd.SimpleContent:
+			return bc.SimpleType // case 3
+		case xsd.EmptyContent, xsd.ElementContent:
+			return anySimpleType // case 5
+		default:
+			panic("parser: simpleContentSimpleType: non-exhaustive ContentType switch")
+		}
+	default:
+		panic("parser: simpleContentSimpleType: non-exhaustive TypeDefinition switch")
+	}
+}
+
+// produceComplexContent maps a <complexType><complexContent> (§3.4.2.3), in both
+// derivation alternants: <restriction>, whose {content type} is purely structural
+// (§3.4.2.3.3 clause 4.1), and <extension>, whose {content type} merges the
+// resolved base's particle with this derivation's ·effective content· (clause
+// 4.2). It enforces src-ct clause 5 (§3.4.3): when mixed is present on both
 // <complexType> and <complexContent>, the two actual values must agree.
+//
+// A <complexContent> with neither alternant is a plain grammar fault, not a rule
+// verdict: §3.4.2.3 states outright that "either <restriction> or <extension>
+// must appear in the content of <complexContent>", and that requirement lives in
+// the schema for schema documents, which src-ct incorporates by reference without
+// stating a clause of its own (the same footing as a nameless top-level
+// <complexType>).
 func (p *producer) produceComplexContent(name xsd.QName, ctElem, cc *Element) (xsd.ComplexType, error) {
-	restriction := childElement(cc, xsd.XMLSchemaNS, "restriction")
-	if restriction == nil {
-		return xsd.ComplexType{}, fmt.Errorf("parser: <complexContent> with <extension> is not yet produced (its {content type} needs the resolved base particle, §3.4.2.3.3 clause 4.2)")
+	derivation, method := complexContentDerivation(cc)
+	if derivation == nil {
+		return xsd.ComplexType{}, fmt.Errorf("parser: <complexContent> at %s has neither a <restriction> nor an <extension> child, one of which §3.4.2.3 requires", cc.Loc())
 	}
 	ctMixed, ctHasMixed := boolAttr(ctElem, "mixed")
 	ccMixed, ccHasMixed := boolAttr(cc, "mixed")
@@ -142,22 +245,68 @@ func (p *producer) produceComplexContent(name xsd.QName, ctElem, cc *Element) (x
 		mixed = ccMixed
 	}
 	abstract, _ := boolAttr(ctElem, "abstract")
-	base, err := p.resolveQName(restriction, attrOr(restriction, "base"))
+	base, err := p.resolveQName(derivation, attrOr(derivation, "base"))
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	content, err := p.buildComplexContentType(restriction, mixed, xsd.ComplexTypeScopeParent{Name: name})
+	content, err := p.complexContentType(derivation, method, base, mixed, xsd.ComplexTypeScopeParent{Name: name})
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	uses, wildcard, err := p.produceAttributeUses(restriction)
+	uses, wildcard, err := p.produceAttributeUses(derivation)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	// {assertions} (§3.4.2.1 clause 2): the <assert> children of <restriction>,
-	// not of the enclosing <complexType>, in this explicit complex-content form.
+	// {assertions} (§3.4.2.1 clause 2): the <assert> children of the derivation
+	// alternant, not of the enclosing <complexType>, in this explicit
+	// complex-content form.
 	return xsd.NewComplexType(ctElem.Loc(), name, base, nil,
-		xsd.DerivationRestriction, abstract, uses, wildcard, content, nil, p.assertionsOf(restriction), nil)
+		method, abstract, uses, wildcard, content, nil, p.assertionsOf(derivation), nil)
+}
+
+// complexContentDerivation returns the <restriction> or <extension> child of a
+// <complexContent> together with the {derivation method} it maps to (§3.4.2.3),
+// or (nil, 0) when neither is present. <restriction> is looked for first, so a
+// malformed source carrying both is mapped by the same alternant every run
+// (STYLE D1).
+func complexContentDerivation(cc *Element) (*Element, xsd.DerivationMethod) {
+	if r := childElement(cc, xsd.XMLSchemaNS, "restriction"); r != nil {
+		return r, xsd.DerivationRestriction
+	}
+	if e := childElement(cc, xsd.XMLSchemaNS, "extension"); e != nil {
+		return e, xsd.DerivationExtension
+	}
+	return nil, 0
+}
+
+// complexContentType computes the ·explicit content type· of a complex content
+// (§3.4.2.3.3 clause 4) from the derivation alternant's children: clause 4.1 for
+// a restriction, clause 4.2 for an extension. derivation is the <restriction> or
+// <extension> element, baseName its base= (needed only by the extension branch,
+// which must resolve it to a component), effectiveMixed is clause 1's result, and
+// scopeParent is the enclosing Complex Type Definition every local element
+// declaration in this content model is scoped to (§3.3.2.3 dcl.elt.local).
+//
+// Clause 6's ·wildcard element· wrap is not applied: with <openContent> declined
+// (declineOpenContent) and <defaultOpenContent> unmapped, the ·wildcard element·
+// is always ·absent· and clause 6.1 makes {content type} the ·explicit content
+// type· verbatim.
+func (p *producer) complexContentType(derivation *Element, method xsd.DerivationMethod, baseName xsd.QName, effectiveMixed bool, scopeParent xsd.ElementScopeParent) (xsd.ContentType, error) {
+	if method == xsd.DerivationRestriction {
+		return p.buildComplexContentType(derivation, effectiveMixed, scopeParent)
+	}
+	if err := declineOpenContent(derivation); err != nil {
+		return nil, err
+	}
+	base, err := p.resolveBaseType(derivation, baseName)
+	if err != nil {
+		return nil, err
+	}
+	effective, explicitEmpty, err := p.effectiveContent(derivation, effectiveMixed, scopeParent)
+	if err != nil {
+		return nil, err
+	}
+	return extensionContentType(derivation.Loc(), base, effective, explicitEmpty, effectiveMixed)
 }
 
 // buildComplexContentType computes the {content type} of a restriction-derived
@@ -166,41 +315,207 @@ func (p *producer) produceComplexContent(name xsd.QName, ctElem, cc *Element) (x
 // <restriction> (explicit complex content); effectiveMixed is clause 1's result;
 // scopeParent is the enclosing Complex Type Definition every local element
 // declaration in this content model is scoped to (§3.3.2.3 dcl.elt.local).
-//
-// It declines <openContent>: computing {open content} needs <defaultOpenContent>
-// fallback support (§3.4.2.3.3 clauses 5-6) not yet built, and silently mapping it
-// to absent would be wrong (grounding: GAP/decline, never silently absent).
 func (p *producer) buildComplexContentType(parent *Element, effectiveMixed bool, scopeParent xsd.ElementScopeParent) (xsd.ContentType, error) {
-	if childElement(parent, xsd.XMLSchemaNS, "openContent") != nil {
-		return nil, fmt.Errorf("parser: <openContent> is not yet produced (its {open content} needs <defaultOpenContent> fallback, §3.4.2.3.3)")
+	if err := declineOpenContent(parent); err != nil {
+		return nil, err
 	}
-	group := modelGroupChild(parent)
-	explicit, err := p.explicitContent(group, scopeParent)
+	effective, _, err := p.effectiveContent(parent, effectiveMixed, scopeParent)
 	if err != nil {
 		return nil, err
 	}
-	// {effective content} (§3.4.2.3.3 clause 3): when explicit content is empty and
-	// the type is mixed, an empty 1..1 sequence stands in so text is admitted.
-	if explicit == nil {
-		if !effectiveMixed {
-			return xsd.EmptyContent{}, nil // clause 4.1.1 (restriction, empty)
-		}
-		seq, err := xsd.NewModelGroup(parent.Loc(), xsd.CompositorSequence, nil, nil)
-		if err != nil {
-			return nil, err
-		}
-		oneOne, err := xsd.NewOccurs(parent.Loc(), 1, 1)
-		if err != nil {
-			return nil, err
-		}
-		part, err := xsd.NewParticle(parent.Loc(), oneOne, xsd.ResolvedTerm{Term: seq}, nil)
-		if err != nil {
-			return nil, err
-		}
-		explicit = &part
+	return explicitContentType(effective, effectiveMixed), nil
+}
+
+// explicitContentType is §3.4.2.3.3 clause 4.1 — the restriction branch's
+// ·explicit content type· — as a total function of the already-computed
+// ·effective content·: clause 4.1.1 (empty effective content ⇒ {variety} empty,
+// which admits NO character content at all, unlike element-only) and clause 4.1.2
+// (otherwise mixed iff ·effective mixed·). Clause 4.2.1 routes the extension
+// cases with a simple or empty/simple-content base through this same function,
+// which is what "a Content Type as per clause 4.1.1 and clause 4.1.2 above"
+// means, so the two clauses have one encoding.
+func explicitContentType(effective *xsd.Particle, effectiveMixed bool) xsd.ContentType {
+	if effective == nil {
+		return xsd.EmptyContent{} // clause 4.1.1
 	}
-	// clause 4.1.2 (restriction, non-empty): mixed iff effectiveMixed.
-	return xsd.ElementContent{Mixed: effectiveMixed, Particle: *explicit}, nil
+	return xsd.ElementContent{Mixed: effectiveMixed, Particle: *effective} // clause 4.1.2
+}
+
+// effectiveContent computes the ·effective content· of a complex content
+// (§3.4.2.3.3 clauses 2-3) from parent's model-group child, and reports whether
+// the ·explicit content· (clause 2) was ***empty***. parent is the <complexType>
+// (implicit content), <restriction> or <extension>.
+//
+// A nil particle means the ·effective content· itself is ***empty*** (clause
+// 3.1.2). The two facts are distinct and both are needed: clause 4.2.2 keys on
+// the EFFECTIVE content being empty, while clause 4.2.3.1 keys on the EXPLICIT
+// content being empty — they differ exactly when clause 3.1.1 substitutes an
+// empty 1..1 sequence for a mixed type with no model-group child, so that text is
+// admitted.
+//
+// This is the single encoding of clauses 2-3: both the restriction branch
+// (buildComplexContentType) and the extension branch (complexContentType) read
+// their ·effective content· from here.
+func (p *producer) effectiveContent(parent *Element, effectiveMixed bool, scopeParent xsd.ElementScopeParent) (effective *xsd.Particle, explicitEmpty bool, err error) {
+	explicit, err := p.explicitContent(modelGroupChild(parent), scopeParent)
+	if err != nil {
+		return nil, false, err
+	}
+	if explicit != nil {
+		return explicit, false, nil // clause 3.2
+	}
+	if !effectiveMixed {
+		return nil, true, nil // clause 3.1.2: ·effective content· is ***empty***
+	}
+	// clause 3.1.1: a 1..1 particle over an empty sequence stands in, so a mixed
+	// type with no model-group child still admits character content.
+	seq, err := xsd.NewModelGroup(parent.Loc(), xsd.CompositorSequence, nil, nil)
+	if err != nil {
+		return nil, false, err
+	}
+	oneOne, err := xsd.NewOccurs(parent.Loc(), 1, 1)
+	if err != nil {
+		return nil, false, err
+	}
+	part, err := xsd.NewParticle(parent.Loc(), oneOne, xsd.ResolvedTerm{Term: seq}, nil)
+	if err != nil {
+		return nil, false, err
+	}
+	return &part, true, nil
+}
+
+// extensionContentType is §3.4.2.3.3 clause 4.2 (ct-extension): the ·explicit
+// content type· of an extension-derived complex content, computed from the
+// RESOLVED {base type definition} and this derivation's own ·effective content·.
+//
+//   - 4.2.1 (c-ctes): a simple base, or a complex base whose {content type} has
+//     {variety} empty or simple, contributes no particle — the result is clause
+//     4.1.1/4.1.2's, delegated to explicitContentType;
+//   - 4.2.2: a complex base with element-only or mixed content and an ***empty***
+//     ·effective content· yields the base's ENTIRE Content Type record, {open
+//     content} included — a different sharing rule from 4.2.3, which takes only
+//     {open content} from the base;
+//   - 4.2.3: otherwise {variety} is mixed iff ·effective mixed·, {particle} is
+//     extensionParticle's merge of the ·base particle· with the ·effective
+//     content·, {open content} is the base's, and {simple type definition} is
+//     ·absent· — automatic here, since xsd.ElementContent has no such field.
+//
+// Nothing is deep-copied: the base particle and the effective content enter the
+// synthesized structure as the very values the base and this derivation already
+// hold, so "the same particles appear in both the base type definition and the
+// extension" (xr.ctd.n4-bis). A Go copy of an immutable value component IS that
+// component; no identity marker is added to carry the fact (STYLE D3).
+func extensionContentType(loc xsderr.Loc, base xsd.TypeDefinition, effective *xsd.Particle, explicitEmpty, effectiveMixed bool) (xsd.ContentType, error) {
+	switch b := base.(type) {
+	case *xsd.SimpleType:
+		return explicitContentType(effective, effectiveMixed), nil // 4.2.1, simple base
+	case xsd.ComplexType:
+		switch bc := b.ContentType().(type) {
+		case xsd.EmptyContent, xsd.SimpleContent:
+			return explicitContentType(effective, effectiveMixed), nil // 4.2.1
+		case xsd.ElementContent:
+			if effective == nil {
+				return bc, nil // 4.2.2: the base's whole Content Type record
+			}
+			particle, err := extensionParticle(loc, bc.Particle, *effective, explicitEmpty)
+			if err != nil {
+				return nil, err
+			}
+			// 4.2.3: {open content} comes from the base, {particle} is the merge.
+			return xsd.ElementContent{Mixed: effectiveMixed, Particle: particle, OpenContent: bc.OpenContent}, nil
+		default:
+			panic("parser: extensionContentType: non-exhaustive ContentType switch")
+		}
+	default:
+		panic("parser: extensionContentType: non-exhaustive TypeDefinition switch")
+	}
+}
+
+// extensionParticle merges the ·base particle· with the ·effective content· per
+// §3.4.2.3.3 clause 4.2.3's three sub-cases:
+//
+//   - 4.2.3.1: the base particle's {term} is an all group and the ·explicit
+//     content· is empty ⇒ the base particle itself, unchanged;
+//   - 4.2.3.2: both terms are all groups ⇒ a particle whose {min occurs} is the
+//     effective content's, {max occurs} 1, and {term} an all group holding the
+//     base group's {particles} followed by the effective group's;
+//   - 4.2.3.3 (c-suffix-extension): otherwise a 1..1 particle over a SEQUENCE of
+//     the base particle followed by the effective content.
+//
+// Both operands are spliced in as-is (xr.ctd.n4-bis: particles are reused, not
+// copied), which is also what lets a wildcard's ##definedSibling see
+// base-declared element names as siblings — the derived {content type} genuinely
+// contains the base's particle, so xsd's content-model walk needs no {base type
+// definition} edge.
+//
+// GAP(xsd): allGroupOf recognizes only an INLINE all group, so a base particle
+// or effective content whose {term} is a <group ref> to an all-bodied model group
+// definition — unresolved at produce time — takes 4.2.3.3 where 4.2.3.1 or
+// 4.2.3.2 applies (#334). Missing 4.2.3.2 is not merely narrower: the
+// fallthrough synthesizes a sequence wrapping two all groups, a shape
+// cos-all-limited (§3.8.6.2) clause 1 forbids. It fabricates no verdict TODAY
+// only because that rule is charged upstream on the source XML, by
+// produceGroupParticle below, and never on the finalized component — so the
+// shape is inert rather than conservative, and would become a wrong answer the
+// moment cos-all-limited is charged componentwise. Missing 4.2.3.1 is the benign
+// half: sequence[all, empty sequence] accepts exactly what the all group does.
+// No lane observes either — the conformance schema lane admits no <extension>.
+func extensionParticle(loc xsderr.Loc, baseParticle, effective xsd.Particle, explicitEmpty bool) (xsd.Particle, error) {
+	baseGroup, baseIsAll := allGroupOf(baseParticle)
+	if baseIsAll && explicitEmpty {
+		return baseParticle, nil // 4.2.3.1
+	}
+	if effectiveGroup, effectiveIsAll := allGroupOf(effective); baseIsAll && effectiveIsAll {
+		// 4.2.3.2: one all group over both {particles} lists, base's first.
+		merged := append(baseGroup.Particles(), effectiveGroup.Particles()...)
+		mg, err := xsd.NewModelGroup(loc, xsd.CompositorAll, merged, nil)
+		if err != nil {
+			return xsd.Particle{}, err
+		}
+		occ, err := xsd.NewOccurs(loc, effective.Occurs().Min(), 1)
+		if err != nil {
+			return xsd.Particle{}, err
+		}
+		return xsd.NewParticle(loc, occ, xsd.ResolvedTerm{Term: mg}, nil)
+	}
+	// 4.2.3.3: a 1..1 sequence, base particle then effective content.
+	seq, err := xsd.NewModelGroup(loc, xsd.CompositorSequence, []xsd.Particle{baseParticle, effective}, nil)
+	if err != nil {
+		return xsd.Particle{}, err
+	}
+	oneOne, err := xsd.NewOccurs(loc, 1, 1)
+	if err != nil {
+		return xsd.Particle{}, err
+	}
+	return xsd.NewParticle(loc, oneOne, xsd.ResolvedTerm{Term: seq}, nil)
+}
+
+// allGroupOf returns the Model Group a particle's {term} is when that group's
+// {compositor} is all (§3.8.1), reporting false for every other {term}: an
+// element declaration, a wildcard, a choice/sequence group, or an unresolved
+// <element ref>/<group ref> (see extensionParticle's GAP(xsd) note, #334).
+func allGroupOf(p xsd.Particle) (xsd.ModelGroup, bool) {
+	rt, ok := p.Term().(xsd.ResolvedTerm)
+	if !ok {
+		return xsd.ModelGroup{}, false
+	}
+	mg, ok := rt.Term.(xsd.ModelGroup)
+	if !ok || mg.Compositor() != xsd.CompositorAll {
+		return xsd.ModelGroup{}, false
+	}
+	return mg, true
+}
+
+// declineOpenContent refuses an <openContent> child of a <complexType>,
+// <restriction> or <extension>: computing {open content} needs the
+// <defaultOpenContent> fallback of §3.4.2.3.3 clauses 5-6, which is not yet
+// built, and silently mapping it to ·absent· would be wrong (never silently
+// absent). One encoding, called from both {content type} branches.
+func declineOpenContent(parent *Element) error {
+	if childElement(parent, xsd.XMLSchemaNS, "openContent") == nil {
+		return nil
+	}
+	return fmt.Errorf("parser: <openContent> is not yet produced (its {open content} needs <defaultOpenContent> fallback, §3.4.2.3.3)")
 }
 
 // explicitContent maps the model-group child to the {explicit content} particle
@@ -542,8 +857,15 @@ func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
 // the union of parent's own <attribute> uses with the uses of every referenced
 // attribute group (§3.6.2.1); {attribute wildcard} is the intersection of
 // parent's own <anyAttribute> with the referenced groups' wildcards (§3.6.2.2,
-// always intersection at one container). The base-type union (§3.4.2.5 clause 2,
-// cos-aw-union) stays out of scope: <extension> is declined upstream.
+// always intersection at one container).
+//
+// GAP(xsd): the BASE type's contribution is not folded in — neither §3.4.2.4
+// clause 3's union of the base's {attribute uses} nor §3.4.2.5 clause 2's
+// cos-aw-union of its {attribute wildcard}. That fold is uniform across
+// restriction and extension, so it is landed as a whole (#265, the same gap
+// xsd/complexderivation.go's checkAttributeUseNamesUnique records) rather than
+// half-applied on the extension path this producer now builds. Missing uses can
+// only make a rejection go unreported, never fabricate one.
 func (p *producer) produceAttributeUses(parent *Element) ([]xsd.AttributeUse, *xsd.Wildcard, error) {
 	var uses []xsd.AttributeUse
 	var wildcards []xsd.Wildcard

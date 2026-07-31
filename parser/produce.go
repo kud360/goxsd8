@@ -23,6 +23,7 @@ const (
 	ruleSrcSimpleType         xsderr.Rule = "src-simple-type"
 	ruleSrcResolve            xsderr.Rule = "src-resolve"
 	ruleSTPropsCorr           xsderr.Rule = "st-props-correct"
+	ruleCTPropsCorr           xsderr.Rule = "ct-props-correct"
 	ruleSrcCT                 xsderr.Rule = "src-ct"
 	ruleCosAllLimited         xsderr.Rule = "cos-all-limited"
 	ruleSrcWildcard           xsderr.Rule = "src-wildcard"
@@ -101,6 +102,23 @@ type symbols struct {
 	// simple types resolve (Structures §3.1.3).
 	simpleTypes map[xsd.QName]*Element
 
+	// complexTypes maps each top-level named <complexType>'s expanded name to
+	// its source (raw element plus the producer of the document that declares
+	// it), filled by the pre-scan so a base= on a <complexContent>/<simpleContent>
+	// derivation reaches its {base type definition} regardless of document order
+	// (§3.4.2's preamble: "the mapping rules … depend upon the {base type
+	// definition} having been identified before they apply").
+	//
+	// The owning producer is carried, not just the element, because producers are
+	// per-DOCUMENT (parse.go's compile) while this index is assembly-wide: a
+	// complex type built on demand from a REFERRING document must still be built
+	// under its OWN document's producer, or every local element declaration
+	// inside it takes the wrong {target namespace} (localTargetNS reads
+	// schemaElem's elementFormDefault, and unqualifiedRefNS/declares answer for
+	// the declaring document). simpleTypes needs no owner because a <simpleType>
+	// body holds no local declaration whose namespace could differ.
+	complexTypes map[xsd.QName]complexSource
+
 	// attributeGroups maps each top-level named <attributeGroup>'s expanded name
 	// to its raw element, filled by the pre-scan so an <attributeGroup ref> (from
 	// a <complexType>/<restriction> or another <attributeGroup>) resolves and is
@@ -113,6 +131,17 @@ type symbols struct {
 	// PRESENT-non-nil value is done. The pre-seeded builtins start out done.
 	built map[xsd.QName]*xsd.SimpleType
 
+	// builtComplex is the same memo + cycle guard for COMPLEX-type construction,
+	// with the identical tri-state (absent unstarted, present-nil on the build
+	// stack, present-non-nil done) so "started but unrecorded" stays
+	// unrepresentable (STYLE T1/D3). The pre-seeded xs:anyType starts out done, so
+	// <extension base="xs:anyType"> resolves without a special case. The on-stack
+	// state is what terminates demand-driven base construction on a circular
+	// chain, charged ct-props-correct clause 3 (§3.4.6.1) — the SAME rule
+	// xsd/resolve.go's checkComplexBaseAcyclic charges for the programmatic
+	// SchemaBuilder path; see buildComplexType.
+	builtComplex map[xsd.QName]*xsd.ComplexType
+
 	// backend is the assembly's [value.Backend], retained past the one-time
 	// [builtin.Seed] call so constructSimpleType can charge the value-space
 	// facet constraints of cos-st-restricts ([builtin.CheckSimpleTypeRestriction])
@@ -120,6 +149,16 @@ type symbols struct {
 	// per-document producer for the same reason the indexes do: it is
 	// assembly-wide and identical for every document.
 	backend value.Backend
+}
+
+// complexSource is one entry of symbols.complexTypes: a top-level <complexType>
+// element together with the producer of the document that DECLARES it. On-demand
+// base construction builds through owner, never through the producer that
+// happens to be asking, so the type's local element declarations take their own
+// document's target namespace and form defaults (§3.3.2.3 dcl.elt.local, §F.1).
+type complexSource struct {
+	elem  *Element
+	owner *producer
 }
 
 // newSymbols returns the empty assembly-wide symbol table, having seeded the
@@ -152,9 +191,13 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 	builder.AddType(anyType)
 	return &symbols{
 		simpleTypes:     make(map[xsd.QName]*Element),
+		complexTypes:    make(map[xsd.QName]complexSource),
 		attributeGroups: make(map[xsd.QName]*Element),
 		built:           built,
-		backend:         backend,
+		// xs:anyType is seeded DONE so a derivation naming it resolves to the very
+		// component AddType registered, rather than to a rebuilt twin.
+		builtComplex: map[xsd.QName]*xsd.ComplexType{anyTypeName: &anyType},
+		backend:      backend,
 	}, nil
 }
 
@@ -209,9 +252,10 @@ func (p *producer) chameleon() bool {
 	return !own
 }
 
-// prescan registers this document's top-level named <simpleType>s (forward base=
-// references, §3.1.3) and named <attributeGroup>s (forward <attributeGroup ref>
-// inlining, §3.6.2.1) in the assembly-wide symbol table, building nothing yet.
+// prescan registers this document's top-level named <simpleType>s and
+// <complexType>s (forward base= references, §3.1.3/§3.4.2) and named
+// <attributeGroup>s (forward <attributeGroup ref> inlining, §3.6.2.1) in the
+// assembly-wide symbol table, building nothing yet.
 // EVERY document's prescan runs before ANY document's run, so a reference in one
 // document reaches a definition in another (§4.2.3 c-incl-incl). Names are
 // minted in the effective target namespace, so a chameleon document's
@@ -236,6 +280,8 @@ func (p *producer) prescan() {
 		switch {
 		case isXSD(el, "simpleType"):
 			p.symbols.simpleTypes[xsd.QName{Space: p.target, Local: name}] = decl
+		case isXSD(el, "complexType"):
+			p.symbols.complexTypes[xsd.QName{Space: p.target, Local: name}] = complexSource{elem: decl, owner: p}
 		case isXSD(el, "attributeGroup"):
 			p.symbols.attributeGroups[xsd.QName{Space: p.target, Local: name}] = decl
 		}
@@ -290,7 +336,12 @@ func (p *producer) run() error {
 			p.builder.AddAttribute(ad)
 		case "complexType":
 			name, _ := attrValue(decl, "name")
-			ct, err := p.produceComplexType(xsd.QName{Space: p.target, Local: name}, decl)
+			// AddType happens HERE, at this type's own document-order position, and
+			// never as a side effect of an on-demand base build from some other
+			// type: buildComplexType populates the memo only, so a type built early
+			// to serve a derivation still enters {type definitions} in document
+			// order (STYLE D2).
+			ct, err := p.buildComplexType(xsd.QName{Space: p.target, Local: name}, decl)
 			if err != nil {
 				return err
 			}
@@ -350,6 +401,84 @@ func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleTy
 	}
 	p.symbols.built[name] = st // replace the on-stack sentinel with the finished node
 	return st, nil
+}
+
+// buildComplexType returns the compiled complex type named name, building it
+// (and, through resolveBaseType, its base chain) on demand with memoization and
+// a cycle guard — the complex-type twin of buildSimpleType, for the same reason:
+// §3.4.2's mapping rules "depend upon the {base type definition} having been
+// identified before they apply", and xsd.NewComplexType demands a complete
+// {content type} at construction, so the base COMPONENT must exist before the
+// derived type can be built at all.
+//
+// It is the SINGLE entry point: run's top-level dispatch and resolveBaseType's
+// on-demand construction both go through it, so a type is mapped exactly once.
+// It populates the memo only — registering the component with the builder is
+// run's job, at the type's own document-order position.
+//
+// A name already on the build stack (the PRESENT-nil memo state) is a circular
+// {base type definition} chain, charged ct-props-correct clause 3 (§3.4.6.1).
+// That is the SAME rule, with the same verdict, that xsd/resolve.go's
+// checkComplexBaseAcyclic charges: two entry points on one rule for the two
+// construction paths — this one for the producer, whose demand-driven recursion
+// would otherwise not terminate, and that one for the programmatic
+// SchemaBuilder, which has no producer and must stay self-defending. Neither
+// substitutes for the other (PRINCIPLES 5's "detect once at construction" applies
+// per construction path).
+func (p *producer) buildComplexType(name xsd.QName, elem *Element) (xsd.ComplexType, error) {
+	if ct, started := p.symbols.builtComplex[name]; started {
+		if ct != nil {
+			return *ct, nil
+		}
+		return xsd.ComplexType{}, xsderr.New(ruleCTPropsCorr, elem.Loc(),
+			"circular complex type definition: %s derives ultimately from itself, but ct-props-correct clause 3 forbids a circular {base type definition} chain (only xs:anyType may be its own base)", name)
+	}
+	p.symbols.builtComplex[name] = nil // mark on-stack
+
+	ct, err := p.produceComplexType(name, elem)
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
+	p.symbols.builtComplex[name] = &ct // replace the on-stack sentinel with the finished node
+	return ct, nil
+}
+
+// resolveBaseType identifies the {base type definition} COMPONENT a base=
+// attribute names (§3.4.2 preamble), building it on demand when it is a
+// not-yet-mapped complex or simple type of this assembly. at is the
+// <restriction>/<extension> carrying the base=, charged for a failure.
+//
+// A complex base is built through its OWN document's producer (complexSource's
+// owner), never through p: see symbols.complexTypes. A simple base returns the
+// very *xsd.SimpleType symbols.built holds — never a rebuilt twin, whose
+// component identity would silently diverge (xsd/typedefinition.go).
+//
+// A name that resolves to no type at all is charged src-resolve clause 1.1
+// (§3.17.6.2) — the same rule, at the same clause, that resolveBase charges for
+// a simple type's base and that finalize charges for an unresolvable
+// {base type definition} reference (xsd/resolve.go's resolveTypeName). One rule,
+// three entry points, identical verdict.
+func (p *producer) resolveBaseType(at *Element, name xsd.QName) (xsd.TypeDefinition, error) {
+	if ct, done := p.symbols.builtComplex[name]; done && ct != nil {
+		return *ct, nil
+	}
+	if src, ok := p.symbols.complexTypes[name]; ok {
+		// Unbuilt or on-stack: buildComplexType handles the memo hit and the
+		// ct-props-correct clause 3 cycle rejection alike.
+		ct, err := src.owner.buildComplexType(name, src.elem)
+		if err != nil {
+			return nil, err
+		}
+		return ct, nil
+	}
+	if st, ok := p.symbols.built[name]; ok && st != nil {
+		return st, nil
+	}
+	if localElem, ok := p.symbols.simpleTypes[name]; ok {
+		return p.buildSimpleType(name, localElem)
+	}
+	return nil, xsderr.New(ruleSrcResolve, at.Loc(),
+		"base type %s does not resolve to any type definition in scope (src-resolve clause 1.1)", name)
 }
 
 // constructSimpleType maps one <simpleType> element (named or anonymous) into a
