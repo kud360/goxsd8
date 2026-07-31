@@ -576,6 +576,191 @@ a clarifying comment on the issue rather than rewritten, since #250 is an
 epic body and the rewrite would lose the original filing rationale; the
 comment names the current tail (#182, #183, #263, #264, #265) instead.
 
+Update (2026-07-31, weekly backlog): **the ORIGINAL M4 carve is fully
+closed — every one of #79's #167–#183 sub-slices** (#182 landed
+`aea7be2`, #183 landed `80352b3`, both 2026-07-27; #181 closed as
+`[SPLIT → #262 / #263 / #264]`). #79 now shows **19 of 22 sub-issues
+complete**, the extra five being continuations chartered after the carve:
+#262 and #263 closed, and **#264, #286 and #287 still open**. So the
+epic stays open and `blocked` — but on three named slices, not on an
+unknown remainder, and **the M5 carve's precondition is those three
+closing**, not the #180/#181/#182/#183 tail the M5 section below still
+names. Thirteen landings since the paragraph above: #202, #203, #206,
+#208, #210, #214, #215, #217, #219, #223, #224, #228, #229. **What M4 is
+missing is mostly fan-out now**: `&lt;xs:redefine&gt;` (#286, the deferred half
+of #183), §F.2 duplicate-`&lt;xs:override&gt;`-child handling (#287),
+`&lt;openContent&gt;` (#230), the `ref=` form of the identity constraints
+(#240), and the two open halves of derivation validity (#264, #265).
+
+**Both lanes moved hard, and the M3 and M4 headings above are now stale
+in their numbers — read this paragraph, not them.** `schema` is **4284
+pass / 11148 fail (15432)**, up from 2951 at the #242 post-land paragraph
+and 2997 at #262's baseline: **+1287** across the window, the bulk of it
+#229's inline-anonymous-`simpleType` cohort (+1190, a cohort nobody had
+predicted). `datatypes` is **1059 pass / 22 fail (1081)**, up from
+1043 / 31 (1074) — #190, #223 and #224 all landed, so the M3 heading's
+"open datatypes-lane follow-ups: anyURI-triage #190, union
+member-dispatch #223, integer-family list fixtures #224" names three
+**closed** issues. The heading is left as filed per this file's
+add-don't-rewrite convention; this sentence is the correction. `instance`
+0 / 26426; `xpath`, `json`, `ber` empty by design.
+
+**Priority band 1 is replaced wholesale** — every issue in the previous
+band-1 line has landed except the composition tail. The working queue,
+lane movement first, dependency-ordered, is now:
+
+1. **#344** — UTF-16 BOM decode (the #226 replan). It carries a
+   **measured, unbanked `schema +4`**: the arbiter ran `GOXSD_RATCHET=1`
+   diagnostically on `wip/issue-226` and restored the lane files, so four
+   `ibmData` `ff fe` fixtures are decidable today and unclaimed. Cheapest
+   real lane movement in the queue, and the only issue whose commit
+   message is *required* to read `Ratchet: schema +4`.
+2. **#331** — routes seeded-but-unmapped lexical types through
+   `value.ValidateLexical`; 48 non-list integer-family fixtures. The
+   largest single `datatypes` movement left.
+3. **#337** — `symbols.simpleTypes` carries no owning producer, so a
+   cross-document on-demand build resolves unqualified references under
+   the wrong document. A **chameleon false reject** — the one direction
+   the ratchet cannot forgive.
+4. **#264** → **#265** — the two open halves of complex-type derivation
+   validity. Together they unblock **#336**, which is where the schema
+   lane widens to admit the extension forms; #265 also now owns the
+   `contentrestricts.go:356` sibling-keyword fold.
+5. **#301** — `ComplexType.{context}`, the component-handle identity
+   **#340** consumes (inline anonymous `complexType` on local
+   declarations — the complexType twin of what #229 just landed for
+   `simpleType`, and the same cohort shape).
+6. **#281** — `substitutionGroup=` into `{substitution group
+   affiliations}` (the producer passes nil today). Retires
+   `contentrestricts.go:462`'s global/global fail-open and unblocks
+   **#342**.
+7. **#346** — the base type's `{assertions}` fold (§3.4.2.1 cl.1), which
+   makes `derivation-ok-restriction` clause 5 chargeable instead of a
+   guaranteed false reject. Filed this pass.
+8. **#324** — `xsdBool` reads `fixed=` too narrowly; an out-of-lexical-
+   space value silently becomes `false` instead of charging
+   `cvc-datatype-valid`. False-accept debt.
+9. **#277** + **#276** — the two ratchet-integrity soft spots in the
+   harness (`indeterminate` mapped to expects-invalid, so 16 cases are
+   winnable by any rejection; an unresolvable `&lt;xs:include&gt;` location
+   admitted where #182 made `&lt;xs:import&gt;` decline the same shape). These
+   move no lane by design and are listed last, but they are the only
+   items here whose *absence* can lock a false accept into the ratchet.
+
+**#286 and #287 sit alongside this band rather than inside it**, and a
+session that wants the highest *planning* leverage should take them: with
+#264 they are the last three open sub-slices of #79, so closing all three
+closes the M4 epic and makes the M5 carve the next planning action. They
+are ranked below band 1 only because each moves less lane than the items
+above it.
+
+Bands 2-5 from the 2026-07-25 paragraph still stand for everything not
+listed above, minus the landed items.
+
+**GAP debt is no longer clean, and the 2026-07-26 paragraph's "12 of 13
+owned, zero unowned" is overtaken.** `grep -rn "GAP(" --include=*.go`
+now returns **23 real sites** (plus `xpath/doc.go:29`, the convention's
+own template, and two `_test.go` references pinning existing markers) —
+#262, #263, #52, #228 and #229 each disclosed new fail-open as they
+landed, which is STYLE 9 working. This pass swept all 23 and found
+**five with no owning issue**; all five are now owned:
+
+- Filed **#345** (`blocked` on #250) for the three that only an
+  **assessment episode** can decide, so no amount of schema-static code
+  retires them: `defaultbinding.go:266` (`loc-testSubP` clause 3 — the
+  W3C `MS-ComplexType` `ctG007`/`ctO003` pattern would false-reject),
+  `defaultbinding.go:353` (element-side fixed `{value constraint}`
+  compared lexically because `xsd` must not depend on `value`), and
+  `contentrestricts.go:515` (element-side `key-dft-binding` cases 4/5).
+  They are the family #267 already belongs to.
+- Filed **#346** for `complexderivation.go:189` — closable today, hence
+  `ready` while the other three stay `blocked`.
+- Claimed `contentrestricts.go:356` for **#265** by comment: the
+  sibling-keyword drop is `cos-ns-subset`'s missing case, and building a
+  private subset test for it would put one relation in two encodings.
+
+**Branch namespace: two stale `wip/*` refs, both correctly retired in
+place, neither deletable by a session** (docs/WORKFLOW.md makes this
+report-only). `git ls-remote --heads origin` returns `main`,
+`wip/issue-195` and `wip/issue-226`; no `parked/*`.
+
+- **`wip/issue-195` @ `63c2e69`** — issue **closed** 2026-07-28 carrying
+  `needs-replan`. Content is deliberately **not** on `main` (a park is
+  not a land) and the replan is tracked by **#304**, `ready`. Nothing is
+  owed; the ref is a leftover flagged for human deletion.
+- **`wip/issue-226` @ `80ef0c3`** — parked 2026-07-31 after two arbiter
+  rejections. It had **no replacement issue**, which is the one real gap
+  this pass found in the branch namespace: **#344** is now filed and
+  #226 is closed as superseded, matching the #195 → #304 disposition.
+  The branch stays retired and is never resumed; #344 copies the files
+  forward off `origin/main`. Its unbanked `schema +4` is recorded in
+  band 1 above so it cannot be misattributed to whatever next touches
+  the lane.
+
+**Ready queue is 65, and this pass is the first to file the reason as an
+issue rather than re-explain it here.** Reconciliation this pass was
+real but net-zero: **#317, #332 and #339 were absorbed into #315** (all
+four are one prose clause block in one `docs/WORKFLOW.md` bullet list,
+and #317 and #332 each asked in writing to be absorbed; #315's body was
+rewritten in place to carry all five defect classes with their evidence),
+**#300 was absorbed into #338** (the same one-sentence `xsd` doc-truth
+edit at an eighth site, exactly the fold-in #300 asked for), and
+**#226 was closed as superseded**. Filed: #344, #345, #346, #347. Three
+`ready` out, three `ready` in.
+
+That flatness is the finding. The band was last met on 2026-07-21 (9);
+since then every backlog has recorded the overrun and applied the same
+mitigation — 16, 26, 34, 35, 65 — because there are exactly three
+ways to shrink `ready` and all three are unavailable: closing real work
+violates the anti-leak convention this repo has defended nine times
+(#111, #112, #118, #128, #149, #195, #270, #303, #327); relabelling to
+`blocked` would be dishonest and would destroy the invariant the
+2026-07-25 pass established (*no `ready` issue has an open hard
+dependency* — spot-checked this pass across band 1 and every issue this
+pass touched, not re-verified across all 65); and merging only
+works for genuinely coupled slices, which this pass exhausted. The cause
+is unchanged and is a feature: **the post-land harvest files follow-ups
+faster than one-issue-per-session consumes them.** So the fix is not
+another paragraph here — it is a decision about what `ready` *means*,
+and that is now **#347**: either separate the working queue from the
+backlog with one new label, or retire the numeric band and formalize the
+ordering as the cartographer's real deliverable. It is filed rather than
+applied because it changes `.claude/agents/cartographer.md` itself, which
+a cartographer should propose through the queue, not apply to itself
+mid-sweep. **Until #347 is decided, band 1 above IS the working queue** —
+11 issues across its 9 entries, which is the band, near enough — and the
+other 54 `ready` issues are the backlog behind it.
+
+**Personas were NOT consulted this pass, and the API/CLI-facing issues
+are unrefreshed as a result.** This session's toolset has no
+subagent-spawn tool, so libuser and cliuser could not be run under the
+isolation their value depends on (godoc + README only, never source) —
+and a persona pass faked by a session that has read the source is worth
+less than no persona pass. #251 (`-help` behind the stub), #252 (no
+document-order enumeration accessors) and #16 (the CLI contract
+acceptance criteria) therefore carry their 2026-07-25 criteria
+unchanged. Flagged for a session with a broader toolset, in the same
+spirit as the milestone-tool gap the 2026-07-25 pass flagged — which is
+**still open**: no open issue carries a GitHub milestone, so the
+preamble's "milestones map one-to-one to GitHub milestones" remains
+aspirational and this file plus issue labels are doing that work alone.
+
+**Addendum (same date, broader-toolset session): the persona gap above
+is closed.** libuser and cliuser ran under the orchestrating session
+(which does have subagent-spawn access) against the current published
+surface — README + `go doc`, and the real binary for cliuser — never the
+source. Result: **no new scope, both confirmations posted as comments.**
+#252's gap reproduces exactly as filed (`*xsd.Schema` still exposes only
+`Element`/`Attribute`/`Type` point lookups); #251's bug reproduces
+exactly as filed (`-help`/`-h`/`--help` still exit 2 via the generic
+stub); #189 (closed 2026-07-28) has **not regressed** — the README still
+matches `go doc` in both directions, confirming the fix held. One
+genuinely new, non-blocking cross-cutting finding from cliuser, posted to
+#251 and #16: no flag is reserved for version discovery, and `-v` is
+already claimed for debug verbosity, so pin a `-version` convention
+before any subcommand's flag parsing lands rather than colliding with it
+later.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
