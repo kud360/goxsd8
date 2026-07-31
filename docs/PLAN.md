@@ -350,9 +350,19 @@ once, so a session can take the first item it can do rather than scan:
    `c-props-correct` cl.2 — the last open M4 leaf follow-up, and an M5
    prerequisite per #250), **#206** ({context} / {scope}.{parent}
    containment back-pointers), **#217** (`cos-st-restricts` facet-value
-   sub-clauses), **#235** → **#236** (attribute default/fixed producer
-   wiring, then the §3.5.4 effective value constraint — #236 is a soft
-   sibling of #235, not gated on it, but landing #235 first is cheaper).
+   sub-clauses), **#236** (the §3.5.4 effective value constraint, now
+   computed over an Attribute Use `{value constraint}` the producer
+   actually populates).
+   *Retired: #235 (attribute `default=`/`fixed=` → Attribute Use
+   `{value constraint}`) landed 2026-07-31 as `84a7431` (PR #357) — both
+   `NewAttributeUse` call sites stopped passing `nil`, so `key-evc` feeds
+   `loc-testSubP` clause 5.2 on real input; schema lane +2 (`attZ008_f`,
+   `attZ008_h`). Post-land harvest filed **#358** (`src-attribute`
+   clauses 2/5 unenforced; `use="prohibited"` short-circuits clause 1)
+   and **#359** (`defaultbinding.go`'s five zero-`Loc` rejections). The
+   `au-props-correct` clause-3 `{value}`-identity half is NOT discharged
+   — it belongs to #236, not to the closed #173, whatever the older doc
+   comments in `xsd/attributeuse.go` still say.*
 4. **Datatypes-lane widening.** **#223** (union member-dispatch),
    **#224** (integer-family list fixtures), **#190** (anyURI triage).
 5. **Surface, docs, process — real work, but it moves no lane, so it
