@@ -276,25 +276,28 @@ import (
 // complexType-typed children, v18's and v19–v22's multi-step restriction chains)
 // are declined honestly and route to the inert instance lane as recorded gaps.
 //
-// # The list-variety cohort (issue #75)
+// # The list-variety cohort (issues #75, #224)
 //
 // The lane also decides the LIST-variety Facets cases under
 // msData/datatypes/{boolean018,float038,float039,anyURI011,hexBinary002,
-// base64Binary002,duration027}.xml. Each such schema declares a user-defined
-// "myList" (<xsd:list itemType="xsd:PRIM"/>) reached through comp_foo (either
+// base64Binary002,duration027}.xml and, since issue #224, their seven
+// integer-family siblings {byte009,long009,short009,unsignedByte007,
+// unsignedInt007,unsignedLong007,unsignedShort007}.xml (claimed by
+// integerListCase). Each such schema declares a user-defined
+// "myList" (<xsd:list itemType="xsd:BUILTIN"/>) reached through comp_foo (either
 // type="myList" directly or an inline anonymous restriction of it) and one-or-more
 // simpleTest elements (a named restriction of "myList"); the restriction may carry
 // <xsd:enumeration> children (boolean018 enumerates 0/1 on comp_foo and true/false
-// on simpleTest; the other six are facet-free). Because comp_foo and simpleTest can
+// on simpleTest; the other thirteen are facet-free). Because comp_foo and simpleTest can
 // carry DIFFERENT own facets, execListCase reads each element's type graph
 // independently (readListCohortCase), synthesizing one leaf per tested element
-// (the item primitive as {item type definition}, xs:anySimpleType as base, the
+// (the item type as {item type definition}, xs:anySimpleType as base, the
 // mandatory fixed whiteSpace=collapse §4.3.6.1 plus any enumeration as own facets)
 // and deciding every tested value through the ordinary value.ValidateLexical
-// pipeline. That pipeline now resolves a list-variety type end to end (issue #75):
-// value.governingMapping wraps the item type's mapping in a generic list mapping
+// pipeline. That pipeline resolves a list-variety type end to end (issue #75):
+// value.governingMapping wraps the item TYPE in a generic list mapping
 // (cvc-datatype-valid clause dv_list §4.1.4 cl.2.2), so each lexical is split into
-// items, each item is Datatype-Valid against the item primitive, and the leaf's
+// items, each item is Datatype-Valid against the item type, and the leaf's
 // enumeration is checked over the LIST value space by "equal or identical"
 // (cvc-enumeration-valid §4.3.5.4, §2.2.1/§2.2.2 pairwise over items; length, had
 // any fixture one, would count list items §4.3.1.3). The case is valid iff every
@@ -304,14 +307,18 @@ import (
 // mapping is unexported (value.listMapping/listValue), consuming the existing
 // strict primitive mappings via the item type.
 //
-// In scope here are only the seven fixtures whose item primitive is in
-// datatypesCase's lexical cohort (boolean/float/anyURI/hexBinary/base64Binary/
-// duration). The byte/long/short/unsignedByte/unsignedInt/unsignedLong/
-// unsignedShort item-type siblings (byte009/long009/short009/unsignedByte007/
-// unsignedInt007/unsignedLong007/unsignedShort007.xml) are NOT: their item
-// primitives are the integer family, outside datatypesCase's primitives-only
-// regex, so they remain unclaimed (a natural follow-up, not this issue). The
-// msData UNION-variety Facets fixtures are likewise still unclaimed by THIS
+// The item type is DERIVED, not a primitive, in the seven fixtures issue #224
+// added, and that distinction is load-bearing: xs:byte's {primitive type
+// definition} is xs:decimal, so the lexical mapping alone accepts every decimal
+// literal while byte's OWN effective facets (pattern, fractionDigits=0,
+// minInclusive=-128, maxInclusive=127) are what reject "128" or "1.5". dv_list
+// requires the FULL cvc-datatype-valid rule per item, clause 3 (dv_vfacets)
+// included, so value.listMapping decides each item by recursing through
+// validateLexical against the item type rather than parsing it through the item
+// type's governing mapping — the #224 fix that closed that false-accept before
+// these fixtures were claimed.
+//
+// The msData UNION-variety Facets fixtures are still unclaimed by THIS
 // reader — value.ValidateLexical decides a union end to end since issue #223
 // (cvc-datatype-valid clause dv_union, §4.1.4 cl.2.3, value/union.go), and the
 // D3_3_4 cohort's union case d3_3_4v17 rides it, but no msData union fixture has
@@ -409,11 +416,17 @@ import (
 // Within the integer family, the odd
 // multi-element cases (e.g. Facets/int/test111092.xml, two named restriction
 // steps under distinct elements) do not fit the single-<foo> instance shape and
-// fall through to the instance lane as recorded gaps. The list-variety fixtures
-// whose item primitive is an integer-family builtin (byte009/long009/short009/
-// unsignedByte007/unsignedInt007/unsignedLong007/unsignedShort007.xml) stay
-// unclaimed for the same reason those primitives are outside datatypesCase's
-// primitives-only regex — a natural follow-up to issue #75, not part of it.
+// fall through to the instance lane as recorded gaps. The integer family's
+// LIST-variety fixtures (byte009/long009/short009/unsignedByte007/
+// unsignedInt007/unsignedLong007/unsignedShort007.xml) are now claimed and
+// decided (issue #224, integerListCase). Their NON-list siblings
+// (byte001–008 and the like, each testing a value against xs:byte/xs:long/…
+// through the shared byte.xsd/long.xsd) stay unclaimed: execLexicalCase's
+// parseOK path needs a backend Mapping for the tested type, and the strict
+// backend maps primitives only, so the integer family would decline there.
+// Routing a seeded-but-unmapped lexical type through value.ValidateLexical (as
+// fixesTimezone already does for xs:dateTimeStamp) is what would make them
+// decidable — the natural follow-up, not part of #224.
 // time_minInclusive006_1163.i (issue #123) is a
 // recorded gap for a different reason: its instance file carries no
 // xsi:noNamespaceSchemaLocation (a defect in that one suite file), so
@@ -586,8 +599,31 @@ var notationFacetsCase = regexp.MustCompile(`msData/datatypes/Facets/NOTATION/NO
 // See "The anyURI a*/b* multi-leaf cohort" above.
 var anyURIShapeCase = regexp.MustCompile(`msData/datatypes/Facets/anyURI/anyURI_[ab][0-9]+\.xml$`)
 
+// integerListCase matches a LIST-variety msData/datatypes fixture whose item
+// type is an integer-family builtin (issue #224): the seven "myList" fixtures
+// that sit alongside the seven issue #75 claimed. They reach execListCase by
+// exactly the route the
+// #75 fixtures take — readLexicalCase decodes the tested type as the non-builtin
+// "myList", so execLexicalCase falls back to execListCase — and need no dispatch
+// branch of their own; only this claim was missing.
+//
+// The seven are NAMED rather than matched by an
+// `(byte|long|short|unsigned…)[0-9]+` family widening of datatypesCase, because
+// that widening would also claim the forty-eight NON-list integer fixtures
+// (byte001–008, long001–008, …). Those test a value against xs:byte/xs:long/…
+// directly, and execLexicalCase declines them: the strict backend maps
+// primitives only, so backend.Mapping(xs:byte) misses and the case records a
+// Fail. Claiming forty-eight cases this lane cannot decide would only duplicate,
+// in datatypes.txt, gaps the instance lane already records — so the claim is held
+// to what the lane actually decides. Routing them through the facet pipeline (as
+// fixesTimezone already does for a seeded-but-unmapped lexical type) is the
+// natural follow-up that would earn the family-wide widening.
+var integerListCase = regexp.MustCompile(
+	`msData/datatypes/(byte009|long009|short009|unsignedByte007|unsignedInt007|unsignedLong007|unsignedShort007)\.xml$`)
+
 // selectsDatatypes claims the instance cases of the lexical, facet,
-// precisionDecimal, NOTATION-facet and anyURI-multi-leaf cohorts. It is a cheap
+// precisionDecimal, NOTATION-facet, anyURI-multi-leaf and integer-family-list
+// cohorts. It is a cheap
 // path predicate; the executor does the real document reading. The
 // anyURIShapeCase disjunct is stated even though facetsCase's pattern happens to
 // match those eight paths too, so the claim rests on the cohort's own selector
@@ -599,7 +635,8 @@ func selectsDatatypes(c caseSpec) bool {
 	doc := filepath.ToSlash(c.doc)
 	return datatypesCase.MatchString(doc) || facetsCase.MatchString(doc) ||
 		pdecimalCase.MatchString(doc) || notationFacetsCase.MatchString(doc) ||
-		d34Case.MatchString(doc) || anyURIShapeCase.MatchString(doc)
+		d34Case.MatchString(doc) || anyURIShapeCase.MatchString(doc) ||
+		integerListCase.MatchString(doc)
 }
 
 // newDatatypesExec builds the lane's executor: it Seeds the builtins once (the
@@ -855,22 +892,25 @@ func execItemCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 }
 
 // listTest is one tested element of a list-variety cohort case (issue #75): the
-// local name of the list's item primitive (itemPrim), the leaf restriction's own
+// local name of the list's item type (itemType, a builtin — a primitive for the
+// #75 fixtures, a derived integer-family type for the #224 ones), the leaf restriction's own
 // enumeration facet children (children, empty for the facet-free fixtures), and
 // every tested lexical carried by that element (values). comp_foo carries one
 // value; a simpleTest element may repeat (float039.xml has nine siblings), each
 // captured so none is silently under-tested.
 type listTest struct {
-	itemPrim string
+	itemType string
 	children []facetChild
 	values   []string
 }
 
-// execListCase decides a list-variety Facets cohort case (issue #75): the
+// execListCase decides a list-variety Facets cohort case (issues #75, #224): the
 // msData/datatypes/{boolean018,float038,float039,anyURI011,hexBinary002,
-// base64Binary002,duration027}.xml fixtures, each a <list itemType=..> (a
+// base64Binary002,duration027,byte009,long009,short009,unsignedByte007,
+// unsignedInt007,unsignedLong007,unsignedShort007}.xml fixtures, each a
+// <list itemType=..> (a
 // user-defined "myList") reached through comp_foo and one-or-more simpleTest
-// elements. For each tested element it resolves the item primitive to a seeded,
+// elements. For each tested element it resolves the item type to a seeded,
 // strict-governed *xsd.SimpleType, synthesizes the list leaf (the item type as
 // {item type definition}, xs:anySimpleType as base, the mandatory fixed
 // whiteSpace=collapse plus any enumeration as own facets), and decides every
@@ -882,15 +922,20 @@ type listTest struct {
 // §2.2.2), its length (had any fixture one) in list items (cvc-length-valid
 // §4.3.1.3). The whole case is valid iff EVERY tested value across comp_foo and
 // every simpleTest sibling validates — the suite's whole-instance polarity. A
-// case whose schema does not decode to the list shape, whose item primitive is
-// not a seeded strict-mapped builtin, or that carries an unrecognized facet is
+// case whose schema does not decode to the list shape, whose item type is
+// not a seeded strict-governed builtin, or that carries an unrecognized facet is
 // declined (Fail, an honest recorded gap) rather than mis-decided.
 //
-// Only the seven fixtures whose item primitive is in datatypesCase's lexical
-// cohort (boolean/float/anyURI/hexBinary/base64Binary/duration) are decidable
-// here; the byte/long/short/unsignedXxx item-type siblings are NOT — their item
-// primitives are the integer family, outside datatypesCase's primitives-only
-// regex — and neither is any msData UNION-variety fixture: the value pipeline
+// The item type may be DERIVED, not only a primitive: the seven #224 fixtures
+// list xs:byte/xs:long/xs:short/xs:unsignedByte/xs:unsignedInt/xs:unsignedLong/
+// xs:unsignedShort, whose {primitive type definition} is xs:decimal. strictGoverns
+// admits them (it resolves through the base chain, issue #81) and, because
+// value.listMapping decides each item by the whole cvc-datatype-valid rule
+// against the item type, the item type's OWN minInclusive/maxInclusive/
+// fractionDigits/pattern facets are enforced per item (dv_list → dv_vfacets,
+// §4.1.4) — not merely xs:decimal's lexical space.
+//
+// No msData UNION-variety fixture is decidable here: the value pipeline
 // decides a union end to end since issue #223 (value/union.go), but this reader
 // still recognizes only the <list itemType=..> "myList" shape.
 func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
@@ -900,12 +945,12 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 	}
 	observedValid := true
 	for _, lt := range tests {
-		qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: lt.itemPrim}
-		itemType, seeded := sym[qn]
+		qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: lt.itemType}
+		item, seeded := sym[qn]
 		if !seeded {
 			return Fail()
 		}
-		if !strictGoverns(backend, itemType) {
+		if !strictGoverns(backend, item) {
 			return Fail()
 		}
 		ownFacets, ok := buildListOwnFacets(lt.children)
@@ -913,8 +958,8 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 			return Fail()
 		}
 		leaf, err := xsd.NewSimpleType(xsderr.Loc{},
-			xsd.QName{Space: synthNS, Local: "myList-" + lt.itemPrim},
-			xsd.NewList(itemType), xsd.AnySimpleType(), ownFacets, nil)
+			xsd.QName{Space: synthNS, Local: "myList-" + lt.itemType},
+			xsd.NewList(item), xsd.AnySimpleType(), ownFacets, nil)
 		if err != nil {
 			return Fail()
 		}
@@ -940,11 +985,12 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 // does not route through the generated builtin table, and value.effectiveWhiteSpace
 // panics on a list-variety type whose EffectiveFacets carry no whiteSpace entry.
 // Each enumeration child is collected via the shared enumerationMember helper and
-// folded into one xsd.NewEnumerationFacet (§4.3.5.4); the fixtures' item primitives
-// (boolean/float/anyURI/hexBinary/base64Binary/duration) are never QName/NOTATION,
+// folded into one xsd.NewEnumerationFacet (§4.3.5.4); the fixtures' item types
+// (boolean/float/anyURI/hexBinary/base64Binary/duration and the seven integer-family
+// builtins) are never QName/NOTATION,
 // so an enumeration member needs no namespace context (facetChild.bindings is
 // nil here). Any non-enumeration facet kind is declined (ok=false), the cohort's
-// honest-decline convention — no other facet kind appears in these seven fixtures.
+// honest-decline convention — no other facet kind appears in these fourteen fixtures.
 func buildListOwnFacets(children []facetChild) ([]xsd.Facet, bool) {
 	facets := []xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}
 	var enumMembers []xsd.EnumerationMember
@@ -1685,7 +1731,7 @@ func readListCohortCase(instancePath string) (tests []listTest, ok bool) {
 			return nil, false
 		}
 	}
-	compPrim, compChildren, ok := resolveListLeaf(compStart, simpleTypes)
+	compItem, compChildren, ok := resolveListLeaf(compStart, simpleTypes)
 	if !ok {
 		return nil, false
 	}
@@ -1695,19 +1741,20 @@ func readListCohortCase(instancePath string) (tests []listTest, ok bool) {
 	if !found {
 		return nil, false
 	}
-	simpPrim, simpChildren, ok := resolveListLeaf(simpStart, simpleTypes)
+	simpItem, simpChildren, ok := resolveListLeaf(simpStart, simpleTypes)
 	if !ok {
 		return nil, false
 	}
 
 	return []listTest{
-		{itemPrim: compPrim, children: compChildren, values: []string{inst.ComplexTest.CompFoo}},
-		{itemPrim: simpPrim, children: simpChildren, values: inst.SimpleTest},
+		{itemType: compItem, children: compChildren, values: []string{inst.ComplexTest.CompFoo}},
+		{itemType: simpItem, children: simpChildren, values: inst.SimpleTest},
 	}, true
 }
 
-// resolveListLeaf resolves a starting simpleType node (inline or named) to its
-// list item primitive and the leaf restriction's own enumeration facet children.
+// resolveListLeaf resolves a starting simpleType node (inline or named) to the
+// local name of its list item type and the leaf restriction's own enumeration
+// facet children.
 // It collects the leaf's own <enumeration> children (only the first restriction
 // step, never an intermediate one — §3.16.1: the item type is never itself a
 // list, so the chain is a single restriction hop to the <list> in this cohort),
@@ -1717,7 +1764,7 @@ func readListCohortCase(instancePath string) (tests []listTest, ok bool) {
 // ok is false for a node that is neither a list nor a recognized restriction, a
 // restriction carrying a non-enumeration facet child, an unresolvable base, or an
 // absent itemType.
-func resolveListLeaf(start listSchemaSimpleType, simpleTypes map[string]listSchemaSimpleType) (itemPrim string, children []facetChild, ok bool) {
+func resolveListLeaf(start listSchemaSimpleType, simpleTypes map[string]listSchemaSimpleType) (itemType string, children []facetChild, ok bool) {
 	cur := start
 	collectedLeaf := false
 	for depth := 0; depth < 4; depth++ {
