@@ -414,32 +414,47 @@ func disallowedSubstitutionsSuperset(specific, general ElementDeclaration) bool 
 // (key-val-sub-type-restricts) names — the same set derivation-ok-restriction
 // clause 4 works under, and the same slice, so the two clauses cannot drift.
 //
-// An absent (anonymous, zero-QName) or unresolvable {type definition} on either
-// side is SKIPPED rather than rejected, exactly as
-// checkLocallyDeclaredElementTypes skips it: this package carries an anonymous
-// type as the zero name, which names no component, so the clause has nothing to
-// compare and is not competent to charge a failure. Skipping is fail-open, never
-// a false reject.
+// An absent or unresolvable {type definition} on either side is SKIPPED rather
+// than rejected, exactly as checkLocallyDeclaredElementTypes skips it: there is
+// no component to compare, so the clause is not competent to charge a failure.
+// Skipping is fail-open, never a false reject. An ANONYMOUS type is no longer
+// among the skipped cases: typeOf hands back the inline component itself, so the
+// comparison is made rather than waved through.
 func (s *Schema) declaredTypeRestricts(specific, general ElementDeclaration) bool {
-	sub, ok := s.typeNamed(specific.TypeDefinitionName())
+	sub, ok := s.typeOf(specific.TypeDefinition())
 	if !ok {
 		return true
 	}
-	super, ok := s.typeNamed(general.TypeDefinitionName())
+	super, ok := s.typeOf(general.TypeDefinition())
 	if !ok {
 		return true
 	}
 	return s.validlySubstitutable(sub, super, restrictionBlockingKeywords)
 }
 
-// typeNamed resolves a {type definition} reference to its component, treating an
-// absent (zero) name as unresolvable — the anonymous-type case
-// declaredTypeRestricts must skip. It is simpleTypeNamed's unnarrowed sibling.
-func (s *Schema) typeNamed(name QName) (TypeDefinition, bool) {
-	if name == (QName{}) {
+// typeOf is the one way this package turns an element or attribute declaration's
+// {type definition} slot into a component, exhaustively over
+// TypeDefinitionOrRef's two arms: an InlineTypeDefinition IS the component (it
+// is in no by-name symbol table, so a lookup would miss it), while a
+// TypeDefinitionRef is the by-name Schema.Type lookup. ok is false for an absent
+// (nil) slot and for an unresolvable name — the cases every caller treats as
+// "not decidable by this clause", never as a violation (a dangling name was
+// already charged src-resolve by resolve.go's Phase A).
+//
+// Every {type definition} consumer goes through this helper or through its
+// narrowed sibling simpleTypeOf; none re-derives a bare-name lookup of its own
+// (STYLE T4).
+func (s *Schema) typeOf(ref TypeDefinitionOrRef) (TypeDefinition, bool) {
+	switch r := ref.(type) {
+	case nil:
 		return nil, false
+	case TypeDefinitionRef:
+		return s.Type(r.Name)
+	case InlineTypeDefinition:
+		return r.Definition, true
+	default:
+		panic("xsd: typeOf: non-exhaustive TypeDefinitionOrRef switch")
 	}
-	return s.Type(name)
 }
 
 // typeTablesAgree is loc-testSubP clause 4.6 (c-tt-equiv): the two {type table}s
@@ -497,11 +512,11 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, t, b ComplexType, general,
 	if !ok {
 		return nil
 	}
-	gt, ok := s.simpleTypeNamed(gd.TypeDefinitionName())
+	gt, ok := s.simpleTypeOf(gd.TypeDefinition())
 	if !ok {
 		return nil
 	}
-	st, ok := s.simpleTypeNamed(sd.TypeDefinitionName())
+	st, ok := s.simpleTypeOf(sd.TypeDefinition())
 	if !ok {
 		return nil
 	}
@@ -509,7 +524,7 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, t, b ComplexType, general,
 		return nil
 	}
 	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-		"complex type %s restricts %s but types attribute %s as %s, which is not validly derived from the base's %s (derivation-ok-restriction clause 3, c-ran, via loc-testSubP clause 5.1 and cos-st-derived-ok §3.16.6.3)", t.Name(), b.Name(), n, sd.TypeDefinitionName(), gd.TypeDefinitionName())
+		"complex type %s restricts %s but types attribute %s as %s, which is not validly derived from the base's %s (derivation-ok-restriction clause 3, c-ran, via loc-testSubP clause 5.1 and cos-st-derived-ok §3.16.6.3)", t.Name(), b.Name(), n, typeDefinitionLabel(st), typeDefinitionLabel(gt))
 }
 
 // checkAttributeValueConstraintSubsumes is loc-testSubP clause 5.2: with GVC and
@@ -544,15 +559,12 @@ func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, t, b ComplexType
 	return nil // clause 5.2.2, exactly when the lexical forms agree; see the GAP above
 }
 
-// simpleTypeNamed resolves a {type definition} reference to a Simple Type
-// Definition. ok is false for an absent (zero) name, an unresolvable one, and
-// one naming a complex type — the three cases every caller here treats as "not
-// decidable by this clause", never as a violation.
-func (s *Schema) simpleTypeNamed(name QName) (*SimpleType, bool) {
-	if name == (QName{}) {
-		return nil, false
-	}
-	t, ok := s.Type(name)
+// simpleTypeOf narrows typeOf to a Simple Type Definition. ok is false for an
+// absent slot, an unresolvable name, and a {type definition} that is a complex
+// type — the three cases every caller here treats as "not decidable by this
+// clause", never as a violation.
+func (s *Schema) simpleTypeOf(ref TypeDefinitionOrRef) (*SimpleType, bool) {
+	t, ok := s.typeOf(ref)
 	if !ok {
 		return nil, false
 	}

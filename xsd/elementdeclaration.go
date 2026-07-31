@@ -116,7 +116,7 @@ func (t TypeTable) DefaultTypeDefinition() TypeAlternative {
 // group definitions}), so a CTD and an MGD may share one expanded name. The kind
 // therefore lives in the variant type, and a consumer follows the reference with
 // a read-time lookup in the index that kind selects — the same
-// pre-resolution-reference convention as TypeDefinitionName, which Schema.Type
+// pre-resolution-reference convention as TypeDefinitionRef, which Schema.Type
 // serves. A ComplexTypeScopeParent is followable today; a ModelGroupScopeParent
 // waits on the Schema.ModelGroup(QName) accessor this package does not export
 // yet (STYLE T5 — no consumer justifies one, the same follow-cost asymmetry
@@ -269,13 +269,15 @@ func (s Scope) Parent() (ElementScopeParent, bool) {
 // exclusions}, {disallowed substitutions}, {abstract}, and {annotations}.
 //
 // Like the other §3 component shapes in this package, ElementDeclaration is a
-// STRUCTURAL holder built before resolution. Two properties are carried as
-// pre-resolution QName REFERENCES, not resolved components: {type definition}
-// (a single reference — the type/@type name of §3.3.2) and {substitution group
-// affiliations} (a list of references — the substitutionGroup names). Finalize
-// (resolve.go, #173) VALIDATES that both resolve against the schema indexes
-// (src-resolve clauses 1.1 and 1.3) and that the substitution-group graph is
-// acyclic (e-props-correct clause 5), but does NOT rewrite them into resolved
+// STRUCTURAL holder built before resolution. {substitution group affiliations}
+// is carried as a list of pre-resolution QName REFERENCES (the substitutionGroup
+// names), and {type definition} as a TypeDefinitionOrRef — a by-name reference
+// for the type/@type, substitution-group and xs:anyType tiers of §3.3.2.1
+// dcl.elt.common, or the owned anonymous component itself for clause 1's inline
+// <simpleType>/<complexType> child. Finalize (resolve.go, #173) VALIDATES that
+// every by-name reference resolves against the schema indexes (src-resolve
+// clauses 1.1 and 1.3) and that the substitution-group graph is acyclic
+// (e-props-correct clause 5), but does NOT rewrite the references into resolved
 // components: the QNames are retained, and a consumer follows them by read-time
 // schema.Type/schema.Element lookups. The remaining cross-component clauses that
 // need resolved components (clauses 2, 4, 7) stay deferred.
@@ -285,13 +287,15 @@ func (s Scope) Parent() (ElementScopeParent, bool) {
 // Model Group Definition it is scoped to, a global one names none, and the
 // producer populates the reference from the ancestor axis (§3.3.2.3
 // dcl.elt.local / §3.3.2.2 dcl.elt.global). {parent} is a THIRD pre-resolution
-// reference alongside {type definition} and {substitution group affiliations},
-// but unlike them it is producer-synthesized rather than schema-document-
-// supplied, so finalize adds no src-resolve check for it — see
+// reference alongside {type definition}'s by-name arm and {substitution group
+// affiliations}, but unlike them it is producer-synthesized rather than
+// schema-document-supplied, so finalize adds no src-resolve check for it — see
 // ElementScopeParent.
 //
-// Ratchet impact: unchanged. Wiring {scope}.{parent} adds a component property
-// no validation rule reads yet, so no conformance lane moves.
+// Ratchet impact: the schema lane widens whenever the producer starts mapping a
+// {type definition} shape it used to decline — most recently the inline
+// anonymous <simpleType> of a local declaration (#229), which the
+// InlineTypeDefinition arm of the slot exists to hold.
 //
 // Construct only through NewElementDeclaration, which rejects the states
 // e-props-correct (§3.3.6.1) clauses 1 and 3 forbid so they are unrepresentable
@@ -299,7 +303,7 @@ func (s Scope) Parent() (ElementScopeParent, bool) {
 type ElementDeclaration struct {
 	loc                           xsderr.Loc // source position; provenance, not a §3.3.1 property
 	name                          QName
-	typeDefinitionName            QName
+	typeDefinition                TypeDefinitionOrRef
 	typeTable                     TypeTable
 	hasTypeTable                  bool
 	scope                         Scope
@@ -334,6 +338,13 @@ type ElementDeclaration struct {
 //   - clause 3: a non-empty substitutionGroupAffiliations forces
 //     scope.Variety() = ScopeGlobal.
 //
+// It also rejects the two illegal encodings of the typeDefinition slot — a
+// zero-named TypeDefinitionRef and an InlineTypeDefinition that is empty or
+// wraps a NAMED type — charged to xsderr.RuleComponentInvariant; see
+// TypeDefinitionOrRef and checkTypeDefinitionOrRef. A nil slot is the legal
+// encoding of an absent {type definition}, which a programmatically built
+// declaration is in before the §3.3.2.1 defaulting tiers are applied.
+//
 // The rest of clause 1's {scope} shape is not checked here because it is
 // unrepresentable: scope is a Scope, obtainable only from NewGlobalScope or
 // NewLocalScope, so its {variety} is always a legal token and its {parent} is
@@ -352,10 +363,13 @@ type ElementDeclaration struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built declaration — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QName, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
+func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
 	if name.Local == "" {
 		return ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, loc,
 			"element declaration has an absent {name}, but the §3.3.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (e-props-correct clause 1)")
+	}
+	if err := checkTypeDefinitionOrRef(loc, typeDefinition, "element declaration "+name.String()); err != nil {
+		return ElementDeclaration{}, err
 	}
 	for i, m := range substitutionGroupExclusions {
 		switch m {
@@ -378,12 +392,12 @@ func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinitionName QName,
 			"element declaration has a non-empty {substitution group affiliations} but its {scope}.{variety} is %s, not global (e-props-correct clause 3)", scope.Variety())
 	}
 	e := ElementDeclaration{
-		loc:                loc,
-		name:               name,
-		typeDefinitionName: typeDefinitionName,
-		scope:              scope,
-		nillable:           nillable,
-		abstract:           abstract,
+		loc:            loc,
+		name:           name,
+		typeDefinition: typeDefinition,
+		scope:          scope,
+		nillable:       nillable,
+		abstract:       abstract,
 	}
 	if typeTable != nil {
 		e.typeTable, e.hasTypeTable = *typeTable, true
@@ -427,15 +441,19 @@ func (e ElementDeclaration) Loc() xsderr.Loc {
 	return e.loc
 }
 
-// TypeDefinitionName returns the {type definition} property (Required) as a
-// pre-resolution QName reference — the type/@type name of §3.3.2.
+// TypeDefinition returns the {type definition} property (Required) as the
+// TypeDefinitionOrRef sealed sum: a TypeDefinitionRef naming a top-level type
+// (§3.3.2.1 dcl.elt.common clauses 2-4), or an InlineTypeDefinition owning the
+// anonymous type of an inline <simpleType>/<complexType> child (clause 1). It is
+// nil only for a declaration built with an absent {type definition}.
 //
-// This is NOT the resolved {type definition} component (§3.3.1). Finalize (#173)
-// validates the name resolves to a type definition (src-resolve clause 1.1) but
-// adds no resolved-component accessor: the QName is retained, and a consumer
-// obtains the component by a read-time schema.Type(name) lookup.
-func (e ElementDeclaration) TypeDefinitionName() QName {
-	return e.typeDefinitionName
+// The by-name arm is NOT resolved into a component here. Finalize (#173)
+// validates that the name resolves to a type definition (src-resolve clause 1.1)
+// but adds no resolved-component accessor: the QName is retained, and a consumer
+// obtains the component by a read-time schema.Type(name) lookup. The inline arm
+// needs no such lookup — it carries the component.
+func (e ElementDeclaration) TypeDefinition() TypeDefinitionOrRef {
+	return e.typeDefinition
 }
 
 // TypeTable returns the {type table} property (Optional); the second result is

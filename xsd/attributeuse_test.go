@@ -11,7 +11,7 @@ import (
 // declaration with the given name, for use in Attribute Use tests.
 func localDecl(t *testing.T, name xsd.QName) xsd.LocalAttributeDeclaration {
 	t.Helper()
-	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, xsd.QName{Local: "T"}, xsd.ScopeLocal, nil, false, nil)
+	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.ScopeLocal, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}
@@ -23,7 +23,7 @@ func localDecl(t *testing.T, name xsd.QName) xsd.LocalAttributeDeclaration {
 func localDeclVC(t *testing.T, kind xsd.ValueConstraintKind) xsd.LocalAttributeDeclaration {
 	t.Helper()
 	vc := xsd.NewValueConstraint(kind, "v")
-	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.QName{Local: "T"}, xsd.ScopeLocal, &vc, false, nil)
+	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.ScopeLocal, &vc, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}

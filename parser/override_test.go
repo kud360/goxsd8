@@ -24,7 +24,7 @@ func mustElementType(t *testing.T, s *xsd.Schema, name, want xsd.QName) {
 	if !ok {
 		t.Fatalf("element %s not found in assembled schema", name)
 	}
-	if got := ed.TypeDefinitionName(); got != want {
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != want {
 		t.Fatalf("element %s type = %s, want %s", name, got, want)
 	}
 }

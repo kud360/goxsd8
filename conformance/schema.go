@@ -563,7 +563,7 @@ func overrideDecidable(el *parser.Element) bool {
 	return true
 }
 
-// elementDecidable reports whether a top-level <element> is in the form the
+// elementDecidable reports whether a TOP-LEVEL <element> is in the form the
 // producer decides genuinely: it must have no inline <simpleType>/<complexType>
 // child. A bare element (no type=) now defaults to xs:anyType (§3.3.2.1 case 4),
 // which the producer seeds as a Complex Type Definition (§3.4.7), so it resolves
@@ -571,6 +571,10 @@ func overrideDecidable(el *parser.Element) bool {
 // anonymous type is an explicit src-element clause 3 rejection (§3.3.3) that
 // conflates a genuine violation with an unsupported form, so it stays declined.
 // Its <unique>/<key>/<keyref> children must also be decidable (#178).
+//
+// The inline decline is deliberately ASYMMETRIC with localElementDecidable,
+// which admits an inline <simpleType>: #229 widened the producer's dcl.elt.local
+// mapping only, leaving dcl.elt.global (§3.3.2.2) declining as before.
 func elementDecidable(el *parser.Element) bool {
 	return childXSD(el, "simpleType") == nil && childXSD(el, "complexType") == nil &&
 		identityConstraintsDecidable(el)
@@ -611,9 +615,11 @@ func identityConstraintsDecidable(el *parser.Element) bool {
 //     limitation error — <simpleContent> <restriction> (§3.4.2.2 cases 1-2
 //     synthesize an anonymous simple type from the restriction's facets),
 //     <openContent> anywhere (its {open content} needs <defaultOpenContent>
-//     fallback, §3.4.2.3.3), an inline anonymous <simpleType>/<complexType> on a
-//     local element/attribute, and a bare <group>/<attributeGroup> lacking a ref
-//     (a nested one is always a reference, so a bare one is malformed);
+//     fallback, §3.4.2.3.3), an inline anonymous <complexType> on a local element
+//     (#340), and a bare <group>/<attributeGroup> lacking a ref (a nested one is
+//     always a reference, so a bare one is malformed). An inline anonymous
+//     <simpleType> on a local element or attribute IS produced (#229) and no
+//     longer declines — see localElementDecidable/localAttributeDecidable;
 //   - the two EXTENSION forms, which the producer DOES build as of #228 —
 //     <simpleContent> <extension> and <complexContent> <extension> — because
 //     cos-ct-extends (§3.4.6.2) is not implemented (#264) and the base's
@@ -653,7 +659,8 @@ func complexTypeDecidable(el *parser.Element) bool {
 // content) are all within the producer's decidable subset. A <group ref> content
 // child and an <attributeGroup ref> are admitted (produced, #177); a bare
 // <group>/<attributeGroup> without a ref, or a stray <simpleContent>/<openContent>
-// at this level, declines.
+// at this level, declines. A local <attribute>'s inline anonymous <simpleType>
+// is admitted when the inline type itself is decidable — see localAttributeDecidable.
 func contentDecidable(parent *parser.Element) bool {
 	for _, child := range parent.Children() {
 		el, ok := child.(*parser.Element)
@@ -668,8 +675,8 @@ func contentDecidable(parent *parser.Element) bool {
 				return false
 			}
 		case "attribute":
-			if childXSD(el, "simpleType") != nil {
-				return false // inline anonymous attribute type — not yet produced
+			if !localAttributeDecidable(el) {
+				return false
 			}
 		case "anyAttribute":
 			// An attribute wildcard is produced.
@@ -696,10 +703,11 @@ func contentDecidable(parent *parser.Element) bool {
 
 // modelGroupDecidable reports whether every particle child of a model group
 // (<sequence>/<choice>/<all>) is within the producer's decidable subset: nested
-// model groups recurse, <element> must carry no inline anonymous type and only
-// decidable identity constraints (produced for local declarations too, #178),
-// <any> is fine, and a <group ref> is produced (#177). A bare <group> without a
-// ref (a nested group is always a reference) or any other child declines.
+// model groups recurse, <element> must be locally decidable
+// (localElementDecidable) and carry only decidable identity constraints
+// (produced for local declarations too, #178), <any> is fine, and a <group ref>
+// is produced (#177). A bare <group> without a ref (a nested group is always a
+// reference) or any other child declines.
 func modelGroupDecidable(group *parser.Element) bool {
 	for _, child := range group.Children() {
 		el, ok := child.(*parser.Element)
@@ -710,8 +718,8 @@ func modelGroupDecidable(group *parser.Element) bool {
 		case "annotation", "any":
 			// Harmless / produced.
 		case "element":
-			if childXSD(el, "simpleType") != nil || childXSD(el, "complexType") != nil {
-				return false // inline anonymous element type — not yet produced
+			if !localElementDecidable(el) {
+				return false
 			}
 			if !identityConstraintsDecidable(el) {
 				return false // ref= identity constraint — not yet produced (#178)
@@ -764,10 +772,11 @@ func groupDecidable(el *parser.Element) bool {
 
 // attributeGroupDecidable reports whether a top-level named <attributeGroup>
 // definition (§3.6.2) is within the producer's decidable subset: it must carry a
-// name, and its children must be only <attribute> (no inline anonymous type),
-// <attributeGroup ref>, or <anyAttribute> — the shapes the producer folds in
-// (§3.6.2.1/§3.6.2.2). A dangling or circular ref is decided genuinely at
-// producer/finalize time, so it is admitted.
+// name, and its children must be only <attribute> (locally decidable — the group's
+// <attribute> children map to LOCAL declarations, §3.6.2.1), <attributeGroup ref>,
+// or <anyAttribute> — the shapes the producer folds in (§3.6.2.1/§3.6.2.2). A
+// dangling or circular ref is decided genuinely at producer/finalize time, so it
+// is admitted.
 func attributeGroupDecidable(el *parser.Element) bool {
 	if !hasAttr(el, "name") || hasAttr(el, "ref") {
 		return false
@@ -781,8 +790,8 @@ func attributeGroupDecidable(el *parser.Element) bool {
 		case "annotation", "anyAttribute":
 			// Harmless / produced.
 		case "attribute":
-			if childXSD(c, "simpleType") != nil {
-				return false // inline anonymous attribute type — not yet produced
+			if !localAttributeDecidable(c) {
+				return false
 			}
 		case "attributeGroup":
 			if !hasAttr(c, "ref") {
@@ -795,12 +804,51 @@ func attributeGroupDecidable(el *parser.Element) bool {
 	return true
 }
 
-// attributeDecidable reports whether a top-level <attribute> is decidable: it must
-// have no inline <simpleType> child (src-attribute clause 4, §3.2.3). type= is NOT
-// required — a bare attribute defaults to xs:anySimpleType (§3.2.2.1), which
-// builtin.Seed always seeds, so it resolves and is decided genuinely.
+// attributeDecidable reports whether a TOP-LEVEL <attribute> is decidable: it
+// must have no inline <simpleType> child. type= is NOT required — a bare
+// attribute defaults to xs:anySimpleType (§3.2.2.1), which builtin.Seed always
+// seeds, so it resolves and is decided genuinely.
+//
+// The inline decline is deliberately ASYMMETRIC with localAttributeDecidable,
+// which admits one: #229 widened the producer's §3.2.2.2 dcl.att.local mapping
+// only. The global mapping dcl.att.global (§3.2.2.1) still declines an inline
+// <simpleType> with a limitation-shaped src-attribute error, so admitting a
+// global one here would report a fabricated "invalid".
 func attributeDecidable(el *parser.Element) bool {
 	return childXSD(el, "simpleType") == nil
+}
+
+// localElementDecidable reports whether a LOCAL <element> (a model group's
+// particle child) is within the producer's decidable subset. The asymmetry with
+// elementDecidable, its top-level sibling, is deliberate and is #229's whole
+// point: the producer maps §3.3.2.1 dcl.elt.common clause 1 for a LOCAL element,
+// so an inline anonymous <simpleType> is genuinely produced and admitted here —
+// provided the inline type is itself in the produced simple-type subset, since
+// otherwise the decline would move inside constructSimpleType and re-shape a
+// limitation as a verdict.
+//
+// An inline <complexType> still declines: it is not produced at all (#340, whose
+// anonymous complex type would have to be the {scope}.{parent} of its own nested
+// local elements — #301). Its both-present-with-type= case is a genuine
+// src-element clause 3 rejection, but the inline-only case is a limitation, and
+// this gate cannot tell which verdict a case expects, so both stay out.
+func localElementDecidable(el *parser.Element) bool {
+	if childXSD(el, "complexType") != nil {
+		return false
+	}
+	inline := childXSD(el, "simpleType")
+	return inline == nil || simpleTypeDecidable(inline)
+}
+
+// localAttributeDecidable reports whether a LOCAL <attribute> — a child of a
+// <complexType>/<restriction> or of an <attributeGroup> definition, both of
+// which map through §3.2.2.2 dcl.att.local — is within the producer's decidable
+// subset. Like localElementDecidable it admits an inline anonymous <simpleType>
+// whose own shape is produced (#229), and for the same reason declines one that
+// is not.
+func localAttributeDecidable(el *parser.Element) bool {
+	inline := childXSD(el, "simpleType")
+	return inline == nil || simpleTypeDecidable(inline)
 }
 
 // simpleTypeDecidable reports whether a <simpleType> (top-level or an anonymous

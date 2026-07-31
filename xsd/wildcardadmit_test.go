@@ -56,7 +56,7 @@ func wCT(t *testing.T, name QName, term TermOrRef) ComplexType {
 // (e-props-correct clause 3).
 func wElement(t *testing.T, name QName, scope Scope, affiliations []QName, disallowedSubstitutions []DerivationMethod) ElementDeclaration {
 	t.Helper()
-	e, err := NewElementDeclaration(xsderr.Loc{}, name, QName{}, nil, scope, nil, false, nil,
+	e, err := NewElementDeclaration(xsderr.Loc{}, name, nil, nil, scope, nil, false, nil,
 		affiliations, nil, false, disallowedSubstitutions, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
@@ -259,7 +259,7 @@ func TestSiblingAbstractHeadStillContains(t *testing.T) {
 	w := wWildcard(t, DisallowedNameSibling)
 	ct := wCT(t, wq("ct"), ElementDeclarationRef{Name: wq("head")})
 
-	abstractHead, err := NewElementDeclaration(xsderr.Loc{}, wq("head"), QName{}, nil, NewGlobalScope(), nil, false, nil,
+	abstractHead, err := NewElementDeclaration(xsderr.Loc{}, wq("head"), nil, nil, NewGlobalScope(), nil, false, nil,
 		nil, nil, true /* abstract */, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
@@ -357,7 +357,7 @@ func TestSiblingIgnoresNonElementContent(t *testing.T) {
 // tests.
 func mustAttributeDecl(t *testing.T, name QName) AttributeDeclaration {
 	t.Helper()
-	a, err := NewAttributeDeclaration(xsderr.Loc{}, name, QName{}, ScopeGlobal, nil, false, nil)
+	a, err := NewAttributeDeclaration(xsderr.Loc{}, name, nil, ScopeGlobal, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}

@@ -10,15 +10,15 @@ import (
 func TestNewAttributeDeclarationValidGlobalNoValueConstraint(t *testing.T) {
 	name := xsd.QName{Space: "urn:ns", Local: "lang"}
 	typ := xsd.QName{Space: "urn:t", Local: "LangType"}
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, typ, xsd.ScopeGlobal, nil, false, nil)
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: typ}, xsd.ScopeGlobal, nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration unexpected error: %v", err)
 	}
 	if a.Name() != name {
 		t.Errorf("Name() = %v, want %v", a.Name(), name)
 	}
-	if a.TypeDefinitionName() != typ {
-		t.Errorf("TypeDefinitionName() = %v, want %v", a.TypeDefinitionName(), typ)
+	if got := a.TypeDefinition(); got != (xsd.TypeDefinitionOrRef)(xsd.TypeDefinitionRef{Name: typ}) {
+		t.Errorf("TypeDefinition() = %v, want a TypeDefinitionRef naming %v", got, typ)
 	}
 	if a.ScopeVariety() != xsd.ScopeGlobal {
 		t.Errorf("ScopeVariety() = %v, want global", a.ScopeVariety())
@@ -36,7 +36,7 @@ func TestNewAttributeDeclarationValidGlobalNoValueConstraint(t *testing.T) {
 
 func TestNewAttributeDeclarationValueConstraintAndInheritablePresent(t *testing.T) {
 	vc := xsd.NewValueConstraint(xsd.ValueFixed, "en")
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.QName{Local: "T"}, xsd.ScopeLocal, &vc, true, nil)
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.ScopeLocal, &vc, true, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestNewAttributeDeclarationValueConstraintAndInheritablePresent(t *testing.
 }
 
 func TestNewAttributeDeclarationRejectsUnknownScope(t *testing.T) {
-	_, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.QName{Local: "T"}, xsd.ScopeVariety(0), nil, false, nil)
+	_, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.ScopeVariety(0), nil, false, nil)
 	if err == nil {
 		t.Fatal("NewAttributeDeclaration(scope=0) succeeded, want a-props-correct error")
 	}
@@ -66,7 +66,7 @@ func TestNewAttributeDeclarationRejectsUnknownScope(t *testing.T) {
 func TestNewAttributeDeclarationRejectsUnknownValueConstraintKind(t *testing.T) {
 	// A zero ValueConstraint carries the invalid zero ValueConstraintKind.
 	bad := xsd.ValueConstraint{}
-	_, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.QName{Local: "T"}, xsd.ScopeGlobal, &bad, false, nil)
+	_, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.ScopeGlobal, &bad, false, nil)
 	if err == nil {
 		t.Fatal("NewAttributeDeclaration(zero value constraint) succeeded, want a-props-correct error")
 	}
@@ -77,7 +77,7 @@ func TestAttributeDeclarationAnnotationsRoundTripAndAlias(t *testing.T) {
 	anns := []xsd.Annotation{
 		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "doc")}, nil),
 	}
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.QName{Local: "T"}, xsd.ScopeGlobal, nil, false, anns)
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.ScopeGlobal, nil, false, anns)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}

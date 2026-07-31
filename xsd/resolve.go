@@ -77,14 +77,17 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // pointer this pass produced — that pointer would be state derivable from the
 // QName plus the index (STYLE D3).
 //
-// An absent (zero) QName reference is skipped, not treated as dangling: the zero
-// QName means "no reference", which src-resolve has nothing to resolve. Only a
-// present-but-unresolvable QName is a failure. That skip is reachable only from
-// the genuinely OPTIONAL reference slots (an ElementDeclaration with no {type
-// definition} name, for instance); it can never mask a mandatory reference,
-// because the three ref-only sum variants — AttributeDeclarationRef,
-// ElementDeclarationRef, ModelGroupRef — cannot hold a zero QName in the first
-// place: NewAttributeUse and NewParticle reject one at construction (STYLE T1).
+// An absent reference is skipped, not treated as dangling: absence — a zero
+// QName in a bare-QName slot, a nil TypeDefinitionOrRef in a {type definition}
+// slot — means "no reference", which src-resolve has nothing to resolve. Only a
+// present-but-unresolvable reference is a failure. That skip is reachable only
+// from the genuinely OPTIONAL reference slots (a ComplexType with no {base type
+// definition} name, an ElementDeclaration with no {type definition}, for
+// instance); it can never mask a mandatory reference, because the four ref-only
+// sum variants — AttributeDeclarationRef, ElementDeclarationRef, ModelGroupRef,
+// TypeDefinitionRef — cannot hold a zero QName in the first place:
+// NewAttributeUse, NewParticle, NewElementDeclaration and
+// NewAttributeDeclaration reject one at construction (STYLE T1).
 //
 // FOLLOW-COST ASYMMETRY (recorded deliberately, not silently): Phase A wires
 // present-tense readers for the three Query views (Type/Element/Attribute
@@ -183,6 +186,41 @@ func resolveTypeName(r TypeResolver, ref QName, ctx string) (TypeDefinition, err
 			"%s references type %s, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)", ctx, ref)
 	}
 	return t, nil
+}
+
+// resolveTypeDefinition resolves the {type definition} slot of an element or
+// attribute declaration (§3.3.2.1 dcl.elt.common, §3.2.2.2 dcl.att.local),
+// exhaustively over TypeDefinitionOrRef's two arms. ctx names the referring site
+// for the message.
+//
+//   - nil is an absent {type definition}: src-resolve has nothing to resolve.
+//   - TypeDefinitionRef is the by-name arm: the src-resolve clause 1.1 lookup.
+//   - InlineTypeDefinition is already the component, reached through no symbol
+//     table, so the SLOT itself needs no resolution. Its own internal references
+//     still do, and differ by variant: a *SimpleType's {base}/{item}/{member}
+//     are live pointers set at construction (see resolveReferences), so it is a
+//     genuine no-op; a ComplexType still carries a by-name {base type
+//     definition} and a particle tree, so it is descended exactly as a top-level
+//     one is.
+func (s *Schema) resolveTypeDefinition(ref TypeDefinitionOrRef, ctx string) error {
+	switch r := ref.(type) {
+	case nil:
+		return nil
+	case TypeDefinitionRef:
+		_, err := resolveTypeName(s, r.Name, ctx)
+		return err
+	case InlineTypeDefinition:
+		switch d := r.Definition.(type) {
+		case *SimpleType:
+			return nil
+		case ComplexType:
+			return s.resolveComplexType(d)
+		default:
+			panic("xsd: resolveTypeDefinition: non-exhaustive TypeDefinition switch")
+		}
+	default:
+		panic("xsd: resolveTypeDefinition: non-exhaustive TypeDefinitionOrRef switch")
+	}
 }
 
 // resolveElementName resolves an element-declaration reference (src-resolve
@@ -355,7 +393,7 @@ func (s *Schema) resolveAttributeUse(u AttributeUse) error {
 // (clause 1.3), each type-table alternative's {type definition} (clause 1.1),
 // and each nested {identity-constraint definitions} keyref (clause 1.7).
 func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
-	if _, err := resolveTypeName(s, e.TypeDefinitionName(), "element declaration "+e.Name().String()+" {type definition}"); err != nil {
+	if err := s.resolveTypeDefinition(e.TypeDefinition(), "element declaration "+e.Name().String()+" {type definition}"); err != nil {
 		return err
 	}
 	for _, aff := range e.SubstitutionGroupAffiliationNames() {
@@ -396,8 +434,7 @@ func (s *Schema) resolveTypeTable(tt TypeTable) error {
 // reference (src-resolve clause 1.1). An attribute's type is always a simple
 // type; the kind-specific lookup rejects a same-name non-type as dangling.
 func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
-	_, err := resolveTypeName(s, a.TypeDefinitionName(), "attribute declaration "+a.Name().String()+" {type definition}")
-	return err
+	return s.resolveTypeDefinition(a.TypeDefinition(), "attribute declaration "+a.Name().String()+" {type definition}")
 }
 
 // checkComplexBaseAcyclic is Phase B for the complex-type base chain

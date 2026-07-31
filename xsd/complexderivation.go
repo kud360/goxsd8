@@ -444,7 +444,7 @@ func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType) error {
 			continue
 		}
 		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-			"complex type %s restricts %s, but the ·locally declared type· %s of attribute %s within the restriction is not ·validly substitutable· for the base's %s subject to {extension, list, union} (derivation-ok-restriction clause 4, c-vs-ctd-r)", t.Name(), b.Name(), typeDefinitionName(within), name, typeDefinitionName(base))
+			"complex type %s restricts %s, but the ·locally declared type· %s of attribute %s within the restriction is not ·validly substitutable· for the base's %s subject to {extension, list, union} (derivation-ok-restriction clause 4, c-vs-ctd-r)", t.Name(), b.Name(), typeDefinitionLabel(within), name, typeDefinitionLabel(base))
 	}
 	return nil
 }
@@ -455,9 +455,9 @@ func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType) error {
 func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType) error {
 	for _, e := range s.contentModelDeclarations(t) {
 		name := e.decl.Name()
-		within, ok := s.Type(e.decl.TypeDefinitionName())
+		within, ok := s.typeOf(e.decl.TypeDefinition())
 		if !ok {
-			continue // anonymous or unresolvable: not decidable by this clause
+			continue // absent or unresolvable: not decidable by this clause
 		}
 		base, ok := s.locallyDeclaredElementType(b, name)
 		if !ok {
@@ -467,7 +467,7 @@ func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType) error {
 			continue
 		}
 		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-			"complex type %s restricts %s, but the ·locally declared type· %s of element %s within the restriction is not ·validly substitutable· for the base's %s subject to {extension, list, union} (derivation-ok-restriction clause 4, c-vs-ctd-r)", t.Name(), b.Name(), typeDefinitionName(within), name, typeDefinitionName(base))
+			"complex type %s restricts %s, but the ·locally declared type· %s of element %s within the restriction is not ·validly substitutable· for the base's %s subject to {extension, list, union} (derivation-ok-restriction clause 4, c-vs-ctd-r)", t.Name(), b.Name(), typeDefinitionLabel(within), name, typeDefinitionLabel(base))
 	}
 	return nil
 }
@@ -490,7 +490,7 @@ func (s *Schema) locallyDeclaredAttributeType(c ComplexType, name QName) (TypeDe
 			if !ok {
 				return nil, false
 			}
-			return s.Type(d.TypeDefinitionName()) // case 2
+			return s.typeOf(d.TypeDefinition()) // case 2
 		}
 		next, ok := s.baseComplexType(c) // case 3
 		if !ok {
@@ -515,7 +515,7 @@ func (s *Schema) locallyDeclaredElementType(c ComplexType, name QName) (TypeDefi
 		}
 		for _, e := range s.contentModelDeclarations(c) {
 			if e.decl.Name() == name {
-				return s.Type(e.decl.TypeDefinitionName()) // case 2
+				return s.typeOf(e.decl.TypeDefinition()) // case 2
 			}
 		}
 		next, ok := s.baseComplexType(c) // case 3
@@ -688,6 +688,18 @@ func typeDefinitionName(t TypeDefinition) QName {
 		return QName{}
 	}
 	return t.Name()
+}
+
+// typeDefinitionLabel renders a type definition inside an error message. An
+// anonymous one — what an inline <simpleType> yields — has the zero QName, which
+// String()s to the empty string, so it is named as anonymous instead of leaving a
+// hole in the message (STYLE E1: the reader must be able to find the construct).
+func typeDefinitionLabel(t TypeDefinition) string {
+	name := typeDefinitionName(t)
+	if name == (QName{}) {
+		return "an anonymous type definition"
+	}
+	return name.String()
 }
 
 // sameTypeDefinition decides the component identity cos-ct-derived-ok clause 2.1

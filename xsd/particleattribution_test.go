@@ -76,7 +76,7 @@ func uLocalScope(t *testing.T) Scope {
 // cos-nonambig without also tripping cos-element-consistent.
 func uLocal(t *testing.T, name QName, typeName QName) ElementDeclaration {
 	t.Helper()
-	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeName, nil, uLocalScope(t), nil, false, nil,
+	e, err := NewElementDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, nil, uLocalScope(t), nil, false, nil,
 		nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
@@ -88,7 +88,7 @@ func uLocal(t *testing.T, name QName, typeName QName) ElementDeclaration {
 // and the given {substitution group affiliations}.
 func uGlobal(t *testing.T, name QName, typeName QName, affiliations ...QName) ElementDeclaration {
 	t.Helper()
-	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeName, nil, NewGlobalScope(), nil, false, nil,
+	e, err := NewElementDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, nil, NewGlobalScope(), nil, false, nil,
 		affiliations, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)

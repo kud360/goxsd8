@@ -28,7 +28,7 @@ func eTypeTable(t *testing.T, expression string, altType, defaultType QName) *Ty
 // eLocalWithTable builds a LOCAL element declaration carrying a {type table}.
 func eLocalWithTable(t *testing.T, name, typeName QName, tt *TypeTable) ElementDeclaration {
 	t.Helper()
-	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeName, tt, uLocalScope(t), nil, false, nil,
+	e, err := NewElementDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, tt, uLocalScope(t), nil, false, nil,
 		nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
@@ -39,7 +39,7 @@ func eLocalWithTable(t *testing.T, name, typeName QName, tt *TypeTable) ElementD
 // eGlobalWithTable builds a TOP-LEVEL element declaration carrying a {type table}.
 func eGlobalWithTable(t *testing.T, name, typeName QName, tt *TypeTable) ElementDeclaration {
 	t.Helper()
-	e, err := NewElementDeclaration(xsderr.Loc{}, name, typeName, tt, NewGlobalScope(), nil, false, nil,
+	e, err := NewElementDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, tt, NewGlobalScope(), nil, false, nil,
 		nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
@@ -47,12 +47,32 @@ func eGlobalWithTable(t *testing.T, name, typeName QName, tt *TypeTable) Element
 	return e
 }
 
-// eAnonymous builds a declaration whose declared {type definition} is anonymous
-// (a zero QName) — the state cos-element-consistent clause 1 forbids for two or
-// more same-named declarations.
+// eAnonymous builds a declaration whose declared {type definition} is the
+// ANONYMOUS type of an inline <simpleType> — an InlineTypeDefinition, which is
+// the only encoding of anonymity since the {type definition} slot became a
+// sealed sum. It is the state cos-element-consistent clause 1 forbids for two or
+// more same-named declarations. The other clause-1 trigger, an ABSENT slot, is
+// eAbsentType below.
 func eAnonymous(t *testing.T, name QName, scope Scope) ElementDeclaration {
 	t.Helper()
-	e, err := NewElementDeclaration(xsderr.Loc{}, name, QName{}, nil, scope, nil, false, nil,
+	st, err := NewSimpleType(xsderr.Loc{}, QName{}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType: %v", err)
+	}
+	e, err := NewElementDeclaration(xsderr.Loc{}, name, InlineTypeDefinition{Definition: st}, nil, scope, nil, false, nil,
+		nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("NewElementDeclaration: %v", err)
+	}
+	return e
+}
+
+// eAbsentType builds a declaration with an ABSENT {type definition} (a nil
+// slot), the second state cos-element-consistent clause 1 forbids for two or
+// more same-named declarations.
+func eAbsentType(t *testing.T, name QName, scope Scope) ElementDeclaration {
+	t.Helper()
+	e, err := NewElementDeclaration(xsderr.Loc{}, name, nil, nil, scope, nil, false, nil,
 		nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)
@@ -90,6 +110,18 @@ func TestEDCAnonymousTypes(t *testing.T) {
 	g := uGroup(t, CompositorSequence,
 		uOne(t, ResolvedTerm{Term: eAnonymous(t, uq("a"), uLocalScope(t))}),
 		uOne(t, ResolvedTerm{Term: eAnonymous(t, uq("a"), uLocalScope(t))}),
+	)
+	expectRule(t, uSchemaWithModel(t, g, nil), ruleCosElementConsistent)
+}
+
+// TestEDCAbsentTypeDefinitions is clause 1's other trigger: two DISTINCT
+// same-named declarations with an ABSENT {type definition} have no {name} to
+// compare either. The sealed sum keeps this case distinct from the anonymous one
+// above, which the single zero-QName encoding used to conflate with it.
+func TestEDCAbsentTypeDefinitions(t *testing.T) {
+	g := uGroup(t, CompositorSequence,
+		uOne(t, ResolvedTerm{Term: eAbsentType(t, uq("a"), uLocalScope(t))}),
+		uOne(t, ResolvedTerm{Term: eAbsentType(t, uq("a"), uLocalScope(t))}),
 	)
 	expectRule(t, uSchemaWithModel(t, g, nil), ruleCosElementConsistent)
 }

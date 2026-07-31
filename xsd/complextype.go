@@ -390,8 +390,11 @@ func (c ComplexType) Loc() xsderr.Loc {
 // (#173) validates the name resolves to a type definition (src-resolve clause
 // 1.1) and that the base chain is acyclic (ct-props-correct clause 3), but adds
 // no resolved-component accessor: the QName is retained, and a consumer obtains
-// the component by a read-time schema.Type(name) lookup, mirroring
-// ElementDeclaration.TypeDefinitionName.
+// the component by a read-time schema.Type(name) lookup, mirroring the
+// TypeDefinitionRef arm of ElementDeclaration.TypeDefinition. A base is always
+// reachable by name here — a complex type's {base type definition} is never the
+// inline anonymous kind this producer builds — so this slot stays a bare QName
+// rather than a TypeDefinitionOrRef.
 func (c ComplexType) BaseTypeDefinitionName() QName {
 	return c.baseTypeDefinitionName
 }

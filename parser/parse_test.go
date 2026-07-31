@@ -62,7 +62,7 @@ func TestParseIncludeSameNamespace(t *testing.T) {
 	if !ok {
 		t.Fatalf("element {urn:a}root not found")
 	}
-	if got := ed.TypeDefinitionName(); got != (xsd.QName{Space: "urn:a", Local: "code"}) {
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != (xsd.QName{Space: "urn:a", Local: "code"}) {
 		t.Fatalf("root type = %s, want {urn:a}code", got)
 	}
 }
@@ -130,7 +130,7 @@ func TestParseChameleonCoercion(t *testing.T) {
 	if !ok {
 		t.Fatalf("element {urn:a}local not found")
 	}
-	if got := ed.TypeDefinitionName(); got != (xsd.QName{Space: "urn:a", Local: "code"}) {
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != (xsd.QName{Space: "urn:a", Local: "code"}) {
 		t.Fatalf("chameleon type reference = %s, want {urn:a}code", got)
 	}
 }
@@ -155,7 +155,7 @@ func TestParseChameleonTransitive(t *testing.T) {
 	if !ok {
 		t.Fatalf("element {urn:a}inB not found")
 	}
-	if got := ed.TypeDefinitionName(); got != (xsd.QName{Space: "urn:a", Local: "deep"}) {
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != (xsd.QName{Space: "urn:a", Local: "deep"}) {
 		t.Fatalf("cross-document chameleon reference = %s, want {urn:a}deep", got)
 	}
 }
@@ -299,7 +299,7 @@ func TestParseIncludeNeitherNamespace(t *testing.T) {
 	if !ok {
 		t.Fatalf("element {}e not found")
 	}
-	if got := ed.TypeDefinitionName(); got != (xsd.QName{Local: "code"}) {
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != (xsd.QName{Local: "code"}) {
 		t.Fatalf("type = %s, want the no-namespace {}code", got)
 	}
 }
@@ -501,7 +501,7 @@ func TestParseImportCrossNamespace(t *testing.T) {
 	if !ok {
 		t.Fatalf("element {urn:a}root not found")
 	}
-	if got := ed.TypeDefinitionName(); got != (xsd.QName{Space: "urn:b", Local: "code"}) {
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != (xsd.QName{Space: "urn:b", Local: "code"}) {
 		t.Fatalf("root type = %s, want {urn:b}code", got)
 	}
 	// D2's own components and its own intra-namespace reference are unaffected.
@@ -535,7 +535,7 @@ func TestParseImportNoChameleonCoercion(t *testing.T) {
 	if !ok {
 		t.Fatalf("element {}e not found")
 	}
-	if got := ed.TypeDefinitionName(); got != (xsd.QName{Local: "code"}) {
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != (xsd.QName{Local: "code"}) {
 		t.Fatalf("imported unqualified reference = %s, want the no-namespace {}code", got)
 	}
 }
