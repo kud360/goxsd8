@@ -221,10 +221,13 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType) bool {
 		// content type carrying one is provisionally accepted. §3.4.4's
 		// ·locally valid· sequences for an interleave or suffix Open Content
 		// interleave the {wildcard} with the particle's own positions, which
-		// this construction does not model. No producer emits {open content}
-		// yet (parser/produce_complex.go declines <openContent>), so the arm
-		// guards programmatic construction only; it lands with the producer
-		// (#265).
+		// this construction does not model. Since #230 the producer really does
+		// emit {open content} (§3.4.2.3.3 clauses 5-6), so this arm is live for
+		// ordinary schemas rather than programmatic construction alone: a
+		// restriction whose Open Content is wider than its base's is accepted
+		// where derivation-ok-restriction clause 2.4 would reject it. The
+		// direction is fail-open — a missing rejection, never a false one — so it
+		// costs verdicts and cannot fabricate them; the fold lands with #265.
 		return true
 	}
 	if s.usesAllCompositor(rc.Particle.Term()) {
@@ -356,7 +359,7 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live []int) []in
 // GAP(xsd): the verdict is exact for {namespaces} and for the defined/QName half
 // of {disallowed names}, but §3.10.6.3 has no sibling bullet, so the fold silently
 // drops a sibling keyword a live base wildcard carried (see
-// unionNamespaceConstraint). A base set that collectively disallows a
+// UnionNamespaceConstraint). A base set that collectively disallows a
 // sibling-excluded name can therefore be read as COVERING a restriction that
 // should be rejected on that basis — fail-open, never a false reject, in the
 // direction this file's header fixes for every approximation.
@@ -388,11 +391,11 @@ func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live []i
 	}
 	union := constraints[0]
 	for _, next := range constraints[1:] {
-		folded, err := unionNamespaceConstraint(xsderr.Loc{}, union, next)
+		folded, err := UnionNamespaceConstraint(xsderr.Loc{}, union, next)
 		if err != nil {
 			// Unreachable: every operand is the {namespace constraint} of an
 			// already-built Wildcard, and the union of two such records always
-			// satisfies w-props-correct (see unionNamespaceConstraint). Should a
+			// satisfies w-props-correct (see UnionNamespaceConstraint). Should a
 			// future divergence reach it, the union is undecided, so the arm
 			// resolves the way every approximation in this file resolves —
 			// towards accepting, i.e. the union is assumed to cover — and the

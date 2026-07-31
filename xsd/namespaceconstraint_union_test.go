@@ -7,13 +7,13 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// uUnion folds a and b through unionNamespaceConstraint, failing the test on the
+// uUnion folds a and b through UnionNamespaceConstraint, failing the test on the
 // error slot the operator documents as unreachable for valid operands.
 func uUnion(t *testing.T, a, b NamespaceConstraint) NamespaceConstraint {
 	t.Helper()
-	got, err := unionNamespaceConstraint(xsderr.Loc{}, a, b)
+	got, err := UnionNamespaceConstraint(xsderr.Loc{}, a, b)
 	if err != nil {
-		t.Fatalf("unionNamespaceConstraint errored (unreachable for valid operands): %v", err)
+		t.Fatalf("UnionNamespaceConstraint errored (unreachable for valid operands): %v", err)
 	}
 	return got
 }

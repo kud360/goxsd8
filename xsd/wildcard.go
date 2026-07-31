@@ -85,7 +85,7 @@ func (w Wildcard) ProcessContents() ProcessContents {
 // <attributeGroup>/<complexType> attribute-wildcard producer folds each
 // referenced group's constraint through IntersectNamespaceConstraint and rebuilds
 // via NewWildcard; and, in-package, the complex-content restriction walk, which
-// folds a base content model's live wildcards through unionNamespaceConstraint
+// folds a base content model's live wildcards through UnionNamespaceConstraint
 // and relates the result by wildcardSubset (contentrestricts.go). It mirrors the
 // inspection getters NamespaceConstraint.Variety/Namespaces; to decide whether a
 // name is admitted, call AllowsName rather than inspecting this.

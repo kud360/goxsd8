@@ -34,13 +34,14 @@ import (
 // decidable subset of <complexType> (implicit and <complexContent>
 // <restriction> content, its particles including <group ref>, local
 // element/attribute declarations, attribute uses including <attributeGroup ref>,
-// wildcards, and <assert> assertions) into xsd components, maps the name=
+// wildcards, <openContent> and the schema-level <defaultOpenContent> it falls
+// back to, and <assert> assertions) into xsd components, maps the name=
 // identity constraints of global and local <element>s (#178), seeds the ur-type
 // xs:anyType, resolves cross-references, and rejects duplicate top-level names
 // within a kind. The one remaining top-level representation
 // (redefine), the ref= identity-constraint form, and the
 // not-yet-produced complexType forms (<simpleContent> <restriction>,
-// inline anonymous local types, <openContent>) are SILENTLY SKIPPED
+// inline anonymous local types) are SILENTLY SKIPPED
 // or declined (§3.1.2 permits ignoring a not-yet-produced representation), NOT
 // rejected.
 //
@@ -107,9 +108,10 @@ import (
 //  3. Top-level allowlist. Every top-level child element must be xsd:annotation,
 //     xsd:include, xsd:import, xsd:override, xsd:simpleType, xsd:element,
 //     xsd:attribute, xsd:complexType,
-//     xsd:attributeGroup (named definition), xsd:group (named definition), or
+//     xsd:attributeGroup (named definition), xsd:group (named definition),
+//     xsd:defaultOpenContent (with the <any> child its content model requires) or
 //     xsd:notation — anything else at top level (redefine,
-//     defaultOpenContent, any non-xsd element, or an out-of-set local name) closes
+//     any non-xsd element, or an out-of-set local name) closes
 //     the false-accept gap above by DECLINING the whole case. Within the allowed
 //     kinds:
 //     - include: always admitted (#242). Its own content model is (annotation?),
@@ -152,12 +154,13 @@ import (
 //     - complexType (top-level, or a <complexContent> <restriction> reached
 //       transitively): must lie within the producer's decidable subset per
 //       complexTypeDecidable — implicit or <restriction> complex content whose
-//       content model is element/any/sequence/choice/all/<group ref> and whose
-//       attributes are local <attribute>/<anyAttribute>/<attributeGroup ref> and
+//       content model is element/any/sequence/choice/all/<group ref>, whose
+//       attributes are local <attribute>/<anyAttribute>/<attributeGroup ref>,
+//       whose <openContent> maps to {open content} (#230) and
 //       whose <assert> children map to {assertions} (#178), with
-//       no <simpleContent>, no <complexContent> <extension>, no <openContent>, and
+//       no <simpleContent>, no <complexContent> <extension>, and
 //       no inline anonymous local type. <simpleContent> <restriction> and
-//       <openContent> and the inline forms need a later producer slice, so Produce
+//       the inline forms need a later producer slice, so Produce
 //       declines them with a plain limitation error, not a spec verdict; the two
 //       EXTENSION forms are produced but not judged (cos-ct-extends #264, the
 //       base-attribute folds #265) — DECLINED either way to avoid a wrong-reason
@@ -251,12 +254,15 @@ import (
 // the shape allowlist excludes every form (inline element/attribute types,
 // list/union/enumeration simpleTypes, ref= identity constraints, the
 // not-yet-produced complexType forms — <simpleContent> <restriction>, inline
-// anonymous local types, <openContent> — and the produced-but-unjudged extension
+// anonymous local types — and the produced-but-unjudged extension
 // forms) where the producer's rejection would be a limitation rather than a spec
 // violation, or its silence a missing rejection. A
 // suite-invalid case whose only defect is a rule finalize does NOT yet check
-// (cos-content-act-restrict — derivation-ok-restriction clause 2.4.2, #263 — or
-// cos-ns-subset, #265) is produced cleanly, so the lane observes "valid",
+// (cos-content-act-restrict — derivation-ok-restriction clause 2.4.2, #263 —
+// cos-ns-subset, #265, or the Open Content half of derivation-ok-restriction
+// clause 2.4, which xsd.Schema's content-model automaton fails open on:
+// xsd/contentrestricts.go's GAP(xsd), live for a produced {open content} since
+// #230) is produced cleanly, so the lane observes "valid",
 // disagrees with the suite, and records a still-failing gap — never a wrong
 // "invalid" pass. The remaining risk the allowlist closes is
 // the VACUOUS pass — a document of entirely skipped top-level content that would
@@ -487,8 +493,19 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			if !overrideDecidable(el) {
 				return false
 			}
+		case "defaultOpenContent":
+			// Read (#230) by every complex type of this document that has no
+			// <openContent> of its own (§3.4.2.3.3 clause 5.2), so it is no longer
+			// silently skipped. It is admitted only with the <any> child its content
+			// model makes mandatory: without one the producer rejects it as a grammar
+			// fault, which is a real verdict, but only for a document that also holds
+			// a complex type reaching clause 5.2 — admitting the childless form would
+			// therefore make the verdict depend on unrelated content.
+			if childXSD(el, "any") == nil {
+				return false
+			}
 		default:
-			// redefine, defaultOpenContent, or any other local name:
+			// redefine or any other local name:
 			// silently skipped by the producer AND not followed by the assembly
 			// (redefine awaits the second half of #183), so a nil verdict there
 			// would be vacuous — decline the whole case.
@@ -614,12 +631,16 @@ func identityConstraintsDecidable(el *parser.Element) bool {
 //   - every shape the producer declines with a plain "not yet produced"
 //     limitation error — <simpleContent> <restriction> (§3.4.2.2 cases 1-2
 //     synthesize an anonymous simple type from the restriction's facets),
-//     <openContent> anywhere (its {open content} needs <defaultOpenContent>
-//     fallback, §3.4.2.3.3), an inline anonymous <complexType> on a local element
+//     an inline anonymous <complexType> on a local element
 //     (#340), and a bare <group>/<attributeGroup> lacking a ref (a nested one is
 //     always a reference, so a bare one is malformed). An inline anonymous
 //     <simpleType> on a local element or attribute IS produced (#229) and no
-//     longer declines — see localElementDecidable/localAttributeDecidable;
+//     longer declines — see localElementDecidable/localAttributeDecidable. An
+//     <openContent> is produced as of #230 (§3.4.2.3.3 clauses 5-6) and is
+//     admitted by contentDecidable wherever the schema for schema documents
+//     allows one; a MISPLACED one — beside <simpleContent>/<complexContent>, or
+//     directly under <complexContent> — is rejected by the producer as the
+//     grammar fault it is, so it needs no decline of its own;
 //   - the two EXTENSION forms, which the producer DOES build as of #228 —
 //     <simpleContent> <extension> and <complexContent> <extension> — because
 //     cos-ct-extends (§3.4.6.2) is not implemented (#264) and the base's
@@ -636,7 +657,7 @@ func identityConstraintsDecidable(el *parser.Element) bool {
 // mismatch, a both-namespace-forms wildcard, a bad occurrence) are NOT declined:
 // admitting them is safe because the producer's rejection is the right reason.
 func complexTypeDecidable(el *parser.Element) bool {
-	if childXSD(el, "simpleContent") != nil || childXSD(el, "openContent") != nil {
+	if childXSD(el, "simpleContent") != nil {
 		return false
 	}
 	if cc := childXSD(el, "complexContent"); cc != nil {
@@ -644,9 +665,6 @@ func complexTypeDecidable(el *parser.Element) bool {
 		if restriction == nil {
 			// <extension> (produced since #228, but unjudged: cos-ct-extends #264)
 			// or a bare/absent derivation.
-			return false
-		}
-		if childXSD(cc, "openContent") != nil || childXSD(restriction, "openContent") != nil {
 			return false
 		}
 		return contentDecidable(restriction)
@@ -657,10 +675,11 @@ func complexTypeDecidable(el *parser.Element) bool {
 // contentDecidable reports whether the content-model child and attribute children
 // of a <complexType> (implicit content) or <restriction> (explicit complex
 // content) are all within the producer's decidable subset. A <group ref> content
-// child and an <attributeGroup ref> are admitted (produced, #177); a bare
-// <group>/<attributeGroup> without a ref, or a stray <simpleContent>/<openContent>
-// at this level, declines. A local <attribute>'s inline anonymous <simpleType>
-// is admitted when the inline type itself is decidable — see localAttributeDecidable.
+// child and an <attributeGroup ref> are admitted (produced, #177); an
+// <openContent> is admitted (produced, #230); a bare <group>/<attributeGroup>
+// without a ref, or a stray <simpleContent> at this level, declines. A local
+// <attribute>'s inline anonymous <simpleType> is admitted when the inline type
+// itself is decidable — see localAttributeDecidable.
 func contentDecidable(parent *parser.Element) bool {
 	for _, child := range parent.Children() {
 		el, ok := child.(*parser.Element)
@@ -692,9 +711,13 @@ func contentDecidable(parent *parser.Element) bool {
 			if !hasAttr(el, "ref") {
 				return false // a nested <attributeGroup> is always a reference; a bare one is malformed — decline
 			}
+		case "openContent":
+			// Produced (#230) into {open content} (§3.4.2.3.3 clauses 5-6). Its own
+			// src-ct clause 3/4 violations and its <any>'s src-wildcard/w-props-correct
+			// ones are genuine rejections, so nothing here is limitation-shaped.
 		default:
-			// simpleContent/complexContent/openContent or any other name at this
-			// level: not produced — decline.
+			// simpleContent/complexContent or any other name at this level: not
+			// produced — decline.
 			return false
 		}
 	}
