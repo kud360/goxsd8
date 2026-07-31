@@ -179,6 +179,7 @@ MS-DataTypes2006-07-15/boolean015_1871/instance/boolean015_1871.i pass
 MS-DataTypes2006-07-15/boolean016_1872/instance/boolean016_1872.i pass
 MS-DataTypes2006-07-15/boolean017_1873/instance/boolean017_1873.i pass
 MS-DataTypes2006-07-15/boolean018_1874/instance/boolean018_1874.v pass
+MS-DataTypes2006-07-15/byte009_2201/instance/byte009_2201.v pass
 MS-DataTypes2006-07-15/byte_enumeration001_1683/instance/byte_enumeration001_1683.i pass
 MS-DataTypes2006-07-15/byte_enumeration002_1684/instance/byte_enumeration002_1684.v pass
 MS-DataTypes2006-07-15/byte_enumeration003_1685/instance/byte_enumeration003_1685.i pass
@@ -670,6 +671,7 @@ MS-DataTypes2006-07-15/language_minLength002_1421/instance/language_minLength002
 MS-DataTypes2006-07-15/language_minLength003_1422/instance/language_minLength003_1422.i pass
 MS-DataTypes2006-07-15/language_minLength004_1423/instance/language_minLength004_1423.v pass
 MS-DataTypes2006-07-15/language_pattern001_1427/instance/language_pattern001_1427.v pass
+MS-DataTypes2006-07-15/long009_2175/instance/long009_2175.v pass
 MS-DataTypes2006-07-15/long_enumeration001_1610/instance/long_enumeration001_1610.i pass
 MS-DataTypes2006-07-15/long_enumeration002_1611/instance/long_enumeration002_1611.v pass
 MS-DataTypes2006-07-15/long_enumeration003_1612/instance/long_enumeration003_1612.i pass
@@ -803,6 +805,7 @@ MS-DataTypes2006-07-15/positiveInteger_pattern001_1826/instance/positiveInteger_
 MS-DataTypes2006-07-15/positiveInteger_totalDigits001_1847/instance/positiveInteger_totalDigits001_1847.i pass
 MS-DataTypes2006-07-15/positiveInteger_totalDigits002_1848/instance/positiveInteger_totalDigits002_1848.v pass
 MS-DataTypes2006-07-15/positiveInteger_totalDigits003_1849/instance/positiveInteger_totalDigits003_1849.v pass
+MS-DataTypes2006-07-15/short009_2192/instance/short009_2192.v pass
 MS-DataTypes2006-07-15/short_enumeration001_1659/instance/short_enumeration001_1659.i pass
 MS-DataTypes2006-07-15/short_enumeration002_1660/instance/short_enumeration002_1660.v pass
 MS-DataTypes2006-07-15/short_enumeration003_1661/instance/short_enumeration003_1661.i pass
@@ -907,6 +910,7 @@ MS-DataTypes2006-07-15/token_minLength002_1406/instance/token_minLength002_1406.
 MS-DataTypes2006-07-15/token_minLength003_1407/instance/token_minLength003_1407.i pass
 MS-DataTypes2006-07-15/token_minLength004_1408/instance/token_minLength004_1408.v pass
 MS-DataTypes2006-07-15/token_pattern001_1412/instance/token_pattern001_1412.v pass
+MS-DataTypes2006-07-15/unsignedByte007_2234/instance/unsignedByte007_2234.v pass
 MS-DataTypes2006-07-15/unsignedByte_enumeration001_1803/instance/unsignedByte_enumeration001_1803.i pass
 MS-DataTypes2006-07-15/unsignedByte_enumeration002_1804/instance/unsignedByte_enumeration002_1804.v pass
 MS-DataTypes2006-07-15/unsignedByte_enumeration003_1805/instance/unsignedByte_enumeration003_1805.i pass
@@ -931,6 +935,7 @@ MS-DataTypes2006-07-15/unsignedByte_pattern001_1802/instance/unsignedByte_patter
 MS-DataTypes2006-07-15/unsignedByte_totalDigits001_1823/instance/unsignedByte_totalDigits001_1823.i pass
 MS-DataTypes2006-07-15/unsignedByte_totalDigits002_1824/instance/unsignedByte_totalDigits002_1824.v pass
 MS-DataTypes2006-07-15/unsignedByte_totalDigits003_1825/instance/unsignedByte_totalDigits003_1825.v pass
+MS-DataTypes2006-07-15/unsignedInt007_2220/instance/unsignedInt007_2220.v pass
 MS-DataTypes2006-07-15/unsignedInt_enumeration001_1755/instance/unsignedInt_enumeration001_1755.i pass
 MS-DataTypes2006-07-15/unsignedInt_enumeration002_1756/instance/unsignedInt_enumeration002_1756.v pass
 MS-DataTypes2006-07-15/unsignedInt_enumeration003_1757/instance/unsignedInt_enumeration003_1757.i pass
@@ -955,6 +960,7 @@ MS-DataTypes2006-07-15/unsignedInt_pattern001_1754/instance/unsignedInt_pattern0
 MS-DataTypes2006-07-15/unsignedInt_totalDigits001_1775/instance/unsignedInt_totalDigits001_1775.i pass
 MS-DataTypes2006-07-15/unsignedInt_totalDigits002_1776/instance/unsignedInt_totalDigits002_1776.v pass
 MS-DataTypes2006-07-15/unsignedInt_totalDigits003_1777/instance/unsignedInt_totalDigits003_1777.v pass
+MS-DataTypes2006-07-15/unsignedLong007_2213/instance/unsignedLong007_2213.v pass
 MS-DataTypes2006-07-15/unsignedLong_enumeration001_1731/instance/unsignedLong_enumeration001_1731.i pass
 MS-DataTypes2006-07-15/unsignedLong_enumeration002_1732/instance/unsignedLong_enumeration002_1732.v pass
 MS-DataTypes2006-07-15/unsignedLong_enumeration003_1733/instance/unsignedLong_enumeration003_1733.i pass
@@ -979,6 +985,7 @@ MS-DataTypes2006-07-15/unsignedLong_pattern001_1730/instance/unsignedLong_patter
 MS-DataTypes2006-07-15/unsignedLong_totalDigits001_1751/instance/unsignedLong_totalDigits001_1751.i pass
 MS-DataTypes2006-07-15/unsignedLong_totalDigits002_1752/instance/unsignedLong_totalDigits002_1752.v pass
 MS-DataTypes2006-07-15/unsignedLong_totalDigits003_1753/instance/unsignedLong_totalDigits003_1753.v pass
+MS-DataTypes2006-07-15/unsignedShort007_2227/instance/unsignedShort007_2227.v pass
 MS-DataTypes2006-07-15/unsignedShort_enumeration001_1779/instance/unsignedShort_enumeration001_1779.i pass
 MS-DataTypes2006-07-15/unsignedShort_enumeration002_1780/instance/unsignedShort_enumeration002_1780.v pass
 MS-DataTypes2006-07-15/unsignedShort_enumeration003_1781/instance/unsignedShort_enumeration003_1781.i pass
