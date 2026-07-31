@@ -1398,9 +1398,9 @@ MS-Attribute2006-07-15/attZ008_b/schema/attZ008_b pass
 MS-Attribute2006-07-15/attZ008_c/schema/attZ008_c pass
 MS-Attribute2006-07-15/attZ008_d/schema/attZ008_d pass
 MS-Attribute2006-07-15/attZ008_e/schema/attZ008_e fail
-MS-Attribute2006-07-15/attZ008_f/schema/attZ008_f fail
+MS-Attribute2006-07-15/attZ008_f/schema/attZ008_f pass
 MS-Attribute2006-07-15/attZ008_g/schema/attZ008_g pass
-MS-Attribute2006-07-15/attZ008_h/schema/attZ008_h fail
+MS-Attribute2006-07-15/attZ008_h/schema/attZ008_h pass
 MS-Attribute2006-07-15/attZ009/schema/attZ009 fail
 MS-Attribute2006-07-15/attZ010a/schema/attZ010a fail
 MS-Attribute2006-07-15/attZ010b/schema/attZ010b fail
