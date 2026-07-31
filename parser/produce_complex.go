@@ -1535,8 +1535,11 @@ func (p *producer) namespaceVarietyAndSet(ns string, hasNS bool, notNS string, h
 // enforcement point); xsd.NewComplexType/NewAttributeGroupDefinition still charge
 // clause 5 on the programmatic-construction path that bypasses this producer.
 //
-// The literal-QName arm still drops a member whose prefix does not resolve; that
-// distinct swallowed error is tracked as #232 and deliberately untouched here.
+// The literal-QName arm is equally hard-failing: a member whose prefix has no
+// in-scope binding cannot be mapped to a QName value at all (Datatypes §3.3.18),
+// and §3.10.2.2 offers no fallback that omits it, so dropping it would silently
+// shrink {disallowed names} into a more permissive wildcard than the schema
+// declares. resolveQName's src-resolve error is propagated verbatim.
 func (p *producer) disallowedNames(el *Element) ([]xsd.QName, []xsd.DisallowedNameKeyword, error) {
 	notQName, ok := attrValue(el, "notQName")
 	if !ok {
@@ -1556,7 +1559,7 @@ func (p *producer) disallowedNames(el *Element) ([]xsd.QName, []xsd.DisallowedNa
 		}
 		qn, err := p.resolveQName(el, tok)
 		if err != nil {
-			continue // an unresolvable notQName member is dropped, not fatal (#232)
+			return nil, nil, err
 		}
 		names = append(names, qn)
 	}

@@ -744,7 +744,7 @@ func assertRule(t *testing.T, err error, want xsderr.Rule) {
 // the literal QName members, which keep their cvc-wildcard-name clause-2 effect.
 func TestProduceNotQNameKeywords(t *testing.T) {
 	// A target namespace is needed so the tns: prefix of the literal member
-	// resolves (an unresolvable prefix is dropped — #232, out of scope here).
+	// resolves; an unresolvable one is a hard src-resolve error, pinned below.
 	body := `<xs:complexType name="CT"><xs:sequence>` +
 		`<xs:any notQName="##defined ##definedSibling tns:foo"/>` +
 		`</xs:sequence></xs:complexType>`
@@ -800,6 +800,57 @@ func TestProduceNotQNameRejections(t *testing.T) {
 	// ##defined stays legal on an attribute wildcard (cvc-wildcard clause 2.2).
 	if _, err := produce(t, wrap("urn:x", `<xs:complexType name="CT"><xs:sequence/><xs:anyAttribute notQName="##defined"/></xs:complexType>`)); err != nil {
 		t.Errorf("Produce rejected notQName=\"##defined\" on <anyAttribute>: %v", err)
+	}
+}
+
+// TestProduceNotQNameLiteralMembers pins the literal-QName arm of the
+// §3.10.2.2 notQName mapping: every literal member with a bound prefix lands in
+// {disallowed names}, and a member whose prefix has no in-scope binding is a
+// hard src-resolve (§3.17.6.2) rejection rather than a silently dropped member
+// that would leave the wildcard more permissive than declared.
+func TestProduceNotQNameLiteralMembers(t *testing.T) {
+	t.Run("all-prefixes-bound", func(t *testing.T) {
+		body := `<xs:complexType name="CT"><xs:sequence>` +
+			`<xs:any notQName="tns:foo tns:bar xs:string"/>` +
+			`</xs:sequence></xs:complexType>`
+		s, err := produce(t, wrap("urn:x", body))
+		if err != nil {
+			t.Fatalf("Produce: %v", err)
+		}
+		td, ok := s.Type(xsd.QName{Space: "urn:x", Local: "CT"})
+		if !ok {
+			t.Fatalf("complex type CT not found")
+		}
+		mg := topGroup(t, td.(xsd.ComplexType))
+		wc, ok := mg.Particles()[0].Term().(xsd.ResolvedTerm).Term.(xsd.Wildcard)
+		if !ok {
+			t.Fatalf("term = %T, want Wildcard", mg.Particles()[0].Term())
+		}
+		for _, name := range []xsd.QName{
+			{Space: "urn:x", Local: "foo"},
+			{Space: "urn:x", Local: "bar"},
+			{Space: xsdNS, Local: "string"},
+		} {
+			if wc.AllowsName(name) {
+				t.Errorf("AllowsName admitted the literal notQName member %v", name)
+			}
+		}
+		if !wc.AllowsName(xsd.QName{Space: "urn:x", Local: "other"}) {
+			t.Errorf("AllowsName rejected a name in no half of {disallowed names}")
+		}
+	})
+	unbound := []struct {
+		name string
+		body string
+	}{
+		{"any", `<xs:complexType name="CT"><xs:sequence><xs:any notQName="nope:foo"/></xs:sequence></xs:complexType>`},
+		{"anyAttribute", `<xs:complexType name="CT"><xs:sequence/><xs:anyAttribute notQName="nope:foo"/></xs:complexType>`},
+	}
+	for _, c := range unbound {
+		t.Run("unbound-prefix-on-"+c.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:x", c.body))
+			assertRule(t, err, xsderr.Rule("src-resolve"))
+		})
 	}
 }
 
