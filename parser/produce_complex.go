@@ -824,6 +824,11 @@ func emptySequenceParticle(loc xsderr.Loc) (xsd.Particle, error) {
 // (2.1.1), an empty <all>/<sequence> (2.1.2), a childless <choice minOccurs="0">
 // (2.1.3), or a group child with maxOccurs="0" (2.1.4).
 //
+// An <all> child has its own occurrence grammar checked FIRST (allOccursGrammar),
+// ahead of every elision test: 2.1.2/2.1.4 decide what the group maps TO, while
+// the {0,1} enumeration decides whether the <all> element is well-formed at all,
+// so an elided <all maxOccurs="0" minOccurs="2"> is still rejected.
+//
 // scopeParent is passed through to every local element declaration built beneath
 // this content model (§3.3.2.3 dcl.elt.local). It is generic rather than a
 // ComplexTypeScopeParent because this function and the ones it calls are shared
@@ -834,6 +839,13 @@ func (p *producer) explicitContent(group *Element, scopeParent xsd.ElementScopeP
 		return nil, nil // 2.1.1
 	}
 	local := group.Name().Local()
+	if local == "all" {
+		// Before any clause-2 elision: an <all> whose occurrence attributes are
+		// outside the {0,1} enumeration is invalid however it maps.
+		if err := allOccursGrammar(group); err != nil {
+			return nil, err
+		}
+	}
 	hasChildren := hasParticleChild(group)
 	if (local == "all" || local == "sequence") && !hasChildren {
 		return nil, nil // 2.1.2
@@ -856,8 +868,9 @@ func (p *producer) explicitContent(group *Element, scopeParent xsd.ElementScopeP
 // may only appear there (cos-all-limited §3.8.6.2, clause 1), never nested in a
 // <choice>/<sequence>. A minOccurs=maxOccurs=0 group maps to no component at all
 // (§3.8.2) — produceGroupParticle returns (nil, nil) — so the caller omits it.
-// The grammar's own {0,1} occurrence restriction on <all> is left to a later
-// schema-for-schemas grammar check (per the #176 grounding), not charged here.
+// The grammar's own {0,1} occurrence restriction on <all> is a separate concern,
+// enforced by allOccursGrammar in explicitContent (the sole path by which an
+// <all> legally reaches here), not repeated in this function.
 // scopeParent passes straight through: a model group is not a scope boundary
 // (§3.3.2.3 names only <complexType> and the named <group> as ancestors that
 // determine {scope}.{parent}).
@@ -1638,6 +1651,58 @@ func nonNegativeInt(lexical string, loc xsderr.Loc, attr string) (int, error) {
 			"%s value %q is not a nonNegativeInteger (p-props-correct)", attr, lexical)
 	}
 	return n, nil
+}
+
+// allOccursGrammar enforces the occurrence grammar the schema for schema
+// documents gives the <all> ELEMENT (§3.8.2's XML representation summary,
+// formalized in Appendix A's xs:complexType "all"): minOccurs restricts
+// xs:nonNegativeInteger and maxOccurs restricts xs:allNNI, each by an enumeration
+// admitting only 0 and 1 — so "unbounded", legal on <choice>/<sequence>, is
+// excluded here along with every integer above 1. An absent attribute takes the
+// declared default 1 and passes.
+//
+// §3.8.3 lists "None as such" for <all>'s Schema Representation Constraints, so
+// the fault carries no src-*/cos-* rule: it is charged cvc-datatype-valid, the
+// generic "attribute value is not valid against its declared type" rule. It is
+// NOT cos-all-limited, which constrains where the resulting particle may appear
+// rather than what the element's attributes may say, and not p-props-correct,
+// which covers lexicals that are not nonNegativeIntegers at all (or max < min).
+//
+// Only the content-model <all> is checked: on the <all> body of a top-level named
+// <group>, Appendix A's xs:namedGroup makes both attributes use="prohibited", a
+// presence fault of a different declaration that this function does not model.
+func allOccursGrammar(el *Element) error {
+	if lexical, ok := attrValue(el, "minOccurs"); ok {
+		if err := allOccursEnum(lexical, el.Loc(), "minOccurs"); err != nil {
+			return err
+		}
+	}
+	lexical, ok := attrValue(el, "maxOccurs")
+	if !ok {
+		return nil
+	}
+	if strings.TrimSpace(lexical) == "unbounded" {
+		return xsderr.New(ruleDatatypeValid, el.Loc(),
+			`<all> maxOccurs is "unbounded", but the schema for schema documents restricts it to the enumeration 0, 1`)
+	}
+	return allOccursEnum(lexical, el.Loc(), "maxOccurs")
+}
+
+// allOccursEnum checks one numeric <all> occurrence lexical against the {0,1}
+// enumeration. The enumeration facet compares VALUES, so "01" is the value 1 and
+// passes, matching how occursOf reads the same attribute; a lexical that is not a
+// nonNegativeInteger at all fails its base type first, charged p-props-correct by
+// nonNegativeInt.
+func allOccursEnum(lexical string, loc xsderr.Loc, attr string) error {
+	n, err := nonNegativeInt(lexical, loc, attr)
+	if err != nil {
+		return err
+	}
+	if n > 1 {
+		return xsderr.New(ruleDatatypeValid, loc,
+			"<all> %s value %q is outside the enumeration 0, 1 that the schema for schema documents declares for it", attr, lexical)
+	}
+	return nil
 }
 
 // processContentsOf maps a processContents lexical to a ProcessContents token,

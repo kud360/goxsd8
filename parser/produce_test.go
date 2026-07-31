@@ -663,6 +663,41 @@ func TestProduceAllNestedRejected(t *testing.T) {
 	assertRule(t, err, "cos-all-limited")
 }
 
+func TestProduceAllOccursGrammar(t *testing.T) {
+	// The schema for schema documents restricts <all>'s OWN minOccurs/maxOccurs by
+	// enumeration to 0 and 1 (§3.8.2 XML representation summary, Appendix A
+	// xs:complexType "all"). §3.8.3 gives <all> no Schema Representation
+	// Constraint, so an excluded value is charged the generic cvc-datatype-valid —
+	// independent of cos-all-limited, which is about nesting.
+	for _, tc := range []struct {
+		name   string
+		occurs string
+		want   xsderr.Rule // empty: the document must be accepted
+	}{
+		{name: "absent defaults to 1", occurs: ``},
+		{name: "one one", occurs: ` minOccurs="1" maxOccurs="1"`},
+		{name: "zero one", occurs: ` minOccurs="0" maxOccurs="1"`},
+		{name: "zero zero elides the particle", occurs: ` minOccurs="0" maxOccurs="0"`},
+		{name: "minOccurs two", occurs: ` minOccurs="2" maxOccurs="2"`, want: "cvc-datatype-valid"},
+		{name: "maxOccurs five", occurs: ` maxOccurs="5"`, want: "cvc-datatype-valid"},
+		{name: "maxOccurs unbounded", occurs: ` maxOccurs="unbounded"`, want: "cvc-datatype-valid"},
+		{name: "minOccurs two elided by maxOccurs zero", occurs: ` minOccurs="2" maxOccurs="0"`, want: "cvc-datatype-valid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `<xs:complexType name="CT"><xs:all` + tc.occurs +
+				`><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>`
+			_, err := produce(t, wrap("", body))
+			if tc.want != "" {
+				assertRule(t, err, tc.want)
+				return
+			}
+			if err != nil {
+				t.Fatalf("produce: %v, want the document accepted", err)
+			}
+		})
+	}
+}
+
 func TestProduceWildcardBothNamespaceFormsRejected(t *testing.T) {
 	// src-wildcard: namespace and notNamespace must not both be present.
 	body := `<xs:complexType name="CT"><xs:sequence><xs:any namespace="##any" notNamespace="urn:z"/></xs:sequence></xs:complexType>`

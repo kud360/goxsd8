@@ -5792,10 +5792,10 @@ MS-ModelGroups2006-07-15/mgAa009/schema/mgAa009 pass
 MS-ModelGroups2006-07-15/mgAb001/schema/mgAb001 pass
 MS-ModelGroups2006-07-15/mgAb002/schema/mgAb002 pass
 MS-ModelGroups2006-07-15/mgAb003/schema/mgAb003 fail
-MS-ModelGroups2006-07-15/mgAb004/schema/mgAb004 fail
+MS-ModelGroups2006-07-15/mgAb004/schema/mgAb004 pass
 MS-ModelGroups2006-07-15/mgAb005/schema/mgAb005 pass
-MS-ModelGroups2006-07-15/mgAb006/schema/mgAb006 fail
-MS-ModelGroups2006-07-15/mgAb007/schema/mgAb007 fail
+MS-ModelGroups2006-07-15/mgAb006/schema/mgAb006 pass
+MS-ModelGroups2006-07-15/mgAb007/schema/mgAb007 pass
 MS-ModelGroups2006-07-15/mgAb008/schema/mgAb008 pass
 MS-ModelGroups2006-07-15/mgAb009/schema/mgAb009 pass
 MS-ModelGroups2006-07-15/mgB001/schema/mgB001 pass
@@ -5819,7 +5819,7 @@ MS-ModelGroups2006-07-15/mgC009/schema/mgC009 fail
 MS-ModelGroups2006-07-15/mgC010/schema/mgC010 pass
 MS-ModelGroups2006-07-15/mgC011/schema/mgC011 pass
 MS-ModelGroups2006-07-15/mgC012/schema/mgC012 pass
-MS-ModelGroups2006-07-15/mgC013/schema/mgC013 fail
+MS-ModelGroups2006-07-15/mgC013/schema/mgC013 pass
 MS-ModelGroups2006-07-15/mgC014/schema/mgC014 pass
 MS-ModelGroups2006-07-15/mgD001/schema/mgD001 pass
 MS-ModelGroups2006-07-15/mgD005/schema/mgD005 pass
@@ -6048,7 +6048,7 @@ MS-ModelGroups2006-07-15/mgN015/schema/mgN015 pass
 MS-ModelGroups2006-07-15/mgN016/schema/mgN016 pass
 MS-ModelGroups2006-07-15/mgO001/schema/mgO001 pass
 MS-ModelGroups2006-07-15/mgO002/schema/mgO002 pass
-MS-ModelGroups2006-07-15/mgO003/schema/mgO003 fail
+MS-ModelGroups2006-07-15/mgO003/schema/mgO003 pass
 MS-ModelGroups2006-07-15/mgO004/schema/mgO004 pass
 MS-ModelGroups2006-07-15/mgO005/schema/mgO005 pass
 MS-ModelGroups2006-07-15/mgO006/schema/mgO006 fail
@@ -6084,11 +6084,11 @@ MS-ModelGroups2006-07-15/mgO035/schema/mgO035 fail
 MS-ModelGroups2006-07-15/mgO036/schema/mgO036 pass
 MS-ModelGroups2006-07-15/mgO037/schema/mgO037 pass
 MS-ModelGroups2006-07-15/mgO038/schema/mgO038 pass
-MS-ModelGroups2006-07-15/mgP039/schema/mgP039 fail
+MS-ModelGroups2006-07-15/mgP039/schema/mgP039 pass
 MS-ModelGroups2006-07-15/mgP040/schema/mgP040 fail
 MS-ModelGroups2006-07-15/mgP041/schema/mgP041 fail
 MS-ModelGroups2006-07-15/mgP042/schema/mgP042 fail
-MS-ModelGroups2006-07-15/mgP043/schema/mgP043 fail
+MS-ModelGroups2006-07-15/mgP043/schema/mgP043 pass
 MS-ModelGroups2006-07-15/mgP049/schema/mgP049 fail
 MS-ModelGroups2006-07-15/mgP050/schema/mgP050 fail
 MS-ModelGroups2006-07-15/mgP055/schema/mgP055 fail
