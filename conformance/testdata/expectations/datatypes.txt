@@ -1063,8 +1063,8 @@ PrecisionDecimalTests/d3_3_4ii01/instance/d3_3_4ii01i pass
 PrecisionDecimalTests/d3_3_4ii02/instance/d3_3_4ii02i pass
 PrecisionDecimalTests/d3_3_4v14/instance/d3_3_4v14i pass
 PrecisionDecimalTests/d3_3_4v15/instance/d3_3_4v15i fail
-PrecisionDecimalTests/d3_3_4v16/instance/d3_3_4v16i fail
-PrecisionDecimalTests/d3_3_4v17/instance/d3_3_4v17i fail
+PrecisionDecimalTests/d3_3_4v16/instance/d3_3_4v16i pass
+PrecisionDecimalTests/d3_3_4v17/instance/d3_3_4v17i pass
 PrecisionDecimalTests/d3_3_4v18/instance/d3_3_4v18i fail
 PrecisionDecimalTests/d3_3_4v19/instance/d3_3_4v19i fail
 PrecisionDecimalTests/d3_3_4v20/instance/d3_3_4v20i fail

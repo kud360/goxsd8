@@ -178,16 +178,18 @@ func TestEffectiveWhiteSpaceListResolvesCollapse(t *testing.T) {
 }
 
 // TestValidateLexicalUnionWhiteSpaceStageNoPanic drives a union-variety type
-// end-to-end through the exported ValidateLexical pipeline to prove the
-// whiteSpace stage no longer panics on a union. This does NOT assert correct
-// union validation (member-dispatch is out of scope, §4.1.4 cl.2.3): with no
-// governing mapping the pipeline errors out at governingMapping with a real
-// *xsderr cvc-datatype-valid error — which is the correct outcome, a returned
-// error, never a panic and never a false (Value, nil) accept.
+// end-to-end through the exported ValidateLexical pipeline to prove no whiteSpace
+// stage runs on a union and nothing panics for want of one (§4.1.5: whiteSpace is
+// not applicable to a union). It pins the UNGOVERNED half of the union path —
+// correct member-dispatch itself is pinned in union_test.go: with a backend that
+// maps none of the members, unionGoverned reports the union ungoverned and
+// ValidateLexical returns a real *xsderr cvc-datatype-valid error, which is the
+// correct outcome — a returned error, never a panic and never a false
+// (Value, nil) accept.
 func TestValidateLexicalUnionWhiteSpaceStageNoPanic(t *testing.T) {
 	union := unionType(t)
-	// emptyBackend maps nothing, so governingMapping finds no mapping for the
-	// union and ValidateLexical returns its normal cvc-datatype-valid error.
+	// emptyBackend maps nothing, so no member of the union is governed and
+	// ValidateLexical returns its normal cvc-datatype-valid error.
 	v, err := ValidateLexical(emptyBackend{}, union, "  raw  literal  ", nil)
 	if err == nil {
 		t.Fatalf("ValidateLexical(union) = (%v, nil), want a real error (no governing mapping)", v)

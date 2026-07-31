@@ -55,33 +55,31 @@ var (
 // and union). It remains the CALLER's to honor for an st assembled by calling the
 // xsd constructors directly, which bypasses that seam entirely — so the panics
 // below stay reachable and stay panics: they mark a violated precondition, not a
-// validity verdict about instance data. st may be atomic, list, or union variety. Atomic and list resolve their
-// in-force whiteSpace facet; a union carries none (categorically not applicable,
-// §4.1.5), so the whiteSpace stage is skipped and the raw lexical passes through
-// unchanged to the pattern stage. A list-variety st resolves its value the same
-// way an atomic one does — governingMapping wraps the item type's mapping in a
-// listMapping (cvc-datatype-valid clause dv_list, §4.1.4 cl.2.2, list.go), so
-// the value/mapping resolution, not just the whiteSpace stage, is now backed by
-// code for the list case. ValidateLexical PANICS — it does not return an
+// validity verdict about instance data.
+//
+// st may be atomic, list or union variety, and EACH is decided end to end — the
+// three cases of cvc-datatype-valid clause 2 (§4.1.4). Atomic (cl.2.1) and list
+// (cl.2.2) share the pipeline below: both resolve their in-force whiteSpace
+// facet, and a list resolves its value exactly as an atomic one does, because
+// governingMapping wraps the item type's mapping in a listMapping (clause
+// dv_list, list.go). A union (cl.2.3, dv_union) takes the separate dispatch path
+// in union.go instead: it carries no whiteSpace facet of its own (categorically
+// not applicable, §4.1.5), and its literal is decided by its {member type
+// definitions} in order — the first member that is itself Datatype Valid is the
+// ·active member type·, its value IS the union's value (dv_union's V is a
+// pass-through, never a union-shaped wrapper), and the union's own pattern and
+// enumeration facets are applied around that dispatch.
+//
+// ValidateLexical PANICS — it does not return an
 // error — when a value facet is paired with a value lacking the capability that
 // facet needs (a bound facet on a non-Ordered value, a length facet on a
 // non-Lengthed value, a digit facet on a non-DigitCounted value). Those are
 // schema-construction errors (st-restrict-facets / cos-applicable-facets) the
 // caller must have already rejected, never instance data, so they surface as
-// programming-error panics, not validity verdicts. (The absent-whiteSpace case
-// splits: a union skips the stage via effectiveWhiteSpace's comma-ok result; an
-// atomic or list with no whiteSpace facet in force is still a construction-error
-// panic inside effectiveWhiteSpace itself, §3.16.7.4/§4.3.6.1.)
-//
-// SCOPE (union): relaxing the whiteSpace stage does NOT make ValidateLexical a
-// complete union validator. cvc-datatype-valid (§4.1.4 cl.2.3 + cl.3 note)
-// defers a union instance's whiteSpace normalization and lexical/value-facet
-// checks PER ACTIVE BASIC MEMBER; different members may carry different
-// whiteSpace facets. The remaining stages run against st itself, not a
-// dispatched member, so for a union st they do NOT produce a spec-correct
-// end-to-end verdict. Member-dispatch is out of scope for this function. A union
-// with no governing mapping still returns its normal cvc-datatype-valid error
-// here (never a panic, never a false accept).
+// programming-error panics, not validity verdicts. An atomic or list with no
+// whiteSpace facet in force is a construction-error panic of the same kind,
+// raised inside effectiveWhiteSpace itself (§3.16.7.4/§4.3.6.1); the one
+// legitimately facet-less variety, union, never reaches that stage.
 //
 // Facet {value} parsing is a separate concern with its own scope: an inherited
 // enumeration/bound facet's lexical {value} is parsed in the DECLARING SCHEMA's
@@ -91,27 +89,51 @@ var (
 // against the bindings in scope where its <enumeration> was written (§3.3.18),
 // carried per member on the facet, never against this instance scope.
 func ValidateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, error) {
+	v, _, err := validateLexical(b, st, rawLexical, ctx)
+	return v, err
+}
+
+// validateLexical is ValidateLexical's internal form: the same verdict, plus the
+// whiteSpace mode of the ·basic member· that actually decided the literal — st's
+// own for the atomic and list varieties, the ·active basic member·'s for a union,
+// which validateUnion reaches by recursing here per member (§4.1.4 cl.2.3).
+//
+// That third result exists for exactly one consumer, validateUnion: a union's own
+// pattern facet must be matched against the literal as normalized by the member
+// that validated it ("in the case of unions the ·pre-lexical· facets to use are
+// those associated with B in clause 2.3", the dv_vfacets note; PRINCIPLES 11),
+// and only the callee knows which member that was. No caller outside this package
+// needs it, so the exported wrapper drops it rather than widening the API
+// (STYLE T5).
+func validateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, whiteSpace, error) {
+	// {variety} dispatch, cvc-datatype-valid clause 2 (§4.1.4): a union takes
+	// clause 2.3's member dispatch (union.go), which composes st's own facets
+	// around the dispatched member's verdict rather than around st's own mapping.
+	// Atomic (cl.2.1) and list (cl.2.2) share the path below.
+	if u, ok := st.Variety().(xsd.Union); ok {
+		return validateUnion(b, st, u, rawLexical, ctx)
+	}
+
 	lexFacets, valFacets, err := compile(b, st)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// whiteSpace stage (§4.3.6): normalize using st's effective whiteSpace facet,
 	// resolved off EffectiveFacets (the ordinary same-kind overlay, §3.16.6.4).
-	// A union carries no whiteSpace facet (categorically not applicable,
-	// cos-applicable-facets §4.1.5), so the stage is skipped and the raw lexical
-	// passes through unchanged — hence the name lexical, not normalized: on the
-	// union path the string is genuinely un-normalized here (T7).
-	lexical := rawLexical
-	if ws, applicable := effectiveWhiteSpace(st); applicable {
-		lexical = normalizeWhiteSpace(rawLexical, ws)
-	}
+	// The comma-ok result is discarded deliberately: applicable=false marks the
+	// union {variety} alone (cos-applicable-facets §4.1.5), which the dispatch
+	// above already took, so a mode is always in force here. Should that ever stop
+	// holding, normalizeWhiteSpace panics on the zero mode rather than silently
+	// leaving the literal un-normalized (effectiveWhiteSpace's documented net).
+	ws, _ := effectiveWhiteSpace(st)
+	lexical := normalizeWhiteSpace(rawLexical, ws)
 
 	// pattern (lexical) stage (cvc-pattern-valid, §4.3.4.4): checked on the
-	// (possibly whiteSpace-normalized) lexical, before the value even exists.
+	// whiteSpace-normalized lexical, before the value even exists.
 	for _, lf := range lexFacets {
 		if err := lf.CheckLexical(lexical); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
 
@@ -120,21 +142,21 @@ func ValidateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Conte
 	// governs facet {value}s, not the application-facing candidate).
 	m, ok := governingMapping(b, st)
 	if !ok {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, 0, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
 			"value: no backend mapping governs type %s", st.Name())
 	}
 	v, err := m.Parse(lexical, ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// value-facet stage: enumeration/bounds/digits/length on the parsed value.
 	for _, vf := range valFacets {
 		if err := vf.CheckValue(v); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
-	return v, nil
+	return v, ws, nil
 }
 
 // compile builds the pattern (lexical) and value facet checkers for st from its
@@ -220,18 +242,22 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 
 // governingMapping resolves the Mapping that governs node's value space. For a
 // list {variety} it wraps the item type's own governing mapping in a
-// listMapping (cvc-datatype-valid clause dv_list, §4.1.4 cl.2.2, list.go);
-// otherwise it walks from node (inclusive) up the base chain and returns the
-// first ancestor's Mapping the backend supplies — the widest-space resolution
-// (backend.go, st-restrict-facets §3.16.6.4): a derived type without its own
-// mapping is governed by its nearest mapped ancestor's.
+// listMapping (cvc-datatype-valid clause dv_list, §4.1.4 cl.2.2, list.go); for a
+// union {variety} it wraps the {member type definitions} in a unionMapping
+// (clause dv_union, §4.1.4 cl.2.3, union.go); otherwise it walks from node
+// (inclusive) up the base chain and returns the first ancestor's Mapping the
+// backend supplies — the widest-space resolution (backend.go, st-restrict-facets
+// §3.16.6.4): a derived type without its own mapping is governed by its nearest
+// mapped ancestor's.
 //
-// The list check is applied only to node itself, never to every ancestor in the
-// base-chain walk: a list-variety type's whole derivation chain is list-variety
-// by construction (Structures §3.16.1, std-item_type_definition: the {item type
-// definition} is never itself a list), so if node is not list-variety, none of
-// its ancestors are either, and the atomic loop below is unchanged. If the
-// item type has no governing mapping, the list is likewise ungoverned — the same
+// Both {variety} checks are applied only to node itself, never to every ancestor
+// in the base-chain walk, because a constructed type's whole derivation chain
+// shares its {variety} (Structures §3.16.1: a list's {item type definition} is
+// never itself a list, and cos-st-restricts clause 3.2 makes a union restriction's
+// base a union) — so if node is neither, none of its ancestors are either and the
+// atomic loop below is unchanged. An ungoverned item type leaves the list
+// ungoverned, and an ungoverned MEMBER leaves the union ungoverned (unionGoverned
+// explains why one unmapped member spoils the whole dispatch) — the same
 // (Mapping{}, false) "ungoverned" outcome the atomic case returns.
 func governingMapping(b Backend, node *xsd.SimpleType) (Mapping, bool) {
 	if lst, ok := node.Variety().(xsd.List); ok {
@@ -240,6 +266,12 @@ func governingMapping(b Backend, node *xsd.SimpleType) (Mapping, bool) {
 			return Mapping{}, false
 		}
 		return listMapping(item), true
+	}
+	if u, ok := node.Variety().(xsd.Union); ok {
+		if !unionGoverned(b, u) {
+			return Mapping{}, false
+		}
+		return unionMapping(b, u), true
 	}
 	for s := node; s != nil; s = s.Base() {
 		if m, ok := b.Mapping(s.Name()); ok {

@@ -60,6 +60,14 @@
 // an *xsderr.Error carrying the facet's rule ID and the pipeline stage that
 // rejected.
 //
+// The list and union varieties recurse rather than adding stages. A list runs
+// the item type's own mapping per whitespace-delimited item and then its own
+// facets over the resulting sequence. A union has no whiteSpace facet at all: it
+// hands the RAW literal to its member types in order, and the first one that is
+// itself datatype-valid supplies both the value and the whiteSpace normalization
+// its own pattern facet then matches against — so a union's value is always some
+// member's value, never a wrapper of its own.
+//
 // A facet's OWN {value} goes through the same whiteSpace normalization before it
 // is parsed, once at construction: a facet's {value} property is "a value from
 // the value space of the {base type definition}" (§4.3.7.1 f-mai-value, §4.3.5.1),
