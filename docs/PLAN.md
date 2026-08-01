@@ -882,6 +882,271 @@ already claimed for debug verbosity, so pin a `-version` convention
 before any subcommand's flag parsing lands rather than colliding with it
 later.
 
+Update (2026-08-01, weekly backlog — the second `/backlog` in as many
+days, run after eleven landings): **the `schema` lane is LOWER than the
+paragraph above records, and that is the most important fact on this
+page.** Current numbers, read off
+`conformance/testdata/expectations/*.txt` at `ee1226b` and cross-checked
+against every `Ratchet:` trailer in the window:
+
+| lane | pass / total | movement since 2026-07-31 |
+|---|---|---|
+| `schema` | **4247 / 15432** | 4284 → 4247, **net −37** |
+| `datatypes` | **1107 / 1129** | 1059 / 1081 → 1107 / 1129, **+48** |
+| `instance` | 0 / 26426 | unchanged |
+| `xpath`, `json`, `ber` | empty by design | unchanged |
+
+The `schema` arithmetic, in landing order, so no one re-derives it:
+4284 → #230 **+12** → 4296 → #231 **+7** → 4303 → #232 **+2** → 4305 →
+#235 **+2** → 4307 → #344 **+5** → 4312 → #236 **+4** → 4316 → #238
+**−69** → **4247**. Eight landings earned **+32** gross and one
+authorized downward correction erased it and more. #309, #337 and #368
+were verified flat by the arbiter (#309 over a *non-empty* suite —
+41858 cases, all seven expectation files md5-identical — which is the
+distinction #309 existed to create).
+
+**The −69 is the finding, not the loss.** #238 discovered that
+`validityTest.SchemaDoc` was a scalar, so `encoding/xml` overwrote it on
+each repeated `<schemaDocument>` child and the harness had been rooting
+`parser.Parse` at whichever document the catalog happened to list LAST.
+Sixty-nine `pass` lines were therefore wins against a document the suite
+had not put under test — right answers to the wrong question. The
+arbiter corrected them downward under #238's own authorization, zero
+upward flips, the flipped set identical to the verified set. **Nothing
+about the ratchet's one rule bent**: a wrong-reason pass is not a score
+to protect.
+
+**Band 1 is reordered on the strength of that, and the reordering is
+this pass's main output.** The 2026-07-31 band ranked #277 and #276 dead
+last with the note *"These move no lane by design and are listed last,
+but they are the only items here whose absence can lock a false accept
+into the ratchet."* #238 converted that hypothetical into a measured 69,
+in the same package, eight days later. The cost of a wrong-reason pass
+compounds — the never-regress wall makes it expensive to unwind *later*,
+not now — so harness integrity goes to the front while the lane is still
+young enough to pay for it. The working queue, dependency-ordered, is
+now:
+
+1. **#277** — `resolveExpected` maps `validity="indeterminate"` to
+   expects-invalid, so 16 suite cases are winnable by ANY rejection.
+   Re-verified against the CURRENT `schema.txt`: exactly two are banked
+   today, `MS-Element2006-07-15/elemZ031` (line 4679) and
+   `MS-Schema2006-07-15/schZ015` (line 9845), both still `pass` at the
+   line numbers the issue body cites — the #238 correction did not touch
+   them. The other 14 are `fail` and are harvestable by any future rule
+   that rejects for any reason at all.
+2. **#276** — the closure scan ADMITS an unresolvable `<xs:include>`
+   location where #182 made `<xs:import>` DECLINE the same shape. Same
+   class as #277 and now the same neighbourhood: #238 rewrote
+   `conformance/schema_closure.go`'s decide path, and
+   `importDirective`'s doc comment (`:253-256`) now argues the asymmetry
+   explicitly rather than leaving it implicit — so the file is fresh and
+   the argument is written down to agree or disagree with. **#377 rides
+   with this one** (`extraDocsInClosure`'s decide path has no
+   `<override>` arm — the one directive `decidable` follows that #238's
+   round-1 rejection was about); take both or neither.
+3. **#264** → **#265** — the two open halves of complex-type derivation
+   validity, unchanged as a pair and still the head of the *lane* work.
+   Together they unblock **#336**, where the schema lane widens to admit
+   the extension forms. #265 additionally owns **seven** of the tree's
+   28 `GAP(` markers, the largest single-issue concentration there is.
+4. **#301** — `ComplexType.{context}`, the component-handle identity
+   **#340** consumes.
+5. **#281** — `substitutionGroup=` into `{substitution group
+   affiliations}`. Retires `contentrestricts.go:465` and unblocks
+   **#342**.
+6. **#365** — the 24 `xs:int`/`xs:integer` lexical fixtures #331 left
+   outside its enumerated 48. **The only issue in the whole queue whose
+   acceptance is literally a lane number**, and the cheapest movement
+   available: the route already exists, no engine change is expected,
+   and the selector-pinning tests #331 planted (`int001.xml`,
+   `integer001.xml` as negative rows) force the widening to argue rather
+   than edit a regex. It inherits **no measurement**, so its `Ratchet:`
+   figure must come from a diagnostic run — the #354 hazard, named in
+   its own body.
+7. **#346** — the base type's `{assertions}` fold (§3.4.2.1 cl.1),
+   which makes `derivation-ok-restriction` clause 5 chargeable instead
+   of a guaranteed false reject.
+8. **#324** — `xsdBool` reads `fixed=` too narrowly; an
+   out-of-lexical-space value silently becomes `false` instead of
+   charging `cvc-datatype-valid`. False-accept debt.
+
+Eight entries, eight issues (nine counting #377 riding with #276) —
+**the 8-10 band, met for the working queue for the first time since
+2026-07-21**, though only because #347's question is still unanswered
+and this list is doing the band's work by hand.
+
+***Retired from the previous band:*** #368 landed and vacated its slot
+(recorded above by its own post-land pass; nothing to add). #344, #331
+and #337 were retired there too. Everything else carried forward.
+
+**#286, #287 and #264 remain the three open sub-slices of #79**, so
+closing all three closes the M4 epic and makes the M5 carve the next
+planning action — the same standing note as 2026-07-31, unchanged. They
+sit alongside band 1, not inside it, because each moves less lane than
+the items above. **#379 (filed this pass) joins #287 as the second
+`<xs:override>`-identity slice** and should be sequenced with it.
+
+**GAP debt: 28 marker sites now, up from 23, and after this pass all 28
+are owned.** The growth is #236 (+3) and #344 (+2) disclosing their own
+fail-open as they landed, which is STYLE 9 working exactly as intended.
+The sweep found **one** site with no owning issue and filed it. The full
+map, so the next sweep starts from a ledger instead of a `grep`:
+
+| owner | sites |
+|---|---|
+| **#265** | `parser/produce_complex.go:1226`; `xsd/complexderivation.go:132`, `:348`, `:376`; `xsd/contentrestricts.go:220`, `:359`; `xsd/defaultbinding.go:126` |
+| **#372** | `value/valuespace.go:133`; `xsd/defaultbinding.go:362`, `:562` |
+| **#279** | `parser/doc.go:103`, `:109` |
+| **#287** | `parser/doc.go:130`; `parser/override.go:129` |
+| **#361** | `parser/xmltree/doc.go:32`; `parser/xmltree/encoding.go:60` |
+| **#249** | `xsd/substitutiongroup.go:162`, `:168` |
+| **#345** | `xsd/contentrestricts.go:518`; `xsd/defaultbinding.go:268` |
+| **#379** *(new)* | `parser/doc.go:118` |
+| **#334** | `parser/produce_complex.go:446` |
+| **#342** | `parser/produce_complex.go:1170` |
+| **#346** | `xsd/complexderivation.go:189` |
+| **#282** | `xsd/contentrestricts.go:289` |
+| **#281** | `xsd/contentrestricts.go:465` |
+| **#267** | `xsd/defaultbinding.go:89` |
+| **#248** | `xsd/wildcard.go:111` |
+
+(`xpath/doc.go:29` is the convention's own template; three `_test.go`
+hits pin existing markers; four in-prose back-references —
+`parser/produce_complex.go:491`, `value/valuespace.go:156`,
+`xsd/defaultbinding.go:368` and `:568` — plus
+`conformance/schema.go:266` cite markers rather than declaring them.
+None are sites.)
+
+**#379** is the sibling #287 explicitly refused to conflate itself with:
+two DISTINCT `<xs:override>` elements that transform a document
+identically get different `docKey`s, because `buildOverrideSet`
+(`parser/override.go:154-170`) writes `e.elem.Loc()` into the identity
+string. The target is then read twice, mints duplicate components, and
+the assembly dies under `sch-props-correct` clause 2 — where §4.2.5's
+note says *"multiple equivalent overrides of the same schema document
+will not constitute a violation"*. Over-rejection only, so nothing in a
+lane file is a lie. **#287 and #379 must not be settled in contradictory
+directions** — both make `overrideSet.id` a function of the
+transformation rather than the syntax — and a cross-reference comment
+now says so on #287.
+
+**Three issues carried stale `file:line` citations and were corrected by
+comment rather than by rewriting bodies** (the #315 class, caught by the
+sweep): #279 (`parser/doc.go:81`/`:87` → `:103`/`:109`, shifted by
+#183's override bullets), #267 (`defaultbinding.go:81` → `:89`), and
+#345 (`:266`/`:353`/`:515` → `:268`/`:362`/`:518`, shifted by #236's
+`ValueSpace` seam). **#345 also shrank from three sites to two and does
+not know it**: #236 replaced the lexical `{value constraint}` comparison
+at what is now `defaultbinding.go:362` with the `ValueSpace` seam, and
+the residue there — QName and NOTATION — belongs to **#372**, not to
+#345. Recorded on the thread for whoever picks it up. #267 additionally
+has a marker citing the *wrong* owner (`(#265)` where #267 is correct);
+whichever lands first repoints it.
+
+**Branch namespace: three stale `wip/*` refs now, all report-only, none
+deletable by a session** (docs/WORKFLOW.md). `git ls-remote --heads
+origin 'refs/heads/wip/*' 'refs/heads/parked/*'` returns
+`wip/issue-195`, `wip/issue-226`, `wip/issue-368`; still no `parked/*`.
+
+- **`wip/issue-368` @ `79c4700` — NEW, and a different species from the
+  other two.** #368 **landed** (PR #378, squashed as `3e97b77`), so
+  GitHub should have auto-deleted this ref; it survived because the
+  post-land `docs/PLAN.md` commit was pushed to the branch *after* the
+  merge. `git diff origin/wip/issue-368 HEAD` is **empty** — the tree is
+  byte-identical to `main`, so nothing is owed and nothing is at risk.
+  Flagged for human deletion. Worth naming the mechanism: **a post-land
+  commit pushed to a merged branch resurrects the ref**, and a future
+  `/backlog` that sees a `wip/issue-<N>` for a closed issue should diff
+  it before assuming work was lost.
+- **`wip/issue-195` @ `63c2e69`** — unchanged from 2026-07-31. Issue
+  closed `needs-replan`; content deliberately not on `main`; replan
+  tracked by **#304**, `ready`. Leftover, flagged for human deletion.
+- **`wip/issue-226` @ `80ef0c3`** — **now fully discharged.** The
+  2026-07-31 pass filed #344 as its replacement; #344 **landed**
+  2026-08-01 (`2c70354`, PR #362) with `schema +5`, and its unbanked
+  `+4` prediction is banked and superseded. The branch is retired, was
+  never resumed, and is a leftover flagged for human deletion. **The
+  #195 → #304 and #226 → #344 dispositions are now both proven**: a
+  park that gets a replacement issue lands; a park without one is
+  invisible.
+
+**Ready queue is 69** (81 open: 69 `ready`, 11 `blocked`, 1 deliberately
+unlabelled). The sequence is **9 → 16 → 26 → 34 → 35 → 65 → 69**, and
+this is the **sixth** consecutive overrun. What is new is the strongest
+version of the finding yet: **eleven issues closed in one day — far
+above the "several a day" the procedure assumes — and `ready` still grew
+by four.** The harvest rate is not a symptom of a slow loop. All three
+shrink mechanisms were exhausted again: nothing was stale enough to
+close, nothing was duplicated (the two near-misses, #345/#372 and
+#267/#265, are genuinely different sites and were disambiguated by
+comment), and no `ready` issue was found with an open dependency. One
+issue was *added* (#379) because the anti-leak convention required it.
+**#347 remains undecided and this pass did not decide it** — CLAUDE.md
+reserves changes to `.claude/agents/cartographer.md` for a human-filed
+issue, and both of #347's options change it. Until then, **band 1 above
+IS the working queue** and the other 61 `ready` issues are the backlog
+behind it. New evidence for #347, posted to its thread: **a third label
+state already exists in practice and is undocumented** — **#291**
+carries neither `ready` nor `blocked`, deliberately (*"on the steward's
+radar for the next `/retro` (Part 2), not in the develop loop's
+queue"*). That is #347's own option (a), invented ad hoc by one filer,
+with no label and no way for `/backlog` to tell it from a filing
+mistake. Whatever #347 decides should account for #291 rather than leave
+it a one-off.
+
+**The 2026-07-25 note that "no open issue carries a GitHub milestone" is
+overtaken and was wrong in the other direction too.** Exactly one
+milestone is in use — **`M4 — Schema parsing`** (33 closed) — and at
+survey time it was carried by **21 of the 80** open issues, assigned by
+nothing but filing date. That is worse than none: partial coverage reads
+as a claim. The
+**working queue was made milestone-consistent this pass** (#265, #276,
+#277, #281, #301, #346 and the new #379 assigned M4, plus the #79 epic
+itself, which had none — 29 of 81 now carry it). The backlog behind it
+was **deliberately left
+alone and not filed as an issue**: what a milestone should mean for a
+backlog issue versus a working-queue issue is #347's question, not a
+separate one, and M5-M12 have no GitHub milestones to assign to because
+those milestones are not carved. Recorded here, in the ledger
+`/backlog` surveys, to be settled with #347.
+
+**Personas: cliuser correctly skipped, libuser genuinely stale and this
+session could not run it.** The addendum above landed in `738fea2`, the
+2026-07-31 backlog commit — so it predates **all eleven** of the
+2026-08-01 landings, and re-checking it was the right call rather than a
+formality.
+
+- **cliuser: no re-run needed, and the reason is mechanical.**
+  `git diff 738fea2..HEAD -- cmd/ README.md` is **empty**. Nothing
+  cliuser can see has changed, so #251, #16 and the `-version`
+  reservation carry their criteria unchanged and a re-run could only
+  reproduce them.
+- **libuser: the addendum IS stale, by four exported identifiers, none
+  of which existed when it was written.** #236 added
+  **`xsd.ValueSpace`** (interface), **`value.NewValueSpace(Backend)
+  xsd.ValueSpace`**, and — the one that matters — **`(*xsd.
+  SchemaBuilder).FinalizeWith(ValueSpace) (*Schema, error)`, a SECOND
+  finalize entry point on the primary builder**, where a consumer now
+  has to choose between fail-open and decided value comparisons with
+  only godoc to guide them. #230 additionally **promoted
+  `unionNamespaceConstraint` to exported `xsd.UnionNamespaceConstraint`**
+  (`xsd/namespaceconstraint_union.go:85`). That is precisely the
+  material a libuser pass exists to judge, and #252's finding (point
+  lookups, no document-order enumeration) was made against a surface
+  that did not have it.
+- **It was not run, deliberately.** This session has no subagent-spawn
+  tool, so libuser could not be run under the isolation its value
+  depends on (godoc + README only, never source) — the same constraint
+  the 2026-07-31 pass hit, and a persona pass faked by a session that
+  has read the source is worth less than no persona pass. **Flagged for
+  the next session with a broader toolset, with the specific question
+  named: does `Finalize` vs `FinalizeWith` read as a coherent choice
+  from godoc alone?**
+
+Bands 2-5 from the 2026-07-25 paragraph still stand for everything not
+listed above, minus the landed items.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
