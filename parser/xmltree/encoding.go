@@ -61,7 +61,7 @@ func (e bomEncoding) agreesWith(name string) bool {
 	// BOM-less UTF-16 form that XML 1.0 §4.3.3 permits an entity to declare
 	// without a mark — is undecodable here rather than silently mis-decoded.
 	// Only a mark is taken as evidence of an entity's encoding; a declaration
-	// standing alone is deliberately not. Tracked by #344.
+	// standing alone is deliberately not. Tracked by #361.
 	return false
 }
 

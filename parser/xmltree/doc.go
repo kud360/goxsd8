@@ -31,7 +31,7 @@
 //     the decoded UTF-8 stream, not into the source bytes.
 //     GAP(xml): UTF-16 without a mark, declared only by encoding=, is
 //     not decoded — it fails well-formedness rather than being read.
-//     Tracked by #344.
+//     Tracked by #361.
 //
 // Fuzz targets guard the reader against panics on malformed input
 // (PRINCIPLES 24); malformed XML is an error value, never a crash.
