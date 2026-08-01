@@ -566,6 +566,42 @@ func TestParseDuplicateAcrossDocuments(t *testing.T) {
 	}
 }
 
+// TestParseIdentityConstraintRefAcrossDocuments exercises the ASSEMBLY-WIDE
+// identity-constraint pre-scan: a <key ref="…"> in the INCLUDING document, which
+// is produced first, resolves to a definition the INCLUDED document declares
+// (§4.2.3 c-incl-incl, §3.1.3). The definition sits on a local <element> nested
+// in a complex type, which §3.17.2's "anywhere within the [[children]]" makes as
+// referenceable as a top-level one.
+func TestParseIdentityConstraintRefAcrossDocuments(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:include schemaLocation="lib.xsd"/>`+
+			`<xs:element name="root"><xs:key ref="tns:k"/></xs:element>`),
+		"lib.xsd": wrap("urn:a", `<xs:complexType name="ct"><xs:sequence>`+
+			`<xs:element name="inner"><xs:key name="k">`+
+			`<xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key></xs:element>`+
+			`</xs:sequence></xs:complexType>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	ed, ok := s.Element(xsd.QName{Space: "urn:a", Local: "root"})
+	if !ok {
+		t.Fatalf("element {urn:a}root not found")
+	}
+	constraints := ed.IdentityConstraints()
+	if len(constraints) != 1 {
+		t.Fatalf("got %d identity constraints on root, want 1", len(constraints))
+	}
+	if got := constraints[0].Name(); got != (xsd.QName{Space: "urn:a", Local: "k"}) {
+		t.Errorf("name = %s, want {urn:a}k", got)
+	}
+	// The reference borrowed the DEFINITION's mapping, built under lib.xsd's own
+	// producer, rather than an empty shell built under main.xsd's.
+	if got := constraints[0].Selector().Expression(); got != "a" {
+		t.Errorf("selector = %q, want the definition's %q", got, "a")
+	}
+}
+
 // TestParseRootUnresolvable checks that a root location that does not resolve is
 // a plain error: unlike an <include>, the caller named a document that must
 // exist, so §4.2.3's "not an error to fail to resolve" does not apply.

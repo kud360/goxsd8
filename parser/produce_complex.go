@@ -1082,12 +1082,6 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 	if err != nil {
 		return nil, err
 	}
-	// A schema's {identity-constraint definitions} collects the definitions of
-	// every <key>/<keyref>/<unique> ANYWHERE in the document (§3.17.1), so a local
-	// declaration's constraints are registered exactly like a global one's.
-	for _, ic := range decl.IdentityConstraints() {
-		p.builder.AddIdentityConstraint(ic)
-	}
 	part, err := xsd.NewParticle(el.Loc(), occ, xsd.ResolvedTerm{Term: decl}, nil)
 	if err != nil {
 		return nil, err

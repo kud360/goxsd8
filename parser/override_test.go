@@ -199,6 +199,59 @@ func TestParseOverrideReplacementIsReferenceable(t *testing.T) {
 	}
 }
 
+// TestParseOverrideIdentityConstraintBelongsToOverriddenDocument proves the
+// identity-constraint pre-scan attributes an <override>'s constraints to the
+// document that PRODUCES them, never to the one that merely writes them down.
+// §F.2 clause 1 makes an <override>'s children top-level declarations of the
+// OVERRIDDEN document, so a MATCHED child's constraint is produced, registered
+// and resolvable under lib.xsd's producer.
+func TestParseOverrideIdentityConstraintBelongsToOverriddenDocument(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:override schemaLocation="lib.xsd">`+
+			`<xs:element name="holder"><xs:key name="k">`+
+			`<xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key></xs:element>`+
+			`</xs:override>`+
+			`<xs:element name="user"><xs:key ref="tns:k"/></xs:element>`),
+		"lib.xsd": wrap("urn:a", `<xs:element name="holder" type="xs:string"/>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	ed, ok := s.Element(xsd.QName{Space: "urn:a", Local: "user"})
+	if !ok {
+		t.Fatalf("element {urn:a}user not found")
+	}
+	constraints := ed.IdentityConstraints()
+	if len(constraints) != 1 {
+		t.Fatalf("got %d identity constraints on user, want 1", len(constraints))
+	}
+	if got := constraints[0].Selector().Expression(); got != "a" {
+		t.Errorf("selector = %q, want the substituted definition's %q", got, "a")
+	}
+}
+
+// TestParseOverrideUnmatchedIdentityConstraintUnreferenceable is the other half:
+// an <override> child matching NOTHING in the target set "will be ignored"
+// (§4.2.5), so no producer maps it and the constraint it carries corresponds to
+// no component at all. A <key ref> naming it must therefore fail src-resolve
+// (clause 1.7) rather than silently borrow a definition that is in no schema's
+// {identity-constraint definitions} — which is why the pre-scan withholds the
+// composition directives' subtrees from the overriding document's own index.
+func TestParseOverrideUnmatchedIdentityConstraintUnreferenceable(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:override schemaLocation="lib.xsd">`+
+			`<xs:element name="ghost"><xs:key name="gk">`+
+			`<xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key></xs:element>`+
+			`</xs:override>`+
+			`<xs:element name="user"><xs:key ref="tns:gk"/></xs:element>`),
+		"lib.xsd": wrap("urn:a", `<xs:element name="doc" type="xs:string"/>`),
+	})
+	var xe *xsderr.Error
+	if !errors.As(err, &xe) || xe.Rule != "src-resolve" {
+		t.Fatalf("Parse error = %v, want an *xsderr.Error with rule src-resolve", err)
+	}
+}
+
 // facetValue returns the single lexical value of st's own facet of kind k.
 func facetValue(t *testing.T, st *xsd.SimpleType, k xsd.FacetKind) string {
 	t.Helper()

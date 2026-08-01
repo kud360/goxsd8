@@ -658,38 +658,17 @@ func overrideDecidable(el *parser.Element) bool {
 // at finalize and is decided genuinely — type= is no longer required. An inline
 // anonymous type is an explicit src-element clause 3 rejection (§3.3.3) that
 // conflates a genuine violation with an unsupported form, so it stays declined.
-// Its <unique>/<key>/<keyref> children must also be decidable (#178).
+//
+// Its <unique>/<key>/<keyref> children impose no condition of their own: #178
+// produced the name= form and #240 the ref= form, so BOTH are mapped and both
+// src-identity-constraint (§3.11.3) and c-props-correct (§3.11.6.1) rejections on
+// them are genuine.
 //
 // The inline decline is deliberately ASYMMETRIC with localElementDecidable,
 // which admits an inline <simpleType>: #229 widened the producer's dcl.elt.local
 // mapping only, leaving dcl.elt.global (§3.3.2.2) declining as before.
 func elementDecidable(el *parser.Element) bool {
-	return childXSD(el, "simpleType") == nil && childXSD(el, "complexType") == nil &&
-		identityConstraintsDecidable(el)
-}
-
-// identityConstraintsDecidable reports whether every <unique>/<key>/<keyref>
-// child of an <element> (global or local) is in the form the producer builds
-// (#178): the name= form, whose whole mapping — category, selector, fields,
-// refer — is settled at produce time, so src-identity-constraint (§3.11.3) and
-// c-props-correct (§3.11.6.1) rejections on it are genuine. The ref= form
-// corresponds to no new component (§3.11.2: it names an existing definition,
-// resolved at finalize) and the producer declines it as not yet produced, so its
-// presence declines the case rather than risking a limitation-shaped verdict.
-func identityConstraintsDecidable(el *parser.Element) bool {
-	for _, child := range el.Children() {
-		c, ok := child.(*parser.Element)
-		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
-			continue
-		}
-		switch c.Name().Local() {
-		case "unique", "key", "keyref":
-			if hasAttr(c, "ref") {
-				return false
-			}
-		}
-	}
-	return true
+	return childXSD(el, "simpleType") == nil && childXSD(el, "complexType") == nil
 }
 
 // complexTypeDecidable reports whether a <complexType> (top-level, or a nested
@@ -798,10 +777,10 @@ func contentDecidable(parent *parser.Element) bool {
 // modelGroupDecidable reports whether every particle child of a model group
 // (<sequence>/<choice>/<all>) is within the producer's decidable subset: nested
 // model groups recurse, <element> must be locally decidable
-// (localElementDecidable) and carry only decidable identity constraints
-// (produced for local declarations too, #178), <any> is fine, and a <group ref>
-// is produced (#177). A bare <group> without a ref (a nested group is always a
-// reference) or any other child declines.
+// (localElementDecidable) — its identity constraints impose no condition of
+// their own, both forms being produced for local declarations too (#178, #240) —
+// <any> is fine, and a <group ref> is produced (#177). A bare <group> without a
+// ref (a nested group is always a reference) or any other child declines.
 func modelGroupDecidable(group *parser.Element) bool {
 	for _, child := range group.Children() {
 		el, ok := child.(*parser.Element)
@@ -814,9 +793,6 @@ func modelGroupDecidable(group *parser.Element) bool {
 		case "element":
 			if !localElementDecidable(el) {
 				return false
-			}
-			if !identityConstraintsDecidable(el) {
-				return false // ref= identity constraint — not yet produced (#178)
 			}
 		case "sequence", "choice", "all":
 			if !modelGroupDecidable(el) {
