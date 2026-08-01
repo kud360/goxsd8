@@ -98,9 +98,20 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 // never ranged to produce user-visible order (STYLE D2).
 type symbols struct {
 	// simpleTypes maps each top-level named <simpleType>'s expanded name to its
-	// raw element, filled by the pre-scan so forward base= references between
-	// simple types resolve (Structures §3.1.3).
-	simpleTypes map[xsd.QName]*Element
+	// source (raw element plus the producer of the document that declares it),
+	// filled by the pre-scan so forward base= references between simple types
+	// resolve (Structures §3.1.3).
+	//
+	// The owning producer is carried for the same reason complexTypes carries one:
+	// §3.16.2.1 identifies {base type definition} as what "the actual value of the
+	// base attribute" resolves to, and that attribute belongs to the DECLARING
+	// document — src-resolve (§3.17.6.2) clause 4.1.1 scopes its absent-namespace
+	// default to "the schema document containing the QName", and §F.1 task (b)
+	// coerces a chameleon-included document's own unqualified references to that
+	// document's effective target namespace. Built under a referring producer
+	// instead, unqualifiedRefNS/declares would answer for the wrong document and
+	// falsely reject a valid base=.
+	simpleTypes map[xsd.QName]typeSource
 
 	// complexTypes maps each top-level named <complexType>'s expanded name to
 	// its source (raw element plus the producer of the document that declares
@@ -115,9 +126,8 @@ type symbols struct {
 	// under its OWN document's producer, or every local element declaration
 	// inside it takes the wrong {target namespace} (localTargetNS reads
 	// schemaElem's elementFormDefault, and unqualifiedRefNS/declares answer for
-	// the declaring document). simpleTypes needs no owner because a <simpleType>
-	// body holds no local declaration whose namespace could differ.
-	complexTypes map[xsd.QName]complexSource
+	// the declaring document).
+	complexTypes map[xsd.QName]typeSource
 
 	// attributeGroups maps each top-level named <attributeGroup>'s expanded name
 	// to its raw element, filled by the pre-scan so an <attributeGroup ref> (from
@@ -151,12 +161,16 @@ type symbols struct {
 	backend value.Backend
 }
 
-// complexSource is one entry of symbols.complexTypes: a top-level <complexType>
-// element together with the producer of the document that DECLARES it. On-demand
-// base construction builds through owner, never through the producer that
-// happens to be asking, so the type's local element declarations take their own
-// document's target namespace and form defaults (§3.3.2.3 dcl.elt.local, §F.1).
-type complexSource struct {
+// typeSource is one entry of symbols.simpleTypes or symbols.complexTypes: a
+// top-level <simpleType>/<complexType> element together with the producer of the
+// document that DECLARES it. On-demand base construction builds through owner,
+// never through the producer that happens to be asking, so the type's local
+// element declarations take their own document's target namespace and form
+// defaults (§3.3.2.3 dcl.elt.local) and its own unqualified QName references take
+// their own document's §F.1 coercion — both properties of the declaring document,
+// which assembly-wide visibility (§4.2.3 c-incl-incl) does not transfer to the
+// asker.
+type typeSource struct {
 	elem  *Element
 	owner *producer
 }
@@ -190,8 +204,8 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 	}
 	builder.AddType(anyType)
 	return &symbols{
-		simpleTypes:     make(map[xsd.QName]*Element),
-		complexTypes:    make(map[xsd.QName]complexSource),
+		simpleTypes:     make(map[xsd.QName]typeSource),
+		complexTypes:    make(map[xsd.QName]typeSource),
 		attributeGroups: make(map[xsd.QName]*Element),
 		built:           built,
 		// xs:anyType is seeded DONE so a derivation naming it resolves to the very
@@ -279,9 +293,9 @@ func (p *producer) prescan() {
 		decl := p.ov.replacement(el)
 		switch {
 		case isXSD(el, "simpleType"):
-			p.symbols.simpleTypes[xsd.QName{Space: p.target, Local: name}] = decl
+			p.symbols.simpleTypes[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		case isXSD(el, "complexType"):
-			p.symbols.complexTypes[xsd.QName{Space: p.target, Local: name}] = complexSource{elem: decl, owner: p}
+			p.symbols.complexTypes[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		case isXSD(el, "attributeGroup"):
 			p.symbols.attributeGroups[xsd.QName{Space: p.target, Local: name}] = decl
 		}
@@ -448,10 +462,13 @@ func (p *producer) buildComplexType(name xsd.QName, elem *Element) (xsd.ComplexT
 // not-yet-mapped complex or simple type of this assembly. at is the
 // <restriction>/<extension> carrying the base=, charged for a failure.
 //
-// A complex base is built through its OWN document's producer (complexSource's
-// owner), never through p: see symbols.complexTypes. A simple base returns the
-// very *xsd.SimpleType symbols.built holds — never a rebuilt twin, whose
-// component identity would silently diverge (xsd/typedefinition.go).
+// A base of either variety is built through its OWN document's producer
+// (typeSource's owner), never through p: see symbols.simpleTypes and
+// symbols.complexTypes. An already-built simple base returns the very
+// *xsd.SimpleType symbols.built holds — never a rebuilt twin, whose component
+// identity would silently diverge (xsd/typedefinition.go); routing through the
+// owner does not change that, since the memo is assembly-wide and every producer
+// of the assembly shares it.
 //
 // A name that resolves to no type at all is charged src-resolve clause 1.1
 // (§3.17.6.2) — the same rule, at the same clause, that resolveBase charges for
@@ -474,8 +491,8 @@ func (p *producer) resolveBaseType(at *Element, name xsd.QName) (xsd.TypeDefinit
 	if st, ok := p.symbols.built[name]; ok && st != nil {
 		return st, nil
 	}
-	if localElem, ok := p.symbols.simpleTypes[name]; ok {
-		return p.buildSimpleType(name, localElem)
+	if src, ok := p.symbols.simpleTypes[name]; ok {
+		return src.owner.buildSimpleType(name, src.elem)
 	}
 	return nil, xsderr.New(ruleSrcResolve, at.Loc(),
 		"base type %s does not resolve to any type definition in scope (src-resolve clause 1.1)", name)
@@ -566,10 +583,11 @@ func (p *producer) resolveBase(restriction *Element) (*xsd.SimpleType, error) {
 	if st, ok := p.symbols.built[qn]; ok && st != nil {
 		return st, nil
 	}
-	// A local (unbuilt or on-stack) recurses; buildSimpleType handles memo hit
-	// and cycle rejection.
-	if localElem, ok := p.symbols.simpleTypes[qn]; ok {
-		return p.buildSimpleType(qn, localElem)
+	// An assembly-visible one (unbuilt or on-stack) recurses through its OWN
+	// document's producer, never p — see symbols.simpleTypes; buildSimpleType
+	// handles memo hit and cycle rejection.
+	if src, ok := p.symbols.simpleTypes[qn]; ok {
+		return src.owner.buildSimpleType(qn, src.elem)
 	}
 	return nil, xsderr.New(ruleSrcResolve, restriction.Loc(),
 		"base type %s does not resolve to any simple type in scope (src-resolve clause 1.1)", qn)
