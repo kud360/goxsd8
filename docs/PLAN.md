@@ -980,6 +980,67 @@ and this list is doing the band's work by hand.
 (recorded above by its own post-land pass; nothing to add). #344, #331
 and #337 were retired there too. Everything else carried forward.
 
+***Retired from THIS band, 2026-08-01 (post-land pass):***
+
+- *#277 (`validity="indeterminate"` scored as its own outcome, declined)
+  landed as `2040c54` (PR #381) — **`Ratchet: schema 4247/15432 →
+  4245/15432`, an authorized downward correction of 2 wrong-reason
+  passes**; datatypes / instance / xpath / json / ber unchanged. Arbiter
+  ACCEPT on round 1, reusing #238's authorized-correction procedure
+  unchanged. **This slot is vacated, not substituted: #276, with #377
+  riding, is now this band's head** and the rest of the ordering (#264 →
+  #265 → #301 → #281 → #365 → #346 → #324) stands as filed — no reorder
+  was warranted, and the #277 → #276 adjacency this band was built on is
+  exactly why. **The smaller half of the 16 was the interesting half.**
+  The issue framed 16 cases as winnable by any rejection; only **2** were
+  actually banked (`elemZ031`, `schZ015`), and the other 14 were already
+  `fail` — this processor was also failing to reject them, so the soft
+  spot was mostly **latent rather than cashed**. That is the band's
+  premise confirmed with a number: landing it at 4247 cost 2, and landing
+  it after the schema lane matured would have cost whatever fraction of
+  the 16 had gone green by then. The reordering that put harness
+  integrity at the front of this band was correct on its own terms, and
+  the same argument now transfers intact to #276.*
+
+***A new tracked invariant, recorded here because `/backlog` is what
+surveys it.*** #277's landing makes the per-lane count of
+`validity="indeterminate"` cases a **baseline to diff against, not a
+one-time measurement**: **schema 12, instance 4, datatypes 0.** A
+`testdata/xsdtests` submodule bump that moves any of the three changes
+the set of cases the harness declines, and per #277's own acceptance
+criterion 5 that must be *noticed* rather than absorbed. Whoever bumps
+the submodule re-measures these and says so.
+
+***Post-land harvest: one issue filed, one item deliberately not.***
+**#382** (`ready`, `kind/process` + `kind/tooling`) takes the
+`STYLE T7` / `STYLE D6` citation drift the #277 arbiter surfaced and
+correctly refused to fix inside a conformance-scoring diff. The census
+in the issue is **23 Go sites across 15 files** — larger than the 10-11
+the verdict reported — citing `T7` (×19), `T8` (×3, one malformed as
+`T5/8`), `D6` and `L6`, none of which `docs/STYLE.md` defines (it runs
+S1-S3, E1-E3, D1-D5, **T1-T6**, P1-P4, L1). Two things make it worth a
+session rather than a shrug. It is the **second** surfacing: #215's
+landing saw it in July and *dismissed* it (`docs/LOG/2026-07.md:9632`,
+"Dismissed as a governance/numbering issue"), which was reasonable
+against one sighting and is not against 23. And **#299 would have
+cemented it** — #299's `## Acceptance` offers `STYLE T2/T7` as the
+exemplar of a *correct* citation, in the guidance it wants written into
+`docs/STYLE.md` itself. #382 is therefore sequenced **before** #299;
+coordination only, the #317/#354 shape, and **neither was relabelled**
+(a note is on the #299 thread instead, since relabelling a startable
+`ready` issue to `blocked` for a sequencing preference is the queue
+inflation #347 is about). This is also the third distinct sweep queued
+over the same comment lines in `xsd/` and `builtin/strict/` — #299,
+#329 (rewrapping) and now #382 — and whichever lands first churns the
+line numbers the other two recorded.
+
+*Net effect on the census below: none.* One issue closed (#277), one
+filed (#382), so the tally is **exactly** where the 2026-08-01 backlog
+left it — 81 open, 69 `ready`, 11 `blocked`, 1 deliberately unlabelled
+(#291). A landing that files one follow-up holds the queue flat; the
+overrun that paragraph documents comes from passes that file several at
+once. One datapoint for #347, recorded rather than argued from.
+
 **#286, #287 and #264 remain the three open sub-slices of #79**, so
 closing all three closes the M4 epic and makes the M5 carve the next
 planning action — the same standing note as 2026-07-31, unchanged. They
@@ -1070,6 +1131,35 @@ origin 'refs/heads/wip/*' 'refs/heads/parked/*'` returns
   #195 → #304 and #226 → #344 dispositions are now both proven**: a
   park that gets a replacement issue lands; a park without one is
   invisible.
+
+***Re-verified 2026-08-01 by #277's post-land pass — unchanged, and the
+count is now STABLE across two independent passes rather than growing.***
+`git ls-remote --heads origin 'refs/heads/wip/*' 'refs/heads/parked/*'`
+still returns exactly `wip/issue-195` @ `63c2e69`, `wip/issue-226` @
+`80ef0c3`, `wip/issue-368` @ `79c4700`, and still no `parked/*`. All
+three map to **closed** issues, so none is resumable work — which is why
+#277's session correctly started a new issue rather than adopting one.
+
+**Deliberately NOT filed as an issue, and the reasoning is recorded so a
+later pass can overturn it cheaply rather than re-derive it.** Three
+things have to be true together to justify filing, and none is:
+**nothing is owed** (each disposition is discharged — #195 → #304
+`ready`, #226 → #344 landed, #368's ref is byte-identical to `main`),
+**nothing is blocked** by their existence (they are cosmetic refs, and a
+`wip/issue-<N>` for a closed issue is exactly what the reconcile step is
+built to see through), and **no session can close such an issue** —
+`docs/WORKFLOW.md` makes branch deletion human-only, so the issue would
+sit in the queue permanently, the same failure mode this document already
+named when it declined to file the "no fourth raw-`*Element` index"
+standing check. Filing one would add to the `ready` overrun #347 is about
+while discharging nothing.
+
+**The trigger that WOULD change this answer**, stated now so the judgement
+is not re-litigated from zero every pass: a **fourth** ref accumulating,
+**or** these three surviving another two passes. Either way the response
+is **one** human-owned housekeeping issue covering all of them, never one
+per ref. Until then the flag lives here and in each pass's report, which
+is where a human reviewing the plan actually reads it.
 
 **Ready queue is 69** (81 open: 69 `ready`, 11 `blocked`, 1 deliberately
 unlabelled). The sequence is **9 → 16 → 26 → 34 → 35 → 65 → 69**, and
