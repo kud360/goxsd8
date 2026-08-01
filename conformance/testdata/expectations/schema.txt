@@ -1397,7 +1397,7 @@ MS-Attribute2006-07-15/attZ008_a/schema/attZ008_a pass
 MS-Attribute2006-07-15/attZ008_b/schema/attZ008_b pass
 MS-Attribute2006-07-15/attZ008_c/schema/attZ008_c pass
 MS-Attribute2006-07-15/attZ008_d/schema/attZ008_d pass
-MS-Attribute2006-07-15/attZ008_e/schema/attZ008_e fail
+MS-Attribute2006-07-15/attZ008_e/schema/attZ008_e pass
 MS-Attribute2006-07-15/attZ008_f/schema/attZ008_f pass
 MS-Attribute2006-07-15/attZ008_g/schema/attZ008_g pass
 MS-Attribute2006-07-15/attZ008_h/schema/attZ008_h pass
@@ -6625,9 +6625,9 @@ MS-Particles2006-07-15/particlesIf003/schema/particlesIf003 pass
 MS-Particles2006-07-15/particlesIf004/schema/particlesIf004 pass
 MS-Particles2006-07-15/particlesIf005/schema/particlesIf005 pass
 MS-Particles2006-07-15/particlesIf006/schema/particlesIf006 pass
-MS-Particles2006-07-15/particlesIf007/schema/particlesIf007 fail
-MS-Particles2006-07-15/particlesIf008/schema/particlesIf008 fail
-MS-Particles2006-07-15/particlesIf009/schema/particlesIf009 fail
+MS-Particles2006-07-15/particlesIf007/schema/particlesIf007 pass
+MS-Particles2006-07-15/particlesIf008/schema/particlesIf008 pass
+MS-Particles2006-07-15/particlesIf009/schema/particlesIf009 pass
 MS-Particles2006-07-15/particlesIg001/schema/particlesIg001 pass
 MS-Particles2006-07-15/particlesIg002/schema/particlesIg002 pass
 MS-Particles2006-07-15/particlesIg003/schema/particlesIg003 fail
