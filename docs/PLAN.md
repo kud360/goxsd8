@@ -622,43 +622,68 @@ add-don't-rewrite convention; this sentence is the correction. `instance`
 band-1 line has landed except the composition tail. The working queue,
 lane movement first, dependency-ordered, is now:
 
-1. **#344** — UTF-16 BOM decode (the #226 replan). It carries a
-   **measured, unbanked `schema +4`**: the arbiter ran `GOXSD_RATCHET=1`
-   diagnostically on `wip/issue-226` and restored the lane files, so four
-   `ibmData` `ff fe` fixtures are decidable today and unclaimed. Cheapest
-   real lane movement in the queue, and the only issue whose commit
-   message is *required* to read `Ratchet: schema +4`.
-2. **#331** — routes seeded-but-unmapped lexical types through
-   `value.ValidateLexical`; 48 non-list integer-family fixtures. The
-   largest single `datatypes` movement left.
-3. **#337** — `symbols.simpleTypes` carries no owning producer, so a
+1. **#337** — `symbols.simpleTypes` carries no owning producer, so a
    cross-document on-demand build resolves unqualified references under
    the wrong document. A **chameleon false reject** — the one direction
    the ratchet cannot forgive.
-4. **#264** → **#265** — the two open halves of complex-type derivation
+2. **#264** → **#265** — the two open halves of complex-type derivation
    validity. Together they unblock **#336**, which is where the schema
    lane widens to admit the extension forms; #265 also now owns the
    `contentrestricts.go:356` sibling-keyword fold.
-5. **#301** — `ComplexType.{context}`, the component-handle identity
+3. **#301** — `ComplexType.{context}`, the component-handle identity
    **#340** consumes (inline anonymous `complexType` on local
    declarations — the complexType twin of what #229 just landed for
    `simpleType`, and the same cohort shape).
-6. **#281** — `substitutionGroup=` into `{substitution group
+4. **#281** — `substitutionGroup=` into `{substitution group
    affiliations}` (the producer passes nil today). Retires
    `contentrestricts.go:462`'s global/global fail-open and unblocks
    **#342**.
-7. **#346** — the base type's `{assertions}` fold (§3.4.2.1 cl.1), which
+5. **#346** — the base type's `{assertions}` fold (§3.4.2.1 cl.1), which
    makes `derivation-ok-restriction` clause 5 chargeable instead of a
    guaranteed false reject. Filed this pass.
-8. **#324** — `xsdBool` reads `fixed=` too narrowly; an out-of-lexical-
+6. **#324** — `xsdBool` reads `fixed=` too narrowly; an out-of-lexical-
    space value silently becomes `false` instead of charging
    `cvc-datatype-valid`. False-accept debt.
-9. **#277** + **#276** — the two ratchet-integrity soft spots in the
+7. **#277** + **#276** — the two ratchet-integrity soft spots in the
    harness (`indeterminate` mapped to expects-invalid, so 16 cases are
    winnable by any rejection; an unresolvable `&lt;xs:include&gt;` location
    admitted where #182 made `&lt;xs:import&gt;` decline the same shape). These
    move no lane by design and are listed last, but they are the only
    items here whose *absence* can lock a false accept into the ratchet.
+
+*Retired from this band, both on 2026-08-01, in the order they were listed:*
+
+- *#344 (UTF-16 BOM decode, the #226 replan) landed as `2c70354` (PR #362)
+  — `schema +5`, not the `+4` this band predicted; the fifth flip
+  (`assertion/d4_3_15ii30`, another `ibmData` `ff fe` document) was traced
+  to the diff before banking rather than tolerated. **The "measured,
+  unbanked `schema +4`" this entry used to carry is therefore discharged**
+  — it is banked, and no later lane movement can be misattributed to it.
+  Post-land harvest filed #361 (BOM-less UTF-16 declared only by
+  `encoding=`, plus the legacy single-byte `EncName`s — the residual
+  `GAP(xml)`) and #363 (three advisory leftovers). Retired here by the
+  #331 post-land pass, which found the entry stale; it is not that pass's
+  own work.*
+- *#331 (route seeded-but-unmapped lexical types through
+  `value.ValidateLexical`) landed as `c488b47` (PR #364) — **`datatypes`
+  +48, 1081 → 1129, all 48 `New@pass`, 0 Regressed, 0 Vanished**, arbiter
+  ACCEPT on round 1 and mason's `Ratchet:` forecast confirmed exactly.
+  `execLexicalCase` no longer demands a **direct** `backend.Mapping` for
+  the tested type; `value.governingMapping` walks the base chain to
+  `xs:decimal` and the type's own effective facets decide the literal
+  (`cvc-datatype-valid` §4.1.4 is a conjunction — `parseOK` satisfied only
+  clause 2.1 and provably false-accepted `"128"` as an `xs:byte`).
+  `fixesTimezone` stayed an independent OR arm because the oracle proved
+  the two conditions independent, not by oversight. #224's
+  `integerListCase` was retired as a strict subset (STYLE D3). Post-land
+  harvest filed **#365** — the `xs:int`/`xs:integer` lexical fixtures
+  #331 deliberately left outside its enumerated 48, which that pass found
+  to be **24 files (int001–008, integer001–016)**, not the 20 that #331's
+  prose, its LOG entry and three `conformance/datatypes.go` comments all
+  name; `integer013–016` exist with the identical shape. #365 owns
+  correcting the count as well as widening the selector, and unlike #331
+  it inherits **no measurement**, so its `Ratchet:` figure must come from
+  a diagnostic run (#354).*
 
 **#286 and #287 sit alongside this band rather than inside it**, and a
 session that wants the highest *planning* leverage should take them: with
