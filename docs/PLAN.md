@@ -1001,6 +1001,47 @@ and #337 were retired there too. Everything else carried forward.
   the 16 had gone green by then. The reordering that put harness
   integrity at the front of this band was correct on its own terms, and
   the same argument now transfers intact to #276.*
+- *#276 (the closure scan's unresolvable-`include` admit) landed as
+  `649fe1d` (PR #385) — **`Ratchet: schema 4248/15432 → 4257/15432`,
+  +9, zero regressions, zero vanished**; every other lane unchanged.
+  Arbiter **REJECT on round 1, ACCEPT on round 2**. **The band's premise
+  is now confirmed twice, and the second confirmation is the stronger
+  one, because it came with a correction.** #277 showed the cost of
+  delay (2 banked wrong-reason passes, 14 latent); #276 shows that
+  closing a false-accept **is not the same edit as declining on its
+  premise** — the round-1 symmetric decline surrendered four genuine
+  `src-include` cl. 2.4 passes (`annotA014`, `anyURI_a006_1341`,
+  `schB8`, `schD8`; `schD8`'s target is literally
+  `must%20not%20resolve.xyzzy`, the suite's own positive test of cl. 2.4
+  tolerance). **When a rule says a condition "is not an error", a
+  harness that declines on that condition is asserting the rule rather
+  than testing it.** The landed form declines on the **consequence** (a
+  broken parse) rather than the premise (an unresolved location), which
+  is why it both closed the hazard **and** harvested +9 — the nine being
+  exactly the `import` cases #182's asymmetry had been declining. Worth
+  carrying into the remaining harness-integrity work: a decline that
+  costs the lane cases the suite ships to prove the tolerant half of a
+  rule is a mis-specified decline, not a price.*
+- ***#377 loses its rider status and is re-homed, not retired.*** The
+  band said *"#377 rides with this one ... take both or neither"* on a
+  file-adjacency rationale. #276 was taken and #377 was not — and the
+  chronicler recorded the miss explicitly (*"note this issue moved
+  adjacent code and still did not produce one"*). The adjacency is now
+  **spent**: #276 rewrote `compose` and `importDirective` around the new
+  `closureScan.unresolved` field, so a later session picking up #377
+  gets no cheaper by pairing. Judged on its own merits it is
+  test-only, `Ratchet: unchanged`, and moves no lane, so it **does not
+  inherit #276's head slot**; it moves to the band's tail. It stays in
+  the band rather than dropping to the backlog because the `override`
+  arm has now been missed **three** times in this file (#238's round-1
+  prose, #377's filing, and this landing).
+
+***Band 1 after this pass*** — head returns to the lane work, eight
+entries, the band still met: **#264 → #265 → #301 → #281 → #365 → #346
+→ #324 → #377**. No reorder among the carried-forward six; the two
+harness-integrity items that led the band have both landed and the
+reason they led it (pay for a wrong-reason pass while the lane is young)
+is discharged for this cycle.
 
 ***A new tracked invariant, recorded here because `/backlog` is what
 surveys it.*** #277's landing makes the per-lane count of
@@ -1040,6 +1081,62 @@ left it — 81 open, 69 `ready`, 11 `blocked`, 1 deliberately unlabelled
 (#291). A landing that files one follow-up holds the queue flat; the
 overrun that paragraph documents comes from passes that file several at
 once. One datapoint for #347, recorded rather than argued from.
+
+***Post-land harvest for #276: ZERO issues filed, three dispositions
+recorded on threads, and the reasoning is here so a later pass can
+overturn it cheaply.*** Nothing was left implied — every item the
+chronicler's entry raised is discharged somewhere readable.
+
+- *The `closureScan.unresolved` residual* (the entry's own
+  `[to file — post-land pass]` marker) was **deliberately not filed**,
+  and folded into **#327** instead. The flag is scan-scoped
+  (`conformance/schema_closure.go:104`, set at `:244`, `:309`, `:319`)
+  and pairs with any parse failure at `conformance/schema.go:443`, so a
+  case whose unresolved directive is unrelated to what broke the parse
+  declines too. Three things had to be true to file and none is: the
+  harm is **conservative** (an honest decline, never a fabricated
+  verdict), it was a **deliberate** non-tightening rather than an
+  oversight, and a body could not fill `## Acceptance` today — no
+  fixture exhibits it and no lane movement can be promised, which is
+  the decayed-ratchet-promise shape **#315 class 5** catalogues. #327's
+  *preferred* fix (surface the set "declined **and** currently recorded
+  `fail`") is the detector that would make the trigger observable,
+  which is the only thing that can convert this from a conditional into
+  a fileable issue. **The trigger that WOULD change this answer**: a
+  suite case measurably declining through the conjunction for an
+  unrelated reason. File then, with the fixture in hand.
+- *#257 was verified rather than re-scoped* — the traversal-confinement
+  false-accept lives on the `perr == nil` branch the new conjunction
+  never reaches, so it survives #276 untouched and still `ready` as
+  filed. Three sharpenings posted to its thread: this landing shipped
+  **no** `loader` change (option (a)'s cost is unchanged and there is
+  nothing to coordinate with, retiring #276's `## Surface` caveat); the
+  fix must be an **outright decline**, not a record on `unresolved`;
+  and it now has **three** sites to split, because `compose`'s include
+  arm widened from `errors.Is(err, loader.ErrNotFound)` to an
+  undiscriminated `if err != nil`.
+- *#272 gained an obligation and is the one item with real risk
+  attached.* #276's landing-order forecast resolved in the direction
+  where **this decision must survive the refactor**: #272 proposes
+  having `parser.Parse` report *the set of documents it assembled*, and
+  that set **cannot** reconstruct the gate — a directive whose target
+  went missing contributes nothing to the assembled set and is
+  invisible in the report by construction. Deleting the walk without
+  also reporting **unresolved directives** silently deletes the +9 and
+  reopens the false accept, while satisfying #272's stated
+  `Ratchet: unchanged` criterion on its face. Recorded on the thread;
+  worth a body edit whenever #272 is picked up.
+
+*Census unchanged again: one issue closed (#276), none filed — **80
+open, 68 `ready`, 11 `blocked`, 1 unlabelled**.* Two consecutive
+post-land passes have now held the queue flat or shrunk it, which is
+the first movement against the six-pass `ready` overrun **#347**
+documents, and it came from harvest **discipline** rather than from any
+mechanism — three items that would each have been filed by an earlier
+pass were dispositioned onto existing trackers instead. That is a
+second datapoint for #347 and a better one than the first: it suggests
+the overrun is at least partly a filing-reflex problem, not only a
+consumption-rate problem.
 
 **#286, #287 and #264 remain the three open sub-slices of #79**, so
 closing all three closes the M4 epic and makes the M5 carve the next
@@ -1160,6 +1257,17 @@ is not re-litigated from zero every pass: a **fourth** ref accumulating,
 is **one** human-owned housekeeping issue covering all of them, never one
 per ref. Until then the flag lives here and in each pass's report, which
 is where a human reviewing the plan actually reads it.
+
+*Re-surveyed at the #276 post-land pass (2026-08-01):* `git ls-remote`
+still shows **exactly these three** — `wip/issue-195`, `wip/issue-226`,
+`wip/issue-368` — so **no fourth has accumulated**, and the counter on
+"surviving another two passes" stands at **one**. Positive evidence
+alongside it: `wip/issue-276` is **gone**, deleted by GitHub at the
+squash-merge of PR #385, which is the branch scheme working as
+`docs/WORKFLOW.md` describes. The three that remain are the exceptions,
+not the norm, and each is still discharged (#195 → #304 `ready`, #226 →
+#344 landed, #368 landed). Nothing filed; no `needs-replan` relabel is
+warranted, since none of the three is a live claim on an open issue.
 
 **Ready queue is 69** (81 open: 69 `ready`, 11 `blocked`, 1 deliberately
 unlabelled). The sequence is **9 → 16 → 26 → 34 → 35 → 65 → 69**, and
