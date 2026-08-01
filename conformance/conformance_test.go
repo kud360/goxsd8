@@ -8,7 +8,10 @@ import (
 // TestConformance runs the W3C suite through the lane executors and enforces
 // the ratchet, per conformance/doc.go.
 //
-//   - Submodule absent: skip with a pointer to `git submodule update --init`.
+//   - Submodule absent: fail with a pointer to `git submodule update --init`
+//     (issue #309), unless a read-only run explicitly opted out with
+//     GOXSD_SUITE_OPTIONAL=1. A run that executed zero cases must never be
+//     mistaken for a green one, and the opt-out never covers a ratchet run.
 //   - Read-only (default): Compare each lane's observed run against its
 //     committed expectations and fail only on a Regressed case; New/Improved/
 //     Vanished do not fail the read-only run (doc.go "Running").
@@ -19,12 +22,10 @@ import (
 // At M1 no real executor is registered, so every case is a stub Fail and, with
 // empty committed lane files, every case is New — the read-only run passes.
 func TestConformance(t *testing.T) {
+	ratcheting := os.Getenv("GOXSD_RATCHET") == "1"
 	index := suitePath()
-	if _, err := os.Stat(index); err != nil {
-		if os.IsNotExist(err) {
-			t.Skipf("W3C suite not present at %s; run `git submodule update --init %s`", index, suiteRoot)
-		}
-		t.Fatalf("stat suite index %s: %v", index, err)
+	if err := checkSuitePresent(index); err != nil {
+		endUnusableSuiteRun(t, err, ratcheting)
 	}
 
 	cases, err := parseSuite(index)
@@ -37,10 +38,25 @@ func TestConformance(t *testing.T) {
 		cases = narrowToCase(t, cases, only)
 	}
 
-	ratcheting := os.Getenv("GOXSD_RATCHET") == "1"
 	for _, l := range defaultLanes() {
 		runConformanceLane(t, l, cases, ratcheting)
 	}
+}
+
+// endUnusableSuiteRun ends the run when the suite index is unusable. The default
+// is a hard failure so a container without the submodule cannot exit `ok`
+// (issue #309); GOXSD_SUITE_OPTIONAL=1 downgrades that to a skip for a read-only
+// run only, never for a ratchet run whose whole output would otherwise be an
+// unearned "no movement".
+func endUnusableSuiteRun(t *testing.T, err error, ratcheting bool) {
+	t.Helper()
+	if os.Getenv(suiteOptionalEnv) != "1" {
+		t.Fatalf("%v (set %s=1 only in an environment that legitimately has no suite)", err, suiteOptionalEnv)
+	}
+	if ratcheting {
+		t.Fatalf("%v (%s=1 does not cover a ratchet run: an empty suite must not report no movement)", err, suiteOptionalEnv)
+	}
+	t.Skipf("%v (skipped: %s=1)", err, suiteOptionalEnv)
 }
 
 // runConformanceLane executes one lane and applies the read-only or ratcheting

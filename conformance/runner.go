@@ -35,10 +35,15 @@ import (
 // whole suite (parseSuite errors on a collision) so an expectation-file line
 // maps to exactly one case. Discovery output is sorted by ID (STYLE D1/D2).
 
-// suiteRoot is the pinned W3C submodule directory. The suite lives at the
-// module root (testdata/xsdtests per conformance/doc.go); `go test` runs with
-// the package directory as the working directory, so it is one level up.
-const suiteRoot = "../testdata/xsdtests"
+// suiteModulePath is the pinned W3C submodule directory as written from the
+// module root (conformance/doc.go) — the path `git submodule update --init`
+// takes. suiteRoot is the same directory as `go test` sees it: the package
+// directory is the working directory, so it is one level up. One fact, one
+// encoding (STYLE D3): the module-relative path is the fact.
+const (
+	suiteModulePath = "testdata/xsdtests"
+	suiteRoot       = "../" + suiteModulePath
+)
 
 // expectationsDir holds the committed per-lane expectation files.
 const expectationsDir = "testdata/expectations"
@@ -46,6 +51,26 @@ const expectationsDir = "testdata/expectations"
 // suitePath is the suite index whose absence means the submodule is not
 // initialized.
 func suitePath() string { return filepath.Join(suiteRoot, "suite.xml") }
+
+// suiteOptionalEnv names the explicit opt-out for an environment that
+// legitimately has no suite checkout (issue #309): GOXSD_SUITE_OPTIONAL=1 turns
+// the missing-suite failure back into a skip for a READ-ONLY run only. It never
+// applies to a ratchet run, so an empty suite can never report "no movement".
+const suiteOptionalEnv = "GOXSD_SUITE_OPTIONAL"
+
+// checkSuitePresent reports whether the suite index is usable, naming the
+// submodule-init command when it is not. A missing suite is a run-ending
+// condition for TestConformance, never a silent skip (issue #309): a suite that
+// executed zero cases must not be indistinguishable from a green run.
+func checkSuitePresent(index string) error {
+	if _, err := os.Stat(index); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("W3C suite not present at %s; run `git submodule update --init %s` from the module root", index, suiteModulePath)
+		}
+		return fmt.Errorf("stat suite index %s: %w", index, err)
+	}
+	return nil
+}
 
 // caseSpec is one discovered conformance case: a stable ID, its kind, the
 // resolved path to the document under test, and the suite's declared XSD 1.1

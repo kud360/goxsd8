@@ -66,4 +66,24 @@
 //
 // The runner supports single-case reproduction for debugging:
 // GOXSD_CASE=<case-id> narrows the run to one case with debug logging.
+//
+// # Missing suite
+//
+// TestConformance FAILS when testdata/xsdtests is not populated, naming
+// `git submodule update --init testdata/xsdtests` (issue #309). A run that
+// executed zero cases must never be reportable as a green run, and a ratchet
+// run over an empty suite must never be reportable as "no movement".
+//
+//	GOXSD_SUITE_OPTIONAL=1
+//	    Explicit opt-out for an environment that legitimately has no suite
+//	    checkout: the missing-suite failure becomes a skip. It applies to
+//	    read-only runs ONLY — under GOXSD_RATCHET=1 the run still fails.
+//
+// The supplementary fixture-driven tests in this package (datatypes_test.go,
+// schema_test.go) keep their plain t.Skipf on a missing suite, unconditionally.
+// They are deliberately treated differently from TestConformance: each drives a
+// named cohort of suite documents to prove one executor decides them for the
+// right reason, so skipping them loses unit coverage but cannot dress an empty
+// run up as suite-wide conformance. TestConformance is the only test whose
+// silence was mistakable for a score.
 package conformance
