@@ -1,6 +1,7 @@
 package parser_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -133,16 +134,248 @@ func TestProduceIdentityConstraintRejections(t *testing.T) {
 	}
 }
 
-func TestProduceIdentityConstraintRefFormDeclined(t *testing.T) {
-	// The ref= form names an existing definition (§3.11.2) resolved at finalize:
-	// a limitation, so a plain error, never a fabricated rule violation.
-	_, err := produce(t, wrap("", `<xs:element name="root"><xs:unique ref="other"/></xs:element>`))
-	if err == nil {
-		t.Fatalf("a ref= identity constraint must be declined, not silently dropped")
+func TestProduceIdentityConstraintRefForm(t *testing.T) {
+	// §3.11.2: "the corresponding schema component is the identity-constraint
+	// definition ·resolved· to by the ·actual value· of the ref attribute" — the
+	// reference contributes the DEFINITION's own component, and the reference
+	// itself contributes none. The definition here follows the reference in
+	// document order, so this also pins forward resolution (§3.1.3).
+	//
+	// That Produce SUCCEEDS is itself the load-bearing assertion that the ref=
+	// form was not registered as a second {identity-constraint definitions}
+	// member: a duplicate name is a sch-props-correct clause 2 rejection at
+	// finalize (TestProduceIdentityConstraintOnLocalElement pins that verdict).
+	s, err := produce(t, wrap("urn:t", `<xs:element name="user"><xs:key ref="tns:k"/></xs:element>
+	<xs:element name="owner">
+	  <xs:key name="k"><xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key>
+	</xs:element>`))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
 	}
-	if _, ok := xsderr.RuleOf(err); ok {
-		t.Fatalf("ref= decline should be a plain limitation error, not an xsderr rule: %v", err)
+	user, ok := s.Element(xsd.QName{Space: "urn:t", Local: "user"})
+	if !ok {
+		t.Fatalf("element user not found")
 	}
+	owner, ok := s.Element(xsd.QName{Space: "urn:t", Local: "owner"})
+	if !ok {
+		t.Fatalf("element owner not found")
+	}
+	referenced := user.IdentityConstraints()
+	defined := owner.IdentityConstraints()
+	if len(referenced) != 1 || len(defined) != 1 {
+		t.Fatalf("got %d referenced and %d defined constraints, want 1 each", len(referenced), len(defined))
+	}
+	if !reflect.DeepEqual(referenced[0], defined[0]) {
+		t.Fatalf("<key ref=> carries %#v, want the definition's own component %#v", referenced[0], defined[0])
+	}
+	// Not a hollow match: the reference borrows the definition's whole mapping.
+	if got := referenced[0].Selector().Expression(); got != "a" {
+		t.Errorf("referenced selector = %q, want the definition's %q", got, "a")
+	}
+	if got := referenced[0].Name(); got != (xsd.QName{Space: "urn:t", Local: "k"}) {
+		t.Errorf("referenced name = %s, want {urn:t}k", got)
+	}
+}
+
+func TestProduceIdentityConstraintRefFormOnLocalElement(t *testing.T) {
+	// §3.17.2 sources {identity-constraint definitions} from the constraints
+	// "anywhere within the [[children]]", so a local <element>'s ref= resolves to
+	// a definition declared on another local <element> just as a top-level one
+	// does — in either direction, here backwards through the content model.
+	s, err := produce(t, wrap("", `<xs:complexType name="ct">
+	  <xs:sequence>
+	    <xs:element name="def">
+	      <xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="@id"/></xs:unique>
+	    </xs:element>
+	    <xs:element name="use"><xs:unique ref="u"/></xs:element>
+	  </xs:sequence>
+	</xs:complexType>`))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	constraints := localElementConstraints(t, s, xsd.QName{Local: "ct"}, "use")
+	if len(constraints) != 1 {
+		t.Fatalf("got %d identity constraints on <use>, want 1", len(constraints))
+	}
+	if got := constraints[0].Name(); got != (xsd.QName{Local: "u"}) {
+		t.Errorf("name = %s, want {}u", got)
+	}
+	if got := constraints[0].Selector().Expression(); got != "a" {
+		t.Errorf("selector = %q, want the definition's %q", got, "a")
+	}
+}
+
+// localElementConstraints returns the {identity-constraint definitions} of the
+// local element declaration named local in the content model of the complex type
+// named typeName.
+func localElementConstraints(t *testing.T, s *xsd.Schema, typeName xsd.QName, local string) []xsd.IdentityConstraint {
+	t.Helper()
+	def, ok := s.Type(typeName)
+	if !ok {
+		t.Fatalf("type %s not found", typeName)
+	}
+	ct, ok := def.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("type %s is not a complex type", typeName)
+	}
+	content, ok := ct.ContentType().(xsd.ElementContent)
+	if !ok {
+		t.Fatalf("type %s has no element-only content", typeName)
+	}
+	group, ok := content.Particle.Term().(xsd.ResolvedTerm).Term.(xsd.ModelGroup)
+	if !ok {
+		t.Fatalf("type %s's {content type} particle is not a model group", typeName)
+	}
+	for _, part := range group.Particles() {
+		term, ok := part.Term().(xsd.ResolvedTerm)
+		if !ok {
+			continue
+		}
+		decl, ok := term.Term.(xsd.ElementDeclaration)
+		if !ok || decl.Name().Local != local {
+			continue
+		}
+		return decl.IdentityConstraints()
+	}
+	t.Fatalf("no local element %q in type %s", local, typeName)
+	return nil
+}
+
+func TestProduceIdentityConstraintRefFormRejections(t *testing.T) {
+	// The definition every well-formed reference below resolves to.
+	const def = `<xs:element name="owner">
+	  <xs:key name="k"><xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key>
+	</xs:element>`
+	tests := []struct {
+		name string
+		body string
+		rule xsderr.Rule
+	}{{
+		name: "both name and ref",
+		body: `<xs:key name="n" ref="k"/>` + def,
+		rule: "src-identity-constraint", // clause 1
+	}, {
+		name: "selector child alongside ref",
+		body: `<xs:key ref="k"><xs:selector xpath="a"/></xs:key>` + def,
+		rule: "src-identity-constraint", // clause 4
+	}, {
+		name: "field child alongside ref",
+		body: `<xs:key ref="k"><xs:field xpath="@id"/></xs:key>` + def,
+		rule: "src-identity-constraint", // clause 4
+	}, {
+		name: "refer alongside ref",
+		body: `<xs:keyref ref="k" refer="k"/>` + def,
+		rule: "src-identity-constraint", // clause 4
+	}, {
+		name: "category mismatch",
+		body: `<xs:unique ref="k"/>` + def,
+		rule: "src-identity-constraint", // clause 5: k is a key, not a unique
+	}, {
+		name: "keyref referencing a key",
+		body: `<xs:keyref ref="k"/>` + def,
+		rule: "src-identity-constraint", // clause 5: ref= is same-category reuse, not refer=
+	}, {
+		name: "unresolvable ref",
+		body: `<xs:key ref="missing"/>` + def,
+		rule: "src-resolve", // clause 1.7
+	}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := produce(t, wrap("", `<xs:element name="root">`+tt.body+`</xs:element>`))
+			assertRule(t, err, tt.rule)
+		})
+	}
+}
+
+func TestProduceIdentityConstraintRefFormAdmitsIDAndAnnotation(t *testing.T) {
+	// src-identity-constraint clause 4 admits exactly id and <annotation>
+	// alongside ref; the clause-4 check must not over-reject either.
+	constraints := idcOf(t, wrap("", `<xs:element name="root">
+	  <xs:key ref="k" id="r1"><xs:annotation><xs:documentation>reused</xs:documentation></xs:annotation></xs:key>
+	</xs:element>
+	<xs:element name="owner">
+	  <xs:key name="k"><xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key>
+	</xs:element>`), xsd.QName{Local: "root"})
+	if len(constraints) != 1 {
+		t.Fatalf("got %d identity constraints, want 1", len(constraints))
+	}
+	if got := constraints[0].Name(); got != (xsd.QName{Local: "k"}) {
+		t.Errorf("name = %s, want {}k", got)
+	}
+}
+
+func TestProduceIdentityConstraintRefIgnoresAnnotationMarkup(t *testing.T) {
+	// §3: "neither the correspondences described nor the XML Representation
+	// Constraints apply to elements in the Schema namespace which occur as
+	// descendants of <appinfo> or <documentation>". A <key name="k"> written in
+	// prose is mapped to no component, so it must not enter the index a ref=
+	// resolves against (src-resolve clause 1.7) and must not shadow the real
+	// definition of k.
+	//
+	// The ref= comes FIRST in document order in both cases: the build-once memo
+	// masks a bad index entry whenever the real definition is produced earlier,
+	// so this ordering is the one that observes the index directly.
+	tests := []struct {
+		name   string
+		shadow string
+	}{{
+		// Charged src-identity-constraint clause 2 against the prose <key>
+		// before the fix — a false REJECT of a valid schema.
+		name:   "truncated shadow",
+		shadow: `<xs:key name="k"/>`,
+	}, {
+		// Resolved to the prose <key> before the fix — no error at all, and
+		// <user> silently carried selector "FAKE".
+		name:   "well-formed shadow with different selector",
+		shadow: `<xs:key name="k"><xs:selector xpath="FAKE"/><xs:field xpath="@fake"/></xs:key>`,
+	}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := produce(t, wrap("", `<xs:element name="user"><xs:key ref="k"/></xs:element>
+			<xs:element name="owner">
+			  <xs:key name="k"><xs:selector xpath="REAL"/><xs:field xpath="@id"/></xs:key>
+			</xs:element>
+			<xs:element name="doc">
+			  <xs:annotation><xs:documentation>`+tt.shadow+`</xs:documentation></xs:annotation>
+			</xs:element>`))
+			if err != nil {
+				t.Fatalf("Produce: %v", err)
+			}
+			user, ok := s.Element(xsd.QName{Local: "user"})
+			if !ok {
+				t.Fatalf("element user not found")
+			}
+			constraints := user.IdentityConstraints()
+			if len(constraints) != 1 {
+				t.Fatalf("got %d identity constraints on <user>, want 1", len(constraints))
+			}
+			if got := constraints[0].Selector().Expression(); got != "REAL" {
+				t.Errorf("selector = %q, want the real definition's %q", got, "REAL")
+			}
+			owner, ok := s.Element(xsd.QName{Local: "owner"})
+			if !ok {
+				t.Fatalf("element owner not found")
+			}
+			defined := owner.IdentityConstraints()
+			if len(defined) != 1 || !reflect.DeepEqual(constraints[0], defined[0]) {
+				t.Errorf("<key ref=\"k\"> carries %#v, want the real definition's component %#v", constraints[0], defined)
+			}
+		})
+	}
+}
+
+func TestProduceIdentityConstraintRefToAnnotationOnlyNameUnresolvable(t *testing.T) {
+	// The only <key name="ghost"> in the document is prose inside
+	// <documentation>, so it is mapped to no component and {identity-constraint
+	// definitions} has no ghost at all: the ref= must fail src-resolve clause
+	// 1.7, not resolve to the illustration.
+	_, err := produce(t, wrap("", `<xs:element name="doc">
+	  <xs:annotation><xs:documentation>
+	    <xs:key name="ghost"><xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key>
+	  </xs:documentation></xs:annotation>
+	</xs:element>
+	<xs:element name="user"><xs:key ref="ghost"/></xs:element>`))
+	assertRule(t, err, "src-resolve")
 }
 
 func TestProduceXPathExpressionProperties(t *testing.T) {

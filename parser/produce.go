@@ -44,8 +44,9 @@ const (
 // <complexType>, <attributeGroup>, <group>, and <notation> declarations of a
 // single already-parsed schema document into xsd components, in document order,
 // and returns the finalized [xsd.Schema]. The identity constraints of an
-// <element> (global or local) are produced with it and registered as schema-level
-// {identity-constraint definitions} (§3.17.1).
+// <element> (global or local) are produced with it; each name= form is registered
+// as a schema-level {identity-constraint definitions} member (§3.17.1), while a
+// ref= form contributes the definition it names and registers nothing (§3.11.2).
 //
 // Produce is the SINGLE-DOCUMENT entry point: it never dereferences an
 // <include>/<import>/<redefine>/<override>, so schema(D) here is immed(D) alone
@@ -99,7 +100,7 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 // symbols is the ASSEMBLY-WIDE symbol table: one set of indexes shared by every
 // document's producer across an entire <include> closure, so a base= or
 // <attributeGroup ref> in one document reaches a definition contributed by
-// another (§4.2.3 clause 3.1.2, c-incl-incl). All three are pure lookup indexes,
+// another (§4.2.3 clause 3.1.2, c-incl-incl). All four are pure lookup indexes,
 // never ranged to produce user-visible order (STYLE D2).
 type symbols struct {
 	// simpleTypes maps each top-level named <simpleType>'s expanded name to its
@@ -151,6 +152,17 @@ type symbols struct {
 	// namespace and unqualifiedRefNS/declares would answer for the wrong document.
 	attributeGroups map[xsd.QName]typeSource
 
+	// identityConstraints maps each NAMED <unique>/<key>/<keyref>'s expanded name
+	// to its source, filled by the pre-scan so a <key ref="…"> reaches its
+	// definition regardless of document order (§3.1.3: "forward reference to named
+	// definitions and declarations is allowed, both within and between schema
+	// documents"). Unlike the three indexes above it is filled from the WHOLE
+	// document tree, not just the top level: §3.17.2 sources a schema's
+	// {identity-constraint definitions} from the constraints "anywhere within the
+	// [[children]]", so a reference may name one declared on an arbitrarily deep
+	// local <element>.
+	identityConstraints map[xsd.QName]identityConstraintSource
+
 	// built is the memo + cycle guard for simple-type construction, mirroring
 	// xsd/resolve.go's color-map idiom collapsed into one map: an ABSENT key is
 	// unstarted, a PRESENT-nil value is on the build stack (being built), and a
@@ -167,6 +179,19 @@ type symbols struct {
 	// xsd/resolve.go's checkComplexBaseAcyclic charges for the programmatic
 	// SchemaBuilder path; see buildComplexType.
 	builtComplex map[xsd.QName]*xsd.ComplexType
+
+	// builtIC is the build-once memo for identity-constraint construction. It has
+	// NO on-stack sentinel, unlike built/builtComplex: mapping a definition reads
+	// only its own <selector>/<field> and retains its refer= as an unresolved
+	// QName, so construction never recurses into another definition and there is
+	// no circularity to guard (PRINCIPLES 5).
+	//
+	// The memo is what makes §3.11.2's ref= mapping literal — "the corresponding
+	// schema component IS the identity-constraint definition resolved to by the
+	// actual value of the ref attribute" — rather than approximate: every
+	// reference to a name yields the very component its definition contributed,
+	// never a rebuilt twin.
+	builtIC map[xsd.QName]xsd.IdentityConstraint
 
 	// backend is the assembly's [value.Backend], retained past the one-time
 	// [builtin.Seed] call so constructSimpleType can charge the value-space
@@ -190,6 +215,26 @@ type symbols struct {
 type typeSource struct {
 	elem  *Element
 	owner *producer
+}
+
+// identityConstraintSource is one entry of symbols.identityConstraints: a NAMED
+// <unique>/<key>/<keyref> element, the {identity-constraint category} its local
+// name fixes (§3.11.2), and the producer of the document that DECLARES it. The
+// category is carried rather than re-derived at each use because the pre-scan
+// already computed it to decide whether to index the element at all (STYLE D3
+// cuts the other way here: re-deriving would mint a second, fallible answer to a
+// question already settled).
+//
+// A reference is built through owner, never through the producer that happens to
+// be asking, for the reasons typeSource's doc gives: the <selector>/<field>
+// XPath Expression records take their {namespace bindings} and {default
+// namespace} from the DECLARING document (§3.13.1, and the xpathDefaultNamespace
+// chain rooted at that document's <schema>), which assembly-wide visibility does
+// not transfer to the asker.
+type identityConstraintSource struct {
+	elem     *Element
+	category xsd.IdentityConstraintCategory
+	owner    *producer
 }
 
 // newSymbols returns the empty assembly-wide symbol table, having seeded the
@@ -221,10 +266,12 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 	}
 	builder.AddType(anyType)
 	return &symbols{
-		simpleTypes:     make(map[xsd.QName]typeSource),
-		complexTypes:    make(map[xsd.QName]typeSource),
-		attributeGroups: make(map[xsd.QName]typeSource),
-		built:           built,
+		simpleTypes:         make(map[xsd.QName]typeSource),
+		complexTypes:        make(map[xsd.QName]typeSource),
+		attributeGroups:     make(map[xsd.QName]typeSource),
+		identityConstraints: make(map[xsd.QName]identityConstraintSource),
+		built:               built,
+		builtIC:             make(map[xsd.QName]xsd.IdentityConstraint),
 		// xs:anyType is seeded DONE so a derivation naming it resolves to the very
 		// component AddType registered, rather than to a rebuilt twin.
 		builtComplex: map[xsd.QName]*xsd.ComplexType{anyTypeName: &anyType},
@@ -297,17 +344,24 @@ func (p *producer) chameleon() bool {
 // <attributeGroup ref> naming it reaches the replacement rather than the
 // replaced definition — "overriding components are constructed as if the
 // overridden components had never existed" (§4.2.5).
+//
+// It also registers this document's named <unique>/<key>/<keyref>s for forward
+// <key ref="…"> resolution, but from the WHOLE subtree of each top-level
+// declaration rather than from its top level: see prescanIdentityConstraints.
 func (p *producer) prescan() {
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
 		if !ok {
 			continue
 		}
+		decl := p.ov.replacement(el)
+		if !compositionDirective(el) {
+			p.prescanIdentityConstraints(decl)
+		}
 		name, ok := attrValue(el, "name")
 		if !ok {
 			continue
 		}
-		decl := p.ov.replacement(el)
 		switch {
 		case isXSD(el, "simpleType"):
 			p.symbols.simpleTypes[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
@@ -317,6 +371,73 @@ func (p *producer) prescan() {
 			p.symbols.attributeGroups[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		}
 	}
+}
+
+// prescanIdentityConstraints registers every NAMED <unique>/<key>/<keyref> in
+// el's subtree, so a <key ref="…"> resolves whatever the document order and
+// whichever document of the assembly declares the target (§3.1.3). It descends
+// the whole subtree because §3.17.2 sources a schema's {identity-constraint
+// definitions} from "all the <key>, <keyref>, and <unique> element information
+// items ANYWHERE within the [[children]]" — a constraint on a local <element>
+// nested arbitrarily deep in a content model is as referenceable as a top-level
+// declaration's.
+//
+// The ref= form is deliberately NOT indexed: it declares nothing (§3.11.2), so
+// a reference chain is unrepresentable and there is no cycle to guard
+// (PRINCIPLES 5). A name is minted in the effective target namespace, exactly as
+// produceIdentityConstraint mints the definition's own {name}, so the index key
+// and the component name agree under chameleon coercion (§F.1 task a).
+//
+// The walk is confined to what THIS producer actually maps, by two exclusions.
+// prescan withholds the composition directives' subtrees (compositionDirective),
+// whose contents belong to another document's producer. And the walk below
+// withholds every <annotation> subtree, entering neither it nor anything under
+// it. <appinfo> and <documentation> hold mixed, processContents="lax" content
+// (§A), and §3 is explicit that "neither the correspondences described nor the
+// XML Representation Constraints apply to elements in the Schema namespace which
+// occur as descendants of <appinfo> or <documentation>": a <key name="…"> there
+// is prose — an illustration, possibly truncated — and is mapped to no component
+// by anyone. Indexing it would make the index a strict SUPERSET of
+// {identity-constraint definitions}, the very property src-resolve clause 1.7
+// looks a ref= up in, letting prose shadow a real same-named definition or
+// satisfy a ref= that resolves to nothing. The guard covers foreign-namespace
+// elements too: in a schema document they occur only inside annotations.
+func (p *producer) prescanIdentityConstraints(el *Element) {
+	for _, child := range el.Children() {
+		c, ok := child.(*Element)
+		if !ok {
+			continue
+		}
+		if isXSD(c, "annotation") {
+			continue
+		}
+		p.prescanIdentityConstraints(c)
+		if c.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		category, ok := identityConstraintCategoryOf(c.Name().Local())
+		if !ok {
+			continue
+		}
+		name, ok := attrValue(c, "name")
+		if !ok {
+			continue
+		}
+		p.symbols.identityConstraints[xsd.QName{Space: p.target, Local: name}] =
+			identityConstraintSource{elem: c, category: category, owner: p}
+	}
+}
+
+// compositionDirective reports whether el is one of the four <schema> children
+// that contribute no component of their OWN — only the components of the
+// document they name (§4.2.3, §4.2.5, §4.2.6.2, §4.2.4). run skips all four for
+// exactly that reason; the identity-constraint pre-scan must skip their subtrees
+// for it, since an <override>'s children are top-level declarations of the
+// OVERRIDDEN document (§F.2 clause 1) and are produced — with their own target
+// namespace and their own <schema> defaults — by that document's producer, which
+// pre-scans them itself through overrideSet.replacement.
+func compositionDirective(el *Element) bool {
+	return isXSD(el, "include") || isXSD(el, "import") || isXSD(el, "override") || isXSD(el, "redefine")
 }
 
 // run walks the <schema> children in strict document order, producing each
@@ -353,12 +474,6 @@ func (p *producer) run() error {
 				return err
 			}
 			p.builder.AddElement(ed)
-			// A schema's {identity-constraint definitions} collects the definitions
-			// of every <key>/<keyref>/<unique> anywhere in the document (§3.17.1),
-			// so each one produced with a declaration is registered here too.
-			for _, ic := range ed.IdentityConstraints() {
-				p.builder.AddIdentityConstraint(ic)
-			}
 		case "attribute":
 			ad, err := p.produceAttribute(decl)
 			if err != nil {

@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"fmt"
-
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -112,28 +110,158 @@ func (p *producer) identityConstraintsOf(hostElem *Element) ([]xsd.IdentityConst
 	return constraints, nil
 }
 
-// produceIdentityConstraint maps one <unique>/<key>/<keyref> element to an
-// Identity-Constraint Definition (§3.11.2, declare-key). category comes from the
-// element's local name; {name} is bundled with the schema's target namespace
-// (§3.11.2: an identity constraint is always named in the target namespace).
+// produceIdentityConstraint maps one <unique>/<key>/<keyref> element to the
+// Identity-Constraint Definition it contributes to its host <element>'s
+// {identity-constraint definitions}, over the two forms §3.11.2's XML Mapping
+// Summary distinguishes. category comes from the element's local name.
 //
-// It enforces the structural src-identity-constraint clauses (§3.11.3): 1
-// (exactly one of ref or name), 2 (a name= form has a <selector> child), and 3
-// (a name= <keyref> has a refer attribute). The ref= form corresponds to no new
-// component — it names an existing definition, resolved at finalize — and is
-// declined as not yet produced (a plain Go error, never a fabricated rule
-// violation), mirroring the producer's other not-yet-produced declines.
+// It enforces src-identity-constraint clause 1 (§3.11.3, "one of ref or name is
+// present, but not both") here, at the fork, since it is what decides the form;
+// the form-specific clauses live with their form (2 and 3 in
+// constructIdentityConstraint, 4 and 5 in referencedIdentityConstraint).
+//
+//   - The name= form DEFINES a component. It is built (once per expanded name)
+//     and registered as one of the schema's {identity-constraint definitions}
+//     (§3.17.1) HERE, at the definition's own document-order position — never at
+//     a demand-driven build site, so the registered order stays document order
+//     (STYLE D2), exactly as buildComplexType leaves AddType to run.
+//   - The ref= form defines NOTHING: "the corresponding schema component is the
+//     identity-constraint definition ·resolved· to by the ·actual value· of the
+//     ref [[attribute]]". It contributes that existing component and is
+//     deliberately NOT registered — a second registration under the same name
+//     would fabricate a sch-props-correct (§3.17.6.1) clause 2 collision against
+//     the very definition it reuses.
 func (p *producer) produceIdentityConstraint(el *Element, category xsd.IdentityConstraintCategory) (xsd.IdentityConstraint, error) {
-	local := el.Name().Local()
 	name, hasName := attrValue(el, "name")
 	if _, hasRef := attrValue(el, "ref"); hasRef == hasName {
 		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
-			"<%s> must carry exactly one of name or ref, but src-identity-constraint clause 1 permits one and not both", local)
+			"<%s> must carry exactly one of name or ref, but src-identity-constraint clause 1 permits one and not both", el.Name().Local())
 	}
 	if !hasName {
-		return xsd.IdentityConstraint{}, fmt.Errorf("parser: an identity constraint in the ref= form is not yet produced (§3.11.2: it names an existing definition, resolved at finalize)")
+		return p.referencedIdentityConstraint(el, category)
 	}
+	ic, err := p.buildIdentityConstraint(xsd.QName{Space: p.target, Local: name}, el, category)
+	if err != nil {
+		return xsd.IdentityConstraint{}, err
+	}
+	p.builder.AddIdentityConstraint(ic)
+	return ic, nil
+}
 
+// referencedIdentityConstraint maps the ref= form of <unique>/<key>/<keyref> to
+// the definition it names (§3.11.2's "reuse it directly via the ref attribute"),
+// enforcing the two src-identity-constraint (§3.11.3) clauses that govern the
+// form:
+//
+//   - clause 4, "if ref is present, then only id and <annotation> are allowed to
+//     appear together with ref": every other schema-vocabulary attribute (refer
+//     above all; name is already gone via clause 1) and every child element other
+//     than <annotation> is rejected. Attributes from foreign namespaces are left
+//     alone — the schema for schema documents admits them on every element, so
+//     they are not "appearing together with ref" in the sense clause 4 restricts.
+//   - clause 5, "the {identity-constraint category} of the identity-constraint
+//     definition ·resolved· to by the ·actual value· of the ref attribute matches
+//     the name of the element information item": EXACT category equality, since
+//     category is a bijection with the element's local name. This is emphatically
+//     not refer='s cross-category link (§3.11.1: a keyref's {referenced key} is a
+//     key or unique) — a <keyref ref="…"> demands a keyref.
+//
+// A ref that names no definition of the assembly is charged src-resolve clause
+// 1.7 (§3.17.6.2), positioned at the referring element. Clause 5 is decided
+// against the pre-scan index BEFORE the target is built, so a reference that is
+// both miscategorized and names a malformed definition reports its own local
+// violation rather than the target's (one deterministic first failure, STYLE D1).
+func (p *producer) referencedIdentityConstraint(el *Element, category xsd.IdentityConstraintCategory) (xsd.IdentityConstraint, error) {
+	local := el.Name().Local()
+	if err := checkIdentityConstraintRefBare(el, local); err != nil {
+		return xsd.IdentityConstraint{}, err
+	}
+	refLex, _ := attrValue(el, "ref") // present: the caller took this arm on !hasName
+	qn, err := p.resolveQName(el, refLex)
+	if err != nil {
+		return xsd.IdentityConstraint{}, err
+	}
+	src, ok := p.symbols.identityConstraints[qn]
+	if !ok {
+		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcResolve, el.Loc(),
+			"<%s ref=%q> resolves to no identity-constraint definition in the schema (src-resolve clause 1.7)", local, qn)
+	}
+	if src.category != category {
+		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
+			"<%s ref=%q> names a definition whose {identity-constraint category} is %s, but src-identity-constraint clause 5 requires it to match the referring element's name", local, qn, src.category)
+	}
+	return src.owner.buildIdentityConstraint(qn, src.elem, src.category)
+}
+
+// checkIdentityConstraintRefBare enforces src-identity-constraint clause 4
+// (§3.11.3) on the ref= form of local: only id may accompany the ref attribute,
+// and only <annotation> may appear among the children. Attributes are checked
+// before children, each in source order, so the first reported violation is
+// deterministic (STYLE D1).
+func checkIdentityConstraintRefBare(el *Element, local string) error {
+	for _, a := range el.Attributes() {
+		if a.Name().Space() != "" {
+			continue // a foreign-namespace attribute is outside clause 4's vocabulary
+		}
+		switch a.Name().Local() {
+		case "ref", "id":
+		default:
+			return xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
+				"<%s ref=…> also carries %s, but src-identity-constraint clause 4 allows only id and <annotation> together with ref", local, a.Name().Local())
+		}
+	}
+	for _, child := range el.Children() {
+		c, ok := child.(*Element)
+		if !ok || isXSD(c, "annotation") {
+			continue
+		}
+		return xsderr.New(ruleSrcIdentityConstraint, c.Loc(),
+			"<%s ref=…> has a <%s> child, but src-identity-constraint clause 4 allows only id and <annotation> together with ref", local, c.Name().Local())
+	}
+	return nil
+}
+
+// buildIdentityConstraint returns the component the name= form declared by el
+// maps to, building it at most once per expanded name. The memo is what makes a
+// <key ref="…"> contribute the VERY component its definition contributed rather
+// than a rebuilt twin, as §3.11.2's mapping summary requires; it needs no
+// on-stack sentinel, since constructing a definition never reaches another one
+// (see symbols.builtIC).
+//
+// It registers nothing with the builder: the schema's {identity-constraint
+// definitions} is populated at the definition's own document-order position by
+// produceIdentityConstraint, not here, where a forward reference may have pulled
+// the build early.
+//
+// A SECOND definition of an already-built name takes the memo hit rather than
+// being mapped itself, exactly as buildComplexType's does. That is a deliberate
+// consequence, not an oversight: such a document is invalid either way, and the
+// duplicate registration it still performs is what reports it — as
+// sch-props-correct (§3.17.6.1) clause 2 rather than as whatever the second
+// declaration's own body would have been charged.
+func (p *producer) buildIdentityConstraint(name xsd.QName, el *Element, category xsd.IdentityConstraintCategory) (xsd.IdentityConstraint, error) {
+	if ic, done := p.symbols.builtIC[name]; done {
+		return ic, nil
+	}
+	ic, err := p.constructIdentityConstraint(name, el, category)
+	if err != nil {
+		return xsd.IdentityConstraint{}, err
+	}
+	p.symbols.builtIC[name] = ic
+	return ic, nil
+}
+
+// constructIdentityConstraint maps the name= form of one <unique>/<key>/<keyref>
+// element to an Identity-Constraint Definition (§3.11.2, declare-key). name is
+// bundled with the declaring document's effective target namespace (§3.11.2: an
+// identity constraint is always named in the target namespace).
+//
+// It enforces the two src-identity-constraint (§3.11.3) clauses that govern the
+// definition form: 2 (a <selector> child is present) and 3 (a <keyref> carries a
+// refer attribute). It does NOT memoize — that bookkeeping lives in
+// buildIdentityConstraint.
+func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, category xsd.IdentityConstraintCategory) (xsd.IdentityConstraint, error) {
+	local := el.Name().Local()
 	selectorEl := childElement(el, xsd.XMLSchemaNS, "selector")
 	if selectorEl == nil {
 		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
@@ -167,8 +295,7 @@ func (p *producer) produceIdentityConstraint(el *Element, category xsd.IdentityC
 		}
 		referencedKey = &qn
 	}
-	return xsd.NewIdentityConstraint(el.Loc(), xsd.QName{Space: p.target, Local: name},
-		category, selector, fields, referencedKey, nil)
+	return xsd.NewIdentityConstraint(el.Loc(), name, category, selector, fields, referencedKey, nil)
 }
 
 // identityConstraintCategoryOf maps an identity-constraint element's local name

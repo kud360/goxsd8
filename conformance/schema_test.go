@@ -63,6 +63,11 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"local element with both type= and an inline simpleType (src-element clause 3)", `<xs:complexType name="T"><xs:sequence><xs:element name="a" type="xs:string"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:element></xs:sequence></xs:complexType>`},
 		{"local attribute with both type= and an inline simpleType (src-attribute clause 4)", `<xs:complexType name="T"><xs:sequence/><xs:attribute name="a" type="xs:string"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute></xs:complexType>`},
 		{"local element with name= identity constraint", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:unique name="u"><xs:selector xpath="b"/><xs:field xpath="@x"/></xs:unique></xs:element></xs:sequence></xs:complexType>`},
+		// #240 produced the ref= form too — it maps to the definition it names
+		// (§3.11.2), so src-identity-constraint clauses 1/4/5 and src-resolve on it
+		// are genuine verdicts, not limitations.
+		{"element with ref= identity constraint", `<xs:element name="e"><xs:key ref="k"/></xs:element><xs:element name="d"><xs:key name="k"><xs:selector xpath="b"/><xs:field xpath="@x"/></xs:key></xs:element>`},
+		{"local element with ref= identity constraint", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:keyref ref="kr"/></xs:element></xs:sequence></xs:complexType>`},
 		{"complexType with assert", `<xs:complexType name="T"><xs:sequence/><xs:assert test="true()"/></xs:complexType>`},
 		{"complexContent restriction with assert", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:restriction base="B"><xs:sequence/><xs:assert test="true()"/></xs:restriction></xs:complexContent></xs:complexType>`},
 		{"restriction with assertion facet", `<xs:simpleType name="A"><xs:restriction base="xs:int"><xs:assertion test="$value > 0"/></xs:restriction></xs:simpleType>`},
@@ -130,8 +135,6 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"restriction with enumeration facet", `<xs:simpleType name="E"><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType>`},
 		{"anonymous inline base with enumeration (recursed decline)", `<xs:simpleType name="N"><xs:restriction><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType></xs:restriction></xs:simpleType>`},
 		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
-		{"element with ref= identity constraint (names an existing definition)", `<xs:element name="e"><xs:key ref="k"/></xs:element>`},
-		{"local element with ref= identity constraint", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:keyref ref="kr"/></xs:element></xs:sequence></xs:complexType>`},
 		// The one composition kind parser.Parse does not follow (the redefine half
 		// of #183 is unlanded): a document carrying it assembles SHORT, so admitting
 		// it would be the vacuous pass the allowlist exists to refuse. Unlike
