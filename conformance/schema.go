@@ -417,7 +417,7 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 		return Fail()
 	}
 	_, perr := parser.Parse(location, parser.WithResolver(resolver), parser.WithBackend(backend))
-	return decideSchema(perr == nil, c.expectValid)
+	return decideSchema(perr == nil, c.expect.wantsValid())
 }
 
 // extraDocsInClosure reports whether every FURTHER document the case declares

@@ -117,9 +117,9 @@ func TestDatatypesExecutorAgreesWithSuite(t *testing.T) {
 	}
 	for _, tc := range cases {
 		c := caseSpec{
-			kind:        kindInstance,
-			doc:         filepath.Join(dir, tc.file),
-			expectValid: tc.expectValid,
+			kind:   kindInstance,
+			doc:    filepath.Join(dir, tc.file),
+			expect: expectValidity(tc.expectValid),
 		}
 		if got := exec(c); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", tc.file, tc.expectValid)
@@ -128,7 +128,7 @@ func TestDatatypesExecutorAgreesWithSuite(t *testing.T) {
 
 	// A deliberately WRONG expectation must produce Fail — proving the executor
 	// genuinely computes validity rather than always passing.
-	wrong := caseSpec{kind: kindInstance, doc: filepath.Join(dir, "decimal017.xml"), expectValid: true}
+	wrong := caseSpec{kind: kindInstance, doc: filepath.Join(dir, "decimal017.xml"), expect: expectValid()}
 	if exec(wrong).IsPass() {
 		t.Errorf("executor must Fail when the declared expectation is wrong (decimal017 'e' is not valid)")
 	}
@@ -163,9 +163,9 @@ func TestDatatypesFacetsStringFamily(t *testing.T) {
 	}
 	for _, tc := range cases {
 		c := caseSpec{
-			kind:        kindInstance,
-			doc:         filepath.Join(facetsDir, filepath.FromSlash(tc.rel)),
-			expectValid: tc.expectValid,
+			kind:   kindInstance,
+			doc:    filepath.Join(facetsDir, filepath.FromSlash(tc.rel)),
+			expect: expectValidity(tc.expectValid),
 		}
 		if got := exec(c); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", tc.rel, tc.expectValid)
@@ -175,9 +175,9 @@ func TestDatatypesFacetsStringFamily(t *testing.T) {
 	// A deliberately WRONG expectation must Fail: token_length001 ("foofo", 5) is
 	// invalid under length=4, so claiming it valid must not pass.
 	wrong := caseSpec{
-		kind:        kindInstance,
-		doc:         filepath.Join(facetsDir, "token", "token_length001.xml"),
-		expectValid: true,
+		kind:   kindInstance,
+		doc:    filepath.Join(facetsDir, "token", "token_length001.xml"),
+		expect: expectValid(),
 	}
 	if exec(wrong).IsPass() {
 		t.Errorf("executor must Fail when the declared expectation is wrong (token_length001 'foofo' is not length 4)")
@@ -220,9 +220,9 @@ func TestDatatypesFacetsWideStringFamily(t *testing.T) {
 	}
 	for _, tc := range cases {
 		c := caseSpec{
-			kind:        kindInstance,
-			doc:         filepath.Join(facetsDir, filepath.FromSlash(tc.rel)),
-			expectValid: tc.expectValid,
+			kind:   kindInstance,
+			doc:    filepath.Join(facetsDir, filepath.FromSlash(tc.rel)),
+			expect: expectValidity(tc.expectValid),
 		}
 		if got := exec(c); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", tc.rel, tc.expectValid)
@@ -233,9 +233,9 @@ func TestDatatypesFacetsWideStringFamily(t *testing.T) {
 	// is invalid under length=4, so claiming it valid must not pass — this also
 	// proves the executor reads the ATTRIBUTE value, not the <foo> element text.
 	wrong := caseSpec{
-		kind:        kindInstance,
-		doc:         filepath.Join(facetsDir, "NMTOKEN", "NMTOKEN_length001.xml"),
-		expectValid: true,
+		kind:   kindInstance,
+		doc:    filepath.Join(facetsDir, "NMTOKEN", "NMTOKEN_length001.xml"),
+		expect: expectValid(),
 	}
 	if exec(wrong).IsPass() {
 		t.Errorf("executor must Fail when the declared expectation is wrong (NMTOKEN_length001 'foofo' is not length 4)")
@@ -312,9 +312,9 @@ func TestDatatypesFacetsBinaryAndURI(t *testing.T) {
 	}
 	for _, tc := range cases {
 		c := caseSpec{
-			kind:        kindInstance,
-			doc:         filepath.Join(facetsDir, filepath.FromSlash(tc.rel)),
-			expectValid: tc.expectValid,
+			kind:   kindInstance,
+			doc:    filepath.Join(facetsDir, filepath.FromSlash(tc.rel)),
+			expect: expectValidity(tc.expectValid),
 		}
 		if got := exec(c); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", tc.rel, tc.expectValid)
@@ -327,9 +327,9 @@ func TestDatatypesFacetsBinaryAndURI(t *testing.T) {
 	// chars > 4) would make the executor compute invalid and this wrong claim would
 	// spuriously pass.
 	wrong := caseSpec{
-		kind:        kindInstance,
-		doc:         filepath.Join(facetsDir, "hexBinary", "hexBinary_maxLength001.xml"),
-		expectValid: false,
+		kind:   kindInstance,
+		doc:    filepath.Join(facetsDir, "hexBinary", "hexBinary_maxLength001.xml"),
+		expect: expectInvalid(),
 	}
 	if exec(wrong).IsPass() {
 		t.Errorf("executor must Fail when the declared expectation is wrong (hexBinary_maxLength001 'abcdef' is 3 octets, valid under maxLength=4)")
@@ -438,11 +438,11 @@ func TestDatatypesAnyURIShapeCohort(t *testing.T) {
 		}
 		// The executor's verdict is the spec-correct one: claiming it Passes, and
 		// claiming the opposite Fails.
-		spec := caseSpec{kind: kindInstance, doc: filepath.Join(dir, s.file), expectValid: s.specValid}
+		spec := caseSpec{kind: kindInstance, doc: filepath.Join(dir, s.file), expect: expectValidity(s.specValid)}
 		if !exec(spec).IsPass() {
 			t.Errorf("%s: executor must decide validity=%v (the spec-correct verdict)", s.file, s.specValid)
 		}
-		flipped := caseSpec{kind: kindInstance, doc: filepath.Join(dir, s.file), expectValid: !s.specValid}
+		flipped := caseSpec{kind: kindInstance, doc: filepath.Join(dir, s.file), expect: expectValidity(!s.specValid)}
 		if exec(flipped).IsPass() {
 			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", s.file)
 		}
@@ -525,12 +525,12 @@ func TestDatatypesQNameFacets(t *testing.T) {
 		{"QName_enumeration004.xml", true},
 	}
 	for _, ec := range enumCases {
-		c := caseSpec{kind: kindInstance, doc: filepath.Join(qnameDir, ec.file), expectValid: ec.expectValid}
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(qnameDir, ec.file), expect: expectValidity(ec.expectValid)}
 		if got := exec(c); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", ec.file, ec.expectValid)
 		}
 		// A flipped expectation must yield Fail, proving the executor really decides.
-		flipped := caseSpec{kind: kindInstance, doc: filepath.Join(qnameDir, ec.file), expectValid: !ec.expectValid}
+		flipped := caseSpec{kind: kindInstance, doc: filepath.Join(qnameDir, ec.file), expect: expectValidity(!ec.expectValid)}
 		if got := exec(flipped); got.IsPass() {
 			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", ec.file)
 		}
@@ -582,12 +582,12 @@ func TestDatatypesNotationFacets(t *testing.T) {
 		{"NOTATION_enumeration003.xml", false}, {"NOTATION_enumeration004.xml", true},
 	}
 	for _, tc := range cases {
-		c := caseSpec{kind: kindInstance, doc: filepath.Join(dir, tc.file), expectValid: tc.expectValid}
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(dir, tc.file), expect: expectValidity(tc.expectValid)}
 		if got := exec(c); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", tc.file, tc.expectValid)
 		}
 		// A flipped expectation must yield Fail, proving the executor really decides.
-		flipped := caseSpec{kind: kindInstance, doc: filepath.Join(dir, tc.file), expectValid: !tc.expectValid}
+		flipped := caseSpec{kind: kindInstance, doc: filepath.Join(dir, tc.file), expect: expectValidity(!tc.expectValid)}
 		if got := exec(flipped); got.IsPass() {
 			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", tc.file)
 		}
@@ -620,7 +620,7 @@ func TestDatatypesLexicalItemShape(t *testing.T) {
 		"gMonthDay006.xml", // --02-30 and --02-31 (day > 29 for month 2)
 	}
 	for _, f := range files {
-		c := caseSpec{kind: kindInstance, doc: filepath.Join(dir, f), expectValid: false}
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(dir, f), expect: expectInvalid()}
 		if got := exec(c); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with suite (expectValid=false)", f)
 		}
@@ -629,7 +629,7 @@ func TestDatatypesLexicalItemShape(t *testing.T) {
 	// A deliberately WRONG expectation must Fail: gMonthDay006 ("--02-30"/"--02-31")
 	// is invalid, so claiming it valid must not pass — proving the executor actually
 	// reads and parses the <item> attribute values rather than always passing.
-	wrong := caseSpec{kind: kindInstance, doc: filepath.Join(dir, "gMonthDay006.xml"), expectValid: true}
+	wrong := caseSpec{kind: kindInstance, doc: filepath.Join(dir, "gMonthDay006.xml"), expect: expectValid()}
 	if exec(wrong).IsPass() {
 		t.Errorf("executor must Fail when the declared expectation is wrong (gMonthDay006 --02-30/--02-31 are invalid)")
 	}
@@ -713,14 +713,14 @@ func TestDatatypesLexicalDateTimeStampTimezone(t *testing.T) {
 	}
 	for _, tc := range cases {
 		// The executor agrees with the spec-correct validity...
-		right := caseSpec{kind: kindInstance, doc: tc.doc, expectValid: tc.suiteValid}
+		right := caseSpec{kind: kindInstance, doc: tc.doc, expect: expectValidity(tc.suiteValid)}
 		if got := exec(right); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with spec-correct validity (expectValid=%v)", tc.name, tc.suiteValid)
 		}
 		// ...and DISAGREES with the opposite claim, so the test can actually fail.
 		// For tz-absent this is the #140 anti-regression: the Parse-only path would
 		// false-accept it and this wrong "valid" claim would spuriously Pass.
-		wrong := caseSpec{kind: kindInstance, doc: tc.doc, expectValid: !tc.suiteValid}
+		wrong := caseSpec{kind: kindInstance, doc: tc.doc, expect: expectValidity(!tc.suiteValid)}
 		if exec(wrong).IsPass() {
 			t.Errorf("%s: executor must Fail against the wrong expectation (expectValid=%v)", tc.name, !tc.suiteValid)
 		}
@@ -804,11 +804,11 @@ func TestDatatypesLexicalIntegerFamily(t *testing.T) {
 	}
 	for _, tc := range cases {
 		doc := filepath.Join(dir, tc.file)
-		right := caseSpec{kind: kindInstance, doc: doc, expectValid: tc.specValid}
+		right := caseSpec{kind: kindInstance, doc: doc, expect: expectValidity(tc.specValid)}
 		if got := exec(right); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with spec-correct validity %v (%s)", tc.file, tc.specValid, tc.whyInvalid)
 		}
-		wrong := caseSpec{kind: kindInstance, doc: doc, expectValid: !tc.specValid}
+		wrong := caseSpec{kind: kindInstance, doc: doc, expect: expectValidity(!tc.specValid)}
 		if exec(wrong).IsPass() {
 			t.Errorf("%s: executor must Fail against the wrong expectation (expectValid=%v)", tc.file, !tc.specValid)
 		}
@@ -895,9 +895,9 @@ func TestDatatypesLexicalQNameCohort(t *testing.T) {
 	}
 	for _, tc := range cases {
 		c := caseSpec{
-			kind:        kindInstance,
-			doc:         filepath.Join(dir, tc.file),
-			expectValid: tc.expectValid,
+			kind:   kindInstance,
+			doc:    filepath.Join(dir, tc.file),
+			expect: expectValidity(tc.expectValid),
 		}
 		if got := exec(c); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", tc.file, tc.expectValid)
@@ -907,7 +907,7 @@ func TestDatatypesLexicalQNameCohort(t *testing.T) {
 	// A deliberately WRONG expectation must Fail: QName006 ("fo:foo", a bound
 	// prefix) is valid, so claiming it invalid must not pass — proving the executor
 	// actually resolves the prefix rather than always passing.
-	wrong := caseSpec{kind: kindInstance, doc: filepath.Join(dir, "QName006.xml"), expectValid: false}
+	wrong := caseSpec{kind: kindInstance, doc: filepath.Join(dir, "QName006.xml"), expect: expectInvalid()}
 	if exec(wrong).IsPass() {
 		t.Errorf("executor must Fail when the declared expectation is wrong (QName006 'fo:foo' is valid)")
 	}
@@ -965,7 +965,7 @@ func TestDatatypesPDecimalCohort(t *testing.T) {
 		{"pdecimal010.n1.xml", false}, // "0.003" scale 3 < minScale 4
 	}
 	for _, tc := range cases {
-		c := caseSpec{kind: kindInstance, doc: filepath.Join(dir, tc.file), expectValid: tc.expectValid}
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(dir, tc.file), expect: expectValidity(tc.expectValid)}
 		if got := exec(c); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with suite (expectValid=%v)", tc.file, tc.expectValid)
 		}
@@ -976,7 +976,7 @@ func TestDatatypesPDecimalCohort(t *testing.T) {
 	// incomparable with every bound (§3.1), so claiming it valid must not pass. A
 	// regression to treating NaN as satisfying (or vacuously passing) a bound facet
 	// would compute valid and this wrong claim would spuriously pass.
-	wrong := caseSpec{kind: kindInstance, doc: filepath.Join(dir, "pdecimal002.n3.xml"), expectValid: true}
+	wrong := caseSpec{kind: kindInstance, doc: filepath.Join(dir, "pdecimal002.n3.xml"), expect: expectValid()}
 	if exec(wrong).IsPass() {
 		t.Errorf("executor must Fail when the declared expectation is wrong (pdecimal002.n3 'NaN' fails minInclusive=0)")
 	}
@@ -1005,10 +1005,10 @@ func TestDatatypesPDecimalCohort(t *testing.T) {
 	// computes VALID: a claim of valid Passes (proving the identity match), and the
 	// suite's own invalid expectation yields a Fail (the honest recorded gap).
 	n2 := filepath.Join(dir, "pdecimal006.n2.xml")
-	if !exec(caseSpec{kind: kindInstance, doc: n2, expectValid: true}).IsPass() {
+	if !exec(caseSpec{kind: kindInstance, doc: n2, expect: expectValid()}).IsPass() {
 		t.Error("pdecimal006.n2 'NaN' must be computed VALID (matches the NaN enumeration member by identity, §4.3.5.4)")
 	}
-	if exec(caseSpec{kind: kindInstance, doc: n2, expectValid: false}).IsPass() {
+	if exec(caseSpec{kind: kindInstance, doc: n2, expect: expectInvalid()}).IsPass() {
 		t.Error("pdecimal006.n2 must Fail against the suite's invalid expectation (spec-correct disagreement, not a false pass)")
 	}
 }
@@ -1074,13 +1074,13 @@ func TestDatatypesD34Cohort(t *testing.T) {
 	for _, f := range []string{
 		"d3_3_4v14.xml", "d3_3_4v16.xml", "d3_3_4v17.xml", "d3_3_4v23.xml", "d3_3_4v24.xml",
 	} {
-		c := caseSpec{kind: kindInstance, doc: filepath.Join(validDir, f), expectValid: true}
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(validDir, f), expect: expectValid()}
 		if got := exec(c); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with suite (expectValid=true)", f)
 		}
 		// A wrong (invalid) expectation must Fail, proving the executor really
 		// computed VALID rather than declining.
-		wrong := caseSpec{kind: kindInstance, doc: filepath.Join(validDir, f), expectValid: false}
+		wrong := caseSpec{kind: kindInstance, doc: filepath.Join(validDir, f), expect: expectInvalid()}
 		if exec(wrong).IsPass() {
 			t.Errorf("%s: a wrong invalid expectation must Fail (executor must compute VALID)", f)
 		}
@@ -1093,13 +1093,13 @@ func TestDatatypesD34Cohort(t *testing.T) {
 		"d3_3_4ii01.xml", "d3_3_4ii01a.xml", "d3_3_4ii01b.xml", "d3_3_4ii01c.xml",
 		"d3_3_4ii01d.xml", "d3_3_4ii01e.xml", "d3_3_4ii01f.xml", "d3_3_4ii02.xml",
 	} {
-		c := caseSpec{kind: kindInstance, doc: filepath.Join(invalidDir, f), expectValid: false}
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(invalidDir, f), expect: expectInvalid()}
 		if got := exec(c); !got.IsPass() {
 			t.Errorf("%s: executor disagreed with suite (expectValid=false)", f)
 		}
 		// A wrong (valid) expectation must Fail, proving a genuine INVALID verdict
 		// (some child's value violates its type's facet), not a decline.
-		wrong := caseSpec{kind: kindInstance, doc: filepath.Join(invalidDir, f), expectValid: true}
+		wrong := caseSpec{kind: kindInstance, doc: filepath.Join(invalidDir, f), expect: expectValid()}
 		if exec(wrong).IsPass() {
 			t.Errorf("%s: a wrong valid expectation must Fail (executor must compute INVALID)", f)
 		}
@@ -1147,10 +1147,10 @@ func TestDatatypesD34Cohort(t *testing.T) {
 		"d3_3_4v15.xml", "d3_3_4v18.xml",
 		"d3_3_4v19.xml", "d3_3_4v20.xml", "d3_3_4v21.xml", "d3_3_4v22.xml",
 	} {
-		for _, expect := range []bool{true, false} {
-			c := caseSpec{kind: kindInstance, doc: filepath.Join(validDir, f), expectValid: expect}
+		for _, declaredValid := range []bool{true, false} {
+			c := caseSpec{kind: kindInstance, doc: filepath.Join(validDir, f), expect: expectValidity(declaredValid)}
 			if exec(c).IsPass() {
-				t.Errorf("%s (expectValid=%v): must decline the out-of-reach shape (honest gap)", f, expect)
+				t.Errorf("%s (declared valid=%v): must decline the out-of-reach shape (honest gap)", f, declaredValid)
 			}
 		}
 	}

@@ -13,10 +13,21 @@ import (
 // iteration and ratchet integration without the real submodule.
 func fakeCases() []caseSpec {
 	return []caseSpec{
-		{id: "set/g/schema/a", kind: kindSchema, expectValid: true},
-		{id: "set/g/schema/b", kind: kindSchema, expectValid: false},
-		{id: "set/g/instance/c", kind: kindInstance, expectValid: true},
+		{id: "set/g/schema/a", kind: kindSchema, expect: expectValid()},
+		{id: "set/g/schema/b", kind: kindSchema, expect: expectInvalid()},
+		{id: "set/g/instance/c", kind: kindInstance, expect: expectValid()},
 	}
+}
+
+// expectValidity renders one of the two DECIDED outcomes from the bool column a
+// table-driven executor test naturally carries (and from its flipped polarity).
+// It exists only for those tests; an indeterminate expectation is never
+// dispatched to an executor, so no executor test has one to build.
+func expectValidity(valid bool) expectation {
+	if valid {
+		return expectValid()
+	}
+	return expectInvalid()
 }
 
 // passSchema is a fake executor: schema cases pass, everything else fails.
@@ -25,6 +36,144 @@ func passSchema(c caseSpec) Status {
 		return Pass()
 	}
 	return Fail()
+}
+
+// TestResolveExpectedClassifiesDeclaredValidity pins the mapping from a suite
+// <expected validity="..."> declaration to the outcome the harness scores against
+// (issue #277), across all three real spellings AND across the version-precedence
+// rule they interact with.
+//
+// The load-bearing claim is that "indeterminate" is its OWN outcome: xsts.dtd
+// declares it disjoint from valid|invalid, XSD 1.1 Structures makes [validity]
+// three-valued (§3.2.5.1/§3.3.5.1) and §5.2 denies that schema validity is a
+// binary predicate, so folding it into "invalid" — as this harness did — scored a
+// case the Working Group left undecided as a pass whenever this processor
+// rejected the document for ANY reason.
+//
+// The mixed-declaration rows pin how the two rules compose. Precedence is decided
+// by @version alone, BEFORE validity is read: a version="1.1" declaration wins
+// over an unversioned one whatever either says — so a 1.1 indeterminate beats an
+// unversioned valid, and symmetrically a 1.1 valid beats an unversioned
+// indeterminate. Declaration order does not matter, because the scan returns on
+// the first 1.1 match and only remembers the first unversioned one.
+func TestResolveExpectedClassifiesDeclaredValidity(t *testing.T) {
+	cases := []struct {
+		name string
+		exps []expected
+		want expectation
+		ok   bool
+	}{
+		{"valid alone", []expected{{Validity: "valid"}}, expectValid(), true},
+		{"invalid alone", []expected{{Validity: "invalid"}}, expectInvalid(), true},
+		{"indeterminate alone", []expected{{Validity: "indeterminate"}}, expectIndeterminate(), true},
+		{
+			"a rarer catalog spelling keeps the not-valid reading",
+			[]expected{{Validity: "notKnown"}},
+			expectInvalid(), true,
+		},
+		{
+			"version 1.1 indeterminate wins over an unversioned valid",
+			[]expected{{Validity: "valid"}, {Validity: "indeterminate", Version: "1.1"}},
+			expectIndeterminate(), true,
+		},
+		{
+			"version 1.1 indeterminate wins over an unversioned invalid, declared first",
+			[]expected{{Validity: "indeterminate", Version: "1.1"}, {Validity: "invalid"}},
+			expectIndeterminate(), true,
+		},
+		{
+			"version 1.1 valid wins over an unversioned indeterminate",
+			[]expected{{Validity: "indeterminate"}, {Validity: "valid", Version: "1.1"}},
+			expectValid(), true,
+		},
+		{
+			"a 1.0-only indeterminate still falls back to the first declaration",
+			[]expected{{Validity: "indeterminate", Version: "1.0"}},
+			expectIndeterminate(), true,
+		},
+		{
+			"an unversioned declaration beats a versioned non-1.1 one",
+			[]expected{{Validity: "invalid", Version: "1.0"}, {Validity: "indeterminate"}},
+			expectIndeterminate(), true,
+		},
+		{"no declaration at all", nil, expectation{}, false},
+	}
+	for _, tc := range cases {
+		got, ok := resolveExpected(tc.exps)
+		if ok != tc.ok {
+			t.Errorf("%s: ok = %v, want %v", tc.name, ok, tc.ok)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("%s: expectation = %s, want %s", tc.name, expectationName(got), expectationName(tc.want))
+		}
+	}
+}
+
+// expectationName renders an expectation for a test failure message.
+func expectationName(e expectation) string {
+	if e.isIndeterminate() {
+		return "indeterminate"
+	}
+	if e.wantsValid() {
+		return "valid"
+	}
+	return "invalid"
+}
+
+// TestRunLaneDeclinesIndeterminateWithoutExecuting proves the decline is total
+// (issue #277): a case the suite declared indeterminate is recorded Fail() — the
+// standing "known/recorded gap" status — and the lane's executor is NOT invoked
+// at all. The fake executor passes everything, so a runLane that still dispatched
+// would record a pass; and it records every case it is handed, so the assertion
+// on the ids it saw cannot be satisfied by an executor that merely returned Fail.
+func TestRunLaneDeclinesIndeterminateWithoutExecuting(t *testing.T) {
+	var dispatched []string
+	l := lane{
+		name:    "fake",
+		selects: selectsKind(kindSchema),
+		exec: func(c caseSpec) Status {
+			dispatched = append(dispatched, c.id)
+			return Pass()
+		},
+	}
+	cases := []caseSpec{
+		{id: "set/g/schema/decided", kind: kindSchema, expect: expectInvalid()},
+		{id: "set/g/schema/undecided", kind: kindSchema, expect: expectIndeterminate()},
+	}
+
+	actual := runLane(l, cases)
+	if len(actual) != 2 {
+		t.Fatalf("both claimed cases must be recorded, got %d", len(actual))
+	}
+	if !actual["set/g/schema/decided"].IsPass() {
+		t.Errorf("a decided case must still be scored by the executor")
+	}
+	if actual["set/g/schema/undecided"].IsPass() {
+		t.Errorf("an indeterminate case must be recorded Fail (declined), never a pass")
+	}
+	if !slices.Equal(dispatched, []string{"set/g/schema/decided"}) {
+		t.Errorf("executor saw %v, want only the decided case — an indeterminate case must never be dispatched", dispatched)
+	}
+}
+
+// TestMakeCaseCarriesIndeterminateThrough proves discovery preserves the third
+// outcome end to end: a suite entry declaring validity="indeterminate" yields a
+// caseSpec whose expectation reports itself indeterminate, which is what runLane
+// declines on.
+func TestMakeCaseCarriesIndeterminateThrough(t *testing.T) {
+	vt := validityTest{
+		Name:       "undecided",
+		SchemaDocs: []docRef{{Href: "a.xsd"}},
+		Expected:   []expected{{Validity: "indeterminate"}},
+	}
+	c, err := makeCase("set", "g", kindSchema, vt, "sets/msMeta", map[string]struct{}{})
+	if err != nil {
+		t.Fatalf("makeCase: %v", err)
+	}
+	if !c.expect.isIndeterminate() {
+		t.Errorf("caseSpec.expect = %s, want indeterminate", expectationName(c.expect))
+	}
 }
 
 func TestRunLaneSelectsOnlyClaimedCases(t *testing.T) {
