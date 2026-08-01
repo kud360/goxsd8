@@ -55,8 +55,14 @@ type Ordered interface {
 // (cvc-enumeration-valid, §4.3.5.4) accepts a value that is "equal or
 // identical" to a member, so identity must distinguish cases [Eq] cannot:
 // NaN is identical to NaN even though it is never equal to itself, and +0 is
-// not identical to -0 even though they are equal. A value without this
-// capability falls back to order equality for enumeration purposes.
+// not identical to -0 even though they are equal.
+//
+// A value type whose identity relation DIFFERS from its equality relation MUST
+// implement this interface. A value that carries only [Eq] is therefore taken
+// to have identity == equality, which §2.2.2 settles for it ("the equality
+// relation for most datatypes IS the identity relation"), and [Eq] answers
+// wherever identity is asked: enumeration matching above, and au-props-correct
+// clause 3 (Structures §3.5.6), which tests strict identity alone.
 type Identical interface {
 	// Identical reports whether the receiver is the identical value to other.
 	Identical(other Value) bool

@@ -58,7 +58,12 @@ const (
 // builtin/strict edge. Produce seeds the builtin datatypes from backend
 // ([builtin.Seed]) so a type="xs:…" reference resolves at finalize; the SAME
 // *[xsd.SimpleType] pointer identity is both AddType'd into the builder and used
-// as a simple-type base, as [xsd.SimpleType] requires.
+// as a simple-type base, as [xsd.SimpleType] requires. backend also supplies the
+// finalized schema's value space ([value.NewValueSpace] through
+// [xsd.SchemaBuilder.FinalizeWith]), so the finalize-time constraints that
+// compare two {value}s — au-props-correct (§3.5.6) clause 3, loc-testSubP
+// (§3.4.6.4) clauses 4.2 and 5.2.2 — decide in the value space instead of failing
+// open on the {lexical form}s.
 //
 // DEVIATION from parser/doc.go's "the parser collects them in document order
 // rather than stopping at the first": Produce returns only the FIRST error. That
@@ -88,7 +93,7 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 	if err := p.run(); err != nil {
 		return nil, err
 	}
-	return builder.Finalize()
+	return builder.FinalizeWith(value.NewValueSpace(backend))
 }
 
 // symbols is the ASSEMBLY-WIDE symbol table: one set of indexes shared by every

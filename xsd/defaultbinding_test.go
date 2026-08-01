@@ -213,3 +213,109 @@ func TestEffectiveValueConstraintFallback(t *testing.T) {
 		t.Fatalf("a use whose declaration has no {value constraint} must be ·absent·")
 	}
 }
+
+// vcElem builds a global element declaration of the named type carrying vc as
+// its {value constraint}.
+func vcElem(t *testing.T, local string, typeName QName, vc *ValueConstraint) ElementDeclaration {
+	t.Helper()
+	e, err := NewElementDeclaration(xsderr.Loc{}, uq(local), TypeDefinitionRef{Name: typeName}, nil,
+		NewGlobalScope(), vc, false, nil, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("NewElementDeclaration(%s): %v", local, err)
+	}
+	return e
+}
+
+// TestElementDeclarationSubsumesFixedValues pins loc-testSubP clause 4.2's
+// fourth outcome — both {value constraint}s fixed — as a VALUE-space test
+// delegated to the installed ValueSpace, and pins that an UNDECIDED verdict
+// still accepts. The two lexical forms differ, so a lexical comparison would
+// decide where only the value space may.
+func TestElementDeclarationSubsumesFixedValues(t *testing.T) {
+	gvc := NewValueConstraint(ValueFixed, "7")
+	svc := NewValueConstraint(ValueFixed, "07")
+
+	for _, tc := range []struct {
+		name string
+		vs   *stubValueSpace
+		want bool
+	}{
+		{"decided equal-or-identical subsumes", &stubValueSpace{same: true, decided: true}, true},
+		{"decided NOT equal-or-identical does not", &stubValueSpace{same: false, decided: true}, false},
+		{"undecided subsumes (fail-open)", &stubValueSpace{same: false, decided: false}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := vcSchema(t, tc.vs, nil)
+			if err != nil {
+				t.Fatalf("FinalizeWith: %v", err)
+			}
+			got := s.elementDeclarationSubsumes(vcElem(t, "g", uq("str"), &gvc), vcElem(t, "s", uq("narrow"), &svc))
+			if got != tc.want {
+				t.Fatalf("elementDeclarationSubsumes = %t, want %t", got, tc.want)
+			}
+			if tc.vs.calls == 0 {
+				t.Fatal("clause 4.2 decided without consulting the ValueSpace")
+			}
+		})
+	}
+}
+
+// TestElementDeclarationSubsumesFixedValuesSkipsUnresolvedType pins clause 4.2's
+// other fail-open branch: a {type definition} that names no simple type leaves
+// the clause with no value space to compare in, so it accepts without consulting
+// the ValueSpace at all.
+func TestElementDeclarationSubsumesFixedValuesSkipsUnresolvedType(t *testing.T) {
+	gvc := NewValueConstraint(ValueFixed, "7")
+	svc := NewValueConstraint(ValueFixed, "07")
+	vs := &stubValueSpace{same: false, decided: true}
+	s, err := vcSchema(t, vs, nil)
+	if err != nil {
+		t.Fatalf("FinalizeWith: %v", err)
+	}
+	if !s.fixedValueConstraintSubsumes(vcElem(t, "g", anyTypeName, &gvc), vcElem(t, "s", anyTypeName, &svc)) {
+		t.Fatal("a complex {type definition} names no value space, so clause 4.2 must accept")
+	}
+	if vs.calls != 0 {
+		t.Fatalf("the ValueSpace was consulted %d time(s) with no simple type to compare in", vs.calls)
+	}
+}
+
+// TestAttributeValueConstraintSubsumesFixedValues pins loc-testSubP clause
+// 5.2.2 the same way: two fixed ·effective value constraints· are compared in
+// the value space, and an undecided verdict accepts.
+func TestAttributeValueConstraintSubsumesFixedValues(t *testing.T) {
+	gvc := NewValueConstraint(ValueFixed, "7")
+	svc := NewValueConstraint(ValueFixed, "07")
+
+	for _, tc := range []struct {
+		name    string
+		vs      *stubValueSpace
+		wantErr bool
+	}{
+		{"decided equal-or-identical subsumes", &stubValueSpace{same: true, decided: true}, false},
+		{"decided NOT equal-or-identical does not", &stubValueSpace{same: false, decided: true}, true},
+		{"undecided subsumes (fail-open)", &stubValueSpace{same: false, decided: false}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := vcSchema(t, tc.vs, nil)
+			if err != nil {
+				t.Fatalf("FinalizeWith: %v", err)
+			}
+			tt := dType(t, uq("t"), anyTypeName, EmptyContent{}, nil, nil)
+			bb := dType(t, uq("b"), anyTypeName, EmptyContent{}, nil, nil)
+			err = s.checkBindingSubsumes(uq("a"), tt, bb,
+				attributeUseBinding{use: dAttrUse(t, uq("a"), uq("str"), false, &gvc)},
+				attributeUseBinding{use: dAttrUse(t, uq("a"), uq("narrow"), false, &svc)})
+			if tc.vs.calls == 0 {
+				t.Fatal("clause 5.2.2 decided without consulting the ValueSpace")
+			}
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("expected ·subsumes·, got %v", err)
+				}
+				return
+			}
+			expectRule(t, err, ruleDerivationOKRestriction)
+		})
+	}
+}

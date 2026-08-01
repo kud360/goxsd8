@@ -12,19 +12,21 @@ import "github.com/kud360/goxsd8/xsderr"
 //   - clause 3 (variety half, Local case): if U.{attribute declaration} has
 //     {value constraint}.{variety} = fixed and U itself has a {value
 //     constraint}, then U.{value constraint}.{variety} must be fixed. Only the
-//     variety-agreement half is enforced; the {value}-identity half is not —
-//     xsd.ValueConstraint carries no {value} (only {lexical form}, see
-//     valueconstraint.go), and identity requires a resolved {type definition},
-//     deferred to finalize (#173). And it fires only when {attribute
-//     declaration} is the LocalAttributeDeclaration variant, whose
-//     ValueConstraint() is available by value now; the AttributeDeclarationRef
-//     variant is unresolved, so its declaration's {value constraint} is not yet
-//     readable — deferred to #173.
+//     variety-agreement half is enforced here, and only for the
+//     LocalAttributeDeclaration variant, whose ValueConstraint() is available by
+//     value at construction; the AttributeDeclarationRef variant is still an
+//     unresolved QName. BOTH halves for BOTH variants are decided at finalize
+//     instead, by Phase E (valueconstraintvalid.go): the {value}-identity half
+//     needs a lexical→value mapping, which xsd.ValueConstraint cannot carry (it
+//     holds {lexical form} only, see valueconstraint.go) and this package cannot
+//     compute (see ValueSpace). This constructor check is therefore a strictly
+//     earlier, strictly narrower rejection of the same states, kept so a use the
+//     Local mapping builds is illegal-by-construction (STYLE T1).
 //
 // Clause 2 (Simple Default Valid — §3.2.6.2 cos-valid-simple-default) needs the
 // resolved {attribute declaration}.{type definition} to validate the {value
-// constraint}'s {lexical form}, which this package does not resolve yet; it is
-// deferred to finalize (#173). The §3.5.4 key-evc effective value constraint
+// constraint}'s {lexical form}; it is not enforced anywhere yet and stays
+// deferred to its own issue. The §3.5.4 key-evc effective value constraint
 // needs the resolved declaration for the Ref variant, so it is NOT modeled on
 // this component: it lives at finalize as (*Schema).effectiveValueConstraint
 // (defaultbinding.go, #262), unexported until an external consumer justifies
@@ -89,7 +91,9 @@ func (AttributeDeclarationRef) attributeDeclarationRef()   {}
 // the sibling declaration. au-props-correct clause 3's variety-agreement half is
 // enforced now for the Local case (see ruleAuPropsCorrect); its {value}-identity
 // half, the Ref case, and clause 2 (Simple Default Valid, needs a resolved {type
-// definition}) are deferred to finalize (#173). The §3.5.4 key-evc effective
+// definition}) are not. The whole of clause 3 — both halves, both variants — is
+// decided at finalize by Phase E (valueconstraintvalid.go); clause 2 stays
+// deferred. The §3.5.4 key-evc effective
 // value constraint is computed at finalize instead of here, for the same reason
 // (defaultbinding.go, #262).
 //
@@ -124,8 +128,8 @@ type AttributeUse struct {
 //   - clause 3 (variety half, Local case): if attributeDeclaration is a
 //     LocalAttributeDeclaration whose own {value constraint} has {variety} =
 //     fixed and valueConstraint is non-nil, then valueConstraint's {variety}
-//     must be fixed too. The {value}-identity half and the Ref case are deferred
-//     to #173 (see ruleAuPropsCorrect).
+//     must be fixed too. The {value}-identity half and the Ref case are decided
+//     at finalize by Phase E, valueconstraintvalid.go (see ruleAuPropsCorrect).
 //
 // It also rejects an AttributeDeclarationRef whose Name is the absent (zero)
 // QName, charged to xsderr.RuleComponentInvariant: the Ref variant represents

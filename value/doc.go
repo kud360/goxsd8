@@ -94,6 +94,26 @@
 // APPLICABILITY first and then delegates here; a type built through the xsd
 // constructors alone gets neither.
 //
+// # Value-constraint comparison (the xsd.ValueSpace seam)
+//
+//	func NewValueSpace(b Backend) xsd.ValueSpace
+//
+// [NewValueSpace] is what lets package xsd — a pure leaf that cannot import this
+// one — decide the Structures constraints that compare two Value Constraints'
+// {value}s: au-props-correct (§3.5.6) clause 3 under the identity relation
+// (§2.2.1), loc-testSubP (§3.4.6.4) clauses 4.2 and 5.2.2 under the
+// equal-or-identical union (§2.2.2). It maps each side's {lexical form} through
+// the governing mapping of the type that constrains it and compares the values
+// with the [Identical]/[Eq] capabilities they carry.
+//
+// It answers "undecided" — never a verdict — for everything it cannot compare in
+// ONE value space: an ungoverned type, an unmappable lexical, the list and union
+// varieties, the context-dependent QName and NOTATION spaces, and any pair whose
+// two types resolve to DIFFERENT governing mappings (the widest-space rule above
+// is what makes a general/specific pair on one base chain comparable at all, and
+// what makes anything else incommensurable). Undecided always accepts on the xsd
+// side, so this seam can only narrow what a schema set admits.
+//
 // # Codegen seam
 //
 // A backend MAY, in a later milestone, implement an Emitter (API frozen in M9;

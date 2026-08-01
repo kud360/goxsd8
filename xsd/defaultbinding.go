@@ -188,9 +188,11 @@ func (s *Schema) attributeUseDeclaration(u AttributeUse) (AttributeDeclaration, 
 //
 // It is a finalize-phase helper on *Schema rather than a method on AttributeUse
 // because the Ref variant's declaration is reachable only through the schema's
-// {attribute declarations}. It stays unexported: the eventual consumer is the
-// instance validator's cvc-au, and that issue is the one that justifies
-// exporting it (STYLE T5/T8).
+// {attribute declarations}. Its one caller today is
+// checkAttributeValueConstraintSubsumes, which is where loc-testSubP clause 5.2
+// invokes ·effective value constraint· by name. It stays unexported: the eventual
+// consumer is the instance validator's cvc-au, and that issue is the one that
+// justifies exporting it (STYLE T5/T8).
 func (s *Schema) effectiveValueConstraint(u AttributeUse) (ValueConstraint, bool) {
 	if vc, ok := u.ValueConstraint(); ok {
 		return vc, true
@@ -330,7 +332,7 @@ func (s *Schema) elementDeclarationSubsumes(general, specific ElementDeclaration
 	if !general.Nillable() && specific.Nillable() {
 		return false // clause 4.1
 	}
-	if !fixedValueConstraintSubsumes(general, specific) {
+	if !s.fixedValueConstraintSubsumes(general, specific) {
 		return false // clause 4.2
 	}
 	if !identityConstraintsSuperset(specific, general) {
@@ -350,22 +352,43 @@ func (s *Schema) elementDeclarationSubsumes(general, specific ElementDeclaration
 // absent or default S is an exact rejection, since no reading of "S has a fixed
 // {value constraint}" can hold.
 //
-// GAP(xsd): two fixed {value constraint}s with DIFFERENT {lexical form}s are
-// accepted. 4.2 compares values, a value-space test: "1" and "01" are the same
-// xs:integer value. ValueConstraint carries only {lexical form}
-// (valueconstraint.go) and this package must not depend on package value, so a
-// lexical mismatch is not evidence of a value mismatch. This is the same
-// fail-open checkAttributeValueConstraintSubsumes takes for clause 5.2.2, for
-// the same reason; closing both needs the lexical mapping of the declaration's
-// {type definition}, and belongs with the instance validator that first needs
-// it.
-func fixedValueConstraintSubsumes(general, specific ElementDeclaration) bool {
+// The remaining outcome — both fixed — is 4.2's "with an equal or identical value",
+// a VALUE-space test: "1" and "01" are the same xs:integer value, so the
+// {lexical form}s ValueConstraint carries cannot decide it (valueconstraint.go).
+// The schema's installed ValueSpace (valuespace.go) decides it instead, in the
+// two declarations' own types; an undecided verdict accepts, so the comparison
+// can only NARROW what this clause admits.
+//
+// GAP(xsd): what remains fail-open here is exactly what the ValueSpace declines
+// to decide — a type no backend mapping governs, a {lexical form} that mapping
+// cannot map, two types resolving to DIFFERENT governing mappings (an
+// incommensurable cross-type comparison), and the context-dependent QName and
+// NOTATION spaces, whose lexicals need the in-scope namespace bindings of the
+// schema document that wrote them, which no ValueConstraint carries (see package
+// value's own GAP(value) marker). A {type definition} that is absent,
+// unresolvable, or COMPLEX (a simple-content complex type still bearing a value
+// constraint) is skipped here for the same reason simpleTypeOf's other callers
+// skip it: there is no simple type to name the value space. Every one of those
+// accepts, so none is ever a false reject (#265).
+func (s *Schema) fixedValueConstraintSubsumes(general, specific ElementDeclaration) bool {
 	gvc, present := general.ValueConstraint()
 	if !present || gvc.Kind() != ValueFixed {
 		return true
 	}
 	svc, present := specific.ValueConstraint()
-	return present && svc.Kind() == ValueFixed
+	if !present || svc.Kind() != ValueFixed {
+		return false
+	}
+	gt, ok := s.simpleTypeOf(general.TypeDefinition())
+	if !ok {
+		return true
+	}
+	st, ok := s.simpleTypeOf(specific.TypeDefinition())
+	if !ok {
+		return true
+	}
+	same, decided := s.valueSpace.EqualOrIdentical(st, svc, gt, gvc)
+	return same || !decided
 }
 
 // identityConstraintsSuperset is loc-testSubP clause 4.3: every member of
@@ -502,21 +525,15 @@ func (s *Schema) checkAttributeUseSubsumes(n QName, t, b ComplexType, general, s
 // An unresolvable or non-simple {type definition} on either side is SKIPPED
 // rather than rejected: a dangling type name was already charged src-resolve by
 // Phase A, and a name resolving to a complex type is not a fact this clause is
-// competent to charge. Skipping is fail-open, never a false reject.
+// competent to charge. Skipping is fail-open, never a false reject. Both sides
+// are resolved through attributeUseType, the one encoding of "the simple type
+// governing this use" clause 5.2.2 also reads (STYLE T4).
 func (s *Schema) checkAttributeTypeDerivedOK(n QName, t, b ComplexType, general, specific AttributeUse) error {
-	gd, ok := s.attributeUseDeclaration(general)
+	gt, ok := s.attributeUseType(general)
 	if !ok {
 		return nil
 	}
-	sd, ok := s.attributeUseDeclaration(specific)
-	if !ok {
-		return nil
-	}
-	gt, ok := s.simpleTypeOf(gd.TypeDefinition())
-	if !ok {
-		return nil
-	}
-	st, ok := s.simpleTypeOf(sd.TypeDefinition())
+	st, ok := s.attributeUseType(specific)
 	if !ok {
 		return nil
 	}
@@ -532,20 +549,26 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, t, b ComplexType, general,
 // ·absent· or {variety} default) and 5.2.2 (SVC.{variety} = fixed and SVC.{value}
 // equal or identical to GVC.{value}) must hold.
 //
-// Three of the four outcomes are exact. 5.2.1 is read directly. When GVC is
-// fixed and SVC is absent or default, 5.2.2 cannot hold under any reading, so
-// the rejection is exact. When both are fixed with equal {lexical form}s, 5.2.2
-// holds.
+// The first two outcomes are exact. 5.2.1 is read directly. When GVC is fixed
+// and SVC is absent or default, 5.2.2 cannot hold under any reading, so the
+// rejection is exact. When both are fixed, 5.2.2's "equal or identical" is a
+// VALUE-space test — "1" and "01" are the same xs:integer value with different
+// lexical forms — which the {lexical form}s ValueConstraint carries
+// (valueconstraint.go) cannot decide; the schema's installed ValueSpace
+// (valuespace.go) decides it, in each side's own attribute {type definition},
+// and an undecided verdict accepts, so the comparison can only NARROW what this
+// clause admits.
 //
-// GAP(xsd): the fourth outcome — both fixed, {lexical form}s DIFFERENT — is
-// accepted. 5.2.2 compares {value}s, a value-space test: "1" and "01" are the
-// same xs:integer value with different lexical forms. ValueConstraint carries
-// only {lexical form} (valueconstraint.go) and this package must not depend on
-// package value, so a lexical mismatch is not evidence of a value mismatch.
-// Accepting is FAIL-OPEN — a schema that should fail may pass — and never a
-// false reject. Closing it needs the lexical mapping of the attribute's
-// {type definition}, which belongs with the instance validator's key-evc
-// consumer.
+// GAP(xsd): what remains fail-open is exactly what the ValueSpace declines to
+// decide — an ungoverned type, an unmappable {lexical form}, two types resolving
+// to DIFFERENT governing mappings (an incommensurable cross-type comparison,
+// which clause 5.1 permits: S's type need only be DERIVED from G's), and the
+// context-dependent QName and NOTATION spaces, whose lexicals need the in-scope
+// namespace bindings of the schema document that wrote them and which no
+// ValueConstraint carries (see package value's own GAP(value) marker) — plus a
+// {type definition} that is absent, unresolvable, or complex, skipped exactly as
+// simpleTypeOf's other callers skip it. Every one of those accepts, so none is
+// ever a false reject (#265).
 func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, t, b ComplexType, general, specific AttributeUse) error {
 	gvc, present := s.effectiveValueConstraint(general)
 	if !present || gvc.Kind() != ValueFixed {
@@ -556,7 +579,44 @@ func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, t, b ComplexType
 		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
 			"complex type %s restricts %s, but the base fixes attribute %s to %q while the restriction leaves it unfixed, and loc-testSubP clause 5.2 requires a fixed ·effective value constraint· with the same value (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), n, gvc.LexicalForm())
 	}
-	return nil // clause 5.2.2, exactly when the lexical forms agree; see the GAP above
+	if s.attributeValueConstraintsAgree(general, specific, gvc, svc) {
+		return nil // clause 5.2.2
+	}
+	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+		"complex type %s restricts %s and fixes attribute %s to %q, but the base fixes it to %q, and loc-testSubP clause 5.2.2 requires the two {value}s to be equal or identical (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), n, svc.LexicalForm(), gvc.LexicalForm())
+}
+
+// attributeValueConstraintsAgree decides loc-testSubP clause 5.2.2's "SVC.{value}
+// is equal or identical to GVC.{value}" for two fixed ·effective value
+// constraints·, asking the installed ValueSpace in each side's own attribute
+// {type definition}. It reports true — accept — for every case the ValueSpace
+// does not decide and for every side whose {type definition} names no simple
+// type; see checkAttributeValueConstraintSubsumes' GAP for the residual.
+func (s *Schema) attributeValueConstraintsAgree(general, specific AttributeUse, gvc, svc ValueConstraint) bool {
+	gt, ok := s.attributeUseType(general)
+	if !ok {
+		return true
+	}
+	st, ok := s.attributeUseType(specific)
+	if !ok {
+		return true
+	}
+	same, decided := s.valueSpace.EqualOrIdentical(st, svc, gt, gvc)
+	return same || !decided
+}
+
+// attributeUseType is the Simple Type Definition governing an attribute use's
+// values: its {attribute declaration}.{type definition}, resolved through the
+// same two helpers every other consumer here uses (STYLE T4). ok is false for a
+// dangling Ref and for a {type definition} that is absent, unresolvable, or
+// complex — the cases the value-constraint clauses treat as "not decidable",
+// never as a violation.
+func (s *Schema) attributeUseType(u AttributeUse) (*SimpleType, bool) {
+	d, ok := s.attributeUseDeclaration(u)
+	if !ok {
+		return nil, false
+	}
+	return s.simpleTypeOf(d.TypeDefinition())
 }
 
 // simpleTypeOf narrows typeOf to a Simple Type Definition. ok is false for an

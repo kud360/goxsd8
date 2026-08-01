@@ -62,9 +62,22 @@
 // onto the compiled set; they never copy it.
 //
 // The views are ElementResolver, AttributeResolver, and TypeResolver;
-// *Schema satisfies all three, and SchemaBuilder.Finalize is the only way
-// to obtain one. This section is shipped surface — see the package
-// Examples for the construct → Finalize → query sequence.
+// *Schema satisfies all three, and SchemaBuilder.Finalize (or its sibling
+// SchemaBuilder.FinalizeWith) is the only way to obtain one. This section
+// is shipped surface — see the package Examples for the construct →
+// Finalize → query sequence.
+//
+// # Value spaces
+//
+// A few finalize-time constraints compare two {value}s — au-props-correct
+// (§3.5.6) clause 3, loc-testSubP (§3.4.6.4) clauses 4.2 and 5.2.2 — and
+// a {value} is an ·actual value·, not a lexical string. Mapping a lexical
+// to a value needs package value, which is layered above this pure leaf,
+// so the comparison is taken as an INPUT: the ValueSpace interface, passed
+// to SchemaBuilder.FinalizeWith. Every ValueSpace method may answer
+// "undecided", and undecided always accepts, so plain Finalize (which
+// installs none) is the fully fail-open configuration. value.NewValueSpace
+// is the implementation the parser installs.
 //
 // # Walk API
 //
