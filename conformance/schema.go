@@ -335,8 +335,11 @@ import (
 // catalog schema); the runner now carries all of them (caseSpec.extraDocs)
 // instead of silently keeping one. This lane decides such a case only when the
 // closure walk from the FIRST document provably reached every other declared one
-// — which is what happens when the first document's own <redefine>/<import>/
-// <include> names them, and is then just the composition case above. Documents
+// — which requires the first document's own <include>/<override>/<import> to
+// name them, those being the only directives the walk follows
+// (closureScan.decidable), and is then just the composition case above. A
+// <redefine> can never supply that reachability: a document carrying one is
+// DECLINED outright above, so nothing it names is ever reached. Documents
 // genuinely independent of each other need several roots merged into one schema,
 // which neither parser.Parse (one root) nor this harness offers, so those cases
 // are DECLINED (extraDocsInClosure) rather than decided against a schema the
@@ -424,10 +427,16 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 //
 // A schemaTest may list several <schemaDocument> children, and the suite's own
 // catalog schema defines that as "run as if the schema documents given were
-// loaded one by one, in order": the case is the SET, not any member of it. Most
-// such cases are self-arranging — the first document's own <redefine>/<import>/
-// <include> names the others, so the walk reaches them and Parse composes them.
-// When it does not (documents genuinely independent of each other), the harness
+// loaded one by one, in order": the case is the SET, not any member of it. The
+// condition holds when the first document's own <include>/<override>/<import>
+// names the others — the only directives closureScan.decidable follows — so the
+// walk reaches them and Parse composes them; a <redefine> never qualifies, since
+// its presence declines the document that carries it (schemaShapeDecidable). No
+// multi-document schemaTest in the suite meets the condition today: all of them
+// decline, most at closure decidability on the first document. The check exists
+// so that a case whose documents the parser's OWN composition constructs already
+// link is decided on the declared set rather than declined for its member count.
+// When the condition does not hold (documents genuinely independent), the harness
 // has no mechanism to merge several roots into one schema, so any verdict it
 // emitted would be a verdict on a DIFFERENT schema than the one declared. It
 // therefore DECLINES, as it declines every other shape it cannot decide for the
