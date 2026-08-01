@@ -106,6 +106,27 @@ func newClosureScan(resolver loader.Resolver, rootResolved, rootTNS string) *clo
 	}
 }
 
+// visited reports whether resolved was reached, under ANY namespace, during the
+// walk — i.e. whether decidable has already shape-checked that filesystem
+// location. It exists for the multi-document schemaTest, whose extra declared
+// documents may only be decided when the walk from the first one provably
+// reached them.
+//
+// The namespace half of the key is deliberately ignored: one document can be
+// reached under several namespaces (a chameleon <include> and a bare <import>),
+// and the question here is only whether THIS location was gated, not under which
+// namespace. The linear scan is the whole implementation on purpose — loaded
+// holds one case's closure and is scanned once per extra document, so a second
+// index would be redundant state (STYLE D3) for no measured hot path (STYLE D4).
+func (s *closureScan) visited(resolved string) bool {
+	for k := range s.loaded {
+		if k.resolved == resolved {
+			return true
+		}
+	}
+	return false
+}
+
 // decidable reports whether doc — reached under the effective target namespace
 // tns — and every document transitively reachable from it through a top-level
 // <xs:include> or <xs:import> lies within the producer's decidable subset. It is

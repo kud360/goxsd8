@@ -330,11 +330,17 @@ import (
 // cos-content-act-restrict (#263) or cos-ns-subset (#265) stay failing gaps
 // rather than wins until those land.
 //
-// A schemaTest with MORE THAN ONE <ts:schemaDocument> child is decided against the
-// wrong document (the runner keeps only one, #238, unlanded). That defect is
-// orthogonal to the closure walk — those cases were mis-decided before #242 and
-// still are; assembling a case's several root documents is the runner's business,
-// not this lane's.
+// A schemaTest with MORE THAN ONE <ts:schemaDocument> child declares a SET of
+// documents to be loaded "one by one, in order" (xsts.xsd, the suite's own
+// catalog schema); the runner now carries all of them (caseSpec.extraDocs)
+// instead of silently keeping one. This lane decides such a case only when the
+// closure walk from the FIRST document provably reached every other declared one
+// — which is what happens when the first document's own <redefine>/<import>/
+// <include> names them, and is then just the composition case above. Documents
+// genuinely independent of each other need several roots merged into one schema,
+// which neither parser.Parse (one root) nor this harness offers, so those cases
+// are DECLINED (extraDocsInClosure) rather than decided against a schema the
+// suite did not declare.
 
 // newSchemaExec builds the schema lane's executor. The strict backend is built
 // once here (mirroring newDatatypesExec's strictBackend := strict.New()): it maps
@@ -400,11 +406,57 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 	// The root's own targetNamespace seeds the walk exactly as it seeds
 	// parser.Parse's assembly.
 	rootTNS, _ := elementAttr(doc.Root(), "targetNamespace")
-	if !newClosureScan(resolver, resolved, rootTNS).decidable(doc, rootTNS) {
+	scan := newClosureScan(resolver, resolved, rootTNS)
+	if !scan.decidable(doc, rootTNS) {
+		return Fail()
+	}
+	if !extraDocsInClosure(scan, resolver, c) {
 		return Fail()
 	}
 	_, perr := parser.Parse(location, parser.WithResolver(resolver), parser.WithBackend(backend))
 	return decideSchema(perr == nil, c.expectValid)
+}
+
+// extraDocsInClosure reports whether every FURTHER document the case declares
+// beyond c.doc was reached by the closure walk that just gated c.doc — the only
+// condition under which parser.Parse, which is handed one root, nonetheless
+// assembles the whole declared set.
+//
+// A schemaTest may list several <schemaDocument> children, and the suite's own
+// catalog schema defines that as "run as if the schema documents given were
+// loaded one by one, in order": the case is the SET, not any member of it. Most
+// such cases are self-arranging — the first document's own <redefine>/<import>/
+// <include> names the others, so the walk reaches them and Parse composes them.
+// When it does not (documents genuinely independent of each other), the harness
+// has no mechanism to merge several roots into one schema, so any verdict it
+// emitted would be a verdict on a DIFFERENT schema than the one declared. It
+// therefore DECLINES, as it declines every other shape it cannot decide for the
+// right reason, rather than loading an arbitrary member or ignoring the rest.
+//
+// Each extra document is resolved through the SAME resolver, under a location
+// string relative to the same root directory, so the resolved identity compared
+// against the walk's index is in the walk's own format. A path that will not
+// resolve at all declines for the same reason as an unresolvable root: an
+// unreadable document is a gap, never a validity verdict.
+func extraDocsInClosure(scan *closureScan, resolver loader.Resolver, c caseSpec) bool {
+	root := filepath.Dir(c.doc)
+	for _, extra := range c.extraDocs {
+		location, err := filepath.Rel(root, extra)
+		if err != nil {
+			return false
+		}
+		rc, resolved, err := resolver.Resolve("", filepath.ToSlash(location))
+		if err != nil {
+			return false
+		}
+		// Read-only handle: a close failure cannot change what the walk recorded,
+		// so it cannot affect the verdict (STYLE S3).
+		_ = rc.Close()
+		if !scan.visited(resolved) {
+			return false
+		}
+	}
+	return true
 }
 
 // decideSchema Passes iff the observed validity agrees with the suite's declared

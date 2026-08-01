@@ -1,8 +1,10 @@
 package conformance
 
 import (
+	"encoding/xml"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -90,6 +92,92 @@ func TestRunLaneRatchetRefusesRegression(t *testing.T) {
 	expected := map[string]Status{"set/g/instance/c": Pass()}
 	if _, err := Ratchet(expected, actual); err == nil {
 		t.Fatal("ratchet must refuse when an executor regresses a committed pass")
+	}
+}
+
+// TestValidityTestKeepsEverySchemaDocument pins the decoding bug this struct's
+// slice field exists to prevent (issue #238): encoding/xml OVERWRITES a
+// non-slice field on every repeated matching child, so a scalar SchemaDoc kept
+// only the LAST <schemaDocument> of a multi-document schemaTest and the harness
+// then decided the case against an arbitrary member of the declared set. The
+// assertion is on the unmarshal itself, not on any downstream verdict, because
+// the loss happened here.
+func TestValidityTestKeepsEverySchemaDocument(t *testing.T) {
+	const src = `<schemaTest xmlns:xlink="http://www.w3.org/1999/xlink" name="multi">
+		<schemaDocument xlink:href="first.xsd"/>
+		<schemaDocument xlink:href="second.xsd"/>
+		<schemaDocument xlink:href="third.xsd"/>
+		<expected validity="valid"/>
+	</schemaTest>`
+
+	var vt validityTest
+	if err := xml.Unmarshal([]byte(src), &vt); err != nil {
+		t.Fatalf("unmarshalling schemaTest: %v", err)
+	}
+
+	got := make([]string, 0, len(vt.SchemaDocs))
+	for _, d := range vt.SchemaDocs {
+		got = append(got, d.Href)
+	}
+	want := []string{"first.xsd", "second.xsd", "third.xsd"}
+	if !slices.Equal(got, want) {
+		t.Errorf("SchemaDocs = %v, want every declared href in document order %v", got, want)
+	}
+}
+
+// TestMakeCaseSplitsSchemaDocuments proves makeCase treats a multi-document
+// schemaTest as the ordered SET xsts.xsd declares it to be: the FIRST document is
+// the case's doc (the one parser.Parse is rooted at) and every further one lands
+// in extraDocs in document order, each resolved against the test set's directory.
+// An instanceTest keeps its single document and no extras, and a schemaTest that
+// names no document at all is a malformed catalog entry rather than a case with
+// an invented document.
+func TestMakeCaseSplitsSchemaDocuments(t *testing.T) {
+	setDir := filepath.Join("sets", "ibmMeta")
+	multi := validityTest{
+		Name: "multi",
+		SchemaDocs: []docRef{
+			{Href: "../ibmData/a.xsd"},
+			{Href: "../ibmData/b.xsd"},
+			{Href: "../ibmData/c.xsd"},
+		},
+		Expected: []expected{{Validity: "valid"}},
+	}
+
+	c, err := makeCase("set", "g", kindSchema, multi, setDir, map[string]struct{}{})
+	if err != nil {
+		t.Fatalf("makeCase: %v", err)
+	}
+	if want := filepath.Join(setDir, "../ibmData/a.xsd"); c.doc != want {
+		t.Errorf("doc = %q, want the FIRST declared document %q", c.doc, want)
+	}
+	wantExtra := []string{
+		filepath.Join(setDir, "../ibmData/b.xsd"),
+		filepath.Join(setDir, "../ibmData/c.xsd"),
+	}
+	if !slices.Equal(c.extraDocs, wantExtra) {
+		t.Errorf("extraDocs = %v, want the remaining documents in order %v", c.extraDocs, wantExtra)
+	}
+
+	inst := validityTest{
+		Name:        "inst",
+		InstanceDoc: docRef{Href: "../ibmData/i.xml"},
+		Expected:    []expected{{Validity: "valid"}},
+	}
+	ic, err := makeCase("set", "g", kindInstance, inst, setDir, map[string]struct{}{})
+	if err != nil {
+		t.Fatalf("makeCase (instance): %v", err)
+	}
+	if want := filepath.Join(setDir, "../ibmData/i.xml"); ic.doc != want {
+		t.Errorf("instance doc = %q, want %q", ic.doc, want)
+	}
+	if len(ic.extraDocs) != 0 {
+		t.Errorf("instance case must carry no extraDocs, got %v", ic.extraDocs)
+	}
+
+	empty := validityTest{Name: "none", Expected: []expected{{Validity: "valid"}}}
+	if _, err := makeCase("set", "g", kindSchema, empty, setDir, map[string]struct{}{}); err == nil {
+		t.Error("a schemaTest declaring no schemaDocument must error, not yield a case with an empty document path")
 	}
 }
 
