@@ -622,10 +622,16 @@ add-don't-rewrite convention; this sentence is the correction. `instance`
 band-1 line has landed except the composition tail. The working queue,
 lane movement first, dependency-ordered, is now:
 
-1. **#337** — `symbols.simpleTypes` carries no owning producer, so a
-   cross-document on-demand build resolves unqualified references under
-   the wrong document. A **chameleon false reject** — the one direction
-   the ratchet cannot forgive.
+1. **#368** — `symbols.attributeGroups` carries no owning producer, so a
+   foreign `<attributeGroup ref>` is folded under the ASKING document.
+   A **chameleon false reject** — the one direction the ratchet cannot
+   forgive. This slot is *substituted*, not vacated: #368 is the same
+   defect class as the #337 that used to sit here, one index over and the
+   third instance after #228, so retiring #337 without promoting it would
+   contradict the very reason #337 was ranked first. Strictly the worse
+   of the two — an `<attributeGroup>` body holds local `<attribute>`
+   declarations, so `localTargetNS` is misread as well as
+   `unqualifiedRefNS`, and the fix has two landed precedents to copy.
 2. **#264** → **#265** — the two open halves of complex-type derivation
    validity. Together they unblock **#336**, which is where the schema
    lane widens to admit the extension forms; #265 also now owns the
@@ -651,7 +657,9 @@ lane movement first, dependency-ordered, is now:
    move no lane by design and are listed last, but they are the only
    items here whose *absence* can lock a false accept into the ratchet.
 
-*Retired from this band, both on 2026-08-01, in the order they were listed:*
+*Retired from this band, all three on 2026-08-01, in the order they were
+listed ("both" above was written when there were two; the count is the only
+word changed):*
 
 - *#344 (UTF-16 BOM decode, the #226 replan) landed as `2c70354` (PR #362)
   — `schema +5`, not the `+4` this band predicted; the fifth flip
@@ -684,6 +692,39 @@ lane movement first, dependency-ordered, is now:
   correcting the count as well as widening the selector, and unlike #331
   it inherits **no measurement**, so its `Ratchet:` figure must come from
   a diagnostic run (#354).*
+- *#337 (`symbols.simpleTypes` gains an owning producer) landed as `1cd1ce1`
+  (PR #367) — **ratchet unchanged** (schema 4312/15432, datatypes 1107/1129,
+  instance 0/26426, md5-verified flat by the arbiter), arbiter ACCEPT on round
+  1. That flatness is the expected result, not a disappointment: **no W3C
+  fixture combines chameleon inclusion with an unqualified simple-type
+  `base=`**, so this was a false-reject fix guarded by its own two-order unit
+  test rather than a lane mover — and the band ranked it first for exactly
+  that reason. #228's `complexSource{elem, owner}` was **generalized into
+  `typeSource`** rather than twinned (STYLE T4), so there is now one
+  source-entry encoding for both type indexes. The stale "simpleTypes needs no
+  owner" doc comment was deleted, not softened. Post-land harvest filed
+  **#368**, which takes over this band's item 1 above.*
+
+***Recorded, deliberately not filed: `<list itemType=…>` and
+`<union memberTypes=…>` will need the same owner routing when they land.***
+§F.1's normative XSLT matches `xs:list/@itemType` and `xs:union/@memberTypes`
+alongside the `@base` this pass fixed, so those two attributes carry the
+identical unqualified-QName exposure. **There is no defect today and no issue
+to file it against**: `restrictionOf` (`parser/produce.go:547`) rejects a
+`<simpleType>` with no `<restriction>` child outright, so no code path can
+reach either attribute, and no open issue or milestone tracks adding the
+list/union varieties to the *producer* — #46 and #75 closed the `xsd` and
+`value` halves of the variety shape, but the parser half is unfiled and
+unscheduled. Filing a speculative `blocked` issue against a dependency that
+does not exist would be a body full of "n/a" and would deepen a `ready` queue
+already at 65 (#347). Filing it as a `## Notes` line on #368 would only move
+the leak: #368 closes, and the note becomes exactly the untracked
+closed-issue advisory #270 and #315 exist to stop. So it is recorded **here**,
+in the ledger a session actually surveys, to be picked up by whatever issue
+first carves parser-side list/union support. Grounding to reuse when that
+happens: #337's oracle comment,
+<https://github.com/kud360/goxsd8/issues/337#issuecomment-5149740049>
+(EDGE CASES, final bullet).
 
 **#286 and #287 sit alongside this band rather than inside it**, and a
 session that wants the highest *planning* leverage should take them: with
