@@ -734,9 +734,9 @@ IdentityConstraint/s2_2_4si04/schema/s2_2_4si04s fail
 IdentityConstraint/s2_2_4si05/schema/s2_2_4si05s fail
 IdentityConstraint/s2_2_4si06/schema/s2_2_4si06s fail
 IdentityConstraint/s2_2_4si07/schema/s2_2_4si07s fail
-IdentityConstraint/s2_2_4v01/schema/s2_2_4v01s fail
-IdentityConstraint/s2_2_4v02/schema/s2_2_4v02s fail
-IdentityConstraint/s2_2_4v03/schema/s2_2_4v03s fail
+IdentityConstraint/s2_2_4v01/schema/s2_2_4v01s pass
+IdentityConstraint/s2_2_4v02/schema/s2_2_4v02s pass
+IdentityConstraint/s2_2_4v03/schema/s2_2_4v03s pass
 MGroup/annotation00101m1/schema/annotation00101m1 pass
 MGroup/annotation00101m10/schema/annotation00101m10 pass
 MGroup/annotation00101m11/schema/annotation00101m11 fail
