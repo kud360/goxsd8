@@ -1,7 +1,9 @@
 package conformance
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -88,5 +90,30 @@ func TestRunLaneRatchetRefusesRegression(t *testing.T) {
 	expected := map[string]Status{"set/g/instance/c": Pass()}
 	if _, err := Ratchet(expected, actual); err == nil {
 		t.Fatal("ratchet must refuse when an executor regresses a committed pass")
+	}
+}
+
+// TestCheckSuitePresent proves the missing-suite gate TestConformance depends
+// on (issue #309): an index that does not exist yields an error naming the
+// submodule-init command, and a present index yields none. The error is what
+// turns a silent skip into a hard failure, so it must be non-nil regardless of
+// whether this checkout has the submodule populated.
+func TestCheckSuitePresent(t *testing.T) {
+	dir := t.TempDir()
+	present := filepath.Join(dir, "suite.xml")
+	if err := os.WriteFile(present, []byte("<testSuite/>"), 0o600); err != nil {
+		t.Fatalf("writing fake suite index: %v", err)
+	}
+
+	err := checkSuitePresent(filepath.Join(dir, "no-such-root", "suite.xml"))
+	if err == nil {
+		t.Fatal("a non-existent suite root must yield an error, not a nil check (a skip would hide an empty run)")
+	}
+	if !strings.Contains(err.Error(), "git submodule update --init "+suiteModulePath) {
+		t.Errorf("error must name the init command, got %q", err)
+	}
+
+	if err := checkSuitePresent(present); err != nil {
+		t.Errorf("an existing suite index must check clean, got %v", err)
 	}
 }
