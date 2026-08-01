@@ -4676,7 +4676,7 @@ MS-Element2006-07-15/elemZ028f2/schema/elemZ028f2 fail
 MS-Element2006-07-15/elemZ028f3/schema/elemZ028f3 fail
 MS-Element2006-07-15/elemZ029/schema/elemZ029 pass
 MS-Element2006-07-15/elemZ030/schema/elemZ030 fail
-MS-Element2006-07-15/elemZ031/schema/elemZ031 pass
+MS-Element2006-07-15/elemZ031/schema/elemZ031 fail
 MS-Element2006-07-15/elemZ032a/schema/elemZ032a pass
 MS-Element2006-07-15/elemZ032b/schema/elemZ032b pass
 MS-Errata102006-07-15/errA001/schema/errA001 fail
@@ -9842,7 +9842,7 @@ MS-Schema2006-07-15/schZ012_c/schema/schZ012_c fail
 MS-Schema2006-07-15/schZ013/schema/schZ013 fail
 MS-Schema2006-07-15/schZ014_a/schema/schZ014_a fail
 MS-Schema2006-07-15/schZ014_b/schema/schZ014_b fail
-MS-Schema2006-07-15/schZ015/schema/schZ015 pass
+MS-Schema2006-07-15/schZ015/schema/schZ015 fail
 MS-SimpleType2006-07-15/stA001/schema/stA001 pass
 MS-SimpleType2006-07-15/stA002/schema/stA002 fail
 MS-SimpleType2006-07-15/stA003/schema/stA003 pass
