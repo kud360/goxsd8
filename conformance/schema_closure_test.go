@@ -382,10 +382,10 @@ func TestSchemaExecutorDecidesIncludeCases(t *testing.T) {
 	}
 	for _, tc := range cases {
 		doc := writeSchemaTree(t, "main.xsd", tc.docs)
-		if got := exec(caseSpec{kind: kindSchema, doc: doc, expectValid: tc.expectValid}); !got.IsPass() {
+		if got := exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(tc.expectValid)}); !got.IsPass() {
 			t.Errorf("%s (%s): executor disagreed with expectValid=%v", tc.name, tc.why, tc.expectValid)
 		}
-		if exec(caseSpec{kind: kindSchema, doc: doc, expectValid: !tc.expectValid}).IsPass() {
+		if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(!tc.expectValid)}).IsPass() {
 			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", tc.name)
 		}
 	}
@@ -437,16 +437,16 @@ func TestSchemaExecutorDecidesReachableExtraDocuments(t *testing.T) {
 	for _, tc := range cases {
 		root := writeSchemaTree(t, "main.xsd", tc.docs)
 		spec := caseSpec{
-			kind:        kindSchema,
-			doc:         root,
-			extraDocs:   extraPaths(root, tc.extra),
-			expectValid: tc.expectValid,
+			kind:      kindSchema,
+			doc:       root,
+			extraDocs: extraPaths(root, tc.extra),
+			expect:    expectValidity(tc.expectValid),
 		}
 		if !exec(spec).IsPass() {
 			t.Errorf("%s: executor disagreed with expectValid=%v", tc.name, tc.expectValid)
 		}
 		flipped := spec
-		flipped.expectValid = !tc.expectValid
+		flipped.expect = expectValidity(!tc.expectValid)
 		if exec(flipped).IsPass() {
 			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", tc.name)
 		}
@@ -477,10 +477,10 @@ func TestSchemaExecutorDeclinesUnreachableExtraDocument(t *testing.T) {
 		root := writeSchemaTree(t, "main.xsd", docs)
 		for _, ev := range []bool{true, false} {
 			spec := caseSpec{
-				kind:        kindSchema,
-				doc:         root,
-				extraDocs:   extraPaths(root, trees[name]),
-				expectValid: ev,
+				kind:      kindSchema,
+				doc:       root,
+				extraDocs: extraPaths(root, trees[name]),
+				expect:    expectValidity(ev),
 			}
 			if exec(spec).IsPass() {
 				t.Errorf("%s: must be DECLINED (Fail) regardless of expectValid=%v", name, ev)
@@ -525,7 +525,7 @@ func TestSchemaExecutorDeclinesUndecidableInclusion(t *testing.T) {
 	for _, name := range slices.Sorted(maps.Keys(trees)) {
 		doc := writeSchemaTree(t, "main.xsd", trees[name])
 		for _, ev := range []bool{true, false} {
-			if exec(caseSpec{kind: kindSchema, doc: doc, expectValid: ev}).IsPass() {
+			if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(ev)}).IsPass() {
 				t.Errorf("%s: must be DECLINED (Fail) regardless of expectValid=%v", name, ev)
 			}
 		}

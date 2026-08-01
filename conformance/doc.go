@@ -33,6 +33,17 @@
 // lane, not an error. Expectation files are machine-written only — never
 // edited by hand, and NEVER edited downward.
 //
+// A suite case may declare validity="indeterminate": the Working Group could
+// not agree the case has one right answer, and the suite's own catalog DTD
+// makes that a category disjoint from valid|invalid. Such a case is DECLINED —
+// no executor is run for it and it is always recorded `fail` — so it can never
+// score a pass (issue #277). Scoring it as if it meant "invalid" would have
+// credited this processor for rejecting a document nobody agrees should be
+// rejected. The decline is a harness-scoring convention, not a spec
+// requirement: XSD 1.1 makes [validity] three-valued and states that schema
+// validity is not a binary predicate, so there is no basis for equating
+// indeterminate with invalid.
+//
 // # Mechanics (the M1 implementation contract)
 //
 //	LoadExpectations(path) (map[string]Status, error)

@@ -25,7 +25,8 @@ import (
 // elements; each group carries schemaTest and/or instanceTest children. A
 // schemaTest/instanceTest has a name, its document reference(s)
 // (xlink:href to the document under test), and one or more expected children
-// declaring validity ("valid"|"invalid"), optionally qualified by a version. An
+// declaring validity ("valid"|"invalid"|"indeterminate", plus rarer spellings
+// xsts.dtd allows), optionally qualified by a version. An
 // instanceTest names ONE instanceDocument; a schemaTest may name SEVERAL
 // schemaDocuments, an ordered set to be loaded "one by one, in order"
 // (testdata/xsdtests/common/xsts.xsd, the suite's own catalog schema), so
@@ -79,9 +80,20 @@ func checkSuitePresent(index string) error {
 // caseSpec is one discovered conformance case: a stable ID, its kind, the
 // resolved path to the document under test, the resolved paths of any FURTHER
 // documents the case declares, and the suite's declared XSD 1.1 expectation. An
-// executor reads doc, extraDocs and expectValid to observe a Status; the M1 stub
+// executor reads doc, extraDocs and expect to observe a Status; the M1 stub
 // ignores them and always reports Fail. Fields are unexported and set only by
 // discovery (STYLE T1); nothing derivable is stored (STYLE D3).
+//
+// expect is THREE-valued, not a bool (issue #277). [validity] is a genuine
+// three-valued PSVI outcome in XSD 1.1 Structures (§3.2.5.1/§3.3.5.1:
+// valid/invalid/notKnown) and §5.2 states outright that "schema validity is not
+// a binary predicate"; the suite's own catalog DTD
+// (testdata/xsdtests/wgMeta/ancillary/xsts.dtd) matches that by declaring
+// `indeterminate` as a category DISJOINT from valid|invalid — a case the Working
+// Group deliberately left undecided. An indeterminate case is therefore DECLINED:
+// runLane never dispatches it to an executor and always records Fail(), the
+// codebase's standing "known/recorded gap" convention. No executor's answer,
+// right or wrong, can earn a pass on a case that has no agreed right answer.
 //
 // extraDocs is empty for every instanceTest and for the single-document
 // schemaTest that is the overwhelming majority. It is non-empty only for a
@@ -92,12 +104,54 @@ func checkSuitePresent(index string) error {
 // when every extra document is provably part of the closure the parser itself
 // walks from doc; see conformance/schema.go.
 type caseSpec struct {
-	id          string
-	kind        string
-	doc         string
-	extraDocs   []string
-	expectValid bool
+	id        string
+	kind      string
+	doc       string
+	extraDocs []string
+	expect    expectation
 }
+
+// expectation is the suite's declared XSD 1.1 outcome for one case, as a closed
+// three-valued set (STYLE T7): the document is expected to be valid, expected to
+// be invalid, or declared indeterminate — the Working Group could not agree on
+// one right answer. It is a struct so values are constructed ONLY via
+// expectValid, expectInvalid and expectIndeterminate, and so "valid or invalid"
+// and "indeterminate" cannot be encoded as an illegal combination of two fields
+// (STYLE D3: one fact, one encoding). The zero expectation is indeterminate, so
+// a caseSpec built without a declared outcome declines rather than being silently
+// scored against "invalid".
+type expectation struct {
+	outcome outcomeKind
+}
+
+// outcomeKind enumerates the three declared outcomes. Indeterminate is zero so
+// it is the safe default (see expectation).
+type outcomeKind uint8
+
+const (
+	outcomeIndeterminate outcomeKind = iota
+	outcomeValid
+	outcomeInvalid
+)
+
+// expectValid is the expectation for a suite case declared valid.
+func expectValid() expectation { return expectation{outcome: outcomeValid} }
+
+// expectInvalid is the expectation for a suite case declared invalid.
+func expectInvalid() expectation { return expectation{outcome: outcomeInvalid} }
+
+// expectIndeterminate is the expectation for a suite case the Working Group left
+// undecided; runLane declines such a case without running an executor.
+func expectIndeterminate() expectation { return expectation{outcome: outcomeIndeterminate} }
+
+// wantsValid reports whether the suite declared the document valid. It is the
+// derived bool view executors compare their observation against (STYLE D3), and
+// is meaningful only for a DISPATCHED case: runLane never dispatches an
+// indeterminate case, so an executor only ever sees the two real outcomes.
+func (e expectation) wantsValid() bool { return e.outcome == outcomeValid }
+
+// isIndeterminate reports whether the suite left this case undecided.
+func (e expectation) isIndeterminate() bool { return e.outcome == outcomeIndeterminate }
 
 // The two case kinds. A schemaTest asserts schema-document validity; an
 // instanceTest asserts an instance document's validity against its schema.
@@ -162,10 +216,21 @@ func laneFile(name string) string {
 // runLane executes every case the lane claims and returns the observed status
 // keyed by case ID. The map is an internal lookup for Compare/Ratchet, never
 // iterated into output (STYLE D2).
+//
+// A case the suite declared indeterminate is DECLINED here, before any executor
+// runs (issue #277): it is recorded Fail() — the codebase's "known/recorded gap"
+// status — and l.exec is not called at all. Declining at this seam rather than
+// inside each executor is what makes the guarantee total: a case with no agreed
+// right answer cannot be scored a pass by any executor, present or future,
+// however it happens to decide the document.
 func runLane(l lane, cases []caseSpec) map[string]Status {
 	actual := map[string]Status{}
 	for _, c := range cases {
 		if !l.selects(c) {
+			continue
+		}
+		if c.expect.isIndeterminate() {
+			actual[c.id] = Fail()
 			continue
 		}
 		actual[c.id] = l.exec(c)
@@ -327,7 +392,7 @@ func makeCase(setName, groupName, kind string, t validityTest, setDir string, se
 	if _, dup := seen[id]; dup {
 		return caseSpec{}, fmt.Errorf("duplicate case id %q", id)
 	}
-	valid, ok := resolveExpected(t.Expected)
+	want, ok := resolveExpected(t.Expected)
 	if !ok {
 		return caseSpec{}, fmt.Errorf("case %q has no declared expected validity", id)
 	}
@@ -337,11 +402,11 @@ func makeCase(setName, groupName, kind string, t validityTest, setDir string, se
 	}
 	seen[id] = struct{}{}
 	return caseSpec{
-		id:          id,
-		kind:        kind,
-		doc:         filepath.Join(setDir, filepath.FromSlash(href)),
-		extraDocs:   extra,
-		expectValid: valid,
+		id:        id,
+		kind:      kind,
+		doc:       filepath.Join(setDir, filepath.FromSlash(href)),
+		extraDocs: extra,
+		expect:    want,
 	}, nil
 }
 
@@ -363,27 +428,58 @@ func caseDocs(kind string, t validityTest, setDir string) (href string, extra []
 	return t.SchemaDocs[0].Href, extra, nil
 }
 
-// resolveExpected picks the validity that applies to an XSD 1.1 processor:
-// an explicit version="1.1" declaration wins, else an unversioned one (applies
-// to all versions), else the first declaration deterministically. ok is false
-// only when no expected element is present.
-func resolveExpected(exps []expected) (valid bool, ok bool) {
+// resolveExpected picks the declaration that applies to an XSD 1.1 processor and
+// classifies it: an explicit version="1.1" declaration wins, else an unversioned
+// one (applies to all versions), else the first declaration deterministically.
+// Precedence is decided by the version attribute ALONE and before the validity
+// is looked at, so a version="1.1" declaration wins over an unversioned one
+// whatever either says. ok is false only when no expected element is present.
+func resolveExpected(exps []expected) (expectation, bool) {
 	unversioned := -1
 	for i := range exps {
 		if exps[i].Version == "1.1" {
-			return exps[i].Validity == "valid", true
+			return classifyValidity(exps[i].Validity), true
 		}
 		if exps[i].Version == "" && unversioned < 0 {
 			unversioned = i
 		}
 	}
 	if unversioned >= 0 {
-		return exps[unversioned].Validity == "valid", true
+		return classifyValidity(exps[unversioned].Validity), true
 	}
 	if len(exps) > 0 {
-		return exps[0].Validity == "valid", true
+		return classifyValidity(exps[0].Validity), true
 	}
-	return false, false
+	return expectation{}, false
+}
+
+// classifyValidity maps one @validity token to the outcome the harness scores
+// against. "indeterminate" is its OWN outcome, not a synonym for invalid (issue
+// #277): xsts.dtd declares it disjoint from valid|invalid|notKnown|
+// runtime-schema-error, and there is no spec basis for equating it with invalid —
+// XSD 1.1 Structures §3.2.5.1/§3.3.5.1 make [validity] three-valued and §5.2 says
+// "schema validity is not a binary predicate" and that "there is no requirement
+// that input which is not schema-valid be rejected". Folding it into invalid
+// scored a case the Working Group left undecided as a PASS whenever this
+// processor happened to reject the document, for any reason, right or wrong.
+// Declining it instead is a harness-scoring convention, not a spec requirement:
+// no rule says a processor must not decide such a document, only that the suite
+// cannot judge the answer.
+//
+// Every other token — "invalid", plus the catalog's rarer
+// notKnown/runtime-schema-error/implementation-defined/implementation-dependent/
+// invalid-latent spellings — keeps the pre-existing "not valid" reading. Giving
+// those their own treatment is separate work; this function is the one place to
+// do it when it is grounded.
+func classifyValidity(v string) expectation {
+	switch v {
+	case "valid":
+		return expectValid()
+	case "indeterminate":
+		return expectIndeterminate()
+	default:
+		return expectInvalid()
+	}
 }
 
 // decodeSuiteIndex streams the suite index into its struct (STYLE P4: the XML

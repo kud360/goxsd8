@@ -178,7 +178,7 @@ func TestSchemaExecutorReadErrorDeclines(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, ev := range []bool{true, false} {
-		if exec(caseSpec{kind: kindSchema, doc: malformed, expectValid: ev}).IsPass() {
+		if exec(caseSpec{kind: kindSchema, doc: malformed, expect: expectValidity(ev)}).IsPass() {
 			t.Errorf("a ReadDocument error must Fail (decline) regardless of expectValid=%v", ev)
 		}
 	}
@@ -195,7 +195,7 @@ func TestSchemaExecutorDeclinesNonSchemaRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, ev := range []bool{true, false} {
-		if exec(caseSpec{kind: kindSchema, doc: nonSchema, expectValid: ev}).IsPass() {
+		if exec(caseSpec{kind: kindSchema, doc: nonSchema, expect: expectValidity(ev)}).IsPass() {
 			t.Errorf("non-schema root must Fail (decline) regardless of expectValid=%v", ev)
 		}
 	}
@@ -228,12 +228,12 @@ func TestSchemaExecutorAgreesWithSuite(t *testing.T) {
 	}
 	for _, tc := range cases {
 		doc := filepath.Join(sunSType, filepath.FromSlash(tc.rel))
-		c := caseSpec{kind: kindSchema, doc: doc, expectValid: tc.expectValid}
+		c := caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(tc.expectValid)}
 		if got := exec(c); !got.IsPass() {
 			t.Errorf("%s (%s): executor disagreed with suite (expectValid=%v)", tc.rel, tc.why, tc.expectValid)
 		}
 		// A flipped expectation must Fail, proving the executor really decides.
-		flipped := caseSpec{kind: kindSchema, doc: doc, expectValid: !tc.expectValid}
+		flipped := caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(!tc.expectValid)}
 		if exec(flipped).IsPass() {
 			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", tc.rel)
 		}
@@ -255,7 +255,7 @@ func TestSchemaExecutorDeclinesUndecidableSuiteCase(t *testing.T) {
 	// Suite-valid, but undecidable (an element with an inline anonymous complexType):
 	// the executor must not claim it — Fail against the true valid expectation is
 	// the honest gap.
-	if exec(caseSpec{kind: kindSchema, doc: doc, expectValid: true}).IsPass() {
+	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
 		t.Error("a suite-valid case with a skipped top-level complexType must be DECLINED (Fail), never vacuously passed")
 	}
 }

@@ -832,7 +832,7 @@ func execLexicalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c
 			break
 		}
 	}
-	if observedValid == c.expectValid {
+	if observedValid == c.expect.wantsValid() {
 		return Pass()
 	}
 	return Fail()
@@ -885,7 +885,7 @@ func decideLexicalByFacets(backend value.Backend, st *xsd.SimpleType, values []s
 			break
 		}
 	}
-	if observedValid == c.expectValid {
+	if observedValid == c.expect.wantsValid() {
 		return Pass()
 	}
 	return Fail()
@@ -924,7 +924,7 @@ func execContextualCase(m value.Mapping, prim string, c caseSpec) Status {
 			break
 		}
 	}
-	if observedValid == c.expectValid {
+	if observedValid == c.expect.wantsValid() {
 		return Pass()
 	}
 	return Fail()
@@ -968,7 +968,7 @@ func execItemCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 	if !decided {
 		return Fail()
 	}
-	if observedValid == c.expectValid {
+	if observedValid == c.expect.wantsValid() {
 		return Pass()
 	}
 	return Fail()
@@ -1056,7 +1056,7 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 			break
 		}
 	}
-	if observedValid == c.expectValid {
+	if observedValid == c.expect.wantsValid() {
 		return Pass()
 	}
 	return Fail()
@@ -1124,7 +1124,7 @@ func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c 
 	}
 	_, verr := value.ValidateLexical(backend, leaf, raw, ctx)
 	observedValid := verr == nil
-	if observedValid == c.expectValid {
+	if observedValid == c.expect.wantsValid() {
 		return Pass()
 	}
 	return Fail()
@@ -1193,7 +1193,7 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 	}
 	_, verr := value.ValidateLexical(backend, leaf, raw, ctx)
 	observedValid := verr == nil
-	if observedValid == c.expectValid {
+	if observedValid == c.expect.wantsValid() {
 		return Pass()
 	}
 	return Fail()
@@ -1299,7 +1299,7 @@ func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, 
 			break
 		}
 	}
-	if observedValid == c.expectValid {
+	if observedValid == c.expect.wantsValid() {
 		return Pass()
 	}
 	return Fail()
@@ -1354,7 +1354,7 @@ func execD34Case(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c cas
 			break
 		}
 	}
-	if observedValid == c.expectValid {
+	if observedValid == c.expect.wantsValid() {
 		return Pass()
 	}
 	return Fail()
@@ -1602,7 +1602,7 @@ func execAnyURIShapeCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleTyp
 			break
 		}
 	}
-	if observedValid == c.expectValid {
+	if observedValid == c.expect.wantsValid() {
 		return Pass()
 	}
 	return Fail()
