@@ -388,13 +388,27 @@ func (p *producer) prescan() {
 // produceIdentityConstraint mints the definition's own {name}, so the index key
 // and the component name agree under chameleon coercion (§F.1 task a).
 //
-// The walk is confined to what THIS producer actually maps: prescan withholds
-// the composition directives' subtrees (compositionDirective), whose contents
-// belong to another document's producer.
+// The walk is confined to what THIS producer actually maps, by two exclusions.
+// prescan withholds the composition directives' subtrees (compositionDirective),
+// whose contents belong to another document's producer. And the walk below
+// withholds every <annotation> subtree, entering neither it nor anything under
+// it. <appinfo> and <documentation> hold mixed, processContents="lax" content
+// (§A), and §3 is explicit that "neither the correspondences described nor the
+// XML Representation Constraints apply to elements in the Schema namespace which
+// occur as descendants of <appinfo> or <documentation>": a <key name="…"> there
+// is prose — an illustration, possibly truncated — and is mapped to no component
+// by anyone. Indexing it would make the index a strict SUPERSET of
+// {identity-constraint definitions}, the very property src-resolve clause 1.7
+// looks a ref= up in, letting prose shadow a real same-named definition or
+// satisfy a ref= that resolves to nothing. The guard covers foreign-namespace
+// elements too: in a schema document they occur only inside annotations.
 func (p *producer) prescanIdentityConstraints(el *Element) {
 	for _, child := range el.Children() {
 		c, ok := child.(*Element)
 		if !ok {
+			continue
+		}
+		if isXSD(c, "annotation") {
 			continue
 		}
 		p.prescanIdentityConstraints(c)

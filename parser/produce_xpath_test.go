@@ -304,6 +304,80 @@ func TestProduceIdentityConstraintRefFormAdmitsIDAndAnnotation(t *testing.T) {
 	}
 }
 
+func TestProduceIdentityConstraintRefIgnoresAnnotationMarkup(t *testing.T) {
+	// §3: "neither the correspondences described nor the XML Representation
+	// Constraints apply to elements in the Schema namespace which occur as
+	// descendants of <appinfo> or <documentation>". A <key name="k"> written in
+	// prose is mapped to no component, so it must not enter the index a ref=
+	// resolves against (src-resolve clause 1.7) and must not shadow the real
+	// definition of k.
+	//
+	// The ref= comes FIRST in document order in both cases: the build-once memo
+	// masks a bad index entry whenever the real definition is produced earlier,
+	// so this ordering is the one that observes the index directly.
+	tests := []struct {
+		name   string
+		shadow string
+	}{{
+		// Charged src-identity-constraint clause 2 against the prose <key>
+		// before the fix — a false REJECT of a valid schema.
+		name:   "truncated shadow",
+		shadow: `<xs:key name="k"/>`,
+	}, {
+		// Resolved to the prose <key> before the fix — no error at all, and
+		// <user> silently carried selector "FAKE".
+		name:   "well-formed shadow with different selector",
+		shadow: `<xs:key name="k"><xs:selector xpath="FAKE"/><xs:field xpath="@fake"/></xs:key>`,
+	}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := produce(t, wrap("", `<xs:element name="user"><xs:key ref="k"/></xs:element>
+			<xs:element name="owner">
+			  <xs:key name="k"><xs:selector xpath="REAL"/><xs:field xpath="@id"/></xs:key>
+			</xs:element>
+			<xs:element name="doc">
+			  <xs:annotation><xs:documentation>`+tt.shadow+`</xs:documentation></xs:annotation>
+			</xs:element>`))
+			if err != nil {
+				t.Fatalf("Produce: %v", err)
+			}
+			user, ok := s.Element(xsd.QName{Local: "user"})
+			if !ok {
+				t.Fatalf("element user not found")
+			}
+			constraints := user.IdentityConstraints()
+			if len(constraints) != 1 {
+				t.Fatalf("got %d identity constraints on <user>, want 1", len(constraints))
+			}
+			if got := constraints[0].Selector().Expression(); got != "REAL" {
+				t.Errorf("selector = %q, want the real definition's %q", got, "REAL")
+			}
+			owner, ok := s.Element(xsd.QName{Local: "owner"})
+			if !ok {
+				t.Fatalf("element owner not found")
+			}
+			defined := owner.IdentityConstraints()
+			if len(defined) != 1 || !reflect.DeepEqual(constraints[0], defined[0]) {
+				t.Errorf("<key ref=\"k\"> carries %#v, want the real definition's component %#v", constraints[0], defined)
+			}
+		})
+	}
+}
+
+func TestProduceIdentityConstraintRefToAnnotationOnlyNameUnresolvable(t *testing.T) {
+	// The only <key name="ghost"> in the document is prose inside
+	// <documentation>, so it is mapped to no component and {identity-constraint
+	// definitions} has no ghost at all: the ref= must fail src-resolve clause
+	// 1.7, not resolve to the illustration.
+	_, err := produce(t, wrap("", `<xs:element name="doc">
+	  <xs:annotation><xs:documentation>
+	    <xs:key name="ghost"><xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key>
+	  </xs:documentation></xs:annotation>
+	</xs:element>
+	<xs:element name="user"><xs:key ref="ghost"/></xs:element>`))
+	assertRule(t, err, "src-resolve")
+}
+
 func TestProduceXPathExpressionProperties(t *testing.T) {
 	constraints := idcOf(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"`+
 		` targetNamespace="urn:t" xmlns:tns="urn:t" xmlns="urn:d">`+
