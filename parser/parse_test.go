@@ -160,6 +160,98 @@ func TestParseChameleonTransitive(t *testing.T) {
 	}
 }
 
+// assembledSimpleType returns the *xsd.SimpleType an assembled schema holds
+// under name, failing the test when there is none or it is not a simple type.
+func assembledSimpleType(t *testing.T, s *xsd.Schema, name xsd.QName) *xsd.SimpleType {
+	t.Helper()
+	td, ok := s.Type(name)
+	if !ok {
+		t.Fatalf("type %s not found in assembled schema", name)
+	}
+	st, ok := td.(*xsd.SimpleType)
+	if !ok {
+		t.Fatalf("type %s = %T, want *xsd.SimpleType", name, td)
+	}
+	return st
+}
+
+// TestParseSimpleTypeBaseBuiltUnderItsOwnProducer is the simple-type twin of
+// TestParseExtensionBaseBuiltUnderItsOwnProducer: a <simpleType> reached through
+// a base= in ANOTHER document must be mapped by the producer of the document that
+// DECLARES it, never by the referring one.
+//
+// base.xsd is a chameleon (§4.2.3 clause 2.3), so §F.1 task (b) coerces ITS OWN
+// unqualified base="Root" to urn:x. That coercion belongs to the document holding
+// the attribute — §3.16.2.1 takes {base type definition} from "the actual value
+// of the base attribute", and src-resolve (§3.17.6.2) clause 4.1.1 scopes its
+// absent-namespace default to "the schema document containing the QName" — while
+// c-incl-incl only makes the component VISIBLE to the referring document, never
+// transfers resolution authority to it. Built under the referring producer,
+// unqualifiedRefNS would leave that reference ·absent· and the parse would falsely
+// fail src-resolve on {}Root.
+//
+// Both document orders are forced, because only one of them takes the on-demand
+// path: production follows discovery order (the root, then depth-first), so
+// "referrer first" is the root doing the referring, and "declarer first" is the
+// root including base.xsd ahead of a sibling document that refers to it.
+func TestParseSimpleTypeBaseBuiltUnderItsOwnProducer(t *testing.T) {
+	const xs = `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+	// Declares Base by restricting the UNQUALIFIED sibling reference Root, which
+	// §F.1 task (b) coerces to {urn:x}Root.
+	const chameleon = `<xs:schema ` + xs + `>` +
+		`<xs:simpleType name="Base"><xs:restriction base="Root">` +
+		`<xs:maxLength value="6"/></xs:restriction></xs:simpleType></xs:schema>`
+	const rootDecl = `<xs:simpleType name="Root"><xs:restriction base="xs:string">` +
+		`<xs:maxLength value="8"/></xs:restriction></xs:simpleType>`
+	const refDecl = `<xs:simpleType name="D"><xs:restriction base="tns:Base">` +
+		`<xs:maxLength value="4"/></xs:restriction></xs:simpleType>`
+
+	cases := []struct {
+		name string
+		docs map[string]string
+	}{{
+		// main is produced FIRST and is itself the referrer, so Base is unbuilt
+		// when D's base="tns:Base" is resolved: the on-demand build under a
+		// FOREIGN producer is the path under test.
+		name: "referrer produced before declarer",
+		docs: map[string]string{
+			"main.xsd": wrap("urn:x", `<xs:include schemaLocation="base.xsd"/>`+rootDecl+refDecl),
+			"base.xsd": chameleon,
+		},
+	}, {
+		// base.xsd is discovered — and so produced — before the sibling that refers
+		// to it, so Base is built by its own producer at its own document-order
+		// position and D's base= is a pure memo hit.
+		name: "declarer produced before referrer",
+		docs: map[string]string{
+			"main.xsd": wrap("urn:x", `<xs:include schemaLocation="base.xsd"/>`+
+				`<xs:include schemaLocation="ref.xsd"/>`+rootDecl),
+			"base.xsd": chameleon,
+			"ref.xsd":  wrap("urn:x", refDecl),
+		},
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := parseMap(t, "main.xsd", tc.docs)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			base := assembledSimpleType(t, s, xsd.QName{Space: "urn:x", Local: "Base"})
+			if got := base.Base().Name(); got != (xsd.QName{Space: "urn:x", Local: "Root"}) {
+				t.Fatalf("{urn:x}Base's {base type definition} = %s, want {urn:x}Root — the base= was resolved under the wrong document", got)
+			}
+			// Component identity (xsd/typedefinition.go): whichever producer asked
+			// for the build, the assembly holds ONE component per name.
+			if root := assembledSimpleType(t, s, xsd.QName{Space: "urn:x", Local: "Root"}); base.Base() != root {
+				t.Errorf("{urn:x}Base's base is a rebuilt twin, not {type definitions}' own {urn:x}Root")
+			}
+			if d := assembledSimpleType(t, s, xsd.QName{Space: "urn:x", Local: "D"}); d.Base() != base {
+				t.Errorf("{urn:x}D's base is a rebuilt twin, not {type definitions}' own {urn:x}Base")
+			}
+		})
+	}
+}
+
 // TestParseChameleonIncludesCoercedNamespace pins §4.2.3's recursion note: A
 // (targetNamespace urn:a) includes chameleon B, which itself includes C declaring
 // targetNamespace urn:a. Clause 2 is evaluated against the COERCED namespace —
