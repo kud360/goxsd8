@@ -276,12 +276,26 @@ func governingMapping(b Backend, node *xsd.SimpleType) (Mapping, bool) {
 		}
 		return unionMapping(b, u), true
 	}
-	for s := node; s != nil; s = s.Base() {
-		if m, ok := b.Mapping(s.Name()); ok {
-			return m, true
-		}
+	if s, ok := governingNode(b, node); ok {
+		return b.Mapping(s.Name())
 	}
 	return Mapping{}, false
+}
+
+// governingNode walks from node (inclusive) up the base chain and returns the
+// first type the backend supplies a Mapping for — the widest-space rule
+// (st-restrict-facets §3.16.6.4, backend.go) as a single encoding (STYLE T4),
+// read by governingMapping for the Mapping it names and by governingType
+// (valuespace.go) for the node's identity. It applies NO {variety} test: each
+// caller states its own (see governingMapping for why one test on node settles
+// the whole chain).
+func governingNode(b Backend, node *xsd.SimpleType) (*xsd.SimpleType, bool) {
+	for s := node; s != nil; s = s.Base() {
+		if _, ok := b.Mapping(s.Name()); ok {
+			return s, true
+		}
+	}
+	return nil, false
 }
 
 // declaringFacetSpace resolves the two things a Constraining Facet's raw {value}

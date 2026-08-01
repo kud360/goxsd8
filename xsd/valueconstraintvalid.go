@@ -99,7 +99,7 @@ func (s *Schema) checkAttributeUseValueConstraints() error {
 // The descent mirrors resolveComplexType's.
 func (s *Schema) checkComplexTypeAttributeUses(c ComplexType) error {
 	for _, u := range c.AttributeUses() {
-		if err := s.checkAttributeUseValueConstraint(u, c.Loc(), "complex type "+c.Name().String()); err != nil {
+		if err := s.checkAttributeUseValueConstraint(u, c.Loc(), complexTypeOwner(c)); err != nil {
 			return err
 		}
 	}
@@ -108,6 +108,18 @@ func (s *Schema) checkComplexTypeAttributeUses(c ComplexType) error {
 		return nil // Empty and Simple content carry no particle tree
 	}
 	return s.checkParticleAttributeUses(ct.Particle)
+}
+
+// complexTypeOwner renders c as the owner phrase of a rejection message. An
+// inline <xs:complexType> has no {name} (the zero QName, whose String is ""),
+// so naming it would leave a hole in the message; it is described by what it is
+// instead.
+func complexTypeOwner(c ComplexType) string {
+	n := c.Name()
+	if n == (QName{}) {
+		return "anonymous complex type"
+	}
+	return "complex type " + n.String()
 }
 
 // checkElementAttributeUses descends an element declaration's inline {type

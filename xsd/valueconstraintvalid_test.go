@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -249,6 +250,42 @@ func TestPhaseEReachesEveryAttributeUseSite(t *testing.T) {
 				tc.build(b)
 			})
 			expectRule(t, err, ruleAuPropsCorrect)
+		})
+	}
+}
+
+// TestPhaseEOwnerNamesAnonymousComplexType pins the owner phrase Phase E puts in
+// its message. An inline <xs:complexType> has no {name}, and the zero QName
+// renders as "", so concatenating it would leave a hole ("complex type  gives
+// …"); the anonymous case must be described instead.
+func TestPhaseEOwnerNamesAnonymousComplexType(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		build func(*SchemaBuilder)
+		want  string
+	}{
+		{"named", func(b *SchemaBuilder) {
+			b.AddType(dType(t, uq("t"), anyTypeName, EmptyContent{}, []AttributeUse{vcRefUse(t, ValueDefault, "7")}, nil))
+		}, "complex type {urn:upa}t "},
+		{"anonymous", func(b *SchemaBuilder) {
+			ct := dType(t, QName{}, anyTypeName, EmptyContent{}, []AttributeUse{vcRefUse(t, ValueDefault, "7")}, nil)
+			e, err := NewElementDeclaration(xsderr.Loc{}, uq("e"), InlineTypeDefinition{Definition: ct}, nil,
+				NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+			if err != nil {
+				t.Fatalf("NewElementDeclaration: %v", err)
+			}
+			b.AddElement(e)
+		}, "anonymous complex type "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := vcSchema(t, undecidedValueSpace{}, func(b *SchemaBuilder) {
+				vcGlobalFixed(t, "7")(b)
+				tc.build(b)
+			})
+			expectRule(t, err, ruleAuPropsCorrect)
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("message %q does not contain %q", err.Error(), tc.want)
+			}
 		})
 	}
 }

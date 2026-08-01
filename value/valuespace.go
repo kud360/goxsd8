@@ -159,8 +159,8 @@ func (vs valueSpace) sharedMapping(ta, tb *xsd.SimpleType) (Mapping, bool) {
 }
 
 // governingType is the type node whose Mapping governs node's value space: node
-// itself, or — under the widest-space rule (governingMapping's own base-chain
-// walk, which this mirrors for the atomic case) — its nearest mapped ancestor.
+// itself, or — under the widest-space rule, walked by the shared governingNode
+// (facets.go) that governingMapping also reads — its nearest mapped ancestor.
 // The NODE is returned rather than the Mapping because a Mapping is a struct of
 // funcs and so cannot be compared; identity of the governing node is what tells
 // two value spaces apart, and pointer identity is the right test because
@@ -173,12 +173,7 @@ func governingType(b Backend, node *xsd.SimpleType) (*xsd.SimpleType, bool) {
 	if _, ok := node.Variety().(xsd.Atomic); !ok {
 		return nil, false
 	}
-	for s := node; s != nil; s = s.Base() {
-		if _, ok := b.Mapping(s.Name()); ok {
-			return s, true
-		}
-	}
-	return nil, false
+	return governingNode(b, node)
 }
 
 // contextDependent reports whether t's {primitive type definition} is QName or
@@ -206,8 +201,14 @@ func contextDependent(t *xsd.SimpleType) bool {
 // identical to itself while equal to nothing; dateTime and duration, equal but
 // not identical across remembered timezone offsets). For every other value
 // §2.2.2 settles it — "the equality relation for most datatypes IS the identity
-// relation" — so order equality answers, which is the same fallback [Identical]'s
-// own doc prescribes for enumeration matching.
+// relation" — so order equality answers.
+//
+// That fallback is sound for STRICT identity only because of the obligation
+// [Identical]'s own doc states: a value type whose identity differs from its
+// equality MUST implement [Identical], so an [Eq]-only value has declared the
+// two relations to be one. It is NOT sound merely by analogy with enumeration
+// matching, which tests the equal-or-identical UNION (equalOrIdentical) and so
+// can absorb an Eq answer in the union direction regardless.
 //
 // This is deliberately NOT equalOrIdentical: for a value that DOES distinguish
 // the two, au-props-correct clause 3 says "identical", so an equal-but-not-
