@@ -516,18 +516,14 @@ func (e enumFacet) CheckValue(v Value) error {
 }
 
 // enumMatch reports the "equal or identical" relation cvc-enumeration-valid
-// needs (§4.3.5.4). It prefers Identical (the identity relation: NaN identical
-// to itself, +0 not identical to -0 — doc.go) when the candidate implements it,
-// and unions it with Eq so an equal-but-not-identical member (e.g. +0 vs -0)
-// still matches. A candidate with neither capability matches nothing.
+// needs (§4.3.5.4). The relation itself is equalOrIdentical, the ONE encoding
+// this package has of the §2.2.1/§2.2.2 union (STYLE T4); enumeration matching
+// discards its decided result because "not decided" and "not matched" are the
+// same verdict for a facet — a candidate carrying neither comparison capability
+// matches nothing, which is what this call site has always done.
 func enumMatch(candidate, member Value) bool {
-	if id, ok := candidate.(Identical); ok && id.Identical(member) {
-		return true
-	}
-	if eq, ok := candidate.(Eq); ok && eq.Eq(member) {
-		return true
-	}
-	return false
+	same, _ := equalOrIdentical(candidate, member)
+	return same
 }
 
 // boundFacet is one of the four bound value-facet stages

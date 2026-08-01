@@ -105,10 +105,12 @@ func (b *SchemaBuilder) AddAnnotation(a Annotation) {
 
 // Schema is the finalized, immutable compiled schema set (Structures §3.17.1,
 // assembled per §4.2.1's "schema(D)"). It is constructible ONLY via
-// SchemaBuilder.Finalize: its fields are unexported and it has no other
-// constructor, so a not-yet-finalized accumulator can never be handed off as a
-// finalized Schema (STYLE T1/T7) — "not finalized" (SchemaBuilder) and
-// "finalized" (Schema) are distinct Go types, not two states of one type.
+// SchemaBuilder.Finalize or SchemaBuilder.FinalizeWith: its fields are
+// unexported and it has no other constructor, so a not-yet-finalized accumulator
+// can never be handed off as a finalized Schema (STYLE T1/T7) — "not finalized"
+// (SchemaBuilder) and "finalized" (Schema) are distinct Go types, not two states
+// of one type. The two entry points differ only in whether a [ValueSpace] is
+// installed.
 //
 // *Schema is the Query API (xsd/doc.go): it satisfies TypeResolver,
 // ElementResolver, and AttributeResolver through its Type, Element, and
@@ -147,6 +149,12 @@ type Schema struct {
 	modelGroupIndex     map[QName]ModelGroupDefinition
 	notationIndex       map[QName]Notation
 	idcIndex            map[QName]IdentityConstraint
+
+	// valueSpace answers the {value}-comparison questions au-props-correct
+	// clause 3 and loc-testSubP clauses 4.2/5.2.2 ask, which this package cannot
+	// answer itself (see ValueSpace). It is never nil: Finalize installs
+	// undecidedValueSpace{}, so every consumer calls it unconditionally.
+	valueSpace ValueSpace
 }
 
 // Finalize builds the immutable Schema from the accumulated components. It
@@ -189,7 +197,43 @@ type Schema struct {
 //
 // Every OTHER sch-props-correct clause (in particular clause 1's remaining
 // cross-reference-dependent requirements) stays deferred to later passes.
+//
+// Finalize installs NO value space, so every {value}-identity comparison the
+// resolution pass would make (au-props-correct §3.5.6 clause 3, loc-testSubP
+// §3.4.6.4 clauses 4.2 and 5.2.2) is undecided and fails open — the behavior
+// this entry point has always had. A caller that can supply the lexical→value
+// mapping calls [SchemaBuilder.FinalizeWith] instead.
 func (b *SchemaBuilder) Finalize() (*Schema, error) {
+	return b.finalize(undecidedValueSpace{})
+}
+
+// FinalizeWith is [SchemaBuilder.Finalize] with a value space installed: vs
+// answers the {value}-comparison questions package xsd cannot (see [ValueSpace]),
+// so the resolution pass can decide au-props-correct (§3.5.6) clause 3 and
+// loc-testSubP (§3.4.6.4) clauses 4.2 and 5.2.2 instead of waving them through.
+// It is otherwise identical to Finalize — same components, same indexes, same
+// rejections — and can only NARROW what is accepted, never widen it: vs reports
+// "undecided" wherever it cannot compare, and undecided is accept.
+//
+// It is a second entry point rather than a setter on the builder because a
+// ValueSpace is a finalize-time INPUT, not accumulated schema state: a mutable
+// setter would make "builder with a value space installed" and "builder without"
+// two states of one type, which is exactly what the SchemaBuilder/Schema split
+// exists to avoid (STYLE T1/T7).
+//
+// It panics if vs is nil, on the same grounds as [SchemaBuilder.AddType]'s nil
+// guard: a nil capability is a caller/producer bug, not a schema-validity
+// condition.
+func (b *SchemaBuilder) FinalizeWith(vs ValueSpace) (*Schema, error) {
+	if vs == nil {
+		panic("xsd: SchemaBuilder.FinalizeWith: nil ValueSpace")
+	}
+	return b.finalize(vs)
+}
+
+// finalize is the one assembly path both entry points take; they differ only in
+// the ValueSpace they install (STYLE T4).
+func (b *SchemaBuilder) finalize(vs ValueSpace) (*Schema, error) {
 	typeIndex, err := indexByName(b.types, "type definitions")
 	if err != nil {
 		return nil, err
@@ -234,6 +278,7 @@ func (b *SchemaBuilder) Finalize() (*Schema, error) {
 		modelGroupIndex:     modelGroupIndex,
 		notationIndex:       notationIndex,
 		idcIndex:            idcIndex,
+		valueSpace:          vs,
 	}
 	if err := s.resolve(); err != nil {
 		return nil, err

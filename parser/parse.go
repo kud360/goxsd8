@@ -528,7 +528,10 @@ func (a *assembly) fetch(requested, namespace string, ov *overrideSet, el *Eleme
 // document's pre-scan runs before any document is produced, so a base= or
 // <attributeGroup ref> in one document reaches a definition contributed by
 // another (§4.2.3 clause 3.1.2, c-incl-incl); the builtins are seeded once, by
-// newSymbols, for the whole assembly.
+// newSymbols, for the whole assembly. backend supplies the finalized schema's
+// value space too ([value.NewValueSpace]), so the finalize-time {value}
+// comparisons (au-props-correct clause 3, loc-testSubP clauses 4.2/5.2.2) decide
+// rather than fail open — see [Produce] for the full statement.
 func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 	builder := xsd.NewSchemaBuilder()
 	sym, err := newSymbols(builder, backend)
@@ -548,7 +551,7 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 			return nil, err
 		}
 	}
-	return builder.Finalize()
+	return builder.FinalizeWith(value.NewValueSpace(backend))
 }
 
 // resolveSchemaLocation resolves a schemaLocation URI reference against the base
