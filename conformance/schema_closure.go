@@ -92,6 +92,16 @@ type closureScan struct {
 	// It is scan-scoped: created per case, never threaded anywhere else
 	// (STYLE D4, like xsd/resolve.go's acyclic-scan sets).
 	loaded map[scanKey]struct{}
+
+	// unresolved records that SOME directive in the closure yielded no D2 — an
+	// <include>/<override>/<import> whose schemaLocation did not resolve, or a bare
+	// <import> with none at all. Each is a spec non-error (§4.2.3 clause 2.4,
+	// §4.3.2, §4.2.6.2), so it cannot decline the walk on its own; it is the
+	// PRECONDITION of the fabricated-rejection hazard, which execSchemaCase
+	// completes by pairing it with the parse outcome (#276). Recording it is not
+	// redundant state (STYLE D3): nothing else in the scan witnesses a directive
+	// that named no document, precisely because no document was loaded for it.
+	unresolved bool
 }
 
 // newClosureScan returns the scan for a root schema document already read from
@@ -131,6 +141,11 @@ func (s *closureScan) visited(resolved string) bool {
 // <xs:include> or <xs:import> lies within the producer's decidable subset. It is
 // the root's entry point too: the root is checked through the same code path as
 // every composed document, so no shape is gated differently for being the root.
+//
+// A directive that names no document at all is NOT what this reports on: there is
+// no shape to gate, so the walk keeps going and merely records the fact on the
+// scan (closureScan.unresolved), which execSchemaCase reads once the parse
+// outcome is known (#276).
 func (s *closureScan) decidable(doc *parser.Document, tns string) bool {
 	if !schemaShapeDecidable(doc) {
 		return false
@@ -176,28 +191,39 @@ func (s *closureScan) decidable(doc *parser.Document, tns string) bool {
 //
 // Its outcomes:
 //
-//   - no schemaLocation attribute: DECLINE. The attribute is required by the
-//     schema for schema documents and parser.Parse reports its absence as a plain
-//     grammar fault, but the walk cannot verify the decidability of a target it
-//     cannot name, so being conservative is the only honest answer.
-//   - the location does not resolve (loader.ErrNotFound): DECLINE, symmetrically
-//     with importDirective (#276). §4.2.3 clause 2.4 is explicit that "it is not
-//     an error for the ·actual value· of the schemaLocation [attribute] to fail to
-//     resolve at all, in which case the corresponding inclusion must not be
-//     performed", and §4.3.2 says the same of <override> ("the attempt must be
-//     made but it is not an error for it to fail"). Precisely because the missing
-//     D2 is a non-error, parser.Parse goes on to assemble a schema lacking every
-//     component D2 would have contributed, and each reference that would have been
-//     discharged from it instead fails src-resolve clauses 1-3 at finalize (the
-//     §5.3 Missing Sub-components pathway src-include's own prose points at). The
-//     lane would then agree with a suite-invalid case for a reason the spec does
-//     not attach to the missing document: a FABRICATED "invalid" verdict, the one
-//     direction that can corrupt the ratchet.
-//   - any OTHER resolver error, or a ReadDocument error on the fetched document:
-//     DECLINE, and ambiguous on top of that — a permission or transport failure, or
-//     a parser encoding LIMITATION (well-formed UTF-16 read as invalid UTF-8) —
-//     so neither may be turned into a verdict (the same reasoning as schema.go
-//     step 1).
+//   - no schemaLocation attribute: DECLINE outright. The attribute is REQUIRED by
+//     the schema for schema documents, so this is a malformed directive, not the
+//     spec's "fails to resolve" non-error; parser.Parse reports its absence as a
+//     plain grammar fault, and the walk cannot verify the decidability of a target
+//     it cannot name.
+//   - the location does not resolve, for ANY resolver reason: NOT a decline, and
+//     the siblings keep being walked — the fact is RECORDED on the scan
+//     (s.unresolved) instead, symmetrically with importDirective (#276). §4.2.3
+//     clause 2.4 is explicit that "it is not an error for the ·actual value· of the
+//     schemaLocation [attribute] to fail to resolve at all, in which case the
+//     corresponding inclusion must not be performed", and §4.3.2 says the same of
+//     <override> ("the attempt must be made but it is not an error for it to
+//     fail"). When parser.Parse then SUCCEEDS, that non-error rule is simply
+//     working — nothing was fabricated, and the case must still be decided; the
+//     suite tests the rule head-on (MS-Schema schD8 names a target
+//     "must%20not%20resolve.xyzzy"), so declining here would refuse the very cases
+//     clause 2.4 is about.
+//     The hazard is the OTHER outcome. Precisely because the missing D2 is a
+//     non-error, parser.Parse may assemble a schema lacking every component D2
+//     would have contributed, and each reference that would have been discharged
+//     from it instead fails src-resolve clauses 1-3 at finalize (the §5.3 Missing
+//     Sub-components pathway src-include's own prose points at). The lane would
+//     then agree with a suite-invalid case for a reason the spec does not attach to
+//     the missing document: a FABRICATED "invalid" verdict, the one direction that
+//     can corrupt the ratchet. That failure is visible only AFTER the parse, so
+//     execSchemaCase declines exactly when this recorded flag coincides with
+//     perr != nil.
+//   - a ReadDocument error on the fetched document: DECLINE, and ambiguous on top
+//     of that — a genuine well-formedness fault or a parser encoding LIMITATION
+//     (well-formed UTF-16 read as invalid UTF-8) — so it may not be turned into a
+//     verdict (the same reasoning as schema.go step 1). Unlike a location that
+//     never resolved, a D2 that exists but could not be read leaves a document the
+//     parser does read UNGATED.
 //   - the document is already loaded: NOT a decline, and not re-walked. It was
 //     shape-checked when first reached.
 //   - the document is not a <schema>: NOT a decline, and not recursed into. There
@@ -215,7 +241,8 @@ func (s *closureScan) compose(el *parser.Element, tns string) bool {
 
 	rc, resolved, err := s.resolver.Resolve(tns, requested)
 	if err != nil {
-		return false
+		s.unresolved = true
+		return true
 	}
 	// Read-only reader: a close failure cannot change what was already read, so it
 	// cannot affect the verdict (STYLE S3).
@@ -242,15 +269,18 @@ func (s *closureScan) compose(el *parser.Element, tns string) bool {
 
 // importDirective follows one <import> element and reports whether what it names
 // is decidable. Its outcomes are compose's, for the same reasons: a directive that
-// yields no D2 DECLINES, whichever directive it is.
+// yields no D2 is RECORDED, not declined, whichever directive it is.
 //
 //   - no schemaLocation attribute (the bare <import> §4.2.6.2 calls legal), or a
-//     schemaLocation that does not resolve: DECLINE. Both are non-errors for the
-//     parser (§4.2.6.2: "It is not an error for the application schema component
+//     schemaLocation that does not resolve for any resolver reason: NOT a decline,
+//     RECORDED on the scan (s.unresolved). Both are non-errors for the parser
+//     (§4.2.6.2: "It is not an error for the application schema component
 //     reference strategy to fail"), so the imported namespace contributes NO
 //     components — and every reference into it then fails src-resolve at finalize.
-//     That is a FABRICATED "invalid" verdict, the one direction that can corrupt
-//     the ratchet by agreeing with a suite-invalid case for the wrong reason.
+//     THAT is the fabricated "invalid" this records against, and it is observable
+//     only as a failed parse, so execSchemaCase pairs the flag with perr != nil
+//     (#276); an import that yields no D2 while the parse succeeds broke nothing
+//     and is decided normally.
 //     §4.2.6.2's "not an error" text is the exact parallel of src-include clause
 //     2.4, and src-resolve draws no line between the two origins either: clause 4
 //     (cl.qnr.nsdeclared) licenses a same-namespace reference unconditionally
@@ -258,17 +288,15 @@ func (s *closureScan) compose(el *parser.Element, tns string) bool {
 //     <import> element (4.2.2), whether or not that import's schemaLocation
 //     resolved — so a missing included D2 and a missing imported D2 both fail at
 //     clauses 1-3, in the same §5.3 bucket. They are one hazard, and compose
-//     declines on it too (#276). The one asymmetry §4.2.6.1 does draw — a foreign
-//     namespace referenced with no <import> element at ALL is not §5.3-eligible —
-//     keys on the ABSENCE of a directive, not on a resolver outcome, and is not
-//     what this branch sees.
-//   - any resolver error at all: DECLINE, for the same reason and for compose's
-//     (a permission or transport failure may not become a verdict).
+//     records it identically (#276). The one asymmetry §4.2.6.1 does draw — a
+//     foreign namespace referenced with no <import> element at ALL is not
+//     §5.3-eligible — keys on the ABSENCE of a directive, not on a resolver
+//     outcome, and is not what this branch sees.
 //   - already loaded under this namespace: NOT a decline, and not re-walked. It
 //     was shape-checked when first reached.
 //   - a ReadDocument error on the fetched document: DECLINE — ambiguous between a
 //     well-formedness fault and a parser encoding LIMITATION, exactly as for
-//     include.
+//     include, and the document it leaves ungated is one the parser does read.
 //   - the document is not a <schema>: NOT a decline. src-import clause 2 makes
 //     that a genuine rejection parser.Parse emits, and there is no top-level
 //     content to shape-check.
@@ -278,7 +306,8 @@ func (s *closureScan) compose(el *parser.Element, tns string) bool {
 func (s *closureScan) importDirective(el *parser.Element) bool {
 	hint, hasHint := elementAttr(el, "schemaLocation")
 	if !hasHint {
-		return false
+		s.unresolved = true
+		return true
 	}
 	// The resolver is asked under the IMPORT's namespace, as parser.assembly does:
 	// that (namespace, location) pair is the reference strategy's input.
@@ -287,7 +316,8 @@ func (s *closureScan) importDirective(el *parser.Element) bool {
 
 	rc, resolved, err := s.resolver.Resolve(namespace, requested)
 	if err != nil {
-		return false
+		s.unresolved = true
+		return true
 	}
 	// Read-only reader (STYLE S3).
 	defer func() { _ = rc.Close() }()

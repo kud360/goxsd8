@@ -36,8 +36,11 @@ func override(location, body string) string {
 
 // closureDecidableIn runs the harness's own discovery walk over an in-memory
 // document set (loader.Map is keyed by the exact location string, so it pins the
-// resolution chain the walk computes) and reports its verdict for root.
-func closureDecidableIn(t *testing.T, root string, docs map[string]string) bool {
+// resolution chain the walk computes) and reports its two verdicts for root: the
+// decidability of every document it reached, and whether some directive in the
+// closure named no document at all (closureScan.unresolved) — the fact
+// execSchemaCase pairs with the parse outcome (#276).
+func closureDecidableIn(t *testing.T, root string, docs map[string]string) (decidable, unresolved bool) {
 	t.Helper()
 	resolver := loader.Map(docs)
 	rc, resolved, err := resolver.Resolve("", root)
@@ -50,7 +53,8 @@ func closureDecidableIn(t *testing.T, root string, docs map[string]string) bool 
 		t.Fatalf("ReadDocument(%q): %v", root, err)
 	}
 	rootTNS, _ := elementAttr(doc.Root(), "targetNamespace")
-	return newClosureScan(resolver, resolved, rootTNS).decidable(doc, rootTNS)
+	scan := newClosureScan(resolver, resolved, rootTNS)
+	return scan.decidable(doc, rootTNS), scan.unresolved
 }
 
 // undecidable is a top-level list-variety simpleType: a shape schemaShapeDecidable
@@ -67,11 +71,18 @@ const decidableType = `<xs:simpleType name="code">` +
 // every document is decidable, and — the point of the whole walk — DECLINES when
 // the undecidable shape sits in an INCLUDED document rather than the root, which a
 // root-only shape check would have vacuously admitted.
+//
+// wantUnresolved pins the walk's second output (#276): a directive that named no
+// document leaves the walk's decidability verdict alone — there is no shape to
+// gate — and is recorded instead, for execSchemaCase to pair with the parse
+// outcome. Every other case must leave that flag CLEAR, which is what keeps the
+// recording specific to a genuinely absent document.
 func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 	cases := []struct {
-		name string
-		docs map[string]string
-		want bool
+		name           string
+		docs           map[string]string
+		want           bool
+		wantUnresolved bool
 	}{
 		{
 			name: "whole closure decidable",
@@ -98,11 +109,12 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "<include> whose schemaLocation does not resolve declines (no D2, #276)",
+			name: "<include> whose schemaLocation does not resolve is recorded, not declined (§4.2.3 cl. 2.4, #276)",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", include("missing.xsd")+`<xs:element name="root" type="xs:string"/>`),
 			},
-			want: false,
+			want:           true,
+			wantUnresolved: true,
 		},
 		{
 			name: "<include> without schemaLocation declines (target cannot be named)",
@@ -152,18 +164,20 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "bare <import> with no schemaLocation declines (no D2: the namespace stays empty)",
+			name: "bare <import> with no schemaLocation is recorded, not declined (§4.2.6.2, #276)",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b"/>`),
 			},
-			want: false,
+			want:           true,
+			wantUnresolved: true,
 		},
 		{
-			name: "<import> whose schemaLocation does not resolve declines (no D2)",
+			name: "<import> whose schemaLocation does not resolve is recorded, not declined (#276)",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="missing.xsd"/>`),
 			},
-			want: false,
+			want:           true,
+			wantUnresolved: true,
 		},
 		{
 			name: "malformed <import>ed document declines (could be an encoding limitation)",
@@ -224,12 +238,13 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "<override> whose schemaLocation does not resolve declines (no Dold, #276)",
+			name: "<override> whose schemaLocation does not resolve is recorded, not declined (§4.3.2, #276)",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", override("missing.xsd", `<xs:element name="e" type="xs:string"/>`)+
 					`<xs:element name="root" type="xs:string"/>`),
 			},
-			want: false,
+			want:           true,
+			wantUnresolved: true,
 		},
 		{
 			name: "<override> without schemaLocation declines (target cannot be named)",
@@ -246,8 +261,12 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		if got := closureDecidableIn(t, "main.xsd", tc.docs); got != tc.want {
+		got, unresolved := closureDecidableIn(t, "main.xsd", tc.docs)
+		if got != tc.want {
 			t.Errorf("%s: closure decidable = %v, want %v", tc.name, got, tc.want)
+		}
+		if unresolved != tc.wantUnresolved {
+			t.Errorf("%s: closure unresolved = %v, want %v", tc.name, unresolved, tc.wantUnresolved)
 		}
 	}
 }
@@ -272,12 +291,12 @@ func TestClosureScanResolvesAgainstIncludingDocumentsBase(t *testing.T) {
 		}
 	}
 	// Depth 2 reached and decidable: the whole chain is admitted.
-	if !closureDecidableIn(t, "main.xsd", tree(decidableType, undecidable)) {
+	if decidable, _ := closureDecidableIn(t, "main.xsd", tree(decidableType, undecidable)); !decidable {
 		t.Error("a fully decidable relative include chain must be admitted")
 	}
 	// Depth 2 reached and undecidable, with a decidable decoy at the resolver root:
 	// only base-relative resolution of the depth-2 hint declines here.
-	if closureDecidableIn(t, "main.xsd", tree(undecidable, decidableType)) {
+	if decidable, _ := closureDecidableIn(t, "main.xsd", tree(undecidable, decidableType)); decidable {
 		t.Error("the walk admitted the case: it resolved sub/child.xsd's include against the wrong base and read the root-level decoy")
 	}
 }
@@ -294,10 +313,10 @@ func TestClosureScanTerminatesOnIncludeCycle(t *testing.T) {
 			"lib.xsd":  schemaSrc("urn:a", include("main.xsd")+libBody),
 		}
 	}
-	if !closureDecidableIn(t, "main.xsd", cycle(decidableType)) {
+	if decidable, _ := closureDecidableIn(t, "main.xsd", cycle(decidableType)); !decidable {
 		t.Error("a decidable include cycle must terminate and be admitted")
 	}
-	if closureDecidableIn(t, "main.xsd", cycle(undecidable)) {
+	if decidable, _ := closureDecidableIn(t, "main.xsd", cycle(undecidable)); decidable {
 		t.Error("an include cycle whose second document is undecidable must decline")
 	}
 }
@@ -532,44 +551,84 @@ func TestSchemaExecutorDeclinesUndecidableInclusion(t *testing.T) {
 	}
 }
 
-// TestSchemaExecutorDeclinesUnresolvedDirectiveTarget pins the include/import
-// symmetry end-to-end (#276): a composition directive whose schemaLocation does
-// not resolve contributes NO document, so the root's reference into what that
+// noD2Trees returns one single-document tree per composition directive that names
+// no document at all: an <include>, an <override> and an <import> whose
+// schemaLocation does not resolve, plus the bare <import> §4.2.6.2 calls legal.
+// sameNSBody is the extra top-level content of the two same-namespace roots and
+// foreignNSBody that of the two <import> roots (which bind the b: prefix to the
+// imported namespace instead).
+//
+// The two tests below drive these SAME four shapes under the only variable that
+// separates them (#276): whether the root refers to something only the missing
+// document could have supplied — i.e. whether parser.Parse fails.
+func noD2Trees(sameNSBody, foreignNSBody string) map[string]map[string]string {
+	foreign := func(directive string) map[string]string {
+		return map[string]string{"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"` +
+			` targetNamespace="urn:a" xmlns:b="urn:b">` + directive + foreignNSBody + `</xs:schema>`}
+	}
+	return map[string]map[string]string{
+		"unresolved <include> target": {
+			"main.xsd": schemaSrc("urn:a", include("missing.xsd")+sameNSBody),
+		},
+		"unresolved <override> target": {
+			"main.xsd": schemaSrc("urn:a",
+				override("missing.xsd", `<xs:element name="e" type="xs:string"/>`)+sameNSBody),
+		},
+		"unresolved <import> target":        foreign(`<xs:import namespace="urn:b" schemaLocation="missing.xsd"/>`),
+		"bare <import> with no D2 to fetch": foreign(`<xs:import namespace="urn:b"/>`),
+	}
+}
+
+// TestSchemaExecutorDeclinesUnresolvedDirectiveTarget pins the whole hazard #276
+// is about, symmetrically across all three directives: a directive that names no
+// document contributes NO components, so the root's reference into what that
 // document would have defined fails src-resolve clauses 1-3 at finalize. The
 // "invalid" that comes back is fabricated — src-include clause 2.4 and
 // src-import's parallel "not an error" text both say the failure to resolve is
 // itself no error — so the case must be DECLINED under BOTH polarities.
 //
 // The reference is what makes this able to fail: each root names a type only the
-// missing document could have defined, so a walk that kept going past the
-// unresolved directive (as <include> and <override> did before #276) observes
-// "invalid" and PASSES the expectValid=false polarity for the wrong reason.
+// missing document could have defined, so a harness that decided the case anyway
+// observes "invalid" and PASSES the expectValid=false polarity for the wrong
+// reason. It is also exactly what TestSchemaExecutorDecidesUnbrokenUnresolvedDirective
+// removes, and the two together pin the CONJUNCTION rather than either half.
 func TestSchemaExecutorDeclinesUnresolvedDirectiveTarget(t *testing.T) {
 	exec := newSchemaExec()
-	sameNSRef := `<xs:element name="root" type="tns:code"/>`
-	trees := map[string]map[string]string{
-		"unresolved <include> target": {
-			"main.xsd": schemaSrc("urn:a", include("missing.xsd")+sameNSRef),
-		},
-		"unresolved <override> target": {
-			"main.xsd": schemaSrc("urn:a",
-				override("missing.xsd", `<xs:element name="e" type="xs:string"/>`)+sameNSRef),
-		},
-		// The behavior include is now symmetric with: unchanged, pinned here so the
-		// two directives are seen to decline the same shape for the same reason.
-		"unresolved <import> target": {
-			"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"` +
-				` targetNamespace="urn:a" xmlns:b="urn:b">` +
-				`<xs:import namespace="urn:b" schemaLocation="missing.xsd"/>` +
-				`<xs:element name="root" type="b:code"/></xs:schema>`,
-		},
-	}
+	trees := noD2Trees(`<xs:element name="root" type="tns:code"/>`, `<xs:element name="root" type="b:code"/>`)
 	for _, name := range slices.Sorted(maps.Keys(trees)) {
 		doc := writeSchemaTree(t, "main.xsd", trees[name])
 		for _, ev := range []bool{true, false} {
 			if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(ev)}).IsPass() {
 				t.Errorf("%s: must be DECLINED (Fail) regardless of expectValid=%v", name, ev)
 			}
+		}
+	}
+}
+
+// TestSchemaExecutorDecidesUnbrokenUnresolvedDirective pins the other half of the
+// same conjunction (#276): when nothing in the root depended on the missing
+// document, parser.Parse succeeds and §4.2.3 clause 2.4 — "it is not an error for
+// the ·actual value· of the schemaLocation [attribute] to fail to resolve at all,
+// in which case the corresponding inclusion must not be performed" — is simply in
+// force, §4.2.6.2 saying the same of <import>. Nothing was fabricated, so the case
+// must still be DECIDED: valid, and Fail under the flipped expectation.
+//
+// The suite depends on this directly — MS-Schema schD8 includes a document named
+// "must%20not%20resolve.xyzzy" precisely to test clause 2.4 tolerance — so a
+// harness that declined every unresolved directive would refuse the very cases the
+// rule is about. The flipped-expectation half is what makes the test able to fail:
+// a decline would satisfy the first assertion vacuously.
+func TestSchemaExecutorDecidesUnbrokenUnresolvedDirective(t *testing.T) {
+	exec := newSchemaExec()
+	unrelated := `<xs:element name="root" type="xs:string"/>`
+	trees := noD2Trees(unrelated, unrelated)
+	for _, name := range slices.Sorted(maps.Keys(trees)) {
+		doc := writeSchemaTree(t, "main.xsd", trees[name])
+		if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(true)}).IsPass() {
+			t.Errorf("%s: an unresolved directive nothing depended on must still be DECIDED valid", name)
+		}
+		if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(false)}).IsPass() {
+			t.Errorf("%s: must Fail under a flipped expectation (decides for real)", name)
 		}
 	}
 }
