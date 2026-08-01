@@ -24,8 +24,10 @@ while IFS= read -r line; do
 	[ -n "$line" ] || continue
 
 	# Porcelain v1 format: "XY path". X = index vs HEAD, Y = worktree
-	# vs index. Take the columns by position so paths containing
-	# spaces survive intact.
+	# vs index. The two status columns are fixed-width and always the
+	# first two characters of the line, so reading them by position
+	# works whatever git does to the path after them (paths with spaces
+	# or non-ASCII bytes come back C-quoted, e.g. MM "my file.txt").
 	rest=${line#??}
 	xy=${line%"$rest"}
 	x=${xy%?}
@@ -50,7 +52,7 @@ while IFS= read -r line; do
 	stale="$stale  $path
 "
 done <<EOF
-$(git status --porcelain)
+$(git status --porcelain=v1)
 EOF
 
 [ -n "$stale" ] || exit 0

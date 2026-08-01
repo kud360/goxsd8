@@ -268,7 +268,7 @@ read the WORKING TREE; nothing in them reads the index. A green gate
 therefore says nothing about what is actually staged: a fix made after
 `git add` gets silently reverted by the commit while every check honestly
 reports green. That is how a red `main` landed at `547b42f` through a
-squash-merged PR (#246). `.githooks/pre-commit` now refuses any commit
+squash-merged PR (#179). `.githooks/pre-commit` now refuses any commit
 where a path has both staged and unstaged changes, which catches this
 mechanically — but only in a session that ran step 1's
 `git config core.hooksPath .githooks`, so the discipline stays yours too.
