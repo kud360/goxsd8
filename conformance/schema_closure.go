@@ -1,7 +1,6 @@
 package conformance
 
 import (
-	"errors"
 	"net/url"
 	"path"
 	"strings"
@@ -181,18 +180,24 @@ func (s *closureScan) decidable(doc *parser.Document, tns string) bool {
 //     schema for schema documents and parser.Parse reports its absence as a plain
 //     grammar fault, but the walk cannot verify the decidability of a target it
 //     cannot name, so being conservative is the only honest answer.
-//   - the location does not resolve: NOT a decline. §4.2.3 clause 2.4 is explicit
-//     that "it is not an error for the ·actual value· of the schemaLocation
-//     [attribute] to fail to resolve at all, in which case the corresponding
-//     inclusion must not be performed" — parser.Parse performs no inclusion
-//     either, so there is nothing left to shape-check. §4.3.2 says the same of
-//     <override> ("the attempt must be made but it is not an error for it to
-//     fail"; only a non-empty <redefine> makes failure an error). Keep walking
-//     the siblings.
+//   - the location does not resolve (loader.ErrNotFound): DECLINE, symmetrically
+//     with importDirective (#276). §4.2.3 clause 2.4 is explicit that "it is not
+//     an error for the ·actual value· of the schemaLocation [attribute] to fail to
+//     resolve at all, in which case the corresponding inclusion must not be
+//     performed", and §4.3.2 says the same of <override> ("the attempt must be
+//     made but it is not an error for it to fail"). Precisely because the missing
+//     D2 is a non-error, parser.Parse goes on to assemble a schema lacking every
+//     component D2 would have contributed, and each reference that would have been
+//     discharged from it instead fails src-resolve clauses 1-3 at finalize (the
+//     §5.3 Missing Sub-components pathway src-include's own prose points at). The
+//     lane would then agree with a suite-invalid case for a reason the spec does
+//     not attach to the missing document: a FABRICATED "invalid" verdict, the one
+//     direction that can corrupt the ratchet.
 //   - any OTHER resolver error, or a ReadDocument error on the fetched document:
-//     DECLINE. Both are ambiguous — a permission or transport failure, or a parser
-//     encoding LIMITATION (well-formed UTF-16 read as invalid UTF-8) — and neither
-//     may be turned into a verdict (the same reasoning as schema.go step 1).
+//     DECLINE, and ambiguous on top of that — a permission or transport failure, or
+//     a parser encoding LIMITATION (well-formed UTF-16 read as invalid UTF-8) —
+//     so neither may be turned into a verdict (the same reasoning as schema.go
+//     step 1).
 //   - the document is already loaded: NOT a decline, and not re-walked. It was
 //     shape-checked when first reached.
 //   - the document is not a <schema>: NOT a decline, and not recursed into. There
@@ -209,9 +214,6 @@ func (s *closureScan) compose(el *parser.Element, tns string) bool {
 	requested := resolveSchemaLocation(el.BaseURI(), hint)
 
 	rc, resolved, err := s.resolver.Resolve(tns, requested)
-	if errors.Is(err, loader.ErrNotFound) {
-		return true
-	}
 	if err != nil {
 		return false
 	}
@@ -239,9 +241,8 @@ func (s *closureScan) compose(el *parser.Element, tns string) bool {
 }
 
 // importDirective follows one <import> element and reports whether what it names
-// is decidable. Its outcomes differ from include's in exactly one way, and that
-// difference is a RATCHET-INTEGRITY requirement, not conservatism for its own
-// sake: an <import> that yields no D2 DECLINES.
+// is decidable. Its outcomes are compose's, for the same reasons: a directive that
+// yields no D2 DECLINES, whichever directive it is.
 //
 //   - no schemaLocation attribute (the bare <import> §4.2.6.2 calls legal), or a
 //     schemaLocation that does not resolve: DECLINE. Both are non-errors for the
@@ -249,12 +250,19 @@ func (s *closureScan) compose(el *parser.Element, tns string) bool {
 //     reference strategy to fail"), so the imported namespace contributes NO
 //     components — and every reference into it then fails src-resolve at finalize.
 //     That is a FABRICATED "invalid" verdict, the one direction that can corrupt
-//     the ratchet by agreeing with a suite-invalid case for the wrong reason. An
-//     unresolvable <include> is not the same hazard in kind but is the same in
-//     shape; it is admitted only because §4.2.3 clause 2.4 makes the included
-//     document's components part of the SAME namespace, which the including
-//     document also populates, whereas an unimported namespace is empty outright.
-//   - any resolver error at all: DECLINE, for the same reason and for include's
+//     the ratchet by agreeing with a suite-invalid case for the wrong reason.
+//     §4.2.6.2's "not an error" text is the exact parallel of src-include clause
+//     2.4, and src-resolve draws no line between the two origins either: clause 4
+//     (cl.qnr.nsdeclared) licenses a same-namespace reference unconditionally
+//     (4.2.1) and a foreign-namespace one on the mere PRESENCE of a matching
+//     <import> element (4.2.2), whether or not that import's schemaLocation
+//     resolved — so a missing included D2 and a missing imported D2 both fail at
+//     clauses 1-3, in the same §5.3 bucket. They are one hazard, and compose
+//     declines on it too (#276). The one asymmetry §4.2.6.1 does draw — a foreign
+//     namespace referenced with no <import> element at ALL is not §5.3-eligible —
+//     keys on the ABSENCE of a directive, not on a resolver outcome, and is not
+//     what this branch sees.
+//   - any resolver error at all: DECLINE, for the same reason and for compose's
 //     (a permission or transport failure may not become a verdict).
 //   - already loaded under this namespace: NOT a decline, and not re-walked. It
 //     was shape-checked when first reached.

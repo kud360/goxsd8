@@ -124,7 +124,9 @@ import (
 //       is decided —
 //       not by this allowlist entry. src-include (§4.2.3) itself imposes no shape
 //       constraint on the included document, only existence and targetNamespace
-//       agreement, both of which Parse decides genuinely.
+//       agreement, both of which Parse decides genuinely. An <include> whose
+//       schemaLocation does not resolve declines in the walk, exactly as an
+//       <import> that yields no D2 does (#276).
 //     - override: admitted (#183) when every child of it is a decidable source
 //       declaration in its own right (overrideDecidable), because §F.2 clause 1
 //       makes those children top-level declarations of the OVERRIDDEN document.
@@ -132,12 +134,12 @@ import (
 //       gated by the same discovery walk that gates an <include>'s target
 //       (closureScan.compose); src-override's own clauses are then enforced
 //       genuinely by parser.Parse.
-//     - import: admitted at top level (#182) on the same reasoning, but the
-//       discovery walk is STRICTER for it than for include — an <import> that
-//       yields no D2 (no schemaLocation, or one that does not resolve) declines the
-//       case, because an empty imported namespace turns every reference into it
-//       into a fabricated src-resolve rejection. See the Composition section below
-//       and closureScan.importDirective.
+//     - import: admitted at top level (#182) on the same reasoning. As for
+//       include, the discovery walk declines a directive that yields no D2 (no
+//       schemaLocation, or one that does not resolve), because the components the
+//       missing document would have contributed turn every reference to them into
+//       a fabricated src-resolve rejection. See the Composition section below and
+//       closureScan.importDirective.
 //     - element: must have no inline <simpleType>/<complexType> child, and every
 //       <unique>/<key>/<keyref> child must use the name= form. A bare
 //       element (no type=) defaults to xs:anyType (§3.3.2.1 case 4), now seeded as
@@ -279,12 +281,17 @@ import (
 // three closures (#179/#182/#183) and the
 // harness's discovery walk gates every document in them, so an
 // include/chameleon/import/override case is now decided for the same reason a
-// single-document case is, not guessed. An <import> is admitted only when it
-// actually yields a D2 — one with no schemaLocation, or one whose schemaLocation
-// does not resolve, DECLINES (closureScan.importDirective), because then the
-// imported namespace contributes no components and every reference into it fails
-// src-resolve at finalize: a FABRICATED "invalid" verdict, the one direction that
-// can corrupt the ratchet.
+// single-document case is, not guessed. A composition directive is admitted only
+// when it actually yields a D2: an <import> with no schemaLocation, and an
+// <include>, <override> or <import> whose schemaLocation does not resolve, DECLINE
+// (closureScan.compose, closureScan.importDirective). The missing document's
+// components are then absent from the assembly and every reference to them fails
+// src-resolve clauses 1-3 at finalize: a FABRICATED "invalid" verdict, the one
+// direction that can corrupt the ratchet. The two directives are one hazard, not
+// two (#276): src-include clause 2.4 and src-import's "not an error" text are
+// parallel, and src-resolve clause 4 (cl.qnr.nsdeclared) licenses a same-namespace
+// reference (4.2.1) and a reference into a namespace with a PRESENT <import>
+// element (4.2.2) alike, whether or not that import's schemaLocation resolved.
 //
 // Two import-adjacent gaps are the OTHER direction — fabricated "valid" — which
 // can only cost wins, never corrupt: src-resolve clause 4 (cl.qnr.nsdeclared,
@@ -516,9 +523,10 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			// and that is gated by closureScan.decidable, which reads the composed
 			// document and runs this same function over it before any case is
 			// decided. src-include's (§4.2.3) and src-import's (§4.2.6.2) own clauses
-			// are then enforced genuinely by parser.Parse. An <import> that yields no
-			// D2 at all — no schemaLocation, or one that does not resolve — is
-			// declined by the walk, not here: see closureScan.importDirective.
+			// are then enforced genuinely by parser.Parse. A directive that yields no
+			// D2 at all — an <import> with no schemaLocation, or either directive with
+			// one that does not resolve — is declined by the walk, not here: see
+			// closureScan.compose and closureScan.importDirective.
 		case "element":
 			if !elementDecidable(el) {
 				return false

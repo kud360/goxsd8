@@ -98,11 +98,11 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "unresolvable schemaLocation is not an error (§4.2.3 clause 2.4)",
+			name: "<include> whose schemaLocation does not resolve declines (no D2, #276)",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", include("missing.xsd")+`<xs:element name="root" type="xs:string"/>`),
 			},
-			want: true,
+			want: false,
 		},
 		{
 			name: "<include> without schemaLocation declines (target cannot be named)",
@@ -224,12 +224,12 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "<override> whose schemaLocation does not resolve is not an error (§4.3.2)",
+			name: "<override> whose schemaLocation does not resolve declines (no Dold, #276)",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", override("missing.xsd", `<xs:element name="e" type="xs:string"/>`)+
 					`<xs:element name="root" type="xs:string"/>`),
 			},
-			want: true,
+			want: false,
 		},
 		{
 			name: "<override> without schemaLocation declines (target cannot be named)",
@@ -520,6 +520,48 @@ func TestSchemaExecutorDeclinesUndecidableInclusion(t *testing.T) {
 		"undecidable across a legal include cycle": {
 			"main.xsd": schemaSrc("urn:a", include("lib.xsd")),
 			"lib.xsd":  schemaSrc("urn:a", include("main.xsd")+undecidable),
+		},
+	}
+	for _, name := range slices.Sorted(maps.Keys(trees)) {
+		doc := writeSchemaTree(t, "main.xsd", trees[name])
+		for _, ev := range []bool{true, false} {
+			if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(ev)}).IsPass() {
+				t.Errorf("%s: must be DECLINED (Fail) regardless of expectValid=%v", name, ev)
+			}
+		}
+	}
+}
+
+// TestSchemaExecutorDeclinesUnresolvedDirectiveTarget pins the include/import
+// symmetry end-to-end (#276): a composition directive whose schemaLocation does
+// not resolve contributes NO document, so the root's reference into what that
+// document would have defined fails src-resolve clauses 1-3 at finalize. The
+// "invalid" that comes back is fabricated — src-include clause 2.4 and
+// src-import's parallel "not an error" text both say the failure to resolve is
+// itself no error — so the case must be DECLINED under BOTH polarities.
+//
+// The reference is what makes this able to fail: each root names a type only the
+// missing document could have defined, so a walk that kept going past the
+// unresolved directive (as <include> and <override> did before #276) observes
+// "invalid" and PASSES the expectValid=false polarity for the wrong reason.
+func TestSchemaExecutorDeclinesUnresolvedDirectiveTarget(t *testing.T) {
+	exec := newSchemaExec()
+	sameNSRef := `<xs:element name="root" type="tns:code"/>`
+	trees := map[string]map[string]string{
+		"unresolved <include> target": {
+			"main.xsd": schemaSrc("urn:a", include("missing.xsd")+sameNSRef),
+		},
+		"unresolved <override> target": {
+			"main.xsd": schemaSrc("urn:a",
+				override("missing.xsd", `<xs:element name="e" type="xs:string"/>`)+sameNSRef),
+		},
+		// The behavior include is now symmetric with: unchanged, pinned here so the
+		// two directives are seen to decline the same shape for the same reason.
+		"unresolved <import> target": {
+			"main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"` +
+				` targetNamespace="urn:a" xmlns:b="urn:b">` +
+				`<xs:import namespace="urn:b" schemaLocation="missing.xsd"/>` +
+				`<xs:element name="root" type="b:code"/></xs:schema>`,
 		},
 	}
 	for _, name := range slices.Sorted(maps.Keys(trees)) {
