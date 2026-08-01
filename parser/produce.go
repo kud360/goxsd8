@@ -135,10 +135,21 @@ type symbols struct {
 	complexTypes map[xsd.QName]typeSource
 
 	// attributeGroups maps each top-level named <attributeGroup>'s expanded name
-	// to its raw element, filled by the pre-scan so an <attributeGroup ref> (from
-	// a <complexType>/<restriction> or another <attributeGroup>) resolves and is
+	// to its source (raw element plus the producer of the document that declares
+	// it), filled by the pre-scan so an <attributeGroup ref> (from a
+	// <complexType>/<restriction> or another <attributeGroup>) resolves and is
 	// inlined at mapping time regardless of document order (§3.6.2.1).
-	attributeGroups map[xsd.QName]*Element
+	//
+	// The owning producer is carried for BOTH reasons the two type indexes carry
+	// one, because an <attributeGroup> body holds local declarations AND unqualified
+	// references: §3.2.2.2 takes a local <attribute>'s {target namespace} from "the
+	// ancestor <schema> element information item", which is the DECLARING document's,
+	// and src-resolve (§3.17.6.2) clause 4.1.1 scopes the absent-namespace default of
+	// its type=/ref= to "the schema document containing the QName", which §F.1 task
+	// (b) coerces when that document is a chameleon. Folded under a referring
+	// producer instead, localTargetNS would mint the local names in the wrong
+	// namespace and unqualifiedRefNS/declares would answer for the wrong document.
+	attributeGroups map[xsd.QName]typeSource
 
 	// built is the memo + cycle guard for simple-type construction, mirroring
 	// xsd/resolve.go's color-map idiom collapsed into one map: an ABSENT key is
@@ -166,15 +177,16 @@ type symbols struct {
 	backend value.Backend
 }
 
-// typeSource is one entry of symbols.simpleTypes or symbols.complexTypes: a
-// top-level <simpleType>/<complexType> element together with the producer of the
-// document that DECLARES it. On-demand base construction builds through owner,
-// never through the producer that happens to be asking, so the type's local
-// element declarations take their own document's target namespace and form
-// defaults (§3.3.2.3 dcl.elt.local) and its own unqualified QName references take
-// their own document's §F.1 coercion — both properties of the declaring document,
-// which assembly-wide visibility (§4.2.3 c-incl-incl) does not transfer to the
-// asker.
+// typeSource is one entry of symbols.simpleTypes, symbols.complexTypes or
+// symbols.attributeGroups: a top-level <simpleType>/<complexType>/
+// <attributeGroup> element together with the producer of the document that
+// DECLARES it. On-demand construction from a reference runs through owner, never
+// through the producer that happens to be asking, so the definition's local
+// element and attribute declarations take their own document's target namespace
+// and form defaults (§3.3.2.3 dcl.elt.local, §3.2.2.2 dcl.att.local) and its own
+// unqualified QName references take their own document's §F.1 coercion — all
+// properties of the declaring document, which assembly-wide visibility (§4.2.3
+// c-incl-incl) does not transfer to the asker.
 type typeSource struct {
 	elem  *Element
 	owner *producer
@@ -211,7 +223,7 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 	return &symbols{
 		simpleTypes:     make(map[xsd.QName]typeSource),
 		complexTypes:    make(map[xsd.QName]typeSource),
-		attributeGroups: make(map[xsd.QName]*Element),
+		attributeGroups: make(map[xsd.QName]typeSource),
 		built:           built,
 		// xs:anyType is seeded DONE so a derivation naming it resolves to the very
 		// component AddType registered, rather than to a rebuilt twin.
@@ -302,7 +314,7 @@ func (p *producer) prescan() {
 		case isXSD(el, "complexType"):
 			p.symbols.complexTypes[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		case isXSD(el, "attributeGroup"):
-			p.symbols.attributeGroups[xsd.QName{Space: p.target, Local: name}] = decl
+			p.symbols.attributeGroups[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		}
 	}
 }

@@ -252,6 +252,85 @@ func TestParseSimpleTypeBaseBuiltUnderItsOwnProducer(t *testing.T) {
 	}
 }
 
+// TestParseAttributeGroupFoldedUnderItsOwnProducer is the attribute-group twin of
+// TestParseSimpleTypeBaseBuiltUnderItsOwnProducer and
+// TestParseExtensionBaseBuiltUnderItsOwnProducer: an <attributeGroup> reached
+// through an <attributeGroup ref> in ANOTHER document must be folded by the
+// producer of the document that DECLARES it, never by the referring one.
+//
+// This site carries BOTH failure flavours at once, because an <attributeGroup>
+// body holds local declarations as well as unqualified references. base.xsd is a
+// chameleon (§4.2.3 clause 2.3) with its own attributeFormDefault="qualified", so
+// §3.2.2.2's "the ancestor <schema> element information item" makes its local
+// <attribute name="a"> land in urn:x, and §F.1 task (b) coerces its own
+// unqualified type="Local" to {urn:x}Local. root.xsd declares neither, so folded
+// under the REFERRING producer the use would be minted as {}a typed {}Local and
+// the parse would falsely fail src-resolve. c-incl-incl only makes the group
+// VISIBLE to root.xsd; it transfers no resolution authority.
+//
+// Both document orders are forced. They differ in whether base.xsd's own
+// run() — which builds the top-level AttributeGroupDefinition component — has
+// happened before the referring complex type folds the group, so the pair pins
+// that the fold is order-independent rather than accidentally correct in the
+// order the fixture happens to discover documents in.
+func TestParseAttributeGroupFoldedUnderItsOwnProducer(t *testing.T) {
+	const xs = `xmlns:xs="http://www.w3.org/2001/XMLSchema"`
+	// A chameleon that qualifies its local attributes and names a sibling type
+	// WITHOUT a prefix, so both properties under test come from this document.
+	const chameleon = `<xs:schema ` + xs + ` attributeFormDefault="qualified">` +
+		`<xs:simpleType name="Local"><xs:restriction base="xs:string">` +
+		`<xs:maxLength value="6"/></xs:restriction></xs:simpleType>` +
+		`<xs:attributeGroup name="G"><xs:attribute name="a" type="Local"/></xs:attributeGroup>` +
+		`</xs:schema>`
+	const refDecl = `<xs:complexType name="T"><xs:sequence/>` +
+		`<xs:attributeGroup ref="tns:G"/></xs:complexType>`
+
+	cases := []struct {
+		name string
+		docs map[string]string
+	}{{
+		// main is produced FIRST and is itself the referrer, so T folds G before
+		// base.xsd's run() has built G's own component.
+		name: "referrer produced before declarer",
+		docs: map[string]string{
+			"main.xsd": wrap("urn:x", `<xs:include schemaLocation="base.xsd"/>`+refDecl),
+			"base.xsd": chameleon,
+		},
+	}, {
+		// base.xsd is discovered — and so produced — before the sibling that refers
+		// to it, so G's own component exists by the time T folds it.
+		name: "declarer produced before referrer",
+		docs: map[string]string{
+			"main.xsd": wrap("urn:x", `<xs:include schemaLocation="base.xsd"/>`+
+				`<xs:include schemaLocation="ref.xsd"/>`),
+			"base.xsd": chameleon,
+			"ref.xsd":  wrap("urn:x", refDecl),
+		},
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := parseMap(t, "main.xsd", tc.docs)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			uses := topComplexTypeIn(t, s, xsd.QName{Space: "urn:x", Local: "T"}).AttributeUses()
+			if len(uses) != 1 {
+				t.Fatalf("complex type {urn:x}T has %d attribute uses, want the referenced group's one", len(uses))
+			}
+			decl, ok := uses[0].AttributeDeclaration().(xsd.LocalAttributeDeclaration)
+			if !ok {
+				t.Fatalf("attribute use declaration is %T, want a local declaration", uses[0].AttributeDeclaration())
+			}
+			if got := decl.Declaration.Name(); got != (xsd.QName{Space: "urn:x", Local: "a"}) {
+				t.Errorf("folded attribute name = %s, want {urn:x}a from base.xsd's own attributeFormDefault", got)
+			}
+			if got := declaredTypeName(t, decl.Declaration.TypeDefinition()); got != (xsd.QName{Space: "urn:x", Local: "Local"}) {
+				t.Errorf("folded attribute type = %s, want {urn:x}Local from base.xsd's own §F.1 coercion", got)
+			}
+		})
+	}
+}
+
 // TestParseChameleonIncludesCoercedNamespace pins §4.2.3's recursion note: A
 // (targetNamespace urn:a) includes chameleon B, which itself includes C declaring
 // targetNamespace urn:a. Clause 2 is evaluated against the COERCED namespace —
