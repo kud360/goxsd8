@@ -944,14 +944,14 @@ func (p *producer) resolveQName(elem *Element, lexical string) (xsd.QName, error
 	if prefix == "" {
 		// An absent default binding and an explicitly empty one (xmlns="") both
 		// leave the reference's namespace name ·absent·, so both take the same path.
-		uri, _ := elem.LookupPrefix("")
+		uri, _ := elem.lookupPrefix("")
 		if uri == "" {
 			return xsd.QName{Space: p.unqualifiedRefNS(elem), Local: local}, nil
 		}
 		return xsd.QName{Space: uri, Local: local}, nil
 	}
 
-	uri, ok := elem.LookupPrefix(prefix)
+	uri, ok := elem.lookupPrefix(prefix)
 	if !ok {
 		return xsd.QName{}, xsderr.New(ruleSrcResolve, elem.Loc(),
 			"the QName prefix %q of %q does not resolve to an in-scope namespace (src-resolve)", prefix, lexical)

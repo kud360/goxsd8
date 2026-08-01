@@ -34,7 +34,7 @@ import (
 func (p *producer) buildXPathExpression(hostElem *Element, exprAttr string) xsd.XPathExpression {
 	expr, _ := attrValue(hostElem, exprAttr)
 	var bindings []xsd.NamespaceBinding
-	for _, ns := range hostElem.InScopePrefixes() {
+	for _, ns := range hostElem.inScopePrefixes() {
 		bindings = append(bindings, xsd.NewNamespaceBinding(ns.Prefix(), ns.URI()))
 	}
 	baseURI := hostElem.BaseURI()
@@ -53,7 +53,7 @@ func (p *producer) buildXPathExpression(hostElem *Element, exprAttr string) xsd.
 // of the host element's in-scope-namespaces entry whose [[prefix]] is absent
 // (clause 1.1), and ·absent· when there is no such entry (clause 1.2). A
 // declared default namespace always has a non-empty namespace name, and
-// xmlns="" undeclares one (Namespaces in XML 1.1), so an empty LookupPrefix("")
+// xmlns="" undeclares one (Namespaces in XML 1.1), so an empty lookupPrefix("")
 // result means exactly "no absent-prefix entry in scope" — both clause 1.2
 // shapes — and yields nil, never a present "".
 func (p *producer) xpathDefaultNamespace(hostElem *Element) *string {
@@ -70,7 +70,7 @@ func (p *producer) xpathDefaultNamespace(hostElem *Element) *string {
 	case "##defaultNamespace":
 		// ok is no signal here: the empty prefix always resolves (scope.lookup).
 		// An empty URI is clause 1.2 — no default namespace bound, so ·absent·.
-		uri, _ := hostElem.LookupPrefix("")
+		uri, _ := hostElem.lookupPrefix("")
 		if uri == "" {
 			return nil
 		}

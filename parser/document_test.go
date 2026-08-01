@@ -71,12 +71,6 @@ func TestReadDocumentTree(t *testing.T) {
 		t.Errorf("root Loc() = %+v, want URI=%q line=1 col=1", loc, docURI)
 	}
 
-	// LookupPrefix resolves the in-scope xs binding (§3.3.18).
-	uri, ok := root.LookupPrefix("xs")
-	if !ok || uri != xsd.XMLSchemaNS {
-		t.Errorf("LookupPrefix(xs) = %q,%v; want %q,true", uri, ok, xsd.XMLSchemaNS)
-	}
-
 	// Attributes exclude the xmlns:xs declaration but keep targetNamespace and
 	// xml:base, in document order.
 	locals := attrLocals(root)
