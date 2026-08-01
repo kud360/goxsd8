@@ -23,6 +23,15 @@
 //     decode errors downstream cite it.
 //   - Nodes are immutable once produced: private fields, getter methods
 //     (STYLE T1).
+//   - Byte-order marks are honoured per XML 1.0 §4.3.3: a UTF-16 mark
+//     (FE FF, FF FE) selects a streaming transcode to UTF-8, a UTF-8
+//     mark is dropped as the encoding signature it is, and an encoding
+//     declaration that disagrees with the mark is that section's fatal
+//     error, reported as RuleXMLWellFormed. Locations are offsets into
+//     the decoded UTF-8 stream, not into the source bytes.
+//     GAP(xml): UTF-16 without a mark, declared only by encoding=, is
+//     not decoded — it fails well-formedness rather than being read.
+//     Tracked by #361.
 //
 // Fuzz targets guard the reader against panics on malformed input
 // (PRINCIPLES 24); malformed XML is an error value, never a crash.

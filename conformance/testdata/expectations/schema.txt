@@ -15148,8 +15148,8 @@ assertion/d4_3_15ii23/schema/d4_3_15ii23s fail
 assertion/d4_3_15ii24/schema/d4_3_15ii24s fail
 assertion/d4_3_15ii25/schema/d4_3_15ii25s fail
 assertion/d4_3_15ii27/schema/d4_3_15ii27s fail
-assertion/d4_3_15ii29/schema/d4_3_15ii29s fail
-assertion/d4_3_15ii30/schema/d4_3_15ii30s fail
+assertion/d4_3_15ii29/schema/d4_3_15ii29s pass
+assertion/d4_3_15ii30/schema/d4_3_15ii30s pass
 assertion/d4_3_15ii31/schema/d4_3_15ii31s pass
 assertion/d4_3_15ii32/schema/d4_3_15ii32s pass
 assertion/d4_3_15si04/schema/d4_3_15si04s fail
@@ -15178,8 +15178,8 @@ assertion/d4_3_15v26/schema/d4_3_15v26s fail
 assertion/d4_3_15v27/schema/d4_3_15v27s fail
 assertion/d4_3_15v28/schema/d4_3_15v28s fail
 constraintsOnAttribute/s3_2_3ii01/schema/s3_2_3ii01s fail
-constraintsOnAttribute/s3_2_3ii02/schema/s3_2_3ii02s fail
-constraintsOnAttribute/s3_2_3ii04/schema/s3_2_3ii04s fail
+constraintsOnAttribute/s3_2_3ii02/schema/s3_2_3ii02s pass
+constraintsOnAttribute/s3_2_3ii04/schema/s3_2_3ii04s pass
 constraintsOnAttribute/s3_2_3ii05/schema/s3_2_3ii05s fail
 constraintsOnAttribute/s3_2_3si01/schema/s3_2_3si01s fail
 constraintsOnAttribute/s3_2_3si02/schema/s3_2_3si02s fail
@@ -15192,7 +15192,7 @@ constraintsOnAttribute/s3_2_3si08/schema/s3_2_3si08s fail
 constraintsOnAttribute/s3_2_3si09/schema/s3_2_3si09s fail
 constraintsOnAttribute/s3_2_3si10/schema/s3_2_3si10s fail
 constraintsOnAttribute/s3_2_3v01/schema/s3_2_3v01s fail
-constraintsOnAttribute/s3_2_3v04/schema/s3_2_3v04s fail
+constraintsOnAttribute/s3_2_3v04/schema/s3_2_3v04s pass
 date/d3_3_10v01/schema/d3_3_10v01s fail
 dateTimeStamp/d3_4_28ii01/schema/d3_4_28ii01s fail
 dateTimeStamp/d3_4_28si01/schema/d3_4_28si01s fail

@@ -5,16 +5,24 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// collect drains a reader into a slice of nodes, stopping at io.EOF and
-// returning the first non-EOF error.
+// collect drains a reader over doc into a slice of nodes, stopping at io.EOF
+// and returning the first non-EOF error.
 func collect(t *testing.T, uri, doc string) ([]xmltree.Node, error) {
 	t.Helper()
-	r := xmltree.NewReader(uri, strings.NewReader(doc))
+	return collectFrom(t, uri, strings.NewReader(doc))
+}
+
+// collectFrom is collect over an arbitrary source, for inputs a string cannot
+// stand in for: encoded byte streams and readers that fail on demand.
+func collectFrom(t *testing.T, uri string, src io.Reader) ([]xmltree.Node, error) {
+	t.Helper()
+	r := xmltree.NewReader(uri, src)
 	var nodes []xmltree.Node
 	for {
 		n, err := r.Token()
@@ -25,6 +33,330 @@ func collect(t *testing.T, uri, doc string) ([]xmltree.Node, error) {
 			return nodes, err
 		}
 		nodes = append(nodes, n)
+	}
+}
+
+// wantWellFormednessError asserts err is a located XML well-formedness fault,
+// the one verdict every encoding-layer failure must reach.
+func wantWellFormednessError(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("want an error, got nil")
+	}
+	rule, ok := xsderr.RuleOf(err)
+	if !ok || rule != xsderr.RuleXMLWellFormed {
+		t.Errorf("error %v: rule = %q (ok=%v), want %q", err, rule, ok, xsderr.RuleXMLWellFormed)
+	}
+	if _, ok := xsderr.LocOf(err); !ok {
+		t.Errorf("error %v carries no xsderr.Loc", err)
+	}
+}
+
+// utf16Doc encodes doc as UTF-16 in the given byte order behind the mark XML
+// 1.0 §4.3.3 requires of a UTF-16 entity.
+func utf16Doc(doc string, bigEndian bool) string {
+	var b []byte
+	for _, u := range utf16.Encode([]rune("\uFEFF" + doc)) {
+		if bigEndian {
+			b = append(b, byte(u>>8), byte(u))
+			continue
+		}
+		b = append(b, byte(u), byte(u>>8))
+	}
+	return string(b)
+}
+
+// utf16Units encodes explicit big-endian code units behind a mark, for input
+// no Go string can express: lone surrogates and half a code unit.
+func utf16Units(units ...uint16) string {
+	b := []byte{0xFE, 0xFF}
+	for _, u := range units {
+		b = append(b, byte(u>>8), byte(u))
+	}
+	return string(b)
+}
+
+// sameNodes asserts two token streams agree in kind, name, data, and location.
+// A UTF-16 document decodes to exactly the bytes of its UTF-8 spelling, so
+// even locations must match.
+func sameNodes(t *testing.T, got, want []xmltree.Node) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("got %d nodes, want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		if got[i].Loc() != w.Loc() {
+			t.Errorf("node %d loc = %v, want %v", i, got[i].Loc(), w.Loc())
+		}
+		switch w := w.(type) {
+		case *xmltree.StartElement:
+			g, ok := got[i].(*xmltree.StartElement)
+			if !ok {
+				t.Fatalf("node %d = %T, want *StartElement", i, got[i])
+			}
+			sameStart(t, i, g, w)
+		case *xmltree.EndElement:
+			g, ok := got[i].(*xmltree.EndElement)
+			if !ok {
+				t.Fatalf("node %d = %T, want *EndElement", i, got[i])
+			}
+			if g.Name() != w.Name() {
+				t.Errorf("node %d end name = %v, want %v", i, g.Name(), w.Name())
+			}
+		case *xmltree.CharData:
+			g, ok := got[i].(*xmltree.CharData)
+			if !ok {
+				t.Fatalf("node %d = %T, want *CharData", i, got[i])
+			}
+			if g.Data() != w.Data() || g.Offset() != w.Offset() {
+				t.Errorf("node %d chardata = %q at offset %d, want %q at %d", i, g.Data(), g.Offset(), w.Data(), w.Offset())
+			}
+		}
+	}
+}
+
+// sameStart compares one start tag's name and attributes, in order.
+func sameStart(t *testing.T, i int, got, want *xmltree.StartElement) {
+	t.Helper()
+	if got.Name() != want.Name() {
+		t.Errorf("node %d start name = %v, want %v", i, got.Name(), want.Name())
+	}
+	if len(got.Attributes()) != len(want.Attributes()) {
+		t.Fatalf("node %d has %d attributes, want %d", i, len(got.Attributes()), len(want.Attributes()))
+	}
+	for j, a := range want.Attributes() {
+		g := got.Attributes()[j]
+		if g.Name() != a.Name() || g.Value() != a.Value() {
+			t.Errorf("node %d attribute %d = %v=%q, want %v=%q", i, j, g.Name(), g.Value(), a.Name(), a.Value())
+		}
+	}
+}
+
+// byteOrders names the two UTF-16 serializations every decode test runs under.
+var byteOrders = []struct {
+	name   string
+	bigEnd bool
+}{
+	{"big-endian", true},
+	{"little-endian", false},
+}
+
+func TestUTF16BOMRoundTrips(t *testing.T) {
+	docs := []struct{ name, doc string }{
+		// An astral character exercises surrogate-pair decoding.
+		{"namespaced multi-line", "<a xmlns=\"urn:D\" x=\"1\">\n  <b:c xmlns:b=\"urn:B\">clef \U0001D11E</b:c>\n</a>"},
+		{"xml declaration without encoding", `<?xml version="1.0"?><a><b/></a>`},
+	}
+	for _, tc := range docs {
+		for _, order := range byteOrders {
+			t.Run(tc.name+"/"+order.name, func(t *testing.T) {
+				want, err := collect(t, "t.xml", tc.doc)
+				if err != nil {
+					t.Fatalf("UTF-8 baseline: %v", err)
+				}
+				got, err := collectFrom(t, "t.xml", strings.NewReader(utf16Doc(tc.doc, order.bigEnd)))
+				if err != nil {
+					t.Fatalf("UTF-16 decode: %v", err)
+				}
+				sameNodes(t, got, want)
+			})
+		}
+	}
+}
+
+// dribbleReader hands out one byte per Read, so every code unit and every
+// surrogate pair straddles a fill boundary at some point.
+type dribbleReader struct{ s string }
+
+func (d *dribbleReader) Read(p []byte) (int, error) {
+	if d.s == "" {
+		return 0, io.EOF
+	}
+	if len(p) == 0 {
+		return 0, nil
+	}
+	p[0] = d.s[0]
+	d.s = d.s[1:]
+	return 1, nil
+}
+
+func TestUTF16StreamsAcrossFillBoundaries(t *testing.T) {
+	doc := "<a>" + strings.Repeat("x", 2000) + "\U0001D11E" + "</a>"
+	want, err := collect(t, "t.xml", doc)
+	if err != nil {
+		t.Fatalf("UTF-8 baseline: %v", err)
+	}
+	sources := []struct {
+		name string
+		open func(string) io.Reader
+	}{
+		{"bulk reads", func(s string) io.Reader { return strings.NewReader(s) }},
+		{"one byte per read", func(s string) io.Reader { return &dribbleReader{s: s} }},
+	}
+	for _, src := range sources {
+		for _, order := range byteOrders {
+			t.Run(src.name+"/"+order.name, func(t *testing.T) {
+				got, err := collectFrom(t, "t.xml", src.open(utf16Doc(doc, order.bigEnd)))
+				if err != nil {
+					t.Fatalf("UTF-16 decode: %v", err)
+				}
+				sameNodes(t, got, want)
+			})
+		}
+	}
+}
+
+func TestUTF16BOMAgreesWithDeclaration(t *testing.T) {
+	cases := []struct {
+		name     string
+		declared string
+		bigEnd   bool
+	}{
+		{"big-endian declares UTF-16", "UTF-16", true},
+		{"little-endian declares UTF-16", "UTF-16", false},
+		{"big-endian declares UTF-16BE", "UTF-16BE", true},
+		{"little-endian declares lowercase utf-16le", "utf-16le", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := `<?xml version="1.0" encoding="` + tc.declared + `"?><a>x</a>`
+			nodes, err := collectFrom(t, "t.xml", strings.NewReader(utf16Doc(doc, tc.bigEnd)))
+			if err != nil {
+				t.Fatalf("decode with encoding=%q: %v", tc.declared, err)
+			}
+			if len(nodes) != 3 {
+				t.Fatalf("got %d nodes, want 3 (start, text, end)", len(nodes))
+			}
+		})
+	}
+}
+
+// TestUTF8BOMIsStripped pins XML 1.0 §4.3.3's "encoding signature, not part of
+// either the markup or the character data": the root still starts at column 1.
+func TestUTF8BOMIsStripped(t *testing.T) {
+	nodes, err := collectFrom(t, "t.xml", strings.NewReader("\xEF\xBB\xBF<a>x</a>"))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(nodes) != 3 {
+		t.Fatalf("got %d nodes, want 3", len(nodes))
+	}
+	wantLoc(t, nodes[0], 1, 1)
+}
+
+// TestUTF16IllFormedIsError pins the transcoder's central decision: ill-formed
+// UTF-16 is a terminal error, never a U+FFFD substitution. Each case names the
+// message it wants, so a substitution mutant cannot hide behind an unrelated
+// structural failure — the unpaired surrogate is followed by ordinary
+// character data rather than by '<' for exactly that reason.
+func TestUTF16IllFormedIsError(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"unpaired surrogate", utf16Units('<', 'a', '>', 0xD834, 'x', '<', '/', 'a', '>'), "unpaired surrogate"},
+		{"truncated code unit", utf16Units('<', 'a', '/', '>') + "\x00", "do not form a code unit"},
+		{"mismatched end tag", utf16Units('<', 'a', '>', '<', 'b', '>', '<', '/', 'a', '>'), "does not match open element b"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := collectFrom(t, "t.xml", strings.NewReader(tc.src))
+			wantWellFormednessError(t, err)
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %q, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestBOMContradictsEncodingDeclaration pins XML 1.0 §4.3.3's fatal error for
+// an entity presented in an encoding other than the one it declares.
+func TestBOMContradictsEncodingDeclaration(t *testing.T) {
+	decl := func(enc string) string {
+		return `<?xml version="1.0" encoding="` + enc + `"?><a/>`
+	}
+	cases := []struct{ name, src string }{
+		{"big-endian mark declares UTF-8", utf16Doc(decl("UTF-8"), true)},
+		{"little-endian mark declares UTF-16BE", utf16Doc(decl("UTF-16BE"), false)},
+		{"big-endian mark declares UTF-16LE", utf16Doc(decl("UTF-16LE"), true)},
+		{"no mark declares UTF-16", decl("UTF-16")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := collectFrom(t, "t.xml", strings.NewReader(tc.src))
+			wantWellFormednessError(t, err)
+			if !strings.Contains(err.Error(), "disagrees") {
+				t.Errorf("error = %q, want a disagreement message", err)
+			}
+		})
+	}
+}
+
+// failFirstReader fails on its very first Read and reports end-of-input on
+// every one after: the shape that exposes a dropped Peek error, since the
+// retry answers with io.EOF and nothing carries the original cause any more.
+type failFirstReader struct {
+	err  error
+	done bool
+}
+
+func (f *failFirstReader) Read([]byte) (int, error) {
+	if f.done {
+		return 0, io.EOF
+	}
+	f.done = true
+	return 0, f.err
+}
+
+// prefixThenFailReader yields prefix, then fails: enough bytes for a mark to
+// be ruled out without the peek itself failing, so no error is latched.
+type prefixThenFailReader struct {
+	prefix string
+	err    error
+}
+
+func (p *prefixThenFailReader) Read(b []byte) (int, error) {
+	if p.prefix == "" {
+		return 0, p.err
+	}
+	n := copy(b, p.prefix)
+	p.prefix = p.prefix[n:]
+	return n, nil
+}
+
+// TestSourceFailureSurfacesItsCause guards the byte-order-mark layer against
+// swallowing a read failure. A source that fails before a mark can be read is
+// the one bufio.Reader.Peek hands its error to exactly once, so a dropped
+// error there turns a broken source into a bare io.EOF — which Token
+// documents as the end of a well-formed document.
+func TestSourceFailureSurfacesItsCause(t *testing.T) {
+	cause := errors.New("boom: original cause")
+	cases := []struct {
+		name      string
+		open      func() io.Reader
+		wantNodes int
+	}{
+		{"fails before a mark can be read", func() io.Reader { return &failFirstReader{err: cause} }, 0},
+		{"fails after a mark is ruled out", func() io.Reader { return &prefixThenFailReader{prefix: "<a>", err: cause} }, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			nodes, err := collectFrom(t, "t.xml", tc.open())
+			if err == nil || errors.Is(err, io.EOF) {
+				t.Fatalf("err = %v, want the source's failure, not end-of-document", err)
+			}
+			wantWellFormednessError(t, err)
+			if !errors.Is(err, cause) {
+				t.Errorf("error %q does not unwrap to the original cause", err)
+			}
+			if !strings.Contains(err.Error(), "boom") {
+				t.Errorf("error = %q, want it to name the original cause", err)
+			}
+			if len(nodes) != tc.wantNodes {
+				t.Errorf("got %d nodes, want %d", len(nodes), tc.wantNodes)
+			}
+		})
 	}
 }
 

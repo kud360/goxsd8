@@ -21,6 +21,10 @@ type Reader struct {
 	dec *xml.Decoder
 	pos *posReader
 
+	// bom is what the document's byte-order mark said its encoding is — the
+	// evidence an encoding declaration must agree with (XML 1.0 §4.3.3).
+	bom bomEncoding
+
 	// stack holds one frame per currently-open element, so end tags match
 	// their starts and nested elements resolve against the right scope.
 	stack []frame
@@ -40,12 +44,21 @@ type frame struct {
 // NewReader returns a Reader over r. uri names the document for locations
 // (xsderr.Loc.URI); it is not opened or resolved here — it is only threaded
 // into every Loc the reader emits.
+//
+// A leading byte-order mark is honoured per XML 1.0 §4.3.3: a UTF-16 document
+// is decoded to UTF-8 before the XML decoder sees it, and a UTF-8 mark is
+// dropped as the encoding signature it is. Locations are therefore offsets
+// into the decoded UTF-8 stream, not into the source bytes.
 func NewReader(uri string, r io.Reader) *Reader {
-	pos := &posReader{r: r}
+	body, bom := decodeBOM(r)
+	pos := &posReader{r: body}
+	dec := xml.NewDecoder(pos)
+	dec.CharsetReader = bom.charsetReader
 	return &Reader{
 		uri: uri,
-		dec: xml.NewDecoder(pos),
+		dec: dec,
 		pos: pos,
+		bom: bom,
 	}
 }
 
@@ -111,11 +124,34 @@ func (r *Reader) classify(tok xml.Token, off int64) (Node, bool, error) {
 		return node, true, nil
 	case xml.CharData:
 		return &CharData{data: string(t), offset: off, loc: loc}, true, nil
+	case xml.ProcInst:
+		return nil, false, r.checkDeclaration(t, loc)
 	default:
-		// xml.Comment, xml.ProcInst, xml.Directive: not part of the
-		// element/character-data stream the parser consumes.
+		// xml.Comment, xml.Directive: not part of the element/character-data
+		// stream the parser consumes.
 		return nil, false, nil
 	}
+}
+
+// checkDeclaration enforces XML 1.0 §4.3.3's fatal error: "it is a fatal error
+// for an entity including an encoding declaration to be presented to the XML
+// processor in an encoding other than that named in the declaration". The
+// byte-order mark is the evidence of the encoding the entity was presented in.
+//
+// It catches the direction the XML decoder cannot: a declaration naming UTF-8
+// is the decoder's default and never reaches charsetReader, so a UTF-16 mark
+// contradicting it would otherwise pass unnoticed.
+func (r *Reader) checkDeclaration(pi xml.ProcInst, loc xsderr.Loc) error {
+	if pi.Target != "xml" {
+		return nil
+	}
+	name := declaredEncoding(string(pi.Inst))
+	if name == "" || r.bom.agreesWith(name) {
+		return nil
+	}
+	// bomEncoding.String names the mark itself, so the message states the
+	// entity's actual encoding rather than repeating "byte-order mark".
+	return xsderr.New(xsderr.RuleXMLWellFormed, loc, "encoding declaration %q disagrees with the entity's actual encoding: %s", name, r.bom)
 }
 
 // startElement resolves an element's name and attributes against the scope
