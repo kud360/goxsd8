@@ -391,6 +391,115 @@ func TestSchemaExecutorDecidesIncludeCases(t *testing.T) {
 	}
 }
 
+// TestSchemaExecutorDecidesReachableExtraDocuments proves a multi-document
+// schemaTest whose further documents are REACHED by the closure walk from the
+// first is decided normally: the walk gated them, so parser.Parse assembles
+// exactly the declared set. Each case must also Fail under the flipped
+// expectation, which is what separates a real decision from a vacuous one.
+func TestSchemaExecutorDecidesReachableExtraDocuments(t *testing.T) {
+	exec := newSchemaExec()
+	cases := []struct {
+		name        string
+		docs        map[string]string
+		extra       []string
+		expectValid bool
+	}{
+		{
+			name: "second document reached by the first's <include>",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", include("lib.xsd")+`<xs:element name="root" type="tns:code"/>`),
+				"lib.xsd":  schemaSrc("urn:a", decidableType),
+			},
+			extra:       []string{"lib.xsd"},
+			expectValid: true,
+		},
+		{
+			name: "second document reached by the first's <import>",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="lib.xsd"/>`+
+					`<xs:element name="root" type="xs:string"/>`),
+				"lib.xsd": schemaSrc("urn:b", decidableType),
+			},
+			extra:       []string{"lib.xsd"},
+			expectValid: true,
+		},
+		{
+			name: "second document reached two levels down, invalid across the set",
+			docs: map[string]string{
+				"main.xsd": schemaSrc("urn:a", include("mid.xsd")+`<xs:element name="dup" type="xs:string"/>`),
+				"mid.xsd":  schemaSrc("urn:a", include("deep.xsd")),
+				"deep.xsd": schemaSrc("urn:a", `<xs:element name="dup" type="xs:string"/>`),
+			},
+			extra:       []string{"mid.xsd", "deep.xsd"},
+			expectValid: false,
+		},
+	}
+	for _, tc := range cases {
+		root := writeSchemaTree(t, "main.xsd", tc.docs)
+		spec := caseSpec{
+			kind:        kindSchema,
+			doc:         root,
+			extraDocs:   extraPaths(root, tc.extra),
+			expectValid: tc.expectValid,
+		}
+		if !exec(spec).IsPass() {
+			t.Errorf("%s: executor disagreed with expectValid=%v", tc.name, tc.expectValid)
+		}
+		flipped := spec
+		flipped.expectValid = !tc.expectValid
+		if exec(flipped).IsPass() {
+			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", tc.name)
+		}
+	}
+}
+
+// TestSchemaExecutorDeclinesUnreachableExtraDocument proves the decline-not-guess
+// rule for a multi-document schemaTest (issue #238): when a declared document is
+// NOT reached by the closure walk from the first, parser.Parse — which takes one
+// root — would assemble a schema the suite never declared, so the case must be
+// DECLINED under BOTH polarities rather than decided against a subset.
+//
+// The decoy is what makes this able to fail: "other.xsd" declares the same name
+// as the root, so a harness that merged the declared documents (or one that
+// simply ignored the extra) would produce a decidable verdict either way —
+// "invalid" if merged, "valid" if ignored. Only declining refuses both.
+func TestSchemaExecutorDeclinesUnreachableExtraDocument(t *testing.T) {
+	exec := newSchemaExec()
+	trees := map[string][]string{
+		"independent second document":            {"other.xsd"},
+		"declared document absent from the tree": {"missing.xsd"},
+	}
+	docs := map[string]string{
+		"main.xsd":  schemaSrc("urn:a", `<xs:element name="dup" type="xs:string"/>`),
+		"other.xsd": schemaSrc("urn:a", `<xs:element name="dup" type="xs:string"/>`),
+	}
+	for _, name := range slices.Sorted(maps.Keys(trees)) {
+		root := writeSchemaTree(t, "main.xsd", docs)
+		for _, ev := range []bool{true, false} {
+			spec := caseSpec{
+				kind:        kindSchema,
+				doc:         root,
+				extraDocs:   extraPaths(root, trees[name]),
+				expectValid: ev,
+			}
+			if exec(spec).IsPass() {
+				t.Errorf("%s: must be DECLINED (Fail) regardless of expectValid=%v", name, ev)
+			}
+		}
+	}
+}
+
+// extraPaths turns slash-separated names relative to root's directory into the
+// resolved paths caseSpec.extraDocs carries, matching makeCase's own join.
+func extraPaths(root string, names []string) []string {
+	dir := filepath.Dir(root)
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		out = append(out, filepath.Join(dir, filepath.FromSlash(n)))
+	}
+	return out
+}
+
 // TestSchemaExecutorDeclinesUndecidableInclusion proves the false-accept guard
 // end-to-end: the root alone is decidable, so a root-only shape check would decide
 // the case, but the INCLUDED document carries a shape the producer does not build.

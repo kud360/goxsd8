@@ -23,9 +23,13 @@ import (
 // suite.xml is a testSuite whose testSetRef children xlink:href relative
 // paths to testSet documents (.testSet or .xml). Each testSet holds testGroup
 // elements; each group carries schemaTest and/or instanceTest children. A
-// schemaTest/instanceTest has a name, a schemaDocument/instanceDocument child
+// schemaTest/instanceTest has a name, its document reference(s)
 // (xlink:href to the document under test), and one or more expected children
-// declaring validity ("valid"|"invalid"), optionally qualified by a version.
+// declaring validity ("valid"|"invalid"), optionally qualified by a version. An
+// instanceTest names ONE instanceDocument; a schemaTest may name SEVERAL
+// schemaDocuments, an ordered set to be loaded "one by one, in order"
+// (testdata/xsdtests/common/xsts.xsd, the suite's own catalog schema), so
+// discovery keeps every one of them (caseSpec.doc plus caseSpec.extraDocs).
 //
 // # Case IDs
 //
@@ -73,14 +77,25 @@ func checkSuitePresent(index string) error {
 }
 
 // caseSpec is one discovered conformance case: a stable ID, its kind, the
-// resolved path to the document under test, and the suite's declared XSD 1.1
-// expectation. An executor reads doc and expectValid to observe a Status; the
-// M1 stub ignores them and always reports Fail. Fields are unexported and set
-// only by discovery (STYLE T1); nothing derivable is stored (STYLE D3).
+// resolved path to the document under test, the resolved paths of any FURTHER
+// documents the case declares, and the suite's declared XSD 1.1 expectation. An
+// executor reads doc, extraDocs and expectValid to observe a Status; the M1 stub
+// ignores them and always reports Fail. Fields are unexported and set only by
+// discovery (STYLE T1); nothing derivable is stored (STYLE D3).
+//
+// extraDocs is empty for every instanceTest and for the single-document
+// schemaTest that is the overwhelming majority. It is non-empty only for a
+// schemaTest declaring several <schemaDocument> children, which xsts.xsd (the
+// suite's own catalog schema) defines as "run as if the schema documents given
+// were loaded one by one, in order" — so the whole list, in document order, is
+// the case, not any one member of it. execSchemaCase decides such a case only
+// when every extra document is provably part of the closure the parser itself
+// walks from doc; see conformance/schema.go.
 type caseSpec struct {
 	id          string
 	kind        string
 	doc         string
+	extraDocs   []string
 	expectValid bool
 }
 
@@ -182,11 +197,19 @@ type testGroup struct {
 	InstanceTests []validityTest `xml:"instanceTest"`
 }
 
-// validityTest mirrors a schemaTest or instanceTest. Exactly one document ref
-// is populated per kind; makeCase selects the right one.
+// validityTest mirrors a schemaTest or instanceTest. Only the refs of the
+// matching kind are populated; makeCase selects them.
+//
+// SchemaDocs is a SLICE because a schemaTest may declare ANY NUMBER of
+// <schemaDocument> children (xsts.xsd, the suite's own catalog schema), and
+// encoding/xml overwrites a non-slice field on each repeated match — so a scalar
+// here silently kept only the LAST of them and decided the case against an
+// arbitrary document. A slice keeps all of them in document order, which is the
+// order xsts.xsd makes significant. InstanceDoc stays scalar: an instanceTest
+// declares exactly one <instanceDocument>.
 type validityTest struct {
 	Name        string     `xml:"name,attr"`
-	SchemaDoc   docRef     `xml:"schemaDocument"`
+	SchemaDocs  []docRef   `xml:"schemaDocument"`
 	InstanceDoc docRef     `xml:"instanceDocument"`
 	Expected    []expected `xml:"expected"`
 }
@@ -295,8 +318,10 @@ func casesFromSet(set testSet, setDir string, seen map[string]struct{}) ([]caseS
 	return out, nil
 }
 
-// makeCase builds one caseSpec, resolving its document path relative to the
-// set directory and its XSD 1.1 expected validity.
+// makeCase builds one caseSpec, resolving its document path(s) relative to the
+// set directory and its XSD 1.1 expected validity. A schemaTest's FIRST
+// <schemaDocument> is the case's doc and the rest, in document order, are its
+// extraDocs; an instanceTest has its one <instanceDocument> and no extras.
 func makeCase(setName, groupName, kind string, t validityTest, setDir string, seen map[string]struct{}) (caseSpec, error) {
 	id := setName + "/" + groupName + "/" + kind + "/" + t.Name
 	if _, dup := seen[id]; dup {
@@ -306,17 +331,36 @@ func makeCase(setName, groupName, kind string, t validityTest, setDir string, se
 	if !ok {
 		return caseSpec{}, fmt.Errorf("case %q has no declared expected validity", id)
 	}
-	href := t.SchemaDoc.Href
-	if kind == kindInstance {
-		href = t.InstanceDoc.Href
+	href, extra, err := caseDocs(kind, t, setDir)
+	if err != nil {
+		return caseSpec{}, fmt.Errorf("case %q: %w", id, err)
 	}
 	seen[id] = struct{}{}
 	return caseSpec{
 		id:          id,
 		kind:        kind,
 		doc:         filepath.Join(setDir, filepath.FromSlash(href)),
+		extraDocs:   extra,
 		expectValid: valid,
 	}, nil
+}
+
+// caseDocs returns the href of the document under test and the set-relative
+// resolved paths of any further declared documents, in document order (STYLE
+// D1: no map iteration, the catalog's own order is the fact). A schemaTest with
+// no <schemaDocument> at all names nothing to test, which is a malformed catalog
+// entry rather than a case this harness may silently invent a document for.
+func caseDocs(kind string, t validityTest, setDir string) (href string, extra []string, err error) {
+	if kind == kindInstance {
+		return t.InstanceDoc.Href, nil, nil
+	}
+	if len(t.SchemaDocs) == 0 {
+		return "", nil, fmt.Errorf("schemaTest declares no schemaDocument")
+	}
+	for _, d := range t.SchemaDocs[1:] {
+		extra = append(extra, filepath.Join(setDir, filepath.FromSlash(d.Href)))
+	}
+	return t.SchemaDocs[0].Href, extra, nil
 }
 
 // resolveExpected picks the validity that applies to an XSD 1.1 processor:
