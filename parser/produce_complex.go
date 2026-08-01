@@ -1274,6 +1274,12 @@ func (p *producer) buildAttributeGroup(name xsd.QName, elem *Element) (xsd.Attri
 // (L if present, else the first of W). visited guards against the spec-legal
 // circular <attributeGroup> reference chains (§3.6.2.1, Q3): an already-visited
 // name is not re-descended, so a cycle contributes each element once.
+//
+// The receiver MUST be the producer of the document that declares container: every
+// child mapped here — a local <attribute>'s {target namespace} (§3.2.2.2) and its
+// type=, an <attribute ref>, an <attributeGroup ref> — is resolved against the
+// receiver's schemaElem and §F.1 coercion. collectReferencedGroup switches
+// producers on the way in for exactly that reason.
 func (p *producer) collectAttributeContent(container *Element, visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
 	if any := childElement(container, xsd.XMLSchemaNS, "anyAttribute"); any != nil {
 		wc, err := p.produceWildcard(any)
@@ -1312,6 +1318,28 @@ func (p *producer) collectAttributeContent(container *Element, visited map[xsd.Q
 // <attributeGroup> with no ref is a well-formedness fault with no dedicated SCC
 // (§3.6.3 "None as such", grounding Q6), reported as a plain error. An
 // already-visited target is skipped, tolerating the spec-legal cycle (Q3).
+//
+// The two halves of this hop belong to DIFFERENT documents, and each is resolved
+// by its own producer. The ref= attribute is held by el, a child of the ASKING
+// document, so p resolves it (§F.1 task (b) transforms xs:*/@ref in the document
+// that carries it). The definition it names may have been contributed by any
+// document of the <include> closure (§4.2.3 c-incl-incl), so its body is descended
+// under src.owner: that visibility lets a foreign producer REACH the group, it
+// does not transfer resolution authority over the group's own local <attribute>
+// names (§3.2.2.2) or unqualified type=/ref= values (src-resolve clause 4.1.1) —
+// the same split #228 established for complexTypes and #337 for simpleTypes.
+//
+// Descending the source elements under their owner computes exactly §3.4.2.4
+// clause c-add2's component-level union of the referenced AttributeGroupDefinition's
+// {attribute uses}: every element is mapped by the producer that would have mapped
+// it in the top-level component, and visited makes the transitive closure §3.6.2.1
+// mandates for cycles come out the same whichever group the walk started from
+// (TestAttributeGroupComponentAndInlineFoldAgree pins the two foldings agreeing).
+// It is preferred over folding an already-built component because that would need a
+// memo the tri-state build guard cannot supply — an attributeGroup cycle is legal,
+// so "on the stack" is not an error here as it is for a base chain — and because a
+// diamond (two refs reaching one group) would then splice that group's uses twice
+// and trip ag-props-correct on a collision the spec's set union does not have.
 func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
 	ref, ok := attrValue(el, "ref")
 	if !ok {
@@ -1325,12 +1353,12 @@ func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]str
 		return nil
 	}
 	visited[qn] = struct{}{}
-	def, ok := p.symbols.attributeGroups[qn]
+	src, ok := p.symbols.attributeGroups[qn]
 	if !ok {
 		return xsderr.New(ruleSrcResolve, el.Loc(),
 			"<attributeGroup ref> %s does not resolve to any top-level attribute group definition (src-resolve clause 1.4)", qn)
 	}
-	return p.collectAttributeContent(def, visited, uses, wildcards)
+	return src.owner.collectAttributeContent(src.elem, visited, uses, wildcards)
 }
 
 // combineAttributeWildcards folds a §3.6.2.2 pre-order sequence of collected
