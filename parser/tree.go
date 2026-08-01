@@ -40,22 +40,22 @@ func (e *Element) Name() xmltree.Name { return e.src.Name() }
 // the reader's own; its Attribute values are immutable.
 func (e *Element) Attributes() []xmltree.Attribute { return e.src.Attributes() }
 
-// LookupPrefix resolves prefix to a namespace URI using the bindings in scope
+// lookupPrefix resolves prefix to a namespace URI using the bindings in scope
 // at this element, so a consumer can later resolve a QName-valued lexical that
 // occurred here (Datatypes §3.3.18). It delegates to the underlying start tag;
 // the empty prefix yields the default namespace, "xml" always resolves, and ok
 // is false for an unbound prefix.
-func (e *Element) LookupPrefix(prefix string) (uri string, ok bool) {
+func (e *Element) lookupPrefix(prefix string) (uri string, ok bool) {
 	return e.src.LookupPrefix(prefix)
 }
 
-// InScopePrefixes returns every prefixed namespace binding in scope at this
+// inScopePrefixes returns every prefixed namespace binding in scope at this
 // element, sorted by prefix, so a consumer can materialize the whole in-scope
 // namespace context an XPath expression written here must be interpreted
 // against (Structures §3.13.2's {namespace bindings}). It delegates to the
 // underlying start tag; the default namespace is not among them — it is
-// obtained from LookupPrefix("").
-func (e *Element) InScopePrefixes() []xmltree.Namespace {
+// obtained from lookupPrefix("").
+func (e *Element) inScopePrefixes() []xmltree.Namespace {
 	return e.src.InScopePrefixes()
 }
 
