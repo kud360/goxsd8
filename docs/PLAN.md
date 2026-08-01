@@ -657,7 +657,7 @@ lane movement first, dependency-ordered, is now:
    move no lane by design and are listed last, but they are the only
    items here whose *absence* can lock a false accept into the ratchet.
 
-*Retired from this band, all three on 2026-08-01, in the order they were
+*Retired from this band, all four on 2026-08-01, in the order they were
 listed ("both" above was written when there were two; the count is the only
 word changed):*
 
@@ -704,6 +704,48 @@ word changed):*
   source-entry encoding for both type indexes. The stale "simpleTypes needs no
   owner" doc comment was deleted, not softened. Post-land harvest filed
   **#368**, which takes over this band's item 1 above.*
+- *#368 (`symbols.attributeGroups` gains an owning producer) landed as
+  `3e97b77` (PR #378) — **ratchet unchanged** (schema 4247/15432, datatypes
+  1107/1129, instance 0/26426, md5-verified flat by the arbiter), arbiter
+  ACCEPT on round 1. **This slot is now vacated, not substituted**: #368 was
+  the third and last instance of the no-owning-producer class (#228
+  `complexTypes`, #337 `simpleTypes`, #368 `attributeGroups`), so unlike
+  #337 there is no fourth index to promote into item 1, and **#264 → #265 is
+  now this band's head**. Flatness was again the predicted result — no W3C
+  fixture combines chameleon inclusion with a cross-document
+  `<attributeGroup ref>` — so this was a false-reject-only fix guarded by a
+  two-order unit test. `typeSource{elem, owner}` was reused for the third
+  time running rather than twinned (STYLE T4). The one thing this landing did
+  **not** inherit from its two precedents: the oracle recommended reusing the
+  already-built `AttributeGroupDefinition` component (its reading of
+  `c-add2`/§3.6.2.1 was correct) and mason shipped the raw-element walk routed
+  through `src.owner` instead; the arbiter settled it by finding that
+  `compile()` runs every `prescan()` before any `run()`
+  (`parser/parse.go:541-551`), so in a referrer-first order the component does
+  not exist yet at fold time. **A grounding's *what* can be sound while its
+  *how* is a guess about code the oracle cannot read** — worth carrying into
+  future groundings that recommend an implementation shape.
+  Post-land harvest filed **nothing**, deliberately, on three separate
+  advisories; see the two paragraphs below.*
+
+***Recorded, deliberately not filed: no fourth raw-`*Element` index.*** The
+#368 arbiter closed its verdict by asking for "a standing check that no fourth
+raw-`*Element` index appears" now that the class is closed at all three sites.
+There is nothing to file: the check is a *review* habit, not a change, and the
+three landed precedents plus `typeSource`'s now-generalized doc comment already
+encode it at the only place a fourth index could be minted. An issue whose
+`## Acceptance` is "no new occurrences of a pattern" can never be closed by the
+develop loop and would sit in the queue forever, so it is recorded **here**, in
+the ledger `/backlog` surveys, as a thing to look for in the exported-surface
+and symbols-table diff of any future `parser/produce.go` change.
+
+***Also deliberately not filed, and NOT a defect:*** the same verdict's D4
+observation that `collectAttributeContent`'s `visited` set is a "seen set"
+smell. The arbiter itself ruled it **pre-existing on `main`, unchanged by
+#368, and correct** — it raises no error and computes the transitive closure
+§3.6.2.1 mandates. It is written down in the #368 LOG entry and here **only**
+so a future D4 sweep does not misread it as introduced by this landing; it is
+not a follow-up, and re-filing it as one would contradict the verdict.
 
 ***Recorded, deliberately not filed: `<list itemType=…>` and
 `<union memberTypes=…>` will need the same owner routing when they land.***
