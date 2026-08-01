@@ -1,0 +1,76 @@
+#!/bin/sh
+# pre-commit — refuse to commit a stale index.
+#
+# The gate (go build / go test / go vet / golangci-lint / conformance)
+# reads the WORKING TREE. Nothing in it reads the git index. So a file
+# that was staged and then edited again commits its stale staged content
+# while every gate command honestly reports green — which is how a broken
+# main landed at 547b42f (#246, harvested from #179's merge-conflict
+# resolution).
+#
+# This hook fails the commit when any path has BOTH staged changes
+# (index differs from HEAD) AND further unstaged changes on top of them
+# (worktree differs from index) — exactly that shape. Untracked files and
+# purely-unstaged edits are not the hazard and are not flagged.
+#
+# Activated per session (fresh clones carry no local git config) by
+# docs/WORKFLOW.md step 1: git config core.hooksPath .githooks
+
+set -u
+
+stale=''
+
+while IFS= read -r line; do
+	[ -n "$line" ] || continue
+
+	# Porcelain v1 format: "XY path". X = index vs HEAD, Y = worktree
+	# vs index. The two status columns are fixed-width and always the
+	# first two characters of the line, so reading them by position
+	# works whatever git does to the path after them (paths with spaces
+	# or non-ASCII bytes come back C-quoted, e.g. MM "my file.txt").
+	rest=${line#??}
+	xy=${line%"$rest"}
+	x=${xy%?}
+	y=${xy#?}
+	path=${rest#" "}
+
+	# Unmerged paths (a conflict still in progress) are git's own
+	# error, not ours — let it report them.
+	case "$xy" in
+	DD | AU | UD | UA | DU | AA | UU) continue ;;
+	esac
+
+	case "$x" in
+	[MARCD]) ;;
+	*) continue ;;
+	esac
+	case "$y" in
+	[MD]) ;;
+	*) continue ;;
+	esac
+
+	stale="$stale  $path
+"
+done <<EOF
+$(git status --porcelain=v1)
+EOF
+
+[ -n "$stale" ] || exit 0
+
+cat >&2 <<EOF
+pre-commit: staged content is stale — these paths have staged changes AND
+further edits on top of them that are NOT staged:
+
+$stale
+Committing now would silently drop those edits, and the gate would not
+notice: go build/test/vet, lint and conformance all read the working tree,
+never the index.
+
+Fix:
+
+  git add -u                # re-stage every touched file
+  git diff --cached --stat  # confirm this is the tree you verified
+
+See docs/WORKFLOW.md, "Merge-conflict resolution".
+EOF
+exit 1

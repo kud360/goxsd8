@@ -121,11 +121,22 @@ work itself and never skips the arbiter.
 
 ## The develop loop (`/develop`, the default scheduled trigger)
 
-1. **Survey** — `git fetch origin` and list the WIP index:
-   `git ls-remote --heads origin 'refs/heads/wip/*'`. If the local tree
-   is somehow dirty (persistent local checkout only; a routine container
-   starts clean), push it to `parked/untriaged-<ts>` first and log it —
-   never clean it (PRINCIPLES 28).
+1. **Survey** — activate the repo's git hooks, then list the WIP index:
+
+   ```sh
+   git config core.hooksPath .githooks   # idempotent; run it EVERY session —
+                                         # a fresh clone carries no local config
+   git fetch origin
+   git ls-remote --heads origin 'refs/heads/wip/*'
+   ```
+
+   The hooks are the only guard that reads the git INDEX rather than the
+   working tree (see "Merge-conflict resolution"), and local git config
+   does not survive an ephemeral container, so activation rides this
+   always-executed step instead of being its own skippable one. If the
+   local tree is somehow dirty (persistent local checkout only; a routine
+   container starts clean), push it to `parked/untriaged-<ts>` first and
+   log it — never clean it (PRINCIPLES 28).
 2. **Pick** — partition the `wip/*` branches by lease
    (tip timestamp vs the 2h claim TTL — see the branch scheme):
    - **LIVE** branches (and their issues) are off-limits this session.
@@ -232,6 +243,35 @@ GitHub: the issue thread, the pushed WIP branch, and main. Neither
 compaction nor a recycled container may be able to eat anything that
 can't be rebuilt from those. Wrapping up early at a checkpoint (time
 budget hit, second reject) is a first-class outcome, not a failure.
+
+**Merge-conflict resolution** — the one path where the checkpoint
+ritual's `git add -A` is not what actually happens. Conflict resolution
+stages file by file, and a merge also stages the files it brought in
+cleanly, so any fix made *after* that staging is invisible to
+`git commit`:
+
+```sh
+git merge origin/main       # step 2's resume merge, or the pre-land merge
+# resolve every conflict — AND make the follow-up fixes the merge implies
+# in files it staged for you (a symbol the other side renamed, a helper
+# that became a method, an import that moved)
+git add -u                  # re-stage EVERY touched file, not just the
+                            # conflicted ones — always after the LAST edit
+git diff --cached --stat    # mandatory: this is the tree that will land
+git commit
+```
+
+`git diff --cached --stat` is a named step of the ritual, not an optional
+sanity check. The whole gate — `go build`, `go test`, `go vet`,
+`golangci-lint run`, the conformance suite — plus the arbiter's review
+read the WORKING TREE; nothing in them reads the index. A green gate
+therefore says nothing about what is actually staged: a fix made after
+`git add` gets silently reverted by the commit while every check honestly
+reports green. That is how a red `main` landed at `547b42f` through a
+squash-merged PR (#179). `.githooks/pre-commit` now refuses any commit
+where a path has both staged and unstaged changes, which catches this
+mechanically — but only in a session that ran step 1's
+`git config core.hooksPath .githooks`, so the discipline stays yours too.
 
 **Park** (second reject, or a resume whose merge won't resolve):
 checkpoint the branch one final time, label the issue `needs-replan`,
