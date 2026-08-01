@@ -58,15 +58,28 @@ func TestDatatypesSelectorClaimsOnlyCohort(t *testing.T) {
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/saxonData/PDecimal/pdecimal010.n1.xml"}, true},
 		// A precisionDecimal SCHEMA case is not claimed (we cannot validate schemas).
 		{caseSpec{kind: kindSchema, doc: "../testdata/xsdtests/saxonData/PDecimal/pdecimal001.xsd"}, false},
-		// The integer-family LIST-variety fixtures are claimed (issue #224).
+		// The integer-family LIST-variety fixtures are claimed (issue #224), now via
+		// datatypesCase's family alternation rather than a selector of their own.
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/byte009.xml"}, true},
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/unsignedShort007.xml"}, true},
-		// Their NON-list integer-family siblings stay unclaimed: they test a value
-		// against xs:byte directly, which execLexicalCase cannot decide (the strict
-		// backend maps primitives only), so claiming them would only duplicate the
-		// instance lane's recorded gaps. See integerListCase.
-		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/byte008.xml"}, false},
-		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/unsignedShort006.xml"}, false},
+		// Their NON-list integer-family siblings are claimed too since issue #331:
+		// execLexicalCase routes a seeded-but-unmapped tested type through
+		// value.ValidateLexical (decideLexicalByFacets), where xs:byte's own facets
+		// decide the value over xs:decimal's mapping. These two rows were negative
+		// when #224 landed them, deliberately, so a later widening would have to
+		// argue with a test; #331 is that argument.
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/byte008.xml"}, true},
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/unsignedShort006.xml"}, true},
+		// The selector stays pinned from BOTH sides: Facets/int/test111092.xml is a
+		// genuinely undecidable shape (two named restriction steps under distinct
+		// <foo1>/<foo2> elements, which readFacetsCase's exactly-one-<foo> reader
+		// declines), so it is claimed by no selector and stays the instance lane's
+		// recorded gap. #331 widened the routing, not the readers.
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/Facets/int/test111092.xml"}, false},
+		// xs:int and xs:integer lexical fixtures have the integer family's shape but
+		// were outside #331's enumerated scope, so they stay unclaimed as well.
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/int001.xml"}, false},
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/integer001.xml"}, false},
 	}
 	for _, tc := range cases {
 		if got := selectsDatatypes(tc.c); got != tc.want {
@@ -748,6 +761,102 @@ func TestDatatypesLexicalDateTimeStampTimezone(t *testing.T) {
 	}
 	if rule, ok := xsderr.RuleOf(verr); !ok || rule != "cvc-explicitTimezone-valid" {
 		t.Errorf("tz-absent dateTimeStamp rejection rule = %q (ok=%v), want cvc-explicitTimezone-valid", rule, ok)
+	}
+}
+
+// TestDatatypesLexicalIntegerFamily drives the executor over the DERIVED
+// integer-family lexical fixtures issue #331 claimed. Their tested type has no
+// direct backend mapping (strict maps primitives only), so before #331 the
+// executor declined every one of them at the backend.Mapping miss; now it routes
+// them through decideLexicalByFacets/value.ValidateLexical, where the type's own
+// effective facets decide the value over xs:decimal's mapping.
+//
+// Both polarities are asserted, and each is also asserted to DISAGREE with the
+// opposite claim — the load-bearing half: a routing that fell back to Parse
+// against xs:decimal would false-ACCEPT "128"/"65536"/"-129" and those wrong
+// "valid" claims would spuriously Pass. Skips when the submodule is absent.
+func TestDatatypesLexicalIntegerFamily(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	exec := newDatatypesExec()
+
+	dir := filepath.Join(suiteRoot, "msData", "datatypes")
+	cases := []struct {
+		file       string
+		specValid  bool // the spec-correct validity of the fixture's literal
+		whyInvalid string
+	}{
+		{"byte001.xml", false, `"" fails byte's fixed pattern [\-+]?[0-9]+`},
+		{"byte002.xml", true, `"-1" is in [-128,127]`},
+		{"byte004.xml", true, `"+1" — the fixed pattern admits a leading +`},
+		{"byte005.xml", true, `"127" is byte's maxInclusive`},
+		{"byte006.xml", false, `"128" exceeds byte's maxInclusive (cvc-maxInclusive-valid)`},
+		{"byte007.xml", true, `"-128" is byte's minInclusive`},
+		{"byte008.xml", false, `"-129" is below byte's minInclusive (cvc-minInclusive-valid)`},
+		{"long008.xml", false, `"9223372036854775808" exceeds long's maxInclusive`},
+		{"unsignedByte006.xml", false, `"256" exceeds unsignedByte's maxInclusive`},
+		{"unsignedInt006.xml", false, `"4294967296" exceeds unsignedInt's maxInclusive`},
+		{"unsignedLong006.xml", false, `"18446744073709551616" exceeds unsignedLong's maxInclusive`},
+		{"unsignedShort002.xml", false, `"-1" is below unsignedShort's minInclusive 0`},
+		{"unsignedShort005.xml", true, `"65535" is unsignedShort's maxInclusive`},
+		{"unsignedShort006.xml", false, `"65536" exceeds unsignedShort's maxInclusive`},
+	}
+	for _, tc := range cases {
+		doc := filepath.Join(dir, tc.file)
+		right := caseSpec{kind: kindInstance, doc: doc, expectValid: tc.specValid}
+		if got := exec(right); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with spec-correct validity %v (%s)", tc.file, tc.specValid, tc.whyInvalid)
+		}
+		wrong := caseSpec{kind: kindInstance, doc: doc, expectValid: !tc.specValid}
+		if exec(wrong).IsPass() {
+			t.Errorf("%s: executor must Fail against the wrong expectation (expectValid=%v)", tc.file, !tc.specValid)
+		}
+	}
+
+	// Pin the two facts the routing rests on: xs:byte is SEEDED but NOT directly
+	// mapped (so the generalized predicate, not fixesTimezone, is what routes it),
+	// and its rejections come from its own facets with the spec's rule IDs.
+	backend := strict.New()
+	types, err := builtin.Seed(backend)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	byteQN := xsd.QName{Space: xsd.XMLSchemaNS, Local: "byte"}
+	var byteType *xsd.SimpleType
+	for _, ty := range types {
+		if ty.Name() == byteQN {
+			byteType = ty
+		}
+	}
+	if byteType == nil {
+		t.Fatal("Seed did not return xs:byte")
+	}
+	if _, mapped := backend.Mapping(byteQN); mapped {
+		t.Error("strict.Mapping(xs:byte) = mapped, want unmapped (the routing premise of #331)")
+	}
+	if !strictGoverns(backend, byteType) {
+		t.Error("strictGoverns(xs:byte) = false, want true (xs:decimal governs it up the base chain)")
+	}
+	if fixesTimezone(byteType) {
+		t.Error("fixesTimezone(xs:byte) = true, want false (the two routing arms are independent)")
+	}
+	rules := []struct {
+		lexical string
+		rule    xsderr.Rule
+	}{
+		{"128", "cvc-maxInclusive-valid"},
+		{"-129", "cvc-minInclusive-valid"},
+		{"5.0", "cvc-pattern-valid"}, // the pattern gate runs before the value facets
+	}
+	for _, r := range rules {
+		_, verr := value.ValidateLexical(backend, byteType, r.lexical, nil)
+		if verr == nil {
+			t.Fatalf("xs:byte %q must be rejected via value.ValidateLexical, got nil", r.lexical)
+		}
+		if rule, ok := xsderr.RuleOf(verr); !ok || rule != r.rule {
+			t.Errorf("xs:byte %q rejection rule = %q (ok=%v), want %s", r.lexical, rule, ok, r.rule)
+		}
 	}
 }
 

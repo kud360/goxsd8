@@ -26,13 +26,15 @@ import (
 // package-internal conformance support: it exports nothing and no library code
 // imports it.
 //
-// # The lexical cohort (issue #15, widened by issue #80)
+// # The lexical cohort (issue #15, widened by issues #80 and #331)
 //
 // The lane claims the Microsoft datatype LEXICAL cases under
 // msData/datatypes/{boolean,decimal,string,float,double,anyURI,hexBinary,
 // base64Binary,duration,dateTime,dateTimeStamp,time,date,gYearMonth,gYear,
-// gMonthDay,gDay,gMonth}NNN.xml. Each
-// such schema declares an element of an UNRESTRICTED builtin primitive
+// gMonthDay,gDay,gMonth}NNN.xml and, since issue #331, the DERIVED integer
+// family {byte,long,short,unsignedByte,unsignedInt,unsignedLong,
+// unsignedShort}NNN.xml ("The derived sub-cohort" below). Each schema of the
+// PRIMITIVE group declares an element of an UNRESTRICTED builtin primitive
 // (xsd:boolean / xsd:decimal / xsd:string / xsd:float / xsd:double / xsd:anyURI /
 // xsd:hexBinary / xsd:base64Binary / xsd:duration / xsd:dateTime and the six
 // remaining seven-property date/time siblings xsd:time / xsd:date /
@@ -63,6 +65,31 @@ import (
 // day-of-month value constraint (con-date-dayValue §3.3.9.1, year-dependent;
 // con-gMonthDay-dayValue §3.3.12.1, year-free so --02-29 is always valid) beyond
 // the grammar regex; gDay/gMonth/gYear/gYearMonth carry no day-value rule.
+//
+// ## The derived (integer-family) sub-cohort (issue #331)
+//
+// The forty-eight msData/datatypes/{byte,long,short}00[1-8].xml and
+// {unsignedByte,unsignedInt,unsignedLong,unsignedShort}00[1-6].xml fixtures have
+// the same comp_foo/simpleTest shape but a tested type that is NOT a primitive:
+// xs:byte and its six siblings are facet restrictions of xs:decimal
+// (§3.4.13–§3.4.25), and the strict backend maps the 20 primitives only. Parse
+// alone is therefore an INCOMPLETE check for them — it would satisfy only
+// cvc-datatype-valid clause 2.1 (§4.1.4) and false-accept "128" or "1.5" as an
+// xs:byte — which is why execLexicalCase used to decline them at a
+// backend.Mapping miss. It no longer does: a seeded type with no direct mapping
+// now routes to decideLexicalByFacets, exactly as a type fixing explicitTimezone
+// does, so value.ValidateLexical applies the type's OWN effective facets (the
+// fixed pattern [\-+]?[0-9]+ at clause 1, then fractionDigits=0 and the per-type
+// min/maxInclusive bounds at clause 3) over the lexical space of the
+// {primitive type definition} its base chain reaches (value.governingMapping, the
+// widest-space rule of st-restrict-facets §3.16.6.4). Both polarities are then
+// decided for the right reason: the out-of-range fixtures (byte008's "-129",
+// unsignedShort006's "65536", …) are rejected by cvc-min/maxInclusive-valid
+// (§4.3.10.3/§4.3.7.3), a fraction-point or empty literal by cvc-pattern-valid
+// (§4.3.4.4) — the pattern gate running BEFORE the value facets, so a "5.0" is a
+// pattern rejection, not a fractionDigits one. The same generated builtin facets
+// the Facets integer cohort (issue #81) and the list cohort (issue #224) already
+// ride; no new backend mapping and no change to package value.
 //
 // ## The context-dependent QName/NOTATION sub-cohort (issue #131)
 //
@@ -283,7 +310,8 @@ import (
 // base64Binary002,duration027}.xml and, since issue #224, their seven
 // integer-family siblings {byte009,long009,short009,unsignedByte007,
 // unsignedInt007,unsignedLong007,unsignedShort007}.xml (claimed by
-// integerListCase). Each such schema declares a user-defined
+// datatypesCase's integer-family alternation since issue #331, by the dedicated
+// integerListCase selector before it). Each such schema declares a user-defined
 // "myList" (<xsd:list itemType="xsd:BUILTIN"/>) reached through comp_foo (either
 // type="myList" directly or an inline anonymous restriction of it) and one-or-more
 // simpleTest elements (a named restriction of "myList"); the restriction may carry
@@ -416,17 +444,23 @@ import (
 // Within the integer family, the odd
 // multi-element cases (e.g. Facets/int/test111092.xml, two named restriction
 // steps under distinct elements) do not fit the single-<foo> instance shape and
-// fall through to the instance lane as recorded gaps. The integer family's
-// LIST-variety fixtures (byte009/long009/short009/unsignedByte007/
-// unsignedInt007/unsignedLong007/unsignedShort007.xml) are now claimed and
-// decided (issue #224, integerListCase). Their NON-list siblings
-// (byte001–008 and the like, each testing a value against xs:byte/xs:long/…
-// through the shared byte.xsd/long.xsd) stay unclaimed: execLexicalCase's
-// parseOK path needs a backend Mapping for the tested type, and the strict
-// backend maps primitives only, so the integer family would decline there.
-// Routing a seeded-but-unmapped lexical type through value.ValidateLexical (as
-// fixesTimezone already does for xs:dateTimeStamp) is what would make them
-// decidable — the natural follow-up, not part of #224.
+// fall through to the instance lane as recorded gaps (issue #331 left them
+// there: this is a READER-shape limit, not the routing gap that issue closed).
+// The family's LIST-variety fixtures (byte009/long009/short009/unsignedByte007/
+// unsignedInt007/unsignedLong007/unsignedShort007.xml) were claimed and decided
+// by issue #224. Their forty-eight NON-list siblings (byte001–008, long001–008,
+// short001–008, unsignedByte/Int/Long/Short001–006, each testing a value against
+// xs:byte/xs:long/… through the shared byte.xsd/long.xsd) are claimed and decided
+// too since issue #331: execLexicalCase no longer demands a DIRECT backend
+// Mapping for the tested type but routes a seeded-but-unmapped one through
+// value.ValidateLexical (decideLexicalByFacets), where governingMapping walks the
+// base chain to xs:decimal's mapping and the type's own effective facets decide
+// the value — the same pipeline xs:dateTimeStamp has taken since issue #140 and
+// the list path has taken per item since #224. Of the msData/datatypes lexical
+// fixtures the integer family still leaves int001–008 and integer001–012
+// unclaimed: they have the identical shape and would ride the same route, but
+// they were outside issue #331's enumerated scope and are a one-line widening of
+// datatypesCase whenever a later issue banks them.
 // time_minInclusive006_1163.i (issue #123) is a
 // recorded gap for a different reason: its instance file carries no
 // xsi:noNamespaceSchemaLocation (a defect in that one suite file), so
@@ -463,7 +497,30 @@ const synthNS = "urn:goxsd8:conformance:facets"
 // value.ValidateLexical path (decideLexicalByFacets) rather than parseOK. A
 // tz-ABSENT dateTimeStamp literal is therefore correctly REJECTED (issue #140),
 // closing the former fail-open; a future tz-absent case cannot regress the ratchet.
-var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|dateTimeStamp|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth|QName|NOTATION)[0-9]+\.xml$`)
+//
+// The seven DERIVED integer-family members (byte, long, short, unsignedByte,
+// unsignedInt, unsignedLong, unsignedShort — the families the current checkout
+// carries plain lexical cases for) joined the claim with issue #331. They are
+// not primitives, so the strict backend maps none of them, and it is exactly
+// that miss which now ROUTES them to decideLexicalByFacets instead of declining
+// them: value.governingMapping walks each one's base chain to xs:decimal's
+// mapping and value.ValidateLexical then applies the type's OWN effective facets
+// — the fixed pattern [\-+]?[0-9]+ (cvc-pattern-valid §4.3.4.4), fractionDigits=0
+// (cvc-fractionDigits-valid §4.3.12.3) and the per-type bounds
+// (cvc-min/maxInclusive-valid §4.3.10.3/§4.3.7.3) — which is what makes
+// "128" against xs:byte a rejection rather than the false accept a Parse against
+// xs:decimal's mapping alone would have produced (cvc-datatype-valid §4.1.4
+// clauses 1 and 3, §3.4.13–§3.4.25). The same alternation also covers each
+// family's LIST-variety sibling (byte009, long009, short009, unsignedByte007,
+// unsignedInt007, unsignedLong007, unsignedShort007 — claimed by issue #224,
+// which needed a named-file selector precisely because a family widening would
+// then have dragged in the undecidable non-list siblings). Those seven still
+// route through execLexicalCase's non-seeded fallback to execListCase, since
+// their tested type decodes as the user-defined "myList", not a builtin.
+// xs:int and xs:integer have plain lexical cases too (int001–008,
+// integer001–012) and the same shape; they are NOT claimed here, having been
+// outside issue #331's enumerated scope, and remain the instance lane's gaps.
+var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|dateTimeStamp|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth|QName|NOTATION|unsignedByte|unsignedInt|unsignedLong|unsignedShort|byte|long|short)[0-9]+\.xml$`)
 
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
 // the lane decides: the strict-mapped primitives (string/decimal/float/double),
@@ -599,35 +656,20 @@ var notationFacetsCase = regexp.MustCompile(`msData/datatypes/Facets/NOTATION/NO
 // See "The anyURI a*/b* multi-leaf cohort" above.
 var anyURIShapeCase = regexp.MustCompile(`msData/datatypes/Facets/anyURI/anyURI_[ab][0-9]+\.xml$`)
 
-// integerListCase matches a LIST-variety msData/datatypes fixture whose item
-// type is an integer-family builtin (issue #224): the seven "myList" fixtures
-// that sit alongside the seven issue #75 claimed. They reach execListCase by
-// exactly the route the
-// #75 fixtures take — readLexicalCase decodes the tested type as the non-builtin
-// "myList", so execLexicalCase falls back to execListCase — and need no dispatch
-// branch of their own; only this claim was missing.
-//
-// The seven are NAMED rather than matched by an
-// `(byte|long|short|unsigned…)[0-9]+` family widening of datatypesCase, because
-// that widening would also claim the forty-eight NON-list integer fixtures
-// (byte001–008, long001–008, …). Those test a value against xs:byte/xs:long/…
-// directly, and execLexicalCase declines them: the strict backend maps
-// primitives only, so backend.Mapping(xs:byte) misses and the case records a
-// Fail. Claiming forty-eight cases this lane cannot decide would only duplicate,
-// in datatypes.txt, gaps the instance lane already records — so the claim is held
-// to what the lane actually decides. Routing them through the facet pipeline (as
-// fixesTimezone already does for a seeded-but-unmapped lexical type) is the
-// natural follow-up that would earn the family-wide widening.
-var integerListCase = regexp.MustCompile(
-	`msData/datatypes/(byte009|long009|short009|unsignedByte007|unsignedInt007|unsignedLong007|unsignedShort007)\.xml$`)
-
-// selectsDatatypes claims the instance cases of the lexical, facet,
-// precisionDecimal, NOTATION-facet, anyURI-multi-leaf and integer-family-list
-// cohorts. It is a cheap
+// selectsDatatypes claims the instance cases of the lexical (integer family
+// included since issue #331), facet, precisionDecimal, NOTATION-facet and
+// anyURI-multi-leaf cohorts. It is a cheap
 // path predicate; the executor does the real document reading. The
 // anyURIShapeCase disjunct is stated even though facetsCase's pattern happens to
 // match those eight paths too, so the claim rests on the cohort's own selector
 // rather than on that overlap.
+//
+// Issue #224's separate integerListCase disjunct (the seven LIST-variety
+// integer fixtures, named one by one so the family widening it feared could not
+// drag in the then-undecidable non-list siblings) is gone: datatypesCase's
+// integer-family alternation now covers those seven files too, and a second
+// selector matching a strict subset of the first would be redundant state
+// (STYLE D3). Their execution route is unchanged — see datatypesCase.
 func selectsDatatypes(c caseSpec) bool {
 	if c.kind != kindInstance {
 		return false
@@ -635,8 +677,7 @@ func selectsDatatypes(c caseSpec) bool {
 	doc := filepath.ToSlash(c.doc)
 	return datatypesCase.MatchString(doc) || facetsCase.MatchString(doc) ||
 		pdecimalCase.MatchString(doc) || notationFacetsCase.MatchString(doc) ||
-		d34Case.MatchString(doc) || anyURIShapeCase.MatchString(doc) ||
-		integerListCase.MatchString(doc)
+		d34Case.MatchString(doc) || anyURIShapeCase.MatchString(doc)
 }
 
 // newDatatypesExec builds the lane's executor: it Seeds the builtins once (the
@@ -701,7 +742,15 @@ func newDatatypesExec() executor {
 }
 
 // execLexicalCase decides a lexical-cohort case: an instance is valid iff every
-// tested leaf value lies in the tested primitive's lexical space (value.Parse).
+// tested leaf value is Datatype Valid (cvc-datatype-valid §4.1.4) against the
+// tested type. A type the backend maps DIRECTLY is its own {primitive type
+// definition} and carries no own constraining facets in this cohort, so clause
+// 2.1 alone decides it and value.Parse (parseOK) is a complete check; a type
+// with no direct mapping — every derived builtin, the integer family foremost —
+// is decided by its OWN effective facets over its nearest mapped ancestor's
+// lexical space, which is the full value.ValidateLexical pipeline
+// (decideLexicalByFacets), not Parse. See the routing comment below.
+//
 // The comp_foo/simpleTest shape is decided directly; the alternate
 // <data><item ATTR="value"/></data> shape (issue #146), which declares its schema
 // out-of-band and so has no noNamespaceSchemaLocation for readLexicalCase to
@@ -725,27 +774,55 @@ func execLexicalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c
 		return execListCase(backend, sym, c)
 	}
 	m, mapped := backend.Mapping(qn)
-	if !mapped {
-		return Fail()
-	}
 	// Context-dependent primitives (QName/NOTATION, §3.3.18/§3.3.19) resolve a
 	// prefix against the in-scope namespace bindings at the literal, so they take
 	// the contextual path with a real value.Context rather than the nil-context
 	// value scan below (whose whiteSpace-only reading suffices for the
-	// context-free primitives).
+	// context-free primitives). Both ARE backend-mapped primitives (strict maps
+	// all 20, guarded by TestDatatypesBackendSeeds); an unmapped one could not be
+	// decided by either path below either — decideLexicalByFacets' nil context is
+	// wrong for it — so it declines honestly rather than being mis-decided.
 	if isContextDependent(prim) {
+		if !mapped {
+			return Fail()
+		}
 		return execContextualCase(m, prim, c)
 	}
-	// A type whose effective facets fix explicitTimezone to a non-optional value
-	// (xs:dateTimeStamp fixes it to required, §3.4.28; §4.3.14.4 permits any
-	// date/time restriction to fix it too) is NOT decided by lexical-space
-	// membership alone. cvc-explicitTimezone-valid (§4.3.14.3) is a VALUE-based
-	// facet, checked at cvc-datatype-valid §4.1.4 clause 3 AFTER the lexical
-	// mapping produces a value — exactly the facet cohort's value.ValidateLexical
-	// path — so parseOK (Parse only) would FALSE-ACCEPT a tz-absent literal. Route
-	// such a type through the same facet pipeline instead (fixesTimezone reads the
-	// fact from EffectiveFacets, never a dateTimeStamp type-name special case).
-	if fixesTimezone(st) {
+	// A tested type with no mapping ANYWHERE up its base chain has no lexical
+	// space to be a member of, so neither path can decide it: an honest decline
+	// (Fail). Since issue #331 an unmapped type reaches this decline only when it
+	// is genuinely ungoverned — no seeded builtin is, since every one resolves to
+	// a strict-mapped primitive, so this is a backend-gap net, not a live branch.
+	if !mapped && !strictGoverns(backend, st) {
+		return Fail()
+	}
+	// TWO INDEPENDENT reasons to leave the Parse-only path — keep them as an OR,
+	// do not fold either into the other (issue #331; the oracle grounding on that
+	// issue establishes the independence, and xs:dateTimeStamp satisfying both
+	// today is a coincidence, not a subsumption):
+	//
+	//   - !mapped: the tested type is not its own {primitive type definition}, so
+	//     Parse against the ancestor mapping that governs it (value.governingMapping,
+	//     the widest-space rule of st-restrict-facets §3.16.6.4) satisfies only
+	//     cvc-datatype-valid clause 2.1 — the type's OWN facets, clause 1's pattern
+	//     and clause 3's value-based facets, are what actually decide it. For the
+	//     integer family that is the fixed pattern [\-+]?[0-9]+ (cvc-pattern-valid
+	//     §4.3.4.4), fractionDigits=0 (cvc-fractionDigits-valid §4.3.12.3) and the
+	//     per-type bounds (cvc-min/maxInclusive-valid §4.3.10.3/§4.3.7.3): Parse
+	//     against xs:decimal's mapping would FALSE-ACCEPT "128" as an xs:byte.
+	//   - fixesTimezone: the type's effective facets fix explicitTimezone to a
+	//     non-optional value (xs:dateTimeStamp fixes it to required, §3.4.28;
+	//     §4.3.14.4 permits any date/time restriction to fix it too).
+	//     cvc-explicitTimezone-valid (§4.3.14.3) is a VALUE-based facet checked at
+	//     clause 3 AFTER the lexical mapping, so parseOK would FALSE-ACCEPT a
+	//     tz-absent literal. This arm is about facet completeness, not about being
+	//     unmapped: explicitTimezone lives only on the eight temporal primitives'
+	//     applicable-facet rows (cos-applicable-facets §4.1.5), every one of them
+	//     DIRECTLY mapped, so a user-defined date/time restriction that is itself
+	//     mapped would still need it. Conversely the integer family never touches
+	//     explicitTimezone (decimal's row has no such entry), so the first arm
+	//     cannot be expressed through this one.
+	if !mapped || fixesTimezone(st) {
 		return decideLexicalByFacets(backend, st, values, c)
 	}
 	observedValid := true
@@ -785,15 +862,21 @@ func fixesTimezone(st *xsd.SimpleType) bool {
 	return false
 }
 
-// decideLexicalByFacets decides a lexical-cohort case whose type fixes a
-// non-optional explicitTimezone (fixesTimezone): each tested value runs through
-// the SAME value-based facet pipeline the facet cohort uses (value.ValidateLexical),
-// which enforces cvc-explicitTimezone-valid (§4.3.14.3) after the lexical mapping,
-// rather than the Parse-only parseOK that cannot. The seeded builtin type already
-// carries the fixed facet in its EffectiveFacets, so no leaf synthesis is needed.
-// The date/time primitives map context-free (§3.3.7), so a nil value.Context
-// suffices. The instance is valid iff every tested value validates, mirroring the
-// parseOK path's whole-instance polarity.
+// decideLexicalByFacets decides a lexical-cohort case whose tested type is not
+// decided by lexical-space membership alone — it has no direct backend mapping,
+// or it fixes a non-optional explicitTimezone, or both (execLexicalCase's routing
+// comment explains why those two reasons stay independent, issue #331). Each
+// tested value runs through the SAME pipeline the facet cohort uses
+// (value.ValidateLexical): the type's own pattern (cvc-pattern-valid §4.3.4.4),
+// then its {primitive type definition}'s lexical mapping reached by walking the
+// base chain (value.governingMapping, cvc-datatype-valid §4.1.4 clause 2.1), then
+// its own value-based facets (clause 3) — bounds, fractionDigits,
+// explicitTimezone. The seeded builtin already carries all of them in its
+// EffectiveFacets (the generated typespec's fixed facets), so no leaf synthesis
+// is needed. Every type reaching here maps context-free (the two
+// context-dependent primitives, §3.3.18/§3.3.19, are routed away upstream), so a
+// nil value.Context suffices. The instance is valid iff every tested value
+// validates, mirroring the parseOK path's whole-instance polarity.
 func decideLexicalByFacets(backend value.Backend, st *xsd.SimpleType, values []string, c caseSpec) Status {
 	observedValid := true
 	for _, v := range values {
