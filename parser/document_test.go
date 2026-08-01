@@ -2,8 +2,10 @@ package parser_test
 
 import (
 	"errors"
+	"io"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/xsd"
@@ -227,6 +229,122 @@ func TestReadDocumentMalformed(t *testing.T) {
 			// Rendering must not panic.
 			_ = err.Error()
 		})
+	}
+}
+
+// utf16LE encodes doc as little-endian UTF-16 behind the byte-order mark that
+// XML 1.0 §4.3.3 requires of a UTF-16 entity.
+func utf16LE(doc string) string {
+	var b []byte
+	for _, u := range utf16.Encode([]rune("\uFEFF" + doc)) {
+		b = append(b, byte(u), byte(u>>8))
+	}
+	return string(b)
+}
+
+func TestReadDocumentUTF16BOM(t *testing.T) {
+	d, err := parser.ReadDocument(docURI, strings.NewReader(utf16LE(schemaDoc)))
+	if err != nil {
+		t.Fatalf("ReadDocument on UTF-16 input: %v", err)
+	}
+	if !d.IsSchema() {
+		t.Error("IsSchema() = false, want true")
+	}
+	want, err := parser.ReadDocument(docURI, strings.NewReader(schemaDoc))
+	if err != nil {
+		t.Fatalf("UTF-8 baseline: %v", err)
+	}
+	sameTree(t, "/", d.Root(), want.Root())
+}
+
+// failFirstReader fails on its very first Read and reports end-of-input on
+// every one after — the source shape whose failure a dropped byte-order-mark
+// peek error would replace with a clean end-of-document.
+type failFirstReader struct {
+	err  error
+	done bool
+}
+
+func (f *failFirstReader) Read([]byte) (int, error) {
+	if f.done {
+		return 0, io.EOF
+	}
+	f.done = true
+	return 0, f.err
+}
+
+// TestReadDocumentSourceFailureSurfacesItsCause is the end-to-end half of
+// xmltree's TestSourceFailureSurfacesItsCause: an I/O failure must reach the
+// caller as itself, not as the "document has no root element" diagnosis a
+// swallowed error produces.
+func TestReadDocumentSourceFailureSurfacesItsCause(t *testing.T) {
+	cause := errors.New("boom: original cause")
+	d, err := parser.ReadDocument(docURI, &failFirstReader{err: cause})
+	if d != nil {
+		t.Errorf("Document = %v on error, want nil", d)
+	}
+	if err == nil {
+		t.Fatal("ReadDocument on a failing source = nil error")
+	}
+	if !errors.Is(err, cause) {
+		t.Errorf("error %q does not unwrap to the original cause", err)
+	}
+	if strings.Contains(err.Error(), "no root element") {
+		t.Errorf("error = %q, want the I/O cause, not a well-formedness diagnosis of it", err)
+	}
+	var xe *xsderr.Error
+	if !errors.As(err, &xe) {
+		t.Fatalf("error %v is not an *xsderr.Error", err)
+	}
+	if xe.Rule != xsderr.RuleXMLWellFormed || xe.Loc.URI != docURI {
+		t.Errorf("error rule/loc = %q/%v, want %q at %q", xe.Rule, xe.Loc, xsderr.RuleXMLWellFormed, docURI)
+	}
+}
+
+// sameTree asserts that two element subtrees agree in name, location, base
+// URI, attributes, and children. A UTF-16 document decodes to exactly the
+// bytes of its UTF-8 spelling, so even locations must match.
+func sameTree(t *testing.T, path string, got, want *parser.Element) {
+	t.Helper()
+	if got.Name() != want.Name() {
+		t.Fatalf("%s: name = %v, want %v", path, got.Name(), want.Name())
+	}
+	if got.Loc() != want.Loc() {
+		t.Errorf("%s: loc = %v, want %v", path, got.Loc(), want.Loc())
+	}
+	if got.BaseURI() != want.BaseURI() {
+		t.Errorf("%s: base URI = %q, want %q", path, got.BaseURI(), want.BaseURI())
+	}
+	if len(got.Attributes()) != len(want.Attributes()) {
+		t.Fatalf("%s: %d attributes, want %d", path, len(got.Attributes()), len(want.Attributes()))
+	}
+	for i, a := range want.Attributes() {
+		g := got.Attributes()[i]
+		if g.Name() != a.Name() || g.Value() != a.Value() {
+			t.Errorf("%s: attribute %d = %v=%q, want %v=%q", path, i, g.Name(), g.Value(), a.Name(), a.Value())
+		}
+	}
+	if len(got.Children()) != len(want.Children()) {
+		t.Fatalf("%s: %d children, want %d", path, len(got.Children()), len(want.Children()))
+	}
+	for i, w := range want.Children() {
+		child := path + want.Name().Local() + "/"
+		switch w := w.(type) {
+		case *parser.Element:
+			g, ok := got.Children()[i].(*parser.Element)
+			if !ok {
+				t.Fatalf("%s: child %d = %T, want *Element", child, i, got.Children()[i])
+			}
+			sameTree(t, child, g, w)
+		case *parser.Text:
+			g, ok := got.Children()[i].(*parser.Text)
+			if !ok {
+				t.Fatalf("%s: child %d = %T, want *Text", child, i, got.Children()[i])
+			}
+			if g.Data() != w.Data() || g.Loc() != w.Loc() {
+				t.Errorf("%s: child %d text = %q at %v, want %q at %v", child, i, g.Data(), g.Loc(), w.Data(), w.Loc())
+			}
+		}
 	}
 }
 
