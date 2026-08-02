@@ -11,7 +11,9 @@
 //	    location hint)". The returned string is the RESOLVED location —
 //	    the dedup key: the loader loads each resolved location once, so
 //	    a document named by several imports/hints composes instead of
-//	    duplicating.
+//	    duplicating. It is a CANONICAL identity every implementation
+//	    owes — one resource served under several spellings returns one
+//	    string.
 //
 //	type ResolverFunc func(namespace, location string) (io.ReadCloser, string, error)
 //	    Adapter, in the http.HandlerFunc idiom.
@@ -40,6 +42,8 @@
 // own (STYLE D5), and callers bound blocking through the injected
 // dependency — the HTTP resolver's *http.Client carries its own Transport
 // timeouts, and a caller needing cancellation wraps Resolve itself. Path-
-// traversal defense (Dir), request construction (HTTP), and this omission
+// traversal defense (Dir), on-disk-case canonicalization of Dir's resolved
+// location (which §4.2.3 and §4.2.6.2 encourage but never require, so FS
+// leaves it to the caller), request construction (HTTP), and this omission
 // are engineering decisions, not spec rules — no XSD text governs them.
 package loader

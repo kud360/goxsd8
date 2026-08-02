@@ -19,6 +19,13 @@ type fsResolver struct {
 // rooted ("/…"), "." / ".." segment, and Windows-volume paths are rejected
 // by the filesystem itself, giving traversal safety for free (engineering
 // property, not a spec rule). A missing entry maps to ErrNotFound.
+//
+// Unlike Dir, FS does NOT canonicalize the resolved location it returns: it
+// hands back location as given. fs.FS guarantees no directory-listing
+// capability in general, so there is nothing to canonicalize against; when
+// fsys is case-insensitive (an os.DirFS over a case-insensitive filesystem,
+// say), keeping Resolver's one-resource-one-identity contract by spelling
+// locations consistently is the caller's responsibility.
 func FS(fsys fs.FS) Resolver {
 	return fsResolver{fsys: fsys}
 }

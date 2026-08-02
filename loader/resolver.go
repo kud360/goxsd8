@@ -17,7 +17,12 @@ var ErrNotFound = errors.New("loader: schema document not found")
 // Resolver answers "give me the schema document for (target namespace,
 // location hint)". The returned string is the RESOLVED location — the
 // dedup key: the loader loads each resolved location once, so a document
-// named by several imports/hints composes instead of duplicating.
+// named by several imports/hints composes instead of duplicating. That makes
+// the string a CANONICAL IDENTITY for the underlying resource, and every
+// implementation — including a third-party one adapted through ResolverFunc —
+// owes it: when one resource is served under several spellings or hints, every
+// one of them must resolve to the SAME string, or the loader composes that
+// document more than once.
 //
 // The empty string is the well-defined "no namespace" state (absence of
 // targetNamespace, §4.2.6.2 / §4.3.2), so namespace == "" is the sentinel
