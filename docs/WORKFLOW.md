@@ -320,6 +320,16 @@ machinery; just don't leave the merge undone.
   drift. Files `kind/refactor` issues ranked by cost-of-delay;
   pre-1.0 movement is encouraged, post-1.0 the audit guards the
   surface (docs/PLAN.md defines the line).
+  **The steward cannot file its own issues or merge its own PR.** Its
+  tool set is deliberately Read/Grep/Glob/Bash only (it must not touch
+  Go code or the tracker directly), and GitHub has been unreachable from
+  that context on both audits run so far (2026-07-26, 2026-08-02). So the
+  hand-off is the intended seam, not a workaround: the steward returns
+  issue-ready write-ups and pushes its `meta: audit <date>` doc commit to
+  a branch, and the **orchestrating session** files the issues, opens the
+  PR and squash-merges it. Budget for that step when delegating; an audit
+  that "filed nothing" because the subagent had no GitHub is an
+  orchestration miss, not a steward finding.
   The ratchet-integrity rules (CLAUDE.md's one rule, arbiter.md's
   ratchet section) change only via a human-filed issue.
 

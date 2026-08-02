@@ -47,8 +47,14 @@ The load-bearing separation of the whole design (Datatypes §2.1–2.3):
 
 ### The facet pipeline
 
-Validation of a literal against a simple type is a fixed pipeline; each
-stage is a value users can compose for their own types:
+Validation of a literal against a simple type is a fixed pipeline. The two
+stage kinds are named as interfaces (`value.LexicalFacet`,
+`value.ValueFacet`), but there is **no composition seam yet**: every
+implementation is unexported inside `value`, the function that assembles a
+type's stages is unexported, and no exported API accepts or returns a stage.
+User-composed stages are a destination, not a shipped capability (steward
+audit 2026-08-02) — see the note under "Exported surface without a
+consumer" below.
 
 ```
 raw literal
@@ -103,19 +109,23 @@ represents it**:
   at schema-construction time; `value.Override(base, partial)` swaps
   individual types (back only `xs:decimal` with a money type, keep strict
   for the rest).
-- Ships with two backends:
-  - `builtin/strict` — spec-exact: arbitrary-precision decimal/integer,
-    `precisionDecimal` (coefficient/scale/sign identity, NaN/±INF), the
-    7-property date/time model, XSD-exact float/double behavior.
-  - `builtin/native` — Go-friendly: `int64`, `float64`, `string`,
-    `time.Time`; documented, deliberate deviations from the spec value
-    spaces (range limits, timezone folding).
+- Two backends are planned; **one ships today**:
+  - `builtin/strict` (ships) — spec-exact: arbitrary-precision
+    decimal/integer, `precisionDecimal` (coefficient/scale/sign identity,
+    NaN/±INF), the 7-property date/time model, XSD-exact float/double
+    behavior.
+  - `builtin/native` (**M12 — doc-only contract, exports nothing today**)
+    — Go-friendly: `int64`, `float64`, `string`, `time.Time`; documented,
+    deliberate deviations from the spec value spaces (range limits,
+    timezone folding). Its `doc.go` is the normative contract and already
+    marks itself planned.
 - **Third-party backends are a supported surface.** `value/backendtest`
   is the public conformance kit: `backendtest.Run(t, backend)` drives
   spec-derived vectors (lexical→value→canonical round-trips, order and
   identity cases, the capability set each type's facets require) plus a
-  primitive-coverage check. Our own backends pass it in-repo; a custom
-  backend that passes it is first-class.
+  primitive-coverage check. `builtin/strict` passes it in-repo (that is the
+  whole of "our backends" until M12); a custom backend that passes it is
+  first-class.
 
 ## Component model (`xsd`)
 
@@ -127,9 +137,10 @@ represents it**:
   their named rule, once.
 
   **Where they are rejected is currently split, and that split is not the
-  design — it is drift to be repaired** (steward audit 2026-07-26). The phase-3
-  home holds the references `xsd` stores as QNames: the complex-type base
-  chain (`ct-props-correct` cl. 3), the `<group ref>` graph
+  design — it is drift to be repaired** (steward audits 2026-07-26 and
+  2026-08-02; tracked as **#271**). The phase-3 home holds the references
+  `xsd` stores as QNames: the complex-type base chain
+  (`ct-props-correct` cl. 3), the `<group ref>` graph
   (`mg-props-correct` cl. 2), and substitution-group affiliation
   (`e-props-correct` cl. 5), all in `xsd/resolve.go`. But `xsd` stores a
   simple type's `{base type definition}` as a **live pointer**, not a QName,
@@ -139,17 +150,59 @@ represents it**:
   `parser/produce.go`, carrying its own copy of `resolve.go`'s color-map
   idiom. One spec concern, two homes, chosen by per-component representation
   accident; `src-resolve` cl. 1.1 is consequently charged from both packages.
-  Unifying on the QName-plus-index representation is a pre-1.0 refactor
-  (finding F1 of the 2026-07-26 audit, docs/LOG) and should land before `<list>`/`<union>` (which add item/member
-  pointers) and before `<import>`/`<redefine>`/`<override>` (which re-point
-  base references).
+
+  **The split has since widened, as predicted.** `parser/produce.go`'s
+  `buildComplexType` now also charges `ct-props-correct` cl. 3 from the
+  producer — the same rule with the same verdict that `xsd/resolve.go`'s
+  `checkComplexBaseAcyclic` charges — because demand-driven eager base
+  construction would otherwise not terminate. The code documents that as
+  two entry points for two construction paths, and on its own terms it is
+  right; but the reason a second entry point is needed at all is the
+  eager-pointer representation #271 exists to remove. So the count is now
+  **two rules charged from both packages**, not one.
+
+  Unifying on the QName-plus-index representation is a pre-1.0 refactor.
+  Its original ordering advice was "land before `<list>`/`<union>` (which
+  add item/member pointers) and before
+  `<import>`/`<redefine>`/`<override>` (which re-point base references)".
+  **Half of that window has closed**: `<import>` (#182) and `<override>`
+  (#183) landed 2026-07-27 with the refactor still undone. `<list>`/
+  `<union>` in the producer are still ahead of it
+  (`parser/produce.go` declines them today), so that half of the ordering
+  argument is still live and is now the last cheap moment.
 - All child collections are slices in document order. Maps exist only as
   internal indexes and never determine any order.
 - Nothing derivable is stored (STYLE D3): no effective-facet caches —
   compute `Merge(base.EffectiveFacets(), declared)` on demand; no status
   booleans beside the facts that imply them.
 - The model is **read-only** after construction; mutation/editing APIs are
-  out of scope.
+  out of scope. `Finalize` performs exactly **one** mutation before it
+  returns — `xsd/attributeusefold.go` materialises §3.4.2.4 clause 3's
+  inherited `{attribute uses}` into every complex type (#401). It is a
+  property OVERWRITE, not a cache of derivable state (STYLE D3): afterwards
+  the producer's partial value is gone rather than kept beside the correct
+  one. Read-only means read-only *after* `Finalize`, and there is one write
+  site, not a growing set.
+
+### Why the finalize machinery lives in `xsd` (a steward ruling, 2026-08-02)
+
+`xsd` is by far the largest package, and roughly 6,700 of its non-test lines
+export **nothing at all**: `derivation.go`, `complexderivation.go`,
+`complexextension.go`, `contentrestricts.go`, `defaultbinding.go`,
+`elementconsistent.go`, `particleattribution.go`, `effectivetotalrange.go`,
+`substitutiongroup.go`, `valueconstraintvalid.go`, `wildcardadmit.go`,
+`attributeusefold.go`, `resolve.go`. That looks like a candidate for an
+`xsd/finalize` sub-package. **It is not; do not propose the split.**
+
+The constraint machinery reads and writes the components' *unexported*
+fields — `attributeusefold.go` reads `ComplexType.prohibitedAttributeNames`
+and writes `attributeUses` back. Moving it to a sibling package would force
+those fields onto the exported surface (or force a mutator API), trading a
+big-but-sealed package for a permanently wider public API and a
+representable illegal state (STYLE T1). Go's package boundary is exactly the
+tool that keeps the component invariants unforgeable, and the zero-export
+files are the evidence it is working, not evidence of a missing seam. Judge
+`xsd` by its exported surface and its doc.go contract, not by line count.
 
 ### Query and walk
 
@@ -158,16 +211,19 @@ Two access styles over the compiled model, one shared core:
 - **Query**: direct lookups — element/attribute/type by QName — exposed
   through minimal capability views (STYLE T3), so a consumer that needs
   only `ElementByName` receives only that.
-- **Walk**: traversal of a type's effective content model. The reusable
-  core is an *algebra* (type-derivation validity, substitution-group
-  acceptance, wildcard admission, attribute-use lookup) with two drivers:
-  - a **push** driver — the exhaustive, schema-only Walker that visits
+- **Walk**: traversal of a type's effective content model. The algebra
+  ships (type-derivation validity, substitution-group acceptance, wildcard
+  admission, attribute-use lookup, all unexported in `xsd`); **the two
+  drivers do not exist yet** and `xsd/doc.go` says so by name:
+  - a **push** driver — `Walker`, the exhaustive, schema-only visitor of
     every particle reachable through sequences/choices/all-groups and
-    named-group references (the codegen consumer), and
-  - a **pull** driver — the instance-guided Matcher that advances the
-    content model one child at a time (the validation consumer).
-  Substitution groups are not expanded at walk time (instance-time
-  concern). Both drivers reuse the same algebra; neither reimplements it.
+    named-group references (the codegen consumer) — **M9**, and
+  - a **pull** driver — `Matcher`, the instance-guided advance of the
+    content model one child at a time (the validation consumer) — **M5**.
+  When they land, substitution groups will not be expanded at walk time
+  (instance-time concern), and both drivers will reuse the same algebra
+  rather than reimplement it. This paragraph is a destination; `go doc
+  ./xsd` is the contract.
 
 ## Parsing & loading
 
@@ -209,7 +265,15 @@ Two access styles over the compiled model, one shared core:
   list of documents they came from. The conformance schema lane needs that
   list to gate every document in a closure, so it re-walks the closure
   itself, duplicating the parser's own location-resolution verbatim; closing
-  that gap is a pre-1.0 refactor (finding F2 of the 2026-07-26 audit).
+  that gap is a pre-1.0 refactor, tracked as **#259** (the
+  `resolveSchemaLocation` copy) and **#272** (the
+  `assembly.discover`/`.include`/`.fetch` walk and the `attrValue` copy).
+  The copy is **growing on schedule**: `conformance/schema_closure.go` went
+  from 315 to 396 lines (+26%) between 2026-07-27 and 2026-08-01 as
+  `<import>`/`<override>`/multi-document gating landed. The two
+  `resolveSchemaLocation` bodies were re-verified byte-identical on
+  2026-08-02 — the cost so far is the declared coupling, not yet a
+  divergence, and every composition feature raises the price of the port.
 
 ## Regex (`regex`)
 
@@ -271,6 +335,13 @@ use `regex`'s F&O flavor, never the pattern-facet flavor.
 
 ## Codegen & codec
 
+**Status: neither package ships anything.** `codegen` (M9) and `codec`
+(M10) are `doc.go`-only today — `go doc` renders no exported identifier for
+either, and `value.Emitter` does not exist (its API is frozen for M9, not
+declared). Everything below is the destination, stated in present tense
+because it is a design contract; read it as "will", not "does" (steward
+audit 2026-08-02).
+
 - `codegen` emits Go types from a compiled schema, deterministically
   (D1/D2). Multiple schemas map to multiple output directories — one
   package per (schema set, target dir) pairing declared by the caller.
@@ -302,29 +373,35 @@ use `regex`'s F&O flavor, never the pattern-facet flavor.
 - **Runtime path** (always available): the facet pipeline +
   `value.Mapping`, driven by the compiled schema. General, reflective,
   allocation-tolerant.
-- **Generated fast path**: backends export **code emitters**
-  (`value.Emitter`, implemented by `builtin/strict` and `builtin/native`;
-  user backends may implement it too). At codegen time the emitter
+- **Generated fast path** (planned): backends will export **code emitters**
+  (`value.Emitter` — API frozen in M9, **not yet declared**; to be
+  implemented by `builtin/strict` and `builtin/native`, and by user
+  backends that want it). At codegen time the emitter
   contributes specialized decode/encode code for its types — parsing
   directly from the reader's byte window into the target field, no
   intermediate string, no boxed `value.Value`, facet checks inlined.
   A backend without an emitter simply falls back to the runtime path for
   its types.
-- Runtime hot-path APIs follow the appender convention
+- Runtime hot-path APIs will follow the appender convention
   (`AppendCanonical(dst []byte, v) []byte`, `ParseBytes(b []byte)`) so
-  even the non-generated path can be allocation-frugal.
+  even the non-generated path can be allocation-frugal. **Neither method
+  exists yet**; the convention is named here and in `codec/doc.go` so the
+  first implementation does not invent a second spelling.
 
-The two paths implement the *same* pipeline stages with the *same* spec
-rule IDs, which makes them **differentially testable**: for every type,
-property tests feed identical input to both paths and require identical
-values and identical error rule IDs, and `testing.AllocsPerRun` benchmarks
-pin the fast path's allocation budget. A fast path that disagrees with the
-runtime path is wrong by definition.
+The two paths must implement the *same* pipeline stages with the *same*
+spec rule IDs, which is what will make them **differentially testable**:
+for every type, property tests feed identical input to both paths and
+require identical values and identical error rule IDs, and
+`testing.AllocsPerRun` benchmarks pin the fast path's allocation budget. A
+fast path that disagrees with the runtime path is wrong by definition.
+(No such test exists today — there is no second path to differ from.)
 
 ### Debuggability of parsing
 
 When a value fails to parse, the error must localize the failure without
-a debugger (extending E1–E3):
+a debugger (extending E1–E3). These are **M10 requirements on `codec`**,
+not descriptions of shipped behaviour — `GOXSD_DEBUG=codec` traces nothing
+today because `codec` is empty:
 
 - every decode error carries the **pipeline stage** that rejected
   (whitespace / pattern / lexical-map / facet / assertion), the type
@@ -336,6 +413,40 @@ a debugger (extending E1–E3):
   stage/rule metadata as the runtime path, and generated files map cleanly
   back to the emitting backend and schema construct (a header comment per
   emitted decode function naming type QName + schema Loc).
+
+## Exported surface without a consumer
+
+STYLE T5 is the rule ("export nothing without a consumer"); this is the
+standing list of places where the surface currently outruns it, so each
+audit re-checks the same set instead of rediscovering it. Everything here
+compiles, is documented, and has **zero** callers module-wide.
+
+- **The annotation subsystem** — `xsd.Annotation`/`AppInfo`/`Documentation`/
+  `Attr` plus their constructors and accessors, `SchemaBuilder.AddAnnotation`,
+  a trailing `annotations []Annotation` parameter on **13** component
+  constructors, and `parser`'s `Text`/`Node` character-data retention that
+  exists (per `parser/tree.go`) to round-trip `<xs:documentation>`. No
+  producer builds an `Annotation`: all 36 `parser` call sites pass `nil`,
+  and no accessor is read. No milestone in docs/PLAN.md owns populating
+  it. Filed for a decision — populate it or unexport it — because the 13
+  trailing positional slots are #405's "last slot to wave through"
+  tripwire, once per constructor.
+- **`value.LexicalFacet` / `value.ValueFacet`** — the two pipeline-stage
+  interfaces. Every implementation is unexported inside `value`, the
+  assembling function (`compile`) is unexported, and no exported API takes
+  or returns a stage, so no consumer can exist. Either grow the composition
+  seam the docs promise, or unexport the interfaces.
+- **`regex.FlavorFO`** and **`loader.FS`/`HTTP`/`Chain`** — no consumer, but
+  both are **justified and not to be filed**: the F&O flavor is fully
+  implemented against its M6/M7 consumer (`xpath`), and the resolver
+  helpers are declared library surface in `loader/doc.go` for external
+  users, which is the "documented contract it fulfills" half of T5.
+  Re-check, do not re-file.
+- **`xsderr.IsValidRule`** — zero non-test consumers, and `xsderr/doc.go`
+  claims a module-wide test enforces it that does not exist. Tracked as
+  **#273**, together with the 63 sites (50 in `builtin/strict`, 13 in
+  `value`) that still pass bare string literals where the rest of the
+  module uses typed `xsderr.Rule` constants.
 
 ## Conformance & ratchet
 
