@@ -461,8 +461,19 @@ import (
 // #331's prose miscounted: integer013–016 exist and carry the identical
 // comp_foo/simpleTest shape) joined the claim with issue #365, which widened
 // datatypesCase's alternation and changed no engine code; they ride that same
-// route unchanged. Nothing under msData/datatypes is left unclaimed by the
-// integer family now except the reader-shape limits named above.
+// route unchanged. Four integer-family sub-families are still UNCLAIMED under
+// msData/datatypes, twenty files in all: negativeInteger001–005,
+// nonNegativeInteger001–005, nonPositiveInteger001–005 and
+// positiveInteger001–005. Each carries the identical comp_foo/simpleTest shape
+// against its own negativeInteger.xsd/nonNegativeInteger.xsd/
+// nonPositiveInteger.xsd/positiveInteger.xsd — precisely the shape and route
+// int001–008 and integer001–016 had before issue #365 — and each currently sits
+// in expectations/instance.txt as fail, absent from datatypes.txt, which is
+// exactly the status int001/integer001 held before this widening. Claiming them
+// is the same selector-only widening #365 performed, deliberately out of #365's
+// scope and left to a later issue; it is a harvest still on the table, not a
+// limit of the route. The only integer-family cases the route genuinely cannot
+// take are the reader-shape limits named above.
 // time_minInclusive006_1163.i (issue #123) is a
 // recorded gap for a different reason: its instance file carries no
 // xsi:noNamespaceSchemaLocation (a defect in that one suite file), so
@@ -501,8 +512,9 @@ const synthNS = "urn:goxsd8:conformance:facets"
 // closing the former fail-open; a future tz-absent case cannot regress the ratchet.
 //
 // The seven DERIVED integer-family members (byte, long, short, unsignedByte,
-// unsignedInt, unsignedLong, unsignedShort — the families the current checkout
-// carries plain lexical cases for) joined the claim with issue #331. They are
+// unsignedInt, unsignedLong, unsignedShort — the families issue #331 claimed,
+// not every family the checkout carries plain lexical cases for) joined the
+// claim with that issue. They are
 // not primitives, so the strict backend maps none of them, and it is exactly
 // that miss which now ROUTES them to decideLexicalByFacets instead of declining
 // them: value.governingMapping walks each one's base chain to xs:decimal's
