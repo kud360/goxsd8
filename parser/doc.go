@@ -94,7 +94,7 @@
 //
 // # Planned composition (not yet implemented)
 //
-//   - xs:redefine is skipped, not followed: it is a top-level
+//   - GAP(xsd): xs:redefine is skipped, not followed: it is a top-level
 //     representation this slice does not yet produce (§3.1.2), so a
 //     schema needing it assembles short. Passing WithLogger is how that
 //     is observed: every skipped child <xs:redefine> element is reported

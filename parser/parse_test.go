@@ -684,7 +684,7 @@ func TestParseRedefineIsLoggedNotFollowed(t *testing.T) {
 		t.Fatalf("element {urn:a}root not found")
 	}
 	got := buf.String()
-	for _, want := range []string{"level=DEBUG", "<xs:redefine>", "location=absent.xsd", "at=main.xsd:"} {
+	for _, want := range []string{"level=DEBUG", "<xs:redefine>", "rule=src-redefine", "location=absent.xsd", "at=main.xsd:"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("log output does not mention %q, want a debug record for the skipped <redefine>:\n%s", want, got)
 		}
