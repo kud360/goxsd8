@@ -131,7 +131,9 @@ func (s *Schema) checkComplexTypeExtension(t ComplexType) error {
 //     and charging it would be a FALSE REJECT of a valid schema.
 //
 // Both skips are FAIL-OPEN — a missing rejection, never a false one — and both
-// land with the fold (#265).
+// land with the fold each names: §3.4.2.5 clause 2.2's attribute-wildcard union
+// for 1.3, §3.4.2.1 clause 1's {assertions} prefix for 1.7 (#346). Neither rides
+// on §3.4.2.4 clause 3's {attribute uses} fold, which is done (#401).
 func (s *Schema) checkExtensionOfComplexBase(t, b ComplexType) error {
 	if err := checkExtensionBaseFinal(t, b); err != nil {
 		return err
@@ -163,31 +165,34 @@ func checkExtensionBaseFinal(t, b ComplexType) error {
 // recursively, are identical to those of U". B's uses are walked in document
 // order, so the first reported failure is deterministic (STYLE D2).
 //
-// The lookup in T is foldedAttributeUse — T's own uses with the base chain
-// folded in, as §3.4.2.4 clause 3 defines {attribute uses} — and that is
-// load-bearing in the REJECT direction, not leniency. The producer maps a type's
-// OWN <attribute> children and no more (#265), so a use T holds by clause 3.1's
-// inheritance reads as absent on the component; charging that absence would
-// false-reject every ordinary extension whose base declares an attribute. What
-// the clause then actually charges is the unambiguous shape: T re-declares the
-// name itself with different properties.
+// Both sides are the MATERIALISED {attribute uses} (§3.4.2.4 clause 3,
+// attributeusefold.go).
 //
 // The comparison is attributeUsesIdentical, NOT the ·subsumption· apparatus
 // c-ran uses (attributeDefaultBinding/bindingSubsumes, defaultbinding.go).
 // c-cte asks for property IDENTITY, which is strictly stronger than
 // ·subsumption·; reusing the looser relation would decide a different constraint.
 //
-// The "no counterpart at all" rejection below states the clause's set-inclusion
-// half and is not reachable while the fold is reconstructed by a chain walk:
-// T.{base type definition} IS B, so foldedAttributeUse always reaches B's own
-// uses and finds the name. It is written rather than dropped because the
-// lookup's second result must decide something (STYLE S3), and because it is the
-// rejection that becomes live the day #265 makes {attribute uses} a stored,
-// genuinely folded property that a caller could assemble incompletely.
+// NEITHER rejection below is reachable through Finalize, and the reason is the
+// fold, so it is stated rather than assumed. Clause 3.1 makes T.{attribute uses}
+// the concatenation of T's own uses with B's ENTIRE materialised set, member for
+// member, so the clause's set-inclusion half holds BY CONSTRUCTION: the lookup
+// cannot miss, and what it finds for a name T does not declare itself IS U, so
+// the identity comparison cannot fail either. The remaining shape — T re-declares
+// the name with different properties — leaves T holding two uses for it, which
+// ct-props-correct clause 4 charges earlier in the same pass
+// (checkCTPropsCorrectResolved runs before checkComplexTypeExtension for a given
+// type, checkComplexDerivations).
+//
+// It is kept, rather than deleted as clause 5's assertion prefix was, because it
+// is the executable statement of clause 1.2 AND the guard on the fold's clause
+// 3.1 arm: a fold that stopped copying B's uses forward would show up here as a
+// verdict rather than as silence. Retiring it belongs with a decision to trust
+// the fold unchecked, not with #401.
 func (s *Schema) checkExtensionAttributeUses(t, b ComplexType) error {
 	for _, u := range b.attributeUses {
 		name := attributeUseName(u)
-		tu, ok := s.foldedAttributeUse(t, name)
+		tu, ok := findAttributeUse(t.attributeUses, name)
 		if !ok {
 			return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
 				"complex type %s extends %s, but the base's attribute use for %s has no counterpart in the extension's {attribute uses}, so B.{attribute uses} is not a subset of T.{attribute uses} (cos-ct-extends clause 1.2, c-cte)", t.Name(), b.Name(), name)

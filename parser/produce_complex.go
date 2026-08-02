@@ -1217,13 +1217,18 @@ func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
 // parent's own <anyAttribute> with the referenced groups' wildcards (§3.6.2.2,
 // always intersection at one container).
 //
-// GAP(xsd): the BASE type's contribution is not folded in — neither §3.4.2.4
-// clause 3's union of the base's {attribute uses} nor §3.4.2.5 clause 2's
-// cos-aw-union of its {attribute wildcard}. That fold is uniform across
-// restriction and extension, so it is landed as a whole (#265, the same gap
-// xsd/complexderivation.go's checkAttributeUseNamesUnique records) rather than
-// half-applied on the extension path this producer now builds. Missing uses can
-// only make a rejection go unreported, never fabricate one.
+// The BASE type's contribution to {attribute uses} is deliberately NOT folded in
+// here: §3.4.2.4 clause 3 needs the resolved base component, which no producer
+// holds, so xsd/attributeusefold.go completes the property at finalize (#401).
+// What this function returns is therefore clauses 1 and 2 alone, and the
+// component xsd.NewComplexType is handed carries exactly that until finalize
+// overwrites it.
+//
+// GAP(xsd): the base's {attribute wildcard} is not folded in either — §3.4.2.5
+// clause 2.2's cos-aw-union for an extension — and unlike the uses, nothing
+// completes it at finalize. An extension's {attribute wildcard} is therefore its
+// own <anyAttribute> alone. A missing wildcard can only withhold a name the type
+// admits, never fabricate one, so the direction is fail-open (#265).
 func (p *producer) produceAttributeUses(parent *Element) ([]xsd.AttributeUse, *xsd.Wildcard, error) {
 	var uses []xsd.AttributeUse
 	var wildcards []xsd.Wildcard

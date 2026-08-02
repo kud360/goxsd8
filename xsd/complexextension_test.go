@@ -97,24 +97,33 @@ func TestCosCTExtendsClause11Passes(t *testing.T) {
 	}
 }
 
-// TestCosCTExtendsClause12 pins clause 1.2 (c-cte) in both directions. The
-// PASSING row is the load-bearing one: the extension declares only its own new
-// attribute and inherits the base's, which is the ordinary shape — the base's
-// use is found by walking the chain (foldedAttributeUse) and compared with
-// itself, so a property-identity predicate that reported it as different would
-// false-reject every extension of a base with attributes.
+// TestCosCTExtendsClause12 pins what an extension may do with its base's
+// attributes. The PASSING row is the load-bearing one: the extension declares
+// only its own new attribute and inherits the base's, which is the ordinary
+// shape — §3.4.2.4 clause 3.1 puts the base's use into the extension's
+// {attribute uses}, and a property-identity predicate that reported it as
+// different from itself would false-reject every extension of a base with
+// attributes.
+//
+// The two rejecting rows are charged ct-props-correct clause 4, NOT c-cte, and
+// that is the spec's own routing rather than an accident of ordering: clause 3.1
+// inherits the base's uses UNCONDITIONALLY, so re-declaring the name leaves the
+// extension holding two uses for it, which clause 4 forbids outright — an
+// extension may add attributes, never restate the base's, whether or not the
+// restatement is identical. Before §3.4.2.4 clause 3 was materialised (#401) the
+// re-declaration hid the inherited use instead, and c-cte was what caught it.
 func TestCosCTExtendsClause12(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		uses   []AttributeUse
-		wantOK bool
+		name     string
+		uses     []AttributeUse
+		wantRule xsderr.Rule // empty: the extension must be accepted
 	}{
 		{"an extension that adds its own attribute inherits the base's unchanged",
-			[]AttributeUse{dAttr(t, uq("b"), uq("str"))}, true},
-		{"an extension that re-declares the base's attribute as required is not identical",
-			[]AttributeUse{dAttrUse(t, uq("a"), uq("str"), true, nil)}, false},
-		{"an extension that re-declares the base's attribute with another type is not identical",
-			[]AttributeUse{dAttr(t, uq("a"), uq("other"))}, false},
+			[]AttributeUse{dAttr(t, uq("b"), uq("str"))}, ""},
+		{"an extension that re-declares the base's attribute as required duplicates it",
+			[]AttributeUse{dAttrUse(t, uq("a"), uq("str"), true, nil)}, ruleCTPropsCorrect},
+		{"an extension that re-declares the base's attribute with another type duplicates it",
+			[]AttributeUse{dAttr(t, uq("a"), uq("other"))}, ruleCTPropsCorrect},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := dFinalize(t, func(b *SchemaBuilder) {
@@ -122,12 +131,13 @@ func TestCosCTExtendsClause12(t *testing.T) {
 					[]AttributeUse{dAttr(t, uq("a"), uq("str"))}, nil))
 				b.AddType(xType(t, uq("derived"), uq("base"), EmptyContent{}, tc.uses, nil))
 			})
-			if tc.wantOK && err != nil {
-				t.Fatalf("a valid extension was rejected: %v", err)
+			if tc.wantRule == "" {
+				if err != nil {
+					t.Fatalf("a valid extension was rejected: %v", err)
+				}
+				return
 			}
-			if !tc.wantOK {
-				expectRule(t, err, ruleCosCTExtends)
-			}
+			expectRule(t, err, tc.wantRule)
 		})
 	}
 }

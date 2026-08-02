@@ -214,6 +214,12 @@ func (o OpenContent) Wildcard() Wildcard {
 // complexderivation.go and complexextension.go, #262/#264). Clause 1's remaining
 // resolved parts stay deferred.
 //
+// {attribute uses} is the ONE property Finalize completes rather than merely
+// checks: §3.4.2.4 clause 3 folds the {base type definition}'s uses into the
+// type's own, which needs the resolved base, so the value a producer supplies to
+// NewComplexType is clauses 1 and 2 alone and Phase D overwrites it with the full
+// set (attributeusefold.go, #401). See AttributeUses.
+//
 // {context} (§3.4.1 ctd-context — the component an anonymous type appears in) is
 // entirely UNMODELED, tracked as #301: the containing declaration/type that would
 // be the {context} is not wired to this component yet, so an anonymous
@@ -427,6 +433,13 @@ func (c ComplexType) Abstract() bool {
 //
 // The spec property is a set (§3.4.1); the document order here is an
 // implementation choice for determinism and carries no spec significance.
+//
+// On a type reached through a finalized [Schema] this is the FULL §3.4.2.4 clause
+// 3 property — the type's own uses followed by those inherited from its {base
+// type definition} — because Finalize materialises the fold (attributeusefold.go,
+// #401). On a ComplexType a caller built with [NewComplexType] and has not yet
+// finalized, it is only what that caller passed in: clause 3 needs the base
+// COMPONENT, which a standalone value has no way to reach.
 func (c ComplexType) AttributeUses() []AttributeUse {
 	if len(c.attributeUses) == 0 {
 		return nil
