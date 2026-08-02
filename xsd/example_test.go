@@ -204,6 +204,130 @@ func Example_buildFinalizeQuery() {
 	// element nosuch: false
 }
 
+// exampleAttribute builds a global attribute declaration of type
+// xs:anySimpleType.
+func exampleAttribute(name xsd.QName) xsd.AttributeDeclaration {
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: anySimpleTypeName}, xsd.ScopeGlobal, nil, false, nil)
+	if err != nil {
+		panic(err)
+	}
+	return a
+}
+
+// exampleAttributeGroup builds an empty named attribute group definition.
+func exampleAttributeGroup(name xsd.QName) xsd.AttributeGroupDefinition {
+	g, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, name, nil, nil, nil)
+	if err != nil {
+		panic(err)
+	}
+	return g
+}
+
+// exampleModelGroupDefinition builds a named group over an empty sequence.
+func exampleModelGroupDefinition(name xsd.QName) xsd.ModelGroupDefinition {
+	d, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, name, exampleModelGroup(xsd.CompositorSequence), nil)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
+// exampleNotation builds a notation declaration with a system identifier.
+func exampleNotation(name xsd.QName, systemID string) xsd.Notation {
+	n, err := xsd.NewNotation(xsderr.Loc{}, name, &systemID, nil, nil)
+	if err != nil {
+		panic(err)
+	}
+	return n
+}
+
+// exampleIdentityConstraint builds a keyref-free unique constraint over one
+// field.
+func exampleIdentityConstraint(name xsd.QName) xsd.IdentityConstraint {
+	c, err := xsd.NewIdentityConstraint(xsderr.Loc{}, name, xsd.IdentityConstraintUnique,
+		xsd.NewXPathExpression(".", nil, nil, nil),
+		[]xsd.XPathExpression{xsd.NewXPathExpression("@sku", nil, nil, nil)}, nil, nil)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+// Example_schemaEnumeration lists a finalized schema's §3.17.1 properties. Next
+// to the by-QName Query views, *Schema enumerates all eight properties in
+// document order — the order components were added, which is a guarantee even
+// though §3.17.1 words seven of the eight as unordered sets ({annotations},
+// alone, is a sequence there too.)
+//
+// Each enumerator returns a COPY of its slice, so writing through the result
+// cannot reach the compiled set; the components inside are shared and
+// immutable. Note Types() holds only TOP-LEVEL type definitions: the local
+// element's type is reached by walking the content model, not from this list.
+func Example_schemaEnumeration() {
+	addressType := exampleQName("AddressType")
+	b := xsd.NewSchemaBuilder()
+	b.AddType(xsd.AnySimpleType())
+	b.AddType(exampleElementOnlyType(addressType,
+		xsd.ResolvedTerm{Term: exampleModelGroup(xsd.CompositorSequence,
+			exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement(addressType, "street")}),
+		)}))
+	b.AddElement(exampleElement(exampleQName("shipTo"), addressType, xsd.NewGlobalScope()))
+	b.AddAttribute(exampleAttribute(exampleQName("country")))
+	b.AddAttributeGroup(exampleAttributeGroup(exampleQName("common")))
+	b.AddModelGroup(exampleModelGroupDefinition(exampleQName("nameGroup")))
+	b.AddNotation(exampleNotation(exampleQName("jpeg"), "image/jpeg"))
+	b.AddIdentityConstraint(exampleIdentityConstraint(exampleQName("skuKey")))
+	// parser.Parse wires no schema-level annotation today; a producer calling
+	// AddAnnotation itself is what Annotations() reports.
+	b.AddAnnotation(xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "purchase orders")}, nil))
+
+	s, err := b.Finalize()
+	if err != nil {
+		panic(err)
+	}
+
+	for _, d := range s.Types() {
+		fmt.Println("type:", d.Name())
+	}
+	for _, d := range s.Elements() {
+		fmt.Println("element:", d.Name().Local)
+	}
+	for _, d := range s.Attributes() {
+		fmt.Println("attribute:", d.Name().Local)
+	}
+	for _, d := range s.AttributeGroups() {
+		fmt.Println("attribute group:", d.Name().Local)
+	}
+	for _, d := range s.ModelGroups() {
+		fmt.Println("model group:", d.Name().Local)
+	}
+	for _, d := range s.Notations() {
+		fmt.Println("notation:", d.Name().Local)
+	}
+	for _, d := range s.IdentityConstraints() {
+		fmt.Println("identity constraint:", d.Name().Local)
+	}
+	for _, a := range s.Annotations() {
+		fmt.Println("annotation:", a.Documentation()[0].Content())
+	}
+
+	elements := s.Elements()
+	elements[0] = xsd.ElementDeclaration{}
+	fmt.Println("after clearing the returned slice, element:", s.Elements()[0].Name().Local)
+
+	// Output:
+	// type: {http://www.w3.org/2001/XMLSchema}anySimpleType
+	// type: {urn:example:po}AddressType
+	// element: shipTo
+	// attribute: country
+	// attribute group: common
+	// model group: nameGroup
+	// notation: jpeg
+	// identity constraint: skuKey
+	// annotation: purchase orders
+	// after clearing the returned slice, element: shipTo
+}
+
 // Example_contentModelTraversal walks a global element's content model down to
 // its leaf element declarations, the five-type chain a consumer needs first:
 // Schema.Element → ElementDeclaration.TypeDefinition → Schema.Type →
