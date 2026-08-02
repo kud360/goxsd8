@@ -29,6 +29,31 @@ func sgType(t *testing.T, name, base QName, method DerivationMethod, prohibited 
 	return ct
 }
 
+// sgSimple builds a named atomic simple type restricting base — a ·derivation·
+// chain link that carries neither {derivation method} nor {prohibited
+// substitutions}, both being Complex Type Definition properties (§3.4.1).
+func sgSimple(t *testing.T, name QName, base *SimpleType) *SimpleType {
+	t.Helper()
+	st, err := NewSimpleType(xsderr.Loc{}, name, Atomic{}, base, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(%s): %v", name, err)
+	}
+	return st
+}
+
+// sgSimpleContentType builds a complex type extending the simple type base — the
+// <simpleContent> shape, and the only way a simple type gets onto the {base type
+// definition} chain of a complex one.
+func sgSimpleContentType(t *testing.T, name QName, base *SimpleType) ComplexType {
+	t.Helper()
+	ct, err := NewComplexType(xsderr.Loc{}, name, base.Name(), nil, DerivationExtension, false,
+		nil, nil, SimpleContent{SimpleType: base}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewComplexType(%s): %v", name, err)
+	}
+	return ct
+}
+
 // sgElement builds a TOP-LEVEL element declaration with the given {type
 // definition} slot, {disallowed substitutions} and {substitution group
 // affiliations}.
@@ -195,11 +220,59 @@ func TestSubstitutionGroupClause23AnonymousMemberType(t *testing.T) {
 	expectMembership(t, member(), sq("member"), sq("head"), true)
 }
 
+// TestSubstitutionGroupClause23SimpleTypeOnDerivationChain pins that the
+// ·derivation· walk runs THROUGH a simple type instead of stopping at it: M's
+// {type definition} is a complex type extending the simple type B, and H's is the
+// simple type A that B restricts, so key-derived's chain (§2.2.1.1, "D can reach
+// B by following its base type definition chain") reaches H past one simple link.
+// The extension step below that link is genuinely involved in the ·derivation·
+// and head's {disallowed substitutions} blocks it (union member (1)).
+//
+// A walk that abandoned at the first non-complex type would discard that
+// extension step and admit the member — a false membership, which under
+// cos-nonambig false-REJECTS a schema the spec accepts. The control differs only
+// in which method head disallows, so the verdict is attributable to the
+// intersection and not to the chain having been walked at all.
+func TestSubstitutionGroupClause23SimpleTypeOnDerivationChain(t *testing.T) {
+	member := func(disallowed DerivationMethod) *Schema {
+		return sgSchema(t, func(b *SchemaBuilder) {
+			head := sgSimple(t, sq("A"), AnyAtomicType())
+			mid := sgSimple(t, sq("B"), head)
+			b.AddType(head)
+			b.AddType(mid)
+			b.AddType(sgSimpleContentType(t, sq("C"), mid))
+			b.AddElement(sgElement(t, sq("head"), sgRef(sq("A")), []DerivationMethod{disallowed}))
+			b.AddElement(sgElement(t, sq("member"), sgRef(sq("C")), nil, sq("head")))
+		})
+	}
+	expectMembership(t, member(DerivationExtension), sq("member"), sq("head"), false)
+	expectMembership(t, member(DerivationRestriction), sq("member"), sq("head"), true)
+}
+
+// TestSubstitutionGroupClause23SimpleTypeChainNotReachingHead pins the other exit
+// from the simple arm: the chain tops out at xs:anySimpleType (whose {base type
+// definition} is absent) without reaching H.{type definition}, so no ·derivation·
+// exists, no {derivation method} is involved, and clause 2.3 blocks nothing —
+// the same vacuous reading TestSubstitutionGroupClause23NoDerivation records.
+func TestSubstitutionGroupClause23SimpleTypeChainNotReachingHead(t *testing.T) {
+	s := sgSchema(t, func(b *SchemaBuilder) {
+		b.AddType(sgType(t, sq("H"), QName{}, DerivationRestriction, DerivationExtension))
+		unrelated := sgSimple(t, sq("Unrelated"), AnyAtomicType())
+		b.AddType(unrelated)
+		b.AddType(sgSimpleContentType(t, sq("C"), unrelated))
+		b.AddElement(sgElement(t, sq("head"), sgRef(sq("H")), []DerivationMethod{DerivationExtension}))
+		b.AddElement(sgElement(t, sq("member"), sgRef(sq("C")), nil, sq("head")))
+	})
+	expectMembership(t, s, sq("member"), sq("head"), true)
+}
+
 // TestSubstitutionGroupClause23NoDerivation pins the reading recorded on
 // derivationAdmitsSubstitution: clause 2.3 is a BLOCKING clause, so a member
 // whose {type definition} does not ·reach· head's at all involves no {derivation
 // method}s and is blocked by nothing. Requiring the derivation is
-// e-props-correct clause 4's job, not this rule's.
+// e-props-correct clause 4's job (c-vs-sg), not this rule's — and clause 4 is
+// unimplemented here, so this pins silence, not delegation (see the GAP on
+// derivationAdmitsSubstitution).
 func TestSubstitutionGroupClause23NoDerivation(t *testing.T) {
 	s := sgSchema(t, func(b *SchemaBuilder) {
 		b.AddType(sgType(t, sq("H"), QName{}, DerivationRestriction, DerivationExtension))

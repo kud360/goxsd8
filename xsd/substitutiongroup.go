@@ -30,6 +30,11 @@ package xsd
 //     also ran checkComplexBaseAcyclic (ct-props-correct clause 3), plus an
 //     explicit xs:anyType test for the one self-based type §3.4.7 permits —
 //     exactly the licence derivedOKComplex's walk records (complexderivation.go).
+//     Where that walk crosses into the simple-type chain it needs no check at
+//     all: a *SimpleType takes its {base type definition} as an already-built
+//     component, so a cycle is unconstructible (simpletype.go records
+//     st-props-correct clause 2 as a no-op for that reason) and the chain ends
+//     at xs:anySimpleType, whose base is nil.
 
 // inSubstitutionGroupOf reports whether the element declaration named member is
 // in the ·substitution group· of the one named head (§3.3.6.4, key-eq: "An
@@ -123,7 +128,13 @@ func (s *Schema) affiliationChainReaches(m ElementDeclaration, head QName) bool 
 // walk has (§3.4.6.5, derivedOKComplex): every level except the terminal target
 // is read. {derivation method} and {prohibited substitutions} are Complex Type
 // Definition properties (§3.4.1) — a simple type on the chain has neither and so
-// contributes nothing to either set.
+// contributes nothing to either set, but the walk CONTINUES THROUGH it rather
+// than stopping there: key-derived follows the {base type definition} chain
+// whatever kind the current type is, and a simple type has a base too. So a
+// complex type based on a simple one (the <simpleContent> shape) still reaches
+// an H.{type definition} sitting further up the simple chain, and the
+// {derivation method}s collected below it are genuinely involved in that
+// ·derivation·.
 //
 // The two sets are both collected before either is read: an intermediate type's
 // {prohibited substitutions} blocks a {derivation method} contributed FURTHER
@@ -131,13 +142,23 @@ func (s *Schema) affiliationChainReaches(m ElementDeclaration, head QName) bool 
 //
 // Clause 2.3 is a BLOCKING clause, and a ·derivation· that does not exist blocks
 // nothing: when the chain ends without reaching H.{type definition} the set of
-// involved {derivation method}s is empty and the intersection is empty. That
-// case is not this rule's to charge — e-props-correct clause 4 (c-vs-sg) is what
-// requires a member's {type definition} to be ·validly substitutable· for its
-// head's. The same reading covers an absent or unresolvable {type definition} on
-// either side, which declaredTypeRestricts (defaultbinding.go) skips identically:
-// there is no component to walk, and a dangling name was already charged
-// src-resolve by resolve.go's Phase A.
+// involved {derivation method}s is empty and so is the intersection, and this
+// predicate is deliberately SILENT — reading clause 2.3 as requiring the chain
+// would be legislating a different rule. The same reading covers an absent or
+// unresolvable {type definition} on either side, which declaredTypeRestricts
+// (defaultbinding.go) skips identically: there is no component to walk, and a
+// dangling name was already charged src-resolve by resolve.go's Phase A.
+//
+// GAP(xsd): requiring the chain to exist at all belongs to e-props-correct
+// clause 4 (§3.3.6.1, c-vs-sg: "For each member M of E.{substitution group
+// affiliations}, E.{type definition} is ·validly substitutable· for M.{type
+// definition}, subject to the blocking keywords in M.{substitution group
+// exclusions}"), and NOTHING in this package enforces it: no check function
+// implements clause 4, and {substitution group exclusions}, the property it
+// reads, is stored and exposed but consulted by no constraint. A member whose
+// {type definition} does not ·derive· from its head's is therefore accepted
+// today. Do not read the silence above as delegation to a check that exists; it
+// is an unimplemented rule, recorded in the #249 arbiter review.
 //
 // The starting type is reached through typeOf, the package's one {type
 // definition} slot reader (STYLE T4), so an ANONYMOUS inline type participates in
@@ -160,42 +181,58 @@ func (s *Schema) derivationAdmitsSubstitution(m, h ElementDeclaration) bool {
 	if sameTypeDefinition(memberType, headType) {
 		return true // no derivation step, so no {derivation method} is involved
 	}
-	blocked := h.disallowedSubstitutions // union member (1)
+	blocked := h.DisallowedSubstitutions() // union member (1), copied by the accessor
 	if hc, ok := headType.(ComplexType); ok {
 		blocked = unionDerivationMethods(blocked, hc.prohibitedSubstitutions) // union member (2)
 	}
 	var methods []DerivationMethod
 	cur := memberType
+walk:
 	for step := 0; ; step++ {
-		c, ok := cur.(ComplexType)
-		if !ok {
-			return true // a simple type has no {derivation method} and no named base here
+		switch c := cur.(type) {
+		case ComplexType:
+			if !containsDerivationMethod(methods, c.DerivationMethod()) {
+				methods = append(methods, c.DerivationMethod())
+			}
+			if step > 0 {
+				// Union member (3): the intermediate types are those STRICTLY
+				// between M.{type definition} (step 0) and H.{type definition}
+				// (where the walk stops), so M's own {prohibited substitutions} is
+				// not in the union and H's entered it as union member (2).
+				blocked = unionDerivationMethods(blocked, c.prohibitedSubstitutions)
+			}
+			if c.Name() == anyTypeName {
+				return true // §3.4.7: xs:anyType is its own base, so the chain ends here
+			}
+			base := c.BaseTypeDefinitionName()
+			if base == (QName{}) {
+				return true // an absent base ends the chain short of H.{type definition}
+			}
+			if base == typeDefinitionName(headType) {
+				break walk // the ·derivation· has reached H.{type definition}
+			}
+			next, ok := s.Type(base)
+			if !ok {
+				return true // a dangling base was already charged src-resolve by Phase A
+			}
+			cur = next
+		case *SimpleType:
+			// A simple type contributes to NEITHER set — {derivation method} and
+			// {prohibited substitutions} are both Complex Type Definition
+			// properties (§3.4.1) — but the ·derivation· runs THROUGH it: key-derived
+			// follows {base type definition} whatever kind the current type is, and
+			// a simple type's is the *SimpleType Base reports.
+			base := c.Base()
+			if base == nil {
+				return true // xs:anySimpleType tops the chain short of H.{type definition}
+			}
+			if sameTypeDefinition(base, headType) {
+				break walk // the ·derivation· has reached H.{type definition}
+			}
+			cur = base
+		default:
+			panic("xsd: derivationAdmitsSubstitution: non-exhaustive TypeDefinition switch")
 		}
-		if !containsDerivationMethod(methods, c.DerivationMethod()) {
-			methods = append(methods, c.DerivationMethod())
-		}
-		if step > 0 {
-			// Union member (3): the intermediate types are those STRICTLY between
-			// M.{type definition} (step 0) and H.{type definition} (where the walk
-			// stops), so M's own {prohibited substitutions} is not in the union and
-			// H's entered it as union member (2).
-			blocked = unionDerivationMethods(blocked, c.prohibitedSubstitutions)
-		}
-		if c.Name() == anyTypeName {
-			return true // §3.4.7: xs:anyType is its own base, so the chain ends here
-		}
-		base := c.BaseTypeDefinitionName()
-		if base == (QName{}) {
-			return true // an absent base ends the chain short of H.{type definition}
-		}
-		if base == typeDefinitionName(headType) {
-			break // the ·derivation· has reached H.{type definition}
-		}
-		next, ok := s.Type(base)
-		if !ok {
-			return true // a dangling base was already charged src-resolve by Phase A
-		}
-		cur = next
 	}
 	for _, d := range methods {
 		if containsDerivationMethod(blocked, d) {

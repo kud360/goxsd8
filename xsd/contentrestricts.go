@@ -432,10 +432,10 @@ func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live []i
 // membership is not one of them: inSubstitutionGroupOf decides
 // cos-equiv-derived-ok-rec exactly (substitutiongroup.go), so this clause reads
 // the true ·substitution group· whichever way membership pushes the verdict. And
-// the base's wildcard is asked through Wildcard.AllowsName (cvc-wildcard-name) rather than
-// through allowsElementWildcardName's defined/sibling keyword exclusions, for
-// the same reason: the narrower test would shrink B and could only add
-// rejections.
+// the base's wildcard is asked through Wildcard.AllowsName (cvc-wildcard-name)
+// rather than through allowsElementWildcardName's defined/sibling keyword
+// exclusions, for the same reason: the narrower test would shrink B and could
+// only add rejections.
 func (s *Schema) positionAdmits(general, specific position) bool {
 	switch g := general.term.(type) {
 	case ElementDeclaration:
@@ -457,8 +457,9 @@ func (s *Schema) positionAdmits(general, specific position) bool {
 
 // elementParticleAdmits reports whether an ·element particle· whose {term} is
 // general admits every item whose ·governing element declaration· is specific:
-// the same expanded name, or specific ·substitutable· for general through a
-// ·substitution group·.
+// specific is ·substitutable· for general through a ·substitution group·, which
+// already folds in plain expanded-name equality (cos-equiv-derived-ok-rec clause
+// 1, so no separate name test is needed here).
 //
 // GAP(xsd): two TOP-LEVEL declarations with different expanded names are
 // admitted unconditionally, without the membership walk deciding it. No producer
@@ -476,9 +477,6 @@ func (s *Schema) positionAdmits(general, specific position) bool {
 // first maps substitutionGroup= into {substitution group affiliations}, after
 // which the membership walk sees the edges it needs and this arm can go.
 func (s *Schema) elementParticleAdmits(general, specific ElementDeclaration) bool {
-	if general.Name() == specific.Name() {
-		return true
-	}
 	if s.inSubstitutionGroupOf(specific.Name(), general.Name()) {
 		return true
 	}

@@ -190,11 +190,11 @@ func (s *Schema) modelGroupContainsName(g ModelGroup, name QName) bool {
 //
 // ·match· here is key-en-match, NOT the substitution-aware key-e-d-match:
 // substitution-group awareness enters through implicit containment expanding the
-// candidate set, never through the match relation itself.
+// candidate set, never through the match relation itself. The two cases need one
+// call, not two: cos-equiv-derived-ok-rec clause 1 puts a declaration in its own
+// ·substitution group·, so expanded-name equality is already the first thing
+// inSubstitutionGroupOf answers.
 func (s *Schema) topLevelDeclarationMatchesName(declared, name QName) bool {
-	if declared == name {
-		return true
-	}
 	return s.inSubstitutionGroupOf(name, declared)
 }
 
