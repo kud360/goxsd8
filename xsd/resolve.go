@@ -48,10 +48,14 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     Attribution (cos-nonambig, particleattribution.go) and Element Declarations
 //     Consistent (cos-element-consistent, elementconsistent.go).
 //   - Phase D (complex-type derivation validity), in two steps. It first
-//     MATERIALISES {attribute uses}: §3.4.2.4 clause 3's fold of the {base type
-//     definition}'s uses into every complex type's own is the one mapping rule a
-//     producer cannot finish, because it needs the resolved base
-//     (attributeusefold.go, #401). It then rejects the derivation-relative
+//     MATERIALISES the two attribute-side properties whose mapping rules a
+//     producer cannot finish, because each needs the resolved base: {attribute
+//     uses}, whose §3.4.2.4 clause 3 folds the {base type definition}'s uses into
+//     every complex type's own (attributeusefold.go, #401), and {attribute
+//     wildcard}, whose §3.4.2.5 clause 2.2 unions an EXTENSION's own
+//     ·complete wildcard· with its ·base wildcard· (attributewildcardfold.go,
+//     #265). The two are independent properties, so their relative order carries
+//     no verdict; both precede the checks. It then rejects the derivation-relative
 //     constraints that need that resolved base — the ct-props-correct (§3.4.6.1)
 //     clauses 2 and 4, derivation-ok-restriction (§3.4.6.3) for every
 //     restriction-derived complex type, and cos-ct-extends (§3.4.6.2) for every
@@ -92,10 +96,10 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // behind a reference obtains it by a read-time index lookup
 // (schema.Type/Element/Attribute), never from a resolved pointer this pass
 // produced — that pointer would be state derivable from the QName plus the index
-// (STYLE D3). Its one mutation is Phase D's {attribute uses} fold, which is a
-// mapping rule finished rather than a reference cached: it overwrites a property
-// with the value §3.4.2.4 defines, leaving one encoding of it and not two (see
-// foldAttributeUses).
+// (STYLE D3). Its only mutations are Phase D's two folds, which are mapping rules
+// finished rather than references cached: each overwrites a property with the
+// value its §3.4.2 rule defines, leaving one encoding of it and not two (see
+// foldAttributeUses and foldAttributeWildcards).
 //
 // An absent reference is skipped, not treated as dangling: absence — a zero
 // QName in a bare-QName slot, a nil TypeDefinitionOrRef in a {type definition}
@@ -142,6 +146,9 @@ func (s *Schema) resolve() error {
 		return err
 	}
 	s.foldAttributeUses()
+	if err := s.foldAttributeWildcards(); err != nil {
+		return err
+	}
 	if err := s.checkComplexDerivations(); err != nil {
 		return err
 	}

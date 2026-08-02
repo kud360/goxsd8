@@ -214,11 +214,16 @@ func (o OpenContent) Wildcard() Wildcard {
 // complexderivation.go and complexextension.go, #262/#264). Clause 1's remaining
 // resolved parts stay deferred.
 //
-// {attribute uses} is the ONE property Finalize completes rather than merely
-// checks: §3.4.2.4 clause 3 folds the {base type definition}'s uses into the
-// type's own, which needs the resolved base, so the value a producer supplies to
-// NewComplexType is clauses 1 and 2 alone and Phase D overwrites it with the full
-// set (attributeusefold.go, #401). See AttributeUses.
+// {attribute uses} and {attribute wildcard} are the TWO properties Finalize
+// completes rather than merely checks, because each has a mapping clause that
+// needs the resolved base. §3.4.2.4 clause 3 folds the {base type definition}'s
+// uses into the type's own, so the value a producer supplies to NewComplexType is
+// clauses 1 and 2 alone and Phase D overwrites it with the full set
+// (attributeusefold.go, #401). §3.4.2.5 clause 2.2 unions an EXTENSION's own
+// ·complete wildcard· with the base's, so for an extension the supplied value is
+// clause 1 alone and Phase D overwrites it with the union
+// (attributewildcardfold.go, #265); for a restriction clause 2.1 makes the
+// supplied value already final. See AttributeUses and AttributeWildcard.
 //
 // prohibitedAttributeNames is the one field here that is NOT a §3.4.1 property.
 // It is a retained MAPPING INPUT: clause 3.2.2 excludes from that fold the
@@ -488,6 +493,29 @@ func (c ComplexType) AttributeUses() []AttributeUse {
 // AttributeWildcard returns the {attribute wildcard} property (Optional); the
 // second result is false when it is absent, in which case the first result is
 // not meaningful.
+//
+// On a type reached through a finalized [Schema] this is the §3.4.2.5 clause 2
+// property. For a restriction that is the ·complete wildcard· the caller supplied
+// (clause 2.1); for an EXTENSION it is that wildcard's {namespace constraint}
+// unioned with the {base type definition}'s per cos-aw-union, under the
+// extension's own {process contents} and {annotations} (clause 2.2), because
+// Finalize materialises the fold (attributewildcardfold.go, #265). On a
+// ComplexType a caller built with [NewComplexType] and has not yet finalized, it
+// is only what that caller passed in: clause 2.2 needs the base COMPONENT, which a
+// standalone value has no way to reach.
+//
+// GAP(xsd): the {attribute wildcard} half of the seam AttributeUses records for
+// {attribute uses} — ONE unfolded shape with two sites, not two gaps. Both folds
+// walk the finalized Schema's TYPE DEFINITIONS only, so an anonymous complex type
+// nested in a particle tree (an InlineTypeDefinition on a local element or
+// attribute declaration) is folded for neither property and reports its own
+// <anyAttribute> alone. No parser reaches that shape — see AttributeUses for why —
+// but a caller assembling a Schema through [SchemaBuilder] can nest an inline
+// complex type that extends a base carrying a wildcard. Phase D quantifies over
+// the same type definitions, so no constraint in this package reads the unfolded
+// value; the exposure is a READING consumer's, and under-reporting is the
+// direction the whole fold's absence had before #265 — it can withhold admitted
+// names, never fabricate them.
 func (c ComplexType) AttributeWildcard() (Wildcard, bool) {
 	return c.attributeWildcard, c.hasAttributeWildcard
 }

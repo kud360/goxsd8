@@ -339,17 +339,21 @@ func restrictionVarietyPairOK(tct, bct ContentType) bool {
 // item whose [attributes] satisfy cvc-complex-type (§3.4.4.2) clauses 2 and 3
 // with respect to T, they must satisfy the same clauses with respect to B, and
 // B's ·default binding· for each attribute must ·subsume· T's (loc-testSubP).
-// Rendered statically over the component model, that is two obligations:
+// Rendered statically over the component model, that is three obligations:
 //
 //   - every expanded name T admits through an {attribute use} must be admitted
-//     by B at all (cvc-complex-type clause 2: otherwise an element carrying it is
-//     valid against T and not against B), and B's binding for it must ·subsume·
-//     T's, which for an {attribute use} is loc-testSubP clause 5;
+//     by B at all (cvc-complex-type clause 2.1: otherwise an element carrying it
+//     is valid against T and not against B), and B's binding for it must
+//     ·subsume· T's, which for an {attribute use} is loc-testSubP clause 5;
+//   - every expanded name T admits through its {attribute wildcard} must be
+//     admitted by B too (cvc-complex-type clause 2.2, c-avaw —
+//     checkRestrictionAttributeWildcard);
 //   - every attribute B marks {required} must stay required in T
 //     (cvc-complex-type clause 3, checkRestrictionRequiredAttributes).
 //
-// The uses are walked in document order, so the first reported failure is
-// deterministic (STYLE D2).
+// The three run in that order, which is cvc-complex-type's own: clause 2's two
+// sub-cases before clause 3's. The uses are walked in document order, so the
+// first reported failure is deterministic (STYLE D2).
 //
 // Both quantifications range over the MATERIALISED sets (§3.4.2.4 clause 3,
 // attributeusefold.go), which is load-bearing in BOTH directions. In the reject
@@ -359,15 +363,6 @@ func restrictionVarietyPairOK(tct, bct ContentType) bool {
 // REJECT. In the charge direction the fold on B is what makes
 // checkRestrictionRequiredAttributes see a required attribute T inherits from
 // higher up the chain rather than only the ones B declares itself.
-//
-// GAP(xsd): the half of clause 3 that quantifies over the names admitted only by
-// T's {attribute wildcard} is NOT decided. Comparing T's {attribute
-// wildcard}.{namespace constraint} against B's needs Wildcard Subset (§3.10.6.2,
-// cos-ns-subset), which does not exist in this tree; the natural home for it is
-// the exported wildcard-set surface #52 owns, so building a private ad-hoc
-// subset test here would be the same relation in two encodings. Skipping the
-// comparison is FAIL-OPEN — a schema that should fail may pass — and never a
-// false reject (#265).
 func (s *Schema) checkRestrictionAttributes(t, b ComplexType) error {
 	for _, u := range t.attributeUses {
 		name := attributeUseName(u)
@@ -380,7 +375,77 @@ func (s *Schema) checkRestrictionAttributes(t, b ComplexType) error {
 			return err
 		}
 	}
+	if err := checkRestrictionAttributeWildcard(t, b); err != nil {
+		return err
+	}
 	return checkRestrictionRequiredAttributes(t, b)
+}
+
+// checkRestrictionAttributeWildcard is the cvc-complex-type clause 2.2 (c-avaw)
+// half of c-ran: the names an element valid against T may carry WITHOUT a
+// matching {attribute use} are exactly those T's {attribute wildcard} admits, and
+// B must admit each of them too — through its own {attribute wildcard}, since no
+// finite {attribute uses} set covers the open name set a wildcard admits.
+//
+// So the obligation is a relation between the two wildcards, and it is decided by
+// wildcardSubset — Wildcard Subset (§3.10.6.2, cos-ns-subset), the ONE encoding of
+// that relation in this package (namespaceconstraint_subset.go, shared with the
+// element-side transition test in contentrestricts.go; STYLE T4). The direction
+// is T's constraint as sub and B's as super: T may admit fewer names than B, never
+// more. A T with no {attribute wildcard} admits nothing this way and discharges
+// the clause vacuously, which is why the absent case returns before B is read.
+//
+// Both sides are read off the type directly and neither walks a base chain,
+// because §3.4.2.5 makes that exact. A restriction's {attribute wildcard} is its
+// ·complete wildcard· — its own <anyAttribute>, clause 2.1 — and an extension's is
+// already the union of its own with its base's, materialised at finalize
+// (attributewildcardfold.go, clause 2.2). Before that fold, a B that inherited its
+// wildcard read as having none and this check FALSELY rejected its restrictions;
+// the fold is what makes the comparison sound, not merely more complete.
+//
+// GAP(xsd): the comparison is an over-approximation in the FAIL-CLOSED
+// direction, owned by #430. cvc-complex-type clause 2.2 is reached only
+// "otherwise", i.e. for a name with no matching {attribute use} in T, so a name
+// T holds a use for is outside the quantification even when T's wildcard also
+// admits it. wildcardSubset decides cos-ns-subset over {namespace constraint}s
+// alone and knows nothing of {attribute uses}, so a subset failure caused SOLELY
+// by a QName in B.{attribute wildcard}.{namespace constraint}.{disallowed names}
+// that B (and therefore T, by §3.4.2.4 clause 3.2) declares an {attribute use}
+// for is charged here though clause 3 does not require it.
+//
+// The error returned below has exactly one consumer chain, and every link
+// propagates a non-nil error as a rejection rather than reading it for anything
+// else: checkRestrictionAttributes → Schema.checkComplexTypeRestriction →
+// Schema.checkComplexDerivations → Schema.resolve → SchemaBuilder.Finalize (and
+// FinalizeWith), which returns it to the caller in place of a *Schema. So the
+// over-charge is a FALSE REJECT of a VALID schema, not a missed rejection: a
+// restriction whose base disallows BY NAME an attribute both types govern with an
+// {attribute use} — B declaring <xs:attribute name="foo"/> alongside
+// <anyAttribute namespace="##any" notQName="foo"/>, T restricting B with
+// <anyAttribute namespace="##any"/> and inheriting the foo use — is rejected by
+// Finalize today. Reachable from plain source syntax; no W3C suite case has the
+// shape, which is why neither the gate nor the ratchet measures it.
+//
+// Narrowing it here would mean re-deriving cos-ns-subset with a name-set
+// parameter — the same relation in two encodings, which is what T4 forbids and
+// what #262 declined to build. #430 owns the choice between that and a
+// pre-filter of B's {disallowed names} against T's {attribute uses} at this call
+// site; nothing is narrowed yet, so the false reject above stands as described.
+func checkRestrictionAttributeWildcard(t, b ComplexType) error {
+	tw, has := t.AttributeWildcard()
+	if !has {
+		return nil
+	}
+	bw, baseHas := b.AttributeWildcard()
+	if !baseHas {
+		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+			"complex type %s restricts %s and declares an {attribute wildcard}, but %s has none, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 2.2, c-avaw)", t.Name(), b.Name(), b.Name())
+	}
+	if wildcardSubset(tw.NamespaceConstraint(), bw.NamespaceConstraint()) {
+		return nil
+	}
+	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+		"complex type %s restricts %s but its {attribute wildcard} admits expanded names %s's does not, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 2.2, c-avaw, and cos-ns-subset)", t.Name(), b.Name(), b.Name())
 }
 
 // checkRestrictionRequiredAttributes is the cvc-complex-type clause 3 half of

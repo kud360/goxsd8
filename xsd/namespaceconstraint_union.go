@@ -17,9 +17,10 @@ import "github.com/kud360/goxsd8/xsderr"
 // carrying an <openContent> derives from a base that already has one
 // (parser/produce_complex.go, openContentWildcard). In-package,
 // contentrestricts.go's coveringWildcardUnion folds live element wildcards
-// through it. The §3.6.2.2 <extension> attribute-wildcard combination (§3.4.2.5
-// dcl.ctd.anyatt clause 2.2.2.3 — NOT §3.4.2.2, which is the simple-content
-// mapping) is the third spec use and lands with #265.
+// through it, and attributewildcardfold.go folds an EXTENSION's own attribute
+// wildcard with its base's — the §3.4.2.5 dcl.ctd.anyatt clause 2.2.2.3 mapping
+// (NOT §3.4.2.2, which is the simple-content one), the third spec use, landed with
+// #265.
 //
 // The {variety}/{namespaces} result is the §3.10.6.3 five-case table:
 //
