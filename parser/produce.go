@@ -227,15 +227,18 @@ type symbols struct {
 	// (xsd/resolve.go's checkModelGroupsAcyclic), which is where the whole graph is
 	// visible; a second rejection path here would be a second encoding of one fact.
 	//
-	// That state is unreachable TODAY and deliberately still guarded. Reaching it
-	// takes a definition body that re-enters complex-type construction, and the
-	// only body child that could — a local <element> with an inline <complexType>
-	// — is not yet produced (#340); every other child (a typed local <element>, a
-	// wildcard, a nested compositor, a <group ref>) either retains its reference or
-	// recurses only within the body. The sentinel must be WRITTEN regardless, since
-	// the memo cannot be filled before the definition exists, so reading it here
-	// costs one branch and is the difference between falling through and
-	// recursing until the stack dies the day that path opens.
+	// That state IS reachable, as of #340: a definition body that re-enters
+	// complex-type construction now exists — a local <element> with an inline
+	// <complexType> — while every other child (a typed local <element>, a
+	// wildcard, a nested compositor, a <group ref>) either retains its reference
+	// or recurses only within the body. The sentinel is this guard's live
+	// termination path for that shape (a <group ref> whose definition body
+	// contains a local element whose inline <complexType> re-enters the same
+	// <group ref>): it reports "does not resolve here" and lets the caller fall
+	// through instead of recursing until the stack dies. It must be WRITTEN
+	// regardless, since the memo cannot be filled before the definition exists,
+	// so reading it here costs one branch always and stops a real infinite
+	// recursion now.
 	builtGroups map[xsd.QName]*xsd.ModelGroupDefinition
 
 	// builtIC is the build-once memo for identity-constraint construction. It has
