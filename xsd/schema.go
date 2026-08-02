@@ -116,7 +116,12 @@ func (b *SchemaBuilder) AddAnnotation(a Annotation) {
 // ElementResolver, and AttributeResolver through its Type, Element, and
 // Attribute methods. Go's structural typing leaves that unprinted by go doc, so
 // it is stated here — a consumer needing only one of the three takes the
-// matching capability view rather than the whole *Schema (STYLE T3).
+// matching capability view rather than the whole *Schema (STYLE T3). Those
+// three by-name lookups copy nothing; the eight document-order enumerators
+// (Types, Elements, Attributes, AttributeGroups, ModelGroups, Notations,
+// IdentityConstraints, Annotations) each return a COPY of their slice, so no
+// caller holds an aliasing handle with which to mutate a source-of-truth slice
+// out of step with the index derived from it (STYLE T1).
 //
 // The document-order slices are the source of truth; the by-expanded-QName maps
 // are indexes DERIVED from those slices at Finalize and exist only for O(1)
@@ -406,4 +411,134 @@ func (s *Schema) Attribute(name QName) (AttributeDeclaration, bool) {
 func (s *Schema) Type(name QName) (TypeDefinition, bool) {
 	d, ok := s.typeIndex[name]
 	return d, ok
+}
+
+// Types returns the {type definitions} property (§3.17.1): every TOP-LEVEL type
+// definition, simple and complex alike, as the one TypeDefinition slice the one
+// spec property is — it is never split by variety.
+//
+// The components are returned in the order they were added to the builder, and
+// that order is a GUARANTEED stable part of this method's contract, even though
+// §3.17.1 words the property as an unordered "A set of Type Definition
+// components".
+//
+// The SLICE is copied: mutating the result does not affect s. Its ELEMENTS are
+// not copied — the components are shared with s and immutable, and a
+// *SimpleType's pointer identity is preserved (cloneSlice copies interface
+// values, never pointees), which is load-bearing per [SimpleType] and Finalize.
+//
+// For a schema obtained from parser.Parse, the leading entries are components
+// no schema document declares: parser.Produce (parser/produce.go) calls AddType
+// for every seeded builtin simple type and for the synthesized xs:anyType
+// BEFORE any document type, so the order is builtins first, then each
+// document's top-level types in document order.
+//
+// It is the §3.17.1 property and nothing more — NOT transitive coverage of
+// every type reachable from the schema. An inline (nested) type definition
+// owned by a declaration is never added to this set, so a consumer needing
+// those must walk the declarations itself. Anonymous top-level type definitions
+// — {name} absent — ARE included even though Type cannot reach them: §3.4.1 and
+// §3.16.1 exempt them from the by-name symbol table (see indexByName).
+//
+// An empty {type definitions} yields nil.
+func (s *Schema) Types() []TypeDefinition {
+	return cloneSlice(s.types)
+}
+
+// Elements returns the {element declarations} property (§3.17.1): the top-level
+// element declarations, in the order they were added to the builder. That order
+// is a guaranteed stable part of this method's contract, even though §3.17.1
+// words the property as an unordered "A set of Element Declaration components".
+//
+// The slice is copied: mutating the result does not affect s. The declarations
+// in it are shared with s and immutable. An empty {element declarations} yields
+// nil.
+func (s *Schema) Elements() []ElementDeclaration {
+	return cloneSlice(s.elements)
+}
+
+// Attributes returns the {attribute declarations} property (§3.17.1): the
+// top-level attribute declarations, in the order they were added to the
+// builder. That order is a guaranteed stable part of this method's contract,
+// even though §3.17.1 words the property as an unordered "A set of Attribute
+// Declaration components". It is unrelated to [Annotation.Attributes], which
+// reports the XML attribute items on one annotation.
+//
+// The slice is copied: mutating the result does not affect s. The declarations
+// in it are shared with s and immutable. An empty {attribute declarations}
+// yields nil.
+func (s *Schema) Attributes() []AttributeDeclaration {
+	return cloneSlice(s.attributes)
+}
+
+// AttributeGroups returns the {attribute group definitions} property (§3.17.1):
+// the top-level attribute group definitions, in the order they were added to
+// the builder. That order is a guaranteed stable part of this method's
+// contract, even though §3.17.1 words the property as an unordered "A set of
+// Attribute Group Definition components".
+//
+// The slice is copied: mutating the result does not affect s. The definitions
+// in it are shared with s and immutable. An empty {attribute group definitions}
+// yields nil.
+func (s *Schema) AttributeGroups() []AttributeGroupDefinition {
+	return cloneSlice(s.attributeGroups)
+}
+
+// ModelGroups returns the {model group definitions} property (§3.17.1): the
+// top-level model group definitions, in the order they were added to the
+// builder. That order is a guaranteed stable part of this method's contract,
+// even though §3.17.1 words the property as an unordered "A set of Model Group
+// Definition components".
+//
+// The slice is copied: mutating the result does not affect s. The definitions
+// in it are shared with s and immutable. An empty {model group definitions}
+// yields nil.
+func (s *Schema) ModelGroups() []ModelGroupDefinition {
+	return cloneSlice(s.modelGroups)
+}
+
+// Notations returns the {notation declarations} property (§3.17.1): the
+// top-level notation declarations, in the order they were added to the builder.
+// That order is a guaranteed stable part of this method's contract, even though
+// §3.17.1 words the property as an unordered "A set of Notation Declaration
+// components".
+//
+// The slice is copied: mutating the result does not affect s. The declarations
+// in it are shared with s and immutable. An empty {notation declarations}
+// yields nil.
+func (s *Schema) Notations() []Notation {
+	return cloneSlice(s.notations)
+}
+
+// IdentityConstraints returns the SCHEMA-level {identity-constraint
+// definitions} property (§3.17.1): the top-level identity-constraint
+// definitions, in the order they were added to the builder. That order is a
+// guaranteed stable part of this method's contract, even though §3.17.1 words
+// the property as an unordered "A set of Identity-Constraint Definition
+// components". It is a different scope from [ElementDeclaration.IdentityConstraints],
+// which reports one element declaration's own §3.3.1 property.
+//
+// The slice is copied: mutating the result does not affect s. The definitions
+// in it are shared with s and immutable. An empty {identity-constraint
+// definitions} yields nil.
+func (s *Schema) IdentityConstraints() []IdentityConstraint {
+	return cloneSlice(s.identityConstraints)
+}
+
+// Annotations returns the {annotations} property (§3.17.1): the schema-level
+// annotations, in the order they were added to the builder. Alone among the
+// eight §3.17.1 properties, {annotations} is worded as "A sequence of
+// Annotation components" rather than a set, so here the order is
+// spec-significant as well as guaranteed stable.
+//
+// The slice is copied: mutating the result does not affect s. The annotations
+// in it are shared with s and immutable. An empty {annotations} yields nil.
+//
+// A schema built by parser.Parse has NO schema-level annotations today: the
+// parser wires no producer call to [SchemaBuilder.AddAnnotation] for a
+// <xs:schema> element's own <xs:annotation> children (§3.17.2), so this returns
+// nil for every parsed schema until that gap closes. Only a producer calling
+// AddAnnotation directly populates it.
+func (s *Schema) Annotations() []Annotation {
+	return cloneSlice(s.annotations)
 }
