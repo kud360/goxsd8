@@ -887,8 +887,11 @@ func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error)
 // consequence here is that this function never fails on an unknown head, only on
 // a lexically unresolvable prefix.
 //
-// It is called only from produceElement: the local path rejects the attribute
-// outright (e-props-correct clause 3, produceLocalElement).
+// It is called only from produceElement. The local path never builds
+// affiliations: the INLINE local form is rejected for carrying the attribute at
+// all (e-props-correct clause 3, produceLocalElement), and the <element ref>
+// form returns from produceElementParticle before that check, ignoring the
+// attribute instead of rejecting it (see the GAP marker on that branch).
 //
 // {substitution group exclusions} — the final=/finalDefault twin — is deliberately
 // NOT mapped alongside it. The property is read by exactly one rule,

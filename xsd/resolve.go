@@ -444,14 +444,14 @@ func (s *Schema) resolveAttributeUse(u AttributeUse) error {
 // edges for one.
 //
 // GAP(xsd): the OTHER reference slots are not yet §5.3-aligned — a dangling
-// {type definition}, <element ref>, <group ref> or keyref is still charged
-// src-resolve here and rejects the whole schema, which is why W3C
+// {type definition}, <element ref>, <attribute ref>, <group ref> or keyref is
+// still charged src-resolve here and rejects the whole schema, which is why W3C
 // Missing/missing001 and missing003/006 sit at fail. That deviation is recorded
 // in parser/doc.go; this slot is aligned rather than joining it because #281 is
 // what first put data in the slot, and extending an unimplemented-§5.3 rejection
 // to a new site would have LOST a case the suite says must pass. Aligning the
-// rest is a §5.3 issue of its own: it needs ·absent· to be representable in every
-// slot plus a lax-assessment fallback at validation time, neither of which exists.
+// rest is #434: it needs ·absent· to be representable in every slot plus a
+// lax-assessment fallback at validation time, neither of which exists.
 func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 	if err := s.resolveTypeDefinition(e.TypeDefinition(), "element declaration "+e.Name().String()+" {type definition}"); err != nil {
 		return err

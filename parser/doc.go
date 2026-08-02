@@ -123,9 +123,9 @@
 //     aligned: a {substitution group affiliations} member naming no
 //     declaration is retained as ·absent· rather than rejected (see
 //     xsd/resolve.go's resolveElementDecl). The remaining slots — {type
-//     definition}, <element ref>, <group ref>, keyref — await a §5.3
-//     issue that can also supply the ·lax assessment· fallback §5.3
-//     requires on the validation side.
+//     definition}, <element ref>, <attribute ref>, <group ref>, keyref —
+//     are #434, which must also supply the ·lax assessment· fallback
+//     §5.3 requires on the validation side.
 //   - GAP(xsd): two DISTINCT <xs:override> elements whose children are
 //     textually equivalent are treated as two different overrides of the
 //     same document, so overriding one document the same way down two

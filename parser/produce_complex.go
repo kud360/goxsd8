@@ -1067,6 +1067,19 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 	if elided {
 		return nil, nil
 	}
+	// GAP(xsd): an <element ref="..." substitutionGroup="..."> is silently ACCEPTED,
+	// the attribute simply ignored. The meta-schema prohibits substitutionGroup on
+	// xs:localElement whichever form it takes (§3.3.2, use="prohibited"), but this
+	// branch returns before produceLocalElement — the one place the producer charges
+	// e-props-correct clause 3 on the attribute's presence — ever runs. Nothing else
+	// reads it here: substitutionGroupAffiliations is called only from
+	// produceElement (the global path), and an ElementDeclarationRef term has no
+	// {substitution group affiliations} slot to populate, so no component property
+	// is affected and no downstream rule sees a different value. The whole loss is
+	// one unmade syntax rejection — an under-reject, not a false-accept of a
+	// validity conclusion. No W3C suite case has this shape. Unowned: no issue
+	// tracks it yet (STYLE P3 requires an issue reference only when an issue does
+	// own the retirement).
 	if ref, hasRef := attrValue(el, "ref"); hasRef {
 		qn, err := p.resolveQName(el, ref)
 		if err != nil {
@@ -1109,15 +1122,20 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 //
 // e-props-correct clause 3 (§3.3.6.1) is charged here too, FIRST, and on the
 // attribute rather than on the built component: a substitutionGroup= on a local
-// <element> is prohibited outright by the schema for schema documents
-// (use="prohibited" on xs:localElement, §3.3.2), and this producer runs no
-// meta-schema validation pass ahead of mapping, so nothing else would see it.
-// Reaching xsd.NewElementDeclaration's identical clause-3 check instead is not an
-// option — the mapping would have to build a non-empty {substitution group
-// affiliations} for a local declaration to trip it, which is exactly the state
-// the clause forbids — and simply not reading the attribute here would silently
-// ACCEPT the prohibited schema. It precedes the src-element test because it
-// depends on nothing but the attribute's presence.
+// <element> is prohibited by the schema for schema documents (use="prohibited"
+// on xs:localElement, §3.3.2), and this producer runs no meta-schema validation
+// pass ahead of mapping, so nothing else would see it. Reaching
+// xsd.NewElementDeclaration's identical clause-3 check instead is not an option —
+// the mapping would have to build a non-empty {substitution group affiliations}
+// for a local declaration to trip it, which is exactly the state the clause
+// forbids — and simply not reading the attribute here would silently ACCEPT the
+// prohibited schema. It precedes the src-element test because it depends on
+// nothing but the attribute's presence.
+//
+// The reach is the INLINE local form only, which is the only form that arrives
+// here: produceElementParticle's <element ref> branch returns before this
+// function runs, so a ref= local element carrying the prohibited attribute is
+// accepted with the attribute ignored (GAP marker on that branch).
 //
 // {disallowed substitutions} comes from the same disallowedSubstitutions mapping
 // the global path uses (STYLE T4): §3.3.2.1's row is a COMMON rule and the
@@ -1189,7 +1207,7 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 // with no type= and no inline child falls straight through to clause 4's
 // xs:anyType, which is wider than the head's type. That direction under-rejects
 // at validation, never false-rejects a valid schema. The attribute chain has no
-// clause-3 analog, so this gap is the element's alone.
+// clause-3 analog, so this gap is the element's alone. #342 owns its retirement.
 //
 // Note what is NOT in the gap since #281: substitutionGroup= IS read, and its
 // items ARE mapped into {substitution group affiliations}, by
