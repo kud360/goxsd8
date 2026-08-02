@@ -869,6 +869,14 @@ func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
+
+	typeName := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"} // §3.3.2.1 case 4
+	if hasType {
+		typeName, err = p.resolveQName(elem, typeLex)
+		if err != nil {
+			return xsd.ElementDeclaration{}, err
+		}
+	}
 	constraints, err := p.identityConstraintsOf(elem)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
@@ -886,14 +894,6 @@ func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error)
 		}
 		return xsd.NewElementDeclarationOwningType(elem.Loc(), edID, qname, ct, nil, xsd.NewGlobalScope(), vc,
 			false, constraints, affiliations, nil, false, p.disallowedSubstitutions(elem), nil)
-	}
-
-	typeName := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"} // §3.3.2.1 case 4
-	if hasType {
-		typeName, err = p.resolveQName(elem, typeLex)
-		if err != nil {
-			return xsd.ElementDeclaration{}, err
-		}
 	}
 	return xsd.NewElementDeclaration(elem.Loc(), qname, xsd.TypeDefinitionRef{Name: typeName}, nil, xsd.NewGlobalScope(), vc,
 		false, constraints, affiliations, nil, false, p.disallowedSubstitutions(elem), nil)

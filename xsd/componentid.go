@@ -58,13 +58,14 @@ package xsd
 // nondeterministic run to run, which STYLE D1 forbids outright. Rejections
 // describe the offending arm with %T instead.
 //
-// The same fact binds any future ID→component resolver — no consumer needs one
-// yet, so none is built (STYLE T5), and #438 is the nearest landing that would:
-// it must walk the anonymous complex types reached only through an
-// InlineTypeDefinition. Such a resolver must never range a map[ComponentID]… to
-// produce output or ordering, because that iteration order is address order
-// (STYLE D2). Order such output by the components' own document order, never by
-// their identities.
+// The same fact binds any future ID→component resolver — no issue owns one yet,
+// so none is built (STYLE T5): #438, the nearest landing to touch the anonymous
+// complex types reached only through an InlineTypeDefinition, walks them by
+// TRAVERSAL from the owning Element Declaration rather than by identity, so it
+// does not need one either. Such a resolver must never range a
+// map[ComponentID]… to produce output or ordering, because that iteration order
+// is address order (STYLE D2). Order such output by the components' own document
+// order, never by their identities.
 type ComponentID struct{ cell *identityCell }
 
 // identityCell is the allocation whose ADDRESS is a ComponentID's identity.
