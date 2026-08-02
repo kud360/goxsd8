@@ -429,12 +429,10 @@ func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live []i
 //     group·, so no base element particle covers a restriction wildcard.
 //
 // Both approximations here resolve towards admitting. Substitution-group
-// membership uses the OVER-approximating predicate — membership makes the
-// transition compatible, i.e. makes cos-content-act-restrict easier to satisfy,
-// so an over-broad group can only miss a rejection, the opposite polarity from
-// cos-nonambig's ·overlap·, which FIRES a constraint on membership and so takes
-// the under-approximating predicate (substitutiongroup.go). And the base's
-// wildcard is asked through Wildcard.AllowsName (cvc-wildcard-name) rather than
+// membership is not one of them: inSubstitutionGroupOf decides
+// cos-equiv-derived-ok-rec exactly (substitutiongroup.go), so this clause reads
+// the true ·substitution group· whichever way membership pushes the verdict. And
+// the base's wildcard is asked through Wildcard.AllowsName (cvc-wildcard-name) rather than
 // through allowsElementWildcardName's defined/sibling keyword exclusions, for
 // the same reason: the narrower test would shrink B and could only add
 // rejections.
@@ -466,7 +464,7 @@ func (s *Schema) positionAdmits(general, specific position) bool {
 // admitted unconditionally, without the membership walk deciding it. No producer
 // in this repo maps substitutionGroup= yet — parser/produce.go passes a nil
 // {substitution group affiliations} to every NewElementDeclaration — so
-// mayBeInSubstitutionGroupOf answers false for a member the spec puts squarely
+// inSubstitutionGroupOf answers false for a member the spec puts squarely
 // in the group, and charging that absence FALSE-REJECTS a valid schema: W3C
 // suite MS-Element elemZ027_a/_b/_e/_f and MS-Particles particlesZ008/Z028 are
 // each a base <element ref="head"/> restricted to a member of head's group. The
@@ -476,12 +474,12 @@ func (s *Schema) positionAdmits(general, specific position) bool {
 // expanded names to agree, which is the shape most content models have.
 // Accepting is fail-open, never a false reject; it is retired by the change that
 // first maps substitutionGroup= into {substitution group affiliations}, after
-// which mayBeInSubstitutionGroupOf answers exactly and this arm can go.
+// which the membership walk sees the edges it needs and this arm can go.
 func (s *Schema) elementParticleAdmits(general, specific ElementDeclaration) bool {
 	if general.Name() == specific.Name() {
 		return true
 	}
-	if s.mayBeInSubstitutionGroupOf(specific.Name(), general.Name()) {
+	if s.inSubstitutionGroupOf(specific.Name(), general.Name()) {
 		return true
 	}
 	return general.ScopeVariety() == ScopeGlobal && specific.ScopeVariety() == ScopeGlobal

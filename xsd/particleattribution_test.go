@@ -333,13 +333,13 @@ func TestUPAUnrelatedGlobalsPass(t *testing.T) {
 	}
 }
 
-// TestUPASubstitutionBlockedByProhibitedSubstitutions pins the UNDER-approximating
-// direction of certainlyInSubstitutionGroupOf: with cos-equiv-derived-ok-rec
-// clause 2.3 undecidable (some complex type in the schema carries a {prohibited
-// substitutions} member), membership is reported as false, so the constraint does
-// not fire. A false accept here is graceful; a false reject would make the schema
-// unusable.
-func TestUPASubstitutionBlockedByProhibitedSubstitutions(t *testing.T) {
+// TestUPAUnrelatedProhibitedSubstitutionsStillOverlap pins that
+// cos-equiv-derived-ok-rec clause 2.3 is decided on the ·derivation· of the
+// member's {type definition} from the head's, not on whether SOME complex type in
+// the schema carries a {prohibited substitutions} member: an unrelated blocking
+// type leaves head and member in one ·substitution group·, so the two particles
+// still ·overlap· and cos-nonambig fires.
+func TestUPAUnrelatedProhibitedSubstitutionsStillOverlap(t *testing.T) {
 	blocking, err := NewComplexType(xsderr.Loc{}, uq("Blocking"), QName{}, nil, DerivationRestriction, false,
 		nil, nil, EmptyContent{}, []DerivationMethod{DerivationExtension}, nil, nil)
 	if err != nil {
@@ -354,8 +354,36 @@ func TestUPASubstitutionBlockedByProhibitedSubstitutions(t *testing.T) {
 		b.AddElement(uGlobal(t, uq("head"), uq("T")))
 		b.AddElement(uGlobal(t, uq("member"), uq("T"), uq("head")))
 	})
+	expectRule(t, err, ruleCosNonambig)
+}
+
+// TestUPASubstitutionBlockedByClause23 is the companion: when clause 2.3 really
+// does block — the head's {type definition} prohibits extension and the member's
+// type reaches it by extension — the member is in no ·substitution group· of the
+// head, the two element particles do not ·overlap·, and the content model stands.
+func TestUPASubstitutionBlockedByClause23(t *testing.T) {
+	head, err := NewComplexType(xsderr.Loc{}, uq("Head"), QName{}, nil, DerivationRestriction, false,
+		nil, nil, EmptyContent{}, []DerivationMethod{DerivationExtension}, nil, nil)
 	if err != nil {
-		t.Fatalf("an undecidable clause 2.3 manufactured a rejection: %v", err)
+		t.Fatalf("NewComplexType: %v", err)
+	}
+	derived, err := NewComplexType(xsderr.Loc{}, uq("Derived"), uq("Head"), nil, DerivationExtension, false,
+		nil, nil, EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewComplexType: %v", err)
+	}
+	g := uGroup(t, CompositorChoice,
+		uOne(t, ElementDeclarationRef{Name: uq("head")}),
+		uOne(t, ElementDeclarationRef{Name: uq("member")}),
+	)
+	err = uSchemaWithModel(t, g, func(b *SchemaBuilder) {
+		b.AddType(head)
+		b.AddType(derived)
+		b.AddElement(uGlobal(t, uq("head"), uq("Head")))
+		b.AddElement(uGlobal(t, uq("member"), uq("Derived"), uq("head")))
+	})
+	if err != nil {
+		t.Fatalf("a clause 2.3 non-member manufactured an ·overlap·: %v", err)
 	}
 }
 

@@ -9,11 +9,12 @@ package xsd
 // resolve.go uses for every graph-consulting operation. Being a *Schema method
 // also makes it unreachable before SchemaBuilder.Finalize, which is what
 // licenses the walks below to carry NO cycle guard: Finalize has already
-// rejected a circular <group ref> graph (mg-props-correct clause 2) and a
-// circular {substitution group affiliations} graph (e-props-correct clause 5),
-// so both graphs these walks follow are acyclic by construction on any *Schema
-// that exists (PRINCIPLES 5; xsd/doc.go's "no visited set beyond the
-// path-scoped guard").
+// rejected a circular <group ref> graph (mg-props-correct clause 2), a circular
+// {substitution group affiliations} graph (e-props-correct clause 5) and a
+// circular complex-type base chain (ct-props-correct clause 3 — reached through
+// substitutiongroup.go's clause 2.3 walk), so every graph these walks follow is
+// acyclic by construction on any *Schema that exists (PRINCIPLES 5; xsd/doc.go's
+// "no visited set beyond the path-scoped guard").
 //
 // Nothing here is memoized. The sibling name set is per-(complex type,
 // occurrence), not per-Wildcard-component: the same Wildcard value can be
@@ -194,7 +195,7 @@ func (s *Schema) topLevelDeclarationMatchesName(declared, name QName) bool {
 	if declared == name {
 		return true
 	}
-	return s.mayBeInSubstitutionGroupOf(name, declared)
+	return s.inSubstitutionGroupOf(name, declared)
 }
 
 // inlineDeclarationMatchesName is topLevelDeclarationMatchesName for a
@@ -211,5 +212,5 @@ func (s *Schema) inlineDeclarationMatchesName(d ElementDeclaration, name QName) 
 	if d.ScopeVariety() != ScopeGlobal {
 		return false
 	}
-	return s.mayBeInSubstitutionGroupOf(name, d.Name())
+	return s.inSubstitutionGroupOf(name, d.Name())
 }
