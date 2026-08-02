@@ -23,6 +23,11 @@
 // Flags common to all subcommands: -q (quiet), -v (debug logging via
 // slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec).
 //
+// Implemented today: with no arguments, or with -h, -help or --help in any
+// argument position, goxsd8 prints this usage to stdout and exits 0. Every
+// other invocation reports that the subcommands are not yet implemented on
+// stderr and exits 2.
+//
 // The CLI is a thin shell over the library — every capability here is
 // reachable through the public packages, and the README documents both
 // routes. Error output is stable and line-oriented for scripting.
