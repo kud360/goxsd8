@@ -20,10 +20,20 @@ func simpleTypeNamed(t *testing.T, name xsd.QName) *xsd.SimpleType {
 	return st
 }
 
-// complexTypeNamed builds a named empty-content ComplexType for schema
-// symbol-table tests.
+// complexTypeNamed builds an empty-content ComplexType for schema symbol-table
+// tests. An absent name selects NewAnonymousComplexType, whose §3.4.1 tableau
+// makes {context} Required; the tests that pass one care only that the {name}
+// is absent, so any freshly minted containing-declaration identity will do.
 func complexTypeNamed(t *testing.T, name xsd.QName) xsd.ComplexType {
 	t.Helper()
+	if name.Local == "" {
+		ct, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, xsd.ElementDeclarationContext{Component: xsd.NewComponentID()},
+			xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("NewAnonymousComplexType: %v", err)
+		}
+		return ct
+	}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%v): %v", name, err)

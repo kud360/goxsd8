@@ -101,8 +101,15 @@ type TypeDefinitionRef struct{ Name QName }
 // anonymous types collide. It is reachable only through the owning
 // declaration's TypeDefinition accessor.
 //
-// The wrapped type's {context} property (§3.16.1) is NOT populated here; that
-// deferral is tracked as #206.
+// This slot does not populate the wrapped type's own {context} property, and it
+// is not the place to: {context} is the BACK-pointer of this same edge, and the
+// caller supplies it. The caller mints one xsd.ComponentID for the declaration
+// before either component exists and threads it into both — into the wrapped
+// type through NewAnonymousComplexType's context argument, and (from #340) into
+// the declaration's own identity — so nothing has to be mutated after
+// construction. For a wrapped COMPLEX type that is §3.4.1 ctd-context; see
+// ComplexTypeContext. A wrapped SIMPLE type's own {context} (§3.16.1
+// std-context) is a separate property and is still unmodeled here.
 //
 // Definition is always present and always ANONYMOUS (its Name() is the zero
 // QName): a named type is reachable by name and so is always the

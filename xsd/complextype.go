@@ -16,6 +16,12 @@ import "github.com/kud360/goxsd8/xsderr"
 //   - {content type} is present (a non-nil ContentType sum variant); a
 //     SimpleContent carries a non-nil {simple type definition}; an
 //     ElementContent carries a {particle} with a present {term}.
+//   - {name} and {context} are a strict XOR ("{context} Required if {name} is
+//     ·absent·, otherwise must be ·absent·"). This one is enforced by the
+//     CONSTRUCTION-PATH PARTITION rather than by a check — NewComplexType takes
+//     a name and no context, NewAnonymousComplexType the reverse — so the only
+//     residue is each entry point rejecting its own half's absence (an empty
+//     {name} local part, a nil {context}). See ComplexType's doc.
 //
 // The substantive, cross-component clauses are NOT enforced here — this
 // constructor is deliberately not the full property-correctness check:
@@ -192,13 +198,130 @@ func (o OpenContent) Wildcard() Wildcard {
 	return o.wildcard
 }
 
+// ComplexTypeContext is the sealed sum of the two component kinds an anonymous
+// complex type definition's {context} property may name (Structures §3.4.1,
+// id="ctd-context": "Either an Element Declaration or a Complex Type
+// Definition"). The unexported complexTypeContext marker method seals it (STYLE
+// T2/T7, the PRINCIPLES 7 sealed-sum exception), mirroring this file's
+// ContentType and elementdeclaration.go's ElementScopeParent.
+//
+// Each arm carries a ComponentID, not a QName: §3.4.2.1 dcl.ctd.common makes
+// the target the nearest ancestor <element>, frequently a LOCAL element
+// declaration, which is not name-unique — see ComponentID for why a name cannot
+// identify it. ID is promoted into the sum so a consumer reads the identity
+// without a type switch, exactly as ContentType promotes Variety and
+// TypeDefinition promotes Name and Loc. The arms ALSO keep an exported field,
+// for the literal-construction symmetry ElementScopeParent's variants have; Go
+// forbids a field and a method sharing a name, which is the only reason the
+// field is Component and the method is ID.
+//
+// This sum is deliberately NOT shared with ElementScopeParent, the {scope}.
+// {parent} sum: §J Summary of Changes makes {context} (on type definitions) and
+// {scope} (on declarations) separate, differently-shaped properties — §3.3.1
+// sc_e types {parent} as Complex Type Definition | Model Group Definition,
+// while §3.4.1 types {context} as Element Declaration | Complex Type
+// Definition. Merging them would make "a complex type contexted in a model
+// group definition" representable. Separate sums, one shared primitive.
+//
+// GAP(xsd): no producer populates this property yet. The parser builds no
+// anonymous complex type at all today (parser's localDeclaredType is the sole
+// InlineTypeDefinition producer and the anonymous type it builds is always a
+// SIMPLE one), so the ElementDeclarationContext arm — the only arm any mapping
+// rule reaches — is exercised by hand-written construction alone until #340
+// lands the inline anonymous <complexType> producer. Only a caller assembling a
+// schema programmatically reaches it before then, the same standing this file's
+// AttributeUses and AttributeWildcard already document.
+type ComplexTypeContext interface {
+	complexTypeContext()
+	// ID returns the identity of the component this {context} names. It is
+	// present (non-zero) on any arm NewAnonymousComplexType accepted.
+	ID() ComponentID
+}
+
+// ElementDeclarationContext is the {context} arm naming the containing Element
+// Declaration (§3.4.2.1 dcl.ctd.common: "the Element Declaration corresponding
+// to the nearest <element> information item among the ancestor element
+// information items"). It is the ONLY arm any mapping rule in the spec
+// produces.
+//
+// Component is that declaration's minted identity; it is a PRESENT identity,
+// never the zero ComponentID — NewAnonymousComplexType rejects an unminted one.
+// The field is read-only by convention; do not mutate it after construction.
+//
+// Note for #340: with no own-identity field on ElementDeclaration, an
+// InlineTypeDefinition may wrap an anonymous ComplexType whose {context} names
+// some OTHER component and nothing here can detect it. #340 — which adds the
+// declaration's own minted identity along with the producer that mints it — must
+// make NewElementDeclaration reject an inline anonymous complex type whose
+// ElementDeclarationContext identity differs from the declaration's own. That
+// check is what finally makes a mis-pointing {context} unrepresentable; it is
+// unbuildable until an ElementDeclaration carries an identity to compare against.
+type ElementDeclarationContext struct{ Component ComponentID }
+
+// ComplexTypeDefinitionContext is the {context} arm naming a containing Complex
+// Type Definition. §3.4.1's tableau declares it, and NO mapping rule in
+// Structures reaches it: §3.4.2.1 dcl.ctd.common has exactly one case, which
+// yields an Element Declaration, and the §3.4.1 <complexType> content model has
+// no slot for a nested unnamed <complexType> child. That is a spec-text
+// asymmetry, not an implementation gap — the arm exists so the §3.4.1 value
+// space stays whole for ct-props-correct (§3.4.6.1) clause 1 bookkeeping and so
+// a caller assembling a schema programmatically is not rejected for building a
+// legal component state. Its sibling std-context (§3.16.1) is a four-member sum
+// with every arm reachable, so an unreachable arm here is shape, not an edge
+// case. It carries no GAP marker because there is nothing to complete: the
+// absence is permanent and correct.
+//
+// Component is the containing definition's minted identity, present under the
+// same rule as ElementDeclarationContext's. The field is read-only by
+// convention; do not mutate it after construction.
+type ComplexTypeDefinitionContext struct{ Component ComponentID }
+
+// complexTypeContext marks ElementDeclarationContext as a ComplexTypeContext
+// (§3.4.1 ctd-context); see the ComplexTypeContext doc.
+func (ElementDeclarationContext) complexTypeContext() {}
+
+// complexTypeContext marks ComplexTypeDefinitionContext as a ComplexTypeContext
+// (§3.4.1 ctd-context); see the ComplexTypeContext doc.
+func (ComplexTypeDefinitionContext) complexTypeContext() {}
+
+// ID returns the identity of the containing Element Declaration.
+func (e ElementDeclarationContext) ID() ComponentID { return e.Component }
+
+// ID returns the identity of the containing Complex Type Definition.
+func (c ComplexTypeDefinitionContext) ID() ComponentID { return c.Component }
+
+// checkComplexTypeContext rejects a {context} arm carrying the zero (unminted)
+// ComponentID, charged to xsderr.RuleComponentInvariant rather than to
+// ct-props-correct: the tableau's own Required-ness is what the nil-context
+// rejection in NewAnonymousComplexType cites, whereas a ComponentID is THIS
+// package's invented representation, so a malformed one is a representation
+// invariant we own — the footing checkTypeDefinitionOrRef already stands on.
+//
+// The switch is exhaustive over the sealed sum; the default arm asserts the
+// invariant and is unreachable for any value an outside package can produce,
+// since complexTypeContext is unexported (mirroring elementScopeParentName).
+// A nil context is caller-checked before this point, so it is not handled here.
+func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
+	switch context.(type) {
+	case ElementDeclarationContext, ComplexTypeDefinitionContext:
+		if context.ID() == (ComponentID{}) {
+			return xsderr.New(xsderr.RuleComponentInvariant, loc,
+				"anonymous complex type definition {context} is a %T carrying an unminted identity, but this representation identifies the containing component by identity token; mint one with NewComponentID", context)
+		}
+		return nil
+	default:
+		panic("xsd: checkComplexTypeContext: non-exhaustive ComplexTypeContext switch")
+	}
+}
+
 // ComplexType is the Complex Type Definition component (Structures §3.4.1,
 // id="Complex_Type_Definition_details"): a kind of Type Definition with
 // {annotations}, {name} (bundled with {target namespace} as an xsd.QName per
 // this package's "Names are expanded QNames" convention — doc.go; the zero
-// QName is an anonymous complex type), {base type definition}, {final},
-// {derivation method}, {abstract}, {attribute uses}, {attribute wildcard}
-// (Optional), {content type}, {prohibited substitutions}, and {assertions}.
+// QName is an anonymous complex type), {context}, {base type definition},
+// {final}, {derivation method}, {abstract}, {attribute uses}, {attribute
+// wildcard} (Optional), {content type}, {prohibited substitutions}, and
+// {assertions}.
 //
 // Like the other §3 component shapes in this package, ComplexType is a
 // STRUCTURAL holder built before resolution. {base type definition} is carried
@@ -236,27 +359,52 @@ func (o OpenContent) Wildcard() Wildcard {
 // about ONE type's own source declaration, consulted once at that type's own
 // fold step, and is never walked up a base chain.
 //
-// {context} (§3.4.1 ctd-context — the component an anonymous type appears in) is
-// entirely UNMODELED, tracked as #301: the containing declaration/type that would
-// be the {context} is not wired to this component yet, so an anonymous
-// ComplexType is structurally incomplete in that one respect. The gap is named
-// here rather than buried. It did NOT ride along with ElementDeclaration's
-// {scope}.{parent} (now wired, see elementdeclaration.go's Scope): {parent}'s two
-// target kinds are always named, whereas §3.4.2.1 dcl.ctd.common makes {context}
-// the nearest ancestor <element>, frequently a LOCAL element declaration, which
-// is not name-unique — so it needs a component handle, not a QName reference.
+// {context} (§3.4.1 ctd-context) is the component an ANONYMOUS type appears in,
+// and the §3.4.1 tableau makes it and {name} a strict XOR: "Required if {name}
+// is ·absent·, otherwise must be ·absent·". It is carried as a
+// ComplexTypeContext — a discriminated reference to the containing Element
+// Declaration or Complex Type Definition by minted ComponentID, not by name,
+// because §3.4.2.1 dcl.ctd.common makes the target the nearest ancestor
+// <element>, frequently a LOCAL element declaration, which is not name-unique.
+// See ComponentID for the identity scheme and ComplexTypeContext for the sum and
+// its producer gap; see Context for the accessor.
+//
+// The XOR needs no runtime check, because it is enforced by a CONSTRUCTION-PATH
+// PARTITION rather than by re-validating two independently optional fields:
+// NewComplexType builds the named variety and takes no context, and
+// NewAnonymousComplexType builds the anonymous one and takes no name. It is the
+// same move NewGlobalScope/NewLocalScope make for {scope}'s tableau
+// correlation, and it banks the same payoff: a named type carrying a context,
+// and an anonymous one missing one, are both unrepresentable.
+//
+// loc and {context} are two different NON-property facts about a component and
+// are easy to conflate: loc is PROVENANCE, where the declaring element sits in
+// a schema document, and two distinct components may share one; a ComponentID
+// is IDENTITY, minted, opaque, and deliberately not derived from position. See
+// Loc, whose meaning this adds nothing to.
 //
 // Ratchet impact: unchanged. This is a leaf shape with no parser producer; the
-// schema conformance lane moves only when the producer (#176) wires it in.
+// schema conformance lane moves only when the producer (#176, and #340 for the
+// {context} slot) wires it in.
 //
-// Construct only through NewComplexType, which rejects the tableau-shape states
-// ct-props-correct (§3.4.6.1) clause 1 forbids so they are unrepresentable
-// (STYLE T1). It is NOT the full property-correctness check (see
-// ruleCTPropsCorrect's doc for exactly which clauses are deferred). ComplexType
-// is immutable after construction.
+// Construct only through NewComplexType (named) or NewAnonymousComplexType
+// (anonymous), which reject the tableau-shape states ct-props-correct (§3.4.6.1)
+// clause 1 forbids so they are unrepresentable (STYLE T1). Neither is the full
+// property-correctness check (see ruleCTPropsCorrect's doc for exactly which
+// clauses are deferred). ComplexType is immutable after construction, and
+// remains so with a {context}: the cell a ComponentID points at is opaque and
+// holds no mutable state, so copying a ComplexType is still a complete copy —
+// the copies share one {context} identity, which is the point.
 type ComplexType struct {
-	loc                    xsderr.Loc // source position; provenance, not a §3.4.1 property
-	name                   QName
+	loc  xsderr.Loc // source position; provenance, not a §3.4.1 property
+	name QName
+	// context is the {context} property: nil ⇔ absent, which the §3.4.1
+	// tableau makes equivalent to "name is present". Presence is the nil
+	// check, never a companion bool (STYLE D3). The name/context XOR holds
+	// because only NewComplexType and NewAnonymousComplexType write this
+	// pair; newComplexType itself can express both-present and
+	// neither-present and does not check.
+	context                ComplexTypeContext
 	baseTypeDefinitionName QName
 	derivationMethod       DerivationMethod
 	final                  []DerivationMethod
@@ -274,10 +422,18 @@ type ComplexType struct {
 	annotations              []Annotation
 }
 
-// NewComplexType builds a ComplexType, rejecting the tableau-shape states
-// Complex Type Definition Properties Correct (§3.4.6.1, ct-props-correct)
-// clause 1 forbids:
+// NewComplexType builds a NAMED ComplexType — one whose {context} is ·absent·
+// per the §3.4.1 tableau — rejecting the tableau-shape states Complex Type
+// Definition Properties Correct (§3.4.6.1, ct-props-correct) clause 1 forbids:
 //
+//   - name must be present: its local part may not be empty. §3.4.1 types
+//     {name} as "an xs:NCName, or ·absent·", so an empty local part is a third
+//     state with no tableau meaning, and an ABSENT {name} makes {context}
+//     Required — which this entry point cannot supply. Build an anonymous
+//     complex type through NewAnonymousComplexType instead. (Testing the local
+//     part, not name == QName{}, is deliberate: the latter would admit
+//     QName{Space: "urn:x", Local: ""} as a named type. Same idiom as
+//     NewLocalScope's parent-name check.)
 //   - derivationMethod must be one of DerivationExtension or DerivationRestriction
 //     (the §3.4.1 {derivation method} value space).
 //   - every final member and every prohibitedSubstitutions member must be
@@ -323,6 +479,58 @@ type ComplexType struct {
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
+	if name.Local == "" {
+		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
+			"complex type definition has an absent {name}, but the §3.4.1 tableau makes {context} Required when {name} is absent; build an anonymous complex type through NewAnonymousComplexType (ct-props-correct clause 1)")
+	}
+	return newComplexType(loc, name, nil, baseTypeDefinitionName, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+}
+
+// NewAnonymousComplexType builds an ANONYMOUS ComplexType — one whose {name} is
+// ·absent· and whose {context} the §3.4.1 tableau therefore makes Required. Its
+// parameter list is NewComplexType's with the name argument replaced, in place,
+// by the context; every other parameter, check, copy, and rejection is
+// identical, because both entry points run one shared core.
+//
+// It adds two rejections of its own:
+//
+//   - a nil context: {context} is Required when {name} is absent (§3.4.1's
+//     tableau), charged to ct-props-correct clause 1 — the tableau's own
+//     Required-ness is a spec fact about the property.
+//   - a context arm carrying an unminted (zero) ComponentID, charged to
+//     xsderr.RuleComponentInvariant instead: a ComponentID is this package's
+//     representation, not a spec-visible name, so a malformed one is an
+//     invariant we own. See checkComplexTypeContext.
+//
+// There is no third check for "named AND contexted": that state does not
+// type-check at this layer, because this constructor accepts no name and
+// NewComplexType accepts no context.
+//
+// GAP(xsd): no parser calls this yet — the inline anonymous <complexType>
+// producer is #340. Until then the only callers are programmatic ones; see
+// ComplexTypeContext.
+func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
+	if context == nil {
+		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
+			"anonymous complex type definition has an absent {context}, but the §3.4.1 tableau requires it to be present when {name} is absent (ct-props-correct clause 1)")
+	}
+	if err := checkComplexTypeContext(loc, context); err != nil {
+		return ComplexType{}, err
+	}
+	return newComplexType(loc, QName{}, context, baseTypeDefinitionName, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+}
+
+// newComplexType is the shared core of NewComplexType and
+// NewAnonymousComplexType: every check and copy that does not concern the
+// {name}/{context} pair lives here exactly once (STYLE T4).
+//
+// PRECONDITION, enforced by its TWO CALLERS and not by itself: exactly one of
+// name and context is present, per the §3.4.1 tableau's XOR. This layer can
+// express both-present and neither-present and does not reject either; the
+// partition's guarantee comes from the exported entry points, each of which
+// accepts only one half of the pair. Any third caller added here must
+// re-establish the XOR itself.
+func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
 	switch derivationMethod {
 	case DerivationExtension, DerivationRestriction:
 	default:
@@ -354,6 +562,7 @@ func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, fi
 	c := ComplexType{
 		loc:                    loc,
 		name:                   name,
+		context:                context,
 		baseTypeDefinitionName: baseTypeDefinitionName,
 		derivationMethod:       derivationMethod,
 		abstract:               abstract,
@@ -409,9 +618,26 @@ func checkContentType(loc xsderr.Loc, contentType ContentType) error {
 }
 
 // Name returns the {name} property, bundled with {target namespace} as a QName.
-// The zero QName denotes an anonymous complex type (§3.4.1).
+// The zero QName denotes an anonymous complex type (§3.4.1) — which by the same
+// tableau row carries a Required {context} naming the component it appears in;
+// see Context. A value built through NewComplexType always has a present name
+// and an absent context, and one built through NewAnonymousComplexType always
+// has the reverse.
 func (c ComplexType) Name() QName {
 	return c.name
+}
+
+// Context returns the {context} property (§3.4.1 ctd-context) as a
+// discriminated identity reference to the containing Element Declaration or
+// Complex Type Definition; the second result is false when it is absent (a
+// NAMED type), in which case the first result is nil.
+//
+// This is NOT the resolved container component: see ComplexTypeContext for why
+// the reference is carried by identity token rather than by name, and
+// ComponentID for how a consumer compares one (with ==, never
+// reflect.DeepEqual).
+func (c ComplexType) Context() (ComplexTypeContext, bool) {
+	return c.context, c.context != nil
 }
 
 // Loc reports the source position of the declaring element — provenance, not a

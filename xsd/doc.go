@@ -37,6 +37,17 @@
 // The zero value means absent/anonymous; String() renders Clark notation
 // ("{ns}local").
 //
+// A name identifies a component that HAS one. An anonymous component has
+// none, so where one component must point at another that may be
+// anonymous — or at a LOCAL declaration, which is not name-unique — the
+// reference carries a ComponentID instead: an opaque identity minted by
+// the producer with NewComponentID before either endpoint is built, and
+// threaded into both. It is compared with ==, never rendered (its
+// underlying value is an address, so any textual or sorted form would be
+// nondeterministic, D1/D2), and never derived from position — Loc is
+// provenance, not identity. ComplexType's {context} (§3.4.1) is the first
+// slot to use it.
+//
 // The eight component kinds a schema's §3.17.1 properties hold — element
 // and attribute declarations, complex and simple type definitions, model
 // group and attribute group definitions, notations, and identity
