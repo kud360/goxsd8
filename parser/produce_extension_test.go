@@ -630,3 +630,80 @@ func TestProduceExtensionBaseMappedExactlyOnce(t *testing.T) {
 		t.Fatalf("Produce: %v — the base was mapped twice, duplicating its identity constraint", err)
 	}
 }
+
+// TestProhibitedAttributeNotInheritedPastRestriction is the end-to-end §3.4.2.4
+// clause 3.2.2 repro, driven through the real producer rather than a hand-built
+// component set: A declares @x, B restricts A with <attribute ref="x"
+// use="prohibited"/>, and E extends B declaring its own @x.
+//
+// The schema is VALID. B.{attribute uses} is empty — clause 3.2.2 blocks the
+// inherited x, and the Note confirms the prohibited <attribute> corresponds to no
+// component of B either — so clause 3.1 gives E B's empty set and E's own @x is
+// the single member named x. Leaving clause 3.2.2 unapplied leaves B carrying A's
+// x, E then holds two members named x, and ct-props-correct clause 4 rejects a
+// duplicate the source never wrote (#401).
+//
+// The prohibition-free row is the control: with B inheriting @x silently, E's
+// re-declaration IS the clause 4 collision and must still be charged, so the
+// first row cannot be bought by weakening the uniqueness check.
+func TestProhibitedAttributeNotInheritedPastRestriction(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		bProhibits string
+		wantRule   xsderr.Rule
+	}{
+		{"B prohibits @x, so E may declare its own", `<xs:attribute ref="x" use="prohibited"/>`, ""},
+		{"B inherits @x silently, so E may not re-declare it", ``, xsderr.Rule("ct-props-correct")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `<xs:attribute name="x" type="xs:string"/>` +
+				`<xs:complexType name="A"><xs:sequence/><xs:attribute ref="x"/></xs:complexType>` +
+				`<xs:complexType name="B"><xs:complexContent><xs:restriction base="A">` +
+				`<xs:sequence/>` + tc.bProhibits +
+				`</xs:restriction></xs:complexContent></xs:complexType>` +
+				`<xs:complexType name="E"><xs:complexContent><xs:extension base="B">` +
+				`<xs:sequence/><xs:attribute ref="x"/>` +
+				`</xs:extension></xs:complexContent></xs:complexType>`
+			s, err := produce(t, wrap("", body))
+			if tc.wantRule != "" {
+				assertRule(t, err, tc.wantRule)
+				return
+			}
+			if err != nil {
+				t.Fatalf("an extension re-declaring a name its restriction ancestor prohibited was rejected: %v", err)
+			}
+			if got := attributeUseLocals(t, s, xsd.QName{Local: "B"}); len(got) != 0 {
+				t.Errorf("B.{attribute uses} = %v, want empty (clause 3.2.2 blocks the inherited x)", got)
+			}
+			if got := attributeUseLocals(t, s, xsd.QName{Local: "E"}); !reflect.DeepEqual(got, []string{"x"}) {
+				t.Errorf("E.{attribute uses} = %v, want exactly [x]", got)
+			}
+		})
+	}
+}
+
+// attributeUseLocals is the local part of each {attribute uses} member's expanded
+// name, in the property's own order.
+func attributeUseLocals(t *testing.T, s *xsd.Schema, name xsd.QName) []string {
+	t.Helper()
+	td, ok := s.Type(name)
+	if !ok {
+		t.Fatalf("complex type %s not found", name)
+	}
+	ct, ok := td.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("type %s is not a complex type (%T)", name, td)
+	}
+	var names []string
+	for _, u := range ct.AttributeUses() {
+		switch d := u.AttributeDeclaration().(type) {
+		case xsd.LocalAttributeDeclaration:
+			names = append(names, d.Declaration.Name().Local)
+		case xsd.AttributeDeclarationRef:
+			names = append(names, d.Name.Local)
+		default:
+			t.Fatalf("unexpected {attribute declaration} shape %T", d)
+		}
+	}
+	return names
+}

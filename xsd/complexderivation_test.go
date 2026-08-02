@@ -23,7 +23,7 @@ func dAnyType(t *testing.T) ComplexType {
 	inner := uParticle(t, uUnbounded(t, 0), ResolvedTerm{Term: w})
 	seq := uGroup(t, CompositorSequence, inner)
 	ct, err := NewComplexType(xsderr.Loc{}, anyTypeName, anyTypeName, nil, DerivationRestriction, false,
-		nil, &w, ElementContent{Mixed: true, Particle: uOne(t, ResolvedTerm{Term: seq})}, nil, nil, nil)
+		nil, nil, &w, ElementContent{Mixed: true, Particle: uOne(t, ResolvedTerm{Term: seq})}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(xs:anyType): %v", err)
 	}
@@ -35,7 +35,7 @@ func dAnyType(t *testing.T) ComplexType {
 func dType(t *testing.T, name, base QName, content ContentType, uses []AttributeUse, wildcard *Wildcard) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, nil, DerivationRestriction, false,
-		uses, wildcard, content, nil, nil, nil)
+		uses, nil, wildcard, content, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -47,7 +47,7 @@ func dType(t *testing.T, name, base QName, content ContentType, uses []Attribute
 func dFinal(t *testing.T, name, base QName, final []DerivationMethod) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, final, DerivationRestriction, false,
-		nil, nil, EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}

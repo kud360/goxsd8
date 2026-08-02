@@ -97,6 +97,13 @@ func (s *Schema) checkAttributeUseValueConstraints() error {
 // then descends c's {content type} particle tree, where a nested element
 // declaration may carry an inline complex type with attribute uses of its own.
 // The descent mirrors resolveComplexType's.
+//
+// Since #401 materialised §3.4.2.4 clause 3, an INHERITED use is a member here
+// too, so it is re-checked at every type that inherits it and charged against
+// THAT type's Loc rather than the ancestor's — deliberate, because clause 3 makes
+// the use genuinely a property of the derived type and that is the position a
+// reader is looking at. The extra passes cannot change the verdict: the walk is
+// over a set, and a use that passed once passes again.
 func (s *Schema) checkComplexTypeAttributeUses(c ComplexType) error {
 	for _, u := range c.AttributeUses() {
 		if err := s.checkAttributeUseValueConstraint(u, c.Loc(), complexTypeOwner(c)); err != nil {

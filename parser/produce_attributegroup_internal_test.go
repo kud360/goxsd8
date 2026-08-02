@@ -61,7 +61,7 @@ func TestAttributeGroupComponentAndInlineFoldAgree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildAttributeGroup: %v", err)
 	}
-	inlined, _, err := rootp.produceAttributeUses(childElement(rootp.schemaElem, xsd.XMLSchemaNS, "complexType"))
+	inlined, _, _, err := rootp.produceAttributeUses(childElement(rootp.schemaElem, xsd.XMLSchemaNS, "complexType"))
 	if err != nil {
 		t.Fatalf("produceAttributeUses: %v", err)
 	}

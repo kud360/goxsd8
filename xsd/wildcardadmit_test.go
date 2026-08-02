@@ -45,7 +45,7 @@ func wGroup(t *testing.T, compositor Compositor, particles ...Particle) ModelGro
 func wCT(t *testing.T, name QName, term TermOrRef) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, QName{}, nil, DerivationRestriction, false,
-		nil, nil, ElementContent{Particle: wParticle(t, term)}, nil, nil, nil)
+		nil, nil, nil, ElementContent{Particle: wParticle(t, term)}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -334,7 +334,7 @@ func TestSiblingIsNotMemoizedPerWildcard(t *testing.T) {
 func TestSiblingIgnoresNonElementContent(t *testing.T) {
 	w := wWildcard(t, DisallowedNameSibling)
 	empty, err := NewComplexType(xsderr.Loc{}, wq("empty"), QName{}, nil, DerivationRestriction, false,
-		nil, nil, EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}

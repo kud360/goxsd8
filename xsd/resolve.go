@@ -47,13 +47,16 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     and its <element ref>s and substitution groups followed — Unique Particle
 //     Attribution (cos-nonambig, particleattribution.go) and Element Declarations
 //     Consistent (cos-element-consistent, elementconsistent.go).
-//   - Phase D (complex-type derivation validity): reject the derivation-relative
-//     constraints that need the resolved {base type definition} — the
-//     ct-props-correct (§3.4.6.1) clauses 2 and 4,
-//     derivation-ok-restriction (§3.4.6.3) for every restriction-derived complex
-//     type, and cos-ct-extends (§3.4.6.2) for every extension-derived one
-//     (complexderivation.go, complexextension.go, defaultbinding.go,
-//     effectivetotalrange.go).
+//   - Phase D (complex-type derivation validity), in two steps. It first
+//     MATERIALISES {attribute uses}: §3.4.2.4 clause 3's fold of the {base type
+//     definition}'s uses into every complex type's own is the one mapping rule a
+//     producer cannot finish, because it needs the resolved base
+//     (attributeusefold.go, #401). It then rejects the derivation-relative
+//     constraints that need that resolved base — the ct-props-correct (§3.4.6.1)
+//     clauses 2 and 4, derivation-ok-restriction (§3.4.6.3) for every
+//     restriction-derived complex type, and cos-ct-extends (§3.4.6.2) for every
+//     extension-derived one (complexderivation.go, complexextension.go,
+//     defaultbinding.go, effectivetotalrange.go).
 //   - Phase E (attribute-use value constraints): reject an Attribute Use whose
 //     own {value constraint} contradicts its resolved {attribute declaration}'s
 //     fixed one — au-props-correct (§3.5.6) clause 3, both the variety half and
@@ -85,11 +88,14 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // component-local failure of the five, so reporting it after the structural
 // phases keeps the first reported failure the most structural one.
 //
-// resolve stores nothing: it returns no value and mutates no component. A
-// consumer that later wants the component behind a reference obtains it by a
-// read-time index lookup (schema.Type/Element/Attribute), never from a resolved
-// pointer this pass produced — that pointer would be state derivable from the
-// QName plus the index (STYLE D3).
+// resolve stores no RESOLUTION result: a consumer that later wants the component
+// behind a reference obtains it by a read-time index lookup
+// (schema.Type/Element/Attribute), never from a resolved pointer this pass
+// produced — that pointer would be state derivable from the QName plus the index
+// (STYLE D3). Its one mutation is Phase D's {attribute uses} fold, which is a
+// mapping rule finished rather than a reference cached: it overwrites a property
+// with the value §3.4.2.4 defines, leaving one encoding of it and not two (see
+// foldAttributeUses).
 //
 // An absent reference is skipped, not treated as dangling: absence — a zero
 // QName in a bare-QName slot, a nil TypeDefinitionOrRef in a {type definition}
@@ -135,6 +141,7 @@ func (s *Schema) resolve() error {
 	if err := s.checkElementDeclarationsConsistent(); err != nil {
 		return err
 	}
+	s.foldAttributeUses()
 	if err := s.checkComplexDerivations(); err != nil {
 		return err
 	}

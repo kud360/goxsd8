@@ -136,11 +136,18 @@ func (s *Schema) checkSimpleBaseIsExtension(c ComplexType) error {
 // FIRST duplicate by position is the one reported and the map never determines
 // the verdict (STYLE D2/D1).
 //
-// GAP(xsd): the set walked is the type's OWN {attribute uses}. §3.4.2.4 clause 3
-// additionally folds the base type's uses into a restriction's {attribute uses},
-// a fold no producer in this repo performs yet, so a collision between a local
-// use and an inherited one is not seen here. Missing a rejection is FAIL-OPEN
-// and never a false reject (#265).
+// The set walked is the MATERIALISED one — the type's own uses with the base's
+// folded in (§3.4.2.4 clause 3, attributeusefold.go) — so a collision between a
+// local use and an INHERITED one is charged here, which is the whole substance
+// this clause has. Clauses 3.2.1 and 3.2.2 remove the collision for a restriction,
+// so what reaches this check is clause 3.1's: an extension that re-declares a name
+// its base already carries, identically or not. An extension may add attributes;
+// it may not restate the base's.
+//
+// Clause 3.2.2 is load-bearing for this check, not decoration. A name a
+// restriction B prohibits must leave B's set entirely; if it lingered, an
+// extension of B declaring that name itself would collide with it and be rejected
+// here for a duplicate its source never wrote (#401).
 func checkAttributeUseNamesUnique(c ComplexType) error {
 	seen := map[QName]bool{}
 	for _, u := range c.attributeUses {
@@ -344,13 +351,14 @@ func restrictionVarietyPairOK(tct, bct ContentType) bool {
 // The uses are walked in document order, so the first reported failure is
 // deterministic (STYLE D2).
 //
-// What B admits is asked of attributeDefaultBinding, which reads B.{attribute
-// uses} as §3.4.2.4 clause 3 defines it — the base chain folded in, not just the
-// uses the producer mapped onto B itself (foldedAttributeUse, defaultbinding.go).
-// That fold is load-bearing in the REJECT direction and is NOT a gap: in a chain
-// A(@x) ← B(inheriting @x, redeclaring nothing) ← C(re-declaring @x), x is in
+// Both quantifications range over the MATERIALISED sets (§3.4.2.4 clause 3,
+// attributeusefold.go), which is load-bearing in BOTH directions. In the reject
+// direction the fold on B is what keeps a valid schema valid: in a chain
+// A(@x) ← B(inheriting @x, re-declaring nothing) ← C(re-declaring @x), x is in
 // B.{attribute uses} by inheritance, and charging C for it would be a FALSE
-// REJECT of a valid schema.
+// REJECT. In the charge direction the fold on B is what makes
+// checkRestrictionRequiredAttributes see a required attribute T inherits from
+// higher up the chain rather than only the ones B declares itself.
 //
 // GAP(xsd): the half of clause 3 that quantifies over the names admitted only by
 // T's {attribute wildcard} is NOT decided. Comparing T's {attribute
@@ -380,25 +388,30 @@ func (s *Schema) checkRestrictionAttributes(t, b ComplexType) error {
 // attribute set that satisfies clause 3 with respect to T by omitting it fails
 // with respect to B.
 //
-// GAP(xsd): a required base use with NO same-named use in T at all is skipped
-// rather than charged. The lookup is findAttributeUse — T's OWN uses, NOT
-// foldedAttributeUse — deliberately: §3.4.2.4 clause 3.2 folds the base's uses
-// into a restriction's {attribute uses}, so a name missing from T's own uses is
-// one T inherits, still required, and charging it would be a FALSE REJECT. The
-// one shape that would deserve charging is clause 3.2.2's <attribute
-// use="prohibited">, which removes the inherited use — but it corresponds to no
-// component at all and so leaves no trace to test. Skipping is fail-open (#265).
-// What is charged is the unambiguous case: T declares the name itself and
-// relaxes it to optional, which §3.4.2.4 clause 3.2.1 makes T's own use,
-// inherited nothing.
+// Both sides are the MATERIALISED {attribute uses} (§3.4.2.4 clause 3), so the
+// quantification is exact rather than an under-approximation. What the fold buys
+// is reach on the B side: a name B holds by inheritance from higher up the chain
+// is now a member of B.{attribute uses} and is compared, where before only the
+// uses the producer mapped onto B itself were.
+//
+// The two ways the clause can fail are both charged. A name T relaxes to optional
+// is one. A base-required name with NO member in T at all is the other, and it is
+// live: clause 3.2 inherits every base use T does not declare itself, so the only
+// way a required name goes missing is clause 3.2.2's <attribute use="prohibited">
+// blocking it (attributeusefold.go) — which is exactly the shape this half is
+// meant to charge, a restriction that prohibits an attribute its base requires.
 func checkRestrictionRequiredAttributes(t, b ComplexType) error {
 	for _, bu := range b.attributeUses {
 		if !bu.Required() {
 			continue
 		}
 		name := attributeUseName(bu)
-		tu, ok := findAttributeUse(t, name)
-		if !ok || tu.Required() {
+		tu, ok := findAttributeUse(t.attributeUses, name)
+		if !ok {
+			return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+				"complex type %s restricts %s but its {attribute uses} carry no use for attribute %s, which the base requires, so an element omitting it is valid against the restriction and not against the base (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 3)", t.Name(), b.Name(), name)
+		}
+		if tu.Required() {
 			continue
 		}
 		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
@@ -407,10 +420,14 @@ func checkRestrictionRequiredAttributes(t, b ComplexType) error {
 	return nil
 }
 
-// findAttributeUse returns c's {attribute use} whose {attribute declaration}
-// carries the expanded name, scanning in document order.
-func findAttributeUse(c ComplexType, name QName) (AttributeUse, bool) {
-	for _, u := range c.attributeUses {
+// findAttributeUse returns the member of a {attribute uses} set whose {attribute
+// declaration} carries the expanded name, scanning in document order so the first
+// match is deterministic (STYLE D1). It takes the set rather than the Complex
+// Type Definition because the §3.4.2.4 clause 3 fold needs the same scan over a
+// set that is still being built (attributeusefold.go) — one encoding, not two
+// (STYLE T4).
+func findAttributeUse(uses []AttributeUse, name QName) (AttributeUse, bool) {
+	for _, u := range uses {
 		if attributeUseName(u) == name {
 			return u, true
 		}
@@ -527,7 +544,7 @@ func (s *Schema) locallyDeclaredAttributeType(c ComplexType, name QName) (TypeDe
 		if c.Name() == anyTypeName {
 			return nil, false // case 1
 		}
-		if u, ok := findAttributeUse(c, name); ok {
+		if u, ok := findAttributeUse(c.attributeUses, name); ok {
 			d, ok := s.attributeUseDeclaration(u)
 			if !ok {
 				return nil, false

@@ -59,7 +59,7 @@ func modelGroupDef(t *testing.T, name xsd.QName, particles ...xsd.Particle) xsd.
 func elementContentCT(t *testing.T, name xsd.QName, term xsd.TermOrRef) xsd.ComplexType {
 	t.Helper()
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{}, nil, xsd.DerivationRestriction, false,
-		nil, nil, xsd.ElementContent{Particle: termParticle(t, term)}, nil, nil, nil)
+		nil, nil, nil, xsd.ElementContent{Particle: termParticle(t, term)}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestResolveDanglingAttributeRef(t *testing.T) {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, qn("ct"), xsd.QName{}, nil, xsd.DerivationRestriction, false,
-		[]xsd.AttributeUse{use}, nil, xsd.EmptyContent{}, nil, nil, nil)
+		[]xsd.AttributeUse{use}, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestResolveSelfCircularComplexBase(t *testing.T) {
 	// A complex type whose {base type definition} is itself (and is not
 	// xs:anyType) is a forbidden derivation cycle.
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, qn("T"), qn("T"), nil, xsd.DerivationRestriction, false,
-		nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -304,12 +304,12 @@ func TestResolveSelfCircularComplexBase(t *testing.T) {
 func TestResolveMutualCircularComplexBase(t *testing.T) {
 	// A -> B -> A base chain across two named types.
 	a, err := xsd.NewComplexType(xsderr.Loc{}, qn("A"), qn("B"), nil, xsd.DerivationRestriction, false,
-		nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType A: %v", err)
 	}
 	bt, err := xsd.NewComplexType(xsderr.Loc{}, qn("B"), qn("A"), nil, xsd.DerivationRestriction, false,
-		nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType B: %v", err)
 	}
@@ -327,7 +327,7 @@ func TestResolveAnyTypeSelfBaseAccepted(t *testing.T) {
 	// xs:anyType is the one complex type permitted to be its own base (§3.4.7).
 	anyType, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"},
 		xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}, nil, xsd.DerivationRestriction, false,
-		nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType anyType: %v", err)
 	}
@@ -380,12 +380,12 @@ func TestResolveValidGraph(t *testing.T) {
 	//   - group g1 referencing group g2 (acyclic)
 	//   - keyref kr referring to key k
 	base, err := xsd.NewComplexType(xsderr.Loc{}, qn("base"), xsd.QName{}, nil, xsd.DerivationRestriction, false,
-		nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType base: %v", err)
 	}
 	derived, err := xsd.NewComplexType(xsderr.Loc{}, qn("derived"), qn("base"), nil, xsd.DerivationExtension, false,
-		nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType derived: %v", err)
 	}

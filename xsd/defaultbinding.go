@@ -63,28 +63,38 @@ func (wildcardKeywordBinding) defaultBinding()    {}
 // attributeDefaultBinding computes c's ·default binding· (key-dft-binding) for an
 // attribute of expanded name n:
 //
-//   - case 2: an {attribute use} of c whose {attribute declaration} carries n,
-//     looked up through foldedAttributeUse so that an INHERITED use counts.
+//   - case 2: the member of c.{attribute uses} whose {attribute declaration}
+//     carries n. The property is the MATERIALISED one (§3.4.2.4 clause 3,
+//     attributeusefold.go), so an INHERITED use counts without any walk here.
 //     cvc-complex-type clause 2.1 makes such a use the ·context-determined
 //     declaration·, so it wins over any wildcard — including a wildcard on c
-//     itself, since under §3.4.2.4 clause 3 the inherited use is a member of
-//     c.{attribute uses} and case 2 is tested before cases 4/5/6.
+//     itself, since case 2 is tested before cases 4/5/6. The set is exact for
+//     both derivation methods: clause 3.2.2's prohibited names are applied at the
+//     fold too, so a name a restriction prohibits is absent here rather than
+//     reported as the ancestor's use.
 //   - cases 4/5/6: otherwise, if c's {attribute wildcard} admits n, the wildcard's
-//     {process contents} keyword. This one is read off c ALONE, which is exact:
-//     §3.4.2.5 clause 2.1 makes a restriction's {attribute wildcard} the
-//     ·complete wildcard· — its own <anyAttribute>, with nothing inherited — and
-//     restriction is the only {derivation method} parser/produce_complex.go emits
-//     for a complex type (its <extension> branches are declined). Walking the
-//     chain for wildcards would be wrong, not merely lenient: every type reaches
-//     ·xs:anyType·, whose lax ##any attribute wildcard would then admit every
-//     name and make the caller's check vacuous. §3.4.2.5 clause 2.2's fold of the
-//     ·base wildcard· into an EXTENSION's wildcard is therefore not reconstructed
-//     here; it becomes reachable only when the producer emits extension.
+//     {process contents} keyword. This one is read off c ALONE, which is exact for
+//     a restriction: §3.4.2.5 clause 2.1 makes its {attribute wildcard} the
+//     ·complete wildcard· — its own <anyAttribute>, with nothing inherited.
+//     Walking the chain for wildcards would be wrong, not merely lenient: every
+//     type reaches ·xs:anyType·, whose lax ##any attribute wildcard would then
+//     admit every name and make the caller's check vacuous.
 //
-// ok is false when c admits no attribute of that name at all — no matching use
-// anywhere on the base chain and no admitting wildcard — in which case there is
-// no binding to compare and the CALLER charges the failure. Case 1 (·governing
-// element declaration·) is the element half and is not reachable here.
+// GAP(xsd): §3.4.2.5 clause 2.2's cos-aw-union of the ·base wildcard· into an
+// EXTENSION's {attribute wildcard} is NOT folded — neither by the producer nor at
+// finalize, unlike {attribute uses} — so an extension's wildcard is its own
+// <anyAttribute> alone here. That is a FALSE-REJECT risk, not a fail-open one:
+// the under-reported wildcard makes ok false for a name the extension genuinely
+// admits, and checkRestrictionAttributes charges derivation-ok-restriction on
+// exactly that !ok, so a restriction of an extension whose base carried the
+// admitting wildcard is rejected for an attribute the base really does allow.
+// Closing it is #265 section 3's (the extension wildcard fold); it is stated
+// plainly here so no caller reads the gap as merely lenient.
+//
+// ok is false when c admits no attribute of that name at all — no member of
+// {attribute uses} and no admitting wildcard — in which case there is no binding
+// to compare and the CALLER charges the failure. Case 1 (·governing element
+// declaration·) is the element half and is not reachable here.
 //
 // GAP(xsd): case 3 — the item has a ·governing attribute declaration· and is
 // ·attributed· to an attribute wildcard, so the binding is a SYNTHESIZED
@@ -99,7 +109,7 @@ func (wildcardKeywordBinding) defaultBinding()    {}
 // weaker tests than case 3's clause-5 comparison — and never a false reject
 // (#265).
 func (s *Schema) attributeDefaultBinding(c ComplexType, n QName) (defaultBinding, bool) {
-	if u, ok := s.foldedAttributeUse(c, n); ok {
+	if u, ok := findAttributeUse(c.attributeUses, n); ok {
 		return attributeUseBinding{use: u}, true // case 2
 	}
 	w, has := c.AttributeWildcard()
@@ -107,48 +117,6 @@ func (s *Schema) attributeDefaultBinding(c ComplexType, n QName) (defaultBinding
 		return nil, false
 	}
 	return wildcardKeywordBinding{keyword: w.ProcessContents()}, true // cases 4/5/6
-}
-
-// foldedAttributeUse is the member of c.{attribute uses} whose {attribute
-// declaration} carries the expanded name n, reading {attribute uses} as
-// §3.4.2.4 clause 3 defines it: the type's OWN uses (clauses 1 and 2) together
-// with those "inherited" from the {base type definition}, under both clause 3.1
-// (extension) and clause 3.2 (restriction). parser/produce_complex.go maps each
-// <restriction>'s own <attribute> children and no more, so the fold is
-// reconstructed here by walking the base chain — without it a use B genuinely
-// has by inheritance reads as absent, and charging its absence FALSE-REJECTS a
-// valid schema.
-//
-// The type's own uses win: the walk stops at the FIRST level carrying the name,
-// which is clause 3.2.1's "already included in the set" exception rendered by
-// search order rather than by building the set.
-//
-// GAP(xsd): clause 3.2.2's other exception — an <attribute use="prohibited">
-// child, which removes an inherited use — corresponds to no component at all and
-// so leaves nothing on the chain to stop the walk. A prohibited name therefore
-// still reports the ancestor's use. That direction is FAIL-OPEN (a binding is
-// found where the spec has none, so a rejection is missed) and never a false
-// reject (#265).
-//
-// The chain walk carries no visited set (Phase B licenses it — see
-// checkComplexDerivations) and terminates on ·xs:anyType·, the one type §3.4.7
-// lets be its own base. The name is tested against anyType's uses first anyway:
-// §3.4.7 gives it an empty {attribute uses}, so the order is immaterial and only
-// the termination matters.
-func (s *Schema) foldedAttributeUse(c ComplexType, n QName) (AttributeUse, bool) {
-	for {
-		if u, ok := findAttributeUse(c, n); ok {
-			return u, true
-		}
-		if c.Name() == anyTypeName {
-			return AttributeUse{}, false
-		}
-		next, ok := s.baseComplexType(c)
-		if !ok {
-			return AttributeUse{}, false
-		}
-		c = next
-	}
 }
 
 // attributeUseName is the expanded name of an attribute use's {attribute

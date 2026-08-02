@@ -113,7 +113,7 @@ func uWildcard(t *testing.T, variety NamespaceConstraintVariety, namespaces []Na
 func uCT(t *testing.T, name QName, p Particle) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, QName{}, nil, DerivationRestriction, false,
-		nil, nil, ElementContent{Particle: p}, nil, nil, nil)
+		nil, nil, nil, ElementContent{Particle: p}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -125,7 +125,7 @@ func uCT(t *testing.T, name QName, p Particle) ComplexType {
 func uNamedType(t *testing.T, name QName) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, QName{}, nil, DerivationRestriction, false,
-		nil, nil, EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -341,7 +341,7 @@ func TestUPAUnrelatedGlobalsPass(t *testing.T) {
 // still ·overlap· and cos-nonambig fires.
 func TestUPAUnrelatedProhibitedSubstitutionsStillOverlap(t *testing.T) {
 	blocking, err := NewComplexType(xsderr.Loc{}, uq("Blocking"), QName{}, nil, DerivationRestriction, false,
-		nil, nil, EmptyContent{}, []DerivationMethod{DerivationExtension}, nil, nil)
+		nil, nil, nil, EmptyContent{}, []DerivationMethod{DerivationExtension}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
@@ -363,12 +363,12 @@ func TestUPAUnrelatedProhibitedSubstitutionsStillOverlap(t *testing.T) {
 // head, the two element particles do not ·overlap·, and the content model stands.
 func TestUPASubstitutionBlockedByClause23(t *testing.T) {
 	head, err := NewComplexType(xsderr.Loc{}, uq("Head"), QName{}, nil, DerivationRestriction, false,
-		nil, nil, EmptyContent{}, []DerivationMethod{DerivationExtension}, nil, nil)
+		nil, nil, nil, EmptyContent{}, []DerivationMethod{DerivationExtension}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
 	derived, err := NewComplexType(xsderr.Loc{}, uq("Derived"), uq("Head"), nil, DerivationExtension, false,
-		nil, nil, EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}

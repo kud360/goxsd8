@@ -55,7 +55,7 @@ func seedAnyType() (xsd.ComplexType, error) {
 	}
 	content := xsd.ElementContent{Mixed: true, Particle: topParticle}
 	return xsd.NewComplexType(xsderr.Loc{}, anyTypeName, anyTypeName, nil,
-		xsd.DerivationRestriction, false, nil, &wildcard, content, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, &wildcard, content, nil, nil, nil)
 }
 
 // produceComplexType maps a <complexType> element (§3.4.2) into a Complex Type
@@ -122,7 +122,7 @@ func (p *producer) produceImplicitContent(name xsd.QName, el *Element) (xsd.Comp
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	uses, wildcard, err := p.produceAttributeUses(el)
+	uses, prohibited, wildcard, err := p.produceAttributeUses(el)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -130,7 +130,7 @@ func (p *producer) produceImplicitContent(name xsd.QName, el *Element) (xsd.Comp
 	// <complexType> itself in this implicit-content form; clause 1's fold of the
 	// base type's own assertions needs the resolved base and stays deferred.
 	return xsd.NewComplexType(el.Loc(), name, anyTypeName, nil,
-		xsd.DerivationRestriction, abstract, uses, wildcard, content, nil, p.assertionsOf(el), nil)
+		xsd.DerivationRestriction, abstract, uses, prohibited, wildcard, content, nil, p.assertionsOf(el), nil)
 }
 
 // produceSimpleContent maps a <complexType><simpleContent> (§3.4.2.2) into a
@@ -169,7 +169,7 @@ func (p *producer) produceSimpleContent(name xsd.QName, ctElem, sc *Element) (xs
 		return xsd.ComplexType{}, err
 	}
 	abstract, _ := boolAttr(ctElem, "abstract")
-	uses, wildcard, err := p.produceAttributeUses(ext)
+	uses, prohibited, wildcard, err := p.produceAttributeUses(ext)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -179,7 +179,7 @@ func (p *producer) produceSimpleContent(name xsd.QName, ctElem, sc *Element) (xs
 	// uniform across restriction and extension and is tracked as a whole (#265,
 	// xsd/complexderivation.go's GAP note), never half-applied here.
 	return xsd.NewComplexType(ctElem.Loc(), name, baseName, nil,
-		xsd.DerivationExtension, abstract, uses, wildcard, content, nil, p.assertionsOf(ext), nil)
+		xsd.DerivationExtension, abstract, uses, prohibited, wildcard, content, nil, p.assertionsOf(ext), nil)
 }
 
 // simpleContentSimpleType is the §3.4.2.2 {simple type definition} tableau for
@@ -256,7 +256,7 @@ func (p *producer) produceComplexContent(name xsd.QName, ctElem, cc *Element) (x
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	uses, wildcard, err := p.produceAttributeUses(derivation)
+	uses, prohibited, wildcard, err := p.produceAttributeUses(derivation)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -264,7 +264,7 @@ func (p *producer) produceComplexContent(name xsd.QName, ctElem, cc *Element) (x
 	// alternant, not of the enclosing <complexType>, in this explicit
 	// complex-content form.
 	return xsd.NewComplexType(ctElem.Loc(), name, base, nil,
-		method, abstract, uses, wildcard, content, nil, p.assertionsOf(derivation), nil)
+		method, abstract, uses, prohibited, wildcard, content, nil, p.assertionsOf(derivation), nil)
 }
 
 // complexContentDerivation returns the <restriction> or <extension> child of a
@@ -1209,32 +1209,96 @@ func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
 }
 
 // produceAttributeUses maps the attribute-bearing children of parent (a
-// <complexType>, <restriction>, or top-level <attributeGroup>) into {attribute
-// uses} and an optional {attribute wildcard}, following <attributeGroup ref>
-// children transitively (§3.6.2.1/§3.6.2.2, the inline case). {attribute uses} is
-// the union of parent's own <attribute> uses with the uses of every referenced
-// attribute group (§3.6.2.1); {attribute wildcard} is the intersection of
-// parent's own <anyAttribute> with the referenced groups' wildcards (§3.6.2.2,
-// always intersection at one container).
+// <complexType>, <restriction>, or <extension>) into {attribute uses}, the
+// expanded names §3.4.2.4 clause 3.2.2 blocks, and an optional {attribute
+// wildcard}, following <attributeGroup ref> children transitively
+// (§3.6.2.1/§3.6.2.2, the inline case). {attribute uses} is the union of parent's
+// own <attribute> uses with the uses of every referenced attribute group
+// (§3.6.2.1); {attribute wildcard} is the intersection of parent's own
+// <anyAttribute> with the referenced groups' wildcards (§3.6.2.2, always
+// intersection at one container).
 //
-// GAP(xsd): the BASE type's contribution is not folded in — neither §3.4.2.4
-// clause 3's union of the base's {attribute uses} nor §3.4.2.5 clause 2's
-// cos-aw-union of its {attribute wildcard}. That fold is uniform across
-// restriction and extension, so it is landed as a whole (#265, the same gap
-// xsd/complexderivation.go's checkAttributeUseNamesUnique records) rather than
-// half-applied on the extension path this producer now builds. Missing uses can
-// only make a rejection go unreported, never fabricate one.
-func (p *producer) produceAttributeUses(parent *Element) ([]xsd.AttributeUse, *xsd.Wildcard, error) {
+// The BASE type's contribution to {attribute uses} is deliberately NOT folded in
+// here: §3.4.2.4 clause 3 needs the resolved base component, which no producer
+// holds, so xsd/attributeusefold.go completes the property at finalize (#401).
+// What this function returns is therefore clauses 1 and 2 alone, and the
+// component xsd.NewComplexType is handed carries exactly that until finalize
+// overwrites it. The clause 3.2.2 names ride along for the same reason: the fold
+// that consumes them runs there, and by then the source is gone.
+//
+// GAP(xsd): the base's {attribute wildcard} is not folded in either — §3.4.2.5
+// clause 2.2's cos-aw-union for an extension — and unlike the uses, nothing
+// completes it at finalize. An extension's {attribute wildcard} is therefore its
+// own <anyAttribute> alone, which is NOT merely lenient: a name the base's
+// wildcard admits reads as inadmissible on the extension, and
+// xsd/defaultbinding.go's caller charges that absence as
+// derivation-ok-restriction — a false reject, not a fail-open. See
+// attributeDefaultBinding for the exact shape; closing it is #265 section 3's
+// job, not this producer's.
+func (p *producer) produceAttributeUses(parent *Element) ([]xsd.AttributeUse, []xsd.QName, *xsd.Wildcard, error) {
 	var uses []xsd.AttributeUse
 	var wildcards []xsd.Wildcard
 	if err := p.collectAttributeContent(parent, map[xsd.QName]struct{}{}, &uses, &wildcards); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	prohibited, err := p.prohibitedAttributeNames(parent)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	wildcard, err := combineAttributeWildcards(parent.Loc(), wildcards)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return uses, wildcard, nil
+	return uses, prohibited, wildcard, nil
+}
+
+// prohibitedAttributeNames is §3.4.2.4 clause 3.2.2's input: the expanded names
+// of parent's own <attribute> children carrying use="prohibited", in document
+// order.
+//
+// It reads parent's DIRECT children only, never descending <attributeGroup ref>,
+// because clause 3.2.2 is written over "an <attribute> [child]" of the
+// <restriction>/<extension>/<complexType> itself — a prohibited <attribute> inside
+// a referenced group is one of the "other contexts" §3.4.2.4's Note calls
+// pointless, and collectAttributeContent already ignores it.
+//
+// The name is computed rather than read off a component: §3.4.2.4's Note makes a
+// prohibited <attribute> correspond to no component at all, so produceAttributeUse
+// returns before building anything and there is nothing to take a name from. The
+// two forms mirror that function's split — a ref= resolves as a QName (§3.2.2.3),
+// a name= takes the local declaration's {target namespace} (§3.2.2.2).
+//
+// The src-attribute clauses are deliberately NOT re-charged here: this is the same
+// <attribute> element produceAttributeUse already declined to map, and an element
+// carrying neither ref nor name simply has no expanded name to block, so it is
+// skipped rather than rejected. The one failure that IS surfaced is an unresolvable
+// ref= prefix — src-resolve, charged by resolveQName for every other reference in
+// this producer, and a prohibited <attribute> earns no exemption from it.
+func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error) {
+	var names []xsd.QName
+	for _, child := range parent.Children() {
+		el, ok := child.(*Element)
+		if !ok || el.Name().Space() != xsd.XMLSchemaNS || el.Name().Local() != "attribute" {
+			continue
+		}
+		if use, _ := attrValue(el, "use"); use != "prohibited" {
+			continue
+		}
+		if ref, hasRef := attrValue(el, "ref"); hasRef {
+			qn, err := p.resolveQName(el, ref)
+			if err != nil {
+				return nil, err
+			}
+			names = append(names, qn)
+			continue
+		}
+		name, hasName := attrValue(el, "name")
+		if !hasName {
+			continue // neither ref nor name: no expanded name to block
+		}
+		names = append(names, xsd.QName{Space: p.localTargetNS(el, "attributeFormDefault"), Local: name})
+	}
+	return names, nil
 }
 
 // buildAttributeGroup maps a top-level <attributeGroup> (§3.6.2) into an

@@ -86,7 +86,7 @@ func exampleLocalElement(container xsd.QName, local string) xsd.ElementDeclarati
 // {content type} is a {1,1} particle over term.
 func exampleElementOnlyType(name xsd.QName, term xsd.TermOrRef) xsd.ComplexType {
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{}, nil, xsd.DerivationRestriction, false,
-		nil, nil, xsd.ElementContent{Particle: exampleParticle(term)}, nil, nil, nil)
+		nil, nil, nil, xsd.ElementContent{Particle: exampleParticle(term)}, nil, nil, nil)
 	if err != nil {
 		panic(err)
 	}

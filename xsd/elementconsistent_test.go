@@ -236,7 +236,7 @@ func TestEDCOpenContentWildcard(t *testing.T) {
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("q"), uq("T"))}),
 	)
 	ct, err := NewComplexType(xsderr.Loc{}, uq("ct"), QName{}, nil, DerivationRestriction, false,
-		nil, nil, ElementContent{Particle: uOne(t, ResolvedTerm{Term: g}), OpenContent: &oc}, nil, nil, nil)
+		nil, nil, nil, ElementContent{Particle: uOne(t, ResolvedTerm{Term: g}), OpenContent: &oc}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
