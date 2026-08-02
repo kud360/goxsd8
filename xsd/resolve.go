@@ -49,9 +49,11 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     Consistent (cos-element-consistent, elementconsistent.go).
 //   - Phase D (complex-type derivation validity): reject the derivation-relative
 //     constraints that need the resolved {base type definition} — the
-//     ct-props-correct (§3.4.6.1) clauses 2 and 4, and
+//     ct-props-correct (§3.4.6.1) clauses 2 and 4,
 //     derivation-ok-restriction (§3.4.6.3) for every restriction-derived complex
-//     type (complexderivation.go, defaultbinding.go, effectivetotalrange.go).
+//     type, and cos-ct-extends (§3.4.6.2) for every extension-derived one
+//     (complexderivation.go, complexextension.go, defaultbinding.go,
+//     effectivetotalrange.go).
 //   - Phase E (attribute-use value constraints): reject an Attribute Use whose
 //     own {value constraint} contradicts its resolved {attribute declaration}'s
 //     fixed one — au-props-correct (§3.5.6) clause 3, both the variety half and
@@ -72,8 +74,9 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // type definition} chains and <group ref> edges with no visited set), and Phase
 // C's cos-element-consistent (which is what makes the ·locally declared type· of
 // an element name within one content model a function rather than a relation,
-// without which derivation-ok-restriction clause 4 would not be statable). See
-// checkComplexDerivations' own doc for the full statement.
+// without which derivation-ok-restriction clause 4 and its cos-ct-extends
+// clause-1.6 twin would not be statable). See checkComplexDerivations' own doc
+// for the full statement.
 //
 // Phase E runs LAST. Its position is not load-bearing the way Phase D's is — it
 // reads one attribute use at a time and follows no chain — but it needs Phase A's
