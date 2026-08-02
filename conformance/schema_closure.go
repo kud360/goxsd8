@@ -23,9 +23,10 @@ import (
 // not the list of documents they came from. A single-document lane could gate on
 // the one document it read; a multi-document lane cannot, because an <include>d
 // document holding a representation the producer silently SKIPS (§3.1.2) — an
-// inline anonymous type, a list/union simpleType — or one it builds without any
-// rule yet judging it (a <complexContent> <extension>, pending cos-ct-extends,
-// #264) would let a schema-INVALID assembly "Parse" cleanly, a FALSE ACCEPT of exactly
+// inline anonymous type, a list/union simpleType — or one it builds with a rule
+// judging it only in part (a <complexContent> <extension>: cos-ct-extends landed
+// with #264, but its clauses 1.3 and 1.7 stay fail-open until #265's base folds)
+// would let a schema-INVALID assembly "Parse" cleanly, a FALSE ACCEPT of exactly
 // the kind schema.go's step-3 allowlist exists to prevent.
 //
 // So the harness discovers the closure itself, BEFORE calling parser.Parse, and
