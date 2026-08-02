@@ -1431,6 +1431,120 @@ make the issue thread the cross-session channel, so a reader arriving at
 instance is not a pattern; recorded here so a second instance has
 something to be the second of.
 
+***Post-land pass, 2026-08-02 (#365, `53bf811`, PR #448, datatypes
+1107/1129 → **1131/1153 (+24)**, instance 0/26426 and schema 9155/15432
+unchanged, zero regressions — the first band-1 landing in a while whose
+whole diff is one regexp alternation and the prose around it, with no
+engine code at all).***
+
+**Band 1 loses another head: `#365 → #346 → #324 → #377` becomes three,
+`#346 → #324 → #377`, no reorder among the rest.** That is the tail of
+the eight-issue band the #264 pass recorded (`#264 → #265 → #301 → #281
+→ #365 → #346 → #324 → #377`); five have now landed in order and the
+band has not been re-derived since, which is the weekly `/backlog`'s job,
+not a post-land pass's.
+
+**Unblock scan: nothing clears, and #365 was a clean leaf in both
+directions.** All nine open `blocked` issues were read at this pass and
+none names #365 in its `## Depends on` — #438→#414, #415→#407,
+#345→#250, #267→#250, #250→#79, #248→#250, #79 (the dependency target
+itself), #56 (an unfiled M6 evaluator issue), #16 (which has **no**
+`## Depends on` section at all — a body defect worth repairing whenever
+someone touches it, not worth a ticket of its own). A full-body sweep of
+every open issue for the literal `#365` returns zero hits, so nothing
+depended on this landing even informally, and #365 itself depended on
+nothing.
+
+**Two issues filed.**
+
+**#449** (`ready`, `kind/feature`, `area/conformance`) — claim the twenty
+`negativeInteger` / `nonNegativeInteger` / `nonPositiveInteger` /
+`positiveInteger` `001–005` lexical fixtures. This is the harvest the
+#365 LOG entry left open as an explicit ledger item, and it is unusually
+well-prepared: the arbiter's round-2 **exhaustiveness sweep** certifies
+*"four sub-families, twenty files, and no fifth"*, and the scope was
+already written into the code by #365's repair round at
+`conformance/datatypes.go:464-476`. Re-verified at this pass rather than
+inherited: all 20 fixtures exist, **0** appear in
+`expectations/datatypes.txt`, all 20 sit in `expectations/instance.txt`
+as `fail`, and each `.xsd` is byte-identical to `integer.xsd` modulo the
+type name. The issue body carries the per-fixture table (keys, suite
+validity, literals) and the four types' facet sections read fresh
+(`nonPositiveInteger` §3.4.14.3 `maxInclusive = 0`; `negativeInteger`
+§3.4.15.3 `maxInclusive = -1`; `nonNegativeInteger` §3.4.20.3
+`minInclusive = 0`; `positiveInteger` §3.4.25.3 `minInclusive = 1`).
+**What makes it more than "same again": it is the first cohort with a
+HALF-bounded arm.** #331's 48 all carry both bounds, #365's `xs:integer`
+carries neither, these four carry exactly one each — so the rule-ID
+table has real work, charging `cvc-pattern-valid` §4.3.4.4 for the four
+empty-after-collapse `001` fixtures against `cvc-minInclusive-valid`
+§4.3.10.3 / `cvc-maxInclusive-valid` §4.3.7.3 for the six single-bound
+violations. **#449 does not enter band 1** — genuine lane movement, but
+small, uncontested, and the band's ordering is a `/backlog` decision.
+It also explicitly **owns rewriting `conformance/datatypes.go:464-476`**,
+because landing it without that would reproduce the P3a defect a third
+consecutive time in the same file.
+
+**#450** (`ready`, `kind/tooling`, `kind/process`, `area/meta`) —
+`.golangci.yml`'s anchored `^tools/` and `^cmd/` exclusions do not apply
+when the linter runs from a **linked git worktree**, which is exactly
+what the arbiter's throwaway ratchet measurement creates. Reproduced
+independently at this pass on `53bf811` with golangci-lint 2.12.2: from
+a detached worktree, 2 spurious `forbidigo` hits on
+`tools/fetchspecs/main.go:52` and `tools/spec2md/main.go:105` (the only
+two `fmt.Printf` calls under `tools/`); from the primary checkout,
+`0 issues.` **Sibling of #426, not a duplicate** — #426 is about
+*invocation* (binary on neither `PATH` nor `go.mod`'s `tool` block, five
+call sites disagreeing), #450 about *result stability once it runs*, and
+#426's option 1 (`go tool golangci-lint run`) would not fix #450 because
+it changes how the binary is found and nothing about the path the
+reporter prints. Filed rather than shrugged at because the false
+positive lands in the **judge's** environment: the one persona whose job
+is to reject diffs is the one most exposed to findings the diff did not
+cause. `cmd/` carries the identical anchor with no current trigger —
+latent, fix both.
+
+**Three dismissals, nothing filed.**
+
+1. **The prose-accuracy repair-round pattern is retro material, not an
+   issue.** #417, #253 and now #365 have each spent a full arbiter round
+   on findings about what a *correct* diff said about itself. Three
+   consecutive sessions is past the two-session threshold, and the
+   chronicler recorded it in `docs/LOG/2026-08.md` under the #365 entry's
+   *Friction* item 2 — confirmed present at this pass, which is where
+   `/retro` mines. Filing it as a normal issue would put a process
+   pattern in a queue that cannot decide it.
+2. **The `EffectiveFacets()` triple-`pattern` observation** (three
+   `pattern "[\-+]?[0-9]+"` rows on `xs:int`, declared by `integer`,
+   `long` and `int`) stays dismissed with the arbiter's reasons: each
+   carries a distinct `declaring` QName, which is what
+   `st-restrict-facets` §3.16.6.4's overlay walk produces and what error
+   reporting attributes a facet to, so collapsing them would destroy
+   information rather than deduplicate it — **not** STYLE D3. Carried
+   into #449's Notes so the next mason in that function does not
+   re-discover it.
+3. **`docs/LOG/2026-08.md:305`'s stale `integer001–012`** stays stale.
+   The arbiter's ruling that an append-only session record must not be
+   retro-edited is the right one; #365's "three prose sites" were
+   satisfied by the two code comments plus this file.
+
+**Branch namespace: empty.** `git ls-remote --heads origin
+'refs/heads/wip/*' 'refs/heads/parked/*'` returns nothing —
+`wip/issue-365` was auto-deleted at squash-merge as expected, and no
+`wip/` or `parked/` ref is outstanding repo-wide. Nothing retired,
+nothing for human triage. (The throwaway worktree this pass created to
+reproduce #450 was removed; `git worktree list` shows the primary
+checkout alone.)
+
+**Lane-count staleness, already owned.** This landing moves the
+`datatypes` lane and therefore deepens the drift **#411** tracks (the M3
+milestone heading still carries pre-#331 counts, PRINCIPLES 32). Not
+re-filed and not fixed here: #411 owns it, and a post-land pass
+correcting a heading it did not survey would be the kind of partial
+sweep #411 exists to end. Note for whoever takes it — **#411 carries no
+`ready`/`blocked` label at all**, so it is invisible to the ready-queue
+count; label it at the next `/backlog`.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
