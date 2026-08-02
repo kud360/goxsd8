@@ -31,9 +31,20 @@ func dAnyType(t *testing.T) ComplexType {
 }
 
 // dType builds a complex type restricting base, with the given {content type},
-// {attribute uses} and {attribute wildcard}.
+// {attribute uses} and {attribute wildcard}. An absent name selects
+// NewAnonymousComplexType, whose §3.4.1 tableau makes {context} Required; the
+// callers that pass one build an inline type under an element declaration, so
+// a freshly minted ElementDeclarationContext is the honest arm.
 func dType(t *testing.T, name, base QName, content ContentType, uses []AttributeUse, wildcard *Wildcard) ComplexType {
 	t.Helper()
+	if name.Local == "" {
+		ct, err := NewAnonymousComplexType(xsderr.Loc{}, ElementDeclarationContext{Component: NewComponentID()},
+			base, nil, DerivationRestriction, false, uses, nil, wildcard, content, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("NewAnonymousComplexType: %v", err)
+		}
+		return ct
+	}
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, nil, DerivationRestriction, false,
 		uses, nil, wildcard, content, nil, nil, nil)
 	if err != nil {

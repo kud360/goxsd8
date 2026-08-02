@@ -224,6 +224,14 @@ func NewGlobalScope() Scope {
 // the compile-of-record that the representation must be revisited (a component
 // handle, not a name) rather than silently mis-scoping.
 //
+// That handle has now landed: ComponentID (componentid.go), minted by the
+// producer and first used by ComplexType's {context} (§3.4.1 ctd-context).
+// Reworking ComplexTypeScopeParent to carry one — the change that would retire
+// this rejection for that variant alone, ModelGroupScopeParent's {name} being a
+// Required xs:NCName (§3.7.1) that keeps its guard — is deferred to #340, the
+// landing that also builds the producer which can mint an anonymous container's
+// identity. Nothing here changes until then.
+//
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built scope — may
 // legitimately pass the zero xsderr.Loc{}.

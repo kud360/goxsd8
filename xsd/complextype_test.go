@@ -1,6 +1,7 @@
 package xsd_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -230,5 +231,149 @@ func TestComplexTypeAttributeWildcardOptional(t *testing.T) {
 	}
 	if _, ok := c.AttributeWildcard(); !ok {
 		t.Error("AttributeWildcard() absent, want present")
+	}
+}
+
+// --- {context} (§3.4.1 ctd-context) ---------------------------------------
+
+func TestNewComplexTypeRejectsAbsentName(t *testing.T) {
+	// §3.4.1 makes {context} Required when {name} is absent, and this entry
+	// point cannot supply one. The Space-only case is the reason the guard
+	// tests name.Local rather than name == QName{}: QName{Space: "urn:x"}
+	// would otherwise pass as a NAMED type.
+	for _, name := range []xsd.QName{{}, {Space: "urn:x"}, {Space: "urn:x", Local: ""}} {
+		_, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{Local: "base"}, nil,
+			xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		if err == nil {
+			t.Fatalf("NewComplexType accepted {name} = %v, want ct-props-correct error", name)
+		}
+		assertRule(t, err, "ct-props-correct")
+	}
+}
+
+func TestNewComplexTypeNamedHasAbsentContext(t *testing.T) {
+	c, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "ct"}, xsd.QName{Local: "base"}, nil,
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewComplexType unexpected error: %v", err)
+	}
+	got, ok := c.Context()
+	if ok {
+		t.Errorf("Context() = (%v, true) on a NAMED type, want (nil, false) per the §3.4.1 tableau", got)
+	}
+	if got != nil {
+		t.Errorf("Context() first result = %v, want nil when absent", got)
+	}
+}
+
+func TestNewAnonymousComplexTypeRejectsNilContext(t *testing.T) {
+	_, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, nil, xsd.QName{Local: "base"}, nil,
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err == nil {
+		t.Fatal("NewAnonymousComplexType accepted a nil {context}, want ct-props-correct error")
+	}
+	assertRule(t, err, "ct-props-correct")
+}
+
+func TestNewAnonymousComplexTypeRejectsUnmintedIdentity(t *testing.T) {
+	// Both arms, each carrying the zero ComponentID: a representation
+	// invariant this package owns, not a spec clause.
+	for _, ctx := range []xsd.ComplexTypeContext{
+		xsd.ElementDeclarationContext{},
+		xsd.ComplexTypeDefinitionContext{},
+	} {
+		_, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, ctx, xsd.QName{Local: "base"}, nil,
+			xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		if err == nil {
+			t.Fatalf("NewAnonymousComplexType accepted %T with an unminted identity, want component-invariant error", ctx)
+		}
+		assertRule(t, err, xsderr.RuleComponentInvariant)
+	}
+}
+
+func TestNewAnonymousComplexTypeContext(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		make func(xsd.ComponentID) xsd.ComplexTypeContext
+	}{
+		{"element declaration", func(id xsd.ComponentID) xsd.ComplexTypeContext {
+			return xsd.ElementDeclarationContext{Component: id}
+		}},
+		{"complex type definition", func(id xsd.ComponentID) xsd.ComplexTypeContext {
+			return xsd.ComplexTypeDefinitionContext{Component: id}
+		}},
+	} {
+		id := xsd.NewComponentID()
+		ctx := tc.make(id)
+		c, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, ctx, xsd.QName{Local: "base"}, nil,
+			xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("%s: NewAnonymousComplexType unexpected error: %v", tc.name, err)
+		}
+		if got := c.Name(); got != (xsd.QName{}) {
+			t.Errorf("%s: Name() = %v, want the absent QName", tc.name, got)
+		}
+		got, ok := c.Context()
+		if !ok {
+			t.Fatalf("%s: Context() absent, want present", tc.name)
+		}
+		if reflect.TypeOf(got) != reflect.TypeOf(ctx) {
+			t.Errorf("%s: Context() arm = %T, want %T", tc.name, got, ctx)
+		}
+		if got.ID() != id {
+			t.Errorf("%s: Context().ID() is not the minted identity", tc.name)
+		}
+		if got.ID() == (xsd.ComponentID{}) {
+			t.Errorf("%s: Context().ID() is the unminted identity", tc.name)
+		}
+	}
+}
+
+// TestComplexTypeContextSurvivesCopy is the end-to-end form of the claim
+// ComponentID rests on: a ComplexType is a value, and copying one — by
+// assignment, through a by-value parameter, and by boxing into TypeDefinition
+// and back out — preserves the {context} identity under ==.
+func TestComplexTypeContextSurvivesCopy(t *testing.T) {
+	id := xsd.NewComponentID()
+	c, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, xsd.ElementDeclarationContext{Component: id},
+		xsd.QName{Local: "base"}, nil, xsd.DerivationRestriction, false, nil, nil, nil,
+		xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAnonymousComplexType unexpected error: %v", err)
+	}
+
+	contextID := func(t *testing.T, what string, ct xsd.ComplexType) xsd.ComponentID {
+		t.Helper()
+		got, ok := ct.Context()
+		if !ok {
+			t.Fatalf("%s: Context() absent, want present", what)
+		}
+		return got.ID()
+	}
+
+	if got := contextID(t, "original", c); got != id {
+		t.Fatal("original: Context().ID() is not the minted identity")
+	}
+
+	copied := c
+	if got := contextID(t, "assignment copy", copied); got != id {
+		t.Error("assignment copy: Context().ID() != the minted identity")
+	}
+
+	// Boxed into the sealed TypeDefinition sum and asserted back out.
+	var td xsd.TypeDefinition = c
+	back, ok := td.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("TypeDefinition round-trip yielded %T, want xsd.ComplexType", td)
+	}
+	if got := contextID(t, "TypeDefinition round-trip", back); got != id {
+		t.Error("TypeDefinition round-trip: Context().ID() != the minted identity")
+	}
+
+	// A DIFFERENT identity must not compare equal, so the assertions above
+	// are not satisfied by any ComponentID at all.
+	other := xsd.NewComponentID()
+	if got := contextID(t, "original", c); got == other {
+		t.Error("Context().ID() equals an unrelated minted identity")
 	}
 }

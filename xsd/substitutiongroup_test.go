@@ -19,8 +19,20 @@ func sq(local string) QName { return QName{Space: sgns, Local: local} }
 // {derivation method} and {prohibited substitutions}. Its {content type} is
 // EmptyContent throughout: clause 2.3 reads neither the content model nor the
 // attribute uses, so an empty one keeps every derivation in these tests valid.
+// An absent name selects NewAnonymousComplexType, whose §3.4.1 tableau makes
+// {context} Required; the caller that passes one wraps the result in an
+// InlineTypeDefinition on an element declaration, so ElementDeclarationContext
+// is the honest arm.
 func sgType(t *testing.T, name, base QName, method DerivationMethod, prohibited ...DerivationMethod) ComplexType {
 	t.Helper()
+	if name.Local == "" {
+		ct, err := NewAnonymousComplexType(xsderr.Loc{}, ElementDeclarationContext{Component: NewComponentID()},
+			base, nil, method, false, nil, nil, nil, EmptyContent{}, prohibited, nil, nil)
+		if err != nil {
+			t.Fatalf("NewAnonymousComplexType: %v", err)
+		}
+		return ct
+	}
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, nil, method, false,
 		nil, nil, nil, EmptyContent{}, prohibited, nil, nil)
 	if err != nil {
