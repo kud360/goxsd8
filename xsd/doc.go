@@ -58,14 +58,24 @@
 // Direct lookups over a compiled schema set — element, attribute, and
 // type definitions by QName — exposed as minimal capability views (T3):
 // a consumer that needs only element lookup receives an interface with
-// exactly that method, not the whole schema. Views are read-only windows
-// onto the compiled set; they never copy it.
+// exactly that method, not the whole schema. Those by-QName views are
+// read-only windows onto the compiled set; they never copy it.
 //
 // The views are ElementResolver, AttributeResolver, and TypeResolver;
 // *Schema satisfies all three, and SchemaBuilder.Finalize (or its sibling
-// SchemaBuilder.FinalizeWith) is the only way to obtain one. This section
-// is shipped surface — see the package Examples for the construct →
-// Finalize → query sequence.
+// SchemaBuilder.FinalizeWith) is the only way to obtain one.
+//
+// Alongside them *Schema enumerates each of the eight §3.17.1 properties
+// in document order — Types, Elements, Attributes, AttributeGroups,
+// ModelGroups, Notations, IdentityConstraints, Annotations. Unlike the
+// by-QName views these DO copy: each returns a fresh slice (the
+// components in it are shared and immutable), so a caller cannot mutate
+// through the result and desync a source-of-truth slice from the index
+// derived from it. They are methods on *Schema and nothing more; no
+// capability view bundles them until a second consumer needs one (T5).
+//
+// This section is shipped surface — see the package Examples for the
+// construct → Finalize → query sequence.
 //
 // # Value spaces
 //
