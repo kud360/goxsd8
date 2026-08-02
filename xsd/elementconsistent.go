@@ -71,7 +71,7 @@ type groupContents struct {
 // checkElementDeclarationsConsistent is the cos-element-consistent half of Phase
 // C. It walks the compiled set in document order (STYLE D2) and returns the first
 // violation.
-func (s *Schema) checkElementDeclarationsConsistent(facts substitutionFacts) error {
+func (s *Schema) checkElementDeclarationsConsistent() error {
 	for _, t := range s.types {
 		ct, ok := t.(ComplexType)
 		if !ok {
@@ -85,7 +85,7 @@ func (s *Schema) checkElementDeclarationsConsistent(facts substitutionFacts) err
 		// "the Model Group is the {term} of the ·content model· of some Complex
 		// Type Definition CTD" holds, so {open content} is passed here and nowhere
 		// deeper.
-		if err := s.checkTermConsistent(ec.Particle.Term(), ct, ec.OpenContent, QName{}, "", facts); err != nil {
+		if err := s.checkTermConsistent(ec.Particle.Term(), ct, ec.OpenContent, QName{}, ""); err != nil {
 			return err
 		}
 	}
@@ -98,7 +98,7 @@ func (s *Schema) checkElementDeclarationsConsistent(facts substitutionFacts) err
 		// excludes nothing — which is the right reading, cvc-wildcard clause 3's
 		// remaining preconditions (3.3-3.6) naming a containing complex type that
 		// does not exist here.
-		if err := s.checkGroupConsistent(mgd.ModelGroup(), ComplexType{}, nil, mgd.Name(), "", facts); err != nil {
+		if err := s.checkGroupConsistent(mgd.ModelGroup(), ComplexType{}, nil, mgd.Name(), ""); err != nil {
 			return err
 		}
 	}
@@ -108,14 +108,14 @@ func (s *Schema) checkElementDeclarationsConsistent(facts substitutionFacts) err
 // checkTermConsistent checks the model group at a particle's {term}, if the
 // {term} is one. An <element ref> or an inline declaration or wildcard is a leaf:
 // the constraint binds Model Groups, not particles.
-func (s *Schema) checkTermConsistent(t TermOrRef, containing ComplexType, oc *OpenContent, root QName, path string, facts substitutionFacts) error {
+func (s *Schema) checkTermConsistent(t TermOrRef, containing ComplexType, oc *OpenContent, root QName, path string) error {
 	switch t := t.(type) {
 	case ResolvedTerm:
 		g, ok := t.Term.(ModelGroup)
 		if !ok {
 			return nil
 		}
-		return s.checkGroupConsistent(g, containing, oc, root, path, facts)
+		return s.checkGroupConsistent(g, containing, oc, root, path)
 	case ModelGroupRef:
 		mgd, ok := s.modelGroupIndex[t.Name]
 		if !ok {
@@ -123,7 +123,7 @@ func (s *Schema) checkTermConsistent(t TermOrRef, containing ComplexType, oc *Op
 		}
 		// Crossing into a definition re-roots the identity path, so the same inline
 		// declaration reached through two <group ref>s keys identically.
-		return s.checkGroupConsistent(mgd.ModelGroup(), containing, oc, t.Name, "", facts)
+		return s.checkGroupConsistent(mgd.ModelGroup(), containing, oc, t.Name, "")
 	case ElementDeclarationRef:
 		return nil
 	default:
@@ -134,12 +134,12 @@ func (s *Schema) checkTermConsistent(t TermOrRef, containing ComplexType, oc *Op
 // checkGroupConsistent checks one model group and then every model group nested
 // below it. {open content} is passed only to the group it was given for: clause
 // 2.2 speaks of the content model's {term}, not of every group inside it.
-func (s *Schema) checkGroupConsistent(g ModelGroup, containing ComplexType, oc *OpenContent, root QName, path string, facts substitutionFacts) error {
-	if err := s.checkGroupElementsConsistent(g, containing, oc, root, path, facts); err != nil {
+func (s *Schema) checkGroupConsistent(g ModelGroup, containing ComplexType, oc *OpenContent, root QName, path string) error {
+	if err := s.checkGroupElementsConsistent(g, containing, oc, root, path); err != nil {
 		return err
 	}
 	for i, p := range g.particles {
-		if err := s.checkTermConsistent(p.Term(), containing, nil, root, path+"/"+strconv.Itoa(i), facts); err != nil {
+		if err := s.checkTermConsistent(p.Term(), containing, nil, root, path+"/"+strconv.Itoa(i)); err != nil {
 			return err
 		}
 	}
@@ -150,10 +150,10 @@ func (s *Schema) checkGroupConsistent(g ModelGroup, containing ComplexType, oc *
 // one model group. Names are visited in first-seen document order; the by-name
 // buckets are a map used only as a lookup index, never ranged, so which violation
 // is reported does not depend on map iteration (STYLE D1/D2).
-func (s *Schema) checkGroupElementsConsistent(g ModelGroup, containing ComplexType, oc *OpenContent, root QName, path string, facts substitutionFacts) error {
+func (s *Schema) checkGroupElementsConsistent(g ModelGroup, containing ComplexType, oc *OpenContent, root QName, path string) error {
 	var c groupContents
 	s.gatherGroupContents(g, root, path, &c)
-	s.gatherImplicitElements(&c, facts)
+	s.gatherImplicitElements(&c)
 
 	var order []QName
 	buckets := map[QName][]ElementDeclaration{}
@@ -458,20 +458,20 @@ func (s *Schema) gatherResolvedTermContents(t Term, root QName, path string, c *
 //
 // Members are enumerated from the document-order {element declarations} slice,
 // never from elementIndex, and heads in the order they were gathered, so the
-// result is deterministic (STYLE D2). Membership uses the UNDER-approximating
-// predicate: an implicitly contained declaration only ever adds obligations, so
-// an over-broad substitution group would reject valid schemas.
-func (s *Schema) gatherImplicitElements(c *groupContents, facts substitutionFacts) {
-	if !facts.anyAffiliation {
-		return // no affiliation edge exists, so every substitution group is a singleton
-	}
+// result is deterministic (STYLE D2). Membership is inSubstitutionGroupOf, which
+// decides cos-equiv-derived-ok-rec exactly (substitutiongroup.go), so the set
+// gathered here is the spec's ·substitution group· — an implicitly contained
+// declaration only ever adds obligations, and none of them is invented. A head is
+// in its own group (clause 1) and so is re-offered here; add drops it as already
+// gathered.
+func (s *Schema) gatherImplicitElements(c *groupContents) {
 	heads := append([]containedElement(nil), c.elements...)
 	for _, head := range heads {
 		if head.decl.ScopeVariety() != ScopeGlobal {
 			continue // a local declaration heads no substitution group
 		}
 		for _, e := range s.elements {
-			if !s.certainlyInSubstitutionGroupOf(e.Name(), head.decl.Name(), facts) {
+			if !s.inSubstitutionGroupOf(e.Name(), head.decl.Name()) {
 				continue
 			}
 			c.add(e, topLevelKey(e.Name()))

@@ -63,11 +63,11 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // than cosmetic: both checks expand <group ref>s and walk {substitution group
 // affiliations} with NO cycle guard, which is licensed only because
 // checkModelGroupsAcyclic and checkSubstitutionGroupsAcyclic have already
-// rejected a circular graph of each kind (PRINCIPLES 5). Neither follows {base
-// type definition}, which §3.4.7 permits to be self-referential. The two
-// schema-global substitution-group facts both checks need are computed once here
-// and threaded as a parameter, never stored on the Schema (STYLE D3); see
-// substitutiongroup.go.
+// rejected a circular graph of each kind (PRINCIPLES 5). Deciding
+// cos-equiv-derived-ok-rec clause 2.3 makes them follow {base type definition}
+// too, so they rest on checkComplexBaseAcyclic as well — plus the explicit
+// xs:anyType test §3.4.7's one self-based type needs, which no acyclicity check
+// can supply (substitutiongroup.go).
 //
 // Phase D runs last, and its position after each earlier phase is load-bearing
 // too — it needs Phase A's resolvability, Phase B's acyclicity (it walks {base
@@ -129,11 +129,10 @@ func (s *Schema) resolve() error {
 	if err := s.checkSubstitutionGroupsAcyclic(); err != nil {
 		return err
 	}
-	facts := s.substitutionFacts()
-	if err := s.checkContentModelsUnambiguous(facts); err != nil {
+	if err := s.checkContentModelsUnambiguous(); err != nil {
 		return err
 	}
-	if err := s.checkElementDeclarationsConsistent(facts); err != nil {
+	if err := s.checkElementDeclarationsConsistent(); err != nil {
 		return err
 	}
 	if err := s.checkComplexDerivations(); err != nil {

@@ -51,10 +51,12 @@ const ruleCosNonambig xsderr.Rule = "cos-nonambig"
 // 5): ModelGroupRef edges (checkModelGroupsAcyclic, mg-props-correct clause 2)
 // and — inside the ·overlap· relation, not the flatten — {substitution group
 // affiliations} edges (checkSubstitutionGroupsAcyclic, e-props-correct clause 5).
-// It does NOT follow {base type definition}: §3.4.7 lets xs:anyType be its own
-// base, and a derived type's {content type} already folds in whatever the
-// derivation contributes (§3.4.2.3.3), so the base chain has nothing to add and
-// would reintroduce the self-loop this design relies on Phase B to have excluded.
+// The FLATTEN itself does not follow {base type definition}: a derived type's
+// {content type} already folds in whatever the derivation contributes
+// (§3.4.2.3.3), so the base chain has nothing to add to a content model. The
+// ·overlap· relation does follow it, for cos-equiv-derived-ok-rec clause 2.3,
+// and terminates on checkComplexBaseAcyclic (ct-props-correct clause 3) plus the
+// explicit test for the one self-based type §3.4.7 permits (substitutiongroup.go).
 
 // maxMandatoryCopies and maxOptionalCopies bound how many copies of a particle's
 // {term} fragment the unfolding emits, so that maxOccurs="100000" does not build
@@ -121,7 +123,7 @@ type automaton struct {
 // makes it a Model Group component the moment <group name="…"> is processed, and
 // §3.8.4.1.4 calls a standalone group shape violating UPA non-conforming without
 // mentioning reference status.
-func (s *Schema) checkContentModelsUnambiguous(facts substitutionFacts) error {
+func (s *Schema) checkContentModelsUnambiguous() error {
 	for _, t := range s.types {
 		ct, ok := t.(ComplexType)
 		if !ok {
@@ -136,7 +138,7 @@ func (s *Schema) checkContentModelsUnambiguous(facts substitutionFacts) error {
 		if err != nil {
 			return err
 		}
-		if err := b.check(first, facts, "complex type "+ct.Name().String()+" content model"); err != nil {
+		if err := b.check(first, "complex type "+ct.Name().String()+" content model"); err != nil {
 			return err
 		}
 	}
@@ -146,7 +148,7 @@ func (s *Schema) checkContentModelsUnambiguous(facts substitutionFacts) error {
 		if err != nil {
 			return err
 		}
-		if err := b.check(first, facts, "model group definition "+mgd.Name().String()); err != nil {
+		if err := b.check(first, "model group definition "+mgd.Name().String()); err != nil {
 			return err
 		}
 	}
@@ -158,12 +160,12 @@ func (s *Schema) checkContentModelsUnambiguous(facts substitutionFacts) error {
 // position 1, … — and within a state the pair with the least (i, j) by position
 // index is reported, so the reported violation is the lexicographically least
 // (state, i, j) and identical inputs always reject identically (STYLE D1).
-func (b *automaton) check(first []int, facts substitutionFacts, ctx string) error {
-	if err := b.checkState(first, facts, ctx, "at the start of"); err != nil {
+func (b *automaton) check(first []int, ctx string) error {
+	if err := b.checkState(first, ctx, "at the start of"); err != nil {
 		return err
 	}
 	for i := range b.follow {
-		if err := b.checkState(b.follow[i], facts, ctx, "after "+b.describe(i)+" in"); err != nil {
+		if err := b.checkState(b.follow[i], ctx, "after "+b.describe(i)+" in"); err != nil {
 			return err
 		}
 	}
@@ -171,10 +173,10 @@ func (b *automaton) check(first []int, facts substitutionFacts, ctx string) erro
 }
 
 // checkState rejects the first competing pair live in one state of the automaton.
-func (b *automaton) checkState(state []int, facts substitutionFacts, ctx, where string) error {
+func (b *automaton) checkState(state []int, ctx, where string) error {
 	for x := 0; x < len(state); x++ {
 		for y := x + 1; y < len(state); y++ {
-			competes, err := b.competes(state[x], state[y], facts)
+			competes, err := b.competes(state[x], state[y])
 			if err != nil {
 				return fmt.Errorf("checking unique particle attribution %s %s: %w", where, ctx, err)
 			}
@@ -202,7 +204,7 @@ func (b *automaton) checkState(state []int, facts substitutionFacts, ctx, where 
 // between an element particle and a wildcard particle is no longer forbidden"),
 // the Element Declaration winning ·attribution·. The two kinds are therefore kept
 // apart here rather than folded into one kind-blind overlap test.
-func (b *automaton) competes(i, j int, facts substitutionFacts) (bool, error) {
+func (b *automaton) competes(i, j int) (bool, error) {
 	pi, pj := b.positions[i], b.positions[j]
 	if pi.particleID == pj.particleID {
 		return false, nil
@@ -213,7 +215,7 @@ func (b *automaton) competes(i, j int, facts substitutionFacts) (bool, error) {
 		if !ok {
 			return false, nil // element particle vs wildcard particle: legal in 1.1
 		}
-		return b.s.elementsOverlap(ti, dj, facts), nil
+		return b.s.elementsOverlap(ti, dj), nil
 	case Wildcard:
 		wj, ok := pj.term.(Wildcard)
 		if !ok {
@@ -253,23 +255,20 @@ func (b *automaton) describe(i int) string {
 // ·substitution group· at all (§3.3.6.4 defines one per declaration "in the
 // {element declarations} of a schema", which §3.17.1 restricts to top-level).
 //
-// Membership uses the UNDER-approximating predicate: overlap here FIRES a schema
-// component constraint, so an over-broad substitution group would reject a valid
-// schema (see substitutiongroup.go).
-func (s *Schema) elementsOverlap(a, b ElementDeclaration, facts substitutionFacts) bool {
+// Membership is inSubstitutionGroupOf, which decides cos-equiv-derived-ok-rec
+// exactly (substitutiongroup.go), so the ·overlap· relation this constraint fires
+// on is the spec's relation and no over-broad group can reject a valid schema.
+func (s *Schema) elementsOverlap(a, b ElementDeclaration) bool {
 	if a.Name() == b.Name() {
 		return true // bullet 1
 	}
-	if !facts.anyAffiliation {
-		return false // bullets 2-3 need an affiliation edge; the schema declares none
-	}
-	if s.nameInSubstitutionGroupOf(a.Name(), b, facts) {
+	if s.nameInSubstitutionGroupOf(a.Name(), b) {
 		return true // bullet 2
 	}
-	if s.nameInSubstitutionGroupOf(b.Name(), a, facts) {
+	if s.nameInSubstitutionGroupOf(b.Name(), a) {
 		return true // bullet 2, the other direction
 	}
-	return s.substitutionGroupsIntersect(a, b, facts) // bullet 3
+	return s.substitutionGroupsIntersect(a, b) // bullet 3
 }
 
 // nameInSubstitutionGroupOf reports whether name is the expanded name of an
@@ -278,11 +277,11 @@ func (s *Schema) elementsOverlap(a, b ElementDeclaration, facts substitutionFact
 // expanded name as an element declaration in the other's substitution group", so
 // a local declaration named x overlaps a head whose group contains the top-level
 // x.
-func (s *Schema) nameInSubstitutionGroupOf(name QName, head ElementDeclaration, facts substitutionFacts) bool {
+func (s *Schema) nameInSubstitutionGroupOf(name QName, head ElementDeclaration) bool {
 	if head.ScopeVariety() != ScopeGlobal {
 		return false // a local declaration heads no substitution group
 	}
-	return s.certainlyInSubstitutionGroupOf(name, head.Name(), facts)
+	return s.inSubstitutionGroupOf(name, head.Name())
 }
 
 // substitutionGroupsIntersect is Appendix J bullet 3: two GLOBAL element
@@ -293,15 +292,15 @@ func (s *Schema) nameInSubstitutionGroupOf(name QName, head ElementDeclaration, 
 // The candidate members are enumerated from the document-order {element
 // declarations} slice, never from elementIndex, so no map iteration order reaches
 // the verdict (STYLE D2).
-func (s *Schema) substitutionGroupsIntersect(a, b ElementDeclaration, facts substitutionFacts) bool {
+func (s *Schema) substitutionGroupsIntersect(a, b ElementDeclaration) bool {
 	if a.ScopeVariety() != ScopeGlobal || b.ScopeVariety() != ScopeGlobal {
 		return false
 	}
 	for _, e := range s.elements {
-		if !s.inSubstitutionGroup(e.Name(), a.Name(), facts) {
+		if !s.inSubstitutionGroupOf(e.Name(), a.Name()) {
 			continue
 		}
-		if s.inSubstitutionGroup(e.Name(), b.Name(), facts) {
+		if s.inSubstitutionGroupOf(e.Name(), b.Name()) {
 			return true
 		}
 	}
