@@ -466,29 +466,67 @@ func TestCosCTExtendsClause15PureChain(t *testing.T) {
 	}
 }
 
-// TestCosCTExtendsDeferredClauses locks in the two clauses this file
-// deliberately does not charge — 1.3 (attribute-wildcard cos-ns-subset) and 1.7
-// ({assertions} prefix). Both are satisfied BY CONSTRUCTION for a faithfully
-// mapped type through folds no producer performs yet (#265), so over the
-// components this repo actually builds, charging either is a FALSE REJECT. The
-// fixture is exactly that shape — an extension whose own {attribute wildcard} is
-// NARROWER than the base's and which repeats none of the base's {assertions} —
-// and it must pass. If a later change turns either into a live check, this test
-// fails and the fold has to land with it.
-func TestCosCTExtendsDeferredClauses(t *testing.T) {
+// TestCosCTExtendsFoldBackedClauses is the control for the two clauses whose
+// satisfaction rides on a §3.4.2 base fold rather than on anything the source
+// document says: 1.3 (attribute-wildcard cos-ns-subset, over §3.4.2.5 clause
+// 2.2's fold, #265) and 1.7 ({assertions} prefix, over §3.4.2.1 clause 1's,
+// #346). The fixture is the shape a fold-less assembly would get wrong — an
+// extension whose OWN {attribute wildcard} is narrower than the base's, carrying
+// the base's assertion ahead of its own — and it must pass, because both folds
+// have run by the time either clause reads the components.
+func TestCosCTExtendsFoldBackedClauses(t *testing.T) {
 	anyW := uWildcard(t, NamespaceConstraintAny, nil, ProcessLax)
 	narrowW := uWildcard(t, NamespaceConstraintEnumeration, []Namespace{NamespaceName(uns)}, ProcessLax)
+	baseAssert := dAssert("true()")
 	err := dFinalize(t, func(b *SchemaBuilder) {
 		base, err := NewComplexType(xsderr.Loc{}, uq("base"), anyTypeName, nil, DerivationRestriction, false,
-			nil, nil, &anyW, EmptyContent{}, nil,
-			[]Assertion{NewAssertion(NewXPathExpression("true()", nil, nil, nil), nil)}, nil)
+			nil, nil, &anyW, EmptyContent{}, nil, []Assertion{baseAssert}, nil)
 		if err != nil {
 			t.Fatalf("NewComplexType(base): %v", err)
 		}
 		b.AddType(base)
-		b.AddType(xType(t, uq("derived"), uq("base"), EmptyContent{}, nil, &narrowW))
+		derived, err := NewComplexType(xsderr.Loc{}, uq("derived"), uq("base"), nil, DerivationExtension, false,
+			nil, nil, &narrowW, EmptyContent{}, nil, []Assertion{baseAssert, dAssert("@a > 0")}, nil)
+		if err != nil {
+			t.Fatalf("NewComplexType(derived): %v", err)
+		}
+		b.AddType(derived)
 	})
 	if err != nil {
-		t.Fatalf("the clause 1.3/1.7 GAP shape was rejected, so a fail-open skip became a false reject: %v", err)
+		t.Fatalf("a folded extension was rejected by a fold-backed clause: %v", err)
+	}
+}
+
+// TestCosCTExtendsClause17 pins clause 1.7 — B.{assertions} is a prefix of
+// T.{assertions} — in both directions. §3.4.2.1 clause 1's fold makes the
+// relation hold by construction for a type the producer mapped, so every
+// rejecting case here is assembled through the exported constructor instead
+// (dAssertType), which folds nothing.
+func TestCosCTExtendsClause17(t *testing.T) {
+	baseAssert, ownAssert := dAssert("true()"), dAssert("@a > 0")
+	for _, tc := range []struct {
+		name    string
+		derived []Assertion
+		wantOK  bool
+	}{
+		{"the fold's own output: the base's assertion, then the type's own", []Assertion{baseAssert, ownAssert}, true},
+		{"the base's assertions alone are a prefix of themselves", []Assertion{baseAssert}, true},
+		{"an extension that keeps only its own assertion", []Assertion{ownAssert}, false},
+		{"an extension carrying no assertions at all", nil, false},
+		{"an extension that puts its own assertion FIRST", []Assertion{ownAssert, baseAssert}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := dFinalize(t, func(b *SchemaBuilder) {
+				b.AddType(dAssertType(t, uq("base"), anyTypeName, DerivationRestriction, []Assertion{baseAssert}))
+				b.AddType(dAssertType(t, uq("derived"), uq("base"), DerivationExtension, tc.derived))
+			})
+			if tc.wantOK {
+				if err != nil {
+					t.Fatalf("an extension whose {assertions} extend the base's was rejected: %v", err)
+				}
+				return
+			}
+			expectRule(t, err, ruleCosCTExtends)
+		})
 	}
 }

@@ -292,17 +292,21 @@ func TestProduceElementBothInlineTypesRejected(t *testing.T) {
 }
 
 // TestResolveInlineComplexTypeReferences pins xsd/resolve.go's
-// resolveTypeDefinition ComplexType inner arm, which this landing is the first
-// to make REACHABLE: finalize must descend an anonymous complex type owned by a
-// declaration and charge src-resolve for its dangling references, exactly as it
-// does for a top-level one. Both reference sites in the arm's reach are covered
-// — the {base type definition} (clause 1.1) and the particle tree (clause 1.3).
+// resolveTypeDefinition ComplexType inner arm: finalize must descend an
+// anonymous complex type owned by a declaration and charge src-resolve for its
+// dangling references, exactly as it does for a top-level one.
+//
+// Only the PARTICLE TREE (clause 1.3) is covered from here. The arm's other
+// reference site, the {base type definition} (clause 1.1), is no longer reachable
+// through the producer: resolveBaseType resolves every base= — on the restriction
+// alternant too, since #346's §3.4.2.1 clause 1 {assertions} fold reads the base
+// component on both — and charges the same src-resolve clause 1.1 first, and
+// POSITIONED, which is what TestProduceComplexContentDanglingBase pins. Finalize
+// keeps that arm for the SchemaBuilder, which has no producer to defend it
+// (xsd/resolve_test.go's TestResolveAnonymousComplexTypeDanglingBase), the same
+// two-entry-points-one-rule shape buildComplexType's cycle rejection has.
 func TestResolveInlineComplexTypeReferences(t *testing.T) {
 	for _, tc := range []struct{ name, body string }{
-		{"dangling {base type definition}", `<xs:element name="doc">
-			<xs:complexType><xs:complexContent>
-				<xs:restriction base="tns:missing"><xs:sequence/></xs:restriction>
-			</xs:complexContent></xs:complexType></xs:element>`},
 		{"dangling <element ref> in the particle tree", `<xs:element name="doc">
 			<xs:complexType><xs:sequence>
 				<xs:element ref="tns:missing"/>
@@ -321,18 +325,31 @@ func TestResolveInlineComplexTypeReferences(t *testing.T) {
 	}
 }
 
-// TestResolveInlineComplexTypeNamesAnonymousOwner pins the diagnostic the arm
-// above emits: an anonymous type has no {name}, whose String is "", so the
-// message must describe what it is instead of leaving a hole.
-func TestResolveInlineComplexTypeNamesAnonymousOwner(t *testing.T) {
-	_, err := produce(t, wrap("urn:x", `<xs:element name="doc">
-		<xs:complexType><xs:complexContent>
+// TestProduceComplexContentDanglingBase pins the producer's own src-resolve
+// clause 1.1 verdict on a base= that names nothing, on BOTH <complexContent>
+// alternants and for a named type as well as an inline anonymous one. The
+// restriction alternant reaches it because #346's {assertions} fold resolves the
+// base component there too; the message is POSITIONED at the derivation element,
+// which finalize's counterpart (xsderr.Loc{}) cannot be.
+func TestProduceComplexContentDanglingBase(t *testing.T) {
+	for _, tc := range []struct{ name, body string }{
+		{"named restriction", `<xs:complexType name="ct"><xs:complexContent>
 			<xs:restriction base="tns:missing"><xs:sequence/></xs:restriction>
-		</xs:complexContent></xs:complexType></xs:element>`))
-	if err == nil {
-		t.Fatal("Produce accepted a dangling base on an inline anonymous complex type")
-	}
-	if !strings.Contains(err.Error(), "anonymous complex type {base type definition}") {
-		t.Fatalf("error = %v, want the anonymous owner phrase", err)
+		</xs:complexContent></xs:complexType>`},
+		{"named extension", `<xs:complexType name="ct"><xs:complexContent>
+			<xs:extension base="tns:missing"><xs:sequence/></xs:extension>
+		</xs:complexContent></xs:complexType>`},
+		{"inline anonymous restriction", `<xs:element name="doc">
+			<xs:complexType><xs:complexContent>
+				<xs:restriction base="tns:missing"><xs:sequence/></xs:restriction>
+			</xs:complexContent></xs:complexType></xs:element>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:x", tc.body))
+			assertRule(t, err, "src-resolve")
+			if !strings.Contains(err.Error(), "mem://produce.xsd:") {
+				t.Fatalf("error = %v, want a positioned producer diagnostic", err)
+			}
+		})
 	}
 }

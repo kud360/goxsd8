@@ -144,10 +144,14 @@ func (i complexTypeIdentity) newComplexType(loc xsderr.Loc, baseTypeDefinitionNa
 // Definition, in all four source forms: implicit complex content (§3.4.2.3.2,
 // restriction from xs:anyType), explicit <complexContent> with <restriction> or
 // with <extension> (§3.4.2.3.3 clauses 4.1 and 4.2), and <simpleContent> with
-// <extension> (§3.4.2.2 cases 3-5). The two extension forms need the
-// {base type definition} COMPONENT, which buildComplexType/resolveBaseType supply
-// by building it on demand (§3.4.2's preamble: the mapping rules "depend upon the
-// {base type definition} having been identified before they apply").
+// <extension> (§3.4.2.2 cases 3-5). Every form that names a base= needs the
+// {base type definition} COMPONENT — the two extension forms for their
+// content-type tableaux, and the <complexContent> <restriction> form for
+// §3.4.2.1 clause 1's {assertions} fold — and buildComplexType/resolveBaseType
+// supply it by building it on demand (§3.4.2's preamble: the mapping rules
+// "depend upon the {base type definition} having been identified before they
+// apply"). The implicit-content form names no base=; its base is xs:anyType,
+// always already seeded.
 //
 // <simpleContent> with <restriction> is the one form still declined: §3.4.2.2
 // cases 1-2 SYNTHESIZE a new anonymous simple type restricting the base's, from
@@ -195,10 +199,13 @@ func (i complexTypeIdentity) newComplexType(loc xsderr.Loc, baseTypeDefinitionNa
 // (xsd/complexderivation.go) with the checkAttributeUseNamesUnique
 // (ct-props-correct clause 4) and checkExtensionAttributeUses
 // (xsd/complexextension.go, cos-ct-extends clause 1.2) it drives — #438. The two
-// attribute folds (xsd/attributeusefold.go's foldAttributeUses,
+// FINALIZE-side folds (xsd/attributeusefold.go's foldAttributeUses,
 // xsd/attributewildcardfold.go's foldAttributeWildcards) miss it as well —
 // #414, and #438 depends on #414 because widening a read-only walk ahead of the
-// folds would turn an unfolded anonymous extension into a FALSE rejection. The
+// folds would turn an unfolded anonymous extension into a FALSE rejection.
+// §3.4.2.1 clause 1's {assertions} fold is NOT among them and needs no issue of
+// its own: assertionsWithBase runs HERE, on every produced type, anonymous ones
+// included (#346). The
 // direction today is open (under-rejection), never fail-closed, and
 // conformance/schema.go's anonymousComplexTypeDecidable narrows the conformance
 // lane to the implicit-content shape, on which the two folds are provably the
@@ -236,8 +243,13 @@ func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (
 		return xsd.ComplexType{}, err
 	}
 	// {assertions} (§3.4.2.1 clause 2) come from the <assert> children of the
-	// <complexType> itself in this implicit-content form; clause 1's fold of the
-	// base type's own assertions needs the resolved base and stays deferred.
+	// <complexType> itself in this implicit-content form. Clause 1's fold of the
+	// base's own {assertions} is not applied through assertionsWithBase here, and
+	// does not need to be: the base is unconditionally xs:anyType, whose
+	// {assertions} is the empty sequence (§3.4.7, seedAnyType), so the fold is
+	// PROVABLY the identity — and it is the seeded xs:anyType that any lookup
+	// would find, since builtComplex holds it before any document is produced and
+	// a name already in that memo is never rebuilt.
 	return id.newComplexType(el.Loc(), anyTypeName, nil,
 		xsd.DerivationRestriction, abstract, uses, prohibited, wildcard, content, nil, p.assertionsOf(el), nil)
 }
@@ -283,12 +295,11 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 		return xsd.ComplexType{}, err
 	}
 	content := xsd.SimpleContent{SimpleType: simpleContentSimpleType(base, p.symbols.built[anySimpleTypeName])}
-	// {assertions} (§3.4.2.1 clause 2): the <assert> children of <extension>. The
-	// base type's own assertions (clause 1) are not folded in — that fold is
-	// uniform across restriction and extension and is tracked as a whole (#265,
-	// xsd/complexderivation.go's GAP note), never half-applied here.
+	// {assertions} (§3.4.2.1): clause 1's members of the resolved base's own
+	// {assertions} — nothing at all when it is a simple type, the common case
+	// here — ahead of clause 2's <assert> children of <extension>.
 	return id.newComplexType(ctElem.Loc(), baseName, nil,
-		xsd.DerivationExtension, abstract, uses, prohibited, wildcard, content, nil, p.assertionsOf(ext), nil)
+		xsd.DerivationExtension, abstract, uses, prohibited, wildcard, content, nil, assertionsWithBase(base, p.assertionsOf(ext)), nil)
 }
 
 // simpleContentSimpleType is the §3.4.2.2 {simple type definition} tableau for
@@ -357,7 +368,18 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 		mixed = ccMixed
 	}
 	abstract, _ := boolAttr(ctElem, "abstract")
-	base, err := p.resolveQName(derivation, attrOr(derivation, "base"))
+	baseName, err := p.resolveQName(derivation, attrOr(derivation, "base"))
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
+	// The base COMPONENT is resolved here, for BOTH alternants, because §3.4.2.1
+	// clause 1's {assertions} fold reads it on both — where §3.4.2.3.3 clause 4's
+	// content-type merge needs it on the extension alternant only. Resolving it on
+	// the restriction alternant too moves nothing but the moment: every named base
+	// is built by run at its own document-order position anyway, and a base that is
+	// on the build stack or resolves to nothing is charged the same ct-props-correct
+	// clause 3 / src-resolve clause 1.1 verdict resolveBaseType always charges.
+	base, err := p.resolveBaseType(derivation, baseName)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -369,11 +391,11 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	// {assertions} (§3.4.2.1 clause 2): the <assert> children of the derivation
-	// alternant, not of the enclosing <complexType>, in this explicit
-	// complex-content form.
-	return id.newComplexType(ctElem.Loc(), base, nil,
-		method, abstract, uses, prohibited, wildcard, content, nil, p.assertionsOf(derivation), nil)
+	// {assertions} (§3.4.2.1): clause 1's members of the resolved base's own
+	// {assertions}, then clause 2's <assert> children of the derivation alternant
+	// — not of the enclosing <complexType> — in this explicit complex-content form.
+	return id.newComplexType(ctElem.Loc(), baseName, nil,
+		method, abstract, uses, prohibited, wildcard, content, nil, assertionsWithBase(base, p.assertionsOf(derivation)), nil)
 }
 
 // complexContentDerivation returns the <restriction> or <extension> child of a
@@ -394,21 +416,19 @@ func complexContentDerivation(cc *Element) (*Element, xsd.DerivationMethod) {
 // complexContentType computes the ·explicit content type· of a complex content
 // (§3.4.2.3.3 clause 4) from the derivation alternant's children: clause 4.1 for
 // a restriction, clause 4.2 for an extension. derivation is the <restriction> or
-// <extension> element, baseName its base= (needed only by the extension branch,
-// which must resolve it to a component), effectiveMixed is clause 1's result, and
-// scopeParent is the enclosing Complex Type Definition every local element
-// declaration in this content model is scoped to (§3.3.2.3 dcl.elt.local).
+// <extension> element, base the COMPONENT its base= names (already resolved by
+// the caller, which needs it for the §3.4.2.1 clause 1 {assertions} fold on both
+// alternants; only the extension branch reads it here), effectiveMixed is clause
+// 1's result, and scopeParent is the enclosing Complex Type Definition every
+// local element declaration in this content model is scoped to (§3.3.2.3
+// dcl.elt.local).
 //
 // Clause 6's ·wildcard element· wrap is applied on top of that result by
 // openContentType, in both branches: the derivation alternant is exactly the
 // element whose <openContent> child clause 5.1 reads.
-func (p *producer) complexContentType(derivation *Element, method xsd.DerivationMethod, baseName xsd.QName, effectiveMixed bool, scopeParent xsd.ElementScopeParent) (xsd.ContentType, error) {
+func (p *producer) complexContentType(derivation *Element, method xsd.DerivationMethod, base xsd.TypeDefinition, effectiveMixed bool, scopeParent xsd.ElementScopeParent) (xsd.ContentType, error) {
 	if method == xsd.DerivationRestriction {
 		return p.buildComplexContentType(derivation, effectiveMixed, scopeParent)
-	}
-	base, err := p.resolveBaseType(derivation, baseName)
-	if err != nil {
-		return nil, err
 	}
 	effective, explicitEmpty, err := p.effectiveContent(derivation, effectiveMixed, scopeParent)
 	if err != nil {

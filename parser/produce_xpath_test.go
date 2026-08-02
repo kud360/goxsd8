@@ -568,6 +568,98 @@ func TestProduceComplexContentRestrictionAssertions(t *testing.T) {
 	}
 }
 
+// assertionTests returns the {test} expressions of ct's {assertions}, in
+// {assertions} order — the order §3.4.2.1's "sequence" and the two prefix
+// clauses that read it (derivation-ok-restriction 5, cos-ct-extends 1.7) depend
+// on.
+func assertionTests(ct xsd.ComplexType) []string {
+	var tests []string
+	for _, a := range ct.Assertions() {
+		tests = append(tests, a.Test().Expression())
+	}
+	return tests
+}
+
+// TestProduceComplexTypeAssertionsFoldBase pins §3.4.2.1 (dcl.ctd.common) clause
+// 1: a complex type's {assertions} open with the {base type definition}'s own,
+// in order, and only then carry clause 2's <assert> children. §3.4.2.1's Note
+// makes the fold independent of the alternant chosen, so all three producing
+// shapes are covered here, plus a two-step chain in which the fold has to compose.
+func TestProduceComplexTypeAssertionsFoldBase(t *testing.T) {
+	doc := wrap("", `<xs:complexType name="base">
+	  <xs:sequence/>
+	  <xs:assert test="b1"/>
+	  <xs:assert test="b2"/>
+	</xs:complexType>
+	<xs:complexType name="restricted">
+	  <xs:complexContent>
+	    <xs:restriction base="base">
+	      <xs:sequence/>
+	      <xs:assert test="r1"/>
+	    </xs:restriction>
+	  </xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="extended">
+	  <xs:complexContent>
+	    <xs:extension base="restricted">
+	      <xs:sequence/>
+	      <xs:assert test="e1"/>
+	    </xs:extension>
+	  </xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="simpleBase">
+	  <xs:simpleContent>
+	    <xs:extension base="xs:string">
+	      <xs:assert test="s1"/>
+	    </xs:extension>
+	  </xs:simpleContent>
+	</xs:complexType>
+	<xs:complexType name="simpleDerived">
+	  <xs:simpleContent>
+	    <xs:extension base="simpleBase">
+	      <xs:assert test="s2"/>
+	    </xs:extension>
+	  </xs:simpleContent>
+	</xs:complexType>`)
+	for _, tc := range []struct {
+		local string
+		want  []string
+	}{
+		{"base", []string{"b1", "b2"}},
+		{"restricted", []string{"b1", "b2", "r1"}},
+		{"extended", []string{"b1", "b2", "r1", "e1"}},
+		// A SIMPLE {base type definition} has no {assertions} property, so it
+		// contributes nothing — clause 1 folds an empty sequence, not the base's
+		// §4.3.13 assertions facet.
+		{"simpleBase", []string{"s1"}},
+		{"simpleDerived", []string{"s1", "s2"}},
+	} {
+		t.Run(tc.local, func(t *testing.T) {
+			got := assertionTests(complexTypeOf(t, doc, tc.local))
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("%s {assertions} = %v, want %v", tc.local, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestProduceImplicitContentAssertionsUnfolded is the control on the one call
+// site that does NOT route through assertionsWithBase: an implicit-content
+// <complexType> restricts xs:anyType, whose {assertions} is empty (§3.4.7), so
+// its own <assert> children are the whole property and the skipped fold is
+// provably the identity. If the ur-type ever gained an assertion, this test would
+// keep passing and the omission would become wrong — which is why the reasoning,
+// not the observation, is what produce_complex.go records.
+func TestProduceImplicitContentAssertionsUnfolded(t *testing.T) {
+	ct := complexTypeOf(t, wrap("", `<xs:complexType name="ct">
+	  <xs:sequence/>
+	  <xs:assert test="a1"/>
+	</xs:complexType>`), "ct")
+	if got := assertionTests(ct); !reflect.DeepEqual(got, []string{"a1"}) {
+		t.Fatalf("{assertions} = %v, want just the type's own <assert> child", got)
+	}
+}
+
 func TestProduceSimpleTypeAssertionFacet(t *testing.T) {
 	s, err := produce(t, wrap("", `<xs:simpleType name="st">
 	  <xs:restriction base="xs:int">

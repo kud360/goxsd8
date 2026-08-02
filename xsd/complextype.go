@@ -50,13 +50,15 @@ import "github.com/kud360/goxsd8/xsderr"
 // Of the derivation-validity rules, derivation-ok-restriction (§3.4.6.3) IS
 // enforced, at finalize (Phase D, complexderivation.go, #262), clause 2.4.2's
 // cos-content-act-restrict (§3.4.6.4) delegate included (contentrestricts.go,
-// #263) — the exceptions there are clause 5's {assertions} prefix, and the
-// content models §3.4.6.3's own all-group leniency licenses accepting
-// provisionally. cos-ct-extends (§3.4.6.2) is enforced too, at the same phase
-// (complexextension.go, #264), clause 1.4.3.2.2.2's cos-particle-extend
-// (§3.9.6.2) delegate included — the exceptions there are clauses 1.3 and 1.7,
-// which need the §3.4.2.4/§3.4.2.5 base folds no producer performs yet (#265),
-// and clause 1.5 for a derivation chain mixing extension and restriction steps.
+// #263) — all five clauses, clause 5's {assertions} prefix included (#346); the
+// one latitude left there is the content models §3.4.6.3's own all-group
+// leniency licenses accepting provisionally. cos-ct-extends (§3.4.6.2) is
+// enforced too, at the same phase (complexextension.go, #264), clause
+// 1.4.3.2.2.2's cos-particle-extend (§3.9.6.2) delegate included — all seven
+// clauses of case 1, since the three §3.4.2 base folds they read are done
+// ({attribute uses} #401, {attribute wildcard} #265, {assertions} #346); the
+// exception is clause 1.5 for a derivation chain mixing extension and
+// restriction steps.
 // None of them is touched HERE — they are cross-component finalize-phase
 // concerns, not tableau shape.
 const ruleCTPropsCorrect xsderr.Rule = "ct-props-correct"

@@ -765,17 +765,16 @@ func anonymousComplexTypeDecidable(el *parser.Element) bool {
 //     directly under <complexContent> — is rejected by the producer as the
 //     grammar fault it is, so it needs no decline of its own;
 //   - the two EXTENSION forms, which the producer DOES build as of #228 —
-//     <simpleContent> <extension> and <complexContent> <extension> — because the
-//     base's {assertions} are still not folded in (§3.4.2.1 clause 1, #346).
-//     cos-ct-extends (§3.4.6.2) itself IS implemented as of #264, and its two
-//     attribute-side clauses now read FOLDED components — 1.2 over §3.4.2.4
-//     clause 3's {attribute uses} (#401) and 1.3 over §3.4.2.5 clause 2.2's
-//     {attribute wildcard} (#265) — but clause 1.7 ({assertions} prefix) remains a
-//     deliberate fail-open gap, so admitting these forms here would still emit
-//     "valid" for schemas a complete processor rejects. The exclusion narrows once
-//     #346 lands, exactly as the restriction path was admitted only once
-//     derivation-ok-restriction existed (#262/#263) — a lane-widening change of
-//     its own (#336), not this one's.
+//     <simpleContent> <extension> and <complexContent> <extension>. Every reason
+//     the exclusion was FIRST written has since been discharged: cos-ct-extends
+//     (§3.4.6.2) is implemented (#264) and all three §3.4.2 base folds its case-1
+//     clauses read are done — 1.2 over §3.4.2.4 clause 3's {attribute uses}
+//     (#401), 1.3 over §3.4.2.5 clause 2.2's {attribute wildcard} (#265) and 1.7
+//     over §3.4.2.1 clause 1's {assertions} (#346). What is left is the
+//     lane-widening measurement itself: admitting a form here changes which
+//     fixtures this gate answers for, so it is #336's change to make and to
+//     ratchet, exactly as the restriction path was admitted only once
+//     derivation-ok-restriction existed (#262/#263).
 //
 // A <group ref>/<attributeGroup ref> IS produced (#177) and admitted: its target
 // resolves genuinely at finalize (or fails src-resolve). Real structural
@@ -789,10 +788,10 @@ func complexTypeDecidable(el *parser.Element) bool {
 	if cc := childXSD(el, "complexContent"); cc != nil {
 		restriction := childXSD(cc, "restriction")
 		if restriction == nil {
-			// <extension> (produced since #228 and judged by cos-ct-extends
-			// since #264, but assembled without the §3.4.2.1 {assertions}
-			// fold #346, which leaves that rule's clause 1.7 fail-open) or a
-			// bare/absent derivation.
+			// <extension> (produced since #228, judged by cos-ct-extends
+			// since #264 and, since #346, over a fully folded {assertions} —
+			// so this decline now awaits only #336's lane-widening
+			// measurement) or a bare/absent derivation.
 			return false
 		}
 		return contentDecidable(restriction)
