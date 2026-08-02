@@ -1161,7 +1161,7 @@ map, so the next sweep starts from a ledger instead of a `grep`:
 | **#249** | `xsd/substitutiongroup.go:162`, `:168` |
 | **#345** | `xsd/contentrestricts.go:518`; `xsd/defaultbinding.go:268` |
 | **#379** *(new)* | `parser/doc.go:118` |
-| **#334** | `parser/produce_complex.go:446` |
+| ~~**#334**~~ | ~~`parser/produce_complex.go:446`~~ — **RETIRED 2026-08-02 by `594da84`** (marker deleted, not reworded; see the post-land note at the end of M4) |
 | **#342** | `parser/produce_complex.go:1170` |
 | **#346** | `xsd/complexderivation.go:189` |
 | **#282** | `xsd/contentrestricts.go:289` |
@@ -1170,11 +1170,21 @@ map, so the next sweep starts from a ledger instead of a `grep`:
 | **#248** | `xsd/wildcard.go:111` |
 
 (`xpath/doc.go:29` is the convention's own template; three `_test.go`
-hits pin existing markers; four in-prose back-references —
-`parser/produce_complex.go:491`, `value/valuespace.go:156`,
+hits pin existing markers; ~~four~~ **three** in-prose back-references —
+~~`parser/produce_complex.go:491`~~ *(deleted with the #334 marker,
+`594da84`)*, `value/valuespace.go:156`,
 `xsd/defaultbinding.go:368` and `:568` — plus
 `conformance/schema.go:266` cite markers rather than declaring them.
 None are sites.)
+
+**Every `file:line` in the table above is a 2026-08-01 snapshot and has
+since drifted** (#236/#264/#265/#281/#334 all moved lines in
+`parser/produce_complex.go`, `xsd/contentrestricts.go`,
+`xsd/defaultbinding.go` and `xsd/complexextension.go`). The *owner →
+site* mapping is still the useful part; the next `/backlog` should
+re-derive the line numbers from `grep -rn "GAP(" --include=*.go` rather
+than trusting these. Only #334's row was corrected here, because that
+one is not drift — the site is **gone**.
 
 **#379** is the sibling #287 explicitly refused to conflate itself with:
 two DISTINCT `<xs:override>` elements that transform a document
@@ -1362,6 +1372,64 @@ owed at land) — it does **not** enter band 1: fail-open only, moves no lane
 while #336 is blocked, and #265 buys strictly more per issue. Unblock scan:
 nothing else clears — #250 names #264 only in a stale comment, its real
 `## Depends on` is #79.
+
+***Post-land pass, 2026-08-02 (#334, `594da84`, PR #437, schema
+4283/15432, datatypes 1107/1129, ratchet unchanged — proved flat by a
+write-free `GOXSD_RATCHET=1` run, exactly as the issue predicted: the
+`<group ref>`-to-`<all>` shape 4.2.3.1/4.2.3.2 now reach is not
+exercised by any suite case that `complexTypeDecidable` admits).***
+
+**The GAP ledger shrinks by one and the census is now 27 owned sites,
+down from 28.** #334 is the first entry to leave the table by
+**retirement** rather than by re-pointing: `allGroupOf` now resolves a
+`<group ref>` particle's `{term}` through the prescan index to the
+referenced definition's real `{compositor}`, so the fail-open the marker
+disclosed no longer exists and the marker was **deleted, not
+reworded** (arbiter-verified at land). Its in-prose back-reference in
+`allGroupOf`'s own doc comment went with it. Both citations are struck
+in the table above.
+
+**One issue filed: #439** (`ready`, `kind/refactor`, `area/parser`, M4) —
+`produceIdentityConstraint`'s doc comment
+(`parser/produce_xpath.go:123-127`) claims named identity constraints are
+registered *"never at a demand-driven build site"*. False since
+`buildComplexType`, and #334 added the **second** route to the identical
+behaviour via `buildModelGroupDefinition`; it also now contradicts
+`symbols.builtGroups`' own doc (`parser/produce.go:214-221`), which says
+the opposite in as many words. Prose only — spec-immaterial (§3.17.1
+imposes no order), non-regressing, registration still happens exactly
+once. Third of its species after #423 and #425 and foldable into either.
+
+**Unblock scan: nothing clears.** No open `blocked` issue names #334 in
+its `## Depends on` — #334 itself depended on nothing, and the two open
+issues whose bodies mention it (#345, #392) cite it as neighbouring GAP
+context, not as a dependency. Ready-queue depth is unchanged by this
+landing.
+
+**Architecture-drift observation handed to the steward, not filed.**
+`buildModelGroupDefinition` (`parser/produce.go`, landed here) is the
+**third** instance of the identical *assembly-wide prescan index +
+tri-state memo* shape, after `buildSimpleType` and `buildComplexType`.
+Three hand-copied instances of one structure is a generalization
+question (a shared generic memo helper) and therefore belongs to the
+steward's `/retro` Part 2 architecture audit, not to a `kind/refactor`
+ticket filed blind by a post-land pass. Logged as a Part 2 input here
+and in the #334 thread; **do not file it as a normal issue**. Folded
+into the same input: `extensionParticle` now resolves the effective
+content's `ModelGroupRef` unconditionally, including when the base is
+not an all group and the answer cannot change the outcome — a possible
+short-circuit, cheap (the memoized build `run` performs anyway) and
+deliberately symmetric with §3.4.2.3.3 clause 4.2.3's own symmetric
+statement; the arbiter accepted it as-is and it is **not** a defect.
+
+**Watch item, one instance, nothing filed.** #334's issue thread carries
+the oracle's grounding and the arbiter's verdict but **no mason
+implementation-summary comment** — the file-by-file account lives only
+in the commit message and the LOG entry. CLAUDE.md and docs/WORKFLOW.md
+make the issue thread the cross-session channel, so a reader arriving at
+#334 from GitHub alone gets less than a reader with the repo. One
+instance is not a pattern; recorded here so a second instance has
+something to be the second of.
 
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 

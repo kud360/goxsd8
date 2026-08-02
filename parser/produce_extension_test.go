@@ -210,6 +210,110 @@ func TestProduceExtensionAllPlusAllMerges(t *testing.T) {
 	}
 }
 
+// TestProduceExtensionAllPlusAllMergesThroughGroupRef pins clause 4.2.3.2 when
+// the ·base particle·'s {term} is a <group ref> to an ALL-bodied model group
+// definition rather than an inline <all> (#334). §3.7.2 makes that particle's
+// {term} the definition's {model group}, so the sub-case test must read through
+// the reference: the two spellings are one component and select the same clause.
+//
+// The distinguishing observable is the {compositor} of the derived {term}. Left
+// unresolved, the reference falls through to clause 4.2.3.3 and synthesizes
+// sequence[all, all] — a shape cos-all-limited (§3.8.6.2) clause 1 forbids.
+//
+// Both particles carry minOccurs="0" for the reason
+// TestProduceExtensionAllPlusAllMerges gives: cos-particle-extend (§3.9.6.2)
+// clause 3.1 requires the derived and base {min occurs} to agree.
+func TestProduceExtensionAllPlusAllMergesThroughGroupRef(t *testing.T) {
+	s, err := produce(t, wrap("urn:x", `
+		<xs:group name="G"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+		<xs:complexType name="B"><xs:group ref="tns:G" minOccurs="0"/></xs:complexType>
+		<xs:complexType name="D"><xs:complexContent><xs:extension base="tns:B">
+			<xs:all minOccurs="0"><xs:element name="b" type="xs:string"/></xs:all>
+		</xs:extension></xs:complexContent></xs:complexType>`))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	// The base itself keeps the reference: resolving it is a READ for the sub-case
+	// test, never a rewrite of the base's own {content type}.
+	baseTerm := elementContentOf(t, s, xq("B")).Particle.Term()
+	if _, ok := baseTerm.(xsd.ModelGroupRef); !ok {
+		t.Fatalf("B {particle} {term} = %T, want the retained xsd.ModelGroupRef", baseTerm)
+	}
+	ec := elementContentOf(t, s, xq("D"))
+	if min := ec.Particle.Occurs().Min(); min != 0 {
+		t.Errorf("merged particle {min occurs} = %d, want 0 (the effective content's)", min)
+	}
+	if max, bounded := ec.Particle.Occurs().Max(); !bounded || max != 1 {
+		t.Errorf("merged particle {max occurs} = (%d,%t), want 1 (clause 4.2.3.2)", max, bounded)
+	}
+	all := groupTermOf(t, ec.Particle)
+	if all.Compositor() != xsd.CompositorAll {
+		t.Fatalf("merged {compositor} = %s, want all — clause 4.2.3.2 must see the all group THROUGH the <group ref>", all.Compositor())
+	}
+	if got := elementLocals(t, all); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("merged {particles} = %v, want [a b] (the referenced group's followed by the effective content's)", got)
+	}
+}
+
+// TestProduceExtensionAllBaseThroughGroupRefWithEmptyExplicitContent pins clause
+// 4.2.3.1 across the same <group ref> (#334): an all-bodied definition reached by
+// reference, with an empty ·explicit content·, yields the ·base particle· itself
+// — reference and all — not clause 4.2.3.3's sequence wrapper.
+//
+// Both types are mixed="true" for the reason
+// TestProduceExtensionAllBaseWithEmptyExplicitContent gives: that is what makes
+// the ·explicit content· empty while the ·effective content· is not, which is the
+// only way to reach this clause, and cos-ct-extends clause 1.4.3.2.2.1 requires
+// base and extension to agree on mixed.
+func TestProduceExtensionAllBaseThroughGroupRefWithEmptyExplicitContent(t *testing.T) {
+	s, err := produce(t, wrap("urn:x", `
+		<xs:group name="G"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:group>
+		<xs:complexType name="B" mixed="true"><xs:group ref="tns:G"/></xs:complexType>
+		<xs:complexType name="D" mixed="true"><xs:complexContent><xs:extension base="tns:B"/></xs:complexContent></xs:complexType>`))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	baseParticle := elementContentOf(t, s, xq("B")).Particle
+	derived := elementContentOf(t, s, xq("D")).Particle
+	if !reflect.DeepEqual(derived, baseParticle) {
+		t.Fatalf("D {particle} = %#v, want the base particle itself (clause 4.2.3.1)", derived)
+	}
+	if _, ok := derived.Term().(xsd.ModelGroupRef); !ok {
+		t.Fatalf("D {particle} {term} = %T, want the base's own xsd.ModelGroupRef", derived.Term())
+	}
+}
+
+// TestProduceExtensionGroupRefMapsDefinitionOnce proves the on-demand resolution
+// clause 4.2.3's sub-case test performs (#334) MAPS the referenced <group> once,
+// not once per lookup. G is declared LAST, so the sub-case test builds it before
+// run reaches its own document-order position; the memo is what stops run from
+// mapping it a second time.
+//
+// The observable is the named <key> on G's local element: mapping a definition
+// registers each named identity constraint in its body with the schema, so a
+// second mapping would register "k" twice and be rejected sch-props-correct
+// (§3.17.6.1) clause 2 — the same collision
+// TestProduceIdentityConstraintOnLocalElement uses to prove registration
+// happened. A clean Produce therefore proves exactly one mapping.
+func TestProduceExtensionGroupRefMapsDefinitionOnce(t *testing.T) {
+	s, err := produce(t, wrap("urn:x", `
+		<xs:complexType name="B"><xs:group ref="tns:G" minOccurs="0"/></xs:complexType>
+		<xs:complexType name="D"><xs:complexContent><xs:extension base="tns:B">
+			<xs:all minOccurs="0"><xs:element name="b" type="xs:string"/></xs:all>
+		</xs:extension></xs:complexContent></xs:complexType>
+		<xs:group name="G"><xs:all>
+			<xs:element name="a" type="xs:string">
+				<xs:key name="k"><xs:selector xpath="."/><xs:field xpath="@id"/></xs:key>
+			</xs:element>
+		</xs:all></xs:group>`))
+	if err != nil {
+		t.Fatalf("Produce: %v (a second mapping of <group G> would collide on the key named k)", err)
+	}
+	if got := elementLocals(t, groupTermOf(t, elementContentOf(t, s, xq("D")).Particle)); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("D merged {particles} = %v, want [a b] — the forward <group ref> resolved for clause 4.2.3.2", got)
+	}
+}
+
 // TestProduceExtensionNonParticleBases pins clause 4.2.1 (c-ctes): a simple base,
 // or a complex base whose {content type}.{variety} is empty or simple,
 // contributes NO particle — the result is clause 4.1.1/4.1.2's, exactly as for a
