@@ -106,7 +106,10 @@ func WithLogger(l *slog.Logger) Option {
 //
 // <redefine> is NOT yet followed: like every other not-yet-produced top-level
 // representation it is skipped, not rejected (§3.1.2), so a schema needing it
-// assembles short rather than wrongly.
+// assembles short rather than wrongly. Since a skipped <redefine> leaves no trace
+// in the returned schema, [WithLogger] at debug level is how a caller discovers
+// one: each skipped child <xs:redefine> element is reported there with its
+// location.
 //
 // Errors are schema-validity verdicts as *[xsderr.Error] values (src-include,
 // src-import, src-import-noselfimport, src-override, src-resolve,
@@ -257,6 +260,15 @@ func (a *assembly) discover(doc *Document, tns string, ov *overrideSet) error {
 			if err := a.importDocument(el, tns); err != nil {
 				return err
 			}
+		case isXSD(el, "redefine"):
+			// §4.2.4 is not implemented: a <redefine> child of a schema document is
+			// skipped, not rejected (§3.1.2), so the assembly is short by whatever that
+			// document would have contributed. Nothing is resolved — src-redefine's
+			// clauses all presuppose a successful resolution that is never attempted
+			// here — so the skip leaves no trace in the returned schema and this record
+			// is the only way to observe it (Parse's WithLogger, at debug level).
+			a.log.Debug("composition skipped: <xs:redefine> is not followed, its schemaLocation hint is never resolved",
+				"location", attrOr(el, "schemaLocation"), "at", el.Loc().String())
 		}
 	}
 	return nil
