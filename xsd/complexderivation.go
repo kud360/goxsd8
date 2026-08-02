@@ -403,16 +403,34 @@ func (s *Schema) checkRestrictionAttributes(t, b ComplexType) error {
 // wildcard read as having none and this check FALSELY rejected its restrictions;
 // the fold is what makes the comparison sound, not merely more complete.
 //
-// One residual over-approximation, stated rather than left to be rediscovered:
-// cvc-complex-type clause 2.2 is reached only "otherwise", i.e. for a name with no
-// matching {attribute use} in T, so a name T holds a use for is outside the
-// quantification even when T's wildcard also admits it. cos-ns-subset knows
-// nothing of {attribute uses}, so a subset failure caused SOLELY by a QName in
-// B.{attribute wildcard}.{namespace constraint}.{disallowed names} that B (and
-// therefore T, by §3.4.2.4 clause 3.2) declares an {attribute use} for is charged
-// here though clause 3 does not require it. Narrowing it would mean re-deriving
-// cos-ns-subset with a name-set parameter — the same relation in two encodings,
-// which is what T4 forbids and what #262 declined to build.
+// GAP(xsd): the comparison is an over-approximation in the FAIL-CLOSED
+// direction, owned by #430. cvc-complex-type clause 2.2 is reached only
+// "otherwise", i.e. for a name with no matching {attribute use} in T, so a name
+// T holds a use for is outside the quantification even when T's wildcard also
+// admits it. wildcardSubset decides cos-ns-subset over {namespace constraint}s
+// alone and knows nothing of {attribute uses}, so a subset failure caused SOLELY
+// by a QName in B.{attribute wildcard}.{namespace constraint}.{disallowed names}
+// that B (and therefore T, by §3.4.2.4 clause 3.2) declares an {attribute use}
+// for is charged here though clause 3 does not require it.
+//
+// The error returned below has exactly one consumer chain, and every link
+// propagates a non-nil error as a rejection rather than reading it for anything
+// else: checkRestrictionAttributes → Schema.checkComplexTypeRestriction →
+// Schema.checkComplexDerivations → Schema.resolve → SchemaBuilder.Finalize (and
+// FinalizeWith), which returns it to the caller in place of a *Schema. So the
+// over-charge is a FALSE REJECT of a VALID schema, not a missed rejection: a
+// restriction whose base disallows BY NAME an attribute both types govern with an
+// {attribute use} — B declaring <xs:attribute name="foo"/> alongside
+// <anyAttribute namespace="##any" notQName="foo"/>, T restricting B with
+// <anyAttribute namespace="##any"/> and inheriting the foo use — is rejected by
+// Finalize today. Reachable from plain source syntax; no W3C suite case has the
+// shape, which is why neither the gate nor the ratchet measures it.
+//
+// Narrowing it here would mean re-deriving cos-ns-subset with a name-set
+// parameter — the same relation in two encodings, which is what T4 forbids and
+// what #262 declined to build. #430 owns the choice between that and a
+// pre-filter of B's {disallowed names} against T's {attribute uses} at this call
+// site; nothing is narrowed yet, so the false reject above stands as described.
 func checkRestrictionAttributeWildcard(t, b ComplexType) error {
 	tw, has := t.AttributeWildcard()
 	if !has {
