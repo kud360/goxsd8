@@ -1289,3 +1289,196 @@ func TestProduceLocalElementInlineComplexTypeStillDeclined(t *testing.T) {
 		t.Fatalf("error = %v, want the inline-<complexType> limitation", err)
 	}
 }
+
+// TestProduceElementSubstitutionGroupHeads pins §3.3.2.1's {substitution group
+// affiliations} mapping: substitutionGroup is `List of QName` (§3.3.2), so EVERY
+// item is ·resolved· and carried, in the list's own lexical order (STYLE D2). The
+// two heads are named through different prefixes — the target namespace's own
+// prefix and the default binding — so the assertion also pins that each item goes
+// through the in-scope-bindings resolver rather than being defaulted wholesale to
+// the target namespace.
+func TestProduceElementSubstitutionGroupHeads(t *testing.T) {
+	body := `<xs:element name="h1" type="xs:string"/>` +
+		`<xs:element name="h2" type="xs:string"/>` +
+		`<xs:element name="member" type="xs:string" substitutionGroup="tns:h1 h2"/>`
+	s, err := produce(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="urn:x"`+
+		` targetNamespace="urn:x" xmlns:tns="urn:x">`+body+`</xs:schema>`)
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	ed, ok := s.Element(xsd.QName{Space: "urn:x", Local: "member"})
+	if !ok {
+		t.Fatalf("element {urn:x}member not found")
+	}
+	want := []xsd.QName{{Space: "urn:x", Local: "h1"}, {Space: "urn:x", Local: "h2"}}
+	if got := ed.SubstitutionGroupAffiliationNames(); !slices.Equal(got, want) {
+		t.Fatalf("{substitution group affiliations} = %v, want %v in document order", got, want)
+	}
+}
+
+// TestProduceElementSubstitutionGroupSingleHead is the one-item case, and pins
+// that a bare <element> with no substitutionGroup gets the EMPTY set rather than
+// a one-element slice holding the absent QName.
+func TestProduceElementSubstitutionGroupSingleHead(t *testing.T) {
+	body := `<xs:element name="head" type="xs:string"/>` +
+		`<xs:element name="member" type="xs:string" substitutionGroup="head"/>`
+	s, err := produce(t, wrap("", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	member, ok := s.Element(xsd.QName{Local: "member"})
+	if !ok {
+		t.Fatalf("element member not found")
+	}
+	want := []xsd.QName{{Local: "head"}}
+	if got := member.SubstitutionGroupAffiliationNames(); !slices.Equal(got, want) {
+		t.Fatalf("{substitution group affiliations} = %v, want %v", got, want)
+	}
+	head, ok := s.Element(xsd.QName{Local: "head"})
+	if !ok {
+		t.Fatalf("element head not found")
+	}
+	if got := head.SubstitutionGroupAffiliationNames(); len(got) != 0 {
+		t.Fatalf("head {substitution group affiliations} = %v, want the empty set", got)
+	}
+}
+
+// TestProduceElementSubstitutionGroupUnknownHeadAccepted pins §5.3 (Missing
+// Sub-components) for this one slot: a substitutionGroup naming no declaration
+// resolves to ·absent·, which is NOT a schema-construction error — the schema
+// stands and the affiliation simply carries a name nothing answers to. W3C
+// saxonData/Missing missing002 is this case, expected valid.
+func TestProduceElementSubstitutionGroupUnknownHeadAccepted(t *testing.T) {
+	body := `<xs:element name="member" type="xs:string" substitutionGroup="tns:missing"/>`
+	s, err := produce(t, wrap("urn:x", body))
+	if err != nil {
+		t.Fatalf("Produce rejected an unresolvable substitutionGroup head, but §5.3 makes it ·absent·, not an error: %v", err)
+	}
+	ed, ok := s.Element(xsd.QName{Space: "urn:x", Local: "member"})
+	if !ok {
+		t.Fatalf("element {urn:x}member not found")
+	}
+	want := []xsd.QName{{Space: "urn:x", Local: "missing"}}
+	if got := ed.SubstitutionGroupAffiliationNames(); !slices.Equal(got, want) {
+		t.Fatalf("{substitution group affiliations} = %v, want the unresolved %v retained", got, want)
+	}
+	// The contrast that makes the exemption specific to this slot rather than a
+	// blanket one: an unresolvable type= is still charged src-resolve at finalize.
+	_, err = produce(t, wrap("urn:x", `<xs:element name="e" type="tns:missing"/>`))
+	assertRule(t, err, "src-resolve")
+}
+
+// TestProduceElementSubstitutionGroupBadPrefixRejected pins the half the producer
+// DOES decide: an item whose prefix has no in-scope binding cannot be mapped to a
+// QName value at all, so it is charged src-resolve here, at the referring
+// element's own position.
+func TestProduceElementSubstitutionGroupBadPrefixRejected(t *testing.T) {
+	body := `<xs:element name="head" type="xs:string"/>` +
+		`<xs:element name="member" type="xs:string" substitutionGroup="head nope:other"/>`
+	_, err := produce(t, wrap("", body))
+	assertRule(t, err, "src-resolve")
+}
+
+// TestProduceElementSubstitutionGroupCircularRejected proves the whole pipe is
+// live end to end: with real affiliation edges flowing, finalize's Phase B
+// circularity check (e-props-correct clause 5) has a graph to walk, which it
+// never did while every producer passed a nil {substitution group affiliations}.
+func TestProduceElementSubstitutionGroupCircularRejected(t *testing.T) {
+	body := `<xs:element name="a" type="xs:string" substitutionGroup="b"/>` +
+		`<xs:element name="b" type="xs:string" substitutionGroup="a"/>`
+	_, err := produce(t, wrap("", body))
+	assertRule(t, err, "e-props-correct")
+}
+
+// TestProduceElementBlockMapped pins §3.3.2.1's {disallowed substitutions} row:
+// the ·effective block value· is block=, else the <schema>'s blockDefault, else
+// the empty string; "#all" names all three keywords; any other value names the
+// keywords its list contains, with unrecognized items IGNORED per the row's own
+// Note. The result is in the spec's canonical order whatever order the attribute
+// spells it in, so one set has one encoding.
+func TestProduceElementBlockMapped(t *testing.T) {
+	all := []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction, xsd.DerivationSubstitution}
+	for _, tc := range []struct {
+		name         string
+		blockDefault string
+		block        string
+		want         []xsd.DerivationMethod
+	}{
+		{name: "absent is the empty set"},
+		{name: "empty block is the empty set", block: `block=""`},
+		{name: "#all", block: `block="#all"`, want: all},
+		{name: "one keyword", block: `block="substitution"`, want: []xsd.DerivationMethod{xsd.DerivationSubstitution}},
+		{name: "canonical order not lexical", block: `block="substitution extension"`,
+			want: []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationSubstitution}},
+		{name: "unrecognized items ignored", block: `block="list union restriction"`,
+			want: []xsd.DerivationMethod{xsd.DerivationRestriction}},
+		{name: "blockDefault fallback", blockDefault: ` blockDefault="restriction"`,
+			want: []xsd.DerivationMethod{xsd.DerivationRestriction}},
+		{name: "block overrides blockDefault", blockDefault: ` blockDefault="#all"`, block: `block="extension"`,
+			want: []xsd.DerivationMethod{xsd.DerivationExtension}},
+		// An EMPTY block= is present, so it wins over blockDefault and maps to the
+		// empty set — the case that would be lost by treating "" as absent.
+		{name: "empty block overrides blockDefault", blockDefault: ` blockDefault="#all"`, block: `block=""`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"` + tc.blockDefault + `>` +
+				`<xs:element name="e" type="xs:string" ` + tc.block + `/></xs:schema>`
+			s, err := produce(t, doc)
+			if err != nil {
+				t.Fatalf("Produce: %v", err)
+			}
+			ed, ok := s.Element(xsd.QName{Local: "e"})
+			if !ok {
+				t.Fatalf("element e not found")
+			}
+			if got := ed.DisallowedSubstitutions(); !slices.Equal(got, tc.want) {
+				t.Fatalf("{disallowed substitutions} = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestProduceElementBlockSubstitutionNarrowsGroup is why {disallowed
+// substitutions} is mapped in the same slice as {substitution group
+// affiliations}: cos-equiv-derived-ok-rec clause 2.1 reads it, so with it
+// unmapped a blocking head would still admit its members and two names that do
+// NOT ·overlap· would be charged cos-nonambig. It is the shape of W3C MS-Element
+// elemZ028a, reduced to two declarations.
+func TestProduceElementBlockSubstitutionNarrowsGroup(t *testing.T) {
+	schema := func(block string) string {
+		return `<xs:element name="head" type="xs:anyType" ` + block + `/>` +
+			`<xs:element name="member" type="xs:anyType" substitutionGroup="head"/>` +
+			// minOccurs="0" on the first makes both particles live at the start
+			// state, so the two ·compete· exactly when they ·overlap·.
+			`<xs:complexType name="CT"><xs:sequence>` +
+			`<xs:element ref="member" minOccurs="0"/><xs:element ref="head"/>` +
+			`</xs:sequence></xs:complexType>`
+	}
+	if _, err := produce(t, wrap("", schema(`block="substitution"`))); err != nil {
+		t.Fatalf("head blocks substitution, so member is in no group of head and the two do not ·overlap·: %v", err)
+	}
+	// The control: drop the block and the two genuinely do overlap.
+	_, err := produce(t, wrap("", schema("")))
+	assertRule(t, err, "cos-nonambig")
+}
+
+// TestProduceLocalElementSubstitutionGroupRejected is e-props-correct clause 3
+// (§3.3.6.1) on the LOCAL path: the attribute is use="prohibited" on
+// xs:localElement (§3.3.2), and this producer runs no meta-schema validation pass
+// ahead of mapping, so silently ignoring it would be a false accept. The charge
+// is positioned on the local <element> itself.
+func TestProduceLocalElementSubstitutionGroupRejected(t *testing.T) {
+	body := `<xs:element name="head" type="xs:string"/>` +
+		"\n" + `<xs:complexType name="CT"><xs:sequence>` +
+		`<xs:element name="e" type="xs:string" substitutionGroup="head"/>` +
+		`</xs:sequence></xs:complexType>`
+	_, err := produce(t, wrap("", body))
+	assertRule(t, err, "e-props-correct")
+	loc, ok := xsderr.LocOf(err)
+	if !ok {
+		t.Fatalf("error %v carries no position", err)
+	}
+	if loc.URI != produceURI || loc.Line != 2 {
+		t.Fatalf("position = %s:%d:%d, want the local <element>'s own line 2 of %s", loc.URI, loc.Line, loc.Col, produceURI)
+	}
+}

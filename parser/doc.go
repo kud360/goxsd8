@@ -117,6 +117,15 @@
 //     package hard-fails, see [xsd.SchemaBuilder.Finalize]); an assembly
 //     that makes no such reference is accepted. Under-rejects in the
 //     same direction as the clause 4 gap above.
+//     That hard-fail is itself the deviation from §5.3, which makes an
+//     unresolved reference an ·absent· value and defers the consequence
+//     to ·assessment·, never rejecting the schema. One slot is already
+//     aligned: a {substitution group affiliations} member naming no
+//     declaration is retained as ·absent· rather than rejected (see
+//     xsd/resolve.go's resolveElementDecl). The remaining slots — {type
+//     definition}, <element ref>, <attribute ref>, <group ref>, keyref —
+//     are #434, which must also supply the ·lax assessment· fallback
+//     §5.3 requires on the validation side.
 //   - GAP(xsd): two DISTINCT <xs:override> elements whose children are
 //     textually equivalent are treated as two different overrides of the
 //     same document, so overriding one document the same way down two

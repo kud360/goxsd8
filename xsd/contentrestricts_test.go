@@ -351,28 +351,47 @@ func cGlobalRefModel(t *testing.T, name string) ModelGroup {
 	return uGroup(t, CompositorSequence, uOne(t, ElementDeclarationRef{Name: uq(name)}))
 }
 
-// TestContentRestrictsGlobalSubstitutionGap pins elementParticleAdmits's GAP(xsd)
-// arm, the only fail-open in this file with a scope narrow enough to test
-// directly: two differently-named TOP-LEVEL declarations are admitted
-// unconditionally, because no producer maps substitutionGroup= into {substitution
-// group affiliations} yet and charging the resulting non-membership would
-// false-reject the W3C suite's base <element ref="head"/> restricted to a member
-// of head's group. The scope is what the second half pins — a LOCAL declaration on
-// either side still needs the expanded names to agree — so the arm cannot quietly
-// widen into "any two element particles admit each other".
-func TestContentRestrictsGlobalSubstitutionGap(t *testing.T) {
-	globalRestriction := func(derived ModelGroup) error {
+// TestContentRestrictsGlobalSubstitution pins elementParticleAdmits now that it
+// carries no approximation: a base <element ref="head"/> restricted to
+// <element ref="member"/> is admitted exactly when member is in head's
+// ·substitution group·, and rejected when it is not.
+//
+// It was TestContentRestrictsGlobalSubstitutionGap, which pinned the opposite —
+// the fail-open arm admitting ANY two top-level declarations, needed while no
+// producer mapped substitutionGroup= into {substitution group affiliations} (a
+// universally-empty set makes every real member answer "not in the group", which
+// false-rejects). The producer now maps it (#281), so the case that used to be
+// the fail-open's whole justification is decided on real data instead, and the
+// unaffiliated pairing that used to slip through is charged.
+//
+// The LOCAL half is retained: a local declaration is in no substitution group at
+// all (e-props-correct clause 3 confines affiliations to a global {scope}), so it
+// is admitted only under cos-equiv-derived-ok-rec clause 1, expanded-name
+// equality — which is what makes the removal of the global arm a real narrowing
+// rather than a relabelling. Its particle is named for a declaration the schema
+// does not declare globally, so the membership walk's own name lookup misses and
+// the LOCAL reading is what is under test; a local particle sharing a global
+// declaration's expanded name would be answered from that global one, since
+// inSubstitutionGroupOf takes names rather than components (substitutiongroup.go).
+func TestContentRestrictsGlobalSubstitution(t *testing.T) {
+	globalRestriction := func(memberAffiliations []QName, derived ModelGroup) error {
 		return dFinalize(t, func(b *SchemaBuilder) {
 			b.AddElement(uGlobal(t, uq("head"), uq("T")))
-			b.AddElement(uGlobal(t, uq("member"), uq("T")))
+			b.AddElement(uGlobal(t, uq("member"), uq("T"), memberAffiliations...))
 			b.AddType(dType(t, uq("base"), anyTypeName, dElementContent(t, false, cGlobalRefModel(t, "head")), nil, nil))
 			b.AddType(dType(t, uq("derived"), uq("base"), dElementContent(t, false, derived), nil, nil))
 		})
 	}
-	if err := globalRestriction(cGlobalRefModel(t, "member")); err != nil {
-		t.Fatalf("a global-over-global element particle pairing was rejected, but the affiliation producer gap makes that a false reject: %v", err)
+	affiliated := []QName{uq("head")}
+	if err := globalRestriction(affiliated, cGlobalRefModel(t, "member")); err != nil {
+		t.Fatalf("member is in head's substitution group, so the element particle pairing must be admitted: %v", err)
 	}
-	expectRule(t, globalRestriction(uGroup(t, CompositorSequence, cElem(t, "member", 1, 1))), ruleDerivationOKRestriction)
+	// Same pairing, affiliation removed: no chain reaches head, and the arm that
+	// used to admit it unconditionally is gone.
+	expectRule(t, globalRestriction(nil, cGlobalRefModel(t, "member")), ruleDerivationOKRestriction)
+	// A LOCAL declaration joins no substitution group, so a differently-named
+	// local particle is not admitted against the base's <element ref="head"/>.
+	expectRule(t, globalRestriction(affiliated, uGroup(t, CompositorSequence, cElem(t, "local", 1, 1))), ruleDerivationOKRestriction)
 }
 
 // cNC builds a Namespace Constraint for the wildcardSubset table.
