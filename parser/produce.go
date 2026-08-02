@@ -31,6 +31,16 @@ const (
 	ruleParticleCorr          xsderr.Rule = "p-props-correct"
 	ruleWildcardCorr          xsderr.Rule = "w-props-correct"
 	ruleSrcIdentityConstraint xsderr.Rule = "src-identity-constraint"
+	// ruleEPropsCorrect is the Element Declaration Properties Correct Schema
+	// Component Constraint (§3.3.6.1). The producer charges only clause 3 ("If
+	// E.{substitution group affiliations} is non-empty, then E.{scope}.{variety}
+	// = global") and only in its SYNTACTIC form — a local <element> carrying a
+	// substitutionGroup attribute, which the schema for schema documents declares
+	// use="prohibited" on xs:localElement (§3.3.2). xsd.NewElementDeclaration
+	// charges the same clause on the component, for the programmatic path that
+	// bypasses this producer; the two are the same rule seen from either side of
+	// the mapping.
+	ruleEPropsCorrect xsderr.Rule = "e-props-correct"
 	// ruleDatatypeValid is the generic "this attribute's value is not valid
 	// against the simple type the schema for schema documents declares for it"
 	// rule (Datatypes §4.1.4, cvc-datatype-valid). It is charged where a schema
@@ -845,9 +855,121 @@ func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
+	affiliations, err := p.substitutionGroupAffiliations(elem)
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
 	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
 	return xsd.NewElementDeclaration(elem.Loc(), qname, xsd.TypeDefinitionRef{Name: typeName}, nil, xsd.NewGlobalScope(), vc,
-		false, constraints, nil, nil, false, nil, nil)
+		false, constraints, affiliations, nil, false, p.disallowedSubstitutions(elem), nil)
+}
+
+// substitutionGroupAffiliations maps the substitutionGroup attribute of a
+// top-level <element> into {substitution group affiliations} (§3.3.2.1
+// dcl.elt.common: "A set of the element declarations ·resolved· to by the items
+// in the ·actual value· of the substitutionGroup attribute, if present, otherwise
+// the empty set").
+//
+// The attribute is typed `List of QName` (§3.3.2), so XSD 1.1 permits SEVERAL
+// heads, and EVERY item contributes — unlike {type definition} clause 3, which
+// reads the first item alone (see localDeclaredType's GAP marker). Items are
+// resolved and returned in LEXICAL order and the property is carried as a slice,
+// not a set (STYLE D2): it reaches users through the cos-nonambig and
+// cos-element-consistent diagnostics, and no map is ranged anywhere on the path.
+//
+// Only the prefix→namespace-name half of ·resolved· happens here, through the one
+// in-scope-bindings resolver (STYLE T4), which also applies §F.1 task (b)'s
+// chameleon coercion to an unqualified item. Existence is not checked here at
+// all, and — unlike every other by-name reference this producer emits — it is not
+// checked at finalize either: a head naming no declaration is an ·absent· member
+// under §5.3 (Missing Sub-components), which makes the schema valid and only its
+// USE invalid. See xsd/resolve.go's resolveElementDecl for that decision; the
+// consequence here is that this function never fails on an unknown head, only on
+// a lexically unresolvable prefix.
+//
+// It is called only from produceElement: the local path rejects the attribute
+// outright (e-props-correct clause 3, produceLocalElement).
+//
+// {substitution group exclusions} — the final=/finalDefault twin — is deliberately
+// NOT mapped alongside it. The property is read by exactly one rule,
+// e-props-correct clause 4 (c-vs-sg), which this package does not implement and
+// which xsd/substitutiongroup.go records as unimplemented; mapping a property no
+// constraint consults would add a fact with no reader.
+func (p *producer) substitutionGroupAffiliations(elem *Element) ([]xsd.QName, error) {
+	lexical, ok := attrValue(elem, "substitutionGroup")
+	if !ok {
+		return nil, nil
+	}
+	var heads []xsd.QName
+	for _, item := range strings.Fields(lexical) {
+		head, err := p.resolveQName(elem, item)
+		if err != nil {
+			return nil, err
+		}
+		heads = append(heads, head)
+	}
+	return heads, nil
+}
+
+// disallowedSubstitutions maps an <element>'s block attribute into {disallowed
+// substitutions} (§3.3.2.1 dcl.elt.common). The ·effective block value· is the
+// block attribute if present, otherwise the ancestor <schema>'s blockDefault if
+// present, otherwise the empty string; the empty string maps to the empty set,
+// "#all" to all three keywords, and any other value to the keywords its
+// whitespace-separated list names. Values outside {extension, restriction,
+// substitution} are IGNORED rather than rejected — the mapping table's own Note
+// says blockDefault "may include values other than extension, restriction or
+// substitution" and that "those values are ignored in the determination of
+// {disallowed substitutions} for element declarations".
+//
+// It is mapped in THIS slice, beside {substitution group affiliations}, because
+// the two are one fact operationally: {disallowed substitutions} is read by
+// cos-equiv-derived-ok-rec clause 2.1 (§3.3.6.3), the clause that decides whether
+// a head admits substitution at all, so populating the affiliation edges while
+// leaving the property universally empty would publish an OVER-BROAD
+// ·substitution group· — every declared head would admit every member, which
+// false-rejects valid schemas through cos-nonambig's ·overlap· relation. W3C
+// MS-Element elemZ028a is exactly that shape: an affiliation chain a→b→c→d in
+// which c and d each carry block="substitution", with b, c and d then named side
+// by side in one <xs:all>. Half the pair is not a smaller change, it is a wrong
+// one.
+//
+// The result is returned in the spec's own canonical order — extension,
+// restriction, substitution, the order the table's case 2 writes the set in —
+// rather than in the attribute's lexical order. The property IS a set, its
+// members are drawn from that fixed three-element set, and a canonical order is
+// deterministic for every input spelling (STYLE D2), which a lexical one is not:
+// block="restriction extension" and block="extension restriction" denote the same
+// set and must not produce two different components.
+//
+// {substitution group exclusions} has no such mapping here — see
+// substitutionGroupAffiliations for why final= is left unmapped.
+func (p *producer) disallowedSubstitutions(elem *Element) []xsd.DerivationMethod {
+	ebv, ok := attrValue(elem, "block")
+	if !ok {
+		ebv, _ = attrValue(p.schemaElem, "blockDefault")
+	}
+	if ebv == "" {
+		return nil // case 1
+	}
+	if ebv == "#all" {
+		return []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction, xsd.DerivationSubstitution} // case 2
+	}
+	items := strings.Fields(ebv)
+	var blocked []xsd.DerivationMethod // case 3
+	for _, m := range []struct {
+		token  string
+		method xsd.DerivationMethod
+	}{
+		{"extension", xsd.DerivationExtension},
+		{"restriction", xsd.DerivationRestriction},
+		{"substitution", xsd.DerivationSubstitution},
+	} {
+		if slices.Contains(items, m.token) {
+			blocked = append(blocked, m.method)
+		}
+	}
+	return blocked
 }
 
 // produceNotation maps a top-level <notation> into a Notation Declaration

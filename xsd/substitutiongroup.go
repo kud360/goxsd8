@@ -95,6 +95,11 @@ func (s *Schema) inSubstitutionGroupOf(member, head QName) bool {
 // Affiliations are followed in document order (STYLE D2); the walk terminates
 // without a visited set because Finalize rejected a circular affiliation graph
 // (e-props-correct clause 5).
+//
+// An affiliation naming no declaration in the schema is an ·absent· member, which
+// resolve.go deliberately does not reject (§5.3 Missing Sub-components — see
+// resolveElementDecl). Skipping it is what §5.3 requires: no chain runs through a
+// component that is not there.
 func (s *Schema) affiliationChainReaches(m ElementDeclaration, head QName) bool {
 	for _, aff := range m.substitutionGroupAffiliations {
 		if aff == head {
@@ -102,7 +107,7 @@ func (s *Schema) affiliationChainReaches(m ElementDeclaration, head QName) bool 
 		}
 		next, ok := s.Element(aff)
 		if !ok {
-			continue // a dangling affiliation was already charged src-resolve by Phase A
+			continue // an ·absent· member (§5.3): there is no component to walk through
 		}
 		if s.affiliationChainReaches(next, head) {
 			return true

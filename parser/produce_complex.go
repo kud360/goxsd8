@@ -1107,12 +1107,33 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 // same footing produceElement charges it for a global <element>: without it,
 // lifting the inline decline would let type= silently win over an inline child.
 //
+// e-props-correct clause 3 (§3.3.6.1) is charged here too, FIRST, and on the
+// attribute rather than on the built component: a substitutionGroup= on a local
+// <element> is prohibited outright by the schema for schema documents
+// (use="prohibited" on xs:localElement, §3.3.2), and this producer runs no
+// meta-schema validation pass ahead of mapping, so nothing else would see it.
+// Reaching xsd.NewElementDeclaration's identical clause-3 check instead is not an
+// option — the mapping would have to build a non-empty {substitution group
+// affiliations} for a local declaration to trip it, which is exactly the state
+// the clause forbids — and simply not reading the attribute here would silently
+// ACCEPT the prohibited schema. It precedes the src-element test because it
+// depends on nothing but the attribute's presence.
+//
+// {disallowed substitutions} comes from the same disallowedSubstitutions mapping
+// the global path uses (STYLE T4): §3.3.2.1's row is a COMMON rule and the
+// meta-schema leaves block= permitted on xs:localElement, unlike the three
+// attributes it prohibits there (substitutionGroup, final, abstract).
+//
 // scopeParent is the nearest <complexType> or named <group> ancestor's component,
 // supplied by the caller (never recomputed from the element here — the ancestor
 // axis is not walkable from an *Element). It is a required parameter, so the
 // inline-<complexType> decline below is the only path that can bypass building a
 // scope.
 func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScopeParent) (xsd.ElementDeclaration, error) {
+	if _, ok := attrValue(el, "substitutionGroup"); ok {
+		return xsd.ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, el.Loc(),
+			"a local <element> carries a substitutionGroup attribute, but e-props-correct clause 3 confines a non-empty {substitution group affiliations} to a global {scope}.{variety} — the schema for schema documents accordingly declares the attribute use=\"prohibited\" on xs:localElement (§3.3.2)")
+	}
 	_, hasType := attrValue(el, "type")
 	inlineSimple := childElement(el, xsd.XMLSchemaNS, "simpleType")
 	inlineComplex := childElement(el, xsd.XMLSchemaNS, "complexType")
@@ -1143,7 +1164,7 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 		return xsd.ElementDeclaration{}, err
 	}
 	return xsd.NewElementDeclaration(el.Loc(), qname, typeDef, nil, scope, vc,
-		nillable, constraints, nil, nil, false, nil, nil)
+		nillable, constraints, nil, nil, false, p.disallowedSubstitutions(el), nil)
 }
 
 // localDeclaredType maps the {type definition} of a local <element> or
@@ -1161,13 +1182,25 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 // xsd.InlineTypeDefinition: it goes into no symbol table, so the declaration is
 // its sole owner. Its {context} (§3.16.1) is not populated (#206).
 //
-// GAP(xsd): the element chain's clause 3 — "the {type definition} of the element
-// declaration ·resolved· to by the actual value of the substitutionGroup
-// attribute" — is not implemented, here or on the global path (produceElement); a
-// substitutionGroup-bearing element with no type= and no inline child falls
-// straight through to clause 4's xs:anyType, which is wider than the head's type.
-// That direction under-rejects at validation, never false-rejects a valid schema.
-// The attribute chain has no clause-3 analog, so this gap is the element's alone.
+// GAP(xsd): the element chain's clause 3 — "The declared {type definition} of the
+// Element Declaration ·resolved· to by the FIRST QName in the ·actual value· of
+// the substitutionGroup attribute, if present" — is still not implemented, here
+// or on the global path (produceElement); a substitutionGroup-bearing element
+// with no type= and no inline child falls straight through to clause 4's
+// xs:anyType, which is wider than the head's type. That direction under-rejects
+// at validation, never false-rejects a valid schema. The attribute chain has no
+// clause-3 analog, so this gap is the element's alone.
+//
+// Note what is NOT in the gap since #281: substitutionGroup= IS read, and its
+// items ARE mapped into {substitution group affiliations}, by
+// produceElement/substitutionGroupAffiliations on the global path — the only path
+// the attribute is legal on, since this function's caller charges e-props-correct
+// clause 3 for a local one. The residue here is the {type definition} tier alone,
+// and the two mappings deliberately read the list differently: affiliations
+// resolve EVERY item, clause 3 the first one only. Closing it needs the HEAD's
+// own DECLARED type, which is recursive (the head may itself be a clause-3 case)
+// and lives behind a name this single-document producer may not have mapped yet,
+// so it belongs to the resolved-component phase, not here.
 func (p *producer) localDeclaredType(el *Element, dflt xsd.QName) (xsd.TypeDefinitionOrRef, error) {
 	if inline := childElement(el, xsd.XMLSchemaNS, "simpleType"); inline != nil {
 		st, err := p.constructSimpleType(xsd.QName{}, inline) // tier 1
