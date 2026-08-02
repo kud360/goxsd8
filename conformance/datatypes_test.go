@@ -76,10 +76,20 @@ func TestDatatypesSelectorClaimsOnlyCohort(t *testing.T) {
 		// declines), so it is claimed by no selector and stays the instance lane's
 		// recorded gap. #331 widened the routing, not the readers.
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/Facets/int/test111092.xml"}, false},
-		// xs:int and xs:integer lexical fixtures have the integer family's shape but
-		// were outside #331's enumerated scope, so they stay unclaimed as well.
-		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/int001.xml"}, false},
-		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/integer001.xml"}, false},
+		// The xs:int and xs:integer lexical fixtures ARE claimed since issue #365.
+		// #331 planted these two rows negative on purpose — the same device #224 used
+		// on byte008/unsignedShort006 — so widening datatypesCase would have to argue
+		// with a test rather than quietly edit a regex; flipping them is that argument.
+		// The widening is selector-only: they take the identical route to their
+		// byte/long/short siblings above (int001–008, integer001–016).
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/int001.xml"}, true},
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/integer001.xml"}, true},
+		// The bare "int" alternative #365 added must not leak. It is anchored between
+		// the literal msData/datatypes/ and [0-9]+\.xml$, so it reaches int<digits>.xml
+		// and nothing else: the Facets/int/ subtree stays out (the row above), and so
+		// does the cohort's own schema. That row is deliberately kindInstance so the
+		// REGEX, not selectsDatatypes' cheap kind guard, is what has to reject it.
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/int.xsd"}, false},
 	}
 	for _, tc := range cases {
 		if got := selectsDatatypes(tc.c); got != tc.want {
@@ -856,6 +866,141 @@ func TestDatatypesLexicalIntegerFamily(t *testing.T) {
 		}
 		if rule, ok := xsderr.RuleOf(verr); !ok || rule != r.rule {
 			t.Errorf("xs:byte %q rejection rule = %q (ok=%v), want %s", r.lexical, rule, ok, r.rule)
+		}
+	}
+}
+
+// TestDatatypesLexicalIntXFamily drives the executor over the xs:int and
+// xs:integer lexical fixtures issue #365 claimed (int001–008, integer001–016 —
+// twenty-four files; #331's prose said "integer001–012", an undercount that
+// this issue also corrected). It is a sibling of
+// TestDatatypesLexicalIntegerFamily rather than an extension of it because the
+// cohort exercises one thing the forty-eight bounded siblings cannot:
+// xs:integer carries NO min/maxInclusive at all (§3.4.13.3), only the fixed
+// fractionDigits=0 and the pattern [\-+]?[0-9]+, so it is the first type to
+// drive the route's UNBOUNDED arm, where the pattern is very nearly the whole
+// decision.
+//
+// Both polarities are asserted, and each is also asserted to DISAGREE with the
+// opposite claim — the load-bearing half: a routing that fell back to Parse
+// against xs:decimal's mapping would false-ACCEPT "2147483648" as an xs:int and
+// "-3.14159" as an xs:integer, and those wrong "valid" claims would spuriously
+// Pass. Skips when the submodule is absent.
+func TestDatatypesLexicalIntXFamily(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	exec := newDatatypesExec()
+
+	dir := filepath.Join(suiteRoot, "msData", "datatypes")
+	cases := []struct {
+		file      string
+		specValid bool // the spec-correct validity of the fixture's literal
+		why       string
+	}{
+		{"int001.xml", false, `"" fails int's fixed pattern [\-+]?[0-9]+ (cvc-pattern-valid)`},
+		{"int002.xml", true, `"-1" is in [-2147483648,2147483647]`},
+		{"int005.xml", true, `"2147483647" is int's maxInclusive`},
+		{"int006.xml", false, `"2147483648" exceeds int's maxInclusive (cvc-maxInclusive-valid)`},
+		{"int007.xml", true, `"-2147483648" is int's minInclusive`},
+		{"int008.xml", false, `"-2147483649" is below int's minInclusive (cvc-minInclusive-valid)`},
+		{"integer001.xml", false, `"" fails integer's pattern (cvc-pattern-valid)`},
+		{"integer002.xml", false, `"-3.14159" fails integer's pattern — the "." is not in it`},
+		{"integer004.xml", true, `"+0" — the pattern admits a leading +`},
+		{"integer005.xml", true, `"-0" — and a leading -`},
+		{"integer006.xml", false, `"+0.0" fails the PATTERN even though it has zero fraction digits`},
+		{"integer008.xml", true, `"1"`},
+		{"integer011.xml", true, `29 digits: the integer family is arbitrary precision, not int64`},
+		{"integer012.xml", false, `"-1E4" is not in xs:decimal's lexical space and fails the pattern`},
+		{"integer013.xml", false, `"INF" — decimal has no INF production (§3.3.3.1)`},
+		{"integer014.xml", false, `"-INF"`},
+		{"integer015.xml", false, `"NaN"`},
+		{"integer016.xml", false, `"ABCDEF"`},
+	}
+	for _, tc := range cases {
+		doc := filepath.Join(dir, tc.file)
+		right := caseSpec{kind: kindInstance, doc: doc, expect: expectValidity(tc.specValid)}
+		if got := exec(right); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with spec-correct validity %v (%s)", tc.file, tc.specValid, tc.why)
+		}
+		wrong := caseSpec{kind: kindInstance, doc: doc, expect: expectValidity(!tc.specValid)}
+		if exec(wrong).IsPass() {
+			t.Errorf("%s: executor must Fail against the wrong expectation (expectValid=%v)", tc.file, !tc.specValid)
+		}
+	}
+
+	// Pin the routing premises for BOTH types, exactly as the byte cohort above
+	// pins them: seeded, NOT directly mapped (so the generalized !mapped arm, not
+	// fixesTimezone, is what routes them), and governed by strict's xs:decimal
+	// mapping up the base chain.
+	backend := strict.New()
+	types, err := builtin.Seed(backend)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	seeded := func(local string) *xsd.SimpleType {
+		qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: local}
+		for _, ty := range types {
+			if ty.Name() == qn {
+				return ty
+			}
+		}
+		t.Fatalf("Seed did not return xs:%s", local)
+		return nil
+	}
+	for _, local := range []string{"int", "integer"} {
+		st := seeded(local)
+		if _, mapped := backend.Mapping(st.Name()); mapped {
+			t.Errorf("strict.Mapping(xs:%s) = mapped, want unmapped (the routing premise of #331/#365)", local)
+		}
+		if !strictGoverns(backend, st) {
+			t.Errorf("strictGoverns(xs:%s) = false, want true (xs:decimal governs it up the base chain)", local)
+		}
+		if fixesTimezone(st) {
+			t.Errorf("fixesTimezone(xs:%s) = true, want false (the two routing arms are independent)", local)
+		}
+	}
+
+	// The rejection REASONS, not just the polarities. #365 flagged the risk that
+	// integer012–016 might be charged cvc-fractionDigits-valid §4.3.12.3 — a right
+	// answer for a wrong reason. They cannot be: cvc-datatype-valid §4.1.4 runs
+	// clause 1's pattern first, and clause 3 tests a value V that clause 2.1 never
+	// establishes for a literal outside xs:decimal's lexical space (§3.3.3.1), so
+	// every one of them is cvc-pattern-valid §4.3.4.4. "+0.0" is the sharpest of
+	// them: it IS a decimal literal with zero fraction digits, so a
+	// fractionDigits-only check would accept it; only the pattern rejects it.
+	rules := []struct {
+		local   string
+		lexical string
+		rule    xsderr.Rule
+	}{
+		{"int", "2147483648", "cvc-maxInclusive-valid"},
+		{"int", "-2147483649", "cvc-minInclusive-valid"},
+		{"int", "", "cvc-pattern-valid"},
+		{"integer", "-1E4", "cvc-pattern-valid"},
+		{"integer", "INF", "cvc-pattern-valid"},
+		{"integer", "-INF", "cvc-pattern-valid"},
+		{"integer", "NaN", "cvc-pattern-valid"},
+		{"integer", "ABCDEF", "cvc-pattern-valid"},
+		{"integer", "+0.0", "cvc-pattern-valid"},
+	}
+	for _, r := range rules {
+		_, verr := value.ValidateLexical(backend, seeded(r.local), r.lexical, nil)
+		if verr == nil {
+			t.Fatalf("xs:%s %q must be rejected via value.ValidateLexical, got nil", r.local, r.lexical)
+		}
+		if rule, ok := xsderr.RuleOf(verr); !ok || rule != r.rule {
+			t.Errorf("xs:%s %q rejection rule = %q (ok=%v), want %s", r.local, r.lexical, rule, ok, r.rule)
+		}
+	}
+
+	// xs:integer's unbounded arm from the accepting side: "2147483648" (an int
+	// overflow) and integer011's 29-digit literal are BOTH valid xs:integer, so no
+	// bound is being spuriously inherited from a narrowing sibling and the family
+	// really is arbitrary precision (builtin/strict/doc.go).
+	for _, lex := range []string{"2147483648", "-2147483649", "12345678901234567890123456789"} {
+		if _, verr := value.ValidateLexical(backend, seeded("integer"), lex, nil); verr != nil {
+			t.Errorf("xs:integer %q must be accepted (it carries no bounds, §3.4.13.3), got %v", lex, verr)
 		}
 	}
 }

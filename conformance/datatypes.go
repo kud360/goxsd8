@@ -456,11 +456,13 @@ import (
 // value.ValidateLexical (decideLexicalByFacets), where governingMapping walks the
 // base chain to xs:decimal's mapping and the type's own effective facets decide
 // the value — the same pipeline xs:dateTimeStamp has taken since issue #140 and
-// the list path has taken per item since #224. Of the msData/datatypes lexical
-// fixtures the integer family still leaves int001–008 and integer001–012
-// unclaimed: they have the identical shape and would ride the same route, but
-// they were outside issue #331's enumerated scope and are a one-line widening of
-// datatypesCase whenever a later issue banks them.
+// the list path has taken per item since #224. Their xs:int and xs:integer
+// siblings (int001–008 and integer001–016 — twenty-four files, not the twenty
+// #331's prose miscounted: integer013–016 exist and carry the identical
+// comp_foo/simpleTest shape) joined the claim with issue #365, which widened
+// datatypesCase's alternation and changed no engine code; they ride that same
+// route unchanged. Nothing under msData/datatypes is left unclaimed by the
+// integer family now except the reader-shape limits named above.
 // time_minInclusive006_1163.i (issue #123) is a
 // recorded gap for a different reason: its instance file carries no
 // xsi:noNamespaceSchemaLocation (a defect in that one suite file), so
@@ -517,10 +519,26 @@ const synthNS = "urn:goxsd8:conformance:facets"
 // then have dragged in the undecidable non-list siblings). Those seven still
 // route through execLexicalCase's non-seeded fallback to execListCase, since
 // their tested type decodes as the user-defined "myList", not a builtin.
-// xs:int and xs:integer have plain lexical cases too (int001–008,
-// integer001–012) and the same shape; they are NOT claimed here, having been
-// outside issue #331's enumerated scope, and remain the instance lane's gaps.
-var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|dateTimeStamp|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth|QName|NOTATION|unsignedByte|unsignedInt|unsignedLong|unsignedShort|byte|long|short)[0-9]+\.xml$`)
+// xs:int and xs:integer joined the same alternation with issue #365: their
+// twenty-four plain lexical cases (int001–008, integer001–016 — #331's prose
+// said "integer001–012", an undercount; integer013–016 are real files of the
+// identical shape) ride the route above with NO engine change, only a wider
+// selector. xs:integer is the first member to exercise that route's UNBOUNDED
+// arm: it carries no min/maxInclusive at all (§3.4.13.3), just the fixed
+// fractionDigits=0 and the pattern [\-+]?[0-9]+, so those two alone decide it.
+// The pattern gate runs FIRST (cvc-datatype-valid §4.1.4 clause 1 before clause
+// 3, and clause 3's V is "as determined by" clause 2), so integer012–016
+// ("-1E4", "INF", "-INF", "NaN", "ABCDEF") are rejected as cvc-pattern-valid
+// §4.3.4.4 failures, never as cvc-fractionDigits-valid §4.3.12.3 ones: none is
+// in xs:decimal's lexical space (§3.3.3.1, no exponent/INF/NaN production)
+// either, so no value V is ever established for the value-based facets to test.
+// The alternation lists "integer" before "int" for the reader's sake only — it
+// is anchored between the literal msData/datatypes/ and [0-9]+\.xml$, so the
+// bare "int" alternative can reach int<digits>.xml and nothing else, and the
+// order is immaterial to what matches. Facets/int/test111092.xml in particular
+// stays claimed by no selector (TestDatatypesSelectorClaimsOnlyCohort pins the
+// selector from both sides).
+var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|dateTimeStamp|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth|QName|NOTATION|unsignedByte|unsignedInt|unsignedLong|unsignedShort|byte|long|short|integer|int)[0-9]+\.xml$`)
 
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
 // the lane decides: the strict-mapped primitives (string/decimal/float/double),
