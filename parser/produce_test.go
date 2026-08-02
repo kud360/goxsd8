@@ -1188,6 +1188,91 @@ func TestProduceChargesScaleRestriction(t *testing.T) {
 	}
 }
 
+// fixedFacetSchemas renders one single-facet <simpleType> per {fixed}-bearing
+// facet family the shared reader serves — a Part-2 facet (totalDigits, §4.3.11)
+// and a precisionDecimal scale facet (maxScale, xsd-precisionDecimal.md §4.2) —
+// with attrs spliced verbatim into the facet's start tag. The facet element sits
+// on line 3 of the document so a charge's position can be pinned. The result is a
+// slice, not a map: subtest order is output (STYLE D2).
+func fixedFacetSchemas(attrs string) []struct{ facet, body string } {
+	schema := func(base, facet string) string {
+		return "\n" + `<xs:simpleType name="st"><xs:restriction base="` + base + `">` + "\n" +
+			`<xs:` + facet + ` value="4"` + attrs + "/>\n</xs:restriction></xs:simpleType>"
+	}
+	return []struct{ facet, body string }{
+		{"totalDigits", schema("xs:decimal", "totalDigits")},
+		{"maxScale", schema("xs:precisionDecimal", "maxScale")},
+	}
+}
+
+// TestProduceFacetFixedActualValue pins the {fixed} property mapping shared by
+// all thirteen {fixed}-bearing facets: {fixed} is "the actual value of the fixed
+// [attribute], if present, otherwise false" (xsd-precisionDecimal.md §4.2.2,
+// §4.3.2; Datatypes §4.3.x). "Actual value" is the xs:boolean VALUE, so the
+// pre-lexical whiteSpace = collapse xs:boolean fixes (§3.3.2.3, §4.3.6) runs
+// before the four-literal lexical space booleanRep (§3.3.2.2) is tested: a padded
+// " true " is the value true, not a non-literal. The producer compared the RAW
+// attribute string against two literals, so every padded form silently became
+// false — and on a base maxScale that silently disabled f-ms-fixed.
+func TestProduceFacetFixedActualValue(t *testing.T) {
+	cases := []struct {
+		name  string
+		attrs string
+		want  bool
+	}{
+		{"absent", "", false},
+		{"true", ` fixed="true"`, true},
+		{"one", ` fixed="1"`, true},
+		{"false", ` fixed="false"`, false},
+		{"zero", ` fixed="0"`, false},
+		{"space padded true", ` fixed=" true "`, true},
+		{"tab and newline padded true", ` fixed="&#x9;true&#xA;"`, true},
+		{"padded zero", ` fixed="  0  "`, false},
+	}
+	for _, c := range cases {
+		for _, s := range fixedFacetSchemas(c.attrs) {
+			t.Run(s.facet+"/"+c.name, func(t *testing.T) {
+				st := simpleTypeOf(t, "st", s.body)
+				facets := st.OwnFacets()
+				if len(facets) != 1 {
+					t.Fatalf("own facets = %v, want exactly one <%s>", facets, s.facet)
+				}
+				fixed, ok := facets[0].Fixed()
+				if !ok {
+					t.Fatalf("%s reports no {fixed}, but it is a {fixed}-bearing facet", s.facet)
+				}
+				if fixed != c.want {
+					t.Errorf("fixed=%q → {fixed} = %v, want %v", c.attrs, fixed, c.want)
+				}
+			})
+		}
+	}
+}
+
+// TestProduceFacetFixedOutOfLexicalSpaceRejected is the other half of the same
+// mapping: a fixed value outside xs:boolean's lexical space is Datatype Valid
+// against nothing (§4.1.4 cvc-datatype-valid) and there is no clause letting it
+// default — so it is a positioned rejection, not a silent {fixed} = false. Case
+// matters ("TRUE" is not a booleanRep), and collapse never rescues an empty
+// value.
+func TestProduceFacetFixedOutOfLexicalSpaceRejected(t *testing.T) {
+	for _, lexical := range []string{"yes", "TRUE", "True", "", "  ", "2", "true false"} {
+		for _, s := range fixedFacetSchemas(` fixed="` + lexical + `"`) {
+			t.Run(s.facet+"/"+lexical, func(t *testing.T) {
+				_, err := produce(t, wrap("", s.body))
+				assertRule(t, err, xsderr.Rule("cvc-datatype-valid"))
+				loc, ok := xsderr.LocOf(err)
+				if !ok {
+					t.Fatalf("error %v carries no position", err)
+				}
+				if loc.URI != produceURI || loc.Line != 3 {
+					t.Fatalf("position = %s:%d:%d, want the facet element's own line 3 of %s", loc.URI, loc.Line, loc.Col, produceURI)
+				}
+			})
+		}
+	}
+}
+
 // inlineSimpleType asserts that a {type definition} slot is the InlineTypeDefinition
 // arm and returns the anonymous simple type it owns (#229).
 func inlineSimpleType(t *testing.T, ref xsd.TypeDefinitionOrRef) *xsd.SimpleType {
