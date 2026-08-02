@@ -95,21 +95,31 @@ type TypeDefinitionRef struct{ Name QName }
 // carried by value because the declaration is its sole owner.
 //
 // The wrapped definition is deliberately NOT registered in the schema's
-// {type definitions} (SchemaBuilder.AddType): §3.17.1 collects the components
-// a QName can resolve to, and an anonymous type has no name to be resolved by
-// — registering it would key the by-name index on QName{} and let unrelated
-// anonymous types collide. It is reachable only through the owning
-// declaration's TypeDefinition accessor.
+// {type definitions} (SchemaBuilder.AddType). §3.17.2's XML Mapping Summary
+// scopes that property to "the <simpleType> and <complexType> element
+// information items in the [children]" of <schema> — top level only — where
+// {identity-constraint definitions} beside it deliberately widens to "anywhere
+// within the [children]", so the spec makes the narrowing for exactly one
+// property and not this one. §3.17.1 agrees from the other side: it collects the
+// components a QName can resolve to, and an anonymous type has no name to be
+// resolved by, so registering it would key the by-name index on QName{} and let
+// unrelated anonymous types collide. Registering would also fork the component
+// in two: ComplexType is a value type, this slot holds its own copy, and
+// finalize's attribute folds write back through the Schema's own type slice —
+// so a registered copy would DIVERGE from the one a consumer reads here (STYLE
+// D3), which is worse than the fold not running. It is reachable only through
+// the owning declaration's TypeDefinition accessor; see Schema.Types.
 //
 // This slot does not populate the wrapped type's own {context} property, and it
 // is not the place to: {context} is the BACK-pointer of this same edge, and the
 // caller supplies it. The caller mints one xsd.ComponentID for the declaration
 // before either component exists and threads it into both — into the wrapped
-// type through NewAnonymousComplexType's context argument, and (from #340) into
-// the declaration's own identity — so nothing has to be mutated after
-// construction. For a wrapped COMPLEX type that is §3.4.1 ctd-context; see
-// ComplexTypeContext. A wrapped SIMPLE type's own {context} (§3.16.1
-// std-context) is a separate property and is still unmodeled here.
+// type through NewAnonymousComplexType's context argument, and into the
+// declaration through NewElementDeclarationOwningType, which is the only entry
+// point that accepts a wrapped COMPLEX type and checks the two agree (#340).
+// That property is §3.4.1 ctd-context; see ComplexTypeContext. A wrapped SIMPLE
+// type's own {context} (§3.16.1 std-context) is a separate property and is still
+// unmodeled here.
 //
 // Definition is always present and always ANONYMOUS (its Name() is the zero
 // QName): a named type is reachable by name and so is always the

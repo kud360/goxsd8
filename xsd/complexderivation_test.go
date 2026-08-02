@@ -30,11 +30,33 @@ func dAnyType(t *testing.T) ComplexType {
 	return ct
 }
 
+// dOwnInline builds the element declaration that OWNS ct, an ANONYMOUS complex
+// type a helper here already minted the {context} identity for. It reads that
+// identity back off the type and hands it to NewElementDeclarationOwningType,
+// the only entry point for this shape, so the two halves of §3.4.2.1
+// dcl.ctd.common agree by construction. A caller that mints the identity itself
+// calls the constructor directly instead — this helper exists for the tests
+// whose subject is something other than the identity (STYLE T4).
+func dOwnInline(t *testing.T, name QName, ct ComplexType, scope Scope, affiliations ...QName) ElementDeclaration {
+	t.Helper()
+	context, ok := ct.Context()
+	if !ok {
+		t.Fatalf("dOwnInline(%s): the complex type is NAMED (%s), so it is not owned by a declaration", name, ct.Name())
+	}
+	e, err := NewElementDeclarationOwningType(xsderr.Loc{}, context.ID(), name, ct, nil, scope,
+		nil, false, nil, affiliations, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("NewElementDeclarationOwningType(%s): %v", name, err)
+	}
+	return e
+}
+
 // dType builds a complex type restricting base, with the given {content type},
 // {attribute uses} and {attribute wildcard}. An absent name selects
 // NewAnonymousComplexType, whose §3.4.1 tableau makes {context} Required; the
 // callers that pass one build an inline type under an element declaration, so
-// a freshly minted ElementDeclarationContext is the honest arm.
+// a freshly minted ElementDeclarationContext is the honest arm — dOwnInline
+// hands that same identity to the declaration.
 func dType(t *testing.T, name, base QName, content ContentType, uses []AttributeUse, wildcard *Wildcard) ComplexType {
 	t.Helper()
 	if name.Local == "" {

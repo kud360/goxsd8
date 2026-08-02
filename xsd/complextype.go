@@ -223,14 +223,10 @@ func (o OpenContent) Wildcard() Wildcard {
 // Definition. Merging them would make "a complex type contexted in a model
 // group definition" representable. Separate sums, one shared primitive.
 //
-// GAP(xsd): no producer populates this property yet. The parser builds no
-// anonymous complex type at all today (parser's localDeclaredType is the sole
-// InlineTypeDefinition producer and the anonymous type it builds is always a
-// SIMPLE one), so the ElementDeclarationContext arm — the only arm any mapping
-// rule reaches — is exercised by hand-written construction alone until #340
-// lands the inline anonymous <complexType> producer. Only a caller assembling a
-// schema programmatically reaches it before then, the same standing this file's
-// AttributeUses and AttributeWildcard already document.
+// The ElementDeclarationContext arm — the only arm any mapping rule reaches — is
+// populated by the parser as of #340, for the inline anonymous <complexType> of
+// a local or a global <element> alike. ComplexTypeDefinitionContext stays
+// producer-unreachable by construction, not by omission; see its own doc.
 type ComplexTypeContext interface {
 	complexTypeContext()
 	// ID returns the identity of the component this {context} names. It is
@@ -248,14 +244,17 @@ type ComplexTypeContext interface {
 // never the zero ComponentID — NewAnonymousComplexType rejects an unminted one.
 // The field is read-only by convention; do not mutate it after construction.
 //
-// Note for #340: with no own-identity field on ElementDeclaration, an
-// InlineTypeDefinition may wrap an anonymous ComplexType whose {context} names
-// some OTHER component and nothing here can detect it. #340 — which adds the
-// declaration's own minted identity along with the producer that mints it — must
-// make NewElementDeclaration reject an inline anonymous complex type whose
-// ElementDeclarationContext identity differs from the declaration's own. That
-// check is what finally makes a mis-pointing {context} unrepresentable; it is
-// unbuildable until an ElementDeclaration carries an identity to compare against.
+// A mis-pointing {context} — an InlineTypeDefinition wrapping an anonymous
+// ComplexType whose {context} names some OTHER component — is unrepresentable as
+// of #340: NewElementDeclarationOwningType is the only construction path for a
+// declaration that owns an anonymous complex type, and it rejects a Component
+// that differs from the identity the caller minted for the declaration itself.
+//
+// That same identity is what the anonymous type's own nested local element
+// declarations report as their {scope}.{parent}, through
+// AnonymousComplexTypeScopeParent.Owner (elementdeclaration.go): the {context}
+// back-pointer here and that forward reference are ONE fact with one encoding
+// (STYLE D3), one mint per inline construct. See that type for the other half.
 type ElementDeclarationContext struct{ Component ComponentID }
 
 // ComplexTypeDefinitionContext is the {context} arm naming a containing Complex
@@ -366,8 +365,8 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // Declaration or Complex Type Definition by minted ComponentID, not by name,
 // because §3.4.2.1 dcl.ctd.common makes the target the nearest ancestor
 // <element>, frequently a LOCAL element declaration, which is not name-unique.
-// See ComponentID for the identity scheme and ComplexTypeContext for the sum and
-// its producer gap; see Context for the accessor.
+// See ComponentID for the identity scheme and ComplexTypeContext for the sum;
+// see Context for the accessor.
 //
 // The XOR needs no runtime check, because it is enforced by a CONSTRUCTION-PATH
 // PARTITION rather than by re-validating two independently optional fields:
@@ -383,9 +382,10 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // is IDENTITY, minted, opaque, and deliberately not derived from position. See
 // Loc, whose meaning this adds nothing to.
 //
-// Ratchet impact: unchanged. This is a leaf shape with no parser producer; the
-// schema conformance lane moves only when the producer (#176, and #340 for the
-// {context} slot) wires it in.
+// Ratchet impact: the schema conformance lane widened when the producer started
+// building this shape (#176) and again when it started building the ANONYMOUS
+// one, {context} and all, for an inline <complexType> child of an <element>
+// (#340).
 //
 // Construct only through NewComplexType (named) or NewAnonymousComplexType
 // (anonymous), which reject the tableau-shape states ct-props-correct (§3.4.6.1)
@@ -506,9 +506,9 @@ func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, fi
 // type-check at this layer, because this constructor accepts no name and
 // NewComplexType accepts no context.
 //
-// GAP(xsd): no parser calls this yet — the inline anonymous <complexType>
-// producer is #340. Until then the only callers are programmatic ones; see
-// ComplexTypeContext.
+// The parser calls this for the inline anonymous <complexType> of a local or a
+// global <element> (#340), always with an ElementDeclarationContext naming the
+// declaration it is building; see ComplexTypeContext.
 func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
 	if context == nil {
 		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
@@ -701,14 +701,16 @@ func (c ComplexType) Abstract() bool {
 // value has no way to reach.
 //
 // GAP(xsd): the fold walks the finalized Schema's TYPE DEFINITIONS only, so an
-// anonymous complex type nested in a particle tree (an InlineTypeDefinition on a
-// local element or attribute declaration) is not folded and reports its own uses
-// alone. No parser reaches that shape — parser's localDeclaredType is the only
-// producer of an InlineTypeDefinition and the anonymous type it builds there is
-// always a SIMPLE one — but a caller assembling a Schema through [SchemaBuilder]
-// can nest an inline complex type over a base that carries uses. Under-reporting
-// the set is the direction the whole fold's absence had before #401: it can
-// withhold a member, never fabricate one.
+// anonymous complex type owned by a declaration (an InlineTypeDefinition, at top
+// level or nested in a particle tree) is not folded and reports its own uses
+// alone. The parser reaches that shape as of #340, for the inline <complexType>
+// child of a local or a global <element>; a caller assembling a Schema through
+// [SchemaBuilder] reaches it too. The parser's own shape is provably unaffected
+// — conformance/schema.go admits only the IMPLICIT-CONTENT form, whose base is
+// xs:anyType, whose {attribute uses} §3.4.7 makes empty, so the unrun fold is
+// the identity — but the widening itself is #414's, one shape with two sites.
+// Under-reporting the set is the direction the whole fold's absence had before
+// #401: it can withhold a member, never fabricate one.
 func (c ComplexType) AttributeUses() []AttributeUse {
 	if len(c.attributeUses) == 0 {
 		return nil
@@ -731,13 +733,14 @@ func (c ComplexType) AttributeUses() []AttributeUse {
 // standalone value has no way to reach.
 //
 // GAP(xsd): the {attribute wildcard} half of the seam AttributeUses records for
-// {attribute uses} — ONE unfolded shape with two sites, not two gaps. Both folds
-// walk the finalized Schema's TYPE DEFINITIONS only, so an anonymous complex type
-// nested in a particle tree (an InlineTypeDefinition on a local element or
-// attribute declaration) is folded for neither property and reports its own
-// <anyAttribute> alone. No parser reaches that shape — see AttributeUses for why —
-// but a caller assembling a Schema through [SchemaBuilder] can nest an inline
-// complex type that extends a base carrying a wildcard. Phase D quantifies over
+// {attribute uses} — ONE unfolded shape with two sites, not two gaps, tracked as
+// #414. Both folds walk the finalized Schema's TYPE DEFINITIONS only, so an
+// anonymous complex type owned by a declaration (an InlineTypeDefinition) is
+// folded for neither property and reports its own <anyAttribute> alone. The
+// parser reaches that shape as of #340, in the implicit-content form alone — see
+// AttributeUses for why that form makes the unrun fold the identity — and a
+// caller assembling a Schema through [SchemaBuilder] can nest an inline complex
+// type that extends a base carrying a wildcard. Phase D quantifies over
 // the same type definitions, so no constraint in this package reads the unfolded
 // value; the exposure is a READING consumer's, and under-reporting is the
 // direction the whole fold's absence had before #265 — it can withhold admitted

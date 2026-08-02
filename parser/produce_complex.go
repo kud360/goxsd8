@@ -58,6 +58,88 @@ func seedAnyType() (xsd.ComplexType, error) {
 		xsd.DerivationRestriction, false, nil, nil, &wildcard, content, nil, nil, nil)
 }
 
+// complexTypeIdentity is what a <complexType> under production is identified by:
+// the expanded {name} of a TOP-LEVEL one, or — for an inline ANONYMOUS one,
+// which §3.4.1 ctd-context leaves nameless and gives a {context} instead — the
+// minted identity of the owning <element>'s declaration (§3.4.2.1
+// dcl.ctd.common: "the Element Declaration corresponding to the nearest
+// <element> information item among the ancestor element information items").
+//
+// Exactly one of the two is present, and that XOR needs no runtime check because
+// it is enforced by a CONSTRUCTION-PATH PARTITION: namedComplexType takes only a
+// name, anonymousComplexType only an owner, and the type is unexported so no
+// other package can write the fields. It never escapes the parser — it is the
+// producer's own threading value, not a component property — and it decides two
+// things at once, which is why it is one value rather than two parameters: which
+// xsd constructor builds the type, and which xsd.ElementScopeParent variant its
+// nested local element declarations report.
+//
+// The zero value carries neither and is not constructible through either entry
+// point; scopeParent and newComplexType assert against it rather than silently
+// emitting an unusable arm.
+type complexTypeIdentity struct {
+	name  xsd.QName
+	owner xsd.ComponentID
+}
+
+// namedComplexType identifies a top-level <complexType> by its expanded {name}.
+// A name whose local part is empty is a grammar fault, rejected by
+// produceComplexType before anything is built — not here, so that the rejection
+// still happens FIRST (see produceComplexType).
+func namedComplexType(name xsd.QName) complexTypeIdentity {
+	return complexTypeIdentity{name: name}
+}
+
+// anonymousComplexType identifies an inline anonymous <complexType> by the
+// minted identity of the element declaration that owns it — the same
+// xsd.ComponentID that declaration is built with and that the type's own
+// {context} carries (§3.4.2.1 dcl.ctd.common). One mint per inline construct.
+func anonymousComplexType(owner xsd.ComponentID) complexTypeIdentity {
+	return complexTypeIdentity{owner: owner}
+}
+
+// anonymous reports which arm i is, derived from the owner's presence rather
+// than stored beside it (STYLE D3).
+func (i complexTypeIdentity) anonymous() bool {
+	return i.owner != xsd.ComponentID{}
+}
+
+// scopeParent returns the {scope}.{parent} every local element declaration
+// nested in this type's content model reports (§3.3.2.3 dcl.elt.local: "the
+// Complex Type Definition corresponding to that item"), in the variant the
+// container's own identity admits.
+//
+// It panics on the zero identity, which names no container at all: that value is
+// unconstructible through this file's two entry points, so reaching it is a
+// producer bug, and emitting an empty arm instead would launder it into an
+// e-props-correct verdict against an innocent schema.
+func (i complexTypeIdentity) scopeParent() xsd.ElementScopeParent {
+	if i.anonymous() {
+		return xsd.AnonymousComplexTypeScopeParent{Owner: i.owner}
+	}
+	if i.name.Local == "" {
+		panic("parser: complexTypeIdentity.scopeParent: the identity carries neither a name nor an owner")
+	}
+	return xsd.ComplexTypeScopeParent{Name: i.name}
+}
+
+// newComplexType builds the Complex Type Definition this identity names, through
+// xsd.NewComplexType for the named arm and xsd.NewAnonymousComplexType for the
+// anonymous one (whose §3.4.1 tableau makes {context} Required). Every other
+// argument is common to both, which is why the two entry points differ only in
+// this one dispatch. It panics on the zero identity, for scopeParent's reason.
+func (i complexTypeIdentity) newComplexType(loc xsderr.Loc, baseTypeDefinitionName xsd.QName, final []xsd.DerivationMethod, derivationMethod xsd.DerivationMethod, abstract bool, attributeUses []xsd.AttributeUse, prohibitedAttributeNames []xsd.QName, attributeWildcard *xsd.Wildcard, contentType xsd.ContentType, prohibitedSubstitutions []xsd.DerivationMethod, assertions []xsd.Assertion, annotations []xsd.Annotation) (xsd.ComplexType, error) {
+	if i.anonymous() {
+		return xsd.NewAnonymousComplexType(loc, xsd.ElementDeclarationContext{Component: i.owner}, baseTypeDefinitionName, final,
+			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+	}
+	if i.name.Local == "" {
+		panic("parser: complexTypeIdentity.newComplexType: the identity carries neither a name nor an owner")
+	}
+	return xsd.NewComplexType(loc, i.name, baseTypeDefinitionName, final,
+		derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+}
+
 // produceComplexType maps a <complexType> element (§3.4.2) into a Complex Type
 // Definition, in all four source forms: implicit complex content (§3.4.2.3.2,
 // restriction from xs:anyType), explicit <complexContent> with <restriction> or
@@ -76,38 +158,65 @@ func seedAnyType() (xsd.ComplexType, error) {
 // schema lane (conformance/schema.go) declines that shape, so the decline never
 // reaches a validity verdict.
 //
-// name is also the {scope}.{parent} that every local element declaration nested
-// in this type's content model reports (§3.3.2.3 dcl.elt.local: "the Complex
-// Type Definition corresponding to that item"). It is threaded down the content
-// tree as an explicit xsd.ElementScopeParent parameter rather than stashed on
-// the producer, so nesting can never mis-attribute a declaration.
+// id is BOTH what the built type is constructed from — a {name} for a top-level
+// one, a {context} for an inline anonymous one — and the {scope}.{parent} that
+// every local element declaration nested in this type's content model reports
+// (§3.3.2.3 dcl.elt.local). It is threaded down the content tree as an explicit
+// xsd.ElementScopeParent parameter rather than stashed on the producer, so
+// nesting can never mis-attribute a declaration. See complexTypeIdentity.
 //
-// A missing name is rejected FIRST, before any content is built. The only caller
-// is the top-level <complexType> branch of run (produce.go), and the schema for
-// schema documents makes name use="required" with type xs:NCName on
-// xs:topLevelComplexType, so both an absent attribute and an empty one leave the
-// {name} property unusable. src-ct (§3.4.3) incorporates that condition by
-// reference ("In addition to the conditions imposed on <complexType> element
-// information items by the schema for schema documents") but states no clause of
-// its own for it, so this is a plain grammar fault like <include> with no
-// schemaLocation (parse.go), not an xsderr rule verdict. Rejecting it here,
-// unconditionally, is what keeps the verdict from depending on whether the
-// content happens to hold a local element — whose xsd.NewLocalScope would
-// otherwise charge e-props-correct, an unrelated rule, and only sometimes.
-func (p *producer) produceComplexType(name xsd.QName, el *Element) (xsd.ComplexType, error) {
-	if name.Local == "" {
+// A missing name on the NAMED arm is rejected FIRST, before any content is
+// built. That arm's caller is the top-level <complexType> branch of run
+// (produce.go, through buildComplexType), and the schema for schema documents
+// makes name use="required" with type xs:NCName on xs:topLevelComplexType, so
+// both an absent attribute and an empty one leave the {name} property unusable.
+// src-ct (§3.4.3) incorporates that condition by reference ("In addition to the
+// conditions imposed on <complexType> element information items by the schema
+// for schema documents") but states no clause of its own for it, so this is a
+// plain grammar fault like <include> with no schemaLocation (parse.go), not an
+// xsderr rule verdict. Rejecting it here, before any content, is what keeps the
+// verdict from depending on whether the content happens to hold a local element
+// — whose xsd.NewLocalScope would otherwise charge e-props-correct, an unrelated
+// rule, and only sometimes. The ANONYMOUS arm cannot reach that rejection: it
+// carries no name to be missing, and its own equivalent — an unminted owner — is
+// unconstructible, since produceElement/produceLocalElement mint the identity
+// before calling.
+//
+// GAP(xsd): an ANONYMOUS complex type built here enters no
+// xsd.SchemaBuilder.AddType (§3.17.2 scopes {type definitions} to the
+// <complexType> children OF <schema>, and registering it would fork the
+// component in two — see xsd/typedefinition.go's InlineTypeDefinition). Finalize
+// Phase A reaches it through the owning declaration, so src-resolve is charged
+// normally, but every finalize pass that quantifies over the Schema's type
+// definitions never visits it and produces NO verdict for it:
+// checkContentModelsUnambiguous (xsd/particleattribution.go, cos-nonambig),
+// checkElementDeclarationsConsistent (xsd/elementconsistent.go,
+// cos-element-consistent), and checkComplexDerivations
+// (xsd/complexderivation.go) with the checkAttributeUseNamesUnique
+// (ct-props-correct clause 4) and checkExtensionAttributeUses
+// (xsd/complexextension.go, cos-ct-extends clause 1.2) it drives — #438. The two
+// attribute folds (xsd/attributeusefold.go's foldAttributeUses,
+// xsd/attributewildcardfold.go's foldAttributeWildcards) miss it as well —
+// #414, and #438 depends on #414 because widening a read-only walk ahead of the
+// folds would turn an unfolded anonymous extension into a FALSE rejection. The
+// direction today is open (under-rejection), never fail-closed, and
+// conformance/schema.go's anonymousComplexTypeDecidable narrows the conformance
+// lane to the implicit-content shape, on which the two folds are provably the
+// identity (base xs:anyType, §3.4.7 empty uses and no wildcard to union).
+func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.ComplexType, error) {
+	if !id.anonymous() && id.name.Local == "" {
 		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
 	}
 	if oc := misplacedOpenContent(el); oc != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <openContent> at %s is in a position the schema for schema documents does not allow: it is a child of <complexType> only in the implicit-content form (no <simpleContent>/<complexContent>), under <complexContent> only of the <restriction>/<extension> alternant, and nowhere at all under <simpleContent>", oc.Loc())
 	}
 	if sc := childElement(el, xsd.XMLSchemaNS, "simpleContent"); sc != nil {
-		return p.produceSimpleContent(name, el, sc)
+		return p.produceSimpleContent(id, el, sc)
 	}
 	if cc := childElement(el, xsd.XMLSchemaNS, "complexContent"); cc != nil {
-		return p.produceComplexContent(name, el, cc)
+		return p.produceComplexContent(id, el, cc)
 	}
-	return p.produceImplicitContent(name, el)
+	return p.produceImplicitContent(id, el)
 }
 
 // produceImplicitContent maps a <complexType> with neither <simpleContent> nor
@@ -115,10 +224,10 @@ func (p *producer) produceComplexType(name xsd.QName, el *Element) (xsd.ComplexT
 // {derivation method} is restriction. The explicit content, attribute uses, and
 // attribute wildcard come directly from the <complexType>'s own children, and
 // this type is the {scope}.{parent} of every local element among them.
-func (p *producer) produceImplicitContent(name xsd.QName, el *Element) (xsd.ComplexType, error) {
+func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (xsd.ComplexType, error) {
 	mixed, _ := boolAttr(el, "mixed")
 	abstract, _ := boolAttr(el, "abstract")
-	content, err := p.buildComplexContentType(el, mixed, xsd.ComplexTypeScopeParent{Name: name})
+	content, err := p.buildComplexContentType(el, mixed, id.scopeParent())
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -129,7 +238,7 @@ func (p *producer) produceImplicitContent(name xsd.QName, el *Element) (xsd.Comp
 	// {assertions} (§3.4.2.1 clause 2) come from the <assert> children of the
 	// <complexType> itself in this implicit-content form; clause 1's fold of the
 	// base type's own assertions needs the resolved base and stays deferred.
-	return xsd.NewComplexType(el.Loc(), name, anyTypeName, nil,
+	return id.newComplexType(el.Loc(), anyTypeName, nil,
 		xsd.DerivationRestriction, abstract, uses, prohibited, wildcard, content, nil, p.assertionsOf(el), nil)
 }
 
@@ -151,7 +260,7 @@ func (p *producer) produceImplicitContent(name xsd.QName, el *Element) (xsd.Comp
 // it is charged here at the <complexType>'s own position — and it is charged
 // BEFORE the <restriction> decline, so a document that violates it gets the rule
 // verdict rather than a limitation error.
-func (p *producer) produceSimpleContent(name xsd.QName, ctElem, sc *Element) (xsd.ComplexType, error) {
+func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Element) (xsd.ComplexType, error) {
 	if mixed, present := boolAttr(ctElem, "mixed"); present && mixed {
 		return xsd.ComplexType{}, xsderr.New(ruleSrcCT, ctElem.Loc(),
 			"<complexType> has mixed=\"true\" and a <simpleContent> child, but src-ct clause 1 forbids mixed=true when the <simpleContent> alternative is chosen")
@@ -178,7 +287,7 @@ func (p *producer) produceSimpleContent(name xsd.QName, ctElem, sc *Element) (xs
 	// base type's own assertions (clause 1) are not folded in — that fold is
 	// uniform across restriction and extension and is tracked as a whole (#265,
 	// xsd/complexderivation.go's GAP note), never half-applied here.
-	return xsd.NewComplexType(ctElem.Loc(), name, baseName, nil,
+	return id.newComplexType(ctElem.Loc(), baseName, nil,
 		xsd.DerivationExtension, abstract, uses, prohibited, wildcard, content, nil, p.assertionsOf(ext), nil)
 }
 
@@ -230,7 +339,7 @@ func simpleContentSimpleType(base xsd.TypeDefinition, anySimpleType *xsd.SimpleT
 // the schema for schema documents, which src-ct incorporates by reference without
 // stating a clause of its own (the same footing as a nameless top-level
 // <complexType>).
-func (p *producer) produceComplexContent(name xsd.QName, ctElem, cc *Element) (xsd.ComplexType, error) {
+func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Element) (xsd.ComplexType, error) {
 	derivation, method := complexContentDerivation(cc)
 	if derivation == nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <complexContent> at %s has neither a <restriction> nor an <extension> child, one of which §3.4.2.3 requires", cc.Loc())
@@ -252,7 +361,7 @@ func (p *producer) produceComplexContent(name xsd.QName, ctElem, cc *Element) (x
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	content, err := p.complexContentType(derivation, method, base, mixed, xsd.ComplexTypeScopeParent{Name: name})
+	content, err := p.complexContentType(derivation, method, base, mixed, id.scopeParent())
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -263,7 +372,7 @@ func (p *producer) produceComplexContent(name xsd.QName, ctElem, cc *Element) (x
 	// {assertions} (§3.4.2.1 clause 2): the <assert> children of the derivation
 	// alternant, not of the enclosing <complexType>, in this explicit
 	// complex-content form.
-	return xsd.NewComplexType(ctElem.Loc(), name, base, nil,
+	return id.newComplexType(ctElem.Loc(), base, nil,
 		method, abstract, uses, prohibited, wildcard, content, nil, p.assertionsOf(derivation), nil)
 }
 
@@ -1145,16 +1254,30 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 // are mapped here exactly as in produceElement. Registering them with the schema
 // builder is the caller's job (produceElementParticle).
 //
-// Its {type definition} is mapped by localDeclaredType: the type= form, the
-// inline <simpleType> form (§3.3.2.1 dcl.elt.common clause 1, #229), or the
-// xs:anyType default (clause 4). An inline <complexType> child is still declined
-// (#340): the anonymous complex type it maps to would have to be the
-// {scope}.{parent} of its OWN nested local elements, which
-// xsd.ComplexTypeScopeParent — a by-NAME reference — cannot express (#301).
+// Its {type definition} is §3.3.2.1 dcl.elt.common's tier chain. Tier 1's inline
+// <complexType> child is mapped HERE, because that arm alone needs an identity
+// minted before either component exists: the anonymous complex type it maps to
+// is the {scope}.{parent} of its OWN nested local element declarations, and
+// having no name it is identified by the owning declaration's xsd.ComponentID
+// instead (xsd.AnonymousComplexTypeScopeParent, #340). One mint per inline
+// construct serves both directions — the type's {context} (§3.4.2.1
+// dcl.ctd.common) and those nested scopes — and
+// xsd.NewElementDeclarationOwningType checks the two agree. The remaining tiers
+// (the inline <simpleType> form, the type= form, the xs:anyType default) are
+// mapped by localDeclaredType, shared with the local-attribute chain.
 //
 // src-element clause 3 (§3.3.3) is charged here for the both-present case, on the
 // same footing produceElement charges it for a global <element>: without it,
-// lifting the inline decline would let type= silently win over an inline child.
+// type= would silently win over an inline child. It covers the inline
+// <complexType> arm as much as the <simpleType> one — the clause names both.
+//
+// An <element> carrying BOTH an inline <simpleType> and an inline <complexType>
+// is rejected outright, with a plain grammar-fault error rather than a rule
+// verdict: the schema for schema documents gives xs:localElement a single
+// (simpleType | complexType)? slot, and no src-element clause states the
+// condition (clause 3 is about a type child TOGETHER WITH type=, not about two
+// type children). Letting one arm win silently would map a schema no processor
+// accepts.
 //
 // e-props-correct clause 3 (§3.3.6.1) is charged here too, FIRST, and on the
 // attribute rather than on the built component: a substitutionGroup= on a local
@@ -1180,9 +1303,8 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 //
 // scopeParent is the nearest <complexType> or named <group> ancestor's component,
 // supplied by the caller (never recomputed from the element here — the ancestor
-// axis is not walkable from an *Element). It is a required parameter, so the
-// inline-<complexType> decline below is the only path that can bypass building a
-// scope.
+// axis is not walkable from an *Element). It is a required parameter, and every
+// path through this function builds the scope from it.
 func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScopeParent) (xsd.ElementDeclaration, error) {
 	if _, ok := attrValue(el, "substitutionGroup"); ok {
 		return xsd.ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, el.Loc(),
@@ -1195,16 +1317,12 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 		return xsd.ElementDeclaration{}, xsderr.New(ruleSrcElement, el.Loc(),
 			"element has both a type attribute and an inline <simpleType>/<complexType> child, but src-element clause 3 forbids both")
 	}
-	if inlineComplex != nil {
-		return xsd.ElementDeclaration{}, fmt.Errorf("parser: a local <element> with an inline <complexType> is not yet produced (#340, blocked on #301)")
+	if err := rejectBothInlineTypes(el, inlineSimple, inlineComplex); err != nil {
+		return xsd.ElementDeclaration{}, err
 	}
 	name, _ := attrValue(el, "name")
 	qname := xsd.QName{Space: p.localTargetNS(el, "elementFormDefault"), Local: name}
 	vc, err := valueConstraintOf(el, ruleSrcElement)
-	if err != nil {
-		return xsd.ElementDeclaration{}, err
-	}
-	typeDef, err := p.localDeclaredType(el, anyTypeName)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
@@ -1217,8 +1335,39 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
+	if inlineComplex != nil {
+		edID := xsd.NewComponentID()
+		ct, err := p.produceComplexType(anonymousComplexType(edID), inlineComplex)
+		if err != nil {
+			return xsd.ElementDeclaration{}, err
+		}
+		return xsd.NewElementDeclarationOwningType(el.Loc(), edID, qname, ct, nil, scope, vc,
+			nillable, constraints, nil, nil, false, p.disallowedSubstitutions(el), nil)
+	}
+	typeDef, err := p.localDeclaredType(el, anyTypeName)
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
 	return xsd.NewElementDeclaration(el.Loc(), qname, typeDef, nil, scope, vc,
 		nillable, constraints, nil, nil, false, p.disallowedSubstitutions(el), nil)
+}
+
+// rejectBothInlineTypes rejects an <element> carrying BOTH an inline
+// <simpleType> and an inline <complexType> child. The schema for schema
+// documents gives xs:element a single (simpleType | complexType)? slot, and
+// src-element (§3.3.3) states no clause for two type children — clause 3 is
+// about a type child together with type= — so this is a plain grammar fault like
+// a nameless top-level <complexType>, not an xsderr rule verdict (STYLE E2:
+// never fabricate a rule ID for a condition the spec states elsewhere).
+//
+// It is shared by the global and the local element path (STYLE T4): §3.3.2.1's
+// tier 1 is a COMMON mapping rule and the meta-schema restriction is the same on
+// xs:topLevelElement and xs:localElement, so one implementation serves both.
+func rejectBothInlineTypes(el *Element, inlineSimple, inlineComplex *Element) error {
+	if inlineSimple == nil || inlineComplex == nil {
+		return nil
+	}
+	return fmt.Errorf("parser: <element> at %s has both an inline <simpleType> and an inline <complexType> child, but the schema for schema documents allows at most one type child on an <element>", el.Loc())
 }
 
 // localDeclaredType maps the {type definition} of a local <element> or

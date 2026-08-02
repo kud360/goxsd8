@@ -223,9 +223,9 @@ func TestSubstitutionGroupClause23AnonymousMemberType(t *testing.T) {
 	member := func(prohibited ...DerivationMethod) *Schema {
 		return sgSchema(t, func(b *SchemaBuilder) {
 			b.AddType(sgType(t, sq("H"), QName{}, DerivationRestriction, prohibited...))
-			anon := InlineTypeDefinition{Definition: sgType(t, QName{}, sq("H"), DerivationExtension)}
+			anon := sgType(t, QName{}, sq("H"), DerivationExtension)
 			b.AddElement(sgElement(t, sq("head"), sgRef(sq("H")), nil))
-			b.AddElement(sgElement(t, sq("member"), anon, nil, sq("head")))
+			b.AddElement(dOwnInline(t, sq("member"), anon, NewGlobalScope(), sq("head")))
 		})
 	}
 	expectMembership(t, member(DerivationExtension), sq("member"), sq("head"), false)
