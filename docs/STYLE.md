@@ -156,6 +156,23 @@ is owned by an issue names that issue in the text, and the issue must
 still be open: a marker pointing at a closed issue is a dead end, so
 repoint it in the landing that closes the owner.
 
+**P3a. A claimed direction names the consumers it quantifies over.** A
+marker or comment that asserts a gap's error direction — "fail-open",
+"never a false reject", "can only cost a win" — must list the readers of
+the value it withholds or adds, by their actual identifiers, and state
+which direction each of them charges in. A gap is fail-open only against
+the WHOLE consumer set: one reader that charges on an EXTRA member makes
+an under-application fail-CLOSED, and one whose rejection condition IS
+the withheld value makes a withholding fail-CLOSED. The unenumerated
+form — "every consumer of X charges on a missing member" — is not an
+acceptable claim, because it is exactly the sentence that gets written
+when only the consumers in view were checked. Write the identifiers, or
+write no direction at all and say the direction is unestablished.
+(Rationale: two consecutive sessions spent their one repair round on a
+fail-open claim that was fail-closed; both died in seconds under
+reproduction, and neither the gate nor the ratchet could see them —
+the corpus does not contain the shapes.)
+
 **P4. Stream from the start.** Bounded memory on every input path: no
 `io.ReadAll`, no whole-document buffering. Position tracking uses an
 offset index over the stream, not retained content.
