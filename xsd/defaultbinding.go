@@ -68,21 +68,28 @@ func (wildcardKeywordBinding) defaultBinding()    {}
 //     attributeusefold.go), so an INHERITED use counts without any walk here.
 //     cvc-complex-type clause 2.1 makes such a use the ·context-determined
 //     declaration·, so it wins over any wildcard — including a wildcard on c
-//     itself, since case 2 is tested before cases 4/5/6. The one shape the
-//     materialised set still over-reports is clause 3.2.2's prohibited name; that
-//     GAP is stated once, at foldAttributeUses.
+//     itself, since case 2 is tested before cases 4/5/6. The set is exact for
+//     both derivation methods: clause 3.2.2's prohibited names are applied at the
+//     fold too, so a name a restriction prohibits is absent here rather than
+//     reported as the ancestor's use.
 //   - cases 4/5/6: otherwise, if c's {attribute wildcard} admits n, the wildcard's
 //     {process contents} keyword. This one is read off c ALONE, which is exact for
 //     a restriction: §3.4.2.5 clause 2.1 makes its {attribute wildcard} the
 //     ·complete wildcard· — its own <anyAttribute>, with nothing inherited.
 //     Walking the chain for wildcards would be wrong, not merely lenient: every
 //     type reaches ·xs:anyType·, whose lax ##any attribute wildcard would then
-//     admit every name and make the caller's check vacuous. §3.4.2.5 clause 2.2's
-//     cos-aw-union of the ·base wildcard· into an EXTENSION's wildcard is NOT
-//     folded — neither by the producer nor at finalize, unlike {attribute uses} —
-//     so an extension's wildcard is under-reported here. Under-reporting a
-//     wildcard can only withhold a binding the caller would have compared, never
-//     invent one: it is FAIL-OPEN, never a false reject (#265).
+//     admit every name and make the caller's check vacuous.
+//
+// GAP(xsd): §3.4.2.5 clause 2.2's cos-aw-union of the ·base wildcard· into an
+// EXTENSION's {attribute wildcard} is NOT folded — neither by the producer nor at
+// finalize, unlike {attribute uses} — so an extension's wildcard is its own
+// <anyAttribute> alone here. That is a FALSE-REJECT risk, not a fail-open one:
+// the under-reported wildcard makes ok false for a name the extension genuinely
+// admits, and checkRestrictionAttributes charges derivation-ok-restriction on
+// exactly that !ok, so a restriction of an extension whose base carried the
+// admitting wildcard is rejected for an attribute the base really does allow.
+// Closing it is #265 section 3's (the extension wildcard fold); it is stated
+// plainly here so no caller reads the gap as merely lenient.
 //
 // ok is false when c admits no attribute of that name at all — no member of
 // {attribute uses} and no admitting wildcard — in which case there is no binding

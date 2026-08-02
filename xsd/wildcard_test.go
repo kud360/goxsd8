@@ -183,7 +183,7 @@ func TestWPropsCorrectClause5(t *testing.T) {
 
 	newCT := func(w *xsd.Wildcard) error {
 		_, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: "urn:t", Local: "ct"}, xsd.QName{}, nil,
-			xsd.DerivationRestriction, false, nil, w, xsd.EmptyContent{}, nil, nil, nil)
+			xsd.DerivationRestriction, false, nil, nil, w, xsd.EmptyContent{}, nil, nil, nil)
 		return err
 	}
 	newAG := func(w *xsd.Wildcard) error {

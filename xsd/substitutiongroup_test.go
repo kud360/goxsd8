@@ -22,7 +22,7 @@ func sq(local string) QName { return QName{Space: sgns, Local: local} }
 func sgType(t *testing.T, name, base QName, method DerivationMethod, prohibited ...DerivationMethod) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, nil, method, false,
-		nil, nil, EmptyContent{}, prohibited, nil, nil)
+		nil, nil, nil, EmptyContent{}, prohibited, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -47,7 +47,7 @@ func sgSimple(t *testing.T, name QName, base *SimpleType) *SimpleType {
 func sgSimpleContentType(t *testing.T, name QName, base *SimpleType) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base.Name(), nil, DerivationExtension, false,
-		nil, nil, SimpleContent{SimpleType: base}, nil, nil, nil)
+		nil, nil, nil, SimpleContent{SimpleType: base}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}

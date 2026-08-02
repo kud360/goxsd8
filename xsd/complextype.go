@@ -220,6 +220,17 @@ func (o OpenContent) Wildcard() Wildcard {
 // NewComplexType is clauses 1 and 2 alone and Phase D overwrites it with the full
 // set (attributeusefold.go, #401). See AttributeUses.
 //
+// prohibitedAttributeNames is the one field here that is NOT a §3.4.1 property.
+// It is a retained MAPPING INPUT: clause 3.2.2 excludes from that fold the
+// expanded name of "what would have been an attribute use corresponding to an
+// <attribute> child, if the <attribute> had not had use = prohibited", and
+// §3.4.2.4's Note makes such an <attribute> correspond to no component at all —
+// so nothing among the properties records it and absence from {attribute uses}
+// cannot distinguish "never declared" from "explicitly prohibited". The fold
+// runs after the producer is gone, so the fact travels on the component. It is
+// about ONE type's own source declaration, consulted once at that type's own
+// fold step, and is never walked up a base chain.
+//
 // {context} (§3.4.1 ctd-context — the component an anonymous type appears in) is
 // entirely UNMODELED, tracked as #301: the containing declaration/type that would
 // be the {context} is not wired to this component yet, so an anonymous
@@ -239,19 +250,23 @@ func (o OpenContent) Wildcard() Wildcard {
 // ruleCTPropsCorrect's doc for exactly which clauses are deferred). ComplexType
 // is immutable after construction.
 type ComplexType struct {
-	loc                     xsderr.Loc // source position; provenance, not a §3.4.1 property
-	name                    QName
-	baseTypeDefinitionName  QName
-	derivationMethod        DerivationMethod
-	final                   []DerivationMethod
-	abstract                bool
-	attributeUses           []AttributeUse
-	attributeWildcard       Wildcard
-	hasAttributeWildcard    bool
-	contentType             ContentType
-	prohibitedSubstitutions []DerivationMethod
-	assertions              []Assertion
-	annotations             []Annotation
+	loc                    xsderr.Loc // source position; provenance, not a §3.4.1 property
+	name                   QName
+	baseTypeDefinitionName QName
+	derivationMethod       DerivationMethod
+	final                  []DerivationMethod
+	abstract               bool
+	attributeUses          []AttributeUse
+	// prohibitedAttributeNames is a mapping input, not a §3.4.1 property: the
+	// expanded names this type's OWN source declaration gave use="prohibited"
+	// (§3.4.2.4 clause 3.2.2). See the type doc.
+	prohibitedAttributeNames []QName
+	attributeWildcard        Wildcard
+	hasAttributeWildcard     bool
+	contentType              ContentType
+	prohibitedSubstitutions  []DerivationMethod
+	assertions               []Assertion
+	annotations              []Annotation
 }
 
 // NewComplexType builds a ComplexType, rejecting the tableau-shape states
@@ -278,6 +293,15 @@ type ComplexType struct {
 // attribute-use expanded-name uniqueness) and the derivation-validity rules are
 // NOT checked here — see ruleCTPropsCorrect's doc.
 //
+// prohibitedAttributeNames is not a §3.4.1 property and is not validated here:
+// it is the mapping input §3.4.2.4 clause 3.2.2 needs and any set of expanded
+// names is legal (the Note makes a prohibited <attribute> "pointless, though not
+// an error" outside a restriction). It arrives through this constructor rather
+// than through a setter because ComplexType is immutable after construction and
+// this is its single construction path (STYLE T1/T7); the alternative — an
+// exported With… copier — would add a second way to build the value for the sake
+// of one field that has nothing to check.
+//
 // baseTypeDefinitionName is a pre-resolution QName reference, not a resolved
 // component; nothing resolves it yet (#173). attributeWildcard is a pointer so
 // absence (nil) is distinct from a present zero record (mirroring
@@ -293,7 +317,7 @@ type ComplexType struct {
 // element's, say) — it is observable, not merely an error-charging convenience.
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
-func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
+func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
 	switch derivationMethod {
 	case DerivationExtension, DerivationRestriction:
 	default:
@@ -335,6 +359,9 @@ func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, fi
 	}
 	if len(attributeUses) > 0 {
 		c.attributeUses = append([]AttributeUse(nil), attributeUses...)
+	}
+	if len(prohibitedAttributeNames) > 0 {
+		c.prohibitedAttributeNames = append([]QName(nil), prohibitedAttributeNames...)
 	}
 	if attributeWildcard != nil {
 		c.attributeWildcard, c.hasAttributeWildcard = *attributeWildcard, true
@@ -434,12 +461,23 @@ func (c ComplexType) Abstract() bool {
 // The spec property is a set (§3.4.1); the document order here is an
 // implementation choice for determinism and carries no spec significance.
 //
-// On a type reached through a finalized [Schema] this is the FULL §3.4.2.4 clause
-// 3 property — the type's own uses followed by those inherited from its {base
-// type definition} — because Finalize materialises the fold (attributeusefold.go,
-// #401). On a ComplexType a caller built with [NewComplexType] and has not yet
-// finalized, it is only what that caller passed in: clause 3 needs the base
-// COMPONENT, which a standalone value has no way to reach.
+// On a NAMED type reached through a finalized [Schema] this is the §3.4.2.4
+// clause 3 property — the type's own uses followed by those inherited from its
+// {base type definition}, less what clauses 3.2.1 and 3.2.2 exclude — because
+// Finalize materialises the fold (attributeusefold.go, #401). On a ComplexType a
+// caller built with [NewComplexType] and has not yet finalized, it is only what
+// that caller passed in: clause 3 needs the base COMPONENT, which a standalone
+// value has no way to reach.
+//
+// GAP(xsd): the fold walks the finalized Schema's TYPE DEFINITIONS only, so an
+// anonymous complex type nested in a particle tree (an InlineTypeDefinition on a
+// local element or attribute declaration) is not folded and reports its own uses
+// alone. No parser reaches that shape — parser's localDeclaredType is the only
+// producer of an InlineTypeDefinition and the anonymous type it builds there is
+// always a SIMPLE one — but a caller assembling a Schema through [SchemaBuilder]
+// can nest an inline complex type over a base that carries uses. Under-reporting
+// the set is the direction the whole fold's absence had before #401: it can
+// withhold a member, never fabricate one.
 func (c ComplexType) AttributeUses() []AttributeUse {
 	if len(c.attributeUses) == 0 {
 		return nil

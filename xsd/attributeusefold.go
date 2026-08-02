@@ -1,5 +1,7 @@
 package xsd
 
+import "slices"
+
 // This file completes one mapping rule: Mapping Rule for Attribute Uses Property
 // (Structures §3.4.2.4, dcl.ctd.attuses), whose clause 3 no producer can apply.
 //
@@ -55,30 +57,14 @@ type attributeUseFold struct {
 // rather than by a guard (PRINCIPLES 5, STYLE 5). It must run before Phase D,
 // which is the first phase to read {attribute uses}.
 //
-// GAP(xsd): clause 3.2.2's exception — an <attribute use="prohibited"> child,
-// which REMOVES the same-named inherited use — is not applied, so a prohibited
-// name is inherited here and stays a member of {attribute uses}. It is not
-// decidable from the component model: §3.4.2.4's Note says such an <attribute>
-// "does not correspond to any component", and parser/produce_complex.go's
-// produceAttributeUse duly maps it to none, so nothing on T distinguishes "T
-// inherits x silently" from "T prohibits x". Closing it needs the producer to
-// carry the locally prohibited expanded names onto the component — new
-// mapping-time state on ComplexType and a NewComplexType signature change, which
-// #401 did not budget for.
-//
-// The direction is FAIL-OPEN, and re-argued for the materialised set rather than
-// inherited from the per-name walk this replaced: applying clause 3.2.2 only ever
-// REMOVES a member, so skipping it only ever adds one, and every consumer of the
-// set charges on a member that is MISSING. ct-props-correct clause 4 needs two
-// same-named members, and a prohibited name contributes one (T declares no use of
-// its own for it, by definition). derivation-ok-restriction clause 3 asks whether
-// B admits each name T holds, and B admits the very use it contributed. Its
-// cvc-complex-type clause 3 half charges a base-required name with no counterpart
-// in T, and the inherited use IS a counterpart, carrying the base's {required}.
-// key-dft-binding case 2 reports that same use as the ·default binding·. So the
-// whole residue is the rejections §3.4.2.4's Note licenses — most sharply, a
-// restriction that prohibits a required attribute goes uncharged — and never a
-// false reject (#265).
+// Clause 3.2.2 — the <attribute use="prohibited"> child, which BLOCKS the
+// same-named inherited use — is applied here too, from the prohibited names the
+// producer records on the type (complextype.go's prohibitedAttributeNames). It is
+// not optional and its omission is not fail-open: because the block is what makes
+// the name absent from a restriction B's set, skipping it leaves B carrying the
+// base's use, and an EXTENSION of B that declares that name itself then holds two
+// same-named members and is FALSELY rejected by ct-props-correct clause 4
+// (checkAttributeUseNamesUnique) for a duplicate the source never wrote.
 func (s *Schema) foldAttributeUses() {
 	f := &attributeUseFold{
 		position: make(map[QName]int, len(s.types)),
@@ -121,7 +107,7 @@ func (s *Schema) foldTypeAttributeUses(f *attributeUseFold, i int) []AttributeUs
 	}
 	uses := c.attributeUses // clauses 1 and 2, as the producer mapped them
 	if j, ok := f.position[c.BaseTypeDefinitionName()]; ok && j != i {
-		uses = inheritAttributeUses(uses, s.foldTypeAttributeUses(f, j), c.DerivationMethod())
+		uses = inheritAttributeUses(uses, s.foldTypeAttributeUses(f, j), c.DerivationMethod(), c.prohibitedAttributeNames)
 	}
 	f.uses[i], f.folded[i] = uses, true
 	return uses
@@ -129,18 +115,20 @@ func (s *Schema) foldTypeAttributeUses(f *attributeUseFold, i int) []AttributeUs
 
 // inheritAttributeUses is §3.4.2.4 clause 3's inherited half: own is the set
 // clauses 1 and 2 built, base is the {base type definition}'s already-folded
-// {attribute uses}, and method selects the case.
+// {attribute uses}, method selects the case, and prohibited is the expanded names
+// the deriving type's own source gave use="prohibited".
 //
 //   - clause 3.1 (extension): every member of base is inherited, unconditionally.
 //     A name the extension also declares itself therefore appears TWICE, which is
 //     precisely what ct-props-correct clause 4 forbids and charges
 //     (checkAttributeUseNamesUnique) — an extension may add attributes, never
-//     re-declare the base's.
+//     re-declare the base's. prohibited is ignored on this branch, exactly as
+//     §3.4.2.4's Note directs: use="prohibited" outside a restriction is
+//     "pointless, though not an error", and the <attribute> "is simply ignored".
 //   - clause 3.2 (restriction): every member of base is inherited EXCEPT one whose
-//     {attribute declaration}'s expanded name is already in own, which is clause
+//     {attribute declaration}'s expanded name is either already in own — clause
 //     3.2.1's "already been included in the set, following the rules in clause 1
-//     or clause 2 above". Clause 3.2.2's other exception is the GAP recorded on
-//     foldAttributeUses.
+//     or clause 2 above" — or among prohibited, which is clause 3.2.2.
 //   - clause 3.3 (no complex base): unreachable here — a base that is absent,
 //     simple, or unresolvable never yields a position, so this function is not
 //     called at all.
@@ -149,11 +137,12 @@ func (s *Schema) foldTypeAttributeUses(f *attributeUseFold, i int) []AttributeUs
 // in its own document order — and no map takes part (STYLE D2). own is copied
 // rather than appended to, so the component's backing array is never aliased into
 // a longer slice.
-func inheritAttributeUses(own, base []AttributeUse, method DerivationMethod) []AttributeUse {
+func inheritAttributeUses(own, base []AttributeUse, method DerivationMethod, prohibited []QName) []AttributeUse {
 	folded := append(make([]AttributeUse, 0, len(own)+len(base)), own...)
 	for _, u := range base {
-		if method == DerivationRestriction && hasAttributeUseNamed(own, attributeUseName(u)) {
-			continue // clause 3.2.1
+		name := attributeUseName(u)
+		if method == DerivationRestriction && (hasAttributeUseNamed(own, name) || slices.Contains(prohibited, name)) {
+			continue // clause 3.2.1, clause 3.2.2
 		}
 		folded = append(folded, u) // clause 3.1, and clause 3.2 otherwise
 	}

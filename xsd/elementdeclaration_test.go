@@ -289,7 +289,7 @@ func TestNewLocalScopeRejectsUnusableParent(t *testing.T) {
 // declaration alongside it carries no {parent} at all (§3.3.2.2).
 func TestElementDeclarationScopeRoundTrip(t *testing.T) {
 	container, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "AddressType"},
-		xsd.QName{Local: "anyType"}, nil, xsd.DerivationRestriction, false, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+		xsd.QName{Local: "anyType"}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}

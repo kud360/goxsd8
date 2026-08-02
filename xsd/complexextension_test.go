@@ -17,7 +17,7 @@ import (
 func xType(t *testing.T, name, base QName, content ContentType, uses []AttributeUse, wildcard *Wildcard) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, nil, DerivationExtension, false,
-		uses, wildcard, content, nil, nil, nil)
+		uses, nil, wildcard, content, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -29,7 +29,7 @@ func xType(t *testing.T, name, base QName, content ContentType, uses []Attribute
 func xFinal(t *testing.T, name, base QName, final []DerivationMethod) ComplexType {
 	t.Helper()
 	ct, err := NewComplexType(xsderr.Loc{}, name, base, final, DerivationRestriction, false,
-		nil, nil, EmptyContent{}, nil, nil, nil)
+		nil, nil, nil, EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
 	}
@@ -480,7 +480,7 @@ func TestCosCTExtendsDeferredClauses(t *testing.T) {
 	narrowW := uWildcard(t, NamespaceConstraintEnumeration, []Namespace{NamespaceName(uns)}, ProcessLax)
 	err := dFinalize(t, func(b *SchemaBuilder) {
 		base, err := NewComplexType(xsderr.Loc{}, uq("base"), anyTypeName, nil, DerivationRestriction, false,
-			nil, &anyW, EmptyContent{}, nil,
+			nil, nil, &anyW, EmptyContent{}, nil,
 			[]Assertion{NewAssertion(NewXPathExpression("true()", nil, nil, nil), nil)}, nil)
 		if err != nil {
 			t.Fatalf("NewComplexType(base): %v", err)

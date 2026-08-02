@@ -139,10 +139,15 @@ func (s *Schema) checkSimpleBaseIsExtension(c ComplexType) error {
 // The set walked is the MATERIALISED one — the type's own uses with the base's
 // folded in (§3.4.2.4 clause 3, attributeusefold.go) — so a collision between a
 // local use and an INHERITED one is charged here, which is the whole substance
-// this clause has. Clause 3.2.1 removes the collision for a restriction, so what
-// reaches this check is clause 3.1's: an extension that re-declares a name its
-// base already carries, identically or not. An extension may add attributes; it
-// may not restate the base's.
+// this clause has. Clauses 3.2.1 and 3.2.2 remove the collision for a restriction,
+// so what reaches this check is clause 3.1's: an extension that re-declares a name
+// its base already carries, identically or not. An extension may add attributes;
+// it may not restate the base's.
+//
+// Clause 3.2.2 is load-bearing for this check, not decoration. A name a
+// restriction B prohibits must leave B's set entirely; if it lingered, an
+// extension of B declaring that name itself would collide with it and be rejected
+// here for a duplicate its source never wrote (#401).
 func checkAttributeUseNamesUnique(c ComplexType) error {
 	seen := map[QName]bool{}
 	for _, u := range c.attributeUses {
@@ -390,15 +395,11 @@ func (s *Schema) checkRestrictionAttributes(t, b ComplexType) error {
 // uses the producer mapped onto B itself were.
 //
 // The two ways the clause can fail are both charged. A name T relaxes to optional
-// is the reachable one. A base-required name with NO member in T at all is the
-// clause's other half, and it is written rather than skipped because the lookup's
-// second result must decide something (STYLE S3) and because skipping it silently
-// is the untracked fail-open P3 forbids — but it cannot fire today: clause 3.2
-// inherits every base use T does not declare itself, and the one exception that
-// would remove one, clause 3.2.2's <attribute use="prohibited">, is the GAP
-// recorded on foldAttributeUses. It becomes live with that clause, which is
-// exactly the shape it is meant to charge — a restriction that prohibits an
-// attribute its base requires.
+// is one. A base-required name with NO member in T at all is the other, and it is
+// live: clause 3.2 inherits every base use T does not declare itself, so the only
+// way a required name goes missing is clause 3.2.2's <attribute use="prohibited">
+// blocking it (attributeusefold.go) — which is exactly the shape this half is
+// meant to charge, a restriction that prohibits an attribute its base requires.
 func checkRestrictionRequiredAttributes(t, b ComplexType) error {
 	for _, bu := range b.attributeUses {
 		if !bu.Required() {

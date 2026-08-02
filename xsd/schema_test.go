@@ -24,7 +24,7 @@ func simpleTypeNamed(t *testing.T, name xsd.QName) *xsd.SimpleType {
 // symbol-table tests.
 func complexTypeNamed(t *testing.T, name xsd.QName) xsd.ComplexType {
 	t.Helper()
-	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%v): %v", name, err)
 	}
@@ -315,7 +315,7 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 			return a.Loc()
 		}},
 		{"ComplexType", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
-			c, err := xsd.NewComplexType(l, name, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+			c, err := xsd.NewComplexType(l, name, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 			if err != nil {
 				t.Fatalf("NewComplexType: %v", err)
 			}
@@ -389,7 +389,7 @@ func TestTypeDefinitionSumPromotesLoc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	ct, err := xsd.NewComplexType(ctLoc, xsd.QName{Space: "urn:ns", Local: "ct"}, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	ct, err := xsd.NewComplexType(ctLoc, xsd.QName{Space: "urn:ns", Local: "ct"}, xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
