@@ -22,6 +22,11 @@ type httpResolver struct {
 // package-level timeout logic (D5/no-hidden-state). A nil client falls back
 // to http.DefaultClient.
 //
+// Unlike Dir, HTTP does NOT canonicalize the resolved location it returns: it
+// hands back location as given, leaving host case, default ports, and
+// percent-encoding exactly as written, so two URLs naming one resource under
+// different spellings are treated as different documents.
+//
 // Status mapping (engineering decision, not spec-derived): a 404 maps to
 // ErrNotFound, since only 404 unambiguously means "not found" the way Chain
 // fall-through requires; every other non-2xx status is a real, wrapped

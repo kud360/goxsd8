@@ -19,6 +19,19 @@ var ErrNotFound = errors.New("loader: schema document not found")
 // dedup key: the loader loads each resolved location once, so a document
 // named by several imports/hints composes instead of duplicating.
 //
+// That makes the string an IDENTITY for the underlying resource, and the
+// obligation on it is capability-gated exactly as §4.2.3 (src-include) gates
+// it: two different schema locations name two different schema documents
+// "unless the implementation is able to determine that the two URIs are
+// references to the same resource". So a Resolver that CAN determine two
+// location strings name one resource must return the SAME string for both —
+// Dir does, respelling each path segment as the filesystem lists it. A
+// Resolver that cannot, or does not attempt to, simply returns the location
+// as given (FS and HTTP do), and the loader composes that document more than
+// once, which §4.2.3 and §4.2.6.2 permit — their Notes encourage collapsing
+// spellings, they never require it. A third-party implementation adapted
+// through ResolverFunc sits on exactly this footing.
+//
 // The empty string is the well-defined "no namespace" state (absence of
 // targetNamespace, §4.2.6.2 / §4.3.2), so namespace == "" is the sentinel
 // for the no-namespace case, not a missing argument.
