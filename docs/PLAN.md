@@ -1163,7 +1163,7 @@ map, so the next sweep starts from a ledger instead of a `grep`:
 | **#379** *(new)* | `parser/doc.go:118` |
 | ~~**#334**~~ | ~~`parser/produce_complex.go:446`~~ — **RETIRED 2026-08-02 by `594da84`** (marker deleted, not reworded; see the post-land note at the end of M4) |
 | **#342** | `parser/produce_complex.go:1170` |
-| **#346** | `xsd/complexderivation.go:189` |
+| ~~**#346**~~ | ~~`xsd/complexderivation.go:189`~~ — **RETIRED 2026-08-02 by `a8c9381`** (marker deleted; the clause-5 comparison is now charged, see the post-land note at the end of M4) |
 | **#282** | `xsd/contentrestricts.go:289` |
 | **#281** | `xsd/contentrestricts.go:465` |
 | **#267** | `xsd/defaultbinding.go:89` |
@@ -1544,6 +1544,126 @@ correcting a heading it did not survey would be the kind of partial
 sweep #411 exists to end. Note for whoever takes it — **#411 carries no
 `ready`/`blocked` label at all**, so it is invisible to the ready-queue
 count; label it at the next `/backlog`.
+
+***Post-land pass, 2026-08-02 (#346, `a8c9381`, PR #451, ratchet
+unchanged — datatypes 1153, schema 15432, instance 26426; the fold and
+both prefix clauses land on code paths no admitted suite case exercises
+yet, exactly as the issue predicted).***
+
+**Band 1 is down to two: `#346 → #324 → #377` becomes `#324 → #377`.**
+No reorder. That is the last of the eight-issue band the #264 pass
+recorded (`#264 → #265 → #301 → #281 → #365 → #346 → #324 → #377`) that
+this file has been drawing down one landing at a time; six of the eight
+have now landed in filed order. **The band is spent and a full
+`/backlog` re-derivation is due** — a two-entry band cannot feed a loop
+that consumes several issues a day, and neither survivor moves a lane
+(#324 is false-accept debt, #377 is test-only). A post-land pass does
+not re-derive the band; the next weekly `/backlog` must, and it inherits
+#347's unanswered question about what `ready` means while it does.
+
+**Unblock scan: nothing clears; #346 was a clean leaf in both
+directions.** All nine open `blocked` issues were read at this pass and
+none names #346 in its `## Depends on` — #438→#414, #415→#407, #345→#250,
+#267→#250, #250→#79, #248→#250, #79 (the dependency target itself), #56
+(an unfiled M6 evaluator issue), #16 (still carrying **no**
+`## Depends on` section, the body defect the #365 pass recorded — second
+sighting, still not worth its own ticket). A full-body sweep of every
+open issue for the literal `#346` returns zero hits. The
+`xsd/complex-derivation` neighbours worth naming because a reader would
+expect them here — **#414**, **#413**, **#392** — were already `ready`
+before this landing and are unaffected: none of them ever waited on the
+`{assertions}` fold.
+
+**One GAP marker retired, table row struck above.**
+`xsd/complexderivation.go:189` is gone, not reworded — the clause-5
+comparison it disclosed as unimplemented is now `assertionsPrefix` in
+the new `xsd/assertionprefix.go`, charged from both
+`derivation-ok-restriction` clause 5 and `cos-ct-extends` clause 1.7.
+The only surviving `GAP(` in that file is `:409` (#265's, drifted from
+the snapshot's `:348`/`:376`).
+
+**Two issues filed, one advisory dismissed** — the arbiter's three
+non-blocking findings from the round-1 ACCEPT, all reproduced against
+`main` at this pass rather than inherited from the thread.
+
+**#452** (`ready`, `kind/refactor`, `area/xsd`, M4) — package `xsd` now
+decides "are these two XPath Expression property records the same?" in
+**two** encodings. `xsd/assertionprefix.go`'s `namespaceBindingsIdentical`
+and `xsd/elementconsistent.go:378`'s `namespaceBindingsEquivalent` are the
+same set comparison with the same position-is-not-significant
+justification written out twice; `xpathExpressionsIdentical` compares the
+same four `XPathExpression` fields that `typeAlternativesEquivalent`
+(`:332`) compares inline as key-equiv-ta clauses 1-4. STYLE **T4** allows
+the split only if the commit message argues it, and `a8c9381`'s does not
+attempt to. The shared layer already half-exists and is already
+mis-homed — `optionalStringsEqual` lives in a rule file
+(`elementconsistent.go:366`) and is called from another rule file — so the
+issue asks for placement next to the type being compared
+(`xsd/xpathexpression.go`) rather than another rule-file resident. The
+direction of risk is what makes it worth a commit: both callers read "not
+identical" as **reject**, so drift between the two encodings surfaces as
+a false reject, the one direction `namespaceBindingsIdentical`'s own doc
+comment cites PRINCIPLES 9 to forbid. Same class as **#419** and **#323**.
+
+**#453** (`ready`, `kind/refactor`, `area/parser`, M4) —
+`produceComplexType`'s `GAP(xsd)` paragraph
+(`parser/produce_complex.go:206-208`) says the new fold
+*"runs HERE, on every produced type"*. It does not:
+`assertionsWithBase` has two call sites (`:302`, `:398`) and
+`produceImplicitContent` is neither — that arm passes `p.assertionsOf(el)`
+directly and documents at `:245-252` exactly why it may (base is
+unconditionally `xs:anyType`, whose `{assertions}` is empty by §3.4.7, so
+the fold is provably the identity). The paragraph's **conclusion** — that
+clause 1's fold needs no issue of its own, unlike the two folds #414 owns
+— survives; only its premise is wrong, and the cost is that a reader who
+greps `assertionsWithBase` finds three producer arms, two call sites, and
+no way to tell whether the third is a bug. The orphan half-line the edit
+left (`// included (#346). The`) is folded into the same comment-only
+commit rather than into **#329**, whose scope is the mechanical sweep.
+Filed separately from #452 on **#396**/**#445**'s settled precedent: a
+comment-only correction gets its own commit, and #452 edits function
+bodies.
+
+**Dismissed: the "documentation-only test".**
+`TestProduceImplicitContentAssertionsUnfolded`
+(`parser/produce_xpath_test.go:653`) does not clear the decorative-test
+bar #326/#261 were filed against, and the distinction is worth recording
+because it will recur. Those two are about behaviour **decided by code
+and pinned by nothing** — delete the carve-out, land green. This is the
+opposite shape: the test makes a falsifiable claim (an implicit-content
+type's `{assertions}` are its own `<assert>` children, in order) that
+goes red if `produceImplicitContent` drops or reorders them. What it
+cannot do is discriminate *fold ran* from *fold skipped* — because on
+that path the fold **is** the identity, so there are not two behaviours
+to tell apart. A test that cannot distinguish two provably identical
+behaviours is not dead weight; deleting it would forfeit a real
+regression guard to buy nothing. The residue is one word: the doc calls
+it *"the control on the one call site that does NOT route through
+`assertionsWithBase`"*, and it is not a control. That overclaim rides
+along in #453 item (2). Mason flagged the limitation unprompted in the
+test's own comment, which is why this is a two-word edit and not an
+issue.
+
+**The follow-up-ledger leak the chronicler flagged is closed, both
+halves.** The #365 post-land pass's twenty-fixture integer harvest is
+**already filed** as **#449** (`ready`, verified open at this pass) — not
+outstanding, and the LOG's ledger line predates the filing. The three
+#346 advisories above are now filed or dismissed in writing. No promised
+follow-up from either landing is unowned.
+
+**Branch namespace: empty.** `git ls-remote --heads origin
+'refs/heads/wip/*' 'refs/heads/parked/*'` returns nothing —
+`wip/issue-346` was auto-deleted at squash-merge along with four other
+stale refs the fetch pruned (`wip/issue-301`, `-334`, `-340`, `-365`),
+all of whose issues are closed and whose content is in `main`. Nothing
+retired in place, nothing `parked/`, nothing for human triage.
+
+**Not fixed here, already owned.** The GAP ledger's `file:line` column
+above remains a 2026-08-01 snapshot with known drift; only #346's row was
+touched, because that one is not drift — the site is **gone**. The full
+re-derivation from `grep -rn "GAP(" --include=*.go` is the next
+`/backlog`'s job, and it now has two struck rows (#334, #346) telling it
+the table shrank.
 
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
