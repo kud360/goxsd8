@@ -305,7 +305,7 @@ func (p *producer) complexContentType(derivation *Element, method xsd.Derivation
 	if err != nil {
 		return nil, err
 	}
-	explicit, err := extensionContentType(derivation.Loc(), base, effective, explicitEmpty, effectiveMixed)
+	explicit, err := p.extensionContentType(derivation.Loc(), base, effective, explicitEmpty, effectiveMixed)
 	if err != nil {
 		return nil, err
 	}
@@ -400,7 +400,7 @@ func (p *producer) effectiveContent(parent *Element, effectiveMixed bool, scopeP
 // hold, so "the same particles appear in both the base type definition and the
 // extension" (xr.ctd.n4-bis). A Go copy of an immutable value component IS that
 // component; no identity marker is added to carry the fact (STYLE D3).
-func extensionContentType(loc xsderr.Loc, base xsd.TypeDefinition, effective *xsd.Particle, explicitEmpty, effectiveMixed bool) (xsd.ContentType, error) {
+func (p *producer) extensionContentType(loc xsderr.Loc, base xsd.TypeDefinition, effective *xsd.Particle, explicitEmpty, effectiveMixed bool) (xsd.ContentType, error) {
 	switch b := base.(type) {
 	case *xsd.SimpleType:
 		return explicitContentType(effective, effectiveMixed), nil // 4.2.1, simple base
@@ -412,7 +412,7 @@ func extensionContentType(loc xsderr.Loc, base xsd.TypeDefinition, effective *xs
 			if effective == nil {
 				return bc, nil // 4.2.2: the base's whole Content Type record
 			}
-			particle, err := extensionParticle(loc, bc.Particle, *effective, explicitEmpty)
+			particle, err := p.extensionParticle(loc, bc.Particle, *effective, explicitEmpty)
 			if err != nil {
 				return nil, err
 			}
@@ -443,24 +443,26 @@ func extensionContentType(loc xsderr.Loc, base xsd.TypeDefinition, effective *xs
 // contains the base's particle, so xsd's content-model walk needs no {base type
 // definition} edge.
 //
-// GAP(xsd): allGroupOf recognizes only an INLINE all group, so a base particle
-// or effective content whose {term} is a <group ref> to an all-bodied model group
-// definition — unresolved at produce time — takes 4.2.3.3 where 4.2.3.1 or
-// 4.2.3.2 applies (#334). Missing 4.2.3.2 is not merely narrower: the
-// fallthrough synthesizes a sequence wrapping two all groups, a shape
-// cos-all-limited (§3.8.6.2) clause 1 forbids. It fabricates no verdict TODAY
-// only because that rule is charged upstream on the source XML, by
-// produceGroupParticle below, and never on the finalized component — so the
-// shape is inert rather than conservative, and would become a wrong answer the
-// moment cos-all-limited is charged componentwise. Missing 4.2.3.1 is the benign
-// half: sequence[all, empty sequence] accepts exactly what the all group does.
-// No lane observes either — the conformance schema lane admits no <extension>.
-func extensionParticle(loc xsderr.Loc, baseParticle, effective xsd.Particle, explicitEmpty bool) (xsd.Particle, error) {
-	baseGroup, baseIsAll := allGroupOf(baseParticle)
+// The sub-case test reads THROUGH a <group ref>: a {term} that is a
+// ModelGroupRef to an all-bodied model group definition selects 4.2.3.1/4.2.3.2
+// exactly as an inline <all> does (allGroupOf), because §3.7.2 makes the {term}
+// of such a particle the definition's {model group} — the reference is a source
+// spelling, not a different component. Reading only the inline spelling would
+// send an all-bodied base down 4.2.3.3, whose synthesized sequence wrapping two
+// all groups is a shape cos-all-limited (§3.8.6.2) clause 1 forbids outright.
+func (p *producer) extensionParticle(loc xsderr.Loc, baseParticle, effective xsd.Particle, explicitEmpty bool) (xsd.Particle, error) {
+	baseGroup, baseIsAll, err := p.allGroupOf(baseParticle)
+	if err != nil {
+		return xsd.Particle{}, err
+	}
 	if baseIsAll && explicitEmpty {
 		return baseParticle, nil // 4.2.3.1
 	}
-	if effectiveGroup, effectiveIsAll := allGroupOf(effective); baseIsAll && effectiveIsAll {
+	effectiveGroup, effectiveIsAll, err := p.allGroupOf(effective)
+	if err != nil {
+		return xsd.Particle{}, err
+	}
+	if baseIsAll && effectiveIsAll {
 		// 4.2.3.2: one all group over both {particles} lists, base's first.
 		merged := append(baseGroup.Particles(), effectiveGroup.Particles()...)
 		mg, err := xsd.NewModelGroup(loc, xsd.CompositorAll, merged, nil)
@@ -487,18 +489,41 @@ func extensionParticle(loc xsderr.Loc, baseParticle, effective xsd.Particle, exp
 
 // allGroupOf returns the Model Group a particle's {term} is when that group's
 // {compositor} is all (§3.8.1), reporting false for every other {term}: an
-// element declaration, a wildcard, a choice/sequence group, or an unresolved
-// <element ref>/<group ref> (see extensionParticle's GAP(xsd) note, #334).
-func allGroupOf(p xsd.Particle) (xsd.ModelGroup, bool) {
-	rt, ok := p.Term().(xsd.ResolvedTerm)
-	if !ok {
-		return xsd.ModelGroup{}, false
+// element declaration, a wildcard, a choice/sequence group, or an <element ref>.
+//
+// A <group ref> {term} is followed to the Model Group it denotes (§3.7.2,
+// xr.mgd3) through resolveModelGroup, which builds the referenced definition on
+// demand: §3.4.2.3.3 clause 4.2.3's sub-cases test the {compositor} of the
+// ·base particle·'s {term}, and a particle's {term} IS the referenced
+// definition's {model group} whichever spelling the source used. That is the one
+// place produce time follows a <group ref> — the clause 4.2.3 sub-case decides
+// the {content type} being synthesized right here, so it cannot wait for
+// finalize, where <group ref>s are otherwise resolved. It is a lookup, not a
+// second resolution regime: a ref that resolves to nothing or closes a cycle
+// simply reports false (see resolveModelGroup), leaving src-resolve clause 1.5
+// and mg-props-correct clause 2 to finalize.
+func (p *producer) allGroupOf(part xsd.Particle) (xsd.ModelGroup, bool, error) {
+	switch t := part.Term().(type) {
+	case xsd.ResolvedTerm:
+		mg, ok := t.Term.(xsd.ModelGroup)
+		if !ok || mg.Compositor() != xsd.CompositorAll {
+			return xsd.ModelGroup{}, false, nil
+		}
+		return mg, true, nil
+	case xsd.ModelGroupRef:
+		mg, ok, err := p.resolveModelGroup(t.Name)
+		if err != nil {
+			return xsd.ModelGroup{}, false, err
+		}
+		if !ok || mg.Compositor() != xsd.CompositorAll {
+			return xsd.ModelGroup{}, false, nil
+		}
+		return mg, true, nil
+	case xsd.ElementDeclarationRef:
+		return xsd.ModelGroup{}, false, nil
+	default:
+		panic("parser: allGroupOf: non-exhaustive TermOrRef switch")
 	}
-	mg, ok := rt.Term.(xsd.ModelGroup)
-	if !ok || mg.Compositor() != xsd.CompositorAll {
-		return xsd.ModelGroup{}, false
-	}
-	return mg, true
 }
 
 // misplacedOpenContent returns the <openContent> element a <complexType> carries
@@ -911,10 +936,18 @@ func (p *producer) produceGroupParticle(group *Element, top bool, scopeParent xs
 // produceGroupRefParticle maps a <group ref> to a Particle whose {term} is a
 // deferred ModelGroupRef (§3.7.2, xr.mgd3), mirroring produceElementParticle's
 // <element ref> → ElementDeclarationRef mapping. A minOccurs=maxOccurs=0 <group
-// ref> maps to no component at all (returns nil, §3.7.2). Resolution and the
+// ref> maps to no component at all (returns nil, §3.7.2). The reference is
+// RETAINED, never rewritten to the {term} it denotes: resolution and the
 // no-circular-groups check happen at finalize (#173: src-resolve clause 1.5,
-// mg-props-correct clause 2), never duplicated here; occurs-range correctness
-// (p-props-correct §3.9.6.1 clause 2.1) is enforced inside xsd.NewParticle.
+// mg-props-correct clause 2), and neither VERDICT is ever duplicated here.
+// Occurs-range correctness (p-props-correct §3.9.6.1 clause 2.1) is enforced
+// inside xsd.NewParticle.
+//
+// One mapping rule nonetheless has to LOOK through a reference produced here:
+// §3.4.2.3.3 clause 4.2.3 selects a sub-case by the {compositor} of the
+// ·base particle·'s {term}, and that choice fixes a {content type} synthesized at
+// produce time. allGroupOf reads it through resolveModelGroup — a read, which
+// leaves this particle untouched and charges nothing.
 func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 	occ, elided, err := occursOf(el)
 	if err != nil {
@@ -943,8 +976,11 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 }
 
 // produceModelGroupDefinition maps a top-level named <group> (§3.7.2, xr.mgd1)
-// into a Model Group Definition. The named form has exactly one <all>/<choice>/
-// <sequence> child, whose Model Group becomes {model group}; an absent child
+// into a Model Group Definition. It is reached only through
+// buildModelGroupDefinition, which memoizes it so one <group> is mapped exactly
+// once however many demand-driven lookups reach it. The named form has exactly
+// one <all>/<choice>/<sequence> child, whose Model Group becomes {model group};
+// an absent child
 // yields the zero ModelGroup that NewModelGroupDefinition rejects
 // (mgd-props-correct §3.7.6, {model group} Required). Occurrence on the child is
 // irrelevant here — a model group definition carries no {min occurs}/{max occurs}
