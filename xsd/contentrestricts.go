@@ -364,6 +364,23 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live []int) []in
 // should be rejected on that basis — fail-open, never a false reject, in the
 // direction this file's header fixes for every approximation.
 //
+// That missing bullet is NOT an omission in cos-aw-union and is not a future
+// issue's to fix: §3.10.6.3 is titled Attribute Wildcard Union, sibling is defined
+// only for ELEMENT wildcards (cvc-wildcard §3.10.4.1 clause 3 gates the sibling
+// test on "W is an element wildcard"), and ##definedSibling is not even
+// grammatically available on <anyAttribute> — §3.10.2's notQName there admits
+// ##defined alone, which w-props-correct clause 5 restates as a component
+// invariant (rejectSiblingOnAttributeWildcard). So an attribute wildcard cannot
+// carry sibling, and the constraint correctly has no bullet for it.
+//
+// The loss is therefore local to THIS call site, the one place the attribute-only
+// union algebra is applied to element wildcards, and only when more than one base
+// wildcard is live — a single one is decided by cos-ns-subset alone in
+// positionAdmits, where sibling IS compared. The local specs define no
+// multi-operand element-wildcard union that preserves the keyword, and inventing
+// one is not this seam's to do: #265 ruled the limitation PERMANENT rather than
+// open, on the oracle grounding recorded on that issue.
+//
 // A single live wildcard is left to cos-ns-subset alone in positionAdmits, where
 // the relation is already exact; folding it here would only restate that verdict.
 //

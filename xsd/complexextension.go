@@ -108,37 +108,25 @@ func (s *Schema) checkComplexTypeExtension(t ComplexType) error {
 // apply when B is a complex type definition. They are checked in spec order, so
 // the first reported failure is deterministic (STYLE D1).
 //
-// GAP(xsd): clauses 1.3 and 1.7 are NOT charged, on exactly the footing
-// checkDerivationOKRestriction records for derivation-ok-restriction clause 5.
-//
-//   - 1.3 — if B has an {attribute wildcard}, T must have one whose {namespace
-//     constraint} is a superset of B's per cos-ns-subset. §3.4.2.5 clause 2.2
-//     makes an extension's {attribute wildcard} the ·attribute wildcard union·
-//     of its own with the base's, which satisfies 1.3 UNCONDITIONALLY for a
-//     faithfully mapped type; the clause exists to constrain components
-//     assembled by other means. No producer in this repo performs that union
-//     (parser/produce_complex.go maps the type's OWN <anyAttribute> only), so a
-//     produced extension that declares a narrower own wildcard — or, far more
-//     commonly, none at all — reads as a 1.3 violation and is not one. The
-//     excuse is the missing fold, NOT a missing subset relation: wildcardSubset
-//     (namespaceconstraint_subset.go) already implements cos-ns-subset and is
-//     directly usable the day the fold lands. Charging the cheap half alone
-//     ("B has a wildcard, T has none") would be precisely the false reject.
-//   - 1.7 — B.{assertions} is a prefix of T.{assertions}. §3.4.2.1 clause 1
-//     makes a complex type's {assertions} the base's followed by its own
-//     <assert> children; the producer maps the type's own children only, so on
-//     every produced extension of a base carrying an assertion the prefix fails
-//     and charging it would be a FALSE REJECT of a valid schema.
-//
-// Both skips are FAIL-OPEN — a missing rejection, never a false one — and both
-// land with the fold each names: §3.4.2.5 clause 2.2's attribute-wildcard union
-// for 1.3, §3.4.2.1 clause 1's {assertions} prefix for 1.7 (#346). Neither rides
-// on §3.4.2.4 clause 3's {attribute uses} fold, which is done (#401).
+// GAP(xsd): clause 1.7 is NOT charged, on exactly the footing
+// checkDerivationOKRestriction records for derivation-ok-restriction clause 5:
+// B.{assertions} must be a prefix of T.{assertions}, but §3.4.2.1 clause 1 makes
+// a complex type's {assertions} the base's followed by its own <assert> children
+// and the producer maps the type's own children only, so on every produced
+// extension of a base carrying an assertion the prefix fails and charging it would
+// be a FALSE REJECT of a valid schema. The skip is FAIL-OPEN — a missing
+// rejection, never a false one — and lands with the fold it names, §3.4.2.1
+// clause 1's {assertions} fold (#346). It rides on neither of the two attribute
+// folds, which are done: §3.4.2.4 clause 3's {attribute uses} (#401) and §3.4.2.5
+// clause 2.2's {attribute wildcard} (#265).
 func (s *Schema) checkExtensionOfComplexBase(t, b ComplexType) error {
 	if err := checkExtensionBaseFinal(t, b); err != nil {
 		return err
 	}
 	if err := s.checkExtensionAttributeUses(t, b); err != nil {
+		return err
+	}
+	if err := checkExtensionAttributeWildcard(t, b); err != nil {
 		return err
 	}
 	if err := s.checkExtensionContentType(t, b); err != nil {
@@ -204,6 +192,51 @@ func (s *Schema) checkExtensionAttributeUses(t, b ComplexType) error {
 			"complex type %s extends %s but re-declares attribute %s with properties that differ from the base's attribute use, which cos-ct-extends clause 1.2 (c-cte) requires to be identical", t.Name(), b.Name(), name)
 	}
 	return nil
+}
+
+// checkExtensionAttributeWildcard is clause 1.3: "If B has an {attribute
+// wildcard}, then T also has one, and B.{attribute wildcard}.{namespace
+// constraint} is a subset of T.{attribute wildcard}.{namespace constraint}, as
+// defined by Wildcard Subset (§3.10.6.2)."
+//
+// The direction is the MIRROR of derivation-ok-restriction clause 3's wildcard
+// half (checkRestrictionAttributeWildcard): an extension must admit at least
+// everything its base admits, so B's constraint is sub and T's is super — the
+// same one wildcardSubset (namespaceconstraint_subset.go), read the other way
+// round (STYLE T4). A B with no {attribute wildcard} discharges the clause
+// vacuously, which is why the absent case returns before T is read; charging on
+// that half alone would be the false reject this seam was warned about.
+//
+// NEITHER rejection below is reachable through Finalize, and the reason is the
+// fold, so it is stated rather than assumed — the same footing
+// checkExtensionAttributeUses records for clause 1.2. §3.4.2.5 clause 2.2 makes
+// T.{attribute wildcard} the cos-aw-union of T's own ·complete wildcard· with B's
+// (attributewildcardfold.go), and a union is a superset of both operands under
+// cos-ns-subset, so a folded extension satisfies 1.3 BY CONSTRUCTION: T cannot
+// lack the property when B has it (clause 2.2.2.2 hands B's straight through),
+// and the union cannot admit fewer names than B's operand did.
+//
+// It is kept, rather than left uncharged, because it is the executable statement
+// of clause 1.3 AND the guard on the fold's clause 2.2 arm: a fold that stopped
+// unioning the base's constraint in would show up here as a verdict rather than as
+// silence. It also remains live for a Complex Type Definition assembled
+// programmatically past the fold, which is the population the spec wrote the
+// clause for.
+func checkExtensionAttributeWildcard(t, b ComplexType) error {
+	bw, has := b.AttributeWildcard()
+	if !has {
+		return nil
+	}
+	tw, extensionHas := t.AttributeWildcard()
+	if !extensionHas {
+		return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
+			"complex type %s extends %s, which has an {attribute wildcard}, but %s has none, and cos-ct-extends clause 1.3 requires the extension to carry one too", t.Name(), b.Name(), t.Name())
+	}
+	if wildcardSubset(bw.NamespaceConstraint(), tw.NamespaceConstraint()) {
+		return nil
+	}
+	return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
+		"complex type %s extends %s but its {attribute wildcard} does not admit every expanded name the base's admits, which cos-ct-extends clause 1.3 requires as a Wildcard Subset (cos-ns-subset)", t.Name(), b.Name())
 }
 
 // checkExtensionContentType is clause 1.4. The spec words it as a disjunction

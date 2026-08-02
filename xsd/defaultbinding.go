@@ -73,23 +73,11 @@ func (wildcardKeywordBinding) defaultBinding()    {}
 //     fold too, so a name a restriction prohibits is absent here rather than
 //     reported as the ancestor's use.
 //   - cases 4/5/6: otherwise, if c's {attribute wildcard} admits n, the wildcard's
-//     {process contents} keyword. This one is read off c ALONE, which is exact for
-//     a restriction: §3.4.2.5 clause 2.1 makes its {attribute wildcard} the
-//     ·complete wildcard· — its own <anyAttribute>, with nothing inherited.
-//     Walking the chain for wildcards would be wrong, not merely lenient: every
-//     type reaches ·xs:anyType·, whose lax ##any attribute wildcard would then
-//     admit every name and make the caller's check vacuous.
-//
-// GAP(xsd): §3.4.2.5 clause 2.2's cos-aw-union of the ·base wildcard· into an
-// EXTENSION's {attribute wildcard} is NOT folded — neither by the producer nor at
-// finalize, unlike {attribute uses} — so an extension's wildcard is its own
-// <anyAttribute> alone here. That is a FALSE-REJECT risk, not a fail-open one:
-// the under-reported wildcard makes ok false for a name the extension genuinely
-// admits, and checkRestrictionAttributes charges derivation-ok-restriction on
-// exactly that !ok, so a restriction of an extension whose base carried the
-// admitting wildcard is rejected for an attribute the base really does allow.
-// Closing it is #265 section 3's (the extension wildcard fold); it is stated
-// plainly here so no caller reads the gap as merely lenient.
+//     {process contents} keyword. This one is read off c ALONE, and that is exact
+//     for both derivation methods: the property is the MATERIALISED one (§3.4.2.5
+//     clause 2, attributewildcardfold.go), so a restriction carries its own
+//     ·complete wildcard· (clause 2.1) and an extension carries the cos-aw-union
+//     of its own with its base's (clause 2.2) without any walk here.
 //
 // ok is false when c admits no attribute of that name at all — no member of
 // {attribute uses} and no admitting wildcard — in which case there is no binding
