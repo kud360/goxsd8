@@ -239,6 +239,101 @@ func TestProduceCrossStepPatternsStillANDed(t *testing.T) {
 	}
 }
 
+// TestProduceRestrictionFacetInterleaving pins the document-order guarantee
+// restrictionFacets gives when its TWO folds — every <pattern> child into one
+// pattern facet (xr-pattern §4.3.4.2) and every <assertion> child into one
+// assertions facet (Datatypes §4.3.13) — are interleaved with plain one-to-one
+// facets: each fold lands at the position of its KIND's FIRST child, and the
+// pattern facet's {value} branches stay in document order across arbitrarily
+// many intervening siblings.
+//
+// The cross-KIND ordering is a determinism choice of this codebase (STYLE D2),
+// not a spec rule: the oracle's grounding on #314 confirms {facets} is
+// spec-defined as "A set of Constraining Facet components" (std-facets) and
+// §4.3 is silent on where a folded facet sits among other kinds. What IS
+// spec-mandated is the ordering WITHIN each fold's own {value} — xr-pattern's
+// concatenation "in order" and xr-assertions clause 2's "in document order" —
+// and this test proves interleaving leaves that untouched.
+//
+// FAILURE CAPABILITY: reworking restrictionFacets to collect pattern values in
+// the loop and splice them with a SECOND post-loop slices.Insert — mirroring
+// the assertions insert, the design #214 deliberately rejected — fails the
+// "assertion before patterns" and "minLength, assertion, patterns" cases: two
+// independent post-loop inserts invalidate each other's recorded index, so the
+// second one inserts against a slice the first already shifted. The in-loop
+// facets[patternAt] rewrite is what keeps exactly one insert with nothing to
+// shift against. Load-bearing across the package boundary: xsd.NewFacet COPIES
+// its values argument, so the repeated NewFacet(kind, patterns, ...) inside the
+// loop never aliases the growing patterns slice; if that ever changed, the
+// Values() assertions here are where it surfaces.
+func TestProduceRestrictionFacetInterleaving(t *testing.T) {
+	// The pattern values need only be distinguishable, not meaningful regexes:
+	// only their accumulation order into the folded {value} is under test.
+	const (
+		patternA = `<xs:pattern value="a"/>`
+		patternB = `<xs:pattern value="b"/>`
+		patternC = `<xs:pattern value="c"/>`
+		assert   = `<xs:assertion test="true()"/>`
+		minLen   = `<xs:minLength value="1"/>`
+		maxLen   = `<xs:maxLength value="8"/>`
+	)
+	cases := []struct {
+		name     string
+		children string
+		kinds    []xsd.FacetKind
+		values   []string
+	}{{
+		name:     "pattern assertion pattern minLength",
+		children: patternA + assert + patternB + minLen,
+		kinds:    []xsd.FacetKind{xsd.FacetPattern, xsd.FacetAssertions, xsd.FacetMinLength},
+		values:   []string{"a", "b"},
+	}, {
+		name:     "assertion pattern pattern",
+		children: assert + patternA + patternB,
+		kinds:    []xsd.FacetKind{xsd.FacetAssertions, xsd.FacetPattern},
+		values:   []string{"a", "b"},
+	}, {
+		name:     "minLength assertion pattern pattern",
+		children: minLen + assert + patternA + patternB,
+		kinds:    []xsd.FacetKind{xsd.FacetMinLength, xsd.FacetAssertions, xsd.FacetPattern},
+		values:   []string{"a", "b"},
+	}, {
+		name:     "minLength pattern pattern assertion",
+		children: minLen + patternA + patternB + assert,
+		kinds:    []xsd.FacetKind{xsd.FacetMinLength, xsd.FacetPattern, xsd.FacetAssertions},
+		values:   []string{"a", "b"},
+	}, {
+		name:     "pattern minLength pattern maxLength pattern",
+		children: patternA + minLen + patternB + maxLen + patternC,
+		kinds:    []xsd.FacetKind{xsd.FacetPattern, xsd.FacetMinLength, xsd.FacetMaxLength},
+		values:   []string{"a", "b", "c"},
+	}}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := simpleTypeOf(t, "st", `<xs:simpleType name="st">
+			  <xs:restriction base="xs:string">`+tc.children+`</xs:restriction>
+			</xs:simpleType>`)
+
+			facets := st.OwnFacets()
+			kinds := make([]xsd.FacetKind, 0, len(facets))
+			for _, f := range facets {
+				kinds = append(kinds, f.Kind())
+			}
+			if !slices.Equal(kinds, tc.kinds) {
+				t.Fatalf("facet kinds = %v, want %v (each fold at its kind's first child)", kinds, tc.kinds)
+			}
+			at := slices.Index(kinds, xsd.FacetPattern)
+			if at < 0 {
+				t.Fatalf("facet kinds = %v, want one folded pattern facet", kinds)
+			}
+			if got := facets[at].Values(); !slices.Equal(got, tc.values) {
+				t.Fatalf("pattern {value} = %q, want %q in document order", got, tc.values)
+			}
+		})
+	}
+}
+
 func TestProduceSimpleTypeForwardReferenceChain(t *testing.T) {
 	// B is declared before A in document order, but A restricts B and B restricts
 	// xs:string. Additionally a C forward-references A. Proves the topological
