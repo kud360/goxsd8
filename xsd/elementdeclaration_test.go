@@ -238,6 +238,7 @@ func TestNewLocalScopeCarriesParent(t *testing.T) {
 	}{
 		{"complex type definition", xsd.ComplexTypeScopeParent{Name: ct}},
 		{"model group definition", xsd.ModelGroupScopeParent{Name: mgd}},
+		{"anonymous complex type definition", xsd.AnonymousComplexTypeScopeParent{Owner: xsd.NewComponentID()}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, err := xsd.NewLocalScope(xsderr.Loc{}, tc.want)
@@ -260,8 +261,9 @@ func TestNewLocalScopeCarriesParent(t *testing.T) {
 
 // TestNewLocalScopeRejectsUnusableParent pins the two states NewLocalScope
 // refuses (e-props-correct clause 1): an absent {parent}, which the §3.3.1
-// tableau requires to be present when {variety} is local, and a variant naming
-// nothing, which this by-name representation could never follow.
+// tableau requires to be present when {variety} is local, and a variant that
+// identifies nothing — an absent name on either by-NAME arm, or an unminted
+// identity on the anonymous arm, neither of which could ever be followed.
 func TestNewLocalScopeRejectsUnusableParent(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -270,6 +272,7 @@ func TestNewLocalScopeRejectsUnusableParent(t *testing.T) {
 		{"absent parent", nil},
 		{"unnamed complex type", xsd.ComplexTypeScopeParent{}},
 		{"unnamed model group", xsd.ModelGroupScopeParent{}},
+		{"unminted anonymous complex type", xsd.AnonymousComplexTypeScopeParent{}},
 		{"namespace but no local name", xsd.ComplexTypeScopeParent{Name: xsd.QName{Space: "urn:ns"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -334,7 +337,7 @@ func TestElementDeclarationScopeRoundTrip(t *testing.T) {
 			case xsd.ModelGroupScopeParent:
 				got = p.Name
 			default:
-				t.Fatalf("Scope().Parent() = %T, want one of the two ElementScopeParent variants", parent)
+				t.Fatalf("Scope().Parent() = %T, want one of the by-NAME ElementScopeParent variants", parent)
 			}
 			if got != tc.want {
 				t.Errorf("{scope}.{parent} names %s, want the container's own name %s", got, tc.want)
@@ -449,4 +452,108 @@ func TestElementDeclarationAnnotationsRoundTripAndNil(t *testing.T) {
 	if got := bare.Annotations(); got != nil {
 		t.Errorf("Annotations() = %v, want nil for empty {annotations}", got)
 	}
+}
+
+// edAnonType builds an ANONYMOUS complex type whose {context} names id — the
+// shape §3.4.2.1 dcl.ctd.common gives an inline <complexType> child of an
+// <element>.
+func edAnonType(t *testing.T, context xsd.ComplexTypeContext) xsd.ComplexType {
+	t.Helper()
+	ct, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, context, xsd.QName{Local: "anyType"}, nil,
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAnonymousComplexType: %v", err)
+	}
+	return ct
+}
+
+// TestNewElementDeclarationOwningTypeMatchingIdentity pins the accepting case of
+// the §3.4.2.1 dcl.ctd.common round trip: one identity minted for the inline
+// construct, threaded into the type's {context} and into the declaration that
+// owns it, so the two compare == and the slot reads back as the InlineTypeDefinition
+// arm holding that very type.
+func TestNewElementDeclarationOwningTypeMatchingIdentity(t *testing.T) {
+	id := xsd.NewComponentID()
+	ct := edAnonType(t, xsd.ElementDeclarationContext{Component: id})
+	e, err := xsd.NewElementDeclarationOwningType(xsderr.Loc{}, id, xsd.QName{Local: "doc"}, ct,
+		nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("NewElementDeclarationOwningType: %v", err)
+	}
+	inline, ok := e.TypeDefinition().(xsd.InlineTypeDefinition)
+	if !ok {
+		t.Fatalf("{type definition} = %#v, want the InlineTypeDefinition arm", e.TypeDefinition())
+	}
+	got, ok := inline.Definition.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("InlineTypeDefinition wraps %T, want the ComplexType passed in", inline.Definition)
+	}
+	context, ok := got.Context()
+	if !ok {
+		t.Fatal("the owned type lost its {context}")
+	}
+	// == and never reflect.DeepEqual: componentid_test.go pins that DeepEqual is
+	// identity-blind, so a DeepEqual assertion here would accept a wrong context.
+	if context.ID() != id {
+		t.Error("the owned type's {context} is not the declaration's own identity")
+	}
+}
+
+// TestNewElementDeclarationOwningTypeRejectsBadIdentity pins the three states the
+// owning constructor makes unrepresentable, all charged component-invariant: an
+// unminted owner identity, a {context} naming a DIFFERENT element declaration,
+// and a ComplexTypeDefinitionContext in a slot §3.4.2.1 gives exactly one case
+// for, which yields an Element Declaration.
+func TestNewElementDeclarationOwningTypeRejectsBadIdentity(t *testing.T) {
+	id := xsd.NewComponentID()
+	for _, tc := range []struct {
+		name string
+		id   xsd.ComponentID
+		ct   xsd.ComplexType
+	}{
+		{"unminted owner identity", xsd.ComponentID{}, edAnonType(t, xsd.ElementDeclarationContext{Component: id})},
+		{"context names another declaration", id, edAnonType(t, xsd.ElementDeclarationContext{Component: xsd.NewComponentID()})},
+		{"context is a complex type definition", id, edAnonType(t, xsd.ComplexTypeDefinitionContext{Component: id})},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xsd.NewElementDeclarationOwningType(xsderr.Loc{}, tc.id, xsd.QName{Local: "doc"}, tc.ct,
+				nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+			if err == nil {
+				t.Fatal("NewElementDeclarationOwningType succeeded, want a component-invariant rejection")
+			}
+			assertRule(t, err, xsderr.RuleComponentInvariant)
+		})
+	}
+}
+
+// TestNewElementDeclarationOwningTypeRejectsNamedType pins that the owning
+// constructor is for ANONYMOUS types only: a NAMED complex type is reachable by
+// name and so is always the TypeDefinitionRef arm. The verdict comes from the
+// shared core's InlineTypeDefinition shape check, not from a duplicate of it.
+func TestNewElementDeclarationOwningTypeRejectsNamedType(t *testing.T) {
+	named, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "T"}, xsd.QName{Local: "anyType"}, nil,
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewComplexType: %v", err)
+	}
+	_, err = xsd.NewElementDeclarationOwningType(xsderr.Loc{}, xsd.NewComponentID(), xsd.QName{Local: "doc"}, named,
+		nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+	if err == nil {
+		t.Fatal("NewElementDeclarationOwningType accepted a NAMED complex type")
+	}
+	assertRule(t, err, xsderr.RuleComponentInvariant)
+}
+
+// TestNewElementDeclarationRejectsOwnedComplexType pins the other half of the
+// partition: the plain constructor takes no identity, so it cannot check a
+// {context} back-pointer and must refuse the shape outright rather than admit a
+// possibly mis-pointing one.
+func TestNewElementDeclarationRejectsOwnedComplexType(t *testing.T) {
+	ct := edAnonType(t, xsd.ElementDeclarationContext{Component: xsd.NewComponentID()})
+	_, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "doc"},
+		xsd.InlineTypeDefinition{Definition: ct}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+	if err == nil {
+		t.Fatal("NewElementDeclaration accepted an InlineTypeDefinition wrapping a ComplexType")
+	}
+	assertRule(t, err, xsderr.RuleComponentInvariant)
 }

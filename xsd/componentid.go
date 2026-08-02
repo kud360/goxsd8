@@ -10,8 +10,10 @@ package xsd
 // ancestor element information items", and that element declaration is very
 // often LOCAL — and local element declarations are not QName-unique (two
 // sibling complex types may each contain <element name="a">). A bare (kind,
-// QName) reference, the pattern ElementScopeParent uses for {scope}.{parent},
-// therefore cannot identify the target; this token can.
+// QName) reference — the pattern ElementScopeParent uses for a {scope}.{parent}
+// whose container HAS a name — therefore cannot identify the target; this token
+// can. The same reasoning gave ElementScopeParent an identity arm of its own,
+// AnonymousComplexTypeScopeParent, for the reciprocal direction.
 //
 // The producer mints the identity BEFORE either endpoint exists and passes it
 // to both, so nothing is mutated after construction and no second phase is
@@ -19,7 +21,12 @@ package xsd
 //
 //	edID := xsd.NewComponentID()
 //	ct, err := xsd.NewAnonymousComplexType(ctLoc, xsd.ElementDeclarationContext{Component: edID}, …)
-//	ed, err := xsd.NewElementDeclaration(edLoc, name, xsd.InlineTypeDefinition{Definition: ct}, …)
+//	ed, err := xsd.NewElementDeclarationOwningType(edLoc, edID, name, ct, …)
+//
+// The same edID is what every local element declaration nested in ct's own
+// content model reports as its {scope}.{parent}, through
+// xsd.AnonymousComplexTypeScopeParent{Owner: edID}: one mint per inline
+// construct identifies the construct from both directions.
 //
 // The zero ComponentID is the UNMINTED identity: it identifies no component and
 // is the absent value. Callers test presence by comparing against it
@@ -51,10 +58,13 @@ package xsd
 // nondeterministic run to run, which STYLE D1 forbids outright. Rejections
 // describe the offending arm with %T instead.
 //
-// The same fact binds the ID→component resolver deferred to #340: it must never
-// range a map[ComponentID]… to produce output or ordering, because that
-// iteration order is address order (STYLE D2). Order such output by the
-// components' own document order, never by their identities.
+// The same fact binds any future ID→component resolver — no consumer needs one
+// yet, so none is built (STYLE T5), and #438 is the nearest landing that would:
+// it must walk the anonymous complex types reached only through an
+// InlineTypeDefinition. Such a resolver must never range a map[ComponentID]… to
+// produce output or ordering, because that iteration order is address order
+// (STYLE D2). Order such output by the components' own document order, never by
+// their identities.
 type ComponentID struct{ cell *identityCell }
 
 // identityCell is the allocation whose ADDRESS is a ComponentID's identity.

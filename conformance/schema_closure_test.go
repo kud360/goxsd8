@@ -104,7 +104,7 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 			name: "undecidable shape in a chameleon included document",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", include("cham.xsd")),
-				"cham.xsd": schemaSrc("", `<xs:element name="e"><xs:complexType/></xs:element>`),
+				"cham.xsd": schemaSrc("", undecidable),
 			},
 			want: false,
 		},

@@ -394,10 +394,23 @@ func TestProduceElementTypeAndInlineRejected(t *testing.T) {
 	assertRule(t, err, "src-element")
 }
 
-func TestProduceElementInlineOnlyRejected(t *testing.T) {
+// TestProduceElementInlineSimpleTypeStillDeclined pins the surviving asymmetry on
+// the GLOBAL path: #340 widened tier 1 for the inline <complexType> child only,
+// so the inline <simpleType> child of a TOP-LEVEL <element> is still unproduced.
+// It must fail as a LIMITATION carrying no rule — the schema is legal, and the
+// src-element verdict this used to fabricate said otherwise (STYLE E2).
+func TestProduceElementInlineSimpleTypeStillDeclined(t *testing.T) {
 	body := `<xs:element name="e"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:element>`
 	_, err := produce(t, wrap("", body))
-	assertRule(t, err, "src-element")
+	if err == nil {
+		t.Fatal("Produce accepted a top-level <element> with an inline <simpleType>")
+	}
+	if rule, ok := xsderr.RuleOf(err); ok {
+		t.Fatalf("error carries rule %s, want a plain limitation error for a legal schema", rule)
+	}
+	if !strings.Contains(err.Error(), "inline <simpleType> is not yet produced") {
+		t.Fatalf("error = %v, want the inline-<simpleType> limitation", err)
+	}
 }
 
 func TestProduceElementDefaultAndFixedRejected(t *testing.T) {
@@ -1272,22 +1285,6 @@ func TestProduceLocalAttributeTypeAndInlineRejected(t *testing.T) {
 		`</xs:complexType>`
 	_, err := produce(t, wrap("", body))
 	assertRule(t, err, "src-attribute")
-}
-
-// TestProduceLocalElementInlineComplexTypeStillDeclined pins the deliberate
-// asymmetry: the inline <complexType> form stays unproduced (#340, blocked on
-// #301), so it must fail as a limitation, never be silently accepted.
-func TestProduceLocalElementInlineComplexTypeStillDeclined(t *testing.T) {
-	body := `<xs:complexType name="CT"><xs:sequence>` +
-		`<xs:element name="e"><xs:complexType><xs:sequence/></xs:complexType></xs:element>` +
-		`</xs:sequence></xs:complexType>`
-	_, err := produce(t, wrap("", body))
-	if err == nil {
-		t.Fatal("Produce accepted a local <element> with an inline <complexType>")
-	}
-	if !strings.Contains(err.Error(), "inline <complexType> is not yet produced") {
-		t.Fatalf("error = %v, want the inline-<complexType> limitation", err)
-	}
 }
 
 // TestProduceElementSubstitutionGroupHeads pins §3.3.2.1's {substitution group

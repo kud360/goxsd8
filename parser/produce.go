@@ -568,10 +568,19 @@ func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleTy
 // {content type} at construction, so the base COMPONENT must exist before the
 // derived type can be built at all.
 //
-// It is the SINGLE entry point: run's top-level dispatch and resolveBaseType's
-// on-demand construction both go through it, so a type is mapped exactly once.
-// It populates the memo only — registering the component with the builder is
-// run's job, at the type's own document-order position.
+// It is the single entry point for a NAMED complex type: run's top-level
+// dispatch and resolveBaseType's on-demand construction both go through it, so a
+// named type is mapped exactly once. It populates the memo only — registering
+// the component with the builder is run's job, at the type's own document-order
+// position.
+//
+// An inline ANONYMOUS <complexType> deliberately does NOT come through here: it
+// calls produceComplexType directly (produceElement, produceLocalElement).
+// Neither of this function's two services applies to it — the memo is keyed by
+// name and an anonymous type has none, and it can be no cycle member for exactly
+// the same reason, since a {base type definition} chain is followed BY NAME and
+// nothing can name it (STYLE 5 / PRINCIPLES 5: no cycle check where the
+// construction order makes one impossible).
 //
 // A name already on the build stack (the PRESENT-nil memo state) is a circular
 // {base type definition} chain, charged ct-props-correct clause 3 (§3.4.6.1).
@@ -592,7 +601,7 @@ func (p *producer) buildComplexType(name xsd.QName, elem *Element) (xsd.ComplexT
 	}
 	p.symbols.builtComplex[name] = nil // mark on-stack
 
-	ct, err := p.produceComplexType(name, elem)
+	ct, err := p.produceComplexType(namedComplexType(name), elem)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -815,41 +824,50 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 
 // produceElement maps a top-level <element> into a global Element Declaration
 // (§3.3.2.2 dcl.elt.global), including its {identity-constraint definitions}
-// (§3.3.2.1). type= form only: an inline <simpleType>/<complexType> child is not
-// wired in this slice. Registering the produced identity constraints with the
-// schema builder is the caller's job (run), keeping this one focused on building
-// the declaration.
+// (§3.3.2.1). Registering the produced identity constraints with the schema
+// builder is the caller's job (run), keeping this one focused on building the
+// declaration.
+//
+// Its {type definition} is §3.3.2.1 dcl.elt.common's tier chain, which is a
+// COMMON mapping rule — §3.3.2.2 supplements only {scope} and {target
+// namespace}, never {type definition} — so tier 1's inline <complexType> child
+// is mapped here exactly as produceLocalElement maps it, through one minted
+// xsd.ComponentID that serves as both the anonymous type's {context} (§3.4.2.1
+// dcl.ctd.common) and the {scope}.{parent} of its own nested local elements
+// (#340). The two paths differ only in the {scope} the declaration itself gets.
+//
+// Tier 1's inline <simpleType> child is the one form still declined on this
+// path: #229 widened §3.2.2.2/§3.3.2.3's LOCAL mapping only, and the global
+// simple-type widening is a separate, adjacent change. It is declined with a
+// plain "not yet produced" error, never a fabricated src-element verdict — the
+// schema is legal and it is this producer that is incomplete (STYLE E2) — and
+// conformance/schema.go's elementDecidable declines the shape so the limitation
+// never reaches a validity verdict.
 func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error) {
 	name, _ := attrValue(elem, "name")
 	qname := xsd.QName{Space: p.target, Local: name}
 
 	typeLex, hasType := attrValue(elem, "type")
-	inline := childElement(elem, xsd.XMLSchemaNS, "simpleType") != nil ||
-		childElement(elem, xsd.XMLSchemaNS, "complexType") != nil
+	inlineSimple := childElement(elem, xsd.XMLSchemaNS, "simpleType")
+	inlineComplex := childElement(elem, xsd.XMLSchemaNS, "complexType")
 
-	if hasType && inline {
+	if hasType && (inlineSimple != nil || inlineComplex != nil) {
 		return xsd.ElementDeclaration{}, xsderr.New(ruleSrcElement, elem.Loc(),
 			"element has both a type attribute and an inline <simpleType>/<complexType> child, but src-element clause 3 forbids both")
 	}
-	if inline {
-		// Lifting this decline also means giving the inline <complexType>'s own
-		// nested local elements a {scope}.{parent} naming an ANONYMOUS type, which
-		// xsd.ComplexTypeScopeParent cannot express — see #301.
-		return xsd.ElementDeclaration{}, xsderr.New(ruleSrcElement, elem.Loc(),
-			"element has an inline <simpleType>/<complexType> child, which this producer does not yet support (only the type attribute form); src-element clause 3")
+	if err := rejectBothInlineTypes(elem, inlineSimple, inlineComplex); err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
+	// The unproduced form is declined BEFORE anything else is mapped, so the
+	// limitation never depends on what the rest of the declaration happens to
+	// hold (the same ordering discipline produceComplexType's name check keeps).
+	if inlineSimple != nil {
+		return xsd.ElementDeclaration{}, fmt.Errorf("parser: a top-level <element> at %s with an inline <simpleType> is not yet produced (§3.3.2.1 dcl.elt.common clause 1; the local form is)", elem.Loc())
 	}
 
 	vc, err := valueConstraintOf(elem, ruleSrcElement)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
-	}
-
-	typeName := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"} // §3.3.2.1 case 4
-	if hasType {
-		typeName, err = p.resolveQName(elem, typeLex)
-		if err != nil {
-			return xsd.ElementDeclaration{}, err
-		}
 	}
 	constraints, err := p.identityConstraintsOf(elem)
 	if err != nil {
@@ -860,6 +878,23 @@ func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error)
 		return xsd.ElementDeclaration{}, err
 	}
 	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
+	if inlineComplex != nil {
+		edID := xsd.NewComponentID()
+		ct, err := p.produceComplexType(anonymousComplexType(edID), inlineComplex)
+		if err != nil {
+			return xsd.ElementDeclaration{}, err
+		}
+		return xsd.NewElementDeclarationOwningType(elem.Loc(), edID, qname, ct, nil, xsd.NewGlobalScope(), vc,
+			false, constraints, affiliations, nil, false, p.disallowedSubstitutions(elem), nil)
+	}
+
+	typeName := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"} // §3.3.2.1 case 4
+	if hasType {
+		typeName, err = p.resolveQName(elem, typeLex)
+		if err != nil {
+			return xsd.ElementDeclaration{}, err
+		}
+	}
 	return xsd.NewElementDeclaration(elem.Loc(), qname, xsd.TypeDefinitionRef{Name: typeName}, nil, xsd.NewGlobalScope(), vc,
 		false, constraints, affiliations, nil, false, p.disallowedSubstitutions(elem), nil)
 }

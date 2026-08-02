@@ -684,23 +684,62 @@ func overrideDecidable(el *parser.Element) bool {
 }
 
 // elementDecidable reports whether a TOP-LEVEL <element> is in the form the
-// producer decides genuinely: it must have no inline <simpleType>/<complexType>
-// child. A bare element (no type=) now defaults to xs:anyType (§3.3.2.1 case 4),
-// which the producer seeds as a Complex Type Definition (§3.4.7), so it resolves
-// at finalize and is decided genuinely — type= is no longer required. An inline
-// anonymous type is an explicit src-element clause 3 rejection (§3.3.3) that
-// conflates a genuine violation with an unsupported form, so it stays declined.
+// producer decides genuinely. A bare element (no type=) defaults to xs:anyType
+// (§3.3.2.1 case 4), which the producer seeds as a Complex Type Definition
+// (§3.4.7), so it resolves at finalize and is decided genuinely — type= is not
+// required.
+//
+// An inline <complexType> child IS produced (§3.3.2.1 dcl.elt.common clause 1,
+// #340) and is admitted when the anonymous type it maps to is itself decidable
+// — see anonymousComplexTypeDecidable, which is narrower than
+// complexTypeDecidable and says why. An inline <simpleType> child is still
+// declined: #229 and #340 widened tier 1 for the LOCAL <simpleType> and for the
+// <complexType> on both paths, leaving the GLOBAL inline <simpleType> as the one
+// unproduced tier-1 shape, which the producer declines as the limitation it is.
 //
 // Its <unique>/<key>/<keyref> children impose no condition of their own: #178
 // produced the name= form and #240 the ref= form, so BOTH are mapped and both
 // src-identity-constraint (§3.11.3) and c-props-correct (§3.11.6.1) rejections on
 // them are genuine.
-//
-// The inline decline is deliberately ASYMMETRIC with localElementDecidable,
-// which admits an inline <simpleType>: #229 widened the producer's dcl.elt.local
-// mapping only, leaving dcl.elt.global (§3.3.2.2) declining as before.
 func elementDecidable(el *parser.Element) bool {
-	return childXSD(el, "simpleType") == nil && childXSD(el, "complexType") == nil
+	if childXSD(el, "simpleType") != nil {
+		return false
+	}
+	inline := childXSD(el, "complexType")
+	return inline == nil || anonymousComplexTypeDecidable(inline)
+}
+
+// anonymousComplexTypeDecidable reports whether the ANONYMOUS complex type of an
+// inline <complexType> child of an <element> is decidable. It is deliberately
+// NARROWER than complexTypeDecidable, which judges a type the finalized Schema
+// holds in its {type definitions}: an anonymous type is never a member of that
+// set (§3.17.2 scopes the property to the <complexType> children OF <schema>;
+// xsd/typedefinition.go records why registering one would be worse), so every
+// finalize pass that quantifies over it silently produces NO verdict for the
+// anonymous type — see the GAP marker on parser's produceComplexType for the
+// exact list and its issues (#414, #438).
+//
+// This gate therefore admits only the IMPLICIT-CONTENT form — no <simpleContent>
+// and no <complexContent> child — because on that shape the two MISSING
+// attribute folds are provably the identity: §3.4.2.3.2 makes the {base type
+// definition} xs:anyType with {derivation method} restriction, §3.4.7 gives
+// xs:anyType an empty {attribute uses} so §3.4.2.4 clause 3's fold adds nothing,
+// and §3.4.2.5 clause 2 unions the base's wildcard only for an EXTENSION, which
+// this form is not. What stays genuinely unenforced on the admitted shape is
+// narrower but real: cos-nonambig and cos-element-consistent inside the
+// anonymous content model, and ct-props-correct clause 4's attribute-name
+// uniqueness. All three are UNDER-rejections — this lane can report "valid" for
+// a schema a complete processor rejects, never "invalid" for a valid one — which
+// is the safe direction for a ratchet.
+//
+// The nesting recursion is contentDecidable's: an inline <complexType> deeper in
+// the tree is reached through modelGroupDecidable → localElementDecidable and
+// comes back through here, so the narrowing applies at every depth.
+func anonymousComplexTypeDecidable(el *parser.Element) bool {
+	if childXSD(el, "simpleContent") != nil || childXSD(el, "complexContent") != nil {
+		return false
+	}
+	return contentDecidable(el)
 }
 
 // complexTypeDecidable reports whether a <complexType> (top-level, or a nested
@@ -712,12 +751,14 @@ func elementDecidable(el *parser.Element) bool {
 //
 //   - every shape the producer declines with a plain "not yet produced"
 //     limitation error — <simpleContent> <restriction> (§3.4.2.2 cases 1-2
-//     synthesize an anonymous simple type from the restriction's facets),
-//     an inline anonymous <complexType> on a local element
-//     (#340), and a bare <group>/<attributeGroup> lacking a ref (a nested one is
-//     always a reference, so a bare one is malformed). An inline anonymous
-//     <simpleType> on a local element or attribute IS produced (#229) and no
-//     longer declines — see localElementDecidable/localAttributeDecidable. An
+//     synthesize an anonymous simple type from the restriction's facets) and a
+//     bare <group>/<attributeGroup> lacking a ref (a nested one is always a
+//     reference, so a bare one is malformed). An inline anonymous <simpleType>
+//     on a local element or attribute IS produced (#229) and an inline anonymous
+//     <complexType> on a local OR global element is produced too (#340); neither
+//     declines here — see localElementDecidable/elementDecidable, and
+//     anonymousComplexTypeDecidable for the separate, narrower gate the
+//     anonymous complex-type shape passes through. An
 //     <openContent> is produced as of #230 (§3.4.2.3.3 clauses 5-6) and is
 //     admitted by contentDecidable wherever the schema for schema documents
 //     allows one; a MISPLACED one — beside <simpleContent>/<complexContent>, or
@@ -934,13 +975,12 @@ func attributeDecidable(el *parser.Element) bool {
 // otherwise the decline would move inside constructSimpleType and re-shape a
 // limitation as a verdict.
 //
-// An inline <complexType> still declines: it is not produced at all (#340, whose
-// anonymous complex type would have to be the {scope}.{parent} of its own nested
-// local elements — #301). Its both-present-with-type= case is a genuine
-// src-element clause 3 rejection, but the inline-only case is a limitation, and
-// this gate cannot tell which verdict a case expects, so both stay out.
+// An inline <complexType> is produced too as of #340, on this path and on the
+// global one alike (§3.3.2.1's tier 1 is a COMMON rule), and is admitted under
+// the same proviso — see anonymousComplexTypeDecidable for why that gate is
+// narrower than complexTypeDecidable.
 func localElementDecidable(el *parser.Element) bool {
-	if childXSD(el, "complexType") != nil {
+	if ct := childXSD(el, "complexType"); ct != nil && !anonymousComplexTypeDecidable(ct) {
 		return false
 	}
 	inline := childXSD(el, "simpleType")

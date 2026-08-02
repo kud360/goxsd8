@@ -336,9 +336,12 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 
 // resolveComplexType descends a complex type's reference sites: its {base type
 // definition} (clause 1.1), each {attribute use}, and its {content type}
-// particle tree.
+// particle tree. It runs for an ANONYMOUS complex type too, reached through an
+// owning declaration's InlineTypeDefinition (see resolveTypeDefinition), so the
+// owner phrase in its message comes from complexTypeOwner rather than from a
+// {name} an anonymous type does not have (STYLE T4).
 func (s *Schema) resolveComplexType(c ComplexType) error {
-	if _, err := resolveTypeName(s, c.BaseTypeDefinitionName(), "complex type "+c.Name().String()+" {base type definition}"); err != nil {
+	if _, err := resolveTypeName(s, c.BaseTypeDefinitionName(), complexTypeOwner(c)+" {base type definition}"); err != nil {
 		return err
 	}
 	for _, u := range c.AttributeUses() {

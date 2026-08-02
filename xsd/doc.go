@@ -46,7 +46,10 @@
 // underlying value is an address, so any textual or sorted form would be
 // nondeterministic, D1/D2), and never derived from position — Loc is
 // provenance, not identity. ComplexType's {context} (§3.4.1) is the first
-// slot to use it.
+// slot to use it, and ElementScopeParent's
+// AnonymousComplexTypeScopeParent arm is the reciprocal second: one mint
+// per inline construct serves the back-pointer and the forward reference
+// both.
 //
 // The eight component kinds a schema's §3.17.1 properties hold — element
 // and attribute declarations, complex and simple type definitions, model

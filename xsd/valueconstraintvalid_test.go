@@ -205,13 +205,7 @@ func TestPhaseEClause3AntecedentNotMet(t *testing.T) {
 func TestPhaseEReachesEveryAttributeUseSite(t *testing.T) {
 	bad := func() []AttributeUse { return []AttributeUse{vcRefUse(t, ValueDefault, "7")} }
 	inlineType := func(name string) ElementDeclaration {
-		ct := dType(t, QName{}, anyTypeName, EmptyContent{}, bad(), nil)
-		e, err := NewElementDeclaration(xsderr.Loc{}, uq(name), InlineTypeDefinition{Definition: ct}, nil,
-			NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
-		if err != nil {
-			t.Fatalf("NewElementDeclaration: %v", err)
-		}
-		return e
+		return dOwnInline(t, uq(name), dType(t, QName{}, anyTypeName, EmptyContent{}, bad(), nil), NewGlobalScope())
 	}
 
 	for _, tc := range []struct {
@@ -269,12 +263,7 @@ func TestPhaseEOwnerNamesAnonymousComplexType(t *testing.T) {
 		}, "complex type {urn:upa}t "},
 		{"anonymous", func(b *SchemaBuilder) {
 			ct := dType(t, QName{}, anyTypeName, EmptyContent{}, []AttributeUse{vcRefUse(t, ValueDefault, "7")}, nil)
-			e, err := NewElementDeclaration(xsderr.Loc{}, uq("e"), InlineTypeDefinition{Definition: ct}, nil,
-				NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
-			if err != nil {
-				t.Fatalf("NewElementDeclaration: %v", err)
-			}
-			b.AddElement(e)
+			b.AddElement(dOwnInline(t, uq("e"), ct, NewGlobalScope()))
 		}, "anonymous complex type "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

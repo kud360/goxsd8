@@ -90,23 +90,39 @@ func (t TypeTable) DefaultTypeDefinition() TypeAlternative {
 	return t.defaultTypeDefinition
 }
 
-// ElementScopeParent is the sealed sum of the two component kinds an element
-// declaration's {scope}.{parent} may name (Structures §3.3.1, Scope record
+// ElementScopeParent is the sealed sum of the ways an element declaration's
+// {scope}.{parent} identifies its container (Structures §3.3.1, Scope record
 // id="sc_e", {parent}: "Either a Complex Type Definition or a Model Group
-// Definition"). The spec's alternation is closed at two, so the set of variant
-// shapes is closed; the unexported elementScopeParent marker method seals it
-// (STYLE T2/T7, the PRINCIPLES 7 sealed-sum exception), mirroring term.go's
-// TermOrRef, so consumers exhaustively switch these two variants and no third is
+// Definition"). The unexported elementScopeParent marker method seals it (STYLE
+// T2/T7, the PRINCIPLES 7 sealed-sum exception), mirroring term.go's TermOrRef,
+// so consumers exhaustively switch these variants and no fourth is
 // representable.
+//
+// There are THREE arms for the spec's TWO component kinds, and the extra one is
+// a REPRESENTATION split inside one kind, not a third kind. A Complex Type
+// Definition container may be named (a top-level <complexType>) or ANONYMOUS (an
+// inline <complexType> child of an <element>, §3.4.1 ctd-context), and the two
+// are not identifiable the same way: a named one is followable by QName, an
+// anonymous one has no name at all and is identified only by the ComponentID
+// minted for the inline construct it belongs to. Encoding that as an optional
+// second field on one arm would make "named AND anonymous" and "neither"
+// representable; a separate arm makes both unrepresentable (STYLE T1), exactly
+// as complextype.go's ComplexTypeContext partitions its own construction paths.
+// A Model Group Definition needs no such split: §3.7.1 types its {name} as a
+// Required xs:NCName, so a nameless one is not a legal component.
+//
+//   - ComplexTypeScopeParent — a NAMED containing complex type definition;
+//   - AnonymousComplexTypeScopeParent — an ANONYMOUS containing complex type
+//     definition, by owner identity;
+//   - ModelGroupScopeParent — a containing model group definition.
 //
 // It is named for the ELEMENT declaration deliberately. The attribute
 // declaration's own {scope}.{parent} (§3.2.1, record id="sc_a") is a DIFFERENT
-// two-member alternation — Complex Type Definition or Attribute Group Definition
-// — and must get its own sealed sum rather than share this one: merging the two
-// into a single three-variant sum would make "an element scoped to an attribute
-// group" representable.
+// alternation — Complex Type Definition or Attribute Group Definition — and must
+// get its own sealed sum rather than share this one: merging the two would make
+// "an element scoped to an attribute group" representable.
 //
-// Both variants carry a QName REFERENCE to the container, not the container
+// Every variant carries a REFERENCE to the container, not the container
 // component itself. Embedding the value is impossible here: construction is
 // bottom-up (a complex type's content model, which owns the local declaration,
 // is built before the complex type is), so the parent does not exist when the
@@ -114,13 +130,15 @@ func (t TypeTable) DefaultTypeDefinition() TypeAlternative {
 // do either: Complex Type Definitions and Model Group Definitions occupy
 // INDEPENDENT symbol spaces on Schema (§3.17.1 {type definitions} versus {model
 // group definitions}), so a CTD and an MGD may share one expanded name. The kind
-// therefore lives in the variant type, and a consumer follows the reference with
-// a read-time lookup in the index that kind selects — the same
+// therefore lives in the variant type, and a consumer follows a by-NAME
+// reference with a read-time lookup in the index that kind selects — the same
 // pre-resolution-reference convention as TypeDefinitionRef, which Schema.Type
 // serves. A ComplexTypeScopeParent is followable today; a ModelGroupScopeParent
 // waits on the Schema.ModelGroup(QName) accessor this package does not export
 // yet (STYLE T5 — no consumer justifies one, the same follow-cost asymmetry
-// resolve.go already records for ModelGroupRef).
+// resolve.go already records for ModelGroupRef); an
+// AnonymousComplexTypeScopeParent waits on the ID→component resolver
+// ComponentID's doc describes, which no consumer justifies yet either.
 //
 // Unlike those reference slots, this one is NOT checked by finalize: resolve.go
 // adds no src-resolve (§3.17.6.2) clause for it. src-resolve governs QNames
@@ -130,13 +148,33 @@ func (t TypeTable) DefaultTypeDefinition() TypeAlternative {
 type ElementScopeParent interface{ elementScopeParent() }
 
 // ComplexTypeScopeParent is the ElementScopeParent variant naming the containing
-// Complex Type Definition (§3.3.2.3 dcl.elt.local: "If the <element> element
-// information item has <complexType> as an ancestor, the Complex Type Definition
-// corresponding to that item"). Name is that definition's expanded {name}; it is
-// a PRESENT reference, never the absent (zero) QName — NewLocalScope rejects a
-// zero Name (see there for why). The field is read-only by convention; do not
-// mutate it after construction.
+// NAMED Complex Type Definition (§3.3.2.3 dcl.elt.local: "If the <element>
+// element information item has <complexType> as an ancestor, the Complex Type
+// Definition corresponding to that item"). Name is that definition's expanded
+// {name}; it is a PRESENT reference, never the absent (zero) QName —
+// NewLocalScope rejects a zero Name (see there for why). An ANONYMOUS containing
+// complex type is the AnonymousComplexTypeScopeParent variant instead. The field
+// is read-only by convention; do not mutate it after construction.
 type ComplexTypeScopeParent struct{ Name QName }
+
+// AnonymousComplexTypeScopeParent is the ElementScopeParent variant identifying
+// an ANONYMOUS containing Complex Type Definition — the same §3.3.2.3
+// dcl.elt.local case ComplexTypeScopeParent covers, for a container that has no
+// {name} to be referenced by (§3.4.1 ctd-context makes {name} and {context} a
+// strict XOR, so an anonymous complex type carries a {context} instead).
+//
+// Owner is the minted identity of the ELEMENT DECLARATION the anonymous complex
+// type is the {type definition} of — not a second identity for the type itself.
+// §3.4.2.1 dcl.ctd.common makes that declaration the type's own {context}, so
+// the type's ElementDeclarationContext.Component and this field hold the SAME
+// ComponentID: one mint per inline construct, one fact with one encoding (STYLE
+// D3). Comparing them with == is how NewElementDeclarationOwningType checks that
+// an inline anonymous complex type points back at its own owner.
+//
+// Owner is a PRESENT identity, never the zero (unminted) ComponentID —
+// NewLocalScope rejects an unminted one. The field is read-only by convention;
+// do not mutate it after construction.
+type AnonymousComplexTypeScopeParent struct{ Owner ComponentID }
 
 // ModelGroupScopeParent is the ElementScopeParent variant naming the containing
 // Model Group Definition (§3.3.2.3 dcl.elt.local: "otherwise (the <element>
@@ -151,24 +189,52 @@ type ModelGroupScopeParent struct{ Name QName }
 // (§3.3.1 sc_e-parent); see the ElementScopeParent doc.
 func (ComplexTypeScopeParent) elementScopeParent() {}
 
+// elementScopeParent marks AnonymousComplexTypeScopeParent as an
+// ElementScopeParent (§3.3.1 sc_e-parent); see the ElementScopeParent doc.
+func (AnonymousComplexTypeScopeParent) elementScopeParent() {}
+
 // elementScopeParent marks ModelGroupScopeParent as an ElementScopeParent
 // (§3.3.1 sc_e-parent); see the ElementScopeParent doc.
 func (ModelGroupScopeParent) elementScopeParent() {}
 
-// elementScopeParentName returns the expanded name a variant references. The
-// default arm asserts the sealed-sum invariant and is unreachable for any value
-// an outside package can produce: elementScopeParent is unexported, so the two
-// variants above are the only implementations that exist (mirroring resolve.go's
-// non-exhaustive-switch assertions).
-func elementScopeParentName(parent ElementScopeParent) QName {
+// checkElementScopeParent rejects a variant that identifies no container, per
+// arm: the two by-NAME arms need a present name, the by-IDENTITY arm a minted
+// ComponentID. All three are charged to ruleEPropsCorrect clause 1, the footing
+// NewLocalScope's own tableau checks stand on.
+//
+// The default arm asserts the sealed-sum invariant and is unreachable for any
+// value an outside package can produce: elementScopeParent is unexported, so the
+// three variants above are the only implementations that exist (mirroring
+// resolve.go's non-exhaustive-switch assertions). A nil parent is caller-checked
+// before this point, so it is not handled here.
+func checkElementScopeParent(loc xsderr.Loc, parent ElementScopeParent) error {
 	switch p := parent.(type) {
 	case ComplexTypeScopeParent:
-		return p.Name
+		if p.Name.Local == "" {
+			return unnamedScopeParent(loc, parent)
+		}
+		return nil
 	case ModelGroupScopeParent:
-		return p.Name
+		if p.Name.Local == "" {
+			return unnamedScopeParent(loc, parent)
+		}
+		return nil
+	case AnonymousComplexTypeScopeParent:
+		if p.Owner == (ComponentID{}) {
+			return xsderr.New(ruleEPropsCorrect, loc,
+				"element declaration's {scope}.{parent} identifies no container: the %T variant carries an unminted identity, but this representation identifies an anonymous containing complex type by identity token; mint one with NewComponentID (e-props-correct clause 1)", parent)
+		}
+		return nil
 	default:
-		panic("xsd: elementScopeParentName: non-exhaustive ElementScopeParent switch")
+		panic("xsd: checkElementScopeParent: non-exhaustive ElementScopeParent switch")
 	}
+}
+
+// unnamedScopeParent is the shared rejection of the two by-NAME
+// ElementScopeParent variants carrying an absent name (STYLE T4).
+func unnamedScopeParent(loc xsderr.Loc, parent ElementScopeParent) error {
+	return xsderr.New(ruleEPropsCorrect, loc,
+		"element declaration's {scope}.{parent} names no container: the %T variant carries an absent name, but this representation identifies the containing complex type or model group definition by name (e-props-correct clause 1)", parent)
 }
 
 // Scope is the {scope} property record of an element declaration (Structures
@@ -185,9 +251,10 @@ func elementScopeParentName(parent ElementScopeParent) QName {
 // constructors are the only way to obtain a local one, since parent is
 // unexported.
 //
-// A local Scope names its {parent} rather than embedding it, and requires that
-// name to be present — see ElementScopeParent for why the reference is a
-// discriminated QName and NewLocalScope for why the name may not be absent.
+// A local Scope REFERENCES its {parent} rather than embedding it, and requires
+// that reference to identify something — see ElementScopeParent for why the
+// reference is a discriminated QName (or, for an anonymous container, a minted
+// identity) and NewLocalScope for why it may not point at nothing.
 type Scope struct {
 	parent ElementScopeParent // nil ⇔ {variety} = global
 }
@@ -208,29 +275,20 @@ func NewGlobalScope() Scope {
 //     scope with no container to be available within contradicts §3.3.1's
 //     availability prose ("E is available for use only within ... E.{scope}.
 //     {parent}").
-//   - a parent variant whose Name is the absent (zero) QName: this
-//     representation identifies the container BY NAME (ElementScopeParent), so an
-//     unnamed container could not be found again.
+//   - a parent variant that identifies no container: an absent (zero) Name on
+//     either by-NAME variant, or an unminted (zero) Owner on
+//     AnonymousComplexTypeScopeParent. Each variant carries the one reference
+//     kind its container admits, so a reference of that kind which points at
+//     nothing could never be followed. See checkElementScopeParent.
 //
 // The second rejection is unreachable from this module's parser; it guards
-// scopes built programmatically (a direct caller, a test) instead. Only a
-// top-level <complexType> or a top-level named <group> ever mints an
-// ElementScopeParent, and the producer rejects each as a grammar fault at the
-// top of the function that maps it — BEFORE any content is built — when its
-// name attribute is absent or empty, so no variant carrying an absent name is
-// ever constructed. The remaining source of an anonymous Complex Type
-// Definition, an inline <complexType>, is declined by every producer path that
-// could reach one. Should inline anonymous complex types land, this rejection is
-// the compile-of-record that the representation must be revisited (a component
-// handle, not a name) rather than silently mis-scoping.
-//
-// That handle has now landed: ComponentID (componentid.go), minted by the
-// producer and first used by ComplexType's {context} (§3.4.1 ctd-context).
-// Reworking ComplexTypeScopeParent to carry one — the change that would retire
-// this rejection for that variant alone, ModelGroupScopeParent's {name} being a
-// Required xs:NCName (§3.7.1) that keeps its guard — is deferred to #340, the
-// landing that also builds the producer which can mint an anonymous container's
-// identity. Nothing here changes until then.
+// scopes built programmatically (a direct caller, a test) instead. A top-level
+// <complexType> or a top-level named <group> is rejected as a grammar fault at
+// the top of the function that maps it — BEFORE any content is built — when its
+// name attribute is absent or empty, and an inline anonymous <complexType> is
+// produced only after its owning declaration's ComponentID has been minted
+// (parser's produceElement/produceLocalElement, #340), so no variant pointing at
+// nothing is ever constructed.
 //
 // loc is the source position charged to any rejection. A caller with no real
 // parser position — a synthesized or programmatically built scope — may
@@ -240,9 +298,8 @@ func NewLocalScope(loc xsderr.Loc, parent ElementScopeParent) (Scope, error) {
 		return Scope{}, xsderr.New(ruleEPropsCorrect, loc,
 			"element declaration has {scope}.{variety} = local but an absent {scope}.{parent}, which the §3.3.1 tableau requires to be present when the variety is local (e-props-correct clause 1)")
 	}
-	if name := elementScopeParentName(parent); name.Local == "" {
-		return Scope{}, xsderr.New(ruleEPropsCorrect, loc,
-			"element declaration's {scope}.{parent} names no container: the %T variant carries an absent name, but this representation identifies the containing complex type or model group definition by name (e-props-correct clause 1)", parent)
+	if err := checkElementScopeParent(loc, parent); err != nil {
+		return Scope{}, err
 	}
 	return Scope{parent: parent}, nil
 }
@@ -301,11 +358,14 @@ func (s Scope) Parent() (ElementScopeParent, bool) {
 // ElementScopeParent.
 //
 // Ratchet impact: the schema lane widens whenever the producer starts mapping a
-// {type definition} shape it used to decline — most recently the inline
-// anonymous <simpleType> of a local declaration (#229), which the
-// InlineTypeDefinition arm of the slot exists to hold.
+// {type definition} shape it used to decline — the inline anonymous <simpleType>
+// of a local declaration (#229) and then the inline anonymous <complexType> of a
+// local OR global one (#340), both of which the InlineTypeDefinition arm of the
+// slot exists to hold.
 //
-// Construct only through NewElementDeclaration, which rejects the states
+// Construct only through NewElementDeclaration, or through
+// NewElementDeclarationOwningType when the declaration owns the anonymous
+// complex type of an inline <complexType> child; both reject the states
 // e-props-correct (§3.3.6.1) clauses 1 and 3 forbid so they are unrepresentable
 // (STYLE T1). ElementDeclaration is immutable after construction.
 type ElementDeclaration struct {
@@ -353,6 +413,13 @@ type ElementDeclaration struct {
 // encoding of an absent {type definition}, which a programmatically built
 // declaration is in before the §3.3.2.1 defaulting tiers are applied.
 //
+// An InlineTypeDefinition wrapping a ComplexType is rejected here too, on the
+// same footing: that shape is §3.3.2.1 dcl.elt.common clause 1's inline
+// <complexType> child, whose anonymous type carries a {context} naming THIS
+// declaration (§3.4.2.1 dcl.ctd.common), and this entry point takes no identity
+// to check that back-pointer against. Build it through
+// NewElementDeclarationOwningType, which does.
+//
 // The rest of clause 1's {scope} shape is not checked here because it is
 // unrepresentable: scope is a Scope, obtainable only from NewGlobalScope or
 // NewLocalScope, so its {variety} is always a legal token and its {parent} is
@@ -372,6 +439,105 @@ type ElementDeclaration struct {
 // A caller with no real parser position — a synthesized or programmatically
 // built declaration — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
+	if inline, ok := typeDefinition.(InlineTypeDefinition); ok {
+		if _, isComplex := inline.Definition.(ComplexType); isComplex {
+			return ElementDeclaration{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
+				"element declaration %s {type definition} is an InlineTypeDefinition wrapping a ComplexType, but a declaration that OWNS an anonymous complex type must be built through NewElementDeclarationOwningType, the only entry point that can check the type's {context} back-pointer (§3.4.2.1 dcl.ctd.common) against the declaration's own identity", name)
+		}
+	}
+	return newElementDeclaration(loc, name, typeDefinition, typeTable, scope, valueConstraint, nillable, identityConstraints, substitutionGroupAffiliations, substitutionGroupExclusions, abstract, disallowedSubstitutions, annotations)
+}
+
+// NewElementDeclarationOwningType builds an ElementDeclaration whose {type
+// definition} is the ANONYMOUS Complex Type Definition of an inline
+// <complexType> child (§3.3.2.1 dcl.elt.common clause 1). It is
+// NewElementDeclaration's parameter list with the TypeDefinitionOrRef slot
+// replaced, in place, by the owned definition and preceded by the declaration's
+// own minted identity; every other parameter, check, copy, and rejection is
+// identical, because both entry points run one shared core. definition is
+// wrapped in an InlineTypeDefinition here, so a caller never spells that arm.
+//
+// It is the ONLY construction path for a declaration owning an anonymous complex
+// type — NewElementDeclaration rejects that shape outright — and it exists to
+// make ONE state unrepresentable that no shape check could reach: an inline
+// anonymous complex type whose {context} names some OTHER component. §3.4.2.1
+// dcl.ctd.common makes that {context} "the Element Declaration corresponding to
+// the nearest <element> information item among the ancestor element information
+// items", which for an inline child is this very declaration, so the identity
+// the caller minted for it and the identity the type's own {context} carries
+// must be the SAME ComponentID (compared with ==; see ComponentID for why
+// reflect.DeepEqual cannot see it). It adds three rejections, all charged to
+// xsderr.RuleComponentInvariant because a ComponentID is this package's
+// representation rather than a spec-visible name — the footing
+// checkComplexTypeContext already stands on:
+//
+//   - an unminted (zero) id: there would be nothing to compare the {context}
+//     against, and the anonymous type's {scope}.{parent} references
+//     (AnonymousComplexTypeScopeParent) would identify nothing either;
+//   - a {context} that is an ElementDeclarationContext naming a DIFFERENT
+//     identity;
+//   - a {context} that is a ComplexTypeDefinitionContext: §3.4.2.1 has exactly
+//     one case and it yields an Element Declaration, so a <complexType> that is
+//     a direct child of <element> is never contexted in a complex type.
+//
+// A definition that is NAMED (its {context} therefore ·absent· per §3.4.1's XOR)
+// is rejected by the shared core's checkTypeDefinitionOrRef, which admits only
+// an anonymous type in the InlineTypeDefinition arm.
+//
+// id is NOT stored on the built declaration. Its whole role is this
+// construction-time comparison, and a field written but never read is dead state
+// (STYLE D3); the landing that adds an ID→component resolver adds the field
+// together with its reader (see ComponentID).
+func NewElementDeclarationOwningType(loc xsderr.Loc, id ComponentID, name QName, definition ComplexType, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
+	if id == (ComponentID{}) {
+		return ElementDeclaration{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
+			"element declaration %s owns an anonymous complex type but carries an unminted identity, which its {type definition}'s {context} back-pointer could not name; mint one with NewComponentID", name)
+	}
+	if err := checkOwnedTypeContext(loc, id, name, definition); err != nil {
+		return ElementDeclaration{}, err
+	}
+	return newElementDeclaration(loc, name, InlineTypeDefinition{Definition: definition}, typeTable, scope, valueConstraint, nillable, identityConstraints, substitutionGroupAffiliations, substitutionGroupExclusions, abstract, disallowedSubstitutions, annotations)
+}
+
+// checkOwnedTypeContext rejects an owned anonymous complex type whose {context}
+// (§3.4.1 ctd-context) does not name the owning declaration's identity id. An
+// ABSENT {context} means definition is NAMED, which the shared core's
+// checkTypeDefinitionOrRef rejects with the message that fits it; this checker
+// passes it through rather than duplicating that verdict (STYLE T4).
+//
+// The switch is exhaustive over ComplexTypeContext's sealed sum; the default arm
+// asserts the invariant and is unreachable for any value an outside package can
+// produce, since complexTypeContext is unexported.
+func checkOwnedTypeContext(loc xsderr.Loc, id ComponentID, name QName, definition ComplexType) error {
+	context, present := definition.Context()
+	if !present {
+		return nil
+	}
+	switch c := context.(type) {
+	case ElementDeclarationContext:
+		if c.ID() != id {
+			return xsderr.New(xsderr.RuleComponentInvariant, loc,
+				"element declaration %s owns an anonymous complex type whose {context} names a DIFFERENT element declaration, but §3.4.2.1 dcl.ctd.common makes an inline <complexType>'s {context} the declaration it is a child of; mint one identity per inline construct and pass it to both", name)
+		}
+		return nil
+	case ComplexTypeDefinitionContext:
+		return xsderr.New(xsderr.RuleComponentInvariant, loc,
+			"element declaration %s owns an anonymous complex type whose {context} is a ComplexTypeDefinitionContext, but §3.4.2.1 dcl.ctd.common has exactly one case and it yields an Element Declaration, so a <complexType> that is a direct child of <element> is never contexted in a complex type definition", name)
+	default:
+		panic("xsd: checkOwnedTypeContext: non-exhaustive ComplexTypeContext switch")
+	}
+}
+
+// newElementDeclaration is the shared core of NewElementDeclaration and
+// NewElementDeclarationOwningType: every check and copy that does not concern
+// the ownership of an anonymous complex type lives here exactly once (STYLE T4).
+//
+// PRECONDITION, enforced by its TWO CALLERS and not by itself: a typeDefinition
+// holding an InlineTypeDefinition that wraps a ComplexType arrived through
+// NewElementDeclarationOwningType, so its {context} has been checked against the
+// owner's identity. This layer cannot express that check — it takes no identity
+// — and does not attempt one. Any third caller added here must re-establish it.
+func newElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
 	if name.Local == "" {
 		return ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, loc,
 			"element declaration has an absent {name}, but the §3.3.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (e-props-correct clause 1)")
