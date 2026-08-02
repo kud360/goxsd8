@@ -1345,6 +1345,24 @@ formality.
 Bands 2-5 from the 2026-07-25 paragraph still stand for everything not
 listed above, minus the landed items.
 
+***Post-land pass, 2026-08-02 (#264, `0b459d1`, PR #391, schema
+4257/15432, datatypes 1107/1129, ratchet unchanged — `complexTypeDecidable`
+still declines every `<extension>` shape, so #336 is what actually exercises
+this code).*** Band 1 loses its head: **#264 → #265 → #301 → #281 → #365 →
+#346 → #324 → #377** becomes seven, **#265 → #301 → #281 → #365 → #346 →
+#324 → #377**, no reorder among the rest. #265 inherits the head slot on its
+own merits, not by default — #264 turned it into the unblocker for both
+#336 (still `blocked` on #264 **and** #265; #264 alone did not clear it) and
+two of the three `GAP(xsd)` markers #264 added (clauses 1.3 and 1.7,
+`xsd/complexextension.go:111-126` and `:127-134`). One new issue,
+**#392** (`ready`, `kind/gap`, M4), filed at this pass for the third marker
+(clause 1.5's extension/restriction-mixed chain, `:353-367` — the one GAP in
+the tree that landed naming no retiring issue, flagged by the arbiter as
+owed at land) — it does **not** enter band 1: fail-open only, moves no lane
+while #336 is blocked, and #265 buys strictly more per issue. Unblock scan:
+nothing else clears — #250 names #264 only in a stale comment, its real
+`## Depends on` is #79.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
