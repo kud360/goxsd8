@@ -254,8 +254,9 @@ func (s *Schema) resolveTypeDefinition(ref TypeDefinitionOrRef, ctx string) erro
 }
 
 // resolveElementName resolves an element-declaration reference (src-resolve
-// clause 1.3): an <element ref> {term} or a {substitution group affiliations}
-// member. A zero ref is absent and skipped.
+// clause 1.3): an <element ref> {term}. A zero ref is absent and skipped. The
+// other clause-1.3 site, a {substitution group affiliations} member, is
+// deliberately NOT routed here — see resolveElementDecl for the §5.3 reason.
 func resolveElementName(r ElementResolver, ref QName, ctx string) error {
 	if ref == (QName{}) {
 		return nil
@@ -419,17 +420,41 @@ func (s *Schema) resolveAttributeUse(u AttributeUse) error {
 }
 
 // resolveElementDecl resolves an element declaration's reference sites: its
-// {type definition} (clause 1.1), each {substitution group affiliations} member
-// (clause 1.3), each type-table alternative's {type definition} (clause 1.1),
-// and each nested {identity-constraint definitions} keyref (clause 1.7).
+// {type definition} (clause 1.1), each type-table alternative's {type definition}
+// (clause 1.1), and each nested {identity-constraint definitions} keyref (clause
+// 1.7).
+//
+// {substitution group affiliations} is the ONE reference slot this pass does NOT
+// hard-fail, and the exemption is §5.3's (Missing Sub-components), not a
+// convenience: "the ·resolution· of such QNames can fail, resulting in one or
+// more values of or containing ·absent· where a component is mandated", and §5.3
+// then defers the consequence to ·assessment· — an element item validated against
+// a component with an ·absent· value fails cvc-elt clause 1 and the processor
+// falls back to ·lax assessment·. It is not a schema-construction error, which is
+// why e-props-correct clause 1 reads "as described in the property tableau ...
+// modulo the impact of Missing Sub-components (§5.3)". W3C saxonData/Missing
+// missing002 pins exactly this: substitutionGroup="rotten" with no `rotten`
+// declared is a VALID schema whose only invalid instance is the one that uses the
+// affected declaration.
+//
+// So a dangling affiliation stays in the property as an ·absent· member, and the
+// two walks that read it already behave as §5.3 requires: affiliationChainReaches
+// (substitutiongroup.go) skips a member it cannot look up, so no chain runs
+// through an absent component, and checkSubstitutionGroupsAcyclic contributes no
+// edges for one.
+//
+// GAP(xsd): the OTHER reference slots are not yet §5.3-aligned — a dangling
+// {type definition}, <element ref>, <attribute ref>, <group ref> or keyref is
+// still charged src-resolve here and rejects the whole schema, which is why W3C
+// Missing/missing001 and missing003/006 sit at fail. That deviation is recorded
+// in parser/doc.go; this slot is aligned rather than joining it because #281 is
+// what first put data in the slot, and extending an unimplemented-§5.3 rejection
+// to a new site would have LOST a case the suite says must pass. Aligning the
+// rest is #434: it needs ·absent· to be representable in every slot plus a
+// lax-assessment fallback at validation time, neither of which exists.
 func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 	if err := s.resolveTypeDefinition(e.TypeDefinition(), "element declaration "+e.Name().String()+" {type definition}"); err != nil {
 		return err
-	}
-	for _, aff := range e.SubstitutionGroupAffiliationNames() {
-		if err := resolveElementName(s, aff, "element declaration "+e.Name().String()+" {substitution group affiliations}"); err != nil {
-			return err
-		}
 	}
 	if tt, ok := e.TypeTable(); ok {
 		if err := s.resolveTypeTable(tt); err != nil {

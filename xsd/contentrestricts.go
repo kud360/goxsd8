@@ -478,26 +478,17 @@ func (s *Schema) positionAdmits(general, specific position) bool {
 // already folds in plain expanded-name equality (cos-equiv-derived-ok-rec clause
 // 1, so no separate name test is needed here).
 //
-// GAP(xsd): two TOP-LEVEL declarations with different expanded names are
-// admitted unconditionally, without the membership walk deciding it. No producer
-// in this repo maps substitutionGroup= yet — parser/produce.go passes a nil
-// {substitution group affiliations} to every NewElementDeclaration — so
-// inSubstitutionGroupOf answers false for a member the spec puts squarely
-// in the group, and charging that absence FALSE-REJECTS a valid schema: W3C
-// suite MS-Element elemZ027_a/_b/_e/_f and MS-Particles particlesZ008/Z028 are
-// each a base <element ref="head"/> restricted to a member of head's group. The
-// escape is scoped to the pairing where an affiliation is even possible —
-// e-props-correct clause 3 confines {substitution group affiliations} to a
-// global declaration, so a LOCAL declaration on either side still needs the
-// expanded names to agree, which is the shape most content models have.
-// Accepting is fail-open, never a false reject; it is retired by the change that
-// first maps substitutionGroup= into {substitution group affiliations}, after
-// which the membership walk sees the edges it needs and this arm can go.
+// There is NO approximation left here. Until #281 this function carried a second
+// arm admitting any two TOP-LEVEL declarations unconditionally, because no
+// producer mapped substitutionGroup= into {substitution group affiliations} and
+// charging the resulting non-membership false-rejected valid schemas (W3C
+// MS-Element elemZ027_a/_b/_e/_f, MS-Particles particlesZ008/Z028 — each a base
+// <element ref="head"/> restricted to a member of head's group). parser now maps
+// the attribute, so inSubstitutionGroupOf sees the affiliation edges it needs and
+// decides those pairings exactly; the escape hatch is gone, and a global pairing
+// with no affiliation chain between them is now correctly REJECTED.
 func (s *Schema) elementParticleAdmits(general, specific ElementDeclaration) bool {
-	if s.inSubstitutionGroupOf(specific.Name(), general.Name()) {
-		return true
-	}
-	return general.ScopeVariety() == ScopeGlobal && specific.ScopeVariety() == ScopeGlobal
+	return s.inSubstitutionGroupOf(specific.Name(), general.Name())
 }
 
 // someBindingSubsumes is cos-content-act-restrict clause 2
