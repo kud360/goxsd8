@@ -18,6 +18,7 @@ const (
 	ruleSrcImport             xsderr.Rule = "src-import"
 	ruleSrcImportNoSelfImport xsderr.Rule = "src-import-noselfimport"
 	ruleSrcOverride           xsderr.Rule = "src-override"
+	ruleSrcRedefine           xsderr.Rule = "src-redefine"
 	ruleSrcElement            xsderr.Rule = "src-element"
 	ruleSrcAttribute          xsderr.Rule = "src-attribute"
 	ruleSrcSimpleType         xsderr.Rule = "src-simple-type"

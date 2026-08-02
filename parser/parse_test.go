@@ -1,9 +1,12 @@
 package parser_test
 
 import (
+	"bytes"
 	"errors"
 	"io"
+	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/loader"
@@ -655,6 +658,36 @@ func TestWithLoggerNilIsSilent(t *testing.T) {
 		parser.WithLogger(nil))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
+	}
+}
+
+// TestParseRedefineIsLoggedNotFollowed pins the ONE way a caller can observe
+// that an assembly came up short because §4.2.4 is unimplemented: a child
+// <xs:redefine> element is skipped — its schemaLocation is never resolved, so a
+// location naming no document is not an error — and the skip is reported only on
+// the logger WithLogger installs, at debug level.
+func TestParseRedefineIsLoggedNotFollowed(t *testing.T) {
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	s, err := parser.Parse("main.xsd",
+		parser.WithResolver(loader.Map(map[string]string{
+			"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="absent.xsd"/>`+
+				`<xs:element name="root" type="xs:string"/>`),
+		})),
+		parser.WithLogger(log))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	// The rest of the document is still assembled: the skip is silent in the
+	// components, which is precisely why the log record has to exist.
+	if _, ok := s.Element(xsd.QName{Space: "urn:a", Local: "root"}); !ok {
+		t.Fatalf("element {urn:a}root not found")
+	}
+	got := buf.String()
+	for _, want := range []string{"level=DEBUG", "<xs:redefine>", "rule=src-redefine", "location=absent.xsd", "at=main.xsd:"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("log output does not mention %q, want a debug record for the skipped <redefine>:\n%s", want, got)
+		}
 	}
 }
 

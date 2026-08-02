@@ -45,7 +45,8 @@ import (
 //
 // <xs:redefine> is a separate mechanism and is NOT implemented: a <redefine> is
 // still skipped, not followed, so §F.2 clause 1's "or <redefine>" scope has
-// nothing to reach. See parser/doc.go.
+// nothing to reach. The skip is reported on Parse's WithLogger at debug level,
+// which is the only way to observe it. See parser/doc.go.
 
 // componentKey identifies an overridable source declaration by exactly the pair
 // §F.2 clause 1 matches on: the ELEMENT TYPE (the local name of the declaration
