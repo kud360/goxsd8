@@ -360,7 +360,9 @@ Ratchet: <lane movement, or "unchanged">
 ```
 
 Small, focused, independently revertible. Ratchet expectation updates are
-part of the same commit as the fix that earned them.
+part of the same commit as the fix that earned them. The `Ratchet:` line
+of the LANDED commit is the arbiter's figure, not the branch's prediction
+— see "The ratchet" below.
 
 ## The ratchet (the heart of the process)
 
@@ -372,6 +374,22 @@ part of the same commit as the fix that earned them.
   that now do better, refuses to write anything worse.
 - Every expectation change must be explainable; "it flipped and I don't
   know why" blocks the commit and becomes an issue.
+- **A read-only conformance PASS is evidence of NO REGRESSION only, never
+  of unchanged counts.** `Compare` fails on `Regressed` cases; `Improved`
+  cases pass silently, so a +7 and a +0 look identical to it. Only
+  `GOXSD_RATCHET=1` — arbiter-only, by design — tells them apart. So a
+  `Ratchet:` line written by anyone but the arbiter is a **prediction**,
+  and no amount of care on the writer's side makes it a measurement: the
+  instrument does not exist for them.
+- **The landed `Ratchet:` line carries only what the arbiter's accept
+  verdict states, in the verdict's own terms.** Branch commits may and
+  should predict — a prediction that names the cases it expects to flip
+  and why is what hands the arbiter its evidence — but at squash time the
+  prediction is REPLACED, not confirmed, and any figure the verdict does
+  not state (per-lane totals in particular) is dropped rather than
+  carried forward. "Unchanged because the diff touches no lane's code
+  path" is an inference; the arbiter's ratchet run over a clean tree is
+  an observation, and only the second belongs in the squash message.
 
 ## Debugging playbook (for agents)
 
