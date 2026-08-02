@@ -163,6 +163,22 @@ type symbols struct {
 	// namespace and unqualifiedRefNS/declares would answer for the wrong document.
 	attributeGroups map[xsd.QName]typeSource
 
+	// modelGroups maps each top-level named <group>'s expanded name to its source
+	// (raw element plus the producer of the document that declares it), filled by
+	// the pre-scan so a <group ref> reaches its definition regardless of document
+	// order (§3.1.3: "forward reference to named definitions and declarations is
+	// allowed"). Only one mapping rule consults it — §3.4.2.3.3 clause 4.2.3's
+	// sub-case test, which must know the {compositor} of the Model Group a
+	// <group ref> ·base particle· resolves to (allGroupOf); every OTHER <group ref>
+	// stays an unresolved ModelGroupRef until finalize (produceGroupRefParticle).
+	//
+	// The owning producer is carried for both reasons attributeGroups carries one:
+	// a <group> body holds local <element> declarations, whose {target namespace}
+	// §3.3.2.3 takes from "the ancestor <schema> element information item" of the
+	// DECLARING document, and unqualified type=/ref= references inside it take that
+	// document's §F.1 chameleon coercion.
+	modelGroups map[xsd.QName]typeSource
+
 	// identityConstraints maps each NAMED <unique>/<key>/<keyref>'s expanded name
 	// to its source, filled by the pre-scan so a <key ref="…"> reaches its
 	// definition regardless of document order (§3.1.3: "forward reference to named
@@ -190,6 +206,37 @@ type symbols struct {
 	// xsd/resolve.go's checkComplexBaseAcyclic charges for the programmatic
 	// SchemaBuilder path; see buildComplexType.
 	builtComplex map[xsd.QName]*xsd.ComplexType
+
+	// builtGroups is the memo + on-stack guard for MODEL GROUP DEFINITION
+	// construction, with the same tri-state as built/builtComplex (absent
+	// unstarted, present-nil on the build stack, present-non-nil done).
+	//
+	// The memo half is a correctness requirement, not an optimization: mapping a
+	// definition whose body holds a local <element> with a NAMED
+	// <unique>/<key>/<keyref> REGISTERS that identity-constraint definition with
+	// the builder (produceIdentityConstraint), so mapping the same <group> twice —
+	// once on demand for a clause 4.2.3 sub-case test, once at its own
+	// document-order position — would register it twice and fabricate a
+	// sch-props-correct (§3.17.6.1) clause 2 duplicate-name collision against the
+	// very definition it duplicates.
+	//
+	// The on-stack half is a TERMINATION guard only, never a verdict: its sole
+	// reader is resolveModelGroup, which reports an in-progress definition as
+	// "does not resolve here" and lets the caller fall through. Rejecting a
+	// circular <group ref> graph stays mg-props-correct clause 2's job at finalize
+	// (xsd/resolve.go's checkModelGroupsAcyclic), which is where the whole graph is
+	// visible; a second rejection path here would be a second encoding of one fact.
+	//
+	// That state is unreachable TODAY and deliberately still guarded. Reaching it
+	// takes a definition body that re-enters complex-type construction, and the
+	// only body child that could — a local <element> with an inline <complexType>
+	// — is not yet produced (#340); every other child (a typed local <element>, a
+	// wildcard, a nested compositor, a <group ref>) either retains its reference or
+	// recurses only within the body. The sentinel must be WRITTEN regardless, since
+	// the memo cannot be filled before the definition exists, so reading it here
+	// costs one branch and is the difference between falling through and
+	// recursing until the stack dies the day that path opens.
+	builtGroups map[xsd.QName]*xsd.ModelGroupDefinition
 
 	// builtIC is the build-once memo for identity-constraint construction. It has
 	// NO on-stack sentinel, unlike built/builtComplex: mapping a definition reads
@@ -280,8 +327,10 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 		simpleTypes:         make(map[xsd.QName]typeSource),
 		complexTypes:        make(map[xsd.QName]typeSource),
 		attributeGroups:     make(map[xsd.QName]typeSource),
+		modelGroups:         make(map[xsd.QName]typeSource),
 		identityConstraints: make(map[xsd.QName]identityConstraintSource),
 		built:               built,
+		builtGroups:         make(map[xsd.QName]*xsd.ModelGroupDefinition),
 		builtIC:             make(map[xsd.QName]xsd.IdentityConstraint),
 		// xs:anyType is seeded DONE so a derivation naming it resolves to the very
 		// component AddType registered, rather than to a rebuilt twin.
@@ -342,9 +391,11 @@ func (p *producer) chameleon() bool {
 }
 
 // prescan registers this document's top-level named <simpleType>s and
-// <complexType>s (forward base= references, §3.1.3/§3.4.2) and named
-// <attributeGroup>s (forward <attributeGroup ref> inlining, §3.6.2.1) in the
-// assembly-wide symbol table, building nothing yet.
+// <complexType>s (forward base= references, §3.1.3/§3.4.2), named
+// <attributeGroup>s (forward <attributeGroup ref> inlining, §3.6.2.1) and named
+// <group>s (forward <group ref> resolution for §3.4.2.3.3 clause 4.2.3's
+// sub-case test, resolveModelGroup) in the assembly-wide symbol table, building
+// nothing yet.
 // EVERY document's prescan runs before ANY document's run, so a reference in one
 // document reaches a definition in another (§4.2.3 c-incl-incl). Names are
 // minted in the effective target namespace, so a chameleon document's
@@ -380,6 +431,8 @@ func (p *producer) prescan() {
 			p.symbols.complexTypes[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		case isXSD(el, "attributeGroup"):
 			p.symbols.attributeGroups[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
+		case isXSD(el, "group"):
+			p.symbols.modelGroups[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		}
 	}
 }
@@ -512,7 +565,11 @@ func (p *producer) run() error {
 			p.builder.AddAttributeGroup(ag)
 		case "group":
 			name, _ := attrValue(decl, "name")
-			mgd, err := p.produceModelGroupDefinition(xsd.QName{Space: p.target, Local: name}, decl)
+			// AddModelGroup happens HERE, at this definition's own document-order
+			// position, and never inside the on-demand build a clause 4.2.3 sub-case
+			// test triggers (buildModelGroupDefinition populates the memo only), so
+			// {model group definitions} stays in document order (STYLE D2).
+			mgd, err := p.buildModelGroupDefinition(xsd.QName{Space: p.target, Local: name}, decl)
 			if err != nil {
 				return err
 			}
@@ -639,6 +696,79 @@ func (p *producer) resolveBaseType(at *Element, name xsd.QName) (xsd.TypeDefinit
 	}
 	return nil, xsderr.New(ruleSrcResolve, at.Loc(),
 		"base type %s does not resolve to any type definition in scope (src-resolve clause 1.1)", name)
+}
+
+// buildModelGroupDefinition returns the Model Group Definition named name,
+// building it on demand with memoization — the model-group twin of
+// buildComplexType, and like it the SINGLE entry point for mapping a top-level
+// named <group>: run's document-order dispatch and resolveModelGroup's
+// demand-driven resolution both go through it, so one <group> is mapped exactly
+// ONCE. That is a correctness requirement here, not a saving — see
+// symbols.builtGroups for the duplicate identity-constraint registration a second
+// mapping would fabricate. It populates the memo only; registering the component
+// with the builder is run's job.
+//
+// Unlike buildComplexType it charges no cycle rejection of its own. It WRITES the
+// on-stack sentinel, but the reader that makes a circular <group ref> graph
+// terminate is resolveModelGroup — the only caller re-enterable for a name still
+// being built — and the REJECTION stays mg-props-correct clause 2's at finalize,
+// where the whole graph is visible. A name therefore arrives here either unstarted
+// or done, never on-stack: run is not re-entrant, and resolveModelGroup answers
+// "does not resolve" for an on-stack name rather than calling in.
+func (p *producer) buildModelGroupDefinition(name xsd.QName, el *Element) (xsd.ModelGroupDefinition, error) {
+	if mgd := p.symbols.builtGroups[name]; mgd != nil {
+		return *mgd, nil
+	}
+	p.symbols.builtGroups[name] = nil // mark on-stack
+
+	mgd, err := p.produceModelGroupDefinition(name, el)
+	if err != nil {
+		return xsd.ModelGroupDefinition{}, err
+	}
+	p.symbols.builtGroups[name] = &mgd // replace the on-stack sentinel with the finished node
+	return mgd, nil
+}
+
+// resolveModelGroup identifies the Model Group a <group ref> resolves its
+// particle's {term} to (§3.7.2, xr.mgd3: "the {model group} of the model group
+// definition ·resolved· to by the ·actual value· of the ref attribute"), building
+// that definition on demand through its OWN document's producer for the reasons
+// typeSource's doc gives.
+//
+// It is deliberately NOT the general <group ref> resolution — that stays
+// finalize's (produceGroupRefParticle keeps the reference deferred). Its one
+// caller is allGroupOf, whose §3.4.2.3.3 clause 4.2.3 sub-case test must know the
+// {compositor} behind a ·base particle· or ·effective content· BEFORE the
+// {content type} is synthesized, which is at produce time and nowhere else.
+//
+// ok is false, with no error, for the two states in which no Model Group is
+// (yet) knowable here, both of which leave the caller to fall through to a
+// sub-case that assumes nothing:
+//
+//   - name matches no top-level <group> of the assembly. A dangling <group ref>
+//     is charged src-resolve clause 1.5 at finalize, against the retained
+//     ModelGroupRef; anticipating that verdict here would be a second encoding.
+//   - name is already on the build stack, i.e. the reference closes a
+//     <group ref> cycle. mg-props-correct clause 2 rejects that at finalize; this
+//     function must only terminate, never reject (see buildModelGroupDefinition).
+//     No schema reaches that branch today — see symbols.builtGroups for why, and
+//     for why the branch is kept rather than left to the stack.
+func (p *producer) resolveModelGroup(name xsd.QName) (xsd.ModelGroup, bool, error) {
+	if mgd, started := p.symbols.builtGroups[name]; started {
+		if mgd == nil {
+			return xsd.ModelGroup{}, false, nil // PRESENT-nil: on the build stack
+		}
+		return mgd.ModelGroup(), true, nil
+	}
+	src, ok := p.symbols.modelGroups[name]
+	if !ok {
+		return xsd.ModelGroup{}, false, nil
+	}
+	mgd, err := src.owner.buildModelGroupDefinition(name, src.elem)
+	if err != nil {
+		return xsd.ModelGroup{}, false, err
+	}
+	return mgd.ModelGroup(), true, nil
 }
 
 // constructSimpleType maps one <simpleType> element (named or anonymous) into a
