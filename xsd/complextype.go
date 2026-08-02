@@ -46,12 +46,13 @@ import "github.com/kud360/goxsd8/xsderr"
 // cos-content-act-restrict (§3.4.6.4) delegate included (contentrestricts.go,
 // #263) — the exceptions there are clause 5's {assertions} prefix, and the
 // content models §3.4.6.3's own all-group leniency licenses accepting
-// provisionally. cos-ct-extends (§3.4.6.2) is untouched and is now a live
-// FAIL-OPEN gap: since #228 the parser DOES build extension-derived complex
-// types (parser/produce_complex.go maps §3.4.2.2 cases 3-5 and §3.4.2.3.3 clause
-// 4.2), so an invalid extension is constructed and never rejected — a missing
-// rejection, never a false one, tracked as #264. None of them is touched HERE —
-// they are cross-component finalize-phase concerns, not tableau shape.
+// provisionally. cos-ct-extends (§3.4.6.2) is enforced too, at the same phase
+// (complexextension.go, #264), clause 1.4.3.2.2.2's cos-particle-extend
+// (§3.9.6.2) delegate included — the exceptions there are clauses 1.3 and 1.7,
+// which need the §3.4.2.4/§3.4.2.5 base folds no producer performs yet (#265),
+// and clause 1.5 for a derivation chain mixing extension and restriction steps.
+// None of them is touched HERE — they are cross-component finalize-phase
+// concerns, not tableau shape.
 const ruleCTPropsCorrect xsderr.Rule = "ct-props-correct"
 
 // ContentType is the sealed sum of the four Content Type varieties of a Complex
@@ -208,10 +209,10 @@ func (o OpenContent) Wildcard() Wildcard {
 // (ct-props-correct clause 3), but does NOT rewrite it into a resolved
 // component: the QName is retained, and a consumer follows it by a read-time
 // schema.Type(name) lookup. Finalize also charges ct-props-correct clauses 2 and
-// 4 and, for a restriction, derivation-ok-restriction (§3.4.6.3) against the
-// resolved base (Phase D, complexderivation.go, #262). Clause 1's remaining
-// resolved parts and cos-ct-extends (§3.4.6.2) stay deferred (#264) — the latter
-// fail-open over the extension-derived types the parser builds as of #228.
+// 4 and, against the resolved base, derivation-ok-restriction (§3.4.6.3) for a
+// restriction and cos-ct-extends (§3.4.6.2) for an extension (Phase D,
+// complexderivation.go and complexextension.go, #262/#264). Clause 1's remaining
+// resolved parts stay deferred.
 //
 // {context} (§3.4.1 ctd-context — the component an anonymous type appears in) is
 // entirely UNMODELED, tracked as #301: the containing declaration/type that would

@@ -38,12 +38,16 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 //     {base type definition} or a resolved {attribute declaration} — clause 2 and
 //     clause 4 (checkCTPropsCorrectResolved); then
 //   - derivation-ok-restriction (§3.4.6.3), for a restriction-derived type whose
-//     base resolves to another complex type.
+//     base resolves to another complex type; then
+//   - cos-ct-extends (§3.4.6.2), for an extension-derived type, over EITHER kind
+//     of resolved base — its case 2 is the extension-of-a-simple-type path
+//     (complexextension.go, #264).
 //
-// ct-props-correct runs first for a given type so a simple base under
-// {derivation method} = restriction is charged the precise clause 2 rather than
-// derivation-ok-restriction clause 1's coarser "B is a complex type definition"
-// (STYLE E2, charge precision).
+// The last two are mutually exclusive by {derivation method}, so their order
+// carries no verdict. ct-props-correct runs first for a given type so a simple
+// base under {derivation method} = restriction is charged the precise clause 2
+// rather than derivation-ok-restriction clause 1's coarser "B is a complex type
+// definition" (STYLE E2, charge precision).
 //
 // PHASE ORDER IS LOAD-BEARING, three ways — this must run after Phases A, B and
 // C, and the reasons are recorded here the way resolve.go:51-59 records Phase
@@ -83,6 +87,9 @@ func (s *Schema) checkComplexDerivations() error {
 			return err
 		}
 		if err := s.checkComplexTypeRestriction(c); err != nil {
+			return err
+		}
+		if err := s.checkComplexTypeExtension(c); err != nil {
 			return err
 		}
 	}
@@ -411,6 +418,28 @@ func findAttributeUse(c ComplexType, name QName) (AttributeUse, bool) {
 	return AttributeUse{}, false
 }
 
+// locallyDeclaredTypeCheck bundles everything that differs between the two
+// constraints quantifying over ·locally declared types· (key-ldtype, §3.4.6.4):
+// derivation-ok-restriction clause 4 (c-vs-ctd-r) and cos-ct-extends clause 1.6
+// (c-vs-ctd-e). The two clauses state the SAME relation over the same walk and
+// differ only in the blocking-keyword set they pass to ·validly substitutable·
+// and in the prose that names them, so they share one encoding of the walk
+// rather than a fifth and sixth near-copy of it (STYLE T4).
+//
+// blocked is the load-bearing field: restriction passes
+// restrictionBlockingKeywords, extension passes the EMPTY
+// extensionBlockingKeywords (complexextension.go). limitation renders that same
+// fact in the message, so a reader can see which set was in force without
+// finding the call site.
+type locallyDeclaredTypeCheck struct {
+	rule       xsderr.Rule        // the rule the failure is charged to
+	blocked    []DerivationMethod // the keywords ·validly substitutable· is subject to
+	verb       string             // "restricts" | "extends"
+	relation   string             // "restriction" | "extension"
+	limitation string             // how the message names the blocking set
+	clause     string             // the clause and clause anchor named in the message
+}
+
 // checkRestrictionLocallyDeclaredTypes is clause 4 (c-vs-ctd-r): for any element
 // or attribute information item, its ·locally declared type· (key-ldtype) within
 // T must be ·validly substitutable· (key-val-sub-type) for its ·locally declared
@@ -422,14 +451,27 @@ func findAttributeUse(c ComplexType, name QName) (AttributeUse, bool) {
 // ·contains· — because a name with no ·locally declared type· in T fails the
 // clause's "in both" precondition and is vacuous.
 func (s *Schema) checkRestrictionLocallyDeclaredTypes(t, b ComplexType) error {
-	if err := s.checkLocallyDeclaredAttributeTypes(t, b); err != nil {
-		return err
-	}
-	return s.checkLocallyDeclaredElementTypes(t, b)
+	return s.checkLocallyDeclaredTypes(t, b, locallyDeclaredTypeCheck{
+		rule:       ruleDerivationOKRestriction,
+		blocked:    restrictionBlockingKeywords,
+		verb:       "restricts",
+		relation:   "restriction",
+		limitation: "subject to {extension, list, union}",
+		clause:     "derivation-ok-restriction clause 4, c-vs-ctd-r",
+	})
 }
 
-// checkLocallyDeclaredAttributeTypes is clause 4 over attributes (key-ldt-att).
-func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType) error {
+// checkLocallyDeclaredTypes runs one key-ldtype quantification — the attribute
+// half then the element half — under the parameters k names.
+func (s *Schema) checkLocallyDeclaredTypes(t, b ComplexType, k locallyDeclaredTypeCheck) error {
+	if err := s.checkLocallyDeclaredAttributeTypes(t, b, k); err != nil {
+		return err
+	}
+	return s.checkLocallyDeclaredElementTypes(t, b, k)
+}
+
+// checkLocallyDeclaredAttributeTypes is the attribute half (key-ldt-att).
+func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType, k locallyDeclaredTypeCheck) error {
 	for _, u := range t.attributeUses {
 		name := attributeUseName(u)
 		within, ok := s.locallyDeclaredAttributeType(t, name)
@@ -440,19 +482,19 @@ func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType) error {
 		if !ok {
 			continue // no ·locally declared type· in B: the clause's precondition fails
 		}
-		if s.validlySubstitutable(within, base, restrictionBlockingKeywords) {
+		if s.validlySubstitutable(within, base, k.blocked) {
 			continue
 		}
-		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-			"complex type %s restricts %s, but the ·locally declared type· %s of attribute %s within the restriction is not ·validly substitutable· for the base's %s subject to {extension, list, union} (derivation-ok-restriction clause 4, c-vs-ctd-r)", t.Name(), b.Name(), typeDefinitionLabel(within), name, typeDefinitionLabel(base))
+		return xsderr.New(k.rule, xsderr.Loc{},
+			"complex type %s %s %s, but the ·locally declared type· %s of attribute %s within the %s is not ·validly substitutable· for the base's %s %s (%s)", t.Name(), k.verb, b.Name(), typeDefinitionLabel(within), name, k.relation, typeDefinitionLabel(base), k.limitation, k.clause)
 	}
 	return nil
 }
 
-// checkLocallyDeclaredElementTypes is clause 4 over elements (key-ldt-elem).
+// checkLocallyDeclaredElementTypes is the element half (key-ldt-elem).
 // Declarations are visited in the document order the content-model gatherer
 // yields (STYLE D2).
-func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType) error {
+func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType, k locallyDeclaredTypeCheck) error {
 	for _, e := range s.contentModelDeclarations(t) {
 		name := e.decl.Name()
 		within, ok := s.typeOf(e.decl.TypeDefinition())
@@ -463,11 +505,11 @@ func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType) error {
 		if !ok {
 			continue // no ·locally declared type· in B: the clause's precondition fails
 		}
-		if s.validlySubstitutable(within, base, restrictionBlockingKeywords) {
+		if s.validlySubstitutable(within, base, k.blocked) {
 			continue
 		}
-		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-			"complex type %s restricts %s, but the ·locally declared type· %s of element %s within the restriction is not ·validly substitutable· for the base's %s subject to {extension, list, union} (derivation-ok-restriction clause 4, c-vs-ctd-r)", t.Name(), b.Name(), typeDefinitionLabel(within), name, typeDefinitionLabel(base))
+		return xsderr.New(k.rule, xsderr.Loc{},
+			"complex type %s %s %s, but the ·locally declared type· %s of element %s within the %s is not ·validly substitutable· for the base's %s %s (%s)", t.Name(), k.verb, b.Name(), typeDefinitionLabel(within), name, k.relation, typeDefinitionLabel(base), k.limitation, k.clause)
 	}
 	return nil
 }

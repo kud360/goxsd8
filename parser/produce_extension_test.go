@@ -150,9 +150,14 @@ func TestProduceExtensionEmptyEffectiveContentReusesBase(t *testing.T) {
 // because ·effective content· and ·explicit content· differ here: mixed="true"
 // with no model-group child makes the explicit content empty (clause 2.1.1)
 // while clause 3.1.1 substitutes a non-empty effective content.
+//
+// The BASE is mixed too, and must be: cos-ct-extends clause 1.4.3.2.2.1 (#264)
+// requires B and T to agree on mixed versus element-only, so an extension may
+// not acquire mixed content its base lacks. The clause under test is unaffected
+// — ·effective mixed· is true either way, which is what selects clause 3.1.1.
 func TestProduceExtensionAllBaseWithEmptyExplicitContent(t *testing.T) {
 	s, err := produce(t, wrap("urn:x", `
-		<xs:complexType name="B"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>
+		<xs:complexType name="B" mixed="true"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>
 		<xs:complexType name="D" mixed="true"><xs:complexContent><xs:extension base="tns:B"/></xs:complexContent></xs:complexType>`))
 	if err != nil {
 		t.Fatalf("Produce: %v", err)
@@ -173,9 +178,16 @@ func TestProduceExtensionAllBaseWithEmptyExplicitContent(t *testing.T) {
 // TestProduceExtensionAllPlusAllMerges pins clause 4.2.3.2: two all groups merge
 // into ONE all group holding the base's {particles} followed by the effective
 // content's, with {min occurs} from the effective content and {max occurs} 1.
+//
+// Both all groups carry minOccurs="0", and they must agree: cos-particle-extend
+// (§3.9.6.2) clause 3.1 requires E.{min occurs} = B.{min occurs} for the
+// all-group branch (#264), so no VALID schema can exhibit a merged particle
+// whose {min occurs} differs from the base's. What the assertion still pins is
+// that the merged particle takes an occurrence range at all rather than the
+// clause 4.2.3.3 default of 1..1.
 func TestProduceExtensionAllPlusAllMerges(t *testing.T) {
 	s, err := produce(t, wrap("urn:x", `
-		<xs:complexType name="B"><xs:all><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>
+		<xs:complexType name="B"><xs:all minOccurs="0"><xs:element name="a" type="xs:string"/></xs:all></xs:complexType>
 		<xs:complexType name="D"><xs:complexContent><xs:extension base="tns:B">
 			<xs:all minOccurs="0"><xs:element name="b" type="xs:string"/></xs:all>
 		</xs:extension></xs:complexContent></xs:complexType>`))
@@ -202,23 +214,37 @@ func TestProduceExtensionAllPlusAllMerges(t *testing.T) {
 // or a complex base whose {content type}.{variety} is empty or simple,
 // contributes NO particle — the result is clause 4.1.1/4.1.2's, exactly as for a
 // restriction.
+//
+// Only the EMPTY-content base yields a schema a complete processor accepts, so
+// only that row can assert on the produced component. Clause 4.2.1's
+// fold-nothing behaviour is precisely what makes the other two invalid: with no
+// base particle folded in, the derived type is element-only over a base whose
+// {content type} is simple, and cos-ct-extends (§3.4.6.2, #264) has no branch
+// for that pair — clause 1.4.3.2 for the complex simple-content base, clause 2.1
+// for the simple-type base. Those two rows therefore pin the REJECTION, which is
+// the only observable this mapping has on such a schema.
 func TestProduceExtensionNonParticleBases(t *testing.T) {
 	simpleContentBase := `<xs:complexType name="B"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`
 	emptyBase := `<xs:complexType name="B"/>`
 	for _, tc := range []struct {
-		name string
-		base string
-		ref  string
+		name       string
+		base       string
+		ref        string
+		wantReject bool
 	}{
-		{"empty-content complex base", emptyBase, "tns:B"},
-		{"simple-content complex base", simpleContentBase, "tns:B"},
-		{"simple type base", "", "xs:string"},
+		{"empty-content complex base", emptyBase, "tns:B", false},
+		{"simple-content complex base", simpleContentBase, "tns:B", true},
+		{"simple type base", "", "xs:string", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, err := produce(t, wrap("urn:x", tc.base+`
 				<xs:complexType name="D"><xs:complexContent><xs:extension base="`+tc.ref+`">
 					<xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
 				</xs:extension></xs:complexContent></xs:complexType>`))
+			if tc.wantReject {
+				assertRule(t, err, "cos-ct-extends")
+				return
+			}
 			if err != nil {
 				t.Fatalf("Produce: %v", err)
 			}
@@ -304,9 +330,15 @@ func TestProduceExtensionDanglingBase(t *testing.T) {
 // seeded DONE in the build memo, so <extension base="xs:anyType"> resolves to the
 // very ur-type component the builder registered, and clause 4.2.3.3 wraps its
 // mixed ##any content with the derivation's own.
+//
+// D is mixed="true" because it must be: xs:anyType's own {content type}.{variety}
+// is mixed (§3.4.7), and cos-ct-extends (#264) grants the ur-type NO exemption
+// from clause 1.4.3.2.2.1 — unlike derivation-ok-restriction clause 2.1, which
+// bypasses the variety match for an xs:anyType base outright. An extension that
+// adds a genuine local particle must therefore keep the ur-type's mixedness.
 func TestProduceExtensionOfAnyType(t *testing.T) {
 	s, err := produce(t, wrap("urn:x", `
-		<xs:complexType name="D"><xs:complexContent><xs:extension base="xs:anyType">
+		<xs:complexType name="D" mixed="true"><xs:complexContent><xs:extension base="xs:anyType">
 			<xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>
 		</xs:extension></xs:complexContent></xs:complexType>`))
 	if err != nil {
@@ -355,16 +387,20 @@ func TestProduceExtensionSiblingElementsFolded(t *testing.T) {
 }
 
 // TestProduceSimpleContentExtensionCases pins the §3.4.2.2 {simple type
-// definition} tableau for <extension>: case 4 (simple base), case 3 (complex base
-// whose own {content type} has {variety} simple) and case 5 (otherwise
-// xs:anySimpleType). Every case REUSES an existing component — the assertions
-// compare POINTERS, since simple-type component identity is load-bearing.
+// definition} tableau for <extension>: case 4 (simple base) and case 3 (complex
+// base whose own {content type} has {variety} simple). Both REUSE an existing
+// component — the assertions compare POINTERS, since simple-type component
+// identity is load-bearing.
+//
+// Case 5 (c-ctsc-bad, "otherwise ·xs:anySimpleType·") is pinned separately by
+// TestProduceSimpleContentExtensionCase5Rejected: it is the arm for a
+// <simpleContent> <extension> over a base whose {content type} is NOT simple,
+// which cos-ct-extends clause 1.4.1 (#264) rejects, so the recovery value it
+// produces is not observable on a schema that finalizes.
 func TestProduceSimpleContentExtensionCases(t *testing.T) {
 	s, err := produce(t, wrap("urn:x", `
 		<xs:complexType name="Case4"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>
-		<xs:complexType name="Case3"><xs:simpleContent><xs:extension base="tns:Case4"/></xs:simpleContent></xs:complexType>
-		<xs:complexType name="Elems"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
-		<xs:complexType name="Case5"><xs:simpleContent><xs:extension base="tns:Elems"/></xs:simpleContent></xs:complexType>`))
+		<xs:complexType name="Case3"><xs:simpleContent><xs:extension base="tns:Case4"/></xs:simpleContent></xs:complexType>`))
 	if err != nil {
 		t.Fatalf("Produce: %v", err)
 	}
@@ -372,17 +408,12 @@ func TestProduceSimpleContentExtensionCases(t *testing.T) {
 	if !ok {
 		t.Fatal("xs:string not seeded")
 	}
-	anySimple, ok := s.Type(xsd.QName{Space: xsdNS, Local: "anySimpleType"})
-	if !ok {
-		t.Fatal("xs:anySimpleType not seeded")
-	}
 	for _, tc := range []struct {
 		name string
 		want xsd.TypeDefinition
 	}{
-		{"Case4", xsString},  // case 4: the resolved simple base itself
-		{"Case3", xsString},  // case 3: the base complex type's own {simple type definition}
-		{"Case5", anySimple}, // case 5 (c-ctsc-bad): xs:anySimpleType
+		{"Case4", xsString}, // case 4: the resolved simple base itself
+		{"Case3", xsString}, // case 3: the base complex type's own {simple type definition}
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ct := contentTypeOf(t, s, xq(tc.name))
@@ -401,6 +432,20 @@ func TestProduceSimpleContentExtensionCases(t *testing.T) {
 	if m := d.(xsd.ComplexType).DerivationMethod(); m != xsd.DerivationExtension {
 		t.Fatalf("Case4 {derivation method} = %s, want extension", m)
 	}
+}
+
+// TestProduceSimpleContentExtensionCase5Rejected pins the one thing observable
+// about §3.4.2.2 case 5 (c-ctsc-bad): the shape that reaches it — a
+// <simpleContent> <extension> whose base is a complex type with element-only
+// content — is rejected by cos-ct-extends clause 1.4.1, which requires B and T
+// to have the SAME {content type}.{simple type definition} and so both to be
+// simple. Case 5 is a §5.3-style recovery value for a schema no complete
+// processor accepts, not a mapping a valid schema can exercise.
+func TestProduceSimpleContentExtensionCase5Rejected(t *testing.T) {
+	_, err := produce(t, wrap("urn:x", `
+		<xs:complexType name="Elems"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>
+		<xs:complexType name="Case5"><xs:simpleContent><xs:extension base="tns:Elems"/></xs:simpleContent></xs:complexType>`))
+	assertRule(t, err, "cos-ct-extends")
 }
 
 // TestProduceSimpleContentExtensionAttributes proves the <extension>'s own
