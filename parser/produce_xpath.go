@@ -313,10 +313,35 @@ func identityConstraintCategoryOf(local string) (xsd.IdentityConstraintCategory,
 	return 0, false
 }
 
-// assertionsOf maps the <assert> children of a <complexType> or its
-// <complexContent> <restriction> to {assertions} in document order (§3.4.2.1,
-// dcl.ctd.common clause 2). The base type's own {assertions} (clause 1) are not
-// folded in: that needs the resolved base, a finalize-phase concern.
+// assertionsWithBase is the whole of a complex type's {assertions} (§3.4.2.1,
+// dcl.ctd.common): clause 1's members drawn from the {base type definition}'s
+// own {assertions}, followed by clause 2's own — the sequence order the spec
+// states, and the order derivation-ok-restriction clause 5 / cos-ct-extends
+// clause 1.7 read as "B.{assertions} is a prefix of T.{assertions}".
+//
+// The fold is INDEPENDENT of {derivation method} and of the XML alternant
+// chosen: §3.4.2.1's Note says outright that the base's assertions are always
+// there "no matter which alternatives are chosen … <simpleContent> or
+// <complexContent>, <restriction> or <extension>". Hence one helper for every
+// call site, never a branch.
+//
+// A simple {base type definition} contributes nothing: a Simple Type Definition
+// has no {assertions} property at all (its assertions live in the §4.3.13
+// assertions FACET, which is not this property and is not inherited by the
+// complex type deriving from it).
+func assertionsWithBase(base xsd.TypeDefinition, own []xsd.Assertion) []xsd.Assertion {
+	ct, ok := base.(xsd.ComplexType)
+	if !ok {
+		return own
+	}
+	return append(ct.Assertions(), own...) // Assertions() is a fresh copy, safe to extend
+}
+
+// assertionsOf maps the <assert> children of a <complexType> or of its
+// <complexContent>/<simpleContent> derivation alternant to Assertions in
+// document order (§3.4.2.1, dcl.ctd.common clause 2). Clause 1's base-type
+// members are prepended by assertionsWithBase, the caller that holds the
+// resolved base.
 //
 // An Assertion has no rejectable state (its {test} is an opaque XPath Expression
 // record), so there is nothing to return an error for.

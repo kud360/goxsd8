@@ -87,6 +87,28 @@ func dFinal(t *testing.T, name, base QName, final []DerivationMethod) ComplexTyp
 	return ct
 }
 
+// dAssertType builds an empty-content named complex type deriving from base by
+// method and carrying the given {assertions}. It is the ONLY way to assemble the
+// state derivation-ok-restriction clause 5 and cos-ct-extends clause 1.7 exist to
+// reject: §3.4.2.1 clause 1's fold (parser/produce_xpath.go) makes the prefix
+// hold by construction for every type the producer maps, so the rejecting cases
+// have to be built through the exported constructor, which folds nothing.
+func dAssertType(t *testing.T, name, base QName, method DerivationMethod, assertions []Assertion) ComplexType {
+	t.Helper()
+	ct, err := NewComplexType(xsderr.Loc{}, name, base, nil, method, false,
+		nil, nil, nil, EmptyContent{}, nil, assertions, nil)
+	if err != nil {
+		t.Fatalf("NewComplexType(%s): %v", name, err)
+	}
+	return ct
+}
+
+// dAssert builds an Assertion over the given XPath text, the only property that
+// distinguishes two Assertions for the prefix relation (assertionprefix.go).
+func dAssert(test string) Assertion {
+	return NewAssertion(NewXPathExpression(test, nil, nil, nil), nil)
+}
+
 // dSimple builds a named atomic simple type restricting base.
 func dSimple(t *testing.T, name QName, base *SimpleType) *SimpleType {
 	t.Helper()
@@ -468,6 +490,53 @@ func TestDerivationOKRestrictionClause4AnyTypeBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("typing an element the base left as xs:anyType was rejected: %v", err)
 	}
+}
+
+// TestDerivationOKRestrictionClause5 pins clause 5 — B.{assertions} is a prefix
+// of T.{assertions} — in both directions. §3.4.2.1 clause 1's fold makes the
+// relation hold by construction for a type the producer mapped (see
+// parser/produce_xpath.go's assertionsWithBase and the parser-side test that
+// pins it), so every rejecting case here is assembled through the exported
+// constructor instead (dAssertType), which folds nothing.
+func TestDerivationOKRestrictionClause5(t *testing.T) {
+	baseAssert, ownAssert := dAssert("true()"), dAssert("@a > 0")
+	for _, tc := range []struct {
+		name    string
+		derived []Assertion
+		wantOK  bool
+	}{
+		{"the fold's own output: the base's assertion, then the type's own", []Assertion{baseAssert, ownAssert}, true},
+		{"the base's assertions alone are a prefix of themselves", []Assertion{baseAssert}, true},
+		{"a restriction that keeps only its own assertion", []Assertion{ownAssert}, false},
+		{"a restriction carrying no assertions at all", nil, false},
+		{"a restriction that puts its own assertion FIRST", []Assertion{ownAssert, baseAssert}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := dFinalize(t, func(b *SchemaBuilder) {
+				b.AddType(dAssertType(t, uq("base"), anyTypeName, DerivationRestriction, []Assertion{baseAssert}))
+				b.AddType(dAssertType(t, uq("derived"), uq("base"), DerivationRestriction, tc.derived))
+			})
+			if tc.wantOK {
+				if err != nil {
+					t.Fatalf("a restriction whose {assertions} extend the base's was rejected: %v", err)
+				}
+				return
+			}
+			expectRule(t, err, ruleDerivationOKRestriction)
+		})
+	}
+}
+
+// TestDerivationOKRestrictionClause5DistinguishesTests is the mutation guard on
+// the identity relation clause 5's prefix is taken under (assertionprefix.go): a
+// derived type that repeats the base's assertion COUNT with a different {test}
+// is not a prefix, and would slip through a comparison that only counted.
+func TestDerivationOKRestrictionClause5DistinguishesTests(t *testing.T) {
+	err := dFinalize(t, func(b *SchemaBuilder) {
+		b.AddType(dAssertType(t, uq("base"), anyTypeName, DerivationRestriction, []Assertion{dAssert("true()")}))
+		b.AddType(dAssertType(t, uq("derived"), uq("base"), DerivationRestriction, []Assertion{dAssert("false()")}))
+	})
+	expectRule(t, err, ruleDerivationOKRestriction)
 }
 
 // TestCTPropsCorrectSimpleBase pins ct-props-correct clause 2: a simple {base

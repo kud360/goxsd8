@@ -120,6 +120,39 @@ func TestResolveDanglingType(t *testing.T) {
 	}
 }
 
+// TestResolveAnonymousComplexTypeDanglingBase pins the diagnostic Phase A emits
+// for an ANONYMOUS complex type's dangling {base type definition}: the type has
+// no {name}, whose String is "", so the message must describe what it is instead
+// of leaving a hole.
+//
+// This is the SchemaBuilder's own defence, and the only path that reaches it: a
+// producer-mapped type never gets here, because parser/produce_complex.go
+// resolves every base= itself — on the restriction alternant too, since #346's
+// §3.4.2.1 clause 1 {assertions} fold reads the base component on both — and
+// charges the same src-resolve clause 1.1 first, positioned. Two entry points on
+// one rule for the two construction paths, the shape buildComplexType's
+// ct-props-correct clause 3 rejection already has.
+func TestResolveAnonymousComplexTypeDanglingBase(t *testing.T) {
+	id := xsd.NewComponentID()
+	ct, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, xsd.ElementDeclarationContext{Component: id},
+		qn("nope"), nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAnonymousComplexType: %v", err)
+	}
+	e, err := xsd.NewElementDeclarationOwningType(xsderr.Loc{}, id, qn("doc"), ct,
+		nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("NewElementDeclarationOwningType: %v", err)
+	}
+	b := xsd.NewSchemaBuilder()
+	b.AddElement(e)
+	_, err = b.Finalize()
+	assertRule(t, err, "src-resolve")
+	if !strings.Contains(err.Error(), "anonymous complex type {base type definition}") {
+		t.Fatalf("error = %v, want the anonymous owner phrase", err)
+	}
+}
+
 func TestResolveDanglingElementRef(t *testing.T) {
 	// A complex type's particle is an <element ref> to a missing element.
 	b := xsd.NewSchemaBuilder()

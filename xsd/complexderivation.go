@@ -196,23 +196,9 @@ func (s *Schema) checkComplexTypeRestriction(t ComplexType) error {
 }
 
 // checkDerivationOKRestriction is Derivation Valid (Restriction, Complex)
-// (§3.4.6.3) for a complex type t restricting the complex type b. The clauses
-// are checked in spec order, so the first reported failure is deterministic
-// (STYLE D1).
-//
-// GAP(xsd): clause 5 — B.{assertions} is a prefix of T.{assertions} — is not
-// charged, and this is the one clause of the constraint with no code at all.
-// §3.4.2.1 clause 1 makes a complex type's {assertions} the base type's followed
-// by the type's own <assert> children, which is exactly what makes clause 5 hold
-// BY CONSTRUCTION for a faithfully mapped type; the clause exists to constrain
-// components assembled by other means. No producer in this repo performs that
-// fold yet (parser/produce_complex.go maps the type's OWN <assert> children
-// only), so on every produced restriction of a base that carries an assertion
-// the base's list is not a prefix of the derived list and charging clause 5
-// would be a FALSE REJECT of a valid schema — W3C suite ibmData
-// D4_3_15/d4_3_15ii10, D4_3_15/d4_3_15v10 and Assert/assert_010 are precisely
-// that shape. Skipping is fail-open, never a false reject; the check lands with
-// the fold (#265).
+// (§3.4.6.3) for a complex type t restricting the complex type b. All five
+// clauses are checked, in spec order, so the first reported failure is
+// deterministic (STYLE D1).
 func (s *Schema) checkDerivationOKRestriction(t, b ComplexType) error {
 	if err := checkRestrictionBaseFinal(t, b); err != nil {
 		return err
@@ -223,7 +209,24 @@ func (s *Schema) checkDerivationOKRestriction(t, b ComplexType) error {
 	if err := s.checkRestrictionAttributes(t, b); err != nil {
 		return err
 	}
-	return s.checkRestrictionLocallyDeclaredTypes(t, b)
+	if err := s.checkRestrictionLocallyDeclaredTypes(t, b); err != nil {
+		return err
+	}
+	return checkRestrictionAssertions(t, b)
+}
+
+// checkRestrictionAssertions is clause 5: B.{assertions} is a prefix of
+// T.{assertions}. The relation, and why it is charged rather than assumed even
+// though §3.4.2.1 clause 1's fold makes it hold by construction for every
+// produced type, live in assertionprefix.go — cos-ct-extends clause 1.7 states
+// the same test in the same words and shares the encoding.
+func checkRestrictionAssertions(t, b ComplexType) error {
+	if assertionsPrefix(b.assertions, t.assertions) {
+		return nil
+	}
+	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
+		"complex type %s restricts %s, but %s's {assertions} (%d) are not a prefix of %s's (%d), which derivation-ok-restriction clause 5 requires: §3.4.2.1 clause 1 places the base's assertions, in order, ahead of the type's own <assert> children",
+		t.Name(), b.Name(), b.Name(), len(b.assertions), t.Name(), len(t.assertions))
 }
 
 // checkRestrictionBaseFinal is clause 1: B's {final} must not contain

@@ -105,20 +105,11 @@ func (s *Schema) checkComplexTypeExtension(t ComplexType) error {
 }
 
 // checkExtensionOfComplexBase is cos-ct-extends case 1: the seven clauses that
-// apply when B is a complex type definition. They are checked in spec order, so
-// the first reported failure is deterministic (STYLE D1).
-//
-// GAP(xsd): clause 1.7 is NOT charged, on exactly the footing
-// checkDerivationOKRestriction records for derivation-ok-restriction clause 5:
-// B.{assertions} must be a prefix of T.{assertions}, but §3.4.2.1 clause 1 makes
-// a complex type's {assertions} the base's followed by its own <assert> children
-// and the producer maps the type's own children only, so on every produced
-// extension of a base carrying an assertion the prefix fails and charging it would
-// be a FALSE REJECT of a valid schema. The skip is FAIL-OPEN — a missing
-// rejection, never a false one — and lands with the fold it names, §3.4.2.1
-// clause 1's {assertions} fold (#346). It rides on neither of the two attribute
-// folds, which are done: §3.4.2.4 clause 3's {attribute uses} (#401) and §3.4.2.5
-// clause 2.2's {attribute wildcard} (#265).
+// apply when B is a complex type definition. All seven are checked, in spec
+// order, so the first reported failure is deterministic (STYLE D1). All three
+// §3.4.2 base folds the case depends on are done: §3.4.2.4 clause 3's
+// {attribute uses} (#401), §3.4.2.5 clause 2.2's {attribute wildcard} (#265) and
+// §3.4.2.1 clause 1's {assertions} (#346).
 func (s *Schema) checkExtensionOfComplexBase(t, b ComplexType) error {
 	if err := checkExtensionBaseFinal(t, b); err != nil {
 		return err
@@ -135,7 +126,24 @@ func (s *Schema) checkExtensionOfComplexBase(t, b ComplexType) error {
 	if err := s.checkExtensionTwoStepDerivable(t); err != nil {
 		return err
 	}
-	return s.checkExtensionLocallyDeclaredTypes(t, b)
+	if err := s.checkExtensionLocallyDeclaredTypes(t, b); err != nil {
+		return err
+	}
+	return checkExtensionAssertions(t, b)
+}
+
+// checkExtensionAssertions is clause 1.7: B.{assertions} is a prefix of
+// T.{assertions}. The relation, and why it is charged rather than assumed even
+// though §3.4.2.1 clause 1's fold makes it hold by construction for every
+// produced type, live in assertionprefix.go — derivation-ok-restriction clause 5
+// states the same test in the same words and shares the encoding.
+func checkExtensionAssertions(t, b ComplexType) error {
+	if assertionsPrefix(b.assertions, t.assertions) {
+		return nil
+	}
+	return xsderr.New(ruleCosCTExtends, t.Loc(),
+		"complex type %s extends %s, but %s's {assertions} (%d) are not a prefix of %s's (%d), which cos-ct-extends clause 1.7 requires: §3.4.2.1 clause 1 places the base's assertions, in order, ahead of the type's own <assert> children",
+		t.Name(), b.Name(), b.Name(), len(b.assertions), t.Name(), len(t.assertions))
 }
 
 // checkExtensionBaseFinal is clause 1.1: B's {final} must not contain extension.
@@ -172,11 +180,13 @@ func checkExtensionBaseFinal(t, b ComplexType) error {
 // (checkCTPropsCorrectResolved runs before checkComplexTypeExtension for a given
 // type, checkComplexDerivations).
 //
-// It is kept, rather than deleted as clause 5's assertion prefix was, because it
-// is the executable statement of clause 1.2 AND the guard on the fold's clause
-// 3.1 arm: a fold that stopped copying B's uses forward would show up here as a
-// verdict rather than as silence. Retiring it belongs with a decision to trust
-// the fold unchecked, not with #401.
+// It is kept because it is the executable statement of clause 1.2 AND the guard
+// on the fold's clause 3.1 arm: a fold that stopped copying B's uses forward
+// would show up here as a verdict rather than as silence. That is the footing
+// every fold-backed clause of this constraint stands on — 1.3
+// (checkExtensionAttributeWildcard) and 1.7 (checkExtensionAssertions) alike.
+// Retiring any of them belongs with a decision to trust the folds unchecked, not
+// with #401.
 func (s *Schema) checkExtensionAttributeUses(t, b ComplexType) error {
 	for _, u := range b.attributeUses {
 		name := attributeUseName(u)
