@@ -94,6 +94,69 @@ func TestProduceIdentityConstraintOnLocalElement(t *testing.T) {
 	assertRule(t, err, "sch-props-correct")
 }
 
+func TestProduceKeyrefOnLocalElementResolvesAcrossDeclarations(t *testing.T) {
+	// §3.17.1 sources {identity-constraint definitions} from every <key>,
+	// <keyref>, and <unique> "anywhere within the [[children]]", so §3.11.2's
+	// ·resolved· lookup of a keyref's refer runs against that whole document-wide
+	// set: a <keyref> under ONE local <element> finds its target under a
+	// DIFFERENT one, the ordinary real-world shape. That Produce (hence Finalize)
+	// SUCCEEDS is the load-bearing assertion — a producer registering only
+	// genuinely top-level constraints would charge src-resolve clause 1.7 against
+	// this valid schema. Either category may be the {referenced key}
+	// (c-props-correct clause 1), so both are covered.
+	for _, tc := range []struct {
+		element string
+		want    xsd.IdentityConstraintCategory
+	}{
+		{"key", xsd.IdentityConstraintKey},
+		{"unique", xsd.IdentityConstraintUnique},
+	} {
+		t.Run(tc.element, func(t *testing.T) {
+			s, err := produce(t, wrap("urn:t", `<xs:complexType name="ct">
+			  <xs:sequence>
+			    <xs:element name="target">
+			      <xs:`+tc.element+` name="k"><xs:selector xpath="a"/><xs:field xpath="@id"/></xs:`+tc.element+`>
+			    </xs:element>
+			    <xs:element name="user">
+			      <xs:keyref name="kr" refer="tns:k"><xs:selector xpath="b"/><xs:field xpath="@ref"/></xs:keyref>
+			    </xs:element>
+			  </xs:sequence>
+			</xs:complexType>`))
+			if err != nil {
+				t.Fatalf("Produce: %v", err)
+			}
+			ctName := xsd.QName{Space: "urn:t", Local: "ct"}
+			user := localElementConstraints(t, s, ctName, "user")
+			if len(user) != 1 {
+				t.Fatalf("got %d identity constraints on <user>, want 1", len(user))
+			}
+			ref, isKeyref := user[0].ReferencedKeyName()
+			if !isKeyref {
+				t.Fatalf("<user>'s constraint is not a keyref")
+			}
+			if want := (xsd.QName{Space: "urn:t", Local: "k"}); ref != want {
+				t.Errorf("refer = %s, want %s", ref, want)
+			}
+			// The definition that name resolved to lives under the OTHER local
+			// declaration, and its {fields} cardinality is what c-props-correct
+			// clause 2 compared against the keyref's.
+			target := localElementConstraints(t, s, ctName, "target")
+			if len(target) != 1 {
+				t.Fatalf("got %d identity constraints on <target>, want 1", len(target))
+			}
+			if got := target[0].Name(); got != ref {
+				t.Errorf("<target> defines %s, want the referenced %s", got, ref)
+			}
+			if got := target[0].Category(); got != tc.want {
+				t.Errorf("category = %s, want %s", got, tc.want)
+			}
+			if got, want := len(target[0].Fields()), len(user[0].Fields()); got != want {
+				t.Errorf("{referenced key} has %d {fields}, keyref has %d", got, want)
+			}
+		})
+	}
+}
+
 func TestProduceKeyrefResolvesAtFinalize(t *testing.T) {
 	_, err := produce(t, wrap("", `<xs:element name="root">
 	  <xs:keyref name="kr" refer="missing"><xs:selector xpath="a"/><xs:field xpath="@r"/></xs:keyref>

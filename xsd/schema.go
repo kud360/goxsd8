@@ -92,8 +92,24 @@ func (b *SchemaBuilder) AddNotation(n Notation) {
 	b.notations = append(b.notations, n)
 }
 
-// AddIdentityConstraint appends a top-level identity-constraint definition in
-// document order.
+// AddIdentityConstraint appends an identity-constraint definition in document
+// order.
+//
+// "Top-level" is NOT the contract here, unlike in every sibling AddX:
+// §3.17.1 sources a schema's {identity-constraint definitions} from the
+// definitions corresponding to all the <key>, <keyref>, and <unique> element
+// information items "anywhere within the [[children]]" — deliberately contrasted
+// in the same tableau with {element declarations}, which is scoped to
+// "(top-level)" items. The caller must therefore register EVERY constraint in
+// the document, at any nesting depth, including those declared inside local
+// <element> declarations, not only those under a top-level <element>.
+//
+// Skipping a nested one is not a missed check but a false REJECT of a valid
+// schema: a keyref's refer resolves by expanded name against this whole
+// document-wide set (§3.11.2), so an unregistered target is unfindable and
+// Finalize charges src-resolve clause 1.7 (§3.17.6.2) against a schema the spec
+// says is valid — and the c-props-correct (§3.11.6.1) clause 1 and 2 checks that
+// read the resolved {referenced key} never run at all.
 func (b *SchemaBuilder) AddIdentityConstraint(c IdentityConstraint) {
 	b.identityConstraints = append(b.identityConstraints, c)
 }
