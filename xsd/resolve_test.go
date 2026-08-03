@@ -276,11 +276,13 @@ func TestResolveKeyrefFieldCardinalityMatch(t *testing.T) {
 
 func TestResolveKeyrefReachedByBothWalks(t *testing.T) {
 	// resolveKeyref is reached from two places: resolveReferences' direct walk over
-	// the top-level {identity-constraint definitions}, and resolveElementDecl's
-	// walk over an element's nested ones. An IDC that sits in both — nested under
-	// element e AND registered top-level, as a <key>/<keyref> declared inside an
-	// <element> is — is therefore visited twice. That must be idempotent: two
-	// clean passes, not a duplicate-name or double-registration failure.
+	// the schema-level {identity-constraint definitions} (§3.17.2 sources those
+	// from the constraints "anywhere within the [[children]]", not from top-level
+	// ones alone), and resolveElementDecl's walk over an element's nested ones. An
+	// IDC that sits in both — nested under element e AND a member of the
+	// schema-level property, as a <key>/<keyref> declared inside an <element> is —
+	// is therefore visited twice. That must be idempotent: two clean passes, not a
+	// duplicate-name or double-registration failure.
 	k := keyOrRefFields(t, qn("k"), xsd.IdentityConstraintKey, xsd.QName{}, 2)
 	kr := keyOrRefFields(t, qn("kr"), xsd.IdentityConstraintKeyref, qn("k"), 2)
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("e"), nil, nil, xsd.NewGlobalScope(), nil, false,

@@ -92,8 +92,29 @@ func (b *SchemaBuilder) AddNotation(n Notation) {
 	b.notations = append(b.notations, n)
 }
 
-// AddIdentityConstraint appends a top-level identity-constraint definition in
-// document order.
+// AddIdentityConstraint appends an identity-constraint definition in document
+// order. Alone among the adders above it is NOT a top-level-only set: §3.17.2's
+// XML Mapping Summary for Schema sources {identity-constraint definitions} from
+// the <key>, <keyref>, and <unique> element information items "anywhere within
+// the [[children]]" — every identity-constraint DEFINITION in the schema, at any
+// nesting depth. The contrast is the spec's own: the same tableau scopes
+// {element declarations} to "The (top-level) element declarations ... in the
+// [[children]]". (§3.17.1 only DECLARES the property — "A set of
+// Identity-Constraint Definition components" — and says nothing about scope.)
+//
+// Pass the name= form only. A <key ref="…">/<keyref ref="…">/<unique ref="…">
+// defines NOTHING: per §3.11.2 "the corresponding schema component is the
+// identity-constraint definition ·resolved· to by the ·actual value· of the ref
+// [[attribute]]", so it contributes that EXISTING definition and must not be
+// passed here — a second registration under the same name would fabricate a
+// sch-props-correct (§3.17.6.1) clause 2 duplicate-expanded-name violation
+// against the very definition it reuses. produceIdentityConstraint
+// (parser/produce_xpath.go) states the same carve-out producer-side.
+//
+// A producer that instead registers only its top-level definitions leaves the
+// nested ones out of the property src-resolve (§3.17.6.2) clause 1.7 resolves
+// identity-constraint QNames against: a nested <keyref>'s refer= target becomes
+// unfindable and a valid schema is false-rejected at Finalize.
 func (b *SchemaBuilder) AddIdentityConstraint(c IdentityConstraint) {
 	b.identityConstraints = append(b.identityConstraints, c)
 }
@@ -304,8 +325,8 @@ func (b *SchemaBuilder) finalize(vs ValueSpace) (*Schema, error) {
 	return s, nil
 }
 
-// namedComponent is what indexByName needs from a top-level component kind: the
-// expanded {name} to key its index by, and the source position to charge a
+// namedComponent is what indexByName needs from a schema-level component kind:
+// the expanded {name} to key its index by, and the source position to charge a
 // duplicate rejection to. Every kind a schema's §3.17.1 properties hold
 // satisfies it, including the TypeDefinition sum — which promotes both methods
 // so its two variants stay on the one generic code path with no type switch
@@ -524,11 +545,18 @@ func (s *Schema) Notations() []Notation {
 }
 
 // IdentityConstraints returns the SCHEMA-level {identity-constraint
-// definitions} property (§3.17.1): the top-level identity-constraint
-// definitions, in the order they were added to the builder. That order is a
-// guaranteed stable part of this method's contract, even though §3.17.1 words
-// the property as an unordered "A set of Identity-Constraint Definition
-// components". It is a different scope from [ElementDeclaration.IdentityConstraints],
+// definitions} property (§3.17.1): every identity-constraint definition in the
+// schema, at any nesting depth, in the order they were added to the builder.
+// The depth is the spec's — §3.17.2 sources the property from the <key>,
+// <keyref>, and <unique> element information items "anywhere within the
+// [[children]]", not from top-level ones alone, so a definition declared under a
+// local element declaration is a member exactly as a top-level one is (see
+// [SchemaBuilder.AddIdentityConstraint], which also carves out the ref= reuse
+// form).
+//
+// That order is a guaranteed stable part of this method's contract, even though
+// §3.17.1 words the property as an unordered "A set of Identity-Constraint
+// Definition components". It is a different scope from [ElementDeclaration.IdentityConstraints],
 // which reports one element declaration's own §3.3.1 property.
 //
 // The slice is copied: mutating the result does not affect s. The definitions
