@@ -1,10 +1,7 @@
 package conformance
 
 import (
-	"net/url"
-	"path"
-	"strings"
-
+	"github.com/kud360/goxsd8/internal/schemaloc"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/xsd"
@@ -54,7 +51,7 @@ import (
 // is the false accept back again. §4.3.2 clause 4 resolves a schemaLocation
 // against the base URI in scope AT THE <include> ELEMENT, so the walk uses
 // Element.BaseURI (already xml:base-aware) and the same resolution algorithm the
-// parser uses — see resolveSchemaLocation below — over the SAME loader.Resolver
+// parser uses — schemaloc.Resolve, shared with it — over the SAME loader.Resolver
 // the parser will be handed, reading the root under the same location string
 // parser.Parse itself will (see execSchemaCase).
 //
@@ -256,7 +253,7 @@ func (s *closureScan) compose(el *parser.Element, tns string) bool {
 	}
 	// §4.3.2 clause 4: a URI reference resolved against the base URI in scope at
 	// the directive element itself (xml:base-aware), not the document URI.
-	requested := resolveSchemaLocation(el.BaseURI(), hint)
+	requested := schemaloc.Resolve(el.BaseURI(), hint)
 
 	rc, resolved, err := s.resolver.Resolve(tns, requested)
 	if err != nil {
@@ -331,7 +328,7 @@ func (s *closureScan) importDirective(el *parser.Element) bool {
 	// The resolver is asked under the IMPORT's namespace, as parser.assembly does:
 	// that (namespace, location) pair is the reference strategy's input.
 	namespace, _ := elementAttr(el, "namespace")
-	requested := resolveSchemaLocation(el.BaseURI(), hint)
+	requested := schemaloc.Resolve(el.BaseURI(), hint)
 
 	rc, resolved, err := s.resolver.Resolve(namespace, requested)
 	if err != nil {
@@ -358,43 +355,6 @@ func (s *closureScan) importDirective(el *parser.Element) bool {
 	// the namespace the parser discovers it under.
 	own, _ := elementAttr(d2.Root(), "targetNamespace")
 	return s.decidable(d2, own)
-}
-
-// resolveSchemaLocation resolves a schemaLocation URI reference against the base
-// URI in scope at the element carrying it (§4.3.2 clause 4).
-//
-// It is a VERBATIM copy of parser.resolveSchemaLocation (parser/parse.go) and MUST
-// be kept in sync with it. The duplication is deliberate: the function has no
-// consumer outside the parser's own assembly, so exporting it would add public
-// surface no library user needs (STYLE T5), yet this harness needs the IDENTICAL
-// algorithm — a walk that resolved a hint even slightly differently would discover
-// a different document set than parser.Parse actually reads, and a document it
-// under-discovered would be one whose shape was never gated, reopening the
-// false-accept gap this whole walk exists to close.
-//
-// An absolute reference wins outright. Otherwise, when the base is itself an
-// absolute URI, standard RFC 3986 reference resolution applies. When it is not — a
-// bare relative path such as "sub/child.xsd", which is exactly what a resolver
-// rooted at a directory or an in-memory map is keyed by — url.URL.ResolveReference
-// would root the result at "/" and turn a resolver-relative location into an
-// absolute one that no such resolver can serve; path-wise resolution against the
-// base's directory is used instead.
-func resolveSchemaLocation(base, location string) string {
-	if location == "" {
-		return base
-	}
-	ref, refErr := url.Parse(location)
-	if refErr == nil && ref.IsAbs() {
-		return location
-	}
-	b, baseErr := url.Parse(base)
-	if refErr == nil && baseErr == nil && b.IsAbs() {
-		return b.ResolveReference(ref).String()
-	}
-	if strings.HasPrefix(location, "/") {
-		return path.Clean(location)
-	}
-	return path.Join(path.Dir(base), location)
 }
 
 // elementAttr returns the value of el's unprefixed (no-namespace) attribute local,

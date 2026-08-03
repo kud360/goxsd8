@@ -4,11 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
-	"path"
-	"strings"
 
 	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/internal/schemaloc"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -322,7 +320,7 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rule xsderr
 	// §4.3.2 clause 4: the location is a URI REFERENCE, resolved against the base
 	// URI in scope at the directive element itself (xml:base-aware), not against
 	// the document URI.
-	requested := resolveSchemaLocation(el.BaseURI(), hint)
+	requested := schemaloc.Resolve(el.BaseURI(), hint)
 
 	d2, err := a.fetch(requested, tns, ov, el, rule)
 	if err != nil {
@@ -382,7 +380,7 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 		// (src-resolve clause 4.2.2 / 4.1.2) without naming a document to satisfy
 		// them from. There is nothing for the reference strategy to succeed at, so
 		// clauses 2 and 3 do not apply and there is no D2 to discover. Deliberately
-		// NOT routed through resolveSchemaLocation: that returns the IMPORTING
+		// NOT routed through schemaloc.Resolve: that returns the IMPORTING
 		// document's own base URI for an empty location, which would make a bare
 		// import re-read the importer.
 		a.log.Debug("import declares a namespace with no schemaLocation hint",
@@ -391,7 +389,7 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 	}
 	// §4.3.2 clause 4: a URI REFERENCE resolved against the base URI in scope at
 	// the <import> element itself (xml:base-aware).
-	requested := resolveSchemaLocation(el.BaseURI(), hint)
+	requested := schemaloc.Resolve(el.BaseURI(), hint)
 
 	// The resolver is asked under the IMPORT's namespace, not the importing
 	// document's: that pair — target namespace and location hint — is exactly the
@@ -568,37 +566,6 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 		}
 	}
 	return builder.FinalizeWith(value.NewValueSpace(backend))
-}
-
-// resolveSchemaLocation resolves a schemaLocation URI reference against the base
-// URI in scope at the element carrying it (§4.3.2 clause 4). The result is what
-// the [loader.Resolver] is asked for, and — for a document that has its own
-// <include>s — the base those are in turn resolved against, so it must stay in
-// the same space as the location the caller handed [Parse].
-//
-// An absolute reference wins outright. Otherwise, when the base is itself an
-// absolute URI, standard RFC 3986 reference resolution applies. When it is not —
-// a bare relative path such as "schemas/main.xsd", which is exactly what a
-// resolver rooted at a directory or an in-memory map is keyed by —
-// [net/url.URL.ResolveReference] would root the result at "/" and turn a
-// resolver-relative location into an absolute one that no such resolver can
-// serve; path-wise resolution against the base's directory is used instead.
-func resolveSchemaLocation(base, location string) string {
-	if location == "" {
-		return base
-	}
-	ref, refErr := url.Parse(location)
-	if refErr == nil && ref.IsAbs() {
-		return location
-	}
-	b, baseErr := url.Parse(base)
-	if refErr == nil && baseErr == nil && b.IsAbs() {
-		return b.ResolveReference(ref).String()
-	}
-	if strings.HasPrefix(location, "/") {
-		return path.Clean(location)
-	}
-	return path.Join(path.Dir(base), location)
 }
 
 // readRootDocument resolves the location [Parse] was handed and reads the schema
