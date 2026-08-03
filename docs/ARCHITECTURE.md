@@ -10,6 +10,9 @@ Value implementations, parsing, validation, and generation live above them.
 ```
                  xsderr          (leaf: errors, rule IDs, locations)
                  xsd             (leaf: component model + query/walk APIs; imports xsderr only)
+                 internal/...    (leaves: stdlib-only helpers two packages must agree on
+                                  byte for byte, unexportable because they are nobody's API —
+                                  internal/schemaloc, the schemaLocation resolver)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
    builtin/strict  builtin/native  <user backends>   (implement value contracts)
@@ -264,16 +267,14 @@ Two access styles over the compiled model, one shared core:
   **document set is not reported** — `Parse` returns components, not the
   list of documents they came from. The conformance schema lane needs that
   list to gate every document in a closure, so it re-walks the closure
-  itself, duplicating the parser's own location-resolution verbatim; closing
-  that gap is a pre-1.0 refactor, tracked as **#259** (the
-  `resolveSchemaLocation` copy) and **#272** (the
-  `assembly.discover`/`.include`/`.fetch` walk and the `attrValue` copy).
-  The copy is **growing on schedule**: `conformance/schema_closure.go` went
-  from 315 to 396 lines (+26%) between 2026-07-27 and 2026-08-01 as
-  `<import>`/`<override>`/multi-document gating landed. The two
-  `resolveSchemaLocation` bodies were re-verified byte-identical on
-  2026-08-02 — the cost so far is the declared coupling, not yet a
-  divergence, and every composition feature raises the price of the port.
+  itself. Location resolution is no longer duplicated to do so: both walks
+  call `internal/schemaloc.Resolve` (#259), so the byte-for-byte agreement
+  the harness depends on is structural rather than a comment promise. The
+  rest of the walk is still a copy — `assembly.discover`/`.include`/`.fetch`
+  and `attrValue`, tracked as **#272** — and it is **growing on schedule**:
+  `conformance/schema_closure.go` went from 315 to 396 lines (+26%) between
+  2026-07-27 and 2026-08-01 as `<import>`/`<override>`/multi-document gating
+  landed. Every composition feature raises the price of that port.
 
 ## Regex (`regex`)
 
