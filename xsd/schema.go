@@ -96,13 +96,20 @@ func (b *SchemaBuilder) AddNotation(n Notation) {
 // order.
 //
 // "Top-level" is NOT the contract here, unlike in every sibling AddX:
-// §3.17.1 sources a schema's {identity-constraint definitions} from the
-// definitions corresponding to all the <key>, <keyref>, and <unique> element
-// information items "anywhere within the [[children]]" — deliberately contrasted
-// in the same tableau with {element declarations}, which is scoped to
-// "(top-level)" items. The caller must therefore register EVERY constraint in
-// the document, at any nesting depth, including those declared inside local
-// <element> declarations, not only those under a top-level <element>.
+// §3.17.2's XML Mapping Summary for Schema sources the {identity-constraint
+// definitions} property (declared in §3.17.1) from the definitions corresponding
+// to all the <key>, <keyref>, and <unique> element information items "anywhere
+// within the [[children]]" — deliberately contrasted in the same tableau with
+// {element declarations}, which is scoped to "(top-level)" items. The caller
+// must therefore register every identity-constraint DEFINITION — every named
+// <key>, <keyref>, or <unique> — exactly once, at any nesting depth, including
+// those declared inside local <element> declarations, not only those under a
+// top-level <element>.
+//
+// Definitions only: the ref= form defines nothing, contributing instead the
+// existing component its ref names, and must NOT be registered — a second
+// registration under the same name would fabricate a sch-props-correct
+// (§3.17.6.1) clause 2 collision against the very definition it reuses.
 //
 // Skipping a nested one is not a missed check but a false REJECT of a valid
 // schema: a keyref's refer resolves by expanded name against this whole

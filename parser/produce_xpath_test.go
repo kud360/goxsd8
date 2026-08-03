@@ -75,7 +75,7 @@ func TestProduceIdentityConstraintsInDocumentOrder(t *testing.T) {
 
 func TestProduceIdentityConstraintOnLocalElement(t *testing.T) {
 	// §3.3.2.1's Common Mapping Rules apply to local declarations too, and
-	// §3.17.1 collects every constraint in the document — a duplicate name
+	// §3.17.2 collects every constraint in the document — a duplicate name
 	// between a global and a local declaration is therefore a genuine
 	// sch-props-correct clause 2 collision, which proves both were registered.
 	_, err := produce(t, wrap("", `<xs:element name="root">
@@ -95,7 +95,7 @@ func TestProduceIdentityConstraintOnLocalElement(t *testing.T) {
 }
 
 func TestProduceKeyrefOnLocalElementResolvesAcrossDeclarations(t *testing.T) {
-	// §3.17.1 sources {identity-constraint definitions} from every <key>,
+	// §3.17.2 sources {identity-constraint definitions} from every <key>,
 	// <keyref>, and <unique> "anywhere within the [[children]]", so §3.11.2's
 	// ·resolved· lookup of a keyref's refer runs against that whole document-wide
 	// set: a <keyref> under ONE local <element> finds its target under a
