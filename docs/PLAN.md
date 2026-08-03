@@ -5,6 +5,15 @@ each into session-sized `ready` issues; the develop loop closes them one
 per session. Prefer vertical slices that move a conformance lane over
 horizontal completeness.
 
+**Conformance-lane counts in this file are date-stamped, never live**
+(settled 2026-08-03 for #411; see that pass's paragraph in M4 for the
+reasoning). `conformance/testdata/expectations/*.txt` is the only source
+of truth for a lane score. Any count restated here — in a milestone
+heading, a narrative sentence or a `/backlog` table — carries the date it
+was read, so a reader can tell staleness from wrongness without opening
+the expectations files. A stamped count is never "corrected" in place
+when the lane moves; the next dated paragraph carries the new number.
+
 ## M0 — Scaffold (done at bootstrap)
 
 Repo layout, docs (STYLE/PRINCIPLES/ARCHITECTURE/WORKFLOW/ROUTINES/PLAN),
@@ -37,7 +46,7 @@ decoder), and the `xsd.QName` expanded-name value type that
 `xsd` component model waits for M4). Full unit tests; fuzz targets for
 xmltree.
 
-## M3 — Datatypes vertical slice (complete — all 20 primitives mapped, `datatypes` lane 1043 pass / 31 fail (1074) after the list-variety Facets cohort #75 and the `value.effectiveWhiteSpace` union not-applicable path #98 landed 2026-07-23; the IBM precisionDecimal cohort (#162) and the `Mapping.Canonical` doc (#166) landed 2026-07-19; open datatypes-lane follow-ups: anyURI-triage #190, union member-dispatch #223, integer-family list fixtures #224)
+## M3 — Datatypes vertical slice (complete — all 20 primitives mapped, `datatypes` lane 1043 pass / 31 fail (1074) **as of 2026-07-23**, after the list-variety Facets cohort #75 and the `value.effectiveWhiteSpace` union not-applicable path #98 landed that day; the IBM precisionDecimal cohort (#162) and the `Mapping.Canonical` doc (#166) landed 2026-07-19; open datatypes-lane follow-ups: anyURI-triage #190, union member-dispatch #223, integer-family list fixtures #224)
 
 `value` contracts finalized; `builtin/strict` primitive mappings + the
 facet pipeline (pattern facets via package `regex`, XSD flavor) +
@@ -1875,11 +1884,338 @@ one. That is **#400**'s territory (a post-land pass leaves no signal on
 `main` when it files no docs commit) and is recorded here as a second
 sighting rather than re-filed.
 
+Update (2026-08-03, weekly backlog — **the full re-derivation the last
+three post-land passes each named as the blocking planning action**):
+band 1 drained to nothing at #377's landing and stayed empty through
+three further landings. **Band 2 is derived below and is this pass's
+main output.**
+
+Lanes first, read off `conformance/testdata/expectations/*.txt` at
+`origin/main` @ `ecf3d79` on 2026-08-03. Date-stamped per the new
+convention in this file's preamble (#411, settled below):
+
+| lane | pass / total | movement since 2026-08-01 |
+|---|---|---|
+| `schema` | **9166 / 15432** | 4247 → 9166, **+4919** |
+| `datatypes` | **1131 / 1153** | 1107 / 1129 → 1131 / 1153, **+24** |
+| `instance` | 0 / 26426 | unchanged |
+| `xpath`, `json`, `ber` | empty by design | unchanged |
+
+**The `schema` +4919 is not eight landings' worth of rule work and
+nobody should read it as one.** The recorded per-landing deltas in this
+window are small and individually attributed — #277 **−2** (authorized
+downward correction), #276 **+9**, #365 **+24** on `datatypes`, #371
+**+11**. The step change came from the lane *widening*, not from the
+processor improving by three orders of magnitude in two days: the
+decidability predicates in `conformance/schema.go` were narrowed
+repeatedly across #238/#276/#340/#377/#259 so that cases previously
+DECLINED now get decided, and a decided-and-correct case scores `pass`.
+**That is exactly why #443 and #446 are in the band below.** A lane that
+grew 2.2× by admitting cases is a lane whose admission criteria are now
+load-bearing for 9166 banked passes, and `anonymousComplexTypeDecidable`'s
+narrowing — the safety argument under a large share of them — is pinned
+by **no test at all**. The next agent to touch that file can delete it
+and land green.
+
+***Band 2 — the working queue, dependency-ordered.*** Nine entries, in
+band. Ordering doctrine, stated so the next pass can disagree with it
+rather than re-derive it: **measured lane movement first, then the
+integrity of the measurement itself, then false rejects, then
+under-rejects, then producer completeness.** PRINCIPLES 9 is what puts
+false rejects ahead of under-rejects; #238's −69 and #277's −2 are what
+put measurement integrity ahead of both.
+
+1. **#449** — claim the twenty `negativeInteger`/`nonNegativeInteger`/
+   `nonPositiveInteger`/`positiveInteger` `001–005` lexical fixtures.
+   **The only issue in the queue whose acceptance is literally a lane
+   number, and the cheapest movement available**: the route exists
+   (#331), it was widened once already (#365, a clean +24 with no engine
+   change), the cohort is arbiter-verified as exactly 20 files with no
+   fifth sub-family, and the body carries the per-fixture expected
+   rejection rule IDs. It adds a genuinely new shape — a **half-bounded**
+   arm, where #331's 48 were all doubly bounded and #365's 24 were
+   unbounded. Its `Ratchet:` figure must come from a diagnostic run, not
+   arithmetic: twenty claimed fixtures is not +20 (#354).
+2. **#336** — narrow `complexTypeDecidable` to admit the two extension
+   forms and measure the `schema` lane. **Both dependencies are closed**
+   (#264 `0b459d1`, #265 `54fd100`, both 2026-08-02), verified issue by
+   issue at this pass rather than inferred from the label; the stale
+   `(blocked on #264/#265)` has been struck from its title. Two full
+   sessions already paid their cost here — both landed
+   `Ratchet: unchanged` on the explicit promise that *"the movement
+   lands in THIS issue"* — so until it runs that investment is
+   unmeasured. Largest expected `schema` movement in the queue.
+3. **#443** — pin `anonymousComplexTypeDecidable`'s implicit-content
+   narrowing. **Sequenced immediately with #336 because it is the safety
+   net under it**: #336 narrows a sibling decidability predicate in the
+   same file, and the existing narrowing that keeps the lane honest is
+   defended by nothing executable. Either order is fine; neither is not.
+4. **#446** — `testGroup/@version` is never read, so 8 XSD-1.0-scoped
+   groups are scored against this 1.1 processor and `pdecimal001a` is
+   unwinnable by construction. Same class as #277 and #276, promoted on
+   the same argument those two proved twice: a wrong-reason pass costs
+   more to unwind later than to prevent now, and the never-regress wall
+   is what makes it expensive. With the lane at 9166 rather than 4247,
+   "while the lane is still young" is a claim with a shrinking shelf
+   life.
+5. **#468** — `addAll`'s returned `last` set claims an `<all>` may end
+   after ANY member, so an enclosing sequence's successor **false-rejects**
+   `sequence(all(a,b), a)` on `cos-nonambig`. A live false reject of a
+   valid schema — the one direction PRINCIPLES 9 forbids — and it comes
+   straight out of #261's landing (`ecf3d79`), which pinned the
+   carve-out and in doing so exposed that the star transcription's
+   "exactly equivalent" claim holds only for a **bare** `<all>`.
+6. **#436** — `final=`/`finalDefault=` and `<complexType>`'s `block=`
+   are never read, so `{final}` and `{prohibited substitutions}` are
+   universally empty. **Nine implemented reader sites across six rules,
+   all dead on every parsed schema** — `st-props-correct` cl.3,
+   `cos-st-restricts` cl.2.2.1.1 and 3.2.1.1, `cos-ct-extends` cl.1.1
+   and 2.2, `derivation-ok-restriction` cl.1, `cos-ct-derived-ok`, and
+   `cos-equiv-derived-ok-rec` cl.2.2/2.3's blocking union. The largest
+   single concentration of inert-but-correct code in the tree, and #281
+   is what made the last three sites reachable at all. Its body already
+   carries the producer site table, the suite counts (108 files with
+   `final=`, 30 `finalDefault=`, 27 `blockDefault=`) and the trap: **the
+   keyword sets differ per property**, so copying `disallowedSubstitutions`'
+   three-keyword `#all` expansion is the way to get this wrong. Direction
+   is a tightening, so a downward flip is possible and must be explained
+   case by case (#264 is the precedent).
+7. **#464 → #463**, taken as a pair and in that order. #464 folds
+   #371's five twice-raised advisories, and one of them is not prose:
+   the hardcoded `clause := "a-props-correct clause 2"` branch has a
+   **live consumer**, because #463 is precisely the "future third
+   caller" it silently mislabels. #463 is `e-props-correct` clause 2 via
+   `cos-valid-default` (§3.3.6.2), the element-side default-value
+   constraint and the third caller of #371's shared `checkSimpleDefault`
+   — whose first two callers were worth **+11**. #463 carries #438's
+   anonymous-inline-type reachability warning, so its walk shape gets
+   measured rather than assumed.
+8. **#342** — `dcl.elt.common` clause 3: an element inherits its
+   `{type definition}` from its `substitutionGroup` head, and today
+   falls through to `xs:anyType` on **both** paths. Unblocked by #281
+   (`2f9c0c4`), which put the affiliations in the slot this reads.
+   **#395** (`e-props-correct` clause 4, `c-vs-sg` — a member whose type
+   does not derive from its head's is accepted today) rides behind it on
+   the same component data, and **#471** (filed this pass) is in the same
+   producer neighbourhood; take them in that order if the queue reaches
+   them.
+9. **#447** — a `<simpleType>` whose body is `<list>` or `<union>` is
+   unproduced at `parser/produce.go:837`, an untracked and unmarked
+   producer limitation with a **measured** cost (`pdecimal019`/`020`).
+   Last in band because it is the narrowest, not because it is the
+   least real: it is the only band entry that is both a producer hole
+   *and* has named fixtures waiting on it.
+
+**Entries 1–3 are what a `/backlog` exists to produce and 4–9 are what
+the harvest produced; the band's job is to keep the second set from
+crowding out the first.** Seven of the nine were filed by post-land
+passes in the last four days.
+
+***Not in band, and why, for the three most obvious candidates.***
+**#442** (a top-level `<element>` with an inline `<simpleType>` child,
+the last unwidened §3.3.2.1 tier-1 shape) is a real producer slice with
+a banked fixture resting on its decline, and it lost to #447 only on
+"measured cost named in the body". **#472** (`goxsd8 parse`, filed this
+pass) moves no conformance lane at all and is deliberately outside a
+lane-ordered band — it is the first user-visible deliverable this
+project would ship, which is a different axis, and a human should say
+whether that axis outranks the lanes before a band encodes the answer.
+**#426** (gate part 2 is not reproducible) stays out because #377's pass
+already routed a working zero-install, version-pinned incantation onto
+its thread; it is now a decision, not a blocker.
+
+***Queue arithmetic, and it got worse.*** **99 open `ready`** at this
+pass (110 open issues: 99 `ready`, 10 `blocked`, 1 unlabelled — #411,
+settled below). The 2026-08-03 post-land note recorded 98; this pass
+filed three (#470, #471, #472) and closed none, because **a cartographer
+does not close issues as done**. Sixth consecutive backlog over the 8–10
+band, and the band above is again doing that instruction's work by hand.
+
+**#347 remains undecided, and this pass deliberately did not decide it.**
+Nothing has changed on that thread since 2026-08-02. Its own filing note
+is the reason and it still binds: the fix edits
+`.claude/agents/cartographer.md`, and *"a cartographer should propose
+through the queue, not apply to itself mid-sweep."* Recording it plainly
+rather than re-arguing it, as its fifth restatement would earn nothing.
+One new datum for whoever takes it: **~20 of the 99 `ready` issues are
+comment-and-doc-accuracy items** (#290, #291, #296, #299, #313, #338,
+#382, #387, #390, #396, #409, #423, #425, #428, #429, #439, #445, #453,
+#458 and the prose half of #464) — a fifth of the queue whose deliverable
+is English, filed one per subsystem on the settled #445/#423/#425
+precedent. That is the single largest coherent cohort in the label, it
+is the one place where option (a)'s `backlog`-vs-`ready` split would
+change the queue's readability most, and **it is not a candidate for
+merging** — the precedent for keeping them separate is explicit and was
+reaffirmed at #453's filing.
+
+***The GAP ledger is re-derived from scratch — the first full
+re-derivation since the 2026-08-01 snapshot, which the last four passes
+each flagged as drifted.*** `grep -rn "GAP(" --include=*.go .` at
+`ecf3d79` returns **43 hits across 21 files**. Of these, 2 are
+references from `_test.go` files naming a marker they pin
+(`parser/override_test.go:371`, `value/valuespace_test.go:138`), 1 is a
+template in `xpath/doc.go:29` showing the marker's own syntax, and 1
+(`conformance/schema.go:273`) is a cross-reference to another package's
+marker. **Every remaining fail-open site reconciles to an open owning
+issue, with exactly one exception.**
+
+- **The one unowned site is `parser/produce_complex.go:1235`** — an
+  `<element ref="…" substitutionGroup="…">` is silently accepted, the
+  attribute ignored, because the `ref=` arm returns before
+  `produceLocalElement` (the one place `e-props-correct` clause 3 is
+  charged on the attribute's presence) ever runs. It says so in its own
+  words: *"Unowned: no issue tracks it yet."* **Filed as #471**
+  (`ready`, `kind/gap`, `area/parser`). Its disclosure is unusually good
+  — it already names the blast radius (no component property affected,
+  no downstream rule reads a different value) and argues the direction
+  correctly (under-reject, never a false accept), which is why it is
+  filed at ordinary priority rather than promoted.
+- **Three ownership corrections against the old snapshot.**
+  `xsd/complexderivation.go:409` is **#430**'s, not #265's — the row the
+  #346 pass carried forward as *"the only surviving `GAP(` in that file
+  is `:409` (#265's)"* was wrong about the owner, and the site's own text
+  says `#430`. `xsd/contentrestricts.go:514` has drifted to **`:522`**
+  (#345's, element-side `key-dft-binding` cases 4/5).
+  `parser/doc.go:111` (§5.3 Missing Sub-components never reported) is
+  **#434**'s, which the site now names explicitly.
+- **Two sites are permanent contract, not incompleteness awaiting an
+  owner, and should stop being counted as debt.**
+  `xsd/contentrestricts.go:359` argues at length that its missing bullet
+  *"is NOT an omission in cos-aw-union and is not a future issue's to
+  fix"* — `sibling` is defined only for element wildcards and
+  `##definedSibling` is not grammatically available on `<anyAttribute>`.
+  `value/valuespace.go:87-107`'s gates 1–3 are likewise the fail-open
+  **contract** #371 established, not a gap; only the item/member residue
+  below them (`:114`) is owned, by **#462**.
+- Everything else maps cleanly: `parser/override.go:130` → #287;
+  `parser/parse.go:262` + `parser/doc.go:97` → #286 (bare-marker P3 debt
+  → #429); `parser/doc.go:105` → #279; `:129` → #379; `:141` → #287;
+  `parser/xmltree/{encoding.go:60,doc.go:32}` → #361;
+  `parser/produce_complex.go:189` → #438 (which depends on #414);
+  `:1408` → #342; `:1485` → #414; `value/valuespace.go:212,235` → #372;
+  `xsd/resolve.go:465` → #434; `xsd/wildcard.go:111` → #248;
+  `xsd/valueconstraintvalid.go:344` + `xsd/schema.go:233` → #321
+  (decision) and #464 (disclosure); `xsd/defaultbinding.go:87` → #267;
+  `:224` → #345; `:318`, `:518` → #372/#462;
+  `xsd/substitutiongroup.go:157` → #395;
+  `xsd/contentrestricts.go:220` → #413; `:289` → #282;
+  `xsd/complextype.go:705,737` → #414;
+  `xsd/complexextension.go:401,420` → #392.
+- **Not visible to this grep, and deliberately so:** #283 owns two
+  fail-open sites that carry **no `GAP(` token at all**
+  (`someBindingSubsumes`, and `unfoldCopies`' copy-cap approximation).
+  A grep-derived ledger cannot find those. Whoever next re-derives this
+  table should treat #283 as the standing reminder that the grep is a
+  lower bound.
+
+***Branch namespace: one ref, one long-owed action discharged.***
+`git ls-remote --heads origin 'refs/heads/wip/*' 'refs/heads/parked/*'`
+returns exactly `wip/issue-256` @ `c56d9f7`, unchanged since #377's pass.
+`git log --oneline main..origin/wip/issue-256` shows **two commits not in
+`main`** (`3c0c918`, `c56d9f7`, branched from `9a26ac2`), and
+`xsd/schema.go:95` on `main` still reads *"appends a top-level
+identity-constraint definition"* — so the branch's content is genuinely
+**not** landed, which is the correct outcome for a **park** rather than
+a lost merge. **Reported for human deletion; not acted on** (sessions
+never delete refs). Nothing under `parked/`, nothing else for triage.
+
+**#256's supersede-and-refile — owed across four passes — is done.**
+#256 was already CLOSED under `needs-replan`; the outstanding half was
+the replacement, now **#470** (`ready`, `kind/bug`, `area/xsd`, M4).
+**Its scope is the PAIR, and that is the whole difference from #256.**
+#256 covered the writer only, and fixing one half of a consistently-wrong
+pair is how a uniformly-wrong-but-coherent file became a
+self-contradiction 440 lines wide on the exported surface — which is what
+the second arbiter rejection was about. Verified against `main` at filing:
+`AddIdentityConstraint` (`xsd/schema.go:95`) and
+`Schema.IdentityConstraints` (`:527`) **both** still say "top-level", and
+the second is false by execution. #470 carries forward, unchanged, the
+three things both arbiter rounds independently verified — the **§3.17.2**
+attribution (§3.17.1 kept only for where the property is *declared*), the
+`ref=` carve-out with its `sch-props-correct` cl.2 rationale, and
+`TestProduceKeyrefOnLocalElementResolvesAcrossDeclarations`
+(mutation-checked twice) — and points at #256's grounding comment rather
+than re-grounding. **#256's own body is not the spec of record**: it
+carried the §3.17.1 misattribution that round 1 caught, and it propagated
+through the oracle grounding and mason's first commit before anyone
+grepped the spec.
+
+***#411 is settled here, because it asked the cartographer to settle
+it.*** The choice is **(b) date-stamp**, not (a) strip. Stripping loses
+information the milestone narratives use — M3's heading is *about* the
+lane draining — while a stamp makes staleness legible instead of silently
+wrong, which is what PRINCIPLES 32 is protecting. The convention is
+stated **once**, in this file's preamble, and nowhere else (#195's
+precedent is binding: an under-settled scope propagated into four
+documents is how that issue reached the park cap). Applied to the two
+sites that carry live counts: M3's heading (`1043 / 31 (1074)`, now
+stamped **as of 2026-07-23**) and M5's `instance`-lane sentence (now
+stamped **as of 2026-08-03**, with its "unmoved by design" reason stated
+so the zero is not mistaken for staleness). No other milestone heading
+carries a count; the pattern the issue suspected recurs does not.
+**#411 is left open** for the session that lands this file to close —
+`/backlog` files and reconciles, it does not close issues as done.
+
+***Issue reconciliation, everything else this pass touched.***
+
+- **#16's body is rewritten to the mandatory template.** The missing
+  `## Depends on` had been sighted **four** times across consecutive
+  post-land passes, each time recorded as "not worth its own ticket" and
+  each time re-costing the next unblock sweep a read; #371's pass handed
+  this one the choice of fixing it or dropping the count. Fixed, with its
+  stale *"all subcommands, `-help` included, still exit 2"* sentence
+  corrected against #251's landing. It stays `blocked` and stays open as
+  the durable cliuser reference for `validate` (M5) and `gen` (M9).
+- **#336's title lost its stale `(blocked on #264/#265)`.** Both closed
+  2026-08-02. Nothing else changed; the label had been `ready` since.
+- **Blocked-issue audit — all ten are honest, no relabels.** #456→#455
+  (open), #438→#414 (open), #415→#407 (open), #345→#250, #267→#250,
+  #250→#79's tail, #248→#250, #79 (the dependency target itself), #56 (an
+  M6 evaluator issue **not yet filed** — repoint at the concrete `#N` at
+  the M6 carve), #16 (now `## Depends on` **#472**, plus two unfiled
+  subcommand issues). No `ready` issue was found carrying an open hard
+  dependency, so the invariant the 2026-07-25 pass established still
+  holds.
+- **Nothing closed as stale, obsolete or duplicate.** The 2026-07-31
+  survey's finding stands re-verified at this pass: the overwhelming
+  majority of the 99 describe live defects or unbuilt spec clauses, and
+  the obvious consolidation candidates are exhausted.
+
+***Step 4 (consult libuser/cliuser) did not run, and the reason is
+#416 — fifth consecutive sighting.*** A cartographer subagent cannot
+spawn the persona subagents its own procedure requires, so the step is
+structurally unrunnable from inside a `/backlog`, exactly as #416 says.
+**This pass is the first where that cost something concrete rather than
+being a bookkeeping complaint**, and the difference is worth recording:
+the CLI/API surface **did** move since the last real persona pass
+(2026-08-01). #251 (`3b98af7`) made `-help` work in any argument
+position; #252 (`4fd77dd`) published eight document-order enumeration
+accessors on `*xsd.Schema`. A fresh cliuser run would see a binary that
+does something for the first time, and a fresh libuser run would see the
+accessor set both personas independently asked for.
+
+**What this pass did instead, within what a cartographer can do
+unaided:** it read the current `README.md` CLI section, `cmd/goxsd8/doc.go`
+and `xsd/schema.go`'s exported accessor set directly, established that
+#252 discharged the gate #16's thread had named since 2026-07-25
+(*"#252 must land first or alongside"*), and **filed #472** — the first
+non-stub subcommand — folding in cliuser's already-recorded `parse`
+acceptance criteria: the 0/1/2 exit-code table, greppable
+`file:line:col: [rule-id] message` failure lines, the requirement that
+the summary's exact shape be pinned (*"print a summary"* is not a
+contract), the multi-schema decision `parser.Parse`'s single-root
+signature forces, the exit-2 overload #251 explicitly left out of scope,
+and the **`-version` reservation**, unowned since 2026-07-09 and now
+homed on the first subcommand issue that reaches a real flag set. That
+is a fold of *recorded* persona output, **not** a persona pass, and it
+does not discharge #416.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
 xsi:type/nil, wildcards, default/fixed values. **`instance` lane** (0 pass
-/ 26426 fail today).
+/ 26426 fail **as of 2026-08-03**; unmoved since the lane was created, by
+design — nothing decides it until this milestone).
 
 The epic was filed as **#250** in the 2026-07-25 backlog, `blocked` on
 #79's tail, deliberately **uncarved**: M4 still has four sub-slices open
