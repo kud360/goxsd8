@@ -411,6 +411,27 @@ func TestUPAAllGroupDistinctNamesPass(t *testing.T) {
 	}
 }
 
+// TestUPAAllGroupNonEmptiableInSequencePasses pins addAll's emptiability
+// carve-out. An <all> with a mandatory member does not accept the empty
+// sequence, so in an enclosing <sequence> the particle after it never joins a
+// state the particle before it still occupies. Taking emptiability from the
+// (P1|…|Pn)* transcription instead — where it is unconditionally true — carries
+// the leading x? past the <all>, merges the trailing x into the start state
+// beside it, and false-rejects this model.
+func TestUPAAllGroupNonEmptiableInSequencePasses(t *testing.T) {
+	g := uGroup(t, CompositorSequence,
+		uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uLocal(t, uq("x"), uq("T"))}),
+		uOne(t, ResolvedTerm{Term: uGroup(t, CompositorAll,
+			uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+			uOne(t, ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
+		)}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("x"), uq("T"))}),
+	)
+	if err := uSchemaWithModel(t, g, nil); err != nil {
+		t.Fatalf("x? then a non-emptiable <all> then x was rejected: %v", err)
+	}
+}
+
 // TestUPAGroupRefExpansion pins that a <group ref> is expanded, and that two
 // references to one definition are two DISTINCT particles (§3.8.6.4: "particles
 // at different points in the content model are always distinct from one another,
