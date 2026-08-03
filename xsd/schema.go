@@ -93,14 +93,15 @@ func (b *SchemaBuilder) AddNotation(n Notation) {
 }
 
 // AddIdentityConstraint appends an identity-constraint definition in document
-// order. Alone among the adders above it is NOT a top-level-only set: §3.17.2's
-// XML Mapping Summary for Schema sources {identity-constraint definitions} from
-// the <key>, <keyref>, and <unique> element information items "anywhere within
-// the [[children]]" — every identity-constraint DEFINITION in the schema, at any
-// nesting depth. The contrast is the spec's own: the same tableau scopes
-// {element declarations} to "The (top-level) element declarations ... in the
-// [[children]]". (§3.17.1 only DECLARES the property — "A set of
-// Identity-Constraint Definition components" — and says nothing about scope.)
+// order. Alone among SchemaBuilder's adders it is NOT a top-level-only set:
+// §3.17.2's XML Mapping Summary for Schema sources {identity-constraint
+// definitions} from the <key>, <keyref>, and <unique> element information
+// items "anywhere within the [[children]]" — every identity-constraint
+// DEFINITION in the schema, at any nesting depth. The contrast is the spec's
+// own: the same tableau scopes {element declarations} to "The (top-level)
+// element declarations ... in the [[children]]". (§3.17.1 only DECLARES the
+// property — "A set of Identity-Constraint Definition components" — and says
+// nothing about scope.)
 //
 // Pass the name= form only. A <key ref="…">/<keyref ref="…">/<unique ref="…">
 // defines NOTHING: per §3.11.2 "the corresponding schema component is the
@@ -108,8 +109,7 @@ func (b *SchemaBuilder) AddNotation(n Notation) {
 // [[attribute]]", so it contributes that EXISTING definition and must not be
 // passed here — a second registration under the same name would fabricate a
 // sch-props-correct (§3.17.6.1) clause 2 duplicate-expanded-name violation
-// against the very definition it reuses. produceIdentityConstraint
-// (parser/produce_xpath.go) states the same carve-out producer-side.
+// against the very definition it reuses.
 //
 // A producer that instead registers only its top-level definitions leaves the
 // nested ones out of the property src-resolve (§3.17.6.2) clause 1.7 resolves
