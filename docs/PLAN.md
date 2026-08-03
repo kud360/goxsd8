@@ -1665,6 +1665,93 @@ re-derivation from `grep -rn "GAP(" --include=*.go` is the next
 `/backlog`'s job, and it now has two struck rows (#334, #346) telling it
 the table shrank.
 
+***Post-land pass, 2026-08-02 (#377, `c138f67`, PR #457, ratchet
+unchanged — the change is a unit arm over a synthetic `writeSchemaTree`
+tree and decides no suite fixture, so there is no lane it could move;
+the arbiter proved it by running `GOXSD_RATCHET=1` and finding
+`git status --porcelain` empty afterward).***
+
+**Band 1 is EMPTY.** `#324 → #377` became `#377` when #324 landed at
+`9a26ac2`, and #377 has now landed too. That closes out the eight-issue
+band the #264 pass recorded — `#264 → #265 → #301 → #281 → #365 → #346 →
+#324 → #377` — which this file has drawn down one landing at a time
+across seven post-land notes; all eight landed, in filed order. **There
+is no next item. A full `/backlog` re-derivation is now the blocking
+planning action, not merely "due"** — the previous note called it due
+while two entries remained; there is no longer even a shallow queue to
+stall on. Neither of the last two entries moved a lane (#324 was
+false-accept debt, #377 test-only), so the band ended without a lane
+number to show for its tail, which is itself an input to the re-derivation.
+
+**No band is derived here, on purpose.** A post-land pass unblocks and
+harvests; it does not re-derive priority. The next `/backlog` owns that,
+and it inherits three things this file has been accumulating for it:
+#347's still-unanswered question about what `ready` means (the `ready`
+label conflates "filed" with "in the working queue", and until it is
+decided the band above IS the working queue), the GAP ledger's
+`file:line` column as a drifted 2026-08-01 snapshot with two struck rows
+(#334, #346), and a `ready` queue now well past the 8–10 target.
+
+**Unblock scan: nothing clears; #377 was a leaf, as its body predicted.**
+All ten open `blocked` issues were read at this pass and none names #377
+in its `## Depends on` — #456→#455, #438→#414, #415→#407, #345→#250,
+#267→#250, #250→#79, #248→#250, #79 (the dependency target itself), #56
+(an unfiled M6 evaluator issue), #16 (still carrying **no**
+`## Depends on` section — third sighting of that body defect, still not
+worth its own ticket). A full-body sweep of all 108 open issues for the
+literal `#377` returns one hit, **#400**, which cites it in a leak-list
+reconciliation rather than as a dependency and is already `ready`.
+
+**One issue filed, one advisory routed, one dismissed** — the arbiter's
+two non-blocking findings from the round-1 ACCEPT plus the session's
+process finding.
+
+**#458** (`ready`, `kind/refactor`, `area/conformance`) — three
+closure-prose defects in one commit. `conformance/schema_closure.go:142`
+(`decidable`'s doc) and `conformance/schema.go:379` (`execSchemaCase`'s
+doc) both describe the closure as `<xs:include>` or `<xs:import>`,
+**omitting `<xs:override>`** — pre-existing on `main`, not introduced by
+#377, and the same prose-omission class #238's round-1 rejection was
+originally about. The tell that they are defects rather than shorthand:
+`schema_closure.go:13` and `:78` already name all three, so the file
+contradicts itself. Folded in with them, rather than left to "the next
+touch of this file" as the verdict suggested, is
+`schema_closure_test.go:440`'s parenthetical citing **§F.2 clause 1** for
+a **no-match** outcome when clause 1 is the *match* case
+(`c-override-xslt-match`) — substance right, pointer loose. Filed
+together because they are one subsystem's prose and one focused commit
+(precedent: #445, #423, #425). **#458 does not enter any band** — comment
+text only, no lane, no behaviour.
+
+**Routed, not filed: the `golangci-lint` invocation.** This session ran
+gate part 2 for real via `go run
+github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6 run`
+(0 issues, by mason and independently by the arbiter), breaking a
+three-session streak — #417, #301 and #324 could not run it at all. That
+is **#426**'s territory (gate part 2 is not reproducible), which was
+verified at this pass to list only two candidate fixes, neither of them
+this one; the incantation is recorded there as a third, because it is
+zero-install **and** version-pinned, the combination neither existing
+option achieves. No duplicate issue. It does not touch **#450** (the
+`^tools/` anchoring half), which survives any change to how the binary is
+found.
+
+**Dismissed in writing:** `cba8dab`'s commit message cites
+`conformance/schema_closure.go:148` for `decidable`'s switch; the switch
+is at `:163` and `:148` is inside the doc comment. Squash-bound and now
+immutable, so there is nothing an issue could fix — the correction is
+recorded in the LOG entry and on the issue thread, which is the only
+durable form available.
+
+**Branch namespace: one live ref, left untouched.** `git ls-remote
+--heads origin 'refs/heads/wip/*' 'refs/heads/parked/*'` returns
+`wip/issue-256` @ `c56d9f7`, tip pushed 2026-08-03 00:34Z — another
+session's in-flight claim on **#256** (`ready`, open). Outside the 2h
+live window and therefore resumable rather than off-limits, but nowhere
+near stale; not retired, not relabelled, reported only. `wip/issue-377`
+was auto-deleted at squash-merge. Nothing `parked/`, nothing for human
+triage.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
