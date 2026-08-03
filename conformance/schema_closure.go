@@ -58,6 +58,21 @@ import (
 // the parser will be handed, reading the root under the same location string
 // parser.Parse itself will (see execSchemaCase).
 //
+// A resolver that REFUSES a location for its own policy reasons rather than
+// failing to find it — loader.Dir maps a "../" hint escaping its root to the very
+// ErrNotFound an absent document yields — is no exception to that, and cannot
+// reopen the under-discovery hazard (issue #257). Two independent reasons. By
+// SPEC: §4.2.6.2 calls resolution "the application schema component reference
+// strategy" and makes any failure of it a non-error, and §4.2.3 clause 2.4
+// enumerates no reasons a D2 might not exist, so a refused hint is a D2 that
+// legitimately does not exist for this assembly — the same non-error, not a
+// harness artifact. By CONSTRUCTION: execSchemaCase builds ONE loader.Dir and
+// hands that SAME instance to this walk, to extraDocsInClosure and to
+// parser.Parse, and Resolve is a pure function of (namespace, location), so the
+// walk and Parse reach the identical resolve-or-refuse verdict for every hint and
+// the walk cannot discover less than Parse composes. The symmetry holds for any
+// suite shape, not because the pinned suite happens to contain no "../" hint.
+//
 // Over-discovering, by contrast, is safe: the walk reads a superset of the
 // documents parser.Parse reads (it keeps walking past conditions on which Parse
 // gives up), in the same depth-first document order, so every document Parse reads
@@ -199,7 +214,10 @@ func (s *closureScan) decidable(doc *parser.Document, tns string) bool {
 //     it cannot name.
 //   - the location does not resolve, for ANY resolver reason: NOT a decline, and
 //     the siblings keep being walked — the fact is RECORDED on the scan
-//     (s.unresolved) instead, symmetrically with importDirective (#276). §4.2.3
+//     (s.unresolved) instead, symmetrically with importDirective (#276). ANY
+//     resolver reason means what it says, a loader.Dir confinement refusal
+//     included — see the file header on why such a refusal is a spec non-error
+//     here too and still cannot under-discover (#257). §4.2.3
 //     clause 2.4 is explicit that "it is not an error for the ·actual value· of the
 //     schemaLocation [attribute] to fail to resolve at all, in which case the
 //     corresponding inclusion must not be performed", and §4.3.2 says the same of
