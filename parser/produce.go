@@ -947,7 +947,11 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 			facets[patternAt] = folded
 			continue
 		}
-		facets = append(facets, xsd.NewFacet(kind, []string{val}, xsdBool(el)))
+		fixed, err := facetFixed(el)
+		if err != nil {
+			return nil, err
+		}
+		facets = append(facets, xsd.NewFacet(kind, []string{val}, fixed))
 	}
 	if len(assertions) == 0 {
 		return facets, nil
@@ -1364,12 +1368,46 @@ func childElement(el *Element, space, local string) *Element {
 	return nil
 }
 
-// xsdBool reads a facet element's {fixed} from its fixed attribute, per the
-// xs:boolean lexical space (true/1). An absent attribute is false.
-func xsdBool(el *Element) bool {
-	v, ok := attrValue(el, "fixed")
+// facetFixed maps a facet element's fixed attribute to that facet's {fixed}
+// property: "The actual value of the fixed [attribute], if present, otherwise
+// false" (xsd-precisionDecimal.md §4.2.2 xr-maxScale and §4.3.2 xr-minScale, the
+// same wording Datatypes §4.3.x carries for each of the other eleven
+// {fixed}-bearing facets, e.g. §4.3.6.1 f-w-fixed). "Actual value" is the
+// xs:boolean VALUE the attribute's declared type maps its literal to, not the
+// literal itself, so the two mapping stages run in the order §4.1.4 fixes:
+//
+//   - pre-lexical. xs:boolean fixes whiteSpace to collapse (§3.3.2.3, §4.3.6) and
+//     the whiteSpace facet is applied BEFORE lexical-space membership is tested
+//     (§4.1.4), so " true " is the value true. Trimming exactly #x9/#xA/#xD/#x20 —
+//     the only characters §4.3.6's replace and collapse steps ever touch, as
+//     value/whitespace.go spells out — decides that membership exactly as a full
+//     collapse would. Let T be the trimmed literal and R its collapse: if T holds
+//     interior whitespace then R holds a #x20 and no booleanRep literal contains
+//     one, so both reject; otherwise R == T. The trim set is load-bearing and
+//     cannot be strings.TrimSpace, whose unicode.IsSpace class also cuts U+0085,
+//     U+00A0, U+2028 and the rest — characters §4.3.6 is NOT whitespace for and
+//     collapse preserves, so trimming them would accept literals the spec rejects.
+//     A four-character trim is not a third private copy of the collapse algorithm
+//     (STYLE T4).
+//   - lexical. booleanRep ::= 'true' | 'false' | '1' | '0' (§3.3.2.2), case
+//     sensitive: "TRUE" is not in the lexical space. Anything outside those four
+//     is charged cvc-datatype-valid (§4.1.4) — a literal outside a datatype's
+//     lexical space is invalid, and no clause lets it default to false.
+//
+// An absent attribute is the {fixed} = false default and is NOT an error; that is
+// a branch distinct from present-but-invalid.
+func facetFixed(el *Element) (bool, error) {
+	lexical, ok := attrValue(el, "fixed")
 	if !ok {
-		return false
+		return false, nil
 	}
-	return v == "true" || v == "1"
+	switch strings.Trim(lexical, "\x09\x0A\x0D\x20") {
+	case "true", "1":
+		return true, nil
+	case "false", "0":
+		return false, nil
+	}
+	return false, xsderr.New(ruleDatatypeValid, el.Loc(),
+		"<%s> fixed value %q is not in the lexical space of xs:boolean (true, false, 1, 0) that the schema for schema documents declares for it",
+		el.Name().Local(), lexical)
 }
