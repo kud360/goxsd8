@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
@@ -617,6 +618,124 @@ func TestSchemaExecutorDeclinesUnresolvedDirectiveTarget(t *testing.T) {
 			if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(ev)}).IsPass() {
 				t.Errorf("%s: must be DECLINED (Fail) regardless of expectValid=%v", name, ev)
 			}
+		}
+	}
+}
+
+// escapedSibling is the schemaLocation every tree escapedD2Trees builds names: a
+// "../" hint that climbs out of the directory execSchemaCase roots its loader.Dir
+// at (filepath.Dir(c.doc)) and lands on a document that REALLY EXISTS on disk.
+// loader.Dir refuses it — filepath.Rel of the target against the root starts ".."
+// — and reports the same ErrNotFound an absent document would.
+const escapedSibling = "../sibling/lib.xsd"
+
+// escapedD2Trees returns one two-document tree per composition directive naming
+// escapedSibling, mirroring noD2Trees shape for shape so the two hazards can be
+// driven through the same assertions. The root sits in "case/" and the document it
+// names sits in the SIBLING "sibling/", so the resolver's confinement — not the
+// filesystem — is what withholds D2 (issue #257).
+//
+// sameNSBody is the extra top-level content of the two same-namespace roots and
+// foreignNSBody that of the <import> root, exactly as in noD2Trees.
+func escapedD2Trees(sameNSBody, foreignNSBody string) map[string]map[string]string {
+	sameNS := func(directive string) map[string]string {
+		return map[string]string{
+			"case/main.xsd":   schemaSrc("urn:a", directive+sameNSBody),
+			"sibling/lib.xsd": schemaSrc("urn:a", decidableType),
+		}
+	}
+	return map[string]map[string]string{
+		"<include> escaping the resolver root": sameNS(include(escapedSibling)),
+		"<override> escaping the resolver root": sameNS(
+			override(escapedSibling, `<xs:element name="e" type="xs:string"/>`)),
+		"<import> escaping the resolver root": {
+			"case/main.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"` +
+				` targetNamespace="urn:a" xmlns:b="urn:b">` +
+				`<xs:import namespace="urn:b" schemaLocation="` + escapedSibling + `"/>` +
+				foreignNSBody + `</xs:schema>`,
+			"sibling/lib.xsd": schemaSrc("urn:b", decidableType),
+		},
+	}
+}
+
+// writeEscapedTree writes one escapedD2Trees tree to disk, returns the root path
+// execSchemaCase is given, and PROVES the premise the two tests below rest on:
+// the escaped document exists, and the loader.Dir execSchemaCase would build for
+// this root nonetheless refuses to serve it with ErrNotFound. Without this the
+// tests could pass vacuously — a hint that stopped escaping, or a sibling that was
+// never written, would degrade them into another genuinely-absent D2 case.
+func writeEscapedTree(t *testing.T, tree map[string]string) string {
+	t.Helper()
+	root := writeSchemaTree(t, "case/main.xsd", tree)
+	caseDir := filepath.Dir(root)
+	if _, err := os.Stat(filepath.Join(caseDir, filepath.FromSlash(escapedSibling))); err != nil {
+		t.Fatalf("escaped document must exist on disk: %v", err)
+	}
+	rc, _, err := loader.Dir(caseDir).Resolve("", escapedSibling)
+	if err == nil {
+		_ = rc.Close()
+		t.Fatalf("loader.Dir rooted at %q must refuse %q", caseDir, escapedSibling)
+	}
+	if !errors.Is(err, loader.ErrNotFound) {
+		t.Fatalf("confinement refusal must be ErrNotFound, got %v", err)
+	}
+	return root
+}
+
+// TestSchemaExecutorDeclinesConfinementRefusedDirectiveTarget pins the hazard
+// issue #257 raises: a schemaLocation loader.Dir REFUSES because it escapes the
+// resolver root, rather than one no document answers, must reach the very verdict
+// #276 pins for a genuinely absent D2 — never a verdict of its own.
+//
+// The spec licenses treating the two alike: §4.2.6.2 makes resolution "the
+// application schema component reference strategy" and any failure of it a
+// non-error, and §4.2.3 clause 2.4 enumerates no reasons a D2 might not exist. So
+// the refusal cannot decline on its own. But it cannot decide on its own either:
+// each root here names a type only the escaped document could have defined, so
+// parser.Parse — handed the SAME refusing resolver — fails src-resolve clauses 1-3
+// at finalize, an "invalid" the spec attaches to nothing. The case must therefore
+// be DECLINED under BOTH polarities, exactly as
+// TestSchemaExecutorDeclinesUnresolvedDirectiveTarget requires of a missing file.
+//
+// What makes this able to fail: were the confinement ever dropped, the escaped
+// document would compose, the parse would succeed and the expectValid=true
+// polarity would Pass.
+func TestSchemaExecutorDeclinesConfinementRefusedDirectiveTarget(t *testing.T) {
+	exec := newSchemaExec()
+	trees := escapedD2Trees(`<xs:element name="root" type="tns:code"/>`, `<xs:element name="root" type="b:code"/>`)
+	for _, name := range slices.Sorted(maps.Keys(trees)) {
+		doc := writeEscapedTree(t, trees[name])
+		for _, ev := range []bool{true, false} {
+			if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(ev)}).IsPass() {
+				t.Errorf("%s: must be DECLINED (Fail) regardless of expectValid=%v", name, ev)
+			}
+		}
+	}
+}
+
+// TestSchemaExecutorDecidesUnbrokenConfinementRefusedDirective pins the other half
+// of that conjunction for the refusal case (#257, mirroring #276's pair): when
+// nothing in the root depended on the escaped document, parser.Parse succeeds and
+// the refusal broke nothing, so the case must still be DECIDED — valid, and Fail
+// under the flipped expectation.
+//
+// This is the half that forbids the OTHER over-correction the issue weighed:
+// making the walk decline every confinement refusal outright. That would refuse
+// live cases for a resolver policy the spec explicitly leaves to the application
+// (§4.2.6.2), turning an engineering choice into lost conformance ground. Together
+// the two tests show a refused "../" hint and an absent file produce identical,
+// non-fabricated verdicts at every polarity.
+func TestSchemaExecutorDecidesUnbrokenConfinementRefusedDirective(t *testing.T) {
+	exec := newSchemaExec()
+	unrelated := `<xs:element name="root" type="xs:string"/>`
+	trees := escapedD2Trees(unrelated, unrelated)
+	for _, name := range slices.Sorted(maps.Keys(trees)) {
+		doc := writeEscapedTree(t, trees[name])
+		if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(true)}).IsPass() {
+			t.Errorf("%s: a refused directive nothing depended on must still be DECIDED valid", name)
+		}
+		if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(false)}).IsPass() {
+			t.Errorf("%s: must Fail under a flipped expectation (decides for real)", name)
 		}
 	}
 }

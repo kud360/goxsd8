@@ -22,6 +22,17 @@ type dirResolver struct {
 // override, mapping such attempts to ErrNotFound. This traversal defense is
 // an engineering decision, NOT a spec rule — no XSD text governs it.
 //
+// Choosing to confine is engineering; how a consumer must treat the refusal
+// that results is not. §4.2.6.2 (src-import) names URI-to-document resolution
+// "the application schema component reference strategy" — Dir's confined-to-root
+// serving IS that strategy for its callers — and rules that "it is not an error
+// for the application schema component reference strategy to fail"; §4.2.3
+// (src-include) clause 2.4 says the same of a schemaLocation that "does not
+// resolve successfully", enumerating no reasons and distinguishing none. A
+// caller may therefore treat a refusal here exactly as it treats a document that
+// is genuinely absent — compose nothing, report no error — which is what
+// parser's assembly.fetch and the conformance closure walk both do (issue #257).
+//
 // The resolved location Dir returns is CANONICAL in on-disk case: on a
 // case-insensitive filesystem two location hints that differ only in case
 // open the same file, and Dir reports the same identity string for both, so
