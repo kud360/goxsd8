@@ -3,8 +3,8 @@ package value
 import "github.com/kud360/goxsd8/xsd"
 
 // This file is the adapter that lets package xsd — a pure leaf that cannot
-// import this one (PRINCIPLES 1) — compare the {value}s of two Value Constraints.
-// The two Structures constraints that need it are:
+// import this one (PRINCIPLES 1) — answer the Structures constraints that reach
+// into a value space. Two of them COMPARE the {value}s of two Value Constraints:
 //
 //   - au-props-correct (§3.5.6) clause 3: "U.{value constraint}.{value} is
 //     IDENTICAL to U.{attribute declaration}.{value constraint}.{value}" —
@@ -16,16 +16,26 @@ import "github.com/kud360/goxsd8/xsd"
 // Both are VALUE-space tests, not lexical ones: {value} is an ·actual value·
 // (key-vv §3.2.1), so "1" and "01" are the same xs:integer {value} under two
 // {lexical form}s, and xsd.ValueConstraint carries only the latter.
+//
+// The third, cos-valid-simple-default (§3.2.6.2) — charged by a-props-correct
+// (§3.2.6.1) clause 2 and au-props-correct clause 2 — is one-sided: it asks
+// whether ONE {lexical form} denotes a value of ONE type at all, which is
+// Datatype Valid (§4.1.4) and so [ValidateLexical]'s whole job. It needs no
+// shared mapping across two types, so it decides the list and union varieties
+// the comparisons refuse; what it must NOT do is turn the pipeline's non-verdict
+// errors into rejections (ValidDefault says which, and why).
 
 // NewValueSpace returns the [xsd.ValueSpace] backed by b: it maps a Value
 // Constraint's {lexical form} through the governing mapping of the type that
-// constrains it and compares the resulting values with the capability relations
-// the values themselves carry ([Identical], [Eq]).
+// constrains it, compares the resulting values with the capability relations the
+// values themselves carry ([Identical], [Eq]), and validates one against its type
+// through the full facet pipeline ([ValidateLexical]).
 //
-// It honors the fail-open contract [xsd.ValueSpace] states: every comparison it
-// cannot make in the SAME value space on both sides reports decided=false rather
-// than a verdict, so an unsupported type, an unmappable lexical, or a cross-type
-// comparison can never turn into a schema rejection.
+// It honors the fail-open contract [xsd.ValueSpace] states: every question it
+// cannot answer reports decided=false rather than a verdict, so an unsupported
+// type, an unmappable lexical, a cross-type comparison, or an error that belongs
+// to the type rather than to the value constraint can never turn into a schema
+// rejection.
 //
 // It panics if b is nil, matching parser.WithBackend's guard: a nil backend is a
 // caller bug, not a schema-validity condition.
@@ -61,6 +71,74 @@ func (vs valueSpace) EqualOrIdentical(ta *xsd.SimpleType, a xsd.ValueConstraint,
 		return false, false
 	}
 	return equalOrIdentical(av, bv)
+}
+
+// ValidDefault is Simple Default Valid (§3.2.6.2, cos-valid-simple-default),
+// which a-props-correct clause 2 and au-props-correct clause 2 both charge: is
+// vc.{lexical form} Datatype Valid (§4.1.4) with respect to t? [ValidateLexical]
+// decides exactly that rule — all three of its clauses, over all three varieties
+// — so the whole of this method is the three gates that separate the errors it
+// returns which ARE that verdict from the ones that are not. Every gate answers
+// undecided, never invalid, per the [xsd.ValueSpace] fail-open contract.
+//
+// The gates run BEFORE the pipeline, in this order, so that any error surviving
+// to the ValidateLexical call is guaranteed to be a verdict about the literal:
+//
+//  1. GAP(value): needsContext. A QName- or NOTATION-governed value space
+//     anywhere in t's variety closure needs the namespace bindings in scope at
+//     the literal (§3.3.18/§3.3.19, PRINCIPLES 19), which xsd.ValueConstraint
+//     does not carry — and a nil [Context] makes a backend reject EVERY QName
+//     lexical, so without this gate every QName default would be a false reject.
+//     This is the same gap sharedMapping records, in its recursive form: the
+//     comparisons refuse list and union outright, so contextDependent on the
+//     type itself suffices there, while this method decides them.
+//  2. GAP(value): governingMapping. An ungoverned type — no backend Mapping on
+//     it or any ancestor, an ungoverned item type, an ungoverned union member —
+//     makes validateLexical return a cvc-datatype-valid "no backend mapping
+//     governs type" error that is a BACKEND gap, not instance data. It is also
+//     how xs:anySimpleType and xs:anyAtomicType arrive here: no backend maps the
+//     ·special· datatypes (Datatypes §4.1), for which Datatype Valid is
+//     unconditionally TRUE, and §3.2.2.2's third tier types every attribute
+//     declaration with no @type as xs:anySimpleType — so reading that error as a
+//     verdict would reject every typeless attribute default in existence. The
+//     union branch of this gate (unionGoverned) is the same test validateUnion
+//     applies before dispatching, so this pre-check and the pipeline agree on
+//     exactly which unions are governed.
+//  3. GAP(value): compile. A construction-stage failure in t's OWN facets — a
+//     pattern regex.Translate cannot express (src-pattern-value), an enumeration
+//     or bound facet whose DECLARING type the backend does not map
+//     (src-enumeration-value) — says nothing about vc.{lexical form}. Charging
+//     it as clause 2 would reject a schema for an unrelated facet, under the
+//     wrong rule ID and against the wrong component.
+//
+// Two residues are recorded rather than papered over. The compile gate covers
+// T's OWN effective facets only: a list's ITEM type and a union's MEMBER types
+// compile inside the dispatch (listMapping's Parse recurses through
+// validateLexical; dispatchUnion folds every member's rejection into one
+// cvc-datatype-valid error), so a construction-stage failure down there still
+// reaches the caller as a decided reject. Closing that needs the pipeline itself
+// to separate its construction and verdict stages per member, which is a change
+// to package value's own error model, not to this adapter. And [ValidateLexical]
+// PANICS rather than erroring when a facet is paired with a value lacking the
+// capability it needs, a precondition discharged for parser-built types only —
+// see checkSimpleDefault (xsd/valueconstraintvalid.go) for who owns that.
+//
+// nil is passed as the [Context] for the same reason values does: gate 1 has
+// already excluded every context-dependent literal.
+func (vs valueSpace) ValidDefault(t *xsd.SimpleType, vc xsd.ValueConstraint) (bool, bool) {
+	if needsContext(t) {
+		return false, false
+	}
+	if _, ok := governingMapping(vs.b, t); !ok {
+		return false, false
+	}
+	if _, _, err := compile(vs.b, t); err != nil {
+		return false, false
+	}
+	if _, err := ValidateLexical(vs.b, t, vc.LexicalForm(), nil); err != nil {
+		return false, true
+	}
+	return true, true
 }
 
 // values maps both {lexical form}s to ·actual values· IN ONE VALUE SPACE, or
@@ -190,6 +268,42 @@ func contextDependent(t *xsd.SimpleType) bool {
 		return false
 	}
 	return p.Name() == qnameName || p.Name() == notationName
+}
+
+// needsContext reports whether t's value space is governed, anywhere in its
+// {item type definition}/{member type definitions} closure, by QName or NOTATION
+// — the recursive form of contextDependent (above).
+//
+// The closure form is needed because ValidDefault, unlike Identical and
+// EqualOrIdentical, does NOT refuse the list and union varieties: it needs one
+// type's mapping rather than a shared one across two, so ValidateLexical's own
+// list/union dispatch (facets.go, union.go) decides them, and a list OF QName or
+// a union WITH a QName member would otherwise reach a backend with a nil Context
+// and be rejected for want of bindings that are not a property of the value
+// constraint at all. governingMapping recurses the same closure for the same
+// reason (facets.go). For a union, ANY context-dependent member makes the whole
+// union undecided: dispatch takes the first member that accepts, so a member
+// that could only be decided WITH context could change the verdict.
+//
+// The nil guards on Item() and each member are not defensive noise: a
+// programmatically built list or union can hold a nil slot, and Variety() on nil
+// would panic. No visited set is needed — a SimpleType's variety graph is a tree,
+// since List and Union are built by value from already-complete item/member
+// pointers and so cannot reach back to t (PRINCIPLES 5).
+func needsContext(t *xsd.SimpleType) bool {
+	switch v := t.Variety().(type) {
+	case xsd.Atomic:
+		return contextDependent(t)
+	case xsd.List:
+		return v.Item() != nil && needsContext(v.Item())
+	case xsd.Union:
+		for _, m := range v.Members() {
+			if m != nil && needsContext(m) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // identical reports Datatypes §2.2.1's identity relation over two values, with

@@ -2,9 +2,26 @@ package xsd
 
 import "github.com/kud360/goxsd8/xsderr"
 
-// This file is Phase E of the finalize resolution pass (resolve.go): Attribute
-// Use Correct (Structures §3.5.6, au-props-correct) CLAUSE 3, the half of that
-// constraint neither NewAttributeUse nor any earlier phase can decide.
+// This file is Phase E of the finalize resolution pass (resolve.go): the
+// value-constraint validity constraints neither NewAttributeDeclaration,
+// NewAttributeUse, nor any earlier phase can decide, because each needs a
+// RESOLVED {type definition} or {attribute declaration}. Three clauses land here,
+// all reading the same two components:
+//
+//   - a-props-correct (§3.2.6.1) clause 2: "if there is a {value constraint},
+//     then it is a valid default with respect to the {type definition} as
+//     defined in Simple Default Valid (§3.2.6.2)."
+//   - au-props-correct (§3.5.6) clause 2: "If U.{value constraint} is not
+//     ·absent·, then it is a valid default with respect to U.{attribute
+//     declaration}.{type definition} as defined in Simple Default Valid."
+//   - au-props-correct clause 3, below.
+//
+// The two clause 2s are ONE predicate — cos-valid-simple-default over a (type,
+// value constraint) pair — differing only in which type and which constraint they
+// pair. They therefore share one implementation, checkSimpleDefault (STYLE T4,
+// #371); a second, parallel one for either call site would be a design failure.
+// Both are gated on PRESENCE: with no {value constraint} the clause is not
+// reached at all, which is not the same as reached-and-vacuously-satisfied.
 //
 // Clause 3, verbatim: "If U.{attribute declaration} has {value constraint}.
 // {variety} = fixed and U itself has a {value constraint}, then U.{value
@@ -26,10 +43,14 @@ import "github.com/kud360/goxsd8/xsderr"
 //     cannot have (PRINCIPLES 1). It asks the installed ValueSpace instead, and
 //     accepts whenever the answer is undecided.
 //
-// Clause 2 (Simple Default Valid, §3.2.6.2 cos-valid-simple-default) is a
-// separate obligation on the use's OWN {value constraint} against the
-// declaration's {type definition}; it is not implemented here and stays deferred
-// to its own issue.
+// The two walks. A GLOBAL Attribute Declaration is charged a-props-correct clause
+// 2 by its own walk over the schema's {attribute declarations}
+// (checkAttributeDeclarationDefaults), never again per use that references it: one
+// charge per component keeps the first reported failure deterministic and does not
+// re-run the same verdict once per referencing site. A LOCAL declaration is not in
+// that table at all — its sole owner is the AttributeUse holding it — so it is
+// charged from the use side instead. Together the two reach every declaration
+// exactly once; neither alone does.
 //
 // D4 (no traversal state): the walk below carries no visited set, exactly as
 // Phase A's mirror walk does. It descends only BY-VALUE structure — a complex
@@ -39,10 +60,11 @@ import "github.com/kud360/goxsd8/xsderr"
 // (checkComplexBaseAcyclic, checkModelGroupsAcyclic) for the by-name edges it
 // deliberately does not take, so no cycle check is needed (PRINCIPLES 5).
 
-// checkAttributeUseValueConstraints is Phase E: it charges au-props-correct
-// clause 3 against every Attribute Use the compiled schema holds, walking in
-// document order so the first reported failure is deterministic (STYLE D1/D2 —
-// no index map is ranged).
+// checkAttributeUseValueConstraints is Phase E's use-side walk: it charges
+// au-props-correct clauses 2 and 3 — and, for a use owning a LOCAL declaration,
+// that declaration's own a-props-correct clause 2 — against every Attribute Use
+// the compiled schema holds, walking in document order so the first reported
+// failure is deterministic (STYLE D1/D2 — no index map is ranged).
 //
 // The walk mirrors Phase A's descent site for site, because the two must reach
 // the same attribute uses: top-level type definitions, then top-level element
@@ -176,15 +198,25 @@ func (s *Schema) checkModelGroupAttributeUses(g ModelGroup) error {
 	return nil
 }
 
-// checkAttributeUseValueConstraint charges au-props-correct (§3.5.6) clause 3
-// against one Attribute Use. owner names the enclosing component and loc is its
+// checkAttributeUseValueConstraint charges au-props-correct (§3.5.6) clauses 2 and
+// 3 against one Attribute Use, plus a-props-correct clause 2 against the LOCAL
+// declaration a use owns. owner names the enclosing component and loc is its
 // position: an Attribute Use is not one of the eight kinds that retain a Loc
 // (doc.go), so the rejection is charged where a reader must edit — the complex
 // type or attribute group that holds the use — and names the attribute in the
-// message.
+// message. The owned local declaration is charged at its OWN Loc, which it does
+// retain.
 //
-// The antecedent is read in the rule's own order. Both conjuncts must hold for
-// the clause to bite: U must have its OWN {value constraint} (never the §3.5.4
+// Clause 2 is decided first, in spec order, so a use violating both clauses
+// reports the more basic failure: its {value constraint} is not a valid default
+// at all, which makes "is it identical to the declaration's" moot. It is checked
+// against the RESOLVED {attribute declaration}.{type definition} — never a type
+// on the Use, which has none — and only when the use has its OWN {value
+// constraint}, never the §3.5.4 ·effective value constraint· (that one is the
+// declaration's, already charged a-props-correct clause 2 in its own right).
+//
+// Clause 3's antecedent is then read in the rule's own order. Both conjuncts must
+// hold for it to bite: U must have its OWN {value constraint} (never the
 // ·effective value constraint·, which would make the test vacuously self-
 // comparing), and U.{attribute declaration}.{value constraint} must be present
 // with {variety} = fixed.
@@ -201,25 +233,42 @@ func (s *Schema) checkModelGroupAttributeUses(g ModelGroup) error {
 // paths Phase A walks), a {type definition} that is absent, unresolvable, or
 // complex, and an undecided ValueSpace verdict all accept.
 func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc, owner string) error {
-	uvc, own := u.ValueConstraint()
-	if !own {
-		return nil // "U itself has a {value constraint}" fails: clause 3 is discharged
-	}
 	d, ok := s.attributeUseDeclaration(u)
 	if !ok {
 		return nil
+	}
+	// The Local variant's declaration is in no global table, so this use is the
+	// only site that can charge it (see the two walks, above). The Ref variant's
+	// target IS in that table and checkAttributeDeclarationDefaults charges it
+	// there, exactly once, however many uses reference it.
+	if local, isLocal := u.AttributeDeclaration().(LocalAttributeDeclaration); isLocal {
+		if err := s.checkAttributeDeclarationValueConstraint(local.Declaration); err != nil {
+			return err
+		}
+	}
+	uvc, own := u.ValueConstraint()
+	if !own {
+		// Both clauses are gated on U having its OWN {value constraint} —
+		// clause 2's "U.{value constraint} is not ·absent·" and clause 3's "U
+		// itself has a {value constraint}" — so neither is reached.
+		return nil
+	}
+	n := attributeUseName(u)
+	t, hasType := s.simpleTypeOf(d.TypeDefinition())
+	if hasType {
+		if err := s.checkSimpleDefault(ruleAuPropsCorrect, loc, owner+" attribute "+n.String(), t, uvc); err != nil {
+			return err
+		}
 	}
 	dvc, present := d.ValueConstraint()
 	if !present || dvc.Kind() != ValueFixed {
 		return nil // the declaration is not fixed: clause 3 is discharged
 	}
-	n := attributeUseName(u)
 	if uvc.Kind() != ValueFixed {
 		return xsderr.New(ruleAuPropsCorrect, loc,
 			"%s gives attribute %s a %s value constraint, but the attribute declaration fixes it to %q, and au-props-correct clause 3 requires the use's {value constraint}.{variety} to be fixed too", owner, n, uvc.Kind(), dvc.LexicalForm())
 	}
-	t, ok := s.simpleTypeOf(d.TypeDefinition())
-	if !ok {
+	if !hasType {
 		return nil
 	}
 	identical, decided := s.valueSpace.Identical(t, uvc, t, dvc)
@@ -228,4 +277,92 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 			"%s fixes attribute %s to %q, but the attribute declaration fixes it to %q, and au-props-correct clause 3 requires the two {value}s to be identical", owner, n, uvc.LexicalForm(), dvc.LexicalForm())
 	}
 	return nil
+}
+
+// checkAttributeDeclarationDefaults is Phase E's declaration-side walk: it charges
+// a-props-correct (§3.2.6.1) clause 2 against every GLOBAL Attribute Declaration,
+// in document order so the first reported failure is deterministic (STYLE D1/D2 —
+// s.attributes is the document-ordered slice, not the by-name index).
+//
+// It walks the GLOBAL table only. A LocalAttributeDeclaration is never a member of
+// it — the dcl.att.local mapping (§3.2.2.2) hands the declaration to its sibling
+// Attribute Use, which is its sole owner (attributeuse.go) — so it is unreachable
+// from here and is charged the same clause from the use side instead, by
+// checkAttributeUseValueConstraint. Neither walk alone reaches every declaration:
+// a global one may be referenced by no use at all, and a local one appears in no
+// table.
+func (s *Schema) checkAttributeDeclarationDefaults() error {
+	for _, d := range s.attributes {
+		if err := s.checkAttributeDeclarationValueConstraint(d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkAttributeDeclarationValueConstraint charges a-props-correct (§3.2.6.1)
+// clause 2 against one Attribute Declaration: "if there is a {value constraint},
+// then it is a valid default with respect to the {type definition}". The
+// declaration is charged at its own Loc, which an AttributeDeclaration retains
+// (doc.go), so a reader is sent to the <xs:attribute> that wrote the default.
+//
+// Both gates accept rather than reject: no {value constraint} means the clause is
+// not reached at all (never reached-and-satisfied), and a {type definition} that
+// is absent, unresolvable, or complex is simpleTypeOf's documented "not decidable
+// by this clause".
+func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration) error {
+	dvc, present := d.ValueConstraint()
+	if !present {
+		return nil // "if there is a {value constraint}" fails: clause 2 is not reached
+	}
+	t, ok := s.simpleTypeOf(d.TypeDefinition())
+	if !ok {
+		return nil
+	}
+	return s.checkSimpleDefault(ruleAPropsCorrect, d.Loc(), "attribute declaration "+d.Name().String(), t, dvc)
+}
+
+// checkSimpleDefault is Simple Default Valid (§3.2.6.2, cos-valid-simple-default)
+// — the ONE implementation of it in this package (STYLE T4), shared by
+// a-props-correct clause 2 and au-props-correct clause 2, which differ only in
+// which (type, value constraint) pair they hand it and which rule the failure is
+// charged to. The clause phrase in the message is DERIVED from rule rather than
+// passed alongside it: there are exactly two callers and rule already tells them
+// apart, so a second parameter would make "ruleAPropsCorrect + au-props-correct
+// clause 2" a representable, wrong state (STYLE D3).
+//
+// The verdict is the installed ValueSpace's, and an UNDECIDED verdict ACCEPTS.
+// That is not laxity, it is the fail-open contract (ValueSpace, PRINCIPLES 9):
+// undecided covers a type no backend mapping governs — xs:anySimpleType and
+// xs:anyAtomicType included, which is what §3.2.2.2's third tier gives every
+// typeless <xs:attribute default="…">, and for which Datatype Valid is
+// unconditionally true — a QName/NOTATION-governed value space, whose lexical
+// mapping needs namespace bindings a ValueConstraint does not carry (PRINCIPLES
+// 19), and a construction-stage failure in the TYPE's facets, which is not a
+// verdict about this value constraint at all.
+//
+// GAP(xsd): this is the first finalize-phase check that enters package value's
+// FACET PIPELINE rather than calling a Mapping directly, and that pipeline PANICS
+// — by design, ValidateLexical's own doc — when a facet is paired with a value
+// lacking the capability it needs (a bound facet on an unordered value, a length
+// facet on an unlengthed one). Its precondition is cos-applicable-facets (§4.1.5),
+// which builtin.CheckSimpleTypeRestriction discharges for every type the PARSER
+// builds — so the parser path and the conformance suite cannot reach it, and the
+// ratchet is unaffected. A *SimpleType assembled by calling this package's
+// constructors directly bypasses that seam, so for a SchemaBuilder caller the
+// panic is newly reachable at FinalizeWith. Closing it means enforcing
+// cos-applicable-facets inside this package, which is a much larger change than
+// #371 and belongs to its own issue; recovering from the panic here is not an
+// option, since it marks a violated precondition, not a validity verdict.
+func (s *Schema) checkSimpleDefault(rule xsderr.Rule, loc xsderr.Loc, owner string, t *SimpleType, vc ValueConstraint) error {
+	valid, decided := s.valueSpace.ValidDefault(t, vc)
+	if !decided || valid {
+		return nil
+	}
+	clause := "a-props-correct clause 2"
+	if rule == ruleAuPropsCorrect {
+		clause = "au-props-correct clause 2"
+	}
+	return xsderr.New(rule, loc,
+		"%s has a {value constraint} of %q, which is not Datatype Valid with respect to its {type definition} (Datatypes §4.1.4 cvc-datatype-valid), so it is not a valid default (%s, cos-valid-simple-default §3.2.6.2)", owner, vc.LexicalForm(), clause)
 }

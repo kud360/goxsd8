@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -16,10 +17,26 @@ import (
 // test can pin that a clause DID consult the value space rather than deciding
 // structurally. Its verdict is the same for both relations: the two are told
 // apart by the caller, not by this stub.
+//
+// ValidDefault is answered separately (validLexicals/defaultCalls), because it is
+// a DIFFERENT question from the comparisons — "is this lexical a value of this
+// type" rather than "are these two the same value" — and a clause-3 test must be
+// able to keep clause 2 quiet while pinning a not-identical verdict. A nil
+// validLexicals means "every lexical is valid", which is the shape every
+// pre-#371 test wants: those schemas exercise clause 3 and must not trip clause
+// 2 in passing.
 type stubValueSpace struct {
 	same    bool
 	decided bool
 	calls   int
+
+	// validLexicals, when non-nil, is the set of {lexical form}s ValidDefault
+	// reports valid; every other lexical is a DECIDED reject.
+	validLexicals map[string]bool
+	// undecidedDefault makes ValidDefault answer undecided for every lexical,
+	// the fail-open arm.
+	undecidedDefault bool
+	defaultCalls     int
 }
 
 func (s *stubValueSpace) Identical(*SimpleType, ValueConstraint, *SimpleType, ValueConstraint) (bool, bool) {
@@ -30,6 +47,17 @@ func (s *stubValueSpace) Identical(*SimpleType, ValueConstraint, *SimpleType, Va
 func (s *stubValueSpace) EqualOrIdentical(*SimpleType, ValueConstraint, *SimpleType, ValueConstraint) (bool, bool) {
 	s.calls++
 	return s.same, s.decided
+}
+
+func (s *stubValueSpace) ValidDefault(_ *SimpleType, vc ValueConstraint) (bool, bool) {
+	s.defaultCalls++
+	if s.undecidedDefault {
+		return false, false
+	}
+	if s.validLexicals == nil {
+		return true, true
+	}
+	return s.validLexicals[vc.LexicalForm()], true
 }
 
 // vcSchema is bSchema with a ValueSpace installed: it finalizes through
@@ -333,4 +361,199 @@ func TestFinalizeWithNilValueSpacePanics(t *testing.T) {
 		}
 	}()
 	_, _ = NewSchemaBuilder().FinalizeWith(nil)
+}
+
+// vcLoc is a recognizable position, so a clause-2 test can pin that the rejection
+// is charged where the reader must edit rather than at the zero Loc.
+var vcLoc = xsderr.Loc{URI: "decl.xsd", Line: 12, Col: 3}
+
+// vcOnly is the stub configuration clause 2's tests want: exactly one lexical is
+// a valid default, every other is a DECIDED reject.
+func vcOnly(valid string) *stubValueSpace {
+	return &stubValueSpace{validLexicals: map[string]bool{valid: true}}
+}
+
+// vcGlobalDecl adds a global attribute declaration g of type str whose {value
+// constraint} is present (kind/lexical) or absent (vc nil), at vcLoc.
+func vcGlobalDecl(t *testing.T, vc *ValueConstraint) func(*SchemaBuilder) {
+	t.Helper()
+	return func(b *SchemaBuilder) {
+		d, err := NewAttributeDeclaration(vcLoc, uq("g"), TypeDefinitionRef{Name: uq("str")}, ScopeGlobal, vc, false, nil)
+		if err != nil {
+			t.Fatalf("NewAttributeDeclaration: %v", err)
+		}
+		b.AddAttribute(d)
+	}
+}
+
+// TestPhaseEAPropsCorrectClause2 pins a-props-correct (§3.2.6.1) clause 2 over the
+// declaration-side walk: a GLOBAL attribute declaration whose own {value
+// constraint} is not a valid default with respect to its {type definition} is
+// rejected (cos-valid-simple-default §3.2.6.2), charged to that rule at the
+// DECLARATION's own Loc — not at some enclosing component's.
+//
+// The declaration is referenced by no attribute use at all, which is the case the
+// use-side walk cannot reach: a global declaration is charged in its own right.
+func TestPhaseEAPropsCorrectClause2(t *testing.T) {
+	for _, kind := range []ValueConstraintKind{ValueDefault, ValueFixed} {
+		t.Run(kind.String(), func(t *testing.T) {
+			vs := vcOnly("7")
+			vc := NewValueConstraint(kind, "not a value of str")
+			_, err := vcSchema(t, vs, vcGlobalDecl(t, &vc))
+			expectRule(t, err, ruleAPropsCorrect)
+			if vs.defaultCalls == 0 {
+				t.Fatal("clause 2 decided without consulting the ValueSpace")
+			}
+			var xe *xsderr.Error
+			if errors.As(err, &xe) && xe.Loc != vcLoc {
+				t.Errorf("charged at %s, want the declaration's own %s", xe.Loc, vcLoc)
+			}
+			if !strings.Contains(err.Error(), "a-props-correct clause 2") {
+				t.Errorf("message %q does not name the clause", err.Error())
+			}
+		})
+	}
+}
+
+// TestPhaseEAPropsCorrectClause2Accepts pins the two ways clause 2 must NOT fire:
+// a valid default passes cleanly (no false positive), and a declaration with NO
+// {value constraint} does not reach the clause at all — "if there is a {value
+// constraint}" is a presence gate, not a vacuously-satisfied test, so the value
+// space must not even be consulted.
+func TestPhaseEAPropsCorrectClause2Accepts(t *testing.T) {
+	valid := NewValueConstraint(ValueFixed, "7")
+	for _, tc := range []struct {
+		name      string
+		vc        *ValueConstraint
+		wantCalls bool
+	}{
+		{"a valid default passes", &valid, true},
+		{"no {value constraint}: the clause is not reached", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vs := vcOnly("7")
+			if _, err := vcSchema(t, vs, vcGlobalDecl(t, tc.vc)); err != nil {
+				t.Fatalf("unexpected rejection: %v", err)
+			}
+			if got := vs.defaultCalls > 0; got != tc.wantCalls {
+				t.Errorf("ValueSpace consulted %d time(s), want consulted=%t", vs.defaultCalls, tc.wantCalls)
+			}
+		})
+	}
+}
+
+// TestPhaseEAPropsCorrectClause2LocalDeclaration pins the other half of the split:
+// a LOCAL attribute declaration is in no global table — its owning Attribute Use
+// is its sole owner — so the declaration-side walk cannot see it and the use-side
+// walk must charge it, still under a-props-correct and still at the DECLARATION's
+// own Loc.
+func TestPhaseEAPropsCorrectClause2LocalDeclaration(t *testing.T) {
+	declVC := NewValueConstraint(ValueDefault, "not a value of str")
+	decl, err := NewAttributeDeclaration(vcLoc, uq("a"), TypeDefinitionRef{Name: uq("str")}, ScopeLocal, &declVC, false, nil)
+	if err != nil {
+		t.Fatalf("NewAttributeDeclaration: %v", err)
+	}
+	use, err := NewAttributeUse(xsderr.Loc{}, false, LocalAttributeDeclaration{Declaration: decl}, nil, false, nil)
+	if err != nil {
+		t.Fatalf("NewAttributeUse: %v", err)
+	}
+	vs := vcOnly("7")
+	_, err = vcSchema(t, vs, func(b *SchemaBuilder) {
+		b.AddType(dType(t, uq("t"), anyTypeName, EmptyContent{}, []AttributeUse{use}, nil))
+	})
+	expectRule(t, err, ruleAPropsCorrect)
+	var xe *xsderr.Error
+	if errors.As(err, &xe) && xe.Loc != vcLoc {
+		t.Errorf("charged at %s, want the local declaration's own %s", xe.Loc, vcLoc)
+	}
+}
+
+// TestPhaseEAuPropsCorrectClause2 pins au-props-correct (§3.5.6) clause 2: an
+// Attribute Use whose OWN {value constraint} is not a valid default with respect
+// to the RESOLVED {attribute declaration}.{type definition} is rejected, charged
+// to au-props-correct at the ENCLOSING component's Loc (an Attribute Use retains
+// none of its own).
+//
+// The declaration carries NO {value constraint} in the first row, so clause 3's
+// antecedent fails outright: clause 2 must fire on its own, not as a side effect
+// of the clause-3 comparison.
+func TestPhaseEAuPropsCorrectClause2(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		declVC *ValueConstraint
+	}{
+		{"the declaration has no {value constraint}: clause 3 cannot fire", nil},
+		{"the declaration is fixed to a valid lexical", func() *ValueConstraint {
+			vc := NewValueConstraint(ValueFixed, "7")
+			return &vc
+		}()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vs := vcOnly("7")
+			_, err := vcSchema(t, vs, func(b *SchemaBuilder) {
+				vcGlobalDecl(t, tc.declVC)(b)
+				bad := vcRefUse(t, ValueFixed, "not a value of str")
+				b.AddType(dType(t, uq("t"), anyTypeName, EmptyContent{}, []AttributeUse{bad}, nil))
+			})
+			expectRule(t, err, ruleAuPropsCorrect)
+			if !strings.Contains(err.Error(), "au-props-correct clause 2") {
+				t.Errorf("message %q does not name the clause", err.Error())
+			}
+			if !strings.Contains(err.Error(), "complex type {urn:upa}t attribute {urn:upa}g") {
+				t.Errorf("message %q does not name the owner and the attribute", err.Error())
+			}
+		})
+	}
+}
+
+// TestPhaseEClause2PrecedesClause3 pins the spec order (§3.5.6 lists 2 before 3):
+// a use that violates BOTH — its own fixed lexical is not a valid default AND it
+// differs from the declaration's fixed {value} — reports clause 2, the more basic
+// failure. "Is it the same value as the declaration's" is moot for a lexical that
+// denotes no value at all.
+func TestPhaseEClause2PrecedesClause3(t *testing.T) {
+	vs := vcOnly("7")
+	vs.same, vs.decided = false, true
+	_, err := vcSchema(t, vs, func(b *SchemaBuilder) {
+		vcGlobalFixed(t, "7")(b)
+		b.AddType(dType(t, uq("t"), anyTypeName, EmptyContent{}, []AttributeUse{vcRefUse(t, ValueFixed, "not a value of str")}, nil))
+	})
+	expectRule(t, err, ruleAuPropsCorrect)
+	if !strings.Contains(err.Error(), "au-props-correct clause 2") {
+		t.Errorf("message %q reports a later clause; clause 2 must win", err.Error())
+	}
+	if vs.calls != 0 {
+		t.Errorf("clause 3 consulted the value space %d time(s) after clause 2 rejected", vs.calls)
+	}
+}
+
+// TestPhaseEClause2FailsOpenWhenUndecided pins the fail-open contract at both call
+// sites: an UNDECIDED ValueSpace verdict accepts, and so does the undecided value
+// space a plain Finalize installs. That is the branch protecting every ungoverned
+// type — xs:anySimpleType, which §3.2.2.2's third tier gives a typeless attribute
+// — and every QName/NOTATION default, which no ValueConstraint can decide.
+func TestPhaseEClause2FailsOpenWhenUndecided(t *testing.T) {
+	build := func(b *SchemaBuilder) {
+		declVC := NewValueConstraint(ValueDefault, "not a value of str")
+		vcGlobalDecl(t, &declVC)(b)
+		bad := vcRefUse(t, ValueDefault, "also not a value of str")
+		b.AddType(dType(t, uq("t"), anyTypeName, EmptyContent{}, []AttributeUse{bad}, nil))
+	}
+	undecidedStub := &stubValueSpace{undecidedDefault: true}
+	for _, tc := range []struct {
+		name string
+		vs   ValueSpace
+	}{
+		{"a ValueSpace that answers undecided", undecidedStub},
+		{"no ValueSpace installed at all", undecidedValueSpace{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := vcSchema(t, tc.vs, build); err != nil {
+				t.Fatalf("an undecided verdict must accept, never reject: %v", err)
+			}
+		})
+	}
+	if undecidedStub.defaultCalls == 0 {
+		t.Fatal("clause 2 accepted without consulting the ValueSpace at all")
+	}
 }

@@ -1,29 +1,41 @@
 package xsd
 
-// ValueSpace is the lexical→value mapping plus the two value-space comparisons
-// this package needs but, as a pure leaf (PRINCIPLES 1, doc.go), cannot
-// implement: they require package value, which is layered ABOVE xsd. A
-// ValueConstraint carries {lexical form} only, never {value} (valueconstraint.go
-// says why), so every "is this {value} the same as that one?" question the §3.5.6
-// and §3.4.6.4 constraints ask is answered here or not at all.
+// ValueSpace is the lexical→value bridge this package needs but, as a pure leaf
+// (PRINCIPLES 1, doc.go), cannot implement: it requires package value, which is
+// layered ABOVE xsd. A ValueConstraint carries {lexical form} only, never {value}
+// (valueconstraint.go says why), so every question the §3.2.6.2, §3.5.6 and
+// §3.4.6.4 constraints ask ABOUT a {value} — "is this one the same as that one?",
+// "does this {lexical form} denote one at all?" — is answered here or not at all.
 //
-// Both methods take BOTH sides' governing Simple Type Definition because the two
-// {value}s compared need not belong to one type: loc-testSubP (§3.4.6.4) clauses
-// 4.2 and 5.2.2 compare a general declaration's {value} against a specific
-// (restricting) one's, and only the implementation can decide whether the two
-// types share a value space.
+// Two shapes of question sit behind the one interface. They share it because they
+// share an installation seam ([SchemaBuilder.FinalizeWith]) and one capability
+// bundle: a value space that can compare but not validate — or the reverse — is
+// not a state worth making representable (STYLE T1/T2).
+//
+//   - the COMPARISONS, Identical and EqualOrIdentical. Each takes BOTH sides'
+//     governing Simple Type Definition because the two {value}s compared need not
+//     belong to one type: loc-testSubP (§3.4.6.4) clauses 4.2 and 5.2.2 compare a
+//     general declaration's {value} against a specific (restricting) one's, and
+//     only the implementation can decide whether the two types share a value
+//     space.
+//   - the one-sided VALIDITY predicate, ValidDefault, which asks whether a single
+//     {lexical form} denotes a value of a single type at all (§3.2.6.2). It takes
+//     one type, and its fail-open scope differs from the comparisons' in
+//     consequence: see its own doc.
 //
 // FAIL-OPEN CONTRACT, binding on every implementation: decided=false means "this
-// comparison was not made" and is the answer for an ungoverned type, a lexical
-// the governing mapping cannot map, and two incommensurable value spaces (ta and
-// tb resolving to different governing mappings). A caller treats undecided as
+// question was not answered". It is the answer for an ungoverned type, a lexical
+// the governing mapping cannot map, two incommensurable value spaces (ta and tb
+// resolving to different governing mappings), and any input whose verdict would
+// need context a ValueConstraint does not carry. A caller treats undecided as
 // "the clause is not competent to charge a failure" and accepts; an
-// implementation must never use undecided as licence to reject, and must never
-// report a false NOT-same, because every caller turns a decided not-same into a
-// schema rejection (PRINCIPLES 9's direction, applied to value spaces).
+// implementation must never use undecided as licence to reject, must never report
+// a false NOT-same, and must never report a false NOT-valid, because every caller
+// turns a decided negative into a schema rejection (PRINCIPLES 9's direction,
+// applied to value spaces).
 //
 // Install one with [SchemaBuilder.FinalizeWith]. A Schema finalized through plain
-// [SchemaBuilder.Finalize] has no value space and every comparison is undecided,
+// [SchemaBuilder.Finalize] has no value space and every question is undecided,
 // which is exactly the pre-existing fail-open behavior.
 type ValueSpace interface {
 	// Identical is the identity relation (Datatypes §2.2.1) — what
@@ -38,10 +50,57 @@ type ValueSpace interface {
 	// either equality or identity, not for identity alone") — what loc-testSubP
 	// (§3.4.6.4) clauses 4.2 and 5.2.2 compare two {value}s under.
 	EqualOrIdentical(ta *SimpleType, a ValueConstraint, tb *SimpleType, b ValueConstraint) (same, decided bool)
+
+	// ValidDefault is Simple Default Valid (§3.2.6.2, cos-valid-simple-default)
+	// — what a-props-correct (§3.2.6.1) clause 2 and au-props-correct (§3.5.6)
+	// clause 2 both charge: vc.{lexical form} must be ·valid· with respect to t
+	// as Datatype Valid defines it (Datatypes §4.1.4, cvc-datatype-valid — the
+	// lexical facets, the lexical→value mapping and the value facets in one
+	// verdict), and it must map to vc.{value}.
+	//
+	// That second clause needs no separate test here. A ValueConstraint carries
+	// no independently stored {value} (valueconstraint.go): {value} is always
+	// DERIVED from {lexical form} through this very mapping, so "maps to
+	// vc.{value}" collapses to "maps to a value", which the mapping stage of the
+	// first clause already decides.
+	//
+	// Unlike the comparisons this takes ONE type, because the constraint relates
+	// a lexical form to the single type that constrains it. An implementation
+	// therefore needs no SHARED mapping across two types and must decide the
+	// list and union varieties (Datatype Valid clauses 2.2 and 2.3 define both)
+	// rather than refusing them the way Identical/EqualOrIdentical do.
+	//
+	// decided=false — accept, never reject — is required for at least:
+	//
+	//   - an UNGOVERNED type, xs:anySimpleType and xs:anyAtomicType included.
+	//     Those two are the ·special· datatypes (Datatypes §4.1), for which
+	//     Datatype Valid is unconditionally true, and they are exactly what
+	//     §3.2.2.2's third tier gives every attribute declaration with no @type
+	//     — so answering "not valid" merely because no implementation maps them
+	//     would false-reject every typeless attribute default there is.
+	//   - a QName- or NOTATION-governed value space ANYWHERE in t's {item type
+	//     definition}/{member type definitions} closure. Their lexical mapping
+	//     resolves a prefix against the namespace bindings in scope AT THE
+	//     LITERAL (§3.3.18/§3.3.19, PRINCIPLES 19) and a ValueConstraint carries
+	//     no such context, so there is no verdict to be had.
+	//   - a construction-stage failure in T'S OWN facets: a pattern the
+	//     implementation cannot compile, an enumeration or bound facet whose
+	//     declaring type it cannot map. That is a statement about the TYPE, not
+	//     a verdict about vc.{lexical form}, and charging it as clause 2 would
+	//     blame the wrong component under the wrong rule ID.
+	//
+	// Only a genuine verdict-stage failure — the lexical form itself failing a
+	// facet or the mapping — may answer (false, true). The specific per-facet
+	// reason is deliberately dropped rather than returned: the caller reports
+	// under a-props-correct or au-props-correct at the owning component's Loc,
+	// and threading the datatype-layer reason out would file a cvc-* message
+	// under a schema-component rule ID. A user who wants the datatype-layer
+	// detail gets it from instance validation, where it is charged cvc-*.
+	ValidDefault(t *SimpleType, vc ValueConstraint) (valid, decided bool)
 }
 
 // undecidedValueSpace is the ValueSpace a Schema finalized without one carries:
-// every comparison is undecided, so each consumer takes its documented fail-open
+// every question is undecided, so each consumer takes its documented fail-open
 // branch. It exists so no consumer needs a nil check — one code path, not two
 // (STYLE S1) — and stays unexported: "no value space installed" is not a
 // capability a caller supplies, it is the absence of one, reached only by not
@@ -53,6 +112,10 @@ func (undecidedValueSpace) Identical(*SimpleType, ValueConstraint, *SimpleType, 
 }
 
 func (undecidedValueSpace) EqualOrIdentical(*SimpleType, ValueConstraint, *SimpleType, ValueConstraint) (bool, bool) {
+	return false, false
+}
+
+func (undecidedValueSpace) ValidDefault(*SimpleType, ValueConstraint) (bool, bool) {
 	return false, false
 }
 

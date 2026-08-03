@@ -545,8 +545,9 @@ func (a *assembly) fetch(requested, namespace string, ov *overrideSet, el *Eleme
 // another (§4.2.3 clause 3.1.2, c-incl-incl); the builtins are seeded once, by
 // newSymbols, for the whole assembly. backend supplies the finalized schema's
 // value space too ([value.NewValueSpace]), so the finalize-time {value}
-// comparisons (au-props-correct clause 3, loc-testSubP clauses 4.2/5.2.2) decide
-// rather than fail open — see [Produce] for the full statement.
+// comparisons (au-props-correct clause 3, loc-testSubP clauses 4.2/5.2.2) and the
+// Simple Default Valid checks (a-props-correct clause 2, au-props-correct clause
+// 2) decide rather than fail open — see [Produce] for the full statement.
 func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 	builder := xsd.NewSchemaBuilder()
 	sym, err := newSymbols(builder, backend)
