@@ -228,8 +228,11 @@ import (
 //     will read has been independently confirmed resolvable, readable,
 //     <schema>-rooted (or deliberately left to src-include clause 1) and
 //     shape-decidable. The plain non-xsderr errors Parse can otherwise return —
-//     an unresolvable root, an I/O or encoding failure, a non-schema root — are
-//     exactly what the walk already eliminated, so what remains is spec verdicts.
+//     an unresolvable root, an I/O or encoding failure, a non-schema root, and an
+//     <include>/<override> carrying no schemaLocation at all, which is a grammar
+//     fault no Schema Representation Constraint covers (parse.go's compose) and
+//     which closureScan.compose therefore declines outright — are exactly what the
+//     walk already eliminated, so what remains is spec verdicts.
 //
 // # sch-props-correct clause 2 is per-kind
 //

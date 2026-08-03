@@ -547,6 +547,43 @@ func TestDatatypesQNameFacets(t *testing.T) {
 	}
 }
 
+// TestBuildOwnFacetsRepeatedKinds proves the non-repeatable-facet guard (warden's
+// advisory on #75): a <restriction> repeating a kind that does NOT merge is
+// st-props-correct (§3.16.6.1) clause 4 invalid, and buildOwnFacets declines it
+// rather than folding the duplicate into one facet where xsd.NewSimpleType's
+// clause-4 check can no longer see it. pattern and enumeration DO merge
+// (§4.3.4.2/§4.3.5.2 case 2) and must stay admitted. No suite fixture needed.
+func TestBuildOwnFacetsRepeatedKinds(t *testing.T) {
+	if _, ok := buildOwnFacets("string", []facetChild{
+		{name: "minLength", value: "2"},
+		{name: "minLength", value: "5"},
+	}); ok {
+		t.Error("buildOwnFacets(string, minLength x2) must decline: two minLength facets violate st-props-correct clause 4")
+	}
+
+	facets, ok := buildOwnFacets("string", []facetChild{
+		{name: "pattern", value: "a+"},
+		{name: "pattern", value: "b+"},
+	})
+	if !ok || len(facets) != 1 {
+		t.Fatalf("buildOwnFacets(string, pattern x2) = facets=%d ok=%v, want one merged facet", len(facets), ok)
+	}
+	if got := facets[0].Values(); len(got) != 2 {
+		t.Errorf("merged pattern facet values = %v, want both branches", got)
+	}
+
+	facets, ok = buildOwnFacets("string", []facetChild{
+		{name: "enumeration", value: "a"},
+		{name: "enumeration", value: "b"},
+	})
+	if !ok || len(facets) != 1 {
+		t.Fatalf("buildOwnFacets(string, enumeration x2) = facets=%d ok=%v, want one merged facet", len(facets), ok)
+	}
+	if members, isEnum := facets[0].EnumerationMembers(); !isEnum || len(members) != 2 {
+		t.Errorf("merged enumeration facet members = %v (isEnum=%v), want both members", members, isEnum)
+	}
+}
+
 // TestDatatypesNotationFacets drives the executor over the real NOTATION
 // Facets-cohort fixtures (issue #153), whose two-step restriction shape (a named
 // simpleType restricting xsd:NOTATION with jpeg/mpeg/g, then an attribute
