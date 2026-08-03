@@ -205,6 +205,59 @@ func TestProduceIdentityConstraintRefFormOnLocalElement(t *testing.T) {
 	}
 }
 
+// TestProduceKeyrefOnLocalElementResolvesAcrossDeclarations pins the ACCEPT path
+// that §3.17.2's "anywhere within the [[children]]" sourcing enables: a <keyref>
+// on one LOCAL element declaration whose refer= names a definition declared
+// under a DIFFERENT local declaration elsewhere in the document. Neither
+// endpoint is top-level, so neither reaches the schema's {identity-constraint
+// definitions} unless nested definitions are registered — and src-resolve
+// (§3.17.6.2) clause 1.7 resolves refer= against exactly that property, so a
+// producer registering only top-level definitions would false-reject this valid
+// schema. TestProduceIdentityConstraintOnLocalElement observes registration
+// through a sch-props-correct collision instead; this is the clean finalize.
+func TestProduceKeyrefOnLocalElementResolvesAcrossDeclarations(t *testing.T) {
+	// §3.11.1: a keyref's {referenced key} is a key OR a unique, so both target
+	// categories are exercised.
+	for _, category := range []string{"key", "unique"} {
+		t.Run("refer to "+category, func(t *testing.T) {
+			s, err := produce(t, wrap("urn:t", `<xs:complexType name="ct">
+			  <xs:sequence>
+			    <xs:element name="keyed">
+			      <xs:`+category+` name="k"><xs:selector xpath="a"/><xs:field xpath="@id"/></xs:`+category+`>
+			    </xs:element>
+			    <xs:element name="referring">
+			      <xs:keyref name="kr" refer="tns:k"><xs:selector xpath="b"/><xs:field xpath="@r"/></xs:keyref>
+			    </xs:element>
+			  </xs:sequence>
+			</xs:complexType>`))
+			if err != nil {
+				t.Fatalf("Produce: %v", err)
+			}
+			constraints := localElementConstraints(t, s, xsd.QName{Space: "urn:t", Local: "ct"}, "referring")
+			if len(constraints) != 1 {
+				t.Fatalf("got %d identity constraints on <referring>, want 1", len(constraints))
+			}
+			ref, isKeyref := constraints[0].ReferencedKeyName()
+			if !isKeyref {
+				t.Fatalf("constraints[0] is not a keyref")
+			}
+			if want := (xsd.QName{Space: "urn:t", Local: "k"}); ref != want {
+				t.Errorf("refer = %s, want %s", ref, want)
+			}
+			// Both nested definitions are members of the SCHEMA-level property, in
+			// document order (xsd.Schema.IdentityConstraints).
+			var names []xsd.QName
+			for _, ic := range s.IdentityConstraints() {
+				names = append(names, ic.Name())
+			}
+			want := []xsd.QName{{Space: "urn:t", Local: "k"}, {Space: "urn:t", Local: "kr"}}
+			if !reflect.DeepEqual(names, want) {
+				t.Errorf("schema {identity-constraint definitions} = %v, want %v", names, want)
+			}
+		})
+	}
+}
+
 // localElementConstraints returns the {identity-constraint definitions} of the
 // local element declaration named local in the content model of the complex type
 // named typeName.
