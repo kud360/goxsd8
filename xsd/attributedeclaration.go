@@ -14,11 +14,13 @@ import "github.com/kud360/goxsd8/xsderr"
 //     legal {variety} (default or fixed).
 //
 // Clause 2 (Simple Default Valid — §3.2.6.2 cos-valid-simple-default) is a
-// cross-component / finalize-phase constraint: it needs the resolved {type
-// definition} to validate the {value constraint}'s {lexical form} against it,
-// which this package does not resolve yet. It is deferred to the finalize-phase
-// issue (#173) that first introduces phased construction (per doc.go's
-// "parse → resolve → finalize") and is NOT enforced here.
+// cross-component constraint: it needs the resolved {type definition} to validate
+// the {value constraint}'s {lexical form} against it, and a value space to do the
+// validating, neither of which this constructor has. It IS enforced, but at
+// FINALIZE rather than here — Phase E of resolve (valueconstraintvalid.go's
+// checkAttributeDeclarationValueConstraint, #371, on the phased-construction seam
+// #173 introduced) — so a rejection carries this rule and this declaration's Loc
+// while being raised by SchemaBuilder.Finalize, not by NewAttributeDeclaration.
 const ruleAPropsCorrect xsderr.Rule = "a-props-correct"
 
 // AttributeDeclaration is the Attribute Declaration component (Structures
@@ -35,9 +37,9 @@ const ruleAPropsCorrect xsderr.Rule = "a-props-correct"
 // component itself for the inline <simpleType> tier. Note that §3.2.2.2's chain
 // has three tiers, not the four of an element's §3.3.2.1 dcl.elt.common: an
 // attribute has no substitution-group analog. A resolved-component accessor for
-// the by-name arm, and a-props-correct clause 2 (Simple Default Valid), are
-// deferred to the finalize-phase issue (#173) that first introduces phased
-// construction; this package resolves neither yet.
+// the by-name arm is still deferred; a-props-correct clause 2 (Simple Default
+// Valid) is decided at FINALIZE, over the resolved {type definition} and the
+// installed ValueSpace (valueconstraintvalid.go, #371), not on this component.
 //
 // {scope}.{parent} (§3.2.1 sc_a — a Complex Type Definition or Attribute Group
 // Definition) is entirely UNMODELED, tracked as #169. Only {scope}.{variety} is
@@ -86,8 +88,9 @@ type AttributeDeclaration struct {
 //     ValueFixed) — this catches a caller passing the zero ValueConstraint{}
 //     instead of a value built through NewValueConstraint.
 //
-// Clause 2 (Simple Default Valid, §3.2.6.2) needs the resolved {type
-// definition} and is deferred to finalize (#173); it is NOT enforced here.
+// Clause 2 (Simple Default Valid, §3.2.6.2) needs the resolved {type definition}
+// and a value space, so it is decided at FINALIZE instead (Phase E,
+// valueconstraintvalid.go, #371) — enforced, but not by this constructor.
 //
 // It also rejects the two illegal encodings of the typeDefinition slot — a
 // zero-named TypeDefinitionRef and an InlineTypeDefinition that is empty or

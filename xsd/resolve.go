@@ -61,10 +61,20 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     restriction-derived complex type, and cos-ct-extends (§3.4.6.2) for every
 //     extension-derived one (complexderivation.go, complexextension.go,
 //     defaultbinding.go, effectivetotalrange.go).
-//   - Phase E (attribute-use value constraints): reject an Attribute Use whose
+//   - Phase E (value-constraint validity), in two walks over the same file
+//     (valueconstraintvalid.go). The USE-side walk rejects an Attribute Use whose
 //     own {value constraint} contradicts its resolved {attribute declaration}'s
 //     fixed one — au-props-correct (§3.5.6) clause 3, both the variety half and
-//     the {value}-identity half (valueconstraintvalid.go).
+//     the {value}-identity half — and an Attribute Use or LOCAL Attribute
+//     Declaration whose own {value constraint} is not a valid default with
+//     respect to the resolved {type definition} (au-props-correct clause 2 and
+//     a-props-correct (§3.2.6.1) clause 2, both over the one shared
+//     cos-valid-simple-default (§3.2.6.2) predicate, #371). The DECLARATION-side
+//     walk charges a-props-correct clause 2 against every GLOBAL Attribute
+//     Declaration. Both walks are needed and neither duplicates the other: a
+//     local declaration is reachable only through its owning use, a global one
+//     only through the schema's {attribute declarations} — where it is charged
+//     once, not once per referencing use.
 //
 // Phase C runs strictly after Phase B, and that ordering is load-bearing rather
 // than cosmetic: both checks expand <group ref>s and walk {substitution group
@@ -86,11 +96,14 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // for the full statement.
 //
 // Phase E runs LAST. Its position is not load-bearing the way Phase D's is — it
-// reads one attribute use at a time and follows no chain — but it needs Phase A's
-// resolvability (an <attribute ref> must name a real declaration before its
-// {value constraint} can be compared) and it charges the narrowest, most
-// component-local failure of the five, so reporting it after the structural
-// phases keeps the first reported failure the most structural one.
+// reads one component at a time and follows no chain — but it needs Phase A's
+// resolvability (an <attribute ref> must name a real declaration, and a
+// TypeDefinitionRef a real type, before either can be read) and it charges the
+// narrowest, most component-local failure of the five, so reporting it after the
+// structural phases keeps the first reported failure the most structural one. Its
+// two walks run use-side first, declaration-side second, which is arbitrary — no
+// verdict depends on the order, only which of two independent failures is
+// reported first.
 //
 // resolve stores no RESOLUTION result: a consumer that later wants the component
 // behind a reference obtains it by a read-time index lookup
@@ -152,7 +165,10 @@ func (s *Schema) resolve() error {
 	if err := s.checkComplexDerivations(); err != nil {
 		return err
 	}
-	return s.checkAttributeUseValueConstraints()
+	if err := s.checkAttributeUseValueConstraints(); err != nil {
+		return err
+	}
+	return s.checkAttributeDeclarationDefaults()
 }
 
 // resolveReferences is Phase A: it walks every reference site in document order,

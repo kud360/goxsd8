@@ -155,10 +155,12 @@ type Schema struct {
 	notationIndex       map[QName]Notation
 	idcIndex            map[QName]IdentityConstraint
 
-	// valueSpace answers the {value}-comparison questions au-props-correct
-	// clause 3 and loc-testSubP clauses 4.2/5.2.2 ask, which this package cannot
-	// answer itself (see ValueSpace). It is never nil: Finalize installs
-	// undecidedValueSpace{}, so every consumer calls it unconditionally.
+	// valueSpace answers the value-space questions this package cannot answer
+	// itself (see ValueSpace): the {value} comparisons au-props-correct clause 3
+	// and loc-testSubP clauses 4.2/5.2.2 ask, and the Simple Default Valid
+	// (§3.2.6.2) verdict a-props-correct clause 2 and au-props-correct clause 2
+	// ask. It is never nil: Finalize installs undecidedValueSpace{}, so every
+	// consumer calls it unconditionally.
 	valueSpace ValueSpace
 }
 
@@ -203,22 +205,33 @@ type Schema struct {
 // Every OTHER sch-props-correct clause (in particular clause 1's remaining
 // cross-reference-dependent requirements) stays deferred to later passes.
 //
-// Finalize installs NO value space, so every {value}-identity comparison the
-// resolution pass would make (au-props-correct §3.5.6 clause 3, loc-testSubP
-// §3.4.6.4 clauses 4.2 and 5.2.2) is undecided and fails open — the behavior
-// this entry point has always had. A caller that can supply the lexical→value
-// mapping calls [SchemaBuilder.FinalizeWith] instead.
+// Finalize installs NO value space, so every question the resolution pass would
+// put to one — the {value}-identity comparisons (au-props-correct §3.5.6 clause
+// 3, loc-testSubP §3.4.6.4 clauses 4.2 and 5.2.2) and the Simple Default Valid
+// checks (§3.2.6.2, charged by a-props-correct §3.2.6.1 clause 2 and
+// au-props-correct clause 2) — is undecided and fails open, the behavior this
+// entry point has always had. A caller that can supply the lexical→value mapping
+// calls [SchemaBuilder.FinalizeWith] instead.
 func (b *SchemaBuilder) Finalize() (*Schema, error) {
 	return b.finalize(undecidedValueSpace{})
 }
 
 // FinalizeWith is [SchemaBuilder.Finalize] with a value space installed: vs
-// answers the {value}-comparison questions package xsd cannot (see [ValueSpace]),
-// so the resolution pass can decide au-props-correct (§3.5.6) clause 3 and
-// loc-testSubP (§3.4.6.4) clauses 4.2 and 5.2.2 instead of waving them through.
-// It is otherwise identical to Finalize — same components, same indexes, same
-// rejections — and can only NARROW what is accepted, never widen it: vs reports
-// "undecided" wherever it cannot compare, and undecided is accept.
+// answers the value-space questions package xsd cannot (see [ValueSpace]), so the
+// resolution pass can decide au-props-correct (§3.5.6) clause 3, loc-testSubP
+// (§3.4.6.4) clauses 4.2 and 5.2.2, and Simple Default Valid (§3.2.6.2) under
+// a-props-correct (§3.2.6.1) clause 2 and au-props-correct clause 2, instead of
+// waving them through. It is otherwise identical to Finalize — same components,
+// same indexes, same rejections — and can only NARROW what is accepted, never
+// widen it: vs reports "undecided" wherever it cannot decide, and undecided is
+// accept.
+//
+// One precondition it does NOT check, and cannot: a *[SimpleType] assembled
+// through this package's constructors may carry a facet that is not applicable to
+// it (cos-applicable-facets, Datatypes §4.1.5), and a value space that validates
+// a default against such a type may panic. A type built by the parser is
+// unaffected — see the GAP(xsd) note on checkSimpleDefault
+// (valueconstraintvalid.go) for the full statement.
 //
 // It is a second entry point rather than a setter on the builder because a
 // ValueSpace is a finalize-time INPUT, not accumulated schema state: a mutable

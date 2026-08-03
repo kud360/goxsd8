@@ -93,15 +93,18 @@
 //
 // # Value spaces
 //
-// A few finalize-time constraints compare two {value}s — au-props-correct
-// (§3.5.6) clause 3, loc-testSubP (§3.4.6.4) clauses 4.2 and 5.2.2 — and
-// a {value} is an ·actual value·, not a lexical string. Mapping a lexical
-// to a value needs package value, which is layered above this pure leaf,
-// so the comparison is taken as an INPUT: the ValueSpace interface, passed
-// to SchemaBuilder.FinalizeWith. Every ValueSpace method may answer
-// "undecided", and undecided always accepts, so plain Finalize (which
-// installs none) is the fully fail-open configuration. value.NewValueSpace
-// is the implementation the parser installs.
+// A few finalize-time constraints reach into a value space. Two COMPARE
+// {value}s — au-props-correct (§3.5.6) clause 3, loc-testSubP (§3.4.6.4)
+// clauses 4.2 and 5.2.2 — and two ask whether one {lexical form} denotes a
+// value of its type at all: a-props-correct (§3.2.6.1) clause 2 and
+// au-props-correct clause 2, both charging Simple Default Valid (§3.2.6.2).
+// A {value} is an ·actual value·, not a lexical string, and mapping a
+// lexical to a value needs package value, which is layered above this pure
+// leaf — so the whole capability is taken as an INPUT: the ValueSpace
+// interface, passed to SchemaBuilder.FinalizeWith. Every ValueSpace method
+// may answer "undecided", and undecided always accepts, so plain Finalize
+// (which installs none) is the fully fail-open configuration.
+// value.NewValueSpace is the implementation the parser installs.
 //
 // # Walk API
 //

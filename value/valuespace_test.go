@@ -249,3 +249,163 @@ func (b looseBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 		return looseValue(n), nil
 	}}, true
 }
+
+// vsList builds a list-variety type over item, carrying the collapse whiteSpace
+// facet the list stage needs in force (§4.3.6, effectiveWhiteSpace).
+func vsList(t *testing.T, local string, item *xsd.SimpleType) *xsd.SimpleType {
+	t.Helper()
+	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
+		xsd.NewList(item), xsd.AnySimpleType(),
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(list %s): %v", local, err)
+	}
+	return st
+}
+
+// vsUnion builds a union-variety type over members. A union carries no whiteSpace
+// facet: it is categorically not applicable (cos-applicable-facets §4.1.5).
+func vsUnion(t *testing.T, local string, members ...*xsd.SimpleType) *xsd.SimpleType {
+	t.Helper()
+	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
+		xsd.NewUnion(members...), xsd.AnySimpleType(), nil, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(union %s): %v", local, err)
+	}
+	return st
+}
+
+// TestValidDefaultDecidesGovernedTypes pins the verdict half of
+// cos-valid-simple-default (§3.2.6.2): for a type the backend governs, a lexical
+// the mapping accepts is a valid default and one it rejects is NOT — the only
+// outcome that may answer decided=true.
+//
+// The list and union rows are the difference from Identical/EqualOrIdentical,
+// which refuse both varieties outright: this predicate needs ONE type's mapping,
+// not a shared one, so Datatype Valid clauses 2.2 and 2.3 are decided here.
+func TestValidDefaultDecidesGovernedTypes(t *testing.T) {
+	prim := vsPrim(t, "int")
+	vs := NewValueSpace(intBackend{mapped: prim.Name()})
+	derived := vsDerived(t, "narrow", prim)
+
+	for _, tc := range []struct {
+		name    string
+		t       *xsd.SimpleType
+		lexical string
+		want    bool
+	}{
+		{"an atomic lexical the mapping accepts", prim, "1", true},
+		{"an atomic lexical the mapping rejects", prim, "zzz", false},
+		{"whiteSpace normalization precedes the mapping", prim, " 1 ", true},
+		{"a derived type is decided by its base's mapping", derived, "01", true},
+		{"a derived type rejects too", derived, "zzz", false},
+		{"a list whose every item maps", vsList(t, "ints", prim), "1 2 3", true},
+		{"a list with one item that does not", vsList(t, "ints", prim), "1 zzz", false},
+		{"a union some member accepts", vsUnion(t, "u", prim), "1", true},
+		{"a union no member accepts", vsUnion(t, "u", prim), "zzz", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			valid, decided := vs.ValidDefault(tc.t, vsFixed(tc.lexical))
+			if !decided {
+				t.Fatalf("ValidDefault = (%t, false), want a decided verdict", valid)
+			}
+			if valid != tc.want {
+				t.Errorf("ValidDefault = (%t, true), want (%t, true)", valid, tc.want)
+			}
+		})
+	}
+}
+
+// TestValidDefaultAcceptsUngovernedTypes is the regression test the whole gate
+// exists for: xs:anySimpleType and xs:anyAtomicType are the ·special· datatypes
+// (Datatypes §4.1), for which Datatype Valid is UNCONDITIONALLY true, and
+// §3.2.2.2's third tier types every <xs:attribute> with no @type as
+// xs:anySimpleType. No backend maps them, so ValidateLexical reports "no backend
+// mapping governs type" — a BACKEND gap, not a verdict. Reading that as a
+// rejection would false-reject every typeless attribute default there is.
+//
+// The lexicals are deliberately ones the governed mapping would reject, so a row
+// cannot pass by the literal happening to be valid.
+func TestValidDefaultAcceptsUngovernedTypes(t *testing.T) {
+	prim := vsPrim(t, "int")
+	vs := NewValueSpace(intBackend{mapped: prim.Name()})
+	unmapped := vsPrim(t, "unmapped")
+
+	for _, tc := range []struct {
+		name string
+		t    *xsd.SimpleType
+	}{
+		{"xs:anySimpleType, the ·special· datatype a typeless attribute gets", xsd.AnySimpleType()},
+		{"xs:anyAtomicType, the other ·special· datatype", xsd.AnyAtomicType()},
+		{"a named type no backend mapping governs", unmapped},
+		{"a list whose ITEM type is ungoverned", vsList(t, "l", unmapped)},
+		{"a union with one ungoverned MEMBER", vsUnion(t, "u", prim, unmapped)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if valid, decided := vs.ValidDefault(tc.t, vsFixed("zzz not a value of anything")); decided {
+				t.Errorf("ValidDefault = (%t, %t), want undecided (fail-open)", valid, decided)
+			}
+		})
+	}
+}
+
+// TestValidDefaultAcceptsContextDependentTypes pins needsContext, the recursive
+// form of contextDependent: a QName or NOTATION lexical resolves a prefix against
+// the bindings in scope where it was written (§3.3.18/§3.3.19, PRINCIPLES 19), and
+// xsd.ValueConstraint carries no such context, so no verdict is available — for a
+// list OF QName and a union WITH a QName member as much as for the primitive.
+//
+// The backend here DOES map QName, so the ungoverned gate cannot be what accepts
+// these: only needsContext can. Without it every row would be a false reject,
+// since the mapping is handed a nil Context.
+func TestValidDefaultAcceptsContextDependentTypes(t *testing.T) {
+	for _, local := range []string{"QName", "NOTATION"} {
+		t.Run(local, func(t *testing.T) {
+			prim := vsPrim(t, local)
+			vs := NewValueSpace(intBackend{mapped: prim.Name()})
+			derived := vsDerived(t, "d", prim)
+
+			for _, tc := range []struct {
+				name string
+				t    *xsd.SimpleType
+			}{
+				{"the primitive itself", prim},
+				{"a restriction of it", derived},
+				{"a list of it", vsList(t, "l", prim)},
+				{"a union with it as a member", vsUnion(t, "u", derived)},
+				{"a list of a union of it", vsList(t, "lu", vsUnion(t, "u2", prim))},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					if valid, decided := vs.ValidDefault(tc.t, vsFixed("p:local")); decided {
+						t.Errorf("ValidDefault = (%t, %t), want undecided (fail-open)", valid, decided)
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestValidDefaultAcceptsConstructionStageFailures pins the compile gate: a
+// pattern facet the regex translator cannot express (src-pattern-value) is a
+// statement about the TYPE, not about the value constraint's lexical form.
+// Charging it as a-props-correct / au-props-correct clause 2 would reject a
+// schema for an unrelated facet, under the wrong rule and against the wrong
+// component — so it is undecided, and a lexical the mapping would happily accept
+// stays undecided too, which is what distinguishes this from a verdict.
+func TestValidDefaultAcceptsConstructionStageFailures(t *testing.T) {
+	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: "int"}
+	bad, err := xsd.NewPrimitiveType(xsderr.Loc{}, qn, []xsd.Facet{
+		xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true),
+		xsd.NewFacet(xsd.FacetPattern, []string{"["}, false), // unclosed character class
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewPrimitiveType: %v", err)
+	}
+	vs := NewValueSpace(intBackend{mapped: qn})
+
+	for _, lexical := range []string{"1", "zzz"} {
+		if valid, decided := vs.ValidDefault(bad, vsFixed(lexical)); decided {
+			t.Errorf("ValidDefault(%q) = (%t, %t), want undecided (fail-open)", lexical, valid, decided)
+		}
+	}
+}

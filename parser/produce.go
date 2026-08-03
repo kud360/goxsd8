@@ -72,10 +72,12 @@ const (
 // *[xsd.SimpleType] pointer identity is both AddType'd into the builder and used
 // as a simple-type base, as [xsd.SimpleType] requires. backend also supplies the
 // finalized schema's value space ([value.NewValueSpace] through
-// [xsd.SchemaBuilder.FinalizeWith]), so the finalize-time constraints that
-// compare two {value}s — au-props-correct (§3.5.6) clause 3, loc-testSubP
-// (§3.4.6.4) clauses 4.2 and 5.2.2 — decide in the value space instead of failing
-// open on the {lexical form}s.
+// [xsd.SchemaBuilder.FinalizeWith]), so the finalize-time constraints that reach
+// into a value space decide there instead of failing open on the {lexical form}s:
+// the two that COMPARE two {value}s — au-props-correct (§3.5.6) clause 3,
+// loc-testSubP (§3.4.6.4) clauses 4.2 and 5.2.2 — and the two that VALIDATE one
+// against its type — a-props-correct (§3.2.6.1) clause 2 and au-props-correct
+// clause 2, both charging Simple Default Valid (§3.2.6.2).
 //
 // DEVIATION from parser/doc.go's "the parser collects them in document order
 // rather than stopping at the first": Produce returns only the FIRST error. That

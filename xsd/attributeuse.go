@@ -25,8 +25,9 @@ import "github.com/kud360/goxsd8/xsderr"
 //
 // Clause 2 (Simple Default Valid — §3.2.6.2 cos-valid-simple-default) needs the
 // resolved {attribute declaration}.{type definition} to validate the {value
-// constraint}'s {lexical form}; it is not enforced anywhere yet and stays
-// deferred to its own issue. The §3.5.4 key-evc effective value constraint
+// constraint}'s {lexical form}, so it too is decided at finalize by Phase E
+// (valueconstraintvalid.go, #371), through the one shared checkSimpleDefault that
+// a-props-correct clause 2 also calls. The §3.5.4 key-evc effective value constraint
 // needs the resolved declaration for the Ref variant, so it is NOT modeled on
 // this component: it lives at finalize as (*Schema).effectiveValueConstraint
 // (defaultbinding.go, #262), unexported until an external consumer justifies
@@ -91,9 +92,9 @@ func (AttributeDeclarationRef) attributeDeclarationRef()   {}
 // the sibling declaration. au-props-correct clause 3's variety-agreement half is
 // enforced now for the Local case (see ruleAuPropsCorrect); its {value}-identity
 // half, the Ref case, and clause 2 (Simple Default Valid, needs a resolved {type
-// definition}) are not. The whole of clause 3 — both halves, both variants — is
-// decided at finalize by Phase E (valueconstraintvalid.go); clause 2 stays
-// deferred. The §3.5.4 key-evc effective
+// definition}) are not. The whole of clause 3 — both halves, both variants — and
+// clause 2 are decided at finalize by Phase E instead (valueconstraintvalid.go,
+// #371). The §3.5.4 key-evc effective
 // value constraint is computed at finalize instead of here, for the same reason
 // (defaultbinding.go, #262).
 //
