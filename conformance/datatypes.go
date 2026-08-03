@@ -2302,6 +2302,17 @@ func typeSpecOf(name string) (builtin.TypeSpec, bool) {
 	return builtin.TypeSpec{}, false
 }
 
+// mergesRepeatedChildren reports whether several children of ONE <restriction>
+// naming kind map to a SINGLE facet of that kind. Only pattern and enumeration
+// do: §4.3.4.2 case 2 concatenates every <pattern> sibling's value into one
+// regular expression with multiple branches, and §4.3.5.2 case 2 collects every
+// <enumeration> sibling's value into one set. A repeated child of any other kind
+// is a SECOND facet of that kind, which st-props-correct (§3.16.6.1) clause 4
+// forbids.
+func mergesRepeatedChildren(kind xsd.FacetKind) bool {
+	return kind == xsd.FacetPattern || kind == xsd.FacetEnumeration
+}
+
 // buildOwnFacets translates the schema's facet children into the leaf's
 // ownFacets, grouping same-kind children (pattern/enumeration carry a set of
 // {value}s) into one facet in first-seen order (D2: the map is a lookup, output
@@ -2309,6 +2320,13 @@ func typeSpecOf(name string) (builtin.TypeSpec, bool) {
 // when a child names an unrecognized facet or a facet inapplicable to base
 // (cos-applicable-facets §4.1.5), so the synthesized leaf never carries a facet
 // that would trip ValidateLexical's panic precondition.
+//
+// A repeated child of a kind that does NOT merge is declined for a different
+// reason: the schema is st-props-correct clause 4 invalid, and the same-kind
+// grouping below would fold the duplicate into one facet, hiding it from the
+// clause-4 check xsd.NewSimpleType runs. The case would then be decided against a
+// type the schema does not define — an agreement with the suite reached for the
+// wrong reason, which the ratchet would lock in (warden's advisory on #75).
 func buildOwnFacets(base string, children []facetChild) ([]xsd.Facet, bool) {
 	spec, ok := typeSpecOf(base)
 	if !ok {
@@ -2332,6 +2350,9 @@ func buildOwnFacets(base string, children []facetChild) ([]xsd.Facet, bool) {
 			return nil, false
 		}
 		if !spec.Applies(builtin.FacetName(kind.String())) {
+			return nil, false
+		}
+		if seen[kind] && !mergesRepeatedChildren(kind) {
 			return nil, false
 		}
 		if !seen[kind] {
