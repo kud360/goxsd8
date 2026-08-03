@@ -1752,6 +1752,129 @@ near stale; not retired, not relabelled, reported only. `wip/issue-377`
 was auto-deleted at squash-merge. Nothing `parked/`, nothing for human
 triage.
 
+***Post-land pass, 2026-08-03 (#371, `cea9c2a`, PR #461, ratchet
+**schema 9155 → 9166, `+11`, zero downward flips** — the arbiter
+attributed all eleven case by case against the W3C suite's declared
+`msMeta` validity, 7 through the new declaration-side walk and 4 through
+the new use-side clause 2).***
+
+**Unblock scan: nothing clears; #371 was a leaf.** All ten open `blocked`
+issues were read and none names #371 in its `## Depends on` — #456→#455,
+#438→#414, #415→#407, #345→#250, #267→#250, #250→#79's tail, #248→#250,
+#79 (the dependency target itself), #56 (an unfiled M6 evaluator issue),
+#16 (**still** no `## Depends on` section — fourth sighting, and the
+first pass to say out loud that a body defect surviving four sightings
+is no longer "not worth a ticket"; the next `/backlog` should either fix
+the body or stop counting). A full-body sweep of every open issue for
+the literal `#371` returns two hits, neither a dependency: **#372**
+(sibling context) and **#441** (a nearest-neighbour in its own filing
+search). Both already `ready`. No label changed at this pass.
+
+**Three issues filed, one advisory routed, one class dismissed** — the
+LOG entry's "Next" items 1–4, harvested while fresh.
+
+- **#462** (`ready`, `kind/gap`, `area/value`) — the residue #371
+  documented but did not fix: a construction-stage failure inside a
+  list's ITEM type or a union's MEMBER type still reaches the caller as
+  a **decided reject**, because gate 3 (`compile`) covers T's own
+  effective facets only and the item/member compiles happen inside the
+  dispatch. Filed with its blast radius pre-costed from the warden's own
+  measurement (219 fixtures carry an attribute default → 14 also contain
+  a `<list>`/`<union>` → 5 contain any `<pattern>`) and with the ratchet
+  prediction **unchanged**: zero suite fixtures reach it, so this buys
+  correctness and fail-open honesty, not a lane number. Acceptance
+  requires the `GAP(value)` marker **deleted**, not reworded, when it
+  closes — the #334/#346 precedent in the ledger above.
+- **#463** (`ready`, `kind/gap`, `area/xsd`) — `e-props-correct` clause 2
+  via `cos-valid-default` §3.3.6.2, the element-side default-value
+  constraint. #371's body deliberately deferred this as *"the natural
+  THIRD caller of `checkSimpleDefault` once this lands; file it then
+  rather than now"*; this lands it, so it is filed. Grounded from the
+  local spec at filing time (§3.3.6.1 clause 2 and §3.3.6.2's two case
+  arms, verbatim with `file:line`) and scoped against what already
+  exists: clause 1 **is** `checkSimpleDefault`, clause 2.2 **is** the
+  existing `particleEmptiable`. The one genuinely new rejection shape is
+  element-only/empty content, which neither §3.3.6.2 case arm can
+  satisfy. Carries #438's anonymous-inline-type reachability warning so
+  the walk shape gets measured rather than assumed.
+- **#464** (`ready`, `kind/refactor`, `area/xsd` + `area/value`) — the
+  five non-blocking findings the warden's diff review and the arbiter's
+  verdict raised **independently and item-for-item**, as ONE ticket. The
+  LOG recommended folding them into "whatever issue next touches these
+  two files"; this pass owns that call and files instead. Precedent is a
+  combined ticket, not a fold — #419 (#314's two), #363 (#344's three),
+  #458 (#377's), and the #445/#423/#425 grouping the LOG itself cites.
+  And one of the five is not prose: the hardcoded `clause :=
+  "a-props-correct clause 2"` branch has a **live consumer**, since #463
+  is precisely the "future third caller" it silently mislabels. #464
+  sequences that item before or with #463, on both threads.
+
+**Routed, not filed: the `GAP(xsd)` panic surface.** It is **#321**'s —
+filed for exactly this cohort ("settle the contract for
+`value/facets.go`'s six capability panics") and a new ticket would have
+duplicated the decision. Commented there with the three facts #321 did
+not have, and its body amended to point at them: (1) the panics are
+**newly reachable from `xsd`'s own finalize phase**, because before #371
+no `xsd` path entered the facet pipeline at all and `FinalizeWith` could
+not panic on component data; (2) the cohort has a **seventh** member of
+a different class, `effectiveWhiteSpace` (§3.16.7.4/§4.3.6.1), which the
+six-site marker string does not match — a decision covering six of seven
+leaves the contract as ambiguous as today; (3) the "enforce it in `xsd`"
+option is narrower than #321's body implies, since
+`checkVarietyApplicableFacets` already covers list and union and only the
+**atomic** per-primitive table is outside the leaf.
+
+**Dismissed in writing:** the `GAP(xsd)` paragraph's own defects — naming
+only §4.1.5, and the half-true *"closing it means enforcing
+cos-applicable-facets inside this package"* — are **not** #321's work.
+They are #464 items. The split is deliberate: #321 stays a decision
+ticket rather than becoming a decision-plus-typo ticket, and the
+disclosure gets accurate now instead of whenever the decision is taken.
+
+**The GAP ledger above is further out of date, by four sites.** #371 added
+`GAP(value)` gates 1–3 plus the item/member residue in
+`value/valuespace.go`, and the consolidated `GAP(xsd)` paragraph in
+`xsd/valueconstraintvalid.go`. Gates 1–3 are permanent fail-open contract,
+not incompleteness awaiting an owner; the residue is #462's and its
+acceptance deletes it; the `GAP(xsd)` paragraph is #321's decision with
+#464's disclosure fix. Nothing untracked — but the next `/backlog`'s
+`grep -rn "GAP(" --include=*.go` re-derivation now has a fourth reason to
+run beyond the two struck rows (#334, #346) and the drifted `file:line`
+column.
+
+**Branch namespace: one ref, and its status CHANGED since the last pass.**
+`git ls-remote --heads origin 'refs/heads/wip/*' 'refs/heads/parked/*'`
+returns `wip/issue-256` @ `c56d9f7` (tip 2026-08-03 00:34Z, two commits,
+unchanged since #377's pass) — but **#256 is now CLOSED** under
+`needs-replan`, retired in place per the 2026-08-03 LOG entry, where
+#377's pass saw it open and live. Verified the branch's content is **not**
+in `main`, and does not need to be: the attempt was parked, not landed
+(WORKFLOW — abandoned attempts are retired in place, never resumed), so
+this is a correctly-retired ref, not a lost merge. **Reported for human
+deletion; not acted on** (sessions never delete refs). `wip/issue-371` was
+auto-deleted at squash-merge. Nothing `parked/`, nothing else for triage.
+**#256's supersede-and-refile is still owed** and is a `/backlog` action,
+not a post-land one.
+
+**No band is derived here, on purpose**, and the queue arithmetic did not
+improve: #371 removed one `ready` issue and this pass added three, leaving
+**98 open `ready` issues** — an order of magnitude past the 8–10 target
+this file's own procedure asks for. **#377's finding that band 1 is EMPTY
+still stands** — a full `/backlog` re-derivation remains the blocking
+planning action, and it now inherits one more input: the harvest keeps
+filing follow-ups faster than the loop consumes them, so a 98-deep
+`ready` label is no longer a queue at all. That is **#347**'s question
+(the label conflates "filed and unblocked" with "in the working queue")
+becoming load-bearing rather than theoretical — the next `/backlog`
+cannot pick a band without answering it first.
+
+**Also worth the next `/backlog`'s attention, observed but not acted on
+here:** the two landings before this one (#257, `2026-08-02`; #256,
+retired) left **no post-land note in this file** — #377's is the previous
+one. That is **#400**'s territory (a post-land pass leaves no signal on
+`main` when it files no docs commit) and is recorded here as a second
+sighting rather than re-filed.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
