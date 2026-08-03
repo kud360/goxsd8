@@ -1378,12 +1378,17 @@ func childElement(el *Element, space, local string) *Element {
 //
 //   - pre-lexical. xs:boolean fixes whiteSpace to collapse (§3.3.2.3, §4.3.6) and
 //     the whiteSpace facet is applied BEFORE lexical-space membership is tested
-//     (§4.1.4), so " true " is the value true. Trimming decides that membership
-//     exactly as a full collapse would: none of the four literals contains
-//     whitespace, so an interior run that collapse would shrink to one #x20 can
-//     match no literal either way. That reuses this package's existing
-//     keyword-lexical idiom (produce_complex.go) instead of a third private copy
-//     of the collapse algorithm (STYLE T4).
+//     (§4.1.4), so " true " is the value true. Trimming exactly #x9/#xA/#xD/#x20 —
+//     the only characters §4.3.6's replace and collapse steps ever touch, as
+//     value/whitespace.go spells out — decides that membership exactly as a full
+//     collapse would. Let T be the trimmed literal and R its collapse: if T holds
+//     interior whitespace then R holds a #x20 and no booleanRep literal contains
+//     one, so both reject; otherwise R == T. The trim set is load-bearing and
+//     cannot be strings.TrimSpace, whose unicode.IsSpace class also cuts U+0085,
+//     U+00A0, U+2028 and the rest — characters §4.3.6 is NOT whitespace for and
+//     collapse preserves, so trimming them would accept literals the spec rejects.
+//     A four-character trim is not a third private copy of the collapse algorithm
+//     (STYLE T4).
 //   - lexical. booleanRep ::= 'true' | 'false' | '1' | '0' (§3.3.2.2), case
 //     sensitive: "TRUE" is not in the lexical space. Anything outside those four
 //     is charged cvc-datatype-valid (§4.1.4) — a literal outside a datatype's
@@ -1396,7 +1401,7 @@ func facetFixed(el *Element) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	switch strings.TrimSpace(lexical) {
+	switch strings.Trim(lexical, "\x09\x0A\x0D\x20") {
 	case "true", "1":
 		return true, nil
 	case "false", "0":

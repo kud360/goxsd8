@@ -1254,9 +1254,11 @@ func TestProduceFacetFixedActualValue(t *testing.T) {
 // against nothing (§4.1.4 cvc-datatype-valid) and there is no clause letting it
 // default — so it is a positioned rejection, not a silent {fixed} = false. Case
 // matters ("TRUE" is not a booleanRep), and collapse never rescues an empty
-// value.
+// value. The &#xA0; case pins §4.3.6's whitespace class: NBSP is a legal XML Char
+// that collapse PRESERVES, so " true" stays outside booleanRep even though
+// Go's unicode.IsSpace (and hence strings.TrimSpace) would cut it.
 func TestProduceFacetFixedOutOfLexicalSpaceRejected(t *testing.T) {
-	for _, lexical := range []string{"yes", "TRUE", "True", "", "  ", "2", "true false"} {
+	for _, lexical := range []string{"yes", "TRUE", "True", "", "  ", "2", "true false", "&#xA0;true"} {
 		for _, s := range fixedFacetSchemas(` fixed="` + lexical + `"`) {
 			t.Run(s.facet+"/"+lexical, func(t *testing.T) {
 				_, err := produce(t, wrap("", s.body))
