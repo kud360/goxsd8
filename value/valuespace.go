@@ -111,14 +111,15 @@ func (vs valueSpace) EqualOrIdentical(ta *xsd.SimpleType, a xsd.ValueConstraint,
 //     it as clause 2 would reject a schema for an unrelated facet, under the
 //     wrong rule ID and against the wrong component.
 //
-// Two residues are recorded rather than papered over. The compile gate covers
-// T's OWN effective facets only: a list's ITEM type and a union's MEMBER types
-// compile inside the dispatch (listMapping's Parse recurses through
-// validateLexical; dispatchUnion folds every member's rejection into one
-// cvc-datatype-valid error), so a construction-stage failure down there still
-// reaches the caller as a decided reject. Closing that needs the pipeline itself
-// to separate its construction and verdict stages per member, which is a change
-// to package value's own error model, not to this adapter. And [ValidateLexical]
+// Two residues are recorded rather than papered over. GAP(value): item/member
+// facet compilation. The compile gate covers T's OWN effective facets only: a
+// list's ITEM type and a union's MEMBER types compile inside the dispatch
+// (listMapping's Parse recurses through validateLexical; dispatchUnion folds
+// every member's rejection into one cvc-datatype-valid error), so a
+// construction-stage failure down there still reaches the caller as a decided
+// reject. Closing that needs the pipeline itself to separate its construction
+// and verdict stages per member, which is a change to package value's own error
+// model, not to this adapter. And [ValidateLexical]
 // PANICS rather than erroring when a facet is paired with a value lacking the
 // capability it needs, a precondition discharged for parser-built types only —
 // see checkSimpleDefault (xsd/valueconstraintvalid.go) for who owns that.
