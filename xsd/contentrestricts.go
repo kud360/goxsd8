@@ -260,6 +260,7 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType) bool {
 // as a membership test — it is never ranged, and no iteration order reaches the
 // verdict (STYLE D2).
 func (s *Schema) contentModelRestricts(r, b contentAutomaton) bool {
+	diagWalk()
 	start := productState{r: startState, b: []int{startState}}
 	visited := map[string]bool{productKey(start): true}
 	queue := []productState{start}
@@ -286,6 +287,7 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton) bool {
 				continue
 			}
 			if len(visited) >= maxProductStates {
+				diagCeilingHit(len(visited))
 				// GAP(xsd): the walk is abandoned and the derivation provisionally
 				// accepted once the product exceeds maxProductStates. §3.4.6.3
 				// licenses it — "It is ·implementation-defined· whether a processor
@@ -302,6 +304,7 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton) bool {
 				return true
 			}
 			visited[key] = true
+			diagRecordVisited(len(visited))
 			queue = append(queue, next)
 		}
 	}
