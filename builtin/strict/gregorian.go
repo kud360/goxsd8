@@ -163,7 +163,7 @@ func gMonthDayMaxDay(month int) int {
 func parseTime(lexical string, _ value.Context) (value.Value, error) {
 	m := timeLexical.FindStringSubmatch(lexical)
 	if m == nil {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"time: %q is not in the lexical space (timeLexicalRep, §3.3.8.2)", lexical)
 	}
 	tz := matchTimezone(m[6])
@@ -183,14 +183,14 @@ func parseTime(lexical string, _ value.Context) (value.Value, error) {
 func parseDate(lexical string, _ value.Context) (value.Value, error) {
 	m := dateLexical.FindStringSubmatch(lexical)
 	if m == nil {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"date: %q is not in the lexical space (dateLexicalRep, §3.3.9.2)", lexical)
 	}
 	year, _ := new(big.Int).SetString(m[1], 10)
 	month, _ := strconv.Atoi(m[2])
 	day, _ := strconv.Atoi(m[3])
 	if day > daysInMonth(year, month) {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"date: %q has day %d out of range for month %d of year %s (con-date-dayValue, §3.3.9.1)",
 			lexical, day, month, year)
 	}
@@ -202,7 +202,7 @@ func parseDate(lexical string, _ value.Context) (value.Value, error) {
 func parseGYearMonth(lexical string, _ value.Context) (value.Value, error) {
 	m := gYearMonthLexical.FindStringSubmatch(lexical)
 	if m == nil {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"gYearMonth: %q is not in the lexical space (gYearMonthLexicalRep, §3.3.10.2)", lexical)
 	}
 	year, _ := new(big.Int).SetString(m[1], 10)
@@ -215,7 +215,7 @@ func parseGYearMonth(lexical string, _ value.Context) (value.Value, error) {
 func parseGYear(lexical string, _ value.Context) (value.Value, error) {
 	m := gYearLexical.FindStringSubmatch(lexical)
 	if m == nil {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"gYear: %q is not in the lexical space (gYearLexicalRep, §3.3.11.2)", lexical)
 	}
 	year, _ := new(big.Int).SetString(m[1], 10)
@@ -228,13 +228,13 @@ func parseGYear(lexical string, _ value.Context) (value.Value, error) {
 func parseGMonthDay(lexical string, _ value.Context) (value.Value, error) {
 	m := gMonthDayLexical.FindStringSubmatch(lexical)
 	if m == nil {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"gMonthDay: %q is not in the lexical space (gMonthDayLexicalRep, §3.3.12.2)", lexical)
 	}
 	month, _ := strconv.Atoi(m[1])
 	day, _ := strconv.Atoi(m[2])
 	if day > gMonthDayMaxDay(month) {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"gMonthDay: %q has day %d out of range for month %d (con-gMonthDay-dayValue, §3.3.12.1)",
 			lexical, day, month)
 	}
@@ -247,7 +247,7 @@ func parseGMonthDay(lexical string, _ value.Context) (value.Value, error) {
 func parseGDay(lexical string, _ value.Context) (value.Value, error) {
 	m := gDayLexical.FindStringSubmatch(lexical)
 	if m == nil {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"gDay: %q is not in the lexical space (gDayLexicalRep, §3.3.13.2)", lexical)
 	}
 	day, _ := strconv.Atoi(m[1])
@@ -259,7 +259,7 @@ func parseGDay(lexical string, _ value.Context) (value.Value, error) {
 func parseGMonth(lexical string, _ value.Context) (value.Value, error) {
 	m := gMonthLexical.FindStringSubmatch(lexical)
 	if m == nil {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"gMonth: %q is not in the lexical space (gMonthLexicalRep, §3.3.14.2)", lexical)
 	}
 	month, _ := strconv.Atoi(m[1])
@@ -271,7 +271,7 @@ func parseGMonth(lexical string, _ value.Context) (value.Value, error) {
 func canonicalTime(v value.Value) (string, error) {
 	t, ok := v.(timeVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"time canonical: value of type %T is not a strict time", v)
 	}
 	return t.Canonical(), nil
@@ -280,7 +280,7 @@ func canonicalTime(v value.Value) (string, error) {
 func canonicalDate(v value.Value) (string, error) {
 	d, ok := v.(dateVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"date canonical: value of type %T is not a strict date", v)
 	}
 	return d.Canonical(), nil
@@ -289,7 +289,7 @@ func canonicalDate(v value.Value) (string, error) {
 func canonicalGYearMonth(v value.Value) (string, error) {
 	g, ok := v.(gYearMonthVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"gYearMonth canonical: value of type %T is not a strict gYearMonth", v)
 	}
 	return g.Canonical(), nil
@@ -298,7 +298,7 @@ func canonicalGYearMonth(v value.Value) (string, error) {
 func canonicalGYear(v value.Value) (string, error) {
 	g, ok := v.(gYearVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"gYear canonical: value of type %T is not a strict gYear", v)
 	}
 	return g.Canonical(), nil
@@ -307,7 +307,7 @@ func canonicalGYear(v value.Value) (string, error) {
 func canonicalGMonthDay(v value.Value) (string, error) {
 	g, ok := v.(gMonthDayVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"gMonthDay canonical: value of type %T is not a strict gMonthDay", v)
 	}
 	return g.Canonical(), nil
@@ -316,7 +316,7 @@ func canonicalGMonthDay(v value.Value) (string, error) {
 func canonicalGDay(v value.Value) (string, error) {
 	g, ok := v.(gDayVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"gDay canonical: value of type %T is not a strict gDay", v)
 	}
 	return g.Canonical(), nil
@@ -325,7 +325,7 @@ func canonicalGDay(v value.Value) (string, error) {
 func canonicalGMonth(v value.Value) (string, error) {
 	g, ok := v.(gMonthVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"gMonth canonical: value of type %T is not a strict gMonth", v)
 	}
 	return g.Canonical(), nil

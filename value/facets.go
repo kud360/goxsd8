@@ -38,6 +38,75 @@ var (
 	_ ValueFacet   = scaleFacet{}
 )
 
+// The rules this file charges: the per-facet Validation Rules of Datatypes §4.3
+// (one specific cvc-* ID per facet kind, never the cvc-facet-valid umbrella —
+// see the pipeline comment above), plus the two Schema Representation
+// Constraints that reject a malformed facet {value} at schema construction. Each
+// string is a live entry in xsderr's generated catalog.
+const (
+	// ruleCvcDatatypeValid is Datatype Valid (Datatypes §4.1.4,
+	// id="cvc-datatype-valid"): the umbrella instance-validity rule for "this
+	// literal is not in the datatype's lexical/value space". This file charges it
+	// only where no facet is implicated at all — a type no backend mapping
+	// governs — and union.go charges it for a literal no member type accepts.
+	ruleCvcDatatypeValid xsderr.Rule = "cvc-datatype-valid"
+	// ruleSrcPatternValue is the Schema Representation Constraint on a pattern
+	// facet's {value} (§4.3.4.3, id="src-pattern-value"): the value must be a
+	// valid regular expression. Charged at facet-compile time, so a bad pattern
+	// surfaces when the type is built, never mid-validation.
+	ruleSrcPatternValue xsderr.Rule = "src-pattern-value"
+	// ruleCvcPatternValid is pattern Valid (§4.3.4.4, id="cvc-pattern-valid"): the
+	// whiteSpace-normalized literal must match at least one member of the pattern
+	// facet's {value} (the members are ORed, §4.3.4.4).
+	ruleCvcPatternValid xsderr.Rule = "cvc-pattern-valid"
+	// ruleSrcEnumerationValue is the Schema Representation Constraint on an
+	// enumeration facet's {value} (§4.3.5.3, id="src-enumeration-value"): every
+	// member must be in the value space of the type that declares the facet. A
+	// member that fails to parse makes the SCHEMA malformed, so the bare
+	// cvc-datatype-valid the lexical mapping returns is remapped to this rule.
+	ruleSrcEnumerationValue xsderr.Rule = "src-enumeration-value"
+	// ruleCvcEnumerationValid is enumeration Valid (§4.3.5.4,
+	// id="cvc-enumeration-valid"): the candidate must be equal or identical to one
+	// of the values in the enumeration facet's {value}.
+	ruleCvcEnumerationValid xsderr.Rule = "cvc-enumeration-valid"
+	// ruleCvcExplicitTimezoneValid is explicitTimezone Valid (§4.3.14.3,
+	// id="cvc-explicitTimezone-valid"): a value's timezone presence must match the
+	// facet's required/prohibited/optional {value}. The same ID also carries this
+	// package's rejection of a malformed facet {value} — a token outside those
+	// three (§4.3.14.1) — since the facet is unusable either way.
+	ruleCvcExplicitTimezoneValid xsderr.Rule = "cvc-explicitTimezone-valid"
+	// ruleCvcLengthValid is Length Valid (§4.3.1.3, id="cvc-length-valid").
+	ruleCvcLengthValid xsderr.Rule = "cvc-length-valid"
+	// ruleCvcMinLengthValid is minLength Valid (§4.3.2.3, id="cvc-minLength-valid").
+	ruleCvcMinLengthValid xsderr.Rule = "cvc-minLength-valid"
+	// ruleCvcMaxLengthValid is maxLength Valid (§4.3.3.3, id="cvc-maxLength-valid").
+	ruleCvcMaxLengthValid xsderr.Rule = "cvc-maxLength-valid"
+	// ruleCvcMaxInclusiveValid is maxInclusive Valid (§4.3.7.3,
+	// id="cvc-maxInclusive-valid").
+	ruleCvcMaxInclusiveValid xsderr.Rule = "cvc-maxInclusive-valid"
+	// ruleCvcMaxExclusiveValid is maxExclusive Valid (§4.3.8.3,
+	// id="cvc-maxExclusive-valid").
+	ruleCvcMaxExclusiveValid xsderr.Rule = "cvc-maxExclusive-valid"
+	// ruleCvcMinExclusiveValid is minExclusive Valid (§4.3.9.3,
+	// id="cvc-minExclusive-valid").
+	ruleCvcMinExclusiveValid xsderr.Rule = "cvc-minExclusive-valid"
+	// ruleCvcMinInclusiveValid is minInclusive Valid (§4.3.10.3,
+	// id="cvc-minInclusive-valid").
+	ruleCvcMinInclusiveValid xsderr.Rule = "cvc-minInclusive-valid"
+	// ruleCvcTotalDigitsValid is totalDigits Valid (§4.3.11.3,
+	// id="cvc-totalDigits-valid").
+	ruleCvcTotalDigitsValid xsderr.Rule = "cvc-totalDigits-valid"
+	// ruleCvcFractionDigitsValid is fractionDigits Valid (§4.3.12.3,
+	// id="cvc-fractionDigits-valid").
+	ruleCvcFractionDigitsValid xsderr.Rule = "cvc-fractionDigits-valid"
+	// ruleCvcMaxScaleValid is maxScale Valid (xsd-precisionDecimal.md §4.2.3,
+	// id="cvc-maxScale-valid") — precisionDecimal-only (§3.3).
+	ruleCvcMaxScaleValid xsderr.Rule = "cvc-maxScale-valid"
+	// ruleCvcMinScaleValid is minScale Valid (xsd-precisionDecimal.md §4.3.3,
+	// id="cvc-minScale-valid") — precisionDecimal-only (§3.3).
+	ruleCvcMinScaleValid xsderr.Rule = "cvc-minScale-valid"
+)
+
 // ValidateLexical validates the lexical string rawLexical against st's effective
 // facets through the full facet pipeline (whiteSpace → pattern → lexical mapping
 // → value facets), returning the parsed value on success or the first
@@ -144,7 +213,7 @@ func validateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Conte
 	// governs facet {value}s, not the application-facing candidate).
 	m, ok := governingMapping(b, st)
 	if !ok {
-		return nil, 0, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, 0, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
 			"value: no backend mapping governs type %s", st.Name())
 	}
 	v, err := m.Parse(lexical, ctx)
@@ -391,7 +460,7 @@ func newPatternFacet(f xsd.Facet) (patternFacet, error) {
 		}
 		re, err := regexp.Compile(goRE)
 		if err != nil {
-			return patternFacet{}, xsderr.Wrap("src-pattern-value", xsderr.Loc{}, err)
+			return patternFacet{}, xsderr.Wrap(ruleSrcPatternValue, xsderr.Loc{}, err)
 		}
 		res = append(res, re)
 	}
@@ -406,7 +475,7 @@ func (p patternFacet) CheckLexical(normalized string) error {
 			return nil
 		}
 	}
-	return xsderr.New("cvc-pattern-valid", xsderr.Loc{},
+	return xsderr.New(ruleCvcPatternValid, xsderr.Loc{},
 		"value %q matches no member of the pattern facet (cvc-pattern-valid, §4.3.4.4)", normalized)
 }
 
@@ -436,7 +505,7 @@ type enumFacet struct {
 func newEnumFacet(b Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (enumFacet, error) {
 	m, ws, ok := declaringFacetSpace(b, st, ef.Declaring())
 	if !ok {
-		return enumFacet{}, xsderr.New("cvc-enumeration-valid", xsderr.Loc{},
+		return enumFacet{}, xsderr.New(ruleCvcEnumerationValid, xsderr.Loc{},
 			"enumeration: no backend mapping governs declaring type %s", ef.Declaring())
 	}
 	// compile() routes only FacetEnumeration facets here, so EnumerationMembers
@@ -446,7 +515,7 @@ func newEnumFacet(b Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (enumFac
 	for _, em := range enumMembers {
 		v, err := facetValue(m, ws, em.Lexical(), newMemberContext(em))
 		if err != nil {
-			return enumFacet{}, xsderr.Wrap("src-enumeration-value", xsderr.Loc{}, err)
+			return enumFacet{}, xsderr.Wrap(ruleSrcEnumerationValue, xsderr.Loc{}, err)
 		}
 		members = append(members, v)
 	}
@@ -525,7 +594,7 @@ func (e enumFacet) CheckValue(v Value) error {
 			return nil
 		}
 	}
-	return xsderr.New("cvc-enumeration-valid", xsderr.Loc{},
+	return xsderr.New(ruleCvcEnumerationValid, xsderr.Loc{},
 		"value is not equal or identical to any enumeration member (cvc-enumeration-valid, §4.3.5.4)")
 }
 
@@ -623,13 +692,13 @@ func (bf boundFacet) violates(ord Ordering) bool {
 func boundRule(k xsd.FacetKind) xsderr.Rule {
 	switch k {
 	case xsd.FacetMaxInclusive:
-		return "cvc-maxInclusive-valid"
+		return ruleCvcMaxInclusiveValid
 	case xsd.FacetMaxExclusive:
-		return "cvc-maxExclusive-valid"
+		return ruleCvcMaxExclusiveValid
 	case xsd.FacetMinInclusive:
-		return "cvc-minInclusive-valid"
+		return ruleCvcMinInclusiveValid
 	case xsd.FacetMinExclusive:
-		return "cvc-minExclusive-valid"
+		return ruleCvcMinExclusiveValid
 	default:
 		panic(fmt.Sprintf("value: boundRule: %s is not a bound facet", k))
 	}
@@ -677,9 +746,9 @@ func (df digitsFacet) CheckValue(v Value) error {
 func digitsRule(k xsd.FacetKind) xsderr.Rule {
 	switch k {
 	case xsd.FacetTotalDigits:
-		return "cvc-totalDigits-valid"
+		return ruleCvcTotalDigitsValid
 	case xsd.FacetFractionDigits:
-		return "cvc-fractionDigits-valid"
+		return ruleCvcFractionDigitsValid
 	default:
 		panic(fmt.Sprintf("value: digitsRule: %s is not a digit facet", k))
 	}
@@ -780,11 +849,11 @@ func (lf lengthFacet) violates(n int) bool {
 func lengthRule(k xsd.FacetKind) xsderr.Rule {
 	switch k {
 	case xsd.FacetLength:
-		return "cvc-length-valid"
+		return ruleCvcLengthValid
 	case xsd.FacetMinLength:
-		return "cvc-minLength-valid"
+		return ruleCvcMinLengthValid
 	case xsd.FacetMaxLength:
-		return "cvc-maxLength-valid"
+		return ruleCvcMaxLengthValid
 	default:
 		panic(fmt.Sprintf("value: lengthRule: %s is not a length facet", k))
 	}
@@ -817,7 +886,7 @@ type explicitTimezoneFacet struct {
 func newExplicitTimezoneFacet(f xsd.Facet) (explicitTimezoneFacet, error) {
 	values := f.Values()
 	if len(values) != 1 {
-		return explicitTimezoneFacet{}, xsderr.New("cvc-explicitTimezone-valid", xsderr.Loc{},
+		return explicitTimezoneFacet{}, xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
 			"explicitTimezone facet must carry exactly one value, has %d", len(values))
 	}
 	switch values[0] {
@@ -828,7 +897,7 @@ func newExplicitTimezoneFacet(f xsd.Facet) (explicitTimezoneFacet, error) {
 	case "optional":
 		return explicitTimezoneFacet{requirement: tzOptional}, nil
 	}
-	return explicitTimezoneFacet{}, xsderr.New("cvc-explicitTimezone-valid", xsderr.Loc{},
+	return explicitTimezoneFacet{}, xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
 		"explicitTimezone facet value %q is not one of required/prohibited/optional (§4.3.14.1)", values[0])
 }
 
@@ -848,11 +917,11 @@ func (tf explicitTimezoneFacet) CheckValue(v Value) error {
 		panic(fmt.Sprintf("value: candidate %T under an explicitTimezone facet is not TimezoneAware (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", v))
 	}
 	if tf.requirement == tzRequired && !ta.HasTimezone() {
-		return xsderr.New("cvc-explicitTimezone-valid", xsderr.Loc{},
+		return xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
 			"value has no explicit timezone but the explicitTimezone facet is required (cvc-explicitTimezone-valid, §4.3.14.3)")
 	}
 	if tf.requirement == tzProhibited && ta.HasTimezone() {
-		return xsderr.New("cvc-explicitTimezone-valid", xsderr.Loc{},
+		return xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
 			"value has an explicit timezone but the explicitTimezone facet prohibits one (cvc-explicitTimezone-valid, §4.3.14.3)")
 	}
 	return nil
@@ -927,9 +996,9 @@ func (sf scaleFacet) violates(scale int) bool {
 func scaleRule(k xsd.FacetKind) xsderr.Rule {
 	switch k {
 	case xsd.FacetMaxScale:
-		return "cvc-maxScale-valid"
+		return ruleCvcMaxScaleValid
 	case xsd.FacetMinScale:
-		return "cvc-minScale-valid"
+		return ruleCvcMinScaleValid
 	default:
 		panic(fmt.Sprintf("value: scaleRule: %s is not a scale facet", k))
 	}

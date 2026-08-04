@@ -9,7 +9,7 @@
 // # Contract (implemented in M2)
 //
 //	type Rule string
-//	    A spec validation rule ID: "cvc-complex-type.2.1",
+//	    A spec validation rule ID: "cvc-complex-type",
 //	    "cos-st-restricts", "src-resolve", "derivation-ok-restriction".
 //	    Exactly one rule per error.
 //
@@ -49,9 +49,20 @@
 // rule ID that appears in the local specs, as the ruleCatalog lookup set.
 // IsValidRule(Rule) bool is hand-written in error.go (not generated) so it
 // can admit the non-spec sentinels alongside the generated catalog without
-// regeneration clobbering those exemptions. Tests assert that every
-// Rule constructed in this module is either in the catalog or a sentinel —
-// an error citing a rule the spec doesn't define is a bug by construction. The generate directive
+// regeneration clobbering those exemptions. Membership is exact — no
+// clause-suffix leniency; see IsValidRule. Rule is a bare string type, so
+// nothing in the Go type system stops an arbitrary one; the guarantee is
+// enforced by test instead. rulecatalog_enforcement_test.go scans the whole
+// module for two things: every constant declared with type Rule anywhere in the
+// module must satisfy IsValidRule, and in non-test code no string literal may
+// sit in one of four syntactic Rule positions — the first argument of New or
+// Wrap, the Rule field of an Error composite literal, a return in a function
+// whose declared result type is Rule, or the operand of a Rule(...) conversion.
+// So a rule the spec doesn't define is caught wherever it is written as a Rule
+// constant or as a literal in those four positions. That is a syntactic floor,
+// not a dataflow proof: a Rule that reaches New/Wrap through a variable or
+// another expression is not scanned, and the test's header comment names the
+// residual holes it deliberately leaves open. The generate directive
 // (`//go:generate go tool rulecat`) is wired here in M2 together with the
 // Rule type it emits against.
 package xsderr

@@ -84,7 +84,7 @@ func resolveQNameLexical(lexical string, ctx value.Context, typ string) (space, 
 	// A nil context cannot resolve any binding, not even the default namespace
 	// for an unprefixed name; reject cleanly rather than dereferencing nil.
 	if ctx == nil {
-		return "", "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"%s: %q cannot be resolved without namespace bindings in scope (§3.3.18.2)", typ, lexical)
 	}
 	// Resolve the prefix (empty prefix = default namespace, §3.3.18): the
@@ -93,7 +93,7 @@ func resolveQNameLexical(lexical string, ctx value.Context, typ string) (space, 
 	// rejection, never a value fabricated with an empty namespace.
 	space, ok := ctx.LookupNamespace(prefix)
 	if !ok {
-		return "", "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"%s: prefix %q of %q is not bound to any namespace in scope (§3.3.18.2)", typ, prefix, lexical)
 	}
 	return space, local, nil
@@ -109,14 +109,14 @@ func splitQName(lexical, typ string) (prefix, local string, err error) {
 	idx := strings.IndexByte(lexical, ':')
 	if idx < 0 {
 		if !ncNameRE.MatchString(lexical) {
-			return "", "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+			return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 				"%s: %q is not in the lexical space (not an NCName; [Namespaces in XML] QName production)", typ, lexical)
 		}
 		return "", lexical, nil
 	}
 	prefix, local = lexical[:idx], lexical[idx+1:]
 	if !ncNameRE.MatchString(prefix) || !ncNameRE.MatchString(local) {
-		return "", "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"%s: %q is not in the lexical space (prefix and local part must each be an NCName; [Namespaces in XML] QName production)", typ, lexical)
 	}
 	return prefix, local, nil

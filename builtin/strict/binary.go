@@ -51,12 +51,12 @@ type base64BinaryVal []byte
 // (f-hexBinaryCanonical, §3.3.15.2).
 func parseHexBinary(lexical string, _ value.Context) (value.Value, error) {
 	if !hexBinaryLexical.MatchString(lexical) {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"hexBinary: %q is not in the lexical space (§3.3.15.2, nt-hexBinary: an even count of [0-9a-fA-F])", lexical)
 	}
 	octets, err := hex.DecodeString(lexical)
 	if err != nil {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"hexBinary: decoding %q: %v", lexical, err)
 	}
 	return hexBinaryVal(octets), nil
@@ -70,12 +70,12 @@ func parseHexBinary(lexical string, _ value.Context) (value.Value, error) {
 // length pseudo-code likewise strips whitespace before decoding).
 func parseBase64Binary(lexical string, _ value.Context) (value.Value, error) {
 	if !base64BinaryLexical.MatchString(lexical) {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"base64Binary: %q is not in the lexical space (§3.3.16.2, nt-Base64Binary)", lexical)
 	}
 	octets, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(lexical, " ", ""))
 	if err != nil {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"base64Binary: decoding %q: %v", lexical, err)
 	}
 	return base64BinaryVal(octets), nil
@@ -86,7 +86,7 @@ func parseBase64Binary(lexical string, _ value.Context) (value.Value, error) {
 func canonicalHexBinary(v value.Value) (string, error) {
 	h, ok := v.(hexBinaryVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"hexBinary canonical: value of type %T is not a strict hexBinary", v)
 	}
 	return h.Canonical(), nil
@@ -96,7 +96,7 @@ func canonicalHexBinary(v value.Value) (string, error) {
 func canonicalBase64Binary(v value.Value) (string, error) {
 	b, ok := v.(base64BinaryVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"base64Binary canonical: value of type %T is not a strict base64Binary", v)
 	}
 	return b.Canonical(), nil

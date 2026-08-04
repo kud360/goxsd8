@@ -20,7 +20,7 @@ func parseBoolean(lexical string, _ value.Context) (value.Value, error) {
 	case "false", "0":
 		return boolVal(false), nil
 	}
-	return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+	return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 		"boolean: %q is not in the lexical space (boolean-lexical-mapping, §3.3.2.1)", lexical)
 }
 
@@ -29,7 +29,7 @@ func parseBoolean(lexical string, _ value.Context) (value.Value, error) {
 func canonicalBoolean(v value.Value) (string, error) {
 	b, ok := v.(boolVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"boolean canonical: value of type %T is not a strict boolean", v)
 	}
 	return b.Canonical(), nil

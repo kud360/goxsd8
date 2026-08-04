@@ -31,7 +31,7 @@ var errNoYearMonthCanonical = errors.New("yearMonthDuration: zero value has no c
 // duration's field extraction and ·duYearMonthFragmentMap· math verbatim.
 func parseYearMonthDuration(lexical string, _ value.Context) (value.Value, error) {
 	if !yearMonthDurationLexical.MatchString(lexical) {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"yearMonthDuration: %q is not in the lexical space (yearMonthDurationLexicalRep, §3.4.26.1)", lexical)
 	}
 	f := durationFields.FindStringSubmatch(lexical)
@@ -67,7 +67,7 @@ func parseYearMonthDuration(lexical string, _ value.Context) (value.Value, error
 func canonicalYearMonthDuration(v value.Value) (string, error) {
 	d, ok := v.(durationVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"yearMonthDuration canonical: value of type %T is not a strict yearMonthDuration", v)
 	}
 	if d.months.Sign() == 0 {

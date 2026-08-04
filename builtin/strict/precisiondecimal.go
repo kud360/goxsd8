@@ -88,7 +88,7 @@ type precisionDecimalVal struct {
 // never stripped: the (coefficient, scale) pair IS the identity.
 func parsePrecisionDecimal(lexical string, _ value.Context) (value.Value, error) {
 	if !precisionDecimalLexical.MatchString(lexical) {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"precisionDecimal: %q is not in the lexical space (pDecimalRep, §3.2)", lexical)
 	}
 
@@ -116,7 +116,7 @@ func parsePrecisionDecimal(lexical string, _ value.Context) (value.Value, error)
 	if i := strings.IndexAny(body, "Ee"); i >= 0 {
 		e, err := strconv.Atoi(body[i+1:])
 		if err != nil {
-			return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+			return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 				"precisionDecimal: %q has an out-of-range exponent (pDecimalRep, §3.2)", lexical)
 		}
 		exp = e
@@ -133,7 +133,7 @@ func parsePrecisionDecimal(lexical string, _ value.Context) (value.Value, error)
 	// the magnitude — the sign is a separate stored fact.
 	coeff, ok := new(big.Int).SetString(intPart+fracPart, 10)
 	if !ok {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"precisionDecimal: %q has no digits (pDecimalRep, §3.2)", lexical)
 	}
 
@@ -276,7 +276,7 @@ func (p precisionDecimalVal) FractionDigits() int {
 func canonicalPrecisionDecimal(v value.Value) (string, error) {
 	p, ok := v.(precisionDecimalVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"precisionDecimal canonical: value of type %T is not a strict precisionDecimal", v)
 	}
 	return p.Canonical(), nil

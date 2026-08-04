@@ -55,7 +55,7 @@ import (
 // rejection, never a retry against a later member.
 func validateUnion(b Backend, st *xsd.SimpleType, u xsd.Union, rawLexical string, ctx Context) (Value, whiteSpace, error) {
 	if !unionGoverned(b, u) {
-		return nil, 0, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, 0, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
 			"value: no backend mapping governs type %s", st.Name())
 	}
 	lexFacets, valFacets, err := compile(b, st)
@@ -127,7 +127,7 @@ func dispatchUnion(b Backend, u xsd.Union, rawLexical string, ctx Context) (Valu
 		}
 		rejections = append(rejections, fmt.Sprintf("member %d (%s): %v", i, m.Name(), err))
 	}
-	return nil, 0, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+	return nil, 0, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
 		"value %q is Datatype Valid with respect to no member of the union's %d {member type definitions} (cvc-datatype-valid clause 2.3, §4.1.4): %s",
 		rawLexical, len(members), strings.Join(rejections, "; "))
 }

@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// Rule is a spec validation rule ID, such as "cvc-complex-type.2.1",
+// Rule is a spec validation rule ID, such as "cvc-complex-type",
 // "cos-st-restricts", or "derivation-ok-restriction". Exactly one Rule
 // identifies each Error. Every Rule constructed in this module is expected to
 // be present in the generated catalog (see IsValidRule).
@@ -126,6 +126,20 @@ func LocOf(err error) (Loc, bool) {
 // the catalog because the faults they name have no spec-defined rule ID. It
 // lives here rather than in the generated catalog.go so the sentinel exemptions
 // survive `go generate`.
+//
+// Membership is exact: no prefix-trimming, no clause-suffix (dotted) leniency.
+// The generated catalog is keyed on the base rule IDs tools/rulecat extracts
+// from the specs ("cvc-complex-type", "cvc-elt"), plus the two hand-listed
+// sentinels above — not on clause-level spellings. So both
+// IsValidRule("cvc-complex-type.2.1") and IsValidRule("cvc-elt.1") are false,
+// and stay false. That costs nothing: no non-test construction site in the
+// module cites a dotted rule ID, because the convention here is one coarse rule
+// ID plus the clause number in prose (see xsd/complexextension.go). And the
+// "cvc-elt.1" fixtures in error_test.go are incidental, not a deliberate claim
+// of validity — those tests exercise Error()/Wrap() rendering and nil handling,
+// where any string would serve identically. Should a call site ever genuinely
+// need to cite a clause-level rule, extend tools/rulecat to emit it rather than
+// weakening this check.
 func IsValidRule(r Rule) bool {
 	if r == RuleXMLWellFormed || r == RuleComponentInvariant {
 		return true
