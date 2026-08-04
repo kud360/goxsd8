@@ -1094,7 +1094,7 @@ MS-Annotations2006-07-15/annotB015/schema/annotB015 fail
 MS-Annotations2006-07-15/annotB016/schema/annotB016 fail
 MS-Annotations2006-07-15/annotB017/schema/annotB017 fail
 MS-Annotations2006-07-15/annotB018/schema/annotB018 fail
-MS-Annotations2006-07-15/annotB019/schema/annotB019 fail
+MS-Annotations2006-07-15/annotB019/schema/annotB019 pass
 MS-Annotations2006-07-15/annotB020/schema/annotB020 fail
 MS-Annotations2006-07-15/annotB021/schema/annotB021 fail
 MS-Annotations2006-07-15/annotB022/schema/annotB022 fail
@@ -6219,7 +6219,7 @@ MS-Notations2006-07-15/notatF029/schema/notatF029 fail
 MS-Notations2006-07-15/notatF030/schema/notatF030 fail
 MS-Notations2006-07-15/notatF031/schema/notatF031 fail
 MS-Notations2006-07-15/notatF032/schema/notatF032 fail
-MS-Notations2006-07-15/notatF033/schema/notatF033 fail
+MS-Notations2006-07-15/notatF033/schema/notatF033 pass
 MS-Notations2006-07-15/notatF034/schema/notatF034 fail
 MS-Notations2006-07-15/notatF035/schema/notatF035 fail
 MS-Notations2006-07-15/notatF036/schema/notatF036 fail
@@ -9831,7 +9831,7 @@ MS-Schema2006-07-15/schZ006/schema/schZ006 fail
 MS-Schema2006-07-15/schZ007/schema/schZ007 fail
 MS-Schema2006-07-15/schZ008/schema/schZ008 pass
 MS-Schema2006-07-15/schZ009/schema/schZ009 fail
-MS-Schema2006-07-15/schZ010/schema/schZ010 fail
+MS-Schema2006-07-15/schZ010/schema/schZ010 pass
 MS-Schema2006-07-15/schZ011_a/schema/schZ011_a fail
 MS-Schema2006-07-15/schZ011_b/schema/schZ011_b fail
 MS-Schema2006-07-15/schZ011_c/schema/schZ011_c fail
@@ -9840,7 +9840,7 @@ MS-Schema2006-07-15/schZ012_a/schema/schZ012_a fail
 MS-Schema2006-07-15/schZ012_b/schema/schZ012_b pass
 MS-Schema2006-07-15/schZ012_c/schema/schZ012_c pass
 MS-Schema2006-07-15/schZ013/schema/schZ013 fail
-MS-Schema2006-07-15/schZ014_a/schema/schZ014_a fail
+MS-Schema2006-07-15/schZ014_a/schema/schZ014_a pass
 MS-Schema2006-07-15/schZ014_b/schema/schZ014_b fail
 MS-Schema2006-07-15/schZ015/schema/schZ015 fail
 MS-SimpleType2006-07-15/stA001/schema/stA001 pass
