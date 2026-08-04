@@ -780,6 +780,108 @@ func TestParseImportNoChameleonCoercion(t *testing.T) {
 	}
 }
 
+// TestParseImportLicensesOnlyItsOwnDocument covers src-resolve clause 4.2.2
+// (cl.qnr.nsdeclared, §3.17.6.2): the <import> that licenses a cross-namespace
+// reference must sit in the schema document making the reference — "some
+// <import> element information item contained in the <schema> element
+// information item of THAT schema document" — not merely somewhere in the
+// assembly.
+//
+// Both runs assemble the SAME three documents and both put {urn:b}code in the
+// schema (main.xsd imports urn:b either way), so clauses 1-3 resolve the
+// reference in both and only clause 4 can tell them apart: without its own
+// <import>, a2.xsd may not reach into urn:b however its siblings were composed
+// (§4.2.6.1).
+func TestParseImportLicensesOnlyItsOwnDocument(t *testing.T) {
+	docs := func(ownImport string) map[string]string {
+		return map[string]string{
+			"main.xsd": wrap("urn:a", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`+
+				`<xs:include schemaLocation="a2.xsd"/>`),
+			"a2.xsd": wrapImporting("urn:a", "urn:b", ownImport+
+				`<xs:element name="root" type="imp:code"/>`),
+			"b.xsd": wrap("urn:b", `<xs:simpleType name="code">`+
+				`<xs:restriction base="xs:string"/></xs:simpleType>`),
+		}
+	}
+	_, err := parseMap(t, "main.xsd", docs(""))
+	mustXSDRule(t, err, "src-resolve", "a2.xsd")
+
+	s, err := parseMap(t, "main.xsd", docs(`<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`))
+	if err != nil {
+		t.Fatalf("Parse: %v, want a2.xsd's OWN <import> to license the same reference", err)
+	}
+	ed, ok := s.Element(xsd.QName{Space: "urn:a", Local: "root"})
+	if !ok {
+		t.Fatalf("element {urn:a}root not found")
+	}
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != (xsd.QName{Space: "urn:b", Local: "code"}) {
+		t.Fatalf("root type = %s, want {urn:b}code", got)
+	}
+}
+
+// TestParseUnqualifiedReferenceNeedsBareImport covers src-resolve clause 4.1: a
+// reference left in the ·absent· namespace is licensed only by a document that
+// declares no targetNamespace (4.1.1) or carries an <import> with no namespace
+// attribute (4.1.2). a2.xsd declares urn:a, so 4.1.1 is out and its own bare
+// <import> is the only thing that can license type="code".
+//
+// The no-namespace {}code is in the assembly for both runs — main.xsd's bare
+// <import> of lib.xsd contributes it, and <import> applies no §F.1 coercion — so
+// again only clause 4 separates them.
+func TestParseUnqualifiedReferenceNeedsBareImport(t *testing.T) {
+	docs := func(ownImport string) map[string]string {
+		return map[string]string{
+			"main.xsd": wrap("urn:a", `<xs:import schemaLocation="lib.xsd"/>`+
+				`<xs:include schemaLocation="a2.xsd"/>`),
+			"a2.xsd": wrap("urn:a", ownImport+`<xs:element name="root" type="code"/>`),
+			"lib.xsd": wrap("", `<xs:simpleType name="code">`+
+				`<xs:restriction base="xs:string"/></xs:simpleType>`),
+		}
+	}
+	_, err := parseMap(t, "main.xsd", docs(""))
+	mustXSDRule(t, err, "src-resolve", "a2.xsd")
+
+	s, err := parseMap(t, "main.xsd", docs(`<xs:import schemaLocation="lib.xsd"/>`))
+	if err != nil {
+		t.Fatalf("Parse: %v, want a2.xsd's own bare <import> to license the unqualified reference", err)
+	}
+	ed, ok := s.Element(xsd.QName{Space: "urn:a", Local: "root"})
+	if !ok {
+		t.Fatalf("element {urn:a}root not found")
+	}
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != (xsd.QName{Local: "code"}) {
+		t.Fatalf("root type = %s, want the no-namespace {}code", got)
+	}
+}
+
+// TestParseChameleonReferenceLicensedByCoercedNamespace pins clause 4 against
+// §F.1: the coercion runs BEFORE the licensing test, so a chameleon document's
+// unqualified reference — which task (b) has already moved into the including
+// namespace — is licensed by clause 4.2.1 against that COERCED namespace, even
+// though the document itself declares no targetNamespace and imports nothing.
+// The reference names a sibling contributed by a THIRD document so that the
+// coerced namespace, not the document's own contents, is doing the work.
+func TestParseChameleonReferenceLicensedByCoercedNamespace(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:include schemaLocation="cham.xsd"/>`+
+			`<xs:include schemaLocation="lib.xsd"/>`),
+		"cham.xsd": `<xs:schema xmlns:xs="` + xsdNS + `">` +
+			`<xs:element name="root" type="code"/></xs:schema>`,
+		"lib.xsd": wrap("urn:a", `<xs:simpleType name="code">`+
+			`<xs:restriction base="xs:string"/></xs:simpleType>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v, want §F.1's coercion to license the reference under clause 4.2.1", err)
+	}
+	ed, ok := s.Element(xsd.QName{Space: "urn:a", Local: "root"})
+	if !ok {
+		t.Fatalf("element {urn:a}root not found")
+	}
+	if got := declaredTypeName(t, ed.TypeDefinition()); got != (xsd.QName{Space: "urn:a", Local: "code"}) {
+		t.Fatalf("chameleon reference = %s, want {urn:a}code", got)
+	}
+}
+
 // TestParseImportSelfNamespace covers src-import clause 1.1
 // (src-import-noselfimport): the namespace attribute must not name the importing
 // schema's own target namespace.

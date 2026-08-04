@@ -4636,8 +4636,8 @@ MS-Element2006-07-15/elemZ002/schema/elemZ002 pass
 MS-Element2006-07-15/elemZ003/schema/elemZ003 fail
 MS-Element2006-07-15/elemZ004/schema/elemZ004 pass
 MS-Element2006-07-15/elemZ005/schema/elemZ005 pass
-MS-Element2006-07-15/elemZ006/schema/elemZ006 fail
-MS-Element2006-07-15/elemZ007/schema/elemZ007 fail
+MS-Element2006-07-15/elemZ006/schema/elemZ006 pass
+MS-Element2006-07-15/elemZ007/schema/elemZ007 pass
 MS-Element2006-07-15/elemZ008/schema/elemZ008 pass
 MS-Element2006-07-15/elemZ009/schema/elemZ009 fail
 MS-Element2006-07-15/elemZ010/schema/elemZ010 fail
@@ -5054,7 +5054,7 @@ MS-IdentityConstraint2006-07-15/idC015/schema/idC015 pass
 MS-IdentityConstraint2006-07-15/idC016/schema/idC016 pass
 MS-IdentityConstraint2006-07-15/idC017/schema/idC017 pass
 MS-IdentityConstraint2006-07-15/idC018/schema/idC018 pass
-MS-IdentityConstraint2006-07-15/idC019/schema/idC019 fail
+MS-IdentityConstraint2006-07-15/idC019/schema/idC019 pass
 MS-IdentityConstraint2006-07-15/idC020/schema/idC020 fail
 MS-IdentityConstraint2006-07-15/idC021/schema/idC021 fail
 MS-IdentityConstraint2006-07-15/idC022/schema/idC022 pass
@@ -9763,7 +9763,7 @@ MS-Schema2006-07-15/schG5/schema/schG5 pass
 MS-Schema2006-07-15/schG6/schema/schG6 pass
 MS-Schema2006-07-15/schG7/schema/schG7 pass
 MS-Schema2006-07-15/schG8/schema/schG8 pass
-MS-Schema2006-07-15/schG9/schema/schG9 fail
+MS-Schema2006-07-15/schG9/schema/schG9 pass
 MS-Schema2006-07-15/schH1/schema/schH1 fail
 MS-Schema2006-07-15/schH2/schema/schH2 fail
 MS-Schema2006-07-15/schH3/schema/schH3 fail
@@ -9825,8 +9825,8 @@ MS-Schema2006-07-15/schU5/schema/schU5 fail
 MS-Schema2006-07-15/schZ001_78029-a/schema/schZ001_78029-a fail
 MS-Schema2006-07-15/schZ002_78029-b/schema/schZ002_78029-b fail
 MS-Schema2006-07-15/schZ003_78029-c/schema/schZ003_78029-c fail
-MS-Schema2006-07-15/schZ004/schema/schZ004 fail
-MS-Schema2006-07-15/schZ005/schema/schZ005 fail
+MS-Schema2006-07-15/schZ004/schema/schZ004 pass
+MS-Schema2006-07-15/schZ005/schema/schZ005 pass
 MS-Schema2006-07-15/schZ006/schema/schZ006 fail
 MS-Schema2006-07-15/schZ007/schema/schZ007 fail
 MS-Schema2006-07-15/schZ008/schema/schZ008 pass
