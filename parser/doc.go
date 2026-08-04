@@ -63,9 +63,19 @@
 // # Current coverage
 //
 //	func Parse(location string, opts ...Option) (*xsd.Schema, error)
+//	func ParseReport(location string, opts ...Option) (*xsd.Schema,
+//	    *AssemblyReport, error)
 //	    Options: WithResolver(loader.Resolver) (default loader.Dir(".")),
 //	    WithBackend(value.Backend) (default builtin/strict),
 //	    WithLogger(*slog.Logger) (default silent).
+//
+// ParseReport is the entry point and Parse the wrapper that drops its
+// report. The [AssemblyReport] answers what the assembled
+// [xsd.Schema] cannot — which schema documents went into it, in
+// discovery order, and which ·inter-schema-document references· could
+// not be followed to one — so a consumer reasoning about the DOCUMENT
+// SET (§4.2.1's schema(D)) does not have to re-walk §4.2's composition
+// edges itself. It is populated even when an error is returned.
 //
 // Parse assembles the <xs:include>, <xs:override> and <xs:import>
 // closure of the root document (§4.2.3, §4.2.5, §4.2.6.2), including
@@ -98,7 +108,10 @@
 //     representation this slice does not yet produce (§3.1.2), so a
 //     schema needing it assembles short. Passing WithLogger is how that
 //     is observed: every skipped child <xs:redefine> element is reported
-//     at debug level with its location. That also empties §F.2 clause
+//     at debug level with its location. It is NOT reported as an
+//     [UnfollowedDirective] either, because no attempt is made to
+//     dereference it — the report says which attempted references came
+//     back empty, and this one is never attempted. That also empties §F.2 clause
 //     1's "or <redefine>" scope: an <xs:override> substitutes only for
 //     the <schema> children of the documents in its ·target set·, never
 //     for a <redefine> child, because no <redefine> is read at all.

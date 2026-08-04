@@ -117,7 +117,7 @@ func TestReadDocumentBaseURIInheritAndOverride(t *testing.T) {
 	for _, n := range root.Children() {
 		el, ok := n.(*parser.Element)
 		if ok && el.Name().Local() == "element" {
-			if v, _ := attrValue(el, "name"); v == "child" {
+			if v, _ := el.Attr("name"); v == "child" {
 				child = el
 			}
 		}
@@ -349,15 +349,6 @@ func attrLocals(e *parser.Element) []string {
 		out = append(out, a.Name().Local())
 	}
 	return out
-}
-
-func attrValue(e *parser.Element, local string) (string, bool) {
-	for _, a := range e.Attributes() {
-		if a.Name().Local() == local {
-			return a.Value(), true
-		}
-	}
-	return "", false
 }
 
 func contains(ss []string, s string) bool {

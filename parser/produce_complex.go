@@ -942,7 +942,7 @@ func openContentModeIsNone(we *Element) bool {
 // (§3.4.6.1), the §3.4.1 tableau the {mode} property belongs to, exactly as
 // xsd.NewOpenContent charges a mode it cannot represent.
 func openContentModeOf(we *Element) (xsd.OpenContentMode, error) {
-	mode, ok := attrValue(we, "mode")
+	mode, ok := we.Attr("mode")
 	if !ok {
 		return xsd.OpenContentInterleave, nil
 	}
@@ -1085,7 +1085,7 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 	if elided {
 		return nil, nil
 	}
-	ref, ok := attrValue(el, "ref")
+	ref, ok := el.Attr("ref")
 	if !ok {
 		// A <group> in a content model is always a reference (§3.8.2: the named
 		// definition form appears only as a top-level <schema> child). ref/name
@@ -1245,7 +1245,7 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 	// validity conclusion. No W3C suite case has this shape. Unowned: no issue
 	// tracks it yet (STYLE P3 requires an issue reference only when an issue does
 	// own the retirement).
-	if ref, hasRef := attrValue(el, "ref"); hasRef {
+	if ref, hasRef := el.Attr("ref"); hasRef {
 		qn, err := p.resolveQName(el, ref)
 		if err != nil {
 			return nil, err
@@ -1326,11 +1326,11 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 // axis is not walkable from an *Element). It is a required parameter, and every
 // path through this function builds the scope from it.
 func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScopeParent) (xsd.ElementDeclaration, error) {
-	if _, ok := attrValue(el, "substitutionGroup"); ok {
+	if _, ok := el.Attr("substitutionGroup"); ok {
 		return xsd.ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, el.Loc(),
 			"a local <element> carries a substitutionGroup attribute, but e-props-correct clause 3 confines a non-empty {substitution group affiliations} to a global {scope}.{variety} — the schema for schema documents accordingly declares the attribute use=\"prohibited\" on xs:localElement (§3.3.2)")
 	}
-	_, hasType := attrValue(el, "type")
+	_, hasType := el.Attr("type")
 	inlineSimple := childElement(el, xsd.XMLSchemaNS, "simpleType")
 	inlineComplex := childElement(el, xsd.XMLSchemaNS, "complexType")
 	if hasType && (inlineSimple != nil || inlineComplex != nil) {
@@ -1340,7 +1340,7 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 	if err := rejectBothInlineTypes(el, inlineSimple, inlineComplex); err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	name, _ := attrValue(el, "name")
+	name, _ := el.Attr("name")
 	qname := xsd.QName{Space: p.localTargetNS(el, "elementFormDefault"), Local: name}
 	vc, err := valueConstraintOf(el, ruleSrcElement)
 	if err != nil {
@@ -1432,7 +1432,7 @@ func (p *producer) localDeclaredType(el *Element, dflt xsd.QName) (xsd.TypeDefin
 		}
 		return xsd.InlineTypeDefinition{Definition: st}, nil
 	}
-	typeLex, hasType := attrValue(el, "type")
+	typeLex, hasType := el.Attr("type")
 	if !hasType {
 		return xsd.TypeDefinitionRef{Name: dflt}, nil
 	}
@@ -1537,10 +1537,10 @@ func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error
 		if !ok || el.Name().Space() != xsd.XMLSchemaNS || el.Name().Local() != "attribute" {
 			continue
 		}
-		if use, _ := attrValue(el, "use"); use != "prohibited" {
+		if use, _ := el.Attr("use"); use != "prohibited" {
 			continue
 		}
-		if ref, hasRef := attrValue(el, "ref"); hasRef {
+		if ref, hasRef := el.Attr("ref"); hasRef {
 			qn, err := p.resolveQName(el, ref)
 			if err != nil {
 				return nil, err
@@ -1548,7 +1548,7 @@ func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error
 			names = append(names, qn)
 			continue
 		}
-		name, hasName := attrValue(el, "name")
+		name, hasName := el.Attr("name")
 		if !hasName {
 			continue // neither ref nor name: no expanded name to block
 		}
@@ -1655,7 +1655,7 @@ func (p *producer) collectAttributeContent(container *Element, visited map[xsd.Q
 // diamond (two refs reaching one group) would then splice that group's uses twice
 // and trip ag-props-correct on a collision the spec's set union does not have.
 func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
-	ref, ok := attrValue(el, "ref")
+	ref, ok := el.Attr("ref")
 	if !ok {
 		return fmt.Errorf("parser: a nested <attributeGroup> must be a reference (carry a ref attribute), but none is present")
 	}
@@ -1715,7 +1715,7 @@ func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.W
 // and ref.att.local (§3.2.2.3) reads them off the ref-carrying element itself,
 // never touching the referenced top-level declaration's.
 func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
-	use, _ := attrValue(el, "use") // default "optional"
+	use, _ := el.Attr("use") // default "optional"
 	if use == "prohibited" {
 		return nil, nil
 	}
@@ -1726,8 +1726,8 @@ func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
 	required := use == "required"
 	inheritable, _ := boolAttr(el, "inheritable")
 
-	ref, hasRef := attrValue(el, "ref")
-	_, hasName := attrValue(el, "name")
+	ref, hasRef := el.Attr("ref")
+	_, hasName := el.Attr("name")
 	if hasRef {
 		if hasName {
 			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
@@ -1737,7 +1737,7 @@ func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
 			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
 				"attribute has both ref and an inline <simpleType>, but src-attribute clause 3 forbids a type with ref")
 		}
-		if _, hasType := attrValue(el, "type"); hasType {
+		if _, hasType := el.Attr("type"); hasType {
 			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
 				"attribute has both ref and type, but src-attribute clause 3 forbids a type with ref")
 		}
@@ -1773,12 +1773,12 @@ func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
 // inline <simpleType> child (#229), the type= reference, or xs:anySimpleType.
 // src-attribute clause 4 (§3.2.3) rejects the both-present case first.
 func (p *producer) produceLocalAttribute(el *Element) (xsd.AttributeDeclaration, error) {
-	_, hasType := attrValue(el, "type")
+	_, hasType := el.Attr("type")
 	if hasType && childElement(el, xsd.XMLSchemaNS, "simpleType") != nil {
 		return xsd.AttributeDeclaration{}, xsderr.New(ruleSrcAttribute, el.Loc(),
 			"attribute has both a type attribute and an inline <simpleType> child, but src-attribute clause 4 forbids both")
 	}
-	name, _ := attrValue(el, "name")
+	name, _ := el.Attr("name")
 	qname := xsd.QName{Space: p.localTargetNS(el, "attributeFormDefault"), Local: name}
 	typeDef, err := p.localDeclaredType(el, anySimpleTypeName)
 	if err != nil {
@@ -1797,7 +1797,7 @@ func (p *producer) produceWildcard(el *Element) (xsd.Wildcard, error) {
 		return xsd.Wildcard{}, err
 	}
 	process := xsd.ProcessStrict
-	if pc, ok := attrValue(el, "processContents"); ok {
+	if pc, ok := el.Attr("processContents"); ok {
 		process, err = processContentsOf(pc, el.Loc())
 		if err != nil {
 			return xsd.Wildcard{}, err
@@ -1809,8 +1809,8 @@ func (p *producer) produceWildcard(el *Element) (xsd.Wildcard, error) {
 // namespaceConstraint maps the namespace/notNamespace/notQName attributes of an
 // <any>/<anyAttribute> to a Namespace Constraint (§3.10.2.2).
 func (p *producer) namespaceConstraint(el *Element) (xsd.NamespaceConstraint, error) {
-	ns, hasNS := attrValue(el, "namespace")
-	notNS, hasNotNS := attrValue(el, "notNamespace")
+	ns, hasNS := el.Attr("namespace")
+	notNS, hasNotNS := el.Attr("notNamespace")
 	if hasNS && hasNotNS {
 		return xsd.NamespaceConstraint{}, xsderr.New(ruleSrcWildcard, el.Loc(),
 			"wildcard has both namespace and notNamespace, but src-wildcard forbids both")
@@ -1887,7 +1887,7 @@ func (p *producer) namespaceVarietyAndSet(ns string, hasNS bool, notNS string, h
 // shrink {disallowed names} into a more permissive wildcard than the schema
 // declares. resolveQName's src-resolve error is propagated verbatim.
 func (p *producer) disallowedNames(el *Element) ([]xsd.QName, []xsd.DisallowedNameKeyword, error) {
-	notQName, ok := attrValue(el, "notQName")
+	notQName, ok := el.Attr("notQName")
 	if !ok {
 		return nil, nil, nil
 	}
@@ -1941,16 +1941,16 @@ func disallowedNameKeywordOf(tok string, attributeWildcard bool, loc xsderr.Loc)
 // schema's *FormDefault (formDefaultAttr is "elementFormDefault" or
 // "attributeFormDefault"), defaulting to absent (unqualified).
 func (p *producer) localTargetNS(el *Element, formDefaultAttr string) string {
-	if tns, ok := attrValue(el, "targetNamespace"); ok {
+	if tns, ok := el.Attr("targetNamespace"); ok {
 		return tns
 	}
-	if form, ok := attrValue(el, "form"); ok {
+	if form, ok := el.Attr("form"); ok {
 		if form == "qualified" {
 			return p.target
 		}
 		return ""
 	}
-	if fd, ok := attrValue(p.schemaElem, formDefaultAttr); ok && fd == "qualified" {
+	if fd, ok := p.schemaElem.Attr(formDefaultAttr); ok && fd == "qualified" {
 		return p.target
 	}
 	return ""
@@ -1962,7 +1962,7 @@ func (p *producer) localTargetNS(el *Element, formDefaultAttr string) string {
 // caller omits the particle entirely rather than building a vacuous Occurs{0,0}.
 func occursOf(el *Element) (occ xsd.Occurs, elided bool, err error) {
 	min := 1
-	if minS, ok := attrValue(el, "minOccurs"); ok {
+	if minS, ok := el.Attr("minOccurs"); ok {
 		min, err = nonNegativeInt(minS, el.Loc(), "minOccurs")
 		if err != nil {
 			return xsd.Occurs{}, false, err
@@ -1970,7 +1970,7 @@ func occursOf(el *Element) (occ xsd.Occurs, elided bool, err error) {
 	}
 	unbounded := false
 	max := 1
-	if maxS, ok := attrValue(el, "maxOccurs"); ok {
+	if maxS, ok := el.Attr("maxOccurs"); ok {
 		if strings.TrimSpace(maxS) == "unbounded" {
 			unbounded = true
 		} else {
@@ -2021,12 +2021,12 @@ func nonNegativeInt(lexical string, loc xsderr.Loc, attr string) (int, error) {
 // <group>, Appendix A's xs:namedGroup makes both attributes use="prohibited", a
 // presence fault of a different declaration that this function does not model.
 func allOccursGrammar(el *Element) error {
-	if lexical, ok := attrValue(el, "minOccurs"); ok {
+	if lexical, ok := el.Attr("minOccurs"); ok {
 		if err := allOccursEnum(lexical, el.Loc(), "minOccurs"); err != nil {
 			return err
 		}
 	}
-	lexical, ok := attrValue(el, "maxOccurs")
+	lexical, ok := el.Attr("maxOccurs")
 	if !ok {
 		return nil
 	}
@@ -2118,26 +2118,26 @@ func hasParticleChild(group *Element) bool {
 
 // minOccursZero reports whether el's minOccurs actual value is 0.
 func minOccursZero(el *Element) bool {
-	v, ok := attrValue(el, "minOccurs")
+	v, ok := el.Attr("minOccurs")
 	return ok && strings.TrimSpace(v) == "0"
 }
 
 // maxOccursZero reports whether el's maxOccurs actual value is 0.
 func maxOccursZero(el *Element) bool {
-	v, ok := attrValue(el, "maxOccurs")
+	v, ok := el.Attr("maxOccurs")
 	return ok && strings.TrimSpace(v) == "0"
 }
 
 // attrOr returns el's attribute local value, or the empty string when absent.
 func attrOr(el *Element, local string) string {
-	v, _ := attrValue(el, local)
+	v, _ := el.Attr(local)
 	return v
 }
 
 // boolAttr reads an xs:boolean-valued attribute (true/1 → true), reporting
 // presence. An absent attribute is (false, false).
 func boolAttr(el *Element, local string) (val bool, present bool) {
-	v, ok := attrValue(el, local)
+	v, ok := el.Attr(local)
 	if !ok {
 		return false, false
 	}

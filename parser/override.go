@@ -117,7 +117,7 @@ func newOverrideSet(el *Element) (*overrideSet, error) {
 			// substitutes for nothing.
 			continue
 		}
-		name, ok := attrValue(c, "name")
+		name, ok := c.Attr("name")
 		if !ok {
 			// The schema for schema documents makes name required on every
 			// non-annotation child of <override>. One without it matches no source
@@ -213,7 +213,7 @@ func (s *overrideSet) replacement(el *Element) *Element {
 	if s == nil {
 		return el
 	}
-	name, ok := attrValue(el, "name")
+	name, ok := el.Attr("name")
 	if !ok {
 		return el
 	}

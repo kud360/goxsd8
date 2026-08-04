@@ -32,7 +32,7 @@ import (
 // is no rejectable state at this layer (xsd.NewXPathExpression's own doc), so
 // there is no error to return.
 func (p *producer) buildXPathExpression(hostElem *Element, exprAttr string) xsd.XPathExpression {
-	expr, _ := attrValue(hostElem, exprAttr)
+	expr, _ := hostElem.Attr(exprAttr)
 	var bindings []xsd.NamespaceBinding
 	for _, ns := range hostElem.inScopePrefixes() {
 		bindings = append(bindings, xsd.NewNamespaceBinding(ns.Prefix(), ns.URI()))
@@ -57,9 +57,9 @@ func (p *producer) buildXPathExpression(hostElem *Element, exprAttr string) xsd.
 // result means exactly "no absent-prefix entry in scope" — both clause 1.2
 // shapes — and yields nil, never a present "".
 func (p *producer) xpathDefaultNamespace(hostElem *Element) *string {
-	d, ok := attrValue(hostElem, "xpathDefaultNamespace")
+	d, ok := hostElem.Attr("xpathDefaultNamespace")
 	if !ok {
-		d, ok = attrValue(p.schemaElem, "xpathDefaultNamespace")
+		d, ok = p.schemaElem.Attr("xpathDefaultNamespace")
 	}
 	if !ok {
 		d = "##local"
@@ -76,7 +76,7 @@ func (p *producer) xpathDefaultNamespace(hostElem *Element) *string {
 		}
 		return &uri
 	case "##targetNamespace":
-		if _, hasTarget := attrValue(p.schemaElem, "targetNamespace"); !hasTarget {
+		if _, hasTarget := p.schemaElem.Attr("targetNamespace"); !hasTarget {
 			return nil
 		}
 		target := p.target
@@ -132,8 +132,8 @@ func (p *producer) identityConstraintsOf(hostElem *Element) ([]xsd.IdentityConst
 //     would fabricate a sch-props-correct (§3.17.6.1) clause 2 collision against
 //     the very definition it reuses.
 func (p *producer) produceIdentityConstraint(el *Element, category xsd.IdentityConstraintCategory) (xsd.IdentityConstraint, error) {
-	name, hasName := attrValue(el, "name")
-	if _, hasRef := attrValue(el, "ref"); hasRef == hasName {
+	name, hasName := el.Attr("name")
+	if _, hasRef := el.Attr("ref"); hasRef == hasName {
 		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
 			"<%s> must carry exactly one of name or ref, but src-identity-constraint clause 1 permits one and not both", el.Name().Local())
 	}
@@ -176,7 +176,7 @@ func (p *producer) referencedIdentityConstraint(el *Element, category xsd.Identi
 	if err := checkIdentityConstraintRefBare(el, local); err != nil {
 		return xsd.IdentityConstraint{}, err
 	}
-	refLex, _ := attrValue(el, "ref") // present: the caller took this arm on !hasName
+	refLex, _ := el.Attr("ref") // present: the caller took this arm on !hasName
 	qn, err := p.resolveQName(el, refLex)
 	if err != nil {
 		return xsd.IdentityConstraint{}, err
@@ -282,7 +282,7 @@ func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, cate
 
 	var referencedKey *xsd.QName
 	if category == xsd.IdentityConstraintKeyref {
-		referLex, ok := attrValue(el, "refer")
+		referLex, ok := el.Attr("refer")
 		if !ok {
 			return xsd.IdentityConstraint{}, xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
 				"<keyref> has no refer attribute, but src-identity-constraint clause 3 requires one when name is present")
