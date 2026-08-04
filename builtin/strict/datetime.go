@@ -60,7 +60,7 @@ type dateTimeVal struct {
 func parseDateTime(lexical string, _ value.Context) (value.Value, error) {
 	m := dateTimeLexical.FindStringSubmatch(lexical)
 	if m == nil {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"dateTime: %q is not in the lexical space (dateTimeLexicalRep, §3.3.7.2)", lexical)
 	}
 	year, _ := new(big.Int).SetString(m[1], 10) // regex guarantees a valid integer numeral
@@ -71,7 +71,7 @@ func parseDateTime(lexical string, _ value.Context) (value.Value, error) {
 	// for every month, so reject a day beyond the month's length (leap year aware)
 	// as outside the lexical space.
 	if day > daysInMonth(year, month) {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"dateTime: %q has day %d out of range for month %d of year %s (con-dateTime-dayValue, §3.3.7.1)",
 			lexical, day, month, year)
 	}
@@ -165,7 +165,7 @@ func isLeapYear(year *big.Int) bool {
 func canonicalDateTime(v value.Value) (string, error) {
 	d, ok := v.(dateTimeVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"dateTime canonical: value of type %T is not a strict dateTime", v)
 	}
 	return d.Canonical(), nil

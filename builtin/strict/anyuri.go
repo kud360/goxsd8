@@ -31,7 +31,7 @@ func parseAnyURI(lexical string, _ value.Context) (value.Value, error) {
 func canonicalAnyURI(v value.Value) (string, error) {
 	u, ok := v.(anyURIVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"anyURI canonical: value of type %T is not a strict anyURI", v)
 	}
 	return u.Canonical(), nil

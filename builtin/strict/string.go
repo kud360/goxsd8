@@ -24,7 +24,7 @@ func parseString(lexical string, _ value.Context) (value.Value, error) {
 func canonicalString(v value.Value) (string, error) {
 	s, ok := v.(stringVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"string canonical: value of type %T is not a strict string", v)
 	}
 	return s.Canonical(), nil

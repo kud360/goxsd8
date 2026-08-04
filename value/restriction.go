@@ -31,6 +31,29 @@ import (
 // {value} is trivially still a member of {facets}. There is no reachable
 // violating state to reject.
 
+// The construction-time Schema Component Constraints this file charges — the
+// §4.3 "valid restriction" siblings of facets.go's instance-time cvc-* rules.
+// Each string is a live entry in xsderr's generated catalog.
+const (
+	// ruleEnumerationValidRestriction is enumeration valid restriction (§4.3.5.5,
+	// id="enumeration-valid-restriction"): every member of a restriction's
+	// enumeration facet {value} must be in the ·value space· of the {base type
+	// definition}.
+	ruleEnumerationValidRestriction xsderr.Rule = "enumeration-valid-restriction"
+	// ruleMaxInclusiveValidRestriction is maxInclusive valid restriction
+	// (§4.3.7.4, id="maxInclusive-valid-restriction").
+	ruleMaxInclusiveValidRestriction xsderr.Rule = "maxInclusive-valid-restriction"
+	// ruleMaxExclusiveValidRestriction is maxExclusive valid restriction
+	// (§4.3.8.4, id="maxExclusive-valid-restriction").
+	ruleMaxExclusiveValidRestriction xsderr.Rule = "maxExclusive-valid-restriction"
+	// ruleMinExclusiveValidRestriction is minExclusive valid restriction
+	// (§4.3.9.4, id="minExclusive-valid-restriction").
+	ruleMinExclusiveValidRestriction xsderr.Rule = "minExclusive-valid-restriction"
+	// ruleMinInclusiveValidRestriction is minInclusive valid restriction
+	// (§4.3.10.4, id="minInclusive-valid-restriction").
+	ruleMinInclusiveValidRestriction xsderr.Rule = "minInclusive-valid-restriction"
+)
+
 // CheckFacetRestriction charges the value-space Schema Component Constraints
 // relating a Simple Type Definition's own Constraining Facets to its {base type
 // definition} — the half of cos-st-restricts clause 1.3.2 / 2.2.2.5 / 3.2.2.5
@@ -347,7 +370,7 @@ func (rc restrictionCheck) checkEnumerationRestriction(b Backend) error {
 		members, _ := own.EnumerationMembers()
 		for _, em := range members {
 			if _, err := ValidateLexical(b, rc.owner.Base(), em.Lexical(), newMemberContext(em)); err != nil {
-				return xsderr.Wrap("enumeration-valid-restriction", rc.owner.Loc(), err)
+				return xsderr.Wrap(ruleEnumerationValidRestriction, rc.owner.Loc(), err)
 			}
 		}
 	}
@@ -374,13 +397,13 @@ func isBoundKind(kind xsd.FacetKind) bool {
 func boundRestrictionRule(k xsd.FacetKind) xsderr.Rule {
 	switch k {
 	case xsd.FacetMaxInclusive:
-		return "maxInclusive-valid-restriction"
+		return ruleMaxInclusiveValidRestriction
 	case xsd.FacetMaxExclusive:
-		return "maxExclusive-valid-restriction"
+		return ruleMaxExclusiveValidRestriction
 	case xsd.FacetMinInclusive:
-		return "minInclusive-valid-restriction"
+		return ruleMinInclusiveValidRestriction
 	case xsd.FacetMinExclusive:
-		return "minExclusive-valid-restriction"
+		return ruleMinExclusiveValidRestriction
 	default:
 		panic("value: boundRestrictionRule: " + k.String() + " is not a bound facet")
 	}

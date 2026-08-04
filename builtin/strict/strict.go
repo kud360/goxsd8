@@ -3,7 +3,17 @@ package strict
 import (
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
+
+// ruleDatatypeValid is Datatype Valid (Datatypes §4.1.4,
+// id="cvc-datatype-valid"), the ONLY rule this package charges: every mapping
+// here decides one question — is this literal in its type's ·lexical space·, and
+// does the ·lexical mapping· take it to a value in the ·value space·. Facet
+// violations belong to the per-facet cvc-* rules charged one layer up (package
+// value); a backend never sees a facet. It is a live entry in xsderr's generated
+// catalog.
+const ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 
 // New returns the spec-exact value.Backend for the primitive cohort so far:
 // xs:decimal, xs:precisionDecimal,

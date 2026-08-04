@@ -65,7 +65,7 @@ func parseDouble(lexical string, _ value.Context) (value.Value, error) {
 // a float64 that is exactly representable as a float32); the caller narrows.
 func parseFloating(lexical string, bitSize int, name string) (float64, error) {
 	if !floatingLexical.MatchString(lexical) {
-		return 0, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return 0, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"%s: %q is not in the lexical space (%s, §3.3.4.2/§3.3.5.2)", name, lexical, name+"Rep")
 	}
 
@@ -92,7 +92,7 @@ func parseFloating(lexical string, bitSize int, name string) (float64, error) {
 		if errors.Is(err, strconv.ErrRange) {
 			return f, nil
 		}
-		return 0, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return 0, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"%s: %q is not in the lexical space (%s, §3.3.4.2/§3.3.5.2)", name, lexical, name+"Rep")
 	}
 	return f, nil
@@ -103,7 +103,7 @@ func parseFloating(lexical string, bitSize int, name string) (float64, error) {
 func canonicalFloat(v value.Value) (string, error) {
 	f, ok := v.(floatVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"float canonical: value of type %T is not a strict float", v)
 	}
 	return f.Canonical(), nil
@@ -113,7 +113,7 @@ func canonicalFloat(v value.Value) (string, error) {
 func canonicalDouble(v value.Value) (string, error) {
 	d, ok := v.(doubleVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"double canonical: value of type %T is not a strict double", v)
 	}
 	return d.Canonical(), nil

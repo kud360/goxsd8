@@ -24,7 +24,7 @@ var dayTimeDurationLexical = regexp.MustCompile(`^-?P((([0-9]+D)(T(([0-9]+H)([0-
 // field extraction and ·duDayTimeFragmentMap· math verbatim.
 func parseDayTimeDuration(lexical string, _ value.Context) (value.Value, error) {
 	if !dayTimeDurationLexical.MatchString(lexical) {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"dayTimeDuration: %q is not in the lexical space (dayTimeDurationLexicalRep, §3.4.27.1)", lexical)
 	}
 	f := durationFields.FindStringSubmatch(lexical)
@@ -62,7 +62,7 @@ func parseDayTimeDuration(lexical string, _ value.Context) (value.Value, error) 
 func canonicalDayTimeDuration(v value.Value) (string, error) {
 	d, ok := v.(durationVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"dayTimeDuration canonical: value of type %T is not a strict dayTimeDuration", v)
 	}
 	return d.Canonical(), nil

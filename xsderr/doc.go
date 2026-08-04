@@ -49,9 +49,14 @@
 // rule ID that appears in the local specs, as the ruleCatalog lookup set.
 // IsValidRule(Rule) bool is hand-written in error.go (not generated) so it
 // can admit the non-spec sentinels alongside the generated catalog without
-// regeneration clobbering those exemptions. Tests assert that every
-// Rule constructed in this module is either in the catalog or a sentinel —
-// an error citing a rule the spec doesn't define is a bug by construction. The generate directive
+// regeneration clobbering those exemptions. Rule is a bare string type, so
+// nothing in the Go type system stops an arbitrary one; the guarantee is
+// enforced by test instead. rulecatalog_enforcement_test.go scans the whole
+// module: every Rule-typed constant it declares must satisfy IsValidRule, and
+// no string literal may sit in a Rule position (a New/Wrap rule argument, an
+// Error.Rule field, a Rule-returning return, a Rule conversion). So an error
+// citing a rule the spec doesn't define is a bug that test catches, and every
+// construction site names a documented constant. The generate directive
 // (`//go:generate go tool rulecat`) is wired here in M2 together with the
 // Rule type it emits against.
 package xsderr

@@ -50,7 +50,7 @@ type durationVal struct {
 // space requires.
 func parseDuration(lexical string, _ value.Context) (value.Value, error) {
 	if !durationLexical.MatchString(lexical) {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"duration: %q is not in the lexical space (durationLexicalRep, §3.3.6.2)", lexical)
 	}
 	f := durationFields.FindStringSubmatch(lexical)
@@ -114,7 +114,7 @@ func addSecondFraction(acc *big.Rat, field string) {
 func canonicalDuration(v value.Value) (string, error) {
 	d, ok := v.(durationVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"duration canonical: value of type %T is not a strict duration", v)
 	}
 	return d.Canonical(), nil

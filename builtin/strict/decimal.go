@@ -35,7 +35,7 @@ var bigTen = big.NewInt(10)
 // form and digit counts all read off one stored fact (STYLE D3).
 func parseDecimal(lexical string, _ value.Context) (value.Value, error) {
 	if !decimalLexical.MatchString(lexical) {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"decimal: %q is not in the lexical space (decimal-lexical-representation, §3.3.3.1)", lexical)
 	}
 
@@ -58,7 +58,7 @@ func parseDecimal(lexical string, _ value.Context) (value.Value, error) {
 	// SetString cannot fail; leading zeros are absorbed by base-10 parsing.
 	unscaled, ok := new(big.Int).SetString(intPart+fracPart, 10)
 	if !ok {
-		return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return nil, xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"decimal: %q has no digits (decimal-lexical-representation, §3.3.3.1)", lexical)
 	}
 	if neg {
@@ -86,7 +86,7 @@ func parseDecimal(lexical string, _ value.Context) (value.Value, error) {
 func canonicalDecimal(v value.Value) (string, error) {
 	d, ok := v.(decimalVal)
 	if !ok {
-		return "", xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		return "", xsderr.New(ruleDatatypeValid, xsderr.Loc{},
 			"decimal canonical: value of type %T is not a strict decimal", v)
 	}
 	return d.Canonical(), nil
