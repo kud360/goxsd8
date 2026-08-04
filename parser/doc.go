@@ -104,8 +104,26 @@
 // already-loaded document's targetNamespace is rejected however that
 // document was first reached.
 //
+// What the assembly contributes is not what a reference may reach for. A
+// QName in a schema document resolves only into a namespace THAT document
+// licenses (§3.17.6.2 src-resolve clause 4, cl.qnr.nsdeclared): its own
+// effective (post-§F.1) target namespace, a namespace one of its OWN
+// <xs:import> children names, or the XSD or XSI namespace — the last two
+// with no <xs:import> at all. An unqualified reference left in the
+// ·absent· namespace is licensed only by a document that declares no
+// targetNamespace or carries a bare <xs:import> (clause 4.1). The license
+// is per schema DOCUMENT, never assembly-wide: a namespace some sibling
+// document of the assembly imported licenses nothing here, which is
+// exactly what §4.2.6.1 states — "if references to components in a given
+// namespace N appear in a schema document S, then S must contain an
+// <import> element importing N". Such a reference is rejected as
+// src-resolve at the reference itself, and deliberately not treated as a
+// §5.3 missing sub-component, which §4.2.6.1 also says in as many words.
+//
 // [Produce] remains the single-document entry point: it maps one
-// already-read document and follows no inter-document reference at all.
+// already-read document and follows no inter-document reference at all —
+// it does READ that document's <xs:import> children, since clause 4
+// licenses its references from them, but dereferences none of them.
 //
 // # Planned composition (not yet implemented)
 //
@@ -120,12 +138,6 @@
 //     1's "or <redefine>" scope: an <xs:override> substitutes only for
 //     the <schema> children of the documents in its ·target set·, never
 //     for a <redefine> child, because no <redefine> is read at all.
-//   - GAP(xsd): src-resolve clause 4 (cl.qnr.nsdeclared, §3.17.6.2) is
-//     not enforced: a QName reference into a namespace the containing
-//     document never <xs:import>ed still resolves if some other document
-//     of the assembly contributed that namespace. That direction
-//     under-rejects (never false-rejects a valid schema), so it is a
-//     recorded gap rather than a correctness hazard.
 //   - GAP(xsd): §5.3 (Missing Sub-components) is never reported as such.
 //     A namespace an <xs:import> declares but no document of the
 //     assembly supplies — a bare import, or one whose schemaLocation
@@ -133,8 +145,13 @@
 //     missing, and the only way that surfaces is an actual QName
 //     reference into it failing src-resolve at finalize (which this
 //     package hard-fails, see [xsd.SchemaBuilder.Finalize]); an assembly
-//     that makes no such reference is accepted. Under-rejects in the
-//     same direction as the clause 4 gap above.
+//     that makes no such reference is accepted, which under-rejects.
+//     The src-resolve clause 4 licensing above does NOT close this gap
+//     and cannot: clause 4 judges whether the document ASKED for the
+//     namespace, §5.3 what follows when a namespace it did ask for
+//     supplies no such component — §4.2.6.1 holds the two apart in as
+//     many words ("references … not imported by that schema document …
+//     are not handled as if they referred to missing components").
 //     That hard-fail is itself the deviation from §5.3, which makes an
 //     unresolved reference an ·absent· value and defers the consequence
 //     to ·assessment·, never rejecting the schema. One slot is already

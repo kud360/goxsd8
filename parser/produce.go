@@ -63,7 +63,11 @@ const (
 // <include>/<import>/<redefine>/<override>, so schema(D) here is immed(D) alone
 // (§4.2.1). Multi-document assembly through <include> — and with it chameleon
 // coercion (§4.2.3 clause 3.2, §F.1) — is [Parse]'s job; a caller holding only a
-// document and a backend, with no resolver, keeps this entry point.
+// document and a backend, with no resolver, keeps this entry point. Its
+// <import> children are still READ, though never followed: src-resolve clause 4
+// licenses this document's QName references from them (see parser/doc.go's
+// Composition section), so a type= into a foreign namespace needs an <import>
+// element naming it here as much as it does under [Parse].
 //
 // backend is passed explicitly rather than defaulted to a builtin/strict policy
 // here: that default belongs to [Parse], keeping this leaf free of a
@@ -1227,14 +1231,36 @@ func valueConstraintOf(elem *Element, rule xsderr.Rule) (*xsd.ValueConstraint, e
 	return nil, nil
 }
 
-// resolveQName resolves a QName-valued lexical (a type=/base=/ref= value)
-// against the namespace bindings in scope at elem (§3.17.6.2 src-resolve clause
-// 4). A prefixed name whose prefix is unbound is rejected. An unprefixed name
-// binds to the in-scope default namespace, or — when none is declared (or the
-// default is declared empty) — to unqualifiedRefNS: the no-namespace name
-// (clause 4.1.1) normally, the assembly's namespace under chameleon coercion,
-// deliberately never the schema's own targetNamespace otherwise.
+// resolveQName resolves a QName-valued lexical that must name a schema component
+// (a type=/base=/ref= value) to its expanded name, under BOTH halves of
+// §3.17.6.2 src-resolve clause 4 (cl.qnr.nsdeclared): bindQName maps the lexical
+// against the namespace bindings in scope at elem, and licensedNamespace then
+// requires the namespace name it landed on to be one the containing schema
+// document may reach into at all.
+//
+// A QName-valued attribute whose value does NOT resolve to a component —
+// notQName, whose items §3.10.2's {disallowed names} mapping takes as plain QName
+// values — takes bindQName directly: src-resolve governs ·resolution·, so
+// charging clause 4 there would reject a name the spec never asks to resolve.
 func (p *producer) resolveQName(elem *Element, lexical string) (xsd.QName, error) {
+	qn, err := p.bindQName(elem, lexical)
+	if err != nil {
+		return xsd.QName{}, err
+	}
+	if err := p.licensedNamespace(elem, lexical, qn.Space); err != nil {
+		return xsd.QName{}, err
+	}
+	return qn, nil
+}
+
+// bindQName maps a QName-valued lexical to its expanded name against the
+// namespace bindings in scope at elem (Datatypes §3.3.18). A prefixed name whose
+// prefix is unbound is rejected. An unprefixed name binds to the in-scope default
+// namespace, or — when none is declared (or the default is declared empty) — to
+// unqualifiedRefNS: the no-namespace name (src-resolve clause 4.1.1) normally,
+// the assembly's namespace under chameleon coercion, deliberately never the
+// schema's own targetNamespace otherwise.
+func (p *producer) bindQName(elem *Element, lexical string) (xsd.QName, error) {
 	before, after, found := strings.Cut(lexical, ":")
 	prefix, local := "", before
 	if found {
@@ -1257,6 +1283,96 @@ func (p *producer) resolveQName(elem *Element, lexical string) (xsd.QName, error
 			"the QName prefix %q of %q does not resolve to an in-scope namespace (src-resolve)", prefix, lexical)
 	}
 	return xsd.QName{Space: uri, Local: local}, nil
+}
+
+// licensedNamespace charges src-resolve clause 4 (cl.qnr.nsdeclared, §3.17.6.2)
+// on a reference written at elem whose namespace name resolved to ns: the schema
+// document CONTAINING the reference must itself license that namespace, which is
+// what §4.2.6.1 calls "licensing references to components across namespaces". The
+// license is per-document and never assembly-wide — a namespace some sibling
+// document of the assembly <import>ed licenses nothing here — so a reference that
+// clauses 1-3 would happily resolve is still rejected when its own document never
+// asked for the namespace (#279).
+//
+// §4.2.6.1 is explicit that this is NOT a §5.3 missing sub-component: such
+// references "are not handled as if they referred to missing components", so the
+// verdict is charged here, at the reference, rather than deferred to finalize.
+//
+// The two namespace facts it tests are the containing document's, read as the
+// spec words them. Clause 4.1.1 asks whether that document's <schema> carries a
+// targetNamespace ATTRIBUTE, which for an <override>'s children is the OVERRIDING
+// document's. Clause 4.2.1 tests the EFFECTIVE target namespace p.target instead:
+// §F.1 task (a) has already made the including namespace a chameleon document's
+// own by the time clause 4 is evaluated, and that coercion is constant across an
+// <include>/<override> cascade, so p.target is the containing document's coerced
+// targetNamespace either way.
+func (p *producer) licensedNamespace(elem *Element, lexical, ns string) error {
+	schemaElem := containingSchema(elem)
+	if ns == "" {
+		// Clause 4.1: an ·absent· namespace name is licensed by a document that
+		// declares no targetNamespace (4.1.1) or that <import>s the unqualified
+		// namespace (4.1.2, §4.2.6.1's "if that attribute is absent, then the import
+		// allows unqualified reference to components with no target namespace").
+		own := attrOr(schemaElem, "targetNamespace")
+		if own == "" || importsNamespace(schemaElem, "") {
+			return nil
+		}
+		return xsderr.New(ruleSrcResolve, elem.Loc(),
+			"the unqualified reference %q resolves into the ·absent· namespace, which this schema document does not license: src-resolve clause 4.1 needs it to declare no targetNamespace (it declares %q) or to carry an <import> with no namespace attribute",
+			lexical, own)
+	}
+	// Clause 4.2.1 (the document's own target namespace) and clauses 4.2.3 / 4.2.4
+	// (the XSD and XSI namespaces, licensed with no <import> at all).
+	if ns == p.target || ns == xsd.XMLSchemaNS || ns == xsd.XMLSchemaInstanceNS {
+		return nil
+	}
+	if importsNamespace(schemaElem, ns) { // clause 4.2.2
+		return nil
+	}
+	return xsderr.New(ruleSrcResolve, elem.Loc(),
+		"the reference %q resolves into namespace %q, which this schema document does not license: src-resolve clause 4.2 needs it to be the document's own target namespace %q, the namespace of one of the document's own <import> elements, or the XSD or XSI namespace",
+		lexical, ns, p.target)
+}
+
+// importsNamespace reports whether the <schema> element information item schema
+// carries an <import> licensing references into ns — clause 4.2.2 for a namespace
+// name, clause 4.1.2 for the ·absent· one (ns == ""). Only that document's OWN
+// <import> children answer, since 4.2.2 scopes them to "some <import> element
+// information item contained in the <schema> element information item of THAT
+// schema document".
+//
+// The ·absent· namespace is the empty string throughout this package, so an
+// <import namespace=""> reads as a bare one and licenses an absent-namespace
+// reference; keeping the attribute's PRESENCE apart here would be a second
+// encoding of namespace-absence (STYLE D3), the same fold checkNoSelfImport
+// documents.
+func importsNamespace(schema *Element, ns string) bool {
+	for _, child := range schema.Children() {
+		el, ok := child.(*Element)
+		if !ok || !isXSD(el, "import") {
+			continue
+		}
+		if attrOr(el, "namespace") == ns {
+			return true
+		}
+	}
+	return false
+}
+
+// containingSchema returns the <schema> element information item of the schema
+// document elem textually lives in — src-resolve clause 4's "the schema document
+// containing the ·QName·". That is usually the producer's own document, but a
+// declaration substituted into its top level by an <override> in a DIFFERENT
+// document (§F.2 clause 1) is licensed by the OVERRIDING document's <import>s, so
+// the answer is the topmost ancestor of elem rather than p.schemaElem. Every
+// document reaching a producer has been checked to be a <schema>
+// (Document.IsSchema), so the walk cannot land on anything else.
+func containingSchema(elem *Element) *Element {
+	root := elem
+	for e := elem; e != nil; e = e.Parent() {
+		root = e
+	}
+	return root
 }
 
 // unqualifiedRefNS is the namespace name the unqualified QName REFERENCE carried
@@ -1283,17 +1399,11 @@ func (p *producer) unqualifiedRefNS(elem *Element) string {
 
 // declares reports whether elem is part of THIS document's tree, as opposed to a
 // declaration substituted into its top level by an <override> in a different
-// document (§F.2 clause 1). It walks the parent chain rather than storing
+// document (§F.2 clause 1). It asks containingSchema rather than storing
 // provenance on the element, since provenance is a property of the producer's
-// question, not of the raw node (STYLE D3), and the walk runs only for the
-// chameleon documents whose answer can differ.
+// question, not of the raw node (STYLE D3).
 func (p *producer) declares(elem *Element) bool {
-	for e := elem; e != nil; e = e.Parent() {
-		if e == p.schemaElem {
-			return true
-		}
-	}
-	return false
+	return containingSchema(elem) == p.schemaElem
 }
 
 // facetKindOf maps a plain-lexical constraining-facet element's local name to its

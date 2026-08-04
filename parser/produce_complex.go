@@ -1885,7 +1885,13 @@ func (p *producer) namespaceVarietyAndSet(ns string, hasNS bool, notNS string, h
 // in-scope binding cannot be mapped to a QName value at all (Datatypes §3.3.18),
 // and §3.10.2.2 offers no fallback that omits it, so dropping it would silently
 // shrink {disallowed names} into a more permissive wildcard than the schema
-// declares. resolveQName's src-resolve error is propagated verbatim.
+// declares. bindQName's src-resolve error is propagated verbatim.
+//
+// It is bindQName rather than resolveQName precisely because §3.10.2's mapping
+// takes these items as QName VALUES and never ·resolves· them to components: a
+// notQName naming a namespace this document did not <import> blocks a name, it
+// does not reach for a declaration, so src-resolve clause 4's licensing test
+// (licensedNamespace) does not apply to it.
 func (p *producer) disallowedNames(el *Element) ([]xsd.QName, []xsd.DisallowedNameKeyword, error) {
 	notQName, ok := el.Attr("notQName")
 	if !ok {
@@ -1903,7 +1909,7 @@ func (p *producer) disallowedNames(el *Element) ([]xsd.QName, []xsd.DisallowedNa
 			keywords = append(keywords, kw)
 			continue
 		}
-		qn, err := p.resolveQName(el, tok)
+		qn, err := p.bindQName(el, tok)
 		if err != nil {
 			return nil, nil, err
 		}

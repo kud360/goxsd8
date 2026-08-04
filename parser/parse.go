@@ -100,7 +100,11 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 // through an <xs:import> child (§4.2.6), which brings a DIFFERENT namespace's
 // components in unchanged: import never coerces, so an imported document's
 // components stay in its own target namespace and a cross-namespace reference
-// resolves against them at finalize. Documents are read once each, keyed by
+// resolves against them at finalize. That <import> element does double duty: it
+// is also what LICENSES the referring document to name that namespace at all
+// (src-resolve clause 4.2.2, §4.2.6.1), and the license reaches only the
+// document the element sits in — see parser/doc.go's Composition section.
+// Documents are read once each, keyed by
 // resolved location AND the namespace they were reached under, so a diamond or a
 // (spec-legal) cycle of <include>s, or a namespace imported repeatedly,
 // contributes its components once and does not trip sch-props-correct
