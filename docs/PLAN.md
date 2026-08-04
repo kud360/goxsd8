@@ -2210,6 +2210,289 @@ homed on the first subcommand issue that reaches a real flag set. That
 is a fold of *recorded* persona output, **not** a persona pass, and it
 does not discharge #416.
 
+Update (2026-08-04, weekly backlog — **the pass that found out what
+happened to band 2**): five issues landed in the twenty-four hours since
+the band was published and **not one of them was a band entry**. All
+nine entries are still open, still `ready`, untouched. That is the
+central fact of this pass and everything below is organised around it.
+
+Lanes first, read off `conformance/testdata/expectations/*.txt` at
+`origin/main` @ `0dd6f71` on 2026-08-04. Date-stamped per the preamble
+convention (#411, settled 2026-08-03 and verified applied at this pass —
+the 2026-08-03 numbers are **not** corrected in place below, which is
+the convention doing its job):
+
+| lane | pass / total | movement since 2026-08-03 |
+|---|---|---|
+| `schema` | **9170 / 15432** | 9166 → 9170, **+4** |
+| `datatypes` | **1131 / 1153** | unchanged |
+| `instance` | 0 / 26426 | unchanged |
+| `xpath`, `json`, `ber` | empty by design | unchanged |
+
+**+4 across five landings, and that is the honest number.** #270 and
+#470 were doc-and-guard work, #271 landed no code at all (a replan
+record), #275 recorded `Ratchet: unchanged` substantiated by a read-only
+`Compare` probe rather than a write, and #272/#273 were a report
+refactor and a rule-constant convergence. Nothing in the window was a
+rule implementation. Compare the 2026-08-03 entry's `+4919`, which was a
+lane *widening* rather than processor improvement: this window is the
+opposite shape — real engineering, no lane movement — and the two
+together are the argument for why the band leads with #449 and #336.
+
+***Band 3 — the working queue, re-derived, ten entries.*** Ordering
+doctrine unchanged and restated so this pass can be disagreed with
+rather than re-derived: **measured lane movement first, then the
+integrity of the measurement itself, then false rejects, then
+under-rejects, then producer completeness.** PRINCIPLES 9 is what puts
+false rejects ahead of under-rejects; #238's −69 and #277's −2 are what
+put measurement integrity ahead of both.
+
+1. **#449** — the twenty `negativeInteger`/`nonNegativeInteger`/
+   `nonPositiveInteger`/`positiveInteger` `001–005` lexical fixtures.
+   Position unchanged: still the only entry whose acceptance is
+   literally a lane number, still the cheapest movement available, and
+   after a window that produced **+4** across five sessions that
+   argument is stronger than it was, not weaker.
+2. **#336** — narrow `complexTypeDecidable` to admit the two extension
+   forms and measure the `schema` lane. Position unchanged; both
+   dependencies (#264, #265) still closed; still the largest expected
+   `schema` movement in the queue and still carrying two prior sessions'
+   unmeasured `Ratchet: unchanged` investment.
+3. **#443** — pin `anonymousComplexTypeDecidable`'s implicit-content
+   narrowing. Sequenced with #336 as its safety net, as before. **Its
+   title now understates the exposure by fifteen**: it says "9155 banked
+   schema-lane passes rest on its safety argument" and the lane is at
+   9170. Not amended — the number in a title is a snapshot and the
+   direction only ever goes up; noted so the next reader does not think
+   the lane shrank.
+4. **#446** — `testGroup/@version` is never read, so 8 XSD-1.0-scoped
+   groups are scored against this 1.1 processor. Position unchanged.
+   Same argument as 2026-08-03 and it decays with every banked pass.
+5. **#468** — `addAll`'s `last` set false-rejects
+   `sequence(all(a,b), a)` on `cos-nonambig`. Position unchanged; the
+   one live false reject the last pass found.
+6. **#430** — **new to the band, and this is the pass's one genuine
+   ordering change.** `checkRestrictionAttributeWildcard`'s
+   `cos-ns-subset` comparison ignores `{attribute uses}` already
+   covering the name, *"so it can false-reject a valid restriction"* —
+   its own title. That is the same class as #468 and the same class the
+   doctrine ranks above every under-reject below it, and it has been
+   carried on the `docs/LOG` follow-up ledger as undischarged for
+   several sessions while sitting unranked in the `ready` label. It was
+   not promoted on 2026-08-03 because that pass was drawing the band
+   from the recent-harvest set; that is a filing-order artefact, not a
+   priority judgement, and correcting it is what re-deriving a band is
+   for.
+7. **#436** — `final=`/`finalDefault=`/`block=` never read, nine
+   implemented reader sites inert across six rules. Position unchanged
+   (was 6, now 7, displaced by #430 only).
+8. **#464 → #463**, still a pair and still in that order. #464's
+   hardcoded `clause := "a-props-correct clause 2"` branch mislabels
+   exactly the third caller #463 introduces.
+9. **#342** — `dcl.elt.common` clause 3, the substitution-group type
+   inheritance that falls through to `xs:anyType` on both paths. #395
+   and #471 still ride behind it on the same component data.
+10. **#478 → #447**, in that order, and the ordering is the point.
+    **#478** (defer ALL simple-type cross-references to finalize — the
+    replan of #271) is a placement refactor with an explicit
+    cost-of-delay argument: `<list>`/`<union>` production landing in the
+    producer is the last cheap moment to fix the representation before a
+    third eager guard accumulates. **#447** is precisely that
+    `<list>`/`<union>` production. Taking #447 first is not wrong, but
+    it is the more expensive order and nothing recorded it in a place
+    the develop loop reads — it lived only in a `docs/LOG` "Next" line.
+    It lives here now.
+
+**Why the band did not get consumed, stated plainly rather than
+re-litigated.** The band is prose in `docs/PLAN.md`; the develop loop
+selects on the `ready` label, where all 108 entries are equal. Five
+sessions each picked a reasonable `ready` issue and none of them picked
+a band entry, which is the expected outcome of a priority signal that
+exists in one document and a selection mechanism that reads another.
+**This is #347's thesis with a second, sharper piece of evidence**, and
+it is recorded on that thread, not resolved here — the fix edits
+`.claude/agents/cartographer.md` and a cartographer proposes through the
+queue rather than applying to itself mid-sweep. Fourth restatement; no
+new argument, one new fact.
+
+***Queue arithmetic, and the ratio is now measured.*** **120 open**
+(108 `ready`, 11 `blocked`, 1 unlabelled — #411). The 2026-08-03 pass
+recorded 110 (99 / 10 / 1). **Seventh consecutive backlog over the 8–10
+band**, and `ready` grew **+9 in a single day**. The decomposition is
+what matters: five landings closed five `ready` issues, and those same
+five landings' post-land harvests filed **thirteen** (#476, #477, #478,
+#479, #480, #482, #483, #484, #486, #487, #488, #489, #491), with two
+more from this pass (#492, #493). **A harvest ratio of roughly 2.6 filed
+per issue landed.** At that ratio no consumption rate reaches the band —
+the band is not a target the develop loop can hit, which is exactly the
+structural claim #347 makes and which the 2026-08-03 pass could only
+assert. It is now arithmetic.
+
+The comment-and-doc-accuracy cohort noted last pass grew with the
+harvest — #476, #477, #482, #483, #488 and #492 all belong to it, so it
+is **~26 of 108**, still the largest coherent cohort in the label and
+still not a merge candidate (the keep-them-separate precedent was
+reaffirmed at #453's filing and nothing this pass saw disturbs it).
+
+***The #271 → #478/#479/#480 replan resolved cleanly, with one
+defect.*** All three replacements were read in full at this pass. #478
+and #479 are `ready` with complete template bodies; #478's is unusually
+strong — eleven numbered acceptance items transcribing the warden's
+pre-flight findings, two of #271's *factual errors* corrected in the
+body so they cannot be re-inherited (`builtin.Seed`'s contract does
+**not** change; the `xs:anyAtomicType` question is a pre-existing gap,
+not a blocker), and an explicit "this may need splitting again" clause
+with the defensible split line named. #480 is `blocked` with a stated,
+non-issue reason (held pending a Phase 1 oracle grounding on its own
+thread) — a legitimate use of the label that the blocked-issue audit
+below treats as documented rather than as drift. **#271 itself is
+closed, carries `needs-replan`, and its `wip/` branch is retired.**
+
+**The defect: #271 is closed with `state_reason: completed`, and so is
+#256.** Neither landed. Two data points make it a convention rather than
+a slip, and the failure mode is silent — `reason:completed` is the one
+signal that tells a searching session "stop reading, this is done", and
+two of this repo's closed issues now point that way falsely. #470's own
+history is the proof that a false premise inherited from a closed
+issue's body survives an oracle grounding and a mason commit before
+anyone re-greps. **Filed as #493**, scoped to the two-line
+`docs/WORKFLOW.md` change plus the decision about whether correcting the
+two existing parks is worth a reopen-and-reclose.
+
+***Branch namespace: two refs, and one of them is empty.***
+`git ls-remote --heads origin 'refs/heads/wip/*' 'refs/heads/parked/*'`
+returns exactly two; nothing under `parked/`.
+
+| ref | tip | commits not in `main` | issue |
+|---|---|---|---|
+| `wip/issue-256` | `c56d9f7` | **2** (`3c0c918`, `c56d9f7`) | #256, closed, `needs-replan` |
+| `wip/issue-271` | `c1c3824` | **0** | #271, closed, `needs-replan` |
+
+**`wip/issue-271` carries no work at all.** Its tip is #470's landed
+commit — `git merge-base --is-ancestor c1c3824 origin/main` is true — so
+the branch was pushed as a claim and the attempt died at the warden
+pre-flight before a single commit. Deleting it loses nothing. That is a
+strictly easier case than `wip/issue-256`, whose two commits genuinely
+are not in `main`, which is the correct outcome for a **park**. Both
+**reported for human deletion, not acted on** (sessions never delete or
+rename refs). Recorded on #399's thread with the observation that a
+survey could join the two sources mechanically: a `wip/issue-<N>` whose
+issue #N is closed is retired by definition, and the only question left
+is the one-line ancestor check.
+
+***The GAP ledger is unchanged, and that is a real result rather than a
+skipped step.*** `grep -rn "GAP(" --include=*.go .` at `0dd6f71`
+returns **43 hits across 21 files** — the same count, the same files,
+and the same owner mapping as the 2026-08-03 re-derivation. **No new
+unowned site appeared** across #270/#470/#272/#273/#275, which is what
+one would hope for from a window with no rule implementation in it, and
+worth stating because four consecutive passes before 2026-08-03 flagged
+the ledger as drifted. Line numbers moved within `parser/doc.go`
+(`:97/:105/:111/:129/:141` → `:112/:123/:129/:147/:159`),
+`parser/parse.go` (`:262` → `:321`), `xsd/schema.go` (`:233` → `:254`)
+and `conformance/schema.go` (`:273` → `:282`); the sites and their
+owners are identical. The one formerly-unowned site,
+`parser/produce_complex.go:1235`, still carries its *"Unowned: no issue
+tracks it yet"* sentence — correctly, because **#471** owns its
+retirement and #471's acceptance bar is literally
+`grep -n 'Unowned: no issue' parser/produce_complex.go` returning
+nothing. #283 remains the standing reminder that this grep is a lower
+bound: it owns two fail-open sites carrying no `GAP(` token at all.
+
+***Issue reconciliation, everything this pass touched.***
+
+- **#471's milestone corrected M3 → M4.** It is a `parser/produce_complex.go`
+  element-declaration producer issue charging `e-props-correct` cl.3;
+  M3 (Datatypes vertical slice) is complete and hosts only its own
+  datatypes-lane follow-ups. Filed into the wrong milestone on
+  2026-08-03. Milestones mirror this file, so this is the file's rule
+  being enforced.
+- **#492 filed** — the step-4 substitute's output; see below.
+- **#493 filed** — the `needs-replan`/`state_reason` defect above.
+- **#489's ledger reconciled on-thread.** The carried "undischarged"
+  block in `docs/LOG/2026-08.md` was matched line by line against the
+  open-issue list: **~80% of it is already filed** (#324's A1/A2 → #455
+  and #456; #346's two advisories → #452 and #453; #365's 20-file
+  harvest → #449; #259 → #466; #261 → #468 and #469; #270's facet note
+  → folded into #408; #470's nits → #476 and #477; #272's two
+  cartographer items → #482 and #483; #273's three → #486/#487/#488;
+  #257's Friction 1 → folded into #458; the `.agent/` pointer defect →
+  #351), several lines are ordinary open issues restated (#400, #430,
+  #347, #426, #336, #413, #414/#438, #458), and **one is simply wrong —
+  #417 is CLOSED**, landed 2026-08-02 as `9315ce1`, carried as
+  undischarged ever since. The finding recorded on that thread is that
+  the ledger is append-only and nothing retires a line, so the
+  deliverable is probably the *retirement rule*, not a one-time sweep.
+- **#295 ↔ #433 overlap recorded, neither closed.** #295 is the defect
+  (sibling M4 constructors accept a zero `{name}`); #433 is a mechanism
+  (a validated QName constructor retiring the eight ad-hoc
+  `Local == ""` guards) that would make it unrepresentable. Whichever
+  lands second needs re-scoping; that is now on #295's thread rather
+  than waiting to be discovered mid-implementation.
+- **#411 re-verified and left open, unlabelled, deliberately.** Its
+  deliverable is on `main` in `a136838` (preamble convention at
+  `docs/PLAN.md:8-15`, M3's stamp in its milestone heading, M5's in its
+  `instance`-lane sentence, both stamped in place); there is
+  no work left in it, so it is not `ready`, and nothing gates it, so it
+  is not `blocked`. A `/backlog` does not close issues as done. The next
+  session to land a commit touching this file should close it.
+- **Blocked-issue audit — all eleven honest, no relabels.** #16→#472,
+  #56 (M6 evaluator, still unfiled — repoint at the concrete `#N` at the
+  M6 carve), #79, #248→#250, #250→#79's tail, #267→#250, #345→#250,
+  #415→#407 (open), #438→#414 (open), #456→#455 (open), and #480 (held
+  pending its own Phase 1 oracle grounding, documented in its body). No
+  dependency closed in this window unblocked anything: the five closures
+  were #270, #470, #271, #272, #275 and none appears in any open
+  `## Depends on`. No `ready` issue carries an open hard dependency, so
+  the invariant the 2026-07-25 pass established still holds.
+- **Nothing closed as stale, obsolete or duplicate.** The candidate
+  pairs were checked rather than assumed: #426/#450 (the latter's title
+  states it is the anchoring half the former does not cover), #310/#359
+  (different files), #303/#491 (run-vs-bank atomicity vs. substantiating
+  "unchanged" without a write), #351/#489, #429/#396/#283 (three bare-
+  marker P3 issues in three different packages, kept separate on the
+  precedent reaffirmed at #453's filing). The 2026-07-31 finding stands
+  a third time: the consolidation candidates are exhausted.
+
+***Step 4 (consult libuser/cliuser) did not run — #416, sixth
+consecutive sighting — and this time the substitute dated the staleness
+in hours.*** A cartographer subagent cannot spawn the persona subagents
+its own procedure requires. What this pass did instead, within what a
+cartographer can do unaided: read `README.md`'s CLI and Library
+sections, `go doc ./cmd/goxsd8`, and the exported surfaces of `xsd` and
+`parser` directly, as a consumer would.
+
+**It found that the README's library contract went stale within hours of
+a landing that changed it.** #272 landed `a667253` on 2026-08-04 and
+published a new top-level entry point — `parser.ParseReport(location,
+opts...) (*xsd.Schema, *AssemblyReport, error)` — plus `AssemblyReport`,
+`AssembledDocument`, `UnfollowedDirective` and `UnfollowedReason`.
+`README.md` was not touched by that commit and mentions none of it.
+Worse, its Library section still carries the paragraph *"Two limits of
+`parser.Parse` worth knowing up front: `<xs:redefine>` is skipped rather
+than followed, so a schema that needs it assembles short…"* — a prose
+warning whose programmatic remedy, `AssemblyReport.Unfollowed()`, now
+sits one exported function away in the same package, unmentioned, in the
+same document. **Filed as #492.**
+
+The trend across the six sightings is worth more than the finding. On
+2026-08-03 the cost was measured in *days between persona passes*
+(#251 and #252 had moved the surface since 2026-08-01). One day later it
+is measured in *hours since a landing*, and the only reason it was
+caught is that a `/backlog` happened to run the next morning. **A weekly
+persona pass would not have caught this either.** The personas answer
+*"is the published contract good?"*; nothing today answers *"is the
+published contract current?"*, and that is a landing-time check, not a
+weekly one. Recorded on #416's thread as a second, narrower observation
+for whoever takes it to scope. None of this discharges #416.
+
+**One residue this pass did not act on, by convention.** `docs/PLAN.md`
+still carries the #272 hazard note as live guidance (*"worth a body edit
+whenever #272 is picked up"*) although #272 has landed. **#482** owns
+superseding it without rewriting the dated historical passage, and the
+add-don't-rewrite convention is why this pass records the tension here
+instead of editing the earlier paragraph.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
