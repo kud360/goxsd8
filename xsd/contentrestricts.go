@@ -73,6 +73,26 @@ import (
 // violations always statically, only from instances, or sometimes) makes
 // unnecessary as well as harmful — though see contentModelRestricts' giveup site
 // for how narrowly that licence is actually conditioned.
+//
+// GAP(xsd): the inherited unfoldCopies bound is the one approximation reaching
+// this verdict that does NOT obey that direction, and it is not merely unproved
+// — it diverges both ways. maxMandatoryCopies/maxOptionalCopies
+// (particleattribution.go) are argued verdict-preserving for cos-nonambig, whose
+// subject is which particle-identifier sets ·compete· in one state; two copies
+// realize every such set, so that argument is sound THERE. It does not carry to
+// language containment, which is what clause 1 decides here: the bound rewrites
+// an occurrence range, e{3,6} as e{2,4} and e{0,100} as e{0,2}, and that rewrite
+// is monotone in neither direction. Both divergences are reachable on a single
+// element particle. R = e{3,6} under B = e{0,100} is a VALID restriction this
+// walk rejects — R unfolds to four positions and B to two, so R's third leaves
+// contentModelRestricts with no live B-position and checkRestrictionContentType
+// charges derivation-ok-restriction against a conforming schema — and R = e{5,5}
+// under B = e{3,3} is an INVALID one it accepts, both sides having collapsed to
+// two mandatory copies. Those two are reproductions, not suite cases: the gate
+// and every ratchet lane are green with the bound in place, which is how the
+// divergence stayed latent. Retiring it means deciding containment over the
+// declared {min occurs}/{max occurs} rather than over a truncated unfolding;
+// raising the constants only moves the two thresholds.
 
 // contentAutomaton is one content model's position automaton together with the
 // three fragment facts addParticle returns for its root particle. The automaton
@@ -248,8 +268,9 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType) bool {
 		// every arm of addTerm/addResolvedTerm either returns nil or panics on a
 		// broken sealed sum, and a dangling <element ref>/<group ref> was already
 		// charged src-resolve by Phase A. Should a future term kind make it
-		// reachable, provisionally accepting is the fail-open direction §3.4.6.3's
-		// implementation-defined licence covers, and the error is not silently
+		// reachable, provisionally accepting is the fail-open direction
+		// contentModelRestricts' giveup site states the actual, narrower licence
+		// for; the argument is not restated here. The error is not silently
 		// discarded — it decides this verdict (STYLE S3).
 		return true
 	}
@@ -295,7 +316,7 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton) bool {
 				continue
 			}
 			if len(visited) >= maxProductStates {
-				// GAP(xsd) #282: the walk is abandoned and the derivation
+				// GAP(xsd): the walk is abandoned and the derivation
 				// provisionally accepted once the product reaches maxProductStates.
 				// The branch is unreached by the whole W3C suite (the measurement is
 				// recorded on maxProductStates), so the incompleteness is latent —
@@ -340,7 +361,8 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton) bool {
 				// false one.
 				//
 				// It is retired by a construction that decides containment without
-				// materializing the product, never by raising the constant.
+				// materializing the product, never by raising the constant; #499
+				// owns that retirement.
 				return true
 			}
 			visited[key] = true
@@ -545,6 +567,17 @@ func (s *Schema) elementParticleAdmits(general, specific ElementDeclaration) boo
 // the existential reading is the FAIL-OPEN one: it accepts on the wildcard's
 // keyword binding where attribution would have used the declaration's. Charging
 // the declaration's instead would reject on a run B might never take.
+//
+// GAP(xsd): the existential is this file's, not the spec's. Clause 2 quantifies
+// in the SINGULAR — "B's ·default binding· for E ·subsumes· that defined by R" —
+// and ·default binding· (key-dft-binding) is a "(partial) functional mapping"
+// from an item to ONE binding, so a literal reading has no set to choose among
+// and passing on any member over-approximates it. The one consumer is
+// contentModelRestricts, which does nothing with a false answer except charge
+// clause 2 and stop: every acceptance the quantifier adds therefore costs a
+// rejection, and none can fabricate one. Deciding it exactly means committing to
+// the single position ·attribution· selects, which the paragraph above records
+// as the direction deliberately not taken.
 func (s *Schema) someBindingSubsumes(b contentAutomaton, matched []int, p position) bool {
 	specific := elementPositionBinding(p)
 	for _, q := range matched {
