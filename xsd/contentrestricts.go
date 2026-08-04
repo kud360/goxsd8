@@ -71,7 +71,8 @@ import (
 // fail-open and a spurious one would false-reject a valid schema, which
 // §3.4.6.3's own implementation-defined licence (a processor may detect 2.4.2
 // violations always statically, only from instances, or sometimes) makes
-// unnecessary as well as harmful.
+// unnecessary as well as harmful — though see contentModelRestricts' giveup site
+// for how narrowly that licence is actually conditioned.
 
 // contentAutomaton is one content model's position automaton together with the
 // three fragment facts addParticle returns for its root particle. The automaton
@@ -164,10 +165,18 @@ func productKey(st productState) string {
 
 // maxProductStates bounds how many product states the walk visits before giving
 // up and provisionally accepting. The subset construction's state space is a
-// powerset in the worst case; every content model the W3C suite and real schemas
-// contain settles in a handful of states, but a bound keeps a pathological one
-// from turning schema assembly into an exponential walk. It is a ceiling on
-// WORK, never on the verdict of a walk that finishes.
+// powerset in the worst case, so a bound keeps a pathological content model from
+// turning schema assembly into an exponential walk. It is a ceiling on WORK,
+// never on the verdict of a walk that finishes.
+//
+// The constant is MEASURED headroom rather than an unexamined guess (#282).
+// Instrumenting both the giveup branch and every insertion into the visited set,
+// then running the full W3C suite — 41858 cases over 6 lanes, which reach this
+// product walk 688 times — recorded ZERO walks that hit the ceiling and a
+// high-water mark of 15 product states, two orders of magnitude below 4096. The
+// bound is therefore inert on every content model the suite contains; it is kept
+// for the worst case the powerset admits, which nothing measures, not because
+// any known schema approaches it.
 const maxProductStates = 4096
 
 // contentTypeRestricts is derivation-ok-restriction clause 2.4.2's delegate:
@@ -286,19 +295,52 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton) bool {
 				continue
 			}
 			if len(visited) >= maxProductStates {
-				// GAP(xsd): the walk is abandoned and the derivation provisionally
-				// accepted once the product exceeds maxProductStates. §3.4.6.3
-				// licenses it — "It is ·implementation-defined· whether a processor
-				// (a) always detects violations of clause 2.4.2 by examination of the
-				// schema in isolation, (b) detects them only when some element
-				// information item in the input document is valid against T but not
-				// against T.{base type definition}, or (c) sometimes detects such
-				// violations" — so this is choice (c) for the models that reach the
-				// ceiling, and it is fail-open, never a false reject. It is marked
-				// nonetheless because it is an incompleteness of THIS algorithm, not
-				// of the spec's demands. It is retired by a construction that decides
-				// containment without materializing the product, never by raising the
-				// constant.
+				// GAP(xsd) #282: the walk is abandoned and the derivation
+				// provisionally accepted once the product reaches maxProductStates.
+				// The branch is unreached by the whole W3C suite (the measurement is
+				// recorded on maxProductStates), so the incompleteness is latent —
+				// but latent is not licensed, and the licence is narrower than it
+				// looks.
+				//
+				// §3.4.6.3's leniency for an undecidable clause 2.4.2 is textually
+				// anchored to a condition this branch does not test: "If (1) the type
+				// definition being checked has T.{content
+				// type}.{particle}.{term}.{compositor} = all and (2) an implementation
+				// is unable to determine by examination of the schema in isolation
+				// whether or not clause 2.4.2 is satisfied, then the implementation
+				// may provisionally accept the derivation". The sentence that follows
+				// — "It is ·implementation-defined· whether a processor (a) always
+				// detects violations of clause 2.4.2 by examination of the schema in
+				// isolation, (b) detects them only when some element information item
+				// in the input document is valid against T but not against T.{base
+				// type definition}, or (c) sometimes detects such violations by
+				// examination of the schema in isolation and sometimes not" — states
+				// no condition of its own, and the all-compositor condition appears
+				// nowhere else in the document. A genuine {compositor} = all never
+				// reaches here in any case: contentTypeRestricts takes the narrow,
+				// correctly scoped allowance through usesAllCompositor before an
+				// automaton is built. This ceiling applies uniformly to sequence and
+				// choice models too, and for those it rests on reading (c) as a
+				// RESIDUAL CATCH-ALL detached from condition (1) — defensible, since
+				// nothing in the local specs forecloses it, but not textually
+				// guaranteed. Naming that stretch is half of why this marker exists.
+				//
+				// The other half is that "provisionally accept" is not a
+				// spec-guaranteed-safe resting state. §3.4.6.3 continues: "If any
+				// instance encountered in the ·assessment· episode is valid against T
+				// but not against T.{base type definition}, then the derivation of T
+				// does not satisfy this constraint, the schema does not conform to
+				// this specification, and no ·assessment· can be performed using that
+				// schema." (b) and (c) as worded describe processors that perform that
+				// runtime cross-check; this ceiling gives up permanently with no
+				// runtime fallback, so a schema accepted here can be non-conforming
+				// with nothing left to say so. What the ceiling does guarantee is
+				// direction: it abandons the WHOLE walk rather than truncating one
+				// into a verdict, so it is fail-open — a missed rejection, never a
+				// false one.
+				//
+				// It is retired by a construction that decides containment without
+				// materializing the product, never by raising the constant.
 				return true
 			}
 			visited[key] = true
