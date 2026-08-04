@@ -40,6 +40,29 @@ func (e *Element) Name() xmltree.Name { return e.src.Name() }
 // the reader's own; its Attribute values are immutable.
 func (e *Element) Attributes() []xmltree.Attribute { return e.src.Attributes() }
 
+// Attr returns the value of the element's UNPREFIXED (no-namespace) attribute
+// named local, reporting whether it is present at all. Presence is a distinct
+// fact from an empty value throughout XSD — a bare <import> (no schemaLocation)
+// is not an <import schemaLocation=""> (§4.2.6.2), and namespace="" is a legal
+// xs:anyURI (§4.2.6.2 clause 1.2) — so both come back rather than one collapsed
+// string.
+//
+// The no-namespace restriction is the whole point: every attribute the schema
+// for schema documents declares on an XSD element (name, ref, type,
+// schemaLocation, …) is unqualified, so a prefixed attribute of the same local
+// name is foreign markup and must not answer here. That rule is subtle enough
+// that a consumer walking a schema document tree through [Element.Attributes]
+// would otherwise re-derive it — as this module's own conformance harness did,
+// until the two implementations were collapsed into this one (issue #272).
+func (e *Element) Attr(local string) (string, bool) {
+	for _, a := range e.Attributes() {
+		if a.Name().Space() == "" && a.Name().Local() == local {
+			return a.Value(), true
+		}
+	}
+	return "", false
+}
+
 // lookupPrefix resolves prefix to a namespace URI using the bindings in scope
 // at this element, so a consumer can later resolve a QName-valued lexical that
 // occurred here (Datatypes §3.3.18). It delegates to the underlying start tag;

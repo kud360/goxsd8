@@ -35,27 +35,22 @@ func override(location, body string) string {
 	return `<xs:override schemaLocation="` + location + `">` + body + `</xs:override>`
 }
 
-// closureDecidableIn runs the harness's own discovery walk over an in-memory
-// document set (loader.Map is keyed by the exact location string, so it pins the
-// resolution chain the walk computes) and reports its two verdicts for root: the
-// decidability of every document it reached, and whether some directive in the
-// closure named no document at all (closureScan.unresolved) — the fact
-// execSchemaCase pairs with the parse outcome (#276).
-func closureDecidableIn(t *testing.T, root string, docs map[string]string) (decidable, unresolved bool) {
+// closureGateIn assembles root over an in-memory document set (loader.Map is
+// keyed by the exact location string, so it pins the resolution chain the
+// assembly computes) and reports the two facts execSchemaCase decides on: whether
+// the case is DECLINED — either some assembled document is out of the producer's
+// decidable subset, or an unfollowed reference coincides with a failed parse
+// (#276) — and whether any ·inter-schema-document reference· went unfollowed at
+// all.
+//
+// The second output is not derivable from the first and is asserted separately on
+// purpose: it is what records a directive that named NO document, which leaves no
+// trace among the assembled documents by construction (#272).
+func closureGateIn(t *testing.T, root string, docs map[string]string) (declined, unfollowed bool) {
 	t.Helper()
-	resolver := loader.Map(docs)
-	rc, resolved, err := resolver.Resolve("", root)
-	if err != nil {
-		t.Fatalf("resolving root %q: %v", root, err)
-	}
-	defer func() { _ = rc.Close() }()
-	doc, err := parser.ReadDocument(root, rc)
-	if err != nil {
-		t.Fatalf("ReadDocument(%q): %v", root, err)
-	}
-	rootTNS, _ := elementAttr(doc.Root(), "targetNamespace")
-	scan := newClosureScan(resolver, resolved, rootTNS)
-	return scan.decidable(doc, rootTNS), scan.unresolved
+	_, report, perr := parser.ParseReport(root, parser.WithResolver(loader.Map(docs)))
+	unfollowed = len(report.Unfollowed()) > 0
+	return !closureDecidable(report) || (unfollowed && perr != nil), unfollowed
 }
 
 // undecidable is a top-level list-variety simpleType: a shape schemaShapeDecidable
@@ -68,22 +63,23 @@ const undecidable = `<xs:simpleType name="L"><xs:list itemType="xs:string"/></xs
 const decidableType = `<xs:simpleType name="code">` +
 	`<xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleType>`
 
-// TestClosureScanWalksIncludedDocuments proves the walk admits a closure whose
-// every document is decidable, and — the point of the whole walk — DECLINES when
-// the undecidable shape sits in an INCLUDED document rather than the root, which a
-// root-only shape check would have vacuously admitted.
+// TestClosureGateOverAssembledDocuments proves the gate admits a closure whose
+// every assembled document is decidable, and — the point of gating the closure
+// rather than the root — DECLINES when the undecidable shape sits in an INCLUDED
+// document, which a root-only shape check would have vacuously admitted.
 //
-// wantUnresolved pins the walk's second output (#276): a directive that named no
-// document leaves the walk's decidability verdict alone — there is no shape to
-// gate — and is recorded instead, for execSchemaCase to pair with the parse
-// outcome. Every other case must leave that flag CLEAR, which is what keeps the
-// recording specific to a genuinely absent document.
-func TestClosureScanWalksIncludedDocuments(t *testing.T) {
+// wantUnfollowed pins the report's second half (#276, #272): a reference that
+// named no document at all leaves the decidability verdict alone — there is no
+// shape to gate — and is recorded instead, for the conjunction with the parse
+// outcome. Every other case must leave it CLEAR, which is what keeps the
+// recording specific to a reference that really was not followed, rather than to
+// a document already assembled under another directive.
+func TestClosureGateOverAssembledDocuments(t *testing.T) {
 	cases := []struct {
 		name           string
 		docs           map[string]string
-		want           bool
-		wantUnresolved bool
+		wantDeclined   bool
+		wantUnfollowed bool
 	}{
 		{
 			name: "whole closure decidable",
@@ -91,7 +87,6 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"main.xsd": schemaSrc("urn:a", include("lib.xsd")+`<xs:element name="root" type="tns:code"/>`),
 				"lib.xsd":  schemaSrc("urn:a", decidableType),
 			},
-			want: true,
 		},
 		{
 			name: "undecidable shape in the included document",
@@ -99,7 +94,7 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"main.xsd": schemaSrc("urn:a", include("lib.xsd")+`<xs:element name="root" type="xs:string"/>`),
 				"lib.xsd":  schemaSrc("urn:a", undecidable),
 			},
-			want: false,
+			wantDeclined: true,
 		},
 		{
 			name: "undecidable shape in a chameleon included document",
@@ -107,45 +102,51 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"main.xsd": schemaSrc("urn:a", include("cham.xsd")),
 				"cham.xsd": schemaSrc("", undecidable),
 			},
-			want: false,
+			wantDeclined: true,
 		},
 		{
 			name: "<include> whose schemaLocation does not resolve is recorded, not declined (§4.2.3 cl. 2.4, #276)",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", include("missing.xsd")+`<xs:element name="root" type="xs:string"/>`),
 			},
-			want:           true,
-			wantUnresolved: true,
+			wantUnfollowed: true,
 		},
 		{
-			name: "<include> without schemaLocation declines (target cannot be named)",
-			docs: map[string]string{"main.xsd": schemaSrc("urn:a", `<xs:include/>`)},
-			want: false,
+			// §4.2.1 makes this schemaLocation mandatory ("not hints"), so the
+			// assembly stops with a grammar fault AND records the reference it could
+			// not follow — the conjunction declines, as the walk did outright.
+			name:           "<include> without schemaLocation declines (target cannot be named)",
+			docs:           map[string]string{"main.xsd": schemaSrc("urn:a", `<xs:include/>`)},
+			wantDeclined:   true,
+			wantUnfollowed: true,
 		},
 		{
 			name: "non-schema included document is left to src-include clause 1",
 			docs: map[string]string{
 				"main.xsd":  schemaSrc("urn:a", include("html.xsd")),
 				"html.xsd":  `<html/>`,
-				"other.xsd": schemaSrc("urn:a", undecidable), // unreferenced: never walked
+				"other.xsd": schemaSrc("urn:a", undecidable), // unreferenced: never assembled
 			},
-			want: true,
 		},
 		{
+			// The document resolved but could not be read, which may be a parser
+			// encoding limitation rather than a real well-formedness fault, so no
+			// verdict may be taken from it: recorded as unfollowed, and declined
+			// through the conjunction with the error the assembly returns.
 			name: "malformed included document declines (could be an encoding limitation)",
 			docs: map[string]string{
 				"main.xsd":   schemaSrc("urn:a", include("broken.xsd")),
 				"broken.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e"/>`,
 			},
-			want: false,
+			wantDeclined:   true,
+			wantUnfollowed: true,
 		},
 		{
-			name: "<import> with a decidable D2 is walked and admitted (#182)",
+			name: "<import> with a decidable D2 is assembled and admitted (#182)",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="lib.xsd"/>`),
 				"lib.xsd":  schemaSrc("urn:b", decidableType),
 			},
-			want: true,
 		},
 		{
 			name: "undecidable shape in the <import>ed document declines",
@@ -153,7 +154,7 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="lib.xsd"/>`),
 				"lib.xsd":  schemaSrc("urn:b", undecidable),
 			},
-			want: false,
+			wantDeclined: true,
 		},
 		{
 			name: "undecidable shape reached through an <import>ed document's own <include>",
@@ -162,23 +163,21 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"lib.xsd":  schemaSrc("urn:b", include("deep.xsd")),
 				"deep.xsd": schemaSrc("urn:b", undecidable),
 			},
-			want: false,
+			wantDeclined: true,
 		},
 		{
 			name: "bare <import> with no schemaLocation is recorded, not declined (§4.2.6.2, #276)",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b"/>`),
 			},
-			want:           true,
-			wantUnresolved: true,
+			wantUnfollowed: true,
 		},
 		{
 			name: "<import> whose schemaLocation does not resolve is recorded, not declined (#276)",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="missing.xsd"/>`),
 			},
-			want:           true,
-			wantUnresolved: true,
+			wantUnfollowed: true,
 		},
 		{
 			name: "malformed <import>ed document declines (could be an encoding limitation)",
@@ -186,7 +185,8 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"main.xsd":   schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="broken.xsd"/>`),
 				"broken.xsd": `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="e"/>`,
 			},
-			want: false,
+			wantDeclined:   true,
+			wantUnfollowed: true,
 		},
 		{
 			name: "non-schema <import>ed document is left to src-import clause 2",
@@ -194,15 +194,13 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"main.xsd": schemaSrc("urn:a", `<xs:import namespace="urn:b" schemaLocation="html.xsd"/>`),
 				"html.xsd": `<html/>`,
 			},
-			want: true,
 		},
 		{
-			name: "<override> with a decidable Dold is walked and admitted (#183)",
+			name: "<override> with a decidable Dold is assembled and admitted (#183)",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", override("lib.xsd", `<xs:element name="e" type="xs:string"/>`)),
 				"lib.xsd":  schemaSrc("urn:a", `<xs:element name="e" type="xs:int"/>`),
 			},
-			want: true,
 		},
 		{
 			name: "undecidable shape in the <override>n document declines",
@@ -210,7 +208,7 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"main.xsd": schemaSrc("urn:a", override("lib.xsd", `<xs:element name="e" type="xs:string"/>`)),
 				"lib.xsd":  schemaSrc("urn:a", undecidable),
 			},
-			want: false,
+			wantDeclined: true,
 		},
 		{
 			name: "undecidable shape reached through the ·target set· (§F.2 clause 3)",
@@ -219,7 +217,7 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"mid.xsd":  schemaSrc("urn:a", include("deep.xsd")),
 				"deep.xsd": schemaSrc("urn:a", undecidable),
 			},
-			want: false,
+			wantDeclined: true,
 		},
 		{
 			name: "undecidable shape reached through a nested <override> (§F.2 clause 4)",
@@ -228,7 +226,7 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"mid.xsd":  schemaSrc("urn:a", override("deep.xsd", `<xs:element name="f" type="xs:string"/>`)),
 				"deep.xsd": schemaSrc("urn:a", undecidable),
 			},
-			want: false,
+			wantDeclined: true,
 		},
 		{
 			name: "undecidable shape in a chameleon <override>n document",
@@ -236,7 +234,7 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"main.xsd": schemaSrc("urn:a", override("cham.xsd", `<xs:element name="e" type="xs:string"/>`)),
 				"cham.xsd": schemaSrc("", undecidable),
 			},
-			want: false,
+			wantDeclined: true,
 		},
 		{
 			name: "<override> whose schemaLocation does not resolve is recorded, not declined (§4.3.2, #276)",
@@ -244,13 +242,13 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"main.xsd": schemaSrc("urn:a", override("missing.xsd", `<xs:element name="e" type="xs:string"/>`)+
 					`<xs:element name="root" type="xs:string"/>`),
 			},
-			want:           true,
-			wantUnresolved: true,
+			wantUnfollowed: true,
 		},
 		{
-			name: "<override> without schemaLocation declines (target cannot be named)",
-			docs: map[string]string{"main.xsd": schemaSrc("urn:a", `<xs:override><xs:element name="e" type="xs:string"/></xs:override>`)},
-			want: false,
+			name:           "<override> without schemaLocation declines (target cannot be named)",
+			docs:           map[string]string{"main.xsd": schemaSrc("urn:a", `<xs:override><xs:element name="e" type="xs:string"/></xs:override>`)},
+			wantDeclined:   true,
+			wantUnfollowed: true,
 		},
 		{
 			name: "non-schema <override>n document is left to src-override clause 1",
@@ -258,31 +256,30 @@ func TestClosureScanWalksIncludedDocuments(t *testing.T) {
 				"main.xsd": schemaSrc("urn:a", override("html.xsd", `<xs:element name="e" type="xs:string"/>`)),
 				"html.xsd": `<html/>`,
 			},
-			want: true,
 		},
 	}
 	for _, tc := range cases {
-		got, unresolved := closureDecidableIn(t, "main.xsd", tc.docs)
-		if got != tc.want {
-			t.Errorf("%s: closure decidable = %v, want %v", tc.name, got, tc.want)
+		declined, unfollowed := closureGateIn(t, "main.xsd", tc.docs)
+		if declined != tc.wantDeclined {
+			t.Errorf("%s: closure declined = %v, want %v", tc.name, declined, tc.wantDeclined)
 		}
-		if unresolved != tc.wantUnresolved {
-			t.Errorf("%s: closure unresolved = %v, want %v", tc.name, unresolved, tc.wantUnresolved)
+		if unfollowed != tc.wantUnfollowed {
+			t.Errorf("%s: closure unfollowed = %v, want %v", tc.name, unfollowed, tc.wantUnfollowed)
 		}
 	}
 }
 
-// TestClosureScanResolvesAgainstIncludingDocumentsBase pins the base-URI rule the
-// whole guard rests on (§4.3.2 clause 4): a nested <include> resolves against the
-// base URI of ITS OWN <include> element, so child.xsd (base "sub/child.xsd")
-// naming a bare "grandchild.xsd" must reach "sub/grandchild.xsd".
+// TestClosureGateSeesBaseRelativeChain pins the base-URI rule the whole guard
+// rests on (§4.3.2 clause 4): a nested <include> resolves against the base URI of
+// ITS OWN <include> element, so child.xsd (base "sub/child.xsd") naming a bare
+// "grandchild.xsd" must reach "sub/grandchild.xsd" — and the gate must see
+// exactly the document the assembly read there.
 //
 // The decoy is what makes this test able to fail: a DECIDABLE "grandchild.xsd"
-// sits at the resolver root beside an UNDECIDABLE "sub/grandchild.xsd". A walk
-// that resolved the depth-2 hint against the root (or against main.xsd's base)
-// would read the decoy and wrongly admit the case; only correct resolution reaches
-// the undecidable one and declines.
-func TestClosureScanResolvesAgainstIncludingDocumentsBase(t *testing.T) {
+// sits at the resolver root beside an UNDECIDABLE "sub/grandchild.xsd". A gate
+// reading the decoy would wrongly admit the case; only the document the assembly
+// actually consumed declines it.
+func TestClosureGateSeesBaseRelativeChain(t *testing.T) {
 	tree := func(grandchildBody, decoyBody string) map[string]string {
 		return map[string]string{
 			"main.xsd":           schemaSrc("urn:a", include("sub/child.xsd")),
@@ -292,32 +289,33 @@ func TestClosureScanResolvesAgainstIncludingDocumentsBase(t *testing.T) {
 		}
 	}
 	// Depth 2 reached and decidable: the whole chain is admitted.
-	if decidable, _ := closureDecidableIn(t, "main.xsd", tree(decidableType, undecidable)); !decidable {
+	if declined, _ := closureGateIn(t, "main.xsd", tree(decidableType, undecidable)); declined {
 		t.Error("a fully decidable relative include chain must be admitted")
 	}
 	// Depth 2 reached and undecidable, with a decidable decoy at the resolver root:
-	// only base-relative resolution of the depth-2 hint declines here.
-	if decidable, _ := closureDecidableIn(t, "main.xsd", tree(undecidable, decidableType)); decidable {
-		t.Error("the walk admitted the case: it resolved sub/child.xsd's include against the wrong base and read the root-level decoy")
+	// only the genuinely assembled depth-2 document declines here.
+	if declined, _ := closureGateIn(t, "main.xsd", tree(undecidable, decidableType)); !declined {
+		t.Error("the gate admitted the case: it judged the root-level decoy instead of the assembled sub/grandchild.xsd")
 	}
 }
 
-// TestClosureScanTerminatesOnIncludeCycle proves the load-once index is doing
-// spec-mandated work: <include> cycles are LEGAL (§4.2.3 — processors guard
-// against infinite loops, they do not reject), so the walk must terminate and
-// still decide. The undecidable variant proves termination is not achieved by
-// giving up before the second document is shape-checked.
-func TestClosureScanTerminatesOnIncludeCycle(t *testing.T) {
+// TestClosureGateTerminatesOnIncludeCycle proves the assembly's load-once index
+// is doing spec-mandated work: <include> cycles are LEGAL (§4.2.3 — processors
+// guard against infinite loops, they do not reject), so the assembly must
+// terminate and the gate must still decide. The undecidable variant proves
+// termination is not achieved by giving up before the second document is
+// shape-checked.
+func TestClosureGateTerminatesOnIncludeCycle(t *testing.T) {
 	cycle := func(libBody string) map[string]string {
 		return map[string]string{
 			"main.xsd": schemaSrc("urn:a", include("lib.xsd")),
 			"lib.xsd":  schemaSrc("urn:a", include("main.xsd")+libBody),
 		}
 	}
-	if decidable, _ := closureDecidableIn(t, "main.xsd", cycle(decidableType)); !decidable {
+	if declined, _ := closureGateIn(t, "main.xsd", cycle(decidableType)); declined {
 		t.Error("a decidable include cycle must terminate and be admitted")
 	}
-	if decidable, _ := closureDecidableIn(t, "main.xsd", cycle(undecidable)); decidable {
+	if declined, _ := closureGateIn(t, "main.xsd", cycle(undecidable)); !declined {
 		t.Error("an include cycle whose second document is undecidable must decline")
 	}
 }
@@ -412,9 +410,9 @@ func TestSchemaExecutorDecidesIncludeCases(t *testing.T) {
 }
 
 // TestSchemaExecutorDecidesReachableExtraDocuments proves a multi-document
-// schemaTest whose further documents are REACHED by the closure walk from the
-// first is decided normally: the walk gated them, so parser.Parse assembles
-// exactly the declared set. Each case must also Fail under the flipped
+// schemaTest whose further documents are CONSUMED by the assembly rooted at the
+// first is decided normally: the closure gate covered them, so parser.ParseReport
+// assembled exactly the declared set. Each case must also Fail under the flipped
 // expectation, which is what separates a real decision from a vacuous one.
 func TestSchemaExecutorDecidesReachableExtraDocuments(t *testing.T) {
 	exec := newSchemaExec()
@@ -434,10 +432,10 @@ func TestSchemaExecutorDecidesReachableExtraDocuments(t *testing.T) {
 			expectValid: true,
 		},
 		{
-			// The third directive closureScan.decidable follows: §4.2.5's
+			// The third directive the assembly follows: §4.2.5's
 			// src-override clauses 3.1.2 and 3.2.2 replace the <override> with an
 			// <include> and hand off to §4.2.3, so reachability is include's, which
-			// is why compose serves both. The child names nothing in lib.xsd and is
+			// is why one composer serves both. The child names nothing in lib.xsd and is
 			// simply ignored (§F.2 clause 1) — the point here is the reach, not the
 			// substitution.
 			name: "second document reached by the first's <override>",
@@ -491,8 +489,8 @@ func TestSchemaExecutorDecidesReachableExtraDocuments(t *testing.T) {
 
 // TestSchemaExecutorDeclinesUnreachableExtraDocument proves the decline-not-guess
 // rule for a multi-document schemaTest (issue #238): when a declared document is
-// NOT reached by the closure walk from the first, parser.Parse — which takes one
-// root — would assemble a schema the suite never declared, so the case must be
+// NOT consumed by the assembly rooted at the first, parser.ParseReport — which
+// takes one root — would assemble a schema the suite never declared, so the case must be
 // DECLINED under BOTH polarities rather than decided against a subset.
 //
 // The decoy is what makes this able to fail: "other.xsd" declares the same name

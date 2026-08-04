@@ -391,7 +391,7 @@ func (p *producer) chameleon() bool {
 	if p.target == "" {
 		return false
 	}
-	_, own := attrValue(p.schemaElem, "targetNamespace")
+	_, own := p.schemaElem.Attr("targetNamespace")
 	return !own
 }
 
@@ -425,7 +425,7 @@ func (p *producer) prescan() {
 		if !compositionDirective(el) {
 			p.prescanIdentityConstraints(decl)
 		}
-		name, ok := attrValue(el, "name")
+		name, ok := el.Attr("name")
 		if !ok {
 			continue
 		}
@@ -488,7 +488,7 @@ func (p *producer) prescanIdentityConstraints(el *Element) {
 		if !ok {
 			continue
 		}
-		name, ok := attrValue(c, "name")
+		name, ok := c.Attr("name")
 		if !ok {
 			continue
 		}
@@ -531,7 +531,7 @@ func (p *producer) run() error {
 		decl := p.ov.replacement(el)
 		switch decl.Name().Local() {
 		case "simpleType":
-			name, _ := attrValue(decl, "name")
+			name, _ := decl.Attr("name")
 			st, err := p.buildSimpleType(xsd.QName{Space: p.target, Local: name}, decl)
 			if err != nil {
 				return err
@@ -550,7 +550,7 @@ func (p *producer) run() error {
 			}
 			p.builder.AddAttribute(ad)
 		case "complexType":
-			name, _ := attrValue(decl, "name")
+			name, _ := decl.Attr("name")
 			// AddType happens HERE, at this type's own document-order position, and
 			// never as a side effect of an on-demand base build from some other
 			// type: buildComplexType populates the memo only, so a type built early
@@ -562,14 +562,14 @@ func (p *producer) run() error {
 			}
 			p.builder.AddType(ct)
 		case "attributeGroup":
-			name, _ := attrValue(decl, "name")
+			name, _ := decl.Attr("name")
 			ag, err := p.buildAttributeGroup(xsd.QName{Space: p.target, Local: name}, decl)
 			if err != nil {
 				return err
 			}
 			p.builder.AddAttributeGroup(ag)
 		case "group":
-			name, _ := attrValue(decl, "name")
+			name, _ := decl.Attr("name")
 			// AddModelGroup happens HERE, at this definition's own document-order
 			// position, and never inside the on-demand build a clause 4.2.3 sub-case
 			// test triggers (buildModelGroupDefinition populates the memo only), so
@@ -845,7 +845,7 @@ func restrictionOf(elem *Element) (*Element, error) {
 // base= is discharged EARLY here — unlike element/attribute type=, which defers
 // to finalize — because NewSimpleType demands a live base pointer at construction.
 func (p *producer) resolveBase(restriction *Element) (*xsd.SimpleType, error) {
-	baseLex, hasBase := attrValue(restriction, "base")
+	baseLex, hasBase := restriction.Attr("base")
 	inline := childElement(restriction, xsd.XMLSchemaNS, "simpleType")
 
 	if hasBase && inline != nil {
@@ -928,7 +928,7 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 		if !ok {
 			continue
 		}
-		val, _ := attrValue(el, "value")
+		val, _ := el.Attr("value")
 		if kind == xsd.FacetPattern {
 			// xr-pattern (§4.3.4.2): all the <pattern> children of ONE <restriction>
 			// contribute BRANCHES of a single regular expression — patterns on the
@@ -983,10 +983,10 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 // conformance/schema.go's elementDecidable declines the shape so the limitation
 // never reaches a validity verdict.
 func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error) {
-	name, _ := attrValue(elem, "name")
+	name, _ := elem.Attr("name")
 	qname := xsd.QName{Space: p.target, Local: name}
 
-	typeLex, hasType := attrValue(elem, "type")
+	typeLex, hasType := elem.Attr("type")
 	inlineSimple := childElement(elem, xsd.XMLSchemaNS, "simpleType")
 	inlineComplex := childElement(elem, xsd.XMLSchemaNS, "complexType")
 
@@ -1073,7 +1073,7 @@ func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error)
 // which xsd/substitutiongroup.go records as unimplemented; mapping a property no
 // constraint consults would add a fact with no reader.
 func (p *producer) substitutionGroupAffiliations(elem *Element) ([]xsd.QName, error) {
-	lexical, ok := attrValue(elem, "substitutionGroup")
+	lexical, ok := elem.Attr("substitutionGroup")
 	if !ok {
 		return nil, nil
 	}
@@ -1122,9 +1122,9 @@ func (p *producer) substitutionGroupAffiliations(elem *Element) ([]xsd.QName, er
 // {substitution group exclusions} has no such mapping here — see
 // substitutionGroupAffiliations for why final= is left unmapped.
 func (p *producer) disallowedSubstitutions(elem *Element) []xsd.DerivationMethod {
-	ebv, ok := attrValue(elem, "block")
+	ebv, ok := elem.Attr("block")
 	if !ok {
-		ebv, _ = attrValue(p.schemaElem, "blockDefault")
+		ebv, _ = p.schemaElem.Attr("blockDefault")
 	}
 	if ebv == "" {
 		return nil // case 1
@@ -1157,13 +1157,13 @@ func (p *producer) disallowedSubstitutions(elem *Element) []xsd.DerivationMethod
 // Constraint of its own. <notation> occurs only as a <schema> child (§3.17.2),
 // so there is no nested form to map.
 func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
-	name, _ := attrValue(elem, "name")
+	name, _ := elem.Attr("name")
 	qname := xsd.QName{Space: p.target, Local: name}
 	var systemID, publicID *string
-	if v, ok := attrValue(elem, "system"); ok {
+	if v, ok := elem.Attr("system"); ok {
 		systemID = &v
 	}
-	if v, ok := attrValue(elem, "public"); ok {
+	if v, ok := elem.Attr("public"); ok {
 		publicID = &v
 	}
 	return xsd.NewNotation(elem.Loc(), qname, systemID, publicID, nil)
@@ -1172,10 +1172,10 @@ func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 // produceAttribute maps a top-level <attribute> into a global Attribute
 // Declaration (§3.2.2.1 dcl.att.global). type= form only.
 func (p *producer) produceAttribute(elem *Element) (xsd.AttributeDeclaration, error) {
-	name, _ := attrValue(elem, "name")
+	name, _ := elem.Attr("name")
 	qname := xsd.QName{Space: p.target, Local: name}
 
-	typeLex, hasType := attrValue(elem, "type")
+	typeLex, hasType := elem.Attr("type")
 	inline := childElement(elem, xsd.XMLSchemaNS, "simpleType") != nil
 
 	if hasType && inline {
@@ -1210,8 +1210,8 @@ func (p *producer) produceAttribute(elem *Element) (xsd.AttributeDeclaration, er
 // the {variety}/{lexical form} record is identical; which component the result is
 // attached to is the caller's decision (§3.2.2.2 / §3.2.2.3).
 func valueConstraintOf(elem *Element, rule xsderr.Rule) (*xsd.ValueConstraint, error) {
-	defLex, hasDef := attrValue(elem, "default")
-	fixLex, hasFix := attrValue(elem, "fixed")
+	defLex, hasDef := elem.Attr("default")
+	fixLex, hasFix := elem.Attr("fixed")
 	if hasDef && hasFix {
 		return nil, xsderr.New(rule, elem.Loc(),
 			"declaration has both default and fixed, but %s clause 1 forbids both", rule)
@@ -1344,17 +1344,6 @@ func isXSD(el *Element, local string) bool {
 	return el.Name().Space() == xsd.XMLSchemaNS && el.Name().Local() == local
 }
 
-// attrValue returns the value of el's unprefixed (no-namespace) attribute local,
-// as XSD schema-element attributes carry no namespace. ok is false when absent.
-func attrValue(el *Element, local string) (string, bool) {
-	for _, a := range el.Attributes() {
-		if a.Name().Space() == "" && a.Name().Local() == local {
-			return a.Value(), true
-		}
-	}
-	return "", false
-}
-
 // childElement returns el's first child element with the expanded name
 // {space}local, or nil.
 func childElement(el *Element, space, local string) *Element {
@@ -1399,7 +1388,7 @@ func childElement(el *Element, space, local string) *Element {
 // An absent attribute is the {fixed} = false default and is NOT an error; that is
 // a branch distinct from present-but-invalid.
 func facetFixed(el *Element) (bool, error) {
-	lexical, ok := attrValue(el, "fixed")
+	lexical, ok := el.Attr("fixed")
 	if !ok {
 		return false, nil
 	}

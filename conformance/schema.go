@@ -70,18 +70,17 @@ import (
 // "Parse returns nil" is genuine evidence of validity ONLY when the top-level
 // content is PROVABLY CONFINED to what the producer actually processes.
 //
-// Since #242 that qualifier binds over a CLOSURE, not one document. Parse reads
-// the whole <include>/<import> closure, so a composed document holding a skipped
-// representation false-accepts exactly as a root one would — and Parse cannot be
-// asked which documents it read (its discovery is unexported, and the *xsd.Schema
-// it returns carries components, not provenance). The harness therefore performs
-// its OWN discovery walk first (closureScan, conformance/schema_closure.go),
-// independently finding every document of the closure and gating each one on the
-// allowlist below. Only when the whole closure is decidable does the case reach
-// parser.Parse. That walk resolves every schemaLocation exactly as the parser
-// does — same resolver, same root location string, same §4.3.2 clause 4
-// base-URI algorithm — because a document it under-discovered would be a document
-// whose shape was never gated, which is the false accept back again.
+// Since #242 that qualifier binds over a CLOSURE, not one document. The assembly
+// reads the whole <include>/<override>/<import> closure, so a composed document
+// holding a skipped representation false-accepts exactly as a root one would. So
+// the harness runs parser.ParseReport, which reports the DOCUMENT SET it
+// assembled, and gates every document of that set on the allowlist below
+// (closureDecidable, conformance/schema_closure.go). Until #272 the harness
+// instead re-walked §4.2's composition edges itself, because parser.Parse could
+// not be asked which documents it read; the gated set is now the assembled set by
+// construction rather than by two walks agreeing, which is what closes the
+// under-gating hazard — a document the harness missed but the parser read would
+// be a document whose shape was never gated, the false accept back again.
 //
 // # The decidable shape (the strict top-level allowlist)
 //
@@ -89,8 +88,9 @@ import (
 // of every document in its closure is confined to what the producer checks, and
 // DECLINES (Fail) anything else:
 //
-//  1. Readability. parser.ReadDocument is run first — on the root, and again on
-//     every document the discovery walk reaches. ANY error DECLINES the case
+//  1. Readability. parser.ReadDocument is run on the root before anything else,
+//     and the assembly reads every composed document through it. ANY error
+//     DECLINES the case
 //     (Fail), never a validity verdict: a ReadDocument error does not distinguish
 //     a genuine XML well-formedness fault from a parser encoding LIMITATION.
 //     Well-formed UTF-16 input (BOM FF FE) is currently rejected as "invalid
@@ -98,15 +98,19 @@ import (
 //     observed-invalid would fabricate an "invalid" verdict for a well-formed
 //     document — a wrong-reason pass that would flip pass→fail once UTF-16
 //     decoding lands (a separate change). So malformed XML is NOT a claimed
-//     schema-well-formedness sub-cohort here; it is a declined recorded gap.
+//     schema-well-formedness sub-cohort here; it is a declined recorded gap. For
+//     a COMPOSED document the decline comes through the report: a document that
+//     resolved but could not be read is one the assembly never took in, recorded
+//     as parser.UnfollowedUnreadable, and the error it also returns completes the
+//     conjunction in step 4.
 //  2. Root identity. If the root is not <schema> (IsSchema false) the case is
 //     DECLINED: §3.17.2 explicitly does NOT require <schema> to be the document
 //     root, so Parse's error there is a plain non-xsderr Go precondition fault,
 //     not a sch-props-correct rejection — not decidable for this lane. Inventing
 //     a "root must be <schema>" rejection would overreach (oracle grounding). An
 //     INCLUDED document that is not a <schema> is the opposite case and is NOT
-//     declined: src-include clause 1 makes that a genuine rejection, which Parse
-//     emits, so the walk leaves it alone (schema_closure.go).
+//     declined: src-include clause 1 makes that a genuine rejection, which the
+//     assembly emits, and the document never enters the report to be gated.
 //  3. Top-level allowlist. Every top-level child element must be xsd:annotation,
 //     xsd:include, xsd:import, xsd:override, xsd:simpleType, xsd:element,
 //     xsd:attribute, xsd:complexType,
@@ -120,30 +124,30 @@ import (
 //     kinds:
 //     - include: always admitted (#242). Its own content model is (annotation?),
 //       so it contributes nothing the producer could silently skip; the
-//       decidability of the document it POINTS AT is established by the discovery
-//       walk, which reads that document and runs this same allowlist over it
-//       (and over its own <include>s and <import>s, transitively) before anything
-//       is decided —
+//       decidability of the document it POINTS AT is established by the closure
+//       gate, which runs this same allowlist over every document the assembly
+//       reported reading (and so, transitively, over that document's own
+//       <include>s and <import>s) —
 //       not by this allowlist entry. src-include (§4.2.3) itself imposes no shape
 //       constraint on the included document, only existence and targetNamespace
-//       agreement, both of which Parse decides genuinely. An <include> whose
-//       schemaLocation does not resolve yields no document to gate: the walk
-//       records that (closureScan.unresolved) exactly as it does for an <import>
-//       that yields no D2, and execSchemaCase declines only if the parse then
-//       fails (#276).
+//       agreement, both of which the assembly decides genuinely. An <include>
+//       whose schemaLocation does not resolve yields no document to gate: the
+//       assembly reports that (parser.UnfollowedLocationUnresolved) exactly as it
+//       does for an <import> that yields no D2, and execSchemaCase declines only
+//       if the parse then fails (#276).
 //     - override: admitted (#183) when every child of it is a decidable source
 //       declaration in its own right (overrideDecidable), because §F.2 clause 1
 //       makes those children top-level declarations of the OVERRIDDEN document.
 //       The document it points at, and the rest of §4.2.5's ·target set·, is
-//       gated by the same discovery walk that gates an <include>'s target
-//       (closureScan.compose); src-override's own clauses are then enforced
-//       genuinely by parser.Parse.
+//       gated by the same closure gate that gates an <include>'s target, being in
+//       the same reported document set; src-override's own clauses are then
+//       enforced genuinely by the assembly.
 //     - import: admitted at top level (#182) on the same reasoning. As for
 //       include, a directive that yields no D2 (no schemaLocation, or one that
-//       does not resolve) is RECORDED by the discovery walk, and declines the case
+//       does not resolve) is REPORTED as unfollowed, and declines the case
 //       only when the parse also fails — that failure being the fabricated
 //       src-resolve rejection the missing components would produce. See the
-//       Composition section below and closureScan.importDirective.
+//       Composition section below and parser.AssemblyReport.Unfollowed.
 //     - element: must have no inline <simpleType>/<complexType> child, and every
 //       <unique>/<key>/<keyref> child must use the name= form. A bare
 //       element (no type=) defaults to xs:anyType (§3.3.2.1 case 4), now seeded as
@@ -203,8 +207,8 @@ import (
 //       src-simple-type clause 2 rule Produce correctly enforces, so a violation
 //       flows through as a real decidable rejection.
 //     - annotation: always allowed, no further check.
-//  4. Decide. When every document of the closure passes, parser.Parse is run and
-//     observed = (err == nil): a nil error is genuine evidence of validity (no
+//  4. Decide. When every document of the closure passes,
+//     observed = (parser.ParseReport's err == nil): a nil error is genuine evidence of validity (no
 //     document of the assembly has any of the violations checked above, so a real
 //     one would surface), and a non-nil error is a REAL, implemented rejection
 //     (src-include §4.2.3, src-import and src-import-noselfimport §4.2.6.2,
@@ -223,16 +227,18 @@ import (
 //     declared validity.
 //
 //     No error-type discrimination (errors.As over *xsderr.Error) is needed to
-//     make that trustworthy, because step 1-3's walk has already ruled out the
-//     non-verdict failure modes ACROSS THE WHOLE CLOSURE: every document Parse
-//     will read has been independently confirmed resolvable, readable,
-//     <schema>-rooted (or deliberately left to src-include clause 1) and
-//     shape-decidable. The plain non-xsderr errors Parse can otherwise return —
+//     make that trustworthy, because steps 1-3 have ruled out the
+//     non-verdict failure modes ACROSS THE WHOLE CLOSURE: the root was
+//     independently confirmed resolvable, readable and <schema>-rooted before the
+//     assembly ran, and every document the assembly did take in is reported and
+//     shape-gated. The plain non-xsderr errors ParseReport can otherwise return —
 //     an unresolvable root, an I/O or encoding failure, a non-schema root, and an
 //     <include>/<override> carrying no schemaLocation at all, which is a grammar
-//     fault no Schema Representation Constraint covers (parse.go's compose) and
-//     which closureScan.compose therefore declines outright — are exactly what the
-//     walk already eliminated, so what remains is spec verdicts.
+//     fault no Schema Representation Constraint covers (parse.go's compose) — are
+//     exactly the modes the root pre-check and the Unfollowed conjunction
+//     eliminate: the last two are reported as parser.UnfollowedUnreadable and
+//     parser.UnfollowedNoSchemaLocation, so a case failing on either declines
+//     rather than being read as a verdict. What remains is spec verdicts.
 //
 // # sch-props-correct clause 2 is per-kind
 //
@@ -285,15 +291,15 @@ import (
 // # Composition: <include>, <import> and <override> decided, redefine deferred
 //
 // <xs:include>, chameleon inclusion included, is DECIDED as of #242,
-// <xs:import> as of #182 and <xs:override> as of #183: parser.Parse follows all
+// <xs:import> as of #182 and <xs:override> as of #183: the assembly follows all
 // three closures (#179/#182/#183) and the
-// harness's discovery walk gates every document in them, so an
+// closure gate covers every document in them, so an
 // include/chameleon/import/override case is now decided for the same reason a
 // single-document case is, not guessed. A composition directive that yields no D2
 // — an <import> with no schemaLocation, or an <include>, <override> or <import>
-// whose schemaLocation does not resolve — is RECORDED by the walk
-// (closureScan.unresolved) and declines the case only when parser.Parse ALSO
-// fails: the missing document's components are then absent from the assembly and
+// whose schemaLocation does not resolve — is REPORTED as unfollowed
+// (parser.AssemblyReport.Unfollowed) and declines the case only when the parse
+// ALSO fails: the missing document's components are then absent from the assembly and
 // the reference that wanted them failed src-resolve clauses 1-3 at finalize, a
 // FABRICATED "invalid" verdict, the one direction that can corrupt the ratchet.
 // The conjunction is the whole hazard (#276): where the parse succeeds despite the
@@ -319,9 +325,9 @@ import (
 // top-level declarations of the overridden document (§F.2 clause 1), so an
 // undecidable one would be an undecidable top-level declaration by another route.
 // The document it points at, and every document that one <include>s or
-// <override>s — §4.2.5's ·target set· — is gated by the same closure walk that
-// gates an <include>'s target, since the override transformation changes which
-// DECLARATIONS a document contributes but never which schemaLocations it names.
+// <override>s — §4.2.5's ·target set· — is gated by the same closure gate that
+// covers an <include>'s target: all of them are documents the assembly read, so
+// all of them are in its report.
 // Verdicts on an admitted override case are genuine in both directions: the
 // substituted declarations are really produced (a violation among them, such as
 // a simple type left restricting itself, surfaces as the rule it breaks), and an
@@ -355,14 +361,14 @@ import (
 // documents to be loaded "one by one, in order" (xsts.xsd, the suite's own
 // catalog schema); the runner now carries all of them (caseSpec.extraDocs)
 // instead of silently keeping one. This lane decides such a case only when the
-// closure walk from the FIRST document provably reached every other declared one
+// assembly from the FIRST document provably consumed every other declared one
 // — which requires the first document's own <include>/<override>/<import> to
-// name them, those being the only directives the walk follows
-// (closureScan.decidable), and is then just the composition case above. A
+// name them, those being the only directives the assembly follows, and is then
+// just the composition case above. A
 // <redefine> can never supply that reachability: a document carrying one is
 // DECLINED outright above, so nothing it names is ever reached. Documents
 // genuinely independent of each other need several roots merged into one schema,
-// which neither parser.Parse (one root) nor this harness offers, so those cases
+// which neither parser.ParseReport (one root) nor this harness offers, so those cases
 // are DECLINED (extraDocsInClosure) rather than decided against a schema the
 // suite did not declare.
 
@@ -379,29 +385,31 @@ func newSchemaExec() executor {
 }
 
 // execSchemaCase decides one schemaTest case, or honestly declines it (Fail). It
-// reads the root document, gates the WHOLE <xs:include>/<xs:import> closure on
-// the decidable
-// top-level shape (closureScan.decidable, which runs schemaShapeDecidable on every
-// document it discovers), then runs parser.Parse and agrees or disagrees with the
-// suite's declared validity. A document it cannot resolve OR cannot read (any
-// ReadDocument error, including a parser encoding limitation such as unsupported
-// UTF-16), whose root is not <schema>, or any document of whose closure falls
-// outside the producer's decidable subset is DECLINED (Fail) as a recorded gap,
-// never guessed. So is a case that both carries a directive naming no document
-// and fails to parse — see the perr check below (#276).
+// reads the root document to check the two preconditions parser.ParseReport
+// answers with a plain Go error rather than a validity verdict, runs
+// parser.ParseReport, gates the WHOLE <xs:include>/<xs:override>/<xs:import>
+// closure it reports on the decidable top-level shape (closureDecidable, which
+// runs schemaShapeDecidable on every document the assembly consumed), and agrees
+// or disagrees with the suite's declared validity. A root it cannot resolve OR
+// cannot read (any ReadDocument error, including a parser encoding limitation
+// such as unsupported UTF-16), whose root element is not <schema>, or any
+// document of whose closure falls outside the producer's decidable subset is
+// DECLINED (Fail) as a recorded gap, never guessed. So is a case that both
+// carries a directive naming no document and fails to parse — see the
+// Unfollowed check below (#276).
 //
 // The resolver is a loader.Dir rooted at the case document's own directory and the
-// root is named by its BASE name, because parser.Parse reads the root under
+// root is named by its BASE name, because parser.ParseReport reads the root under
 // exactly the location string it is handed (readRootDocument in parser/parse.go):
 // passing the full path would give the root document a base URI of
 // "…/sunData/SType/x" instead of "x", and every <include> in it would then resolve
-// one directory tree away from where the resolver serves. The harness's own read
-// below therefore uses the SAME resolver and the SAME location string, so its
-// closure walk resolves byte-identically to the assembly Parse builds.
+// one directory tree away from where the resolver serves. The harness's own
+// precondition read below therefore uses the SAME resolver and the SAME location
+// string, so it reads byte-identically the document the assembly roots at.
 func execSchemaCase(backend value.Backend, c caseSpec) Status {
 	resolver := loader.Dir(filepath.Dir(c.doc))
 	location := filepath.Base(c.doc)
-	rc, resolved, err := resolver.Resolve("", location)
+	rc, _, err := resolver.Resolve("", location)
 	if err != nil {
 		// Unreadable document: an honest recorded gap, not a validity verdict.
 		return Fail()
@@ -425,62 +433,61 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 	if !doc.IsSchema() {
 		return Fail()
 	}
-	// Only decide when EVERY document of the <include>/<import> closure is confined
-	// to what the producer processes; otherwise a silently-skipped invalid
-	// representation, in the root or in any composed document, could false-accept.
-	// The root's own targetNamespace seeds the walk exactly as it seeds
-	// parser.Parse's assembly.
-	rootTNS, _ := elementAttr(doc.Root(), "targetNamespace")
-	scan := newClosureScan(resolver, resolved, rootTNS)
-	if !scan.decidable(doc, rootTNS) {
+	// ParseReport, not Parse: the verdict needs the DOCUMENT SET the assembly
+	// consumed, not only its components (#272).
+	_, report, perr := parser.ParseReport(location, parser.WithResolver(resolver), parser.WithBackend(backend))
+	// Only decide when EVERY document of the <include>/<override>/<import> closure
+	// is confined to what the producer processes; otherwise a silently-skipped
+	// invalid representation, in the root or in any composed document, could
+	// false-accept.
+	if !closureDecidable(report) {
 		return Fail()
 	}
-	if !extraDocsInClosure(scan, resolver, c) {
+	if !extraDocsInClosure(report, resolver, c) {
 		return Fail()
 	}
-	_, perr := parser.Parse(location, parser.WithResolver(resolver), parser.WithBackend(backend))
 	// A directive that named no document is only half the fabricated-rejection
 	// hazard (#276): the missing components matter solely when something referred
 	// to them, and that shows up here, as a failed parse whose src-resolve clause
 	// 1-3 error the spec does not attach to the missing document (§5.3). A parse
-	// that SUCCEEDED past an unresolved directive fabricated nothing — §4.2.3
+	// that SUCCEEDED past an unfollowed directive fabricated nothing — §4.2.3
 	// clause 2.4's "not an error ... the inclusion must not be performed" is
 	// exactly that outcome — so the case is still decided. Only the conjunction
 	// declines.
-	if scan.unresolved && perr != nil {
+	if len(report.Unfollowed()) > 0 && perr != nil {
 		return Fail()
 	}
 	return decideSchema(perr == nil, c.expect.wantsValid())
 }
 
 // extraDocsInClosure reports whether every FURTHER document the case declares
-// beyond c.doc was reached by the closure walk that just gated c.doc — the only
-// condition under which parser.Parse, which is handed one root, nonetheless
+// beyond c.doc was consumed by the assembly rooted at c.doc — the only condition
+// under which parser.ParseReport, which is handed one root, nonetheless
 // assembles the whole declared set.
 //
 // A schemaTest may list several <schemaDocument> children, and the suite's own
 // catalog schema defines that as "run as if the schema documents given were
 // loaded one by one, in order": the case is the SET, not any member of it. The
 // condition holds when the first document's own <include>/<override>/<import>
-// names the others — the only directives closureScan.decidable follows — so the
-// walk reaches them and Parse composes them; a <redefine> never qualifies, since
-// its presence declines the document that carries it (schemaShapeDecidable). No
-// multi-document schemaTest in the suite meets the condition today: all of them
-// decline, most at closure decidability on the first document. The check exists
-// so that a case whose documents the parser's OWN composition constructs already
-// link is decided on the declared set rather than declined for its member count.
-// When the condition does not hold (documents genuinely independent), the harness
-// has no mechanism to merge several roots into one schema, so any verdict it
-// emitted would be a verdict on a DIFFERENT schema than the one declared. It
-// therefore DECLINES, as it declines every other shape it cannot decide for the
-// right reason, rather than loading an arbitrary member or ignoring the rest.
+// names the others — the only directives the assembly follows — so it composes
+// them; a <redefine> never qualifies, since its presence declines the document
+// that carries it (schemaShapeDecidable). No multi-document schemaTest in the
+// suite meets the condition today: all of them decline, most at closure
+// decidability on the first document. The check exists so that a case whose
+// documents the parser's OWN composition constructs already link is decided on
+// the declared set rather than declined for its member count. When the condition
+// does not hold (documents genuinely independent), the harness has no mechanism
+// to merge several roots into one schema, so any verdict it emitted would be a
+// verdict on a DIFFERENT schema than the one declared. It therefore DECLINES, as
+// it declines every other shape it cannot decide for the right reason, rather
+// than loading an arbitrary member or ignoring the rest.
 //
-// Each extra document is resolved through the SAME resolver, under a location
-// string relative to the same root directory, so the resolved identity compared
-// against the walk's index is in the walk's own format. A path that will not
-// resolve at all declines for the same reason as an unresolvable root: an
-// unreadable document is a gap, never a validity verdict.
-func extraDocsInClosure(scan *closureScan, resolver loader.Resolver, c caseSpec) bool {
+// Each extra document is resolved through the SAME resolver the parse used, under
+// a location string relative to the same root directory, so the resolved identity
+// compared against the report is in the report's own format (closureReached). A
+// path that will not resolve at all declines for the same reason as an
+// unresolvable root: an unreadable document is a gap, never a validity verdict.
+func extraDocsInClosure(report *parser.AssemblyReport, resolver loader.Resolver, c caseSpec) bool {
 	root := filepath.Dir(c.doc)
 	for _, extra := range c.extraDocs {
 		location, err := filepath.Rel(root, extra)
@@ -491,10 +498,10 @@ func extraDocsInClosure(scan *closureScan, resolver loader.Resolver, c caseSpec)
 		if err != nil {
 			return false
 		}
-		// Read-only handle: a close failure cannot change what the walk recorded,
+		// Read-only handle: a close failure cannot change what the assembly read,
 		// so it cannot affect the verdict (STYLE S3).
 		_ = rc.Close()
-		if !scan.visited(resolved) {
+		if !closureReached(report, resolved) {
 			return false
 		}
 	}
@@ -546,14 +553,14 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			// component of its own — <include>'s content model is (annotation?) and
 			// <import>'s likewise — so there is nothing here for the producer to
 			// silently skip. What each POINTS AT is the thing that could be skipped,
-			// and that is gated by closureScan.decidable, which reads the composed
-			// document and runs this same function over it before any case is
-			// decided. src-include's (§4.2.3) and src-import's (§4.2.6.2) own clauses
-			// are then enforced genuinely by parser.Parse. A directive that yields no
+			// and that is gated by closureDecidable, which runs this same function
+			// over every document the assembly reported reading. src-include's
+			// (§4.2.3) and src-import's (§4.2.6.2) own clauses
+			// are then enforced genuinely by the assembly. A directive that yields no
 			// D2 at all — an <import> with no schemaLocation, or either directive with
-			// one that does not resolve — is recorded by the walk, not judged here,
+			// one that does not resolve — is reported as unfollowed, not judged here,
 			// and declines the case only alongside a failed parse: see
-			// closureScan.compose, closureScan.importDirective and execSchemaCase.
+			// parser.AssemblyReport.Unfollowed and execSchemaCase.
 		case "element":
 			if !elementDecidable(el) {
 				return false
@@ -607,7 +614,7 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			// enumeration outright. Both are rejected by the same lazy path as the
 			// childless form, so the same decline applies: one principle, applied to
 			// the whole shape rather than half of it.
-			if mode, present := elementAttr(el, "mode"); present && mode != "interleave" && mode != "suffix" {
+			if mode, present := el.Attr("mode"); present && mode != "interleave" && mode != "suffix" {
 				return false
 			}
 		default:
@@ -635,8 +642,9 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 // exists to refuse. Any other element type declines for the same reason.
 //
 // The document the <override> POINTS AT is NOT gated here; that is the closure
-// walk's job (closureScan.compose), which reads it and runs schemaShapeDecidable
-// over it exactly as it does for an <include>'s target.
+// gate's job (closureDecidable), which runs schemaShapeDecidable over it exactly
+// as it does for an <include>'s target, both being documents the assembly
+// reported reading.
 func overrideDecidable(el *parser.Element) bool {
 	for _, child := range el.Children() {
 		c, ok := child.(*parser.Element)
@@ -1036,10 +1044,11 @@ func simpleTypeDecidable(el *parser.Element) bool {
 
 // hasAttr reports whether el carries the unprefixed (no-namespace) attribute
 // local, as XSD schema-element attributes (name, ref, …) carry no namespace. It
-// is the presence-only face of elementAttr, not a second scan of its own (STYLE
-// D3).
+// is the presence-only face of parser.Element.Attr, not a second scan of its own
+// (STYLE D3) — the lookup itself lives in the parser package, which is the one
+// implementation both this harness and the assembly use (#272).
 func hasAttr(el *parser.Element, local string) bool {
-	_, ok := elementAttr(el, local)
+	_, ok := el.Attr(local)
 	return ok
 }
 

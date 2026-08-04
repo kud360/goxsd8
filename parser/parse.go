@@ -79,7 +79,18 @@ func WithLogger(l *slog.Logger) Option {
 	return func(c *config) { c.log = l }
 }
 
-// Parse assembles the schema rooted at location and returns it finalized.
+// Parse assembles the schema rooted at location and returns it finalized. It is
+// [ParseReport] without the report, for the callers that only want the schema.
+func Parse(location string, opts ...Option) (*xsd.Schema, error) {
+	schema, _, err := ParseReport(location, opts...)
+	return schema, err
+}
+
+// ParseReport assembles the schema rooted at location, returns it finalized,
+// and reports which schema documents went into it — every document it read, in
+// discovery order, and every ·inter-schema-document reference· it could not
+// follow to one (see [AssemblyReport]). The report is never nil and is
+// populated as far as assembly got even when an error is returned.
 //
 // It implements §4.2.1's schema(D): the components of the root document plus,
 // transitively, those of every schema document reached through an <xs:include>
@@ -114,15 +125,17 @@ func WithLogger(l *slog.Logger) Option {
 // sch-props-correct, …)
 // carrying the offending construct's location; a failure to resolve the ROOT
 // location, by contrast, is a plain I/O error, since the caller named a document
-// that must exist. Like [Produce], Parse returns only the first error.
-func Parse(location string, opts ...Option) (*xsd.Schema, error) {
+// that must exist. Like [Produce], ParseReport returns only the first error.
+func ParseReport(location string, opts ...Option) (*xsd.Schema, *AssemblyReport, error) {
 	cfg := newConfig(opts)
 	root, resolved, err := readRootDocument(cfg.resolver, location)
 	if err != nil {
-		return nil, fmt.Errorf("parser: reading root schema document %q: %w", location, err)
+		// Nothing was assembled: an empty report, not a nil one, so every caller
+		// reads the same shape on every path.
+		return nil, &AssemblyReport{}, fmt.Errorf("parser: reading root schema document %q: %w", location, err)
 	}
 	if !root.IsSchema() {
-		return nil, fmt.Errorf("parser: Parse requires a <schema> document root at %q, got %s", location, root.Root().Name().Local())
+		return nil, &AssemblyReport{}, fmt.Errorf("parser: assembling a schema requires a <schema> document root at %q, got %s", location, root.Root().Name().Local())
 	}
 	// The root document's effective target namespace is its own: there is no
 	// including document to borrow one from (§4.2.3 clause 2.3 needs one).
@@ -130,10 +143,11 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 	a := newAssembly(resolved, rootTNS, cfg)
 	// The root is discovered under the nil (identity) override set: no <override>
 	// element points at it, so nothing substitutes for its own declarations.
-	if err := a.discover(root, rootTNS, nil); err != nil {
-		return nil, err
+	if err := a.discover(root, resolved, rootTNS, nil); err != nil {
+		return nil, a.report(), err
 	}
-	return a.compile(cfg.backend)
+	schema, err := a.compile(cfg.backend)
+	return schema, a.report(), err
 }
 
 // discovered is one schema document of an assembly paired with the EFFECTIVE
@@ -156,6 +170,14 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 type discovered struct {
 	doc *Document
 	tns string
+
+	// resolved is the location the [loader.Resolver] reported for this document —
+	// the load-once identity half of docKey, and what [AssemblyReport] hands a
+	// consumer as [AssembledDocument.Location]. It is not derivable from doc:
+	// Document.URI is the location as REQUESTED, before the resolver
+	// canonicalized it (loader.Dir folds on-disk case), so the two differ exactly
+	// where dedup depends on them (STYLE D3).
+	resolved string
 
 	// ov is the ·override pre-processing· in force over THIS document's own top
 	// level (§4.2.5, §F.2), nil when it was reached plainly. Like tns it is
@@ -209,6 +231,30 @@ type assembly struct {
 	// so it is user-visible in sch-props-correct duplicate reports (STYLE D1/D2)
 	// and must not be made to depend on which KIND of directive was seen.
 	docs []discovered
+
+	// unfollowed holds every ·inter-schema-document reference· (§4.2.1) that
+	// yielded no document, in encounter order, for [AssemblyReport.Unfollowed].
+	// It is not redundant with docs (STYLE D3): a directive that named no
+	// document contributes nothing TO docs, which is exactly why it needs its own
+	// record.
+	unfollowed []UnfollowedDirective
+}
+
+// report renders the assembly's discovery state as the [AssemblyReport]
+// [ParseReport] returns. It is built from the docs SLICE, in append order, never
+// from the loaded index — a map iteration would make the reported order
+// nondeterministic (STYLE D2).
+func (a *assembly) report() *AssemblyReport {
+	docs := make([]AssembledDocument, 0, len(a.docs))
+	for _, d := range a.docs {
+		docs = append(docs, AssembledDocument{Doc: d.doc, Location: d.resolved})
+	}
+	return &AssemblyReport{documents: docs, unfollowed: a.unfollowed}
+}
+
+// unfollowedAt records that the directive at el yielded no document, for reason.
+func (a *assembly) unfollowedAt(el *Element, reason UnfollowedReason) {
+	a.unfollowed = append(a.unfollowed, UnfollowedDirective{Reason: reason, At: el.Loc()})
 }
 
 // newAssembly returns the assembly for a root schema document already read from
@@ -222,7 +268,8 @@ func newAssembly(rootResolved, rootTNS string, cfg config) *assembly {
 	}
 }
 
-// discover appends doc to the assembly under tns — its effective target
+// discover appends doc to the assembly under resolved — the location the
+// resolver reported for it — tns — its effective target
 // namespace — and ov — the ·override pre-processing· in force over it — and then,
 // in ONE document-order pass, follows each of its top-level <include> (§4.2.3:
 // schema(D1) contains immed(D1) plus the components of schema(D2) for each
@@ -231,8 +278,8 @@ func newAssembly(rootResolved, rootTNS string, cfg config) *assembly {
 // identical to those of each imported S2) children depth-first. The three
 // directive kinds share the pass so that component entry order stays document
 // order rather than becoming directive-kind-dependent (STYLE D1).
-func (a *assembly) discover(doc *Document, tns string, ov *overrideSet) error {
-	a.docs = append(a.docs, discovered{doc: doc, tns: tns, ov: ov})
+func (a *assembly) discover(doc *Document, resolved, tns string, ov *overrideSet) error {
+	a.docs = append(a.docs, discovered{doc: doc, tns: tns, resolved: resolved, ov: ov})
 	for _, child := range doc.Root().Children() {
 		el, ok := child.(*Element)
 		if !ok {
@@ -307,14 +354,18 @@ func (a *assembly) override(el *Element, tns string, ov *overrideSet) error {
 // what the composed document is discovered under (§F.1 coercion for the chameleon
 // case).
 func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rule xsderr.Rule) error {
-	hint, ok := attrValue(el, "schemaLocation")
+	hint, ok := el.Attr("schemaLocation")
 	if !ok {
 		// schemaLocation is REQUIRED on <include> and <override> by the schema for
 		// schema documents, and src-include/src-override govern only what its actual
 		// value resolves to. A missing required attribute is therefore a grammar
 		// fault with no dedicated Schema Representation Constraint, reported as a
 		// plain error — the same treatment a <group> with no ref gets in
-		// produce_complex.go.
+		// produce_complex.go. It is ALSO a reference this assembly could not follow,
+		// and is recorded as one: the error says the assembly stopped, the report
+		// says which document set it stopped short of (§4.2.1 makes these
+		// schemaLocations mandatory, "not hints").
+		a.unfollowedAt(el, UnfollowedNoSchemaLocation)
 		return fmt.Errorf("parser: <%s> at %s has no schemaLocation attribute, which the schema for schema documents requires", el.Name().Local(), el.Loc())
 	}
 	// §4.3.2 clause 4: the location is a URI REFERENCE, resolved against the base
@@ -322,7 +373,7 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rule xsderr
 	// the document URI.
 	requested := schemaloc.Resolve(el.BaseURI(), hint)
 
-	d2, err := a.fetch(requested, tns, ov, el, rule)
+	d2, resolved, err := a.fetch(requested, tns, ov, el, rule)
 	if err != nil {
 		return err
 	}
@@ -340,7 +391,7 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rule xsderr
 	// document's: §4.2.3's recursion note spells out that "if A includes B and B
 	// includes C … the effect is as if A included B' and B' included C'", with B'
 	// carrying A's targetNamespace.
-	own, hasOwn := attrValue(d2.Root(), "targetNamespace")
+	own, hasOwn := d2.Root().Attr("targetNamespace")
 	if hasOwn && own != tns {
 		// src-include clause 2.1 (c-normi) fails (the two targetNamespaces differ,
 		// or the composing document has none), 2.2 (c-normi2) fails (D2 has one),
@@ -354,7 +405,7 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rule xsderr
 	// document has one — 2.3, whose §F.1 coercion is applied at production time:
 	// either way D2 is discovered under the composing document's effective
 	// namespace, carrying whatever override is in force over it.
-	return a.discover(d2, tns, ov)
+	return a.discover(d2, resolved, tns, ov)
 }
 
 // importDocument follows one <import> element (§4.2.6.2). It enforces
@@ -369,11 +420,11 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rule xsderr
 // attribute selects which sub-clause applies, since namespace="" is a legal (if
 // unusual) xs:anyURI value and is not the same thing as no attribute at all.
 func (a *assembly) importDocument(el *Element, tns string) error {
-	namespace, hasNamespace := attrValue(el, "namespace")
+	namespace, hasNamespace := el.Attr("namespace")
 	if err := checkNoSelfImport(el, namespace, hasNamespace, tns); err != nil {
 		return err
 	}
-	hint, hasHint := attrValue(el, "schemaLocation")
+	hint, hasHint := el.Attr("schemaLocation")
 	if !hasHint {
 		// A bare <import> — namespace but no schemaLocation — is explicitly legal
 		// (§4.2.6.2): it declares that references into namespace are expected
@@ -383,6 +434,7 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 		// NOT routed through schemaloc.Resolve: that returns the IMPORTING
 		// document's own base URI for an empty location, which would make a bare
 		// import re-read the importer.
+		a.unfollowedAt(el, UnfollowedNoLocation)
 		a.log.Debug("import declares a namespace with no schemaLocation hint",
 			"rule", string(ruleSrcImport), "namespace", namespace, "at", el.Loc().String())
 		return nil
@@ -394,7 +446,7 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 	// The resolver is asked under the IMPORT's namespace, not the importing
 	// document's: that pair — target namespace and location hint — is exactly the
 	// "application schema reference strategy" input clause 2 describes.
-	d2, err := a.fetch(requested, namespace, nil, el, ruleSrcImport)
+	d2, resolved, err := a.fetch(requested, namespace, nil, el, ruleSrcImport)
 	if err != nil {
 		return err
 	}
@@ -413,7 +465,7 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 	// discovered under it: import applies NO §F.1 coercion, which is src-include
 	// clause 2.3's alone, and no ·override pre-processing· either, since §F.2
 	// clause 5 copies an <import> unchanged.
-	return a.discover(d2, own, nil)
+	return a.discover(d2, resolved, own, nil)
 }
 
 // checkNoSelfImport enforces src-import clause 1 (src-import-noselfimport,
@@ -484,32 +536,44 @@ func checkImportedNamespace(el *Element, requested, namespace string, hasNamespa
 // every directive but <override> (§F.2 clause 5 leaves an <import> unchanged).
 //
 // It returns a nil *Document, and no error, for the two outcomes that mean
-// "perform no composition here":
+// "perform no composition here" — outcomes the report must NOT conflate, which
+// is why only the first records an [UnfollowedDirective]:
 //
 //   - the location does not resolve at all — §4.2.3: "It is not an error for the
 //     actual value of the schemaLocation attribute to fail to resolve at all, in
 //     which case the corresponding inclusion must not be performed" (src-include
 //     clause 2.4), and §4.2.6.2 equally: "It is not an error for the application
-//     schema component reference strategy to fail";
+//     schema component reference strategy to fail". No document was assembled for
+//     this directive, so it is UnfollowedLocationUnresolved;
 //   - the document was already loaded under this namespace and this override —
 //     the same schema location names the same schema document (§4.2.3), §4.2.6.2's
 //     note requires repeated <import>s of one document not to trip
 //     sch-props-correct clause 2 either, and §4.2.5's note wants the same of
 //     "multiple equivalent overrides of the same schema document", so it
-//     contributes its components exactly once.
+//     contributes its components exactly once. This directive WAS followed — to a
+//     document already in the report — so nothing is recorded: reporting a dedup
+//     hit as unfollowed would mark almost every multi-document assembly.
 //
 // Any OTHER resolver failure is real: a permission or transport error is not
-// silently downgraded to "absent".
-func (a *assembly) fetch(requested, namespace string, ov *overrideSet, el *Element, rule xsderr.Rule) (*Document, error) {
+// silently downgraded to "absent". It still yielded no document, so it is
+// recorded too, under the same reason — the report says which references came
+// back empty, not why the resolver said so.
+//
+// The resolved location travels back with the document because it, not the
+// requested one, is the assembly's document identity (docKey) and the report's
+// [AssembledDocument.Location].
+func (a *assembly) fetch(requested, namespace string, ov *overrideSet, el *Element, rule xsderr.Rule) (*Document, string, error) {
 	rc, resolved, err := a.resolver.Resolve(namespace, requested)
 	if errors.Is(err, loader.ErrNotFound) {
+		a.unfollowedAt(el, UnfollowedLocationUnresolved)
 		a.log.Debug("composition skipped: schemaLocation does not resolve",
 			"rule", string(rule), "directive", el.Name().Local(),
 			"namespace", namespace, "location", requested, "at", el.Loc().String())
-		return nil, nil
+		return nil, "", nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("parser: resolving <%s> schemaLocation %q at %s: %w", el.Name().Local(), requested, el.Loc(), err)
+		a.unfollowedAt(el, UnfollowedLocationUnresolved)
+		return nil, "", fmt.Errorf("parser: resolving <%s> schemaLocation %q at %s: %w", el.Name().Local(), requested, el.Loc(), err)
 	}
 	// A read-only reader: a close failure cannot change what was already read, so
 	// it cannot affect the parse verdict (STYLE S3).
@@ -519,7 +583,7 @@ func (a *assembly) fetch(requested, namespace string, ov *overrideSet, el *Eleme
 	if _, done := a.loaded[key]; done {
 		a.log.Debug("schema document already loaded", "directive", el.Name().Local(),
 			"namespace", namespace, "location", requested, "resolved", resolved, "at", el.Loc().String())
-		return nil, nil
+		return nil, resolved, nil
 	}
 	a.loaded[key] = struct{}{}
 
@@ -528,11 +592,14 @@ func (a *assembly) fetch(requested, namespace string, ov *overrideSet, el *Eleme
 		// src-include clause 1.1 and src-import clause 2 alike require the resolved
 		// resource to correspond to a <schema> item "in a well-formed information
 		// set", so a well-formedness fault in a document that DID resolve is a
-		// composition violation, not a bare XML error.
-		return nil, xsderr.Wrap(rule, el.Loc(),
+		// composition violation, not a bare XML error. The document is nonetheless
+		// one the assembly never read, so the directive is recorded as unfollowed
+		// alongside the verdict.
+		a.unfollowedAt(el, UnfollowedUnreadable)
+		return nil, "", xsderr.Wrap(rule, el.Loc(),
 			fmt.Errorf("the schema document %q named by this <%s> is not well-formed, but %s requires a well-formed information set: %w", requested, el.Name().Local(), rule, err))
 	}
-	return doc, nil
+	return doc, resolved, nil
 }
 
 // compile produces every discovered document into ONE builder — each under its

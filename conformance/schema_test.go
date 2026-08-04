@@ -85,20 +85,21 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"complexContent restriction with assert", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:restriction base="B"><xs:sequence/><xs:assert test="true()"/></xs:restriction></xs:complexContent></xs:complexType>`},
 		{"restriction with assertion facet", `<xs:simpleType name="A"><xs:restriction base="xs:int"><xs:assertion test="$value > 0"/></xs:restriction></xs:simpleType>`},
 		// #242: <include> contributes no component of its own, so it is admitted
-		// here; the decidability of what it points at is the closure walk's job
-		// (closureScan.decidable), not this allowlist's.
+		// here; the decidability of what it points at is the closure gate's job
+		// (closureDecidable over the assembly's report), not this allowlist's.
 		{"top-level include", `<xs:include schemaLocation="lib.xsd"/>`},
 		{"include beside decidable kinds", `<xs:include schemaLocation="lib.xsd"/><xs:element name="e" type="xs:string"/>`},
 		// #182: <import> likewise contributes no component of its own. The stricter
-		// no-D2 rule that governs it lives in closureScan.importDirective, not in
-		// this shape allowlist, so a bare <import> is admitted HERE and declined
-		// THERE.
+		// no-D2 rule that governs it lives in the Unfollowed conjunction
+		// execSchemaCase applies, not in this shape allowlist, so a bare <import>
+		// is admitted HERE and declined THERE.
 		{"top-level import", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`},
 		{"import beside include and decidable kinds", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/><xs:include schemaLocation="lib.xsd"/><xs:element name="e" type="xs:string"/>`},
 		// #183: an <override> is admitted when each of its children is a decidable
 		// source declaration, since §F.2 clause 1 makes those children top-level
 		// declarations of the OVERRIDDEN document. What it points at is the closure
-		// walk's job (closureScan.compose), not this allowlist's.
+		// gate's job (closureDecidable over the assembly's report), not this
+		// allowlist's.
 		{"override with decidable children", `<xs:override schemaLocation="b.xsd"><xs:element name="e" type="xs:string"/><xs:simpleType name="T"><xs:restriction base="xs:string"/></xs:simpleType></xs:override>`},
 		{"override with only an annotation", `<xs:override schemaLocation="b.xsd"><xs:annotation><xs:documentation>hi</xs:documentation></xs:annotation></xs:override>`},
 		{"empty override", `<xs:override schemaLocation="b.xsd"/>`},
