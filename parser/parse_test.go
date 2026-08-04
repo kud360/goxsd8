@@ -964,6 +964,108 @@ func TestParseSameDocumentIncludedAndImported(t *testing.T) {
 	mustType(t, s, xsd.QName{Local: "code"})
 }
 
+// TestParseImportClause3OnDedupHit pins that src-import clause 3 is judged per
+// <import> ELEMENT, not per document read. §4.2.6.2's note licenses skipping the
+// re-composition of an already-read D2's components; it does not license skipping
+// clause 3, whose "If D2 exists, that is, clause 2.1 or clause 2.2 above were
+// satisfied" is a fact about the resolved document.
+//
+// A chameleon <include> is what makes the two paths diverge: it keys the
+// no-targetNamespace lib.xsd under the includer's urn:b, so x.xsd's
+// <import namespace="urn:b"> of that same document is a dedup hit — and must
+// still be rejected, since lib.xsd has no targetNamespace to be identical to
+// urn:b (clause 3.1). x.xsd is byte-identical in both assemblies, so the two
+// verdicts must be too.
+func TestParseImportClause3OnDedupHit(t *testing.T) {
+	x := wrap("urn:x", `<xs:import namespace="urn:b" schemaLocation="lib.xsd"/>`)
+	lib := wrap("", `<xs:simpleType name="code">`+
+		`<xs:restriction base="xs:string"/></xs:simpleType>`)
+
+	// Control: nothing has read lib.xsd, so x.xsd's <import> reads it itself.
+	_, control := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:main", `<xs:import namespace="urn:x" schemaLocation="x.xsd"/>`),
+		"x.xsd":    x,
+		"lib.xsd":  lib,
+	})
+	mustXSDRule(t, control, "src-import", "x.xsd")
+
+	// The reachability scenario: root.xsd chameleon-<include>s lib.xsd under urn:b
+	// FIRST, so x.xsd's identical <import> lands on the load-once key instead.
+	_, deduped := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:main", `<xs:import namespace="urn:b" schemaLocation="root.xsd"/>`+
+			`<xs:import namespace="urn:x" schemaLocation="x.xsd"/>`),
+		"root.xsd": wrap("urn:b", `<xs:include schemaLocation="lib.xsd"/>`),
+		"x.xsd":    x,
+		"lib.xsd":  lib,
+	})
+	mustXSDRule(t, deduped, "src-import", "x.xsd")
+	if deduped.Error() != control.Error() {
+		t.Fatalf("dedup-hit verdict = %q, want it identical to the control path's %q", deduped, control)
+	}
+}
+
+// TestParseImportUnresolvableSkipsClause3 pins the OTHER direction of the same
+// distinction: a schemaLocation that does not resolve means clause 2 was not
+// satisfied, so D2 does not exist and clause 3 — gated on "If D2 exists" — must
+// not be evaluated at all. §4.2.6.2: "It is not an error for the application
+// schema component reference strategy to fail."
+//
+// The assembly is the dedup scenario's, minus the resolvable location: lib.xsd IS
+// loaded under urn:b, so an implementation that treated an unresolved location as
+// "D2 exists" would find a targetNamespace to compare and wrongly reject.
+func TestParseImportUnresolvableSkipsClause3(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:main", `<xs:import namespace="urn:b" schemaLocation="root.xsd"/>`+
+			`<xs:import namespace="urn:x" schemaLocation="x.xsd"/>`),
+		"root.xsd": wrap("urn:b", `<xs:include schemaLocation="lib.xsd"/>`),
+		"lib.xsd": wrap("", `<xs:simpleType name="code">`+
+			`<xs:restriction base="xs:string"/></xs:simpleType>`),
+		"x.xsd": wrap("urn:x", `<xs:import namespace="urn:b" schemaLocation="missing.xsd"/>`+
+			`<xs:element name="root" type="xs:string"/>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v, want the unresolvable import to leave clause 3 vacuous", err)
+	}
+	if _, ok := s.Element(xsd.QName{Space: "urn:x", Local: "root"}); !ok {
+		t.Fatalf("element {urn:x}root not found")
+	}
+}
+
+// TestParseImportDedupHitComposesOnce pins that running clause 3 on a dedup hit
+// did not turn the hit into a second COMPOSITION: the repeated <import> of one
+// document under one namespace still contributes D2's components exactly once, so
+// sch-props-correct clause 2 (c-nmd) is not tripped — which is precisely what
+// §4.2.6.2's note is careful to permit.
+func TestParseImportDedupHitComposesOnce(t *testing.T) {
+	docs := map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`+
+			`<xs:import namespace="urn:b" schemaLocation="b.xsd"/>`+
+			`<xs:element name="root" type="xs:string"/>`),
+		"b.xsd": wrap("urn:b", `<xs:element name="shared" type="xs:string"/>`),
+	}
+	s, report, err := parser.ParseReport("main.xsd", parser.WithResolver(loader.Map(docs)))
+	if err != nil {
+		t.Fatalf("ParseReport: %v", err)
+	}
+	if _, ok := s.Element(xsd.QName{Space: "urn:b", Local: "shared"}); !ok {
+		t.Fatalf("element {urn:b}shared not found")
+	}
+	// main.xsd and b.xsd, b.xsd once: a re-composed dedup hit would show up here
+	// before it showed up as a duplicate-component verdict.
+	var got []string
+	for _, d := range report.Documents() {
+		got = append(got, d.Location)
+	}
+	if want := []string{"main.xsd", "b.xsd"}; !slices.Equal(got, want) {
+		t.Fatalf("assembled documents = %v, want %v", got, want)
+	}
+	// A dedup hit whose clause 3 HOLDS is silent: the second <import> names the
+	// same namespace b.xsd declares, so nothing is charged.
+	if len(report.Unfollowed()) != 0 {
+		t.Fatalf("unfollowed = %v, want none: a dedup hit is a followed reference", report.Unfollowed())
+	}
+}
+
 // TestParseDirectiveDocumentOrder pins that <include> and <import> are followed
 // in ONE document-order pass, depth-first and pre-order, rather than in two
 // kind-segregated passes. The order documents enter the assembly is the order

@@ -98,6 +98,11 @@
 // namespace they were reached under and the override applied to them, so
 // a repeated include, import or equivalent override, a
 // diamond, or a (spec-legal) cycle contributes its components once.
+// Loading once suppresses the second COMPOSITION only, which is all
+// §4.2.6.2's note asks for: a repeated <xs:import> is still judged
+// against src-import clause 3, so one whose namespace disagrees with the
+// already-loaded document's targetNamespace is rejected however that
+// document was first reached.
 //
 // [Produce] remains the single-document entry point: it maps one
 // already-read document and follows no inter-document reference at all.
