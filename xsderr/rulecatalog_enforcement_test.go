@@ -14,6 +14,24 @@
 //     Rule-returning function, or a Rule(...) conversion. Without this half the
 //     positive half is trivially satisfiable by going back to bare literals,
 //     which declare no constant at all and so would be scanned by nothing.
+//
+// What this raises is the floor, from "nothing enforced" to "literal misuse and
+// stray constants are caught". It is NOT full dataflow soundness, and three
+// holes are known and deliberately left open — closing them would need variable
+// and call-site resolution, which #273 explicitly ruled out as scope:
+//
+//   - `var r xsderr.Rule = "…"; New(r, …)`. A package-level or local `var` (as
+//     opposed to a const) of type Rule is invisible to the positive half, which
+//     walks const declarations only; passed on as an identifier it is invisible
+//     to the negative half too, which flags only *ast.BasicLit.
+//   - `xsderr.Rule(expr)` where expr is not itself a literal — e.g.
+//     `xsderr.Rule(someStringVar)`. The conversion check flags a *ast.BasicLit
+//     operand; a converted variable or expression passes through unscanned.
+//   - A Rule copied off an existing *Error — reading `.Rule`, or RuleOf, and
+//     threading that identifier into a fresh New/Wrap. It is an identifier at
+//     the call site, so the negative half does not flag it. In practice tracing
+//     it back reaches a validated origin, but this scan does not verify that
+//     chain and does not claim to.
 package xsderr_test
 
 import (
