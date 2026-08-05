@@ -63,6 +63,40 @@ func TestNewAttributeGroupDefinitionEmptyUsesYieldsNil(t *testing.T) {
 	}
 }
 
+// TestNewAttributeGroupDefinitionRejectsAbsentName exercises ag-props-correct
+// clause 1 for the {name} slot: the §3.6.1 tableau types it as a Required
+// xs:NCName, and NCName's value space excludes the empty string, so a QName with
+// an empty Local is not a legal {name} — with or without a namespace name. A
+// present local name in no namespace stays legal (a zero Space is a present name,
+// not an absent one).
+func TestNewAttributeGroupDefinitionRejectsAbsentName(t *testing.T) {
+	tests := []struct {
+		name    string
+		qname   xsd.QName
+		wantErr bool
+	}{
+		{"zero QName", xsd.QName{}, true},
+		{"namespace with empty local", xsd.QName{Space: "urn:ns"}, true},
+		{"no-namespace present local", xsd.QName{Local: "g"}, false},
+		{"namespaced present local", xsd.QName{Space: "urn:ns", Local: "g"}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xsd.NewAttributeGroupDefinition(xsderr.Loc{}, tc.qname, nil, nil, nil)
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("NewAttributeGroupDefinition(%v) unexpected error: %v", tc.qname, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("NewAttributeGroupDefinition(%v) succeeded, want ag-props-correct clause 1 error", tc.qname)
+			}
+			assertRule(t, err, "ag-props-correct")
+		})
+	}
+}
+
 func TestNewAttributeGroupDefinitionRejectsDuplicateExpandedNameLocalLocal(t *testing.T) {
 	dup := xsd.QName{Space: "urn:ns", Local: "a"}
 	uses := []xsd.AttributeUse{

@@ -5,9 +5,9 @@ import "github.com/kud360/goxsd8/xsderr"
 // ruleICProps is Identity-Constraint Definition Properties Correct
 // (Structures §3.11.6.1, id="c-props-correct"): an identity-constraint
 // definition's properties must match the §3.11.1 tableau. This constructor
-// enforces clause 1 (a {name}/{identity-constraint category}/{selector}/
-// {fields} shape with at least one field, and a {referenced key} present
-// exactly when the category is "keyref").
+// enforces clause 1 (a present {name}, a legal {identity-constraint category},
+// a {fields} with at least one field, and a {referenced key} present exactly
+// when the category is "keyref").
 //
 // This constructor enforces only clause 1's LOCAL part (the presence-iff-keyref
 // shape). Everything that needs the RESOLVED {referenced key} is enforced at
@@ -51,12 +51,29 @@ type IdentityConstraint struct {
 
 // NewIdentityConstraint builds an IdentityConstraint, rejecting the states
 // Identity-Constraint Definition Properties Correct clause 1 (§3.11.6.1,
-// c-props-correct) forbids: an unknown {identity-constraint category}, an
-// empty {fields}, and a {referenced key} whose presence disagrees with the
-// category (present iff the category is "keyref"). referencedKey is a pointer
-// so that its absence (nil) is distinct from a present zero/absent QName.
-// fields and annotations are copied; the caller's backing arrays are not
-// aliased.
+// c-props-correct) forbids: an absent {name}, an unknown {identity-constraint
+// category}, an empty {fields}, and a {referenced key} whose presence disagrees
+// with the category (present iff the category is "keyref").
+//
+// name must be present: its local part may not be empty. The §3.11.1 tableau
+// types {name} as a Required xs:NCName, and NCName's value space (Datatypes
+// §3.4.7, pattern \i\c*) excludes the empty string, so a zero-Local QName is
+// categorically not a legal {name}. The §5.3 Missing Sub-components escape hatch
+// does not cover it: §5.3 is scoped to properties whose value is another
+// component reached by QName ·resolution·, and {name} is the identity other
+// components resolve AGAINST — here quite literally, since a keyref's
+// {referenced key} names a key/unique by exactly this QName. The guard is
+// unconditional because an identity-constraint definition has NO anonymous form:
+// §3.11.2 requires name on <key>, <unique> and <keyref> alike. That reasoning is
+// deliberately NOT generalized to NewComplexType / NewSimpleType, whose
+// components have a genuine anonymous form ({name} Optional). Testing the local
+// part, not name == QName{}, is deliberate: the latter would admit
+// QName{Space: "urn:x", Local: ""} as a named definition. Same idiom as
+// NewElementDeclaration's e-props-correct clause 1 check.
+//
+// referencedKey is a pointer so that its absence (nil) is distinct from a
+// present zero/absent QName. fields and annotations are copied; the caller's
+// backing arrays are not aliased.
 //
 // loc is the source position charged to any rejection AND retained: Loc reports
 // it back as the definition's provenance. Pass the position of this
@@ -65,6 +82,10 @@ type IdentityConstraint struct {
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewIdentityConstraint(loc xsderr.Loc, name QName, category IdentityConstraintCategory, selector XPathExpression, fields []XPathExpression, referencedKey *QName, annotations []Annotation) (IdentityConstraint, error) {
+	if name.Local == "" {
+		return IdentityConstraint{}, xsderr.New(ruleICProps, loc,
+			"identity-constraint definition has an absent {name}, but the §3.11.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (c-props-correct clause 1)")
+	}
 	switch category {
 	case IdentityConstraintKey, IdentityConstraintKeyref, IdentityConstraintUnique:
 	default:

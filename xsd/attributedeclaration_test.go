@@ -55,6 +55,39 @@ func TestNewAttributeDeclarationValueConstraintAndInheritablePresent(t *testing.
 	}
 }
 
+// TestNewAttributeDeclarationRejectsAbsentName exercises a-props-correct clause
+// 1 for the {name} slot: the §3.2.1 tableau types it as a Required xs:NCName, and
+// NCName's value space excludes the empty string, so a QName with an empty Local
+// is not a legal {name} — with or without a namespace name. A present local name
+// in no namespace stays legal (a zero Space is a present name, not an absent one).
+func TestNewAttributeDeclarationRejectsAbsentName(t *testing.T) {
+	tests := []struct {
+		name    string
+		qname   xsd.QName
+		wantErr bool
+	}{
+		{"zero QName", xsd.QName{}, true},
+		{"namespace with empty local", xsd.QName{Space: "urn:ns"}, true},
+		{"no-namespace present local", xsd.QName{Local: "a"}, false},
+		{"namespaced present local", xsd.QName{Space: "urn:ns", Local: "a"}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, tc.qname, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.ScopeGlobal, nil, false, nil)
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("NewAttributeDeclaration(%v) unexpected error: %v", tc.qname, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("NewAttributeDeclaration(%v) succeeded, want a-props-correct clause 1 error", tc.qname)
+			}
+			assertRule(t, err, "a-props-correct")
+		})
+	}
+}
+
 func TestNewAttributeDeclarationRejectsUnknownScope(t *testing.T) {
 	_, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, xsd.ScopeVariety(0), nil, false, nil)
 	if err == nil {

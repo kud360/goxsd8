@@ -9,9 +9,9 @@ import "github.com/kud360/goxsd8/xsderr"
 // specific clause number in each message (the rule ID is not sub-anchored per
 // clause, matching elementdeclaration.go's single-rule-const convention):
 //
-//   - clause 1 (tableau shape): {scope}.{variety} is one of the legal Scope
-//     tokens (global or local), and a present {value constraint} carries a
-//     legal {variety} (default or fixed).
+//   - clause 1 (tableau shape): {name} is present, {scope}.{variety} is one of
+//     the legal Scope tokens (global or local), and a present {value
+//     constraint} carries a legal {variety} (default or fixed).
 //
 // Clause 2 (Simple Default Valid — §3.2.6.2 cos-valid-simple-default) is a
 // cross-component constraint: it needs the resolved {type definition} to validate
@@ -83,6 +83,24 @@ type AttributeDeclaration struct {
 // Attribute Declaration Properties Correct (§3.2.6.1, a-props-correct) clause 1
 // forbids:
 //
+//   - name must be present: its local part may not be empty. The §3.2.1
+//     tableau types {name} as a Required xs:NCName, and NCName's value space
+//     (Datatypes §3.4.7, pattern \i\c*) excludes the empty string, so a
+//     zero-Local QName is categorically not a legal {name}. The §5.3 Missing
+//     Sub-components escape hatch does not cover it: §5.3 is scoped to
+//     properties whose value is another component reached by QName
+//     ·resolution·, and {name} is the identity other components resolve
+//     AGAINST — unlike the deferred QName REFERENCE this component carries in
+//     its {type definition} slot. The guard is unconditional because an
+//     attribute declaration has NO anonymous form: §3.2.2.1/§3.2.2.2 make the
+//     name attribute present for every declaration-producing case, and the ref
+//     form resolves to an existing declaration rather than minting an unnamed
+//     one. That reasoning is deliberately NOT generalized to NewComplexType /
+//     NewSimpleType, whose components have a genuine anonymous form ({name}
+//     Optional, {context} Required instead). Testing the local part, not
+//     name == QName{}, is deliberate: the latter would admit
+//     QName{Space: "urn:x", Local: ""} as a named declaration. Same idiom as
+//     NewElementDeclaration's e-props-correct clause 1 check;
 //   - scopeVariety must be a legal Scope token (ScopeGlobal or ScopeLocal);
 //   - a present valueConstraint must carry a legal {variety} (ValueDefault or
 //     ValueFixed) — this catches a caller passing the zero ValueConstraint{}
@@ -113,6 +131,10 @@ type AttributeDeclaration struct {
 // A caller with no real parser position — a synthesized or programmatically
 // built declaration — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, scopeVariety ScopeVariety, valueConstraint *ValueConstraint, inheritable bool, annotations []Annotation) (AttributeDeclaration, error) {
+	if name.Local == "" {
+		return AttributeDeclaration{}, xsderr.New(ruleAPropsCorrect, loc,
+			"attribute declaration has an absent {name}, but the §3.2.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (a-props-correct clause 1)")
+	}
 	if err := checkTypeDefinitionOrRef(loc, typeDefinition, "attribute declaration "+name.String()); err != nil {
 		return AttributeDeclaration{}, err
 	}

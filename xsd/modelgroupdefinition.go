@@ -4,10 +4,11 @@ import "github.com/kud360/goxsd8/xsderr"
 
 // ruleMgdPropsCorrect is Model Group Definition Properties Correct (Structures
 // §3.7.6, id="mgd-props-correct"): a model group definition's properties must
-// match the §3.7.1 property tableau. This file enforces the one cheap,
-// cross-reference-free part of that tableau: {model group} is Required, so a
-// zero (never-constructed) ModelGroup — whose {compositor} is the invalid zero —
-// is rejected, mirroring NewWildcard's zero-NamespaceConstraint guard.
+// match the §3.7.1 property tableau. This file enforces the two cheap,
+// cross-reference-free parts of that tableau: {name} is a Required xs:NCName, so
+// a QName with an empty local part is rejected; and {model group} is Required,
+// so a zero (never-constructed) ModelGroup — whose {compositor} is the invalid
+// zero — is rejected too, mirroring NewWildcard's zero-NamespaceConstraint guard.
 const ruleMgdPropsCorrect xsderr.Rule = "mgd-props-correct"
 
 // ModelGroupDefinition is the Model Group Definition component (Structures
@@ -25,9 +26,10 @@ const ruleMgdPropsCorrect xsderr.Rule = "mgd-props-correct"
 // Ratchet impact: unchanged. This is a leaf shape with no parser producer; the
 // schema conformance lane moves only when the producer (#176) wires it in.
 //
-// Construct only through NewModelGroupDefinition, which rejects an absent (zero)
-// {model group} so the Required-property violation is unrepresentable (STYLE T1).
-// ModelGroupDefinition is immutable after construction.
+// Construct only through NewModelGroupDefinition, which rejects an absent {name}
+// and an absent (zero) {model group} so both Required-property violations are
+// unrepresentable (STYLE T1). ModelGroupDefinition is immutable after
+// construction.
 type ModelGroupDefinition struct {
 	loc         xsderr.Loc // source position; provenance, not a §3.7.1 property
 	name        QName
@@ -35,12 +37,29 @@ type ModelGroupDefinition struct {
 	annotations []Annotation
 }
 
-// NewModelGroupDefinition builds a ModelGroupDefinition, rejecting the state
-// Model Group Definition Properties Correct (§3.7.6, mgd-props-correct) forbids
-// at this layer: an absent {model group}. The property is Required (§3.7.1), so a
-// zero ModelGroup — one never built through NewModelGroup, carrying the invalid
-// zero {compositor} — is illegal, mirroring NewWildcard's rejection of a zero
-// NamespaceConstraint.
+// NewModelGroupDefinition builds a ModelGroupDefinition, rejecting the two
+// states Model Group Definition Properties Correct (§3.7.6, mgd-props-correct)
+// forbids at this layer:
+//
+//   - an absent {name}: its local part may not be empty. The §3.7.1 tableau
+//     types {name} as a Required xs:NCName, and NCName's value space (Datatypes
+//     §3.4.7, pattern \i\c*) excludes the empty string, so a zero-Local QName is
+//     categorically not a legal {name}. The §5.3 Missing Sub-components escape
+//     hatch does not cover it: §5.3 is scoped to properties whose value is
+//     another component reached by QName ·resolution·, and {name} is the
+//     identity other components resolve AGAINST. The guard is unconditional
+//     because a model group definition has NO anonymous form: per §3.7.2 only a
+//     <group> child of <schema>/<redefine> — always carrying name — maps to this
+//     component, while a <group ref> maps to a Particle instead. That reasoning
+//     is deliberately NOT generalized to NewComplexType / NewSimpleType, whose
+//     components have a genuine anonymous form ({name} Optional). Testing the
+//     local part, not name == QName{}, is deliberate: the latter would admit
+//     QName{Space: "urn:x", Local: ""} as a named definition. Same idiom as
+//     NewElementDeclaration's e-props-correct clause 1 check.
+//   - an absent {model group}: the property is Required (§3.7.1), so a zero
+//     ModelGroup — one never built through NewModelGroup, carrying the invalid
+//     zero {compositor} — is illegal, mirroring NewWildcard's rejection of a
+//     zero NamespaceConstraint.
 //
 // annotations is copied; the caller's backing array is not aliased, and an empty
 // input is held as nil.
@@ -52,6 +71,10 @@ type ModelGroupDefinition struct {
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewModelGroupDefinition(loc xsderr.Loc, name QName, modelGroup ModelGroup, annotations []Annotation) (ModelGroupDefinition, error) {
+	if name.Local == "" {
+		return ModelGroupDefinition{}, xsderr.New(ruleMgdPropsCorrect, loc,
+			"model group definition has an absent {name}, but the §3.7.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (mgd-props-correct)")
+	}
 	switch modelGroup.Compositor() {
 	case CompositorAll, CompositorChoice, CompositorSequence:
 	default:

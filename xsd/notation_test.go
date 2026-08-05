@@ -46,6 +46,39 @@ func TestNewNotationValid(t *testing.T) {
 	}
 }
 
+// TestNewNotationRejectsAbsentName exercises n-props-correct for the {name}
+// slot: the §3.14.1 tableau types it as a Required xs:NCName, and NCName's value
+// space excludes the empty string, so a QName with an empty Local is not a legal
+// {name} — with or without a namespace name. A present local name in no namespace
+// stays legal (a zero Space is a present name, not an absent one).
+func TestNewNotationRejectsAbsentName(t *testing.T) {
+	tests := []struct {
+		name    string
+		qname   xsd.QName
+		wantErr bool
+	}{
+		{"zero QName", xsd.QName{}, true},
+		{"namespace with empty local", xsd.QName{Space: "urn:ns"}, true},
+		{"no-namespace present local", xsd.QName{Local: "n"}, false},
+		{"namespaced present local", xsd.QName{Space: "urn:ns", Local: "n"}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xsd.NewNotation(xsderr.Loc{}, tc.qname, strptr("http://sys"), nil, nil)
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("NewNotation(%v) unexpected error: %v", tc.qname, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("NewNotation(%v) succeeded, want n-props-correct error", tc.qname)
+			}
+			assertRule(t, err, "n-props-correct")
+		})
+	}
+}
+
 func TestNewNotationRejectsBothAbsent(t *testing.T) {
 	_, err := xsd.NewNotation(xsderr.Loc{}, xsd.QName{Local: "n"}, nil, nil, nil)
 	if err == nil {

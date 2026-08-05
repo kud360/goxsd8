@@ -54,6 +54,39 @@ func TestNewIdentityConstraintValid(t *testing.T) {
 	}
 }
 
+// TestNewIdentityConstraintRejectsAbsentName exercises c-props-correct clause 1
+// for the {name} slot: the §3.11.1 tableau types it as a Required xs:NCName, and
+// NCName's value space excludes the empty string, so a QName with an empty Local
+// is not a legal {name} — with or without a namespace name. A present local name
+// in no namespace stays legal (a zero Space is a present name, not an absent one).
+func TestNewIdentityConstraintRejectsAbsentName(t *testing.T) {
+	tests := []struct {
+		name    string
+		qname   xsd.QName
+		wantErr bool
+	}{
+		{"zero QName", xsd.QName{}, true},
+		{"namespace with empty local", xsd.QName{Space: "urn:ns"}, true},
+		{"no-namespace present local", xsd.QName{Local: "k"}, false},
+		{"namespaced present local", xsd.QName{Space: "urn:ns", Local: "k"}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xsd.NewIdentityConstraint(xsderr.Loc{}, tc.qname, xsd.IdentityConstraintKey, xp("."), []xsd.XPathExpression{xp("@a")}, nil, nil)
+			if !tc.wantErr {
+				if err != nil {
+					t.Fatalf("NewIdentityConstraint(%v) unexpected error: %v", tc.qname, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("NewIdentityConstraint(%v) succeeded, want c-props-correct clause 1 error", tc.qname)
+			}
+			assertRule(t, err, "c-props-correct")
+		})
+	}
+}
+
 func TestNewIdentityConstraintRejectsUnknownCategory(t *testing.T) {
 	_, err := xsd.NewIdentityConstraint(xsderr.Loc{}, xsd.QName{Local: "k"}, 0, xp("."), []xsd.XPathExpression{xp("@a")}, nil, nil)
 	if err == nil {
