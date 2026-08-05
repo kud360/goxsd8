@@ -63,8 +63,9 @@ type ElementDeclarationRef struct{ Name QName }
 // construction.
 //
 // Name is a PRESENT reference, never the absent (zero) QName: a <group> inside a
-// content model is always the reference form (§3.8.2). NewParticle rejects a
-// zero Name (see there for why).
+// content model is always the reference form (§3.7.2, whose named branch xr.mgd1
+// requires a <schema>/<redefine>/<override> parent), and group/@ref is typed
+// xs:QName there. NewParticle rejects a zero Name (see there for why).
 type ModelGroupRef struct{ Name QName }
 
 func (ResolvedTerm) termOrRef()          {}

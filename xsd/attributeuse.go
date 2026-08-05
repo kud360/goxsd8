@@ -156,7 +156,7 @@ func NewAttributeUse(loc xsderr.Loc, required bool, attributeDeclaration Attribu
 	}
 	if ref, ok := attributeDeclaration.(AttributeDeclarationRef); ok && ref.Name.Local == "" {
 		return AttributeUse{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
-			"attribute use {attribute declaration} is an AttributeDeclarationRef carrying the absent (zero) QName, but that variant maps only the ref-present branch (§3.2.2.3 ref.att.local), whose attribute/@ref is an xs:QName with a non-empty local part")
+			"<attribute ref> carries an empty reference: attribute/@ref is typed xs:QName (§3.2.2.3 ref.att.local), whose local part is an NCName and so is never empty (attribute use {attribute declaration} variant AttributeDeclarationRef)")
 	}
 	// Clause 3 variety half fires only for the Local variant, whose declaration
 	// (and its {value constraint}) is owned by value and readable now; the Ref
