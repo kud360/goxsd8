@@ -1,10 +1,10 @@
 package parser
 
 import (
+	"log/slog"
 	"strings"
 
 	"github.com/kud360/goxsd8/xsd"
-	"github.com/kud360/goxsd8/xsderr"
 )
 
 // This file implements ·override pre-processing· (§4.2.5, transformation §F.2):
@@ -126,9 +126,14 @@ type overrideSet struct {
 // override(E,D) idempotent, and a nil set leaves the overridden document's
 // load-once identity equal to a plain <include>'s, so a document reached both
 // ways is read once rather than tripping sch-props-correct clause 2 on itself.
-func newOverrideSet(el *Element) (*overrideSet, error) {
+//
+// Two children sharing an (element type, name) pair resolve to the FIRST in
+// document order and cannot fail: see the shadowing branch below. log receives a
+// debug line for each child so discarded (STYLE 10) and is never nil — the
+// assembly's logger is silent by default.
+func newOverrideSet(el *Element, log *slog.Logger) *overrideSet {
 	var entries []overrideEntry
-	seen := make(map[componentKey]*Element)
+	first := make(map[componentKey]*Element)
 	for _, child := range el.Children() {
 		c, ok := child.(*Element)
 		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
@@ -149,26 +154,31 @@ func newOverrideSet(el *Element) (*overrideSet, error) {
 			continue
 		}
 		key := componentKey{kind: c.Name().Local(), name: name}
-		if prev, dup := seen[key]; dup {
-			// GAP(xsd): this over-rejects a case §F.2 DOES define. The stylesheet is
-			// the NORMATIVE statement of the transformation — "the transformation can
-			// also be described (non-normatively) in prose" — and its clause 1
-			// template selects ($replacement, $original)[1], so a repeated (element
-			// type, name) pair simply means first match wins and the Dold′ it yields
-			// is conforming. Reporting it instead is a deliberate simplification:
-			// first-match-wins silently discards one of two conflicting declarations,
-			// and this set's index is keyed by exactly that pair, so carrying the
-			// loser would be a second encoding of one substitution (STYLE D3). The
-			// direction is safe — this can lose a valid assembly, never accept an
-			// invalid one.
-			return nil, xsderr.New(ruleSrcOverride, c.Loc(),
-				"<override> has two <%s> children named %q (the first at %s): an ambiguous duplicate override target, which this implementation reports rather than resolving to the first (§F.2 clause 1 keys the substitution on element type and name)",
-				key.kind, key.name, prev.Loc())
+		if prev, shadowed := first[key]; shadowed {
+			// §F.2 clause 1 resolves a repeated (element type, name) pair to the FIRST
+			// child in document order, and the stylesheet is the NORMATIVE statement of
+			// the transformation ("the transformation can also be described
+			// (non-normatively) in prose"): $replacement selects O1's children matching
+			// E2 on the child axis — hence in document order — and the template copies
+			// ($replacement, $original)[1]. The later duplicate is copied nowhere, so it
+			// is DROPPED here rather than merely shadowed in the lookup: carrying it
+			// would be a second encoding of one substitution (STYLE D3), it would have
+			// to be kept out of the index by hand, and it would perturb this set's
+			// identity string — two <override> elements differing only in an inert
+			// duplicate yield the same Dold′ and so must read Dold once, which is the
+			// outcome §4.2.5's note on sch-props-correct clause 2 asks for. Where the
+			// duplicated pair matches nothing in the ·target set· the two copies are
+			// equally inert, which §4.2.5 makes explicit ("It is not an error ... but it
+			// will be ignored"), so neither sub-case is an error and src-override is not
+			// charged.
+			log.Debug("override child shadowed by an earlier sibling of the same element type and name",
+				"kind", key.kind, "name", key.name, "at", c.Loc().String(), "first", prev.Loc().String())
+			continue
 		}
-		seen[key] = c
+		first[key] = c
 		entries = append(entries, overrideEntry{key: key, elem: c})
 	}
-	return buildOverrideSet(entries), nil
+	return buildOverrideSet(entries)
 }
 
 // buildOverrideSet completes an overrideSet from its document-ordered entries,

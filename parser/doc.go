@@ -98,7 +98,12 @@
 // — §4.2.5's ·target set· — while stopping at <xs:import>. A substituted
 // declaration is produced by the OVERRIDDEN document's producer, so the
 // overridden document's target namespace and schema-level defaults apply
-// to it (§4.2.5's document-level-defaults note, PRINCIPLES 16).
+// to it (§4.2.5's document-level-defaults note, PRINCIPLES 16). Two
+// children of one <xs:override> with the same element type and name are
+// resolved to the FIRST in document order, per clause 1's normative
+// ($replacement, $original)[1]; the later one is copied nowhere, so it is
+// discarded — it neither substitutes nor changes the overridden
+// document's load-once identity.
 // An <xs:redefine>d document is coerced on the same terms too (§4.2.4
 // clause 3.3), and is the one composition kind that BOTH includes and
 // subtracts: the redefined document contributes every component it
@@ -215,14 +220,6 @@
 //     <xs:override> element reached twice is recognized, which is what
 //     terminates every cycle. This over-rejects, so it can lose a valid
 //     assembly, never accept an invalid one.
-//   - GAP(xsd): two children of ONE <xs:override> with the same element
-//     type and name are reported under src-override. §F.2's stylesheet is
-//     the normative statement of the transformation (the prose beside it
-//     is explicitly non-normative) and its clause 1 template selects
-//     ($replacement, $original)[1], so first match wins and the case is
-//     spec-defined; rejecting it is a deliberate choice not to discard one
-//     of two conflicting declarations silently. Over-rejects in the same
-//     direction as the entry above.
 //   - Assembling several root locations into one schema awaits a
 //     consumer; nothing in the CLI or validator needs it yet, so no
 //     multi-root entry point is exported (STYLE T5).

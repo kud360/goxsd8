@@ -368,20 +368,65 @@ func TestParseOverrideNotWellFormed(t *testing.T) {
 	mustXSDRule(t, err, "src-override", "main.xsd")
 }
 
-// TestParseOverrideDuplicateChildren pins newOverrideSet's GAP(xsd): two children
-// of one <override> with the same element type and name are reported under
-// src-override even though §F.2's normative stylesheet defines the case, its
-// clause 1 template resolving the pair as first-match-wins via
-// ($replacement, $original)[1]. The rejection is the documented over-rejection,
-// not a reading of the spec as silent.
+// TestParseOverrideDuplicateChildren is §F.2 clause 1's resolution of two
+// children of ONE <override> sharing an (element type, name) pair: the FIRST in
+// document order is the substitution and the second is discarded, because the
+// normative stylesheet's template copies ($replacement, $original)[1] out of a
+// child-axis selection, which is in document order. The type asserted is the
+// first child's and NOT the second's, so a last-wins resolution fails here.
 func TestParseOverrideDuplicateChildren(t *testing.T) {
-	_, err := parseMap(t, "main.xsd", map[string]string{
+	s, err := parseMap(t, "main.xsd", map[string]string{
 		"main.xsd": wrap("urn:a", `<xs:override schemaLocation="lib.xsd">`+
 			`<xs:element name="doc" type="xs:date"/>`+
 			`<xs:element name="doc" type="xs:int"/></xs:override>`),
 		"lib.xsd": wrap("urn:a", `<xs:element name="doc" type="xs:string"/>`),
 	})
-	mustXSDRule(t, err, "src-override", "main.xsd")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	mustElementType(t, s, xsd.QName{Space: "urn:a", Local: "doc"}, xsType("date"))
+}
+
+// TestParseOverrideDuplicateChildrenMatchNothing is the other sub-case: the
+// duplicated pair matches nothing in the ·target set·. Neither copy is ever
+// compared against a source declaration, so §4.2.5's "It is not an error for an
+// <override> element to contain a source declaration which matches nothing in
+// the target set, but it will be ignored" applies to both alike — no error, and
+// no component gained.
+func TestParseOverrideDuplicateChildrenMatchNothing(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:override schemaLocation="lib.xsd">`+
+			`<xs:element name="absent" type="xs:date"/>`+
+			`<xs:element name="absent" type="xs:int"/></xs:override>`),
+		"lib.xsd": wrap("urn:a", `<xs:element name="doc" type="xs:string"/>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	mustElementType(t, s, xsd.QName{Space: "urn:a", Local: "doc"}, xsType("string"))
+	if _, ok := s.Element(xsd.QName{Space: "urn:a", Local: "absent"}); ok {
+		t.Fatalf("element {urn:a}absent was added, but an unmatched <override> child must be ignored")
+	}
+}
+
+// TestParseOverrideDuplicateChildrenNestedMerge composes the first-wins
+// resolution with §F.2 clause 4: only the winner of a duplicated pair in the
+// OUTER override reaches the nested one, so clause 4.1 replaces the nested
+// child with the first copy and the second copy is not appended under clause 4.3
+// as a stray sibling.
+func TestParseOverrideDuplicateChildrenNestedMerge(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:override schemaLocation="mid.xsd">`+
+			`<xs:element name="doc" type="xs:date"/>`+
+			`<xs:element name="doc" type="xs:int"/></xs:override>`),
+		"mid.xsd": wrap("urn:a", `<xs:override schemaLocation="lib.xsd">`+
+			`<xs:element name="doc" type="xs:boolean"/></xs:override>`),
+		"lib.xsd": wrap("urn:a", `<xs:element name="doc" type="xs:string"/>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	mustElementType(t, s, xsd.QName{Space: "urn:a", Local: "doc"}, xsType("date"))
 }
 
 // TestParseOverrideMissingSchemaLocation reports the absent required attribute as

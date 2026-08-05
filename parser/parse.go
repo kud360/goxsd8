@@ -414,10 +414,7 @@ func (a *assembly) redefine(el *Element, tns string) (*redefineSet, error) {
 // therefore cannot leak back into the overriding document, whatever cycle of
 // mutual overrides the schema documents form (PRINCIPLES 16).
 func (a *assembly) override(el *Element, tns string, ov *overrideSet) error {
-	own, err := newOverrideSet(el)
-	if err != nil {
-		return err
-	}
+	own := newOverrideSet(el, a.log)
 	return a.compose(el, tns, own.mergedUnder(ov), nil, ruleSrcOverride)
 }
 
