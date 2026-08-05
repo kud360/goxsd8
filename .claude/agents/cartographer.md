@@ -48,10 +48,16 @@ Cheap and targeted — not a full /backlog. Two duties:
    slices that move a conformance lane over horizontal completeness.
    The develop loop can consume several issues a day; a shallow queue
    stalls it.
-4. **Consult the user personas** for API- or CLI-facing milestones: give
-   libuser the current `go doc` output and README, cliuser the README
-   and CLI contract, and fold their stories/acceptance criteria into
-   issue bodies (or file them as `kind/story` issues).
+4. **Fold in the persona stories the orchestrating session hands you**
+   for API- or CLI-facing milestones. You do not run libuser/cliuser:
+   the session that launches `/backlog` does, before or alongside your
+   sweep, and hands you their output (see docs/WORKFLOW.md's `/backlog`
+   bullet, which is where that duty is stated). Your half is to fold
+   their stories/acceptance criteria into issue bodies, or file them as
+   `kind/story` issues. **Never role-play a persona yourself** — you
+   have already read the source, so a verdict you write launders an
+   insider's opinion as an outsider's, which is worse than none. Handed
+   nothing → say so in the plan summary and fold nothing.
 5. **Update docs/PLAN.md** if reality has drifted from it; note the
    drift in the commit message.
 
