@@ -105,7 +105,8 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 // (src-resolve clause 4.2.2, §4.2.6.1), and the license reaches only the
 // document the element sits in — see parser/doc.go's Composition section.
 // Documents are read once each, keyed by
-// resolved location AND the namespace they were reached under, so a diamond or a
+// resolved location AND the namespace they were reached under AND the override
+// and redefinition applied to them, so a diamond or a
 // (spec-legal) cycle of <include>s, or a namespace imported repeatedly,
 // contributes its components once and does not trip sch-props-correct
 // (§3.17.6.1) clause 2. Reading once skips the re-COMPOSITION alone: every
@@ -119,16 +120,21 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 // declarations of that document and of every document it in turn <include>s or
 // <override>s (§F.2, parser/override.go).
 //
-// <redefine> is NOT yet followed: like every other not-yet-produced top-level
-// representation it is skipped, not rejected (§3.1.2), so a schema needing it
-// assembles short rather than wrongly. Since a skipped <redefine> leaves no trace
-// in the returned schema, [WithLogger] at debug level is how a caller discovers
-// one: each skipped child <xs:redefine> element is reported there with its
-// location.
+// An <xs:redefine> child (§4.2.4) is followed too, and is the one directive that
+// both adds and subtracts: the document it names is composed as an <include>d
+// one, contributing every component it declares EXCEPT those the <redefine>
+// explicitly redefines (clause 4.1.2), while the <redefine>'s own children
+// contribute the replacements as definitions of THIS document (clause 4.1.1). A
+// self-reference inside a redefining declaration resolves to the definition it
+// replaces, not to itself (src-expredef, parser/redefine.go). Two things differ
+// from <include>: a non-empty <redefine> whose schemaLocation does not resolve is
+// an ERROR (src-redefine clause 1) rather than a silent skip, and a redefining
+// <complexType> is declined as not yet produced (see parser/doc.go's composition
+// gaps). §4.2.4 marks the mechanism ·deprecated·.
 //
 // Errors are schema-validity verdicts as *[xsderr.Error] values (src-include,
-// src-import, src-import-noselfimport, src-override, src-resolve,
-// sch-props-correct, …)
+// src-import, src-import-noselfimport, src-override, src-redefine, src-expredef,
+// src-resolve, sch-props-correct, …)
 // carrying the offending construct's location; a failure to resolve the ROOT
 // location, by contrast, is a plain I/O error, since the caller named a document
 // that must exist. Like [Produce], ParseReport returns only the first error.
@@ -149,7 +155,7 @@ func ParseReport(location string, opts ...Option) (*xsd.Schema, *AssemblyReport,
 	a := newAssembly(resolved, rootTNS, cfg)
 	// The root is discovered under the nil (identity) override set: no <override>
 	// element points at it, so nothing substitutes for its own declarations.
-	if err := a.discover(root, resolved, rootTNS, nil); err != nil {
+	if err := a.discover(root, resolved, rootTNS, nil, nil); err != nil {
 		return nil, a.report(), err
 	}
 	schema, err := a.compile(cfg.backend)
@@ -193,6 +199,20 @@ type discovered struct {
 	// own component set — which is precisely why §4.2.5 says such a schema "will
 	// have duplicate and conflicting versions of some components".
 	ov *overrideSet
+
+	// rd is the ·redefinition· in force over THIS document (§4.2.4,
+	// parser/redefine.go), nil when it was not reached through an <xs:redefine>.
+	// It is a property of the path for the same reason ov is, and it says which of
+	// this document's own top-level definitions clause 4.1.2 excepts.
+	rd *redefineSet
+
+	// redefines are the sets read from this document's OWN <redefine> children, in
+	// document order. It is the other end of rd — what this document does to
+	// others rather than what was done to it — and it is not derivable from the
+	// document (STYLE D3): a set exists only for a <redefine> the assembly
+	// actually followed, which is what distinguishes an assembled document from
+	// one handed to [Produce].
+	redefines []*redefineSet
 }
 
 // docKey is the load-once identity of one discovered document: its RESOLVED
@@ -205,13 +225,19 @@ type discovered struct {
 // the same reason: one document overridden two different ways yields two
 // different component sets (§4.2.5), while overriding it the same way twice, or
 // reaching it again around an <include>/<override> cycle, must contribute its
-// components once (§4.2.5's note on sch-props-correct clause 2). In an
-// include-only closure both extra components are constant, so neither changes any
-// include behavior.
+// components once (§4.2.5's note on sch-props-correct clause 2). The redefine
+// half is there for the third time over: §4.2.4 clause 4.1.2 gives a redefined
+// document's reading a component set that DEPENDS on the redefinition applied to
+// it, so one document redefined two different ways is two readings, while
+// §4.2.4's own note asks that "multiple equivalent <redefine>ing of the same
+// schema document will not constitute a violation of clause 2 of Schema
+// Properties Correct". In an include-only closure all three extra components are
+// constant, so none changes any include behavior.
 type docKey struct {
 	resolved  string
 	namespace string
 	override  string
+	redefine  string
 }
 
 // assembly is the multi-document build context for one [Parse] call: the
@@ -294,8 +320,12 @@ func newAssembly(rootResolved, rootTNS string, cfg config) *assembly {
 // identical to those of each imported S2) children depth-first. The three
 // directive kinds share the pass so that component entry order stays document
 // order rather than becoming directive-kind-dependent (STYLE D1).
-func (a *assembly) discover(doc *Document, resolved, tns string, ov *overrideSet) error {
-	a.docs = append(a.docs, discovered{doc: doc, tns: tns, resolved: resolved, ov: ov})
+func (a *assembly) discover(doc *Document, resolved, tns string, ov *overrideSet, rd *redefineSet) error {
+	// The index this document's own <redefine> sets are recorded at. It is taken
+	// before the append, and the recursion below appends further documents, so the
+	// position cannot be recomputed later from len(a.docs).
+	self := len(a.docs)
+	a.docs = append(a.docs, discovered{doc: doc, tns: tns, resolved: resolved, ov: ov, rd: rd})
 	for _, child := range doc.Root().Children() {
 		el, ok := child.(*Element)
 		if !ok {
@@ -307,7 +337,7 @@ func (a *assembly) discover(doc *Document, resolved, tns string, ov *overrideSet
 			// <override> carrying the same children, so ov CASCADES into the included
 			// document — that is what makes §4.2.5's ·target set· transitive over
 			// inclusion.
-			if err := a.compose(el, tns, ov, ruleSrcInclude); err != nil {
+			if err := a.compose(el, tns, ov, nil, ruleSrcInclude); err != nil {
 				return err
 			}
 		case isXSD(el, "override"):
@@ -322,20 +352,49 @@ func (a *assembly) discover(doc *Document, resolved, tns string, ov *overrideSet
 				return err
 			}
 		case isXSD(el, "redefine"):
-			// GAP(xsd): <xs:redefine> (§4.2.4) is not followed. A <redefine> child of a
-			// schema document is skipped, not rejected (§3.1.2), so the assembly is short
-			// by whatever that document would have contributed. Nothing is resolved:
-			// src-redefine clauses 2-4 are conditioned on a resolution never attempted
-			// here, and clause 1 — which requires the schemaLocation to resolve whenever
-			// the <redefine> has non-<annotation> children — is not enforced either, so a
-			// genuine src-redefine violation is silently accepted. The skip leaves no
-			// trace in the returned schema; this record is the only way to observe it
-			// (Parse's WithLogger, at debug level).
-			a.log.Debug("composition skipped: <xs:redefine> is not followed, its schemaLocation hint is never resolved",
-				"rule", string(ruleSrcRedefine), "location", attrOr(el, "schemaLocation"), "at", el.Loc().String())
+			set, err := a.redefine(el, tns)
+			if err != nil {
+				return err
+			}
+			if set != nil {
+				a.docs[self].redefines = append(a.docs[self].redefines, set)
+			}
 		}
 	}
 	return nil
+}
+
+// redefine follows one <redefine> element (§4.2.4). It reads the redefining
+// declarations the element itself declares and hands them to compose, which
+// fetches the redefined document, enforces src-redefine clauses 1 and 2 on it,
+// and discovers it under the set — after which the redefined document's producer
+// excepts the redefined names (clause 4.1.2) and records each as the original the
+// redefinition is paired with (src-expredef).
+//
+// Clause 2 is src-include clause 2 in every particular — same three sub-clauses,
+// same chameleon case (clause 3.3 there, §F.1) — so <redefine> shares the one
+// composer with <include> and <override>, told only which rule to charge.
+//
+// The set returned is the one the REDEFINING document's producer needs, and nil
+// for an empty <redefine>, which redefines nothing and is a plain <include>.
+//
+// ov is deliberately NOT passed on: §F.2 clause 5 copies a <redefine> element
+// unchanged, and §4.2.5's ·target set· "does not include schema documents which
+// are pointed to by <import> or <redefine> elements", so an override in force
+// over the redefining document does not cascade into the redefined one. It DOES
+// still substitute for the <redefine>'s own children, which are element
+// information items among the children of a <redefine> within the overridden
+// document and so fall under §F.2 clause 1 — that half is applied at produce
+// time (producer.prescanRedefine).
+func (a *assembly) redefine(el *Element, tns string) (*redefineSet, error) {
+	set, err := newRedefineSet(el)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.compose(el, tns, nil, set, ruleSrcRedefine); err != nil {
+		return nil, err
+	}
+	return set, nil
 }
 
 // override follows one <override> element (§4.2.5). It reads the substitutions
@@ -359,28 +418,32 @@ func (a *assembly) override(el *Element, tns string, ov *overrideSet) error {
 	if err != nil {
 		return err
 	}
-	return a.compose(el, tns, own.mergedUnder(ov), ruleSrcOverride)
+	return a.compose(el, tns, own.mergedUnder(ov), nil, ruleSrcOverride)
 }
 
-// compose follows one <include> or <override> element: it resolves the
-// schemaLocation, reads the document it names, enforces clauses 1 and 2 of rule —
-// src-include (§4.2.3) or src-override (§4.2.5), whose clauses coincide — on it,
-// and recurses into its own directives under ov. tns is the COMPOSING document's
-// effective target namespace, which is both what clause 2 is judged against and
-// what the composed document is discovered under (§F.1 coercion for the chameleon
-// case).
-func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rule xsderr.Rule) error {
+// compose follows one <include>, <override> or <redefine> element: it resolves
+// the schemaLocation, reads the document it names, enforces clauses 1 and 2 of
+// rule — src-include (§4.2.3), src-override (§4.2.5) or src-redefine (§4.2.4),
+// whose clauses coincide — on it, and recurses into its own directives under ov
+// and rd. tns is the COMPOSING document's effective target namespace, which is
+// both what clause 2 is judged against and what the composed document is
+// discovered under (§F.1 coercion for the chameleon case).
+//
+// At most one of ov and rd is ever non-nil: <redefine> is copied unchanged by
+// §F.2 clause 5 (so no override cascades through it) and its own children are
+// not a further override.
+func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rd *redefineSet, rule xsderr.Rule) error {
 	hint, ok := el.Attr("schemaLocation")
 	if !ok {
-		// schemaLocation is REQUIRED on <include> and <override> by the schema for
-		// schema documents, and src-include/src-override govern only what its actual
-		// value resolves to. A missing required attribute is therefore a grammar
-		// fault with no dedicated Schema Representation Constraint, reported as a
-		// plain error — the same treatment a <group> with no ref gets in
-		// produce_complex.go. It is ALSO a reference this assembly could not follow,
-		// and is recorded as one: the error says the assembly stopped, the report
-		// says which document set it stopped short of (§4.2.1 makes these
-		// schemaLocations mandatory, "not hints").
+		// schemaLocation is REQUIRED on <include>, <override> and <redefine> by the
+		// schema for schema documents, and src-include/src-override/src-redefine
+		// govern only what its actual value resolves to. A missing required attribute
+		// is therefore a grammar fault with no dedicated Schema Representation
+		// Constraint, reported as a plain error — the same treatment a <group> with
+		// no ref gets in produce_complex.go. It is ALSO a reference this assembly
+		// could not follow, and is recorded as one: the error says the assembly
+		// stopped, the report says which document set it stopped short of (§4.2.1
+		// makes these schemaLocations mandatory, "not hints").
 		a.unfollowedAt(el, UnfollowedNoSchemaLocation)
 		return fmt.Errorf("parser: <%s> at %s has no schemaLocation attribute, which the schema for schema documents requires", el.Name().Local(), el.Loc())
 	}
@@ -389,9 +452,21 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rule xsderr
 	// the document URI.
 	requested := schemaloc.Resolve(el.BaseURI(), hint)
 
-	f, err := a.fetch(requested, tns, ov, el, rule)
+	f, err := a.fetch(requested, tns, ov, rd, el, rule)
 	if err != nil {
 		return err
+	}
+	if !f.exists && rd.mustResolve() {
+		// src-redefine clause 1, the one place <redefine> parts company with
+		// <include>: "If there are any element information items among the [children]
+		// other than <annotation> then the ·actual value· of the schemaLocation
+		// [attribute] must successfully resolve". src-include clause 2.4 says the
+		// opposite for an <include> — "It is not an error … to fail to resolve at
+		// all" — so the two mechanisms are split here rather than sharing fetch's
+		// silent-skip outcome. An EMPTY <redefine> has a nil set and takes the
+		// <include> path, since clause 1's antecedent does not fire for it.
+		return xsderr.New(ruleSrcRedefine, el.Loc(),
+			"the schemaLocation %q of this non-empty <redefine> does not resolve to a schema document, but src-redefine clause 1 requires it to resolve successfully whenever the <redefine> has children other than <annotation>", requested)
 	}
 	if f.doc == nil {
 		// Nothing to compose, from either outcome: the location did not resolve —
@@ -438,8 +513,8 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rule xsderr
 	// Clause 2.1, 2.2, or — when D2 declares no targetNamespace and the composing
 	// document has one — 2.3, whose §F.1 coercion is applied at production time:
 	// either way D2 is discovered under the composing document's effective
-	// namespace, carrying whatever override is in force over it.
-	return a.discover(f.doc, f.resolved, tns, ov)
+	// namespace, carrying whatever override or redefinition is in force over it.
+	return a.discover(f.doc, f.resolved, tns, ov, rd)
 }
 
 // importDocument follows one <import> element (§4.2.6.2). It enforces
@@ -480,7 +555,7 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 	// The resolver is asked under the IMPORT's namespace, not the importing
 	// document's: that pair — target namespace and location hint — is exactly the
 	// "application schema reference strategy" input clause 2 describes.
-	f, err := a.fetch(requested, namespace, nil, el, ruleSrcImport)
+	f, err := a.fetch(requested, namespace, nil, nil, el, ruleSrcImport)
 	if err != nil {
 		return err
 	}
@@ -516,7 +591,7 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 	// discovered under it: import applies NO §F.1 coercion, which is src-include
 	// clause 2.3's alone, and no ·override pre-processing· either, since §F.2
 	// clause 5 copies an <import> unchanged.
-	return a.discover(f.doc, f.resolved, f.tns, nil)
+	return a.discover(f.doc, f.resolved, f.tns, nil, nil)
 }
 
 // checkNoSelfImport enforces src-import clause 1 (src-import-noselfimport,
@@ -616,7 +691,7 @@ func checkImportedNamespace(el *Element, requested, namespace string, hasNamespa
 // The resolved location travels back with the document because it, not the
 // requested one, is the assembly's document identity (docKey) and the report's
 // [AssembledDocument.Location].
-func (a *assembly) fetch(requested, namespace string, ov *overrideSet, el *Element, rule xsderr.Rule) (fetched, error) {
+func (a *assembly) fetch(requested, namespace string, ov *overrideSet, rd *redefineSet, el *Element, rule xsderr.Rule) (fetched, error) {
 	rc, resolved, err := a.resolver.Resolve(namespace, requested)
 	if errors.Is(err, loader.ErrNotFound) {
 		a.unfollowedAt(el, UnfollowedLocationUnresolved)
@@ -633,7 +708,7 @@ func (a *assembly) fetch(requested, namespace string, ov *overrideSet, el *Eleme
 	// it cannot affect the parse verdict (STYLE S3).
 	defer func() { _ = rc.Close() }()
 
-	key := docKey{resolved: resolved, namespace: namespace, override: ov.key()}
+	key := docKey{resolved: resolved, namespace: namespace, override: ov.key(), redefine: rd.key()}
 	if own, done := a.loaded[key]; done {
 		a.log.Debug("schema document already loaded", "directive", el.Name().Local(),
 			"namespace", namespace, "location", requested, "resolved", resolved, "at", el.Loc().String())
@@ -711,7 +786,7 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 	}
 	producers := make([]*producer, 0, len(a.docs))
 	for _, d := range a.docs {
-		p := newProducer(d.doc, d.tns, d.ov, builder, sym)
+		p := newProducer(d.doc, d.tns, d.ov, d.rd, d.redefines, builder, sym)
 		p.prescan()
 		producers = append(producers, p)
 	}

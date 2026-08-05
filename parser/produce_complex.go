@@ -1097,6 +1097,28 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 	if err != nil {
 		return nil, err
 	}
+	if src, redefining := p.redefinedGroupOriginal(el, qn); redefining {
+		// src-expredef clause 2: this is a redefining <group>'s licensed
+		// self-reference, so "a component which corresponds to the top-level
+		// definition item of that name and the appropriate kind in S2 is used" —
+		// the ORIGINAL, which the visible name no longer reaches. The reference
+		// cannot stay deferred, since resolving it by name at finalize would land on
+		// the redefinition and read as a circular <group ref> graph
+		// (mg-props-correct clause 2). It is resolved HERE instead, to exactly what
+		// §3.7.2 xr.mgd3 says a <group ref> particle's {term} is — "the {model
+		// group} of the model group definition ·resolved· to by the ·actual value·
+		// of the ref attribute" — built under the REDEFINED document's producer so
+		// its local declarations keep their own document's namespace and defaults.
+		mg, err := src.owner.buildDefinitionModelGroup(src.elem, xsd.ModelGroupScopeParent{Name: qn})
+		if err != nil {
+			return nil, err
+		}
+		part, err := xsd.NewParticle(el.Loc(), occ, xsd.ResolvedTerm{Term: mg}, nil)
+		if err != nil {
+			return nil, err
+		}
+		return &part, nil
+	}
 	part, err := xsd.NewParticle(el.Loc(), occ, xsd.ModelGroupRef{Name: qn}, nil)
 	if err != nil {
 		return nil, err
@@ -1662,6 +1684,17 @@ func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]str
 	qn, err := p.resolveQName(el, ref)
 	if err != nil {
 		return err
+	}
+	if src, redefining := p.redefinedAttributeGroupOriginal(el, qn); redefining {
+		// src-expredef clause 2 again, for the attributeGroup half: this is a
+		// redefining <attributeGroup>'s self-reference, so it splices in the
+		// ORIGINAL's uses and wildcard rather than nothing. It is tested BEFORE the
+		// visited set, which buildAttributeGroup seeds with the group's own name and
+		// which would otherwise swallow the reference silently. The descent still
+		// terminates: the original lives in the redefined document, outside any
+		// <redefine>, so a self-reference in ITS body is an ordinary reference and
+		// meets the visited entry below.
+		return src.owner.collectAttributeContent(src.elem, visited, uses, wildcards)
 	}
 	if _, seen := visited[qn]; seen {
 		return nil

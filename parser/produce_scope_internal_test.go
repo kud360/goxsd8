@@ -34,7 +34,7 @@ func TestProduceModelGroupDefinitionScopesLocalElements(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newSymbols: %v", err)
 	}
-	p := newProducer(d, "urn:po", nil, builder, sym)
+	p := newProducer(d, "urn:po", nil, nil, nil, builder, sym)
 	group := childElement(d.Root(), xsd.XMLSchemaNS, "group")
 	if group == nil {
 		t.Fatal("the test document has no top-level <group>")

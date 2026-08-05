@@ -51,8 +51,8 @@ func TestAttributeGroupComponentAndInlineFoldAgree(t *testing.T) {
 	// base.xsd is <include>d by root.xsd, so its effective target namespace is
 	// root's (§4.2.3 clause 2.3) while it declares none of its own — the chameleon
 	// state, mirroring what compile() wires up.
-	basep := newProducer(baseDoc, "urn:x", nil, builder, sym)
-	rootp := newProducer(rootDoc, "urn:x", nil, builder, sym)
+	basep := newProducer(baseDoc, "urn:x", nil, nil, nil, builder, sym)
+	rootp := newProducer(rootDoc, "urn:x", nil, nil, nil, builder, sym)
 	basep.prescan()
 	rootp.prescan()
 

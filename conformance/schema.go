@@ -38,10 +38,10 @@ import (
 // back to, and <assert> assertions) into xsd components, maps the name=
 // identity constraints of global and local <element>s (#178), seeds the ur-type
 // xs:anyType, resolves cross-references, and rejects duplicate top-level names
-// within a kind. The one remaining top-level representation
-// (redefine), the ref= identity-constraint form, and the
+// within a kind. The ref= identity-constraint form, the
 // not-yet-produced complexType forms (<simpleContent> <restriction>,
-// inline anonymous local types) are SILENTLY SKIPPED
+// inline anonymous local types) and the redefining <complexType> (#286) are
+// SILENTLY SKIPPED
 // or declined (§3.1.2 permits ignoring a not-yet-produced representation), NOT
 // rejected.
 //
@@ -118,8 +118,8 @@ import (
 //     xsd:defaultOpenContent (only in the shape its declaration allows: with the
 //     <any> child its content model requires and, if mode= is present at all, a
 //     value from its interleave|suffix enumeration) or
-//     xsd:notation — anything else at top level (redefine,
-//     any non-xsd element, or an out-of-set local name) closes
+//     xsd:notation or xsd:redefine — anything else at top level (a
+//     non-xsd element, or an out-of-set local name) closes
 //     the false-accept gap above by DECLINING the whole case. Within the allowed
 //     kinds:
 //     - include: always admitted (#242). Its own content model is (annotation?),
@@ -333,15 +333,20 @@ import (
 // a simple type left restricting itself, surfaces as the rule it breaks), and an
 // unmatched override child is really ignored (§4.2.5) rather than added.
 //
-// <xs:redefine> stays DECLINED. Parse does not follow it —
-// like any other not-yet-produced representation it is skipped, not rejected
-// (§3.1.2, the second half of #183 unlanded) — so a document carrying one
-// assembles SHORT: the
-// components of the document it names never enter the builder, and any violation
-// among them is invisible. That is precisely the vacuous pass step 3 exists to
-// refuse, so its mere presence at top level declines the case until the parser
-// follows it. §F.2 clause 1's "or <redefine>" scope is empty for the same reason:
-// an <override> never substitutes into a <redefine> the parser does not read.
+// <xs:redefine> is DECIDED as of #286, for the three redefinable kinds the
+// producer maps. The assembly follows it, so the document it names is in the
+// closure and gated like any other, and the redefinition's own clauses —
+// src-redefine clause 1 (a non-empty <redefine> whose schemaLocation does not
+// resolve is an ERROR, unlike <include>), clause 5, clauses 6.1.1/6.1.2, clause
+// 7.1, and src-expredef's requirement of a top-level definition item of the
+// appropriate name and kind — are enforced genuinely. A redefining <complexType>
+// is the one shape still DECLINED (redefineDecidable): the producer refuses it
+// as not-yet-produced rather than emitting the self-derivation src-expredef
+// clause 1.1's {name}-·absent· pairing is there to avoid, and a decline is a
+// limitation, not a verdict. §F.2 clause 1's "or <redefine>" scope is no longer
+// empty either: an <override> in force over a document now substitutes for that
+// document's <redefine> children too, restricted to the four element types
+// <redefine>'s own content model admits.
 //
 // # Still deferred
 //
@@ -468,12 +473,9 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 // A schemaTest may list several <schemaDocument> children, and the suite's own
 // catalog schema defines that as "run as if the schema documents given were
 // loaded one by one, in order": the case is the SET, not any member of it. The
-// condition holds when the first document's own <include>/<override>/<import>
-// names the others — the only directives the assembly follows — so it composes
-// them; a <redefine> never qualifies, since its presence declines the document
-// that carries it (schemaShapeDecidable). No multi-document schemaTest in the
-// suite meets the condition today: all of them decline, most at closure
-// decidability on the first document. The check exists so that a case whose
+// condition holds when the first document's own
+// <include>/<override>/<import>/<redefine> names the others — the four
+// directives the assembly follows — so it composes them. The check exists so that a case whose
 // documents the parser's OWN composition constructs already link is decided on
 // the declared set rather than declined for its member count. When the condition
 // does not hold (documents genuinely independent), the harness has no mechanism
@@ -617,11 +619,79 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			if mode, present := el.Attr("mode"); present && mode != "interleave" && mode != "suffix" {
 				return false
 			}
+		case "redefine":
+			// Admitted (#286) for the three redefinable kinds the producer maps.
+			// Like <override> the document it points at is gated by the closure
+			// walk, and its own children are gated here — but by a NARROWER
+			// predicate, since a redefining <complexType> is declined outright.
+			if !redefineDecidable(el) {
+				return false
+			}
 		default:
-			// redefine or any other local name:
-			// silently skipped by the producer AND not followed by the assembly
-			// (redefine awaits the second half of #183), so a nil verdict there
-			// would be vacuous — decline the whole case.
+			// Any other local name: silently skipped by the producer, so a nil
+			// verdict there would be vacuous — decline the whole case.
+			return false
+		}
+	}
+	return true
+}
+
+// redefineDecidable reports whether every child of an <xs:redefine> (§4.2.4) is
+// a definition the producer decides genuinely once the redefinition has been
+// applied (#286). A redefining child becomes a top-level definition of the
+// REDEFINING document (src-expredef clause 1.2 / clause 2, §4.2.4 clause 4.1.1),
+// so each is gated by the very predicate a top-level child of any document is
+// gated by — with one subtraction.
+//
+// <complexType> is the subtraction: parser/redefine.go declines a redefining
+// complex type outright (src-expredef clause 1.1's {name}-·absent· paired base is
+// not representable while xsd.ComplexType carries {base type definition} as a
+// QName reference), and a decline is a limitation, not a verdict. Admitting it
+// would risk exactly the wrong-reason "invalid" the allowlist exists to refuse.
+//
+// A child with no name= declines rather than being waved through: the pairing is
+// keyed on (element type, name), and src-expredef requires a top-level definition
+// item of that name and kind in the redefined document, so a nameless child is
+// reported as a grammar fault rather than decided.
+//
+// Two fail-open clauses remain inside an admitted case, both in the SAFE
+// direction: src-redefine clause 6.2.2 (the redefining group must accept a subset
+// of the original's element sequences) and clause 7.2.2 (the redefining attribute
+// group must satisfy derivation-ok-restriction clause 3 against the original) are
+// not decided, so a case turning on either observes "valid" where the suite says
+// "invalid" — a recorded gap, never a pass. The document the <redefine> POINTS AT
+// is gated by closureDecidable, exactly as an <include>'s target is.
+func redefineDecidable(el *parser.Element) bool {
+	for _, child := range el.Children() {
+		c, ok := child.(*parser.Element)
+		if !ok {
+			continue
+		}
+		if c.Name().Space() != xsd.XMLSchemaNS {
+			return false
+		}
+		if c.Name().Local() == "annotation" {
+			continue
+		}
+		if !hasAttr(c, "name") {
+			return false
+		}
+		switch c.Name().Local() {
+		case "simpleType":
+			if !simpleTypeDecidable(c) {
+				return false
+			}
+		case "group":
+			if !groupDecidable(c) {
+				return false
+			}
+		case "attributeGroup":
+			if !attributeGroupDecidable(c) {
+				return false
+			}
+		default:
+			// <complexType> (declined, see above) and every element type §4.2.4's
+			// content model does not admit at all.
 			return false
 		}
 	}

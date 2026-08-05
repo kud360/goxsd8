@@ -7,12 +7,13 @@
 //	phase 1  parse    — each schema document → raw form via parser/xmltree;
 //	                    every raw node keeps its Loc, so every later error
 //	                    can cite file:line:column.
-//	phase 2  resolve  — schema composition (include, import and override
-//	                    ship; redefine does not yet) through ONE
+//	phase 2  resolve  — schema composition (include, import, override
+//	                    and redefine) through ONE
 //	                    loader.Resolver, with chameleon namespace
-//	                    coercion on include and override only, override
-//	                    pre-processing carried as data alongside the
-//	                    effective namespace (parser/override.go), and
+//	                    coercion on include, override and redefine only,
+//	                    override pre-processing and redefinition both
+//	                    carried as data alongside the effective namespace
+//	                    (parser/override.go, parser/redefine.go), and
 //	                    QName reference resolution through a symbol table
 //	                    seeded once per assembly with the builtins
 //	                    (builtin.Seed).
@@ -33,18 +34,21 @@
 // carries a visited set purely to bound the walk and avoid re-descending
 // a group already folded in — it rejects nothing. Likewise the
 // composition index keyed by resolved location AND the namespace the
-// document was reached under AND the override applied to it is DOCUMENT
+// document was reached under AND the override applied to it AND the
+// redefinition applied to it is DOCUMENT
 // IDENTITY, not a cycle guard:
 // §4.2.3 makes two xs:includes of the same resolved location the same
 // schema document and declares include cycles legal, §4.2.6.2 says as
 // much for repeated xs:imports, §4.2.5 says as much for equivalent
 // xs:overrides (and requires the processor to recognize that closure has
-// been reached, which is exactly what the index does), the namespace is
+// been reached, which is exactly what the index does), §4.2.4's own note
+// asks the same of "multiple equivalent xs:redefineing of the same
+// schema document", the namespace is
 // part of the key because one document reached as a chameleon include
 // and as an import yields two different component sets, and the override
-// is part of it because one document overridden two different ways
-// likewise does. Each distinct reading is loaded once and nothing is
-// rejected.
+// and the redefinition are part of it because one document overridden —
+// or redefined — two different ways likewise does. Each distinct reading
+// is loaded once and nothing is rejected.
 //
 // # Determinism
 //
@@ -77,9 +81,10 @@
 // SET (§4.2.1's schema(D)) does not have to re-walk §4.2's composition
 // edges itself. It is populated even when an error is returned.
 //
-// Parse assembles the <xs:include>, <xs:override> and <xs:import>
-// closure of the root document (§4.2.3, §4.2.5, §4.2.6.2), including
-// chameleon coercion of a
+// Parse assembles the <xs:include>, <xs:override>, <xs:redefine> and
+// <xs:import>
+// closure of the root document (§4.2.3, §4.2.5, §4.2.4, §4.2.6.2),
+// including chameleon coercion of a
 // no-targetNamespace <xs:include>d document into the including namespace
 // (§F.1) — both the components it declares and the unqualified QName
 // references inside it. An <xs:import>ed document is never coerced: it
@@ -94,9 +99,24 @@
 // declaration is produced by the OVERRIDDEN document's producer, so the
 // overridden document's target namespace and schema-level defaults apply
 // to it (§4.2.5's document-level-defaults note, PRINCIPLES 16).
-// Documents are loaded once, keyed by resolved location, the
-// namespace they were reached under and the override applied to them, so
-// a repeated include, import or equivalent override, a
+// An <xs:redefine>d document is coerced on the same terms too (§4.2.4
+// clause 3.3), and is the one composition kind that BOTH includes and
+// subtracts: the redefined document contributes every component it
+// declares EXCEPT those the <redefine> names (clause 4.1.2), while the
+// <redefine>'s own children contribute the replacements (clause 4.1.1)
+// as definitions of the REDEFINING document. A redefining
+// simpleType/complexType is paired with a hidden {name}-·absent· copy of
+// the definition it replaces, which is what its own base= resolves to;
+// a redefining group/attributeGroup self-reference resolves to the
+// original the same way (src-expredef, parser/redefine.go). §4.2.4
+// marks the whole mechanism ·deprecated·. A non-empty <xs:redefine>
+// whose schemaLocation does not resolve is an ERROR (src-redefine clause
+// 1) where an <xs:include>'s is explicitly not one (src-include clause
+// 2.4). Documents are loaded once, keyed by resolved location, the
+// namespace they were reached under, the override applied to them and
+// the redefinition applied to them, so
+// a repeated include, import, equivalent override or equivalent
+// redefinition, a
 // diamond, or a (spec-legal) cycle contributes its components once.
 // Loading once suppresses the second COMPOSITION only, which is all
 // §4.2.6.2's note asks for: a repeated <xs:import> is still judged
@@ -125,19 +145,38 @@
 // it does READ that document's <xs:import> children, since clause 4
 // licenses its references from them, but dereferences none of them.
 //
-// # Planned composition (not yet implemented)
+// # Composition gaps
 //
-//   - GAP(xsd): xs:redefine is skipped, not followed: it is a top-level
-//     representation this slice does not yet produce (§3.1.2), so a
-//     schema needing it assembles short. Passing WithLogger is how that
-//     is observed: every skipped child <xs:redefine> element is reported
-//     at debug level with its location. It is NOT reported as an
-//     [UnfollowedDirective] either, because no attempt is made to
-//     dereference it — the report says which attempted references came
-//     back empty, and this one is never attempted. That also empties §F.2 clause
-//     1's "or <redefine>" scope: an <xs:override> substitutes only for
-//     the <schema> children of the documents in its ·target set·, never
-//     for a <redefine> child, because no <redefine> is read at all.
+//   - GAP(xsd): a redefining <xs:complexType> is declined, not
+//     produced. src-expredef clause 1.1 pairs it with a {name}-·absent·
+//     copy of the type it replaces as its {base type definition}, and
+//     [xsd.ComplexType] carries {base type definition} as a
+//     pre-resolution QName reference, so the pairing has nowhere to
+//     live: the only representable form would name the redefinition
+//     itself as its own base, which Finalize (rightly, for what it would
+//     be handed) rejects under ct-props-correct clause 3. The decline is
+//     a plain "not yet produced" error, never a fabricated rule
+//     violation, and it OVER-rejects — a valid redefining complex type
+//     is refused, never accepted wrongly. Closing it needs an
+//     xsd-package change (a complex type able to hold an anonymous
+//     resolved base), which is library surface #286 did not open; it
+//     needs a follow-up issue of its own. Redefining simpleType, group
+//     and attributeGroup are produced in full.
+//   - GAP(xsd): src-redefine clauses 6.2.2 and 7.2.2 — the
+//     no-self-reference branches — are fail-open. 6.2.2 asks whether the
+//     redefining group's {model group} accepts a SUBSET of the element
+//     sequences the original accepts, a language-containment question
+//     needing the content-model engine cos-content-act-restrict (#263)
+//     needs; 7.2.2 asks whether the redefining attribute group satisfies
+//     clause 3 of derivation-ok-restriction (§3.4.6.3) against the
+//     original. Their 6.2.1/7.2.1 halves ARE charged, as src-expredef's
+//     closing requirement. Both UNDER-reject: a redefinition that widens
+//     rather than restricts is accepted, never wrongly refused. Owned by
+//     #286.
+//   - GAP(parser): a redefining declaration that an <xs:override>
+//     substitutes for under §F.2 clause 1 loses its self-reference
+//     resolution — see parser/override.go's GAP for the mechanism.
+//     Over-rejects.
 //   - GAP(xsd): §5.3 (Missing Sub-components) is never reported as such.
 //     A namespace an <xs:import> declares but no document of the
 //     assembly supplies — a bare import, or one whose schemaLocation
@@ -161,12 +200,15 @@
 //     definition}, <element ref>, <attribute ref>, <group ref>, keyref —
 //     are #434, which must also supply the ·lax assessment· fallback
 //     §5.3 requires on the validation side.
-//   - GAP(xsd): two DISTINCT <xs:override> elements whose children are
-//     textually equivalent are treated as two different overrides of the
+//   - GAP(xsd): two DISTINCT <xs:override> (or <xs:redefine>) elements
+//     whose children are
+//     textually equivalent are treated as two different overrides (or
+//     redefinitions) of the
 //     same document, so overriding one document the same way down two
 //     paths yields duplicate components and a sch-props-correct clause 2
 //     rejection where §4.2.5's note ("multiple equivalent overrides of
-//     the same schema document will not constitute a violation") wants
+//     the same schema document will not constitute a violation") — and
+//     §4.2.4's identically-worded note for <redefine> — wants
 //     none. Override identity here is the ordered list of substituted
 //     (element type, name, source location) triples, not the fn:deep-equal
 //     comparison §4.2.5 offers as one way of detecting closure; the SAME
