@@ -64,18 +64,25 @@ func TestNewParticleRejectsAbsentTerm(t *testing.T) {
 // present QName. An empty local part — with or without a namespace name — is
 // rejected at construction rather than deferred, so finalize's "a zero QName is
 // absent" skip (resolve.go) can never swallow an unresolvable {term}.
+//
+// wantConstruct pins only that the message LEADS with the author-visible
+// construct (STYLE E1: a schema author who wrote <group ref=""> must be able to
+// find it without knowing the internal variant name, which the message keeps
+// only as trailing detail). The rest of the sentence is not asserted — message
+// text beyond that lead is not a contract.
 func TestNewParticleRejectsAbsentRefName(t *testing.T) {
 	tests := []struct {
-		name    string
-		term    xsd.TermOrRef
-		wantErr bool
+		name          string
+		term          xsd.TermOrRef
+		wantErr       bool
+		wantConstruct string
 	}{
-		{"element-ref zero QName", xsd.ElementDeclarationRef{}, true},
-		{"element-ref namespace with empty local", xsd.ElementDeclarationRef{Name: xsd.QName{Space: "urn:ns"}}, true},
-		{"element-ref present local", xsd.ElementDeclarationRef{Name: xsd.QName{Local: "e"}}, false},
-		{"group-ref zero QName", xsd.ModelGroupRef{}, true},
-		{"group-ref namespace with empty local", xsd.ModelGroupRef{Name: xsd.QName{Space: "urn:ns"}}, true},
-		{"group-ref present local", xsd.ModelGroupRef{Name: xsd.QName{Local: "g"}}, false},
+		{"element-ref zero QName", xsd.ElementDeclarationRef{}, true, "<element ref>"},
+		{"element-ref namespace with empty local", xsd.ElementDeclarationRef{Name: xsd.QName{Space: "urn:ns"}}, true, "<element ref>"},
+		{"element-ref present local", xsd.ElementDeclarationRef{Name: xsd.QName{Local: "e"}}, false, ""},
+		{"group-ref zero QName", xsd.ModelGroupRef{}, true, "<group ref>"},
+		{"group-ref namespace with empty local", xsd.ModelGroupRef{Name: xsd.QName{Space: "urn:ns"}}, true, "<group ref>"},
+		{"group-ref present local", xsd.ModelGroupRef{Name: xsd.QName{Local: "g"}}, false, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -90,6 +97,7 @@ func TestNewParticleRejectsAbsentRefName(t *testing.T) {
 				t.Fatalf("NewParticle(%v) succeeded, want an absent-ref-name rejection", tc.term)
 			}
 			assertRule(t, err, xsderr.RuleComponentInvariant)
+			assertMsgLeadsWith(t, err, tc.wantConstruct)
 		})
 	}
 }

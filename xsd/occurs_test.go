@@ -2,6 +2,7 @@ package xsd_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -176,5 +177,21 @@ func assertRule(t *testing.T, err error, want xsderr.Rule) {
 	}
 	if got, ok := xsderr.RuleOf(err); !ok || got != want {
 		t.Errorf("RuleOf = (%q, %v), want (%q, true)", got, ok, want)
+	}
+}
+
+// assertMsgLeadsWith checks that err's message OPENS with construct — the
+// author-visible XML the schema author wrote (STYLE E1). It reads *xsderr.Error's
+// Msg rather than err.Error() so the loc/rule prefix Error() adds is not part of
+// the comparison. Only the lead is pinned; the explanatory remainder is free to
+// change.
+func assertMsgLeadsWith(t *testing.T, err error, construct string) {
+	t.Helper()
+	var e *xsderr.Error
+	if !errors.As(err, &e) {
+		t.Fatalf("error %v is not an *xsderr.Error", err)
+	}
+	if !strings.HasPrefix(e.Msg, construct) {
+		t.Errorf("message %q does not lead with the offending construct %s (E1)", e.Msg, construct)
 	}
 }

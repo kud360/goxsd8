@@ -112,6 +112,9 @@ func TestNewAttributeUseRejectsAbsentRefName(t *testing.T) {
 				t.Fatalf("NewAttributeUse(ref %v) succeeded, want an absent-ref-name rejection", tc.ref)
 			}
 			assertRule(t, err, xsderr.RuleComponentInvariant)
+			// Only that the message LEADS with the author-visible construct
+			// (STYLE E1); the rest of the sentence is not a contract.
+			assertMsgLeadsWith(t, err, "<attribute ref>")
 		})
 	}
 }
