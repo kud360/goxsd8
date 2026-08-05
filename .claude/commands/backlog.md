@@ -8,10 +8,11 @@ lanes, `grep -rn "GAP("`), reconcile the issue list, keep 8–10 `ready`
 issues with complete bodies, order by dependency, and update
 docs/PLAN.md on drift.
 
-For API- or CLI-facing milestones, have the cartographer consult
-**libuser** and **cliuser** (feed them only the current README and
-`go doc` output) and fold their stories and acceptance criteria into the
-issue bodies.
+For API- or CLI-facing milestones, **you** — this session, not the
+cartographer — delegate to **libuser** and **cliuser** (feed them only
+the current README and `go doc` output), then hand their reports to the
+cartographer to fold into issue bodies. See docs/WORKFLOW.md's
+`/backlog` bullet for why the duty sits here.
 
 Then delegate a session log entry to **chronicler**, commit any PLAN.md/
 doc edits (`meta: backlog <date>`), and land them the same way `wip/issue-`

@@ -295,9 +295,13 @@ machinery; just don't leave the merge undone.
 - **`/ratchet`** — arbiter only: run conformance, report movement per
   lane, ratchet upward, investigate & file issues for any regression.
 - **`/backlog`** — cartographer: reconcile GitHub issues with reality (close
-  stale, split oversized, order by dependency, keep 8–10 `ready`);
-  consult **libuser**/**cliuser** when planning API- or CLI-facing
-  milestones. Also **reconcile the branch namespace**: classify every
+  stale, split oversized, order by dependency, keep 8–10 `ready`).
+  **The launching session — not the cartographer — runs
+  libuser/cliuser** when the pass covers API- or CLI-facing milestones,
+  and hands their stories to the cartographer to fold into issue bodies.
+  A cartographer subagent has no way to spawn them, and role-playing a
+  persona it could not isolate itself from is worse than skipping the
+  step (#416). Also **reconcile the branch namespace**: classify every
   `wip/*` branch by its issue's state (live / resumable / retired); a
   `wip/` branch stale for several days with no RESUME comment gets its
   issue flagged `needs-replan`; a closed issue's leftover branch is
