@@ -809,7 +809,7 @@ MS-Additional2006-07-15/addB006/schema/addB006 fail
 MS-Additional2006-07-15/addB007/schema/addB007 fail
 MS-Additional2006-07-15/addB008/schema/addB008 pass
 MS-Additional2006-07-15/addB009/schema/addB009 pass
-MS-Additional2006-07-15/addB010/schema/addB010 fail
+MS-Additional2006-07-15/addB010/schema/addB010 pass
 MS-Additional2006-07-15/addB011/schema/addB011 pass
 MS-Additional2006-07-15/addB012/schema/addB012 pass
 MS-Additional2006-07-15/addB013/schema/addB013 pass
@@ -1150,7 +1150,7 @@ MS-Attribute2006-07-15/attB006/schema/attB006 fail
 MS-Attribute2006-07-15/attC001/schema/attC001 pass
 MS-Attribute2006-07-15/attC002/schema/attC002 pass
 MS-Attribute2006-07-15/attC003/schema/attC003 pass
-MS-Attribute2006-07-15/attC004/schema/attC004 fail
+MS-Attribute2006-07-15/attC004/schema/attC004 pass
 MS-Attribute2006-07-15/attC005/schema/attC005 fail
 MS-Attribute2006-07-15/attC006/schema/attC006 fail
 MS-Attribute2006-07-15/attC007/schema/attC007 fail
@@ -1337,7 +1337,7 @@ MS-Attribute2006-07-15/attO024/schema/attO024 fail
 MS-Attribute2006-07-15/attO025/schema/attO025 fail
 MS-Attribute2006-07-15/attP001/schema/attP001 fail
 MS-Attribute2006-07-15/attP002/schema/attP002 fail
-MS-Attribute2006-07-15/attP003/schema/attP003 fail
+MS-Attribute2006-07-15/attP003/schema/attP003 pass
 MS-Attribute2006-07-15/attP004/schema/attP004 fail
 MS-Attribute2006-07-15/attP005/schema/attP005 fail
 MS-Attribute2006-07-15/attP006/schema/attP006 fail
@@ -1371,7 +1371,7 @@ MS-Attribute2006-07-15/attQ001/schema/attQ001 fail
 MS-Attribute2006-07-15/attQ002/schema/attQ002 fail
 MS-Attribute2006-07-15/attQ003/schema/attQ003 pass
 MS-Attribute2006-07-15/attQ004/schema/attQ004 fail
-MS-Attribute2006-07-15/attQ005/schema/attQ005 fail
+MS-Attribute2006-07-15/attQ005/schema/attQ005 pass
 MS-Attribute2006-07-15/attQ006/schema/attQ006 fail
 MS-Attribute2006-07-15/attQ007/schema/attQ007 pass
 MS-Attribute2006-07-15/attQ008/schema/attQ008 pass
@@ -1427,7 +1427,7 @@ MS-AttributeGroup2006-07-15/attgB003/schema/attgB003 fail
 MS-AttributeGroup2006-07-15/attgB004/schema/attgB004 fail
 MS-AttributeGroup2006-07-15/attgB005/schema/attgB005 pass
 MS-AttributeGroup2006-07-15/attgB006/schema/attgB006 fail
-MS-AttributeGroup2006-07-15/attgB007/schema/attgB007 fail
+MS-AttributeGroup2006-07-15/attgB007/schema/attgB007 pass
 MS-AttributeGroup2006-07-15/attgB008/schema/attgB008 pass
 MS-AttributeGroup2006-07-15/attgB009/schema/attgB009 pass
 MS-AttributeGroup2006-07-15/attgB010/schema/attgB010 pass
@@ -4946,7 +4946,7 @@ MS-IdentityConstraint2006-07-15/idA027/schema/idA027 fail
 MS-IdentityConstraint2006-07-15/idA028/schema/idA028 fail
 MS-IdentityConstraint2006-07-15/idA029/schema/idA029 fail
 MS-IdentityConstraint2006-07-15/idA030/schema/idA030 fail
-MS-IdentityConstraint2006-07-15/idA031/schema/idA031 fail
+MS-IdentityConstraint2006-07-15/idA031/schema/idA031 pass
 MS-IdentityConstraint2006-07-15/idA032/schema/idA032 fail
 MS-IdentityConstraint2006-07-15/idA033/schema/idA033 pass
 MS-IdentityConstraint2006-07-15/idA034/schema/idA034 pass
@@ -5006,7 +5006,7 @@ MS-IdentityConstraint2006-07-15/idB027/schema/idB027 fail
 MS-IdentityConstraint2006-07-15/idB028/schema/idB028 fail
 MS-IdentityConstraint2006-07-15/idB029/schema/idB029 fail
 MS-IdentityConstraint2006-07-15/idB030/schema/idB030 fail
-MS-IdentityConstraint2006-07-15/idB031/schema/idB031 fail
+MS-IdentityConstraint2006-07-15/idB031/schema/idB031 pass
 MS-IdentityConstraint2006-07-15/idB032/schema/idB032 fail
 MS-IdentityConstraint2006-07-15/idB033/schema/idB033 pass
 MS-IdentityConstraint2006-07-15/idB034/schema/idB034 pass
@@ -5066,7 +5066,7 @@ MS-IdentityConstraint2006-07-15/idC027/schema/idC027 fail
 MS-IdentityConstraint2006-07-15/idC028/schema/idC028 fail
 MS-IdentityConstraint2006-07-15/idC029/schema/idC029 fail
 MS-IdentityConstraint2006-07-15/idC030/schema/idC030 fail
-MS-IdentityConstraint2006-07-15/idC031/schema/idC031 fail
+MS-IdentityConstraint2006-07-15/idC031/schema/idC031 pass
 MS-IdentityConstraint2006-07-15/idC032/schema/idC032 fail
 MS-IdentityConstraint2006-07-15/idC033/schema/idC033 pass
 MS-IdentityConstraint2006-07-15/idC034/schema/idC034 pass
@@ -6167,7 +6167,7 @@ MS-Notations2006-07-15/notatB006/schema/notatB006 pass
 MS-Notations2006-07-15/notatB008/schema/notatB008 fail
 MS-Notations2006-07-15/notatB009/schema/notatB009 fail
 MS-Notations2006-07-15/notatB010/schema/notatB010 fail
-MS-Notations2006-07-15/notatB011/schema/notatB011 fail
+MS-Notations2006-07-15/notatB011/schema/notatB011 pass
 MS-Notations2006-07-15/notatB012/schema/notatB012 fail
 MS-Notations2006-07-15/notatB013/schema/notatB013 fail
 MS-Notations2006-07-15/notatB014/schema/notatB014 pass
@@ -14456,7 +14456,7 @@ Notation/annotation00101m3/schema/annotation00101m3 pass
 Notation/annotation00101m4/schema/annotation00101m4 fail
 Notation/name00101m1/schema/name00101m1 fail
 Notation/name00101m2/schema/name00101m2 fail
-Notation/name00201m1/schema/name00201m1 fail
+Notation/name00201m1/schema/name00201m1 pass
 Notation/publicid00101m1/schema/publicId00101m1 pass
 Notation/publicid00201m1/schema/publicId00201m1 pass
 Notation/systemid00101m1/schema/systemId00101m1 pass

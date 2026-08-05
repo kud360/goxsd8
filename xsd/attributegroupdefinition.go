@@ -6,9 +6,10 @@ import "github.com/kud360/goxsd8/xsderr"
 // (Structures §3.6.6, id="ag-props-correct"): an attribute group definition's
 // properties must match the §3.6.1 property tableau. This file enforces:
 //
-//   - clause 1 (tableau shape): satisfied by construction — the sum and
-//     optional-slot machinery already make an ill-formed {attribute uses} member
-//     or {attribute wildcard} unrepresentable, so no extra check is needed.
+//   - clause 1 (tableau shape): {name} is present. The rest is satisfied by
+//     construction — the sum and optional-slot machinery already make an
+//     ill-formed {attribute uses} member or {attribute wildcard}
+//     unrepresentable, so no extra check is needed there.
 //   - clause 2: no two {attribute uses} members have {attribute declaration}s
 //     with the same expanded name. This is cheaply computable now — BOTH sum
 //     variants expose a QName WITHOUT resolution (a local declaration's own
@@ -41,7 +42,7 @@ const ruleAgPropsCorrect xsderr.Rule = "ag-props-correct"
 // schema conformance lane moves only when the producer (#174/#175) wires it in.
 //
 // Construct only through NewAttributeGroupDefinition, which rejects the states
-// ag-props-correct (§3.6.6) clause 2 forbids so they are unrepresentable
+// ag-props-correct (§3.6.6) clauses 1 and 2 forbid so they are unrepresentable
 // (STYLE T1). AttributeGroupDefinition is immutable after construction.
 type AttributeGroupDefinition struct {
 	loc           xsderr.Loc // source position; provenance, not a §3.6.1 property
@@ -54,16 +55,33 @@ type AttributeGroupDefinition struct {
 
 // NewAttributeGroupDefinition builds an AttributeGroupDefinition, rejecting the
 // state Attribute Group Definition Properties Correct (§3.6.6, ag-props-correct)
-// clause 2 forbids: two {attribute uses} members whose {attribute declaration}s
-// have the same expanded name. The scan is deterministic (STYLE D2) — the
+// clause 1 forbids for the {name} slot — name must be present, its local part
+// may not be empty. The §3.6.1 tableau types {name} as a Required xs:NCName, and
+// NCName's value space (Datatypes §3.4.7, pattern \i\c*) excludes the empty
+// string, so a zero-Local QName is categorically not a legal {name}. The §5.3
+// Missing Sub-components escape hatch does not cover it: §5.3 is scoped to
+// properties whose value is another component reached by QName ·resolution·, and
+// {name} is the identity other components resolve AGAINST. The guard is
+// unconditional because an attribute group definition has NO anonymous form:
+// per §3.6.2.1 an <attributeGroup> maps to this component only as a child of
+// <schema>/<redefine>, where name is required; the ref usage under
+// <complexType>/<attributeGroup> "does not correspond to any component as such".
+// That reasoning is deliberately NOT generalized to NewComplexType /
+// NewSimpleType, whose components have a genuine anonymous form ({name}
+// Optional). Testing the local part, not name == QName{}, is deliberate: the
+// latter would admit QName{Space: "urn:x", Local: ""} as a named definition.
+// Same idiom as NewElementDeclaration's e-props-correct clause 1 check.
+//
+// It also rejects the state clause 2 forbids: two {attribute uses} members whose
+// {attribute declaration}s have the same expanded name. The scan is deterministic (STYLE D2) — the
 // members are walked in document order and membership is tested against a
 // map[QName]struct{} seen-set, so the first duplicate found by index is the one
 // rejected (never ranging the map itself for the scan). Both sum variants expose
 // the expanded name without resolution: a LocalAttributeDeclaration via its
 // Declaration.Name(), an AttributeDeclarationRef via its Name.
 //
-// clause 1 is satisfied by construction (the sum and optional-slot machinery
-// already make ill-formed members unrepresentable); the §3.6.2.2 referenced-group
+// The REST of clause 1 is satisfied by construction (the sum and optional-slot
+// machinery already make ill-formed members unrepresentable); the §3.6.2.2 referenced-group
 // union is folded in by the producer (§3.6.2.1, mapping time) before it calls
 // this constructor, so the members passed here are already complete.
 //
@@ -87,6 +105,10 @@ type AttributeGroupDefinition struct {
 // A caller with no real parser position — a synthesized or programmatically
 // built definition — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []AttributeUse, wildcard *Wildcard, annotations []Annotation) (AttributeGroupDefinition, error) {
+	if name.Local == "" {
+		return AttributeGroupDefinition{}, xsderr.New(ruleAgPropsCorrect, loc,
+			"attribute group definition has an absent {name}, but the §3.6.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (ag-props-correct clause 1)")
+	}
 	seen := make(map[QName]struct{}, len(attributeUses))
 	for i, use := range attributeUses {
 		expanded := attributeUseDeclarationName(use)
