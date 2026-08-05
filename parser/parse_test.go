@@ -661,12 +661,14 @@ func TestWithLoggerNilIsSilent(t *testing.T) {
 	}
 }
 
-// TestParseRedefineIsLoggedNotFollowed pins the ONE way a caller can observe
-// that an assembly came up short because §4.2.4 is unimplemented: a child
-// <xs:redefine> element is skipped — its schemaLocation is never resolved, so a
-// location naming no document is not an error — and the skip is reported only on
-// the logger WithLogger installs, at debug level.
-func TestParseRedefineIsLoggedNotFollowed(t *testing.T) {
+// TestParseEmptyRedefineUnresolvedIsLoggedNotRejected pins the ONE <redefine>
+// shape that keeps <include>'s silent-skip semantics: an EMPTY one. src-redefine
+// clause 1 obliges the schemaLocation to resolve only "if there are any element
+// information items among the [children] other than <annotation>", so an empty
+// <redefine> naming nothing is not an error, and the debug logger is how a
+// caller observes that the composition did not happen. The non-empty case is the
+// opposite and is pinned in redefine_test.go.
+func TestParseEmptyRedefineUnresolvedIsLoggedNotRejected(t *testing.T) {
 	var buf bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	s, err := parser.Parse("main.xsd",
@@ -684,9 +686,9 @@ func TestParseRedefineIsLoggedNotFollowed(t *testing.T) {
 		t.Fatalf("element {urn:a}root not found")
 	}
 	got := buf.String()
-	for _, want := range []string{"level=DEBUG", "<xs:redefine>", "rule=src-redefine", "location=absent.xsd", "at=main.xsd:"} {
+	for _, want := range []string{"level=DEBUG", "rule=src-redefine", "directive=redefine", "location=absent.xsd", "at=main.xsd:"} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("log output does not mention %q, want a debug record for the skipped <redefine>:\n%s", want, got)
+			t.Fatalf("log output does not mention %q, want a debug record for the unresolved empty <redefine>:\n%s", want, got)
 		}
 	}
 }

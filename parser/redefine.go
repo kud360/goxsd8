@@ -1,0 +1,788 @@
+package parser
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+
+	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
+)
+
+// This file implements <xs:redefine> (§4.2.4, src-redefine and src-expredef):
+// including a schema document while REPLACING some of its top-level
+// simpleType/complexType/group/attributeGroup definitions with new ones written
+// inline, each of which may build on the definition it replaces.
+//
+// §4.2.4 marks the whole mechanism ·deprecated· — "may be removed from future
+// versions of this specification. Schema authors are encouraged to avoid its use
+// in cases where interoperability or compatibility with later versions of this
+// specification are important" — and §4.2.5 says why: "existing XSD processors
+// have implemented conflicting and non-interoperable interpretations of
+// <redefine>". It is implemented here because §4.2.4 is still normative, not
+// because it is recommended; nothing in this file is a behaviour change to
+// <xs:override>, which exists to replace it.
+//
+// # The shape of the mechanism
+//
+// A <redefine> is an <include> plus a rewrite, so it enters at the DISCOVER
+// phase alongside <include>/<import>/<override> and the rewrite is carried as
+// DATA — a redefineSet threaded through discovery beside the effective target
+// namespace and the ·override pre-processing· — exactly as parser/override.go
+// carries §F.2. No tree is rewritten and no node is synthesized.
+//
+// Two documents meet over one redefineSet, and they read it from opposite sides:
+//
+//	D1, the REDEFINING document, holds the <redefine> element. Its producer
+//	     maps the <redefine>'s children as top-level definitions of its own
+//	     (src-expredef clause 1.2 / clause 2, §4.2.4 clause 4.1.1).
+//	D2, the REDEFINED document, is the one the schemaLocation names. Its
+//	     producer contributes every component it declares EXCEPT those the set
+//	     names (§4.2.4 clause 4.1.2, "with the exception of those explicitly
+//	     redefined"), and records each excepted declaration as the ORIGINAL a
+//	     self-reference in D1 resolves to.
+//
+// # Self-reference: the two-component pairing (src-expredef)
+//
+// A redefining <simpleType>/<complexType> corresponds to TWO components: a
+// hidden one with {name} ·absent· that is the ORIGINAL (clause 1.1), and the
+// visible redefining one whose {base type definition} is that hidden original
+// (clause 1.2). "This pairing ensures the coherence constraints on type
+// definitions are respected, while at the same time achieving the desired
+// effect, namely that references to names of redefined components in both the
+// <redefine>ing and <redefine>d schema documents ·resolve· to the redefined
+// component". A redefining <group>/<attributeGroup> corresponds to a SINGLE
+// component, but "if and when a self-reference based on a ref [attribute] …
+// is ·resolved·, a component which corresponds to the top-level definition item
+// of that name and the appropriate kind in S2 is used" (clause 2).
+//
+// Getting that wrong produces a FALSE CIRCULARITY — a type or group appearing to
+// derive from or contain itself — so the three resolution sites that can meet a
+// self-reference each consult the set first: resolveBase (a simple type's base=,
+// produce.go), produceGroupRefParticle (a <group ref>) and collectReferencedGroup
+// (an <attributeGroup ref>, both produce_complex.go).
+//
+// # GAP(xsd): a redefining <complexType> is not produced (#286)
+//
+// xsd.ComplexType carries {base type definition} as a pre-resolution QName
+// REFERENCE (xsd/complextype.go), which Finalize resolves by name and walks for
+// ct-props-correct clause 3. src-expredef clause 1.1 needs the base to be a
+// component with NO name at all, so the pairing is not representable there: a
+// redefining <complexType> can only be built with base name = its own name,
+// which is the very false circularity the pairing exists to avoid. Rather than
+// emit that, produceRedefinition DECLINES the redefining <complexType> with a
+// plain "not yet produced" error — the same treatment <simpleContent> with
+// <restriction> gets in produce_complex.go, and deliberately not a fabricated
+// rule violation. It OVER-rejects: a valid redefining complex type is refused,
+// never accepted wrongly. Closing it needs an xsd-package change (a complex type
+// able to hold an anonymous resolved base), which is library surface this slice
+// does not open. src-redefine clause 5 is still charged against the declined
+// shape first, so a redefining complex type that does not derive from itself is
+// rejected for the right reason rather than for the decline.
+
+// redefineEntry is one non-<annotation> child of a <redefine> element paired
+// with the key it redefines on. Entries are kept as a SLICE in document order,
+// never as a bare map, because that order is the order the redefining components
+// enter the builder and so reaches the user through the component set and
+// through duplicate reports (STYLE D2).
+type redefineEntry struct {
+	key  componentKey
+	elem *Element
+}
+
+// redefineSet is the ·redefinition· one <redefine> element declares: which
+// top-level definitions of the document it names are replaced, by what, and —
+// once that document has been pre-scanned — what each replaced definition was.
+//
+// The nil *redefineSet is the identity: an EMPTY <redefine> (no children, or
+// <annotation> only) redefines nothing and is a plain <include>, which is also
+// why src-redefine clause 1 does not require its schemaLocation to resolve.
+type redefineSet struct {
+	// el is the <redefine> element this set was read from. It is the set's
+	// identity for the producer of the document that CONTAINS it, which looks its
+	// own <redefine> children up by element rather than by position.
+	el *Element
+
+	// entries are the redefining declarations in document order (see
+	// redefineEntry). Two entries may share a key: two same-named children of one
+	// <redefine> correspond to two components with one expanded name, which
+	// Finalize rejects under sch-props-correct (§3.17.6.1) clause 2 — the rule
+	// that genuinely governs it — so both are produced rather than one being
+	// discarded here.
+	entries []redefineEntry
+
+	// index is the membership set the REDEFINED document's producer consults to
+	// decide which of its own top-level declarations §4.2.4 clause 4.1.2 excepts.
+	// It is derived from entries at construction and never ranged to produce
+	// output (STYLE D2/D3).
+	index map[componentKey]struct{}
+
+	// byElem is the reverse of index, likewise derived from entries at
+	// construction: it answers "is THIS element a redefining declaration, and of
+	// what", which is what the three self-reference resolution sites ask after
+	// walking up from a base=/ref= to its containing declaration.
+	byElem map[*Element]componentKey
+
+	// originals holds, per redefined key, the top-level declaration of the
+	// REDEFINED document that the redefining one replaces — the component
+	// src-expredef clause 1.1 makes the hidden {name}-·absent· base and clause 2
+	// makes the target of a group/attributeGroup self-reference.
+	//
+	// It is the ONE field filled after construction, by the redefined document's
+	// pre-scan (producer.prescan): it is not knowable when the set is read, since
+	// that document has not been fetched yet. Filling it is how the two producers
+	// meet, and it is written exactly once per key, from a single document-order
+	// pass over one document.
+	originals map[componentKey]typeSource
+
+	// id is the set's canonical identity, derived from entries at construction:
+	// the ordered (kind, name, source location) triples. It is the redefine half
+	// of docKey, so that one document redefined two DIFFERENT ways is read twice —
+	// §4.2.4 clause 4.1.2 gives each reading its own component set — while a
+	// document reached again around a composition cycle is read once. Because
+	// every reachable set is drawn from the finitely many children of the finitely
+	// many <redefine> elements of the assembly, the space of ids is finite and the
+	// load-once index that keys on it terminates (STYLE D4: identity, not a cycle
+	// guard).
+	id string
+}
+
+// newRedefineSet reads the redefining declarations a <redefine> element declares
+// (§4.2.4's XML Representation Summary). It returns nil for one that declares
+// none, which makes an empty <redefine> a plain <include> in every particular:
+// same load-once key, and no src-redefine clause 1 obligation on its
+// schemaLocation.
+//
+// The content model is (annotation | (simpleType | complexType | group |
+// attributeGroup))* — narrower than <override>'s, which also admits <element>,
+// <attribute> and <notation>. A child outside it is a grammar fault with no
+// dedicated Schema Representation Constraint (src-redefine's preamble
+// incorporates the schema for schema documents by reference without restating
+// it), reported as a plain error like an <include> with no schemaLocation, never
+// silently ignored: ignoring it would drop a declaration the author wrote.
+func newRedefineSet(el *Element) (*redefineSet, error) {
+	var entries []redefineEntry
+	for _, child := range el.Children() {
+		c, ok := child.(*Element)
+		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
+			// Foreign-namespace markup is admitted only inside <annotation> (§A), so
+			// anything here is already outside the content model; it is skipped
+			// rather than charged, since it corresponds to no component either way.
+			continue
+		}
+		if isXSD(c, "annotation") {
+			continue
+		}
+		if !redefinableKind(c.Name().Local()) {
+			return nil, fmt.Errorf("parser: <redefine> at %s has a <%s> child at %s, but §4.2.4's content model admits only (annotation | (simpleType | complexType | group | attributeGroup)) — <element>, <attribute> and <notation> are <override>'s (§4.2.5), not <redefine>'s", el.Loc(), c.Name().Local(), c.Loc())
+		}
+		name, ok := c.Attr("name")
+		if !ok {
+			return nil, fmt.Errorf("parser: the <%s> child of <redefine> at %s has no name attribute, which the schema for schema documents requires and which src-expredef needs in order to pair it with a top-level definition of the redefined schema document", c.Name().Local(), c.Loc())
+		}
+		entries = append(entries, redefineEntry{key: componentKey{kind: c.Name().Local(), name: name}, elem: c})
+	}
+	return buildRedefineSet(el, entries), nil
+}
+
+// buildRedefineSet completes a redefineSet from its document-ordered entries,
+// deriving the two indexes and the identity string from them so none is a second
+// encoding of the same fact (STYLE D3). An empty entry list is the nil set.
+func buildRedefineSet(el *Element, entries []redefineEntry) *redefineSet {
+	if len(entries) == 0 {
+		return nil
+	}
+	index := make(map[componentKey]struct{}, len(entries))
+	byElem := make(map[*Element]componentKey, len(entries))
+	var id strings.Builder
+	for _, e := range entries {
+		index[e.key] = struct{}{}
+		byElem[e.elem] = e.key
+		id.WriteString(e.key.kind)
+		id.WriteByte(' ')
+		id.WriteString(e.key.name)
+		id.WriteByte('@')
+		id.WriteString(e.elem.Loc().String())
+		id.WriteByte('\n')
+	}
+	return &redefineSet{
+		el:        el,
+		entries:   entries,
+		index:     index,
+		byElem:    byElem,
+		originals: make(map[componentKey]typeSource, len(entries)),
+		id:        id.String(),
+	}
+}
+
+// key is this set's contribution to a discovered document's load-once identity
+// (see [redefineSet].id). The nil set contributes the empty string, so a plainly
+// <include>d document and one reached under an empty <redefine> share a key.
+func (s *redefineSet) key() string {
+	if s == nil {
+		return ""
+	}
+	return s.id
+}
+
+// mustResolve reports whether src-redefine clause 1 obliges this set's
+// schemaLocation to resolve: "If there are any element information items among
+// the [children] other than <annotation> then the ·actual value· of the
+// schemaLocation [attribute] must successfully resolve". A non-nil set is
+// exactly that condition, and it is what makes <redefine> differ from
+// <include>, whose src-include clause 2.4 states the opposite in as many words
+// ("It is not an error … to fail to resolve at all").
+func (s *redefineSet) mustResolve() bool {
+	return s != nil
+}
+
+// excepts reports whether el, a top-level declaration of the REDEFINED document,
+// is one this set replaces — §4.2.4 clause 4.1.2's "with the exception of those
+// explicitly redefined". Such a declaration contributes no component of its own;
+// it survives only as the hidden original a self-reference resolves to.
+func (s *redefineSet) excepts(el *Element) bool {
+	if s == nil {
+		return false
+	}
+	key, ok := declarationKey(el)
+	if !ok {
+		return false
+	}
+	_, redefined := s.index[key]
+	return redefined
+}
+
+// recordOriginal notes the redefined document's own declaration for key, which
+// src-expredef clause 1.1 makes the hidden {name}-·absent· base of the redefining
+// type and clause 2 the target of a group/attributeGroup self-reference. Only
+// the redefined document's pre-scan calls it, once per key.
+func (s *redefineSet) recordOriginal(key componentKey, src typeSource) {
+	s.originals[key] = src
+}
+
+// declarationKey identifies a top-level source declaration by the pair
+// <redefine> matches on — the element type and the ·actual value· of its name
+// attribute — the same key §F.2 clause 1 uses for <override> (componentKey).
+func declarationKey(el *Element) (componentKey, bool) {
+	if el.Name().Space() != xsd.XMLSchemaNS {
+		return componentKey{}, false
+	}
+	name, ok := el.Attr("name")
+	if !ok {
+		return componentKey{}, false
+	}
+	return componentKey{kind: el.Name().Local(), name: name}, true
+}
+
+// redefinableKind reports whether local is one of the four element types
+// §4.2.4's content model admits as a redefining declaration. It is deliberately
+// NARROWER than overridableKind: <element>, <attribute> and <notation> are
+// <override>'s three extra kinds and are the load-bearing structural difference
+// between the two mechanisms.
+func redefinableKind(local string) bool {
+	switch local {
+	case "simpleType", "complexType", "group", "attributeGroup":
+		return true
+	}
+	return false
+}
+
+// redefineSetOf returns the set read from el, one of this document's own
+// <redefine> children, or nil when the assembly never followed it. Nil is the
+// [Produce] path: a single-document producer dereferences no
+// ·inter-schema-document reference· at all, so its <redefine> children name no
+// document and redefine nothing.
+//
+// The scan is over a SLICE in document order, so the answer does not depend on
+// map iteration (STYLE D2).
+func (p *producer) redefineSetOf(el *Element) *redefineSet {
+	for _, rs := range p.redefines {
+		if rs.el == el {
+			return rs
+		}
+	}
+	return nil
+}
+
+// redefinitionOf reports whether el is a redefining declaration of one of this
+// document's own followed <redefine> elements, and under which key. It is the
+// question every self-reference site asks after walking up from a base=/ref= to
+// the declaration that contains it.
+func (p *producer) redefinitionOf(el *Element) (*redefineSet, componentKey, bool) {
+	for _, rs := range p.redefines {
+		if key, ok := rs.byElem[el]; ok {
+			return rs, key, true
+		}
+	}
+	return nil, componentKey{}, false
+}
+
+// originalFor returns the redefined document's own declaration behind decl — the
+// component src-expredef pairs the redefining one with — provided decl really is
+// a redefining declaration of one of the kinds given and its own expanded name
+// is qn, the name the reference wrote.
+//
+// A miss on any of the three conditions falls through to ordinary resolution,
+// which is the correct outcome: a reference that is not the redefining
+// declaration's own name is an ordinary reference and resolves to the visible
+// (redefined) component, per src-expredef's note.
+func (p *producer) originalFor(decl *Element, qn xsd.QName, kinds ...string) (typeSource, bool) {
+	rs, key, ok := p.redefinitionOf(decl)
+	if !ok {
+		return typeSource{}, false
+	}
+	if !slices.Contains(kinds, key.kind) {
+		return typeSource{}, false
+	}
+	if (xsd.QName{Space: p.target, Local: key.name}) != qn {
+		return typeSource{}, false
+	}
+	src, recorded := rs.originals[key]
+	return src, recorded
+}
+
+// redefinedTypeBase returns the ORIGINAL type definition a base= written at at —
+// a <restriction> or <extension> — names, when that base is the redefining
+// type's own expanded name (src-expredef clause 1.1). ok is false for every
+// other base=, which then resolves ordinarily.
+func (p *producer) redefinedTypeBase(at *Element, qn xsd.QName) (typeSource, bool) {
+	decl := redefinedTypeDeclaration(at)
+	if decl == nil {
+		return typeSource{}, false
+	}
+	return p.originalFor(decl, qn, "simpleType", "complexType")
+}
+
+// redefinedTypeDeclaration returns the <simpleType>/<complexType> whose OWN
+// derivation the <restriction>/<extension> at states, at exactly the depth
+// src-redefine clause 5 words: a <restriction> "among [a <simpleType>'s]
+// children", a <restriction> or <extension> "among [a <complexType>'s]
+// grand-children". A derivation nested deeper — inside an inline anonymous type,
+// say — is not the redefining type's own, so a base= there names the VISIBLE
+// (redefined) component like any other reference and is genuinely circular if it
+// names the type it sits in.
+func redefinedTypeDeclaration(at *Element) *Element {
+	parent := at.Parent()
+	if parent == nil {
+		return nil
+	}
+	if isXSD(parent, "simpleType") {
+		return parent
+	}
+	grand := parent.Parent()
+	if grand != nil && isXSD(grand, "complexType") {
+		return grand
+	}
+	return nil
+}
+
+// redefinedGroupOriginal returns the ORIGINAL model group definition a
+// <group ref> at at resolves to under src-expredef clause 2: at sits inside a
+// redefining <group> and its ref= names that group's own expanded name.
+//
+// Clause 2's resolution rule carries NO "<element> ancestor" condition — "if and
+// when a self-reference based on a ref [attribute] whose ·actual value· is the
+// same as the item's name plus target namespace is ·resolved·, a component which
+// corresponds to the top-level definition item of that name and the appropriate
+// kind in S2 is used", with no qualification. The <element>-ancestor exclusion
+// belongs to src-redefine clause 6.1 alone, where it selects which self-references
+// are COUNTED for 6.1.1/6.1.2 (see selfReferences); it does not change what any
+// of them resolves to. Conflating the two would leave a self-reference under a
+// local element resolving to the redefinition and reported as a circular
+// <group ref> graph.
+func (p *producer) redefinedGroupOriginal(at *Element, qn xsd.QName) (typeSource, bool) {
+	decl := redefinedContainer(at, "group")
+	if decl == nil {
+		return typeSource{}, false
+	}
+	return p.originalFor(decl, qn, "group")
+}
+
+// redefinedAttributeGroupOriginal is redefinedGroupOriginal's attributeGroup
+// twin (src-expredef clause 2 again). src-redefine clause 7.1 carries NEITHER of
+// clause 6.1's two extra conditions — no minOccurs/maxOccurs constraint and no
+// "<element> ancestor" exclusion — a verified asymmetry, not an omission, so
+// neither is ported across to the counting either (see
+// checkRedefinedAttributeGroup).
+func (p *producer) redefinedAttributeGroupOriginal(at *Element, qn xsd.QName) (typeSource, bool) {
+	decl := redefinedContainer(at, "attributeGroup")
+	if decl == nil {
+		return typeSource{}, false
+	}
+	return p.originalFor(decl, qn, "attributeGroup")
+}
+
+// redefinedContainer walks up from at to the nearest ancestor element of element
+// type kind — the definition a nested ref= could be a self-reference of. A ref=
+// with no such ancestor (a <group ref> in a redefining <complexType>, say) is an
+// ordinary reference to the visible redefined component, not a self-reference.
+func redefinedContainer(at *Element, kind string) *Element {
+	for cur := at.Parent(); cur != nil; cur = cur.Parent() {
+		if isXSD(cur, kind) {
+			return cur
+		}
+	}
+	return nil
+}
+
+// prescanRedefine registers the redefining declarations of one <redefine> child
+// of THIS document in the assembly-wide symbol table, under their own expanded
+// names and this producer as owner — they are children of this document, so
+// their local declarations take this document's target namespace and
+// schema-level defaults (§3.3.2.3 dcl.elt.local) and their unqualified
+// references this document's §F.1 coercion.
+//
+// Registering them here is what makes references resolve the way src-expredef's
+// note requires: "references to names of redefined components in both the
+// <redefine>ing and <redefine>d schema documents ·resolve· to the redefined
+// component". The redefined document's own pre-scan withholds the names it is
+// excepted of (§4.2.4 clause 4.1.2), so there is no contest between the two.
+//
+// Each child is first passed through the ·override pre-processing· in force over
+// this document: §F.2's governing sentence scopes its case analysis to "each
+// element information item E2 in the [children] of any <schema> OR <redefine>
+// element information item within D2", so clause 1 substitutes for a <redefine>
+// child exactly as it does for a <schema> child.
+func (p *producer) prescanRedefine(el *Element) {
+	rs := p.redefineSetOf(el)
+	if rs == nil {
+		return
+	}
+	for _, e := range rs.entries {
+		decl := p.ov.replacement(e.elem)
+		p.prescanIdentityConstraints(decl)
+		qn := xsd.QName{Space: p.target, Local: e.key.name}
+		src := typeSource{elem: decl, owner: p}
+		switch e.key.kind {
+		case "simpleType":
+			p.symbols.simpleTypes[qn] = src
+		case "complexType":
+			p.symbols.complexTypes[qn] = src
+		case "attributeGroup":
+			p.symbols.attributeGroups[qn] = src
+		case "group":
+			p.symbols.modelGroups[qn] = src
+		}
+	}
+}
+
+// produceRedefine maps the children of one <redefine> child of this document
+// into components, in document order (§4.2.4 clause 4.1.1: "the schema
+// corresponding to D1 includes … definitions or declarations corresponding to
+// the appropriate members of its own [children]"). The components of the
+// redefined document reach the builder through ITS producer, minus the ones this
+// set excepts.
+func (p *producer) produceRedefine(el *Element) error {
+	rs := p.redefineSetOf(el)
+	if rs == nil {
+		// [Produce] follows no ·inter-schema-document reference· (§4.2.1), so its
+		// <redefine> children name no document; there is no original to pair a
+		// redefinition with, and the whole element is skipped exactly as <include>,
+		// <import> and <override> are.
+		return nil
+	}
+	for _, e := range rs.entries {
+		if err := p.produceRedefinition(rs, e); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// produceRedefinition maps ONE redefining declaration. It charges, in order, the
+// closing requirement of src-expredef ("In all cases there must be a top-level
+// definition item of the appropriate name and kind in the <redefine>d schema
+// document"), then the src-redefine clause that constrains this kind's own shape
+// (5 for a type, 6 for a group, 7 for an attribute group), and only then builds.
+//
+// The closing requirement comes first because every later step depends on the
+// original existing: clause 5's self-derivation would otherwise resolve to the
+// redefinition itself and be reported as a circularity, which is the wrong
+// verdict for a redefinition of a name the redefined document never declared.
+// It also subsumes src-redefine clauses 6.2.1 and 7.2.1, which say the same
+// thing for the no-self-reference branch ("its own name attribute plus target
+// namespace successfully ·resolves· to a model group definition in S2").
+func (p *producer) produceRedefinition(rs *redefineSet, e redefineEntry) error {
+	qn := xsd.QName{Space: p.target, Local: e.key.name}
+	if _, ok := rs.originals[e.key]; !ok {
+		return xsderr.New(ruleSrcExpRedefine, e.elem.Loc(),
+			"<redefine> redefines <%s> %s, but the redefined schema document declares no top-level <%s> of that name: src-expredef requires \"a top-level definition item of the appropriate name and kind in the <redefine>d schema document\" in all cases",
+			e.key.kind, qn, e.key.kind)
+	}
+	decl := p.ov.replacement(e.elem)
+	if err := p.checkRedefinition(decl, qn); err != nil {
+		return err
+	}
+	switch e.key.kind {
+	case "simpleType":
+		st, err := p.buildSimpleType(qn, decl)
+		if err != nil {
+			return err
+		}
+		p.builder.AddType(st)
+		return nil
+	case "complexType":
+		// GAP(xsd): see this file's header — src-expredef clause 1.1's hidden
+		// {name}-·absent· base is not representable while xsd.ComplexType carries
+		// {base type definition} as a QName reference, so the redefining complex
+		// type is declined rather than emitted as a self-derivation Finalize would
+		// (correctly, for what it would be handed) reject under ct-props-correct
+		// clause 3. Over-rejects; owned by #286's follow-up.
+		return fmt.Errorf("parser: the redefining <complexType> %s at %s is not yet produced: src-expredef clause 1.1 pairs it with a {name}-absent copy of the redefined type as its {base type definition}, which this component model cannot yet hold (it carries {base type definition} as a QName reference)", qn, decl.Loc())
+	case "group":
+		mgd, err := p.buildModelGroupDefinition(qn, decl)
+		if err != nil {
+			return err
+		}
+		p.builder.AddModelGroup(mgd)
+		return nil
+	case "attributeGroup":
+		ag, err := p.buildAttributeGroup(qn, decl)
+		if err != nil {
+			return err
+		}
+		p.builder.AddAttributeGroup(ag)
+		return nil
+	}
+	return fmt.Errorf("parser: <redefine> child <%s> at %s is outside §4.2.4's content model", e.key.kind, decl.Loc())
+}
+
+// checkRedefinition charges the src-redefine clause that constrains a redefining
+// declaration's own shape, dispatched on its element type: clause 5 for a
+// <simpleType>/<complexType>, clause 6 for a <group>, clause 7 for an
+// <attributeGroup>.
+func (p *producer) checkRedefinition(decl *Element, qn xsd.QName) error {
+	switch decl.Name().Local() {
+	case "simpleType":
+		return p.checkRedefinedSimpleType(decl, qn)
+	case "complexType":
+		return p.checkRedefinedComplexType(decl, qn)
+	case "group":
+		return p.checkRedefinedGroup(decl, qn)
+	case "attributeGroup":
+		return p.checkRedefinedAttributeGroup(decl, qn)
+	}
+	return nil
+}
+
+// checkRedefinedSimpleType charges src-redefine clause 5's simple-type half:
+// "each <simpleType> must have a <restriction> among its children … the ·actual
+// value· of whose base [attribute] must be the same as the ·actual value· of its
+// own name attribute plus target namespace".
+func (p *producer) checkRedefinedSimpleType(decl *Element, qn xsd.QName) error {
+	restriction := childElement(decl, xsd.XMLSchemaNS, "restriction")
+	if restriction == nil {
+		return xsderr.New(ruleSrcRedefine, decl.Loc(),
+			"the redefining <simpleType> %s has no <restriction> child, but src-redefine clause 5 requires one whose base is %s itself", qn, qn)
+	}
+	same, err := p.namesSelf(restriction, qn)
+	if err != nil {
+		return err
+	}
+	if same {
+		return nil
+	}
+	return xsderr.New(ruleSrcRedefine, restriction.Loc(),
+		"the redefining <simpleType> %s does not restrict itself: src-redefine clause 5 requires its <restriction>'s base to be %s, its own name plus target namespace", qn, qn)
+}
+
+// checkRedefinedComplexType charges src-redefine clause 5's complex-type half:
+// "each <complexType> must have a restriction or extension among its
+// grand-children the ·actual value· of whose base [attribute] must be the same
+// as the ·actual value· of its own name attribute plus target namespace". The
+// depth is the spec's own — a <complexContent>/<simpleContent> child holding the
+// derivation — so the implicit-content form, which states no derivation at all,
+// fails the clause as it should.
+func (p *producer) checkRedefinedComplexType(decl *Element, qn xsd.QName) error {
+	for _, child := range decl.Children() {
+		c, ok := child.(*Element)
+		if !ok {
+			continue
+		}
+		for _, grand := range c.Children() {
+			d, ok := grand.(*Element)
+			if !ok || d.Name().Space() != xsd.XMLSchemaNS {
+				continue
+			}
+			if d.Name().Local() != "restriction" && d.Name().Local() != "extension" {
+				continue
+			}
+			same, err := p.namesSelf(d, qn)
+			if err != nil {
+				return err
+			}
+			if same {
+				return nil
+			}
+		}
+	}
+	return xsderr.New(ruleSrcRedefine, decl.Loc(),
+		"the redefining <complexType> %s does not derive from itself: src-redefine clause 5 requires a <restriction> or <extension> among its grand-children whose base is %s, its own name plus target namespace", qn, qn)
+}
+
+// namesSelf reports whether the base attribute of derivation — a <restriction>
+// or <extension> — resolves to qn, the redefining declaration's own expanded
+// name. An absent base is not a match: src-redefine clause 5 reads the ·actual
+// value· of an attribute that has to be there.
+func (p *producer) namesSelf(derivation *Element, qn xsd.QName) (bool, error) {
+	lexical, ok := derivation.Attr("base")
+	if !ok {
+		return false, nil
+	}
+	base, err := p.resolveQName(derivation, lexical)
+	if err != nil {
+		return false, err
+	}
+	return base == qn, nil
+}
+
+// checkRedefinedGroup charges src-redefine clause 6 on a redefining <group>.
+//
+// Clause 6.1's precondition is a <group> among the redefinition's contents "at
+// some level" whose ref= is the group's own name plus target namespace AND that
+// "does not have an <element> ancestor". When one or more such self-references
+// exist, 6.1.1 requires exactly one and 6.1.2 requires its minOccurs and
+// maxOccurs both to be 1 (or ·absent·).
+//
+// GAP(xsd): clause 6.2 — the NO-self-reference branch — is fail-open (#286).
+// 6.2.1 is charged (it is src-expredef's closing requirement, already enforced
+// by produceRedefinition), but 6.2.2 requires the redefining group's {model
+// group} to accept "a subset of the element sequences accepted by that model
+// group definition in S2", a language-containment question needing the same
+// content-model engine cos-content-act-restrict (#263) needs and which this
+// package does not have. It UNDER-rejects: a redefinition that widens the group
+// it replaces is accepted here, never wrongly refused.
+func (p *producer) checkRedefinedGroup(decl *Element, qn xsd.QName) error {
+	refs, err := p.selfReferences(decl, qn, "group", true)
+	if err != nil {
+		return err
+	}
+	if len(refs) == 0 {
+		return nil // clause 6.2, fail-open above
+	}
+	if len(refs) > 1 {
+		return xsderr.New(ruleSrcRedefine, refs[1].Loc(),
+			"the redefining <group> %s references itself %d times (the first at %s), but src-redefine clause 6.1.1 permits exactly one", qn, len(refs), refs[0].Loc())
+	}
+	return checkSelfReferenceOccurs(refs[0], qn)
+}
+
+// checkRedefinedAttributeGroup charges src-redefine clause 7 on a redefining
+// <attributeGroup>: clause 7.1 permits exactly one self-reference. It carries
+// NEITHER of clause 6.1's extra conditions (see
+// redefinedAttributeGroupOriginal).
+//
+// GAP(xsd): clause 7.2 — the NO-self-reference branch — is fail-open (#286).
+// 7.2.1 is charged as src-expredef's closing requirement; 7.2.2 requires the
+// redefinition's {attribute uses}/{attribute wildcard}, viewed as a complex
+// type's, to satisfy clause 3 of derivation-ok-restriction (§3.4.6.3) against
+// the original's, which this producer cannot state without building both as
+// complex types. It UNDER-rejects: a restrictive attribute-group redefinition
+// that is not in fact a restriction is accepted, never wrongly refused.
+func (p *producer) checkRedefinedAttributeGroup(decl *Element, qn xsd.QName) error {
+	refs, err := p.selfReferences(decl, qn, "attributeGroup", false)
+	if err != nil {
+		return err
+	}
+	if len(refs) <= 1 {
+		return nil // one self-reference: clause 7.1; none: clause 7.2, fail-open above
+	}
+	return xsderr.New(ruleSrcRedefine, refs[1].Loc(),
+		"the redefining <attributeGroup> %s references itself %d times (the first at %s), but src-redefine clause 7.1 permits exactly one", qn, len(refs), refs[0].Loc())
+}
+
+// selfReferences collects, in document order, every descendant of decl of
+// element type kind whose ref= resolves to qn — the self-references src-redefine
+// clauses 6.1 and 7.1 count.
+//
+// excludeElement stops the descent at an <element>, which is clause 6.1's "and
+// that <group> does not have an <element> ancestor": a matching <group ref>
+// under a local element is not counted, so a redefinition whose only
+// self-reference sits there falls to clause 6.2 rather than satisfying 6.1 —
+// which is why a naive "one ref= matching my own name" count gets clause 6
+// wrong. It is a COUNTING rule only: such a reference still resolves to the
+// original (redefinedGroupOriginal). Clause 7.1 has no such exclusion and passes
+// false.
+//
+// <annotation> subtrees are never descended: §3 states that "neither the
+// correspondences described nor the XML Representation Constraints apply to
+// elements in the Schema namespace which occur as descendants of <appinfo> or
+// <documentation>", so a <group ref> written there is prose and counts for
+// nothing.
+//
+// Every ref= it meets is resolved, and a resolution failure is RETURNED rather
+// than skipped (STYLE S3): an unbound prefix is a src-resolve verdict wherever
+// it occurs.
+func (p *producer) selfReferences(decl *Element, qn xsd.QName, kind string, excludeElement bool) ([]*Element, error) {
+	var refs []*Element
+	for _, child := range decl.Children() {
+		c, ok := child.(*Element)
+		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		if isXSD(c, "annotation") {
+			continue
+		}
+		if excludeElement && isXSD(c, "element") {
+			continue
+		}
+		if c.Name().Local() == kind {
+			match, err := p.namesSelfRef(c, qn)
+			if err != nil {
+				return nil, err
+			}
+			if match {
+				refs = append(refs, c)
+			}
+		}
+		nested, err := p.selfReferences(c, qn, kind, excludeElement)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, nested...)
+	}
+	return refs, nil
+}
+
+// namesSelfRef reports whether el's ref attribute resolves to qn. An element
+// with no ref (a nested definition form, which the grammar does not admit here
+// anyway) matches nothing.
+func (p *producer) namesSelfRef(el *Element, qn xsd.QName) (bool, error) {
+	lexical, ok := el.Attr("ref")
+	if !ok {
+		return false, nil
+	}
+	ref, err := p.resolveQName(el, lexical)
+	if err != nil {
+		return false, err
+	}
+	return ref == qn, nil
+}
+
+// checkSelfReferenceOccurs charges src-redefine clause 6.1.2: "The ·actual
+// value· of both that group's minOccurs and maxOccurs [attribute] is 1 (or
+// ·absent·)". An absent attribute defaults to 1 and passes; maxOccurs="unbounded"
+// is not 1 and fails here rather than being read as an occurrence range, since
+// clause 6.1.2 is about the attribute's actual value, not about the particle.
+func checkSelfReferenceOccurs(ref *Element, qn xsd.QName) error {
+	for _, attr := range []string{"minOccurs", "maxOccurs"} {
+		lexical, present := ref.Attr(attr)
+		if !present {
+			continue
+		}
+		if strings.TrimSpace(lexical) == "unbounded" {
+			return xsderr.New(ruleSrcRedefine, ref.Loc(),
+				"the self-reference of the redefining <group> %s has %s=%q, but src-redefine clause 6.1.2 requires both minOccurs and maxOccurs to be 1 (or absent)", qn, attr, lexical)
+		}
+		n, err := nonNegativeInt(lexical, ref.Loc(), attr)
+		if err != nil {
+			return err
+		}
+		if n == 1 {
+			continue
+		}
+		return xsderr.New(ruleSrcRedefine, ref.Loc(),
+			"the self-reference of the redefining <group> %s has %s=%q, but src-redefine clause 6.1.2 requires both minOccurs and maxOccurs to be 1 (or absent)", qn, attr, lexical)
+	}
+	return nil
+}

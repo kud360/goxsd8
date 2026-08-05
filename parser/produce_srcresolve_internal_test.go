@@ -25,7 +25,7 @@ func resolverFor(t *testing.T, doc string) func(string) (xsd.QName, error) {
 	if err != nil {
 		t.Fatalf("newSymbols: %v", err)
 	}
-	p := newProducer(d, attrOr(d.Root(), "targetNamespace"), nil, builder, sym)
+	p := newProducer(d, attrOr(d.Root(), "targetNamespace"), nil, nil, nil, builder, sym)
 	elem := childElement(d.Root(), xsd.XMLSchemaNS, "element")
 	if elem == nil {
 		t.Fatal("the test document has no top-level <element>")

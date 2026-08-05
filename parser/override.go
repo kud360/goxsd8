@@ -43,10 +43,33 @@ import (
 // the original overridden declaration (Dold)" holds without a special case
 // (PRINCIPLES 16).
 //
-// <xs:redefine> is a separate mechanism and is NOT implemented: a <redefine> is
-// still skipped, not followed, so §F.2 clause 1's "or <redefine>" scope has
-// nothing to reach. The skip is reported on Parse's WithLogger at debug level,
-// which is the only way to observe it. See parser/doc.go.
+// §F.2's governing sentence scopes the case analysis to "each element
+// information item E2 in the [children] of any <schema> OR <redefine> element
+// information item within D2", and since #286 that second half is live: a
+// <redefine> IS followed, so an overridden document's inline <redefine> children
+// are candidate E2s and clause 1 substitutes for them exactly as it does for a
+// <schema> child. That substitution is applied where the redefine's children are
+// read — producer.prescanRedefine and producer.produceRedefine — through the same
+// [overrideSet.replacement] lookup used at a document's top level. Only four of
+// clause 1's seven element types can occur there, since <redefine>'s own content
+// model (§4.2.4) admits no <element>, <attribute> or <notation>.
+//
+// This is distinct from, and not in tension with, §4.2.5's ·target set·
+// (key-targetset), which governs which further DOCUMENTS an <override> reaches
+// and which "does not include schema documents which are pointed to by <import>
+// or <redefine> elements": the override does not cascade into the document a
+// <redefine> names (parse.go's assembly.redefine passes no override on), only
+// into the redefinition items written inline in the document it already reaches.
+//
+// GAP(parser): a redefining declaration REPLACED under clause 1 loses its
+// self-reference resolution (#286). src-expredef pairs a redefining
+// <simpleType>/<group>/<attributeGroup> with the original it replaces by walking
+// up from the reference to the declaration that contains it, and a substituted
+// declaration is written under the <override>, not under the <redefine>, so the
+// walk does not find it and the self-reference resolves to the visible
+// redefinition instead — reported as a circular derivation or a circular group.
+// It OVER-rejects: an override-of-a-redefine-child assembly can be lost, never
+// wrongly accepted. Nothing else about the substitution is affected.
 
 // componentKey identifies an overridable source declaration by exactly the pair
 // §F.2 clause 1 matches on: the ELEMENT TYPE (the local name of the declaration

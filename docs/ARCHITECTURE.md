@@ -168,8 +168,12 @@ represents it**:
   Its original ordering advice was "land before `<list>`/`<union>` (which
   add item/member pointers) and before
   `<import>`/`<redefine>`/`<override>` (which re-point base references)".
-  **Half of that window has closed**: `<import>` (#182) and `<override>`
-  (#183) landed 2026-07-27 with the refactor still undone. `<list>`/
+  **Most of that window has closed**: `<import>` (#182) and `<override>`
+  (#183) landed 2026-07-27 and `<redefine>` (#286) after them, with the
+  refactor still undone — and `<redefine>` is where the cost first showed:
+  `src-expredef` cl. 1.1 needs a complex type whose base is an ANONYMOUS
+  component, which the QName-valued `{base type definition}` cannot hold, so
+  a redefining `complexType` is declined rather than produced. `<list>`/
   `<union>` in the producer are still ahead of it
   (`parser/produce.go` declines them today), so that half of the ordering
   argument is still live and is now the last cheap moment.
@@ -248,13 +252,16 @@ Two access styles over the compiled model, one shared core:
   resolved location, the namespace the document was reached under and the
   override applied to it (document identity, *not* a cycle guard — include
   cycles are spec-legal), applies chameleon coercion to a
-  no-`targetNamespace` included or overridden document (§F.1), carries
-  override pre-processing (§F.2) as data beside the effective namespace,
+  no-`targetNamespace` included, overridden or redefined document (§F.1),
+  carries override pre-processing (§F.2) and redefinition (§4.2.4) alike as
+  data beside the effective namespace,
   then produces every document into
   one shared `xsd.SchemaBuilder` and finalizes. `Produce(doc, backend)` is
   the single-document entry point and follows no inter-document reference.
-  `<redefine>` is skipped, not rejected
-  (§3.1.2), so a schema needing it assembles short rather than wrongly.
+  `<redefine>` is followed (#286) for `simpleType`, `group` and
+  `attributeGroup`; a redefining `complexType` is declined, because
+  `src-expredef` cl. 1.1's hidden `{name}`-absent base has nowhere to live
+  while `xsd.ComplexType` carries `{base type definition}` as a QName.
   The assembly-wide symbol table is seeded with the builtins exactly once
   (`builtin.Seed`), which is why seeding is assembly-scoped and not
   per-document: per-document seeding would re-add `xs:string` per included

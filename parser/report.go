@@ -61,12 +61,15 @@ func (r *AssemblyReport) Documents() []AssembledDocument { return r.documents }
 // consumer cannot otherwise observe: a reference that named no document leaves
 // no trace among [AssemblyReport.Documents] by construction.
 //
+// A NON-EMPTY <xs:redefine> is the one directive for which an unresolved
+// location is also an error (src-redefine clause 1, §4.2.4): it is recorded here
+// too, and [ParseReport] returns the verdict alongside. An EMPTY one keeps
+// <include>'s non-error skip, since clause 1's antecedent does not fire for it.
+//
 // It records references the assembly ATTEMPTED and came back empty from, which
-// is narrower than "every reference the document set contains" in two ways.
+// is narrower than "every reference the document set contains":
 // [ParseReport] stops at its first error, so directives it never reached are
-// neither followed nor reported; and a child <xs:redefine> is skipped outright
-// (the GAP in this package's documentation), never dereferenced, so it never
-// appears here.
+// neither followed nor reported.
 //
 // The slice is the report's own; treat it as read-only.
 func (r *AssemblyReport) Unfollowed() []UnfollowedDirective { return r.unfollowed }

@@ -50,6 +50,12 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"complexType with attributeGroup ref", `<xs:complexType name="T"><xs:sequence/><xs:attributeGroup ref="ag"/></xs:complexType>`},
 		{"all decidable kinds together", `<xs:element name="e" type="T"/><xs:attribute name="a"/><xs:simpleType name="T"><xs:restriction base="xs:string"><xs:maxLength value="3"/></xs:restriction></xs:simpleType>`},
 		{"top-level notation (§3.14.2)", `<xs:notation name="n" public="-//x//y" system="x.dtd"/>`},
+		// #286: <redefine> is admitted for the three redefinable kinds the producer
+		// maps, each gated by the very predicate its top-level form is gated by.
+		{"redefine of a simpleType", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType name="T"><xs:restriction base="tns:T"><xs:maxLength value="3"/></xs:restriction></xs:simpleType></xs:redefine>`},
+		{"redefine of a group", `<xs:redefine schemaLocation="b.xsd"><xs:group name="g"><xs:sequence><xs:group ref="tns:g"/><xs:element name="a" type="xs:string"/></xs:sequence></xs:group></xs:redefine>`},
+		{"redefine of an attributeGroup", `<xs:redefine schemaLocation="b.xsd"><xs:attributeGroup name="ag"><xs:attributeGroup ref="tns:ag"/><xs:attribute name="a" type="xs:string"/></xs:attributeGroup></xs:redefine>`},
+		{"empty redefine (a plain include)", `<xs:redefine schemaLocation="b.xsd"><xs:annotation><xs:documentation>hi</xs:documentation></xs:annotation></xs:redefine>`},
 		{"element with name= identity constraint", `<xs:element name="e"><xs:key name="k"><xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key></xs:element>`},
 		// #229: an inline anonymous <simpleType> on a LOCAL element or attribute is
 		// produced (§3.3.2.1 dcl.elt.common clause 1, §3.2.2.2 dcl.att.local), so the
@@ -159,11 +165,14 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"restriction with enumeration facet", `<xs:simpleType name="E"><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType>`},
 		{"anonymous inline base with enumeration (recursed decline)", `<xs:simpleType name="N"><xs:restriction><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType></xs:restriction></xs:simpleType>`},
 		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
-		// The one composition kind parser.Parse does not follow (the redefine half
-		// of #183 is unlanded): a document carrying it assembles SHORT, so admitting
-		// it would be the vacuous pass the allowlist exists to refuse. Unlike
-		// <include> (#242), <import> (#182) and <override> (#183).
-		{"top-level redefine (not followed by the assembly)", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType name="T"><xs:restriction base="xs:string"/></xs:simpleType></xs:redefine>`},
+		// <redefine> is followed as of #286, but a redefining <complexType> is
+		// declined by the producer (src-expredef clause 1.1's {name}-absent paired
+		// base is not representable), so admitting one would risk a wrong-reason
+		// "invalid". Its other three kinds are admitted — see the decidable cases.
+		{"redefine child that is a complexType (declined, not produced)", `<xs:redefine schemaLocation="b.xsd"><xs:complexType name="T"><xs:complexContent><xs:extension base="tns:T"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType></xs:redefine>`},
+		{"redefine child with no name (no pairing possible)", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:redefine>`},
+		{"redefine child that is a list-variety simpleType", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType></xs:redefine>`},
+		{"redefine child of an out-of-model kind", `<xs:redefine schemaLocation="b.xsd"><xs:element name="e" type="xs:string"/></xs:redefine>`},
 		// An <override> child the parser can only ignore, or one whose own shape is
 		// outside the decidable subset, declines the whole case: after substitution
 		// it would be an unmapped or undecidable TOP-LEVEL declaration.

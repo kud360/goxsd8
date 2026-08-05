@@ -19,6 +19,7 @@ const (
 	ruleSrcImportNoSelfImport xsderr.Rule = "src-import-noselfimport"
 	ruleSrcOverride           xsderr.Rule = "src-override"
 	ruleSrcRedefine           xsderr.Rule = "src-redefine"
+	ruleSrcExpRedefine        xsderr.Rule = "src-expredef"
 	ruleSrcElement            xsderr.Rule = "src-element"
 	ruleSrcAttribute          xsderr.Rule = "src-attribute"
 	ruleSrcSimpleType         xsderr.Rule = "src-simple-type"
@@ -106,7 +107,7 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 	// A lone document is its own assembly, so its effective target namespace is
 	// its own targetNamespace and it is never a chameleon (§4.2.3 clause 2.3
 	// needs an including document to borrow a namespace from).
-	p := newProducer(doc, attrOr(doc.Root(), "targetNamespace"), nil, builder, sym)
+	p := newProducer(doc, attrOr(doc.Root(), "targetNamespace"), nil, nil, nil, builder, sym)
 	p.prescan()
 	if err := p.run(); err != nil {
 		return nil, err
@@ -371,18 +372,34 @@ type producer struct {
 	// NOT take is this document's §F.1 chameleon coercion of unqualified QName
 	// references, which §4.2.5 clause 3.2.1 orders BEFORE the substitution — see
 	// unqualifiedRefNS.
-	ov      *overrideSet
-	builder *xsd.SchemaBuilder
-	symbols *symbols
+	ov *overrideSet
+	// rd is the ·redefinition· in force over this document (§4.2.4,
+	// parser/redefine.go), nil unless it was reached through an <xs:redefine>.
+	// Like ov it is a property of the PATH the document was reached by, not of the
+	// document (STYLE D3). It EXCEPTS this document's own top-level declarations of
+	// the redefined names from contributing components (§4.2.4 clause 4.1.2), and
+	// it is where each of them is recorded as the original a self-reference in the
+	// redefining document resolves to (src-expredef).
+	rd *redefineSet
+	// redefines are the sets read from THIS document's own <redefine> children, in
+	// document order — the other side of the same values: rd is what some other
+	// document's <redefine> did to this one, redefines is what this document's
+	// <redefine>s did to others. It is empty on the [Produce] path, which follows
+	// no ·inter-schema-document reference·, and that emptiness is what makes a
+	// <redefine> skipped there rather than half-applied.
+	redefines []*redefineSet
+	builder   *xsd.SchemaBuilder
+	symbols   *symbols
 }
 
 // newProducer returns the build context for one document of an assembly. target
 // is THIS document's effective target namespace (see [producer].target), ov the
-// override in force over it (nil for none) and sym the assembly's shared symbol
-// table; all three are set at construction and never mutated into validity
-// afterward (STYLE T1).
-func newProducer(doc *Document, target string, ov *overrideSet, builder *xsd.SchemaBuilder, sym *symbols) *producer {
-	return &producer{schemaElem: doc.Root(), target: target, ov: ov, builder: builder, symbols: sym}
+// override in force over it (nil for none), rd the redefinition in force over it
+// (nil for none), redefines the sets read from its own <redefine> children (empty
+// for none) and sym the assembly's shared symbol table; all are set at
+// construction and never mutated into validity afterward (STYLE T1).
+func newProducer(doc *Document, target string, ov *overrideSet, rd *redefineSet, redefines []*redefineSet, builder *xsd.SchemaBuilder, sym *symbols) *producer {
+	return &producer{schemaElem: doc.Root(), target: target, ov: ov, rd: rd, redefines: redefines, builder: builder, symbols: sym}
 }
 
 // chameleon reports whether this document is produced under chameleon coercion
@@ -416,6 +433,14 @@ func (p *producer) chameleon() bool {
 // replaced definition — "overriding components are constructed as if the
 // overridden components had never existed" (§4.2.5).
 //
+// A <redefine> child of this document contributes its OWN children as this
+// document's definitions (§4.2.4 clause 4.1.1), so they are registered too — see
+// prescanRedefine. In the other direction, a name a <redefine> in force over
+// this document replaces is NOT registered here: §4.2.4 clause 4.1.2 excepts it
+// from the components this document contributes, and it is recorded instead as
+// the original the redefining declaration's self-reference resolves to
+// (src-expredef clauses 1.1 and 2).
+//
 // It also registers this document's named <unique>/<key>/<keyref>s for forward
 // <key ref="…"> resolution, but from the WHOLE subtree of each top-level
 // declaration rather than from its top level: see prescanIdentityConstraints.
@@ -425,12 +450,25 @@ func (p *producer) prescan() {
 		if !ok {
 			continue
 		}
+		if isXSD(el, "redefine") {
+			p.prescanRedefine(el)
+			continue
+		}
 		decl := p.ov.replacement(el)
 		if !compositionDirective(el) {
 			p.prescanIdentityConstraints(decl)
 		}
 		name, ok := el.Attr("name")
 		if !ok {
+			continue
+		}
+		if p.rd.excepts(el) {
+			// §4.2.4 clause 4.1.2: this declaration is explicitly redefined, so it
+			// contributes no component under its own name. It survives as the hidden
+			// original src-expredef pairs the redefining declaration with, recorded
+			// under THIS producer so its body is still mapped in its own document's
+			// context.
+			p.rd.recordOriginal(componentKey{kind: el.Name().Local(), name: name}, typeSource{elem: decl, owner: p})
 			continue
 		}
 		switch {
@@ -502,13 +540,19 @@ func (p *producer) prescanIdentityConstraints(el *Element) {
 }
 
 // compositionDirective reports whether el is one of the four <schema> children
-// that contribute no component of their OWN — only the components of the
-// document they name (§4.2.3, §4.2.5, §4.2.6.2, §4.2.4). run skips all four for
-// exactly that reason; the identity-constraint pre-scan must skip their subtrees
-// for it, since an <override>'s children are top-level declarations of the
-// OVERRIDDEN document (§F.2 clause 1) and are produced — with their own target
-// namespace and their own <schema> defaults — by that document's producer, which
-// pre-scans them itself through overrideSet.replacement.
+// whose subtree the identity-constraint pre-scan must NOT walk from here.
+//
+// Three of them — <include>, <import>, <override> — contribute no component of
+// their own at all (§4.2.3, §4.2.6.2, §4.2.5), only the components of the
+// document they name, and run skips all three: an <override>'s children are
+// top-level declarations of the OVERRIDDEN document (§F.2 clause 1) and are
+// produced, with their own target namespace and their own <schema> defaults, by
+// that document's producer, which pre-scans them itself through
+// overrideSet.replacement. The fourth, <redefine>, is the exception in both
+// respects: its children ARE definitions of this document (§4.2.4 clause 4.1.1),
+// so run produces them and prescanRedefine walks them — which is why prescan
+// handles <redefine> before consulting this predicate at all, and why the
+// predicate is not the same question as "does run skip it".
 func compositionDirective(el *Element) bool {
 	return isXSD(el, "include") || isXSD(el, "import") || isXSD(el, "override") || isXSD(el, "redefine")
 }
@@ -523,6 +567,11 @@ func compositionDirective(el *Element) bool {
 // every other child is produced as written. The substitution never changes the
 // element TYPE — it is half of the matching key — so the switch below is the same
 // whichever declaration is produced.
+//
+// A declaration a <redefine> in force over this document replaces is skipped
+// outright (§4.2.4 clause 4.1.2): the redefining declaration is produced by the
+// REDEFINING document's producer, in its own document-order position there, and
+// this one survives only as the hidden original behind it (src-expredef).
 func (p *producer) run() error {
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
@@ -530,6 +579,9 @@ func (p *producer) run() error {
 			continue
 		}
 		if el.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		if p.rd.excepts(el) {
 			continue
 		}
 		decl := p.ov.replacement(el)
@@ -589,6 +641,15 @@ func (p *producer) run() error {
 			// (§4.2.3, §4.2.5, §4.2.6.2), only the components of the document it
 			// names, which reach the builder through that document's own producer.
 			// [Produce], which follows no inter-document reference, skips them.
+		case "redefine":
+			// The one composition directive that DOES contribute components of its
+			// own: its children are definitions of this document (§4.2.4 clause
+			// 4.1.1, src-expredef). The document it names is still the assembler's
+			// to discover, and reaches the builder through its own producer minus
+			// the declarations this <redefine> excepts (clause 4.1.2).
+			if err := p.produceRedefine(decl); err != nil {
+				return err
+			}
 		case "notation":
 			n, err := p.produceNotation(decl)
 			if err != nil {
@@ -596,7 +657,7 @@ func (p *producer) run() error {
 			}
 			p.builder.AddNotation(n)
 		default:
-			// annotation, redefine, defaultOpenContent, … — not this slice's scope
+			// annotation, defaultOpenContent, … — not this slice's scope
 			// (§3.1.2), skipped, not invalid.
 		}
 	}
@@ -869,6 +930,18 @@ func (p *producer) resolveBase(restriction *Element) (*xsd.SimpleType, error) {
 	qn, err := p.resolveQName(restriction, baseLex)
 	if err != nil {
 		return nil, err
+	}
+	if src, redefining := p.redefinedTypeBase(restriction, qn); redefining {
+		// src-expredef clause 1.1/1.2: this <restriction> is a redefining
+		// <simpleType>'s own, and its base names that type itself, so it resolves to
+		// the ORIGINAL — "one component which corresponds to the top-level definition
+		// item with the same name in the <redefine>d schema document … except that its
+		// {name} is ·absent·". Built here, once, with the zero QName and under the
+		// REDEFINED document's producer, so it enters no symbol table, is registered
+		// with no builder, and takes its own document's namespace and defaults. That
+		// is what keeps the redefinition an ordinary restriction rather than a
+		// self-derivation (st-props-correct clause 2).
+		return src.owner.constructSimpleType(xsd.QName{}, src.elem)
 	}
 	// Pre-seeded builtins and already-finished locals resolve directly.
 	if st, ok := p.symbols.built[qn]; ok && st != nil {
