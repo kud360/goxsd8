@@ -60,7 +60,7 @@ func TestNewParticleRejectsAbsentTerm(t *testing.T) {
 
 // TestNewParticleRejectsAbsentRefName proves the representation invariant (STYLE
 // T1) on the two ref {term} variants: ElementDeclarationRef and ModelGroupRef map
-// only the ref-present branches (§3.3.2.4, §3.8.2), so their Name is always a
+// only the ref-present branches (§3.3.2.4, §3.7.2), so their Name is always a
 // present QName. An empty local part — with or without a namespace name — is
 // rejected at construction rather than deferred, so finalize's "a zero QName is
 // absent" skip (resolve.go) can never swallow an unresolvable {term}.

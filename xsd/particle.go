@@ -55,7 +55,7 @@ type Particle struct {
 // guarantee lives one layer earlier, in the xs:QName typing of the element/@ref
 // and group/@ref attributes (Datatypes §3.3.18: a QName's local part is an
 // NCName, so the empty string is outside its value space). The two ref variants
-// exist solely to carry a PRESENT ref (§3.3.2.4, §3.8.2), so an absent one is
+// exist solely to carry a PRESENT ref (§3.3.2.4, §3.7.2), so an absent one is
 // unbuildable here rather than deferred: finalize's "a zero QName is absent, so
 // there is nothing to resolve" rule (resolve.go) is right for genuinely optional
 // QName slots but would otherwise let a permanently unresolvable {term} pass
@@ -85,12 +85,12 @@ func NewParticle(loc xsderr.Loc, occurs Occurs, term TermOrRef, annotations []An
 	case ElementDeclarationRef:
 		if t.Name.Local == "" {
 			return Particle{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"particle {term} is an ElementDeclarationRef carrying the absent (zero) QName, but that variant maps only the ref-present branch (§3.3.2.4 ref.elt.global), whose element/@ref is an xs:QName with a non-empty local part")
+				"<element ref> carries an empty reference: element/@ref is typed xs:QName (§3.3.2.4 ref.elt.global), whose local part is an NCName and so is never empty (particle {term} variant ElementDeclarationRef)")
 		}
 	case ModelGroupRef:
 		if t.Name.Local == "" {
 			return Particle{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"particle {term} is a ModelGroupRef carrying the absent (zero) QName, but that variant maps only the <group ref> branch (§3.8.2), whose group/@ref is an xs:QName with a non-empty local part")
+				"<group ref> carries an empty reference: group/@ref is typed xs:QName (§3.7.2 declare-namedModelGroup), whose local part is an NCName and so is never empty (particle {term} variant ModelGroupRef)")
 		}
 	}
 	p := Particle{occurs: occurs, term: term}
