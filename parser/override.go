@@ -150,19 +150,16 @@ func newOverrideSet(el *Element) (*overrideSet, error) {
 		}
 		key := componentKey{kind: c.Name().Local(), name: name}
 		if prev, dup := seen[key]; dup {
-			// GAP(xsd): this over-rejects a case §F.2 DOES define. The stylesheet is
-			// the NORMATIVE statement of the transformation — "the transformation can
-			// also be described (non-normatively) in prose" — and its clause 1
-			// template selects ($replacement, $original)[1], so a repeated (element
-			// type, name) pair simply means first match wins and the Dold′ it yields
-			// is conforming. Reporting it instead is a deliberate simplification:
-			// first-match-wins silently discards one of two conflicting declarations,
-			// and this set's index is keyed by exactly that pair, so carrying the
-			// loser would be a second encoding of one substitution (STYLE D3). The
-			// direction is safe — this can lose a valid assembly, never accept an
-			// invalid one.
+			// §F.2's NORMATIVE stylesheet resolves a repeated (element type, name)
+			// pair as first-match-wins — clause 1 selects ($replacement, $original)[1]
+			// — so the REC as published makes this case VALID. It is rejected here
+			// because the Working Group resolved otherwise (W3C Bugzilla 17617,
+			// 2012-06-29: "an erratum is needed to make this situation an error"), the
+			// erratum was never filed, and W3C Override/over021 is `accepted` on the
+			// strength of that intent. The rejection loses a valid assembly, never
+			// accepts an invalid one.
 			return nil, xsderr.New(ruleSrcOverride, c.Loc(),
-				"<override> has two <%s> children named %q (the first at %s): an ambiguous duplicate override target, which this implementation reports rather than resolving to the first (§F.2 clause 1 keys the substitution on element type and name)",
+				"<override> has two <%s> children named %q (the first at %s): a duplicate override target, which the XML Schema WG resolved is an error (W3C Bugzilla 17617) though §F.2 clause 1's stylesheet would resolve it to the first",
 				key.kind, key.name, prev.Loc())
 		}
 		seen[key] = c

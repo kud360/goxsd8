@@ -215,14 +215,15 @@
 //     <xs:override> element reached twice is recognized, which is what
 //     terminates every cycle. This over-rejects, so it can lose a valid
 //     assembly, never accept an invalid one.
-//   - GAP(xsd): two children of ONE <xs:override> with the same element
-//     type and name are reported under src-override. §F.2's stylesheet is
-//     the normative statement of the transformation (the prose beside it
-//     is explicitly non-normative) and its clause 1 template selects
-//     ($replacement, $original)[1], so first match wins and the case is
-//     spec-defined; rejecting it is a deliberate choice not to discard one
-//     of two conflicting declarations silently. Over-rejects in the same
-//     direction as the entry above.
+//   - Two children of ONE <xs:override> with the same element type and
+//     name are reported under src-override, though §F.2's normative
+//     stylesheet resolves the pair as first-match-wins and the published
+//     REC therefore makes the case valid. This tracks the Working Group's
+//     recorded intent instead (W3C Bugzilla 17617, 2012-06-29: "an
+//     erratum is needed to make this situation an error"); the erratum
+//     was never filed, and W3C Override/over021 is `accepted` on the
+//     strength of it. Over-rejects in the same direction as the entry
+//     above.
 //   - Assembling several root locations into one schema awaits a
 //     consumer; nothing in the CLI or validator needs it yet, so no
 //     multi-root entry point is exported (STYLE T5).
