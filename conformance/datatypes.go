@@ -382,7 +382,14 @@ import (
 // readAnyURIShapeCase therefore reads element and attribute declarations from the
 // schema, resolves each instance leaf to its declared simple type, and
 // execAnyURIShapeCase ANDs value.ValidateLexical over every leaf — the same
-// whole-document polarity execPDecimalCase and execD34Case use. No new spec rule
+// whole-document polarity execPDecimalCase and execD34Case use. That leaf-AND
+// model decides LEXICAL validity only and validates no content model: occurrence
+// constraints (minOccurs/maxOccurs) and element order go unchecked, so an
+// instance that is invalid ONLY structurally would still score valid here. This
+// is a cohort-wide convention rather than anything specific to anyURI —
+// execFacetsCase and execD34Case take the same shortcut — and it is sound for
+// these eight fixtures, which all satisfy their content models (maxOccurs
+// 100/1000/unbounded against 3/6/7/26 children). No new spec rule
 // and no new backend mapping is involved: all eight fixtures restrict xsd:anyURI
 // with enumeration only, so the rules in play are cvc-enumeration-valid (§4.3.5.4,
 // "equal or identical to one of the values specified in {value}") over
@@ -3510,10 +3517,20 @@ func indexAnyURIComplexTypes(s anyURISchema, simpleTypes map[string][]facetChild
 
 // indexAnyURIElements indexes every element declaration in the schema document —
 // top-level and the local children of an inline complexType — by its local name.
-// ok is false when two declarations share a name but reference DIFFERENT types,
-// which would make an instance occurrence ambiguous under readAnyURIShapeCase's
-// local-name matching; no cohort fixture does, and the check makes that a verified
-// fact rather than an assumption.
+// ok is false when two declarations share a name but name DIFFERENT types in
+// their type= attribute, which would make an instance occurrence ambiguous under
+// readAnyURIShapeCase's local-name matching; no cohort fixture does.
+//
+// The check compares type= ATTRIBUTE STRINGS, not fully resolved shapes, so one
+// conflict escapes it: two same-named declarations that BOTH carry an inline
+// complexType have Type == "" and so compare equal even when their inline shapes
+// differ, and the second silently overwrites the first — last-wins, unflagged. No
+// cohort fixture does that either, but anyURIShapeCase is a FAMILY regexp
+// (anyURI_[ab][0-9]+\.xml), not an enumeration of the eight files, so any future
+// fixture dropped into msData/datatypes/Facets/anyURI/ joins the cohort with no
+// review gate and could reach it. Comparing decoded inline shapes is the fix when
+// one does; until then this states the invariant the code actually holds rather
+// than paying for a structural equality nothing exercises (issue #290).
 func indexAnyURIElements(s anyURISchema) (map[string]anyURIElemDecl, bool) {
 	index := map[string]anyURIElemDecl{}
 	for _, el := range s.Elements {
@@ -3527,7 +3544,9 @@ func indexAnyURIElements(s anyURISchema) (map[string]anyURIElemDecl, bool) {
 // collectAnyURIElems adds el to index under its name (a ref= child, which declares
 // none, contributes only its subtree) and recurses into the local element children
 // of its inline complexType. It reports false on the conflicting-name condition
-// indexAnyURIElements documents.
+// indexAnyURIElements documents — a prior.Type != el.Type comparison of type=
+// strings, which by construction cannot see the inline-complexType conflict that
+// comment names.
 func collectAnyURIElems(index map[string]anyURIElemDecl, el anyURIElemDecl) bool {
 	if el.Name != "" {
 		prior, seen := index[el.Name]
