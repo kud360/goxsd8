@@ -1073,7 +1073,9 @@ func TestDatatypesLexicalIntXFamily(t *testing.T) {
 //     minInclusive=1 (§3.4.25.3) — so a single-sided value-facet check is the
 //     only thing between a well-formed integer literal and acceptance.
 //   - the TWO-HOP base chain. negativeInteger restricts nonPositiveInteger and
-//     positiveInteger restricts nonNegativeInteger (§3.4.15.2/§3.4.25.2), not
+//     positiveInteger restricts nonNegativeInteger (§3.4.15/§3.4.25 — the
+//     section INTROS state the {base type definition}; the ".2" subsections
+//     are Canonical representation and say nothing about it), not
 //     xs:integer directly, so st-restrict-facets §3.16.6.4's overlay walk has to
 //     cross two restriction steps before it reaches xs:integer, xs:decimal and
 //     strict's mapping. Every earlier cohort member was one hop off xs:integer.
@@ -1152,7 +1154,7 @@ func TestDatatypesLexicalHalfBoundedIntegerFamily(t *testing.T) {
 	}
 	families := []struct {
 		local string
-		base  string // the DECLARED base, §3.4.14.2/§3.4.15.2/§3.4.20.2/§3.4.25.2
+		base  string // the DECLARED base, §3.4.14/§3.4.15/§3.4.20/§3.4.25 intros
 	}{
 		{"nonPositiveInteger", "integer"},
 		{"negativeInteger", "nonPositiveInteger"},
