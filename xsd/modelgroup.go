@@ -8,7 +8,7 @@ import "github.com/kud360/goxsd8/xsderr"
 // {compositor} is one of {all, choice, sequence} (the zero Compositor is
 // invalid). Clause 2 (no circular groups: no particle at any depth whose {term}
 // is the group itself) needs the resolved <group ref> graph, which only exists
-// once the schema set is assembled; per PRINCIPLES 5 it is NOT checked in this
+// once the schema set is assembled; per PRINCIPLES 9 it is NOT checked in this
 // constructor (no seen-set traversal here) but at finalize (resolve.go's
 // checkModelGroupsAcyclic, #173).
 const ruleMgPropsCorrect xsderr.Rule = "mg-props-correct"

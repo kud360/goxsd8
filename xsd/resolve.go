@@ -80,7 +80,7 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // than cosmetic: both checks expand <group ref>s and walk {substitution group
 // affiliations} with NO cycle guard, which is licensed only because
 // checkModelGroupsAcyclic and checkSubstitutionGroupsAcyclic have already
-// rejected a circular graph of each kind (PRINCIPLES 5). Deciding
+// rejected a circular graph of each kind (PRINCIPLES 9). Deciding
 // cos-equiv-derived-ok-rec clause 2.3 makes them follow {base type definition}
 // too, so they rest on checkComplexBaseAcyclic as well — plus the explicit
 // xs:anyType test §3.4.7's one self-based type needs, which no acyclicity check
@@ -518,7 +518,7 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 // (out-degree ≤ 1), so a cycle is a repeated name on a single chain walk.
 //
 // The path map is a per-walk, finalize-scoped cycle guard: it lives entirely
-// inside this function and is discarded when resolve returns (PRINCIPLES 5). It
+// inside this function and is discarded when resolve returns (PRINCIPLES 9). It
 // is NEVER threaded into any later traversal — doc.go promises the Walker needs
 // "no visited set beyond the path-scoped guard" — so no runtime traversal
 // inherits it.
@@ -581,7 +581,7 @@ func (s *Schema) checkComplexBaseAcyclic() error {
 //
 // The color map is a finalize-scoped cycle guard (0 unvisited, 1 on the current
 // DFS stack, 2 finished): it lives only in this function and is discarded when
-// resolve returns (PRINCIPLES 5), never threaded into any later traversal.
+// resolve returns (PRINCIPLES 9), never threaded into any later traversal.
 // Definitions are iterated, and each definition's out-refs collected, in
 // document order (STYLE D2), so the first reported cycle is deterministic.
 func (s *Schema) checkModelGroupsAcyclic() error {
@@ -665,7 +665,7 @@ func collectGroupRefs(t TermOrRef, refs *[]QName) {
 //
 // The color map is a finalize-scoped cycle guard (same 0/1/2 scheme as
 // checkModelGroupsAcyclic): it lives only in this function and is discarded when
-// resolve returns (PRINCIPLES 5), never threaded into a later traversal.
+// resolve returns (PRINCIPLES 9), never threaded into a later traversal.
 // Elements are iterated, and each element's affiliations followed, in document
 // order (STYLE D2), so the first reported cycle is deterministic.
 func (s *Schema) checkSubstitutionGroupsAcyclic() error {

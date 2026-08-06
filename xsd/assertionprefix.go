@@ -72,7 +72,7 @@ func xpathExpressionsIdentical(a, b XPathExpression) bool {
 // ordered slice: that order is a determinism device with no spec weight
 // (xpathexpression.go), so an order-sensitive comparison could call two equal
 // sets different — and both callers read "not identical" as "reject", making
-// that direction a FALSE REJECT, the one direction PRINCIPLES 9 forbids. The
+// that direction a FALSE REJECT, the one direction PRINCIPLES 20 forbids. The
 // residual looseness (a hypothetical multiset with repeats compares equal to a
 // set of the same cardinality) runs the other way, which is fail-open.
 func namespaceBindingsIdentical(a, b []NamespaceBinding) bool {

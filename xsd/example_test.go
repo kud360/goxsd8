@@ -389,7 +389,7 @@ func Example_contentModelTraversal() {
 	fmt.Println(ct.Name(), "content type:", content.Variety())
 
 	// Step 3: recurse through the particle tree. Nesting terminates by
-	// construction — Finalize rejected the circular group graphs (PRINCIPLES 5),
+	// construction — Finalize rejected the circular group graphs (PRINCIPLES 9),
 	// so no visited set is needed.
 	var walk func(p xsd.Particle, depth int)
 	walk = func(p xsd.Particle, depth int) {
