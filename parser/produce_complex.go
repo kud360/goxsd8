@@ -1151,9 +1151,17 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 // no rule ID — while deferring it would let a nameless <group> be judged by
 // whether its body happens to hold a local element. Since #305 run reaches this
 // only through topLevelName, which raises the identical fault a step earlier;
-// what remains guarded here is resolveModelGroup's on-demand build, whose name
-// comes from a <group ref> lexical rather than from run's dispatch, plus direct
-// programmatic calls.
+// what remains guarded here is the <redefine> path — produceRedefinition
+// (redefine.go) mints the redefining declaration's name from the <redefine>
+// child's own name attribute and never consults topLevelName, so a
+// <group name=""> child of a <redefine> whose redefined document declares the
+// same nameless <group> (recorded as the original, hence past src-expredef's
+// closing requirement) arrives here with an empty local part — plus direct
+// programmatic calls. resolveModelGroup's on-demand build does NOT reach it: its
+// only caller is allGroupOf, reading a ModelGroupRef that only
+// produceGroupRefParticle mints, and xsd.NewParticle rejects an empty
+// ModelGroupRef local part as a component-invariant before any resolution
+// happens.
 func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd.ModelGroupDefinition, error) {
 	if name.Local == "" {
 		return xsd.ModelGroupDefinition{}, fmt.Errorf("parser: top-level <group> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())

@@ -732,7 +732,7 @@ func (p *producer) run() error {
 // registered under QName{target, ""} and the document produces without error.
 // #305 scoped itself to the five kinds named above; what a schema so registered
 // goes on to do downstream is not established here, so no error direction is
-// claimed for it.
+// claimed for it. Tracked as #523.
 func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 	name, _ := decl.Attr("name")
 	if name == "" {

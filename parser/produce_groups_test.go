@@ -409,3 +409,36 @@ func TestProduceNamelessTopLevelRejected(t *testing.T) {
 		})
 	}
 }
+
+// TestProduceNamelessBaseTypeRejectedOffDispatch reaches produceComplexType's own
+// nameless-{name} guard, which since #305 no longer lies on run's document-order
+// dispatch path (that fault is topLevelName's a step earlier). The remaining live
+// entry is resolveBaseType's ON-DEMAND build: prescan indexes a top-level
+// <complexType name=""> under QName{target, ""} — an empty local part nothing
+// filters — and a base="" lexical binds to exactly that name, so building the
+// derived type pulls the nameless one in before run ever dispatches on it.
+//
+// DOCUMENT ORDER IS LOAD-BEARING: the deriving <complexType> must come FIRST, or
+// run reaches the nameless declaration itself and topLevelName raises the fault,
+// which would leave the guard untested. Deleting the guard does not merely
+// change this message — production walks on into the nameless type's content and
+// complexTypeIdentity.scopeParent's zero-identity assertion panics, which is
+// exactly why the fault is charged here, before anything is built.
+func TestProduceNamelessBaseTypeRejectedOffDispatch(t *testing.T) {
+	_, err := produce(t, wrap("", `<xs:complexType name="d"><xs:complexContent>`+
+		`<xs:restriction base=""><xs:sequence>`+
+		`<xs:element name="b" type="xs:string"/></xs:sequence></xs:restriction>`+
+		`</xs:complexContent></xs:complexType>`+
+		`<xs:complexType name=""><xs:sequence>`+
+		`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`))
+	if err == nil {
+		t.Fatalf("Produce succeeded, want a grammar fault for the base= reference's nameless <complexType>")
+	}
+	var xe *xsderr.Error
+	if errors.As(err, &xe) {
+		t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+	}
+	if !strings.Contains(err.Error(), "top-level <complexType>") || !strings.Contains(err.Error(), "no usable name") {
+		t.Fatalf("error = %v, want the <complexType> grammar fault reporting the unusable name", err)
+	}
+}
