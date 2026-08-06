@@ -736,6 +736,11 @@ MS-DataTypes2006-07-15/long_pattern001_1609/instance/long_pattern001_1609.v pass
 MS-DataTypes2006-07-15/long_totalDigits001_1630/instance/long_totalDigits001_1630.i pass
 MS-DataTypes2006-07-15/long_totalDigits002_1631/instance/long_totalDigits002_1631.v pass
 MS-DataTypes2006-07-15/long_totalDigits003_1632/instance/long_totalDigits003_1632.v pass
+MS-DataTypes2006-07-15/negativeInteger001_2162/instance/negativeInteger001_2162.i pass
+MS-DataTypes2006-07-15/negativeInteger002_2163/instance/negativeInteger002_2163.v pass
+MS-DataTypes2006-07-15/negativeInteger003_2164/instance/negativeInteger003_2164.i pass
+MS-DataTypes2006-07-15/negativeInteger004_2165/instance/negativeInteger004_2165.i pass
+MS-DataTypes2006-07-15/negativeInteger005_2166/instance/negativeInteger005_2166.v pass
 MS-DataTypes2006-07-15/negativeInteger_enumeration001_1586/instance/negativeInteger_enumeration001_1586.i pass
 MS-DataTypes2006-07-15/negativeInteger_enumeration002_1587/instance/negativeInteger_enumeration002_1587.v pass
 MS-DataTypes2006-07-15/negativeInteger_enumeration003_1588/instance/negativeInteger_enumeration003_1588.i pass
@@ -760,6 +765,11 @@ MS-DataTypes2006-07-15/negativeInteger_pattern001_1585/instance/negativeInteger_
 MS-DataTypes2006-07-15/negativeInteger_totalDigits001_1606/instance/negativeInteger_totalDigits001_1606.i pass
 MS-DataTypes2006-07-15/negativeInteger_totalDigits002_1607/instance/negativeInteger_totalDigits002_1607.v pass
 MS-DataTypes2006-07-15/negativeInteger_totalDigits003_1608/instance/negativeInteger_totalDigits003_1608.v pass
+MS-DataTypes2006-07-15/nonNegativeInteger001_2202/instance/nonNegativeInteger001_2202.i pass
+MS-DataTypes2006-07-15/nonNegativeInteger002_2203/instance/nonNegativeInteger002_2203.i pass
+MS-DataTypes2006-07-15/nonNegativeInteger003_2204/instance/nonNegativeInteger003_2204.v pass
+MS-DataTypes2006-07-15/nonNegativeInteger004_2205/instance/nonNegativeInteger004_2205.v pass
+MS-DataTypes2006-07-15/nonNegativeInteger005_2206/instance/nonNegativeInteger005_2206.v pass
 MS-DataTypes2006-07-15/nonNegativeInteger_enumeration001_1707/instance/nonNegativeInteger_enumeration001_1707.i pass
 MS-DataTypes2006-07-15/nonNegativeInteger_enumeration002_1708/instance/nonNegativeInteger_enumeration002_1708.v pass
 MS-DataTypes2006-07-15/nonNegativeInteger_enumeration003_1709/instance/nonNegativeInteger_enumeration003_1709.i pass
@@ -784,6 +794,11 @@ MS-DataTypes2006-07-15/nonNegativeInteger_pattern001_1706/instance/nonNegativeIn
 MS-DataTypes2006-07-15/nonNegativeInteger_totalDigits001_1727/instance/nonNegativeInteger_totalDigits001_1727.i pass
 MS-DataTypes2006-07-15/nonNegativeInteger_totalDigits002_1728/instance/nonNegativeInteger_totalDigits002_1728.v pass
 MS-DataTypes2006-07-15/nonNegativeInteger_totalDigits003_1729/instance/nonNegativeInteger_totalDigits003_1729.v pass
+MS-DataTypes2006-07-15/nonPositiveInteger001_2157/instance/nonPositiveInteger001_2157.i pass
+MS-DataTypes2006-07-15/nonPositiveInteger002_2158/instance/nonPositiveInteger002_2158.v pass
+MS-DataTypes2006-07-15/nonPositiveInteger003_2159/instance/nonPositiveInteger003_2159.v pass
+MS-DataTypes2006-07-15/nonPositiveInteger004_2160/instance/nonPositiveInteger004_2160.i pass
+MS-DataTypes2006-07-15/nonPositiveInteger005_2161/instance/nonPositiveInteger005_2161.v pass
 MS-DataTypes2006-07-15/nonPositiveInteger_enumeration001_1562/instance/nonPositiveInteger_enumeration001_1562.i pass
 MS-DataTypes2006-07-15/nonPositiveInteger_enumeration002_1563/instance/nonPositiveInteger_enumeration002_1563.v pass
 MS-DataTypes2006-07-15/nonPositiveInteger_enumeration003_1564/instance/nonPositiveInteger_enumeration003_1564.i pass
@@ -823,6 +838,11 @@ MS-DataTypes2006-07-15/normalizedString_minLength002_1391/instance/normalizedStr
 MS-DataTypes2006-07-15/normalizedString_minLength003_1392/instance/normalizedString_minLength003_1392.i pass
 MS-DataTypes2006-07-15/normalizedString_minLength004_1393/instance/normalizedString_minLength004_1393.v pass
 MS-DataTypes2006-07-15/normalizedString_pattern001_1397/instance/normalizedString_pattern001_1397.v pass
+MS-DataTypes2006-07-15/positiveInteger001_2235/instance/positiveInteger001_2235.i pass
+MS-DataTypes2006-07-15/positiveInteger002_2236/instance/positiveInteger002_2236.i pass
+MS-DataTypes2006-07-15/positiveInteger003_2237/instance/positiveInteger003_2237.i pass
+MS-DataTypes2006-07-15/positiveInteger004_2238/instance/positiveInteger004_2238.v pass
+MS-DataTypes2006-07-15/positiveInteger005_2239/instance/positiveInteger005_2239.v pass
 MS-DataTypes2006-07-15/positiveInteger_enumeration001_1827/instance/positiveInteger_enumeration001_1827.i pass
 MS-DataTypes2006-07-15/positiveInteger_enumeration002_1828/instance/positiveInteger_enumeration002_1828.v pass
 MS-DataTypes2006-07-15/positiveInteger_enumeration003_1829/instance/positiveInteger_enumeration003_1829.i pass
