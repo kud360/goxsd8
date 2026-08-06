@@ -176,7 +176,23 @@ work itself and never skips the arbiter.
    freshly-fetched `origin/main` (never a local `main` — see the branch
    scheme) per STYLE.md including the exported-surface diff (T5), and
    posts a verdict on the issue. **Checkpoint after each verdict.**
-   - *accept* → arbiter runs the ratchet (`GOXSD_RATCHET=1`, upward only).
+   - *accept* → arbiter runs the ratchet (`GOXSD_RATCHET=1`, upward
+     only). Running it and banking it are ONE step. Immediately after the
+     run — before anything else, no branch switch, no ending the session
+     — check `git status --porcelain -- conformance/testdata/expectations/`:
+     - non-empty → `git add` those files and commit them on the CURRENT
+       WIP branch right then, as their own checkpoint, naming the lane
+       movement in the commit message; only then post the verdict.
+     - empty → the run found no movement; say so.
+
+     The posted verdict states exactly one of two things: "ratchet run,
+     write committed as `<sha>`" (the real short SHA of that commit), or
+     "ratchet not run, because `<X>`" — the second only when the gate's
+     conformance run was itself inapplicable to the change, and it must
+     name that reason. There is no third state: running the ratchet,
+     discarding the write, and reporting `Ratchet: unchanged` is the
+     defect this rule exists to prevent — it is how #202 stranded six
+     `schema`-lane flips for a later branch to absorb.
    - *reject* → one repair round by mason (edit the flagged lines, don't
      rewrite), then re-judge. Second reject → **park** (see below),
      comment findings, relabel `needs-replan`. **Two rejections is the
