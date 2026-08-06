@@ -2747,6 +2747,246 @@ three. Not settled here.
   guessed, and a wrong milestone is worse than a stale one. Left for the
   next pass that can read the milestone list.
 
+Update (2026-08-06, weekly backlog — **the pass where the band was
+consumed for the first time, and where #347's shape is ratified**): five
+issues landed since the last backlog and **one of them was a band
+entry** — #449, slot 1 for three consecutive passes. That breaks a
+twelve-landing streak of the band being ignored and is the first
+evidence in the band's history that publishing an ordering does
+anything. It is the second central fact of this pass; the first is that
+**#347 is decided in shape and blocked on an actor, not on a decision.**
+
+Lanes first, read off `conformance/testdata/expectations/*.txt` at
+`origin/main` @ `779d61e` on 2026-08-06. Date-stamped per the preamble
+convention (#411); the 2026-08-05 numbers are **not** corrected in place
+above:
+
+| lane | pass / total | movement since 2026-08-05 |
+|---|---|---|
+| `schema` | **9251 / 15432** | 9241 → 9251, **+10** |
+| `datatypes` | **1151 / 1173** | 1131 / 1153 → 1151 / 1173, **+20 pass, +20 total** |
+| `instance` | 0 / 26426 | unchanged |
+| `xpath`, `json`, `ber` | empty by design | unchanged |
+
+**The two lanes moved for opposite reasons and the distinction is the
+point.** `schema` **+10** with the case-ID set **held at 15432** is rule
+work — #295's five constructors rejecting an empty `{name}`, ten W3C
+cases the non-ratchet harness is structurally silent about. `datatypes`
+**+20 pass on +20 total** is a **widening**: #449 claimed twenty
+`negativeInteger`/`nonNegativeInteger`/`nonPositiveInteger`/
+`positiveInteger` `001–005` fixtures by extending one regexp
+alternation, so the lane started *counting* twenty cases it had never
+counted, and all twenty pass. Both are honest and neither is the other;
+a reader comparing only the pass column would score them identically.
+The 2026-08-05 window's `+71` was the first kind, the 2026-08-03
+window's `+4919` the second.
+
+***The post-land harvest is CLEAN — every promised follow-up from all
+five landings is discharged, and this is the first pass where that is
+true.*** #489 was filed on 2026-08-04 because the ledger had gone four
+consecutive sessions unaudited; #286's entry said nine. This pass
+audited each of the five landings' `Next:` lists against reality and
+found **nothing leaked**:
+
+| owed by | disposition |
+|---|---|
+| #295 Next 1 (`attP003` citation precision) | filed as **#518** |
+| #295 Next 2 (`xsd/modelgroupdefinition.go:26` stale "no parser producer") | **folded into #338** by comment, with a named falsifier and a corrected 7→4 site list |
+| #295 Next 4 (#433's guard count stale at eight) | **comment on #433** — re-grepped to **sixteen**, three-way classification added |
+| #296 Next 1+2 (two §3.8.2-for-§3.7.2 comments in `parser/`) | filed as **#520** |
+| #449 Next 1 (duplicated `strict.New()`/`builtin.Seed` prologue) | filed as **#522** |
+| #305 Next 1 (tell #518 which went first) | **comment on #518** — witness table re-derived from the seven fixtures, Acceptance corrected, failure-capability hazard named |
+| #305 Next 2 (nameless top-level `<simpleType>`) | filed as **#523** |
+| #305 Next 3 (the thrice-spelled "has no usable name" sentence) | filed as **#525** |
+| #305 Next 4 (`produce_complex.go:1152` comma splice) | **absorbed into #525's Acceptance** as an explicit same-commit drive-by |
+| #299 Next 1 (three amendments owed to #382) | **comment on #382** |
+| #299 rider (`citations_test.go:7` says 38, truth is 37) | **folded into #382**, which will be editing that file |
+| #299 process residue | filed as **#527** (the `gh` 403 fallback rule) and **#528** (who notices a missing LOG entry) |
+
+Seven filings, four fold-by-comment discharges, zero leaks. The
+fold-don't-file routing #283 proved out did the work in four of the
+twelve: **#338, #433, #382 and #525 each already owned the thing being
+harvested**, and filing a sibling would have been the duplicate this
+project keeps not having to merge. Recorded because the ledger's value
+is exactly that every site maps to an issue, and this is the first
+window where the mapping is total.
+
+***#347 — RATIFIED in shape, and the blocker is now correctly named.***
+The 2026-08-05 pass left a recommendation on the thread "for the next
+pass to ratify rather than re-derive"; this pass's launching prompt
+delegated the judgment, and the shape is **ratified**: retire the
+numeric 8–10 band, formalize the dependency **ordering** as the
+cartographer's deliverable in its place, and widen `blocked` to
+*"waiting on a named dependency — an issue **or** a trigger — recorded
+in `## Depends on`."*
+
+Three pieces of evidence this pass added rather than re-agreed:
+
+1. **The `blocked` widening documents existing practice.** Of the twelve
+   `blocked` issues, **four are already blocked on a trigger and not on
+   any open issue** — #480 (its own oracle grounding, and its body says
+   `Depends on: none` in as many words), #56 (an M6 issue not yet
+   filed), #16 (the `validate`/`gen` issues not yet filed), #79 (an
+   uncarved epic, *"none — it is the dependency target"*). The widening
+   relabels nothing; it licenses what a third of the set already does.
+2. **The band was consumed** — see above. Weak evidence, and it cuts
+   *toward* (b): the ordering worked, slowly, with no label enforcing
+   it, which is what (b) formalizes rather than what (a) relabels
+   around.
+3. **The arithmetic nearly flattened and it does not rescue the number.**
+   **116 `ready` of 129 open** (116 / 12 `blocked` / 1 unlabelled). The
+   sequence: `9 → 16 → 26 → 34 → 35 → 65 → 69 → 77 → 81 → 99 → 108 →
+   115 → 116`. Six closed in the window (the five landings plus **#416**,
+   closed at the 2026-08-05 pass boundary at 14:37:43Z and therefore
+   outside that pass's own count — which is what reconciles 115 + 7 − 6
+   to 116), seven filed, **harvest ratio 1.4** against 1.7 and 2.6 in
+   the two prior windows. A ratio converging on 1.0 holds the queue
+   steady **at 116**, not at 10.
+
+**The edit is NOT made here, and the reason is new.** The 2026-08-05
+comment concluded the blocker was that no launching prompt had ever
+named an option; that arrived and is discharged. What remains is
+narrower and survives that refutation: **the cartographer's operating
+instructions state that no agent message can authorize changing the
+agent's own configuration, and `.claude/agents/cartographer.md` is that
+configuration.** The orchestrating session is an agent, so an
+orchestrator instruction to make this edit is exactly the class of
+authorization that rule refuses — independently of the instruction being
+clear and the decision being right. This is *not* the claim demolished
+on 2026-08-05 (*"CLAUDE.md reserves agent-definition changes for a
+human-filed issue"* — false; it reserves two texts and this is neither);
+it is a claim about **which actor may direct a change to the acting
+agent's own configuration**.
+
+So #347 re-reads as **"the option is ratified; the edit requires an
+actor the `/backlog` loop structurally does not contain"** — the same
+diagnosis #416 carried for seven passes, with the same resolution
+available: **#416's step was run by the orchestrating session, not by
+the cartographer.** The three edits are specified verbatim on #347's
+thread so they need no re-derivation, and they are agent configuration,
+so the diff is flagged for human review as #416's was.
+
+***Band 4 — re-derived, ten entries, one substitution and one
+promotion.*** Ordering doctrine unchanged: **measured lane movement
+first, then the integrity of the measurement, then false rejects, then
+under-rejects, then producer completeness.**
+
+1. **#336** — narrow `complexTypeDecidable` to admit the two extension
+   forms, measure the `schema` lane. **Promoted from 2 to the head slot
+   vacated by #449's landing**; both dependencies still closed, and it
+   is now the only entry whose acceptance is literally a lane number.
+2. **#443** — pin `anonymousComplexTypeDecidable`'s implicit-content
+   narrowing; still sequenced as #336's safety net. **Its title now
+   understates the exposure by 96** (it says 9155 banked passes; the
+   lane is at 9251, up from the 86 recorded last pass). Titles are
+   snapshots and the direction only goes up; not amended, noted again so
+   no reader thinks the lane shrank.
+3. **#446** — `testGroup/@version` unread, 8 XSD-1.0 groups scored
+   against a 1.1 processor. Unchanged, and decaying with every banked
+   pass — twenty more were banked this window.
+4. **#501** — `unfoldCopies`' 2/2 copy cap false-rejects conforming
+   schemas in `cos-content-act-restrict`, and **hard-blocks #504**.
+   Unchanged at 4.
+5. **#468** — `addAll`'s `last` set false-rejects `sequence(all(a,b),
+   a)` on `cos-nonambig`. Unchanged.
+6. **#430** — `checkRestrictionAttributeWildcard`'s `cos-ns-subset`
+   comparison ignores `{attribute uses}` already covering the name.
+   Unchanged, and **checked against this window's landings rather than
+   assumed**: #295 and #296 touched absent-`{name}` guards and message
+   wording in `xsd/`, which is the same package but neither the same
+   file nor the same rule — #430's defect is in the wildcard-subset
+   comparison and is untouched. No re-scoping owed.
+7. **#436** — `final=`/`finalDefault=`/`block=` never read; nine reader
+   sites inert across six rules. Unchanged.
+8. **#464 → #463**, still a pair, still in that order.
+9. **#342** — `dcl.elt.common` clause 3; #395 and #471 ride behind it on
+   the same component data.
+10. **#478 → #447 — promoted into the band from on deck**, as a pair and
+    in that order. #447 is the substitution for #449 on the doctrine's
+    first tier: it is a **measured** producer limitation (`pdecimal019`
+    and `pdecimal020` are the recorded cost of a `<simpleType>` whose
+    body is `<list>` or `<union>` going unproduced) and it is the last
+    `GAP(` site in the tree that no issue owned before it was filed.
+    #478 stays ahead of it for the reason on deck already recorded — the
+    placement refactor lands before the production that would otherwise
+    mint a third eager guard.
+
+**On deck:** **#499** (adjacent to #501 in the same walk but not a
+blocker for it — the `maxProductStates` ceiling fails *open*, so it
+costs score, not correctness), **#442** (the last unwidened §3.3.2.1
+tier-1 shape, with a banked fixture resting on the decline), and
+**#506** (an `<override>`-substituted child losing its self-reference
+resolution — a false reject, and the only tier-3 candidate not already
+in the band).
+
+- **`GAP(` ledger: 47 → 48 across 21 files, and the one new site is
+  owned.** The delta is `parser/produce.go`, which had no marker at
+  `bfdb920` and now carries one at `:729` — #305's disclosure that a
+  top-level `<simpleType>` is the one kind still outside `topLevelName`,
+  registered under `QName{target, ""}` and produced without error. Its
+  prose names **#523**, filed the same session. File-by-file counts are
+  otherwise byte-identical to the 2026-08-05 sweep. **Every one of the
+  48 maps to an issue**; the ledger has been total since #471 claimed
+  the last unowned marker.
+- **Step 4 (libuser/cliuser) was SKIPPED this pass, and the reason is
+  surface-unchanged — not #416's structural inability, which is
+  decided.** `git diff --stat bfdb920..779d61e -- README.md cmd/` is
+  empty: this window's five landings are internal to `xsd/`, `parser/`
+  and `conformance/` (empty-`{name}` rejection, error-message quality, a
+  shared `topLevelName` helper, fixture claims, doc-citation fixes). The
+  orchestrating session — which owns the step per `docs/WORKFLOW.md`'s
+  `/backlog` bullet — judged that a fresh pass would re-read an
+  unchanged published surface and reproduce 2026-08-05's verdict, and
+  handed the cartographer nothing. **Nothing was folded, and per step 4
+  as #416 rewrote it, that is said here rather than silently omitted.**
+  The next window that touches `README.md` or `cmd/` owes a real pass;
+  #472 and #514 will both trigger one.
+- **#472's milestone CORRECTED, M3 → M4.** The 2026-08-05 pass flagged
+  this and could not act — *"this session's GitHub tooling exposes no
+  milestone listing, so the numeric id could only be guessed."* It is
+  readable through the issue-search path rather than the issue-list
+  path: **M4 — Schema parsing is milestone number 5**. Corrected, labels
+  verified intact afterwards. **No body field was sent**, which is what
+  makes this safe under #515 — the stripping happens on write, so a
+  metadata-only update cannot damage a body. Worth recording because
+  #472's body **already carries #515 damage** from the 2026-08-05 pass
+  (its `<include>`/`<import>` closure sentence and its bare autolink are
+  both hollowed out), and that damage is unrecoverable from the returned
+  text.
+- **Nothing closed as stale, obsolete or duplicate.** Three near-miss
+  pairs checked rather than assumed, all clustered on the new `parser/`
+  filings and each genuinely distinct: **#520/#525** (a wrong `§3.8.2`
+  citation vs. a triplicated error *sentence* — different defects in
+  overlapping files), **#523/#525** (a missing guard vs. the message
+  that guard would spell), **#518/#525** (a *prohibited-`ref`* sentence
+  vs. an *absent-`name`* one — #525's own Notes pre-disambiguates this
+  and says explicitly they must **not** be merged). The 2026-07-31
+  finding stands a fifth time: the consolidation candidates are
+  exhausted.
+- **Blocked-issue audit — all twelve honest, no relabels**, and this
+  pass read every `## Depends on` rather than carrying the prior list
+  forward. #16, #56, #79 and #480 wait on triggers (see #347 above);
+  #248→#250, #250→#79's tail, #267→#250, #345→#250, #415→#407,
+  #438→#414, #456→#455, #504→#501 all name issues that are **still
+  open**. **None of the six closures in this window appears in any open
+  `## Depends on`**, so nothing unblocked; no `ready` issue carries an
+  open hard dependency, and the invariant holds at 116.
+- **#411 unchanged, unlabelled, deliberately** — its deliverable is on
+  `main` and a `/backlog` does not close issues as done. Fifth pass
+  recording this, and #347's ratified widening does not touch it: #411
+  waits on a *commit*, not a dependency.
+- **Branch namespace: three refs, unchanged in name and SHA since
+  2026-08-04**, re-verified this pass and still awaiting human deletion
+  (sessions never delete or rename refs). `wip/issue-256` @ `c56d9f7` —
+  #256 closed `needs-replan`, two commits genuinely not in `main`, a
+  correct park. `wip/issue-271` @ `c1c3824` — #271 closed
+  `needs-replan`, tip is #470's already-landed commit, **carries no work
+  at all**. `wip/issue-287` @ `6d79251` — #287 closed **completed**, the
+  retired implementation attempt superseded by the doc-only #511
+  landing (`6b99b2f`). No `parked/untriaged-*` refs exist. #399 owns the
+  fact that this survey re-derives the same three deaths every session;
+  it is `ready` and unpicked.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
