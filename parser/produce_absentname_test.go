@@ -7,13 +7,21 @@ import (
 )
 
 // TestProduceAbsentNameAndEmptyRefRejected pins, END TO END from a schema
-// DOCUMENT, the five shapes whose only rejection lives in an xsd component
-// constructor: a nameless <element> on the global path and on the local path
-// (both e-props-correct clause 1, §3.3.6.1 — the §3.3.1 tableau types {name} as a
-// Required xs:NCName, and §3.3.2.1 dcl.elt.common maps it identically for both
-// {scope} varieties, so neither path may map an empty one), and the three
-// empty-ref shapes whose reference variant carries the absent (zero) QName:
-// <group ref="">, <element ref=""> and <attribute ref="">.
+// DOCUMENT, the four shapes whose only rejection lives in an xsd component
+// constructor: a nameless <element> on the local path (e-props-correct clause 1,
+// §3.3.6.1 — the §3.3.1 tableau types {name} as a Required xs:NCName, and
+// §3.3.2.1 dcl.elt.common maps it identically for both {scope} varieties, so
+// neither path may map an empty one), and the three empty-ref shapes whose
+// reference variant carries the absent (zero) QName: <group ref="">,
+// <element ref=""> and <attribute ref="">.
+//
+// The GLOBAL path's row moved out at #305: a top-level <element> now takes its
+// {name} from the parser's topLevelName, which rejects an unusable one as a
+// grammar fault before the declaration is built, so that shape never reaches
+// the constructor and is pinned by TestProduceNamelessTopLevelRejected instead.
+// The constructor's own e-props-correct verdict is unchanged and still covered
+// here, by the local row — its single remaining parser-visible call site for a
+// missing {name}.
 //
 // The three ref shapes are charged xsderr.RuleComponentInvariant, the non-spec
 // sentinel: §3.2.2.3 ref.att.local, §3.3.2.4 ref.elt.global and §3.8.2 are
@@ -44,17 +52,9 @@ func TestProduceAbsentNameAndEmptyRefRejected(t *testing.T) {
 		wantLine int
 	}{
 		{
-			// §3.3.2.2 dcl.elt.global: the top-level path, produceElement.
-			name:     `nameless global <element>`,
-			body:     "\n" + `<xs:element name="" type="xs:string"/>`,
-			wantRule: "e-props-correct",
-			wantLine: 2,
-		},
-		{
-			// §3.3.2.3 dcl.elt.local: the local path, produceLocalElement, a
-			// SECOND call site of the same constructor check. src-element clause
-			// 2.1's name-XOR-ref representation constraint is a different rule and
-			// is deliberately not what is asserted here.
+			// §3.3.2.3 dcl.elt.local: the local path, produceLocalElement.
+			// src-element clause 2.1's name-XOR-ref representation constraint is a
+			// different rule and is deliberately not what is asserted here.
 			name: `nameless local <element>`,
 			body: "\n" + `<xs:complexType name="CT"><xs:sequence>` + "\n" +
 				`<xs:element name="" type="xs:string"/>` + "\n" +

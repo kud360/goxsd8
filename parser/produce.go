@@ -572,6 +572,11 @@ func compositionDirective(el *Element) bool {
 // outright (§4.2.4 clause 4.1.2): the redefining declaration is produced by the
 // REDEFINING document's producer, in its own document-order position there, and
 // this one survives only as the hidden original behind it (src-expredef).
+//
+// The five named kinds whose {name} the schema for schema documents makes
+// use="required" — <complexType>, <group>, <attributeGroup>, <element>,
+// <attribute> — take it from topLevelName, which rejects an unusable one before
+// any of them is built.
 func (p *producer) run() error {
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
@@ -594,43 +599,60 @@ func (p *producer) run() error {
 			}
 			p.builder.AddType(st)
 		case "element":
-			ed, err := p.produceElement(decl)
+			name, err := p.topLevelName(decl)
+			if err != nil {
+				return err
+			}
+			ed, err := p.produceElement(name, decl)
 			if err != nil {
 				return err
 			}
 			p.builder.AddElement(ed)
 		case "attribute":
-			ad, err := p.produceAttribute(decl)
+			name, err := p.topLevelName(decl)
+			if err != nil {
+				return err
+			}
+			ad, err := p.produceAttribute(name, decl)
 			if err != nil {
 				return err
 			}
 			p.builder.AddAttribute(ad)
 		case "complexType":
-			name, _ := decl.Attr("name")
+			name, err := p.topLevelName(decl)
+			if err != nil {
+				return err
+			}
 			// AddType happens HERE, at this type's own document-order position, and
 			// never as a side effect of an on-demand base build from some other
 			// type: buildComplexType populates the memo only, so a type built early
 			// to serve a derivation still enters {type definitions} in document
 			// order (STYLE D2).
-			ct, err := p.buildComplexType(xsd.QName{Space: p.target, Local: name}, decl)
+			ct, err := p.buildComplexType(name, decl)
 			if err != nil {
 				return err
 			}
 			p.builder.AddType(ct)
 		case "attributeGroup":
-			name, _ := decl.Attr("name")
-			ag, err := p.buildAttributeGroup(xsd.QName{Space: p.target, Local: name}, decl)
+			name, err := p.topLevelName(decl)
+			if err != nil {
+				return err
+			}
+			ag, err := p.buildAttributeGroup(name, decl)
 			if err != nil {
 				return err
 			}
 			p.builder.AddAttributeGroup(ag)
 		case "group":
-			name, _ := decl.Attr("name")
+			name, err := p.topLevelName(decl)
+			if err != nil {
+				return err
+			}
 			// AddModelGroup happens HERE, at this definition's own document-order
 			// position, and never inside the on-demand build a clause 4.2.3 sub-case
 			// test triggers (buildModelGroupDefinition populates the memo only), so
 			// {model group definitions} stays in document order (STYLE D2).
-			mgd, err := p.buildModelGroupDefinition(xsd.QName{Space: p.target, Local: name}, decl)
+			mgd, err := p.buildModelGroupDefinition(name, decl)
 			if err != nil {
 				return err
 			}
@@ -662,6 +684,61 @@ func (p *producer) run() error {
 		}
 	}
 	return nil
+}
+
+// topLevelName expands the name attribute of a top-level <complexType>,
+// <group>, <attributeGroup>, <element> or <attribute> into this document's
+// target namespace (§3.17.2: a top-level declaration's {target namespace} is
+// the <schema>'s), rejecting one that cannot serve as a {name} at all.
+//
+// The rejection is a plain grammar fault, not an xsderr rule verdict, and it is
+// the same fault for all five kinds. The schema for schema documents makes name
+// use="required" with type xs:NCName on xs:topLevelComplexType, xs:namedGroup,
+// xs:namedAttributeGroup, xs:topLevelElement and xs:topLevelAttribute, so an
+// absent attribute and an empty one are equally unusable — which is why the
+// presence flag is deliberately discarded rather than branched on. No numbered
+// Schema Representation Constraint states a clause of its own for it: §3.4.3
+// src-ct incorporates the schema for schema documents by reference over its own
+// five clauses (none about name), and §3.6.3 src-attribute_group is literally
+// "None as such". Charging src-ct, e-props-correct or a-props-correct here
+// would be a fabricated verdict (STYLE E2); this is the footing <include> with
+// no schemaLocation already stands on (parse.go).
+//
+// For the two DECLARATION kinds the parser-level rejection is deliberate
+// defense in depth rather than the only enforcement: xsd.NewElementDeclaration
+// and xsd.NewAttributeDeclaration independently reject an empty {name} citing
+// e-props-correct clause 1 (§3.3.6.1) and a-props-correct clause 1 (§3.2.6.1),
+// each through its component's property tableau, where {name} is a Required
+// xs:NCName. That verdict stays theirs and is still what the LOCAL paths
+// produce; this one supersedes it only for a top-level declaration, where the
+// fault belongs to the schema document's grammar and must be reported without
+// having built anything.
+//
+// Rejecting here, in run's dispatch, is what makes the verdict
+// CONTENT-INDEPENDENT: every one of the five kinds is judged before a single
+// child of it is walked, so a nameless declaration cannot be judged by whether
+// its content happens to hold a local element (whose own construction would
+// otherwise charge an unrelated rule, and only sometimes) — the defect #206
+// found for two of the five and this closes for all five.
+//
+// The other two top-level named kinds do not come through here. <notation> is
+// covered where it is built: xsd.NewNotation rejects an empty {name} citing
+// n-props-correct (§3.14.6), which a nameless <notation> document already
+// produces end to end.
+//
+// GAP(parser): a top-level <simpleType> is the one kind still outside this
+// helper — run expands its name inline and xsd.NewSimpleType has no {name}
+// guard of its own, so a <simpleType> with an absent or empty name is currently
+// registered under QName{target, ""} and the document produces without error.
+// #305 scoped itself to the five kinds named above; what a schema so registered
+// goes on to do downstream is not established here, so no error direction is
+// claimed for it.
+func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
+	name, _ := decl.Attr("name")
+	if name == "" {
+		return xsd.QName{}, fmt.Errorf("parser: top-level <%s> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", decl.Name().Local(), decl.Loc())
+	}
+	return xsd.QName{Space: p.target, Local: name}, nil
 }
 
 // buildSimpleType returns the compiled simple type named name, building it (and
@@ -1044,6 +1121,10 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 // builder is the caller's job (run), keeping this one focused on building the
 // declaration.
 //
+// qname is the expanded {name}/{target namespace}, taken from topLevelName by
+// the single caller (run) rather than read from the element here, so an
+// unusable name is a grammar fault charged before any of this mapping runs.
+//
 // Its {type definition} is §3.3.2.1 dcl.elt.common's tier chain, which is a
 // COMMON mapping rule — §3.3.2.2 supplements only {scope} and {target
 // namespace}, never {type definition} — so tier 1's inline <complexType> child
@@ -1059,10 +1140,7 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 // schema is legal and it is this producer that is incomplete (STYLE E2) — and
 // conformance/schema.go's elementDecidable declines the shape so the limitation
 // never reaches a validity verdict.
-func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error) {
-	name, _ := elem.Attr("name")
-	qname := xsd.QName{Space: p.target, Local: name}
-
+func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDeclaration, error) {
 	typeLex, hasType := elem.Attr("type")
 	inlineSimple := childElement(elem, xsd.XMLSchemaNS, "simpleType")
 	inlineComplex := childElement(elem, xsd.XMLSchemaNS, "complexType")
@@ -1076,7 +1154,7 @@ func (p *producer) produceElement(elem *Element) (xsd.ElementDeclaration, error)
 	}
 	// The unproduced form is declined BEFORE anything else is mapped, so the
 	// limitation never depends on what the rest of the declaration happens to
-	// hold (the same ordering discipline produceComplexType's name check keeps).
+	// hold (the same ordering discipline topLevelName's name check keeps).
 	if inlineSimple != nil {
 		return xsd.ElementDeclaration{}, fmt.Errorf("parser: a top-level <element> at %s with an inline <simpleType> is not yet produced (§3.3.2.1 dcl.elt.common clause 1; the local form is)", elem.Loc())
 	}
@@ -1247,11 +1325,9 @@ func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 }
 
 // produceAttribute maps a top-level <attribute> into a global Attribute
-// Declaration (§3.2.2.1 dcl.att.global). type= form only.
-func (p *producer) produceAttribute(elem *Element) (xsd.AttributeDeclaration, error) {
-	name, _ := elem.Attr("name")
-	qname := xsd.QName{Space: p.target, Local: name}
-
+// Declaration (§3.2.2.1 dcl.att.global). type= form only. qname reaches it from
+// topLevelName through run, for the reason produceElement's doc gives.
+func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.AttributeDeclaration, error) {
 	typeLex, hasType := elem.Attr("type")
 	inline := childElement(elem, xsd.XMLSchemaNS, "simpleType") != nil
 
