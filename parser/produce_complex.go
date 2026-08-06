@@ -83,9 +83,10 @@ type complexTypeIdentity struct {
 }
 
 // namedComplexType identifies a top-level <complexType> by its expanded {name}.
-// A name whose local part is empty is a grammar fault, rejected by
-// produceComplexType before anything is built — not here, so that the rejection
-// still happens FIRST (see produceComplexType).
+// A name whose local part is empty is a grammar fault, rejected before anything
+// is built — by topLevelName on run's dispatch path and by produceComplexType
+// on the on-demand base-build path, never here, so that the rejection still
+// happens FIRST (see produceComplexType).
 func namedComplexType(name xsd.QName) complexTypeIdentity {
 	return complexTypeIdentity{name: name}
 }
@@ -170,21 +171,22 @@ func (i complexTypeIdentity) newComplexType(loc xsderr.Loc, baseTypeDefinitionNa
 // nesting can never mis-attribute a declaration. See complexTypeIdentity.
 //
 // A missing name on the NAMED arm is rejected FIRST, before any content is
-// built. That arm's caller is the top-level <complexType> branch of run
-// (produce.go, through buildComplexType), and the schema for schema documents
-// makes name use="required" with type xs:NCName on xs:topLevelComplexType, so
-// both an absent attribute and an empty one leave the {name} property unusable.
-// src-ct (§3.4.3) incorporates that condition by reference ("In addition to the
-// conditions imposed on <complexType> element information items by the schema
-// for schema documents") but states no clause of its own for it, so this is a
-// plain grammar fault like <include> with no schemaLocation (parse.go), not an
-// xsderr rule verdict. Rejecting it here, before any content, is what keeps the
-// verdict from depending on whether the content happens to hold a local element
-// — whose xsd.NewLocalScope would otherwise charge e-props-correct, an unrelated
-// rule, and only sometimes. The ANONYMOUS arm cannot reach that rejection: it
-// carries no name to be missing, and its own equivalent — an unminted owner — is
-// unconstructible, since produceElement/produceLocalElement mint the identity
-// before calling.
+// built, with the same plain grammar fault topLevelName raises and for the same
+// reason (produce.go: name is use="required" typed xs:NCName on
+// xs:topLevelComplexType in the schema for schema documents, and §3.4.3 src-ct
+// states no clause of its own for it, incorporating the condition only by
+// reference). Since #305 that fault is unreachable from run's document-order
+// dispatch, which now takes every top-level name from topLevelName. What this
+// guard still covers is the OTHER entry path into buildComplexType:
+// resolveBaseType's on-demand build, whose name comes from a base= lexical
+// resolved against the prescan index — where an empty local part is a name
+// nothing filtered — and any direct programmatic call. Deleting it would make
+// that path's verdict depend on whether the content happens to hold a local
+// element, whose xsd.NewLocalScope would charge e-props-correct, an unrelated
+// rule, and only sometimes: the #206 defect, on the path #305 does not touch.
+// The ANONYMOUS arm cannot reach the rejection at all: it carries no name to be
+// missing, and its own equivalent — an unminted owner — is unconstructible,
+// since produceElement/produceLocalElement mint the identity before calling.
 //
 // GAP(xsd): an ANONYMOUS complex type built here enters no
 // xsd.SchemaBuilder.AddType (§3.17.2 scopes {type definitions} to the
@@ -1147,7 +1149,19 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 // use="required" with type xs:NCName on xs:namedGroup, and §3.7.3 states "None
 // as such" for <group>'s Schema Representation Constraints, so the fault carries
 // no rule ID — while deferring it would let a nameless <group> be judged by
-// whether its body happens to hold a local element.
+// whether its body happens to hold a local element. Since #305 run reaches this
+// only through topLevelName, which raises the identical fault a step earlier;
+// what remains guarded here is the <redefine> path — produceRedefinition
+// (redefine.go) mints the redefining declaration's name from the <redefine>
+// child's own name attribute and never consults topLevelName, so a
+// <group name=""> child of a <redefine> whose redefined document declares the
+// same nameless <group> (recorded as the original, hence past src-expredef's
+// closing requirement) arrives here with an empty local part — plus direct
+// programmatic calls. resolveModelGroup's on-demand build does NOT reach it: its
+// only caller is allGroupOf, reading a ModelGroupRef that only
+// produceGroupRefParticle mints, and xsd.NewParticle rejects an empty
+// ModelGroupRef local part as a component-invariant before any resolution
+// happens.
 func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd.ModelGroupDefinition, error) {
 	if name.Local == "" {
 		return xsd.ModelGroupDefinition{}, fmt.Errorf("parser: top-level <group> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())

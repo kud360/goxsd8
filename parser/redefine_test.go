@@ -440,6 +440,44 @@ func TestParseRedefineAttributeGroupClause71Rejected(t *testing.T) {
 	mustRule(t, err, "src-redefine", "7.1")
 }
 
+// TestParseRedefineNamelessGroupRejected reaches produceModelGroupDefinition's
+// own nameless-{name} guard, which since #305 no longer lies on run's
+// document-order dispatch path (that fault is topLevelName's a step earlier).
+// The remaining live entry is THIS one: produceRedefinition mints the redefining
+// declaration's name from the <redefine> child's own name attribute and never
+// consults topLevelName, so a <group name=""> child reaches
+// buildModelGroupDefinition with an empty local part. The redefined document
+// declares the same nameless <group> because src-expredef's closing requirement
+// is charged first — without an original of the same kind and name the case
+// would be rejected there instead, one step short of the guard. An ABSENT name
+// cannot get this far either: newRedefineSet rejects a <redefine> child with no
+// name attribute while reading the set.
+//
+// The redefining body holds a local <element> for the #206 reason — deleting the
+// guard makes the verdict content-dependent, and this body turns it into a bogus
+// e-props-correct against the {scope}.{parent} rather than the grammar fault
+// below.
+func TestParseRedefineNamelessGroupRejected(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+			`<xs:group name=""><xs:sequence>`+
+			`<xs:element name="b" type="xs:string"/></xs:sequence></xs:group>`+
+			`</xs:redefine>`),
+		"lib.xsd": wrap("urn:a", `<xs:group name=""><xs:sequence>`+
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`),
+	})
+	if err == nil {
+		t.Fatalf("Parse succeeded, want a grammar fault for the redefining <group>'s empty name")
+	}
+	var xe *xsderr.Error
+	if errors.As(err, &xe) {
+		t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+	}
+	if !strings.Contains(err.Error(), "top-level <group>") || !strings.Contains(err.Error(), "no usable name") {
+		t.Fatalf("error = %v, want the <group> grammar fault reporting the unusable name", err)
+	}
+}
+
 // TestParseRedefineContentModelRejectsOverrideOnlyKinds pins the load-bearing
 // structural difference between the two mechanisms: §4.2.4's content model is
 // (annotation | (simpleType | complexType | group | attributeGroup))*, so the

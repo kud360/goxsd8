@@ -339,20 +339,30 @@ func TestProduceTopLevelElementHasNoScopeParent(t *testing.T) {
 	}
 }
 
-// TestProduceNamelessTopLevelContainerRejected pins that a top-level
-// <complexType>/<group> with no usable name is rejected the SAME way whether or
-// not its content holds a local element declaration. name is use="required" with
-// type xs:NCName in the schema for schema documents (xs:topLevelComplexType,
-// xs:namedGroup), so an absent and an empty attribute are equally unusable, and
-// no Schema Representation Constraint states a clause of its own for either
-// (§3.4.3 src-ct incorporates the schema for schema documents by reference;
-// §3.7.3 is "None as such") — hence a plain grammar fault, not a rule verdict.
+// TestProduceNamelessTopLevelRejected pins that a top-level <complexType>,
+// <group>, <attributeGroup>, <element> or <attribute> with no usable name is
+// rejected the SAME way — one fault shape for all five kinds — whether or not
+// its content holds anything. name is use="required" with type xs:NCName in the
+// schema for schema documents (xs:topLevelComplexType, xs:namedGroup,
+// xs:namedAttributeGroup, xs:topLevelElement, xs:topLevelAttribute), so an
+// absent and an empty attribute are equally unusable, and no Schema
+// Representation Constraint states a clause of its own for any of them (§3.4.3
+// src-ct incorporates the schema for schema documents by reference; §3.6.3
+// src-attribute_group is "None as such") — hence a plain grammar fault, not a
+// rule verdict. The two DECLARATION kinds are charged the same way here even
+// though xsd.NewElementDeclaration/xsd.NewAttributeDeclaration would later
+// charge e-props-correct/a-props-correct clause 1 for the same empty {name}: at
+// top level the fault belongs to the schema document's grammar and is reported
+// before anything is built. Those two constructor verdicts stay pinned on the
+// LOCAL paths by TestProduceAbsentNameAndEmptyRefRejected.
 //
-// The content-bearing rows are the regression guard: before the fix the empty
-// bodies produced silently while the bodies holding a local <element> failed
-// with a bogus e-props-correct — the missing name was judged, when judged at
-// all, by an unrelated rule and only for some content.
-func TestProduceNamelessTopLevelContainerRejected(t *testing.T) {
+// The content-bearing rows are the regression guard, and they are why reverting
+// the topLevelName call in run's switch fails this test rather than merely
+// changing a message: before #206 the empty <complexType>/<group> bodies
+// produced silently while the bodies holding a local <element> failed with a
+// bogus e-props-correct, and before #305 a nameless <attributeGroup> was minted
+// under QName{tns, ""} and carried on.
+func TestProduceNamelessTopLevelRejected(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		decl string
@@ -371,6 +381,18 @@ func TestProduceNamelessTopLevelContainerRejected(t *testing.T) {
 			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`},
 		{"group with empty name", `<xs:group name=""><xs:sequence>` +
 			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`},
+		{"attributeGroup empty content", `<xs:attributeGroup/>`},
+		{"attributeGroup with attribute use", `<xs:attributeGroup>` +
+			`<xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`},
+		{"attributeGroup with empty name", `<xs:attributeGroup name="">` +
+			`<xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`},
+		{"element with type", `<xs:element type="xs:string"/>`},
+		{"element with inline complexType", `<xs:element><xs:complexType><xs:sequence>` +
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`},
+		{"element with empty name", `<xs:element name="" type="xs:string"/>`},
+		{"attribute with type", `<xs:attribute type="xs:string"/>`},
+		{"attribute with no type", `<xs:attribute/>`},
+		{"attribute with empty name", `<xs:attribute name="" type="xs:string"/>`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := produce(t, wrap("urn:po", tc.decl))
@@ -385,5 +407,38 @@ func TestProduceNamelessTopLevelContainerRejected(t *testing.T) {
 				t.Fatalf("error = %v, want it to report the unusable name", err)
 			}
 		})
+	}
+}
+
+// TestProduceNamelessBaseTypeRejectedOffDispatch reaches produceComplexType's own
+// nameless-{name} guard, which since #305 no longer lies on run's document-order
+// dispatch path (that fault is topLevelName's a step earlier). The remaining live
+// entry is resolveBaseType's ON-DEMAND build: prescan indexes a top-level
+// <complexType name=""> under QName{target, ""} — an empty local part nothing
+// filters — and a base="" lexical binds to exactly that name, so building the
+// derived type pulls the nameless one in before run ever dispatches on it.
+//
+// DOCUMENT ORDER IS LOAD-BEARING: the deriving <complexType> must come FIRST, or
+// run reaches the nameless declaration itself and topLevelName raises the fault,
+// which would leave the guard untested. Deleting the guard does not merely
+// change this message — production walks on into the nameless type's content and
+// complexTypeIdentity.scopeParent's zero-identity assertion panics, which is
+// exactly why the fault is charged here, before anything is built.
+func TestProduceNamelessBaseTypeRejectedOffDispatch(t *testing.T) {
+	_, err := produce(t, wrap("", `<xs:complexType name="d"><xs:complexContent>`+
+		`<xs:restriction base=""><xs:sequence>`+
+		`<xs:element name="b" type="xs:string"/></xs:sequence></xs:restriction>`+
+		`</xs:complexContent></xs:complexType>`+
+		`<xs:complexType name=""><xs:sequence>`+
+		`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`))
+	if err == nil {
+		t.Fatalf("Produce succeeded, want a grammar fault for the base= reference's nameless <complexType>")
+	}
+	var xe *xsderr.Error
+	if errors.As(err, &xe) {
+		t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+	}
+	if !strings.Contains(err.Error(), "top-level <complexType>") || !strings.Contains(err.Error(), "no usable name") {
+		t.Fatalf("error = %v, want the <complexType> grammar fault reporting the unusable name", err)
 	}
 }
