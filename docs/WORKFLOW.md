@@ -185,14 +185,17 @@ work itself and never skips the arbiter.
        movement in the commit message; only then post the verdict.
      - empty → the run found no movement; say so.
 
-     The posted verdict states exactly one of two things: "ratchet run,
-     write committed as `<sha>`" (the real short SHA of that commit), or
-     "ratchet not run, because `<X>`" — the second only when the gate's
-     conformance run was itself inapplicable to the change, and it must
-     name that reason. There is no third state: running the ratchet,
-     discarding the write, and reporting `Ratchet: unchanged` is the
-     defect this rule exists to prevent — it is how #202 stranded six
-     `schema`-lane flips for a later branch to absorb.
+     The posted verdict states exactly one of three things: "ratchet run,
+     write committed as `<sha>`" (the real short SHA of that commit);
+     "ratchet run, tree clean, nothing to bank" — the run left
+     `git status --porcelain -- conformance/testdata/expectations/` empty,
+     so there was no upward movement to commit; or "ratchet not run,
+     because `<X>`" — the last only when the gate's conformance run was
+     itself inapplicable to the change, and it must name that reason.
+     There is no fourth state: running the ratchet, discarding the write,
+     and reporting `Ratchet: unchanged` is the defect this rule exists to
+     prevent — it is how #202 stranded six `schema`-lane flips for a later
+     branch to absorb.
    - *reject* → one repair round by mason (edit the flagged lines, don't
      rewrite), then re-judge. Second reject → **park** (see below),
      comment findings, relabel `needs-replan`. **Two rejections is the
@@ -405,12 +408,16 @@ of the LANDED commit is the arbiter's figure, not the branch's prediction
 - Every expectation change must be explainable; "it flipped and I don't
   know why" blocks the commit and becomes an issue.
 - **A read-only conformance PASS is evidence of NO REGRESSION only, never
-  of unchanged counts.** `Compare` fails on `Regressed` cases; `Improved`
-  cases pass silently, so a +7 and a +0 look identical to it. Only
-  `GOXSD_RATCHET=1` — arbiter-only, by design — tells them apart. So a
-  `Ratchet:` line written by anyone but the arbiter is a **prediction**,
-  and no amount of care on the writer's side makes it a measurement: the
-  instrument does not exist for them.
+  of the whole ratchet write.** `Compare` fails on `Regressed` cases;
+  `Improved` cases still pass, but the read-only run now LOGS them, so
+  `go test ./conformance -run TestConformance -count=1 -v` lets a
+  non-arbiter measure the improvement half of the movement rather than
+  guess at it (issue #303). What remains invisible read-only is the `New`
+  set — cases carrying no expectation line yet, which a `GOXSD_RATCHET=1`
+  run also writes. So a `Ratchet:` line written by anyone but the arbiter
+  is still a **prediction** of the write as a whole, even when its
+  improvement half is measured; only the arbiter's ratchet run over a
+  clean tree observes all of it.
 - **The landed `Ratchet:` line carries only what the arbiter's accept
   verdict states, in the verdict's own terms.** Branch commits may and
   should predict — a prediction that names the cases it expects to flip

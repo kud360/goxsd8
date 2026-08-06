@@ -32,7 +32,7 @@ Never edit an expectations file downward to make CI green.
 ```sh
 go build ./... && go test ./... && go vet ./...    # gate, part 1
 golangci-lint run                                   # gate, part 2 (STYLE lint subset)
-go test ./conformance -run TestConformance -count=1                  # conformance check
+go test ./conformance -run TestConformance -count=1 -v               # conformance check (-v surfaces improved-but-unbanked cases)
 GOXSD_RATCHET=1 go test ./conformance -run TestConformance -count=1  # ratchet — ARBITER ONLY
 go generate ./...                                   # regenerate spec md + generated tables
 go tool fetchspecs                                  # (re)download pristine spec HTML

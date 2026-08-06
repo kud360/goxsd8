@@ -56,14 +56,16 @@ check `git status --porcelain -- conformance/testdata/expectations/`. If
 it is non-empty, `git add` those files and commit them on the CURRENT WIP
 branch right then, as their own checkpoint, naming the lane movement in
 the commit message; only then post your verdict. If it is empty, the run
-found no movement — say so. Your verdict must state exactly one of two
+found no movement — say so. Your verdict must state exactly one of three
 things: "ratchet run, write committed as `<sha>`" (the real short SHA of
-that commit), or "ratchet not run, because `<X>`" — the second only when
-the gate's conformance run was itself inapplicable to the change, and you
-must name that reason. There is no third state: running it, discarding
-the write, and reporting `RATCHET: unchanged` is the defect this rule
-exists to prevent — it is how #202 stranded six `schema`-lane flips for a
-later branch to absorb.
+that commit); "ratchet run, tree clean, nothing to bank" — the run left
+`git status --porcelain -- conformance/testdata/expectations/` empty, so
+there was no upward movement to commit; or "ratchet not run, because
+`<X>`" — the last only when the gate's conformance run was itself
+inapplicable to the change, and you must name that reason. There is no
+fourth state: running it, discarding the write, and reporting
+`RATCHET: unchanged` is the defect this rule exists to prevent — it is
+how #202 stranded six `schema`-lane flips for a later branch to absorb.
 
 On reject: mason gets ONE repair round. A second rejection ends the
 session for this issue: instruct the orchestrator to park the WIP branch
