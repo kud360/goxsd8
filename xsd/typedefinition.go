@@ -9,9 +9,9 @@ import "github.com/kud360/goxsd8/xsderr"
 // one namespace is exactly the sch-props-correct (§3.17.6.1 clause 2)
 // collision, so one sum keyed once makes the two-map illegal state
 // unrepresentable (STYLE T7). The unexported typeDefinition marker method seals
-// it (STYLE T2/T7, the PRINCIPLES 7 sealed-sum exception): consumers
-// exhaustively switch these two variants and no third is representable,
-// mirroring term.go's Term and complextype.go's ContentType sealed sums.
+// it (STYLE T2/T7): consumers exhaustively switch these two variants and no
+// third is representable, mirroring term.go's Term and complextype.go's
+// ContentType sealed sums.
 //
 // The two variants satisfy TypeDefinition with different receiver kinds, a
 // deliberate asymmetry a consumer must respect: ComplexType satisfies it BY
@@ -48,13 +48,13 @@ func (*SimpleType) typeDefinition() {}
 
 // TypeDefinitionOrRef is the {type definition} slot of an Element Declaration
 // (§3.3.1) or an Attribute Declaration (§3.2.1). It is a sealed sum (STYLE
-// T2/T7, the PRINCIPLES 7 sealed-sum exception): TypeDefinitionRef and
-// InlineTypeDefinition are its only implementations, sealed by the unexported
-// typeDefinitionOrRef method, so consumers exhaustively switch the two branches
-// and no third variant is representable. It copies attributeuse.go's
-// AttributeDeclarationOrRef precedent exactly, and for the same reason: the two
-// XML mappings that populate the slot differ fundamentally in OWNERSHIP of the
-// type definition they yield.
+// T2/T7): TypeDefinitionRef and InlineTypeDefinition are its only
+// implementations, sealed by the unexported typeDefinitionOrRef method, so
+// consumers exhaustively switch the two branches and no third variant is
+// representable. It copies attributeuse.go's AttributeDeclarationOrRef
+// precedent exactly, and for the same reason: the two XML mappings that
+// populate the slot differ fundamentally in OWNERSHIP of the type definition
+// they yield.
 //
 //   - TypeDefinitionRef covers §3.3.2.1 dcl.elt.common clauses 2-4 and §3.2.2.2
 //     dcl.att.local's type= and xs:anySimpleType tiers: the type is a top-level

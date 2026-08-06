@@ -27,10 +27,9 @@ import "github.com/kud360/goxsd8/xsderr"
 // Definition gives an information item (Structures §3.4.6.4, key-dft-binding):
 // "an Element Declaration, an Attribute Use, or one of the keywords strict, lax,
 // or skip". The spec's six cases land in exactly those three shapes, so the set
-// is closed and this is a sealed sum (STYLE T2/T7, the PRINCIPLES 7 sealed-sum
-// exception) mirroring ContentType and Term — never a kind tag beside optional
-// payloads, which would make "an Element Declaration that is also skip"
-// representable.
+// is closed and this is a sealed sum (STYLE T2/T7) mirroring ContentType and
+// Term — never a kind tag beside optional payloads, which would make "an
+// Element Declaration that is also skip" representable.
 type defaultBinding interface{ defaultBinding() }
 
 // elementDeclarationBinding is key-dft-binding case 1: the item has a ·governing

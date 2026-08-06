@@ -33,7 +33,7 @@ var durationFields = regexp.MustCompile(`^(-)?P(?:([0-9]+)Y)?(?:([0-9]+)M)?(?:([
 // (§3.3.6.1) is a two-property tuple — an integer ·months· and a decimal
 // ·seconds· that share one sign — NOT six independent components. Encoding the
 // sign once (negative) over nonnegative magnitudes makes a mixed-sign duration
-// unrepresentable (STYLE T7; the spec's sign-coupling invariant, PRINCIPLES 4).
+// unrepresentable (STYLE T7; the spec's sign-coupling invariant, PRINCIPLES 5).
 // big.Int/big.Rat because duration lexicals allow unbounded digit runs, and
 // big.Rat normalizes decimal seconds structurally (1.0 == 1.00) so Eq/Identical
 // stay structural.

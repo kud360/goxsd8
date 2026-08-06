@@ -4,6 +4,16 @@ Violations are grounds for the arbiter to reject a change even if tests
 pass. Each rule has an ID; reviews cite rule IDs. The rationale behind
 these rules lives in docs/PRINCIPLES.md.
 
+**Citing rules.** A style rule is cited by its letter ID from this file
+(`STYLE D4`, `STYLE T2`) — never by a position in CLAUDE.md's "Style
+headlines" list, which is a summary and carries no citable IDs.
+`PRINCIPLES N` always means item N of docs/PRINCIPLES.md, whose numbering
+is append-only. Both lists start at 1 and disagree about what the early
+numbers mean (headline 5 "no cycle checks" is PRINCIPLES.md item 9), so a
+positional citation of the headline list silently names the wrong
+principle. The module-root `citations_test.go` guards the numbers that
+have actually been confused.
+
 ## Control flow
 
 **S1. Happy path on the left.** The success path runs down the left margin;

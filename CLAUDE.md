@@ -43,6 +43,10 @@ commit. W3C suite: `git submodule update --init testdata/xsdtests`.
 
 ## Style headlines (full rules in docs/STYLE.md — cite IDs in reviews)
 
+These numbers are NOT citable IDs — cite the docs/STYLE.md letter ID
+(`STYLE D4`, `STYLE T2`); `PRINCIPLES N` always means docs/PRINCIPLES.md
+item N, which is numbered differently from this list.
+
 1. Happy path stays left; return early; **no `else` blocks**.
 2. Every error is checked, wrapped with context, and mapped to a spec
    validation rule via `xsderr`. Errors carry file:line:column.

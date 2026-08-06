@@ -5,9 +5,9 @@ package xsd
 // (§3.3.1), a Wildcard (§3.10.1), or a Model Group (§3.8.1). The spec's
 // definitional sentence names exactly "the three kinds of components which can
 // appear in particles", so the set is closed. The unexported term marker method
-// seals it (STYLE T2/T7, the PRINCIPLES 7 sealed-sum exception), so consumers
-// exhaustively switch these three variants and no fourth is representable; it
-// mirrors attributeuse.go's AttributeDeclarationOrRef sealed sum.
+// seals it (STYLE T2/T7), so consumers exhaustively switch these three variants
+// and no fourth is representable; it mirrors attributeuse.go's
+// AttributeDeclarationOrRef sealed sum.
 //
 // A Model Group Definition (§3.7.1) is deliberately NOT a Term: only its {model
 // group} is (see modelgroupdefinition.go), and a <group ref> resolves to that

@@ -36,7 +36,7 @@ var dateTimeLexical = regexp.MustCompile(
 // permits no property except ·timezoneOffset· to be absent, so year/month/day/
 // hour/minute/second are always present. ·second· is ONE decimal number (a
 // *big.Rat, mirroring duration's ·seconds·), not a separate int+fraction pair
-// (PRINCIPLES 4/5). ·year· is unbounded (yearFrag admits arbitrary-length digit
+// (PRINCIPLES 5). ·year· is unbounded (yearFrag admits arbitrary-length digit
 // runs), so it is a *big.Int and reuses duration.go's daysFromCivil directly. The
 // endOfDayFrag hour-24 case is normalized/carried at parse time, so ·hour· is
 // NEVER 24 in a stored value, and no illegal day/month/year combination is ever
@@ -295,7 +295,7 @@ func (d dateTimeVal) Cmp(other value.Value) value.Ordering {
 // lacks a timezone the spec imputes the ±840-minute extremes to the absent
 // operand and the pair is ordered only if both imputations agree
 // (imputedOrdering), otherwise Incomparable. Shared by every seven-property
-// type's Cmp so the incomparability rule is written once (PRINCIPLES 4).
+// type's Cmp so the incomparability rule is written once (PRINCIPLES 5).
 func cmpInstants(d, o *big.Rat, dHas, oHas bool) value.Ordering {
 	if dHas == oHas {
 		return ratOrdering(d, o)
