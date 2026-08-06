@@ -55,7 +55,7 @@ import (
 // unfoldCopies bounds each particle's copies, and the B-sets are drawn from a
 // finite powerset, with maxProductStates as a hard ceiling on top. That set is a
 // walk-scoped graph-reachability guard over two automata already built, not a
-// component-resolution cycle check, so PRINCIPLES 5 / STYLE D4 are untouched.
+// component-resolution cycle check, so PRINCIPLES 9 / STYLE D4 are untouched.
 //
 // WHAT cos-ns-subset IS DOING HERE. §3.10.6.2's Wildcard Subset relation is NOT
 // cited by cos-content-act-restrict — clause 1 names no algorithm at all. It is
@@ -625,7 +625,7 @@ func elementPositionBinding(p position) defaultBinding {
 // through a <group ref>, so the tree walk and the spec's
 // "T.{content type}.{particle}.{term}.{compositor} = all" agree on every content
 // model the grammar admits. The walk carries no visited set, licensed by Phase
-// B's checkModelGroupsAcyclic (PRINCIPLES 5).
+// B's checkModelGroupsAcyclic (PRINCIPLES 9).
 func (s *Schema) usesAllCompositor(t TermOrRef) bool {
 	switch t := t.(type) {
 	case ResolvedTerm:

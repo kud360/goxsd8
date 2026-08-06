@@ -31,7 +31,7 @@ package xsd
 // "the clause is not competent to charge a failure" and accepts; an
 // implementation must never use undecided as licence to reject, must never report
 // a false NOT-same, and must never report a false NOT-valid, because every caller
-// turns a decided negative into a schema rejection (PRINCIPLES 9's direction,
+// turns a decided negative into a schema rejection (PRINCIPLES 20's direction,
 // applied to value spaces).
 //
 // Install one with [SchemaBuilder.FinalizeWith]. A Schema finalized through plain

@@ -61,7 +61,7 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 //     effectivetotalrange.go follows <group ref> edges, with NO visited set. That
 //     is licensed only because checkComplexBaseAcyclic and
 //     checkModelGroupsAcyclic have already rejected a circular graph of each kind
-//     (PRINCIPLES 5). The single spec-permitted self-derivation, xs:anyType
+//     (PRINCIPLES 9). The single spec-permitted self-derivation, xs:anyType
 //     (§3.4.7), terminates every base walk here by an explicit anyTypeName test,
 //     not by a guard.
 //   - after Phase C (cos-element-consistent): clause 4 (c-vs-ctd-r) reads the

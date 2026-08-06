@@ -23,7 +23,7 @@ package xsd
 // The walk below follows ModelGroupRef edges into their definitions with NO
 // cycle guard. That is licensed, not overlooked: it runs only in Phase D
 // (resolve.go), strictly after Phase B's checkModelGroupsAcyclic has rejected a
-// circular <group ref> graph (PRINCIPLES 5).
+// circular <group ref> graph (PRINCIPLES 9).
 
 // maxFiniteRange caps the saturating arithmetic below. An effective total range
 // is a product of a particle's {min occurs}/{max occurs} with a sum over its

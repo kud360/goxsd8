@@ -78,7 +78,7 @@ type attributeWildcardFold struct {
 // which is what licenses the recursion below to carry no visited set: the {base
 // type definition} graph is known acyclic apart from ·xs:anyType·'s
 // self-derivation (§3.4.7, any-type-itself), the one edge foldTypeAttributeWildcard
-// excludes by position rather than by a guard (PRINCIPLES 5, STYLE 5). It must run
+// excludes by position rather than by a guard (PRINCIPLES 9, STYLE D4). It must run
 // before Phase D, the first phase to read {attribute wildcard}.
 //
 // It returns an error where foldAttributeUses cannot, because clause 2.2.2.3

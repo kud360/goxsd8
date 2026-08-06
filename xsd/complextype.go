@@ -67,9 +67,9 @@ const ruleCTPropsCorrect xsderr.Rule = "ct-props-correct"
 // Type Definition (Structures §3.4.1 "Content Type" property record, id="ct").
 // The spec's {variety} property is closed to exactly {empty, simple,
 // element-only, mixed}, so the set of variant shapes is closed. The unexported
-// contentType marker method seals it (STYLE T2/T7, the PRINCIPLES 7 sealed-sum
-// exception) — consumers exhaustively switch these variants and no further one
-// is representable — mirroring term.go's Term sealed sum.
+// contentType marker method seals it (STYLE T2/T7) — consumers exhaustively
+// switch these variants and no further one is representable — mirroring
+// term.go's Term sealed sum.
 //
 // The four spec varieties collapse into THREE variant types because
 // element-only and mixed share an identical property shape (a Required
@@ -204,8 +204,8 @@ func (o OpenContent) Wildcard() Wildcard {
 // complex type definition's {context} property may name (Structures §3.4.1,
 // id="ctd-context": "Either an Element Declaration or a Complex Type
 // Definition"). The unexported complexTypeContext marker method seals it (STYLE
-// T2/T7, the PRINCIPLES 7 sealed-sum exception), mirroring this file's
-// ContentType and elementdeclaration.go's ElementScopeParent.
+// T2/T7), mirroring this file's ContentType and elementdeclaration.go's
+// ElementScopeParent.
 //
 // Each arm carries a ComponentID, not a QName: §3.4.2.1 dcl.ctd.common makes
 // the target the nearest ancestor <element>, frequently a LOCAL element

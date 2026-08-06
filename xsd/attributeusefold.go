@@ -54,7 +54,7 @@ type attributeUseFold struct {
 // recursion below to carry no visited set: the {base type definition} graph is
 // known acyclic apart from ·xs:anyType·'s self-derivation (§3.4.7,
 // any-type-itself), the one edge foldTypeAttributeUses excludes by position
-// rather than by a guard (PRINCIPLES 5, STYLE 5). It must run before Phase D,
+// rather than by a guard (PRINCIPLES 9, STYLE D4). It must run before Phase D,
 // which is the first phase to read {attribute uses}.
 //
 // Clause 3.2.2 — the <attribute use="prohibited"> child, which BLOCKS the

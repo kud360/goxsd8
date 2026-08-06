@@ -169,7 +169,7 @@ func (backend) Mapping(typ xsd.QName) (value.Mapping, bool) {
 		// verbatim. The tz-required constraint is enforced generically by the
 		// explicitTimezone facet pipeline (§4.3.14, cvc-explicitTimezone-valid),
 		// reading dateTimeVal's value.TimezoneAware — NOT re-checked here, to avoid
-		// encoding the same constraint twice (PRINCIPLES 4). Do NOT copy this alias
+		// encoding the same constraint twice (PRINCIPLES 5). Do NOT copy this alias
 		// reflexively for the next derived type (e.g. yearMonthDuration/
 		// dayTimeDuration): their canonical forms genuinely differ from duration's,
 		// so they will need their own Canonical — re-ground each case against the

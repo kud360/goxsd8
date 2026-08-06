@@ -572,7 +572,7 @@ func (s *Schema) extensionAllGroupPrefix(e, b Particle) bool {
 // identity for one property kind — they are named for the relation they decide.
 //
 // The recursion is finite BY CONSTRUCTION, with no visited set anywhere (STYLE
-// D4 / PRINCIPLES 5): every component-valued slot that could close a cycle — a
+// D4 / PRINCIPLES 9): every component-valued slot that could close a cycle — a
 // declaration's {type definition}, a <group ref>, an <element ref> — bottoms out
 // at COMPONENT IDENTITY (an expanded name, sameTypeDefinition's reading), never
 // at a structural walk into the referenced component. What the predicates do

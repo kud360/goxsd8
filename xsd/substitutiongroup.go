@@ -20,7 +20,7 @@ package xsd
 // cos-element-consistent) both get the same true relation.
 //
 // Two walks run here, over two different edge kinds, and each terminates on its
-// own licence (PRINCIPLES 5, no runtime cycle checks):
+// own licence (PRINCIPLES 9, no runtime cycle checks):
 //
 //   - the {substitution group affiliations} walk (clause 2.2) terminates because
 //     Finalize's Phase B ran checkSubstitutionGroupsAcyclic (e-props-correct

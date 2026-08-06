@@ -58,7 +58,7 @@ import "github.com/kud360/goxsd8/xsderr"
 // inline {type definition} — and never follows a by-name ref, which is what makes
 // the structure a finite tree. It additionally inherits Phase B's acyclicity
 // (checkComplexBaseAcyclic, checkModelGroupsAcyclic) for the by-name edges it
-// deliberately does not take, so no cycle check is needed (PRINCIPLES 5).
+// deliberately does not take, so no cycle check is needed (PRINCIPLES 9).
 
 // checkAttributeUseValueConstraints is Phase E's use-side walk: it charges
 // au-props-correct clauses 2 and 3 — and, for a use owning a LOCAL declaration,
@@ -332,7 +332,7 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 // clause 2" a representable, wrong state (STYLE D3).
 //
 // The verdict is the installed ValueSpace's, and an UNDECIDED verdict ACCEPTS.
-// That is not laxity, it is the fail-open contract (ValueSpace, PRINCIPLES 9):
+// That is not laxity, it is the fail-open contract (ValueSpace, PRINCIPLES 20):
 // undecided covers a type no backend mapping governs — xs:anySimpleType and
 // xs:anyAtomicType included, which is what §3.2.2.2's third tier gives every
 // typeless <xs:attribute default="…">, and for which Datatype Valid is

@@ -13,7 +13,7 @@ package xsd
 // {substitution group affiliations} graph (e-props-correct clause 5) and a
 // circular complex-type base chain (ct-props-correct clause 3 — reached through
 // substitutiongroup.go's clause 2.3 walk), so every graph these walks follow is
-// acyclic by construction on any *Schema that exists (PRINCIPLES 5; xsd/doc.go's
+// acyclic by construction on any *Schema that exists (PRINCIPLES 9; xsd/doc.go's
 // "no visited set beyond the path-scoped guard").
 //
 // Nothing here is memoized. The sibling name set is per-(complex type,

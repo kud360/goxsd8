@@ -21,7 +21,7 @@ import (
 // ·timezoneOffset· is optional-and-present-or-absent, carried as *int (nil ==
 // absent) with no parallel presence flag, exactly as dateTimeVal does. The
 // order, equality/identity divergence and imputation-incomparability all reuse
-// datetime.go's cmpInstants / sevenProp.instant / imputedOrdering (PRINCIPLES 4);
+// datetime.go's cmpInstants / sevenProp.instant / imputedOrdering (PRINCIPLES 5);
 // this file adds only the seven per-type lexical grammars and canonical maps.
 // Every lexical/day-value rejection maps to cvc-datatype-valid (§4.1.4).
 

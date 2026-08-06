@@ -290,7 +290,7 @@ func contextDependent(t *xsd.SimpleType) bool {
 // programmatically built list or union can hold a nil slot, and Variety() on nil
 // would panic. No visited set is needed — a SimpleType's variety graph is a tree,
 // since List and Union are built by value from already-complete item/member
-// pointers and so cannot reach back to t (PRINCIPLES 5).
+// pointers and so cannot reach back to t (PRINCIPLES 9).
 func needsContext(t *xsd.SimpleType) bool {
 	switch v := t.Variety().(type) {
 	case xsd.Atomic:

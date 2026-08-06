@@ -252,7 +252,7 @@ type symbols struct {
 	// NO on-stack sentinel, unlike built/builtComplex: mapping a definition reads
 	// only its own <selector>/<field> and retains its refer= as an unresolved
 	// QName, so construction never recurses into another definition and there is
-	// no circularity to guard (PRINCIPLES 5).
+	// no circularity to guard (PRINCIPLES 9).
 	//
 	// The memo is what makes §3.11.2's ref= mapping literal — "the corresponding
 	// schema component IS the identity-constraint definition resolved to by the
@@ -495,7 +495,7 @@ func (p *producer) prescan() {
 //
 // The ref= form is deliberately NOT indexed: it declares nothing (§3.11.2), so
 // a reference chain is unrepresentable and there is no cycle to guard
-// (PRINCIPLES 5). A name is minted in the effective target namespace, exactly as
+// (PRINCIPLES 9). A name is minted in the effective target namespace, exactly as
 // produceIdentityConstraint mints the definition's own {name}, so the index key
 // and the component name agree under chameleon coercion (§F.1 task a).
 //
@@ -783,7 +783,7 @@ func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleTy
 // Neither of this function's two services applies to it — the memo is keyed by
 // name and an anonymous type has none, and it can be no cycle member for exactly
 // the same reason, since a {base type definition} chain is followed BY NAME and
-// nothing can name it (STYLE 5 / PRINCIPLES 5: no cycle check where the
+// nothing can name it (STYLE D4 / PRINCIPLES 9: no cycle check where the
 // construction order makes one impossible).
 //
 // A name already on the build stack (the PRESENT-nil memo state) is a circular
@@ -793,7 +793,7 @@ func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleTy
 // construction paths — this one for the producer, whose demand-driven recursion
 // would otherwise not terminate, and that one for the programmatic
 // SchemaBuilder, which has no producer and must stay self-defending. Neither
-// substitutes for the other (PRINCIPLES 5's "detect once at construction" applies
+// substitutes for the other (PRINCIPLES 9's "detect once at construction" applies
 // per construction path).
 func (p *producer) buildComplexType(name xsd.QName, elem *Element) (xsd.ComplexType, error) {
 	if ct, started := p.symbols.builtComplex[name]; started {
