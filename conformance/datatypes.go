@@ -468,19 +468,34 @@ import (
 // #331's prose miscounted: integer013–016 exist and carry the identical
 // comp_foo/simpleTest shape) joined the claim with issue #365, which widened
 // datatypesCase's alternation and changed no engine code; they ride that same
-// route unchanged. Four integer-family sub-families are still UNCLAIMED under
-// msData/datatypes, twenty files in all: negativeInteger001–005,
-// nonNegativeInteger001–005, nonPositiveInteger001–005 and
-// positiveInteger001–005. Each carries the identical comp_foo/simpleTest shape
-// against its own negativeInteger.xsd/nonNegativeInteger.xsd/
-// nonPositiveInteger.xsd/positiveInteger.xsd — precisely the shape and route
-// int001–008 and integer001–016 had before issue #365 — and each currently sits
-// in expectations/instance.txt as fail, absent from datatypes.txt, which is
-// exactly the status int001/integer001 held before this widening. Claiming them
-// is the same selector-only widening #365 performed, deliberately out of #365's
-// scope and left to a later issue; it is a harvest still on the table, not a
-// limit of the route. The only integer-family cases the route genuinely cannot
-// take are the reader-shape limits named above.
+// route unchanged. The last four integer-family sub-families under
+// msData/datatypes — negativeInteger001–005, nonNegativeInteger001–005,
+// nonPositiveInteger001–005 and positiveInteger001–005, twenty files in all —
+// joined the claim with issue #449, again by widening datatypesCase's
+// alternation and changing no engine code. Each carries the identical
+// comp_foo/simpleTest shape against its own negativeInteger.xsd/
+// nonNegativeInteger.xsd/nonPositiveInteger.xsd/positiveInteger.xsd. They are
+// the route's first HALF-bounded arm: #331's forty-eight all carry BOTH
+// min- and maxInclusive and #365's xs:integer carries NEITHER, while each of
+// these four carries exactly one bound (§3.4.14.3 maxInclusive=0,
+// §3.4.15.3 maxInclusive=-1, §3.4.20.3 minInclusive=0, §3.4.25.3
+// minInclusive=1), so a single-sided value-facet check is the only thing
+// between a well-formed integer literal and acceptance. Two of them are also
+// the route's first TWO-HOP base chains: negativeInteger restricts
+// nonPositiveInteger and positiveInteger restricts nonNegativeInteger, so
+// st-restrict-facets §3.16.6.4's overlay walk crosses two restriction steps
+// before reaching xs:integer and then xs:decimal's mapping — it does, and
+// TestDatatypesLexicalHalfBoundedIntegerFamily pins it.
+// What is still undecided is therefore enumerable rather than open-ended
+// (STYLE P3a). Within the integer family, exactly one kind of case remains:
+// the reader-shape limits named above — Facets/int/test111092.xml's
+// two-named-step, two-element shape and any sibling of that kind, which
+// readFacetsCase's exactly-one-<foo> reader declines. Outside it, the lane's
+// standing exclusions are unchanged and named elsewhere in this comment: the
+// NIST corpus, UNION variety, the plural list-typed dirs (IDREFS, NMTOKENS),
+// string_pattern002's user-defined list item type, and
+// time_minInclusive006_1163.i. Every one of those is an honest decline (Fail,
+// recorded in the instance lane), never a false accept.
 // time_minInclusive006_1163.i (issue #123) is a
 // recorded gap for a different reason: its instance file carries no
 // xsi:noNamespaceSchemaLocation (a defect in that one suite file), so
@@ -551,13 +566,29 @@ const synthNS = "urn:goxsd8:conformance:facets"
 // §4.3.4.4 failures, never as cvc-fractionDigits-valid §4.3.12.3 ones: none is
 // in xs:decimal's lexical space (§3.3.3.1, no exponent/INF/NaN production)
 // either, so no value V is ever established for the value-based facets to test.
-// The alternation lists "integer" before "int" for the reader's sake only — it
-// is anchored between the literal msData/datatypes/ and [0-9]+\.xml$, so the
-// bare "int" alternative can reach int<digits>.xml and nothing else, and the
-// order is immaterial to what matches. Facets/int/test111092.xml in particular
+// nonPositiveInteger, negativeInteger, nonNegativeInteger and positiveInteger
+// joined it with issue #449 — their twenty plain lexical cases (each family's
+// 001–005) — again with NO engine change, only a wider selector. They are the
+// route's first HALF-bounded arm (exactly one of min/maxInclusive each,
+// §3.4.14.3/§3.4.15.3/§3.4.20.3/§3.4.25.3) and, for negativeInteger and
+// positiveInteger, its first TWO-HOP base chains (negativeInteger →
+// nonPositiveInteger → integer → decimal; positiveInteger → nonNegativeInteger
+// → integer → decimal), which governingMapping's st-restrict-facets §3.16.6.4
+// walk crosses unchanged.
+// The alternation lists "integer" before "int", and the two "non*" forms
+// before the "negativeInteger"/"positiveInteger" they contain as suffixes, for
+// the reader's sake only. Ordering cannot matter: RE2 has no leftmost-FIRST
+// alternation, and more importantly the alternation is anchored between the
+// literal msData/datatypes/ and [0-9]+\.xml$, so an alternative must consume
+// the name from the character immediately after that literal — "negativeInteger"
+// cannot reach nonNegativeInteger001.xml (that position reads n, o, n) and the
+// bare "int" alternative can reach int<digits>.xml and nothing else. That was
+// checked empirically for #449, not merely argued: a whole-tree match diff of
+// the old pattern against the new one over testdata/xsdtests adds exactly the
+// twenty files above and removes none. Facets/int/test111092.xml in particular
 // stays claimed by no selector (TestDatatypesSelectorClaimsOnlyCohort pins the
-// selector from both sides).
-var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|dateTimeStamp|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth|QName|NOTATION|unsignedByte|unsignedInt|unsignedLong|unsignedShort|byte|long|short|integer|int)[0-9]+\.xml$`)
+// selector from both sides, including the cohort's own .xsd siblings).
+var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|dateTimeStamp|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth|QName|NOTATION|unsignedByte|unsignedInt|unsignedLong|unsignedShort|nonNegativeInteger|nonPositiveInteger|negativeInteger|positiveInteger|byte|long|short|integer|int)[0-9]+\.xml$`)
 
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
 // the lane decides: the strict-mapped primitives (string/decimal/float/double),

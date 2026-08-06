@@ -90,6 +90,23 @@ func TestDatatypesSelectorClaimsOnlyCohort(t *testing.T) {
 		// does the cohort's own schema. That row is deliberately kindInstance so the
 		// REGEX, not selectsDatatypes' cheap kind guard, is what has to reject it.
 		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/int.xsd"}, false},
+		// The four HALF-bounded families are claimed since issue #449, one row per
+		// family. The pair that matters is negativeInteger vs nonNegativeInteger (and
+		// positiveInteger vs nonPositiveInteger): each shorter name is a SUFFIX of the
+		// longer one, so a reader has to be convinced the alternation cannot mis-bind.
+		// It cannot: the alternative must start at the character right after the
+		// literal msData/datatypes/, which for the non* files reads n, o, n. These
+		// rows are that conviction made executable.
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/negativeInteger003.xml"}, true},
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/nonNegativeInteger002.xml"}, true},
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/nonPositiveInteger004.xml"}, true},
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/positiveInteger005.xml"}, true},
+		// …and the same anchor pin #365 planted on int.xsd, now on two of the new
+		// families' .xsd siblings: the alternation must not leak past [0-9]+\.xml$.
+		// Both rows are deliberately kindInstance so the REGEX, not selectsDatatypes'
+		// cheap kind guard, is what has to reject them.
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/negativeInteger.xsd"}, false},
+		{caseSpec{kind: kindInstance, doc: "../testdata/xsdtests/msData/datatypes/nonNegativeInteger.xsd"}, false},
 	}
 	for _, tc := range cases {
 		if got := selectsDatatypes(tc.c); got != tc.want {
@@ -1038,6 +1055,178 @@ func TestDatatypesLexicalIntXFamily(t *testing.T) {
 	for _, lex := range []string{"2147483648", "-2147483649", "12345678901234567890123456789"} {
 		if _, verr := value.ValidateLexical(backend, seeded("integer"), lex, nil); verr != nil {
 			t.Errorf("xs:integer %q must be accepted (it carries no bounds, §3.4.13.3), got %v", lex, verr)
+		}
+	}
+}
+
+// TestDatatypesLexicalHalfBoundedIntegerFamily drives the executor over the
+// twenty nonPositiveInteger/negativeInteger/nonNegativeInteger/positiveInteger
+// lexical fixtures issue #449 claimed (001–005 per family). It is a sibling of
+// TestDatatypesLexicalIntegerFamily and TestDatatypesLexicalIntXFamily rather
+// than an extension of either, because this cohort is the first to drive two
+// shapes neither of those can:
+//
+//   - the HALF-bounded arm. #331's forty-eight (byte/long/short/unsigned*) all
+//     carry BOTH minInclusive and maxInclusive; #365's xs:integer carries
+//     NEITHER. These four carry exactly one bound each — maxInclusive=0
+//     (§3.4.14.3), maxInclusive=-1 (§3.4.15.3), minInclusive=0 (§3.4.20.3),
+//     minInclusive=1 (§3.4.25.3) — so a single-sided value-facet check is the
+//     only thing between a well-formed integer literal and acceptance.
+//   - the TWO-HOP base chain. negativeInteger restricts nonPositiveInteger and
+//     positiveInteger restricts nonNegativeInteger (§3.4.15.2/§3.4.25.2), not
+//     xs:integer directly, so st-restrict-facets §3.16.6.4's overlay walk has to
+//     cross two restriction steps before it reaches xs:integer, xs:decimal and
+//     strict's mapping. Every earlier cohort member was one hop off xs:integer.
+//
+// Both polarities are asserted, and each is also asserted to DISAGREE with the
+// opposite claim — the load-bearing half: a routing that fell back to Parse
+// against xs:decimal's mapping, or one whose overlay walk stopped a hop short
+// and picked up xs:integer's (absent) bounds instead of the leaf's own, would
+// false-ACCEPT "0" as an xs:negativeInteger and "-1" as an
+// xs:nonNegativeInteger, and those wrong "valid" claims would spuriously Pass.
+// Skips when the submodule is absent.
+func TestDatatypesLexicalHalfBoundedIntegerFamily(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	exec := newDatatypesExec()
+
+	dir := filepath.Join(suiteRoot, "msData", "datatypes")
+	cases := []struct {
+		file      string
+		specValid bool // the spec-correct validity of the fixture's literal
+		why       string
+	}{
+		{"nonPositiveInteger001.xml", false, `"" (empty after whiteSpace=collapse) fails the fixed pattern [\-+]?[0-9]+`},
+		{"nonPositiveInteger002.xml", true, `"-1" is at or below maxInclusive 0`},
+		{"nonPositiveInteger003.xml", true, `"0" IS nonPositiveInteger's maxInclusive`},
+		{"nonPositiveInteger004.xml", false, `"1" exceeds maxInclusive 0 (cvc-maxInclusive-valid)`},
+		{"nonPositiveInteger005.xml", true, `29 digits negative: arbitrary precision, and no minInclusive to trip`},
+		{"negativeInteger001.xml", false, `"" fails the fixed pattern`},
+		{"negativeInteger002.xml", true, `"-1" IS negativeInteger's maxInclusive`},
+		{"negativeInteger003.xml", false, `"0" exceeds maxInclusive -1 — the two-hop overlay must win over nonPositiveInteger's 0`},
+		{"negativeInteger004.xml", false, `"1" exceeds maxInclusive -1 (cvc-maxInclusive-valid)`},
+		{"negativeInteger005.xml", true, `29 digits negative`},
+		{"nonNegativeInteger001.xml", false, `"" fails the fixed pattern`},
+		{"nonNegativeInteger002.xml", false, `"-1" is below minInclusive 0 (cvc-minInclusive-valid)`},
+		{"nonNegativeInteger003.xml", true, `"0" IS nonNegativeInteger's minInclusive`},
+		{"nonNegativeInteger004.xml", true, `"+1" — the fixed pattern admits a leading +`},
+		{"nonNegativeInteger005.xml", true, `29 digits positive: no maxInclusive to trip`},
+		{"positiveInteger001.xml", false, `"" fails the fixed pattern`},
+		{"positiveInteger002.xml", false, `"-1" is below minInclusive 1 (cvc-minInclusive-valid)`},
+		{"positiveInteger003.xml", false, `"0" is below minInclusive 1 — the two-hop overlay must win over nonNegativeInteger's 0`},
+		{"positiveInteger004.xml", true, `"+1" IS positiveInteger's minInclusive, written with a leading +`},
+		{"positiveInteger005.xml", true, `29 digits positive`},
+	}
+	for _, tc := range cases {
+		doc := filepath.Join(dir, tc.file)
+		right := caseSpec{kind: kindInstance, doc: doc, expect: expectValidity(tc.specValid)}
+		if got := exec(right); !got.IsPass() {
+			t.Errorf("%s: executor disagreed with spec-correct validity %v (%s)", tc.file, tc.specValid, tc.why)
+		}
+		wrong := caseSpec{kind: kindInstance, doc: doc, expect: expectValidity(!tc.specValid)}
+		if exec(wrong).IsPass() {
+			t.Errorf("%s: executor must Fail against the wrong expectation (expectValid=%v)", tc.file, !tc.specValid)
+		}
+	}
+
+	// Pin the routing premises for all four types, exactly as the two cohorts
+	// above pin theirs: seeded, NOT directly mapped (so the generalized !mapped
+	// arm, not fixesTimezone, is what routes them), and governed by strict's
+	// xs:decimal mapping up the base chain — across two restriction steps for
+	// negativeInteger and positiveInteger, which is the premise this cohort adds.
+	backend := strict.New()
+	types, err := builtin.Seed(backend)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	seeded := func(local string) *xsd.SimpleType {
+		qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: local}
+		for _, ty := range types {
+			if ty.Name() == qn {
+				return ty
+			}
+		}
+		t.Fatalf("Seed did not return xs:%s", local)
+		return nil
+	}
+	families := []struct {
+		local string
+		base  string // the DECLARED base, §3.4.14.2/§3.4.15.2/§3.4.20.2/§3.4.25.2
+	}{
+		{"nonPositiveInteger", "integer"},
+		{"negativeInteger", "nonPositiveInteger"},
+		{"nonNegativeInteger", "integer"},
+		{"positiveInteger", "nonNegativeInteger"},
+	}
+	for _, fam := range families {
+		st := seeded(fam.local)
+		if _, mapped := backend.Mapping(st.Name()); mapped {
+			t.Errorf("strict.Mapping(xs:%s) = mapped, want unmapped (the routing premise of #331/#365/#449)", fam.local)
+		}
+		if !strictGoverns(backend, st) {
+			t.Errorf("strictGoverns(xs:%s) = false, want true (xs:decimal governs it up the base chain)", fam.local)
+		}
+		if fixesTimezone(st) {
+			t.Errorf("fixesTimezone(xs:%s) = true, want false (the two routing arms are independent)", fam.local)
+		}
+		if got := st.Base().Name().Local; got != fam.base {
+			t.Errorf("xs:%s base = xs:%s, want xs:%s — the two-hop chain is the premise the overlay walk has to cross", fam.local, got, fam.base)
+		}
+	}
+
+	// The rejection REASONS, not just the polarities — the #149 right-answer/
+	// wrong-reason guard, and where this cohort earns its keep. The two reasons
+	// are genuinely different here: the four empty literals never establish a
+	// value V at all (cvc-datatype-valid §4.1.4 clause 1's pattern runs before
+	// clause 3, and clause 3 tests the V clause 2.1 produces), so they are
+	// cvc-pattern-valid §4.3.4.4 — while every other rejection below is a
+	// perfectly good integer literal failing only its type's single bound, which
+	// must be charged to cvc-max/minInclusive-valid §4.3.7.3/§4.3.10.3 and never
+	// to cvc-pattern-valid §4.3.4.4 or cvc-fractionDigits-valid §4.3.12.3.
+	rules := []struct {
+		local   string
+		lexical string
+		rule    xsderr.Rule
+	}{
+		{"nonPositiveInteger", "", "cvc-pattern-valid"},
+		{"negativeInteger", "", "cvc-pattern-valid"},
+		{"nonNegativeInteger", "", "cvc-pattern-valid"},
+		{"positiveInteger", "", "cvc-pattern-valid"},
+		{"nonPositiveInteger", "1", "cvc-maxInclusive-valid"},
+		{"negativeInteger", "0", "cvc-maxInclusive-valid"},
+		{"negativeInteger", "1", "cvc-maxInclusive-valid"},
+		{"nonNegativeInteger", "-1", "cvc-minInclusive-valid"},
+		{"positiveInteger", "-1", "cvc-minInclusive-valid"},
+		{"positiveInteger", "0", "cvc-minInclusive-valid"},
+	}
+	for _, r := range rules {
+		_, verr := value.ValidateLexical(backend, seeded(r.local), r.lexical, nil)
+		if verr == nil {
+			t.Fatalf("xs:%s %q must be rejected via value.ValidateLexical, got nil", r.local, r.lexical)
+		}
+		if rule, ok := xsderr.RuleOf(verr); !ok || rule != r.rule {
+			t.Errorf("xs:%s %q rejection rule = %q (ok=%v), want %s", r.local, r.lexical, rule, ok, r.rule)
+		}
+	}
+
+	// The 005 fixtures' 29-digit literals from the ACCEPTING side: each is the
+	// first arbitrary-precision value this route compares against a BOUND rather
+	// than against no bound at all (#365) or against an int64-sized one (#331).
+	// builtin/strict/doc.go states the integer family is math/big-backed, so the
+	// unbounded side of each half-bounded type must admit them outright.
+	accepts := []struct {
+		local   string
+		lexical string
+	}{
+		{"nonPositiveInteger", "-12345678901234567890123456789"},
+		{"negativeInteger", "-12345678901234567890123456789"},
+		{"nonNegativeInteger", "12345678901234567890123456789"},
+		{"positiveInteger", "12345678901234567890123456789"},
+	}
+	for _, a := range accepts {
+		if _, verr := value.ValidateLexical(backend, seeded(a.local), a.lexical, nil); verr != nil {
+			t.Errorf("xs:%s %q must be accepted (29 digits, and the type is unbounded on that side), got %v", a.local, a.lexical, verr)
 		}
 	}
 }
