@@ -68,7 +68,9 @@
 //
 //	go test ./conformance -run TestConformance -count=1
 //	    Read-only: runs the suite, Compares against committed
-//	    expectations, fails on any Regressed case.
+//	    expectations, fails on any Regressed case. Improved cases are
+//	    logged (visible with -v), never written: a non-arbiter agent can
+//	    thus see the upward movement pending banking (issue #303).
 //
 //	GOXSD_RATCHET=1 go test ./conformance -run TestConformance -count=1
 //	    Additionally Ratchets each lane and rewrites its file. Arbiter

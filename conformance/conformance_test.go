@@ -14,7 +14,9 @@ import (
 //     mistaken for a green one, and the opt-out never covers a ratchet run.
 //   - Read-only (default): Compare each lane's observed run against its
 //     committed expectations and fail only on a Regressed case; New/Improved/
-//     Vanished do not fail the read-only run (doc.go "Running").
+//     Vanished do not fail the read-only run (doc.go "Running"). Improved is
+//     logged so an agent that cannot run the ratchet can still see the upward
+//     movement its branch earned but has not banked (issue #303).
 //   - GOXSD_RATCHET=1: additionally Ratchet each lane and rewrite its file;
 //     a Ratchet refusal (regression or vanished) fails the test. Arbiter only.
 //   - GOXSD_CASE=<id>: narrow execution to one case across all lanes.
@@ -75,6 +77,10 @@ func runConformanceLane(t *testing.T, l lane, cases []caseSpec, ratcheting bool)
 		d := Compare(expected, actual)
 		if len(d.Regressed) > 0 {
 			t.Errorf("lane %s: %d regressed case(s): %v", l.name, len(d.Regressed), d.Regressed)
+		}
+		if len(d.Improved) > 0 {
+			t.Logf("lane %s: %d case(s) improved, not yet banked (GOXSD_RATCHET=1 required to write): %v",
+				l.name, len(d.Improved), d.Improved)
 		}
 		return
 	}
