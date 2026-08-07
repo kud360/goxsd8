@@ -321,7 +321,9 @@ machinery; just don't leave the merge undone.
 - **`/ratchet`** — arbiter only: run conformance, report movement per
   lane, ratchet upward, investigate & file issues for any regression.
 - **`/backlog`** — cartographer: reconcile GitHub issues with reality (close
-  stale, split oversized, order by dependency, keep 8–10 `ready`).
+  stale, split oversized, order by dependency). No numeric `ready` cap
+  (#347) — the dependency-ordered band published in docs/PLAN.md is the
+  working queue; `.claude/agents/cartographer.md` states the rule.
   **The launching session — not the cartographer — runs
   libuser/cliuser** when the pass covers API- or CLI-facing milestones,
   and hands their stories to the cartographer to fold into issue bodies.

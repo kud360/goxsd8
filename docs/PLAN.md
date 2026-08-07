@@ -2987,6 +2987,293 @@ in the band).
   fact that this survey re-derives the same three deaths every session;
   it is `ready` and unpicked.
 
+Update (2026-08-07, daily backlog — **the first pass under the retired
+band, and the pass where #347's ratified edit exists in the tree**).
+Five landings since `779d61e`: #304 (`da76d02`), #303 (`7a24098`), #306
+(`86ce634`), #336 (`26a20df`), #307 (`4144016`). Two facts dominate.
+The first is that **#347 is resolved in substance** — the three-part
+edit it ratified on 2026-08-06 was made by the orchestrating session
+before this pass launched, and the cartographer's half was to verify it
+rather than to author it. The second is that **#336 moved the `schema`
+lane by +278**, the largest rule-work movement since #229's cohort, and
+it did so by *widening an admitted shape* rather than by fixing a rule —
+which reshuffles the band's head.
+
+Lanes, read off `conformance/testdata/expectations/*.txt` at
+`4144016` on 2026-08-07. Date-stamped per the preamble convention
+(#411); earlier paragraphs are **not** corrected in place:
+
+| lane | pass / total | movement since 2026-08-06 |
+|---|---|---|
+| `schema` | **9529 / 15432** | 9251 → 9529, **+278** |
+| `datatypes` | **1151 / 1173** | unchanged |
+| `instance` | 0 / 26426 | unchanged |
+| `xpath`, `json`, `ber` | empty by design | unchanged |
+
+**The `schema` +278 is the third kind, and the file has not had to name
+it before.** The 2026-08-06 paragraph distinguished *rule work* (pass
+column moves, case-ID set held) from *widening* (both columns move). #336
+is neither: the case-ID set held at **15432** — so by the first test it
+reads as rule work — but no rule was implemented. #336 narrowed
+`complexTypeDecidable` to **admit two `<extension>` forms the harness had
+been declining**, and 278 of the newly-decided cases turned out to
+already pass. The lane did not get better at XSD; it stopped refusing to
+look. Call it **harness widening within a fixed case set** — invisible to
+both prior tests, and the reason #443 and #538 now sit at the head of the
+band. A reader comparing only the pass column would score it as #295's
+kind, and would be wrong about what was bought.
+
+***#347 — RESOLVED, and the resolution is #416's template applied
+verbatim.*** The 2026-08-06 comment ratified option (b) and named the
+blocker exactly: *"the option is ratified; the edit requires an actor the
+`/backlog` loop structurally does not contain."* The orchestrating
+session was that actor. Five edits, verified this pass against the
+ratified shape and against the **#195 precedent that exactly one file
+states a rule**:
+
+| ratified part | file | verdict |
+|---|---|---|
+| retire the numeric 8–10 band | `.claude/agents/cartographer.md` step 3 | matches — *"no numeric cap … its size is an output, not a target"* |
+| formalize the ordering as the deliverable | same, step 3 | matches — *"the **ordering is the deliverable**"*, `docs/PLAN.md`'s band named as the working queue |
+| widen `blocked` | same, Labels line | matches the thread's draft verbatim — *"an issue **or** a trigger … recorded in `## Depends on`"* |
+
+The handoff also asked for `docs/WORKFLOW.md` *if and only if* it
+restated the number. It did, and the orchestrator found **two further
+live restatements the handoff had not enumerated** — `docs/ROUTINES.md`'s
+schedule-table row and `.claude/commands/backlog.md`'s front-matter
+description *and* body. So the rule is now stated once in
+`.claude/agents/cartographer.md` and routed to from three documents,
+which is #195 satisfied rather than gestured at. **This file's dated
+paragraphs were deliberately left alone** — they are a record, not a live
+rule, and add-don't-rewrite governs them.
+
+**The governance objection was not overturned; it was routed around, and
+the distinction matters.** The 2026-08-06 refusal barred the cartographer
+from *making* the edit on an agent's say-so. It never barred verifying
+one already made. Both refusals stand as written and neither is weakened
+by this resolution. **The close is handed to the orchestrating session**,
+`state_reason: completed`, at the pass boundary — as #416 was closed on
+2026-08-05. The five edits landed as **`9e41fc8`** mid-pass (*"process:
+retire the numeric 8-10 ready-queue band, ratified at #347 (#347)"*),
+which is one commit ahead of `origin/main` and **not yet merged**, so the
+reason holds unchanged: closing an issue whose deliverable an unmerged
+branch could still drop is **#400**'s exact open defect, and the close
+belongs to the actor that can watch the merge succeed.
+
+***Queue size, reported and not adjudicated. 117 `ready` of 130 open***
+(117 / 12 `blocked` / 1 unlabelled). **That sentence is the whole of it.**
+No delta against a target, no consecutive-overrun counter, no harvest
+ratio pressed into service as an argument about a number that no longer
+exists. The sequence `9 → … → 115 → 116 → 117` is retired here; it was
+only ever evidence for #347, and #347 is answered. What replaces it as
+the pass's deliverable is **Band 5**, below.
+
+For the record, since the composition did change and the composition is
+still meaningful: **five closed** (the five landings), **six filed**
+(#531, #532, #534, #536, #538, #540 — every one of them by the develop
+loop's own post-land harvests), plus one restored to `ready` (#291,
+below), which reconciles 116 + 6 − 5 to **117**. **This pass filed
+nothing** — the first `/backlog` in the recorded sequence to file zero
+issues, and not for want of looking: every harvestable item this window
+had already been filed by the landing that generated it, which is the
+post-land harvest working exactly as #489 asked for.
+
+***The post-land harvest is CLEAN for the second consecutive pass — and
+this time the develop loop did it, not the backlog.*** Each of the five
+landings' `Next:` lists was audited against reality:
+
+| owed by | disposition |
+|---|---|
+| #304 Next (mason.md's fourth gate restatement) | filed as **#534** by #304's own post-land pass |
+| #303 Next (arbiter verdict-template ratchet slot) | filed as **#532**; the `-v` divergence as **#531** |
+| #306 Next (`Scope` → `ElementScope` rename, both reviewers deferred) | filed as **#536** |
+| #336 Next 1 (`{final}` data-dead on cos-ct-extends 1.1/2.2) | filed as **#538** |
+| #336 Next 2 (the rewrap nit) | **folded into #329**, which already owns the class |
+| #307 Next 1 (`xsd/resolve.go:141` cites numeric `STYLE 8`) | **folded into #540**, filed the same day with a 7-site census |
+| #307 Next 2 (#291's label/body inconsistency) | acted on — **and got it backwards; corrected this pass, see below** |
+
+Eleven of twelve discharged correctly with zero leaks. **The twelfth is
+the finding.**
+
+***The one real defect this pass found is a post-land pass that reverted
+an argued relabel by reading a body and not a thread — #291.*** #307's
+post-land pass stripped `ready` from #291 six hours before this sweep,
+quoting the body's *"Deliberately NOT labelled `ready` — this is on the
+steward's radar for the next `/retro`"* and reasoning that there was *"no
+evidence the steward's intent has changed since filing."*
+
+**The evidence was two comments up the same thread.** The 2026-08-02
+`/backlog` had applied `ready` deliberately and with an argument, because
+the trigger #291 was waiting on had **fired**: the steward's audit ran on
+2026-08-02, ruled **ruling 1** (`docs/LOG/2026-08.md:3392`,
+*"the 2026-07-19 cohort-isolation ruling stands"*), and the remaining
+deliverable was rescoped to one paragraph in `docs/ARCHITECTURE.md`. All
+three facts were re-verified from `main` this pass rather than taken from
+the comment; the §"Cohort isolation is deliberate" section exists at
+`docs/ARCHITECTURE.md:470` and is pitched entirely at the cohort-triple
+level, leaving the inner-struct question the issue actually asked
+unanswered in either direction. **`ready` restored.**
+
+Two things this costs, both worth writing down:
+
+1. **It is #315's class with a fresh witness.** A body line that was true
+   when written became a stale premise the moment its trigger fired, and
+   a later pass acted on the body in preference to the thread. The
+   project's own stated remedy — *"GitHub issues are the cross-session
+   channel"* — only works if the channel is read to the end.
+2. **It is the widened `blocked`'s first use in the unblocking
+   direction**, and it works cleanly: #291's `## Depends on` names a
+   trigger (*"sequenced by the steward's `/retro` audit"*), the trigger
+   fired, so the disposition is `ready` — not `blocked`, because nothing
+   is waited on, and not unlabelled, because the scheme has no such
+   state. Under the pre-#347 vocabulary this issue had **no honest
+   label**, which is exactly why it drifted for five passes.
+
+A correction was also handed to whoever picks #291 up: re-deriving its
+own table found the mirror set is **three anonymous inner
+`Restriction struct` sites plus one already-named `d34Restriction`**, not
+four identical anonymous ones, and every line number in the body has
+drifted (`:1803`, `:2790`, `:3034`, `:3468`). Posted as a comment, not a
+body edit, per #515.
+
+***#411 — the ask is discharged, and the sixth recording names an actor
+instead of restating it.*** Five passes wrote *"unchanged, unlabelled,
+deliberately."* Verified at `4144016`: the convention **was** decided
+(option (b), date-stamp), it is stated once in this file's preamble
+(lines 8–16), it **was** applied to the M3 heading (*"as of
+2026-07-23"*), and *"any other milestone headings with the same
+pattern"* — checked one by one — **is the empty set**. M3 was the only
+instance, so the issue's own hedge that the pattern *"probably recurs"*
+is falsified. Nothing is left to do. **Recommended to the orchestrating
+session for closure as `completed`**, on the reasoning posted to the
+thread: a cartographer closes issues as obsolete or duplicate, not as
+done, and forcing `not_planned` onto genuinely-finished work would
+manufacture **#493**'s defect rather than avoid it.
+
+***GAP ledger: 48 → 50 across 21 files, and both new sites are
+cross-references, not new fail-open.*** File-by-file counts at `4144016`
+are byte-identical to the 2026-08-06 sweep **except**
+`conformance/schema.go`, **1 → 3**. Both additions came in with #336 and
+both are prose *citations* of a marker that lives elsewhere —
+`:58` and `:861` each name `xsd/complexextension.go`'s clause-1.5
+under-rejection, owned by **#392**, and both are additionally covered by
+**#538**. The pre-existing `:284` cites `xsd/contentrestricts.go`'s
+open-content marker, owned by **#413**. No new fail-open site was
+introduced by any of the five landings, no marker was deleted while its
+gap stayed open, and **every one of the 50 maps to an issue** — the
+ledger has been total since #471 claimed the last unowned marker, and
+this is the third consecutive pass it has held.
+
+***Band 5 — the deliverable, now that it is the only one.*** Ordering
+doctrine unchanged: **measured lane movement first, then the integrity of
+the measurement, then false rejects, then under-rejects, then producer
+completeness.** One head promotion and one insertion; every other entry
+is unchanged and said to be so, so the ordering is not re-derived.
+
+1. **#443** — pin `anonymousComplexTypeDecidable`'s implicit-content
+   narrowing. **Promoted from 2 to the head slot vacated by #336's
+   landing, which is precisely the event it was sequenced as the safety
+   net for.** Its exposure is no longer hypothetical: #336 widened the
+   admitted shape and banked **+278** against a narrowing that **no test
+   pins** — deleting it still lands green. **9529** banked `schema`
+   passes now rest on a safety argument nothing checks, up from 9251 last
+   pass. Its title says 9155 and is now understated by 374; titles are
+   snapshots and the direction only goes up, so it is **not amended**,
+   noted a third time so no reader concludes the lane shrank.
+2. **#538 — new this window, entering at 2.** Same tier, same file, and
+   the disclosure #336's own landing incurred: `conformance/schema.go`'s
+   fail-open inventory for the newly-admitted `<extension>` shape names
+   **one** clause when **three** cannot reject — `cos-ct-extends` 1.1 and
+   2.2 are data-dead on an unmapped `{final}`. Sequenced immediately
+   behind #443 because the two together are the single "make the
+   measurement honest about what #336 bought" slice, and because it is
+   cheapest while the landing is fresh. Note the coupling: the *cause* of
+   the unmapped `{final}` is **#436** (slot 7) — #538 is the honest
+   disclosure, not the fix, and must not be closed by fixing #436.
+3. **#446** — `testGroup/@version` unread, so 8 XSD-1.0-scoped groups are
+   scored against a 1.1 processor and `pdecimal001a` is unwinnable by
+   construction. Unchanged in kind and **decaying faster than at any
+   prior reading**: 278 more cases were banked this window against a
+   version filter that does not exist.
+4. **#501** — `unfoldCopies`' 2/2 copy cap false-rejects conforming
+   schemas in `cos-content-act-restrict`, and **hard-blocks #504**. Was 4.
+5. **#468** — `addAll`'s `last` set false-rejects `sequence(all(a,b), a)`
+   on `cos-nonambig`. Was 5.
+6. **#430** — `checkRestrictionAttributeWildcard`'s `cos-ns-subset`
+   comparison ignores `{attribute uses}` already covering the name. Was
+   6, and **re-checked against this window rather than assumed**: #306
+   wired `AttributeDeclaration {scope}.{parent}` in the same package but
+   touches neither the wildcard-subset comparison nor its rule. No
+   re-scoping owed.
+7. **#436** — `final=`/`finalDefault=`/`block=` never read; nine reader
+   sites inert across six rules. Was 7, and its stock rose without
+   moving: #538 is a second independent consequence of the same unmapped
+   `{final}`, which is now costing in two places.
+8. **#464 → #463**, still a pair, still in that order.
+9. **#342** — `dcl.elt.common` clause 3; #395 and #471 ride behind it on
+   the same component data.
+10. **#478 → #447**, still a pair, still in that order — the placement
+    refactor before the `<list>`/`<union>` production that would
+    otherwise mint a third eager guard.
+
+**On deck:** **#392** — *added this pass*, the substantive retirement of
+the clause-1.5 under-rejection that #538 merely discloses and that two of
+`conformance/schema.go`'s three GAP citations now point at. Sequenced
+**behind** #538 deliberately: a correct fail-open inventory is a
+precondition for measuring what #392 buys, and landing them in the other
+order means the measurement changes under the fix. Also on deck,
+unchanged: **#499** (adjacent to #501 in the same walk but not a blocker
+for it — the `maxProductStates` ceiling fails *open*, so it costs score,
+not correctness), **#442**, and **#506**.
+
+- **Nothing closed as stale, obsolete or duplicate.** Two near-miss pairs
+  checked rather than assumed, both thrown up by this window's filings
+  and both genuinely distinct: **#538/#436** (a fail-open *inventory* that
+  understates by two clauses vs. the unread `final=` attribute that makes
+  those clauses data-dead — disclosure and cause, and #538 stays open if
+  #436 lands alone with the inventory uncorrected) and **#538/#392** (an
+  inventory correction vs. the clause-1.5 implementation, adjacent in the
+  same file and neither a superset of the other). The 2026-07-31 finding
+  stands a **sixth** time: the consolidation candidates are exhausted, and
+  after six passes that is a property of the queue rather than a run of
+  luck.
+- **Blocked-issue audit — all twelve honest, no relabels, and for the
+  first time the vocabulary fits.** #16, #56, #79 and #480 wait on
+  triggers with nothing open in `## Depends on`; under #347's ratified
+  widening these are **correctly labelled**, and this is the first pass
+  that can say so without an apology or a footnote. #248→#250,
+  #250→#79's tail, #267→#250, #345→#250, #415→#407, #438→#414,
+  #456→#455, #504→#501 all name issues **verified still open** at
+  `4144016`. **None of the five closures in this window (#303, #304,
+  #306, #307, #336) appears in any open `## Depends on`**, so nothing
+  unblocked. No `ready` issue carries an open hard dependency; the
+  honesty invariant holds at 117.
+- **Step 4 (libuser/cliuser) was SKIPPED, and the reason is
+  surface-unchanged.** `git diff --stat 779d61e..4144016 -- README.md
+  cmd/` is empty: all five landings are internal to `xsd/`, `parser/`,
+  `conformance/` and `.claude/`. The orchestrating session — which owns
+  the step per `docs/WORKFLOW.md`'s `/backlog` bullet and #416's
+  resolution — judged that a fresh pass would reproduce 2026-08-05's
+  verdict against an identical published surface, and handed the
+  cartographer nothing. **Nothing was folded, and per step 4 that is
+  said here rather than silently omitted.** #472 and #514 each still owe
+  the next window a real pass.
+- **Branch namespace: three refs, unchanged in name and SHA since
+  2026-08-04**, and **not re-verified by this pass** — the orchestrating
+  session had already done it, which is the fourth consecutive session to
+  spend the same derivation on the same three dead branches. `wip/issue-256`
+  @ `c56d9f7` (#256 closed `needs-replan`, two commits genuinely not in
+  `main`, a correct park); `wip/issue-271` @ `c1c3824` (#271 closed
+  `needs-replan`, tip already on `main` via #470, **carries no work at
+  all**); `wip/issue-287` @ `6d79251` (#287 closed **completed**,
+  superseded by #511's doc-only landing). No `parked/untriaged-*` refs.
+  **Listed for human deletion**, as they have been for five passes;
+  sessions never delete or rename refs. **#399 owns this and is `ready`
+  and unpicked** — and it is worth noting that its cost is now measurable
+  rather than notional: five passes × one full `git ls-remote` +
+  ancestry check, to re-learn three facts that have not changed in four
+  days.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
