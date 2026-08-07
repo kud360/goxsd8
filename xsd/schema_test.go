@@ -573,6 +573,80 @@ func TestAddModelGroupObservableViaResolution(t *testing.T) {
 	}
 }
 
+// TestModelGroupScopeParentResolvesViaAccessor is the ModelGroupScopeParent
+// half of the round trip elementdeclaration.go's ElementScopeParent doc now
+// claims followable: a local element declaration nested inside a named model
+// group definition's {model group} names that definition by QName in its own
+// {scope}.{parent}, unchecked by Finalize (elementdeclaration.go). Schema.
+// ModelGroup (§3.17.1) is the read-time lookup that resolves the name back —
+// proved not merely by a matching {name} but by walking the hit's one particle
+// back to the very element declaration that named it.
+func TestModelGroupScopeParentResolvesViaAccessor(t *testing.T) {
+	mgdName := xsd.QName{Space: "urn:ns", Local: "addressGroup"}
+
+	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ModelGroupScopeParent{Name: mgdName})
+	if err != nil {
+		t.Fatalf("NewLocalScope: %v", err)
+	}
+	el, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Space: "urn:ns", Local: "street"},
+		nil, nil, scope, nil, false, nil, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("NewElementDeclaration: %v", err)
+	}
+	particle, err := xsd.NewParticle(xsderr.Loc{}, mustOccurs11(t), xsd.ResolvedTerm{Term: el}, nil)
+	if err != nil {
+		t.Fatalf("NewParticle: %v", err)
+	}
+	group, err := xsd.NewModelGroup(xsderr.Loc{}, xsd.CompositorSequence, []xsd.Particle{particle}, nil)
+	if err != nil {
+		t.Fatalf("NewModelGroup: %v", err)
+	}
+	mgd, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, mgdName, group, nil)
+	if err != nil {
+		t.Fatalf("NewModelGroupDefinition: %v", err)
+	}
+
+	b := xsd.NewSchemaBuilder()
+	b.AddModelGroup(mgd)
+	s, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+
+	// Step 1: follow the local element's own {scope}.{parent}.
+	parent, ok := el.Scope().Parent()
+	if !ok {
+		t.Fatal("Parent() ok = false, want true for a local scope")
+	}
+	mgp, ok := parent.(xsd.ModelGroupScopeParent)
+	if !ok {
+		t.Fatalf("Parent() = %#v, want a ModelGroupScopeParent", parent)
+	}
+
+	// Step 2: resolve that name via the accessor this issue adds, and prove the
+	// hit is the very definition the element is nested inside, not merely one
+	// sharing its name.
+	got, ok := s.ModelGroup(mgp.Name)
+	if !ok {
+		t.Fatalf("ModelGroup(%v) miss, want the definition the element is scoped to", mgp.Name)
+	}
+	particles := got.ModelGroup().Particles()
+	if len(particles) != 1 {
+		t.Fatalf("ModelGroup(%v).ModelGroup().Particles() = %d particles, want 1", mgp.Name, len(particles))
+	}
+	term, ok := particles[0].Term().(xsd.ResolvedTerm)
+	if !ok {
+		t.Fatalf("particle {term} = %#v, want a ResolvedTerm", particles[0].Term())
+	}
+	gotEl, ok := term.Term.(xsd.ElementDeclaration)
+	if !ok {
+		t.Fatalf("ResolvedTerm.Term = %#v, want an ElementDeclaration", term.Term)
+	}
+	if gotEl.Name() != el.Name() {
+		t.Errorf("resolved element = %v, want %v", gotEl.Name(), el.Name())
+	}
+}
+
 // TestAddWrapperDuplicateRejected proves the appended components are indexed by
 // expanded name: two attribute groups, two model groups, or two notations
 // sharing a name collide under sch-props-correct clause 2.

@@ -335,9 +335,9 @@ func Example_schemaEnumeration() {
 // TermOrRef) → Term → ModelGroup.Particles, recursing on each nested particle.
 //
 // The model mixes inline groups with one <element ref> so both TermOrRef shapes
-// appear; a ModelGroupRef is deliberately absent, because following one needs a
-// Schema.ModelGroup(QName) accessor this package does not export yet (see
-// resolve.go's recorded follow-cost asymmetry).
+// appear; a ModelGroupRef is deliberately absent from this fixture — following
+// one is Example_modelGroupScopeParent's demonstration, via the
+// Schema.ModelGroup(QName) accessor (§3.17.1).
 func Example_contentModelTraversal() {
 	// PurchaseOrderType: sequence( shipTo, choice( comment, note ), ref billTo )
 	poType := exampleQName("PurchaseOrderType")
@@ -414,7 +414,7 @@ func Example_contentModelTraversal() {
 			}
 			fmt.Printf("%selement %s (via ref)\n", indent, target.Name().Local)
 		case xsd.ModelGroupRef:
-			fmt.Printf("%sgroup ref %s (not followable: no Schema.ModelGroup accessor)\n", indent, v.Name)
+			fmt.Printf("%sgroup ref %s (not in this fixture: see Example_modelGroupScopeParent)\n", indent, v.Name)
 		}
 	}
 	walk(content.Particle, 1)
@@ -427,4 +427,58 @@ func Example_contentModelTraversal() {
 	//       element comment
 	//       element note
 	//     element billTo (via ref)
+}
+
+// Example_modelGroupScopeParent is the ModelGroupScopeParent half of the
+// ElementScopeParent round trip Example_contentModelTraversal's fixture leaves
+// undemonstrated (its ModelGroupRef case never fires): a local element
+// declaration nested inside a named model group definition follows its
+// {scope}.{parent} back to that definition by expanded name, through the very
+// Schema.ModelGroup(QName) accessor (§3.17.1) a ModelGroupRef term would use.
+func Example_modelGroupScopeParent() {
+	groupName := exampleQName("addressGroup")
+	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ModelGroupScopeParent{Name: groupName})
+	if err != nil {
+		panic(err)
+	}
+	street := exampleElement(exampleQName("street"), anySimpleTypeName, scope)
+
+	group := exampleModelGroup(xsd.CompositorSequence, exampleParticle(xsd.ResolvedTerm{Term: street}))
+	def, err := xsd.NewModelGroupDefinition(xsderr.Loc{}, groupName, group, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	b := xsd.NewSchemaBuilder()
+	b.AddType(xsd.AnySimpleType())
+	b.AddModelGroup(def)
+	s, err := b.Finalize()
+	if err != nil {
+		panic(err)
+	}
+
+	// Step 1: follow the local element's own {scope}.{parent} — unchecked by
+	// Finalize (elementdeclaration.go).
+	parent, ok := street.Scope().Parent()
+	if !ok {
+		panic("street has no {scope}.{parent}")
+	}
+	mgp, ok := parent.(xsd.ModelGroupScopeParent)
+	if !ok {
+		panic("street's {scope}.{parent} is not a ModelGroupScopeParent")
+	}
+
+	// Step 2: resolve the name via the read-time lookup this issue adds.
+	got, ok := s.ModelGroup(mgp.Name)
+	if !ok {
+		panic("addressGroup not declared")
+	}
+	fmt.Println("element scoped to:", mgp.Name.Local)
+	fmt.Println("resolved model group definition:", got.Name().Local)
+	fmt.Println("resolved compositor:", got.ModelGroup().Compositor())
+
+	// Output:
+	// element scoped to: addressGroup
+	// resolved model group definition: addressGroup
+	// resolved compositor: sequence
 }

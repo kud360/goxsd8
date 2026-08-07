@@ -447,6 +447,15 @@ func (s *Schema) Type(name QName) (TypeDefinition, bool) {
 	return d, ok
 }
 
+// ModelGroup returns the top-level model group definition with the given
+// expanded name and true, or the zero ModelGroupDefinition and false when
+// none is declared. It is a read-only window onto the compiled set (§3.17.1
+// {model group definitions}); it copies nothing.
+func (s *Schema) ModelGroup(name QName) (ModelGroupDefinition, bool) {
+	d, ok := s.modelGroupIndex[name]
+	return d, ok
+}
+
 // Types returns the {type definitions} property (§3.17.1): every TOP-LEVEL type
 // definition, simple and complex alike, as the one TypeDefinition slice the one
 // spec property is — it is never split by variety.
