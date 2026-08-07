@@ -176,6 +176,13 @@ work itself and never skips the arbiter.
    freshly-fetched `origin/main` (never a local `main` — see the branch
    scheme) per STYLE.md including the exported-surface diff (T5), and
    posts a verdict on the issue. **Checkpoint after each verdict.**
+   The gate is exactly that list — CLAUDE.md's "Commands" block is its
+   single source of truth, and a step absent from that block is not a
+   gate step no matter which brief, LOG entry, or issue names one (the
+   standing example is `go tool logguard`, which has never existed). A
+   phantom step is a defect in the text that names it, not a gate
+   failure, and confirming its absence from scratch is not the
+   arbiter's job.
    - *accept* → arbiter runs the ratchet (`GOXSD_RATCHET=1`, upward
      only). Running it and banking it are ONE step. Immediately after the
      run — before anything else, no branch switch, no ending the session

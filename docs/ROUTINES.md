@@ -58,6 +58,10 @@ go generate ./...                                  # regenerate spec md + catalo
 go tool fetchspecs                                 # (re)download pristine spec HTML
 ```
 
+This is a restatement, not an independent definition: CLAUDE.md's
+"Commands" block is the single source of truth for what the gate is, and
+a step absent from it is not a gate step (see docs/WORKFLOW.md step 5).
+
 ## Ephemeral containers, overlap, and failure
 
 - **Assume every routine run starts in a fresh container with a fresh
