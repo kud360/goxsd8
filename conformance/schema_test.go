@@ -41,6 +41,15 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"complexType with sequence + local element + attribute", `<xs:complexType name="CT"><xs:sequence><xs:element name="a" type="xs:string"/><xs:any/></xs:sequence><xs:attribute name="at" type="xs:int"/></xs:complexType>`},
 		{"complexType with choice + anyAttribute", `<xs:complexType name="CT"><xs:choice><xs:element name="a" type="xs:string"/></xs:choice><xs:anyAttribute namespace="##other"/></xs:complexType>`},
 		{"complexContent restriction", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="CT"><xs:complexContent><xs:restriction base="B"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`},
+		// #336: both <extension> forms are produced (#228) and judged by
+		// cos-ct-extends (§3.4.6.2, #264) over the §3.4.2 base folds #401/#265/#346
+		// completed, so a NAMED complex type using either is decided rather than
+		// declined. The inline anonymous forms below stay declined — that is
+		// anonymousComplexTypeDecidable's separate, narrower gate, not this one.
+		{"complexContent extension", `<xs:complexType name="T"><xs:complexContent><xs:extension base="xs:anyType"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`},
+		{"complexContent extension with attributes and a group ref", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:extension base="B"><xs:sequence><xs:group ref="g"/></xs:sequence><xs:attribute name="a" type="xs:string"/><xs:anyAttribute namespace="##other"/></xs:extension></xs:complexContent></xs:complexType>`},
+		{"simpleContent extension", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`},
+		{"simpleContent extension with attributes and an assert", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="a" type="xs:int"/><xs:attributeGroup ref="ag"/><xs:anyAttribute namespace="##other"/><xs:assert test="true()"/></xs:extension></xs:simpleContent></xs:complexType>`},
 		{"top-level group definition (§3.7.2)", `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`},
 		{"top-level group with choice + any", `<xs:group name="g"><xs:choice><xs:element name="a" type="xs:string"/><xs:any/></xs:choice></xs:group>`},
 		{"top-level attributeGroup definition (§3.6.2)", `<xs:attributeGroup name="ag"><xs:attribute name="a" type="xs:string"/><xs:anyAttribute namespace="##other"/></xs:attributeGroup>`},
@@ -137,9 +146,16 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"top-level group without name (reference form is malformed)", `<xs:group ref="g"/>`},
 		{"top-level attributeGroup with an inline attribute type outside the produced simple-type subset", `<xs:attributeGroup name="ag"><xs:attribute name="a"><xs:simpleType><xs:list itemType="xs:string"/></xs:simpleType></xs:attribute></xs:attributeGroup>`},
 		{"complexType with bare nested group (no ref)", `<xs:complexType name="T"><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:complexType>`},
-		{"complexType with simpleContent extension (produced, but cos-ct-extends unjudged)", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`},
 		{"complexType with simpleContent restriction (synthesizes an anonymous simple type)", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleContent></xs:complexType>`},
-		{"complexType with complexContent extension (produced, but cos-ct-extends unjudged)", `<xs:complexType name="T"><xs:complexContent><xs:extension base="xs:anyType"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`},
+		{"complexType with a complexContent carrying neither alternant", `<xs:complexType name="T"><xs:complexContent/></xs:complexType>`},
+		{"complexType with a simpleContent carrying neither alternant", `<xs:complexType name="T"><xs:simpleContent/></xs:complexType>`},
+		// #336 admits <simpleContent> <extension>, but only in the shape
+		// xs:simpleExtensionType allows: §3.4.2.2 builds {content type} from the base
+		// alone, so a particle child is DROPPED without an error — a false accept, not
+		// a verdict.
+		{"simpleContent extension carrying a particle the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType>`},
+		{"simpleContent extension carrying a group ref the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:group ref="g"/></xs:extension></xs:simpleContent></xs:complexType>`},
+		{"complexContent extension with a bare nested group (no ref)", `<xs:complexType name="T"><xs:complexContent><xs:extension base="xs:anyType"><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:extension></xs:complexContent></xs:complexType>`},
 		{"element with both type= and inline type", `<xs:element name="e" type="xs:string"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:element>`},
 		{"attribute with inline simpleType", `<xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`},
 		// The deliberate asymmetries that survive #229 and #340: the GLOBAL inline
