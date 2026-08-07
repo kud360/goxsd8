@@ -1,12 +1,12 @@
 ---
-description: Reconcile GitHub issues with reality and keep 8–10 ready issues, consulting the user personas for API/CLI-facing work. Doc-only commit; no code changes.
+description: Reconcile GitHub issues with reality and keep the ready queue dependency-ordered, consulting the user personas for API/CLI-facing work. Doc-only commit; no code changes.
 ---
 
 Run the **cartographer**'s full /backlog procedure (see its agent file and
 docs/WORKFLOW.md): survey reality (git log, docs/LOG, issues, ratchet
-lanes, `grep -rn "GAP("`), reconcile the issue list, keep 8–10 `ready`
-issues with complete bodies, order by dependency, and update
-docs/PLAN.md on drift.
+lanes, `grep -rn "GAP("`), reconcile the issue list, keep `ready` issues
+with complete bodies ordered by dependency (no numeric cap — #347), and
+update docs/PLAN.md on drift.
 
 For API- or CLI-facing milestones, **you** — this session, not the
 cartographer — delegate to **libuser** and **cliuser** (feed them only

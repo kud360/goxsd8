@@ -43,11 +43,16 @@ Cheap and targeted — not a full /backlog. Two duties:
 2. **Reconcile**: close stale/obsolete issues, split anything too big
    for one session, merge duplicates, file `kind/gap` issues for
    untracked GAP sites.
-3. **Keep 8–10 `ready` issues**, ordered by dependency (`Depends on #N`
-   in the body; label `blocked` until deps close). Prefer vertical
-   slices that move a conformance lane over horizontal completeness.
-   The develop loop can consume several issues a day; a shallow queue
-   stalls it.
+3. **Order the `ready` queue by dependency** (`Depends on #N` in the
+   body; label `blocked` until deps close) and publish the working
+   queue as a dependency-ordered band in `docs/PLAN.md`. There is no
+   numeric cap — `ready` means filed-and-unblocked, and its size is an
+   output, not a target (#347: nine consecutive passes proved the
+   8–10 band unreachable at the develop loop's harvest-to-landing
+   ratio). The **ordering is the deliverable**: prefer vertical slices
+   that move a conformance lane over horizontal completeness, and keep
+   the published band current so a session can pick the highest-value
+   startable issue instead of scanning an unordered list.
 4. **Fold in the persona stories the orchestrating session hands you**
    for API- or CLI-facing milestones. You do not run libuser/cliuser:
    the session that launches `/backlog` does, before or alongside your
@@ -88,4 +93,7 @@ Fill every `##` section; write "n/a" or "none" rather than dropping one.
 
 Labels: `ready`/`blocked`/`needs-replan`/`epic`; `area/<pkg>`;
 `kind/{feature,gap,bug,refactor,process,tooling,story}`. Milestones
-mirror docs/PLAN.md.
+mirror docs/PLAN.md. `blocked` means waiting on a named dependency —
+an issue **or** a trigger (e.g. an on-thread grounding, an unfiled
+epic, a `/retro` audit) — recorded in `## Depends on`; it is not
+restricted to open-issue dependencies.
