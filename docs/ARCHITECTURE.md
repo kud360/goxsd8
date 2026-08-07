@@ -493,6 +493,25 @@ unrelated fixture shapes so one cohort's change can break another — exceeds
 the cost of the parallel shapes. Re-flag only if a semantic rule ever has
 to be edited in two triples to stay correct.
 
+The same ruling covers the *inner* `Restriction{Base, Facets}` decode struct
+that mirrors across the cohorts — and the mirror is three anonymous inline
+structs plus one already-named type, not four identical anonymous ones:
+`conformance/datatypes.go:1803` inside `lexicalSchema` (which captures only
+`base`, that cohort's fixtures carrying no facets), `:2790` inside
+`pdecimalSchema`, `:3468` inside `anyURISimpleType`, and the named
+`d34Restriction` at `:3034` that `d34SimpleType.Restriction` points at. Each
+decodes the frozen `<restriction base=..>` shape of its own cohort's fixtures,
+so the upkeep coupling that would make duplication expensive is absent at this
+inner level for exactly the reason it is absent at the triple level: one
+cohort's fixture handling can change without obliging an edit to another's.
+STYLE T4 asks that near-identical structures be unified or the difference
+explained — this paragraph is that explanation — and STYLE D3 is not in
+tension, because each struct is the sole encoding of its own cohort's fixture
+shape, not a second encoding of one shared fact. The section's re-flag
+condition applies unchanged and extends to this level: re-flag only if a
+semantic rule ever has to be edited in two of these restriction decoders (or
+two triples) to stay correct.
+
 ## Logging
 
 `log/slog` injected at construction, namespaced groups, silent by default.
