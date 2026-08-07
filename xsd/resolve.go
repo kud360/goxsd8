@@ -180,6 +180,20 @@ func (s *Schema) resolve() error {
 // take a Resolver interface (STYLE T3) so they are testable against a fake; the
 // model-group and keyref resolvers read the internal indexes directly, since no
 // external consumer justifies minting a capability interface for them (STYLE 8).
+//
+// REFERRER-LOC CONVENTION. Every src-resolve rejection here is charged to the
+// REFERRING component's position, never to the target's — the target is exactly
+// what does not exist, so it has none. Each helper therefore takes a loc
+// alongside its ctx phrase, and the descent threads down the position of the
+// nearest ENCLOSING component that retains one: a ComplexType,
+// ElementDeclaration, AttributeDeclaration or ModelGroupDefinition re-roots it at
+// its own Loc() as the walk enters it, while a Particle, AttributeUse, ModelGroup,
+// TypeTable or TypeAlternative inherits the enclosing component's, because none of
+// those five retains a position or exposes an accessor for one — nothing consumed
+// their positions when they were built, so none was minted (xsd doc.go, STYLE T5).
+// Inheriting is not an approximation of the wrong thing: an inline particle tree or
+// attribute use belongs to exactly one such enclosing component, so its position
+// names the declaration a reader must open, one enclosing element out.
 func (s *Schema) resolveReferences() error {
 	for _, t := range s.types {
 		switch t := t.(type) {
@@ -210,7 +224,7 @@ func (s *Schema) resolveReferences() error {
 		}
 	}
 	for _, mgd := range s.modelGroups {
-		if err := s.resolveModelGroup(mgd.ModelGroup()); err != nil {
+		if err := s.resolveModelGroup(mgd.ModelGroup(), mgd.Loc()); err != nil {
 			return err
 		}
 	}
@@ -225,14 +239,14 @@ func (s *Schema) resolveReferences() error {
 // resolveTypeName resolves a {type definition}/{base type definition} reference
 // (src-resolve clause 1.1). A zero ref is absent and resolves to (nil, nil); a
 // present-but-missing ref is rejected. ctx names the referring site for the
-// message.
-func resolveTypeName(r TypeResolver, ref QName, ctx string) (TypeDefinition, error) {
+// message and loc positions it at the referring component (resolveReferences).
+func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (TypeDefinition, error) {
 	if ref == (QName{}) {
 		return nil, nil
 	}
 	t, ok := r.Type(ref)
 	if !ok {
-		return nil, xsderr.New(ruleSrcResolve, xsderr.Loc{},
+		return nil, xsderr.New(ruleSrcResolve, loc,
 			"%s references type %s, but no type definition with that expanded name is present in the schema (src-resolve clause 1.1)", ctx, ref)
 	}
 	return t, nil
@@ -241,7 +255,8 @@ func resolveTypeName(r TypeResolver, ref QName, ctx string) (TypeDefinition, err
 // resolveTypeDefinition resolves the {type definition} slot of an element or
 // attribute declaration (§3.3.2.1 dcl.elt.common, §3.2.2.2 dcl.att.local),
 // exhaustively over TypeDefinitionOrRef's two arms. ctx names the referring site
-// for the message.
+// for the message and loc positions it at the owning declaration; the
+// InlineTypeDefinition arm re-roots that position at the inline type itself.
 //
 //   - nil is an absent {type definition}: src-resolve has nothing to resolve.
 //   - TypeDefinitionRef is the by-name arm: the src-resolve clause 1.1 lookup.
@@ -252,12 +267,12 @@ func resolveTypeName(r TypeResolver, ref QName, ctx string) (TypeDefinition, err
 //     genuine no-op; a ComplexType still carries a by-name {base type
 //     definition} and a particle tree, so it is descended exactly as a top-level
 //     one is.
-func (s *Schema) resolveTypeDefinition(ref TypeDefinitionOrRef, ctx string) error {
+func (s *Schema) resolveTypeDefinition(ref TypeDefinitionOrRef, loc xsderr.Loc, ctx string) error {
 	switch r := ref.(type) {
 	case nil:
 		return nil
 	case TypeDefinitionRef:
-		_, err := resolveTypeName(s, r.Name, ctx)
+		_, err := resolveTypeName(s, r.Name, loc, ctx)
 		return err
 	case InlineTypeDefinition:
 		switch d := r.Definition.(type) {
@@ -274,41 +289,44 @@ func (s *Schema) resolveTypeDefinition(ref TypeDefinitionOrRef, ctx string) erro
 }
 
 // resolveElementName resolves an element-declaration reference (src-resolve
-// clause 1.3): an <element ref> {term}. A zero ref is absent and skipped. The
-// other clause-1.3 site, a {substitution group affiliations} member, is
-// deliberately NOT routed here — see resolveElementDecl for the §5.3 reason.
-func resolveElementName(r ElementResolver, ref QName, ctx string) error {
+// clause 1.3): an <element ref> {term}. A zero ref is absent and skipped; loc
+// positions a rejection at the component enclosing the particle. The other
+// clause-1.3 site, a {substitution group affiliations} member, is deliberately
+// NOT routed here — see resolveElementDecl for the §5.3 reason.
+func resolveElementName(r ElementResolver, ref QName, loc xsderr.Loc, ctx string) error {
 	if ref == (QName{}) {
 		return nil
 	}
 	if _, ok := r.Element(ref); !ok {
-		return xsderr.New(ruleSrcResolve, xsderr.Loc{},
+		return xsderr.New(ruleSrcResolve, loc,
 			"%s references element declaration %s, but no element declaration with that expanded name is present in the schema (src-resolve clause 1.3)", ctx, ref)
 	}
 	return nil
 }
 
 // resolveAttributeName resolves an <attribute ref> {attribute declaration}
-// reference (src-resolve clause 1.2). A zero ref is absent and skipped.
-func resolveAttributeName(r AttributeResolver, ref QName, ctx string) error {
+// reference (src-resolve clause 1.2). A zero ref is absent and skipped; loc
+// positions a rejection at the component enclosing the attribute use.
+func resolveAttributeName(r AttributeResolver, ref QName, loc xsderr.Loc, ctx string) error {
 	if ref == (QName{}) {
 		return nil
 	}
 	if _, ok := r.Attribute(ref); !ok {
-		return xsderr.New(ruleSrcResolve, xsderr.Loc{},
+		return xsderr.New(ruleSrcResolve, loc,
 			"%s references attribute declaration %s, but no attribute declaration with that expanded name is present in the schema (src-resolve clause 1.2)", ctx, ref)
 	}
 	return nil
 }
 
 // resolveModelGroupName resolves a <group ref> {term} reference (src-resolve
-// clause 1.5) against modelGroupIndex directly. A zero ref is absent and skipped.
-func (s *Schema) resolveModelGroupName(ref QName, ctx string) error {
+// clause 1.5) against modelGroupIndex directly. A zero ref is absent and
+// skipped; loc positions a rejection at the component enclosing the particle.
+func (s *Schema) resolveModelGroupName(ref QName, loc xsderr.Loc, ctx string) error {
 	if ref == (QName{}) {
 		return nil
 	}
 	if _, ok := s.modelGroupIndex[ref]; !ok {
-		return xsderr.New(ruleSrcResolve, xsderr.Loc{},
+		return xsderr.New(ruleSrcResolve, loc,
 			"%s references model group definition %s, but no model group definition with that expanded name is present in the schema (src-resolve clause 1.5)", ctx, ref)
 	}
 	return nil
@@ -328,6 +346,12 @@ func (s *Schema) resolveModelGroupName(ref QName, ctx string) error {
 //   - clause 2 (cardinality): the keyref's {fields} count must equal the
 //     {referenced key}'s.
 //
+// All three rejections are positioned at the KEYREF (ic.Loc()), never at the
+// target: the keyref is the component whose {referenced key} is wrong, it is the
+// one the schema author must edit, and for clause 1.7 the target does not exist
+// to have a position. resolveKeyref therefore needs no threaded loc — an
+// IdentityConstraint retains its own, top-level or nested alike.
+//
 // The category check runs first, so a target that is both the wrong category and
 // the wrong cardinality reports the category failure — one deterministic first
 // failure (STYLE D1). The lengths are read off the unexported fields of two
@@ -340,15 +364,15 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 	}
 	target, ok := s.idcIndex[ref]
 	if !ok {
-		return xsderr.New(ruleSrcResolve, xsderr.Loc{},
+		return xsderr.New(ruleSrcResolve, ic.Loc(),
 			"keyref %s references identity constraint %s, but no identity-constraint definition with that expanded name is present in the schema (src-resolve clause 1.7)", ic.Name(), ref)
 	}
 	if target.Category() == IdentityConstraintKeyref {
-		return xsderr.New(ruleICProps, xsderr.Loc{},
+		return xsderr.New(ruleICProps, ic.Loc(),
 			"keyref %s references %s, which is itself a keyref, but c-props-correct clause 1 requires a keyref's {referenced key} to be a key or unique", ic.Name(), ref)
 	}
 	if len(ic.fields) != len(target.fields) {
-		return xsderr.New(ruleICProps, xsderr.Loc{},
+		return xsderr.New(ruleICProps, ic.Loc(),
 			"keyref %s has %d {fields} but its {referenced key} %s has %d, and c-props-correct clause 2 requires equal cardinality", ic.Name(), len(ic.fields), ref, len(target.fields))
 	}
 	return nil
@@ -360,12 +384,18 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 // owning declaration's InlineTypeDefinition (see resolveTypeDefinition), so the
 // owner phrase in its message comes from complexTypeOwner rather than from a
 // {name} an anonymous type does not have (STYLE T4).
+//
+// This is where the referrer-Loc convention re-roots: every rejection below this
+// point is positioned at c.Loc() until a nested declaration that retains its own
+// position takes over. An anonymous type's Loc is its own <complexType> element,
+// which is the right position for its base= and its attribute uses — nearer than
+// the owning declaration's.
 func (s *Schema) resolveComplexType(c ComplexType) error {
-	if _, err := resolveTypeName(s, c.BaseTypeDefinitionName(), complexTypeOwner(c)+" {base type definition}"); err != nil {
+	if _, err := resolveTypeName(s, c.BaseTypeDefinitionName(), c.Loc(), complexTypeOwner(c)+" {base type definition}"); err != nil {
 		return err
 	}
 	for _, u := range c.AttributeUses() {
-		if err := s.resolveAttributeUse(u); err != nil {
+		if err := s.resolveAttributeUse(u, c.Loc()); err != nil {
 			return err
 		}
 	}
@@ -374,29 +404,30 @@ func (s *Schema) resolveComplexType(c ComplexType) error {
 		// Empty carries no reference. Simple carries a *SimpleType {simple type
 		// definition}, a live pointer resolved by construction (not a QName ref).
 	case ElementContent:
-		return s.resolveParticle(ct.Particle)
+		return s.resolveParticle(ct.Particle, c.Loc())
 	default:
 		panic("xsd: resolveComplexType: non-exhaustive ContentType switch")
 	}
 	return nil
 }
 
-// resolveParticle descends a particle's {term}.
-func (s *Schema) resolveParticle(p Particle) error {
-	return s.resolveTerm(p.Term())
+// resolveParticle descends a particle's {term}, carrying loc — the enclosing
+// component's position, since a Particle retains none of its own.
+func (s *Schema) resolveParticle(p Particle, loc xsderr.Loc) error {
+	return s.resolveTerm(p.Term(), loc)
 }
 
 // resolveTerm resolves a particle's {term}: a <element ref> or <group ref> is a
 // leaf resolved by a single lookup (never descended — that would cross into
 // another component's own resolution), while an inline ResolvedTerm is descended.
-func (s *Schema) resolveTerm(t TermOrRef) error {
+func (s *Schema) resolveTerm(t TermOrRef, loc xsderr.Loc) error {
 	switch t := t.(type) {
 	case ResolvedTerm:
-		return s.resolveResolvedTerm(t.Term)
+		return s.resolveResolvedTerm(t.Term, loc)
 	case ElementDeclarationRef:
-		return resolveElementName(s, t.Name, "particle {term} <element ref>")
+		return resolveElementName(s, t.Name, loc, "particle {term} <element ref>")
 	case ModelGroupRef:
-		return s.resolveModelGroupName(t.Name, "particle {term} <group ref>")
+		return s.resolveModelGroupName(t.Name, loc, "particle {term} <group ref>")
 	default:
 		panic("xsd: resolveTerm: non-exhaustive TermOrRef switch")
 	}
@@ -405,12 +436,17 @@ func (s *Schema) resolveTerm(t TermOrRef) error {
 // resolveResolvedTerm descends an inline Term. A nil Term is unreachable on a
 // value built through NewParticle (which rejects ResolvedTerm{Term: nil}); the
 // default arm asserts the sealed-sum invariant.
-func (s *Schema) resolveResolvedTerm(t Term) error {
+//
+// loc is the enclosing component's position, forwarded only to the ModelGroup arm
+// (an inline model group retains none of its own). The ElementDeclaration arm
+// deliberately drops it: a local declaration retains its own Loc, so
+// resolveElementDecl re-roots the convention there.
+func (s *Schema) resolveResolvedTerm(t Term, loc xsderr.Loc) error {
 	switch t := t.(type) {
 	case ElementDeclaration:
 		return s.resolveElementDecl(t)
 	case ModelGroup:
-		return s.resolveModelGroup(t)
+		return s.resolveModelGroup(t, loc)
 	case Wildcard:
 		return nil // a wildcard carries no QName reference
 	default:
@@ -418,10 +454,13 @@ func (s *Schema) resolveResolvedTerm(t Term) error {
 	}
 }
 
-// resolveModelGroup descends every particle of a model group in document order.
-func (s *Schema) resolveModelGroup(g ModelGroup) error {
+// resolveModelGroup descends every particle of a model group in document order,
+// carrying loc: a ModelGroup retains no position of its own, so a top-level group
+// is walked under its ModelGroupDefinition's Loc and an inline one under whatever
+// component encloses it.
+func (s *Schema) resolveModelGroup(g ModelGroup, loc xsderr.Loc) error {
 	for _, p := range g.Particles() {
-		if err := s.resolveParticle(p); err != nil {
+		if err := s.resolveParticle(p, loc); err != nil {
 			return err
 		}
 	}
@@ -431,12 +470,16 @@ func (s *Schema) resolveModelGroup(g ModelGroup) error {
 // resolveAttributeUse resolves an attribute use's {attribute declaration}: an
 // <attribute ref> is resolved by lookup (clause 1.2); a sibling local
 // declaration is descended so its own {type definition} reference resolves.
-func (s *Schema) resolveAttributeUse(u AttributeUse) error {
+//
+// loc is the enclosing complex type's position, used for the ref arm because an
+// AttributeUse retains none of its own. The local-declaration arm drops it, as an
+// AttributeDeclaration retains its own Loc.
+func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc) error {
 	switch d := u.AttributeDeclaration().(type) {
 	case LocalAttributeDeclaration:
 		return s.resolveAttributeDecl(d.Declaration)
 	case AttributeDeclarationRef:
-		return resolveAttributeName(s, d.Name, "attribute use <attribute ref>")
+		return resolveAttributeName(s, d.Name, loc, "attribute use <attribute ref>")
 	default:
 		panic("xsd: resolveAttributeUse: non-exhaustive AttributeDeclarationOrRef switch")
 	}
@@ -476,11 +519,11 @@ func (s *Schema) resolveAttributeUse(u AttributeUse) error {
 // rest is #434: it needs ·absent· to be representable in every slot plus a
 // lax-assessment fallback at validation time, neither of which exists.
 func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
-	if err := s.resolveTypeDefinition(e.TypeDefinition(), "element declaration "+e.Name().String()+" {type definition}"); err != nil {
+	if err := s.resolveTypeDefinition(e.TypeDefinition(), e.Loc(), "element declaration "+e.Name().String()+" {type definition}"); err != nil {
 		return err
 	}
 	if tt, ok := e.TypeTable(); ok {
-		if err := s.resolveTypeTable(tt); err != nil {
+		if err := s.resolveTypeTable(tt, e.Loc()); err != nil {
 			return err
 		}
 	}
@@ -496,13 +539,18 @@ func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 // (src-resolve clause 1.1; §3.12.3 maps the type/@type of a <alternative> via
 // [·resolved·]). Both the {alternatives} members and the {default type
 // definition} carry the same QName reference slot.
-func (s *Schema) resolveTypeTable(tt TypeTable) error {
+//
+// loc is the owning element declaration's position: neither TypeTable nor
+// TypeAlternative retains one (TypeAlternative's constructor does not even take a
+// loc — typealternative.go), and both live inside the <element> the position
+// names.
+func (s *Schema) resolveTypeTable(tt TypeTable, loc xsderr.Loc) error {
 	for _, alt := range tt.Alternatives() {
-		if _, err := resolveTypeName(s, alt.TypeDefinitionName(), "type alternative {type definition}"); err != nil {
+		if _, err := resolveTypeName(s, alt.TypeDefinitionName(), loc, "type alternative {type definition}"); err != nil {
 			return err
 		}
 	}
-	if _, err := resolveTypeName(s, tt.DefaultTypeDefinition().TypeDefinitionName(), "type table {default type definition}"); err != nil {
+	if _, err := resolveTypeName(s, tt.DefaultTypeDefinition().TypeDefinitionName(), loc, "type table {default type definition}"); err != nil {
 		return err
 	}
 	return nil
@@ -512,7 +560,7 @@ func (s *Schema) resolveTypeTable(tt TypeTable) error {
 // reference (src-resolve clause 1.1). An attribute's type is always a simple
 // type; the kind-specific lookup rejects a same-name non-type as dangling.
 func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
-	return s.resolveTypeDefinition(a.TypeDefinition(), "attribute declaration "+a.Name().String()+" {type definition}")
+	return s.resolveTypeDefinition(a.TypeDefinition(), a.Loc(), "attribute declaration "+a.Name().String()+" {type definition}")
 }
 
 // checkComplexBaseAcyclic is Phase B for the complex-type base chain
@@ -529,7 +577,14 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 //
 // Roots are iterated in document order (STYLE D2); an anonymous root (zero name)
 // is walked but never recorded (it can be no base's target, having no name to be
-// referenced by), so the first reported cycle is deterministic.
+// referenced by), so the first reported cycle is deterministic. path is read only
+// by key, never ranged, so which cycle member is named does not depend on Go map
+// iteration order either.
+//
+// The cycle is symmetric, so any member on it would be a defensible position;
+// nextCT is the one already in hand at the rejection — the ComplexType the
+// offending base= resolved to, whose {name} the message also prints — so it is
+// charged without a second lookup.
 //
 // This is ONE of two entry points on clause 3, with identical verdicts, for the
 // two construction paths. The other is parser's buildComplexType, whose on-stack
@@ -566,7 +621,7 @@ func (s *Schema) checkComplexBaseAcyclic() error {
 				break // base is a simple type: chain terminates
 			}
 			if path[base] {
-				return xsderr.New(ruleCTPropsCorrect, xsderr.Loc{},
+				return xsderr.New(ruleCTPropsCorrect, nextCT.Loc(),
 					"complex type %s participates in a circular {base type definition} chain, but ct-props-correct clause 3 forbids it (only xs:anyType may be its own base)", base)
 			}
 			cur = nextCT
@@ -587,7 +642,9 @@ func (s *Schema) checkComplexBaseAcyclic() error {
 // DFS stack, 2 finished): it lives only in this function and is discarded when
 // resolve returns (PRINCIPLES 9), never threaded into any later traversal.
 // Definitions are iterated, and each definition's out-refs collected, in
-// document order (STYLE D2), so the first reported cycle is deterministic.
+// document order (STYLE D2), so the first reported cycle is deterministic. The
+// color map is read only by key and never ranged, so neither the reported name nor
+// the reported position depends on Go map iteration order.
 func (s *Schema) checkModelGroupsAcyclic() error {
 	// The map's zero value is the implicit "unvisited" state; onStack/done are
 	// the two recorded states.
@@ -602,7 +659,13 @@ func (s *Schema) checkModelGroupsAcyclic() error {
 		case done:
 			return nil
 		case onStack:
-			return xsderr.New(ruleMgPropsCorrect, xsderr.Loc{},
+			// A name is onStack only between its own visit's two color writes, and
+			// recursion in that window runs solely through its out-edges — which the
+			// index lookup below supplies only for a name the index HOLDS. So a name
+			// absent from the index goes straight to done and can never be
+			// re-encountered onStack: the lookup here always hits, and the position is
+			// the offending definition's own <group> element.
+			return xsderr.New(ruleMgPropsCorrect, s.modelGroupIndex[name].Loc(),
 				"model group definition %s participates in a circular <group ref> chain, but mg-props-correct clause 2 forbids circular groups", name)
 		}
 		color[name] = onStack
@@ -671,7 +734,9 @@ func collectGroupRefs(t TermOrRef, refs *[]QName) {
 // checkModelGroupsAcyclic): it lives only in this function and is discarded when
 // resolve returns (PRINCIPLES 9), never threaded into a later traversal.
 // Elements are iterated, and each element's affiliations followed, in document
-// order (STYLE D2), so the first reported cycle is deterministic.
+// order (STYLE D2), so the first reported cycle is deterministic. The color map is
+// read only by key and never ranged, so neither the reported name nor the reported
+// position depends on Go map iteration order.
 func (s *Schema) checkSubstitutionGroupsAcyclic() error {
 	// The map's zero value is the implicit "unvisited" state; onStack/done are
 	// the two recorded states.
@@ -686,7 +751,12 @@ func (s *Schema) checkSubstitutionGroupsAcyclic() error {
 		case done:
 			return nil
 		case onStack:
-			return xsderr.New(ruleEPropsCorrect, xsderr.Loc{},
+			// The index lookup always hits, by checkModelGroupsAcyclic's argument: a
+			// name the index does not hold contributes no out-edges, so it reaches done
+			// before any recursion can return to it. That matters more here than there,
+			// because a §5.3 dangling affiliation legitimately names no declaration and
+			// Phase A does not reject it (resolveElementDecl).
+			return xsderr.New(ruleEPropsCorrect, s.elementIndex[name].Loc(),
 				"element declaration %s participates in a circular {substitution group affiliations} chain, but e-props-correct clause 5 forbids circular substitution groups", name)
 		}
 		color[name] = onStack

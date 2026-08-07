@@ -60,8 +60,12 @@
 // position is PROVENANCE, not a component property at all — no kind's
 // §3.x.1 property list has it. It is where the declaring element sits in
 // the schema document, retained from the constructor so a finalize-time
-// rejection (sch-props-correct clause 2) can cite file:line:column
-// instead of "?". The zero xsderr.Loc means
+// rejection can cite file:line:column instead of "?" — sch-props-correct
+// clause 2 (schema.go) was the first such consumer, and resolve.go's Phase
+// A/B rejections (src-resolve, c-props-correct, ct-props-correct,
+// mg-props-correct, e-props-correct) are the second: each is charged to
+// the REFERRING or offending component's own Loc, per the referrer-Loc
+// convention documented on resolveReferences. The zero xsderr.Loc means
 // the position is unknown, and is the correct value for a component with
 // no schema document behind it — parser.Produce's synthesized xs:anyType
 // and package builtin's seeded built-in datatypes are the legitimate
