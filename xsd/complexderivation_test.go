@@ -130,7 +130,7 @@ func dAttr(t *testing.T, name, typeName QName) AttributeUse {
 // given {required} and the declaration's {value constraint}.
 func dAttrUse(t *testing.T, name, typeName QName, required bool, vc *ValueConstraint) AttributeUse {
 	t.Helper()
-	decl, err := NewAttributeDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, ScopeLocal, vc, false, nil)
+	decl, err := NewAttributeDeclaration(xsderr.Loc{}, name, TypeDefinitionRef{Name: typeName}, aLocalScope(t), vc, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration(%s): %v", name, err)
 	}

@@ -62,7 +62,7 @@ func TestTypeDefinitionOrRefInvariants(t *testing.T) {
 			_, elemErr := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, tc.ref(t), nil,
 				xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 			_, attrErr := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, tc.ref(t),
-				xsd.ScopeGlobal, nil, false, nil)
+				xsd.NewAttributeGlobalScope(), nil, false, nil)
 			// A slice, not a map: which constructor's failure is reported must not
 			// depend on iteration order (STYLE D1/D2).
 			for _, got := range []struct {
@@ -103,7 +103,7 @@ func TestTypeDefinitionRoundTrip(t *testing.T) {
 	}
 
 	ref := xsd.TypeDefinitionRef{Name: xsd.QName{Space: "urn:t", Local: "T"}}
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, ref, xsd.ScopeLocal, nil, false, nil)
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, ref, adLocalScope(t), nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}

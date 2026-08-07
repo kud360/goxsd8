@@ -357,7 +357,7 @@ func TestSiblingIgnoresNonElementContent(t *testing.T) {
 // tests.
 func mustAttributeDecl(t *testing.T, name QName) AttributeDeclaration {
 	t.Helper()
-	a, err := NewAttributeDeclaration(xsderr.Loc{}, name, nil, ScopeGlobal, nil, false, nil)
+	a, err := NewAttributeDeclaration(xsderr.Loc{}, name, nil, NewAttributeGlobalScope(), nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}

@@ -61,7 +61,9 @@ func TestAttributeGroupComponentAndInlineFoldAgree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildAttributeGroup: %v", err)
 	}
-	inlined, _, _, err := rootp.produceAttributeUses(childElement(rootp.schemaElem, xsd.XMLSchemaNS, "complexType"))
+	tName := xsd.QName{Space: "urn:x", Local: "T"}
+	inlined, _, _, err := rootp.produceAttributeUses(childElement(rootp.schemaElem, xsd.XMLSchemaNS, "complexType"),
+		namedComplexType(tName).attributeScopeParent())
 	if err != nil {
 		t.Fatalf("produceAttributeUses: %v", err)
 	}
@@ -74,6 +76,94 @@ func TestAttributeGroupComponentAndInlineFoldAgree(t *testing.T) {
 	if len(folded) != len(own) || folded[0] != own[0] {
 		t.Errorf("complex type T folded %v but {urn:x}G's own component holds %v — c-add2 unions the component's already-resolved property, so the two foldings must agree", folded, own)
 	}
+
+	// {scope}.{parent} (§3.2.1 sc_a) is part of that agreement, and it is where
+	// the two foldings would silently diverge: the inline walk descends the
+	// group's source elements from a COMPLEX TYPE, so a threading that forwarded
+	// T's own parent would scope {urn:x}a to T here and to G in G's component.
+	// §3.2.2.2 dcl.att.local settles it — the <attribute> is a child of the
+	// top-level <attributeGroup> and has no <complexType> ancestor, so its
+	// {parent} is G whichever type reached it.
+	wantParent := xsd.AttributeScopeParent(xsd.AttributeGroupScopeParent{Name: xsd.QName{Space: "urn:x", Local: "G"}})
+	ownParent := attributeUseScopeParent(t, ag.AttributeUses()[0])
+	foldedParent := attributeUseScopeParent(t, inlined[0])
+	if ownParent != wantParent {
+		t.Errorf("{urn:x}G's own component scopes {urn:x}a to %#v, want %#v", ownParent, wantParent)
+	}
+	if foldedParent != wantParent {
+		t.Errorf("complex type T scopes the folded {urn:x}a to %#v, want %#v — an <attribute> inside a top-level <attributeGroup> has no <complexType> ancestor, so §3.2.2.2 dcl.att.local makes its {parent} the group, not the referencing type", foldedParent, wantParent)
+	}
+}
+
+// TestReferencedAttributeGroupAttributesScopedToGroup is the direct case behind
+// the agreement above, on the ordinary (non-chameleon, single-document) path: a
+// complex type C references attribute group G, and G's attribute reports G as its
+// {scope}.{parent}, never C.
+func TestReferencedAttributeGroupAttributesScopedToGroup(t *testing.T) {
+	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:x" xmlns:tns="urn:x">` +
+		`<xs:attributeGroup name="G"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>` +
+		`<xs:complexType name="C"><xs:sequence/><xs:attribute name="own" type="xs:string"/><xs:attributeGroup ref="tns:G"/></xs:complexType>` +
+		`</xs:schema>`
+	uses := complexTypeAttributeUses(t, doc, "C")
+	if len(uses) != 2 {
+		t.Fatalf("complex type C folded %d attribute uses, want 2 (its own and G's)", len(uses))
+	}
+	// Document order: C's own <attribute> precedes the <attributeGroup ref>.
+	if got, want := attributeUseScopeParent(t, uses[0]), xsd.AttributeScopeParent(xsd.AttributeComplexTypeScopeParent{Name: xsd.QName{Space: "urn:x", Local: "C"}}); got != want {
+		t.Errorf("C's own attribute is scoped to %#v, want %#v", got, want)
+	}
+	if got, want := attributeUseScopeParent(t, uses[1]), xsd.AttributeScopeParent(xsd.AttributeGroupScopeParent{Name: xsd.QName{Space: "urn:x", Local: "G"}}); got != want {
+		t.Errorf("the attribute reached through <attributeGroup ref> is scoped to %#v, want %#v — §3.2.2.2 dcl.att.local reads {parent} off the <attribute>'s OWN ancestor axis, which holds no <complexType>", got, want)
+	}
+}
+
+// complexTypeAttributeUses produces the named top-level <complexType> of a
+// single-document schema and returns its {attribute uses}.
+func complexTypeAttributeUses(t *testing.T, doc, name string) []xsd.AttributeUse {
+	t.Helper()
+	parsed, err := ReadDocument("mem://scope.xsd", strings.NewReader(doc))
+	if err != nil {
+		t.Fatalf("ReadDocument: %v", err)
+	}
+	builder := xsd.NewSchemaBuilder()
+	sym, err := newSymbols(builder, strict.New())
+	if err != nil {
+		t.Fatalf("newSymbols: %v", err)
+	}
+	p := newProducer(parsed, "urn:x", nil, nil, nil, builder, sym)
+	p.prescan()
+	for _, child := range p.schemaElem.Children() {
+		el, ok := child.(*Element)
+		if !ok || el.Name().Space() != xsd.XMLSchemaNS || el.Name().Local() != "complexType" {
+			continue
+		}
+		if n, _ := el.Attr("name"); n != name {
+			continue
+		}
+		ct, err := p.produceComplexType(namedComplexType(xsd.QName{Space: "urn:x", Local: name}), el)
+		if err != nil {
+			t.Fatalf("produceComplexType(%s): %v", name, err)
+		}
+		return ct.AttributeUses()
+	}
+	t.Fatalf("no top-level <complexType name=%q> in the fixture", name)
+	return nil
+}
+
+// attributeUseScopeParent reports the {scope}.{parent} of a use's sibling local
+// Attribute Declaration; a use of any other shape, or a declaration with no
+// {parent}, fails the test — neither can occur in these fixtures.
+func attributeUseScopeParent(t *testing.T, u xsd.AttributeUse) xsd.AttributeScopeParent {
+	t.Helper()
+	local, ok := u.AttributeDeclaration().(xsd.LocalAttributeDeclaration)
+	if !ok {
+		t.Fatalf("attribute use declaration is %T, want a local declaration", u.AttributeDeclaration())
+	}
+	parent, ok := local.Declaration.Scope().Parent()
+	if !ok {
+		t.Fatalf("attribute %s has an absent {scope}.{parent}, but §3.2.2.2 dcl.att.local makes it Required for a local declaration", local.Declaration.Name())
+	}
+	return parent
 }
 
 // attributeUseNames renders each attribute use as "name:type" so two foldings of

@@ -312,12 +312,12 @@ func (k ValueConstraintKind) String() string {
 // Model Group Definition (element) versus Complex Type Definition / Attribute
 // Group Definition (attribute) that a local declaration lives in; that property
 // is NOT modeled by this enum, which carries only the shared {variety}. The
-// element side's {parent} lives on elementdeclaration.go's Scope record (whose
-// Variety() returns one of these tokens, derived); the attribute side's is still
-// unmodeled (#169). Sharing one type across both components follows
-// the ValueConstraintKind precedent above (one enum for the identical {variety}
-// of three Value Constraint records). The attribute-declaration issue (#169) is
-// expected to reuse this same type for its own {scope}.{variety}.
+// element side's {parent} lives on elementdeclaration.go's Scope record and the
+// attribute side's on attributedeclaration.go's AttributeScope (two records, one
+// per component, because the alternations differ — #306); each derives its
+// {variety} from {parent}'s presence and returns one of these tokens. Sharing one
+// type across both components follows the ValueConstraintKind precedent above
+// (one enum for the identical {variety} of three Value Constraint records).
 type ScopeVariety uint8
 
 // The ScopeVariety values.

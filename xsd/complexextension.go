@@ -623,6 +623,14 @@ func (s *Schema) attributeDeclarationsIdentical(a, b AttributeDeclarationOrRef) 
 
 // localAttributeDeclarationsIdentical compares two sibling-owned Attribute
 // Declarations property by property; see attributeDeclarationsIdentical.
+//
+// {scope} is compared at its {variety} only, deliberately excluding {parent}
+// (§3.2.1 sc_a-parent, wired in #306). The two declarations reaching here are a
+// base type's attribute use and the structurally identical use on a type
+// extending it, which §3.4.2.4 clause 3's fold gives DIFFERENT parents by
+// construction — each names its own containing complex type. Comparing {parent}
+// would therefore make every legal extension's copy non-identical and fail
+// cos-ct-extends clause 1.2 on it: a false reject, not a tightening.
 func (s *Schema) localAttributeDeclarationsIdentical(a, b AttributeDeclaration) bool {
 	if a.Name() != b.Name() || a.ScopeVariety() != b.ScopeVariety() || a.Inheritable() != b.Inheritable() {
 		return false

@@ -63,7 +63,7 @@ func elementNamedAt(t *testing.T, loc xsderr.Loc, name xsd.QName) xsd.ElementDec
 // tests.
 func attributeNamed(t *testing.T, name xsd.QName) xsd.AttributeDeclaration {
 	t.Helper()
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, nil, xsd.ScopeGlobal, nil, false, nil)
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, nil, xsd.NewAttributeGlobalScope(), nil, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration(%v): %v", name, err)
 	}
@@ -318,7 +318,7 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 	}{
 		{"ElementDeclaration", func(t *testing.T, l xsderr.Loc) xsderr.Loc { return elementNamedAt(t, l, name).Loc() }},
 		{"AttributeDeclaration", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
-			a, err := xsd.NewAttributeDeclaration(l, name, nil, xsd.ScopeGlobal, nil, false, nil)
+			a, err := xsd.NewAttributeDeclaration(l, name, nil, xsd.NewAttributeGlobalScope(), nil, false, nil)
 			if err != nil {
 				t.Fatalf("NewAttributeDeclaration: %v", err)
 			}
