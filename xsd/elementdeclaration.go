@@ -132,12 +132,11 @@ func (t TypeTable) DefaultTypeDefinition() TypeAlternative {
 // therefore lives in the variant type, and a consumer follows a by-NAME
 // reference with a read-time lookup in the index that kind selects — the same
 // pre-resolution-reference convention as TypeDefinitionRef, which Schema.Type
-// serves. A ComplexTypeScopeParent is followable today; a ModelGroupScopeParent
-// waits on the Schema.ModelGroup(QName) accessor this package does not export
-// yet (STYLE T5 — no consumer justifies one, the same follow-cost asymmetry
-// resolve.go already records for ModelGroupRef); an
-// AnonymousComplexTypeScopeParent waits on the ID→component resolver
-// ComponentID's doc describes, which no consumer justifies yet either.
+// serves. Both ComplexTypeScopeParent and ModelGroupScopeParent are followable
+// today, by the same read-time lookup pattern: Schema.Type for the former,
+// Schema.ModelGroup for the latter; an AnonymousComplexTypeScopeParent still
+// waits on the ID→component resolver ComponentID's doc describes, which no
+// consumer justifies yet either.
 //
 // Unlike those reference slots, this one is NOT checked by finalize: resolve.go
 // adds no src-resolve (§3.17.6.2) clause for it. src-resolve governs QNames

@@ -131,14 +131,18 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // Resolvers) and for modelGroupIndex + idcIndex. It reads NEITHER
 // attributeGroupIndex NOR notationIndex — no in-scope reference resolves into
 // them yet (an <attributeGroup ref> is inlined at producer mapping time with no
-// persistent ref component, §3.6.2.1; nothing carries a NOTATION reference). And
-// because resolution is validation-only, this package exposes no
-// Schema.ModelGroup(name)/Schema.IdentityConstraint(name) accessor (STYLE 8 —
-// export nothing without a consumer): the cost of following a ModelGroupRef or a
-// keyref at read time is shifted onto the future Walker/Matcher and instance
-// validator, which will need exactly those accessors. That temporary asymmetry
-// with the three existing views is intentional, discharged by the consumer issue
-// that adds the two accessors.
+// persistent ref component, §3.6.2.1; nothing carries a NOTATION reference).
+// Schema.ModelGroup(QName) (#307) closed the modelGroupIndex half of the
+// asymmetry this paragraph used to record: a ModelGroupRef, like a
+// ModelGroupScopeParent (elementdeclaration.go), is followable today the same
+// read-time-lookup way the three Query views are, and needed no new Resolver
+// interface (no consumer takes one, unlike Type/Element/Attribute). Because
+// resolution is still validation-only, this package exposes no
+// Schema.IdentityConstraint(name) accessor (STYLE 8 — export nothing without a
+// consumer): the cost of following a keyref at read time is shifted onto the
+// future Walker/Matcher and instance validator, which will need exactly that
+// accessor. That remaining asymmetry is intentional, discharged by the
+// consumer issue that adds it.
 func (s *Schema) resolve() error {
 	if err := s.resolveReferences(); err != nil {
 		return err
