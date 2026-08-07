@@ -41,6 +41,19 @@ go tool fetchspecs                                  # (re)download pristine spec
 The full gate (build, test, vet, lint, conformance) must pass before any
 commit. W3C suite: `git submodule update --init testdata/xsdtests`.
 
+**This block is the single source of truth for the gate**, and the gate
+is exactly build/test/vet + `golangci-lint run` + the conformance run —
+nothing else. A step absent from this block is not a gate step, however
+confidently some other text names one: a session brief, a `docs/LOG`
+entry, an agent note, or a stale issue body naming an extra step is
+wrong and non-authoritative, and its step's absence is not a gate
+failure. The standing example is `go tool logguard`, proposed in #195,
+never built, never in `go.mod`'s tool block, and never in this block;
+briefs have named it as a gate step since 2026-07 (#304). Do not
+re-adjudicate a phantom — run this block. Adding a real gate step means
+editing this block first; the restatements in `docs/ROUTINES.md`,
+`docs/WORKFLOW.md` step 5, and `.claude/agents/arbiter.md` follow it.
+
 ## Style headlines (full rules in docs/STYLE.md — cite IDs in reviews)
 
 These numbers are NOT citable IDs — cite the docs/STYLE.md letter ID

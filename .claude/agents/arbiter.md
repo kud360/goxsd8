@@ -27,6 +27,12 @@ comment on the issue under review.
    `golangci-lint run` and
    `go test ./conformance -run TestConformance -count=1`.
    Any failure → reject.
+   Those three commands are the whole gate; CLAUDE.md's "Commands" block
+   is the single source of truth for that list. If your brief names a
+   step that is not in it — `go tool logguard` is the standing example,
+   proposed in #195 and never built — the brief is wrong. Say so in one
+   line and move on: the step does not exist, its absence is not a gate
+   failure, and re-verifying that from scratch is not your job (#304).
 3. Review by STYLE rule ID (S1–S3, E1–E3, D1–D5, T1–T5, P1–P4, L1).
    Cite the ID with every finding.
 4. **Exported-surface check (T5)**: diff the exported surface
