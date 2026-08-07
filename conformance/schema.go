@@ -31,8 +31,9 @@ import (
 // which coerces nothing: the imported document keeps its own namespace) — and
 // maps top-level
 // <simpleType>/<element>/<attribute>/<attributeGroup>/<group>/<notation> and the
-// decidable subset of <complexType> (implicit and <complexContent>
-// <restriction> content, its particles including <group ref>, local
+// decidable subset of <complexType> (implicit content, both <complexContent>
+// alternants, and <simpleContent> <extension>; its particles including
+// <group ref>, local
 // element/attribute declarations, attribute uses including <attributeGroup ref>,
 // wildcards, <openContent> and the schema-level <defaultOpenContent> it falls
 // back to, and <assert> assertions) into xsd components, maps the name=
@@ -45,16 +46,20 @@ import (
 // or declined (§3.1.2 permits ignoring a not-yet-produced representation), NOT
 // rejected.
 //
-// The EXTENSION forms are a third category, neither produced-and-decided nor
-// skipped: since #228 Parse really does build <complexContent> <extension> and
-// <simpleContent> <extension> types (§3.4.2.3.3 clause 4.2, §3.4.2.2 cases 3-5),
-// and since #264 cos-ct-extends (§3.4.6.2) judges them — but the
-// §3.4.2.4/§3.4.2.5 base-attribute/wildcard/assertion folds those components are
-// assembled without (#265) are still missing, which is exactly why #264 had to
-// leave clauses 1.3 and 1.7 as fail-open gaps. So this lane still DECLINES them
-// (complexTypeDecidable). Admitting them while a clause is knowingly unenforced
-// would make the lane emit "valid" for schemas a complete processor rejects,
-// which is the one direction that corrupts the ratchet; the widening is #336's.
+// The EXTENSION forms are DECIDED as of #336: Parse builds <complexContent>
+// <extension> and <simpleContent> <extension> types (#228; §3.4.2.3.3 clause 4.2,
+// §3.4.2.2 cases 3-5), cos-ct-extends (§3.4.6.2) judges them (#264), and every
+// §3.4.2 base fold its case-1 clauses read is now done — clause 1.2's
+// {attribute uses} (§3.4.2.4 clause 3, #401), clause 1.3's {attribute wildcard}
+// (§3.4.2.5 clause 2.2, #265) and clause 1.7's {assertions} (§3.4.2.1 clause 1,
+// #346). One clause stays fail-open inside the admitted shape: cos-ct-extends
+// clause 1.5's two-step derivability is proven only for a pure-extension chain,
+// and a chain that mixes extension and restriction steps is accepted
+// unconditionally (GAP(xsd) in xsd/complexextension.go). That is an
+// UNDER-rejection — the lane can report "valid" for a schema a complete
+// processor rejects, never "invalid" for a valid one — so it is a recorded gap
+// of the same shape as the ones the admitted <restriction> path already carries,
+// not a fabricated verdict.
 //
 // # Why "Parse returns nil" is not, by itself, evidence of validity
 //
@@ -163,21 +168,18 @@ import (
 //     - notation: always allowed. Its content is (annotation?) and its whole
 //       tableau is decided at produce time (n-props-correct §3.14.6 rejects both
 //       identifiers absent), so nothing is silently skipped.
-//     - complexType (top-level, or a <complexContent> <restriction> reached
-//       transitively): must lie within the producer's decidable subset per
-//       complexTypeDecidable — implicit or <restriction> complex content whose
+//     - complexType (top-level, or a <complexContent>/<simpleContent> derivation
+//       reached transitively): must lie within the producer's decidable subset per
+//       complexTypeDecidable — implicit content, either <complexContent>
+//       alternant, or <simpleContent> <extension>, whose
 //       content model is element/any/sequence/choice/all/<group ref>, whose
 //       attributes are local <attribute>/<anyAttribute>/<attributeGroup ref>,
 //       whose <openContent> maps to {open content} (#230) and
 //       whose <assert> children map to {assertions} (#178), with
-//       no <simpleContent>, no <complexContent> <extension>, and
+//       no <simpleContent> <restriction> and
 //       no inline anonymous local type. <simpleContent> <restriction> and
 //       the inline forms need a later producer slice, so Produce
-//       declines them with a plain limitation error, not a spec verdict; the two
-//       EXTENSION forms are produced and judged by cos-ct-extends (#264) but
-//       still assembled without the base folds (#265), which leaves that rule's
-//       clauses 1.3 and 1.7 fail-open — DECLINED either way to avoid a
-//       wrong-reason pass in either direction. A <group ref>/
+//       declines them with a plain limitation error, not a spec verdict. A <group ref>/
 //       <attributeGroup ref> IS produced (#177): its target resolves (or fails
 //       src-resolve) genuinely. A real structural violation inside an admitted
 //       shape (src-ct, cos-all-limited, src-wildcard, …) flows through as a genuine
@@ -351,16 +353,15 @@ import (
 // # Still deferred
 //
 // Inline anonymous types on element/attribute, list/union/enumeration
-// simpleTypes, ref= identity constraints, the not-yet-produced complexType
-// forms named above, and the extension forms awaiting #265's folds (judged by
-// cos-ct-extends since #264, but with two of its clauses fail-open until the
-// folds land — #336 owns the widening) widen in with later slices (exactly
+// simpleTypes, ref= identity constraints and the not-yet-produced complexType
+// forms named above widen in with later slices (exactly
 // as the datatypes lane grew across #15/#57/#80); they stay DECLINED (Fail)
-// recorded gaps here, never guessed. UPA and EDC landed with #180 and
-// derivation-ok-restriction with #262, so the admitted complexType cases those
-// rules reject are now decided; the restriction cases still turning on
-// cos-content-act-restrict (#263) or cos-ns-subset (#265) stay failing gaps
-// rather than wins until those land.
+// recorded gaps here, never guessed. UPA and EDC landed with #180,
+// derivation-ok-restriction with #262 and cos-ct-extends with #264, so the
+// admitted complexType cases those rules reject — restriction and extension
+// alike, the latter admitted by #336 — are now decided; the cases still turning
+// on cos-content-act-restrict (#263) stay failing gaps
+// rather than wins until that lands.
 //
 // A schemaTest with MORE THAN ONE <ts:schemaDocument> child declares a SET of
 // documents to be loaded "one by one, in order" (xsts.xsd, the suite's own
@@ -824,7 +825,8 @@ func anonymousComplexTypeDecidable(el *parser.Element) bool {
 }
 
 // complexTypeDecidable reports whether a <complexType> (top-level, or a nested
-// <restriction> reached through <complexContent>) lies within the producer's
+// derivation reached through <complexContent>/<simpleContent>) lies within the
+// producer's
 // decidable subset — the shapes it fully builds AND finalize fully judges, so any
 // Produce error on it is a REAL structural violation
 // (src-ct/cos-all-limited/src-wildcard/src-attribute/p-props-correct/src-resolve)
@@ -845,17 +847,21 @@ func anonymousComplexTypeDecidable(el *parser.Element) bool {
 //     allows one; a MISPLACED one — beside <simpleContent>/<complexContent>, or
 //     directly under <complexContent> — is rejected by the producer as the
 //     grammar fault it is, so it needs no decline of its own;
-//   - the two EXTENSION forms, which the producer DOES build as of #228 —
-//     <simpleContent> <extension> and <complexContent> <extension>. Every reason
-//     the exclusion was FIRST written has since been discharged: cos-ct-extends
-//     (§3.4.6.2) is implemented (#264) and all three §3.4.2 base folds its case-1
-//     clauses read are done — 1.2 over §3.4.2.4 clause 3's {attribute uses}
-//     (#401), 1.3 over §3.4.2.5 clause 2.2's {attribute wildcard} (#265) and 1.7
-//     over §3.4.2.1 clause 1's {assertions} (#346). What is left is the
-//     lane-widening measurement itself: admitting a form here changes which
-//     fixtures this gate answers for, so it is #336's change to make and to
-//     ratchet, exactly as the restriction path was admitted only once
-//     derivation-ok-restriction existed (#262/#263).
+//   - a <complexContent> carrying NEITHER alternant. §3.4.2.3 requires one of
+//     them, and the producer says so, but as a grammar fault about the source
+//     item rather than a rule verdict, so it is declined like any limitation.
+//
+// Both EXTENSION forms are ADMITTED as of #336. The producer builds them (#228),
+// cos-ct-extends (§3.4.6.2) judges them (#264), and its case-1 clauses read only
+// folds that are now done — 1.2 over §3.4.2.4 clause 3's {attribute uses}
+// (#401), 1.3 over §3.4.2.5 clause 2.2's {attribute wildcard} (#265) and 1.7
+// over §3.4.2.1 clause 1's {assertions} (#346). Case 2 (simple base, clauses
+// 2.1-2.2) is complete. Case 1's clause 1.5 (two-step derivability) is proven
+// only for a pure-extension chain and is otherwise accepted unconditionally
+// (GAP(xsd), xsd/complexextension.go) — an UNDER-rejection, the same safe
+// direction as cos-nonambig and ct-props-correct clause 4 already are on the
+// admitted <restriction> path, so it bounds what this lane can claim rather than
+// letting it fabricate an "invalid".
 //
 // A <group ref>/<attributeGroup ref> IS produced (#177) and admitted: its target
 // resolves genuinely at finalize (or fails src-resolve). Real structural
@@ -863,21 +869,49 @@ func anonymousComplexTypeDecidable(el *parser.Element) bool {
 // mismatch, a both-namespace-forms wildcard, a bad occurrence) are NOT declined:
 // admitting them is safe because the producer's rejection is the right reason.
 func complexTypeDecidable(el *parser.Element) bool {
-	if childXSD(el, "simpleContent") != nil {
-		return false
+	if sc := childXSD(el, "simpleContent"); sc != nil {
+		ext := childXSD(sc, "extension")
+		if ext == nil {
+			return false // <restriction>, or neither alternant — see above
+		}
+		return simpleContentExtensionDecidable(ext)
 	}
 	if cc := childXSD(el, "complexContent"); cc != nil {
-		restriction := childXSD(cc, "restriction")
-		if restriction == nil {
-			// <extension> (produced since #228, judged by cos-ct-extends
-			// since #264 and, since #346, over a fully folded {assertions} —
-			// so this decline now awaits only #336's lane-widening
-			// measurement) or a bare/absent derivation.
-			return false
+		derivation := childXSD(cc, "restriction")
+		if derivation == nil {
+			derivation = childXSD(cc, "extension")
 		}
-		return contentDecidable(restriction)
+		if derivation == nil {
+			return false // neither alternant — see above
+		}
+		return contentDecidable(derivation)
 	}
 	return contentDecidable(el)
+}
+
+// simpleContentExtensionDecidable reports whether a <simpleContent> <extension>
+// is in the shape the producer decides genuinely. It is contentDecidable MINUS
+// the particles: xs:simpleExtensionType's content model is (annotation?,
+// ((attribute | attributeGroup)*, anyAttribute?), assert*), so a
+// <sequence>/<choice>/<all>/<group> child is a grammar fault — but §3.4.2.2
+// computes {content type} from the resolved base alone (cases 3-5) and
+// produceSimpleContent never reads a particle, so the producer SILENTLY DROPS
+// such a child and returns no error at all. That silence is exactly the false
+// accept this allowlist exists to refuse, so the shape declines here, while the
+// attribute children the producer really does fold in (§3.4.2.4) go through
+// contentDecidable unchanged.
+func simpleContentExtensionDecidable(ext *parser.Element) bool {
+	for _, child := range ext.Children() {
+		el, ok := child.(*parser.Element)
+		if !ok || el.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		switch el.Name().Local() {
+		case "sequence", "choice", "all", "group":
+			return false
+		}
+	}
+	return contentDecidable(ext)
 }
 
 // contentDecidable reports whether the content-model child and attribute children
