@@ -82,7 +82,7 @@ func vcGlobalFixed(t *testing.T, lexical string) func(*SchemaBuilder) {
 	t.Helper()
 	return func(b *SchemaBuilder) {
 		vc := NewValueConstraint(ValueFixed, lexical)
-		d, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, ScopeGlobal, &vc, false, nil)
+		d, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), &vc, false, nil)
 		if err != nil {
 			t.Fatalf("NewAttributeDeclaration: %v", err)
 		}
@@ -171,7 +171,7 @@ func TestPhaseEClause3ValueHalf(t *testing.T) {
 // text draws no variant distinction and neither does the check.
 func TestPhaseEClause3LocalVariant(t *testing.T) {
 	declVC := NewValueConstraint(ValueFixed, "7")
-	decl, err := NewAttributeDeclaration(xsderr.Loc{}, uq("a"), TypeDefinitionRef{Name: uq("str")}, ScopeLocal, &declVC, false, nil)
+	decl, err := NewAttributeDeclaration(xsderr.Loc{}, uq("a"), TypeDefinitionRef{Name: uq("str")}, aLocalScope(t), &declVC, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestPhaseEClause3AntecedentNotMet(t *testing.T) {
 			vs := &stubValueSpace{same: false, decided: true}
 			declVC := NewValueConstraint(tc.declKind, "7")
 			_, err := vcSchema(t, vs, func(b *SchemaBuilder) {
-				d, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, ScopeGlobal, &declVC, false, nil)
+				d, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), &declVC, false, nil)
 				if err != nil {
 					t.Fatalf("NewAttributeDeclaration: %v", err)
 				}
@@ -378,7 +378,7 @@ func vcOnly(valid string) *stubValueSpace {
 func vcGlobalDecl(t *testing.T, vc *ValueConstraint) func(*SchemaBuilder) {
 	t.Helper()
 	return func(b *SchemaBuilder) {
-		d, err := NewAttributeDeclaration(vcLoc, uq("g"), TypeDefinitionRef{Name: uq("str")}, ScopeGlobal, vc, false, nil)
+		d, err := NewAttributeDeclaration(vcLoc, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), vc, false, nil)
 		if err != nil {
 			t.Fatalf("NewAttributeDeclaration: %v", err)
 		}
@@ -449,7 +449,7 @@ func TestPhaseEAPropsCorrectClause2Accepts(t *testing.T) {
 // own Loc.
 func TestPhaseEAPropsCorrectClause2LocalDeclaration(t *testing.T) {
 	declVC := NewValueConstraint(ValueDefault, "not a value of str")
-	decl, err := NewAttributeDeclaration(vcLoc, uq("a"), TypeDefinitionRef{Name: uq("str")}, ScopeLocal, &declVC, false, nil)
+	decl, err := NewAttributeDeclaration(vcLoc, uq("a"), TypeDefinitionRef{Name: uq("str")}, aLocalScope(t), &declVC, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}

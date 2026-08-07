@@ -1352,7 +1352,7 @@ func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.Attribu
 			return xsd.AttributeDeclaration{}, err
 		}
 	}
-	return xsd.NewAttributeDeclaration(elem.Loc(), qname, xsd.TypeDefinitionRef{Name: typeName}, xsd.ScopeGlobal, vc, false, nil)
+	return xsd.NewAttributeDeclaration(elem.Loc(), qname, xsd.TypeDefinitionRef{Name: typeName}, xsd.NewAttributeGlobalScope(), vc, false, nil)
 }
 
 // valueConstraintOf maps the default/fixed attributes of an <element>/<attribute>

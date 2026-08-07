@@ -108,6 +108,23 @@ func TestProduceGlobalElementInlineComplexType(t *testing.T) {
 	if len(ct.AttributeUses()) != 1 {
 		t.Fatalf("{attribute uses} has %d members, want the one declared <attribute>", len(ct.AttributeUses()))
 	}
+	// The anonymous container has no {name} for the attribute's {scope}.{parent}
+	// (§3.2.1 sc_a) to reference, so it is carried by the identity the type's own
+	// {context} holds — the same one mint per inline construct the nested element
+	// declarations use. == and never reflect.DeepEqual, which cannot see a
+	// ComponentID.
+	attr := ct.AttributeUses()[0].AttributeDeclaration().(xsd.LocalAttributeDeclaration).Declaration
+	parent, ok := attr.Scope().Parent()
+	if !ok {
+		t.Fatal("the attribute of the inline anonymous complex type has no {scope}.{parent}")
+	}
+	anon, ok := parent.(xsd.AttributeAnonymousComplexTypeScopeParent)
+	if !ok {
+		t.Fatalf("{scope}.{parent} = %T, want an xsd.AttributeAnonymousComplexTypeScopeParent", parent)
+	}
+	if anon.Owner != ownerID(t, ct) {
+		t.Error("the attribute's {scope}.{parent}.Owner is not the anonymous type's own {context} identity")
+	}
 	for _, td := range s.Types() {
 		if td.Name() == (xsd.QName{}) {
 			t.Fatalf("an anonymous type reached {type definitions}; it must stay reachable only through the owning declaration")

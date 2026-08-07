@@ -124,6 +124,31 @@ func (i complexTypeIdentity) scopeParent() xsd.ElementScopeParent {
 	return xsd.ComplexTypeScopeParent{Name: i.name}
 }
 
+// attributeScopeParent returns the {scope}.{parent} every local attribute
+// declaration among this type's own attribute content reports (§3.2.2.2
+// dcl.att.local: "the Complex Type Definition corresponding to that item"), in
+// the variant the container's own identity admits. It is the attribute-side twin
+// of scopeParent: sc_a's alternation is CTD | AGD where sc_e's is CTD | MGD, so
+// the two sums are distinct types and this method cannot be folded into that one.
+//
+// It is NOT what an attribute reached through an <attributeGroup ref> reports:
+// such an attribute's own ancestor axis has no <complexType> in it, so
+// collectReferencedGroup rebinds the parent to the group at the hop.
+//
+// It panics on the zero identity, for scopeParent's reason: that value names no
+// container at all, is unconstructible through this file's two entry points, and
+// emitting an empty arm instead would launder the producer bug into an
+// a-props-correct verdict against an innocent schema.
+func (i complexTypeIdentity) attributeScopeParent() xsd.AttributeScopeParent {
+	if i.anonymous() {
+		return xsd.AttributeAnonymousComplexTypeScopeParent{Owner: i.owner}
+	}
+	if i.name.Local == "" {
+		panic("parser: complexTypeIdentity.attributeScopeParent: the identity carries neither a name nor an owner")
+	}
+	return xsd.AttributeComplexTypeScopeParent{Name: i.name}
+}
+
 // newComplexType builds the Complex Type Definition this identity names, through
 // xsd.NewComplexType for the named arm and xsd.NewAnonymousComplexType for the
 // anonymous one (whose §3.4.1 tableau makes {context} Required). Every other
@@ -165,10 +190,15 @@ func (i complexTypeIdentity) newComplexType(loc xsderr.Loc, baseTypeDefinitionNa
 //
 // id is BOTH what the built type is constructed from — a {name} for a top-level
 // one, a {context} for an inline anonymous one — and the {scope}.{parent} that
-// every local element declaration nested in this type's content model reports
-// (§3.3.2.3 dcl.elt.local). It is threaded down the content tree as an explicit
-// xsd.ElementScopeParent parameter rather than stashed on the producer, so
-// nesting can never mis-attribute a declaration. See complexTypeIdentity.
+// every local element declaration nested in this type's content model (§3.3.2.3
+// dcl.elt.local) and every local attribute declaration among its own attribute
+// content (§3.2.2.2 dcl.att.local) reports. It is threaded down as an explicit
+// xsd.ElementScopeParent / xsd.AttributeScopeParent parameter rather than stashed
+// on the producer, so nesting can never mis-attribute a declaration. The
+// attribute half stops at the <attributeGroup ref> hop, which is a scope boundary
+// and rebinds the parent to the referenced group — see collectReferencedGroup.
+// The two sums are distinct types (§3.2.1 sc_a's alternation is CTD | AGD where
+// §3.3.1 sc_e's is CTD | MGD), so complexTypeIdentity emits one of each.
 //
 // A missing name on the NAMED arm is rejected FIRST, before any content is
 // built, with the same plain grammar fault topLevelName raises and for the same
@@ -232,7 +262,8 @@ func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.
 // <complexContent> (§3.4.2.3.2): the {base type definition} is xs:anyType and
 // {derivation method} is restriction. The explicit content, attribute uses, and
 // attribute wildcard come directly from the <complexType>'s own children, and
-// this type is the {scope}.{parent} of every local element among them.
+// this type is the {scope}.{parent} of every local element and every local
+// attribute among them.
 func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (xsd.ComplexType, error) {
 	mixed, _ := boolAttr(el, "mixed")
 	abstract, _ := boolAttr(el, "abstract")
@@ -240,7 +271,7 @@ func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	uses, prohibited, wildcard, err := p.produceAttributeUses(el)
+	uses, prohibited, wildcard, err := p.produceAttributeUses(el, id.attributeScopeParent())
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -292,7 +323,7 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 		return xsd.ComplexType{}, err
 	}
 	abstract, _ := boolAttr(ctElem, "abstract")
-	uses, prohibited, wildcard, err := p.produceAttributeUses(ext)
+	uses, prohibited, wildcard, err := p.produceAttributeUses(ext, id.attributeScopeParent())
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -389,7 +420,7 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	uses, prohibited, wildcard, err := p.produceAttributeUses(derivation)
+	uses, prohibited, wildcard, err := p.produceAttributeUses(derivation, id.attributeScopeParent())
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -1527,10 +1558,17 @@ func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
 // derivation-ok-restriction — a false reject, not a fail-open. See
 // attributeDefaultBinding for the exact shape; closing it is #265 section 3's
 // job, not this producer's.
-func (p *producer) produceAttributeUses(parent *Element) ([]xsd.AttributeUse, []xsd.QName, *xsd.Wildcard, error) {
+//
+// scopeParent is the {scope}.{parent} (§3.2.1 sc_a) of parent's OWN <attribute>
+// children — the enclosing complex type, supplied by the caller as an explicit
+// parameter rather than stashed on the producer, so nesting can never
+// mis-attribute a declaration. It does NOT reach the attributes of a referenced
+// <attributeGroup>: those are scoped to the group, and collectReferencedGroup
+// rebinds the parent at that hop (§3.2.2.2 dcl.att.local).
+func (p *producer) produceAttributeUses(parent *Element, scopeParent xsd.AttributeScopeParent) ([]xsd.AttributeUse, []xsd.QName, *xsd.Wildcard, error) {
 	var uses []xsd.AttributeUse
 	var wildcards []xsd.Wildcard
-	if err := p.collectAttributeContent(parent, map[xsd.QName]struct{}{}, &uses, &wildcards); err != nil {
+	if err := p.collectAttributeContent(parent, scopeParent, map[xsd.QName]struct{}{}, &uses, &wildcards); err != nil {
 		return nil, nil, nil, err
 	}
 	prohibited, err := p.prohibitedAttributeNames(parent)
@@ -1601,11 +1639,18 @@ func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error
 // transitive closure, never an error (grounding Q3). ag-props-correct (§3.6.6)
 // clause 2 fires inside NewAttributeGroupDefinition only on a genuine
 // duplicate-name collision among the folded uses.
+//
+// Every <attribute> collected from elem's own body is scoped to THIS group by
+// construction (§3.2.2.2 dcl.att.local: an <attribute> with no <complexType>
+// ancestor takes the Attribute Group Definition corresponding to the
+// <attributeGroup> it is within), so name is passed down as an
+// xsd.AttributeGroupScopeParent — the same value collectReferencedGroup rebinds
+// to when a complex type reaches this group by reference instead.
 func (p *producer) buildAttributeGroup(name xsd.QName, elem *Element) (xsd.AttributeGroupDefinition, error) {
 	var uses []xsd.AttributeUse
 	var wildcards []xsd.Wildcard
 	visited := map[xsd.QName]struct{}{name: {}}
-	if err := p.collectAttributeContent(elem, visited, &uses, &wildcards); err != nil {
+	if err := p.collectAttributeContent(elem, xsd.AttributeGroupScopeParent{Name: name}, visited, &uses, &wildcards); err != nil {
 		return xsd.AttributeGroupDefinition{}, err
 	}
 	wildcard, err := combineAttributeWildcards(elem.Loc(), wildcards)
@@ -1630,7 +1675,15 @@ func (p *producer) buildAttributeGroup(name xsd.QName, elem *Element) (xsd.Attri
 // type=, an <attribute ref>, an <attributeGroup ref> — is resolved against the
 // receiver's schemaElem and §F.1 coercion. collectReferencedGroup switches
 // producers on the way in for exactly that reason.
-func (p *producer) collectAttributeContent(container *Element, visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
+//
+// scopeParent is the {scope}.{parent} of container's OWN <attribute> children
+// only (§3.2.2.2 dcl.att.local, the component container corresponds to). It is
+// deliberately not forwarded across the <attributeGroup ref> hop:
+// collectReferencedGroup descends into a top-level <attributeGroup>'s own body,
+// whose <attribute> children have no <complexType> ancestor and are therefore
+// scoped to that group whichever container reached it, so that function rebinds
+// the value rather than threading this one.
+func (p *producer) collectAttributeContent(container *Element, scopeParent xsd.AttributeScopeParent, visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
 	if any := childElement(container, xsd.XMLSchemaNS, "anyAttribute"); any != nil {
 		wc, err := p.produceWildcard(any)
 		if err != nil {
@@ -1645,7 +1698,7 @@ func (p *producer) collectAttributeContent(container *Element, visited map[xsd.Q
 		}
 		switch el.Name().Local() {
 		case "attribute":
-			use, err := p.produceAttributeUse(el)
+			use, err := p.produceAttributeUse(el, scopeParent)
 			if err != nil {
 				return err
 			}
@@ -1690,6 +1743,17 @@ func (p *producer) collectAttributeContent(container *Element, visited map[xsd.Q
 // so "on the stack" is not an error here as it is for a base chain — and because a
 // diamond (two refs reaching one group) would then splice that group's uses twice
 // and trip ag-props-correct on a collision the spec's set union does not have.
+//
+// This hop is a {scope} BOUNDARY, and takes NO scopeParent from its caller: it
+// REBINDS the parent to the resolved group. §3.2.2.2 dcl.att.local reads {parent}
+// off the <attribute>'s own ancestor axis, and an <attribute> child of a
+// top-level <attributeGroup> has no <complexType> ancestor at all, so its
+// {parent} is that Attribute Group Definition invariantly — the same value
+// however many complex types reference the group, and the same value
+// buildAttributeGroup passes when it builds the group's own component. Forwarding
+// the referencing complex type's parent here instead would make the two foldings
+// this function's doc claims are equal differ in {scope}.{parent}
+// (TestAttributeGroupComponentAndInlineFoldAgree pins that they do not).
 func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
 	ref, ok := el.Attr("ref")
 	if !ok {
@@ -1707,8 +1771,9 @@ func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]str
 		// which would otherwise swallow the reference silently. The descent still
 		// terminates: the original lives in the redefined document, outside any
 		// <redefine>, so a self-reference in ITS body is an ordinary reference and
-		// meets the visited entry below.
-		return src.owner.collectAttributeContent(src.elem, visited, uses, wildcards)
+		// meets the visited entry below. The redefined original carries the same
+		// expanded name, so it is the same {scope}.{parent} either way.
+		return src.owner.collectAttributeContent(src.elem, xsd.AttributeGroupScopeParent{Name: qn}, visited, uses, wildcards)
 	}
 	if _, seen := visited[qn]; seen {
 		return nil
@@ -1719,7 +1784,7 @@ func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]str
 		return xsderr.New(ruleSrcResolve, el.Loc(),
 			"<attributeGroup ref> %s does not resolve to any top-level attribute group definition (src-resolve clause 1.4)", qn)
 	}
-	return src.owner.collectAttributeContent(src.elem, visited, uses, wildcards)
+	return src.owner.collectAttributeContent(src.elem, xsd.AttributeGroupScopeParent{Name: qn}, visited, uses, wildcards)
 }
 
 // combineAttributeWildcards folds a §3.6.2.2 pre-order sequence of collected
@@ -1761,7 +1826,11 @@ func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.W
 // sibling local declaration's own {value constraint} ·absent· unconditionally,
 // and ref.att.local (§3.2.2.3) reads them off the ref-carrying element itself,
 // never touching the referenced top-level declaration's.
-func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
+//
+// scopeParent reaches only the sibling local declaration of the name= form: the
+// ref= form (§3.2.2.3 ref.att.local) builds no declaration at all, and the
+// top-level one it names carries the global {scope} its own mapping gave it.
+func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeScopeParent) (*xsd.AttributeUse, error) {
 	use, _ := el.Attr("use") // default "optional"
 	if use == "prohibited" {
 		return nil, nil
@@ -1802,7 +1871,7 @@ func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
 		return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
 			"attribute has neither ref nor name, but src-attribute clause 3 requires exactly one")
 	}
-	decl, err := p.produceLocalAttribute(el)
+	decl, err := p.produceLocalAttribute(el, scopeParent)
 	if err != nil {
 		return nil, err
 	}
@@ -1819,7 +1888,13 @@ func (p *producer) produceAttributeUse(el *Element) (*xsd.AttributeUse, error) {
 // definition} is mapped by localDeclaredType over §3.2.2.2's three tiers: the
 // inline <simpleType> child (#229), the type= reference, or xs:anySimpleType.
 // src-attribute clause 4 (§3.2.3) rejects the both-present case first.
-func (p *producer) produceLocalAttribute(el *Element) (xsd.AttributeDeclaration, error) {
+//
+// scopeParent is the containing <complexType>'s or <attributeGroup>'s component,
+// supplied by the caller (never recomputed from the element here — the ancestor
+// axis is not walkable from an *Element). It is a required parameter: every local
+// attribute declaration has a {scope}.{parent} (§3.2.1 sc_a), so there is no path
+// through this function that does not build the scope from it.
+func (p *producer) produceLocalAttribute(el *Element, scopeParent xsd.AttributeScopeParent) (xsd.AttributeDeclaration, error) {
 	_, hasType := el.Attr("type")
 	if hasType && childElement(el, xsd.XMLSchemaNS, "simpleType") != nil {
 		return xsd.AttributeDeclaration{}, xsderr.New(ruleSrcAttribute, el.Loc(),
@@ -1832,7 +1907,11 @@ func (p *producer) produceLocalAttribute(el *Element) (xsd.AttributeDeclaration,
 		return xsd.AttributeDeclaration{}, err
 	}
 	inheritable, _ := boolAttr(el, "inheritable")
-	return xsd.NewAttributeDeclaration(el.Loc(), qname, typeDef, xsd.ScopeLocal, nil, inheritable, nil)
+	scope, err := xsd.NewAttributeLocalScope(el.Loc(), scopeParent)
+	if err != nil {
+		return xsd.AttributeDeclaration{}, err
+	}
+	return xsd.NewAttributeDeclaration(el.Loc(), qname, typeDef, scope, nil, inheritable, nil)
 }
 
 // produceWildcard maps an <any>/<anyAttribute> to a Wildcard (§3.10.2.2). It

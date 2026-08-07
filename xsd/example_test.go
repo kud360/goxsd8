@@ -169,7 +169,7 @@ func Example_buildFinalizeQuery() {
 			exampleParticle(xsd.ResolvedTerm{Term: exampleLocalElement(addressType, "city")}),
 		)}))
 	b.AddElement(exampleElement(exampleQName("shipTo"), addressType, xsd.NewGlobalScope()))
-	country, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, exampleQName("country"), xsd.TypeDefinitionRef{Name: anySimpleTypeName}, xsd.ScopeGlobal, nil, false, nil)
+	country, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, exampleQName("country"), xsd.TypeDefinitionRef{Name: anySimpleTypeName}, xsd.NewAttributeGlobalScope(), nil, false, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -207,7 +207,7 @@ func Example_buildFinalizeQuery() {
 // exampleAttribute builds a global attribute declaration of type
 // xs:anySimpleType.
 func exampleAttribute(name xsd.QName) xsd.AttributeDeclaration {
-	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: anySimpleTypeName}, xsd.ScopeGlobal, nil, false, nil)
+	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: anySimpleTypeName}, xsd.NewAttributeGlobalScope(), nil, false, nil)
 	if err != nil {
 		panic(err)
 	}

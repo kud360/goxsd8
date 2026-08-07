@@ -702,6 +702,59 @@ func TestProduceLocalAttributeUses(t *testing.T) {
 	}
 }
 
+// TestProduceLocalAttributeScopeParent is the §3.2.1 sc_a round trip at the
+// parser level, for both discriminants of §3.2.2.2 dcl.att.local's {parent} row:
+// an <attribute> with a <complexType> ancestor names that complex type, and one
+// with none — a child of a top-level <attributeGroup>, reached here through a
+// ref — names the attribute group instead, NOT the complex type that referenced
+// it. The two are read back off the same produced Schema, so the parent each
+// declaration reports is the expanded name the container is registered under.
+func TestProduceLocalAttributeScopeParent(t *testing.T) {
+	body := `<xs:attributeGroup name="G"><xs:attribute name="grouped" type="xs:string"/></xs:attributeGroup>` +
+		`<xs:complexType name="CT"><xs:sequence/>` +
+		`<xs:attribute name="own" type="xs:string"/>` +
+		`<xs:attributeGroup ref="tns:G"/>` +
+		`</xs:complexType>`
+	s, err := produce(t, wrap("urn:x", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, ok := s.Type(xsd.QName{Space: "urn:x", Local: "CT"})
+	if !ok {
+		t.Fatal("complex type {urn:x}CT not found")
+	}
+	ct := td.(xsd.ComplexType)
+	uses := ct.AttributeUses()
+	if len(uses) != 2 {
+		t.Fatalf("{attribute uses} has %d members, want 2 (CT's own and G's)", len(uses))
+	}
+	for _, tc := range []struct {
+		name string
+		use  xsd.AttributeUse
+		want xsd.AttributeScopeParent
+	}{
+		{"declared in the complex type", uses[0], xsd.AttributeComplexTypeScopeParent{Name: ct.Name()}},
+		{"declared in the attribute group", uses[1], xsd.AttributeGroupScopeParent{Name: xsd.QName{Space: "urn:x", Local: "G"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			decl, ok := tc.use.AttributeDeclaration().(xsd.LocalAttributeDeclaration)
+			if !ok {
+				t.Fatalf("{attribute declaration} = %T, want a local declaration", tc.use.AttributeDeclaration())
+			}
+			if decl.Declaration.ScopeVariety() != xsd.ScopeLocal {
+				t.Errorf("ScopeVariety() = %s, want local (§3.2.2.2)", decl.Declaration.ScopeVariety())
+			}
+			got, ok := decl.Declaration.Scope().Parent()
+			if !ok {
+				t.Fatal("Scope().Parent() ok = false, which §3.2.1 makes Required when {variety} is local")
+			}
+			if got != tc.want {
+				t.Errorf("Scope().Parent() = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestProduceAttributeRefUse(t *testing.T) {
 	body := `<xs:attribute name="g" type="xs:string"/>` +
 		`<xs:complexType name="CT"><xs:sequence/><xs:attribute ref="tns:g"/></xs:complexType>`
