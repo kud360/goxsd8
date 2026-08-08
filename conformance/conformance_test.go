@@ -17,6 +17,9 @@ import (
 //     Vanished do not fail the read-only run (doc.go "Running"). Improved is
 //     logged so an agent that cannot run the ratchet can still see the upward
 //     movement its branch earned but has not banked (issue #303).
+//   - Every lane, on either path, reports its decline census (issue #327): the
+//     count of recorded failures no executor decided at all, re-checked this run
+//     rather than trusted. GOXSD_DECLINES=1 also lists their IDs.
 //   - GOXSD_RATCHET=1: additionally Ratchet each lane and rewrite its file;
 //     a Ratchet refusal (regression or vanished) fails the test. Arbiter only.
 //   - GOXSD_CASE=<id>: narrow execution to one case across all lanes.
@@ -72,6 +75,7 @@ func runConformanceLane(t *testing.T, l lane, cases []caseSpec, ratcheting bool)
 		t.Fatalf("lane %s: loading expectations: %v", l.name, err)
 	}
 	t.Logf("lane %s: %d cases", l.name, len(actual))
+	reportDeclines(t, l, cases, actual)
 
 	if !ratcheting {
 		d := Compare(expected, actual)
@@ -93,6 +97,30 @@ func runConformanceLane(t *testing.T, l lane, cases []caseSpec, ratcheting bool)
 	if err := WriteExpectations(path, merged); err != nil {
 		t.Fatalf("lane %s: writing expectations: %v", l.name, err)
 	}
+}
+
+// reportDeclines surfaces the lane's decline census (issue #327) through the
+// same t.Logf channel the Improved cases already use, so a -v run shows how many
+// of the lane's recorded failures no executor decided at all. That count is the
+// harvest queue's size: it drops at the landing that widens an engine, instead
+// of a wrongly-declined case waiting for an unrelated reader edit to stumble
+// over it. The census reports only — it scores nothing and writes nothing, so it
+// runs on the ratcheting path too.
+func reportDeclines(t *testing.T, l lane, cases []caseSpec, actual map[string]Status) {
+	t.Helper()
+	census := takeDeclineCensus(l, cases, actual)
+	if len(census.candidates) > 0 {
+		t.Logf("lane %s: %d declined case(s) recorded fail — harvest candidates re-checked this run (%s=1 lists them)",
+			l.name, len(census.candidates), declinesEnv)
+	}
+	if census.indeterminate > 0 {
+		t.Logf("lane %s: %d further case(s) declined as indeterminate, never harvestable (issue #277)",
+			l.name, census.indeterminate)
+	}
+	if os.Getenv(declinesEnv) != "1" {
+		return
+	}
+	t.Logf("lane %s: decline candidates: %v", l.name, census.candidates)
 }
 
 // narrowToCase keeps only the case whose ID equals only, failing clearly if no
