@@ -23,7 +23,9 @@ Cheap and targeted — not a full /backlog. Two duties:
    issue thread's warden/arbiter advisory notes. Every promised or
    implied follow-up either gets filed now (complete body, correct
    labels/deps) or is explicitly dismissed in a comment — promised
-   follow-ups have leaked before.
+   follow-ups have leaked before. Filing one means first searching the
+   open queue for its primary file path/identifier, per the
+   filing-discipline bullet in docs/WORKFLOW.md's "GitHub conventions".
 
 ## Procedure (one /backlog run)
 
@@ -42,7 +44,9 @@ Cheap and targeted — not a full /backlog. Two duties:
    for human triage in your plan summary.
 2. **Reconcile**: close stale/obsolete issues, split anything too big
    for one session, merge duplicates, file `kind/gap` issues for
-   untracked GAP sites.
+   untracked GAP sites. A stale premise found in an open body is fixed
+   by editing that body, not by commenting only — same
+   filing-discipline bullet.
 3. **Order the `ready` queue by dependency** (`Depends on #N` in the
    body; label `blocked` until deps close) and publish the working
    queue as a dependency-ordered band in `docs/PLAN.md`. There is no
