@@ -283,6 +283,88 @@ func TestFixReflowsFromTheFirstRaggedBreak(t *testing.T) {
 	}
 }
 
+// TestFixKeepsABlockCommentInsideItsGroup covers the shape go/ast collects into
+// a single CommentGroup: `//` lines, a whole-line `/* */`, then `//` lines
+// again. The block comment carries no paragraph text, so it has to END the run
+// rather than be stepped over — a paragraph accumulated across it spans its
+// line, and a reflow splices over every line it spans, deleting the block
+// comment silently (#329).
+func TestFixKeepsABlockCommentInsideItsGroup(t *testing.T) {
+	const block = "/* keep me */"
+	// The block comment sits on line 7, between two runs that each carry a
+	// ragged break of their own, so -fix splices on both sides of it.
+	const blockLine = 7
+	src := "package p\n\n" +
+		mkLine(0, 80) + "\n" +
+		mkLine(0, 50) + "\n" +
+		mkLine(0, 79) + "\n" +
+		mkLine(0, 40) + "\n" +
+		block + "\n" +
+		mkLine(0, 80) + "\n" +
+		mkLine(0, 50) + "\n" +
+		mkLine(0, 79) + "\n" +
+		mkLine(0, 40) + "\n" +
+		"var x = 1\n"
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "x.go")
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	if got := strings.Split(src, "\n")[blockLine-1]; got != block {
+		t.Fatalf("fixture line %d = %q, want %q", blockLine, got, block)
+	}
+
+	if _, err := process(path, true, map[int]bool{}); err != nil {
+		t.Fatalf("process(fix): %v", err)
+	}
+	fixed, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading fixed file: %v", err)
+	}
+	if string(fixed) == src {
+		t.Fatal("-fix reflowed nothing, so this fixture no longer exercises a splice beside a block comment")
+	}
+
+	got := strings.Split(string(fixed), "\n")
+	kept := 0
+	for _, line := range got {
+		if line == block {
+			kept++
+		}
+	}
+	if kept != 1 {
+		t.Fatalf("the block comment survives on %d whole lines after -fix, want 1:\n%s", kept, fixed)
+	}
+
+	findings, err := process(path, false, map[int]bool{})
+	if err != nil {
+		t.Fatalf("process(recheck): %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("the fixed file still reports %d finding(s): %v", len(findings), findings)
+	}
+
+	// The same defect stated on the paragraphs themselves, where -fix reads its
+	// splice ranges from: neither run may reach across the block comment's line.
+	// comments parses the source it is handed, so this reads the fixture as
+	// written, not the reflowed file on disk.
+	paras, err := comments(path, src, strings.Split(src, "\n"))
+	if err != nil {
+		t.Fatalf("comments: %v", err)
+	}
+	if len(paras) != 2 {
+		t.Fatalf("got %d paragraph(s), want 2: one on each side of the block comment", len(paras))
+	}
+	for _, para := range paras {
+		first, last := para[0].num, para[len(para)-1].num
+		if first < blockLine && last > blockLine {
+			t.Fatalf("paragraph spans lines %d-%d, the range -fix splices over, and line %d in it is %q",
+				first, last, blockLine, block)
+		}
+	}
+}
+
 func TestWaiverCoversItsParagraph(t *testing.T) {
 	if len(waivers) == 0 {
 		t.Skip("no waivers to exercise")
@@ -297,6 +379,11 @@ func TestWaiverCoversItsParagraph(t *testing.T) {
 	}
 	if _, ok := waivedBy(filepath.Join("some", "root", w.file), para[:1]); ok {
 		t.Fatalf("waiver %s covered a paragraph that does not carry its line", w.issue)
+	}
+	// The waiver names whole path elements: a file whose name merely ends in the
+	// waived path is a different file.
+	if _, ok := waivedBy("x"+w.file, para); ok {
+		t.Fatalf("waiver %s covered %q, a different file that only ends in the waived path", w.issue, "x"+w.file)
 	}
 }
 

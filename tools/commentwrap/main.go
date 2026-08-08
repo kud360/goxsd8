@@ -272,10 +272,20 @@ func comments(path, src string, lines []string) ([][]commentLine, error) {
 
 	var paras [][]commentLine
 	for _, group := range file.Comments {
+		// A comment group runs `//` lines and `/* */` blocks together, so a line
+		// this check cannot carry paragraph text on ends the run rather than
+		// being stepped over: a paragraph accumulated across it would span its
+		// line, and a reflow splices over every line it spans, deleting it
+		// (#329).
 		block := make([]commentLine, 0, len(group.List))
+		flush := func() {
+			paras = append(paras, paragraphs(block)...)
+			block = nil
+		}
 		for _, c := range group.List {
 			pos := fset.Position(c.Slash)
 			if !strings.HasPrefix(c.Text, "//") || pos.Line > len(lines) {
+				flush()
 				continue
 			}
 			raw := lines[pos.Line-1]
@@ -283,6 +293,7 @@ func comments(path, src string, lines []string) ([][]commentLine, error) {
 			// paragraph: the code to its left, not a wrap width, decides where
 			// it starts and how much room is left.
 			if strings.TrimSpace(raw) != c.Text {
+				flush()
 				continue
 			}
 			block = append(block, commentLine{
@@ -291,7 +302,7 @@ func comments(path, src string, lines []string) ([][]commentLine, error) {
 				body: strings.TrimPrefix(c.Text, "//"),
 			})
 		}
-		paras = append(paras, paragraphs(block)...)
+		flush()
 	}
 	return paras, nil
 }
@@ -631,14 +642,22 @@ var waivers = []waiver{{
 	issue: "#564",
 }}
 
+// covers reports whether path is the file the waiver names. The waiver names a
+// repo-relative path and the check runs on paths relative to wherever it was
+// invoked, so the match is on whole path elements: a bare suffix match would
+// let a waiver keyed "value/list.go" cover "xvalue/list.go" too.
+func (w waiver) covers(path string) bool {
+	slash := filepath.ToSlash(filepath.Clean(path))
+	return slash == w.file || strings.HasSuffix(slash, "/"+w.file)
+}
+
 // waivedBy reports which waiver, if any, covers a paragraph. The whole
 // paragraph is waived, not the single line: a reflow rewrites the paragraph
 // from its first ragged break onward, so there is no way to fix a neighbouring
 // break without touching the waived one.
 func waivedBy(path string, para []commentLine) (int, bool) {
-	slash := filepath.ToSlash(filepath.Clean(path))
 	for i, w := range waivers {
-		if !strings.HasSuffix(slash, w.file) {
+		if !w.covers(path) {
 			continue
 		}
 		for _, line := range para {
@@ -660,7 +679,7 @@ func staleWaivers(files []string, used map[int]bool) []finding {
 			continue
 		}
 		for _, path := range files {
-			if !strings.HasSuffix(filepath.ToSlash(filepath.Clean(path)), w.file) {
+			if !w.covers(path) {
 				continue
 			}
 			findings = append(findings, finding{
