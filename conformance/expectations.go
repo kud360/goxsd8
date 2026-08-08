@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -267,6 +268,60 @@ func Ratchet(expected, actual map[string]Status, withheld []string, removals Rem
 		delete(merged, id)
 	}
 	return merged, nil
+}
+
+// laneRun is one lane's completed run: the lane's name, the expectations
+// committed for it, and the statuses this run observed. It carries a lane from
+// the observation pass to the merge, so every lane can be merged before any
+// lane is written (ratchetAll). Nothing derivable is stored (STYLE D3): the
+// lane's file comes from its name, and the withheld set is the run's rather
+// than any one lane's.
+type laneRun struct {
+	name     string
+	expected map[string]Status
+	actual   map[string]Status
+}
+
+// ratchetAll merges every lane and then writes every lane, in two separated
+// phases: no lane's file is written unless EVERY lane merged without error.
+// Ratchet is a per-lane function and refuses only the merge it was asked for;
+// this is what makes one lane's refusal cost the whole run, so a single wrong
+// removal assertion can no longer leave a half-banked tree behind a failing run
+// (issue #581). Every refusal is collected rather than the first one ending the
+// pass — an arbiter correcting one asserted count should see all of them at
+// once, and none of them wrote anything.
+//
+// runs is a slice so lanes merge and write in the caller's fixed order (STYLE
+// D1); removals is an internal lookup keyed by lane name, read by key and never
+// iterated (STYLE D2), so a lane it does not name asserts the zero
+// RemovalAssertion. dir is the directory holding the committed lane files.
+//
+// The write phase is not itself transactional: WriteExpectations renames each
+// lane's file into place separately, so an I/O fault partway through can still
+// leave earlier lanes written. That is a failing disk rather than a refused
+// merge — the refusals this function exists to contain are all decided in the
+// first phase, before anything is opened for writing.
+func ratchetAll(dir string, runs []laneRun, withheld []string, removals map[string]RemovalAssertion) error {
+	merged := make([]map[string]Status, len(runs))
+	var refused []error
+	for i, r := range runs {
+		m, err := Ratchet(r.expected, r.actual, withheld, removals[r.name])
+		if err != nil {
+			refused = append(refused, fmt.Errorf("lane %s: %w", r.name, err))
+			continue
+		}
+		merged[i] = m
+	}
+	if len(refused) > 0 {
+		return fmt.Errorf("no lane was written: %w", errors.Join(refused...))
+	}
+
+	for i, r := range runs {
+		if err := WriteExpectations(laneFileIn(dir, r.name), merged[i]); err != nil {
+			return fmt.Errorf("lane %s: writing expectations: %w", r.name, err)
+		}
+	}
+	return nil
 }
 
 // WriteExpectations writes a lane's expectations to path, one case per line as

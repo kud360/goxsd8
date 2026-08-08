@@ -110,6 +110,145 @@ func TestResolveExpectedClassifiesDeclaredValidity(t *testing.T) {
 	}
 }
 
+// TestVersionApplicableUsesOrConnectedTokens pins the APPLICABILITY half of the
+// suite's `version` attribute (issue #446) — a different rule from the
+// resolveExpected precedence above, not a variant of it. xsts.xsd:1449-1458 gives
+// testSuite/testSet/testGroup/schemaTest/instanceTest an implicit OR ("if a
+// processor configuration supports any of them, the tests included are
+// applicable"); `expected` alone gets an AND.
+//
+// Three rows carry the design and the rest guard the edges. Absence must be
+// applicable — `version` is use="optional" at every declaration site and
+// ts:version-info declares no default, and an empty token list satisfies no
+// any-match loop, so absence has to be special-cased or discovery loses the
+// unversioned majority of the suite. "1.0 1.1" must be applicable, which is what
+// distinguishes the OR from an equality test on the whole attribute value. And
+// "full-xpath-in-CTA" must NOT be: it is an xsts.xsd:1854-1855 FEATURE token, and
+// this processor's XPath engine is unlanded.
+func TestVersionApplicableUsesOrConnectedTokens(t *testing.T) {
+	cases := []struct {
+		name    string
+		version string
+		want    bool
+	}{
+		{"absent applies to everything", "", true},
+		{"whitespace only is absent", "  \n\t ", true},
+		{"the supported version alone", "1.1", true},
+		{"XSD 1.0 only", "1.0", false},
+		{"1.0 or 1.1 — the OR admits it", "1.0 1.1", true},
+		{"1.1 or 1.0, token order irrelevant", "1.1 1.0", true},
+		{"full-xpath-in-CTA is an unsupported feature", "full-xpath-in-CTA", false},
+		{"restricted-xpath-in-CTA is unsupported too", "restricted-xpath-in-CTA", false},
+		{"a supported version beside an unsupported feature", "1.1 full-xpath-in-CTA", true},
+		{"two unsupported tokens", "1.0 full-xpath-in-CTA", false},
+		{"an unknown token", "Unicode_4.0.0", false},
+		{"several unsupported tokens", "1.0 Unicode_4.0.0 restricted-xpath-in-CTA", false},
+		{"a supported token last in a long list", "1.0 Unicode_4.0.0 1.1", true},
+		{"1.10 is not 1.1", "1.10", false},
+		{"a token merely containing 1.1", "x1.1y", false},
+	}
+	for _, tc := range cases {
+		if got := versionApplicable(tc.version); got != tc.want {
+			t.Errorf("%s: versionApplicable(%q) = %v, want %v", tc.name, tc.version, got, tc.want)
+		}
+	}
+}
+
+// TestCasesFromSetWithholdsInapplicableLevels proves the filter removes cases
+// from DISCOVERY rather than declining them (issue #446): an inapplicable level
+// yields no caseSpec at all, so it cannot reach an expectation file even as a
+// recorded fail. It exercises every level casesFromSet can see — the set, each
+// group, and each schemaTest/instanceTest — on a synthetic catalog, so it needs
+// no submodule. The retained rows are chosen so a filter that skipped a level (or
+// filtered one it should not) changes the ID list rather than only its length.
+//
+// Every dropped case must ALSO be recorded withheld (issue #576), because that
+// recording is the whole difference between a sanctioned Delta.Removed and a
+// Vanished regression that refuses the ratchet. The two lists are asserted
+// exactly and asserted DISJOINT: a filter site that skipped without recording, or
+// a recorder that fired on a level the loop still descended into, both show up
+// here rather than as a ratchet refusal months later.
+func TestCasesFromSetWithholdsInapplicableLevels(t *testing.T) {
+	vt := func(name, version string) validityTest {
+		return validityTest{
+			Name:        name,
+			Version:     version,
+			SchemaDocs:  []docRef{{Href: name + ".xsd"}},
+			InstanceDoc: docRef{Href: name + ".xml"},
+			Expected:    []expected{{Validity: "valid"}},
+		}
+	}
+	set := testSet{
+		Name: "set",
+		Groups: []testGroup{
+			{
+				Name:          "keep",
+				SchemaTests:   []validityTest{vt("s-keep", ""), vt("s-drop", "1.0")},
+				InstanceTests: []validityTest{vt("i-keep", "1.0 1.1"), vt("i-drop", "1.0")},
+			},
+			{Name: "dropVersion", Version: "1.0", SchemaTests: []validityTest{vt("s", "1.1")}},
+			{Name: "dropFeature", Version: "full-xpath-in-CTA", SchemaTests: []validityTest{vt("s", "")}},
+		},
+	}
+
+	got, err := casesFromSet(set, "sets/saxonMeta", map[string]struct{}{})
+	if err != nil {
+		t.Fatalf("casesFromSet: %v", err)
+	}
+	var ids []string
+	for _, c := range got.cases {
+		ids = append(ids, c.id)
+	}
+	want := []string{"set/keep/schema/s-keep", "set/keep/instance/i-keep"}
+	if !slices.Equal(ids, want) {
+		t.Errorf("discovered %v, want %v", ids, want)
+	}
+	wantWithheld := []string{
+		"set/keep/schema/s-drop",
+		"set/keep/instance/i-drop",
+		"set/dropVersion/schema/s",
+		"set/dropFeature/schema/s",
+	}
+	if !slices.Equal(got.withheld, wantWithheld) {
+		t.Errorf("withheld %v, want %v", got.withheld, wantWithheld)
+	}
+	assertDisjoint(t, ids, got.withheld)
+
+	scoped := set
+	scoped.Version = "1.0"
+	dropped, err := casesFromSet(scoped, "sets/saxonMeta", map[string]struct{}{})
+	if err != nil {
+		t.Fatalf("casesFromSet on an inapplicable set: %v", err)
+	}
+	if len(dropped.cases) != 0 {
+		t.Errorf("an XSD-1.0-only testSet must yield no cases, got %d: %v", len(dropped.cases), dropped.cases)
+	}
+	wantSetWithheld := []string{
+		"set/keep/schema/s-keep",
+		"set/keep/schema/s-drop",
+		"set/keep/instance/i-keep",
+		"set/keep/instance/i-drop",
+		"set/dropVersion/schema/s",
+		"set/dropFeature/schema/s",
+	}
+	if !slices.Equal(dropped.withheld, wantSetWithheld) {
+		t.Errorf("an XSD-1.0-only testSet must withhold every case it would have produced, got %v, want %v",
+			dropped.withheld, wantSetWithheld)
+	}
+}
+
+// assertDisjoint fails when one case ID appears in both the produced and the
+// withheld list. Compare treats that overlap as a runner bug and errors the whole
+// run (issue #576), so casesFromSet must never build one.
+func assertDisjoint(t *testing.T, produced, withheld []string) {
+	t.Helper()
+	for _, id := range withheld {
+		if slices.Contains(produced, id) {
+			t.Errorf("case %q is both produced and withheld", id)
+		}
+	}
+}
+
 // expectationName renders an expectation for a test failure message.
 func expectationName(e expectation) string {
 	if e.isIndeterminate() {
@@ -359,7 +498,7 @@ func TestWithheldIDsUseTheSameConstructionAsProducedCases(t *testing.T) {
 		t.Fatalf("casesFromSet: %v", err)
 	}
 	if len(produced.withheld) != 0 {
-		t.Fatalf("no level withholds anything until issue #446, got %v", produced.withheld)
+		t.Fatalf("no level of this fixture declares a version, so nothing may be withheld, got %v", produced.withheld)
 	}
 	ids := make([]string, 0, len(produced.cases))
 	for _, c := range produced.cases {

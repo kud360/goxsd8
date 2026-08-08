@@ -25,7 +25,9 @@ import (
 //     are logged on the read-only path and never fail it.
 //   - GOXSD_RATCHET=1: additionally Ratchet each lane and rewrite its file;
 //     a Ratchet refusal (regression, vanished, or a removal count the run did not
-//     assert) fails the test. Arbiter only.
+//     assert) fails the test. Arbiter only. Writing is all-or-nothing across
+//     lanes (ratchetAll, issue #581): every lane merges first, and one lane's
+//     refusal leaves every lane's file untouched.
 //   - GOXSD_RATCHET_REMOVALS=<lane>=<n>,…: arbiter-only, ratchet-path-only
 //     assertion of the sanctioned removals each lane is expected to bank; set
 //     without GOXSD_RATCHET=1 it fails the run rather than half-applying.
@@ -53,8 +55,20 @@ func TestConformance(t *testing.T) {
 		cases = narrowToCase(t, cases, only)
 	}
 
-	for _, l := range defaultLanes() {
-		runConformanceLane(t, l, cases, found.withheld, ratcheting, removals[l.name])
+	lanes := defaultLanes()
+	runs := make([]laneRun, 0, len(lanes))
+	for _, l := range lanes {
+		runs = append(runs, observeConformanceLane(t, l, cases))
+	}
+
+	if !ratcheting {
+		for _, r := range runs {
+			reportLaneReadOnly(t, r, found.withheld)
+		}
+		return
+	}
+	if err := ratchetAll(expectationsDir, runs, found.withheld, removals); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -89,34 +103,23 @@ func endUnusableSuiteRun(t *testing.T, err error, ratcheting bool) {
 	t.Skipf("%v (skipped: %s=1)", err, suiteOptionalEnv)
 }
 
-// runConformanceLane executes one lane and applies the read-only or ratcheting
-// policy to its result. withheld is the suite-wide set of case IDs discovery
-// ruled inapplicable; it needs no per-lane routing because a withheld ID only
-// classifies against the lane whose committed expectations carry it.
-func runConformanceLane(t *testing.T, l lane, cases []caseSpec, withheld []string, ratcheting bool, removals RemovalAssertion) {
+// observeConformanceLane executes one lane and reports what the run saw of it:
+// its case count and its decline census (issue #327). Both are pure reporting
+// and belong to either path, so this pass is the same for a read-only and a
+// ratcheting run. It judges nothing about the score — the read-only verdict and
+// the upward-only merge both happen once EVERY lane has been observed, which is
+// what lets one lane's refusal be known before any lane's file is written
+// (ratchetAll, issue #581).
+func observeConformanceLane(t *testing.T, l lane, cases []caseSpec) laneRun {
 	t.Helper()
 	actual := runLane(l, cases)
-	path := laneFile(l.name)
-	expected, err := LoadExpectations(path)
+	expected, err := LoadExpectations(laneFile(l.name))
 	if err != nil {
 		t.Fatalf("lane %s: loading expectations: %v", l.name, err)
 	}
 	t.Logf("lane %s: %d cases", l.name, len(actual))
 	reportDeclines(t, l, cases, actual)
-
-	if !ratcheting {
-		reportLaneReadOnly(t, l, expected, actual, withheld)
-		return
-	}
-
-	merged, err := Ratchet(expected, actual, withheld, removals)
-	if err != nil {
-		t.Errorf("lane %s: %v", l.name, err)
-		return
-	}
-	if err := WriteExpectations(path, merged); err != nil {
-		t.Fatalf("lane %s: writing expectations: %v", l.name, err)
-	}
+	return laneRun{name: l.name, expected: expected, actual: actual}
 }
 
 // reportLaneReadOnly applies the read-only policy: fail on a Regressed case, and
@@ -129,23 +132,27 @@ func runConformanceLane(t *testing.T, l lane, cases []caseSpec, withheld []strin
 // discovery both withheld and produced one case, which is a runner bug rather
 // than a conformance result, and no run should proceed on a self-contradicting
 // case list.
-func reportLaneReadOnly(t *testing.T, l lane, expected, actual map[string]Status, withheld []string) {
+//
+// withheld is the suite-wide set of case IDs discovery ruled inapplicable; it
+// needs no per-lane routing because a withheld ID only classifies against the
+// lane whose committed expectations carry it.
+func reportLaneReadOnly(t *testing.T, r laneRun, withheld []string) {
 	t.Helper()
-	d, err := Compare(expected, actual, withheld)
+	d, err := Compare(r.expected, r.actual, withheld)
 	if err != nil {
-		t.Errorf("lane %s: %v", l.name, err)
+		t.Errorf("lane %s: %v", r.name, err)
 		return
 	}
 	if len(d.Regressed) > 0 {
-		t.Errorf("lane %s: %d regressed case(s): %v", l.name, len(d.Regressed), d.Regressed)
+		t.Errorf("lane %s: %d regressed case(s): %v", r.name, len(d.Regressed), d.Regressed)
 	}
 	if len(d.Improved) > 0 {
 		t.Logf("lane %s: %d case(s) improved, not yet banked (GOXSD_RATCHET=1 required to write): %v",
-			l.name, len(d.Improved), d.Improved)
+			r.name, len(d.Improved), d.Improved)
 	}
 	if len(d.Removed) > 0 {
 		t.Logf("lane %s: %d sanctioned applicability removal(s), not yet banked (GOXSD_RATCHET=1 with %s=%s=%d required to write): %v",
-			l.name, len(d.Removed), ratchetRemovalsEnv, l.name, len(d.Removed), d.Removed)
+			r.name, len(d.Removed), ratchetRemovalsEnv, r.name, len(d.Removed), d.Removed)
 	}
 }
 
