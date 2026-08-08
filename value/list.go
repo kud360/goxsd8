@@ -59,7 +59,13 @@ var (
 // are what reject "128", "-129" and "1.5". Parsing a token through the item
 // mapping only would FALSE-ACCEPT all three (issue #224); recursing runs the
 // same facet pipeline a standalone xs:byte value takes, so the two paths cannot
-// disagree. The recursion terminates structurally: neither the item type nor any
+// disagree. The same holds one sub-clause over for a UNION item type (cl.2.3,
+// dv_union): the recursion layers the union's OWN pattern (clause 1) and
+// enumeration (clause 3) — with assertions the only facets §4.1.5
+// cos-applicable-facets admits on a union — around the member dispatch, where
+// parsing a token through the item's mapping alone (unionMapping, which is that
+// dispatch and nothing else) would apply neither (issue #326). The recursion
+// terminates structurally: neither the item type nor any
 // basic member of it is itself a list (§3.16.1, std-item_type_definition), so
 // validateLexical never re-enters this Parse.
 //
@@ -78,6 +84,19 @@ var (
 func listMapping(b Backend, item *xsd.SimpleType) Mapping {
 	return Mapping{
 		Parse: func(lexical string, ctx Context) (Value, error) {
+			// This split is the only point at which the ITEM type's whiteSpace mode
+			// could have mattered, and no mode can change a token's verdict. The
+			// recursion below does re-enter validateLexical's whiteSpace stage with
+			// the item type's own mode, but whiteSpace is a ·pre-lexical· facet and
+			// the dv_vfacets note (§4.1.4) says outright that "whiteSpace facets and
+			// other ·pre-lexical· facets do not take part in checking Datatype
+			// Valid": pre-lexical facets normalize the infoset value BEFORE datatype
+			// validity is checked, and the one doing so here is the LIST's own
+			// whiteSpace — fixed to collapse (§4.3.6.1 f-w-fixed, §3.16.2.1 case 3)
+			// and already applied upstream by validateLexical before this Parse. So
+			// no test pins a preserve/replace/collapse item type (issue #326): the
+			// exclusion is structural, not merely an artifact of Fields happening to
+			// leave a token with no whitespace for a mode to act on.
 			tokens := strings.Fields(lexical)
 			items := make([]Value, 0, len(tokens))
 			for _, tok := range tokens {
