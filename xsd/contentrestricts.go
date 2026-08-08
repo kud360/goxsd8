@@ -298,19 +298,27 @@ func (s *Schema) resolvedTermPositions(t Term) int {
 
 // modelGroupPositions sums its members' unfolded positions, saturating as soon as
 // the running total passes the ceiling so a wide group under a wide range is not
-// summed to completion. Every compositor contributes each member's fragment
-// exactly once — addSequence, addChoice and addAll differ in the edges they draw,
-// never in the positions they emit — so one sum serves all three. Particles are
-// walked in document order (STYLE D2).
+// summed to completion. Particles are walked in document order (STYLE D2).
+//
+// <sequence> and <choice> contribute each member's fragment exactly once —
+// addSequence and addChoice differ in the edges they draw, never in the positions
+// they emit. addAll emits each member's fragment TWICE, once for the star and
+// once for the primed alternation that carries the group's ·last· set, so an
+// <all> counts double. Keeping that factor in step with addAll is what makes this
+// count the automaton's size rather than an estimate of it.
 func (s *Schema) modelGroupPositions(g ModelGroup) int {
+	copies := 1
+	if g.Compositor() == CompositorAll {
+		copies = 2
+	}
 	total := 0
 	for _, p := range g.particles {
 		total += s.unfoldedPositions(p)
-		if total > maxContentPositions {
+		if total > maxContentPositions/copies {
 			return maxContentPositions + 1
 		}
 	}
-	return total
+	return copies * total
 }
 
 // startState is the automaton state before any element has been consumed. Every
@@ -543,9 +551,10 @@ const maxProductStates = 4096
 //     implementation is unable to determine by examination of the schema in
 //     isolation whether or not clause 2.4.2 is satisfied, then the implementation
 //     may provisionally accept the derivation" — and precondition (2) genuinely
-//     holds for the machinery here: addAll models all(P1…Pn) as (P1|…|Pn)*, whose
-//     language is a SUPERSET of the interleave — a single-member ·all· already
-//     reads as that member repeated — so an R modelled that way admits sequences
+//     holds for the machinery here: addAll models all(P1…Pn) as a star over its
+//     members followed by a primed replay of one of them, whose language is a
+//     SUPERSET of the star's and so of the interleave — a single-member ·all·
+//     already reads as that member repeated — so an R modelled that way admits sequences
 //     R does not, and charging their absence from B would false-reject. B needs
 //     no such leniency
 //     for the mirror-image reason: the same over-approximation makes B look

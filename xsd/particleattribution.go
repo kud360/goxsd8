@@ -519,41 +519,120 @@ func (b *automaton) addChoice(g ModelGroup) ([]int, []int, bool, error) {
 	return first, last, emptiable, nil
 }
 
+// allFragment is one pass over an <all> group's members: the union of their
+// ·first· positions, the union of their ·last· positions, whether every one of
+// them accepts the empty sequence, and the group's RESIDUAL — the positions still
+// live once the group has been completed.
+//
+// residual is what §3.8.4.1.3 leaves live after S1 × … × Sn is accounted for: a
+// member whose Si may be empty (·emptiable·, cos-group-emptiable §3.9.6.3) has
+// not been taken yet and may still start, and a member taken as far as one of its
+// own ·last· positions may still continue past it when its {max occurs} exceeds
+// the occurrences already consumed. It is snapshotted while the members are
+// emitted, before addAll draws any group-level edge, so it holds each member's
+// own continuations and nothing the group adds around them.
+type allFragment struct {
+	first     []int
+	last      []int
+	residual  []int
+	emptiable bool
+}
+
+// addAllMembers emits one fragment per member of an <all> group and collects the
+// four facts addAll composes them from. Members are walked in document order
+// (STYLE D2).
+func (b *automaton) addAllMembers(g ModelGroup) (allFragment, error) {
+	frag := allFragment{emptiable: true}
+	for _, p := range g.particles {
+		f, l, e, err := b.addParticle(p)
+		if err != nil {
+			return allFragment{}, err
+		}
+		frag.first = mergePositions(frag.first, f)
+		frag.last = mergePositions(frag.last, l)
+		frag.emptiable = frag.emptiable && e
+		if e {
+			frag.residual = mergePositions(frag.residual, f)
+		}
+		for _, q := range l {
+			frag.residual = mergePositions(frag.residual, b.follow[q])
+		}
+	}
+	return frag, nil
+}
+
 // addAll emits an <all> group (§3.8.4.1.3, interleave). The literal interleave of
-// n members has n! orderings and must not be built. For deciding ·compete· it is
-// exactly equivalent to
+// n members has n! orderings and must not be built. What is built instead is
 //
-//	all(P1 … Pn) ≈ (P1 | P2 | … | Pn)*
+//	all(P1 … Pn) ≈ (P1 | P2 | … | Pn)* · (P1′ | P2′ | … | Pn′)
 //
-// because the two agree on the only two facts the position automaton reads: which
-// positions are live at the start (all members', in both), and which positions
-// may follow a given one (in the interleave, any member other than the one just
-// taken; in the star, any member including the one just taken). The star's extra
-// pairs are exactly the self-pairs of one member, which competes rejects by
-// particle identity before ever consulting the terms. Nesting composes, since an
-// <all> reached through a <group ref> inside another <all> (which 1.1 permits at
-// {min occurs} = {max occurs} = 1) contributes its own first/last sets to the
-// outer union like any other member.
+// where Pi′ is a SECOND fragment for member Pi replaying Pi's particle
+// identifiers, exactly as the unfolding of a numeric occurrence range replays
+// them (addParticle). The star carries the group's ·first· set and the "some
+// other member may still be taken here" edges; the primed alternation carries the
+// group's ·last· set, so the state an enclosing sequence appends a successor onto
+// is the state reached by taking the LAST member, not the state reached by taking
+// any member.
+//
+// Splitting the two is what §3.8.4.1.3 requires and a bare star conflates. L(M)
+// for an all group is S1 × … × Sn with each Si in L(Pi), so the group is complete
+// only once every member has contributed, a member contributing the empty
+// sequence only when it is ·emptiable·. A successor is therefore live after a
+// member only in the state where every OTHER non-emptiable member has already
+// been taken — a fact about the SUBSET taken so far, which no per-member flag can
+// carry, since with k non-emptiable members there are k orders and each ends on a
+// different one. The primed alternation is that state: reaching it is taking one
+// more member, and beside the successor only a residual is live there.
+//
+// The residual drawn onto the primed ·last· positions is the STAR pass's, not the
+// primed pass's, because the members it speaks for are the ones taken before the
+// last: an emptiable member never taken is offered its star ·first· set, and a
+// member taken to one of its star ·last· positions its own continuation from
+// there. A member's primed copy needs no entry here — its own continuations are
+// already in its own follow sets, and its ·first· set is the same source particle
+// as its star copy, which competes exempts by identity.
+//
+// WITHIN the star the transcription is exactly equivalent to the interleave for
+// deciding ·compete·, and that much is unchanged: the two agree on which
+// positions are live at the start (all members', in both) and on which may follow
+// a given one (in the interleave, any member other than the one just taken; in
+// the star, any member including it), so the star's extra pairs are exactly the
+// self-pairs of one member, which competes rejects by particle identity before
+// ever consulting the terms. Nesting composes, since an <all> reached through a
+// <group ref> inside another <all> (which 1.1 permits at {min occurs} = {max
+// occurs} = 1) contributes its own first/last sets to the outer union like any
+// other member, and its own residual to the outer one through the follow sets of
+// its ·last· positions.
+//
+// The sequences the fragment ACCEPTS are a superset of the star's own, which was
+// already a superset of the interleave: the primed alternation replays fragments
+// the star already admits, and the residual edges only add. That direction is the
+// one contentrestricts.go's walk requires of the automaton it reads (see its
+// DIRECTION OF EVERY APPROXIMATION note); the position count doubles, which that
+// file's modelGroupPositions accounts for.
 //
 // Emptiability is NOT taken from the star form, which would always be emptiable:
 // an <all> accepts the empty sequence exactly when every member does, and that is
 // what an enclosing sequence needs in order not to invent competition sets.
 func (b *automaton) addAll(g ModelGroup) ([]int, []int, bool, error) {
-	var first, last []int
-	emptiable := true
-	for _, p := range g.particles {
-		f, l, e, err := b.addParticle(p)
-		if err != nil {
-			return nil, nil, false, err
-		}
-		first = mergePositions(first, f)
-		last = mergePositions(last, l)
-		emptiable = emptiable && e
+	startID := b.nextParticleID
+	taken, err := b.addAllMembers(g)
+	if err != nil {
+		return nil, nil, false, err
 	}
-	for _, q := range last {
+	b.nextParticleID = startID
+	final, err := b.addAllMembers(g)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	first := mergePositions(taken.first, final.first)
+	for _, q := range taken.last {
 		b.addFollow(q, first)
 	}
-	return first, last, emptiable, nil
+	for _, q := range final.last {
+		b.addFollow(q, taken.residual)
+	}
+	return first, final.last, taken.emptiable, nil
 }
 
 // sequenceFragment accumulates the ·first·/·last·/emptiable sets of a
