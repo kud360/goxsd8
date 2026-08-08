@@ -159,7 +159,11 @@ work itself and never skips the arbiter.
      now; fetch and pick again.
    - Nothing to resume, nothing ready → run the cartographer instead
      and stop.
-3. **Ground** — ask the **oracle** for the exact spec clauses and rule
+3. **Ground** — before delegating, search the open issue queue for this
+   issue's primary file path and identifier (the filing-discipline bullet
+   under "GitHub conventions"): a hit is a duplicate to close or an
+   adjacent issue to cross-reference, recorded either way, never silent
+   overlap. Then ask the **oracle** for the exact spec clauses and rule
    IDs in scope. Post the answer verbatim as a comment on the issue
    (`GROUNDING:` prefix); also save to `.agent/grounding-issue-<N>.md`
    as session scratch. The citation goes in the commit. **Checkpoint.**
@@ -389,6 +393,54 @@ you can also run locally on demand.
   self-contradictory. The right criterion is "the regenerated diff is
   additive-only and every added entry is a genuine spec member," verified
   by grep.
+- **Filing discipline — a defective issue BODY outlives the session that
+  filed it** (#315; six-plus landings paid for each clause below). Before
+  filing a new issue, and again before grounding one already filed:
+  - **A stale or wrong premise is corrected IN THE BODY.** When someone
+    finds a body asserting something no longer true — or never true — the
+    fix edits that body; a thread comment alone does not retire the
+    premise, because the next reader starts from the body. The comment
+    that found it stays as provenance, it just isn't the only place the
+    correction lives. When rewriting a body, keep angle-bracket tags and
+    bare-URL autolinks out of the replacement text: GitHub
+    entity-escapes both when a body is stored, and an edit round-trips
+    unchanged as long as the new text introduces neither.
+  - **A runtime-mechanism claim states whether it was reproduced.** A
+    body asserting what the code currently does (a mechanism in the tree,
+    not a spec rule) either says the assertion was reproduced against the
+    tree, or is written as a hypothesis pending verification. A memory of
+    prior discussion is not reproduction and must not be filed as settled
+    fact.
+  - **Every static citation is checked against the tree before filing.**
+    That covers every rule ID — a docs/STYLE.md `T`/`D` number, an XSD
+    rule name, a spec section — and every file path named as a consumer
+    or a target. Three sharpenings, each of which caught a real defect a
+    generic "check your citations" habit missed: (a) a citation must
+    resolve to the right section by KIND, not merely by number — a
+    `cvc-*`-style Validation Rule ID belongs in the spec's "… Validation
+    Rules" subsection and a Schema Component Constraint in the sibling
+    "Constraints on … Schema Components" subsection, so the right number
+    under the wrong-kind subsection is still a wrong citation; (b)
+    CLAUDE.md's headline-bullet numbering and docs/STYLE.md's T-series
+    are two different numbering spaces over overlapping content — cite
+    the docs/STYLE.md letter+number ID (`STYLE T1`), never the CLAUDE.md
+    headline bullet number, and never conflate them; (c) to point at a
+    specific site, prefer a `GAP(...)` marker's TEXT or the enclosing
+    identifier's name over a line number, which later unrelated edits
+    move.
+  - **Search the open queue for overlap, and record what the hit was.**
+    Search open issues for the primary file path and the primary
+    identifier the change is about. A hit means one of exactly two
+    things: the same change — close one as duplicate and say which in a
+    comment; or an adjacent change — post a one-line cross-reference on
+    both issues. Never proceed past a hit without recording which of the
+    two it was.
+  - **An `## Acceptance` ratchet promise names its condition.** A clause
+    promising a lane will move states what that promise depends on
+    ("moves the `schema` lane **provided** #N has landed"), so that a
+    later planning pass chartering #N's prerequisites differently leaves
+    the staleness one grep away instead of requiring planning history to
+    be reconstructed.
 - `// GAP(...)` comments and fail-open sites get tracking issues
   (`kind/gap`) so nothing fails open silently forever.
 
