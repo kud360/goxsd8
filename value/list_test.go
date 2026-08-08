@@ -1,6 +1,7 @@
 package value
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -197,6 +198,77 @@ func TestValidateLexicalListItemTypeFacetsApply(t *testing.T) {
 	}
 	if r, _ := xsderr.RuleOf(err); r != "cvc-enumeration-valid" {
 		t.Errorf("out-of-enumeration item charged %s, want cvc-enumeration-valid (§4.3.5.4 on the ITEM type, not the list)", r)
+	}
+}
+
+// TestValidateLexicalListUnionItemTypeOwnFacetsApply pins the second list-item
+// shape listMapping's per-item recursion decides (issue #326): an item type of
+// UNION {variety}. dv_list (§4.1.4 cl.2.2) says each token is "Datatype Valid
+// with respect to the {item type definition}", and that is the WHOLE
+// cvc-datatype-valid conjunction against the union — clause 1 (dv_pattern, the
+// union's OWN pattern), clause 2.3 (dv_union, the member dispatch) AND clause 3
+// (dv_vfacets, the union's OWN enumeration), layered on top of the dispatch
+// rather than instead of it. pattern and enumeration are, with assertions,
+// exactly the facets cos-applicable-facets (§4.1.5) makes applicable to a union,
+// so they are the whole of what clauses 1 and 3 can contribute at the item level.
+//
+// Both item types below carry a facet NO MEMBER carries, so each rejected token
+// is one the member dispatch alone ACCEPTS: parsing tokens through the item
+// type's governing mapping only (unionMapping, which is dispatch and nothing
+// else) would false-accept every one of them, and the test would fail. The list
+// types carry no pattern or enumeration of their own, so a cvc-pattern-valid or
+// cvc-enumeration-valid rejection here can only be the item type's — and the
+// pattern message names the TOKEN, not the whole lexical, which is what charges
+// it per item.
+//
+// std-item_type_definition (Structures §3.16.1) keeps this one level deep: the
+// union item type has no list among its basic members, so the recursion bottoms
+// out in the atomic members below.
+func TestValidateLexicalListUnionItemTypeOwnFacetsApply(t *testing.T) {
+	num := primType(t, "numeric", "collapse")
+	text := primType(t, "text", "preserve")
+	b := memberBackend{
+		num.Name():  allDigits,
+		text.Name(): func(string) bool { return true },
+	}
+	base := unionType2(t, "itemBase", num, text)
+
+	// clause 3 (dv_vfacets): the union item type's own enumeration. "8" is
+	// accepted by the numeric member — the dispatch succeeds — and rejected only
+	// by the enumeration the union itself declares.
+	enumItem := unionRestriction(t, "enumItem", base, []xsd.Facet{enumOf("7")})
+	enumList := listType(t, enumItem)
+	if _, err := ValidateLexical(b, enumList, "7 7", nil); err != nil {
+		t.Fatalf("ValidateLexical(list of enumerated union items, %q) = %v, want accept", "7 7", err)
+	}
+	_, err := ValidateLexical(b, enumList, "7 8", nil)
+	if err == nil {
+		t.Fatal("ValidateLexical(list, token outside the union item type's enumeration) = nil, want the item type's own clause-3 rejection (dv_list → dv_vfacets)")
+	}
+	if r, _ := xsderr.RuleOf(err); r != "cvc-enumeration-valid" {
+		t.Errorf("out-of-enumeration union item charged %s, want cvc-enumeration-valid (§4.3.5.4 on the union ITEM type)", r)
+	}
+
+	// clause 1 (dv_pattern): the union item type's own pattern. "abc" is accepted
+	// by the text member — the dispatch succeeds — and rejected only by the
+	// pattern the union itself declares.
+	patItem := unionRestriction(t, "patItem", base,
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetPattern, []string{"[0-9]+"}, false)})
+	patList := listType(t, patItem)
+	if _, err := ValidateLexical(b, patList, "7 42", nil); err != nil {
+		t.Fatalf("ValidateLexical(list of pattern-matching union items, %q) = %v, want accept", "7 42", err)
+	}
+	_, err = ValidateLexical(b, patList, "7 abc", nil)
+	if err == nil {
+		t.Fatal("ValidateLexical(list, token violating the union item type's pattern) = nil, want the item type's own clause-1 rejection (dv_list → dv_pattern)")
+	}
+	if r, _ := xsderr.RuleOf(err); r != "cvc-pattern-valid" {
+		t.Errorf("pattern-violating union item charged %s, want cvc-pattern-valid (§4.3.4.4 on the union ITEM type)", r)
+	}
+	// The pattern was matched against the TOKEN "abc", not the whole lexical
+	// "7 abc": the item type decides per space-delimited substring (dv_list).
+	if msg := err.Error(); !strings.Contains(msg, `"abc"`) || strings.Contains(msg, `"7 abc"`) {
+		t.Errorf("pattern rejection = %q, want it to name the token %q, not the whole list lexical %q", msg, "abc", "7 abc")
 	}
 }
 
