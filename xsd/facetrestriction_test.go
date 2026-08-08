@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -354,5 +355,98 @@ func TestAtomicVarietyApplicableFacetsNotCharged(t *testing.T) {
 		NewAtomic(prim), prim,
 		[]Facet{NewFacet(FacetMaxInclusive, []string{"5"}, false)}, nil); err != nil {
 		t.Fatalf("atomic applicability must not be charged in package xsd, got: %v", err)
+	}
+}
+
+// lengthChain builds a base chain of restriction steps over a fresh string
+// primitive — one SimpleType per element of steps, each carrying that step's own
+// facets — and returns the construction error of the first step that is
+// rejected, or nil when the whole chain constructs. It exists because
+// length-minLength-maxLength clauses 1.2/2.2 are a derivation-HISTORY predicate:
+// unlike the same-{facets} clauses 1.1/2.1, they cannot be exercised on one type.
+func lengthChain(t *testing.T, steps ...[]Facet) error {
+	t.Helper()
+	cur := mustPrim(t, "string")
+	for i, own := range steps {
+		next, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "step" + strconv.Itoa(i)},
+			cur.variety, cur, own, nil)
+		if err != nil {
+			return err
+		}
+		cur = next
+	}
+	return nil
+}
+
+// TestLengthDerivationHistory covers length-minLength-maxLength clauses 1.2 and
+// 2.2: length and a coexisting minLength/maxLength may not be specified together
+// at one derivation step. Every case here satisfies clauses 1.1/2.1 (the value
+// ordering), so a rejection can only come from the derivation-history half —
+// checkLengthCoexistence would accept all of them.
+func TestLengthDerivationHistory(t *testing.T) {
+	length := func(v string) Facet { return NewFacet(FacetLength, []string{v}, false) }
+	minLen := func(v string) Facet { return NewFacet(FacetMinLength, []string{v}, false) }
+	maxLen := func(v string) Facet { return NewFacet(FacetMaxLength, []string{v}, false) }
+
+	cases := []struct {
+		name       string
+		steps      [][]Facet
+		wantClause string // empty means the chain must construct
+	}{
+		{
+			"length and minLength at one step",
+			[][]Facet{{length("4"), minLen("1")}},
+			"clause 1.2",
+		},
+		{
+			"length and maxLength at one step",
+			[][]Facet{{length("4"), maxLen("10")}},
+			"clause 2.2",
+		},
+		{
+			"minLength inherited at the same value, length added below",
+			[][]Facet{{minLen("4")}, {length("4")}},
+			"",
+		},
+		{
+			"maxLength inherited at the same value, length added below",
+			[][]Facet{{maxLen("8")}, {length("4")}},
+			"",
+		},
+		{
+			"minLength raised at the step that adds length",
+			[][]Facet{{minLen("1")}, {minLen("3"), length("5")}},
+			"clause 1.2",
+		},
+		{
+			"maxLength lowered at the step that adds length",
+			[][]Facet{{maxLen("9")}, {maxLen("6"), length("5")}},
+			"clause 2.2",
+		},
+		{
+			"both inherited two steps up, length added at the leaf",
+			[][]Facet{{minLen("2")}, {maxLen("9")}, {length("4")}},
+			"",
+		},
+		{
+			"maxLength added below the step that introduced length",
+			[][]Facet{{length("5")}, {maxLen("5")}},
+			"",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := lengthChain(t, c.steps...)
+			if c.wantClause == "" {
+				if err != nil {
+					t.Fatalf("chain rejected: %v", err)
+				}
+				return
+			}
+			wantRule(t, err, ruleLengthMinLengthMaxLength)
+			if !strings.Contains(err.Error(), c.wantClause) {
+				t.Errorf("message %q does not cite %s", err.Error(), c.wantClause)
+			}
+		})
 	}
 }
