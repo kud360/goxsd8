@@ -20,32 +20,57 @@ import (
 //   - Every lane, on either path, reports its decline census (issue #327): the
 //     count of recorded failures no executor decided at all, re-checked this run
 //     rather than trusted. GOXSD_DECLINES=1 also lists their IDs.
+//   - Sanctioned applicability removals — cases discovery withheld because the
+//     suite's own metadata scopes them away from this processor (issue #576) —
+//     are logged on the read-only path and never fail it.
 //   - GOXSD_RATCHET=1: additionally Ratchet each lane and rewrite its file;
-//     a Ratchet refusal (regression or vanished) fails the test. Arbiter only.
+//     a Ratchet refusal (regression, vanished, or a removal count the run did not
+//     assert) fails the test. Arbiter only.
+//   - GOXSD_RATCHET_REMOVALS=<lane>=<n>,…: arbiter-only, ratchet-path-only
+//     assertion of the sanctioned removals each lane is expected to bank; set
+//     without GOXSD_RATCHET=1 it fails the run rather than half-applying.
 //   - GOXSD_CASE=<id>: narrow execution to one case across all lanes.
 //
 // At M1 no real executor is registered, so every case is a stub Fail and, with
 // empty committed lane files, every case is New — the read-only run passes.
 func TestConformance(t *testing.T) {
 	ratcheting := os.Getenv("GOXSD_RATCHET") == "1"
+	removals := assertedRemovals(t, ratcheting)
 	index := suitePath()
 	if err := checkSuitePresent(index); err != nil {
 		endUnusableSuiteRun(t, err, ratcheting)
 	}
 
-	cases, err := parseSuite(index)
+	found, err := parseSuite(index)
 	if err != nil {
 		t.Fatalf("parsing suite: %v", err)
 	}
-	t.Logf("discovered %d cases across %d lanes", len(cases), len(defaultLanes()))
+	t.Logf("discovered %d cases across %d lanes, %d withheld as inapplicable",
+		len(found.cases), len(defaultLanes()), len(found.withheld))
 
+	cases := found.cases
 	if only, ok := os.LookupEnv("GOXSD_CASE"); ok {
 		cases = narrowToCase(t, cases, only)
 	}
 
 	for _, l := range defaultLanes() {
-		runConformanceLane(t, l, cases, ratcheting)
+		runConformanceLane(t, l, cases, found.withheld, ratcheting, removals[l.name])
 	}
+}
+
+// assertedRemovals reads the arbiter's per-lane removal assertion
+// (ratchetRemovalsEnv) and ends the run on anything removalAssertions refuses —
+// a value set off the ratchet path, or a malformed one. The gate lives in
+// removalAssertions so it is testable; this is only its env binding, in the same
+// shape endUnusableSuiteRun uses for the suite opt-out (issue #309).
+func assertedRemovals(t *testing.T, ratcheting bool) map[string]RemovalAssertion {
+	t.Helper()
+	raw, set := os.LookupEnv(ratchetRemovalsEnv)
+	byLane, err := removalAssertions(raw, set, ratcheting)
+	if err != nil {
+		t.Fatalf("%s: %v", ratchetRemovalsEnv, err)
+	}
+	return byLane
 }
 
 // endUnusableSuiteRun ends the run when the suite index is unusable. The default
@@ -65,8 +90,10 @@ func endUnusableSuiteRun(t *testing.T, err error, ratcheting bool) {
 }
 
 // runConformanceLane executes one lane and applies the read-only or ratcheting
-// policy to its result.
-func runConformanceLane(t *testing.T, l lane, cases []caseSpec, ratcheting bool) {
+// policy to its result. withheld is the suite-wide set of case IDs discovery
+// ruled inapplicable; it needs no per-lane routing because a withheld ID only
+// classifies against the lane whose committed expectations carry it.
+func runConformanceLane(t *testing.T, l lane, cases []caseSpec, withheld []string, ratcheting bool, removals RemovalAssertion) {
 	t.Helper()
 	actual := runLane(l, cases)
 	path := laneFile(l.name)
@@ -78,24 +105,47 @@ func runConformanceLane(t *testing.T, l lane, cases []caseSpec, ratcheting bool)
 	reportDeclines(t, l, cases, actual)
 
 	if !ratcheting {
-		d := Compare(expected, actual)
-		if len(d.Regressed) > 0 {
-			t.Errorf("lane %s: %d regressed case(s): %v", l.name, len(d.Regressed), d.Regressed)
-		}
-		if len(d.Improved) > 0 {
-			t.Logf("lane %s: %d case(s) improved, not yet banked (GOXSD_RATCHET=1 required to write): %v",
-				l.name, len(d.Improved), d.Improved)
-		}
+		reportLaneReadOnly(t, l, expected, actual, withheld)
 		return
 	}
 
-	merged, err := Ratchet(expected, actual)
+	merged, err := Ratchet(expected, actual, withheld, removals)
 	if err != nil {
 		t.Errorf("lane %s: %v", l.name, err)
 		return
 	}
 	if err := WriteExpectations(path, merged); err != nil {
 		t.Fatalf("lane %s: writing expectations: %v", l.name, err)
+	}
+}
+
+// reportLaneReadOnly applies the read-only policy: fail on a Regressed case, and
+// on nothing else about the score. Improved cases and sanctioned applicability
+// removals are reported through t.Logf so an agent who cannot run the ratchet
+// still sees what its branch would bank; banking either needs GOXSD_RATCHET=1,
+// and a removal needs the arbiter's asserted count on top of that.
+//
+// A Compare error is a different animal and does fail the read-only run: it means
+// discovery both withheld and produced one case, which is a runner bug rather
+// than a conformance result, and no run should proceed on a self-contradicting
+// case list.
+func reportLaneReadOnly(t *testing.T, l lane, expected, actual map[string]Status, withheld []string) {
+	t.Helper()
+	d, err := Compare(expected, actual, withheld)
+	if err != nil {
+		t.Errorf("lane %s: %v", l.name, err)
+		return
+	}
+	if len(d.Regressed) > 0 {
+		t.Errorf("lane %s: %d regressed case(s): %v", l.name, len(d.Regressed), d.Regressed)
+	}
+	if len(d.Improved) > 0 {
+		t.Logf("lane %s: %d case(s) improved, not yet banked (GOXSD_RATCHET=1 required to write): %v",
+			l.name, len(d.Improved), d.Improved)
+	}
+	if len(d.Removed) > 0 {
+		t.Logf("lane %s: %d sanctioned applicability removal(s), not yet banked (GOXSD_RATCHET=1 with %s=%s=%d required to write): %v",
+			l.name, len(d.Removed), ratchetRemovalsEnv, l.name, len(d.Removed), d.Removed)
 	}
 }
 

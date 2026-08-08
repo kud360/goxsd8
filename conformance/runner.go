@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -213,6 +214,87 @@ func laneFile(name string) string {
 	return filepath.Join(expectationsDir, name+".txt")
 }
 
+// ratchetRemovalsEnv names the arbiter's per-lane assertion of how many
+// sanctioned applicability removals a ratchet run is expected to bank
+// (issue #576):
+//
+//	GOXSD_RATCHET_REMOVALS=schema=34,instance=65
+//
+// It is arbiter-only and covers the ratchet path ALONE: TestConformance fails
+// outright when it is set without GOXSD_RATCHET=1, on the same reasoning as
+// suiteOptionalEnv (issue #309) — an opt-in that changes what the ratchet will
+// bank must never half-apply to a read-only run. Absent, every lane asserts the
+// zero RemovalAssertion, so any removal at all refuses the merge.
+//
+// The count is asserted PER LANE because the real figures are per lane: a
+// removal drifting from one lane to another cannot net out to a passing total.
+const ratchetRemovalsEnv = "GOXSD_RATCHET_REMOVALS"
+
+// removalAssertions resolves one run's per-lane removal assertions. raw and set
+// are ratchetRemovalsEnv's os.LookupEnv pair and ratcheting is whether
+// GOXSD_RATCHET=1; taking them as arguments keeps the gate a pure decision the
+// tests can exercise in both directions.
+//
+// The gate itself: an unset variable asserts nothing on either path, and a
+// variable set WITHOUT the ratchet is an error that ends the run. It is never
+// parsed-and-ignored, because a read-only run that accepted the assertion would
+// report agreement with a figure it never checked and could not bank.
+func removalAssertions(raw string, set, ratcheting bool) (map[string]RemovalAssertion, error) {
+	if !set {
+		return nil, nil
+	}
+	if !ratcheting {
+		return nil, fmt.Errorf(
+			"%s is set but GOXSD_RATCHET=1 is not: asserting sanctioned removals is arbiter-only and never applies to a read-only run",
+			ratchetRemovalsEnv)
+	}
+	return parseRemovalAssertions(raw)
+}
+
+// parseRemovalAssertions parses ratchetRemovalsEnv's value into one
+// RemovalAssertion per named lane. Lanes it does not name assert nothing.
+//
+// Every malformed spelling is an error rather than a skipped entry: an assertion
+// nothing reads — a typo'd lane name, a repeated lane, a count that is not a
+// non-negative number — would let a run appear to have asserted a figure while
+// the lane it meant still refuses (or, worse, still banks against the zero
+// assertion). The map is an internal lookup keyed by lane, never iterated into
+// output (STYLE D2).
+func parseRemovalAssertions(raw string) (map[string]RemovalAssertion, error) {
+	out := map[string]RemovalAssertion{}
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		name, count, ok := strings.Cut(entry, "=")
+		if !ok {
+			return nil, fmt.Errorf("entry %q: want `<lane>=<count>`", entry)
+		}
+		name = strings.TrimSpace(name)
+		if !isLaneName(name) {
+			return nil, fmt.Errorf("entry %q: no lane is named %q", entry, name)
+		}
+		if _, dup := out[name]; dup {
+			return nil, fmt.Errorf("entry %q: lane %q is asserted twice", entry, name)
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(count))
+		if err != nil {
+			return nil, fmt.Errorf("entry %q: count: %w", entry, err)
+		}
+		if n < 0 {
+			return nil, fmt.Errorf("entry %q: count %d is negative", entry, n)
+		}
+		out[name] = AssertRemovals(n)
+	}
+	return out, nil
+}
+
+// isLaneName reports whether name is one of the committed lanes.
+func isLaneName(name string) bool {
+	return slices.ContainsFunc(defaultLanes(), func(l lane) bool { return l.name == name })
+}
+
 // runLane executes every case the lane claims and returns the observed status
 // keyed by case ID. The map is an internal lookup for Compare/Ratchet, never
 // iterated into output (STYLE D2).
@@ -288,23 +370,76 @@ type expected struct {
 	Version  string `xml:"version,attr"`
 }
 
+// discovery is everything one pass over the suite catalog found: the cases to
+// execute, and the IDs of the cases discovery deliberately WITHHELD because the
+// suite's own applicability metadata scopes them away from this processor. The
+// two are disjoint by construction — a withheld level yields no caseSpec — and
+// Compare consumes the pair to tell a sanctioned applicability removal from a
+// Vanished regression (issue #576). parseSuite returns both sorted by case ID.
+type discovery struct {
+	cases    []caseSpec
+	withheld []string
+}
+
+// withholdTest records the ID of one schemaTest or instanceTest the suite scoped
+// away from this processor. withholdGroup and withholdSet record every case the
+// coarser levels would have produced, in catalog order; the caller stops
+// descending at the level it withheld, so recording is not double-counted.
+//
+// All three build IDs through caseID — the same construction makeCase uses —
+// because Compare matches a withheld ID against a committed expectation by exact
+// string, so an ID assembled a second way would silently classify a sanctioned
+// removal as a Vanished regression.
+//
+// No level of discovery withholds anything TODAY: the reading of the suite's
+// OR-connected `version` metadata that produces the first withheld case is issue
+// #446, which wires these recorders to its four filter sites. The order is
+// deliberate — the ratchet must know how to bank a sanctioned removal, under the
+// arbiter's asserted count, before discovery is allowed to make one.
+func (d *discovery) withholdTest(setName, groupName, kind, testName string) {
+	d.withheld = append(d.withheld, caseID(setName, groupName, kind, testName))
+}
+
+func (d *discovery) withholdGroup(setName string, g testGroup) {
+	for _, st := range g.SchemaTests {
+		d.withholdTest(setName, g.Name, kindSchema, st.Name)
+	}
+	for _, it := range g.InstanceTests {
+		d.withholdTest(setName, g.Name, kindInstance, it.Name)
+	}
+}
+
+func (d *discovery) withholdSet(set testSet) {
+	for _, g := range set.Groups {
+		d.withholdGroup(set.Name, g)
+	}
+}
+
+// absorb merges one nested pass's result into this one, preserving catalog order
+// within each list; parseSuite sorts once at the end.
+func (d *discovery) absorb(found discovery) {
+	d.cases = append(d.cases, found.cases...)
+	d.withheld = append(d.withheld, found.withheld...)
+}
+
 // parseSuite discovers every case reachable from the suite index (and its
-// auxiliary extra-suite sibling), sorted by ID (STYLE D1). It errors on a
-// malformed reference, an unreadable set, a case with no declared expectation,
-// or a duplicate case ID.
-func parseSuite(indexPath string) ([]caseSpec, error) {
+// auxiliary extra-suite sibling), sorted by ID (STYLE D1), alongside the IDs
+// discovery withheld as inapplicable. It errors on a malformed reference, an
+// unreadable set, a case with no declared expectation, or a duplicate case ID.
+func parseSuite(indexPath string) (discovery, error) {
 	seen := map[string]struct{}{}
 	seenSets := map[string]struct{}{}
-	var cases []caseSpec
+	var d discovery
 	for _, index := range suiteIndexPaths(indexPath) {
 		found, err := casesFromIndex(index, seen, seenSets)
 		if err != nil {
-			return nil, err
+			return discovery{}, err
 		}
-		cases = append(cases, found...)
+		d.absorb(found)
 	}
-	slices.SortFunc(cases, func(a, b caseSpec) int { return strings.Compare(a.id, b.id) })
-	return cases, nil
+	slices.SortFunc(d.cases, func(a, b caseSpec) int { return strings.Compare(a.id, b.id) })
+	slices.Sort(d.withheld)
+	return d, nil
 }
 
 // suiteIndexPaths returns the discovery indices rooted at primary: the primary
@@ -331,13 +466,13 @@ func suiteIndexPaths(primary string) []string {
 // than one index — common/introspection.testSet is listed in both suite.xml and
 // extra-suite.xml — is processed by the FIRST index to reach it, so its cases are
 // discovered once rather than surfacing as a spurious duplicate-ID error.
-func casesFromIndex(indexPath string, seen, seenSets map[string]struct{}) ([]caseSpec, error) {
+func casesFromIndex(indexPath string, seen, seenSets map[string]struct{}) (discovery, error) {
 	idx, err := decodeSuiteIndex(indexPath)
 	if err != nil {
-		return nil, err
+		return discovery{}, err
 	}
 	baseDir := filepath.Dir(indexPath)
-	var cases []caseSpec
+	var d discovery
 	for _, ref := range idx.Refs {
 		if ref.Href == "" {
 			continue
@@ -349,38 +484,41 @@ func casesFromIndex(indexPath string, seen, seenSets map[string]struct{}) ([]cas
 		seenSets[setPath] = struct{}{}
 		set, err := decodeTestSet(setPath)
 		if err != nil {
-			return nil, fmt.Errorf("test set %s: %w", ref.Href, err)
+			return discovery{}, fmt.Errorf("test set %s: %w", ref.Href, err)
 		}
 		found, err := casesFromSet(set, filepath.Dir(setPath), seen)
 		if err != nil {
-			return nil, fmt.Errorf("test set %s: %w", ref.Href, err)
+			return discovery{}, fmt.Errorf("test set %s: %w", ref.Href, err)
 		}
-		cases = append(cases, found...)
+		d.absorb(found)
 	}
-	return cases, nil
+	return d, nil
 }
 
 // casesFromSet flattens one testSet into cases, recording each ID in seen to
-// enforce suite-wide uniqueness.
-func casesFromSet(set testSet, setDir string, seen map[string]struct{}) ([]caseSpec, error) {
-	var out []caseSpec
+// enforce suite-wide uniqueness. Every level of this set is in scope today, so
+// the discovery it returns withholds nothing; the applicability filter that
+// makes a level contribute withheld IDs instead of cases is issue #446, and it
+// belongs here (see discovery.withholdSet).
+func casesFromSet(set testSet, setDir string, seen map[string]struct{}) (discovery, error) {
+	var d discovery
 	for _, g := range set.Groups {
 		for _, st := range g.SchemaTests {
 			c, err := makeCase(set.Name, g.Name, kindSchema, st, setDir, seen)
 			if err != nil {
-				return nil, err
+				return discovery{}, err
 			}
-			out = append(out, c)
+			d.cases = append(d.cases, c)
 		}
 		for _, it := range g.InstanceTests {
 			c, err := makeCase(set.Name, g.Name, kindInstance, it, setDir, seen)
 			if err != nil {
-				return nil, err
+				return discovery{}, err
 			}
-			out = append(out, c)
+			d.cases = append(d.cases, c)
 		}
 	}
-	return out, nil
+	return d, nil
 }
 
 // makeCase builds one caseSpec, resolving its document path(s) relative to the
@@ -388,7 +526,7 @@ func casesFromSet(set testSet, setDir string, seen map[string]struct{}) ([]caseS
 // <schemaDocument> is the case's doc and the rest, in document order, are its
 // extraDocs; an instanceTest has its one <instanceDocument> and no extras.
 func makeCase(setName, groupName, kind string, t validityTest, setDir string, seen map[string]struct{}) (caseSpec, error) {
-	id := setName + "/" + groupName + "/" + kind + "/" + t.Name
+	id := caseID(setName, groupName, kind, t.Name)
 	if _, dup := seen[id]; dup {
 		return caseSpec{}, fmt.Errorf("duplicate case id %q", id)
 	}
@@ -408,6 +546,15 @@ func makeCase(setName, groupName, kind string, t validityTest, setDir string, se
 		extraDocs: extra,
 		expect:    want,
 	}, nil
+}
+
+// caseID renders the stable ID of one catalog entry,
+// `<testSet>/<testGroup>/<kind>/<test-name>` (see "Case IDs" above). It is the
+// ONE construction (STYLE D3): makeCase stamps a produced case with it and
+// discovery.withholdTest stamps a withheld one, so the produced and withheld
+// sets Compare partitions are comparable by exact string.
+func caseID(setName, groupName, kind, testName string) string {
+	return setName + "/" + groupName + "/" + kind + "/" + testName
 }
 
 // caseDocs returns the href of the document under test and the set-relative

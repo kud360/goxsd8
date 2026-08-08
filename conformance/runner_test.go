@@ -204,7 +204,7 @@ func TestRunLaneRatchetRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load empty lane: %v", err)
 	}
-	merged, err := Ratchet(expected, actual)
+	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{})
 	if err != nil {
 		t.Fatalf("ratchet must accept all-New cases: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestRunLaneRatchetRefusesRegression(t *testing.T) {
 	actual := runLane(l, fakeCases())
 
 	expected := map[string]Status{"set/g/instance/c": Pass()}
-	if _, err := Ratchet(expected, actual); err == nil {
+	if _, err := Ratchet(expected, actual, nil, RemovalAssertion{}); err == nil {
 		t.Fatal("ratchet must refuse when an executor regresses a committed pass")
 	}
 }
@@ -327,6 +327,134 @@ func TestMakeCaseSplitsSchemaDocuments(t *testing.T) {
 	empty := validityTest{Name: "none", Expected: []expected{{Validity: "valid"}}}
 	if _, err := makeCase("set", "g", kindSchema, empty, setDir, map[string]struct{}{}); err == nil {
 		t.Error("a schemaTest declaring no schemaDocument must error, not yield a case with an empty document path")
+	}
+}
+
+// TestWithheldIDsUseTheSameConstructionAsProducedCases pins what makes a
+// sanctioned applicability removal reach Compare at all (issue #576): the ID a
+// withheld level records must be byte-identical to the ID the same catalog entry
+// would have produced. Assemble it a second way and Compare would classify the
+// removal as a Vanished regression, which is precisely the failure this class
+// exists to prevent — so the assertion compares the recorders against
+// casesFromSet's own output rather than against a hand-written literal.
+func TestWithheldIDsUseTheSameConstructionAsProducedCases(t *testing.T) {
+	valid := []expected{{Validity: "valid"}}
+	set := testSet{
+		Name: "saxonMeta/Missing",
+		Groups: []testGroup{
+			{
+				Name:          "g1",
+				SchemaTests:   []validityTest{{Name: "s1", SchemaDocs: []docRef{{Href: "a.xsd"}}, Expected: valid}},
+				InstanceTests: []validityTest{{Name: "i1", InstanceDoc: docRef{Href: "a.xml"}, Expected: valid}},
+			},
+			{
+				Name:        "g2",
+				SchemaTests: []validityTest{{Name: "s2", SchemaDocs: []docRef{{Href: "b.xsd"}}, Expected: valid}},
+			},
+		},
+	}
+
+	produced, err := casesFromSet(set, "sets", map[string]struct{}{})
+	if err != nil {
+		t.Fatalf("casesFromSet: %v", err)
+	}
+	if len(produced.withheld) != 0 {
+		t.Fatalf("no level withholds anything until issue #446, got %v", produced.withheld)
+	}
+	ids := make([]string, 0, len(produced.cases))
+	for _, c := range produced.cases {
+		ids = append(ids, c.id)
+	}
+	if len(ids) != 3 {
+		t.Fatalf("fixture must produce 3 cases, got %v", ids)
+	}
+
+	var wholeSet discovery
+	wholeSet.withholdSet(set)
+	if !slices.Equal(wholeSet.withheld, ids) {
+		t.Errorf("withholdSet recorded %v, want the ids the same set produces %v", wholeSet.withheld, ids)
+	}
+
+	var oneGroup discovery
+	oneGroup.withholdGroup(set.Name, set.Groups[0])
+	if !slices.Equal(oneGroup.withheld, ids[:2]) {
+		t.Errorf("withholdGroup recorded %v, want the first group's ids %v", oneGroup.withheld, ids[:2])
+	}
+
+	var oneTest discovery
+	oneTest.withholdTest(set.Name, "g1", kindSchema, "s1")
+	if !slices.Equal(oneTest.withheld, ids[:1]) {
+		t.Errorf("withholdTest recorded %v, want %v", oneTest.withheld, ids[:1])
+	}
+}
+
+// TestRemovalAssertionsAreReachableOnlyFromARatchetRun pins the gating boundary
+// (issue #576): the per-lane removal assertion applies on the ratchet path and
+// NOWHERE else. A value set without GOXSD_RATCHET=1 ends the run rather than
+// being parsed and ignored — the endUnusableSuiteRun rule (issue #309) that an
+// opt-in touching what the ratchet banks must never half-work.
+func TestRemovalAssertionsAreReachableOnlyFromARatchetRun(t *testing.T) {
+	if _, err := removalAssertions("schema=34", true, false); err == nil {
+		t.Error("asserting removals without GOXSD_RATCHET=1 must end the run, not half-apply")
+	}
+	if _, err := removalAssertions("nonsense", true, false); err == nil {
+		t.Error("the ratchet gate must be checked before the value is parsed")
+	}
+
+	unsetReadOnly, err := removalAssertions("", false, false)
+	if err != nil {
+		t.Errorf("an unset variable must be fine on a read-only run, got %v", err)
+	}
+	if len(unsetReadOnly) != 0 {
+		t.Errorf("an unset variable must assert nothing, got %v", unsetReadOnly)
+	}
+
+	unsetRatchet, err := removalAssertions("", false, true)
+	if err != nil {
+		t.Errorf("an unset variable must be fine on a ratchet run, got %v", err)
+	}
+	if unsetRatchet["schema"] != (RemovalAssertion{}) {
+		t.Errorf("an unset variable must leave every lane at the zero assertion, got %v", unsetRatchet["schema"])
+	}
+
+	asserted, err := removalAssertions("schema=34,instance=65", true, true)
+	if err != nil {
+		t.Fatalf("a well-formed assertion on a ratchet run: %v", err)
+	}
+	if asserted["schema"] != AssertRemovals(34) || asserted["instance"] != AssertRemovals(65) {
+		t.Errorf("parsed assertions = %v, want schema=34 instance=65", asserted)
+	}
+}
+
+// TestParseRemovalAssertionsRejectsAnythingThatWouldAssertNothing proves every
+// malformed spelling is an error rather than a skipped entry: an assertion the
+// ratchet never reads would let a run look like it predicted a count while the
+// lane it meant still refuses (or banks against the zero assertion instead).
+func TestParseRemovalAssertionsRejectsAnythingThatWouldAssertNothing(t *testing.T) {
+	bad := map[string]string{
+		"no such lane":        "schemata=1",
+		"no count at all":     "schema",
+		"non-numeric count":   "schema=lots",
+		"negative count":      "schema=-1",
+		"lane asserted twice": "schema=1,schema=2",
+	}
+	for name, raw := range bad {
+		t.Run(name, func(t *testing.T) {
+			if _, err := parseRemovalAssertions(raw); err == nil {
+				t.Fatalf("%q must be rejected", raw)
+			}
+		})
+	}
+
+	got, err := parseRemovalAssertions(" schema = 34 , instance=65 ")
+	if err != nil {
+		t.Fatalf("surrounding whitespace must be tolerated: %v", err)
+	}
+	if got["schema"] != AssertRemovals(34) {
+		t.Errorf("schema = %v, want 34", got["schema"])
+	}
+	if got["datatypes"] != (RemovalAssertion{}) {
+		t.Errorf("a lane the value does not name must assert nothing, got %v", got["datatypes"])
 	}
 }
 
