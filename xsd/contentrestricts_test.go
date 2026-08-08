@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -544,5 +545,48 @@ func TestContentRestrictsBeyondPositionCeiling(t *testing.T) {
 		uGroup(t, CompositorSequence, cElem(t, "e", huge, huge)),
 		uGroup(t, CompositorSequence, cElem(t, "e", huge+1, huge+1))); err != nil {
 		t.Fatalf("an undecidable derivation was rejected rather than provisionally accepted: %v", err)
+	}
+}
+
+// TestContentRestrictsWideRangeStaysCheap pins the COST of the containment walk,
+// which the exact unfolding made a load-bearing property rather than an
+// incidental one: unfoldExactly emits {max occurs} positions, so a range an
+// ordinary schema may carry — maxOccurs="300" narrowed to maxOccurs="150" — puts
+// hundreds of positions into both automata, and every per-copy quantity the walk
+// touches per transition multiplies out from there. The first exact unfolding
+// paid that per COPY and took 15.2 s on the identical-range row below (8.3 s at
+// width 200, 2 m 25 s at 1024); the walk now decides one transition per SOURCE
+// PARTICLE live in a state, and per distinct B-subset rather than per product
+// state, which is what these rows guard (#501).
+//
+// The assertion is a wall clock with two orders of magnitude of slack, not a
+// benchmark: the rows measured ~100 ms and ~40 ms on the machine whose numbers
+// maxContentPositions records, against a 5 s budget, so a machine fifty times
+// slower still passes while the defect they pin — which was 150x and 85x over
+// its row — cannot. The verdicts are asserted too, since a walk that got fast by
+// deciding something else is not the thing being kept.
+func TestContentRestrictsWideRangeStaysCheap(t *testing.T) {
+	const budget = 5 * time.Second
+	for _, tc := range []struct {
+		name       string
+		bMax, rMax int
+	}{
+		{name: "identical wide ranges", bMax: 300, rMax: 300},
+		{name: "wide range narrowed", bMax: 200, rMax: 100},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			start := time.Now()
+			err := cRestricts(t,
+				uGroup(t, CompositorSequence, cElem(t, "e", 0, tc.bMax)),
+				uGroup(t, CompositorSequence, cElem(t, "e", 0, tc.rMax)))
+			elapsed := time.Since(start)
+			if err != nil {
+				t.Fatalf("e{0,%d} under e{0,%d} is a valid restriction and was rejected: %v", tc.rMax, tc.bMax, err)
+			}
+			if elapsed > budget {
+				t.Fatalf("deciding e{0,%d} under e{0,%d} took %v, over the %v budget: the containment walk is doing work per unfolded copy again",
+					tc.rMax, tc.bMax, elapsed, budget)
+			}
+		})
 	}
 }
