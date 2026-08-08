@@ -136,6 +136,16 @@ var errFacetPrecondition = errors.New("facet-pipeline precondition violated")
 // It is the ONE construction site of the class (STYLE T4), which is also what keeps
 // the cohort greppable now that the sites no longer share a marker STRING: `grep
 // facetPrecondition(` enumerates every one of them.
+//
+// loc locates the component at fault wherever the site holds it: newBoundFacet and
+// effectiveWhiteSpace both run at COMPILE time with st in hand, and both pass
+// st.Loc(). The five sites inside a ValueFacet's CheckValue pass the zero Loc
+// instead, and deliberately — a compiled checker holds the facet's own {value} and
+// its kind, never a reference back to the *xsd.SimpleType it was built for, and no
+// caller re-supplies one — so five of this class's seven members ship
+// location-less. That is stated rather than left silent (STYLE E3), because the
+// class is ABOUT a component: the fix is to carry the declaring type's Loc on each
+// checker, not to invent one at the check site.
 func facetPrecondition(rule xsderr.Rule, loc xsderr.Loc, format string, args ...any) *xsderr.Error {
 	return xsderr.Wrap(rule, loc, fmt.Errorf("%w: %s", errFacetPrecondition, fmt.Sprintf(format, args...)))
 }
@@ -737,7 +747,7 @@ func newBoundFacet(b Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (boundF
 	}
 	ord, ok := v.(Ordered)
 	if !ok {
-		return boundFacet{}, facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
+		return boundFacet{}, facetPrecondition(ruleCosApplicableFacets, st.Loc(),
 			"value: %s facet value %q is not Ordered, so the facet is not applicable to %s (cos-applicable-facets §4.1.5)", kind, values[0], st.Name())
 	}
 	return boundFacet{limit: ord, kind: kind}, nil
