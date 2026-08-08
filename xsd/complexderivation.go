@@ -77,6 +77,18 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // returns element-only or mixed and nothing else, so the forbidden state is
 // unrepresentable and a runtime test would be dead code. See complextype.go's
 // ruleCTPropsCorrect doc, which records the by-construction discharge.
+//
+// GAP(xsd): this walk quantifies over s.types, so an ANONYMOUS complex type —
+// one reachable only through a slot that owns it — gets NO verdict from any
+// constraint above. That covers the inline <complexType> of an element or
+// attribute declaration (#438/#414) and, since #505, the src-expredef clause 1.1
+// ORIGINAL a redefining complex type owns, which the spec makes a full component
+// "as defined in Schema Component Details (§3)" and therefore subject to these
+// same rules. The same absence leaves its own copy of the two folded properties
+// at the producer's value (attributeusefold.go's storeFoldedAttributeUses). It
+// UNDER-rejects in every case: a constraint that is not run refuses nothing.
+// Closing it means a declaration-descending walk over the owning slots, which is
+// one change for all three and is filed as #505's follow-up.
 func (s *Schema) checkComplexDerivations() error {
 	for _, t := range s.types {
 		c, ok := t.(ComplexType)
@@ -115,9 +127,12 @@ func (s *Schema) checkCTPropsCorrectResolved(c ComplexType) error {
 
 // checkSimpleBaseIsExtension is ct-props-correct clause 2. An absent or
 // unresolvable base is skipped: the reference was already charged src-resolve by
-// Phase A, and an absent one has no variety to read.
+// Phase A, and an absent one has no variety to read. The base is reached through
+// typeOf, so an anonymous inline base is decided rather than skipped — skipping
+// it would wave the clause through unchecked for every redefining complex type
+// (STYLE T4, #505).
 func (s *Schema) checkSimpleBaseIsExtension(c ComplexType) error {
-	base, ok := s.Type(c.BaseTypeDefinitionName())
+	base, ok := s.typeOf(c.Base())
 	if !ok {
 		return nil
 	}
@@ -128,7 +143,7 @@ func (s *Schema) checkSimpleBaseIsExtension(c ComplexType) error {
 		return nil
 	}
 	return xsderr.New(ruleCTPropsCorrect, xsderr.Loc{},
-		"complex type %s has the simple type %s as its {base type definition} but {derivation method} = %s, and ct-props-correct clause 2 requires extension", c.Name(), c.BaseTypeDefinitionName(), c.DerivationMethod())
+		"complex type %s has the simple type %s as its {base type definition} but {derivation method} = %s, and ct-props-correct clause 2 requires extension", c.Name(), typeDefinitionLabel(base), c.DerivationMethod())
 }
 
 // checkAttributeUseNamesUnique is ct-props-correct clause 4. The uses are walked
@@ -177,19 +192,15 @@ func (s *Schema) checkComplexTypeRestriction(t ComplexType) error {
 	if t.DerivationMethod() != DerivationRestriction {
 		return nil
 	}
-	baseName := t.BaseTypeDefinitionName()
-	if baseName == (QName{}) {
-		return nil
-	}
-	if t.Name() == anyTypeName && baseName == anyTypeName {
-		return nil
-	}
-	base, ok := s.Type(baseName)
+	base, ok := s.typeOf(t.Base())
 	if !ok {
-		return nil // a dangling base was already charged src-resolve by Phase A
+		return nil // an absent base, or a dangling one Phase A already charged src-resolve
 	}
 	b, ok := base.(ComplexType)
 	if !ok {
+		return nil
+	}
+	if t.Name() == anyTypeName && b.Name() == anyTypeName {
 		return nil
 	}
 	return s.checkDerivationOKRestriction(t, b)
@@ -668,11 +679,14 @@ func (s *Schema) contentModelDeclarations(c ComplexType) []containedElement {
 	return contents.elements
 }
 
-// baseComplexType resolves c's {base type definition} when it is another Complex
-// Type Definition. It is false for an absent, unresolvable or simple base — the
-// three ways key-ldtype's case-3 recursion terminates without an answer.
+// baseComplexType is typeOf (typedefinition.go) narrowed to a COMPLEX base: it
+// resolves c's {base type definition} when it is another Complex Type
+// Definition, and is false for an absent, unresolvable or simple base — the
+// three ways key-ldtype's case-3 recursion terminates without an answer. It
+// re-derives no lookup of its own, so an anonymous inline base (src-expredef
+// clause 1.1) is followed here exactly as a named one is (STYLE T4).
 func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
-	base, ok := s.Type(c.BaseTypeDefinitionName())
+	base, ok := s.typeOf(c.Base())
 	if !ok {
 		return ComplexType{}, false
 	}
@@ -738,6 +752,12 @@ func (s *Schema) validlySubstitutable(sub, super TypeDefinition, blocked []Deriv
 // Two ANONYMOUS types both present as the zero QName and are reported as NOT
 // identical, exactly the licence §3.4.6.5's no-identity Note grants — the same
 // call typeAlternativesEquivalent already makes for key-equiv-ta clause 5.
+//
+// The walk follows the {base type definition} SLOT through typeOf, both arms.
+// Terminating at an InlineTypeDefinition instead would answer FALSE for every
+// type derived through a redefining complex type — an over-REJECT, not a
+// conservative answer, because a false here is what makes an instance
+// validation fail (#505).
 func (s *Schema) derivedOKComplex(d ComplexType, b TypeDefinition, blocked []DerivationMethod) bool {
 	subset := complexBlockingSubset(blocked)
 	for {
@@ -747,19 +767,15 @@ func (s *Schema) derivedOKComplex(d ComplexType, b TypeDefinition, blocked []Der
 		if containsDerivationMethod(subset, d.DerivationMethod()) {
 			return false // clause 1
 		}
-		baseName := d.BaseTypeDefinitionName()
-		if baseName == (QName{}) {
-			return false
+		base, ok := s.typeOf(d.Base())
+		if !ok {
+			return false // an absent base, or a dangling one Phase A already charged
 		}
-		if baseName == typeDefinitionName(b) {
+		if sameTypeDefinition(base, b) {
 			return true // clause 2.2
 		}
-		if baseName == anyTypeName {
+		if typeDefinitionName(base) == anyTypeName {
 			return false // clause 2.3.1
-		}
-		base, ok := s.Type(baseName)
-		if !ok {
-			return false
 		}
 		next, ok := base.(ComplexType)
 		if !ok {

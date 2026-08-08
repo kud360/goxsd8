@@ -27,12 +27,16 @@ import "slices"
 // the pass returns — nothing derived from it outlives foldAttributeUses.
 type attributeUseFold struct {
 	// position maps the expanded {name} of a COMPLEX type definition to its
-	// index in s.types. Simple types are deliberately absent: a base name that
+	// index in s.types. Simple types are deliberately absent: a base NAME that
 	// misses here is §3.4.2.4 clause 3.3's "otherwise no attribute use is
 	// inherited", which is exactly the answer a missing lookup gives. Names are
 	// unique across type definitions (sch-props-correct clause 2, enforced at
 	// Finalize), so the map is a function. It is a point-lookup index and never
 	// ranged (STYLE D2).
+	//
+	// It is consulted for the TypeDefinitionRef arm of a {base type definition}
+	// ONLY. An anonymous inline base has no name and so no position, which is
+	// not clause 3.3 but a base reached a different way; see baseAttributeUses.
 	position map[QName]int
 	uses     [][]AttributeUse
 	folded   []bool
@@ -87,16 +91,17 @@ func (s *Schema) foldAttributeUses() {
 	s.storeFoldedAttributeUses(f)
 }
 
-// foldTypeAttributeUses computes and memoises the folded {attribute uses} of the
-// Complex Type Definition at position i, recursing into its {base type
-// definition} first so the base's own set is already complete when clause 3 folds
-// it in (base-before-derived, STYLE D4).
+// foldTypeAttributeUses computes and MEMOISES the folded {attribute uses} of the
+// Complex Type Definition at position i. It is the index-keyed half of the pair;
+// foldComponentAttributeUses is the component-keyed half, which does the work.
 //
 // The recursion terminates for the same two reasons every other base walk in this
-// package does: Phase B has rejected every circular chain, and ·xs:anyType·'s
-// permitted self-derivation is excluded by j != i — the one self-edge §3.4.7
-// allows, which no acyclicity check can remove. §3.4.7 gives ·xs:anyType· an
-// empty {attribute uses}, so excluding it loses nothing.
+// package does: Phase B has rejected every circular chain — including one running
+// through an anonymous inline base, which Phase B descends for exactly this
+// reason (resolve.go's checkComplexBaseAcyclic) — and ·xs:anyType·'s permitted
+// self-derivation is excluded by j != i, the one self-edge §3.4.7 allows, which
+// no acyclicity check can remove. §3.4.7 gives ·xs:anyType· an empty {attribute
+// uses}, so excluding it loses nothing.
 func (s *Schema) foldTypeAttributeUses(f *attributeUseFold, i int) []AttributeUse {
 	if f.folded[i] {
 		return f.uses[i]
@@ -105,12 +110,60 @@ func (s *Schema) foldTypeAttributeUses(f *attributeUseFold, i int) []AttributeUs
 	if !ok {
 		panic("xsd: foldTypeAttributeUses: position of a non-complex type definition")
 	}
-	uses := c.attributeUses // clauses 1 and 2, as the producer mapped them
-	if j, ok := f.position[c.BaseTypeDefinitionName()]; ok && j != i {
-		uses = inheritAttributeUses(uses, s.foldTypeAttributeUses(f, j), c.DerivationMethod(), c.prohibitedAttributeNames)
-	}
+	uses := s.foldComponentAttributeUses(f, c, i)
 	f.uses[i], f.folded[i] = uses, true
 	return uses
+}
+
+// foldComponentAttributeUses computes §3.4.2.4 clause 3 for one Complex Type
+// Definition COMPONENT, recursing into its {base type definition} first so the
+// base's own set is already complete when clause 3 folds it in
+// (base-before-derived, STYLE D4).
+//
+// It takes the component rather than a position because not every type it must
+// answer for HAS one: the anonymous src-expredef clause 1.1 original a redefining
+// complex type owns is in no s.types slice, so it is in f.position too. Reading
+// a miss there as clause 3.3's "no attribute use is inherited" would leave the
+// redefinition not inheriting its original's attribute uses — and a type missing
+// an {attribute use} REJECTS instances that carry that attribute, a pass→fail
+// verdict flip, not an under-report (#505).
+//
+// position is the memo key, so only the named types that have one are memoised;
+// an inline base is folded once, at the single slot that owns it, and nothing
+// else can reach it to fold it twice. i is the folding type's own position, used
+// only to exclude the ·xs:anyType· self-edge.
+func (s *Schema) foldComponentAttributeUses(f *attributeUseFold, c ComplexType, i int) []AttributeUse {
+	own := c.attributeUses // clauses 1 and 2, as the producer mapped them
+	base, ok := s.baseAttributeUses(f, c, i)
+	if !ok {
+		return own // clause 3.3: no complex {base type definition} to inherit from
+	}
+	return inheritAttributeUses(own, base, c.DerivationMethod(), c.prohibitedAttributeNames)
+}
+
+// baseAttributeUses returns the already-folded {attribute uses} of c's {base type
+// definition}, exhaustively over the TypeDefinitionOrRef slot's arms. ok is false
+// for §3.4.2.4 clause 3.3 — a base that is absent, simple, unresolvable, or
+// ·xs:anyType· reached by its own self-edge.
+func (s *Schema) baseAttributeUses(f *attributeUseFold, c ComplexType, i int) ([]AttributeUse, bool) {
+	switch b := c.Base().(type) {
+	case nil:
+		return nil, false
+	case TypeDefinitionRef:
+		j, ok := f.position[b.Name]
+		if !ok || j == i {
+			return nil, false
+		}
+		return s.foldTypeAttributeUses(f, j), true
+	case InlineTypeDefinition:
+		bc, isComplex := b.Definition.(ComplexType)
+		if !isComplex {
+			return nil, false
+		}
+		return s.foldComponentAttributeUses(f, bc, i), true
+	default:
+		panic("xsd: baseAttributeUses: non-exhaustive TypeDefinitionOrRef switch")
+	}
 }
 
 // inheritAttributeUses is §3.4.2.4 clause 3's inherited half: own is the set
@@ -161,9 +214,16 @@ func hasAttributeUseNamed(uses []AttributeUse, name QName) bool {
 // Definition. ComplexType is a VALUE type held in two places — the document-order
 // s.types slice and the by-name s.typeIndex — so both are re-seated; a consumer
 // that reaches a type either way sees the same folded property. The index entry
-// exists only for a named type (an anonymous one is in no §3.17.1 symbol table),
-// and no anonymous type can be a {base type definition}, since a base is named by
-// QName.
+// exists only for a named type (an anonymous one is in no §3.17.1 symbol table).
+//
+// An ANONYMOUS base — the src-expredef clause 1.1 original a redefining complex
+// type owns — is in neither place, so its OWN stored {attribute uses} keeps the
+// producer's clause-1-and-2 value even though the fold computed its clause-3 one
+// to hand to the redefinition. The redefinition's property is correct; the
+// original's, read through Base(), under-reports what it in turn inherits. That
+// is one facet of the gap complexderivation.go's checkComplexDerivations records
+// and is filed with it; the direction is under-rejection everywhere it is read,
+// since a base with fewer uses imposes fewer obligations on its derivations.
 func (s *Schema) storeFoldedAttributeUses(f *attributeUseFold) {
 	for i, uses := range f.uses {
 		c, ok := s.types[i].(ComplexType)

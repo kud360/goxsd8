@@ -209,16 +209,18 @@ walk:
 			if c.Name() == anyTypeName {
 				return true // §3.4.7: xs:anyType is its own base, so the chain ends here
 			}
-			base := c.BaseTypeDefinitionName()
-			if base == (QName{}) {
-				return true // an absent base ends the chain short of H.{type definition}
-			}
-			if base == typeDefinitionName(headType) {
-				break walk // the ·derivation· has reached H.{type definition}
-			}
-			next, ok := s.Type(base)
+			// The slot is followed through typeOf, BOTH arms: an anonymous
+			// src-expredef clause 1.1 base is a real step of the ·derivation·,
+			// and stopping on it would answer true — a fail-OPEN accept, not a
+			// conservative refusal (#505).
+			next, ok := s.typeOf(c.Base())
 			if !ok {
-				return true // a dangling base was already charged src-resolve by Phase A
+				// An absent base ends the chain short of H.{type definition}; a
+				// dangling one was already charged src-resolve by Phase A.
+				return true
+			}
+			if sameTypeDefinition(next, headType) {
+				break walk // the ·derivation· has reached H.{type definition}
 			}
 			cur = next
 		case *SimpleType:

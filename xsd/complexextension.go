@@ -83,16 +83,12 @@ func (s *Schema) checkComplexTypeExtension(t ComplexType) error {
 	if t.DerivationMethod() != DerivationExtension {
 		return nil
 	}
-	baseName := t.BaseTypeDefinitionName()
-	if baseName == (QName{}) {
-		return nil
-	}
-	if t.Name() == anyTypeName && baseName == anyTypeName {
-		return nil
-	}
-	base, ok := s.Type(baseName)
+	base, ok := s.typeOf(t.Base())
 	if !ok {
-		return nil // a dangling base was already charged src-resolve by Phase A
+		return nil // an absent base, or a dangling one Phase A already charged src-resolve
+	}
+	if t.Name() == anyTypeName && typeDefinitionName(base) == anyTypeName {
+		return nil
 	}
 	switch b := base.(type) {
 	case ComplexType:
@@ -435,13 +431,12 @@ func (s *Schema) pureExtensionChain(t ComplexType) bool {
 		if c.DerivationMethod() != DerivationExtension {
 			return false
 		}
-		baseName := c.BaseTypeDefinitionName()
-		if baseName == anyTypeName {
-			return true // c IS the ancestor whose {base type definition} is ·xs:anyType·
-		}
 		next, ok := s.baseComplexType(c)
 		if !ok {
 			return false
+		}
+		if next.Name() == anyTypeName {
+			return true // c IS the ancestor whose {base type definition} is ·xs:anyType·
 		}
 		c = next
 	}

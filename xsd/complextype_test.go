@@ -49,8 +49,8 @@ func TestNewComplexTypeEmptyContent(t *testing.T) {
 	if c.ContentType().Variety() != xsd.ContentEmpty {
 		t.Errorf("Variety() = %s, want empty", c.ContentType().Variety())
 	}
-	if got := c.BaseTypeDefinitionName(); got != (xsd.QName{Local: "base"}) {
-		t.Errorf("BaseTypeDefinitionName() = %v, want {base}", got)
+	if got := c.Base(); got != (xsd.TypeDefinitionOrRef(xsd.TypeDefinitionRef{Name: xsd.QName{Local: "base"}})) {
+		t.Errorf("Base() = %#v, want a TypeDefinitionRef naming {base}", got)
 	}
 	if c.DerivationMethod() != xsd.DerivationRestriction {
 		t.Errorf("DerivationMethod() = %s, want restriction", c.DerivationMethod())

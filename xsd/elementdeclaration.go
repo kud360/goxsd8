@@ -161,13 +161,23 @@ type ComplexTypeScopeParent struct{ Name QName }
 // {name} to be referenced by (§3.4.1 ctd-context makes {name} and {context} a
 // strict XOR, so an anonymous complex type carries a {context} instead).
 //
-// Owner is the minted identity of the ELEMENT DECLARATION the anonymous complex
-// type is the {type definition} of — not a second identity for the type itself.
-// §3.4.2.1 dcl.ctd.common makes that declaration the type's own {context}, so
-// the type's ElementDeclarationContext.Component and this field hold the SAME
-// ComponentID: one mint per inline construct, one fact with one encoding (STYLE
-// D3). Comparing them with == is how NewElementDeclarationOwningType checks that
-// an inline anonymous complex type points back at its own owner.
+// Owner is the identity carried by the anonymous container's OWN {context}
+// (§3.4.1 ctd-context), whichever arm that is — not a second identity for the
+// type itself. There are two such arms and both reach this field:
+//
+//   - an ElementDeclarationContext, when §3.4.2.1 dcl.ctd.common built the type
+//     for an inline <complexType> child; Owner is then the owning ELEMENT
+//     DECLARATION's minted identity;
+//   - a ComplexTypeDefinitionContext, when §4.2.4 src-expredef clause 1.1 built
+//     the type as the {name}-·absent· original of a redefinition; Owner is then
+//     the REDEFINING COMPLEX TYPE's minted identity, and no element declaration
+//     is involved at all.
+//
+// What holds in both cases, and is the invariant to rely on, is the 1:1 pairing:
+// the container's {context} identity and this field hold the SAME ComponentID,
+// one mint per pairing, one fact with one encoding (STYLE D3). Comparing them
+// with == is how NewElementDeclarationOwningType and NewComplexTypeOwningBase
+// each check that the anonymous type points back at its own owner.
 //
 // Owner is a PRESENT identity, never the zero (unminted) ComponentID —
 // NewLocalScope rejects an unminted one. The field is read-only by convention;
@@ -540,7 +550,7 @@ func newElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefini
 		return ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, loc,
 			"element declaration has an absent {name}, but the §3.3.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (e-props-correct clause 1)")
 	}
-	if err := checkTypeDefinitionOrRef(loc, typeDefinition, "element declaration "+name.String()); err != nil {
+	if err := checkTypeDefinitionOrRef(loc, typeDefinition, "element declaration "+name.String()+" {type definition}"); err != nil {
 		return ElementDeclaration{}, err
 	}
 	for i, m := range substitutionGroupExclusions {

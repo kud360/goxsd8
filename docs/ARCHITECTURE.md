@@ -249,8 +249,9 @@ Two access styles over the compiled model, one shared core:
   document through one `loader.Resolver`, walks the
   `<xs:include>`/`<xs:import>`/`<xs:override>` closure (§4.2.3, §4.2.6.2,
   §4.2.5) depth-first in document order with a load-once index keyed by
-  resolved location, the namespace the document was reached under and the
-  override applied to it (document identity, *not* a cycle guard — include
+  resolved location, the namespace the document was reached under, the
+  override applied to it and the redefinition applied to it (document
+  identity, *not* a cycle guard — include
   cycles are spec-legal), applies chameleon coercion to a
   no-`targetNamespace` included, overridden or redefined document (§F.1),
   carries override pre-processing (§F.2) and redefinition (§4.2.4) alike as
@@ -258,10 +259,10 @@ Two access styles over the compiled model, one shared core:
   then produces every document into
   one shared `xsd.SchemaBuilder` and finalizes. `Produce(doc, backend)` is
   the single-document entry point and follows no inter-document reference.
-  `<redefine>` is followed (#286) for `simpleType`, `group` and
-  `attributeGroup`; a redefining `complexType` is declined, because
-  `src-expredef` cl. 1.1's hidden `{name}`-absent base has nowhere to live
-  while `xsd.ComplexType` carries `{base type definition}` as a QName.
+  `<redefine>` is followed (#286) for all four redefinable kinds; a
+  redefining `complexType` is paired with the `{name}`-absent original
+  `src-expredef` cl. 1.1 defines, which `xsd.ComplexType` holds in the
+  `InlineTypeDefinition` arm of its `{base type definition}` slot (#505).
   The assembly-wide symbol table is seeded with the builtins exactly once
   (`builtin.Seed`), which is why seeding is assembly-scoped and not
   per-document: per-document seeding would re-add `xs:string` per included

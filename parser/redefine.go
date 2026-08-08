@@ -57,28 +57,34 @@ import (
 // of that name and the appropriate kind in S2 is used" (clause 2).
 //
 // Getting that wrong produces a FALSE CIRCULARITY — a type or group appearing to
-// derive from or contain itself — so the three resolution sites that can meet a
-// self-reference each consult the set first: resolveBase (a simple type's base=,
-// produce.go), produceGroupRefParticle (a <group ref>) and collectReferencedGroup
-// (an <attributeGroup ref>, both produce_complex.go).
+// derive from or contain itself — so the FOUR resolution sites that can meet a
+// self-reference each consult the set first: resolveBase (a simple type's base=)
+// and redefinedComplexBase (a complex type's, both produce.go),
+// produceGroupRefParticle (a <group ref>) and collectReferencedGroup (an
+// <attributeGroup ref>, both produce_complex.go).
 //
-// # GAP(xsd): a redefining <complexType> is not produced (#286)
+// # The complex-type pairing (#505)
 //
-// xsd.ComplexType carries {base type definition} as a pre-resolution QName
-// REFERENCE (xsd/complextype.go), which Finalize resolves by name and walks for
-// ct-props-correct clause 3. src-expredef clause 1.1 needs the base to be a
-// component with NO name at all, so the pairing is not representable there: a
-// redefining <complexType> can only be built with base name = its own name,
-// which is the very false circularity the pairing exists to avoid. Rather than
-// emit that, produceRedefinition DECLINES the redefining <complexType> with a
-// plain "not yet produced" error — the same treatment <simpleContent> with
-// <restriction> gets in produce_complex.go, and deliberately not a fabricated
-// rule violation. It OVER-rejects: a valid redefining complex type is refused,
-// never accepted wrongly. Closing it needs an xsd-package change (a complex type
-// able to hold an anonymous resolved base), which is library surface this slice
-// does not open. src-redefine clause 5 is still charged against the declined
-// shape first, so a redefining complex type that does not derive from itself is
-// rejected for the right reason rather than for the decline.
+// A redefining <complexType> is a NAMED component that OWNS its
+// {name}-·absent· base outright, which xsd.ComplexType's {base type definition}
+// slot expresses as the InlineTypeDefinition arm of a TypeDefinitionOrRef and
+// xsd.NewComplexTypeOwningBase is the only entry point for. The producer mints
+// ONE xsd.ComponentID per redefinition (namedComplexTypeIdentity, produce.go),
+// builds clause 1.1's original from the REDEFINED document's own declaration and
+// under that document's producer, and threads the identity into both halves so
+// the original's {context} points back at the redefining component; the
+// constructor checks the two agree.
+//
+// The pairing is built at buildComplexType, not here, because the redefining
+// declaration is reachable by NAME as well: prescanRedefine registers it under
+// its own expanded name, so a reference from either document arrives through
+// resolveBaseType. One decision point means one component per name, which is
+// what makes src-expredef's note ("references … in both the <redefine>ing and
+// <redefine>d schema documents ·resolve· to the redefined component") hold.
+//
+// src-redefine clause 5 is charged BEFORE the pairing is attempted, so a
+// redefining complex type that does not derive from itself is rejected for that
+// rule rather than for a missing original.
 
 // redefineEntry is one non-<annotation> child of a <redefine> element paired
 // with the key it redefines on. Entries are kept as a SLICE in document order,
@@ -502,11 +508,22 @@ func (p *producer) produceRedefine(el *Element) error {
 // It also subsumes src-redefine clauses 6.2.1 and 7.2.1, which say the same
 // thing for the no-self-reference branch ("its own name attribute plus target
 // namespace successfully ·resolves· to a model group definition in S2").
+//
+// Its message says "was recorded from" rather than "the redefined schema
+// document declares no": the miss it reports is on rs.originals, which one
+// unreachable-for-a-valid-schema path leaves unfilled even though the
+// declaration IS there. A document discovered twice under different override
+// sets but the same namespace builds a second redefineSet with an identical id,
+// so the redefined document's docKey collides, fetch dedups, and the second
+// set's pre-scan never runs. It over-rejects only, and the double discovery it
+// needs is itself a duplicate-component situation sch-props-correct must fail
+// anyway — but a wrong-but-unreachable error string is exactly the shape that
+// survives unexamined, so the claim is narrowed to what is actually known here.
 func (p *producer) produceRedefinition(rs *redefineSet, e redefineEntry) error {
 	qn := xsd.QName{Space: p.target, Local: e.key.name}
 	if _, ok := rs.originals[e.key]; !ok {
 		return xsderr.New(ruleSrcExpRedefine, e.elem.Loc(),
-			"<redefine> redefines <%s> %s, but the redefined schema document declares no top-level <%s> of that name: src-expredef requires \"a top-level definition item of the appropriate name and kind in the <redefine>d schema document\" in all cases",
+			"<redefine> redefines <%s> %s, but no top-level <%s> of that name was recorded from the redefined schema document: src-expredef requires \"a top-level definition item of the appropriate name and kind in the <redefine>d schema document\" in all cases",
 			e.key.kind, qn, e.key.kind)
 	}
 	decl := p.ov.replacement(e.elem)
@@ -522,13 +539,16 @@ func (p *producer) produceRedefinition(rs *redefineSet, e redefineEntry) error {
 		p.builder.AddType(st)
 		return nil
 	case "complexType":
-		// GAP(xsd): see this file's header — src-expredef clause 1.1's hidden
-		// {name}-·absent· base is not representable while xsd.ComplexType carries
-		// {base type definition} as a QName reference, so the redefining complex
-		// type is declined rather than emitted as a self-derivation Finalize would
-		// (correctly, for what it would be handed) reject under ct-props-correct
-		// clause 3. Over-rejects; owned by #286's follow-up.
-		return fmt.Errorf("parser: the redefining <complexType> %s at %s is not yet produced: src-expredef clause 1.1 pairs it with a {name}-absent copy of the redefined type as its {base type definition}, which this component model cannot yet hold (it carries {base type definition} as a QName reference)", qn, decl.Loc())
+		// src-expredef clause 1.2. buildComplexType selects the redefining
+		// identity from decl itself, so this path and a by-name reference to qn
+		// reach the same memoised component; the clause-1.1 original is built
+		// under it (see this file's header).
+		ct, err := p.buildComplexType(qn, decl)
+		if err != nil {
+			return err
+		}
+		p.builder.AddType(ct)
+		return nil
 	case "group":
 		mgd, err := p.buildModelGroupDefinition(qn, decl)
 		if err != nil {
@@ -593,10 +613,17 @@ func (p *producer) checkRedefinedSimpleType(decl *Element, qn xsd.QName) error {
 // depth is the spec's own — a <complexContent>/<simpleContent> child holding the
 // derivation — so the implicit-content form, which states no derivation at all,
 // fails the clause as it should.
+//
+// <annotation> subtrees are skipped, as selfReferences skips them and for the
+// same reason: §3 states that "neither the correspondences described nor the XML
+// Representation Constraints apply to elements in the Schema namespace which
+// occur as descendants of <appinfo> or <documentation>", so a <restriction>
+// written there is prose and discharges nothing. Only markup <complexType>'s own
+// content model already forbids can reach it.
 func (p *producer) checkRedefinedComplexType(decl *Element, qn xsd.QName) error {
 	for _, child := range decl.Children() {
 		c, ok := child.(*Element)
-		if !ok {
+		if !ok || isXSD(c, "annotation") {
 			continue
 		}
 		for _, grand := range c.Children() {
