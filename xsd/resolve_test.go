@@ -437,24 +437,14 @@ func TestResolveCircularModelGroups(t *testing.T) {
 
 func TestResolveCircularSubstitutionGroups(t *testing.T) {
 	// Element A affiliates to B, element B affiliates to A.
-	ea, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("A"), nil, nil, xsd.NewGlobalScope(), nil, false, nil,
-		[]xsd.QName{qn("B")}, nil, false, nil, nil)
-	if err != nil {
-		t.Fatalf("NewElementDeclaration A: %v", err)
-	}
-	eb, err := xsd.NewElementDeclaration(xsderr.Loc{}, qn("B"), nil, nil, xsd.NewGlobalScope(), nil, false, nil,
-		[]xsd.QName{qn("A")}, nil, false, nil, nil)
-	if err != nil {
-		t.Fatalf("NewElementDeclaration B: %v", err)
-	}
 	b := xsd.NewSchemaBuilder()
-	b.AddElement(ea)
-	b.AddElement(eb)
-	if _, err := b.Finalize(); err == nil {
+	b.AddElement(elementAffiliatedAt(t, xsderr.Loc{}, qn("A"), qn("B")))
+	b.AddElement(elementAffiliatedAt(t, xsderr.Loc{}, qn("B"), qn("A")))
+	_, err := b.Finalize()
+	if err == nil {
 		t.Fatal("Finalize(A<->B substitution cycle) succeeded, want e-props-correct error")
-	} else {
-		assertRule(t, err, "e-props-correct")
 	}
+	assertRule(t, err, "e-props-correct")
 }
 
 func TestResolveValidGraph(t *testing.T) {
@@ -515,20 +505,32 @@ func assertLoc(t *testing.T, err error, want xsderr.Loc) {
 	}
 }
 
-// TestResolveRejectionsCiteTheOffendingComponent pins the position of one
-// rejection per rule the resolution pass can raise — src-resolve (§3.17.6.2),
-// c-props-correct (§3.11.6.1), ct-props-correct (§3.4.6.1) clause 3,
+// TestResolveRejectionsCiteTheOffendingComponent pins the position of every
+// Loc-bearing rejection the resolution pass can raise — all ten sites, across
+// src-resolve (§3.17.6.2) clauses 1.1, 1.2, 1.3, 1.5 and 1.7, c-props-correct
+// (§3.11.6.1) clauses 1 and 2, ct-props-correct (§3.4.6.1) clause 3,
 // mg-props-correct (§3.8.6.1) clause 2 and e-props-correct (§3.3.6.1) clause 5 —
 // so no site can drift back to the zero "position unknown" Loc unnoticed.
 //
-// The src-resolve family gets three cases rather than one, because its ten
-// reference sites do not all take their position the same way. Two of them —
-// a particle {term} <element ref> and an attribute use <attribute ref> — sit on a
-// Particle and an AttributeUse, neither of which RETAINS a position (xsd doc.go,
-// STYLE T5), so both are charged the enclosing complex type's instead. Those two
-// cases build the Particle and the AttributeUse at the ZERO Loc on purpose: if the
-// substitution were ever dropped in favour of the ref-bearing component's own
-// position, the rejection would go back to citing nothing and the case would fail.
+// The table is per-SITE, not per-rule. A shared rule ID is no evidence that a
+// sibling site is guarded: sites charged the same rule reach their position by
+// different routes, and a case covering one of them would leave the others free
+// to regress silently.
+//
+// src-resolve accordingly gets five cases, because its reference sites do not all
+// take their position the same way. Three of them — a particle {term} <element
+// ref>, a particle {term} <group ref>, and an attribute use <attribute ref> — sit
+// on a Particle and an AttributeUse, neither of which RETAINS a position (xsd
+// doc.go, STYLE T5), so all three are charged the enclosing complex type's
+// instead. Those three cases build the Particle and the AttributeUse at the ZERO
+// Loc on purpose: if the substitution were ever dropped in favour of the
+// ref-bearing component's own position, the rejection would go back to citing
+// nothing and the case would fail.
+//
+// c-props-correct gets two cases for the same per-site reason: resolveKeyref's
+// category check (clause 1) returns before its cardinality check (clause 2) can
+// run, so only a keyref whose target is the wrong CATEGORY reaches the former and
+// only one whose target matches in category reaches the latter.
 func TestResolveRejectionsCiteTheOffendingComponent(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -569,6 +571,39 @@ func TestResolveRejectionsCiteTheOffendingComponent(t *testing.T) {
 				b := xsd.NewSchemaBuilder()
 				b.AddType(ct)
 				return b, resolveLoc(31)
+			},
+		},
+		{
+			name: "src-resolve dangling group ref cites the enclosing complex type",
+			rule: "src-resolve",
+			build: func(t *testing.T) (*xsd.SchemaBuilder, xsderr.Loc) {
+				b := xsd.NewSchemaBuilder()
+				b.AddType(elementContentCTAt(t, resolveLoc(81), qn("ct"), xsd.ModelGroupRef{Name: qn("nope")}))
+				return b, resolveLoc(81)
+			},
+		},
+		{
+			name: "src-resolve dangling keyref cites the keyref",
+			rule: "src-resolve",
+			build: func(t *testing.T) (*xsd.SchemaBuilder, xsderr.Loc) {
+				// The target does not exist to have a position, so the referring
+				// keyref is the only component the rejection can name.
+				b := xsd.NewSchemaBuilder()
+				b.AddIdentityConstraint(keyOrRefFieldsAt(t, resolveLoc(91), qn("kr"), xsd.IdentityConstraintKeyref, qn("nope"), 1))
+				return b, resolveLoc(91)
+			},
+		},
+		{
+			name: "c-props-correct wrong category cites the referring keyref",
+			rule: "c-props-correct",
+			build: func(t *testing.T) (*xsd.SchemaBuilder, xsderr.Loc) {
+				// Two mutually-referring keyrefs: kr1 is visited first in document
+				// order and its {referenced key} is itself a keyref, so clause 1
+				// rejects there. Equal {fields} counts keep clause 2 out of it.
+				b := xsd.NewSchemaBuilder()
+				b.AddIdentityConstraint(keyOrRefFieldsAt(t, resolveLoc(101), qn("kr1"), xsd.IdentityConstraintKeyref, qn("kr2"), 1))
+				b.AddIdentityConstraint(keyOrRefFieldsAt(t, resolveLoc(102), qn("kr2"), xsd.IdentityConstraintKeyref, qn("kr1"), 1))
+				return b, resolveLoc(101)
 			},
 		},
 		{
