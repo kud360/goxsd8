@@ -398,50 +398,228 @@ func openContentModeLabel(oc *OpenContent) string {
 // walks in this package are (see checkComplexDerivations), and terminates on
 // ·xs:anyType·, the one type §3.4.7 lets be its own base.
 //
-// GAP(xsd): a chain that MIXES extension and restriction steps is not decided —
-// it is accepted. Deciding it needs the intermediate type the Note describes,
-// and synthesizing that means merging a base particle with an ·effective
-// content· the way §3.4.2.3.3 clause 4.2 does, repeatedly, over a chain that has
-// been re-ordered into an order no schema document expresses. That merge exists
-// in this repo only as the finalize-phase-eligible construction the producer
-// performs for one real <extension>; it is not built for arbitrary reordered
-// chains, and re-deriving it here would be the same rule in a second encoding
-// (STYLE T4). The direction is FAIL-OPEN — a mixed chain that violates clause
-// 1.5 is accepted, never a false reject — and it should be filed as a follow-up
-// xsd issue. Note for whoever picks it up: the natural final test is
-// s.contentTypeRestricts(T's {content type}, the collapsed one), and that
-// function early-accepts whenever either side carries {open content}
-// (contentrestricts.go:219-231), so an open-content extension would inherit that
-// skip into clause 1.5 as well.
+// A chain that MIXES extension and restriction steps is decided by CONSTRUCTION,
+// which is what the Note prescribes for it: the collapsed intermediate M is
+// synthesized (collapsedintermediate.go) and T is asked to be a valid restriction
+// of it. Two things are charged against M, in this order:
+//
+//   - ct-props-correct clause 4 on M itself, through the same one scan the
+//     clause's own check uses (duplicateAttributeUseName, complexderivation.go).
+//     M is duplicate-free BY CONSTRUCTION — collapsedAttributeUses drops an
+//     extension step's re-declaration of a name the collapse already carries,
+//     because an intermediate holding both is unrepresentable rather than merely
+//     invalid — so this is the guard on that construction and not the substance
+//     of the clause. It is charged as cos-ct-extends all the same: a collapse
+//     that yielded a duplicate would mean NO legal intermediate exists, which is
+//     a clause 1.5 verdict, never a ct-props-correct one against a type the user
+//     did not write.
+//   - derivation-ok-restriction (§3.4.6.3) whole, T against M. That is the
+//     Note's "if the resulting definition can be the basis for a valid
+//     restriction to the desired definition", and it is the ONE encoding of that
+//     relation in this tree (complexderivation.go, STYLE T4) — no second
+//     restriction engine, and in particular no second containment engine beside
+//     cos-content-act-restrict's. It is also where the Note's own motivating
+//     example lands: something a restriction step removed and an extension step
+//     added back "with a conflicting type assignment or value constraint" is a
+//     T whose use or declaration fails clause 3's ·subsumption· or clause 4's
+//     ·validly substitutable· against the inherited one M still carries.
+//
+// Neither verdict is surfaced as the rule it was decided by. M is synthetic and
+// carries A's {name} so the base walks off it terminate on real components, so an
+// error naming it would name a type the user did not write and charge a rule
+// (ct-props-correct, derivation-ok-restriction) the user's schema does not
+// violate (STYLE E1/E2). Both are re-charged as cos-ct-extends at T's own
+// position, with the re-ordering explained in the message.
+//
+// GAP(xsd): the CONTENT half of the second charge is undecided for a chain
+// carrying {open content} — owned by #413, which owns the same skip for real
+// restrictions. checkDerivationOKRestriction reaches the content models through
+// clause 2.4.2's contentTypeRestricts, which early-accepts the moment either side
+// carries an {open content} record (contentrestricts.go), and M inherits whatever
+// the §3.4.2.3.3 clause 4.2 merge propagated. The direction is fail-open — clause
+// 1.5's content half is skipped, never falsely charged — and the clause's
+// attribute halves (both charges above) still decide such a chain.
 func (s *Schema) checkExtensionTwoStepDerivable(t ComplexType) error {
 	if s.pureExtensionChain(t) {
 		return nil // clause 1.5 holds; see the proof above
 	}
-	return nil // GAP(xsd): the mixed chain is not decided; see the doc above
+	m, ok, err := s.collapsedExtension(t)
+	if err != nil {
+		return xsderr.New(ruleCosCTExtends, t.Loc(),
+			"complex type %s cannot be shown ·derivable· in two steps — an extension followed by a possibly vacuous restriction — from the ancestor whose {base type definition} is xs:anyType, because re-ordering its derivation chain as cos-ct-extends clause 1.5's Note prescribes does not yield a legal Complex Type Definition", t.Name())
+	}
+	if !ok {
+		// GAP(xsd): the chain leaves the complex-type graph before reaching an
+		// ancestor whose base is ·xs:anyType· (an unresolvable or simple base),
+		// or one step's own contribution is not recoverable from the folded
+		// properties — so clause 1.5 is ACCEPTED undecided, as the whole mixed
+		// chain was before #392. #586 owns the remainder. The direction is
+		// fail-open against the clause's one reader: this function's error is
+		// consumed only by checkExtensionOfComplexBase → checkComplexTypeExtension
+		// → checkComplexDerivations → Schema.resolve, each of which propagates a
+		// non-nil error as a rejection and reads nothing else out of it, so a nil
+		// here is a missed rejection and can never fabricate one.
+		return nil
+	}
+	if name, duplicate := duplicateAttributeUseName(m.attributeUses); duplicate {
+		return xsderr.New(ruleCosCTExtends, t.Loc(),
+			"complex type %s is not ·derivable· in two steps — an extension followed by a possibly vacuous restriction — from the ancestor whose {base type definition} is xs:anyType, as cos-ct-extends clause 1.5 requires: re-ordering its derivation chain to put every extension step first collapses two attribute uses for %s into one type, which ct-props-correct clause 4 forbids, so an extension in the chain adds back an attribute a restriction in the chain removed", t.Name(), name)
+	}
+	if s.restrictionFromCollapseIsVacuous(t, m) {
+		return nil // clause 1.5's own "(possibly vacuous)" arm; see below
+	}
+	if err := s.checkDerivationOKRestriction(t, m); err != nil {
+		return xsderr.New(ruleCosCTExtends, t.Loc(),
+			"complex type %s is not ·derivable· in two steps — an extension followed by a possibly vacuous restriction — from the ancestor whose {base type definition} is xs:anyType, as cos-ct-extends clause 1.5 requires: re-ordering its derivation chain to put every extension step first, then collapsing them into a single extension, yields an intermediate type that %s does not validly restrict (derivation-ok-restriction, §3.4.6.3), so something a restriction step removed is added back incompatibly by an extension step", t.Name(), t.Name())
+	}
+	return nil
+}
+
+// restrictionFromCollapseIsVacuous reports whether the second of clause 1.5's two
+// steps is the VACUOUS restriction the clause explicitly permits — "the first an
+// extension and the second a restriction (possibly vacuous)" — by testing the
+// three properties derivation-ok-restriction compares for property identity:
+// {content type}, {attribute uses} member for member, and {attribute wildcard}.
+// When they agree, the second step changes nothing and is valid by the identity
+// argument, which is precisely the argument #264 landed for the pure-extension
+// chain (see this file's clause-1.5 doc). {final} and {assertions} are not
+// compared: M's {final} is empty, so clause 1 cannot fail, and A's {assertions}
+// are a prefix of T's along the real chain, so clause 5 cannot either
+// (newCollapsedExtension).
+//
+// It is not an optimisation, and skipping it would be a FALSE REJECT. Running
+// derivation-ok-restriction on a T and a structurally identical M charges clause
+// 2.4.2's ctr-child-type-subsumption and clause 4's ·validly substitutable· for
+// every element or attribute whose {type definition} is ANONYMOUS, because
+// sameTypeDefinition reports two anonymous types as different (§3.4.6.5's
+// no-identity Note) — so an anonymous type is not substitutable even for ITSELF,
+// and a type whose content model holds one would fail to restrict its own copy.
+// That shape is ordinary: a chain whose only restriction step is above an
+// extension of an empty-content base collapses to an M identical to T, and any
+// inline <complexType> in its content model would sink it (the W3C suite's
+// MS-Element elemZ015 is exactly that schema).
+//
+// The three predicates are this package's existing identity relations, the same
+// ones cos-ct-extends clause 1.2 and cos-particle-extend read (STYLE T4).
+func (s *Schema) restrictionFromCollapseIsVacuous(t, m ComplexType) bool {
+	if !s.contentTypesIdentical(t.ContentType(), m.ContentType()) {
+		return false
+	}
+	if len(t.attributeUses) != len(m.attributeUses) {
+		return false
+	}
+	for i, u := range t.attributeUses {
+		if !s.attributeUsesIdentical(u, m.attributeUses[i]) {
+			return false
+		}
+	}
+	tw, tHas := t.AttributeWildcard()
+	mw, mHas := m.AttributeWildcard()
+	if tHas != mHas {
+		return false
+	}
+	return !tHas || wildcardsIdentical(tw, mw)
+}
+
+// contentTypesIdentical decides property identity between two Content Types
+// (§3.4.1), exhaustively over the sealed ContentType sum: two records are
+// identical when they have the same variety and their variety's own properties
+// are identical — the {simple type definition} at component identity, the
+// {particle} under particlesIdentical, {mixed} and {open content} field for
+// field. Two Content Types of different varieties are never identical.
+//
+// It answers ONE question, clause 1.5's: whether the residual restriction from
+// the collapsed intermediate to T is vacuous. It is not a restriction test and
+// not ·equivalent· (§3.8.6.3); see restrictionFromCollapseIsVacuous.
+func (s *Schema) contentTypesIdentical(a, b ContentType) bool {
+	switch ac := a.(type) {
+	case EmptyContent:
+		_, ok := b.(EmptyContent)
+		return ok
+	case SimpleContent:
+		bc, ok := b.(SimpleContent)
+		if !ok {
+			return false
+		}
+		return ac.SimpleType == bc.SimpleType || sameTypeDefinition(ac.SimpleType, bc.SimpleType)
+	case ElementContent:
+		bc, ok := b.(ElementContent)
+		if !ok || ac.Mixed != bc.Mixed || !openContentsIdentical(ac.OpenContent, bc.OpenContent) {
+			return false
+		}
+		return s.particlesIdentical(ac.Particle, bc.Particle)
+	default:
+		panic("xsd: contentTypesIdentical: non-exhaustive ContentType switch")
+	}
+}
+
+// openContentsIdentical decides identity between two Optional {open content}
+// records (§3.4.1): both ·absent·, or both present with the same {mode} and
+// property-identical {wildcard}s.
+func openContentsIdentical(a, b *OpenContent) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Mode() == b.Mode() && wildcardsIdentical(a.Wildcard(), b.Wildcard())
 }
 
 // pureExtensionChain reports whether every step of t's {base type definition}
-// chain, up to the ancestor whose base is ·xs:anyType·, has {derivation method}
-// = extension. A chain that leaves the complex-type graph before reaching
-// xs:anyType — an unresolvable base, or a simple one — is not one of the pure
-// chains clause 1.5's identity argument covers, so it answers false and the
-// caller's GAP applies.
+// chain, up to and including the ancestor whose base is ·xs:anyType·, has
+// {derivation method} = extension. A chain that leaves the complex-type graph
+// before reaching xs:anyType — an unresolvable base, or a simple one — is not one
+// of the pure chains clause 1.5's identity argument covers, so it answers false
+// and the caller synthesizes the collapsed intermediate instead.
+//
+// The ancestor is tested too, and deliberately: it is a step of the chain like
+// any other, and the identity argument covers the whole chain or none of it. Only
+// ·xs:anyType· itself, which baseChainToAnyType reports as its own root, has no
+// such step to test.
 func (s *Schema) pureExtensionChain(t ComplexType) bool {
-	c := t
-	for {
-		if c.Name() == anyTypeName {
-			return true // the ur-type itself terminates the walk
-		}
+	steps, a, ok := s.baseChainToAnyType(t)
+	if !ok {
+		return false
+	}
+	for _, c := range steps {
 		if c.DerivationMethod() != DerivationExtension {
 			return false
 		}
-		baseName := c.BaseTypeDefinitionName()
-		if baseName == anyTypeName {
-			return true // c IS the ancestor whose {base type definition} is ·xs:anyType·
+	}
+	return a.Name() == anyTypeName || a.DerivationMethod() == DerivationExtension
+}
+
+// baseChainToAnyType walks t's {base type definition} chain to the ancestor A
+// clause 1.5 names — "that type definition among its ancestors whose {base type
+// definition} is ·xs:anyType·" — and returns the steps from t down to but
+// EXCLUDING A, in that order, together with A itself. A is excluded because
+// clause 1.5 makes it the STARTING POINT of the two-step derivation: A's own
+// derivation from the ur-type is never re-ordered, and the collapse begins from
+// A's properties whatever method produced them.
+//
+// ok is false when the chain leaves the complex-type graph first — a base that is
+// absent, unresolvable, or a simple type definition, none of which is an ancestor
+// the clause can start from.
+//
+// It is the ONE base walk this constraint makes: pureExtensionChain reads the
+// same result for its proof and collapsedExtension for its construction, rather
+// than each walking the chain itself (STYLE T4). Like every other base walk in
+// this package it carries NO visited set, licensed by Phase B having already
+// rejected every circular chain (STYLE D4, on the licence checkComplexDerivations
+// states in full); ·xs:anyType·'s
+// self-derivation, the one §3.4.7 permits and no acyclicity check can remove,
+// terminates it by the explicit name test rather than by a guard.
+func (s *Schema) baseChainToAnyType(t ComplexType) (steps []ComplexType, a ComplexType, ok bool) {
+	c := t
+	for {
+		if c.Name() == anyTypeName {
+			return steps, c, true // the ur-type itself is its own root (§3.4.7)
 		}
+		if c.BaseTypeDefinitionName() == anyTypeName {
+			return steps, c, true // c IS the ancestor whose {base type definition} is ·xs:anyType·
+		}
+		steps = append(steps, c)
 		next, ok := s.baseComplexType(c)
 		if !ok {
-			return false
+			return nil, ComplexType{}, false
 		}
 		c = next
 	}
