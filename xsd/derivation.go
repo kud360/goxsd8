@@ -96,11 +96,13 @@ const (
 	// a base {value} of optional may be narrowed.
 	ruleTimezoneValidRestriction xsderr.Rule = "timezone-valid-restriction"
 	// ruleLengthMinLengthMaxLength is "length and minLength or maxLength"
-	// (§4.3.1.4, id="length-minLength-maxLength"), a same-type consistency SCC
-	// (not restriction-specific): when length is in {facets}, any coexisting
-	// minLength may not exceed it and any coexisting maxLength may not fall below
-	// it. Only clauses 1.1 and 2.1 are charged here; see checkLengthCoexistence
-	// for the deferred derivation-history clauses 1.2 and 2.2.
+	// (§4.3.1.4, id="length-minLength-maxLength"): when length is in {facets},
+	// any coexisting minLength may not exceed it and any coexisting maxLength may
+	// not fall below it (clauses 1.1/2.1, checkLengthCoexistence), and length and
+	// that coexisting minLength/maxLength may not have been specified together at
+	// one derivation step (clauses 1.2/2.2, checkLengthDerivationHistory, which
+	// declines the strictest reading of those two clauses under a tracked GAP).
+	// All four clauses are charged.
 	ruleLengthMinLengthMaxLength xsderr.Rule = "length-minLength-maxLength"
 	// ruleMinLengthLEMaxLength is "minLength <= maxLength" (§4.3.2.4,
 	// id="minLength-less-than-equal-to-maxLength"), a same-type consistency SCC.
@@ -139,10 +141,17 @@ const (
 //   - the count- and token-valued §4.3 facet Schema Component Constraints
 //     (length/minLength/maxLength/totalDigits/fractionDigits valid restriction,
 //     whiteSpace valid restriction, timezone valid restriction, and the
-//     same-type consistency SCCs minLength ≤ maxLength, fractionDigits ≤
-//     totalDigits, and length-minLength-maxLength) — via checkFacetRestrictions.
-//     These are the part of cos-st-restricts clause 1.3.2 / 2.2.2.5 / 3.2.2.5
-//     decidable without a value space.
+//     consistency SCCs minLength ≤ maxLength and fractionDigits ≤ totalDigits)
+//     — via checkFacetRestrictions. These are the part of cos-st-restricts
+//     clause 1.3.2 / 2.2.2.5 / 3.2.2.5 decidable without a value space.
+//   - length-minLength-maxLength (§4.3.1.4) in FULL, also via
+//     checkFacetRestrictions: clauses 1.1/2.1, the same-{facets} value ordering,
+//     in checkLengthCoexistence, and clauses 1.2/2.2, the derivation-history
+//     demand that length and the coexisting minLength/maxLength not be specified
+//     at one step, in checkLengthDerivationHistory (which carries a GAP for the
+//     strictest reading of those two clauses). 1.2/2.2 were deferred until the
+//     base chain modeled every ·restriction· step the clause quantifies over,
+//     including #319's anonymous intermediate list.
 //   - the list- and union-variety applicable-facet sets, cos-st-restricts
 //     clauses 2.2.2.4 and 3.2.2.4 — via checkVarietyApplicableFacets, whose
 //     applicable sets are the fixed literals cos-applicable-facets (§4.1.5)
@@ -815,13 +824,23 @@ func checkTimezoneRestriction(loc xsderr.Loc, t *SimpleType, baseEff []Effective
 		ownV, baseV, ruleTimezoneValidRestriction)
 }
 
-// checkFacetConsistency charges the same-type count-facet consistency SCCs.
-// They are NOT restriction-specific — each constrains any single type's
-// {facets} — so they run against t's OWN effective {facets} after overlay, the
+// checkFacetConsistency charges the count-facet consistency SCCs. They are NOT
+// restriction-specific — each constrains any single type's {facets} — so they
+// run against t's OWN effective {facets} after overlay, the
 // checkScaleConsistency shape.
+//
+// length-minLength-maxLength is the one SCC in the group that does not fit that
+// shape whole: its clauses 1.2/2.2 ask which DERIVATION STEP specified what, so
+// checkLengthDerivationHistory takes t as well as the overlaid facets. It is
+// called here rather than beside the *-valid-restriction checks because it is
+// one half of the same SCC as checkLengthCoexistence, and because it constrains
+// t even when t declares no own facet of either kind.
 func checkFacetConsistency(loc xsderr.Loc, t *SimpleType) error {
 	eff := t.EffectiveFacets()
 	if err := checkLengthCoexistence(loc, eff); err != nil {
+		return err
+	}
+	if err := checkLengthDerivationHistory(loc, t, eff); err != nil {
 		return err
 	}
 	if err := checkCountOrder(loc, eff, FacetMinLength, FacetMaxLength,
@@ -865,15 +884,10 @@ func checkCountOrder(loc xsderr.Loc, eff []EffectiveFacet, lower, upper FacetKin
 // {facets}, a coexisting minLength may not exceed it and a coexisting maxLength
 // may not fall below it.
 //
-// DEFERRED, deliberately: clauses 1.2 and 2.2, which additionally demand that
-// the coexisting minLength/maxLength be INHERITED — "there is some type
-// definition from which this one is derived by one or more ·restriction· steps
-// in which minLength has the same {value} and length is not specified". That is
-// a derivation-HISTORY predicate over the whole base chain, not a property of
-// {facets}, and it makes newly introducing length beside minLength at one step
-// an error even when the values are consistent. It is a materially different
-// (and much sharper) rejection than 1.1/2.1 and is left to its own change so its
-// interaction with the existing corpora can be judged on its own evidence.
+// The same SCC's clauses 1.2 and 2.2 are a derivation-HISTORY predicate over the
+// whole base chain rather than a property of one type's {facets}, so they are a
+// separate check on a separate input: checkLengthDerivationHistory, which needs
+// the type itself and not only its effective facets.
 func checkLengthCoexistence(loc xsderr.Loc, eff []EffectiveFacet) error {
 	lengthF, ok := findEffectiveFacet(eff, FacetLength)
 	if !ok {
@@ -908,6 +922,130 @@ func checkLengthCoexistence(loc xsderr.Loc, eff []EffectiveFacet) error {
 	return xsderr.New(ruleLengthMinLengthMaxLength, loc,
 		"simple type {facets} has length {value} %d greater than maxLength {value} %d (%s clause 2.1)",
 		lengthV, maxV, ruleLengthMinLengthMaxLength)
+}
+
+// checkLengthDerivationHistory charges "length and minLength or maxLength"
+// (§4.3.1.4, id="length-minLength-maxLength") clauses 1.2 and 2.2, the
+// derivation-history half of the SCC whose same-{facets} half (1.1/2.1)
+// checkLengthCoexistence charges. When length is in {facets}, a coexisting
+// minLength is an error unless "there is some type definition from which this
+// one is derived by one or more ·restriction· steps in which minLength has the
+// same {value} and length is not specified" (clause 1.2), and mirror-image for
+// maxLength (clause 2.2). Its effect is that length and a minLength/maxLength
+// may not be SPECIFIED TOGETHER at one derivation step, however consistent their
+// two values are — which is exactly how the XSD 1.0 erratum that introduced
+// these clauses (E2-35) summarizes itself, and how the W3C suite's errF001
+// testGroup annotation quotes it: "length facet is now allowed with either
+// minLength or maxLength if they are specified in different derivation steps".
+//
+// The steps quantified over are every hop of the {base type definition} chain,
+// not only facet-based <restriction> hops: §2.4.3's ·restriction· is the
+// value/lexical-space-subset relation, whose Note records that ·construction· by
+// ·list· or ·union· produces restrictions of the base type too, and ·derived·
+// (dt-derived) is defined purely as that chain. So the walk here is
+// EffectiveFacets's own base-chain walk with no hop kind special-cased — an
+// anonymous intermediate list is a step like any other, and list being one of
+// the two varieties this SCC governs (cos-applicable-facets), a candidate match
+// rather than an inert pass-through. Union steps are walked through but can
+// never match: the length family is not applicable to a union, so no union
+// carries the facet the clause asks for.
+func checkLengthDerivationHistory(loc xsderr.Loc, t *SimpleType, eff []EffectiveFacet) error {
+	if _, ok := findEffectiveFacet(eff, FacetLength); !ok {
+		return nil
+	}
+	if err := checkLengthFreeStep(loc, t, eff, FacetMinLength, ruleMinLengthValidRestriction, "1.2"); err != nil {
+		return err
+	}
+	return checkLengthFreeStep(loc, t, eff, FacetMaxLength, ruleMaxLengthValidRestriction, "2.2")
+}
+
+// checkLengthFreeStep runs one side of checkLengthDerivationHistory: kind is
+// FacetMinLength (clause 1.2) or FacetMaxLength (clause 2.2), valueRule is the
+// rule a malformed {value} on that facet is charged under (countValue's
+// convention), and clause names the clause in the rejection. It is vacuous when
+// kind is not in force at all — the clause only constrains a minLength/maxLength
+// that actually coexists with length.
+//
+// It searches for a step of t's derivation at which the facet already had the
+// {value} it has now and length was NOT SPECIFIED, walking t's base chain
+// most-derived first. Two readings of the clause's wording are load-bearing, and
+// both are resolved in the ACCEPTING direction — see the GAP below:
+//
+//   - "has the same {value}" is read against the candidate's {facets}, the only
+//     facet set a component has (§4.1.1, overlaid per §3.16.6.4) — its
+//     EffectiveFacets. The walk therefore stops at the first candidate that
+//     cannot be in the clause's same-{value} span: one where the kind is absent
+//     (the overlay never removes a facet kind, so nothing above it has the kind
+//     either), or one whose {value} differs (minLength may only grow and
+//     maxLength only shrink across a step per their valid-restriction SCCs, so
+//     the same-{value} candidates are a contiguous prefix of the walk). "minLength
+//     exists somewhere above" is emphatically not the predicate.
+//   - "length is not specified" is read against the candidate's OWN facets — the
+//     directly-specified set S of §3.16.6.4, not the overlay. The clause says
+//     "specified" here where it says "is a member of {facets}" everywhere else,
+//     and it is the reading the erratum's own "in different derivation steps"
+//     summary states: a step that inherits length without restating it did not
+//     specify it.
+//
+// t itself is a candidate step for the same reason. No cycle guard is needed or
+// wanted (STYLE D4): {base} is unexported and demanded live at construction, so
+// the chain is acyclic by construction.
+//
+// GAP(xsd): the two readings above make this check REJECT LESS than the
+// strictest reading of clauses 1.2/2.2 — one that admits only STRICT ancestors
+// as candidates and reads "length is not specified" against the overlay. Under
+// that stricter reading a minLength/maxLength introduced at or below the step
+// that introduced length is also an error, so a schema deriving st2 from
+// st = string(length=5) by adding maxLength=5 would be rejected. It is not
+// rejected here. That shape is the W3C suite's MS-Errata102006-07-15/errF001,
+// which the suite declares VALID while flagging its own expectation
+// status="queried" against W3C bug 4681 since 2007-06-21 — i.e. the one
+// published fixture bearing on the divergence reads it the accepting way, and
+// the erratum's prose agrees with it, so the stricter reading is not adopted
+// without an oracle grounding that reaches this fixture.
+//
+// The withheld rejection is an UNDER-rejection for every consumer of this
+// error, so no valid schema can be false-rejected by it. The error returned here
+// reaches exactly one place — checkFacetConsistency -> checkFacetRestrictions ->
+// checkSTGraph — and a non-nil checkSTGraph return is the only thing any caller
+// ever sees of it. Its readers are the two constructors NewSimpleType and
+// NewPrimitiveType, which return it verbatim; through them,
+// parser.producer.constructSimpleType (which returns it as the schema document's
+// rejection), builtin.Seed's build closure and builtin.interposeListBase (which
+// fail Seed with it), and any library caller of those two exported
+// constructors; and downstream conformance.execSchemaCase, which scores a nil
+// error as "observed valid". Every one of them reads a WITHHELD error as a
+// schema ACCEPTED that a stricter processor rejects; not one of them treats a
+// missing error as grounds to reject anything, so the gap cannot turn into a
+// false reject at any of them.
+func checkLengthFreeStep(loc xsderr.Loc, t *SimpleType, eff []EffectiveFacet, kind FacetKind, valueRule xsderr.Rule, clause string) error {
+	inForce, ok := findEffectiveFacet(eff, kind)
+	if !ok {
+		return nil
+	}
+	want, err := countValue(inForce, loc, valueRule)
+	if err != nil {
+		return err
+	}
+	for s := t; s != nil; s = s.base {
+		stepF, has := findEffectiveFacet(s.EffectiveFacets(), kind)
+		if !has {
+			break
+		}
+		stepV, err := countValue(stepF, loc, valueRule)
+		if err != nil {
+			return err
+		}
+		if stepV != want {
+			break
+		}
+		if _, specified := findFacet(s.ownFacets, FacetLength); !specified {
+			return nil
+		}
+	}
+	return xsderr.New(ruleLengthMinLengthMaxLength, loc,
+		"simple type {facets} has length alongside %s {value} %d, but every derivation step at which %s held that {value} also specified length (%s clause %s)",
+		kind, want, kind, ruleLengthMinLengthMaxLength, clause)
 }
 
 // checkVarietyApplicableFacets enforces cos-st-restricts clauses 2.2.2.4 (list)
