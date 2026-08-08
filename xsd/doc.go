@@ -97,6 +97,21 @@
 // This section is shipped surface — see the package Examples for the
 // construct → Finalize → query sequence.
 //
+// # Mapping rules
+//
+// One §3.4.2 mapping rule is exported, and only because it has two
+// callers on opposite sides of the parse/finalize line:
+// ExtensionContentType is Structures §3.4.2.3.3 clause 4.2, the merge of
+// a base's {content type} with an extension's ·effective content·. The
+// producer applies it to one <extension> element at parse time;
+// cos-ct-extends clause 1.5 applies it repeatedly at finalize, over a
+// derivation chain re-ordered into an order no schema document
+// expresses. It takes its <group ref> lookup as a parameter because
+// those two callers resolve one differently, not because it is an
+// extension point. Every other mapping rule this package completes —
+// the §3.4.2.4 clause 3 and §3.4.2.5 clause 2 folds, and this one's
+// structural inverse — stays in-package (T5).
+//
 // # Value spaces
 //
 // A few finalize-time constraints reach into a value space. Two COMPARE
