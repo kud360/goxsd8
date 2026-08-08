@@ -170,7 +170,8 @@ const (
 	FacetMinLength
 	// FacetMaxLength is the "maxLength" facet (§4.3.3).
 	FacetMaxLength
-	// FacetPattern is the "pattern" facet (§4.3.4). It has no {fixed}.
+	// FacetPattern is the "pattern" facet (§4.3.4). It has no {fixed}; for how
+	// its multiple {value} members combine, see Facet.Values.
 	FacetPattern
 	// FacetEnumeration is the "enumeration" facet (§4.3.5). It has no {fixed}.
 	FacetEnumeration
@@ -383,6 +384,22 @@ func (f Facet) Kind() FacetKind {
 // DERIVED from the members' Lexical() forms (STYLE D3 — not stored twice), so an
 // existing consumer that only reads Values keeps its behavior; a consumer that
 // also needs each member's namespace context reads EnumerationMembers instead.
+//
+// For a pattern facet (Kind() == FacetPattern) the values are ALTERNATIVE
+// branches ORed with one another: they are the <pattern> siblings declared at
+// ONE derivation step, and a literal satisfies this facet when it matches ANY
+// of them. AND-ing happens ACROSS facets, never within one — patterns declared
+// at DIFFERENT derivation steps stay separate FacetPattern entries in
+// EffectiveFacets, and a literal is pattern-valid only if EVERY one of those
+// entries accepts it (cvc-pattern-valid, §4.3.4.4). That is deliberately the
+// mirror image of the literal {value} encoding of §4.3.4.2 (xr-pattern), which
+// first joins same-step siblings into ONE regex with "|", so that a
+// multi-member {value} can only have come from union ACROSS steps; a reader
+// carrying that encoding over to Values would read a multi-member result as
+// ANDed, which inverts its meaning. The two encodings accept exactly the same
+// literals because XSD pattern regexes are implicitly whole-string anchored,
+// which makes matching the single branch-set "a|b" the same as matching "a" or
+// matching "b" (equivalence established on #214).
 func (f Facet) Values() []string {
 	if f.kind == FacetEnumeration {
 		if len(f.members) == 0 {
