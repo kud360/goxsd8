@@ -149,16 +149,35 @@ func (s *Schema) checkSimpleBaseIsExtension(c ComplexType) error {
 // extension of B declaring that name itself would collide with it and be rejected
 // here for a duplicate its source never wrote (#401).
 func checkAttributeUseNamesUnique(c ComplexType) error {
+	name, duplicate := duplicateAttributeUseName(c.attributeUses)
+	if !duplicate {
+		return nil
+	}
+	return xsderr.New(ruleCTPropsCorrect, xsderr.Loc{},
+		"complex type %s has two {attribute uses} whose {attribute declaration}s share the expanded name %s, but ct-props-correct clause 4 forbids it", c.Name(), name)
+}
+
+// duplicateAttributeUseName reports the FIRST expanded name that two members of
+// an {attribute uses} set share, scanning in document order so the reported
+// duplicate is deterministic and the map never determines the verdict (STYLE
+// D2/D1).
+//
+// It takes the set rather than the Complex Type Definition because it has two
+// consumers over one scan (STYLE T4): ct-props-correct clause 4 above, which
+// charges a REAL type, and cos-ct-extends clause 1.5, which asks the same
+// question of the synthesized collapsed intermediate and charges its OWN rule at
+// the extending type's position — a synthetic component may not be named in a
+// verdict (checkExtensionTwoStepDerivable).
+func duplicateAttributeUseName(uses []AttributeUse) (QName, bool) {
 	seen := map[QName]bool{}
-	for _, u := range c.attributeUses {
+	for _, u := range uses {
 		name := attributeUseName(u)
 		if seen[name] {
-			return xsderr.New(ruleCTPropsCorrect, xsderr.Loc{},
-				"complex type %s has two {attribute uses} whose {attribute declaration}s share the expanded name %s, but ct-props-correct clause 4 forbids it", c.Name(), name)
+			return name, true
 		}
 		seen[name] = true
 	}
-	return nil
+	return QName{}, false
 }
 
 // checkComplexTypeRestriction runs derivation-ok-restriction (§3.4.6.3) for one

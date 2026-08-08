@@ -149,6 +149,45 @@ func inheritAttributeUses(own, base []AttributeUse, method DerivationMethod, pro
 	return folded
 }
 
+// ownAttributeUses inverts inheritAttributeUses' EXTENSION branch: given an
+// extension-derived Complex Type Definition c and its resolved {base type
+// definition} b, both with §3.4.2.4 clause 3 already folded into them, it
+// recovers the uses clauses 1 and 2 gave c ITSELF — what the producer mapped from
+// c's own <attribute> and <attributeGroup ref> children, before clause 3 folded
+// the base's in. cos-ct-extends clause 1.5's collapse needs it, because the
+// re-ordering re-applies each extension step's own contribution against a
+// DIFFERENT base (collapsedintermediate.go).
+//
+// The recovery is POSITIONAL and exact. inheritAttributeUses builds
+//
+//	folded(c) = own(c) ++ folded(b)
+//
+// as a value SEQUENCE — the extension branch appends every member of the base
+// set unconditionally, in order, after a copy of own — so own(c) is precisely the
+// leading len(folded(c)) - len(folded(b)) members. Each step folds against its
+// own immediate base alone, so no history perturbs the arithmetic: for
+// A ←ext E1 ←restr R ←ext E2 the identity holds for E2 over R whatever R dropped.
+//
+// THIS IS A COUPLING TO inheritAttributeUses' EXACT CONCATENATION ORDER, not to
+// the set it produces. A fold that put the base's members first, or interleaved
+// them, would silently make this recovery return the wrong prefix — so the tail
+// is VERIFIED against folded(b) name for name before the prefix is trusted, and a
+// mismatch DECLINES (false) rather than guessing. Any edit to the extension
+// branch of inheritAttributeUses is an edit here, and
+// TestOwnAttributeUsesMixedChain is what fails when only one of the two moves.
+func ownAttributeUses(c, b ComplexType) ([]AttributeUse, bool) {
+	if len(c.attributeUses) < len(b.attributeUses) {
+		return nil, false
+	}
+	ownCount := len(c.attributeUses) - len(b.attributeUses)
+	for i, u := range b.attributeUses {
+		if attributeUseName(c.attributeUses[ownCount+i]) != attributeUseName(u) {
+			return nil, false
+		}
+	}
+	return c.attributeUses[:ownCount], true
+}
+
 // hasAttributeUseNamed reports whether the set already carries an attribute use
 // for the expanded name, reusing the one document-order scan every other consumer
 // takes (STYLE T4).

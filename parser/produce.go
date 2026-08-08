@@ -176,8 +176,9 @@ type symbols struct {
 	// order (§3.1.3: "forward reference to named definitions and declarations is
 	// allowed"). Only one mapping rule consults it — §3.4.2.3.3 clause 4.2.3's
 	// sub-case test, which must know the {compositor} of the Model Group a
-	// <group ref> ·base particle· resolves to (allGroupOf); every OTHER <group ref>
-	// stays an unresolved ModelGroupRef until finalize (produceGroupRefParticle).
+	// <group ref> ·base particle· resolves to (xsd.ExtensionContentType, through
+	// resolveModelGroup); every OTHER <group ref> stays an unresolved
+	// ModelGroupRef until finalize (produceGroupRefParticle).
 	//
 	// The owning producer is carried for both reasons attributeGroups carries one:
 	// a <group> body holds local <element> declarations, whose {target namespace}
@@ -915,7 +916,8 @@ func (p *producer) buildModelGroupDefinition(name xsd.QName, el *Element) (xsd.M
 //
 // It is deliberately NOT the general <group ref> resolution — that stays
 // finalize's (produceGroupRefParticle keeps the reference deferred). Its one
-// caller is allGroupOf, whose §3.4.2.3.3 clause 4.2.3 sub-case test must know the
+// caller is xsd.ExtensionContentType, to which it is passed as the group-lookup
+// callback, and whose §3.4.2.3.3 clause 4.2.3 sub-case test must know the
 // {compositor} behind a ·base particle· or ·effective content· BEFORE the
 // {content type} is synthesized, which is at produce time and nowhere else.
 //
