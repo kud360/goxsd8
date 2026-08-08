@@ -122,7 +122,7 @@ func TestEffectiveWhiteSpaceNoFacetPanics(t *testing.T) {
 	_, _ = effectiveWhiteSpace(bare)
 }
 
-// TestEffectiveWhiteSpaceListNoFacetPanics confirms the no-usable-mode panic is
+// TestEffectiveWhiteSpaceListNoUsableModePanics confirms the no-usable-mode panic is
 // LIST as well as atomic: a list-variety type with no whiteSpace mode in force
 // is still a construction bug, never the relaxed union outcome. This is the
 // mutation guard proving the relaxation is union-ONLY, not "any non-atomic
@@ -137,7 +137,7 @@ func TestEffectiveWhiteSpaceNoFacetPanics(t *testing.T) {
 // §4.3.6.4's restriction SCC deliberately leaves an out-of-domain {value} to the
 // normalization stage here (STYLE E2) — and effectiveWhiteSpace collapses all
 // three no-usable-mode states onto this one panic, so it guards the same branch.
-func TestEffectiveWhiteSpaceListNoFacetPanics(t *testing.T) {
+func TestEffectiveWhiteSpaceListNoUsableModePanics(t *testing.T) {
 	item := primType(t, "string", "preserve")
 	constructed, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "goodList"},
 		xsd.NewList(item), xsd.AnySimpleType(),
@@ -153,7 +153,7 @@ func TestEffectiveWhiteSpaceListNoFacetPanics(t *testing.T) {
 	}
 	defer func() {
 		if recover() == nil {
-			t.Error("effectiveWhiteSpace(list, no whiteSpace facet): want panic, got none")
+			t.Error("effectiveWhiteSpace(list, unrecognized whiteSpace {value}): want panic, got none")
 		}
 	}()
 	_, _ = effectiveWhiteSpace(list)

@@ -921,15 +921,19 @@ func checkLengthCoexistence(loc xsderr.Loc, eff []EffectiveFacet) error {
 // list/union), and the two varieties are therefore scoped differently here:
 //
 //   - LIST runs unconditionally, including on a freshly-constructed list.
-//     cos-applicable-facets constrains {facets} unconditionally, and the
-//     constructed-list clause that would otherwise cover it, 2.2.1.2, is still
-//     otherwise deferred (see checkSTGraph) — so running the §4.1.5 set there
-//     keeps a freshly-constructed list's facets checked at all, rather than
-//     unchecked. On that path the rejection is CHARGED UNDER 2.2.1.2, the clause
-//     the spec's case split actually selects (applicableClause): 2.2.1.2 admits
-//     only a fixed collapse whiteSpace facet, so every facet this check rejects
-//     there — none of which is whiteSpace — violates it too, and naming 2.2.2.4
-//     would name a clause not in force (STYLE E2).
+//     cos-applicable-facets constrains {facets} unconditionally. On a
+//     freshly-constructed list the clause that covers {facets}, 2.2.1.2, is
+//     itself CHARGED — in checkListGraph, by checkConstructedListFacets, whose
+//     closed-set test is strictly stronger than this one. This site is not
+//     redundant with it: checkSTGraph runs checkVarietyApplicableFacets before
+//     checkListGraph, so a facet that is inapplicable to a list at all is
+//     rejected here, reported as an applicability violation rather than as a
+//     closed-set shape violation. On that path the rejection is likewise
+//     CHARGED UNDER 2.2.1.2, the clause the spec's case split actually selects
+//     (applicableClause): 2.2.1.2 admits only a fixed collapse whiteSpace
+//     facet, so every facet this check rejects there — none of which is
+//     whiteSpace — violates it too, and naming 2.2.2.4 would name a clause not
+//     in force (STYLE E2).
 //   - UNION skips a freshly-constructed one (B is xs:anySimpleType). There the
 //     spec's own branch is 3.2.1, whose clause 3.2.1.2 checkUnionGraph charges —
 //     and it is STRICTLY stronger, rejecting every facet rather than only the
