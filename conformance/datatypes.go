@@ -318,9 +318,11 @@ import (
 // <xsd:enumeration> children (boolean018 enumerates 0/1 on comp_foo and true/false
 // on simpleTest; the other thirteen are facet-free). Because comp_foo and simpleTest can
 // carry DIFFERENT own facets, execListCase reads each element's type graph
-// independently (readListCohortCase), synthesizing one leaf per tested element
-// (the item type as {item type definition}, xs:anySimpleType as base, the
-// mandatory fixed whiteSpace=collapse §4.3.6.1 plus any enumeration as own facets)
+// independently (readListCohortCase), synthesizing the fixture's TWO derivation
+// steps per tested element — an anonymous constructed list over the item type
+// with xs:anySimpleType as base and the mandatory fixed whiteSpace=collapse
+// §4.3.6.1 as its whole {facets} (cos-st-restricts clause 2.2.1.2), then the
+// named leaf restricting it and carrying any enumeration —
 // and deciding every tested value through the ordinary value.ValidateLexical
 // pipeline. That pipeline resolves a list-variety type end to end (issue #75):
 // value.governingMapping wraps the item TYPE in a generic list mapping
@@ -1104,13 +1106,18 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 		if !strictGoverns(backend, item) {
 			return Fail()
 		}
-		ownFacets, ok := buildListOwnFacets(lt.children)
+		ownFacets, ok := buildListRestrictionFacets(lt.children)
 		if !ok {
+			return Fail()
+		}
+		constructed, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{},
+			xsd.NewList(item), xsd.AnySimpleType(), constructedListFacets(), nil)
+		if err != nil {
 			return Fail()
 		}
 		leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 			xsd.QName{Space: synthNS, Local: "myList-" + lt.itemType},
-			xsd.NewList(item), xsd.AnySimpleType(), ownFacets, nil)
+			xsd.NewList(item), constructed, ownFacets, nil)
 		if err != nil {
 			return Fail()
 		}
@@ -1130,11 +1137,28 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 	return Fail()
 }
 
-// buildListOwnFacets translates a list leaf restriction's facet children into
-// its own facets. It always starts with the fixed whiteSpace=collapse facet
-// EVERY list carries (§4.3.6.1 f-w-fixed) — mandatory here because this cohort
-// does not route through the generated builtin table, and value.effectiveWhiteSpace
-// panics on a list-variety type whose EffectiveFacets carry no whiteSpace entry.
+// constructedListFacets is the {facets} of a CONSTRUCTED list — the
+// <list itemType=..> step itself, whose {base type definition} is
+// xs:anySimpleType. Structures §3.16.2.1 map.std.common case 3 manufactures
+// exactly one member there, the whiteSpace facet with {value} = collapse and
+// {fixed} = true (§4.3.6.1 f-w-fixed), and cos-st-restricts clause 2.2.1.2
+// admits nothing else. It is spelled here because this cohort does not route
+// through the generated builtin table, and value.effectiveWhiteSpace panics on a
+// list-variety type with no whiteSpace mode in force.
+func constructedListFacets() []xsd.Facet {
+	return []xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}
+}
+
+// buildListRestrictionFacets translates a list leaf restriction's facet children
+// into the own facets of the SECOND derivation step — the <restriction base=..>
+// hop over the constructed list, which is where the fixtures actually write
+// them (boolean018.xsd: <simpleType name="myList"><list itemType="xsd:boolean"/>
+// then <restriction base="myList"><enumeration …>). The two steps must stay
+// apart: a constructed list may carry nothing but constructedListFacets
+// (cos-st-restricts clause 2.2.1.2), and the enumeration belongs to the
+// restricting type anyway, so this is the spec-accurate shape as well as the
+// constructible one.
+//
 // Each enumeration child is collected via the shared enumerationMember helper and
 // folded into one xsd.NewEnumerationFacet (§4.3.5.4); the fixtures' item types
 // (boolean/float/anyURI/hexBinary/base64Binary/duration and the seven integer-family
@@ -1142,8 +1166,9 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 // so an enumeration member needs no namespace context (facetChild.bindings is
 // nil here). Any non-enumeration facet kind is declined (ok=false), the cohort's
 // honest-decline convention — no other facet kind appears in these fourteen fixtures.
-func buildListOwnFacets(children []facetChild) ([]xsd.Facet, bool) {
-	facets := []xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}
+// No enumeration child yields no own facets, a restriction step that narrows
+// nothing.
+func buildListRestrictionFacets(children []facetChild) ([]xsd.Facet, bool) {
 	var enumMembers []xsd.EnumerationMember
 	for _, ch := range children {
 		if ch.name != "enumeration" {
@@ -1151,10 +1176,10 @@ func buildListOwnFacets(children []facetChild) ([]xsd.Facet, bool) {
 		}
 		enumMembers = append(enumMembers, enumerationMember(ch))
 	}
-	if len(enumMembers) > 0 {
-		facets = append(facets, xsd.NewEnumerationFacet(enumMembers))
+	if len(enumMembers) == 0 {
+		return nil, true
 	}
-	return facets, true
+	return []xsd.Facet{xsd.NewEnumerationFacet(enumMembers)}, true
 }
 
 // execFacetsCase decides a facet-cohort case: it synthesizes the schema's
@@ -1488,11 +1513,7 @@ func buildD34Type(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, decl
 		if !ok {
 			return nil, false
 		}
-		ownFacets, ok := buildListOwnFacets(nil)
-		if !ok {
-			return nil, false
-		}
-		return newD34SimpleType(name, xsd.NewList(item), xsd.AnySimpleType(), ownFacets)
+		return newD34SimpleType(name, xsd.NewList(item), xsd.AnySimpleType(), constructedListFacets())
 	}
 	if decl.Union != nil {
 		members, ok := d34UnionMembers(backend, sym, decls, built, key, *decl.Union)
@@ -1739,6 +1760,13 @@ func normalizeWhiteSpace(prim, raw string) string {
 
 // whiteSpaceOf returns the spec whiteSpace value for a primitive, from the
 // generated builtin table (never hand-typed); "" if the primitive is unknown.
+//
+// Reading the row's OWN whiteSpace value is enough because prim always names a
+// type the backend maps DIRECTLY (every parseOK call site gates on
+// backend.Mapping), and strict maps only atomic primitives. The three
+// list-variety builtins — whose rows deliberately carry no own whiteSpace value,
+// since it belongs to their anonymous intermediate list (§3.16.2.1 case 3) — are
+// unmapped and so never reach here.
 func whiteSpaceOf(prim string) string {
 	for _, t := range builtin.Types {
 		if t.Name != prim {

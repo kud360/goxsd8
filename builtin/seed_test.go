@@ -242,6 +242,91 @@ func TestSeedListVarietyWired(t *testing.T) {
 	}
 }
 
+// TestSeedListTwoStepDerivation pins the two-step derivation Datatypes §3.4.5/
+// §3.4.10/§3.4.12 define for the three list builtins: an ANONYMOUS list over the
+// singular item type is defined first, and the named plural type restricts THAT
+// — it is not a one-step list off xs:anySimpleType. The anonymous node's whole
+// {facets} is whiteSpace = collapse with {fixed} = true (§3.16.2.1 map.std.common
+// case 3, the only set cos-st-restricts clause 2.2.1.2 admits) and the named
+// type's own {facets} is minLength = 1, UNFIXED (§3.4.5.1 permits a further
+// restriction to raise it).
+func TestSeedListTwoStepDerivation(t *testing.T) {
+	types, err := builtin.Seed(allPrimitives())
+	if err != nil {
+		t.Fatalf("Seed: %v", err)
+	}
+	idx := byName(types)
+	for _, tc := range []struct{ plural, item string }{
+		{"NMTOKENS", "NMTOKEN"},
+		{"IDREFS", "IDREF"},
+		{"ENTITIES", "ENTITY"},
+	} {
+		t.Run(tc.plural, func(t *testing.T) {
+			named := idx[tc.plural]
+			if named == nil {
+				t.Fatalf("xs:%s is not seeded", tc.plural)
+			}
+			anon := named.Base()
+			if anon == nil || anon == xsd.AnySimpleType() {
+				t.Fatalf("xs:%s {base type definition} = %v, want the anonymous intermediate list", tc.plural, anon)
+			}
+			if got := anon.Name(); got != (xsd.QName{}) {
+				t.Errorf("intermediate list {name} = %v, want absent (the zero QName)", got)
+			}
+			if anon.Base() != xsd.AnySimpleType() {
+				t.Errorf("intermediate list {base type definition} = %v, want xs:anySimpleType", anon.Base())
+			}
+			lst, ok := anon.Variety().(xsd.List)
+			if !ok {
+				t.Fatalf("intermediate {variety} = %T, want xsd.List", anon.Variety())
+			}
+			if lst.Item() != idx[tc.item] {
+				t.Errorf("intermediate {item type definition} = %v, want the shared xs:%s node", lst.Item(), tc.item)
+			}
+			own := anon.OwnFacets()
+			if len(own) != 1 || own[0].Kind() != xsd.FacetWhiteSpace {
+				t.Fatalf("intermediate own facets = %v, want exactly one whiteSpace facet (cos-st-restricts 2.2.1.2)", own)
+			}
+			if vals := own[0].Values(); len(vals) != 1 || vals[0] != "collapse" {
+				t.Errorf("intermediate whiteSpace values = %v, want [collapse]", vals)
+			}
+			if fixed, ok := own[0].Fixed(); !ok || !fixed {
+				t.Errorf("intermediate whiteSpace must be fixed")
+			}
+
+			namedOwn := named.OwnFacets()
+			if len(namedOwn) != 1 || namedOwn[0].Kind() != xsd.FacetMinLength {
+				t.Fatalf("xs:%s own facets = %v, want exactly one minLength facet", tc.plural, namedOwn)
+			}
+			if vals := namedOwn[0].Values(); len(vals) != 1 || vals[0] != "1" {
+				t.Errorf("xs:%s minLength values = %v, want [1]", tc.plural, vals)
+			}
+			if fixed, ok := namedOwn[0].Fixed(); !ok || fixed {
+				t.Errorf("xs:%s minLength must NOT be fixed (§3.4.5.1)", tc.plural)
+			}
+		})
+	}
+}
+
+// TestSeedExcludesAnonymousIntermediates pins the returned slice's contract
+// against the graph change: the anonymous intermediate lists are components of
+// the seeded graph but NOT members of the result, which stays exactly
+// len(Types)+1 with every member named.
+func TestSeedExcludesAnonymousIntermediates(t *testing.T) {
+	types, err := builtin.Seed(allPrimitives())
+	if err != nil {
+		t.Fatalf("Seed: %v", err)
+	}
+	if len(types) != len(builtin.Types)+1 {
+		t.Fatalf("Seed returned %d components, want len(Types)+1 = %d", len(types), len(builtin.Types)+1)
+	}
+	for i, st := range types {
+		if st.Name() == (xsd.QName{}) {
+			t.Errorf("Seed result[%d] has an absent {name}; anonymous intermediates must not be returned", i)
+		}
+	}
+}
+
 func TestSeedFacetsAttached(t *testing.T) {
 	types, err := builtin.Seed(allPrimitives())
 	if err != nil {

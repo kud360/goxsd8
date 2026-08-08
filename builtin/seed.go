@@ -43,8 +43,10 @@ func (e *MissingPrimitivesError) Error() string {
 //
 // The result is deterministic and holds exactly len(Types)+1 elements in this
 // fixed order (STYLE D2): xs:anySimpleType first, then one component per row of
-// Types in Types order. xs:anySimpleType has no row in Types (it has no facets
-// and cannot be a restriction base, §3.2.1.3), so Seed prepends it. Its
+// Types in Types order — one element per row and nothing else, so the anonymous
+// intermediate lists described below are NOT in it. xs:anySimpleType has no row
+// in Types (it has no facets and cannot be a restriction base, §3.2.1.3), so
+// Seed prepends it. Its
 // xs:anySimpleType and xs:anyAtomicType nodes are the canonical shared
 // singletons from package xsd ([xsd.AnySimpleType]/[xsd.AnyAtomicType]), so
 // every primitive's {base type definition} is the one xs:anyAtomicType identity
@@ -64,6 +66,18 @@ func (e *MissingPrimitivesError) Error() string {
 // at its primitive ancestor; a primitive datatype's own {primitive type
 // definition} is itself, wired via [xsd.NewPrimitiveType]. Only xs:anyAtomicType
 // carries an absent {primitive type definition} (the zero xsd.Atomic{}).
+//
+// # The list datatypes' anonymous intermediate step
+//
+// The three list-variety builtins (xs:NMTOKENS, xs:IDREFS, xs:ENTITIES) are
+// derived from xs:anySimpleType in TWO steps, not one (Datatypes §3.4.5,
+// §3.4.10 and §3.4.12), so a consumer walking Base() from one of them meets ONE
+// NAMELESS component — an anonymous list over the same item type, with the fixed
+// whiteSpace = collapse facet §3.16.2.1 map.std.common case 3 manufactures for
+// every <list> — before reaching xs:anySimpleType. That node is the plural
+// type's {base type definition}; the plural type's own {facets} is minLength = 1
+// alone. It is a component of the returned graph but not a member of the
+// returned slice, and being nameless it is invisible to any by-name index.
 //
 // # Precondition and error
 //
@@ -162,6 +176,10 @@ func Seed(b value.Backend) ([]*xsd.SimpleType, error) {
 		if err != nil {
 			return nil, err
 		}
+		base, err = interposeListBase(spec, variety, base)
+		if err != nil {
+			return nil, err
+		}
 		node, err := xsd.NewSimpleType(xsderr.Loc{}, qname(spec.Name), variety, base, facets, nil)
 		if err != nil {
 			return nil, fmt.Errorf("builtin: constructing xs:%s: %w", spec.Name, err)
@@ -180,6 +198,40 @@ func Seed(b value.Backend) ([]*xsd.SimpleType, error) {
 		out = append(out, node)
 	}
 	return out, nil
+}
+
+// interposeListBase returns the {base type definition} the row's named component
+// restricts. For an atomic row that is base unchanged; for a LIST row it is the
+// ANONYMOUS intermediate list component the row's named type actually restricts.
+//
+// Datatypes §3.4.5/§3.4.10/§3.4.12 derive xs:NMTOKENS/xs:IDREFS/xs:ENTITIES from
+// xs:anySimpleType in TWO steps: "an anonymous list type is defined, whose item
+// type is NMTOKEN; this is the base type of NMTOKENS, which restricts its value
+// space to lists with at least one item". Structures §3.16.2.1 map.std.common
+// fixes both halves of that first step with no per-type variation — case 2 gives
+// the <list> alternative the base xs:anySimpleType, case 3 gives it a {facets}
+// set with exactly one member, whiteSpace = collapse with {fixed} = true — so the
+// row's {variety} determines the interposed component entirely and it needs no
+// data of its own in the table (STYLE D3). Each list row gets its own fresh node;
+// it is nameless and so is never memoized in built nor returned by Seed.
+//
+// A List row whose Base is not anySimpleType has no two-step reading, so it is
+// REFUSED rather than quietly flattened back onto its stated base — a silent
+// fallback there would be a false-accept of a shape cos-st-restricts clause
+// 2.2.1.2 exists to reject.
+func interposeListBase(spec TypeSpec, variety xsd.Variety, base *xsd.SimpleType) (*xsd.SimpleType, error) {
+	if _, ok := spec.Variety.(List); !ok {
+		return base, nil
+	}
+	if spec.Base != "anySimpleType" {
+		return nil, fmt.Errorf("builtin: list type %q has base %q, but a list row's first derivation step must restrict anySimpleType (§3.16.2.1 map.std.common case 2)", spec.Name, spec.Base)
+	}
+	node, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{}, variety, xsd.AnySimpleType(),
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("builtin: constructing the anonymous list xs:%s restricts: %w", spec.Name, err)
+	}
+	return node, nil
 }
 
 // buildVariety translates a row's backend-neutral builtin.Variety into the

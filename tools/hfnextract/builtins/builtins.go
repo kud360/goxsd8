@@ -106,6 +106,7 @@ func Parse(structuresPath, precisionPath string) ([]Builtin, error) {
 	out = append(out, aat)
 	out = append(out, pd)
 	resolveOwnPatterns(out)
+	resolveOwnListFacets(out)
 	return out, nil
 }
 
@@ -179,6 +180,32 @@ func subtractOperands(a, b []string) []string {
 		out = append(out, s)
 	}
 	return out
+}
+
+// resolveOwnListFacets clears the whiteSpace VALUE on every list-variety row.
+// Structures §3.16.2.1 map.std.common case 3 puts that facet on the ANONYMOUS
+// intermediate list a named list datatype restricts (Datatypes §3.4.5/§3.4.10/
+// §3.4.12: "an anonymous list type is defined ... this is the base type of
+// NMTOKENS"), not on the named type, whose own facet is minLength = 1 alone
+// (§3.4.5.1). A type's Facets subsection renders the EFFECTIVE cross-step set,
+// so the inherited value is subtracted here for the same reason
+// resolveOwnPatterns subtracts an inherited pattern operand. Leaving it would
+// also be actively wrong: the row's unfixed whiteSpace would overlay-replace the
+// intermediate list's {fixed} = true (§3.16.6.4). The facet NAME stays, because
+// whiteSpace is still an applicable facet of the named type.
+func resolveOwnListFacets(types []Builtin) {
+	for i := range types {
+		if types[i].Variety != "list" {
+			continue
+		}
+		for j := range types[i].Facets {
+			if types[i].Facets[j].Name != "whiteSpace" {
+				continue
+			}
+			types[i].Facets[j].Value = ""
+			types[i].Facets[j].Fixed = false
+		}
+	}
 }
 
 // parseStructures walks the Datatypes spec once, slicing each builtin's

@@ -392,8 +392,16 @@ func governingNode(b Backend, node *xsd.SimpleType) (*xsd.SimpleType, bool) {
 // usable whiteSpace facet (xs:anySimpleType, xs:anyAtomicType, a union) — means
 // no normalization applies (whiteSpaceInForce).
 //
-// Types are matched by QName; anonymous declaring types (the zero QName) are
-// outside this runner's manually-built scope.
+// Types are matched by QName, and an ANONYMOUS component (the zero QName) is a
+// normal inhabitant of a base chain — every builtin list datatype restricts an
+// anonymous intermediate list (§3.4.5/§3.4.10/§3.4.12, builtin.Seed), so such a
+// node sits between xs:NMTOKENS/xs:IDREFS/xs:ENTITIES and xs:anySimpleType. It is
+// never the DECLARING type of a facet reaching here: only enumeration and the
+// four bound facets route through this resolution, and §3.16.2.1 map.std.common
+// case 3 gives a constructed list exactly one facet, whiteSpace, which the
+// normalization stage consumes without consulting Declaring(). A caller that
+// nonetheless passed the zero QName would match the nearest anonymous node from
+// leaf upward, which is the same nearest-declaration rule a named match gets.
 func declaringFacetSpace(b Backend, leaf *xsd.SimpleType, declaring xsd.QName) (m Mapping, ws whiteSpace, ok bool) {
 	for s := leaf; s != nil; s = s.Base() {
 		if s.Name() != declaring {

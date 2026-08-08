@@ -24,7 +24,10 @@
 // stored twice (STYLE D3). Base follows the spec hierarchy (§4.1.6): the 19
 // primitives and precisionDecimal derive from anyAtomicType, anyAtomicType
 // from anySimpleType, and each list restricts an anonymous list rooted at
-// anySimpleType. The closed value types (Variety, Fundamental, Facet) are
+// anySimpleType — a two-step derivation (§3.4.5/§3.4.10/§3.4.12) whose
+// intermediate node Seed materializes from the row's Variety, so on a list row
+// Base names that ANONYMOUS list's base, not the named type's (TypeSpec.Base).
+// The closed value types (Variety, Fundamental, Facet) are
 // hand-written in typespec.go; the type IsPrimitive helper reports
 // Base == "anyAtomicType".
 //
