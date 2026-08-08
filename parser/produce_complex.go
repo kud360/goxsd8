@@ -586,7 +586,7 @@ func (p *producer) complexContentType(derivation *Element, method xsd.Derivation
 	if err != nil {
 		return nil, err
 	}
-	explicit, err := p.extensionContentType(derivation.Loc(), base, effective, explicitEmpty, effectiveMixed)
+	explicit, err := xsd.ExtensionContentType(derivation.Loc(), base, effective, explicitEmpty, effectiveMixed, p.resolveModelGroup)
 	if err != nil {
 		return nil, err
 	}
@@ -614,10 +614,19 @@ func (p *producer) buildComplexContentType(parent *Element, effectiveMixed bool,
 // ·explicit content type· — as a total function of the already-computed
 // ·effective content·: clause 4.1.1 (empty effective content ⇒ {variety} empty,
 // which admits NO character content at all, unlike element-only) and clause 4.1.2
-// (otherwise mixed iff ·effective mixed·). Clause 4.2.1 routes the extension
-// cases with a simple or empty/simple-content base through this same function,
-// which is what "a Content Type as per clause 4.1.1 and clause 4.1.2 above"
-// means, so the two clauses have one encoding.
+// (otherwise mixed iff ·effective mixed·). Clause 4.2.1 says the extension cases
+// with a simple or empty/simple-content base yield "a Content Type as per clause
+// 4.1.1 and clause 4.1.2 above", i.e. exactly this.
+//
+// It is stated a SECOND time, in package xsd, and that split was ruled at #392's
+// warden pre-flight rather than overlooked. Clause 4.2 moved down to xsd because
+// cos-ct-extends clause 1.5 needs it at finalize (xsd.ExtensionContentType), and
+// it carries clause 4.1 with it for its own 4.2.1 arm; exporting a SECOND name
+// for a two-line total function, whose one out-of-package caller would be this
+// restriction branch, was more surface than the sharing is worth (STYLE T5). The
+// two encodings are pinned against each other by this package's content-type
+// tests, which run both arms over the same source shapes: a change to clause
+// 4.1.1 or 4.1.2 is a change to both sites.
 func explicitContentType(effective *xsd.Particle, effectiveMixed bool) xsd.ContentType {
 	if effective == nil {
 		return xsd.EmptyContent{} // clause 4.1.1
@@ -658,153 +667,6 @@ func (p *producer) effectiveContent(parent *Element, effectiveMixed bool, scopeP
 		return nil, false, err
 	}
 	return &part, true, nil
-}
-
-// extensionContentType is §3.4.2.3.3 clause 4.2 (ct-extension): the ·explicit
-// content type· of an extension-derived complex content, computed from the
-// RESOLVED {base type definition} and this derivation's own ·effective content·.
-//
-//   - 4.2.1 (c-ctes): a simple base, or a complex base whose {content type} has
-//     {variety} empty or simple, contributes no particle — the result is clause
-//     4.1.1/4.1.2's, delegated to explicitContentType;
-//   - 4.2.2: a complex base with element-only or mixed content and an ***empty***
-//     ·effective content· yields the base's ENTIRE Content Type record, {open
-//     content} included — a different sharing rule from 4.2.3, which takes only
-//     {open content} from the base;
-//   - 4.2.3: otherwise {variety} is mixed iff ·effective mixed·, {particle} is
-//     extensionParticle's merge of the ·base particle· with the ·effective
-//     content·, {open content} is the base's, and {simple type definition} is
-//     ·absent· — automatic here, since xsd.ElementContent has no such field.
-//
-// Nothing is deep-copied: the base particle and the effective content enter the
-// synthesized structure as the very values the base and this derivation already
-// hold, so "the same particles appear in both the base type definition and the
-// extension" (xr.ctd.n4-bis). A Go copy of an immutable value component IS that
-// component; no identity marker is added to carry the fact (STYLE D3).
-func (p *producer) extensionContentType(loc xsderr.Loc, base xsd.TypeDefinition, effective *xsd.Particle, explicitEmpty, effectiveMixed bool) (xsd.ContentType, error) {
-	switch b := base.(type) {
-	case *xsd.SimpleType:
-		return explicitContentType(effective, effectiveMixed), nil // 4.2.1, simple base
-	case xsd.ComplexType:
-		switch bc := b.ContentType().(type) {
-		case xsd.EmptyContent, xsd.SimpleContent:
-			return explicitContentType(effective, effectiveMixed), nil // 4.2.1
-		case xsd.ElementContent:
-			if effective == nil {
-				return bc, nil // 4.2.2: the base's whole Content Type record
-			}
-			particle, err := p.extensionParticle(loc, bc.Particle, *effective, explicitEmpty)
-			if err != nil {
-				return nil, err
-			}
-			// 4.2.3: {open content} comes from the base, {particle} is the merge.
-			return xsd.ElementContent{Mixed: effectiveMixed, Particle: particle, OpenContent: bc.OpenContent}, nil
-		default:
-			panic("parser: extensionContentType: non-exhaustive ContentType switch")
-		}
-	default:
-		panic("parser: extensionContentType: non-exhaustive TypeDefinition switch")
-	}
-}
-
-// extensionParticle merges the ·base particle· with the ·effective content· per
-// §3.4.2.3.3 clause 4.2.3's three sub-cases:
-//
-//   - 4.2.3.1: the base particle's {term} is an all group and the ·explicit
-//     content· is empty ⇒ the base particle itself, unchanged;
-//   - 4.2.3.2: both terms are all groups ⇒ a particle whose {min occurs} is the
-//     effective content's, {max occurs} 1, and {term} an all group holding the
-//     base group's {particles} followed by the effective group's;
-//   - 4.2.3.3 (c-suffix-extension): otherwise a 1..1 particle over a SEQUENCE of
-//     the base particle followed by the effective content.
-//
-// Both operands are spliced in as-is (xr.ctd.n4-bis: particles are reused, not
-// copied), which is also what lets a wildcard's ##definedSibling see
-// base-declared element names as siblings — the derived {content type} genuinely
-// contains the base's particle, so xsd's content-model walk needs no {base type
-// definition} edge.
-//
-// The sub-case test reads THROUGH a <group ref>: a {term} that is a
-// ModelGroupRef to an all-bodied model group definition selects 4.2.3.1/4.2.3.2
-// exactly as an inline <all> does (allGroupOf), because §3.7.2 makes the {term}
-// of such a particle the definition's {model group} — the reference is a source
-// spelling, not a different component. Reading only the inline spelling would
-// send an all-bodied base down 4.2.3.3, whose synthesized sequence wrapping two
-// all groups is a shape cos-all-limited (§3.8.6.2) clause 1 forbids outright.
-func (p *producer) extensionParticle(loc xsderr.Loc, baseParticle, effective xsd.Particle, explicitEmpty bool) (xsd.Particle, error) {
-	baseGroup, baseIsAll, err := p.allGroupOf(baseParticle)
-	if err != nil {
-		return xsd.Particle{}, err
-	}
-	if baseIsAll && explicitEmpty {
-		return baseParticle, nil // 4.2.3.1
-	}
-	effectiveGroup, effectiveIsAll, err := p.allGroupOf(effective)
-	if err != nil {
-		return xsd.Particle{}, err
-	}
-	if baseIsAll && effectiveIsAll {
-		// 4.2.3.2: one all group over both {particles} lists, base's first.
-		merged := append(baseGroup.Particles(), effectiveGroup.Particles()...)
-		mg, err := xsd.NewModelGroup(loc, xsd.CompositorAll, merged, nil)
-		if err != nil {
-			return xsd.Particle{}, err
-		}
-		occ, err := xsd.NewOccurs(loc, effective.Occurs().Min(), 1)
-		if err != nil {
-			return xsd.Particle{}, err
-		}
-		return xsd.NewParticle(loc, occ, xsd.ResolvedTerm{Term: mg}, nil)
-	}
-	// 4.2.3.3: a 1..1 sequence, base particle then effective content.
-	seq, err := xsd.NewModelGroup(loc, xsd.CompositorSequence, []xsd.Particle{baseParticle, effective}, nil)
-	if err != nil {
-		return xsd.Particle{}, err
-	}
-	oneOne, err := xsd.NewOccurs(loc, 1, 1)
-	if err != nil {
-		return xsd.Particle{}, err
-	}
-	return xsd.NewParticle(loc, oneOne, xsd.ResolvedTerm{Term: seq}, nil)
-}
-
-// allGroupOf returns the Model Group a particle's {term} is when that group's
-// {compositor} is all (§3.8.1), reporting false for every other {term}: an
-// element declaration, a wildcard, a choice/sequence group, or an <element ref>.
-//
-// A <group ref> {term} is followed to the Model Group it denotes (§3.7.2,
-// xr.mgd3) through resolveModelGroup, which builds the referenced definition on
-// demand: §3.4.2.3.3 clause 4.2.3's sub-cases test the {compositor} of the
-// ·base particle·'s {term}, and a particle's {term} IS the referenced
-// definition's {model group} whichever spelling the source used. That is the one
-// place produce time follows a <group ref> — the clause 4.2.3 sub-case decides
-// the {content type} being synthesized right here, so it cannot wait for
-// finalize, where <group ref>s are otherwise resolved. It is a lookup, not a
-// second resolution regime: a ref that resolves to nothing or closes a cycle
-// simply reports false (see resolveModelGroup), leaving src-resolve clause 1.5
-// and mg-props-correct clause 2 to finalize.
-func (p *producer) allGroupOf(part xsd.Particle) (xsd.ModelGroup, bool, error) {
-	switch t := part.Term().(type) {
-	case xsd.ResolvedTerm:
-		mg, ok := t.Term.(xsd.ModelGroup)
-		if !ok || mg.Compositor() != xsd.CompositorAll {
-			return xsd.ModelGroup{}, false, nil
-		}
-		return mg, true, nil
-	case xsd.ModelGroupRef:
-		mg, ok, err := p.resolveModelGroup(t.Name)
-		if err != nil {
-			return xsd.ModelGroup{}, false, err
-		}
-		if !ok || mg.Compositor() != xsd.CompositorAll {
-			return xsd.ModelGroup{}, false, nil
-		}
-		return mg, true, nil
-	case xsd.ElementDeclarationRef:
-		return xsd.ModelGroup{}, false, nil
-	default:
-		panic("parser: allGroupOf: non-exhaustive TermOrRef switch")
-	}
 }
 
 // misplacedOpenContent returns the <openContent> element a <complexType> carries
@@ -1033,7 +895,7 @@ func (p *producer) openContentOf(we *Element, explicit xsd.ContentType) (*xsd.Op
 //
 // The second arm is live for an <extension> whose base already has an Open
 // Content: §3.4.2.3.3 clause 4.2.2/4.2.3 hand the base's {open content} through
-// into the ·explicit content type· (extensionContentType), and this derivation's
+// into the ·explicit content type· (xsd.ExtensionContentType), and this derivation's
 // own <openContent> then widens it rather than replacing it.
 func openContentWildcard(loc xsderr.Loc, w xsd.Wildcard, explicit xsd.ContentType) (xsd.Wildcard, error) {
 	ec, ok := explicit.(xsd.ElementContent)
@@ -1072,7 +934,7 @@ func wrapOpenContent(loc xsderr.Loc, explicit xsd.ContentType, oc xsd.OpenConten
 		// {open content} is a property of ElementContent alone
 		// (xsd/complextype.go), and no §3.4.2.3.3 branch feeding this function can
 		// yield simple content — the <simpleContent> forms never reach it.
-		// Panicking on the broken sealed sum matches extensionContentType above;
+		// Panicking on the broken sealed sum matches xsd.ExtensionContentType;
 		// charging a rule the type system already makes impossible would be a
 		// fabricated verdict.
 		panic("parser: wrapOpenContent: non-exhaustive ContentType switch")
@@ -1227,7 +1089,8 @@ func (p *producer) produceGroupParticle(group *Element, top bool, scopeParent xs
 // One mapping rule nonetheless has to LOOK through a reference produced here:
 // §3.4.2.3.3 clause 4.2.3 selects a sub-case by the {compositor} of the
 // ·base particle·'s {term}, and that choice fixes a {content type} synthesized at
-// produce time. allGroupOf reads it through resolveModelGroup — a read, which
+// produce time. xsd.ExtensionContentType reads it through the resolveModelGroup
+// callback this producer passes it — a read, which
 // leaves this particle untouched and charges nothing.
 func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 	occ, elided, err := occursOf(el)
@@ -1308,7 +1171,8 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 // same nameless <group> (recorded as the original, hence past src-expredef's
 // closing requirement) arrives here with an empty local part — plus direct
 // programmatic calls. resolveModelGroup's on-demand build does NOT reach it: its
-// only caller is allGroupOf, reading a ModelGroupRef that only
+// only caller is xsd.ExtensionContentType's group-lookup callback, reading a
+// ModelGroupRef that only
 // produceGroupRefParticle mints, and xsd.NewParticle rejects an empty
 // ModelGroupRef local part as a component-invariant before any resolution
 // happens.

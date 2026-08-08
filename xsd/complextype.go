@@ -56,9 +56,11 @@ import "github.com/kud360/goxsd8/xsderr"
 // enforced too, at the same phase (complexextension.go, #264), clause
 // 1.4.3.2.2.2's cos-particle-extend (§3.9.6.2) delegate included — all seven
 // clauses of case 1, since the three §3.4.2 base folds they read are done
-// ({attribute uses} #401, {attribute wildcard} #265, {assertions} #346); the
-// exception is clause 1.5 for a derivation chain mixing extension and
-// restriction steps.
+// ({attribute uses} #401, {attribute wildcard} #265, {assertions} #346).
+// Clause 1.5 is decided for BOTH chain shapes as of #392: the pure-extension
+// chain by the identity re-ordering, and a chain mixing extension and
+// restriction steps by synthesizing the §3.4.6.2 Note's collapsed intermediate
+// (collapsedintermediate.go) and running derivation-ok-restriction against it.
 // None of them is touched HERE — they are cross-component finalize-phase
 // concerns, not tableau shape.
 const ruleCTPropsCorrect xsderr.Rule = "ct-props-correct"
@@ -646,22 +648,110 @@ func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTyp
 	return newComplexType(loc, QName{}, context, baseTypeDefinitionRef(baseTypeDefinitionName), final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
 }
 
+// newCollapsedExtension builds the collapsed intermediate M that cos-ct-extends
+// (§3.4.6.2) clause 1.5's Note describes: the single extension of a, the ancestor
+// whose {base type definition} is ·xs:anyType·, that the Note's re-ordering
+// yields (collapsedintermediate.go computes the properties it is handed).
+//
+// It is newComplexType's FOURTH caller, and it re-establishes that function's
+// {name}/{context} XOR precondition by borrowing A's identity pair WHOLE: M takes
+// a's {name} AND a's {context}. A is itself a validly constructed component, so
+// exactly one of that pair is present and the XOR holds however A was built —
+// which is the only formulation that survives A being the ANONYMOUS src-expredef
+// clause 1.1 original (#505). Passing a's {name} with a hard-coded nil {context}
+// held only while every A was named; for an anonymous A it would build a type
+// that is neither named nor contexted, the one state §3.4.1's tableau forbids
+// outright. Building M through the validating core rather than as a bare
+// ComplexType literal is what keeps every ct-props-correct clause-1 shape check on
+// it — a literal inside this package would bypass all of them, which is the one
+// construction hole this type's whole design exists to close (STYLE T1).
+//
+// M is a VALUE with a lifetime of one constraint check. It is never added to a
+// SchemaBuilder, never written into s.types or s.typeIndex, and never reachable
+// from a resolver: it corresponds to no <complexType> element, so a schema that
+// could see it would report a component no document declares. Its identity is a's
+// only so that the base walks derivation-ok-restriction performs off it terminate
+// on real components; every error the check produces is re-charged against T
+// before it reaches a caller (checkExtensionTwoStepDerivable).
+//
+// Two properties are FIXED here rather than collapsed, and both are load-bearing:
+//
+//   - {final} is EMPTY. The Note's intermediate has no source and hence no
+//     final=; copying a's would make derivation-ok-restriction clause 1
+//     (checkRestrictionBaseFinal) charge T for a constraint stated by a type that
+//     does not exist, false-rejecting every chain rooted at a final="restriction"
+//     ancestor. A's own {final} is already charged where it belongs, against A's
+//     real derivations.
+//   - {assertions} is A's. Along the REAL chain §3.4.2.1 clause 1 makes A's
+//     assertions a prefix of T's, so derivation-ok-restriction clause 5
+//     (checkRestrictionAssertions) is satisfied by construction.
+//
+// GAP(xsd): that {assertions} choice discharges clause 5 VACUOUSLY rather than
+// deciding it — owned by #586. The true collapsed intermediate would also carry
+// each extension step's own assertions, but under the re-ordering that sequence
+// is in general NOT a prefix of T's (a restriction step's assertions sit between
+// them), so charging it would be a false reject. The one reader neutralised is
+// checkRestrictionAssertions (complexderivation.go), which this makes answer
+// "prefix" for every chain: the direction is fail-open — clause 1.5 never rejects
+// on assertions — and no other reader of M.{assertions} exists.
+func newCollapsedExtension(loc xsderr.Loc, a ComplexType, p collapsedProperties) (ComplexType, error) {
+	context, _ := a.Context()
+	return newComplexType(loc, a.Name(), context, collapsedExtensionBase(a), nil, DerivationExtension, false,
+		p.uses, nil, p.wildcard, p.content, nil, a.assertions, nil)
+}
+
+// collapsedExtensionBase is M's {base type definition}: a reference to A, in
+// whichever arm of TypeDefinitionOrRef can express A (#505). It is what makes the
+// base walks derivation-ok-restriction performs off M — key-ldtype case 3's
+// recursion in locallyDeclaredAttributeType and locallyDeclaredElementType
+// (complexderivation.go) — reach A and then A's own ancestors, which is the
+// whole reason M carries A's identity at all.
+//
+// The arm follows from A's {name}, which is the ONE fact that distinguishes them
+// and is never separately stored (see TypeDefinitionOrRef):
+//
+//   - A is NAMED: a TypeDefinitionRef, resolved by the ordinary Schema.Type
+//     lookup, exactly as every base= produced from a document is.
+//   - A is ANONYMOUS: A is the src-expredef clause 1.1 original a redefining
+//     <complexType> owns, which is in no by-name symbol table, so a ref could not
+//     name it and the InlineTypeDefinition arm carries the component itself.
+//
+// The InlineTypeDefinition arm's OWNERSHIP invariant is not violated by the
+// second holder this creates. The arm's owner is the redefining type's own
+// {base type definition} slot; M is a throwaway VALUE outside the component model
+// altogether — never registered, never reachable from a resolver, discarded when
+// the clause-1.5 check returns — so the copy it holds can neither be observed
+// beside the original nor diverge from it (the divergence that doc warns of needs
+// a fold writing through one holder, and no fold runs over M).
+func collapsedExtensionBase(a ComplexType) TypeDefinitionOrRef {
+	if a.Name() == (QName{}) {
+		return InlineTypeDefinition{Definition: a}
+	}
+	return TypeDefinitionRef{Name: a.Name()}
+}
+
 // newComplexType is the shared core of NewComplexType,
 // NewComplexTypeOwningBase and NewAnonymousComplexType: every check and copy
 // that does not concern the {name}/{context} pair lives here exactly once
 // (STYLE T4).
 //
-// PRECONDITION, enforced by its THREE CALLERS and not by itself: exactly one of
+// PRECONDITION, enforced by its FOUR CALLERS and not by itself: exactly one of
 // name and context is present, per the §3.4.1 tableau's XOR. This layer can
 // express both-present and neither-present and does not reject either; the
-// partition's guarantee comes from the exported entry points, each of which
-// accepts only one half of the pair. Any fourth caller added here must
-// re-establish the XOR itself.
+// partition's guarantee comes from the entry points, each of which accepts only
+// one half of the pair — the three exported ones by their parameter lists, and
+// newCollapsedExtension by copying the already-validated pair off the ancestor A
+// it collapses onto. Any further caller added here must re-establish the XOR
+// itself.
 //
 // A SECOND precondition belongs to NewComplexTypeOwningBase alone: a base
 // holding an InlineTypeDefinition arrived through it, so the owned component's
 // {context} has been checked against the owner's identity. This layer cannot
 // express that check — it takes no identity — and does not attempt one.
+// newCollapsedExtension is outside that precondition and needs no such check: the
+// anonymous base it may pass is A itself, already constructed and already
+// context-checked against its real owner, and M is never a component a consumer
+// can reach.
 func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, base TypeDefinitionOrRef, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
 	if err := checkTypeDefinitionOrRef(loc, base, complexTypeLabel(name)+" {base type definition}"); err != nil {
 		return ComplexType{}, err

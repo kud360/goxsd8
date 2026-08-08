@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -353,6 +354,18 @@ func TestCosCTExtendsOpenContent(t *testing.T) {
 // 1.4.3.2.1 and the element declarations never have to satisfy
 // cos-particle-extend, leaving clause 1.6 as the only clause that can decide the
 // row. key-ldt-elem's case 3 then reads the type from mid's own base.
+//
+// grand's {base type definition} is ABSENT for the same isolating reason, and
+// #392 is what made it necessary. That shape — an ancestor declaring e1, a
+// restriction step removing it, an extension step adding it back with an
+// extension-derived type — is EXACTLY what clause 1.5 rejects once the mixed
+// chain is decided by construction, because the collapsed intermediate carries
+// grand's e1 and the ·locally declared type· comparison against it runs under
+// {extension, list, union}, where clause 1.6's runs under the empty set. An
+// absent base makes clause 1.5's chain walk decline before it reaches xs:anyType,
+// so the row here is decided by clause 1.6 and nothing else; the clause-1.5
+// verdict on that same shape is pinned by
+// TestCosCTExtendsClause15MixedChainElementType, which is where it belongs.
 func TestCosCTExtendsClause16(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -367,7 +380,7 @@ func TestCosCTExtendsClause16(t *testing.T) {
 				b.AddType(dType(t, uq("ldtBase"), anyTypeName, EmptyContent{}, nil, nil))
 				b.AddType(xType(t, uq("ldtExt"), uq("ldtBase"), EmptyContent{}, nil, nil))
 				b.AddType(dType(t, uq("ldtOther"), anyTypeName, EmptyContent{}, nil, nil))
-				b.AddType(dType(t, uq("grand"), anyTypeName,
+				b.AddType(dType(t, uq("grand"), QName{},
 					dElementContent(t, false, uGroup(t, CompositorSequence,
 						uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uLocal(t, uq("e1"), uq("ldtBase"))}))),
 					nil, nil))
@@ -528,5 +541,344 @@ func TestCosCTExtendsClause17(t *testing.T) {
 			}
 			expectRule(t, err, ruleCosCTExtends)
 		})
+	}
+}
+
+// TestCosCTExtendsClause15MixedChainAttribute pins clause 1.5 for a chain that
+// MIXES the two derivation methods, over the shape the §3.4.6.2 Note names first:
+// A declares @x, a restriction step PROHIBITS it, and an extension step declares
+// @x again. Both real steps are legal and T ends up holding exactly one use for x
+// (§3.4.2.4 clause 3.2.2), so nothing but clause 1.5 can see the chain as a
+// whole.
+//
+// The re-ordering does NOT replay the prohibition — the Note re-orders the
+// extension steps, not the restrictions — so A's use is still in the collapsed
+// intermediate when T's own arrives. Whether that is legal turns entirely on
+// COMPATIBILITY, which is what the Note says ("added back … in an incompatible
+// way (for example, with a conflicting type assignment or value constraint)"):
+//
+//   - re-declared with the SAME type, the second step is the vacuous restriction
+//     clause 1.5 explicitly permits and the schema is valid;
+//   - re-declared with an UNRELATED type, T's ·locally declared type· for x is not
+//     ·validly substitutable· for the intermediate's under {extension, list,
+//     union}, so no two-step derivation exists and clause 1.5 rejects.
+//
+// Mutation check: deleting the collapse and returning nil, or dropping the
+// second row's type change, makes the reject row pass and the test fail.
+func TestCosCTExtendsClause15MixedChainAttribute(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		declared QName
+		wantOK   bool
+	}{
+		{"the extension adds @x back with the type the restriction removed", uq("str"), true},
+		{"the extension adds @x back with a conflicting type assignment", uq("other"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := dFinalize(t, func(b *SchemaBuilder) {
+				b.AddType(dType(t, uq("A"), anyTypeName, EmptyContent{},
+					[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, nil))
+				b.AddType(dProhibiting(t, uq("B"), uq("A"), nil, []QName{uq("x")}))
+				b.AddType(xType(t, uq("E"), uq("B"), EmptyContent{},
+					[]AttributeUse{dAttr(t, uq("x"), tc.declared)}, nil))
+			})
+			if tc.wantOK {
+				if err != nil {
+					t.Fatalf("a mixed chain that satisfies clause 1.5 was rejected: %v", err)
+				}
+				return
+			}
+			expectClause15(t, err)
+		})
+	}
+}
+
+// TestCosCTExtendsClause15MixedChainElementType pins the same verdict over the
+// ELEMENT half, which is the shape the Note's "conflicting type assignment"
+// describes most directly: grand declares e1 with ldtBase, mid restricts the
+// content away entirely, and derived extends mid re-declaring e1.
+//
+// The collapsed intermediate keeps grand's e1 — the restriction step that removed
+// it is not replayed — so the residual restriction has to narrow e1's type from
+// ldtBase to whatever derived declares, under derivation-ok-restriction clause 4's
+// blocking keywords {extension, list, union}:
+//
+//   - re-declared with ldtBase itself, that narrowing is the identity and the
+//     schema is valid;
+//   - re-declared with ldtExt, an EXTENSION of ldtBase, it is exactly what
+//     restriction may not do, and clause 1.5 rejects.
+//
+// The second row is also the counterpart of TestCosCTExtendsClause16's passing
+// row, and the pair is the point: ·without limitation· (clause 1.6, the empty
+// blocking set) admits an extension-derived ·locally declared type· against the
+// IMMEDIATE base, while clause 1.5 measures the same declaration against the
+// collapsed intermediate under restriction's blocking set and rejects it. Both
+// verdicts are correct and they are about different bases; see that test's own
+// doc for why its fixture stays out of clause 1.5's reach.
+func TestCosCTExtendsClause15MixedChainElementType(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		elementType QName
+		wantOK      bool
+	}{
+		{"the extension adds e1 back with the type the restriction removed", uq("ldtBase"), true},
+		{"the extension adds e1 back with an extension-derived type", uq("ldtExt"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := dFinalize(t, func(b *SchemaBuilder) {
+				b.AddType(dType(t, uq("ldtBase"), anyTypeName, EmptyContent{}, nil, nil))
+				b.AddType(xType(t, uq("ldtExt"), uq("ldtBase"), EmptyContent{}, nil, nil))
+				b.AddType(dType(t, uq("grand"), anyTypeName,
+					dElementContent(t, false, uGroup(t, CompositorSequence,
+						uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uLocal(t, uq("e1"), uq("ldtBase"))}))),
+					nil, nil))
+				b.AddType(dType(t, uq("mid"), uq("grand"), EmptyContent{}, nil, nil))
+				b.AddType(xType(t, uq("derived"), uq("mid"),
+					dElementContent(t, false, uGroup(t, CompositorSequence,
+						uOne(t, ResolvedTerm{Term: uLocal(t, uq("e1"), tc.elementType)}))),
+					nil, nil))
+			})
+			if tc.wantOK {
+				if err != nil {
+					t.Fatalf("a mixed chain that satisfies clause 1.5 was rejected: %v", err)
+				}
+				return
+			}
+			expectClause15(t, err)
+		})
+	}
+}
+
+// TestCosCTExtendsClause15CollapsedIntermediate exercises the synthesis itself,
+// so a failure points at the collapse rather than at whichever clause happened to
+// charge. The chain is four steps of alternating method — A ←extension← E1
+// ←restriction← R ←extension← T — and M must come out carrying every extension
+// step's own contribution over A's, with the restriction step's contribution
+// nowhere in it.
+func TestCosCTExtendsClause15CollapsedIntermediate(t *testing.T) {
+	s := xSchema(t, func(b *SchemaBuilder) {
+		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dType(t, uq("cA"), anyTypeName, EmptyContent{}, []AttributeUse{dAttr(t, uq("a"), uq("str"))}, nil))
+		b.AddType(xType(t, uq("cE1"), uq("cA"), EmptyContent{}, []AttributeUse{dAttr(t, uq("b"), uq("str"))}, nil))
+		b.AddType(dProhibiting(t, uq("cR"), uq("cE1"), nil, []QName{uq("a")}))
+		b.AddType(xType(t, uq("cT"), uq("cR"), EmptyContent{}, []AttributeUse{dAttr(t, uq("c"), uq("str"))}, nil))
+	})
+	def, _ := s.Type(uq("cT"))
+	m, ok, err := s.collapsedExtension(def.(ComplexType))
+	if err != nil || !ok {
+		t.Fatalf("collapsedExtension(cT) = (ok=%t, err=%v), want a synthesized intermediate", ok, err)
+	}
+	if m.Name() != uq("cA") {
+		t.Fatalf("the collapsed intermediate is named %s, want the chain's xs:anyType-based ancestor cA", m.Name())
+	}
+	if m.DerivationMethod() != DerivationExtension || m.Base() != TypeDefinitionOrRef(TypeDefinitionRef{Name: uq("cA")}) {
+		t.Fatalf("the collapsed intermediate is a %s of %#v, want an extension referring to cA by name", m.DerivationMethod(), m.Base())
+	}
+	if len(m.Final()) != 0 {
+		t.Fatalf("the collapsed intermediate carries a {final}, which would charge derivation-ok-restriction clause 1 against a type that does not exist")
+	}
+	var names []string
+	for _, u := range m.AttributeUses() {
+		names = append(names, attributeUseName(u).Local)
+	}
+	// cT's own @c, then E1's own @b, then A's @a: the restriction step's
+	// prohibition of @a is NOT replayed, which is the whole of the re-ordering.
+	if !fEqual(names, []string{"c", "b", "a"}) {
+		t.Fatalf("the collapsed intermediate's {attribute uses} = %v, want [c b a]", names)
+	}
+	if _, found := s.Type(uq("cA")); !found {
+		t.Fatalf("the real ancestor cA left the schema")
+	}
+	real, _ := s.Type(uq("cA"))
+	if got := len(real.(ComplexType).AttributeUses()); got != 1 {
+		t.Fatalf("the real cA now has %d {attribute uses}: the synthesized intermediate leaked into the schema", got)
+	}
+}
+
+// TestOwnAttributeUsesMixedChain pins the positional recovery the collapse rests
+// on, over the chain shape that would break a set-difference reading: four steps,
+// ext-restr-ext, with a restriction step that PROHIBITS a name an earlier
+// extension inherited. §3.4.2.4 clause 3's fold makes folded(c) = own(c) ++
+// folded(b) for an extension step, per step and against its own immediate base
+// only, so no history perturbs the arithmetic.
+//
+// The tail verification is pinned too: handed a base that is not the type's own,
+// the recovery DECLINES rather than returning a prefix that means nothing.
+func TestOwnAttributeUsesMixedChain(t *testing.T) {
+	s := xSchema(t, func(b *SchemaBuilder) {
+		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dType(t, uq("oA"), anyTypeName, EmptyContent{}, []AttributeUse{dAttr(t, uq("a"), uq("str"))}, nil))
+		b.AddType(xType(t, uq("oE1"), uq("oA"), EmptyContent{}, []AttributeUse{dAttr(t, uq("b"), uq("str"))}, nil))
+		b.AddType(dProhibiting(t, uq("oR"), uq("oE1"), nil, []QName{uq("a")}))
+		b.AddType(xType(t, uq("oE2"), uq("oR"), EmptyContent{}, []AttributeUse{dAttr(t, uq("c"), uq("str"))}, nil))
+	})
+	oOwn := func(derived, base QName) []string {
+		t.Helper()
+		d, _ := s.Type(derived)
+		b, _ := s.Type(base)
+		uses, ok := ownAttributeUses(d.(ComplexType), b.(ComplexType))
+		if !ok {
+			t.Fatalf("ownAttributeUses(%s, %s) declined a step whose fold it inverts", derived, base)
+		}
+		var names []string
+		for _, u := range uses {
+			names = append(names, attributeUseName(u).Local)
+		}
+		return names
+	}
+	if got := oOwn(uq("oE1"), uq("oA")); !fEqual(got, []string{"b"}) {
+		t.Fatalf("own {attribute uses} of oE1 = %v, want [b]", got)
+	}
+	// The load-bearing row: oR dropped @a, so folded(oE2) is [c b] and the prefix
+	// is [c] — the arithmetic is against oE2's OWN base, not against the chain.
+	if got := oOwn(uq("oE2"), uq("oR")); !fEqual(got, []string{"c"}) {
+		t.Fatalf("own {attribute uses} of oE2 = %v, want [c]", got)
+	}
+	d, _ := s.Type(uq("oE2"))
+	wrong, _ := s.Type(uq("oE1"))
+	if _, ok := ownAttributeUses(d.(ComplexType), wrong.(ComplexType)); ok {
+		t.Fatalf("ownAttributeUses accepted a base that is not the type's own, so the tail verification is not guarding the coupling")
+	}
+}
+
+// expectClause15 asserts a cos-ct-extends rejection that clause 1.5 in
+// particular made. The rule ID alone is not enough — six other clauses charge it
+// — and the clause number lives in the prose by this tree's convention (#262), so
+// the two-step wording is what identifies it.
+func expectClause15(t *testing.T, err error) {
+	t.Helper()
+	expectRule(t, err, ruleCosCTExtends)
+	if !strings.Contains(err.Error(), "in two steps") {
+		t.Fatalf("expected a cos-ct-extends clause 1.5 rejection, got another clause: %v", err)
+	}
+}
+
+// oRedefiningRestriction builds the ONE fixture shape #392 and #505 could not
+// have covered between them, because neither existed when the other was written:
+// a redefining <complexType> (§4.2.4 src-expredef clause 1.1) that PROHIBITS an
+// attribute use its own {name}-·absent· original declares.
+//
+// oPair (ownedbase_test.go) builds every other owned-base fixture, but it hard-
+// codes an empty prohibited-name list and puts the original's base under the
+// caller's control; this shape needs the opposite of both — a prohibition, and an
+// original whose {base type definition} IS ·xs:anyType·, which is what makes the
+// ANONYMOUS original the ancestor A of cos-ct-extends clause 1.5.
+func oRedefiningRestriction(t *testing.T, name QName, originalUses []AttributeUse, prohibited []QName) ComplexType {
+	t.Helper()
+	id := NewComponentID()
+	original, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: id},
+		anyTypeName, nil, DerivationRestriction, false, originalUses, nil, nil, EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAnonymousComplexType (the clause-1.1 original of %s): %v", name, err)
+	}
+	ct, err := NewComplexTypeOwningBase(xsderr.Loc{}, id, name, original, nil, DerivationRestriction, false,
+		nil, prohibited, nil, EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewComplexTypeOwningBase(%s): %v", name, err)
+	}
+	return ct
+}
+
+// TestCosCTExtendsClause15MixedChainThroughOwnedBase is the interaction #392 and
+// #505 create together and neither one's own suite could reach: the §3.4.6.2
+// Note's mixed chain, with its RESTRICTION step supplied by a redefining
+// <complexType> — so the ancestor A that clause 1.5 collapses onto is the
+// src-expredef clause 1.1 ANONYMOUS original, reachable only through the
+// InlineTypeDefinition arm of {base type definition} and by no name at all.
+//
+// The chain is xs:anyType ←restriction← O(@x) ←restriction, prohibiting @x← mid
+// ←extension re-declaring @x← derived, where O is mid's owned original. It is
+// TestCosCTExtendsClause15MixedChainAttribute's chain with the middle step folded
+// into a redefinition, and it decides the same way for the same reason: the
+// re-ordering does not replay the prohibition, so O's @x is still in the
+// collapsed intermediate when derived's own arrives, and whether that is legal
+// turns on compatibility alone.
+//
+// Both rows exercise the reconciliation newCollapsedExtension needed to survive an
+// anonymous A (complextype.go): the accept row FAILS outright if M's {base type
+// definition} is built as a TypeDefinitionRef carrying A's ·absent· name, because
+// checkTypeDefinitionOrRef rejects that encoding and clause 1.5 turns the
+// construction error into a charge against a valid schema.
+func TestCosCTExtendsClause15MixedChainThroughOwnedBase(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		declared QName
+		wantOK   bool
+	}{
+		{"the extension adds @x back with the type the redefinition prohibited", uq("str"), true},
+		{"the extension adds @x back with a conflicting type assignment", uq("other"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := dFinalize(t, func(b *SchemaBuilder) {
+				b.AddType(oRedefiningRestriction(t, uq("mid"),
+					[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, []QName{uq("x")}))
+				b.AddType(xType(t, uq("derived"), uq("mid"), EmptyContent{},
+					[]AttributeUse{dAttr(t, uq("x"), tc.declared)}, nil))
+			})
+			if tc.wantOK {
+				if err != nil {
+					t.Fatalf("a mixed chain through a redefining <complexType> that satisfies clause 1.5 was rejected: %v", err)
+				}
+				return
+			}
+			expectClause15(t, err)
+		})
+	}
+}
+
+// TestCosCTExtendsClause15CollapsedOverAnonymousAncestor pins the SYNTHESIS for
+// the same chain, so a failure points at how M is built rather than at whichever
+// clause happened to charge. Two properties are asserted that no end-to-end
+// verdict can see, because both are fail-open when wrong:
+//
+//   - M's {base type definition} is the InlineTypeDefinition arm holding A
+//     itself. A ref cannot name an anonymous component, and a nil slot would
+//     silently stop key-ldtype case 3's recursion off M at M — the one thing M
+//     carries A's identity in order to avoid.
+//   - M satisfies §3.4.1's {name}/{context} XOR, on the {context} side. M borrows
+//     the pair off A whole, so an anonymous A yields an anonymous M with A's
+//     {context}; hard-coding a nil {context} beside A's ·absent· {name} builds
+//     the one component shape the tableau forbids, and newComplexType's
+//     precondition makes that its CALLER's obligation, which is this test.
+func TestCosCTExtendsClause15CollapsedOverAnonymousAncestor(t *testing.T) {
+	s := xSchema(t, func(b *SchemaBuilder) {
+		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(oRedefiningRestriction(t, uq("mid"),
+			[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, []QName{uq("x")}))
+		b.AddType(xType(t, uq("derived"), uq("mid"), EmptyContent{},
+			[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, nil))
+	})
+	def, _ := s.Type(uq("derived"))
+	steps, a, ok := s.baseChainToAnyType(def.(ComplexType))
+	if !ok || len(steps) != 2 {
+		t.Fatalf("baseChainToAnyType(derived) = (%d steps, ok=%t), want the two steps derived and mid", len(steps), ok)
+	}
+	if a.Name() != (QName{}) {
+		t.Fatalf("the ancestor whose {base type definition} is xs:anyType is %s, want the redefinition's ANONYMOUS clause-1.1 original", a.Name())
+	}
+	m, ok, err := s.collapsedExtension(def.(ComplexType))
+	if err != nil || !ok {
+		t.Fatalf("collapsedExtension(derived) = (ok=%t, err=%v), want a synthesized intermediate over the anonymous ancestor", ok, err)
+	}
+	inline, owned := m.Base().(InlineTypeDefinition)
+	if !owned {
+		t.Fatalf("the collapsed intermediate's {base type definition} is %#v, want the InlineTypeDefinition arm carrying the anonymous ancestor", m.Base())
+	}
+	base, isComplex := inline.Definition.(ComplexType)
+	if !isComplex || base.Name() != (QName{}) {
+		t.Fatalf("the collapsed intermediate's owned base is %#v, want the anonymous ancestor itself", inline.Definition)
+	}
+	if _, present := m.Context(); m.Name() != (QName{}) || !present {
+		t.Fatalf("the collapsed intermediate is named %s with {context} present=%t, want §3.4.1's XOR satisfied on the {context} side as the anonymous ancestor's is", m.Name(), present)
+	}
+	var names []string
+	for _, u := range m.AttributeUses() {
+		names = append(names, attributeUseName(u).Local)
+	}
+	// The ancestor's @x alone: the redefinition's prohibition is not replayed, and
+	// derived's own re-declaration is dropped rather than duplicated, because no
+	// legal intermediate can hold two uses for one name (collapsedAttributeUses).
+	if !fEqual(names, []string{"x"}) {
+		t.Fatalf("the collapsed intermediate's {attribute uses} = %v, want [x]", names)
 	}
 }

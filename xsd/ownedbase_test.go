@@ -162,10 +162,25 @@ func TestOwnedBaseAttributeFolds(t *testing.T) {
 // checkRestrictionAttributeWildcard), each of which REJECTS on a base reporting
 // fewer attribute uses than it has. So the direction is fail-CLOSED, not an
 // under-report (#505).
+//
+// u carries an <anyAttribute>, and that is load-bearing rather than decorative.
+// The original RESTRICTS u while declaring an attribute use of its own, @orig,
+// which derivation-ok-restriction clause 3 (c-ran) admits only if u declares the
+// same name or admits it through an {attribute wildcard}. Without the wildcard
+// this fixture is an INVALID schema that merely happens to finalize, because the
+// original is registered nowhere and so never receives its own Phase-D verdict —
+// the under-rejection #584 owns; the named-equivalent chain is rejected outright
+// by that very clause. #392's cos-ct-extends clause 1.5 collapse re-applies only
+// the EXTENSION steps, so the intermediate it builds carries @grand and @own but
+// not the restriction step's @orig, and it began charging this fixture as soon as
+// the two landings met. The wildcard makes the schema valid, which is what this
+// test needed all along; it changes neither the storeback the test pins nor the
+// {attribute uses} it asserts.
 func TestOwnedBaseFoldIsStoredBack(t *testing.T) {
+	wildcard := dWildcard(t)
 	s := xSchema(t, func(b *SchemaBuilder) {
 		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
-		b.AddType(dType(t, uq("u"), anyTypeName, EmptyContent{}, []AttributeUse{dAttr(t, uq("grand"), uq("str"))}, nil))
+		b.AddType(dType(t, uq("u"), anyTypeName, EmptyContent{}, []AttributeUse{dAttr(t, uq("grand"), uq("str"))}, &wildcard))
 		b.AddType(oPair(t, uq("ct"), uq("u"), DerivationExtension,
 			[]AttributeUse{dAttr(t, uq("own"), uq("str"))},
 			[]AttributeUse{dAttr(t, uq("orig"), uq("str"))},
