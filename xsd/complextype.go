@@ -36,10 +36,10 @@ import "github.com/kud360/goxsd8/xsderr"
 //     base graph, which only exists once the schema set is assembled;
 //   - clause 4 (no two {attribute uses} share an {attribute declaration}
 //     expanded name) needs the Ref variant of {attribute declaration} resolved,
-//     so it too is enforced at finalize (Phase D,
-//     checkAttributeUseNamesUnique, #262) rather than at shape time (unlike
-//     AttributeGroupDefinition, whose own ag-props-correct clause 2 is enforced
-//     at shape time over uses it already owns);
+//     so it too is enforced at finalize (Phase D, checkAttributeUseNamesUnique,
+//     #262) rather than at shape time (unlike AttributeGroupDefinition, whose
+//     own ag-props-correct clause 2 is enforced at shape time over uses it
+//     already owns);
 //   - clause 5 ({content type}.{open content} non-absent ⇒ {variety} is
 //     element-only or mixed) is satisfied BY CONSTRUCTION and gets no runtime
 //     check anywhere, at shape time or at finalize: {open content} is a field

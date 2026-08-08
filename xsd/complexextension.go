@@ -604,9 +604,9 @@ func (s *Schema) pureExtensionChain(t ComplexType) bool {
 // than each walking the chain itself (STYLE T4). Like every other base walk in
 // this package it carries NO visited set, licensed by Phase B having already
 // rejected every circular chain (STYLE D4, on the licence checkComplexDerivations
-// states in full); ·xs:anyType·'s
-// self-derivation, the one §3.4.7 permits and no acyclicity check can remove,
-// terminates it by the explicit name test rather than by a guard.
+// states in full); ·xs:anyType·'s self-derivation, the one §3.4.7 permits and no
+// acyclicity check can remove, terminates it by the explicit name test rather
+// than by a guard.
 func (s *Schema) baseChainToAnyType(t ComplexType) (steps []ComplexType, a ComplexType, ok bool) {
 	c := t
 	for {

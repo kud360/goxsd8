@@ -79,11 +79,10 @@
 // item type's own facets included, which is what makes a list of a derived type
 // (a list of xs:byte, whose mapping is xs:decimal's) reject an out-of-range item
 // — and then its own facets over the resulting sequence. A union has no
-// whiteSpace facet at all: it
-// hands the RAW literal to its member types in order, and the first one that is
-// itself datatype-valid supplies both the value and the whiteSpace normalization
-// its own pattern facet then matches against — so a union's value is always some
-// member's value, never a wrapper of its own.
+// whiteSpace facet at all: it hands the RAW literal to its member types in
+// order, and the first one that is itself datatype-valid supplies both the value
+// and the whiteSpace normalization its own pattern facet then matches against —
+// so a union's value is always some member's value, never a wrapper of its own.
 //
 // A facet's OWN {value} goes through the same whiteSpace normalization before it
 // is parsed, once at construction: a facet's {value} property is "a value from

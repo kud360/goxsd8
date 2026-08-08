@@ -29,12 +29,11 @@ import "github.com/kud360/goxsd8/xsderr"
 //  3. both enumeration                        -> variety enumeration,
 //     {namespaces} = set UNION;
 //  4. both not                                -> the set INTERSECTION, and then
-//     4.1 empty     -> variety any;
-//     4.2 non-empty -> variety not with that intersection;
+//     4.1 empty -> variety any; 4.2 non-empty -> variety not with that
+//     intersection;
 //  5. one not (set S1), one enumeration (S2)  -> the set difference S1 minus S2,
-//     and then
-//     5.1 empty     -> variety any;
-//     5.2 non-empty -> variety not with that difference.
+//     and then 5.1 empty -> variety any; 5.2 non-empty -> variety not with that
+//     difference.
 //
 // Case 1 needs no special arm: two identical enumeration sets union to that set
 // (case 3), and two identical non-empty not sets intersect to that set (case
@@ -51,19 +50,19 @@ import "github.com/kud360/goxsd8/xsderr"
 // members not allowed by a — the cvc-wildcard-name (§3.10.4.2) expanded-name
 // test, which is a strictly different predicate from cos-aw-intersect's
 // namespace-name test (cvc-wildcard-namespace, §3.10.4.3); the two filters are
-// not interchangeable and neither file may borrow the other's.
-// Bullet 3 (the keyword half): "the keyword defined if it is contained in BOTH
-// {disallowed names}" — a set INTERSECTION. Do NOT transpose this with
-// cos-aw-intersect (§3.10.6.4), whose corresponding clause is an OR ("a member of
-// EITHER"): wildcard union is AND for defined, wildcard intersection is OR. The
-// spec's own Note licenses the resulting over-approximation — dropping defined
-// "may allow QNames that are not allowed by either wildcard[;] this is to ensure
-// that all unions are expressible" — so the asymmetry is deliberate, not a
-// simplification taken here. The keyword sibling has NO bullet in this formula at
-// all, so an operand carrying it has it dropped from the result — silently, with
-// no defensive branch, because that is exactly what §3.10.6.3 defines. Operands do
-// reach here carrying it: coveringWildcardUnion folds the {namespace constraint}s
-// of ELEMENT wildcards, on which sibling is legal (parser/produce_complex.go maps
+// not interchangeable and neither file may borrow the other's. Bullet 3 (the
+// keyword half): "the keyword defined if it is contained in BOTH {disallowed
+// names}" — a set INTERSECTION. Do NOT transpose this with cos-aw-intersect
+// (§3.10.6.4), whose corresponding clause is an OR ("a member of EITHER"):
+// wildcard union is AND for defined, wildcard intersection is OR. The spec's own
+// Note licenses the resulting over-approximation — dropping defined "may allow
+// QNames that are not allowed by either wildcard[;] this is to ensure that all
+// unions are expressible" — so the asymmetry is deliberate, not a simplification
+// taken here. The keyword sibling has NO bullet in this formula at all, so an
+// operand carrying it has it dropped from the result — silently, with no defensive
+// branch, because that is exactly what §3.10.6.3 defines. Operands do reach here
+// carrying it: coveringWildcardUnion folds the {namespace constraint}s of ELEMENT
+// wildcards, on which sibling is legal (parser/produce_complex.go maps
 // ##definedSibling to it in the non-attribute-wildcard case). Dropping it only
 // ever WIDENS the union — one fewer excluded name — so the loss is fail-open at
 // every call site, attribute or element, and can never cause a false reject.

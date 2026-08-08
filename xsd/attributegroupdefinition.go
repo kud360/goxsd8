@@ -73,17 +73,19 @@ type AttributeGroupDefinition struct {
 // Same idiom as NewElementDeclaration's e-props-correct clause 1 check.
 //
 // It also rejects the state clause 2 forbids: two {attribute uses} members whose
-// {attribute declaration}s have the same expanded name. The scan is deterministic (STYLE D2) — the
-// members are walked in document order and membership is tested against a
-// map[QName]struct{} seen-set, so the first duplicate found by index is the one
-// rejected (never ranging the map itself for the scan). Both sum variants expose
-// the expanded name without resolution: a LocalAttributeDeclaration via its
-// Declaration.Name(), an AttributeDeclarationRef via its Name.
+// {attribute declaration}s have the same expanded name. The scan is
+// deterministic (STYLE D2) — the members are walked in document order and
+// membership is tested against a map[QName]struct{} seen-set, so the first
+// duplicate found by index is the one rejected (never ranging the map itself for
+// the scan). Both sum variants expose the expanded name without resolution: a
+// LocalAttributeDeclaration via its Declaration.Name(), an
+// AttributeDeclarationRef via its Name.
 //
 // The REST of clause 1 is satisfied by construction (the sum and optional-slot
-// machinery already make ill-formed members unrepresentable); the §3.6.2.2 referenced-group
-// union is folded in by the producer (§3.6.2.1, mapping time) before it calls
-// this constructor, so the members passed here are already complete.
+// machinery already make ill-formed members unrepresentable); the §3.6.2.2
+// referenced-group union is folded in by the producer (§3.6.2.1, mapping time)
+// before it calls this constructor, so the members passed here are already
+// complete.
 //
 // It also rejects one state Wildcard Properties Correct (§3.10.6.1,
 // w-props-correct) clause 5 forbids, charged to that rule rather than to

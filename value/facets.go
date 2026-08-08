@@ -176,13 +176,13 @@ func IsFacetPrecondition(err error) bool {
 //
 // PRECONDITION (caller-guarded, not PRE-checked here — but a violation is
 // reported, see below): every facet on st is applicable to st per
-// cos-applicable-facets (§4.1.5), and b maps st's governing
-// type. The applicability half of that precondition is DISCHARGED for any st
-// built through the parser, whose sole xsd.NewSimpleType call site follows
-// construction with builtin.CheckSimpleTypeRestriction (cos-st-restricts clause
-// 1.3.1 for the atomic case, clauses 2.2.2.4/3.2.2.4 inside package xsd for list
-// and union). It remains the CALLER's to honor for an st assembled by calling the
-// xsd constructors directly, which bypasses that seam entirely — so a violated
+// cos-applicable-facets (§4.1.5), and b maps st's governing type. The
+// applicability half of that precondition is DISCHARGED for any st built through
+// the parser, whose sole xsd.NewSimpleType call site follows construction with
+// builtin.CheckSimpleTypeRestriction (cos-st-restricts clause 1.3.1 for the
+// atomic case, clauses 2.2.2.4/3.2.2.4 inside package xsd for list and union). It
+// remains the CALLER's to honor for an st assembled by calling the xsd
+// constructors directly, which bypasses that seam entirely — so a violated
 // precondition is reachable, and it is REPORTED rather than assumed away.
 //
 // st may be atomic, list or union variety, and EACH is decided end to end — the
@@ -192,13 +192,13 @@ func IsFacetPrecondition(err error) bool {
 // governingMapping wraps the item TYPE in a listMapping whose Parse recurses
 // here per item — so an item is Datatype Valid by the whole rule, the item
 // type's own facets included (clause dv_list, list.go). A union (cl.2.3,
-// dv_union) takes the separate dispatch path
-// in union.go instead: it carries no whiteSpace facet of its own (categorically
-// not applicable, §4.1.5), and its literal is decided by its {member type
-// definitions} in order — the first member that is itself Datatype Valid is the
-// ·active member type·, its value IS the union's value (dv_union's V is a
-// pass-through, never a union-shaped wrapper), and the union's own pattern and
-// enumeration facets are applied around that dispatch.
+// dv_union) takes the separate dispatch path in union.go instead: it carries no
+// whiteSpace facet of its own (categorically not applicable, §4.1.5), and its
+// literal is decided by its {member type definitions} in order — the first
+// member that is itself Datatype Valid is the ·active member type·, its value
+// IS the union's value (dv_union's V is a pass-through, never a union-shaped
+// wrapper), and the union's own pattern and enumeration facets are applied
+// around that dispatch.
 //
 // A VIOLATED PRECONDITION is returned as an *xsderr.Error that
 // [IsFacetPrecondition] reports true for — never as a panic, and never as a
@@ -392,12 +392,12 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 			// names a hole in this package — matching the kind-dispatch convention
 			// of boundFacet.violates, boundRule, digitsRule, lengthRule and
 			// scaleRule. Failing loud rather than silently dropping the facet is
-			// the #133 silent-drop bug class. Trade-off:
-			// adding this default disables golangci `exhaustive`'s compile-time
-			// FacetKind-coverage check for this switch, so a future kind is caught
-			// here at test/runtime instead of at lint time — still strictly better
-			// than a silent no-op drop. FacetKind.String() never panics on an
-			// unknown value, so %s below is always safe.
+			// the #133 silent-drop bug class. Trade-off: adding this default
+			// disables golangci `exhaustive`'s compile-time FacetKind-coverage
+			// check for this switch, so a future kind is caught here at
+			// test/runtime instead of at lint time — still strictly better than a
+			// silent no-op drop. FacetKind.String() never panics on an unknown
+			// value, so %s below is always safe.
 			panic(fmt.Sprintf("value: compile: unhandled FacetKind %s", ef.Facet().Kind()))
 		}
 	}
@@ -408,13 +408,12 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 // list {variety} it wraps the item TYPE in a listMapping, which decides each
 // item by the full cvc-datatype-valid rule against that type — its own facets
 // included, not merely its governing mapping (clause dv_list, §4.1.4 cl.2.2,
-// list.go); for a
-// union {variety} it wraps the {member type definitions} in a unionMapping
-// (clause dv_union, §4.1.4 cl.2.3, union.go); otherwise it walks from node
-// (inclusive) up the base chain and returns the first ancestor's Mapping the
-// backend supplies — the widest-space resolution (backend.go, st-restrict-facets
-// §3.16.6.4): a derived type without its own mapping is governed by its nearest
-// mapped ancestor's.
+// list.go); for a union {variety} it wraps the {member type definitions} in a
+// unionMapping (clause dv_union, §4.1.4 cl.2.3, union.go); otherwise it walks
+// from node (inclusive) up the base chain and returns the first ancestor's
+// Mapping the backend supplies — the widest-space resolution (backend.go,
+// st-restrict-facets §3.16.6.4): a derived type without its own mapping is
+// governed by its nearest mapped ancestor's.
 //
 // Both {variety} checks are applied only to node itself, never to every ancestor
 // in the base-chain walk, because a constructed type's whole derivation chain

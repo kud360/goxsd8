@@ -30,12 +30,11 @@ import (
 // composition edge had to be ported twice.
 //
 // parser.ParseReport now reports the assembly directly (parser.AssemblyReport):
-// every document read, in discovery order, and every
-// ·inter-schema-document reference· (§4.2.1) it could not follow to one. The
-// gate below reads that report, so the gated set is the assembled set BY
-// CONSTRUCTION rather than by two walks agreeing — no §4.3.2 clause 4 base-URI
-// algorithm, no resolver protocol and no load-once identity is re-implemented
-// here.
+// every document read, in discovery order, and every ·inter-schema-document
+// reference· (§4.2.1) it could not follow to one. The gate below reads that
+// report, so the gated set is the assembled set BY CONSTRUCTION rather than by
+// two walks agreeing — no §4.3.2 clause 4 base-URI algorithm, no resolver
+// protocol and no load-once identity is re-implemented here.
 //
 // # Why running the shape check on the RAW document is correct
 //
