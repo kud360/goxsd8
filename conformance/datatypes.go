@@ -1334,10 +1334,11 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 // ibmData/{valid,instance_invalid}/D3_3_4/*.xml (discovered via the same
 // ibmMeta/precisionDecimal.testSet auxiliary index, runner.go). This is a
 // SECOND, materially larger precisionDecimal shape than the Saxon cohort's
-// single-leaf model: ONE schema declares SEVERAL simple types — single-step
-// restrictions of a builtin (decType/decTotalDigits/decEnumeration/decPattern/
-// decMinMaxInclusive/decMinMaxExclusive/decMinMaxScale), <list>s over them (v16)
-// and <union>s over them (v17) — and the instance's <root> carries MULTIPLE
+// single-leaf model: ONE schema declares SEVERAL simple types — restrictions of a
+// builtin (decType/decTotalDigits/decEnumeration/decPattern/
+// decMinMaxInclusive/decMinMaxExclusive/decMinMaxScale), restrictions of those
+// restrictions (v18 and v19–v22, chains one to three steps deep), <list>s over them
+// (v16) and <union>s over them (v17) — and the instance's <root> carries MULTIPLE
 // children, each dispatched to its OWN type by the element's declared type=
 // attribute (the element→type binding is NOT a naming convention — v14's
 // decMinMaxScale type is carried by element elMinMaxScale — so the reader
@@ -1372,10 +1373,10 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 // without special-casing, because its types simply fail to build. That gap is
 // recorded in the DATATYPES lane — this repo's most complete lane, where the
 // residual failures number in the tens against over a thousand passes — so it costs
-// a real point. (The INSTANCE lane, 0/26426, is the inert one; naming it here, as
-// this comment once did, would tell a reader the decline is free.) NaN.xml in
-// valid/D3_3_4 is not referenced by any testGroup, so parseSuite never emits a case
-// for it and the selector never sees it.
+// a real point. (The INSTANCE lane, which scores zero, is the actually-inert one;
+// naming it here, as this comment once did, would tell a reader the decline is
+// free.) NaN.xml in valid/D3_3_4 is not referenced by any testGroup, so parseSuite
+// never emits a case for it and the selector never sees it.
 func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
 	children, values, ok := readPDecimalCase(c.doc)
 	if !ok {
@@ -1472,9 +1473,10 @@ func execD34Case(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c cas
 
 // buildD34Types turns the schema's simple-type declarations into real
 // *xsd.SimpleType components, keyed by d34TypeDecl.key. A declaration whose shape
-// this cohort cannot back — anything but a single-step restriction of a seeded
-// builtin, a list, or a union over those — is simply absent from the result, which
-// is how the out-of-scope D3_3_4 shapes decline without being special-cased.
+// this cohort cannot back — anything but a restriction (of a seeded builtin or of
+// another declared type, to any depth), a list, or a union over those — is simply
+// absent from the result, which is how the out-of-scope D3_3_4 shapes decline
+// without being special-cased.
 //
 // Declarations may reference one another (v16's decListC lists sv:decTotalDigits,
 // v17's decUnionC unions sv:decMinScale), so the pass repeats over the ordered
@@ -1624,8 +1626,9 @@ func d34ItemOrMember(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, d
 }
 
 // d34TypeRef resolves a type REFERENCE — a list's itemType=, a union's memberTypes=
-// entry — to a component. A name the schema itself DECLARES resolves only once that
-// declaration is built (ok=false meanwhile, which the fixed point retries);
+// entry, a restriction's base= — to a component. A name the schema itself DECLARES
+// resolves only once that declaration is built (ok=false meanwhile, which the
+// fixed point retries);
 // otherwise it must be a seeded builtin the strict backend governs, so a reference
 // to an unbacked type declines rather than silently validating through some other
 // mapping. Schema declarations are consulted FIRST so a schema-local type can never
