@@ -69,8 +69,17 @@ func validateUnion(b Backend, st *xsd.SimpleType, u xsd.Union, rawLexical string
 
 	// clause 1 (cvc-pattern-valid, §4.3.4.4) on the literal as the active basic
 	// member normalized it, NOT on the raw one and not on a union-level
-	// normalization (a union has no whiteSpace facet to normalize with).
-	lexical := normalizeWhiteSpace(rawLexical, ws)
+	// normalization (a union has no whiteSpace facet to normalize with). A zero mode
+	// means the ·active basic member· is itself a type §4.1.5 makes facet-less: an
+	// ATOMIC member whose {primitive type definition} is absent, which cos-st-restricts
+	// clause 3.1 admits as a member because it rejects only the two ·special· ANCHOR
+	// nodes by identity, not every absent-primitive atomic a caller can build. Nothing
+	// normalizes there, so the raw literal is what clause 1 tests — the same `if ws != 0`
+	// guard validateLexical and facetValue apply.
+	lexical := rawLexical
+	if ws != 0 {
+		lexical = normalizeWhiteSpace(rawLexical, ws)
+	}
 	for _, lf := range lexFacets {
 		if err := lf.CheckLexical(lexical); err != nil {
 			return nil, 0, err
@@ -111,7 +120,18 @@ func validateUnion(b Backend, st *xsd.SimpleType, u xsd.Union, rawLexical string
 // mechanism. So the rejections are collected rather than dropped (STYLE S3) and,
 // when no member accepts, folded into the one cvc-datatype-valid rejection
 // returned here, which names every member's reason in membership order
-// (deterministic, STYLE D2). A union whose {member type definitions} is EMPTY —
+// (deterministic, STYLE D2).
+//
+// A facet-pipeline PRECONDITION fault is the ONE error class that must NOT be
+// collected, and it aborts the scan (IsFacetPrecondition, ValidateLexical). It is
+// not a verdict about the literal, so folding it in would report member i as having
+// REJECTED a literal it never decided — and since a later member may well accept,
+// the union would be reported VALID off a member the dispatch was never entitled to
+// reach, with that member's value as V. That is a false accept produced by
+// swallowing a caller's construction fault, the worst of the outcomes available
+// here, so the fault propagates and the union is decided by nobody.
+//
+// A union whose {member type definitions} is EMPTY —
 // xs:error (Structures §3.16.7.3), whose value and lexical spaces are both empty —
 // falls out of the loop with zero candidates and so rejects every literal
 // including "", with no special case.
@@ -124,6 +144,9 @@ func dispatchUnion(b Backend, u xsd.Union, rawLexical string, ctx Context) (Valu
 		v, ws, err := validateLexical(b, m, rawLexical, ctx)
 		if err == nil {
 			return v, ws, nil
+		}
+		if IsFacetPrecondition(err) {
+			return nil, 0, err
 		}
 		rejections = append(rejections, fmt.Sprintf("member %d (%s): %v", i, m.Name(), err))
 	}

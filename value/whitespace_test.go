@@ -68,11 +68,11 @@ func TestEffectiveWhiteSpace(t *testing.T) {
 	preservePrim := primType(t, "string", "preserve")
 	collapsePrim := primType(t, "decimal", "collapse")
 
-	if got, ok := effectiveWhiteSpace(preservePrim); got != preserveWS || !ok {
-		t.Errorf("effectiveWhiteSpace(string primitive) = (%d, %v), want (preserve %d, true)", got, ok, preserveWS)
+	if got, err := effectiveWhiteSpace(preservePrim); got != preserveWS || err != nil {
+		t.Errorf("effectiveWhiteSpace(string primitive) = (%d, %v), want (preserve %d, nil)", got, err, preserveWS)
 	}
-	if got, ok := effectiveWhiteSpace(collapsePrim); got != collapseWS || !ok {
-		t.Errorf("effectiveWhiteSpace(decimal primitive) = (%d, %v), want (collapse %d, true)", got, ok, collapseWS)
+	if got, err := effectiveWhiteSpace(collapsePrim); got != collapseWS || err != nil {
+		t.Errorf("effectiveWhiteSpace(decimal primitive) = (%d, %v), want (collapse %d, nil)", got, err, collapseWS)
 	}
 
 	// A derivation with no own whiteSpace facet inherits the primitive's entry.
@@ -81,8 +81,8 @@ func TestEffectiveWhiteSpace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	if got, ok := effectiveWhiteSpace(derived); got != collapseWS || !ok {
-		t.Errorf("effectiveWhiteSpace(inheriting derivation) = (%d, %v), want (collapse %d, true)", got, ok, collapseWS)
+	if got, err := effectiveWhiteSpace(derived); got != collapseWS || err != nil {
+		t.Errorf("effectiveWhiteSpace(inheriting derivation) = (%d, %v), want (collapse %d, nil)", got, err, collapseWS)
 	}
 }
 
@@ -98,36 +98,47 @@ func TestEffectiveWhiteSpaceOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	if got, ok := effectiveWhiteSpace(collapsed); got != collapseWS || !ok {
-		t.Errorf("effectiveWhiteSpace(overriding derivation) = (%d, %v), want (collapse %d, true) (§3.16.6.4)", got, ok, collapseWS)
+	if got, err := effectiveWhiteSpace(collapsed); got != collapseWS || err != nil {
+		t.Errorf("effectiveWhiteSpace(overriding derivation) = (%d, %v), want (collapse %d, nil) (§3.16.6.4)", got, err, collapseWS)
 	}
 }
 
-// TestEffectiveWhiteSpaceNoFacetPanics confirms an ATOMIC type with no
-// whiteSpace facet in force is a caught construction bug (§3.16.7.4 guarantees
-// every atomic primitive's {facets} carries a whiteSpace entry), not a silent
-// default and NOT the relaxed union "(0, false)" outcome. This is the guard the
-// union widening must not weaken: if effectiveWhiteSpace returned (0, false) for
-// every absent case regardless of variety, this test would fail.
-func TestEffectiveWhiteSpaceNoFacetPanics(t *testing.T) {
+// TestEffectiveWhiteSpaceNoFacetErrors confirms an ATOMIC type with no whiteSpace
+// facet in force is a caught construction fault (§3.16.7.4 guarantees every atomic
+// primitive's {facets} carries a whiteSpace entry) — a returned, discriminable
+// component-invariant error, not a silent default and NOT the "no facets applicable"
+// (0, nil) outcome. This is the guard the no-facets-applicable widening must not
+// weaken: if effectiveWhiteSpace answered (0, nil) for every absent case regardless
+// of {variety}, this test would fail.
+//
+// A primitive built by NewPrimitiveType has a PRESENT {primitive type definition}
+// (itself, §3.16.1), which is what keeps it out of the xs:anyAtomicType arm.
+func TestEffectiveWhiteSpaceNoFacetErrors(t *testing.T) {
 	bare, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "bare"}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewPrimitiveType: %v", err)
 	}
-	defer func() {
-		if recover() == nil {
-			t.Error("effectiveWhiteSpace(atomic, no whiteSpace facet): want panic, got none")
-		}
-	}()
-	_, _ = effectiveWhiteSpace(bare)
+	ws, err := effectiveWhiteSpace(bare)
+	if err == nil {
+		t.Fatalf("effectiveWhiteSpace(atomic, no whiteSpace facet) = (%d, nil), want a component-invariant error", ws)
+	}
+	if ws != whiteSpace(0) {
+		t.Errorf("effectiveWhiteSpace(atomic, no whiteSpace facet) ws = %d, want zero value 0", ws)
+	}
+	if r, _ := xsderr.RuleOf(err); r != xsderr.RuleComponentInvariant {
+		t.Errorf("effectiveWhiteSpace(atomic, no whiteSpace facet) charged %s, want %s (§4.3.6.3: no Validation Rules are associated with whiteSpace)", r, xsderr.RuleComponentInvariant)
+	}
+	if !IsFacetPrecondition(err) {
+		t.Error("effectiveWhiteSpace(atomic, no whiteSpace facet): IsFacetPrecondition = false, want true — callers cannot tell the fault from a verdict")
+	}
 }
 
-// TestEffectiveWhiteSpaceListNoUsableModePanics confirms the no-usable-mode panic is
+// TestEffectiveWhiteSpaceListNoUsableModeErrors confirms the no-usable-mode fault is
 // LIST as well as atomic: a list-variety type with no whiteSpace mode in force
-// is still a construction bug, never the relaxed union outcome. This is the
-// mutation guard proving the relaxation is union-ONLY, not "any non-atomic
-// variety": a blanket "non-atomic ⇒ (0, false)" would silently pass a broken
-// list here.
+// is still a construction fault, never the "no facets applicable" outcome. This is the
+// mutation guard proving the relaxation is the three §4.1.5 cases ONLY, not "any
+// variety that is not a primitive-bearing atomic": a blanket "not atomic-with-a-
+// primitive ⇒ (0, nil)" would silently pass a broken list here.
 //
 // The list reaches that state through an UNRECOGNIZED {value}, not an absent
 // facet: cos-st-restricts clause 2.2.1.2 now rejects a constructed list carrying
@@ -136,8 +147,8 @@ func TestEffectiveWhiteSpaceNoFacetPanics(t *testing.T) {
 // through xsd's constructors at all. The malformed-{value} state is, because
 // §4.3.6.4's restriction SCC deliberately leaves an out-of-domain {value} to the
 // normalization stage here (STYLE E2) — and effectiveWhiteSpace collapses all
-// three no-usable-mode states onto this one panic, so it guards the same branch.
-func TestEffectiveWhiteSpaceListNoUsableModePanics(t *testing.T) {
+// three no-usable-mode states onto this one error, so it guards the same branch.
+func TestEffectiveWhiteSpaceListNoUsableModeErrors(t *testing.T) {
 	item := primType(t, "string", "preserve")
 	constructed, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "goodList"},
 		xsd.NewList(item), xsd.AnySimpleType(),
@@ -151,34 +162,78 @@ func TestEffectiveWhiteSpaceListNoUsableModePanics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
 	}
-	defer func() {
-		if recover() == nil {
-			t.Error("effectiveWhiteSpace(list, unrecognized whiteSpace {value}): want panic, got none")
-		}
-	}()
-	_, _ = effectiveWhiteSpace(list)
+	ws, err := effectiveWhiteSpace(list)
+	if err == nil {
+		t.Fatalf("effectiveWhiteSpace(list, unrecognized whiteSpace {value}) = (%d, nil), want a component-invariant error", ws)
+	}
+	if r, _ := xsderr.RuleOf(err); r != xsderr.RuleComponentInvariant {
+		t.Errorf("effectiveWhiteSpace(list, unrecognized whiteSpace {value}) charged %s, want %s", r, xsderr.RuleComponentInvariant)
+	}
+	if !IsFacetPrecondition(err) {
+		t.Error("effectiveWhiteSpace(list, unrecognized whiteSpace {value}): IsFacetPrecondition = false, want true")
+	}
 }
 
-// TestEffectiveWhiteSpaceUnionNotApplicable confirms the ONE relaxed case: a
-// union {variety} carries no whiteSpace facet (cos-applicable-facets §4.1.5,
-// whiteSpace is not applicable to union), so effectiveWhiteSpace answers
-// (0, false) — "not applicable" — rather than panicking.
-func TestEffectiveWhiteSpaceUnionNotApplicable(t *testing.T) {
-	union := unionType(t)
-	got, applicable := effectiveWhiteSpace(union)
-	if applicable {
-		t.Errorf("effectiveWhiteSpace(union) applicable = true, want false (cos-applicable-facets §4.1.5)")
+// TestEffectiveWhiteSpaceNoFacetsApplicable pins all THREE cos-applicable-facets
+// (§4.1.5) no-facets-applicable cases as "not applicable" — (0, nil) — rather than as
+// faults: an ABSENT {variety} (xs:anySimpleType), an ATOMIC {variety} with an absent
+// {primitive type definition} (xs:anyAtomicType), and a UNION, whose applicable
+// facets are pattern/enumeration/assertions with whiteSpace absent.
+//
+// The two ·specials· are the live-bug half (warden pre-flight on #321): before the
+// widening only the union arm was relaxed, so effectiveWhiteSpace faulted on
+// xs:anySimpleType and xs:anyAtomicType — reachable from SchemaBuilder and from any
+// library caller — and a returned fault there would false-reject the two widest types
+// in the language, which §4.1.4 makes unconditionally Datatype Valid.
+func TestEffectiveWhiteSpaceNoFacetsApplicable(t *testing.T) {
+	cases := []struct {
+		name string
+		st   *xsd.SimpleType
+	}{
+		{"anySimpleType ({variety} absent)", xsd.AnySimpleType()},
+		{"anyAtomicType (atomic, {primitive type definition} absent)", xsd.AnyAtomicType()},
+		{"union (whiteSpace not in its applicable set)", unionType(t)},
 	}
-	if got != whiteSpace(0) {
-		t.Errorf("effectiveWhiteSpace(union) ws = %d, want zero value 0", got)
+	for _, c := range cases {
+		ws, err := effectiveWhiteSpace(c.st)
+		if err != nil {
+			t.Errorf("effectiveWhiteSpace(%s) = (%d, %v), want (0, nil) — §4.1.5 makes no facet applicable", c.name, ws, err)
+			continue
+		}
+		if ws != whiteSpace(0) {
+			t.Errorf("effectiveWhiteSpace(%s) ws = %d, want zero value 0", c.name, ws)
+		}
+	}
+}
+
+// TestValidateLexicalSpecialDatatypesDoNotFault drives the two ·special· datatypes
+// through the exported pipeline to prove the whiteSpace stage no longer faults on
+// them (it runs BEFORE the governing-mapping gate, so they cannot be filtered out
+// earlier). The expected outcome is the ordinary "no backend mapping governs"
+// cvc-datatype-valid error — no backend maps a ·special· (§4.1) — and NOT a facet
+// precondition fault, which valueSpace.ValidDefault would have to answer undecided and
+// a naive caller would read as a false reject.
+func TestValidateLexicalSpecialDatatypesDoNotFault(t *testing.T) {
+	for _, st := range []*xsd.SimpleType{xsd.AnySimpleType(), xsd.AnyAtomicType()} {
+		_, err := ValidateLexical(emptyBackend{}, st, "  raw  literal  ", nil)
+		if err == nil {
+			t.Errorf("ValidateLexical(%s) = nil error, want the ungoverned cvc-datatype-valid error", st.Name())
+			continue
+		}
+		if IsFacetPrecondition(err) {
+			t.Errorf("ValidateLexical(%s) reported a facet precondition fault: %v", st.Name(), err)
+		}
+		if r, _ := xsderr.RuleOf(err); r != "cvc-datatype-valid" {
+			t.Errorf("ValidateLexical(%s) charged %s, want cvc-datatype-valid (no backend mapping governs)", st.Name(), r)
+		}
 	}
 }
 
 // TestEffectiveWhiteSpaceListResolvesCollapse confirms a list-variety type that
 // carries its materialized whiteSpace=collapse facet (as builtin.Seed
 // materializes NMTOKENS/IDREFS/ENTITIES per §4.3.6.1) resolves through the
-// ordinary EffectiveFacets scan to (collapse, true) — hitting neither the union
-// branch nor the panic branch, so no list special-casing is needed.
+// ordinary EffectiveFacets scan to (collapse, nil) — hitting neither the
+// no-facets-applicable arm nor the fault, so no list special-casing is needed.
 func TestEffectiveWhiteSpaceListResolvesCollapse(t *testing.T) {
 	item := primType(t, "string", "preserve")
 	list, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "collapseList"},
@@ -187,8 +242,8 @@ func TestEffectiveWhiteSpaceListResolvesCollapse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
 	}
-	if got, ok := effectiveWhiteSpace(list); got != collapseWS || !ok {
-		t.Errorf("effectiveWhiteSpace(list) = (%d, %v), want (collapse %d, true) (§4.3.6.1)", got, ok, collapseWS)
+	if got, err := effectiveWhiteSpace(list); got != collapseWS || err != nil {
+		t.Errorf("effectiveWhiteSpace(list) = (%d, %v), want (collapse %d, nil) (§4.3.6.1)", got, err, collapseWS)
 	}
 }
 

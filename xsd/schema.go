@@ -247,12 +247,16 @@ func (b *SchemaBuilder) Finalize() (*Schema, error) {
 // widen it: vs reports "undecided" wherever it cannot decide, and undecided is
 // accept.
 //
-// One precondition it does NOT check, and cannot: a *[SimpleType] assembled
-// through this package's constructors may carry a facet that is not applicable to
-// it (cos-applicable-facets, Datatypes §4.1.5), and a value space that validates
-// a default against such a type may panic. A type built by the parser is
-// unaffected — see the GAP(xsd) note on checkSimpleDefault
-// (valueconstraintvalid.go) for the full statement.
+// One constraint it does NOT check, and cannot: a *[SimpleType] assembled through
+// this package's constructors may carry a facet that is not applicable to it
+// (cos-applicable-facets, Datatypes §4.1.5). The applicability table lives outside
+// this leaf, so builtin.CheckSimpleTypeRestriction — which a producer calls right
+// after [NewSimpleType], and which the parser always calls — owns that check, and a
+// caller that skips it gets no diagnosis of the fault here. What it does NOT get
+// either is a wrong answer: a value space asked to validate a default against such a
+// type reports the fault undecided rather than as a verdict, so this entry point
+// neither rejects the schema for it nor fails (see checkSimpleDefault,
+// valueconstraintvalid.go).
 //
 // It is a second entry point rather than a setter on the builder because a
 // ValueSpace is a finalize-time INPUT, not accumulated schema state: a mutable

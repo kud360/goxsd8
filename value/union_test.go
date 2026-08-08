@@ -299,3 +299,68 @@ func TestGoverningMappingUnionRequiresEveryMember(t *testing.T) {
 		t.Errorf("unionMapping.Parse(%q) = %#v, want %#v (the active member's own value)", "7", v, want)
 	}
 }
+
+// TestDispatchUnionAbortsOnFacetPreconditionFault pins the one error class the member
+// scan must NOT collect: a facet-precondition fault on member 0 (cos-applicable-facets
+// §4.1.5, IsFacetPrecondition) aborts the dispatch instead of being folded into the
+// rejection list.
+//
+// The union here is built so that folding produces a FALSE ACCEPT, not merely a
+// misleading message: member 1 accepts every literal, so a scan that recorded member 0
+// as "rejected" would report the union VALID with member 1's value as V — off a member
+// dv_union (§4.1.4 cl.2.3) never entitled it to reach, since member 0 was never
+// decided at all. That is the worst outcome available here, which is why the fault
+// propagates and the union is decided by nobody.
+func TestDispatchUnionAbortsOnFacetPreconditionFault(t *testing.T) {
+	faulting := preconditionType(t, "unmeasurable")
+	accepting := primType(t, "text", "preserve")
+	b := plainBackend{faulting.Name(): true, accepting.Name(): true}
+	u := unionType2(t, "faultingFirst", faulting, accepting)
+
+	v, err := ValidateLexical(b, u, "ab", nil)
+	if err == nil {
+		t.Fatalf("ValidateLexical(union whose member 0 faults) = (%#v, nil): member 1 wrongly decided a union member 0 never decided", v)
+	}
+	if !IsFacetPrecondition(err) {
+		t.Errorf("ValidateLexical(union whose member 0 faults): IsFacetPrecondition = false, want true — the fault was folded into a cvc-datatype-valid rejection: %v", err)
+	}
+
+	// The mutation guard: an ordinary member REJECTION is still the dispatch mechanism,
+	// so a later member must still win. Were the abort widened to any member error,
+	// this would fail.
+	num := primType(t, "numeric", "collapse")
+	text := primType(t, "text2", "preserve")
+	mb := memberBackend{num.Name(): allDigits, text.Name(): func(string) bool { return true }}
+	if _, err := ValidateLexical(mb, unionType2(t, "numFirst2", num, text), "abc", nil); err != nil {
+		t.Errorf("ValidateLexical(union, literal only member 1 accepts) = %v, want accept via member 1", err)
+	}
+}
+
+// TestValidateLexicalUnionMemberWithNoApplicableFacets pins the zero-mode guard in
+// validateUnion's clause-1 stage. When the ·active basic member· is an ATOMIC type
+// whose {primitive type definition} is absent, cos-applicable-facets (§4.1.5) makes NO
+// facet applicable to it, so it resolves no whiteSpace mode and the union's own pattern
+// stage must test the RAW literal rather than normalize with the zero mode.
+//
+// The state is reachable, not hypothetical: cos-st-restricts clause 3.1 rejects the two
+// ·special· ANCHOR nodes as members by identity, so an absent-primitive atomic a caller
+// builds itself passes that check and can be a member. Without the guard,
+// normalizeWhiteSpace panics on the zero mode — the very panic class this cohort exists
+// to remove.
+func TestValidateLexicalUnionMemberWithNoApplicableFacets(t *testing.T) {
+	member, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "noPrimitive"},
+		xsd.NewAtomic(nil), xsd.AnyAtomicType(), nil, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(atomic with absent {primitive type definition}): %v", err)
+	}
+	u := unionType2(t, "facetlessMember", member)
+
+	const raw = "  x  "
+	v, verr := ValidateLexical(plainBackend{member.Name(): true}, u, raw, nil)
+	if verr != nil {
+		t.Fatalf("ValidateLexical(union over a facet-less member) = %v, want accept", verr)
+	}
+	if v != Value(raw) {
+		t.Errorf("ValidateLexical = %#v, want the RAW literal %q — no whiteSpace mode is in force, so nothing normalizes", v, raw)
+	}
+}

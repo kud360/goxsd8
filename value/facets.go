@@ -1,6 +1,7 @@
 package value
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -105,7 +106,65 @@ const (
 	// ruleCvcMinScaleValid is minScale Valid (xsd-precisionDecimal.md §4.3.3,
 	// id="cvc-minScale-valid") — precisionDecimal-only (§3.3).
 	ruleCvcMinScaleValid xsderr.Rule = "cvc-minScale-valid"
+	// ruleCosApplicableFacets is Applicable Facets (§4.1.5,
+	// id="cos-applicable-facets"): the Schema Component Constraint fixing which
+	// ·constraining facets· "are allowed to be members of" a type's {facets}, keyed
+	// on its {variety} and — for the atomic variety — its {primitive type
+	// definition}. It is a Schema Component Constraint, not a Validation Rule, so it
+	// is the ONE rule in this file that never decides an instance: it is charged
+	// where the pipeline meets a facet paired with a value lacking the capability
+	// that facet needs, which is precisely a facet sitting in {facets} outside the
+	// set §4.1.5 permits (facetPrecondition, ValidateLexical).
+	ruleCosApplicableFacets xsderr.Rule = "cos-applicable-facets"
 )
+
+// errFacetPrecondition is the sentinel every facet-pipeline PRECONDITION fault
+// wraps. The call sites that must tell such a fault apart from a validity verdict
+// (valueSpace.ValidDefault's gate 4, dispatchUnion, checkEnumerationRestriction)
+// then test ONE fact instead of matching a message or enumerating the two rule IDs
+// the cohort spans — cos-applicable-facets and xsderr.RuleComponentInvariant. It
+// stays unexported, reachable only through IsFacetPrecondition, so no consumer can
+// reassign the sentinel out from under those decisions.
+var errFacetPrecondition = errors.New("facet-pipeline precondition violated")
+
+// facetPrecondition builds the *xsderr.Error for a facet-pipeline PRECONDITION
+// fault: rule attributes it (ruleCosApplicableFacets for a facet paired with an
+// incapable value, xsderr.RuleComponentInvariant for the whiteSpace representation
+// invariant), and the wrapped errFacetPrecondition makes it discriminable through
+// IsFacetPrecondition without any caller parsing a message.
+//
+// It is the ONE construction site of the class (STYLE T4), which is also what keeps
+// the cohort greppable now that the sites no longer share a marker STRING: `grep
+// facetPrecondition(` enumerates every one of them.
+//
+// loc locates the component at fault wherever the site holds it: newBoundFacet and
+// effectiveWhiteSpace both run at COMPILE time with st in hand, and both pass
+// st.Loc(). The five sites inside a ValueFacet's CheckValue pass the zero Loc
+// instead, and deliberately — a compiled checker holds the facet's own {value} and
+// its kind, never a reference back to the *xsd.SimpleType it was built for, and no
+// caller re-supplies one — so five of this class's seven members ship
+// location-less. That is stated rather than left silent (STYLE E3), because the
+// class is ABOUT a component: the fix is to carry the declaring type's Loc on each
+// checker, not to invent one at the check site.
+func facetPrecondition(rule xsderr.Rule, loc xsderr.Loc, format string, args ...any) *xsderr.Error {
+	return xsderr.Wrap(rule, loc, fmt.Errorf("%w: %s", errFacetPrecondition, fmt.Sprintf(format, args...)))
+}
+
+// IsFacetPrecondition reports whether err is a facet-pipeline PRECONDITION fault
+// — a fault in the *[xsd.SimpleType] handed to [ValidateLexical], not a verdict
+// about the literal validated against it. [ValidateLexical] enumerates the exact
+// states that produce one and why each is the caller's rather than the schema's.
+//
+// Test it before reading any [ValidateLexical] error as a validity verdict: a
+// caller that charges such a fault as "this literal is invalid" turns its own
+// construction bug into a false rejection of a valid schema or instance. The
+// [xsderr.Rule] the error carries says which fault it is (cos-applicable-facets or
+// [xsderr.RuleComponentInvariant], reachable through [xsderr.RuleOf]); this
+// predicate says only that it is one of them, which is the question every caller
+// deciding validity actually has.
+func IsFacetPrecondition(err error) bool {
+	return errors.Is(err, errFacetPrecondition)
+}
 
 // ValidateLexical validates the lexical string rawLexical against st's effective
 // facets through the full facet pipeline (whiteSpace → pattern → lexical mapping
@@ -115,16 +174,16 @@ const (
 // the governing mapping's Parse for the candidate value; a context-free cohort
 // (decimal/boolean/string) passes nil here.
 //
-// PRECONDITION (caller-guarded, NOT checked here): every facet on st is
-// applicable to st per cos-applicable-facets (§4.1.5), and b maps st's governing
+// PRECONDITION (caller-guarded, not PRE-checked here — but a violation is
+// reported, see below): every facet on st is applicable to st per
+// cos-applicable-facets (§4.1.5), and b maps st's governing
 // type. The applicability half of that precondition is DISCHARGED for any st
 // built through the parser, whose sole xsd.NewSimpleType call site follows
 // construction with builtin.CheckSimpleTypeRestriction (cos-st-restricts clause
 // 1.3.1 for the atomic case, clauses 2.2.2.4/3.2.2.4 inside package xsd for list
 // and union). It remains the CALLER's to honor for an st assembled by calling the
-// xsd constructors directly, which bypasses that seam entirely — so the panics
-// below stay reachable and stay panics: they mark a violated precondition, not a
-// validity verdict about instance data.
+// xsd constructors directly, which bypasses that seam entirely — so a violated
+// precondition is reachable, and it is REPORTED rather than assumed away.
 //
 // st may be atomic, list or union variety, and EACH is decided end to end — the
 // three cases of cvc-datatype-valid clause 2 (§4.1.4). Atomic (cl.2.1) and list
@@ -141,16 +200,41 @@ const (
 // pass-through, never a union-shaped wrapper), and the union's own pattern and
 // enumeration facets are applied around that dispatch.
 //
-// ValidateLexical PANICS — it does not return an
-// error — when a value facet is paired with a value lacking the capability that
-// facet needs (a bound facet on a non-Ordered value, a length facet on a
-// non-Lengthed value, a digit facet on a non-DigitCounted value). Those are
-// schema-construction errors (st-restrict-facets / cos-applicable-facets) the
-// caller must have already rejected, never instance data, so they surface as
-// programming-error panics, not validity verdicts. An atomic or list with no
-// whiteSpace facet in force is a construction-error panic of the same kind,
-// raised inside effectiveWhiteSpace itself (§3.16.7.4/§4.3.6.1); the one
-// legitimately facet-less variety, union, never reaches that stage.
+// A VIOLATED PRECONDITION is returned as an *xsderr.Error that
+// [IsFacetPrecondition] reports true for — never as a panic, and never as a
+// validity verdict. There are exactly two such states:
+//
+//   - a value facet paired with a value lacking the CAPABILITY that facet needs: a
+//     bound facet on a value that is not [Ordered], a length facet on one that is
+//     not [Lengthed], a digit facet on one that is not [DigitCounted], a scale facet
+//     on one that is not [Scaled], explicitTimezone on one that is not
+//     [TimezoneAware]. Each is a facet sitting in {facets} outside the set §4.1.5
+//     permits, so each is charged to cos-applicable-facets. Note the capability is
+//     what is missing, not the property: a [TimezoneAware] value with no timezone
+//     under a required explicitTimezone facet, and a [Scaled] value whose ·scale· is
+//     absent, are ordinary verdicts (a rejection and a vacuous pass), not faults.
+//   - an atomic or list st with no usable whiteSpace mode in force — no whiteSpace
+//     facet at all, a multi-valued one, or a {value} outside the §4.3.6.1 domain —
+//     where §3.16.7.4 and §4.3.6.1 guarantee one. That is charged to
+//     [xsderr.RuleComponentInvariant], not to a cvc-* or cos-* ID: §4.3.6.3 states
+//     outright that "there are no Validation Rules associated with whiteSpace", and
+//     the state it names is a representation invariant of the component rather than
+//     any numbered clause (effectiveWhiteSpace).
+//
+// Neither says anything about rawLexical, so a caller that charges one as a
+// validity verdict converts its own construction bug into a FALSE REJECT of a valid
+// schema or instance. Inside this package the three deciders discriminate it:
+// valueSpace.ValidDefault reports undecided (its gate 4), dispatchUnion aborts the
+// member scan instead of folding the fault into its rejection list, and
+// checkEnumerationRestriction skips the member instead of re-charging it under
+// §4.3.5.5. An external caller does the same through [IsFacetPrecondition].
+//
+// The three §4.1.5 states in which NO facet is applicable at all are not faults and
+// not errors: an absent {variety} (xs:anySimpleType), an atomic {variety} with an
+// absent {primitive type definition} (xs:anyAtomicType), and a union, whose
+// applicable facets are pattern, enumeration and assertions alone. No whiteSpace
+// mode is in force for any of them and none is required, so the normalization stage
+// is skipped and the literal is parsed as written.
 //
 // Facet {value} parsing is a separate concern with its own scope: an inherited
 // enumeration/bound facet's lexical {value} is parsed in the DECLARING SCHEMA's
@@ -191,14 +275,20 @@ func validateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Conte
 	}
 
 	// whiteSpace stage (§4.3.6): normalize using st's effective whiteSpace facet,
-	// resolved off EffectiveFacets (the ordinary same-kind overlay, §3.16.6.4).
-	// The comma-ok result is discarded deliberately: applicable=false marks the
-	// union {variety} alone (cos-applicable-facets §4.1.5), which the dispatch
-	// above already took, so a mode is always in force here. Should that ever stop
-	// holding, normalizeWhiteSpace panics on the zero mode rather than silently
-	// leaving the literal un-normalized (effectiveWhiteSpace's documented net).
-	ws, _ := effectiveWhiteSpace(st)
-	lexical := normalizeWhiteSpace(rawLexical, ws)
+	// resolved off EffectiveFacets (the ordinary same-kind overlay, §3.16.6.4). A
+	// zero mode with no error is §4.1.5's "no facets are applicable": the union
+	// {variety} the dispatch above already took, and the two ·special· datatypes,
+	// whose {variety} or {primitive type definition} is absent. Those normalize
+	// nothing and the literal is parsed as written — the same `if ws != 0` guard
+	// facetValue applies to a facet's own {value}.
+	ws, err := effectiveWhiteSpace(st)
+	if err != nil {
+		return nil, 0, err
+	}
+	lexical := rawLexical
+	if ws != 0 {
+		lexical = normalizeWhiteSpace(rawLexical, ws)
+	}
 
 	// pattern (lexical) stage (cvc-pattern-valid, §4.3.4.4): checked on the
 	// whiteSpace-normalized lexical, before the value even exists.
@@ -293,13 +383,16 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 			// not an atomic value facet.
 		default:
 			// A FacetKind with no case above is a package-internal completeness
-			// bug, not instance data: the enum was extended without wiring its
-			// checker here. Per this file's kind-dispatch convention
-			// (boundFacet.violates, boundRule, digitsRule, lengthRule, scaleRule)
-			// and ValidateLexical's panic doc — schema-construction/programmer
-			// errors the caller must already have rejected surface as panics, not
-			// *xsderr validity verdicts — this fails loud rather than silently
-			// dropping the facet (the #133 silent-drop bug class). Trade-off:
+			// bug, not instance data and not even caller data: the enum was
+			// extended without wiring its checker here, and no *xsd.SimpleType a
+			// caller can build reaches it (st-props-correct clause 5 rejects an
+			// out-of-enum kind at construction, TestUnsupportedFacetKindRejected).
+			// So it stays a panic where the capability faults became errors —
+			// those name a fixable mistake in the caller's own component, this one
+			// names a hole in this package — matching the kind-dispatch convention
+			// of boundFacet.violates, boundRule, digitsRule, lengthRule and
+			// scaleRule. Failing loud rather than silently dropping the facet is
+			// the #133 silent-drop bug class. Trade-off:
 			// adding this default disables golangci `exhaustive`'s compile-time
 			// FacetKind-coverage check for this switch, so a future kind is caught
 			// here at test/runtime instead of at lint time — still strictly better
@@ -619,8 +712,9 @@ func enumMatch(candidate, member Value) bool {
 
 // boundFacet is one of the four bound value-facet stages
 // (cvc-maxInclusive/maxExclusive/minInclusive/minExclusive-valid, §4.3.7–4.3.10).
-// The limit and candidate both assert Ordered (every bound-applicable primitive
-// is ordered, cos-applicable-facets §4.1.5). An Incomparable Cmp is a legitimate
+// The limit and candidate must both be Ordered (every bound-applicable primitive
+// is ordered, cos-applicable-facets §4.1.5); one that is not is reported as a
+// facetPrecondition fault, never as a rejection. An Incomparable Cmp is a legitimate
 // spec outcome for a PARTIALLY ordered primitive (float/double): a value
 // incomparable with a bounding facet's value is EXCLUDED from the restricted
 // value space (§3.3.4.3/§3.3.5.3 Note — e.g. NaN against any numeric bound, or
@@ -653,7 +747,8 @@ func newBoundFacet(b Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (boundF
 	}
 	ord, ok := v.(Ordered)
 	if !ok {
-		panic(fmt.Sprintf("value: %s facet value %q is not Ordered (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", kind, values[0]))
+		return boundFacet{}, facetPrecondition(ruleCosApplicableFacets, st.Loc(),
+			"value: %s facet value %q is not Ordered, so the facet is not applicable to %s (cos-applicable-facets §4.1.5)", kind, values[0], st.Name())
 	}
 	return boundFacet{limit: ord, kind: kind}, nil
 }
@@ -662,7 +757,8 @@ func newBoundFacet(b Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (boundF
 func (bf boundFacet) CheckValue(v Value) error {
 	cand, ok := v.(Ordered)
 	if !ok {
-		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Ordered (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", v, bf.kind))
+		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
+			"value: candidate %T under a %s facet is not Ordered, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v, bf.kind)
 	}
 	ord := cand.Cmp(bf.limit)
 	if ord == Incomparable {
@@ -737,7 +833,8 @@ func newDigitsFacet(f xsd.Facet) (digitsFacet, error) {
 func (df digitsFacet) CheckValue(v Value) error {
 	dc, ok := v.(DigitCounted)
 	if !ok {
-		panic(fmt.Sprintf("value: candidate %T under a %s facet is not DigitCounted (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", v, df.kind))
+		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
+			"value: candidate %T under a %s facet is not DigitCounted, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v, df.kind)
 	}
 	got := dc.TotalDigits()
 	if df.kind == xsd.FacetFractionDigits {
@@ -830,7 +927,8 @@ func (lf lengthFacet) CheckValue(v Value) error {
 	}
 	l, ok := v.(Lengthed)
 	if !ok {
-		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Lengthed (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", v, lf.kind))
+		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
+			"value: candidate %T under a %s facet is not Lengthed, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v, lf.kind)
 	}
 	if lf.violates(l.Len()) {
 		return xsderr.New(lengthRule(lf.kind), xsderr.Loc{},
@@ -913,16 +1011,18 @@ func newExplicitTimezoneFacet(f xsd.Facet) (explicitTimezoneFacet, error) {
 // non-absent ·timezoneOffset·, prohibited demands an absent one, optional always
 // passes (a real always-succeeding branch, not a dropped stage). The candidate
 // must be TimezoneAware for the required/prohibited cases; a non-TimezoneAware
-// value under an explicitTimezone facet is a schema-construction error (the facet
+// value under an explicitTimezone facet is a schema-construction fault (the facet
 // is not applicable to it, cos-applicable-facets §4.1.5), never instance data, so
-// it PANICS rather than returning a validity verdict — the boundFacet convention.
+// it returns a facetPrecondition error rather than a validity verdict — the
+// boundFacet convention.
 func (tf explicitTimezoneFacet) CheckValue(v Value) error {
 	if tf.requirement == tzOptional {
 		return nil
 	}
 	ta, ok := v.(TimezoneAware)
 	if !ok {
-		panic(fmt.Sprintf("value: candidate %T under an explicitTimezone facet is not TimezoneAware (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", v))
+		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
+			"value: candidate %T under an explicitTimezone facet is not TimezoneAware, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v)
 	}
 	if tf.requirement == tzRequired && !ta.HasTimezone() {
 		return xsderr.New(ruleCvcExplicitTimezoneValid, xsderr.Loc{},
@@ -968,13 +1068,15 @@ func newScaleFacet(f xsd.Facet) (scaleFacet, error) {
 // ·scale· (a special: NaN/±INF) passes vacuously — clause 2 of both rules — so
 // the Scale() ok=false path returns nil before any comparison. The candidate
 // must be Scaled: maxScale/minScale apply to precisionDecimal only (§3.3), so a
-// non-Scaled value under one of these facets is a schema-construction error
+// non-Scaled value under one of these facets is a schema-construction fault
 // (cos-applicable-facets §4.1.5 not enforced upstream), never instance data, and
-// PANICS rather than returning a validity verdict — the boundFacet convention.
+// returns a facetPrecondition error rather than a validity verdict — the boundFacet
+// convention.
 func (sf scaleFacet) CheckValue(v Value) error {
 	sc, ok := v.(Scaled)
 	if !ok {
-		panic(fmt.Sprintf("value: candidate %T under a %s facet is not Scaled (cos-applicable-facets §4.1.5 not enforced upstream — see ValidateLexical's PRECONDITION)", v, sf.kind))
+		return facetPrecondition(ruleCosApplicableFacets, xsderr.Loc{},
+			"value: candidate %T under a %s facet is not Scaled, so the facet is not applicable to its type (cos-applicable-facets §4.1.5)", v, sf.kind)
 	}
 	scale, ok := sc.Scale()
 	if !ok {

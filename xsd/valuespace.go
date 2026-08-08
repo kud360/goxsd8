@@ -88,6 +88,16 @@ type ValueSpace interface {
 	//     declaring type it cannot map. That is a statement about the TYPE, not
 	//     a verdict about vc.{lexical form}, and charging it as clause 2 would
 	//     blame the wrong component under the wrong rule ID.
+	//   - a facet on t that is NOT APPLICABLE to t (cos-applicable-facets,
+	//     Datatypes §4.1.5), or a t carrying no usable whiteSpace mode where
+	//     §3.16.7.4 and §4.3.6.1 guarantee one. Both are reachable only for a
+	//     *SimpleType assembled by calling this package's constructors directly,
+	//     since the construction seam every parsed type goes through discharges
+	//     applicability. Each is a fault of T, not a verdict about vc.{lexical
+	//     form}, so an implementation that meets one answers undecided and never
+	//     decided-invalid. [SchemaBuilder.FinalizeWith] and the clause-2 check
+	//     itself document that to their own callers as a guarantee, which is why
+	//     it binds every implementation here rather than describing one.
 	//
 	// Only a genuine verdict-stage failure — the lexical form itself failing a
 	// facet or the mapping — may answer (false, true). The specific per-facet

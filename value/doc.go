@@ -60,6 +60,20 @@
 // an *xsderr.Error carrying the facet's rule ID and the pipeline stage that
 // rejected.
 //
+// Not every error the pipeline returns is a VERDICT, though, and the difference is
+// load-bearing. A type may reach [ValidateLexical] carrying a facet that is not
+// applicable to it at all (cos-applicable-facets §4.1.5) — a bound facet on an
+// unordered value space, a length facet on an unmeasurable one — or with no usable
+// whiteSpace mode where §3.16.7.4 guarantees one. Those are faults in the type, not
+// in the literal, so they are reported as their own error class, distinguished by
+// [IsFacetPrecondition] and charged to cos-applicable-facets or
+// [xsderr.RuleComponentInvariant] rather than to any cvc-* rule. A caller that reads
+// one as "this literal is invalid" turns a construction bug into a false reject, so
+// every caller in this package that decides validity discriminates it explicitly and
+// an external caller is expected to do the same. Applicability itself is
+// builtin.CheckSimpleTypeRestriction's to enforce, which is what discharges the
+// whole class for any type the parser builds.
+//
 // The list and union varieties recurse rather than adding stages. A list runs
 // this whole pipeline against the ITEM TYPE per whitespace-delimited item — the
 // item type's own facets included, which is what makes a list of a derived type
@@ -116,7 +130,8 @@
 // ungoverned type (the ·special· xs:anySimpleType and xs:anyAtomicType included,
 // for which Datatype Valid is unconditionally true), an unmappable lexical, the
 // context-dependent QName and NOTATION spaces, a construction-stage failure in
-// the type's own facets, the list and union varieties on the comparisons, and any
+// the type's own facets, a facet-pipeline precondition fault
+// ([IsFacetPrecondition]), the list and union varieties on the comparisons, and any
 // pair whose two types resolve to DIFFERENT governing mappings (the widest-space
 // rule above is what makes a general/specific pair on one base chain comparable
 // at all, and what makes anything else incommensurable). Undecided always accepts
