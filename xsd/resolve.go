@@ -185,12 +185,12 @@ func (s *Schema) resolve() error {
 // REFERRING component's position, never to the target's — the target is exactly
 // what does not exist, so it has none. Each helper therefore takes a loc
 // alongside its ctx phrase, and the descent threads down the position of the
-// nearest ENCLOSING component that retains one: a ComplexType,
-// ElementDeclaration, AttributeDeclaration or ModelGroupDefinition re-roots it at
-// its own Loc() as the walk enters it, while a Particle, AttributeUse, ModelGroup,
-// TypeTable or TypeAlternative inherits the enclosing component's, because none of
-// those five retains a position or exposes an accessor for one — nothing consumed
-// their positions when they were built, so none was minted (xsd doc.go, STYLE T5).
+// nearest ENCLOSING component that retains one: a ComplexType, ElementDeclaration,
+// AttributeDeclaration or ModelGroupDefinition re-roots it at its own Loc() as the
+// walk enters it, while a Particle, AttributeUse, ModelGroup, TypeTable or
+// TypeAlternative inherits the enclosing component's, because none of those five
+// retains a position or exposes an accessor for one — nothing consumed their
+// positions when they were built, so none was minted (xsd doc.go, STYLE T5).
 // Inheriting is not an approximation of the wrong thing: an inline particle tree or
 // attribute use belongs to exactly one such enclosing component, so its position
 // names the declaration a reader must open, one enclosing element out.

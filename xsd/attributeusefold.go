@@ -11,8 +11,8 @@ import "slices"
 // element, and parser/produce_complex.go applies them. Clause 3 is not: the uses
 // "inherited" from the {base type definition} need the base COMPONENT, which is
 // reachable only once the whole schema set is assembled and its base references
-// are known to resolve. So {attribute uses} arrives at finalize
-// under-approximated, and is completed HERE, once, before any constraint reads it.
+// are known to resolve. So {attribute uses} arrives at finalize under-approximated,
+// and is completed HERE, once, before any constraint reads it.
 //
 // The alternative — leaving the property partial and folding the base chain at
 // each read site — is what this replaced (#262/#264's foldedAttributeUse). It put

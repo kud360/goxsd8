@@ -36,10 +36,10 @@ import "github.com/kud360/goxsd8/xsderr"
 //     base graph, which only exists once the schema set is assembled;
 //   - clause 4 (no two {attribute uses} share an {attribute declaration}
 //     expanded name) needs the Ref variant of {attribute declaration} resolved,
-//     so it too is enforced at finalize (Phase D,
-//     checkAttributeUseNamesUnique, #262) rather than at shape time (unlike
-//     AttributeGroupDefinition, whose own ag-props-correct clause 2 is enforced
-//     at shape time over uses it already owns);
+//     so it too is enforced at finalize (Phase D, checkAttributeUseNamesUnique,
+//     #262) rather than at shape time (unlike AttributeGroupDefinition, whose
+//     own ag-props-correct clause 2 is enforced at shape time over uses it
+//     already owns);
 //   - clause 5 ({content type}.{open content} non-absent ⇒ {variety} is
 //     element-only or mixed) is satisfied BY CONSTRUCTION and gets no runtime
 //     check anywhere, at shape time or at finalize: {open content} is a field
@@ -58,9 +58,8 @@ import "github.com/kud360/goxsd8/xsderr"
 // clauses of case 1, since the three §3.4.2 base folds they read are done
 // ({attribute uses} #401, {attribute wildcard} #265, {assertions} #346); the
 // exception is clause 1.5 for a derivation chain mixing extension and
-// restriction steps.
-// None of them is touched HERE — they are cross-component finalize-phase
-// concerns, not tableau shape.
+// restriction steps. None of them is touched HERE — they are cross-component
+// finalize-phase concerns, not tableau shape.
 const ruleCTPropsCorrect xsderr.Rule = "ct-props-correct"
 
 // ContentType is the sealed sum of the four Content Type varieties of a Complex

@@ -16,18 +16,15 @@ import (
 const ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 
 // New returns the spec-exact value.Backend for the primitive cohort so far:
-// xs:decimal, xs:precisionDecimal,
-// xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary,
-// xs:base64Binary, xs:duration, xs:dateTime, the six remaining
-// seven-property date/time siblings xs:time, xs:date, xs:gYearMonth, xs:gYear,
-// xs:gMonthDay, xs:gDay and xs:gMonth, and xs:QName and xs:NOTATION. Each type's
-// value
-// space is represented with full fidelity to the Datatypes spec (§3.3.3,
-// §3.3.2, §3.3.1, §3.3.17, §3.3.4, §3.3.5, §3.3.15, §3.3.16, §3.3.6, §3.3.7,
-// §3.3.8–§3.3.14, §3.3.18, §3.3.19); a [value.Mapping.Parse]
-// rejects any lexical
-// outside the type's lexical space as an *xsderr.Error with rule
-// "cvc-datatype-valid" (§4.1.4), never a false validity verdict.
+// xs:decimal, xs:precisionDecimal, xs:boolean, xs:string, xs:anyURI, xs:float,
+// xs:double, xs:hexBinary, xs:base64Binary, xs:duration, xs:dateTime, the six
+// remaining seven-property date/time siblings xs:time, xs:date, xs:gYearMonth,
+// xs:gYear, xs:gMonthDay, xs:gDay and xs:gMonth, and xs:QName and xs:NOTATION.
+// Each type's value space is represented with full fidelity to the Datatypes
+// spec (§3.3.3, §3.3.2, §3.3.1, §3.3.17, §3.3.4, §3.3.5, §3.3.15, §3.3.16,
+// §3.3.6, §3.3.7, §3.3.8–§3.3.14, §3.3.18, §3.3.19); a [value.Mapping.Parse]
+// rejects any lexical outside the type's lexical space as an *xsderr.Error with
+// rule "cvc-datatype-valid" (§4.1.4), never a false validity verdict.
 //
 // The value each mapping's Parse produces satisfies exactly the capability
 // interfaces its applicable facets require (cos-applicable-facets), so a

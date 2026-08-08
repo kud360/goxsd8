@@ -421,11 +421,11 @@ func (p *producer) chameleon() bool {
 // <attributeGroup>s (forward <attributeGroup ref> inlining, §3.6.2.1) and named
 // <group>s (forward <group ref> resolution for §3.4.2.3.3 clause 4.2.3's
 // sub-case test, resolveModelGroup) in the assembly-wide symbol table, building
-// nothing yet.
-// EVERY document's prescan runs before ANY document's run, so a reference in one
-// document reaches a definition in another (§4.2.3 c-incl-incl). Names are
-// minted in the effective target namespace, so a chameleon document's
-// definitions are registered under the including namespace (§F.1 task a).
+// nothing yet. EVERY document's prescan runs before ANY document's run, so a
+// reference in one document reaches a definition in another (§4.2.3
+// c-incl-incl). Names are minted in the effective target namespace, so a
+// chameleon document's definitions are registered under the including namespace
+// (§F.1 task a).
 //
 // A name an <override> in force over this document substitutes for is registered
 // with the OVERRIDING declaration (§F.2 clause 1), so a base= or

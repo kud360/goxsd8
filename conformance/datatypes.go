@@ -123,20 +123,20 @@ import (
 // comp_foo/simpleTest: <data><item SOMITEM_DATATYPE_X="value"/></data>, with the
 // tested value in an attribute (some documents carry two <item> children testing
 // two attributes/types at once). These declare their schema OUT-OF-BAND in the
-// suite's testGroup metadata, so the instance carries no
-// noNamespaceSchemaLocation for readLexicalCase to follow; the schema is always the
-// sibling datatypes.xsd, which types each SOMITEM_DATATYPE_* attribute directly as
-// an UNRESTRICTED builtin primitive (SOMITEM_DATATYPE_DURATION as xsd:duration,
-// _DATETIME as xsd:dateTime, _MONTHDAY as xsd:gMonthDay, _DATE as xsd:date, …). So
-// this sub-shape has exactly the lexical cohort's semantics — validity is
-// lexical-space membership (value.Parse) of each tested value — merely a different
-// carrier. execLexicalCase falls back to execItemCase when the comp_foo decode
-// declines, which reads the sibling datatypes.xsd (parsed, never hand-typed — same
-// discipline as decodeTestedPrimitive) to resolve each attribute's primitive and
-// ANDs parseOK across every recognized tested value. Only attributes typed as a
-// seeded, directly-mapped primitive are decided (the same guard the comp_foo path
-// applies); an attribute typed as a non-directly-mapped builtin (integer/derived-
-// string family) is skipped, since Parse alone is not a complete check for those.
+// suite's testGroup metadata, so the instance carries no noNamespaceSchemaLocation
+// for readLexicalCase to follow; the schema is always the sibling datatypes.xsd,
+// which types each SOMITEM_DATATYPE_* attribute directly as an UNRESTRICTED builtin
+// primitive (SOMITEM_DATATYPE_DURATION as xsd:duration, _DATETIME as xsd:dateTime,
+// _MONTHDAY as xsd:gMonthDay, _DATE as xsd:date, …). So this sub-shape has exactly
+// the lexical cohort's semantics — validity is lexical-space membership
+// (value.Parse) of each tested value — merely a different carrier. execLexicalCase
+// falls back to execItemCase when the comp_foo decode declines, which reads the
+// sibling datatypes.xsd (parsed, never hand-typed — same discipline as
+// decodeTestedPrimitive) to resolve each attribute's primitive and ANDs parseOK
+// across every recognized tested value. Only attributes typed as a seeded,
+// directly-mapped primitive are decided (the same guard the comp_foo path applies);
+// an attribute typed as a non-directly-mapped builtin (integer/derived- string
+// family) is skipped, since Parse alone is not a complete check for those.
 //
 // dateTimeStamp (§3.4.28) is listed and decided completely, though it has ZERO
 // cases in the current checkout. Being a restriction of dateTime that fixes
@@ -164,21 +164,19 @@ import (
 // and the NCName-derived ID, IDREF, ENTITY (issue #116), one of the length-facet-
 // carrying primitives anyURI, hexBinary, base64Binary (issue #124), or a temporal
 // primitive (issue #123): dateTime, time, date, gYearMonth, gYear, gMonthDay, gDay,
-// gMonth, duration.
-// Each such schema restricts <base> by one or more constraining facets
-// (length/minLength/maxLength/pattern/enumeration on string; minInclusive/
+// gMonth, duration. Each such schema restricts <base> by one or more constraining
+// facets (length/minLength/maxLength/pattern/enumeration on string; minInclusive/
 // maxInclusive/minExclusive/maxExclusive/totalDigits/pattern/enumeration on
 // decimal; the bound facets plus pattern/enumeration on float/double; pattern/
-// enumeration/bounds on the temporal types). The
-// float/double bound facets are checked over the PARTIAL order (NaN is
-// incomparable to every value, so a NaN bound yields an empty value space and any
-// bound comparison against NaN excludes — §2.2.3; §3.3.4.1 Note), which the
-// existing boundFacet path already decides (incomparable ⇒ reject, spec-correct
-// per §4.3.7.3–§4.3.10.3). The temporal bound facets ride that SAME incomparable ⇒
-// reject path over the timeline's partial order (§3.3.6.3 for duration, e.g.
-// P1M vs P31D; §3.2.7.3-style timezone-straddling incomparability for the
-// date/time siblings), so an incomparable candidate is a genuine rejection, never
-// a vacuous pass.
+// enumeration/bounds on the temporal types). The float/double bound facets are
+// checked over the PARTIAL order (NaN is incomparable to every value, so a NaN
+// bound yields an empty value space and any bound comparison against NaN excludes —
+// §2.2.3; §3.3.4.1 Note), which the existing boundFacet path already decides
+// (incomparable ⇒ reject, spec-correct per §4.3.7.3–§4.3.10.3). The temporal bound
+// facets ride that SAME incomparable ⇒ reject path over the timeline's partial
+// order (§3.3.6.3 for duration, e.g. P1M vs P31D; §3.2.7.3-style
+// timezone-straddling incomparability for the date/time siblings), so an
+// incomparable candidate is a genuine rejection, never a vacuous pass.
 //
 // The integer family is NOT a set of new primitives: xs:integer fixes decimal's
 // fractionDigits to 0 and its lexical space to [\-+]?[0-9]+, and each narrowing
@@ -209,41 +207,38 @@ import (
 // ordinary cvc-length/pattern/enumeration path.
 //
 // The wider string family (language, Name, NCName, NMTOKEN, issue #106; ID,
-// IDREF, ENTITY, issue #116) extends
-// this the same way: all derive from token (NCName via Name; ID/IDREF/ENTITY via
-// NCName, §3.4.8/§3.4.9/§3.4.11 dt-ID/dt-IDREF/dt-ENTITY) and resolve to
-// the xs:string primitive, so strict's string mapping governs them unchanged.
-// They differ from normalizedString/token only by carrying an intrinsic pattern
-// facet in the generated builtin table (language [a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*,
-// NMTOKEN \c+, Name \i\c*, NCName's own [\i-[:]][\c-[:]]* ANDed across the
-// Name→NCName step with Name's \i\c* — §4.3.4.2 xr-pattern, the cross-step pattern
-// AND EffectiveFacets already realizes; ID/IDREF/ENTITY inherit NCName's pattern
-// verbatim, adding none of their own) plus inherited whiteSpace=collapse. A
-// value violating an intrinsic pattern (e.g. an NCName or ID with a colon) is
-// rejected via cvc-pattern-valid before the own length/pattern/enumeration facets.
-// ID-uniqueness and IDREF-target-existence are Structures-level checks (cvc-id,
-// xmlschema11-1.md §3.3.4.5), NOT part of cvc-datatype-valid/cvc-facet-valid, so
-// this cohort decides only per-value lexical+facet validity, exactly as it does
-// for NCName. Unlike
-// the string-content cohorts, the NMTOKEN and ID/IDREF cases carry the tested
-// value in a named
+// IDREF, ENTITY, issue #116) extends this the same way: all derive from token
+// (NCName via Name; ID/IDREF/ENTITY via NCName, §3.4.8/§3.4.9/§3.4.11
+// dt-ID/dt-IDREF/dt-ENTITY) and resolve to the xs:string primitive, so strict's
+// string mapping governs them unchanged. They differ from normalizedString/token
+// only by carrying an intrinsic pattern facet in the generated builtin table
+// (language [a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*, NMTOKEN \c+, Name \i\c*, NCName's
+// own [\i-[:]][\c-[:]]* ANDed across the Name→NCName step with Name's \i\c* —
+// §4.3.4.2 xr-pattern, the cross-step pattern AND EffectiveFacets already realizes;
+// ID/IDREF/ENTITY inherit NCName's pattern verbatim, adding none of their own) plus
+// inherited whiteSpace=collapse. A value violating an intrinsic pattern (e.g. an
+// NCName or ID with a colon) is rejected via cvc-pattern-valid before the own
+// length/pattern/enumeration facets. ID-uniqueness and IDREF-target-existence are
+// Structures-level checks (cvc-id, xmlschema11-1.md §3.3.4.5), NOT part of
+// cvc-datatype-valid/cvc-facet-valid, so this cohort decides only per-value
+// lexical+facet validity, exactly as it does for NCName. Unlike the string-content
+// cohorts, the NMTOKEN and ID/IDREF cases carry the tested value in a named
 // attribute of <foo> rather than its content, so readFacetsCase reads the value
 // named by the enclosing xsd:attribute.
 //
-// Validity in this cohort
-// depends on FACET checking, not
-// just primitive lexical-space membership: an instance can be lexically valid
-// yet facet-invalid (e.g. a 5-character string under length=4). The executor
-// synthesizes the corresponding xsd.SimpleType (the seeded builtin as base, its
-// primitive ancestor as {primitive type definition}, the schema's facet children
-// as ownFacets) and decides validity through the
-// now-complete facet pipeline (value.ValidateLexical, issue #45) — pattern
-// (cvc-pattern-valid §4.3.4.4), lexical mapping (cvc-datatype-valid §4.1.4),
-// then the value facets cvc-enumeration-valid (§4.3.5.4),
-// cvc-min/maxInclusive/Exclusive-valid (§4.3.7–4.3.10), cvc-totalDigits-valid
-// (§4.3.11.3) and cvc-length/minLength/maxLength-valid (§4.3.1.3–4.3.3.3). This
-// is the facet-invalid-but-lexically-valid class the original #15 landing could
-// not discriminate with Parse alone.
+// Validity in this cohort depends on FACET checking, not just primitive
+// lexical-space membership: an instance can be lexically valid yet facet-invalid
+// (e.g. a 5-character string under length=4). The executor synthesizes the
+// corresponding xsd.SimpleType (the seeded builtin as base, its primitive
+// ancestor as {primitive type definition}, the schema's facet children as
+// ownFacets) and decides validity through the now-complete facet pipeline
+// (value.ValidateLexical, issue #45) — pattern (cvc-pattern-valid §4.3.4.4),
+// lexical mapping (cvc-datatype-valid §4.1.4), then the value facets
+// cvc-enumeration-valid (§4.3.5.4), cvc-min/maxInclusive/Exclusive-valid
+// (§4.3.7–4.3.10), cvc-totalDigits-valid (§4.3.11.3) and
+// cvc-length/minLength/maxLength-valid (§4.3.1.3–4.3.3.3). This is the
+// facet-invalid-but-lexically-valid class the original #15 landing could not
+// discriminate with Parse alone.
 //
 // The executor OWNS facet applicability (cos-applicable-facets §4.1.5): it
 // attaches a facet to the synthesized leaf only when builtin's applicable-facet
@@ -312,33 +307,31 @@ import (
 // msData/datatypes/{boolean018,float038,float039,anyURI011,hexBinary002,
 // base64Binary002,duration027}.xml and, since issue #224, their seven
 // integer-family siblings {byte009,long009,short009,unsignedByte007,
-// unsignedInt007,unsignedLong007,unsignedShort007}.xml (claimed by
-// datatypesCase's integer-family alternation since issue #331, by the dedicated
-// integerListCase selector before it). Each such schema declares a user-defined
-// "myList" (<xsd:list itemType="xsd:BUILTIN"/>) reached through comp_foo (either
-// type="myList" directly or an inline anonymous restriction of it) and one-or-more
-// simpleTest elements (a named restriction of "myList"); the restriction may carry
-// <xsd:enumeration> children (boolean018 enumerates 0/1 on comp_foo and true/false
-// on simpleTest; the other thirteen are facet-free). Because comp_foo and simpleTest can
-// carry DIFFERENT own facets, execListCase reads each element's type graph
-// independently (readListCohortCase), synthesizing the fixture's TWO derivation
-// steps per tested element — an anonymous constructed list over the item type
-// with xs:anySimpleType as base and the mandatory fixed whiteSpace=collapse
-// §4.3.6.1 as its whole {facets} (cos-st-restricts clause 2.2.1.2), then the
-// named leaf restricting it and carrying any enumeration —
-// and deciding every tested value through the ordinary value.ValidateLexical
-// pipeline. That pipeline resolves a list-variety type end to end (issue #75):
-// value.governingMapping wraps the item TYPE in a generic list mapping
+// unsignedInt007,unsignedLong007,unsignedShort007}.xml (claimed by datatypesCase's
+// integer-family alternation since issue #331, by the dedicated integerListCase selector
+// before it). Each such schema declares a user-defined "myList" (<xsd:list
+// itemType="xsd:BUILTIN"/>) reached through comp_foo (either type="myList" directly or
+// an inline anonymous restriction of it) and one-or-more simpleTest elements (a named
+// restriction of "myList"); the restriction may carry <xsd:enumeration> children
+// (boolean018 enumerates 0/1 on comp_foo and true/false on simpleTest; the other
+// thirteen are facet-free). Because comp_foo and simpleTest can carry DIFFERENT own
+// facets, execListCase reads each element's type graph independently
+// (readListCohortCase), synthesizing the fixture's TWO derivation steps per tested
+// element — an anonymous constructed list over the item type with xs:anySimpleType as
+// base and the mandatory fixed whiteSpace=collapse §4.3.6.1 as its whole {facets}
+// (cos-st-restricts clause 2.2.1.2), then the named leaf restricting it and carrying any
+// enumeration — and deciding every tested value through the ordinary
+// value.ValidateLexical pipeline. That pipeline resolves a list-variety type end to end
+// (issue #75): value.governingMapping wraps the item TYPE in a generic list mapping
 // (cvc-datatype-valid clause dv_list §4.1.4 cl.2.2), so each lexical is split into
-// items, each item is Datatype-Valid against the item type, and the leaf's
-// enumeration is checked over the LIST value space by "equal or identical"
-// (cvc-enumeration-valid §4.3.5.4, §2.2.1/§2.2.2 pairwise over items; length, had
-// any fixture one, would count list items §4.3.1.3). The case is valid iff every
-// value across comp_foo and every simpleTest sibling validates (float039.xml's
-// nine simpleTest siblings — spanning ±MIN/MAX float, NaN, ±INF, ±0 — are each
-// checked). No new backend mapping and no new exported identifier: the list
-// mapping is unexported (value.listMapping/listValue), consuming the existing
-// strict primitive mappings via the item type.
+// items, each item is Datatype-Valid against the item type, and the leaf's enumeration
+// is checked over the LIST value space by "equal or identical" (cvc-enumeration-valid
+// §4.3.5.4, §2.2.1/§2.2.2 pairwise over items; length, had any fixture one, would count
+// list items §4.3.1.3). The case is valid iff every value across comp_foo and every
+// simpleTest sibling validates (float039.xml's nine simpleTest siblings — spanning
+// ±MIN/MAX float, NaN, ±INF, ±0 — are each checked). No new backend mapping and no new
+// exported identifier: the list mapping is unexported (value.listMapping/listValue),
+// consuming the existing strict primitive mappings via the item type.
 //
 // The item type is DERIVED, not a primitive, in the seven fixtures issue #224
 // added, and that distinction is load-bearing: xs:byte's {primitive type
@@ -444,75 +437,69 @@ import (
 // out of scope until their backends land. LIST variety over a lexical-cohort item
 // primitive is now decided (issue #75, "The list-variety cohort" above): the
 // boolean018/float038/float039/anyURI011/hexBinary002/base64Binary002/duration027
-// fixtures flipped from recorded gaps to decided passes.
-// string_pattern002_1031.i (issue #146) is a list-variety case that stays deferred
-// for two reasons: its Facets/string/string_pattern002.xml restricts via
-// <xsd:list itemType="Hex"/> where "Hex" is a USER-DEFINED pattern-restricted
-// simpleType, not a seeded strict-mapped primitive (execListCase declines a
-// non-seeded item type), and its instance shape (a <Xml xmlns="TestNamespace">
-// root with three <Hex> list-valued children) matches neither readFacetsCase's
-// single-<foo> shape nor readListCohortCase's comp_foo/simpleTest shape, so it is
-// honestly declined (Fail), never false-accepted.
-// Within the integer family, the odd
-// multi-element cases (e.g. Facets/int/test111092.xml, two named restriction
-// steps under distinct elements) do not fit the single-<foo> instance shape and
-// fall through to the instance lane as recorded gaps (issue #331 left them
-// there: this is a READER-shape limit, not the routing gap that issue closed).
-// The family's LIST-variety fixtures (byte009/long009/short009/unsignedByte007/
-// unsignedInt007/unsignedLong007/unsignedShort007.xml) were claimed and decided
-// by issue #224. Their forty-eight NON-list siblings (byte001–008, long001–008,
+// fixtures flipped from recorded gaps to decided passes. string_pattern002_1031.i
+// (issue #146) is a list-variety case that stays deferred for two reasons: its
+// Facets/string/string_pattern002.xml restricts via <xsd:list itemType="Hex"/> where
+// "Hex" is a USER-DEFINED pattern-restricted simpleType, not a seeded strict-mapped
+// primitive (execListCase declines a non-seeded item type), and its instance shape
+// (a <Xml xmlns="TestNamespace"> root with three <Hex> list-valued children) matches
+// neither readFacetsCase's single-<foo> shape nor readListCohortCase's
+// comp_foo/simpleTest shape, so it is honestly declined (Fail), never
+// false-accepted. Within the integer family, the odd multi-element cases (e.g.
+// Facets/int/test111092.xml, two named restriction steps under distinct elements) do
+// not fit the single-<foo> instance shape and fall through to the instance lane as
+// recorded gaps (issue #331 left them there: this is a READER-shape limit, not the
+// routing gap that issue closed). The family's LIST-variety fixtures
+// (byte009/long009/short009/unsignedByte007/
+// unsignedInt007/unsignedLong007/unsignedShort007.xml) were claimed and decided by
+// issue #224. Their forty-eight NON-list siblings (byte001–008, long001–008,
 // short001–008, unsignedByte/Int/Long/Short001–006, each testing a value against
 // xs:byte/xs:long/… through the shared byte.xsd/long.xsd) are claimed and decided
-// too since issue #331: execLexicalCase no longer demands a DIRECT backend
-// Mapping for the tested type but routes a seeded-but-unmapped one through
+// too since issue #331: execLexicalCase no longer demands a DIRECT backend Mapping
+// for the tested type but routes a seeded-but-unmapped one through
 // value.ValidateLexical (decideLexicalByFacets), where governingMapping walks the
-// base chain to xs:decimal's mapping and the type's own effective facets decide
-// the value — the same pipeline xs:dateTimeStamp has taken since issue #140 and
-// the list path has taken per item since #224. Their xs:int and xs:integer
-// siblings (int001–008 and integer001–016 — twenty-four files, not the twenty
-// #331's prose miscounted: integer013–016 exist and carry the identical
-// comp_foo/simpleTest shape) joined the claim with issue #365, which widened
-// datatypesCase's alternation and changed no engine code; they ride that same
-// route unchanged. The last four integer-family sub-families under
-// msData/datatypes — negativeInteger001–005, nonNegativeInteger001–005,
-// nonPositiveInteger001–005 and positiveInteger001–005, twenty files in all —
-// joined the claim with issue #449, again by widening datatypesCase's
-// alternation and changing no engine code. Each carries the identical
-// comp_foo/simpleTest shape against its own negativeInteger.xsd/
-// nonNegativeInteger.xsd/nonPositiveInteger.xsd/positiveInteger.xsd. They are
-// the route's first HALF-bounded arm: #331's forty-eight all carry BOTH
-// min- and maxInclusive and #365's xs:integer carries NEITHER, while each of
-// these four carries exactly one bound (§3.4.14.3 maxInclusive=0,
-// §3.4.15.3 maxInclusive=-1, §3.4.20.3 minInclusive=0, §3.4.25.3
-// minInclusive=1), so a single-sided value-facet check is the only thing
-// between a well-formed integer literal and acceptance. Two of them are also
-// the route's first TWO-HOP base chains: negativeInteger restricts
+// base chain to xs:decimal's mapping and the type's own effective facets decide the
+// value — the same pipeline xs:dateTimeStamp has taken since issue #140 and the list
+// path has taken per item since #224. Their xs:int and xs:integer siblings
+// (int001–008 and integer001–016 — twenty-four files, not the twenty #331's prose
+// miscounted: integer013–016 exist and carry the identical comp_foo/simpleTest
+// shape) joined the claim with issue #365, which widened datatypesCase's alternation
+// and changed no engine code; they ride that same route unchanged. The last four
+// integer-family sub-families under msData/datatypes — negativeInteger001–005,
+// nonNegativeInteger001–005, nonPositiveInteger001–005 and positiveInteger001–005,
+// twenty files in all — joined the claim with issue #449, again by widening
+// datatypesCase's alternation and changing no engine code. Each carries the
+// identical comp_foo/simpleTest shape against its own negativeInteger.xsd/
+// nonNegativeInteger.xsd/nonPositiveInteger.xsd/positiveInteger.xsd. They are the
+// route's first HALF-bounded arm: #331's forty-eight all carry BOTH min- and
+// maxInclusive and #365's xs:integer carries NEITHER, while each of these four
+// carries exactly one bound (§3.4.14.3 maxInclusive=0, §3.4.15.3 maxInclusive=-1,
+// §3.4.20.3 minInclusive=0, §3.4.25.3 minInclusive=1), so a single-sided value-facet
+// check is the only thing between a well-formed integer literal and acceptance. Two
+// of them are also the route's first TWO-HOP base chains: negativeInteger restricts
 // nonPositiveInteger and positiveInteger restricts nonNegativeInteger, so
-// st-restrict-facets §3.16.6.4's overlay walk crosses two restriction steps
-// before reaching xs:integer and then xs:decimal's mapping — it does, and
-// TestDatatypesLexicalHalfBoundedIntegerFamily pins it.
-// What is still undecided is therefore enumerable rather than open-ended
-// (STYLE P3a). Within the integer family, exactly one kind of case remains:
-// the reader-shape limits named above — Facets/int/test111092.xml's
-// two-named-step, two-element shape and any sibling of that kind, which
-// readFacetsCase's exactly-one-<foo> reader declines. Outside it, the lane's
-// standing exclusions are unchanged and named elsewhere in this comment: the
-// NIST corpus, UNION variety, the plural list-typed dirs (IDREFS, NMTOKENS),
-// string_pattern002's user-defined list item type, and
-// time_minInclusive006_1163.i. Every one of those is an honest decline (Fail,
-// recorded in the instance lane), never a false accept.
-// time_minInclusive006_1163.i (issue #123) is a
-// recorded gap for a different reason: its instance file carries no
-// xsi:noNamespaceSchemaLocation (a defect in that one suite file), so
-// readFacetsCase cannot resolve its schema and declines it (Fail) rather than
-// guessing the base — an honest decline, not a false accept. The anyURI
-// Facets/anyURI/anyURI_a*.xml and anyURI_b*.xml cases, honest declines from the
-// #124 landing, are now DECIDED by their own reader and executor — see "The anyURI
-// a*/b* multi-leaf cohort (issue #190)" above; readFacetsCase itself still decodes
-// only the canonical single-<foo> shape and still declines everything else,
-// including those eight files should they ever reach it. Of the anyURI/hexBinary/
-// base64Binary cases, readFacetsCase decides the length/minLength/maxLength/
-// enumeration ones in the canonical <test><foo> shape.
+// st-restrict-facets §3.16.6.4's overlay walk crosses two restriction steps before
+// reaching xs:integer and then xs:decimal's mapping — it does, and
+// TestDatatypesLexicalHalfBoundedIntegerFamily pins it. What is still undecided is
+// therefore enumerable rather than open-ended (STYLE P3a). Within the integer
+// family, exactly one kind of case remains: the reader-shape limits named above —
+// Facets/int/test111092.xml's two-named-step, two-element shape and any sibling of
+// that kind, which readFacetsCase's exactly-one-<foo> reader declines. Outside it,
+// the lane's standing exclusions are unchanged and named elsewhere in this comment:
+// the NIST corpus, UNION variety, the plural list-typed dirs (IDREFS, NMTOKENS),
+// string_pattern002's user-defined list item type, and time_minInclusive006_1163.i.
+// Every one of those is an honest decline (Fail, recorded in the instance lane),
+// never a false accept. time_minInclusive006_1163.i (issue #123) is a recorded gap
+// for a different reason: its instance file carries no xsi:noNamespaceSchemaLocation
+// (a defect in that one suite file), so readFacetsCase cannot resolve its schema and
+// declines it (Fail) rather than guessing the base — an honest decline, not a false
+// accept. The anyURI Facets/anyURI/anyURI_a*.xml and anyURI_b*.xml cases, honest
+// declines from the #124 landing, are now DECIDED by their own reader and executor —
+// see "The anyURI a*/b* multi-leaf cohort (issue #190)" above; readFacetsCase itself
+// still decodes only the canonical single-<foo> shape and still declines everything
+// else, including those eight files should they ever reach it. Of the
+// anyURI/hexBinary/ base64Binary cases, readFacetsCase decides the
+// length/minLength/maxLength/ enumeration ones in the canonical <test><foo> shape.
 
 // synthNS namespaces the anonymous leaf types the facet cohort synthesizes. It
 // is deliberately outside xsd.XMLSchemaNS so a synthesized leaf is never mistaken
@@ -541,100 +528,96 @@ const synthNS = "urn:goxsd8:conformance:facets"
 // The seven DERIVED integer-family members (byte, long, short, unsignedByte,
 // unsignedInt, unsignedLong, unsignedShort — the families issue #331 claimed,
 // not every family the checkout carries plain lexical cases for) joined the
-// claim with that issue. They are
-// not primitives, so the strict backend maps none of them, and it is exactly
-// that miss which now ROUTES them to decideLexicalByFacets instead of declining
-// them: value.governingMapping walks each one's base chain to xs:decimal's
-// mapping and value.ValidateLexical then applies the type's OWN effective facets
-// — the fixed pattern [\-+]?[0-9]+ (cvc-pattern-valid §4.3.4.4), fractionDigits=0
-// (cvc-fractionDigits-valid §4.3.12.3) and the per-type bounds
-// (cvc-min/maxInclusive-valid §4.3.10.3/§4.3.7.3) — which is what makes
-// "128" against xs:byte a rejection rather than the false accept a Parse against
-// xs:decimal's mapping alone would have produced (cvc-datatype-valid §4.1.4
-// clauses 1 and 3, §3.4.13–§3.4.25). The same alternation also covers each
-// family's LIST-variety sibling (byte009, long009, short009, unsignedByte007,
-// unsignedInt007, unsignedLong007, unsignedShort007 — claimed by issue #224,
-// which needed a named-file selector precisely because a family widening would
-// then have dragged in the undecidable non-list siblings). Those seven still
-// route through execLexicalCase's non-seeded fallback to execListCase, since
-// their tested type decodes as the user-defined "myList", not a builtin.
-// xs:int and xs:integer joined the same alternation with issue #365: their
-// twenty-four plain lexical cases (int001–008, integer001–016 — #331's prose
-// said "integer001–012", an undercount; integer013–016 are real files of the
-// identical shape) ride the route above with NO engine change, only a wider
-// selector. xs:integer is the first member to exercise that route's UNBOUNDED
-// arm: it carries no min/maxInclusive at all (§3.4.13.3), just the fixed
-// fractionDigits=0 and the pattern [\-+]?[0-9]+, so those two alone decide it.
-// The pattern gate runs FIRST (cvc-datatype-valid §4.1.4 clause 1 before clause
-// 3, and clause 3's V is "as determined by" clause 2), so integer012–016
-// ("-1E4", "INF", "-INF", "NaN", "ABCDEF") are rejected as cvc-pattern-valid
-// §4.3.4.4 failures, never as cvc-fractionDigits-valid §4.3.12.3 ones: none is
-// in xs:decimal's lexical space (§3.3.3.1, no exponent/INF/NaN production)
-// either, so no value V is ever established for the value-based facets to test.
-// nonPositiveInteger, negativeInteger, nonNegativeInteger and positiveInteger
-// joined it with issue #449 — their twenty plain lexical cases (each family's
-// 001–005) — again with NO engine change, only a wider selector. They are the
-// route's first HALF-bounded arm (exactly one of min/maxInclusive each,
-// §3.4.14.3/§3.4.15.3/§3.4.20.3/§3.4.25.3) and, for negativeInteger and
-// positiveInteger, its first TWO-HOP base chains (negativeInteger →
-// nonPositiveInteger → integer → decimal; positiveInteger → nonNegativeInteger
-// → integer → decimal), which governingMapping's st-restrict-facets §3.16.6.4
-// walk crosses unchanged.
-// The alternation lists "integer" before "int", and the two "non*" forms
-// before the "negativeInteger"/"positiveInteger" they contain as suffixes, for
-// the reader's sake only. Ordering cannot matter: RE2 has no leftmost-FIRST
-// alternation, and more importantly the alternation is anchored between the
-// literal msData/datatypes/ and [0-9]+\.xml$, so an alternative must consume
-// the name from the character immediately after that literal — "negativeInteger"
-// cannot reach nonNegativeInteger001.xml (that position reads n, o, n) and the
-// bare "int" alternative can reach int<digits>.xml and nothing else. That was
-// checked empirically for #449, not merely argued: a whole-tree match diff of
-// the old pattern against the new one over testdata/xsdtests adds exactly the
-// twenty files above and removes none. Facets/int/test111092.xml in particular
-// stays claimed by no selector (TestDatatypesSelectorClaimsOnlyCohort pins the
-// selector from both sides, including the cohort's own .xsd siblings).
+// claim with that issue. They are not primitives, so the strict backend maps none
+// of them, and it is exactly that miss which now ROUTES them to
+// decideLexicalByFacets instead of declining them: value.governingMapping walks
+// each one's base chain to xs:decimal's mapping and value.ValidateLexical then
+// applies the type's OWN effective facets — the fixed pattern [\-+]?[0-9]+
+// (cvc-pattern-valid §4.3.4.4), fractionDigits=0 (cvc-fractionDigits-valid
+// §4.3.12.3) and the per-type bounds (cvc-min/maxInclusive-valid
+// §4.3.10.3/§4.3.7.3) — which is what makes "128" against xs:byte a rejection
+// rather than the false accept a Parse against xs:decimal's mapping alone would
+// have produced (cvc-datatype-valid §4.1.4 clauses 1 and 3, §3.4.13–§3.4.25). The
+// same alternation also covers each family's LIST-variety sibling (byte009,
+// long009, short009, unsignedByte007, unsignedInt007, unsignedLong007,
+// unsignedShort007 — claimed by issue #224, which needed a named-file selector
+// precisely because a family widening would then have dragged in the undecidable
+// non-list siblings). Those seven still route through execLexicalCase's
+// non-seeded fallback to execListCase, since their tested type decodes as the
+// user-defined "myList", not a builtin. xs:int and xs:integer joined the same
+// alternation with issue #365: their twenty-four plain lexical cases (int001–008,
+// integer001–016 — #331's prose said "integer001–012", an undercount;
+// integer013–016 are real files of the identical shape) ride the route above with
+// NO engine change, only a wider selector. xs:integer is the first member to
+// exercise that route's UNBOUNDED arm: it carries no min/maxInclusive at all
+// (§3.4.13.3), just the fixed fractionDigits=0 and the pattern [\-+]?[0-9]+, so
+// those two alone decide it. The pattern gate runs FIRST (cvc-datatype-valid
+// §4.1.4 clause 1 before clause 3, and clause 3's V is "as determined by" clause
+// 2), so integer012–016 ("-1E4", "INF", "-INF", "NaN", "ABCDEF") are rejected as
+// cvc-pattern-valid §4.3.4.4 failures, never as cvc-fractionDigits-valid
+// §4.3.12.3 ones: none is in xs:decimal's lexical space (§3.3.3.1, no
+// exponent/INF/NaN production) either, so no value V is ever established for the
+// value-based facets to test. nonPositiveInteger, negativeInteger,
+// nonNegativeInteger and positiveInteger joined it with issue #449 — their twenty
+// plain lexical cases (each family's 001–005) — again with NO engine change, only
+// a wider selector. They are the route's first HALF-bounded arm (exactly one of
+// min/maxInclusive each, §3.4.14.3/§3.4.15.3/§3.4.20.3/§3.4.25.3) and, for
+// negativeInteger and positiveInteger, its first TWO-HOP base chains
+// (negativeInteger → nonPositiveInteger → integer → decimal; positiveInteger →
+// nonNegativeInteger → integer → decimal), which governingMapping's
+// st-restrict-facets §3.16.6.4 walk crosses unchanged. The alternation lists
+// "integer" before "int", and the two "non*" forms before the
+// "negativeInteger"/"positiveInteger" they contain as suffixes, for the reader's
+// sake only. Ordering cannot matter: RE2 has no leftmost-FIRST alternation, and
+// more importantly the alternation is anchored between the literal
+// msData/datatypes/ and [0-9]+\.xml$, so an alternative must consume the name
+// from the character immediately after that literal — "negativeInteger" cannot
+// reach nonNegativeInteger001.xml (that position reads n, o, n) and the bare
+// "int" alternative can reach int<digits>.xml and nothing else. That was checked
+// empirically for #449, not merely argued: a whole-tree match diff of the old
+// pattern against the new one over testdata/xsdtests adds exactly the twenty
+// files above and removes none. Facets/int/test111092.xml in particular stays
+// claimed by no selector (TestDatatypesSelectorClaimsOnlyCohort pins the selector
+// from both sides, including the cohort's own .xsd siblings).
 var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string|float|double|anyURI|hexBinary|base64Binary|duration|dateTime|dateTimeStamp|time|date|gYearMonth|gYear|gMonthDay|gDay|gMonth|QName|NOTATION|unsignedByte|unsignedInt|unsignedLong|unsignedShort|nonNegativeInteger|nonPositiveInteger|negativeInteger|positiveInteger|byte|long|short|integer|int)[0-9]+\.xml$`)
 
 // facetsBaseTypes lists the builtin datatypes whose Facets-cohort restrictions
 // the lane decides: the strict-mapped primitives (string/decimal/float/double),
 // the integer family (xs:integer and its twelve narrowings, issue #81), the
-// derived string family — normalizedString/token (issue #85), the
-// pattern-restricted language/Name/NCName/NMTOKEN (issue #106) and the
-// NCName-derived ID/IDREF/ENTITY (issue #116) — the length-facet-carrying
-// primitives anyURI/hexBinary/base64Binary (issue #124), and the temporal
-// primitives dateTime/time/date/gYearMonth/gYear/gMonthDay/gDay/gMonth/duration
-// (issue #123).
-// Every
-// integer-family type is a facet restriction of xs:decimal (§3.4.13–§3.4.25) that
-// shares decimal's value space, order and identity (Datatypes §2.2.1 Identity
-// note), so strict's decimal mapping governs it unchanged; the derived string
-// types are facet restrictions of xs:string (chain token → normalizedString →
-// string, §3.4.1/§3.4.2; language/Name/NMTOKEN off token, NCName off Name,
-// ID/IDREF/ENTITY off NCName — §3.4.8/§3.4.9/§3.4.11) that
-// share string's value space and differ only by inherited whiteSpace and their
-// intrinsic pattern facets, so strict's string mapping governs them unchanged. The
-// nine temporal types are themselves primitives (§3.3.6–§3.3.14), each mapped
-// directly by strict, so their Facets restrictions resolve to their own primitive
-// mapping (the string/numeric cohorts' widest-space pattern) with no derivation
-// walk. Their applicable facets (cos-applicable-facets §4.1.5) admit pattern,
-// enumeration and the four bound facets — exactly the kinds the present suite's
-// temporal Facets schemas carry (no length, no explicitTimezone cases exist), all
-// already in facetKinds — and the bound facets are decided over the temporal
-// primitives' PARTIAL timeline order, where an incomparable candidate-vs-bound
-// comparison (common for duration, §3.3.6.3) is a real rejection, exactly as the
-// existing boundFacet path already decides it (cvc-*Inclusive/Exclusive-valid
-// §4.3.7.3–§4.3.10.3; duration lacks explicitTimezone per §4.1.5, immaterial here
-// since no such case exists). anyURI, hexBinary and base64Binary (issue #124) are
-// likewise primitives strict maps directly (#82, #83), so their Facets restrictions
-// resolve to their own mapping. All three are unordered (ordered=false,
-// §3.3.15.3/§3.3.16.3/§3.3.17.3) and share xs:string's applicable-facet set —
-// length/minLength/maxLength/pattern/enumeration (cos-applicable-facets §4.1.5), all
-// in facetKinds — with NO bound facets. The length facets measure the value's
-// intrinsic size, which is unit-aware per type (§4.3.1.3 clauses 1.1/1.2): rune count
-// for anyURI (like string) but decoded-OCTET count for the two binary types, a split
-// value.Lengthed already realizes through each mapping's Len() (anyURIVal.Len over
-// runes; hexBinaryVal/base64BinaryVal.Len over decoded []byte), so no length-unit
-// special-casing is needed here.
+// derived string family — normalizedString/token (issue #85), the pattern-restricted
+// language/Name/NCName/NMTOKEN (issue #106) and the NCName-derived ID/IDREF/ENTITY
+// (issue #116) — the length-facet-carrying primitives anyURI/hexBinary/base64Binary
+// (issue #124), and the temporal primitives
+// dateTime/time/date/gYearMonth/gYear/gMonthDay/gDay/gMonth/duration (issue #123).
+// Every integer-family type is a facet restriction of xs:decimal (§3.4.13–§3.4.25)
+// that shares decimal's value space, order and identity (Datatypes §2.2.1 Identity
+// note), so strict's decimal mapping governs it unchanged; the derived string types
+// are facet restrictions of xs:string (chain token → normalizedString → string,
+// §3.4.1/§3.4.2; language/Name/NMTOKEN off token, NCName off Name, ID/IDREF/ENTITY
+// off NCName — §3.4.8/§3.4.9/§3.4.11) that share string's value space and differ only
+// by inherited whiteSpace and their intrinsic pattern facets, so strict's string
+// mapping governs them unchanged. The nine temporal types are themselves primitives
+// (§3.3.6–§3.3.14), each mapped directly by strict, so their Facets restrictions
+// resolve to their own primitive mapping (the string/numeric cohorts' widest-space
+// pattern) with no derivation walk. Their applicable facets (cos-applicable-facets
+// §4.1.5) admit pattern, enumeration and the four bound facets — exactly the kinds
+// the present suite's temporal Facets schemas carry (no length, no explicitTimezone
+// cases exist), all already in facetKinds — and the bound facets are decided over the
+// temporal primitives' PARTIAL timeline order, where an incomparable
+// candidate-vs-bound comparison (common for duration, §3.3.6.3) is a real rejection,
+// exactly as the existing boundFacet path already decides it
+// (cvc-*Inclusive/Exclusive-valid §4.3.7.3–§4.3.10.3; duration lacks explicitTimezone
+// per §4.1.5, immaterial here since no such case exists). anyURI, hexBinary and
+// base64Binary (issue #124) are likewise primitives strict maps directly (#82, #83),
+// so their Facets restrictions resolve to their own mapping. All three are unordered
+// (ordered=false, §3.3.15.3/§3.3.16.3/§3.3.17.3) and share xs:string's
+// applicable-facet set — length/minLength/maxLength/pattern/enumeration
+// (cos-applicable-facets §4.1.5), all in facetKinds — with NO bound facets. The
+// length facets measure the value's intrinsic size, which is unit-aware per type
+// (§4.3.1.3 clauses 1.1/1.2): rune count for anyURI (like string) but decoded-OCTET
+// count for the two binary types, a split value.Lengthed already realizes through
+// each mapping's Len() (anyURIVal.Len over runes; hexBinaryVal/base64BinaryVal.Len
+// over decoded []byte), so no length-unit special-casing is needed here.
 //
 // xsd:QName (issue #125) is likewise a primitive strict maps directly (#131), so its
 // Facets restrictions resolve to its own CONTEXT-DEPENDENT mapping. Its applicable
@@ -663,8 +646,7 @@ var datatypesCase = regexp.MustCompile(`msData/datatypes/(boolean|decimal|string
 // current W3C checkout (no msData/datatypes/Facets/ENTITY dir); it is listed for
 // spec parity and mechanism reuse (a zero-case regex alternative is harmless), so
 // a future suite update carrying such cases is decided with no further code change.
-// The list feeds both the
-// directory and the filename-prefix alternation of facetsCase.
+// The list feeds both the directory and the filename-prefix alternation of facetsCase.
 const facetsBaseTypes = `string|normalizedString|token|language|Name|NCName|NMTOKEN|` +
 	`ID|IDREF|ENTITY|` +
 	`anyURI|hexBinary|base64Binary|` +
@@ -731,11 +713,10 @@ var anyURIShapeCase = regexp.MustCompile(`msData/datatypes/Facets/anyURI/anyURI_
 
 // selectsDatatypes claims the instance cases of the lexical (integer family
 // included since issue #331), facet, precisionDecimal, NOTATION-facet and
-// anyURI-multi-leaf cohorts. It is a cheap
-// path predicate; the executor does the real document reading. The
-// anyURIShapeCase disjunct is stated even though facetsCase's pattern happens to
-// match those eight paths too, so the claim rests on the cohort's own selector
-// rather than on that overlap.
+// anyURI-multi-leaf cohorts. It is a cheap path predicate; the executor does the
+// real document reading. The anyURIShapeCase disjunct is stated even though
+// facetsCase's pattern happens to match those eight paths too, so the claim
+// rests on the cohort's own selector rather than on that overlap.
 //
 // Issue #224's separate integerListCase disjunct (the seven LIST-variety
 // integer fixtures, named one by one so the family widening it feared could not
@@ -768,11 +749,10 @@ func newDatatypesExec() executor {
 	// (lexical cohort) and string/decimal/float/double plus the integer and
 	// derived-string (normalizedString/token, #85; language/Name/NCName/NMTOKEN,
 	// #106; ID/IDREF/ENTITY, #116) families, anyURI/hexBinary/base64Binary (#124)
-	// and the temporal primitives (#123) (facet cohort) cases
-	// (float/double added in #80, anyURI in #82, hexBinary/base64Binary in #83,
-	// duration in #84, dateTime in #103, the seven-property siblings in #109),
-	// every one of which resolves (directly or via a base ancestor) to a strict
-	// mapping.
+	// and the temporal primitives (#123) (facet cohort) cases (float/double added in
+	// #80, anyURI in #82, hexBinary/base64Binary in #83, duration in #84, dateTime
+	// in #103, the seven-property siblings in #109), every one of which resolves
+	// (directly or via a base ancestor) to a strict mapping.
 	strictBackend := strict.New()
 
 	// Seed proves the strict backend satisfies the all-primitives precondition —
@@ -1050,11 +1030,12 @@ func execItemCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 
 // listTest is one tested element of a list-variety cohort case (issue #75): the
 // local name of the list's item type (itemType, a builtin — a primitive for the
-// #75 fixtures, a derived integer-family type for the #224 ones), the leaf restriction's own
-// enumeration facet children (children, empty for the facet-free fixtures), and
-// every tested lexical carried by that element (values). comp_foo carries one
-// value; a simpleTest element may repeat (float039.xml has nine siblings), each
-// captured so none is silently under-tested.
+// #75 fixtures, a derived integer-family type for the #224 ones), the leaf
+// restriction's own enumeration facet children (children, empty for the
+// facet-free fixtures), and every tested lexical carried by that element
+// (values). comp_foo carries one value; a simpleTest element may repeat
+// (float039.xml has nine siblings), each captured so none is silently
+// under-tested.
 type listTest struct {
 	itemType string
 	children []facetChild
@@ -1065,23 +1046,23 @@ type listTest struct {
 // msData/datatypes/{boolean018,float038,float039,anyURI011,hexBinary002,
 // base64Binary002,duration027,byte009,long009,short009,unsignedByte007,
 // unsignedInt007,unsignedLong007,unsignedShort007}.xml fixtures, each a
-// <list itemType=..> (a
-// user-defined "myList") reached through comp_foo and one-or-more simpleTest
-// elements. For each tested element it resolves the item type to a seeded,
-// strict-governed *xsd.SimpleType, synthesizes the list leaf (the item type as
-// {item type definition}, xs:anySimpleType as base, the mandatory fixed
-// whiteSpace=collapse plus any enumeration as own facets), and decides every
-// tested value through the real facet pipeline (value.ValidateLexical): the
-// list-variety mapping (cvc-datatype-valid clause dv_list §4.1.4, list.go)
-// splits each lexical into items, each item is Datatype-Valid against the item
-// type, and the leaf's enumeration is checked over the list value space by
-// value-space "equal or identical" (cvc-enumeration-valid §4.3.5.4, §2.2.1/
-// §2.2.2), its length (had any fixture one) in list items (cvc-length-valid
-// §4.3.1.3). The whole case is valid iff EVERY tested value across comp_foo and
-// every simpleTest sibling validates — the suite's whole-instance polarity. A
-// case whose schema does not decode to the list shape, whose item type is
-// not a seeded strict-governed builtin, or that carries an unrecognized facet is
-// declined (Fail, an honest recorded gap) rather than mis-decided.
+// <list itemType=..> (a user-defined "myList") reached through comp_foo and
+// one-or-more simpleTest elements. For each tested element it resolves the item
+// type to a seeded, strict-governed *xsd.SimpleType, synthesizes the list leaf
+// (the item type as {item type definition}, xs:anySimpleType as base, the
+// mandatory fixed whiteSpace=collapse plus any enumeration as own facets), and
+// decides every tested value through the real facet pipeline
+// (value.ValidateLexical): the list-variety mapping (cvc-datatype-valid clause
+// dv_list §4.1.4, list.go) splits each lexical into items, each item is
+// Datatype-Valid against the item type, and the leaf's enumeration is checked
+// over the list value space by value-space "equal or identical"
+// (cvc-enumeration-valid §4.3.5.4, §2.2.1/ §2.2.2), its length (had any fixture
+// one) in list items (cvc-length-valid §4.3.1.3). The whole case is valid iff
+// EVERY tested value across comp_foo and every simpleTest sibling validates —
+// the suite's whole-instance polarity. A case whose schema does not decode to
+// the list shape, whose item type is not a seeded strict-governed builtin, or
+// that carries an unrecognized facet is declined (Fail, an honest recorded gap)
+// rather than mis-decided.
 //
 // The item type may be DERIVED, not only a primitive: the seven #224 fixtures
 // list xs:byte/xs:long/xs:short/xs:unsignedByte/xs:unsignedInt/xs:unsignedLong/
@@ -1169,12 +1150,11 @@ func constructedListFacets() []xsd.Facet {
 // Each enumeration child is collected via the shared enumerationMember helper and
 // folded into one xsd.NewEnumerationFacet (§4.3.5.4); the fixtures' item types
 // (boolean/float/anyURI/hexBinary/base64Binary/duration and the seven integer-family
-// builtins) are never QName/NOTATION,
-// so an enumeration member needs no namespace context (facetChild.bindings is
-// nil here). Any non-enumeration facet kind is declined (ok=false), the cohort's
-// honest-decline convention — no other facet kind appears in these fourteen fixtures.
-// No enumeration child yields no own facets, a restriction step that narrows
-// nothing.
+// builtins) are never QName/NOTATION, so an enumeration member needs no namespace
+// context (facetChild.bindings is nil here). Any non-enumeration facet kind is
+// declined (ok=false), the cohort's honest-decline convention — no other facet kind
+// appears in these fourteen fixtures. No enumeration child yields no own facets, a
+// restriction step that narrows nothing.
 func buildListRestrictionFacets(children []facetChild) ([]xsd.Facet, bool) {
 	var enumMembers []xsd.EnumerationMember
 	for _, ch := range children {
@@ -1506,9 +1486,9 @@ func buildD34Types(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, dec
 //     (§4.1.4 cl.2.2).
 //   - <union>: {member type definitions} from memberTypes= then the inline
 //     <simpleType> children, in that order (map.std.union clause 1), facet-free
-//     because a union constructed from xs:anySimpleType must be
-//     (cos-st-restricts clause 3.2.1.2) — decided through clause dv_union (cl.2.3),
-//     whose first-accepting-member scan reads exactly that order.
+//     because a union constructed from xs:anySimpleType must be (cos-st-restricts
+//     clause 3.2.1.2) — decided through clause dv_union (cl.2.3), whose
+//     first-accepting-member scan reads exactly that order.
 //   - <restriction base="B">, where B is a SEEDED, strict-governed builtin: the
 //     atomic leaf the pre-#223 reader built, generalized from precisionDecimal to
 //     any such base because v17's decUnionB unions a precisionDecimal restriction
@@ -1650,10 +1630,10 @@ func d34TypeRef(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, decls 
 // so the spec-correct verdict is VALID, yet the suite declares the instance
 // invalid — an expectation its own testGroup annotation contradicts ("Schema doc
 // changed to guaranteed-to-fail URIs, but that does not make the schema (or
-// instance) invalid") and which has carried status="queried"
-// (bugzilla 4126) since 2010. Per the pdecimal006.n2 precedent the executor keeps
-// the spec-correct verdict, so this one case records an honest Fail rather than a
-// false Pass bought by mis-implementing the enumeration check.
+// instance) invalid") and which has carried status="queried" (bugzilla 4126) since
+// 2010. Per the pdecimal006.n2 precedent the executor keeps the spec-correct
+// verdict, so this one case records an honest Fail rather than a false Pass bought
+// by mis-implementing the enumeration check.
 func execAnyURIShapeCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
 	typeFacets, leaves, ok := readAnyURIShapeCase(c.doc)
 	if !ok {
@@ -1970,16 +1950,15 @@ func readListCohortCase(instancePath string) (tests []listTest, ok bool) {
 
 // resolveListLeaf resolves a starting simpleType node (inline or named) to the
 // local name of its list item type and the leaf restriction's own enumeration
-// facet children.
-// It collects the leaf's own <enumeration> children (only the first restriction
-// step, never an intermediate one — §3.16.1: the item type is never itself a
-// list, so the chain is a single restriction hop to the <list> in this cohort),
-// then walks the <restriction base=..> chain (capped at a small fixed depth as a
-// defensive guard against a malformed/cyclic fixture — trusted test inputs, so
-// this is not load-bearing) until it reaches the <list itemType=..> declaration.
-// ok is false for a node that is neither a list nor a recognized restriction, a
-// restriction carrying a non-enumeration facet child, an unresolvable base, or an
-// absent itemType.
+// facet children. It collects the leaf's own <enumeration> children (only the
+// first restriction step, never an intermediate one — §3.16.1: the item type is
+// never itself a list, so the chain is a single restriction hop to the <list> in
+// this cohort), then walks the <restriction base=..> chain (capped at a small
+// fixed depth as a defensive guard against a malformed/cyclic fixture — trusted
+// test inputs, so this is not load-bearing) until it reaches the <list
+// itemType=..> declaration. ok is false for a node that is neither a list nor a
+// recognized restriction, a restriction carrying a non-enumeration facet child,
+// an unresolvable base, or an absent itemType.
 func resolveListLeaf(start listSchemaSimpleType, simpleTypes map[string]listSchemaSimpleType) (itemType string, children []facetChild, ok bool) {
 	cur := start
 	collectedLeaf := false
@@ -2226,11 +2205,11 @@ type nsContext struct {
 // names namespace-declaration attributes, not a resolvable prefix (WG ruling,
 // bugzilla 4053; the suite's QName009_2092 expects "xmlns:xsi" invalid on exactly
 // this ground). A declared prefix resolves to its snapshot binding. The empty
-// prefix (an unprefixed name) binds
-// to the default namespace if declared, else to no namespace (ok=true, "") —
-// element-name semantics, so an unprefixed QName is never rejected as unbound. A
-// non-empty prefix with no declaration is genuinely unbound (ok=false), which
-// strict's Parse turns into a cvc-datatype-valid rejection (§4.1.4).
+// prefix (an unprefixed name) binds to the default namespace if declared, else to
+// no namespace (ok=true, "") — element-name semantics, so an unprefixed QName is
+// never rejected as unbound. A non-empty prefix with no declaration is genuinely
+// unbound (ok=false), which strict's Parse turns into a cvc-datatype-valid
+// rejection (§4.1.4).
 func (c nsContext) LookupNamespace(prefix string) (namespace string, ok bool) {
 	if prefix == "xml" {
 		return xmlPrefixNS, true
@@ -2552,14 +2531,13 @@ func readFacetsCase(instancePath string) (raw, base string, children []facetChil
 // a*/b* fixtures that motivated this guard are now claimed earlier, by
 // anyURIShapeCase's dedicated multi-leaf reader (issue #190), so they no longer
 // reach here; the guard stays because it is what keeps any FUTURE out-of-cohort
-// shape from being mis-read.
-// Attrs captures the <test> root's raw attributes (mirroring fooElem.Attrs) so the
-// QName cohort (issue #125) can build the instance's root-level namespace context.
-// Every Facets/QName fixture in the current checkout declares its xmlns bindings
-// only on this root (verified), so a root-only snapshot is a complete context for
-// the tested <foo> literal — no ancestor-chain streaming (readQNameContexts) is
-// needed here. The field is inert for every other base type (their Parse ignores
-// the threaded context).
+// shape from being mis-read. Attrs captures the <test> root's raw attributes
+// (mirroring fooElem.Attrs) so the QName cohort (issue #125) can build the
+// instance's root-level namespace context. Every Facets/QName fixture in the
+// current checkout declares its xmlns bindings only on this root (verified), so a
+// root-only snapshot is a complete context for the tested <foo> literal — no
+// ancestor-chain streaming (readQNameContexts) is needed here. The field is inert
+// for every other base type (their Parse ignores the threaded context).
 type facetsInstance struct {
 	SchemaLoc string     `xml:"http://www.w3.org/2001/XMLSchema-instance noNamespaceSchemaLocation,attr"`
 	Attrs     []xml.Attr `xml:",any,attr"`

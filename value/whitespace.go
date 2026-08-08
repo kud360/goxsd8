@@ -130,13 +130,12 @@ func whiteSpaceInForce(st *xsd.SimpleType) whiteSpace {
 //
 // The not-applicable arm is exactly cos-applicable-facets' (§4.1.5) three
 // no-facets-applicable cases: an ABSENT {variety} (xs:anySimpleType), an ATOMIC
-// {variety} whose {primitive type definition} is
-// absent (xs:anyAtomicType), and a UNION, whose applicable facets are pattern,
-// enumeration and assertions — whiteSpace conspicuously absent, its normalization
-// deferred per ·active basic member· instead (§4.3.6). The first two are the
-// ·special· datatypes, which §4.1.4 makes unconditionally Datatype Valid, so
-// demanding a whiteSpace facet of them would false-reject the two widest types in
-// the language.
+// {variety} whose {primitive type definition} is absent (xs:anyAtomicType), and a
+// UNION, whose applicable facets are pattern, enumeration and assertions —
+// whiteSpace conspicuously absent, its normalization deferred per ·active basic
+// member· instead (§4.3.6). The first two are the ·special· datatypes, which
+// §4.1.4 makes unconditionally Datatype Valid, so demanding a whiteSpace facet of
+// them would false-reject the two widest types in the language.
 //
 // Every OTHER missing-mode state is the fault: a whiteSpace facet whose Values() is
 // multi-valued (a malformed generated table), an unrecognized {value} string

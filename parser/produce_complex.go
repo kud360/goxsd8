@@ -237,11 +237,11 @@ func (i complexTypeIdentity) newComplexType(loc xsderr.Loc, baseTypeDefinitionNa
 // folds would turn an unfolded anonymous extension into a FALSE rejection.
 // §3.4.2.1 clause 1's {assertions} fold is NOT among them and needs no issue of
 // its own: assertionsWithBase runs HERE, on every produced type, anonymous ones
-// included (#346). The
-// direction today is open (under-rejection), never fail-closed, and
-// conformance/schema.go's anonymousComplexTypeDecidable narrows the conformance
-// lane to the implicit-content shape, on which the two folds are provably the
-// identity (base xs:anyType, §3.4.7 empty uses and no wildcard to union).
+// included (#346). The direction today is open (under-rejection), never
+// fail-closed, and conformance/schema.go's anonymousComplexTypeDecidable narrows
+// the conformance lane to the implicit-content shape, on which the two folds are
+// provably the identity (base xs:anyType, §3.4.7 empty uses and no wildcard to
+// union).
 func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.ComplexType, error) {
 	if !id.anonymous() && id.name.Local == "" {
 		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
@@ -1164,8 +1164,7 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 // buildModelGroupDefinition, which memoizes it so one <group> is mapped exactly
 // once however many demand-driven lookups reach it. The named form has exactly
 // one <all>/<choice>/<sequence> child, whose Model Group becomes {model group};
-// an absent child
-// yields the zero ModelGroup that NewModelGroupDefinition rejects
+// an absent child yields the zero ModelGroup that NewModelGroupDefinition rejects
 // (mgd-props-correct §3.7.6, {model group} Required). Occurrence on the child is
 // irrelevant here — a model group definition carries no {min occurs}/{max occurs}
 // (§3.7.2 note); those live solely on a <group ref> particle.
