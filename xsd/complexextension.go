@@ -139,7 +139,7 @@ func checkExtensionAssertions(t, b ComplexType) error {
 	}
 	return xsderr.New(ruleCosCTExtends, t.Loc(),
 		"complex type %s extends %s, but %s's {assertions} (%d) are not a prefix of %s's (%d), which cos-ct-extends clause 1.7 requires: §3.4.2.1 clause 1 places the base's assertions, in order, ahead of the type's own <assert> children",
-		t.Name(), b.Name(), b.Name(), len(b.assertions), t.Name(), len(t.assertions))
+		t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b), len(b.assertions), t.Name(), len(t.assertions))
 }
 
 // checkExtensionBaseFinal is clause 1.1: B's {final} must not contain extension.
@@ -148,7 +148,7 @@ func checkExtensionBaseFinal(t, b ComplexType) error {
 		return nil
 	}
 	return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-		"complex type %s extends %s, but %s has extension in its {final}, which cos-ct-extends clause 1.1 forbids", t.Name(), b.Name(), b.Name())
+		"complex type %s extends %s, but %s has extension in its {final}, which cos-ct-extends clause 1.1 forbids", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b))
 }
 
 // checkExtensionAttributeUses is clause 1.2 (c-cte): B.{attribute uses} is a
@@ -189,13 +189,13 @@ func (s *Schema) checkExtensionAttributeUses(t, b ComplexType) error {
 		tu, ok := findAttributeUse(t.attributeUses, name)
 		if !ok {
 			return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-				"complex type %s extends %s, but the base's attribute use for %s has no counterpart in the extension's {attribute uses}, so B.{attribute uses} is not a subset of T.{attribute uses} (cos-ct-extends clause 1.2, c-cte)", t.Name(), b.Name(), name)
+				"complex type %s extends %s, but the base's attribute use for %s has no counterpart in the extension's {attribute uses}, so B.{attribute uses} is not a subset of T.{attribute uses} (cos-ct-extends clause 1.2, c-cte)", t.Name(), typeDefinitionLabel(b), name)
 		}
 		if s.attributeUsesIdentical(tu, u) {
 			continue
 		}
 		return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-			"complex type %s extends %s but re-declares attribute %s with properties that differ from the base's attribute use, which cos-ct-extends clause 1.2 (c-cte) requires to be identical", t.Name(), b.Name(), name)
+			"complex type %s extends %s but re-declares attribute %s with properties that differ from the base's attribute use, which cos-ct-extends clause 1.2 (c-cte) requires to be identical", t.Name(), typeDefinitionLabel(b), name)
 	}
 	return nil
 }
@@ -236,13 +236,13 @@ func checkExtensionAttributeWildcard(t, b ComplexType) error {
 	tw, extensionHas := t.AttributeWildcard()
 	if !extensionHas {
 		return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-			"complex type %s extends %s, which has an {attribute wildcard}, but %s has none, and cos-ct-extends clause 1.3 requires the extension to carry one too", t.Name(), b.Name(), t.Name())
+			"complex type %s extends %s, which has an {attribute wildcard}, but %s has none, and cos-ct-extends clause 1.3 requires the extension to carry one too", t.Name(), typeDefinitionLabel(b), t.Name())
 	}
 	if wildcardSubset(bw.NamespaceConstraint(), tw.NamespaceConstraint()) {
 		return nil
 	}
 	return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-		"complex type %s extends %s but its {attribute wildcard} does not admit every expanded name the base's admits, which cos-ct-extends clause 1.3 requires as a Wildcard Subset (cos-ns-subset)", t.Name(), b.Name())
+		"complex type %s extends %s but its {attribute wildcard} does not admit every expanded name the base's admits, which cos-ct-extends clause 1.3 requires as a Wildcard Subset (cos-ns-subset)", t.Name(), typeDefinitionLabel(b))
 }
 
 // checkExtensionContentType is clause 1.4. The spec words it as a disjunction
@@ -262,7 +262,7 @@ func (s *Schema) checkExtensionContentType(t, b ComplexType) error {
 			return nil // clause 1.4.2
 		}
 		return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-			"complex type %s extends %s with an empty {content type}, but the base's is %s, and cos-ct-extends clause 1.4.2 requires both to be empty", t.Name(), b.Name(), b.ContentType().Variety())
+			"complex type %s extends %s with an empty {content type}, but the base's is %s, and cos-ct-extends clause 1.4.2 requires both to be empty", t.Name(), typeDefinitionLabel(b), b.ContentType().Variety())
 	case ElementContent:
 		return s.checkExtensionElementContent(t, b, tc) // clause 1.4.3
 	default:
@@ -285,13 +285,13 @@ func checkExtensionSimpleContent(t, b ComplexType, tc SimpleContent) error {
 	bc, ok := b.ContentType().(SimpleContent)
 	if !ok {
 		return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-			"complex type %s extends %s with a simple {content type}, but the base's is %s, and cos-ct-extends clause 1.4.1 requires both to be simple", t.Name(), b.Name(), b.ContentType().Variety())
+			"complex type %s extends %s with a simple {content type}, but the base's is %s, and cos-ct-extends clause 1.4.1 requires both to be simple", t.Name(), typeDefinitionLabel(b), b.ContentType().Variety())
 	}
 	if tc.SimpleType == bc.SimpleType || sameTypeDefinition(tc.SimpleType, bc.SimpleType) {
 		return nil
 	}
 	return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-		"complex type %s extends %s but its {content type}.{simple type definition} is %s where the base's is %s, and cos-ct-extends clause 1.4.1 requires the same one", t.Name(), b.Name(), typeDefinitionLabel(tc.SimpleType), typeDefinitionLabel(bc.SimpleType))
+		"complex type %s extends %s but its {content type}.{simple type definition} is %s where the base's is %s, and cos-ct-extends clause 1.4.1 requires the same one", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(tc.SimpleType), typeDefinitionLabel(bc.SimpleType))
 }
 
 // checkExtensionElementContent is clause 1.4.3, entered once 1.4.3.1 (T's
@@ -315,23 +315,23 @@ func (s *Schema) checkExtensionElementContent(t, b ComplexType, tc ElementConten
 	bc, ok := b.ContentType().(ElementContent)
 	if !ok {
 		return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-			"complex type %s extends %s with an %s {content type}, but the base's is %s, which satisfies neither cos-ct-extends clause 1.4.3.2.1 (base empty) nor clause 1.4.3.2.2.1 (both mixed or both element-only)", t.Name(), b.Name(), tc.Variety(), b.ContentType().Variety())
+			"complex type %s extends %s with an %s {content type}, but the base's is %s, which satisfies neither cos-ct-extends clause 1.4.3.2.1 (base empty) nor clause 1.4.3.2.2.1 (both mixed or both element-only)", t.Name(), typeDefinitionLabel(b), tc.Variety(), b.ContentType().Variety())
 	}
 	if tc.Mixed != bc.Mixed {
 		return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-			"complex type %s extends %s with a %s {content type} where the base's is %s, but cos-ct-extends clause 1.4.3.2.2.1 requires both to be mixed or both to be element-only", t.Name(), b.Name(), tc.Variety(), bc.Variety())
+			"complex type %s extends %s with a %s {content type} where the base's is %s, but cos-ct-extends clause 1.4.3.2.2.1 requires both to be mixed or both to be element-only", t.Name(), typeDefinitionLabel(b), tc.Variety(), bc.Variety())
 	}
 	if !s.particleValidExtension(tc.Particle, bc.Particle) {
 		return xsderr.New(ruleCosParticleExtend, xsderr.Loc{},
-			"complex type %s extends %s, but its {content type}.{particle} is not a ·valid extension· of the base's under any clause of cos-particle-extend (§3.9.6.2: clause 1 the same particle, clause 2 a 1..1 sequence group whose first member is identical to the base's particle, clause 3 both ·all· groups with equal {min occurs} and the base's {particles} a prefix of the extension's), which cos-ct-extends clause 1.4.3.2.2.2 requires", t.Name(), b.Name())
+			"complex type %s extends %s, but its {content type}.{particle} is not a ·valid extension· of the base's under any clause of cos-particle-extend (§3.9.6.2: clause 1 the same particle, clause 2 a 1..1 sequence group whose first member is identical to the base's particle, clause 3 both ·all· groups with equal {min occurs} and the base's {particles} a prefix of the extension's), which cos-ct-extends clause 1.4.3.2.2.2 requires", t.Name(), typeDefinitionLabel(b))
 	}
 	if !extensionOpenContentModesOK(bc.OpenContent, tc.OpenContent) {
 		return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-			"complex type %s extends %s, but the base's {open content} has {mode} %s and the extension's has {mode} %s, satisfying none of cos-ct-extends clause 1.4.3.2.2.3's branches (.1 the base's is absent, .2 the extension's is interleave, .3 both are suffix)", t.Name(), b.Name(), bc.OpenContent.Mode(), openContentModeLabel(tc.OpenContent))
+			"complex type %s extends %s, but the base's {open content} has {mode} %s and the extension's has {mode} %s, satisfying none of cos-ct-extends clause 1.4.3.2.2.3's branches (.1 the base's is absent, .2 the extension's is interleave, .3 both are suffix)", t.Name(), typeDefinitionLabel(b), bc.OpenContent.Mode(), openContentModeLabel(tc.OpenContent))
 	}
 	if !extensionOpenContentWildcardOK(bc.OpenContent, tc.OpenContent) {
 		return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-			"complex type %s extends %s, but the base's {open content}.{wildcard}.{namespace constraint} is not a subset of the extension's per cos-ns-subset (§3.10.6.2), which cos-ct-extends clause 1.4.3.2.2.4 requires", t.Name(), b.Name())
+			"complex type %s extends %s, but the base's {open content}.{wildcard}.{namespace constraint} is not a subset of the extension's per cos-ns-subset (§3.10.6.2), which cos-ct-extends clause 1.4.3.2.2.4 requires", t.Name(), typeDefinitionLabel(b))
 	}
 	return nil
 }
@@ -475,17 +475,17 @@ func checkExtensionOfSimpleBase(t ComplexType, b *SimpleType) error {
 	tc, ok := t.ContentType().(SimpleContent)
 	if !ok {
 		return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-			"complex type %s extends the simple type %s but its {content type} is %s, and cos-ct-extends clause 2.1 requires simple", t.Name(), b.Name(), t.ContentType().Variety())
+			"complex type %s extends the simple type %s but its {content type} is %s, and cos-ct-extends clause 2.1 requires simple", t.Name(), typeDefinitionLabel(b), t.ContentType().Variety())
 	}
 	if tc.SimpleType != b && !sameTypeDefinition(tc.SimpleType, b) {
 		return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-			"complex type %s extends the simple type %s but its {content type}.{simple type definition} is %s, and cos-ct-extends clause 2.1 requires it to be the base itself", t.Name(), b.Name(), typeDefinitionLabel(tc.SimpleType))
+			"complex type %s extends the simple type %s but its {content type}.{simple type definition} is %s, and cos-ct-extends clause 2.1 requires it to be the base itself", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(tc.SimpleType))
 	}
 	if !finalContains(b.final, DerivationExtension) {
 		return nil
 	}
 	return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
-		"complex type %s extends the simple type %s, but %s has extension in its {final}, which cos-ct-extends clause 2.2 forbids", t.Name(), b.Name(), b.Name())
+		"complex type %s extends the simple type %s, but %s has extension in its {final}, which cos-ct-extends clause 2.2 forbids", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b))
 }
 
 // particleValidExtension is ·valid extension· (Particle Valid (Extension),

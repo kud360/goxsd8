@@ -450,6 +450,80 @@ func TestParseRedefineComplexTypeInheritsOriginalAttributes(t *testing.T) {
 	}
 }
 
+// TestParseRedefineRestrictionOverInheritingOriginal pins the OTHER half of the
+// same two folds: not the redefinition's own properties, but the ORIGINAL's.
+//
+// The original here declares no attribute of its own — it extends a named type
+// that does — so its {attribute uses} and {attribute wildcard} are entirely
+// clause-3/clause-2.2 inherited. derivation-ok-restriction clause 3 (c-ran) reads
+// exactly those two properties OFF THE BASE to charge the redefining restriction:
+// checkRestrictionAttributes demands the base declare or admit every use the
+// restriction declares, and checkRestrictionAttributeWildcard demands the base
+// have a wildcard when the restriction does. A fold that computed the original's
+// values without STORING them back into the {base type definition} slot that owns
+// it left both readers seeing a base that declares nothing, and each rejected a
+// legal redefinition — fail-CLOSED, not the under-rejection a skipped constraint
+// gives (#505).
+//
+// The control is the same shape written without <redefine> at all, which this
+// implementation has always accepted: the two must agree, since <redefine>
+// changes where the base component comes from and not whether the derivation is
+// valid.
+func TestParseRedefineRestrictionOverInheritingOriginal(t *testing.T) {
+	for _, c := range []struct{ name, inherited, restricted string }{
+		{
+			name:       "attribute use",
+			inherited:  `<xs:attribute name="gattr" type="xs:string"/>`,
+			restricted: `<xs:attribute name="gattr" type="xs:string"/>`,
+		},
+		{
+			name:       "attribute wildcard",
+			inherited:  `<xs:anyAttribute namespace="urn:w"/>`,
+			restricted: `<xs:anyAttribute namespace="urn:w"/>`,
+		},
+		{
+			// The restriction declares NO wildcard of its own, so its own
+			// folded {attribute wildcard} is ·absent· — and the base's
+			// inherited one is the only thing that admits the name it
+			// declares a use for (·default binding·, defaultbinding.go). A
+			// storeback that wrote only the types whose own folded value was
+			// present would drop the base re-seat on exactly this shape.
+			name:       "attribute use admitted only by the inherited wildcard",
+			inherited:  `<xs:anyAttribute namespace="##any"/>`,
+			restricted: `<xs:attribute name="loc" type="xs:string"/>`,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			lib := wrap("urn:a", `<xs:complexType name="g"><xs:sequence/>`+c.inherited+`</xs:complexType>`+
+				`<xs:complexType name="ct"><xs:complexContent><xs:extension base="tns:g">`+
+				`<xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`)
+			if _, err := parseMap(t, "main.xsd", map[string]string{
+				"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+					`<xs:complexType name="ct"><xs:complexContent><xs:restriction base="tns:ct">`+
+					`<xs:sequence/>`+c.restricted+
+					`</xs:restriction></xs:complexContent></xs:complexType>`+
+					`</xs:redefine>`),
+				"lib.xsd": lib,
+			}); err != nil {
+				t.Fatalf("Parse: %v\nwant the redefining restriction ACCEPTED: the clause 1.1 original inherits the %s c-ran reads off the base", err, c.name)
+			}
+			// Control: the identical derivation with the original named, so the
+			// base is an ordinary by-name component and no anonymous slot is
+			// involved.
+			if _, err := parseMap(t, "main.xsd", map[string]string{
+				"main.xsd": wrap("urn:a", `<xs:complexType name="g"><xs:sequence/>`+c.inherited+`</xs:complexType>`+
+					`<xs:complexType name="orig"><xs:complexContent><xs:extension base="tns:g">`+
+					`<xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`+
+					`<xs:complexType name="ct"><xs:complexContent><xs:restriction base="tns:orig">`+
+					`<xs:sequence/>`+c.restricted+
+					`</xs:restriction></xs:complexContent></xs:complexType>`),
+			}); err != nil {
+				t.Fatalf("control (no <redefine>): %v\nthe redefine form must not be judged more harshly than this", err)
+			}
+		})
+	}
+}
+
 // attributeUseLocalName reads the local part of an attribute use's declared name,
 // through whichever arm of the {attribute declaration} slot it carries.
 func attributeUseLocalName(t *testing.T, u xsd.AttributeUse) string {

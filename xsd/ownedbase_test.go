@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -146,6 +147,67 @@ func TestOwnedBaseAttributeFolds(t *testing.T) {
 	def, _ := s.Type(uq("ct"))
 	if _, present := def.(ComplexType).AttributeWildcard(); !present {
 		t.Fatal("{attribute wildcard} of ct is absent, but §3.4.2.5 clause 2.2 unions in the ·base wildcard· its owned original declares")
+	}
+}
+
+// TestOwnedBaseFoldIsStoredBack pins the STOREBACK half of the same two folds:
+// not what the redefinition ends up with, but what the ORIGINAL does.
+//
+// The original is in no by-name index and in no s.types position, so the only
+// place its folded value can live is the {base type definition} slot that owns
+// it. Computing the value and discarding it leaves the original reporting the
+// producer's clause-1-and-2 set to every reader that follows Base() — and the
+// readers that follow it are derivation-ok-restriction clause 3's
+// (checkRestrictionAttributes, checkRestrictionRequiredAttributes,
+// checkRestrictionAttributeWildcard), each of which REJECTS on a base reporting
+// fewer attribute uses than it has. So the direction is fail-CLOSED, not an
+// under-report (#505).
+func TestOwnedBaseFoldIsStoredBack(t *testing.T) {
+	s := xSchema(t, func(b *SchemaBuilder) {
+		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dType(t, uq("u"), anyTypeName, EmptyContent{}, []AttributeUse{dAttr(t, uq("grand"), uq("str"))}, nil))
+		b.AddType(oPair(t, uq("ct"), uq("u"), DerivationExtension,
+			[]AttributeUse{dAttr(t, uq("own"), uq("str"))},
+			[]AttributeUse{dAttr(t, uq("orig"), uq("str"))},
+			nil, nil))
+	})
+	ct := mustComplex(t, s, uq("ct"))
+	inline, owned := ct.Base().(InlineTypeDefinition)
+	if !owned {
+		t.Fatalf("ct.Base() = %#v, want the InlineTypeDefinition arm holding the clause-1.1 original", ct.Base())
+	}
+	original, isComplex := inline.Definition.(ComplexType)
+	if !isComplex {
+		t.Fatalf("the owned base is a %T, want a ComplexType", inline.Definition)
+	}
+	var got []string
+	for _, u := range original.AttributeUses() {
+		got = append(got, attributeUseName(u).Local)
+	}
+	// The original's OWN <attribute> child (clause 1), then what it inherits
+	// from the named type it restricts (clause 3.2) — its own folded set, which
+	// is what a reader following Base() must see.
+	if want := []string{"orig", "grand"}; !fEqual(got, want) {
+		t.Fatalf("{attribute uses} of the owned original = %v, want %v — the fold computed this set but did not store it back into the slot that owns it", got, want)
+	}
+}
+
+// TestOwnedBaseRejectionNamesTheAnonymousBase pins STYLE E1 for the messages an
+// owned base now reaches. Every derivation message in complexderivation.go and
+// complexextension.go prints the base, and since #505 that base can be the
+// anonymous src-expredef clause 1.1 original — whose zero QName String()s to the
+// EMPTY string, leaving "complex type {urn:a}ct restricts  but declares…", a hole
+// exactly where the reader looks for the construct. typeDefinitionLabel is the
+// one renderer that answers for both cases.
+func TestOwnedBaseRejectionNamesTheAnonymousBase(t *testing.T) {
+	err := dFinalize(t, func(b *SchemaBuilder) {
+		b.AddType(dType(t, uq("u"), anyTypeName, EmptyContent{}, nil, nil))
+		b.AddType(oPair(t, uq("ct"), uq("u"), DerivationRestriction,
+			[]AttributeUse{dAttr(t, uq("own"), uq("str"))}, nil, nil, nil))
+	})
+	expectRule(t, err, ruleDerivationOKRestriction)
+	if !strings.Contains(err.Error(), "an anonymous type definition") {
+		t.Fatalf("message %q does not name the anonymous base, so the reader cannot tell which base was meant", err)
 	}
 }
 
