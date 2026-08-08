@@ -378,7 +378,7 @@ var Types = []TypeSpec{
 		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "minLength", Default: "1"},
-			{Name: "whiteSpace", Default: "collapse"},
+			{Name: "whiteSpace"},
 			{Name: "length"},
 			{Name: "maxLength"},
 			{Name: "enumeration"},
@@ -453,7 +453,7 @@ var Types = []TypeSpec{
 		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "minLength", Default: "1"},
-			{Name: "whiteSpace", Default: "collapse"},
+			{Name: "whiteSpace"},
 			{Name: "length"},
 			{Name: "maxLength"},
 			{Name: "enumeration"},
@@ -483,7 +483,7 @@ var Types = []TypeSpec{
 		Fundamental: &Fundamental{Ordered: OrderedFalse, Bounded: BoundedFalse, Cardinality: CardinalityCountablyInfinite, Numeric: NumericFalse},
 		Facets: []Facet{
 			{Name: "minLength", Default: "1"},
-			{Name: "whiteSpace", Default: "collapse"},
+			{Name: "whiteSpace"},
 			{Name: "length"},
 			{Name: "maxLength"},
 			{Name: "enumeration"},

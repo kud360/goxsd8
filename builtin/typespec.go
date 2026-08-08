@@ -102,9 +102,16 @@ type Facet struct {
 type TypeSpec struct {
 	// Name is the spec datatype name, verbatim (e.g. "nonNegativeInteger").
 	Name string
-	// Base is the name of the {base type definition}. Primitives derive from
-	// anyAtomicType (§4.1.6 dummy-def); anyAtomicType derives from
-	// anySimpleType; lists restrict an anonymous list rooted at anySimpleType.
+	// Base names the type this row's FIRST derivation step restricts, which for
+	// an atomic row is the {base type definition} itself: primitives derive from
+	// anyAtomicType (§4.1.6 dummy-def), anyAtomicType from anySimpleType.
+	//
+	// On a LIST row it is NOT the named type's {base type definition}. A list
+	// datatype is derived in two steps (§3.4.5/§3.4.10/§3.4.12): an anonymous
+	// list over Variety's item type is defined first, and THAT anonymous
+	// component is the named type's {base type definition}. Base names the
+	// anonymous list's own base, always anySimpleType (§3.16.2.1 map.std.common
+	// case 2), and Seed materializes the interposed component from Variety.
 	Base string
 	// Variety is the datatype's {variety}: Atomic{} or List{Item: ...}.
 	Variety Variety

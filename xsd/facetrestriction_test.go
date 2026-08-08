@@ -246,10 +246,20 @@ func TestCountFacetValueMalformed(t *testing.T) {
 // differs between the two list branches: a CONSTRUCTED list (B is
 // xs:anySimpleType) is in branch 2.2.1, so 2.2.1.2; a list RESTRICTING a real
 // list is in branch 2.2.2, so 2.2.2.4.
+//
+// The applicable-facet POSITIVE case is therefore a RESTRICTING list: clause
+// 2.2.1.2 admits nothing but whiteSpace = collapse fixed on a constructed one,
+// so an applicable minLength can only ever appear at a second derivation step —
+// the same two-step shape xs:NMTOKENS itself has (§3.4.5).
 func TestListApplicableFacets(t *testing.T) {
 	item := mustPrim(t, "string")
+	constructed, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "constructedlist"},
+		NewList(item), anySimpleType, constructedListFacets(), nil)
+	if err != nil {
+		t.Fatalf("constructed list rejected: %v", err)
+	}
 	baseList, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "goodlist"},
-		NewList(item), anySimpleType,
+		NewList(item), constructed,
 		[]Facet{NewFacet(FacetMinLength, []string{"1"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("list with an applicable facet rejected: %v", err)

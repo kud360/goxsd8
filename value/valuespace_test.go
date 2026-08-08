@@ -105,7 +105,8 @@ func TestValueSpaceRefusesUngovernedAndNonAtomic(t *testing.T) {
 
 	unmapped := vsPrim(t, "unmapped")
 	lst, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "lst"},
-		xsd.NewList(prim), xsd.AnySimpleType(), nil, nil)
+		xsd.NewList(prim), xsd.AnySimpleType(),
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
 	}

@@ -48,13 +48,19 @@ func (b stubItemBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 	}}, true
 }
 
-// listType builds a list-variety *xsd.SimpleType over item (restricting
-// xs:anySimpleType), carrying own facets — mirroring how the conformance list
-// cohort synthesizes its leaf and how whitespace_test's list helpers build one.
-func listType(t *testing.T, item *xsd.SimpleType, own []xsd.Facet) *xsd.SimpleType {
+// listType builds a CONSTRUCTED list-variety *xsd.SimpleType over item
+// (restricting xs:anySimpleType) — mirroring how the conformance list cohort
+// synthesizes its constructed step and how whitespace_test's list helpers build
+// one. Its {facets} is the one set cos-st-restricts clause 2.2.1.2 admits there:
+// the fixed whiteSpace=collapse facet §3.16.2.1 map.std.common case 3
+// manufactures for every <list>, which is also the facet effectiveWhiteSpace
+// needs in force (§4.3.6.1 f-w-fixed). A list carrying anything else is a
+// SECOND derivation step and is built by the test that needs one.
+func listType(t *testing.T, item *xsd.SimpleType) *xsd.SimpleType {
 	t.Helper()
 	lst, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "lst"},
-		xsd.NewList(item), xsd.AnySimpleType(), own, nil)
+		xsd.NewList(item), xsd.AnySimpleType(),
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
 	}
@@ -68,7 +74,7 @@ func listType(t *testing.T, item *xsd.SimpleType, own []xsd.Facet) *xsd.SimpleTy
 // governing mapping leaves the list ungoverned, the atomic path's outcome.
 func TestGoverningMappingListResolves(t *testing.T) {
 	item := primType(t, "myitem", "collapse")
-	lst := listType(t, item, nil)
+	lst := listType(t, item)
 
 	m, ok := governingMapping(stubItemBackend{item: item.Name()}, lst)
 	if !ok {
@@ -133,10 +139,7 @@ func TestListValueIdentityEquality(t *testing.T) {
 // validates and yields a listValue.
 func TestValidateLexicalListItemErrorPropagates(t *testing.T) {
 	item := primType(t, "myitem", "collapse")
-	// The list's mandatory fixed whiteSpace=collapse facet (§4.3.6.1 f-w-fixed):
-	// effectiveWhiteSpace panics on a list carrying none.
-	own := []xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}
-	leaf := listType(t, item, own)
+	leaf := listType(t, item)
 	b := stubItemBackend{item: item.Name()}
 
 	v, err := ValidateLexical(b, leaf, "aa bb ccc", nil)
@@ -182,8 +185,7 @@ func TestValidateLexicalListItemTypeFacetsApply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSimpleType(item restriction): %v", err)
 	}
-	own := []xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}
-	leaf := listType(t, item, own)
+	leaf := listType(t, item)
 
 	if _, err := ValidateLexical(b, leaf, "aa bb", nil); err != nil {
 		t.Fatalf("ValidateLexical(list of enumerated items) = %v, want accept", err)
@@ -195,5 +197,55 @@ func TestValidateLexicalListItemTypeFacetsApply(t *testing.T) {
 	}
 	if r, _ := xsderr.RuleOf(err); r != "cvc-enumeration-valid" {
 		t.Errorf("out-of-enumeration item charged %s, want cvc-enumeration-valid (§4.3.5.4 on the ITEM type, not the list)", r)
+	}
+}
+
+// TestListEnumerationResolvesThroughAnonymousBase is the regression guard for
+// the shape builtin.Seed now produces: every list datatype restricts an
+// ANONYMOUS intermediate list (Datatypes §3.4.5/§3.4.10/§3.4.12), so a
+// zero-QName component sits on the base chain of any user type derived from
+// xs:NMTOKENS/xs:IDREFS/xs:ENTITIES. This mirrors that chain — anonymous
+// constructed list, the named plural type restricting it with minLength = 1, the
+// user's own restriction carrying an enumeration — and drives it end to end.
+//
+// Two resolutions have to survive the extra hop. The enumeration's {value} is
+// parsed in its DECLARING type's space (declaringFacetSpace), whose whiteSpace
+// mode is read off the declaring type's BASE — here the plural type, which owns
+// no whiteSpace facet and inherits collapse across the anonymous node through the
+// §3.16.6.4 overlay. If either resolution missed, the enumeration would decide
+// nothing and the out-of-enumeration list would be false-accepted.
+func TestListEnumerationResolvesThroughAnonymousBase(t *testing.T) {
+	item := primType(t, "myitem", "collapse")
+	b := stubItemBackend{item: item.Name()}
+
+	anon, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{},
+		xsd.NewList(item), xsd.AnySimpleType(),
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(anonymous intermediate list): %v", err)
+	}
+	plural, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "NMTOKENS"},
+		xsd.NewList(item), anon,
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetMinLength, []string{"1"}, false)}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(xs:NMTOKENS): %v", err)
+	}
+	// stubItemBackend keys an item's value by token length, so "aa bb" and
+	// "aa ccc" are different list values.
+	leaf, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "twoShortTokens"},
+		xsd.NewList(item), plural, []xsd.Facet{enumOf("aa bb")}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(user restriction of xs:NMTOKENS): %v", err)
+	}
+
+	if _, err := ValidateLexical(b, leaf, "aa bb", nil); err != nil {
+		t.Fatalf("ValidateLexical(enumerated list value) = %v, want accept", err)
+	}
+	_, err = ValidateLexical(b, leaf, "aa ccc", nil)
+	if err == nil {
+		t.Fatal("ValidateLexical(out-of-enumeration list) = nil, want the enumeration's rejection")
+	}
+	if r, _ := xsderr.RuleOf(err); r != "cvc-enumeration-valid" {
+		t.Errorf("out-of-enumeration list charged %s, want cvc-enumeration-valid (§4.3.5.4)", r)
 	}
 }

@@ -9,12 +9,12 @@ import (
 // ruleCosSTRestricts is Derivation Valid (Restriction, Simple) (Structures
 // §3.16.6.2, id="cos-st-restricts"): the per-variety constraints relating a
 // Simple Type Definition D to its {base type definition} B. This package charges
-// its structural/variety-shape sub-clauses (1.1, 2.1, 2.2.1.1, 2.2.2.1, 2.2.2.3,
-// 3.1, 3.2.1.1, 3.2.2.1, 3.2.2.3) at construction time, plus the list/union
-// applicable-facet clauses 2.2.2.4 and 3.2.2.4 and the count- and token-valued
-// part of the facet-constraint clauses 1.3.2 / 2.2.2.5 / 3.2.2.5. Its remaining
-// facet-value sub-clauses need an applicability table or a value space and are
-// charged above this pure leaf, or still deferred — see checkSTGraph.
+// its structural/variety-shape sub-clauses (1.1, 2.1, 2.2.1.1, 2.2.1.2, 2.2.2.1,
+// 2.2.2.3, 3.1, 3.2.1.1, 3.2.1.2, 3.2.2.1, 3.2.2.3) at construction time, plus
+// the list/union applicable-facet clauses 2.2.2.4 and 3.2.2.4 and the count- and
+// token-valued part of the facet-constraint clauses 1.3.2 / 2.2.2.5 / 3.2.2.5.
+// Its remaining facet-value sub-clauses need an applicability table or a value
+// space and are charged above this pure leaf — see checkSTGraph.
 const ruleCosSTRestricts xsderr.Rule = "cos-st-restricts"
 
 // The precisionDecimal scale-facet Schema Component Constraints, charged at
@@ -170,22 +170,12 @@ const (
 //     value.CheckFacetRestriction, wired together at the parser's sole
 //     NewSimpleType call site.
 //
-//   - cos-st-restricts clause 2.2.1.2 ALONE — the FRESHLY-CONSTRUCTED (B is
-//     xs:anySimpleType) LIST facet-shape clause: "{facets} contains only the
-//     whiteSpace facet component with {value} = collapse and {fixed} = true". It
-//     is not charged anywhere yet, because the component graphs this repo builds
-//     today do not yet model the anonymous intermediate list a named list datatype
-//     restricts (§4.1.1): builtin.Seed flattens xs:NMTOKENS/xs:IDREFS/xs:ENTITIES
-//     into a single list component whose {base type definition} IS
-//     xs:anySimpleType and whose {facets} carry minLength = 1, so charging 2.2.1.2
-//     here would reject the builtin datatypes themselves. Interposing that
-//     anonymous list is a change to the generated builtin table's shape
-//     (builtin/gen_typespec.go), not to this constraint, so the clause waits on
-//     it — a follow-up worth harvesting as its own issue.
-//
-//     Its UNION sibling, clause 3.2.1.2 ("{facets} is empty"), does NOT share
-//     that blocker and is charged, in checkUnionGraph: the generated table
-//     contains no builtin union at all, so no seeded component can trip it.
+// The two constructed-variety facet-shape clauses — 2.2.1.2 for a list and its
+// union sibling 3.2.1.2 — are BOTH charged here, in checkListGraph and
+// checkUnionGraph respectively. 2.2.1.2 was deferred until builtin.Seed modeled
+// the anonymous intermediate list a named list datatype restricts (§3.4.5/
+// §3.4.10/§3.4.12); with that node interposed, xs:NMTOKENS/xs:IDREFS/xs:ENTITIES
+// are restrictions of a real list and the clause no longer touches them.
 func checkSTGraph(loc xsderr.Loc, t *SimpleType) error {
 	if err := checkFacetsSupported(loc, t.ownFacets); err != nil {
 		return err
@@ -271,8 +261,8 @@ func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
 // this off the resolved base, not off which XML element produced the type):
 //
 //   - constructed (B is xs:anySimpleType): clause 2.2.1.1 — the item's {final}
-//     does not contain list. Clause 2.2.1.2 (the "only whiteSpace collapse
-//     fixed" facets shape) is deferred — see checkSTGraph for why.
+//     does not contain list; clause 2.2.1.2 — the closed facet shape, in
+//     checkConstructedListFacets.
 //   - restricted (B is a real list): clause 2.2.2.1 — B.{variety} is list; clause
 //     2.2.2.3 — the item is validly derived from B's item (cos-st-derived-ok,
 //     §3.16.6.3). Clause 2.2.2.2 (B.{final}) is discharged by checkSTGraph's
@@ -310,7 +300,7 @@ func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
 			return xsderr.New(ruleCosSTRestricts, loc,
 				"list {item type definition} %s has list in its {final}, blocking its use as a list item (cos-st-restricts clause 2.2.1.1)", item.name)
 		}
-		return nil
+		return checkConstructedListFacets(loc, t)
 	}
 	baseList, ok := t.base.variety.(List)
 	if !ok {
@@ -324,6 +314,47 @@ func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
 	return nil
 }
 
+// checkConstructedListFacets enforces cos-st-restricts clause 2.2.1.2 on a
+// FRESHLY-CONSTRUCTED list t (B is xs:anySimpleType): "D.{facets} contains only
+// the whiteSpace facet component with {value} = collapse and {fixed} = true".
+// The set is CLOSED — any additional facet, a missing whiteSpace, a whiteSpace
+// that is not collapse, or an unfixed one is a violation.
+//
+// It reads t.ownFacets directly because for a constructed list {facets} IS the
+// own facet set: xs:anySimpleType carries no facets (§3.16.1), so the §3.16.6.4
+// overlay has nothing to inherit — the same argument checkUnionGraph makes for
+// the union sibling 3.2.1.2. "Only" needs no duplicate scan either: two members
+// of the same kind are already refused by st-props-correct clause 4 in
+// checkSTProps.
+//
+// A conforming mapping always satisfies this, because Structures §3.16.2.1
+// map.std.common case 3 manufactures exactly that one-member set for every
+// <list> alternative — which is also why the clause bites only on a
+// programmatically built component, never on one parsed from a schema document.
+func checkConstructedListFacets(loc xsderr.Loc, t *SimpleType) error {
+	for _, f := range t.ownFacets {
+		if f.kind == FacetWhiteSpace {
+			continue
+		}
+		return xsderr.New(ruleCosSTRestricts, loc,
+			"list simple type constructed directly from xs:anySimpleType carries facet %s, but its {facets} must contain only whiteSpace = collapse with {fixed} = true (cos-st-restricts clause 2.2.1.2)", f.kind)
+	}
+	ws, ok := findFacet(t.ownFacets, FacetWhiteSpace)
+	if !ok {
+		return xsderr.New(ruleCosSTRestricts, loc,
+			"list simple type constructed directly from xs:anySimpleType has no whiteSpace facet, but its {facets} must contain whiteSpace = collapse with {fixed} = true (cos-st-restricts clause 2.2.1.2)")
+	}
+	if v := ws.Values(); len(v) != 1 || v[0] != "collapse" {
+		return xsderr.New(ruleCosSTRestricts, loc,
+			"list simple type constructed directly from xs:anySimpleType has whiteSpace %q, but its {facets} must contain whiteSpace = collapse with {fixed} = true (cos-st-restricts clause 2.2.1.2)", v)
+	}
+	if fixed, _ := ws.Fixed(); !fixed {
+		return xsderr.New(ruleCosSTRestricts, loc,
+			"list simple type constructed directly from xs:anySimpleType has an unfixed whiteSpace facet, but its {facets} must contain whiteSpace = collapse with {fixed} = true (cos-st-restricts clause 2.2.1.2)")
+	}
+	return nil
+}
+
 // checkUnionGraph enforces the union-variety constraints on t (whose {variety}
 // is Union): cos-st-restricts clause 3. Clause 3.1 excludes special type
 // definitions from {member type definitions}. Clause 3.2 branches on the
@@ -333,9 +364,9 @@ func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
 //     {final} does not contain union; clause 3.2.1.2 — {facets} is empty. A
 //     freshly-constructed union has nothing to inherit (xs:anySimpleType carries
 //     no facets, §3.16.1), so its {facets} IS its own facet set and the clause
-//     reads directly off t.ownFacets. Unlike its list sibling 2.2.1.2, this
-//     clause has no blocker: the generated builtin table defines no union, so no
-//     seeded component can trip it (see checkSTGraph).
+//     reads directly off t.ownFacets — the same argument its list sibling
+//     2.2.1.2 makes in checkConstructedListFacets. The generated builtin table
+//     defines no union at all, so no seeded component can trip this one.
 //   - restricted (B is a real union): clause 3.2.2.1 — B.{variety} is union;
 //     clause 3.2.2.3 — each member is validly derived from the CORRESPONDING
 //     (positional, PRINCIPLES 11) base member (cos-st-derived-ok, §3.16.6.3).

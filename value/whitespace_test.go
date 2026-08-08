@@ -122,17 +122,32 @@ func TestEffectiveWhiteSpaceNoFacetPanics(t *testing.T) {
 	_, _ = effectiveWhiteSpace(bare)
 }
 
-// TestEffectiveWhiteSpaceListNoFacetPanics confirms the absent-facet panic is
-// LIST as well as atomic: a list-variety type that (contrary to §4.3.6.1) lacks
-// its materialized whiteSpace=collapse facet is still a construction bug, never
-// the relaxed union outcome. This is the mutation guard proving the relaxation
-// is union-ONLY, not "any non-atomic variety": a blanket
-// "non-atomic ⇒ (0, false)" would silently pass a broken list here.
+// TestEffectiveWhiteSpaceListNoFacetPanics confirms the no-usable-mode panic is
+// LIST as well as atomic: a list-variety type with no whiteSpace mode in force
+// is still a construction bug, never the relaxed union outcome. This is the
+// mutation guard proving the relaxation is union-ONLY, not "any non-atomic
+// variety": a blanket "non-atomic ⇒ (0, false)" would silently pass a broken
+// list here.
+//
+// The list reaches that state through an UNRECOGNIZED {value}, not an absent
+// facet: cos-st-restricts clause 2.2.1.2 now rejects a constructed list carrying
+// anything but whiteSpace=collapse fixed, and every list restricting one
+// inherits that facet, so the absent-facet state is no longer constructible
+// through xsd's constructors at all. The malformed-{value} state is, because
+// §4.3.6.4's restriction SCC deliberately leaves an out-of-domain {value} to the
+// normalization stage here (STYLE E2) — and effectiveWhiteSpace collapses all
+// three no-usable-mode states onto this one panic, so it guards the same branch.
 func TestEffectiveWhiteSpaceListNoFacetPanics(t *testing.T) {
 	item := primType(t, "string", "preserve")
-	// A list with no own whiteSpace facet: EffectiveFacets surfaces none.
+	constructed, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "goodList"},
+		xsd.NewList(item), xsd.AnySimpleType(),
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(constructed list): %v", err)
+	}
 	list, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "bareList"},
-		xsd.NewList(item), xsd.AnySimpleType(), nil, nil)
+		xsd.NewList(item), constructed,
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"not-a-whiteSpace-token"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
 	}

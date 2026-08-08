@@ -18,6 +18,16 @@ func mustPrim(t *testing.T, local string) *SimpleType {
 	return st
 }
 
+// constructedListFacets is the {facets} set Structures §3.16.2.1 map.std.common
+// case 3 manufactures for every <list> — one whiteSpace facet, {value} collapse,
+// {fixed} true — and so the only set cos-st-restricts clause 2.2.1.2 admits on a
+// list whose base is xs:anySimpleType. Every constructed list in these tests
+// carries it, so a case exercising some OTHER clause is never rejected by 2.2.1.2
+// first.
+func constructedListFacets() []Facet {
+	return []Facet{NewFacet(FacetWhiteSpace, []string{"collapse"}, true)}
+}
+
 // mustST builds a simple type through NewSimpleType or fails the test — used for
 // the prerequisite base/item/member types the negative cases restrict.
 func mustST(t *testing.T, name string, v Variety, base *SimpleType, facets []Facet, final []DerivationMethod) *SimpleType {
@@ -33,7 +43,10 @@ func mustST(t *testing.T, name string, v Variety, base *SimpleType, facets []Fac
 // case checks in derivation.go: both polarities for atomic (clause 1.1), list
 // (clause 2, both the constructed B==anySimpleType and restricted branches),
 // union (clause 3, both branches), the {final}-blocking clause
-// 3/1.2/2.2.2.2/3.2.2.2 (shared site) and 2.2.1.1/3.2.1.1, and clause 5. Every
+// 3/1.2/2.2.2.2/3.2.2.2 (shared site), 2.2.1.1/3.2.1.1, the constructed-list
+// facet-shape clause 2.2.1.2 in all four of its failure modes (an extra facet, no
+// whiteSpace at all, a whiteSpace that is not collapse, an unfixed one), and
+// clause 5. Every
 // prerequisite type is built through the real constructors — no XML fixtures.
 func TestSTGraphChecks(t *testing.T) {
 	dec := mustPrim(t, "decimal")
@@ -45,7 +58,7 @@ func TestSTGraphChecks(t *testing.T) {
 	int2 := mustST(t, "int2", NewAtomic(dec), intT, nil, nil)
 
 	// Constructed lists/unions (base xs:anySimpleType).
-	listOverDec := mustST(t, "decList", NewList(dec), anySimpleType, nil, nil)
+	listOverDec := mustST(t, "decList", NewList(dec), anySimpleType, constructedListFacets(), nil)
 	unionDecStr := mustST(t, "decStr", NewUnion(dec, str), anySimpleType, nil, nil)
 	unionAllAtomic := mustST(t, "uAtomic", NewUnion(dec, str), anySimpleType, nil, nil)
 	unionWithList := mustST(t, "uList", NewUnion(dec, listOverDec), anySimpleType, nil, nil)
@@ -90,29 +103,48 @@ func TestSTGraphChecks(t *testing.T) {
 
 		// --- list (cos-st-restricts case 2) ---
 		{"list ok constructed atomic item", func() error {
-			_, e := NewSimpleType(loc, qn, NewList(dec), anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(dec), anySimpleType, constructedListFacets(), nil)
 			return e
 		}, "", ""},
 		{"list ok constructed atomic-union item", func() error {
-			_, e := NewSimpleType(loc, qn, NewList(unionAllAtomic), anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(unionAllAtomic), anySimpleType, constructedListFacets(), nil)
 			return e
 		}, "", ""},
 		{"list special item (2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, NewList(anyAtomicType), anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(anyAtomicType), anySimpleType, constructedListFacets(), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.1"},
 		{"list nested-list item (2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, NewList(listOverDec), anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(listOverDec), anySimpleType, constructedListFacets(), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.1"},
 		{"list union-with-list item (2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, NewList(unionWithList), anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(unionWithList), anySimpleType, constructedListFacets(), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.1"},
 		{"list constructed item {final} has list (2.2.1.1)", func() error {
-			_, e := NewSimpleType(loc, qn, NewList(itemFinalList), anySimpleType, nil, nil)
+			_, e := NewSimpleType(loc, qn, NewList(itemFinalList), anySimpleType, constructedListFacets(), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.1.1"},
+		{"list constructed extra facet (2.2.1.2)", func() error {
+			_, e := NewSimpleType(loc, qn, NewList(dec), anySimpleType,
+				append(constructedListFacets(), NewFacet(FacetMinLength, []string{"1"}, false)), nil)
+			return e
+		}, ruleCosSTRestricts, "clause 2.2.1.2"},
+		{"list constructed no facets (2.2.1.2)", func() error {
+			_, e := NewSimpleType(loc, qn, NewList(dec), anySimpleType, nil, nil)
+			return e
+		}, ruleCosSTRestricts, "clause 2.2.1.2"},
+		{"list constructed whiteSpace not collapse (2.2.1.2)", func() error {
+			_, e := NewSimpleType(loc, qn, NewList(dec), anySimpleType,
+				[]Facet{NewFacet(FacetWhiteSpace, []string{"preserve"}, true)}, nil)
+			return e
+		}, ruleCosSTRestricts, "clause 2.2.1.2"},
+		{"list constructed whiteSpace unfixed (2.2.1.2)", func() error {
+			_, e := NewSimpleType(loc, qn, NewList(dec), anySimpleType,
+				[]Facet{NewFacet(FacetWhiteSpace, []string{"collapse"}, false)}, nil)
+			return e
+		}, ruleCosSTRestricts, "clause 2.2.1.2"},
 		{"list ok restricted same item", func() error {
 			_, e := NewSimpleType(loc, qn, NewList(dec), listOverDec, nil, nil)
 			return e
@@ -356,7 +388,7 @@ func TestDerivedOKSimple(t *testing.T) {
 	str := mustPrim(t, "string")
 	intT := mustST(t, "int", NewAtomic(dec), dec, nil, nil)
 	int2 := mustST(t, "int2", NewAtomic(dec), intT, nil, nil)
-	listOverDec := mustST(t, "decList", NewList(dec), anySimpleType, nil, nil)
+	listOverDec := mustST(t, "decList", NewList(dec), anySimpleType, constructedListFacets(), nil)
 	unionDecStr := mustST(t, "decStr", NewUnion(dec, str), anySimpleType, nil, nil)
 
 	tests := []struct {
