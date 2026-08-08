@@ -20,10 +20,42 @@ import (
 // Clause 1 is stated extensionally — language containment L(R) ⊆ L(B), with no
 // syntactic recipe — and clause 2 quantifies over the same sequences, so both
 // reduce to one walk of the PRODUCT of the two content models' position
-// automata. The automata are particleattribution.go's, unchanged and unforked:
-// the same addParticle, the same unfoldCopies bound, the same first/follow/last
-// sets cos-nonambig was decided over (STYLE T4). A second, differently-bounded
-// unfolding would explore a state space cos-nonambig never validated.
+// automata. The automata are particleattribution.go's construction, reused whole
+// rather than forked (STYLE T4): the same addParticle, the same first/follow/last
+// sets cos-nonambig is decided over. One thing is chosen differently — the
+// unfolding of a numeric occurrence range, which this file supplies as
+// unfoldExactly through automaton.unfold.
+//
+// WHY THE UNFOLDING IS THE ONE THING NOT SHARED. maxMandatoryCopies /
+// maxOptionalCopies bound a range to two copies of each kind, which is
+// verdict-preserving for cos-nonambig — whose subject is which particle-
+// IDENTIFIER sets are live in one state, and two copies realize every such set —
+// and is NOT verdict-preserving here, because as a statement about LANGUAGE the
+// bound rewrites the range itself: e{3,6} would read as e{2,4} and e{0,100} as
+// e{0,2}. That rewrite is monotone in neither direction, and both directions are
+// reachable on a bare single element particle: e{3,6} under e{0,100} is a VALID
+// restriction whose fourth R-copy would find no live B-position and be rejected,
+// and e{5,5} under e{3,3} is an INVALID one both of whose sides would collapse to
+// two mandatory copies and become indistinguishable. Nothing licenses either
+// outcome — clause 1 is pure set containment naming no algorithm, Appendix J's
+// unfolding guidance is scoped by its own text to cos-nonambig, and §3.4.6.3's
+// implementation-defined licence excuses provisional ACCEPTANCE of an undecided
+// case, never a rejection. So the constants are not raised, which would only move
+// the same two thresholds, but replaced for this consumer: unfoldExactly emits
+// {max occurs} copies of a bounded range and {min occurs} copies plus a loop-back
+// for an unbounded one, so the automaton accepts exactly L and this walk DECIDES
+// containment over the declared {min occurs}/{max occurs} instead of over a
+// truncated unfolding (#501).
+//
+// The exact unfolding does not step outside what cos-nonambig validated.
+// maxMandatoryCopies' own argument is that copies past the second realize no
+// identifier set the first two do not, so every state of the exactly-unfolded
+// automaton offers an identifier set already present in the bounded one that
+// Phase C accepted: the "no two competing particles in one state" premise the
+// determinism note below rests on carries over unchanged. It is not load-bearing
+// for soundness in any case — R's live positions are ALL explored and B is
+// subset-constructed, which is the standard containment check over two NFAs, and
+// neither half needs a deterministic automaton.
 //
 // WHY THE WALK NEEDS NO BACKTRACKING, AND WHY B IS STILL DETERMINIZED.
 // cos-nonambig (Phase C, which runs before this Phase D check) has already
@@ -51,11 +83,12 @@ import (
 // — it passes when SOME member's binding ·subsumes· R's, which is this file's
 // fail-open direction, not a claim that the members agree.
 //
-// The walk terminates on its visited set: positions(R) is finite because
-// unfoldCopies bounds each particle's copies, and the B-sets are drawn from a
-// finite powerset, with maxProductStates as a hard ceiling on top. That set is a
-// walk-scoped graph-reachability guard over two automata already built, not a
-// component-resolution cycle check, so PRINCIPLES 9 / STYLE D4 are untouched.
+// The walk terminates on its visited set: positions(R) is finite because a
+// content model past maxContentPositions is never unfolded at all, and the B-sets
+// are drawn from a finite powerset, with maxProductStates as a hard ceiling on
+// top. That set is a walk-scoped graph-reachability guard over two automata
+// already built, not a component-resolution cycle check, so PRINCIPLES 9 /
+// STYLE D4 are untouched.
 //
 // WHAT cos-ns-subset IS DOING HERE. §3.10.6.2's Wildcard Subset relation is NOT
 // cited by cos-content-act-restrict — clause 1 names no algorithm at all. It is
@@ -73,26 +106,6 @@ import (
 // violations always statically, only from instances, or sometimes) makes
 // unnecessary as well as harmful — though see contentModelRestricts' giveup site
 // for how narrowly that licence is actually conditioned.
-//
-// GAP(xsd): the inherited unfoldCopies bound is the one approximation reaching
-// this verdict that does NOT obey that direction, and it is not merely unproved
-// — it diverges both ways. maxMandatoryCopies/maxOptionalCopies
-// (particleattribution.go) are argued verdict-preserving for cos-nonambig, whose
-// subject is which particle-identifier sets ·compete· in one state; two copies
-// realize every such set, so that argument is sound THERE. It does not carry to
-// language containment, which is what clause 1 decides here: the bound rewrites
-// an occurrence range, e{3,6} as e{2,4} and e{0,100} as e{0,2}, and that rewrite
-// is monotone in neither direction. Both divergences are reachable on a single
-// element particle. R = e{3,6} under B = e{0,100} is a VALID restriction this
-// walk rejects — R unfolds to four positions and B to two, so R's third leaves
-// contentModelRestricts with no live B-position and checkRestrictionContentType
-// charges derivation-ok-restriction against a conforming schema — and R = e{5,5}
-// under B = e{3,3} is an INVALID one it accepts, both sides having collapsed to
-// two mandatory copies. Those two are reproductions, not suite cases: the gate
-// and every ratchet lane are green with the bound in place, which is how the
-// divergence stayed latent. Retiring it means deciding containment over the
-// declared {min occurs}/{max occurs} rather than over a truncated unfolding;
-// raising the constants only moves the two thresholds.
 
 // contentAutomaton is one content model's position automaton together with the
 // three fragment facts addParticle returns for its root particle. The automaton
@@ -106,15 +119,198 @@ type contentAutomaton struct {
 }
 
 // contentAutomatonOf builds the position automaton of one Content Type's
-// {particle}. It is finalize-scoped and memoized nowhere (STYLE D3), exactly as
+// {particle}, unfolding every numeric occurrence range exactly (unfoldExactly),
+// so the automaton accepts exactly the sequences ·locally valid· with respect to
+// that content model and the walk below decides containment rather than
+// approximating it. Nothing here bounds the construction: the caller must have
+// cleared the content model through unfoldedPositions first.
+//
+// It is finalize-scoped and memoized nowhere (STYLE D3), exactly as
 // checkContentModelsUnambiguous builds and discards one per content model.
 func (s *Schema) contentAutomatonOf(c ElementContent) (contentAutomaton, error) {
-	b := &automaton{s: s}
+	b := &automaton{s: s, unfold: unfoldExactly}
 	first, last, emptiable, err := b.addParticle(c.Particle)
 	if err != nil {
 		return contentAutomaton{}, err
 	}
 	return contentAutomaton{automaton: b, first: first, last: last, emptiable: emptiable}, nil
+}
+
+// unfoldExactly is the automaton.unfold policy cos-content-act-restrict is
+// decided over: the unfolding of a numeric occurrence range that preserves the
+// LANGUAGE of the particle, which is the only fact a containment walk reads.
+//
+// It is unfoldCopies (particleattribution.go) with the two copy caps removed, and
+// removing them is precisely what makes it language-exact. A bounded {m,n} emits
+// n copies of which the first m are mandatory, which addParticle concatenates
+// into L^m·(L∪ε)^(n-m) — the union of L^j for j from m to n, i.e. the range
+// itself. An unbounded {m,unbounded} emits max(m,1) copies, all mandatory when
+// m ≥ 1, with a loop-back edge on the last, which is L^m·L*. A vacuous {0,0}
+// emits nothing, exactly as before. No copy count is truncated, so no declared
+// occurrence range is silently rewritten into a different one.
+//
+// This is an implementation decision and is cited as one: §3.4.6.4 clause 1
+// states containment extensionally and names no decision procedure, no other
+// clause supplies one, and the only unfolding guidance the local specs carry
+// (Appendix J) is scoped by its own text to cos-nonambig. What keeps the
+// construction finite is therefore not a bound on the copy count — which would
+// have to be a bound on the LANGUAGE, and there is no sound one — but
+// maxContentPositions, a bound on the whole content model that abandons it
+// wholesale instead of truncating it into a verdict.
+func unfoldExactly(o Occurs) (copies, mandatory int, loop bool) {
+	bound, bounded := o.Max()
+	if bounded && bound == 0 {
+		return 0, 0, false
+	}
+	if !bounded {
+		return max(o.Min(), 1), o.Min(), true
+	}
+	return bound, o.Min(), false
+}
+
+// maxContentPositions bounds how many positions one content model's exact
+// unfolding may emit before the derivation is left undecided and provisionally
+// accepted. The exact unfolding is linear in {max occurs}, and §3.9.2 types
+// maxOccurs as a nonNegativeInteger, so maxOccurs="4294967295" is a schema a
+// processor may be handed and must not try to materialize.
+//
+// It bounds the SIZE of the automaton — its position count — and never a
+// verdict, and that second half is the whole difference between it and the
+// two-copy bound it replaced: a content model within it is unfolded exactly and
+// DECIDED exactly, while one beyond it is abandoned whole, never truncated into
+// an answer. Abandoning is fail-open in the direction this file's header fixes;
+// truncating was monotone in neither.
+//
+// It is NOT a bound on time, and must not be read as one. Position count and
+// cost are related through the SHAPE of the model, not through a constant: a
+// 2970-position model out of the W3C suite costs nothing measurable, while a
+// 200-position all-optional range on both sides cost 8.3 seconds before the
+// per-source-particle collapse below went in (#501). What actually holds the
+// walk's cost down is that collapse — per transition it does work proportional
+// to the number of distinct SOURCE PARTICLES live in a state rather than to the
+// unfolded copies of them (liveSet, subsetTable, contentModelRestricts) — with
+// maxProductStates bounding the states on top of it.
+//
+// The constant is MEASURED, on the same footing as maxProductStates, and unlike
+// that one it is NOT inert on the W3C suite. Instrumenting unfoldedPositions and
+// running the full suite — this check is reached 1538 times, twice per candidate
+// pair — recorded 1532 content models at 2970 positions or fewer, and six beyond
+// the ceiling: one at 30001, one at 999999, three at 9999999, and one past
+// 16777216. Those six carry a maxOccurs in the thousands to millions and are the
+// shapes an exact unfolding cannot be asked to materialize. So the ceiling sits
+// 1.38× above the widest model the suite DECIDES (4096 over 2970) and a factor
+// of 7 below the narrowest it DECLINES (30001 over 4096). The gap is narrow on
+// the lower side, and that is exactly why the constant is not LOWERED to control
+// cost: every step down starts declining models the suite decides today, and
+// each decline is a verdict lost.
+//
+// What it costs at its own value is stated rather than asserted. The worst shape
+// it admits is a wide all-optional range on both sides; measured through
+// cRestricts (a whole Finalize, one machine, one run, e{0,n} under e{0,n}):
+//
+//	n =  200    50 ms      48 MB allocated    11 MB peak heap
+//	n =  500   288 ms     396 MB allocated    15 MB peak heap
+//	n = 1024   1.4 s      3.0 GB allocated    27 MB peak heap
+//	n = 4096    78 s      180 GB allocated   287 MB peak heap
+//
+// Peak heap is modest throughout; the wall clock and the allocation CHURN are
+// what grow. At n = 1024 a CPU profile puts 60% of that in addFollow, inside the
+// SHARED automaton construction (mergePositions recopies a follow set per edge,
+// and an all-optional run makes every position follow every later one), against
+// 8% in this file's walk. The residual at the ceiling is therefore a
+// construction cost, not a containment-walk cost, and it is retired by a cheaper
+// follow-set representation there or by a procedure that decides containment
+// without materializing an automaton per occurrence — not by moving this
+// constant, which the suite pins from below.
+const maxContentPositions = 4096
+
+// unfoldedPositions reports how many positions the exact unfolding of one
+// particle contributes to a content automaton, saturating one past
+// maxContentPositions so a maxOccurs of 4294967295 is answered by arithmetic
+// rather than by construction. It counts exactly what addParticle emits under
+// unfoldExactly — one fragment per copy, each fragment holding the {term}'s own
+// positions — so the count is the automaton's size, not an estimate of it.
+//
+// The walk follows <group ref> and stops at <element ref>, exactly as addTerm
+// does, and carries no visited set for the same reason addTerm carries none:
+// Phase B's checkModelGroupsAcyclic (mg-props-correct clause 2) has already
+// rejected a circular group, so PRINCIPLES 9 / STYLE D4 are untouched.
+//
+// It counts rather than builds because the count has to be known BEFORE the
+// automaton exists — an automaton already built past the ceiling has already cost
+// what the ceiling exists to refuse — so this is a second traversal of the same
+// tree addParticle/addTerm/addModelGroup traverse, and it must stay in step with
+// them: a term kind that starts emitting a different number of positions has to
+// be reflected here in the same commit, or the ceiling stops bounding what it
+// claims to bound. The three arms below mirror those three functions one for one
+// so the correspondence is checkable by reading them side by side.
+func (s *Schema) unfoldedPositions(p Particle) int {
+	copies, _, _ := unfoldExactly(p.Occurs())
+	if copies == 0 {
+		return 0 // a vacuous {0,0} particle emits no fragment at all
+	}
+	inner := s.termPositions(p.Term())
+	if inner == 0 {
+		return 0
+	}
+	if copies > (maxContentPositions+1)/inner {
+		return maxContentPositions + 1
+	}
+	return copies * inner
+}
+
+// termPositions is unfoldedPositions for a particle's {term}: the positions ONE
+// copy of the term's fragment emits. An unresolvable <group ref> contributes
+// nothing, as addTerm's own unreachable arm does; an <element ref> contributes
+// the one position addLeaf emits for it, counted whether or not it resolves,
+// since over-counting can only send this content model to the fail-open ceiling.
+func (s *Schema) termPositions(t TermOrRef) int {
+	switch t := t.(type) {
+	case ResolvedTerm:
+		return s.resolvedTermPositions(t.Term)
+	case ElementDeclarationRef:
+		return 1
+	case ModelGroupRef:
+		mgd, ok := s.modelGroupIndex[t.Name]
+		if !ok {
+			return 0
+		}
+		return s.modelGroupPositions(mgd.ModelGroup())
+	default:
+		panic("xsd: termPositions: non-exhaustive TermOrRef switch")
+	}
+}
+
+// resolvedTermPositions is termPositions over the sealed Term sum: one position
+// for either kind of leaf, and the sum of its members for a model group.
+func (s *Schema) resolvedTermPositions(t Term) int {
+	switch t := t.(type) {
+	case ElementDeclaration:
+		return 1
+	case ModelGroup:
+		return s.modelGroupPositions(t)
+	case Wildcard:
+		return 1
+	default:
+		panic("xsd: resolvedTermPositions: non-exhaustive Term switch")
+	}
+}
+
+// modelGroupPositions sums its members' unfolded positions, saturating as soon as
+// the running total passes the ceiling so a wide group under a wide range is not
+// summed to completion. Every compositor contributes each member's fragment
+// exactly once — addSequence, addChoice and addAll differ in the edges they draw,
+// never in the positions they emit — so one sum serves all three. Particles are
+// walked in document order (STYLE D2).
+func (s *Schema) modelGroupPositions(g ModelGroup) int {
+	total := 0
+	for _, p := range g.particles {
+		total += s.unfoldedPositions(p)
+		if total > maxContentPositions {
+			return maxContentPositions + 1
+		}
+	}
+	return total
 }
 
 // startState is the automaton state before any element has been consumed. Every
@@ -156,28 +352,149 @@ func (a contentAutomaton) acceptingAny(states []int) bool {
 // liveIn returns the ascending union of the positions live in every member of a
 // B-state set: the alphabet B may consume next, taken over all runs that reach
 // this set.
+//
+// The union is MARKED rather than merged pairwise. mergePositions returns a
+// fresh slice per operand, so folding n ·follow· sets through it recopies the
+// accumulator n times — quadratic in the set's width on top of the members it
+// actually reads, and this is the walk's per-state entry point. Marking a
+// scratch []bool costs one write per member position and one scan of the
+// automaton's positions, and the scan is what makes the result ascending without
+// sorting (STYLE D2). The scratch is call-scoped: nothing derivable outlives the
+// call (STYLE D3).
 func (a contentAutomaton) liveIn(states []int) []int {
-	var live []int
+	marked := make([]bool, len(a.positions))
+	total := 0
 	for _, st := range states {
-		live = mergePositions(live, a.live(st))
+		for _, q := range a.live(st) {
+			if marked[q] {
+				continue
+			}
+			marked[q] = true
+			total++
+		}
+	}
+	live := make([]int, 0, total)
+	for q, ok := range marked {
+		if ok {
+			live = append(live, q)
+		}
 	}
 	return live
 }
 
-// productState is one state of the product walk: a single state of R paired with
-// the SET of B states B's runs may be in. Both position lists are ascending, so
-// the key productKey builds is canonical.
-type productState struct {
-	r int
-	b []int
+// liveSet is what B may consume next from one B-state set — liveIn's ascending
+// union — together with the partition of those positions by SOURCE PARTICLE.
+//
+// The partition exists for cost, and it is exact rather than an approximation.
+// positionAdmits reads nothing off a position but its {term} (and
+// coveringWildcardUnion nothing but its {namespace constraint}), and every
+// unfolded copy of one particle replays that particle's identifier over the same
+// source subtree, so within one automaton a particleID determines the {term}
+// (addParticle's allocator reset — the same property competes relies on). Every
+// member of a group therefore gives positionAdmits the same answer, and asking
+// one member answers for all of them.
+//
+// The STATE SET is not collapsed, and must not be: copies of one particle carry
+// DIFFERENT ·follow· sets (copy k of e{0,n} is followed by copies k+1…n), so
+// dropping copies from the matched set would drop continuations B allows. What
+// collapses is only the number of positionAdmits CALLS per transition; matched
+// still names every live position the group covers, in ascending order.
+//
+// positions is ascending; group[i] is the group index of positions[i]; reps
+// holds one representative position per group, in the order the groups were
+// first seen scanning positions. The map inside liveGroups is a lookup only —
+// every output order here comes from the ascending scan (STYLE D2).
+type liveSet struct {
+	positions []int
+	group     []int
+	reps      []int
 }
 
-// productKey is the canonical string identity of a product state, for the
-// visited set. It is a lookup key only — the set is never ranged (STYLE D2).
-func productKey(st productState) string {
-	buf := strconv.AppendInt(nil, int64(st.r), 10)
-	for _, q := range st.b {
-		buf = append(buf, ' ')
+// liveGroups is liveIn with that partition computed: one pass over the union,
+// which is the only pass that consults a particle identifier.
+func (a contentAutomaton) liveGroups(states []int) liveSet {
+	positions := a.liveIn(states)
+	set := liveSet{positions: positions, group: make([]int, len(positions))}
+	index := make(map[int]int, len(positions))
+	for i, q := range positions {
+		id := a.positions[q].particleID
+		g, seen := index[id]
+		if !seen {
+			g = len(set.reps)
+			index[id] = g
+			set.reps = append(set.reps, q)
+		}
+		set.group[i] = g
+	}
+	return set
+}
+
+// productState is one state of the product walk: a single state of R paired with
+// the SET of B states B's runs may be in, the set named by its subsetTable
+// identifier. Naming it rather than carrying it is what makes the state
+// comparable, so the visited set keys on the state itself and no string is built
+// per state (see subsetTable).
+type productState struct {
+	r int
+	b int
+}
+
+// subsetTable interns the B-state sets the walk reaches: equal sets share an
+// identifier, so a product state is a pair of ints and the visited set is a
+// plain map over that pair.
+//
+// It exists because the identity of a product state has to be tested once per
+// live R-position per state, while the SETS those states pair with are far
+// fewer — every R-position of one source particle transitions into the SAME set
+// (contentModelRestricts computes it once), so interning turns a per-transition
+// canonical-string build, linear in the set's width, into one build per distinct
+// set reached.
+//
+// The canonical form is the ascending members, exactly as before: identity is
+// still set equality and nothing about the walk's verdict depends on the
+// numbering. Both the id map and the visited map keyed on these ids are lookups
+// only, never ranged (STYLE D2).
+//
+// The two fields are the two directions of ONE bijection, not a fact stored
+// twice (STYLE D3): the walk asks "have I seen this set" on the way in and "what
+// were that identifier's members" on the way out, and recovering either from the
+// other would mean rebuilding a key or scanning the table.
+type subsetTable struct {
+	ids  map[string]int
+	sets [][]int
+}
+
+// newSubsetTable returns an empty table.
+func newSubsetTable() *subsetTable {
+	return &subsetTable{ids: map[string]int{}}
+}
+
+// intern returns the identifier of an ascending B-state set, assigning the next
+// one the first time that set is reached.
+func (t *subsetTable) intern(set []int) int {
+	key := positionsKey(set)
+	if id, ok := t.ids[key]; ok {
+		return id
+	}
+	id := len(t.sets)
+	t.ids[key] = id
+	t.sets = append(t.sets, set)
+	return id
+}
+
+// set returns the members an identifier names, ascending.
+func (t *subsetTable) set(id int) []int {
+	return t.sets[id]
+}
+
+// positionsKey is the canonical string identity of an ascending position set.
+// It is a lookup key only — the map it indexes is never ranged (STYLE D2).
+func positionsKey(states []int) string {
+	var buf []byte
+	for i, q := range states {
+		if i > 0 {
+			buf = append(buf, ' ')
+		}
 		buf = strconv.AppendInt(buf, int64(q), 10)
 	}
 	return string(buf)
@@ -210,7 +527,7 @@ const maxProductStates = 4096
 // reported separately; contentModelRestricts records which one failed only in
 // the comments at its two rejection sites.
 //
-// Three shapes are provisionally accepted rather than decided, each licensed and
+// Four shapes are provisionally accepted rather than decided, each licensed and
 // each fail-open:
 //
 //   - a non-element {content type} on either side. 2.4.1 (restrictionVarietyPairOK)
@@ -236,6 +553,13 @@ const maxProductStates = 4096
 //     allowance, not the broader implementation-defined (a)/(b)/(c) clause that
 //     the pre-#263 stub relied on; being spec-licensed rather than a deliberate
 //     incompleteness, it carries no GAP marker.
+//   - a content model whose exact unfolding would exceed maxContentPositions on
+//     either side. This one alone is a RESOURCE ceiling rather than a modelling
+//     gap — it bounds the automaton's size, see maxContentPositions for what that
+//     does and does not bound — and it is the only path on which a declared
+//     occurrence range does not reach the walk; the licence it leans on is the
+//     one contentModelRestricts' giveup site states, and the marker is at the
+//     branch itself.
 func (s *Schema) contentTypeRestricts(tct, bct ContentType) bool {
 	rc, ok := tct.(ElementContent)
 	if !ok {
@@ -261,6 +585,25 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType) bool {
 	}
 	if s.usesAllCompositor(rc.Particle.Term()) {
 		return true // §3.4.6.3's all-group leniency; see the doc above
+	}
+	if s.unfoldedPositions(rc.Particle) > maxContentPositions || s.unfoldedPositions(bc.Particle) > maxContentPositions {
+		// GAP(xsd): a content model whose exact unfolding would exceed
+		// maxContentPositions is not unfolded at all, and the derivation is
+		// provisionally accepted undecided. The alternative is not a smaller
+		// automaton but a WRONG one: truncating the copies of an occurrence range
+		// rewrites the range, which is monotone in neither direction and
+		// false-rejects conforming schemas (see this file's header, #501). The
+		// ceiling therefore declines the whole question, which is fail-open — a
+		// missed rejection, never a fabricated one — and rests on exactly the
+		// §3.4.6.3 reading contentModelRestricts' giveup site sets out, including
+		// how narrowly that reading is licensed. Unlike this file's other
+		// ceilings the branch is REACHED — six of the W3C suite's 1538 candidate
+		// content models land here, each carrying a maxOccurs in the thousands to
+		// millions (the measurement is recorded on maxContentPositions) — so the
+		// incompleteness is live rather than latent, and it is retired only by a
+		// construction that decides containment without materializing an
+		// automaton per occurrence, never by raising the constant.
+		return true
 	}
 	r, err := s.contentAutomatonOf(rc)
 	if err != nil {
@@ -289,30 +632,65 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType) bool {
 // depends only on the two content models. The visited set is a map used purely
 // as a membership test — it is never ranged, and no iteration order reaches the
 // verdict (STYLE D2).
+//
+// One transition is decided per SOURCE PARTICLE live in R, not per unfolded copy
+// of it. Everything a transition depends on — which B-positions match
+// (matchPositions), whether some matched binding subsumes (someBindingSubsumes)
+// — is read off the R-position's {term}, and copies of one particle share it, so
+// the copies of one particle live in a state all transition into one B-set. The
+// copies are still enqueued SEPARATELY, each as its own R-state: they carry
+// different ·follow· sets, so nothing about the state space is collapsed, only
+// the recomputation of one answer per copy (#501). Iteration stays in ascending
+// R-position order, so the walk order is unchanged by the memo.
+//
+// Two walk-scoped memos, both keyed on a fact rather than caching a computation
+// whose inputs might drift (STYLE D3), and both bounded by maxProductStates
+// because that is what bounds the entries they can acquire:
+//
+//   - liveOf, from a B-subset to what B may consume next from it. The live set is
+//     a FUNCTION of the subset, and many R-states pair with one subset, so
+//     without it the same union is rebuilt once per product state instead of once
+//     per distinct subset.
+//   - target, per state, from an R particle identifier to the subset its
+//     transition lands in — the per-source-particle collapse above.
+//
+// Both die with the walk; nothing survives into the Schema, and no automaton is
+// memoized anywhere (contentAutomatonOf builds one per call).
 func (s *Schema) contentModelRestricts(r, b contentAutomaton) bool {
-	start := productState{r: startState, b: []int{startState}}
-	visited := map[string]bool{productKey(start): true}
+	subsets := newSubsetTable()
+	liveOf := map[int]liveSet{}
+	start := productState{r: startState, b: subsets.intern([]int{startState})}
+	visited := map[productState]bool{start: true}
 	queue := []productState{start}
 	for len(queue) > 0 {
 		cur := queue[0]
 		queue = queue[1:]
-		if r.accepting(cur.r) && !b.acceptingAny(cur.b) {
+		if r.accepting(cur.r) && !b.acceptingAny(subsets.set(cur.b)) {
 			// Clause 1: a sequence that ends here is ·locally valid· with respect
 			// to R and leaves every run of B in a non-final state.
 			return false
 		}
-		live := b.liveIn(cur.b)
+		live, computed := liveOf[cur.b]
+		if !computed {
+			live = b.liveGroups(subsets.set(cur.b))
+			liveOf[cur.b] = live
+		}
+		target := map[int]int{}
 		for _, p := range r.live(cur.r) {
-			matched := s.matchPositions(r.positions[p], b, live)
-			if len(matched) == 0 {
-				return false // clause 1: R can continue where B cannot
+			id, decided := target[r.positions[p].particleID]
+			if !decided {
+				matched := s.matchPositions(r.positions[p], b, live)
+				if len(matched) == 0 {
+					return false // clause 1: R can continue where B cannot
+				}
+				if !s.someBindingSubsumes(b, matched, r.positions[p]) {
+					return false // clause 2, ctr-child-type-subsumption
+				}
+				id = subsets.intern(matched)
+				target[r.positions[p].particleID] = id
 			}
-			if !s.someBindingSubsumes(b, matched, r.positions[p]) {
-				return false // clause 2, ctr-child-type-subsumption
-			}
-			next := productState{r: p, b: matched}
-			key := productKey(next)
-			if visited[key] {
+			next := productState{r: p, b: id}
+			if visited[next] {
 				continue
 			}
 			if len(visited) >= maxProductStates {
@@ -365,7 +743,7 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton) bool {
 				// owns that retirement.
 				return true
 			}
-			visited[key] = true
+			visited[next] = true
 			queue = append(queue, next)
 		}
 	}
@@ -384,10 +762,21 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton) bool {
 // into the union of their ·follow· sets, and someBindingSubsumes examines EVERY
 // member, succeeding when any one of them ·subsumes· — never reading a binding
 // off a representative.
-func (s *Schema) matchPositions(p position, b contentAutomaton, live []int) []int {
+//
+// The admits test runs once per SOURCE PARTICLE live in the state, not once per
+// unfolded copy: copies of one particle share a {term}, so they share the answer
+// (see liveSet, which computes the partition once per product state). This is
+// the walk's hot loop — it is entered once per live R-position per product state
+// — and the collapse is what keeps its cost proportional to the number of
+// distinct particles rather than to the declared {max occurs} (#501).
+func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []int {
+	admits := make([]bool, len(live.reps))
+	for g, q := range live.reps {
+		admits[g] = s.positionAdmits(b.positions[q], p)
+	}
 	var matched []int
-	for _, q := range live {
-		if s.positionAdmits(b.positions[q], p) {
+	for i, q := range live.positions {
+		if admits[live.group[i]] {
 			matched = append(matched, q)
 		}
 	}
@@ -456,18 +845,34 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live []int) []in
 // the {term} assertion is made once per live position, never repeated to recover
 // a constraint the fold needs — and both die with the call; nothing derivable is
 // stored (STYLE D3).
-func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live []int) []int {
+//
+// The FOLD runs over the distinct source particles (liveSet's representatives),
+// while the RESULT names every live position they cover. Folding a repeated copy
+// would add nothing DIFFERENT: copies of one particle carry one identical
+// {namespace constraint} value (addParticle's allocator reset makes particleID
+// -> {term} a function), so re-including a copy would hand
+// UnionNamespaceConstraint an operand already in constraints, never a new one —
+// this is a claim about which OPERANDS the fold sees, not that §3.10.6.3's union
+// is idempotent as a relation: it is not (the GAP above is exactly a case where
+// folding drops a sibling keyword, so X ∪ X can differ from X for a constraint
+// that carries one). The guard is therefore on the number of DISTINCT wildcard
+// particles: one particle's copies are decided by cos-ns-subset alone in
+// positionAdmits, which has already answered for all of them, exactly as a
+// single wildcard is.
+func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live liveSet) []int {
 	var wildcards []int
 	var constraints []NamespaceConstraint
-	for _, q := range live {
+	for i, q := range live.positions {
 		w, ok := b.positions[q].term.(Wildcard)
 		if !ok {
 			continue
 		}
 		wildcards = append(wildcards, q)
-		constraints = append(constraints, w.NamespaceConstraint())
+		if q == live.reps[live.group[i]] {
+			constraints = append(constraints, w.NamespaceConstraint())
+		}
 	}
-	if len(wildcards) < 2 {
+	if len(constraints) < 2 {
 		return nil
 	}
 	union := constraints[0]

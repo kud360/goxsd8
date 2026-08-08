@@ -60,7 +60,7 @@ var allowedCollisionCitations = []citationAllowance{
 	{file: "xsd/attributewildcardfold.go", number: 9, count: 1},
 	{file: "xsd/complexderivation.go", number: 9, count: 1},
 	{file: "xsd/complexextension.go", number: 9, count: 1},
-	{file: "xsd/contentrestricts.go", number: 9, count: 2},
+	{file: "xsd/contentrestricts.go", number: 9, count: 3},
 	{file: "xsd/effectivetotalrange.go", number: 9, count: 1},
 	{file: "xsd/example_test.go", number: 9, count: 1},
 	{file: "xsd/modelgroup.go", number: 9, count: 1},

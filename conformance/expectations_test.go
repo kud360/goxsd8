@@ -76,20 +76,201 @@ func TestCompareAllPartitions(t *testing.T) {
 		"regressed":      Fail(),
 		"new":            Pass(),
 	}
-	d := Compare(expected, actual)
+	d, err := Compare(expected, actual, nil)
+	if err != nil {
+		t.Fatalf("compare: %v", err)
+	}
 
 	assertSlice(t, "Improved", d.Improved, []string{"improved"})
 	assertSlice(t, "Regressed", d.Regressed, []string{"regressed"})
 	assertSlice(t, "New", d.New, []string{"new"})
 	assertSlice(t, "Vanished", d.Vanished, []string{"vanished"})
+	assertSlice(t, "Removed", d.Removed, nil)
 }
 
 func TestCompareSlicesAreSorted(t *testing.T) {
 	expected := map[string]Status{"c": Fail(), "a": Fail(), "b": Fail()}
 	actual := map[string]Status{"c": Pass(), "a": Pass(), "b": Pass()}
-	d := Compare(expected, actual)
+	d, err := Compare(expected, actual, nil)
+	if err != nil {
+		t.Fatalf("compare: %v", err)
+	}
 	if !slices.IsSorted(d.Improved) {
 		t.Fatalf("Improved not sorted: %v", d.Improved)
+	}
+}
+
+// TestCompareSeparatesSanctionedRemovalFromVanished pins the fourth change class
+// (issue #576): an expected case the run no longer produced is Removed when — and
+// only when — discovery NAMED it as withheld, and Vanished in every other
+// circumstance. The classification is authoritative input, so the table's
+// withheld column is the only thing that moves a case between the two.
+func TestCompareSeparatesSanctionedRemovalFromVanished(t *testing.T) {
+	cases := []struct {
+		name         string
+		expected     map[string]Status
+		actual       map[string]Status
+		withheld     []string
+		wantRemoved  []string
+		wantVanished []string
+	}{
+		{
+			name:        "a withheld case with a banked fail is Removed",
+			expected:    map[string]Status{"gone": Fail()},
+			withheld:    []string{"gone"},
+			wantRemoved: []string{"gone"},
+		},
+		{
+			name:        "a withheld case with a banked PASS is Removed too",
+			expected:    map[string]Status{"gone": Pass()},
+			withheld:    []string{"gone"},
+			wantRemoved: []string{"gone"},
+		},
+		{
+			name:         "the same absence with nothing withheld stays Vanished",
+			expected:     map[string]Status{"gone": Pass()},
+			withheld:     nil,
+			wantVanished: []string{"gone"},
+		},
+		{
+			name:         "withholding one case does not sanction another's disappearance",
+			expected:     map[string]Status{"gone": Pass(), "also-gone": Pass()},
+			withheld:     []string{"gone"},
+			wantRemoved:  []string{"gone"},
+			wantVanished: []string{"also-gone"},
+		},
+		{
+			name:     "a withheld id with no committed expectation is a no-op",
+			expected: map[string]Status{"kept": Pass()},
+			actual:   map[string]Status{"kept": Pass()},
+			withheld: []string{"never-banked"},
+		},
+		{
+			name:        "Removed is sorted and de-duplicated from an unordered withheld list",
+			expected:    map[string]Status{"b": Fail(), "a": Fail()},
+			withheld:    []string{"b", "a", "b"},
+			wantRemoved: []string{"a", "b"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.actual
+			if actual == nil {
+				actual = map[string]Status{}
+			}
+			d, err := Compare(tc.expected, actual, tc.withheld)
+			if err != nil {
+				t.Fatalf("compare: %v", err)
+			}
+			assertSlice(t, "Removed", d.Removed, tc.wantRemoved)
+			assertSlice(t, "Vanished", d.Vanished, tc.wantVanished)
+		})
+	}
+}
+
+// TestCompareRejectsACaseDiscoveryBothWithheldAndProduced proves the overlap is
+// surfaced rather than resolved by letting one side win: a runner that claims to
+// have withheld a case it also produced is broken, and neither reading of it is
+// safe to score.
+func TestCompareRejectsACaseDiscoveryBothWithheldAndProduced(t *testing.T) {
+	expected := map[string]Status{"x": Fail()}
+	actual := map[string]Status{"x": Fail()}
+
+	d, err := Compare(expected, actual, []string{"x"})
+	if err == nil {
+		t.Fatal("a withheld case the run also produced must error, not be silently classified")
+	}
+	if len(d.Removed) > 0 || len(d.Vanished) > 0 || len(d.New) > 0 {
+		t.Errorf("a contradicting Delta must be empty, got %+v", d)
+	}
+	if _, err := Ratchet(expected, actual, []string{"x"}, RemovalAssertion{}); err == nil {
+		t.Error("Ratchet must propagate the contradiction, not merge past it")
+	}
+}
+
+// TestRatchetBanksAssertedRemovalsByDeletingTheirLines proves banking a
+// sanctioned removal DELETES the case's line, including a line banked as `pass`.
+// Merely tolerating the removal would leave the stale line behind for the next
+// run to re-refuse — the permanent-freeze failure mode this class exists to end
+// (issue #576, motivated by #446).
+func TestRatchetBanksAssertedRemovalsByDeletingTheirLines(t *testing.T) {
+	expected := map[string]Status{
+		"improved":     Fail(),
+		"removed-pass": Pass(),
+		"removed-fail": Fail(),
+	}
+	actual := map[string]Status{"improved": Pass()}
+	withheld := []string{"removed-fail", "removed-pass"}
+
+	merged, err := Ratchet(expected, actual, withheld, AssertRemovals(2))
+	if err != nil {
+		t.Fatalf("ratchet must bank an asserted removal: %v", err)
+	}
+	for _, id := range withheld {
+		if _, still := merged[id]; still {
+			t.Errorf("case %q survived the merge: a banked removal must delete the line, not tolerate it", id)
+		}
+	}
+	if merged["improved"] != Pass() {
+		t.Errorf("the upward flip in the same run must still be banked, got %v", merged["improved"])
+	}
+	if len(merged) != 1 {
+		t.Errorf("merged lane = %v, want only the improved case", merged)
+	}
+}
+
+// TestRatchetRefusesUnassertedOrMiscountedRemovals proves the second lock: the
+// asserted count never decides WHICH cases are sanctioned, it only refuses a set
+// whose size the arbiter did not predict — in either direction, and including the
+// zero assertion a caller that says nothing supplies.
+func TestRatchetRefusesUnassertedOrMiscountedRemovals(t *testing.T) {
+	expected := map[string]Status{"a": Pass(), "b": Fail()}
+	actual := map[string]Status{}
+	withheld := []string{"a", "b"}
+
+	cases := []struct {
+		name     string
+		removals RemovalAssertion
+	}{
+		{"no assertion at all refuses, exactly as before #576", RemovalAssertion{}},
+		{"asserting fewer than the run withheld refuses", AssertRemovals(1)},
+		{"asserting more than the run withheld refuses", AssertRemovals(3)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			merged, err := Ratchet(expected, actual, withheld, tc.removals)
+			if err == nil {
+				t.Fatal("ratchet must refuse a removal count the run did not assert")
+			}
+			if merged != nil {
+				t.Errorf("refusal must return nil map, got %v", merged)
+			}
+		})
+	}
+
+	t.Run("asserting removals that did not happen refuses too", func(t *testing.T) {
+		steady := map[string]Status{"a": Pass()}
+		if _, err := Ratchet(steady, steady, nil, AssertRemovals(1)); err == nil {
+			t.Fatal("an assertion no removal satisfies must refuse, not pass unnoticed")
+		}
+	})
+}
+
+// TestRatchetRefusesRegressionAndVanishWhateverTheRemovalAssertion proves the two
+// existing refusals are untouchable: a correctly asserted, correctly classified
+// removal buys no tolerance for a genuine regression or a genuine vanish sharing
+// the same run.
+func TestRatchetRefusesRegressionAndVanishWhateverTheRemovalAssertion(t *testing.T) {
+	withheld := []string{"removed"}
+
+	regressed := map[string]Status{"scored": Pass(), "removed": Fail()}
+	if _, err := Ratchet(regressed, map[string]Status{"scored": Fail()}, withheld, AssertRemovals(1)); err == nil {
+		t.Error("a genuine regression must refuse the merge whatever the removal count says")
+	}
+
+	vanished := map[string]Status{"scored": Pass(), "removed": Fail()}
+	if _, err := Ratchet(vanished, map[string]Status{}, withheld, AssertRemovals(1)); err == nil {
+		t.Error("a genuine vanish must refuse the merge whatever the removal count says")
 	}
 }
 
@@ -104,7 +285,7 @@ func TestRatchetImprovedFlipsAndNewRecorded(t *testing.T) {
 		"new-pass": Pass(),
 		"new-fail": Fail(),
 	}
-	merged, err := Ratchet(expected, actual)
+	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{})
 	if err != nil {
 		t.Fatalf("ratchet: %v", err)
 	}
@@ -127,7 +308,7 @@ func TestRatchetImprovedFlipsAndNewRecorded(t *testing.T) {
 func TestRatchetRefusesOnRegressed(t *testing.T) {
 	expected := map[string]Status{"x": Pass()}
 	actual := map[string]Status{"x": Fail()}
-	merged, err := Ratchet(expected, actual)
+	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{})
 	if err == nil {
 		t.Fatal("ratchet must refuse on a regressed case")
 	}
@@ -139,7 +320,7 @@ func TestRatchetRefusesOnRegressed(t *testing.T) {
 func TestRatchetRefusesOnVanished(t *testing.T) {
 	expected := map[string]Status{"x": Pass(), "gone": Pass()}
 	actual := map[string]Status{"x": Pass()}
-	merged, err := Ratchet(expected, actual)
+	merged, err := Ratchet(expected, actual, nil, RemovalAssertion{})
 	if err == nil {
 		t.Fatal("ratchet must refuse on a vanished case")
 	}
@@ -151,7 +332,7 @@ func TestRatchetRefusesOnVanished(t *testing.T) {
 func TestRatchetDoesNotMutateInputs(t *testing.T) {
 	expected := map[string]Status{"improved": Fail()}
 	actual := map[string]Status{"improved": Pass(), "new": Pass()}
-	if _, err := Ratchet(expected, actual); err != nil {
+	if _, err := Ratchet(expected, actual, nil, RemovalAssertion{}); err != nil {
 		t.Fatalf("ratchet: %v", err)
 	}
 	if expected["improved"] != Fail() {

@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -25,6 +26,13 @@ func cRestricts(t *testing.T, base, derived ModelGroup) error {
 func cElem(t *testing.T, local string, minOccurs, maxOccurs int) Particle {
 	t.Helper()
 	return uParticle(t, uOccurs(t, minOccurs, maxOccurs), ResolvedTerm{Term: uLocal(t, uq(local), uq("T"))})
+}
+
+// cUnbounded is a particle over a local element declaration of the given name,
+// typed T, whose {max occurs} is unbounded.
+func cUnbounded(t *testing.T, local string, minOccurs int) Particle {
+	t.Helper()
+	return uParticle(t, uUnbounded(t, minOccurs), ResolvedTerm{Term: uLocal(t, uq(local), uq("T"))})
 }
 
 // cAny is a particle over a wildcard with the given {namespace constraint} and
@@ -447,6 +455,137 @@ func TestWildcardSubset(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := wildcardSubset(tc.sub, tc.super); got != tc.want {
 				t.Fatalf("wildcardSubset = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestContentRestrictsDeclaredOccurrenceBounds pins cos-content-act-restrict
+// clause 1 over occurrence ranges no fixed unfolding bound can decide. The class
+// this test guards is not the five rows but the defect they witness: an
+// unfolding that truncates a range REWRITES it, and the rewrite is monotone in
+// neither direction — {3,6} truncated to two copies of each kind reads as {2,4},
+// which adds 2 and drops 5 and 6 — so a truncating walk both rejects valid
+// restrictions and accepts invalid ones, at thresholds that move but never
+// vanish when the constant is raised. The walk therefore decides over the
+// declared {min occurs}/{max occurs} (unfoldExactly, #501).
+//
+// Rows 1-2 are the false rejects: R's range is a subset of B's, sharing B's
+// maximum in row 2, and both were charged derivation-ok-restriction. Rows 3-5
+// are the false accepts: R demands strictly more occurrences than B permits, and
+// both sides collapsed to the same two mandatory copies. Every row is a bare
+// single element particle with no group nesting, which is what makes the class
+// reachable by an ordinary schema.
+//
+// Rows 6-8 carry the class past the shapes the constants happen to sit at: a
+// range wider than any small bound on both sides, an unbounded base (which must
+// contain every bounded restriction of it), and an unbounded restriction under a
+// bounded base (which no base range can contain).
+func TestContentRestrictsDeclaredOccurrenceBounds(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		base, derived  Particle
+		wantRestricted bool
+	}{
+		{name: "subset range under a much wider base", base: cElem(t, "e", 0, 100), derived: cElem(t, "e", 3, 6), wantRestricted: true},
+		{name: "subset range sharing the base maximum", base: cElem(t, "e", 0, 6), derived: cElem(t, "e", 3, 6), wantRestricted: true},
+		{name: "fixed count well above a fixed base", base: cElem(t, "e", 3, 3), derived: cElem(t, "e", 5, 5), wantRestricted: false},
+		{name: "fixed count one above a fixed base", base: cElem(t, "e", 3, 3), derived: cElem(t, "e", 4, 4), wantRestricted: false},
+		{name: "fixed count above a smaller fixed base", base: cElem(t, "e", 2, 2), derived: cElem(t, "e", 3, 3), wantRestricted: false},
+		{name: "wide range one past a wide base", base: cElem(t, "e", 10, 40), derived: cElem(t, "e", 10, 41), wantRestricted: false},
+		{name: "bounded range under an unbounded base", base: cUnbounded(t, "e", 0), derived: cElem(t, "e", 7, 9), wantRestricted: true},
+		{name: "unbounded range under a bounded base", base: cElem(t, "e", 0, 9), derived: cUnbounded(t, "e", 0), wantRestricted: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := cRestricts(t,
+				uGroup(t, CompositorSequence, tc.base),
+				uGroup(t, CompositorSequence, tc.derived))
+			if tc.wantRestricted && err != nil {
+				t.Fatalf("a valid content-model restriction was rejected: %v", err)
+			}
+			if !tc.wantRestricted {
+				expectRule(t, err, ruleDerivationOKRestriction)
+			}
+		})
+	}
+}
+
+// TestContentRestrictsOccurrenceBoundsNested is the same class one level down: a
+// numeric occurrence range on a <sequence> particle, not on an element particle,
+// so the copies the unfolding emits are whole group fragments. The verdicts are
+// the containment verdicts — (a, b){3,6} is a subset of (a, b){0,100} and
+// (a, b){5,5} is not a subset of (a, b){3,3} — and nothing about them depends on
+// the members being leaves.
+func TestContentRestrictsOccurrenceBoundsNested(t *testing.T) {
+	pair := func(minOccurs, maxOccurs int) ModelGroup {
+		inner := uGroup(t, CompositorSequence, cElem(t, "a", 1, 1), cElem(t, "b", 1, 1))
+		return uGroup(t, CompositorSequence, uParticle(t, uOccurs(t, minOccurs, maxOccurs), ResolvedTerm{Term: inner}))
+	}
+	if err := cRestricts(t, pair(0, 100), pair(3, 6)); err != nil {
+		t.Fatalf("a valid restriction of a repeated group was rejected: %v", err)
+	}
+	expectRule(t, cRestricts(t, pair(3, 3), pair(5, 5)), ruleDerivationOKRestriction)
+}
+
+// TestContentRestrictsBeyondPositionCeiling pins the direction of the
+// maxContentPositions giveup: a content model whose exact unfolding does not fit
+// is left undecided and provisionally ACCEPTED, never rejected. Both pairs here
+// are past the ceiling, and the invalid one is accepted for that reason — the
+// fail-open the GAP marker at the giveup site records. What the test guards is
+// that the ceiling never manufactures a rejection, which is the failure mode the
+// truncating unfolding it replaced actually had.
+func TestContentRestrictsBeyondPositionCeiling(t *testing.T) {
+	huge := maxContentPositions + 1
+	if err := cRestricts(t,
+		uGroup(t, CompositorSequence, cElem(t, "e", 0, huge)),
+		uGroup(t, CompositorSequence, cElem(t, "e", 3, 6))); err != nil {
+		t.Fatalf("a valid restriction of an unmaterializable base was rejected: %v", err)
+	}
+	if err := cRestricts(t,
+		uGroup(t, CompositorSequence, cElem(t, "e", huge, huge)),
+		uGroup(t, CompositorSequence, cElem(t, "e", huge+1, huge+1))); err != nil {
+		t.Fatalf("an undecidable derivation was rejected rather than provisionally accepted: %v", err)
+	}
+}
+
+// TestContentRestrictsWideRangeStaysCheap pins the COST of the containment walk,
+// which the exact unfolding made a load-bearing property rather than an
+// incidental one: unfoldExactly emits {max occurs} positions, so a range an
+// ordinary schema may carry — maxOccurs="300" narrowed to maxOccurs="150" — puts
+// hundreds of positions into both automata, and every per-copy quantity the walk
+// touches per transition multiplies out from there. The first exact unfolding
+// paid that per COPY and took 15.2 s on the identical-range row below (8.3 s at
+// width 200, 2 m 25 s at 1024); the walk now decides one transition per SOURCE
+// PARTICLE live in a state, and per distinct B-subset rather than per product
+// state, which is what these rows guard (#501).
+//
+// The assertion is a wall clock with two orders of magnitude of slack, not a
+// benchmark: the rows measured ~100 ms and ~40 ms on the machine whose numbers
+// maxContentPositions records, against a 5 s budget, so a machine fifty times
+// slower still passes while the defect they pin — which was 150x and 85x over
+// its row — cannot. The verdicts are asserted too, since a walk that got fast by
+// deciding something else is not the thing being kept.
+func TestContentRestrictsWideRangeStaysCheap(t *testing.T) {
+	const budget = 5 * time.Second
+	for _, tc := range []struct {
+		name       string
+		bMax, rMax int
+	}{
+		{name: "identical wide ranges", bMax: 300, rMax: 300},
+		{name: "wide range narrowed", bMax: 200, rMax: 100},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			start := time.Now()
+			err := cRestricts(t,
+				uGroup(t, CompositorSequence, cElem(t, "e", 0, tc.bMax)),
+				uGroup(t, CompositorSequence, cElem(t, "e", 0, tc.rMax)))
+			elapsed := time.Since(start)
+			if err != nil {
+				t.Fatalf("e{0,%d} under e{0,%d} is a valid restriction and was rejected: %v", tc.rMax, tc.bMax, err)
+			}
+			if elapsed > budget {
+				t.Fatalf("deciding e{0,%d} under e{0,%d} took %v, over the %v budget: the containment walk is doing work per unfolded copy again",
+					tc.rMax, tc.bMax, elapsed, budget)
 			}
 		})
 	}

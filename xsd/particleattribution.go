@@ -62,8 +62,18 @@ const ruleCosNonambig xsderr.Rule = "cos-nonambig"
 // {term} fragment the unfolding emits, so that maxOccurs="100000" does not build
 // a hundred thousand of them.
 //
-// The bound is verdict-preserving, not a heuristic. Every unfolded copy of one
-// source particle replays the SAME particle identifiers (see automaton.addParticle),
+// The bound is verdict-preserving FOR cos-nonambig, the constraint this file
+// decides, and for that consumer alone — the property is quantified, not flat
+// (STYLE P3a). What it preserves is which particle-IDENTIFIER sets are live
+// together in one state; it does NOT preserve the language the automaton
+// accepts, which it demonstrably changes (e{3,6} reads as e{2,4}). The other
+// consumer of this construction, contentrestricts.go's cos-content-act-restrict
+// walk, decides language containment and therefore selects its own exact
+// unfolding through automaton.unfold; these constants are not on its path
+// (#501).
+//
+// The argument for that quantified claim: every unfolded copy of one source
+// particle replays the SAME particle identifiers (see automaton.addParticle),
 // so all copies of a fragment have identical ·first·, ·last· and internal follow
 // sets when read as sets of particle identifiers. The competition sets a chain of
 // n copies produces are therefore, as identifier sets, only these: the fragment's
@@ -105,11 +115,22 @@ type position struct {
 // automaton is the position automaton of ONE content model under construction.
 // follow is indexed by position, and every position set is an ascending []int, so
 // no map is consulted to decide which violation is reported (STYLE D1/D2).
+//
+// unfold is the construction policy for numeric occurrence ranges, not automaton
+// state: it is chosen once by the caller and read only by addParticle. The two
+// constraints decided over this construction need different unfoldings and
+// neither may be given the other's — cos-nonambig passes unfoldCopies, whose
+// two-copy bound is verdict-preserving for identifier-set competition, and
+// contentrestricts.go's cos-content-act-restrict walk passes unfoldExactly,
+// because that bound rewrites the accepted language (see maxMandatoryCopies).
+// Every construction site names its own, so no unfolding is inherited by
+// default.
 type automaton struct {
 	s              *Schema
 	positions      []position
 	follow         [][]int
 	nextParticleID int
+	unfold         func(Occurs) (copies, mandatory int, loop bool)
 }
 
 // checkContentModelsUnambiguous is the cos-nonambig half of Phase C. It walks the
@@ -133,7 +154,7 @@ func (s *Schema) checkContentModelsUnambiguous() error {
 		if !ok {
 			continue // empty and simple {content type}s hold no particle
 		}
-		b := &automaton{s: s}
+		b := &automaton{s: s, unfold: unfoldCopies}
 		first, _, _, err := b.addParticle(ec.Particle)
 		if err != nil {
 			return err
@@ -143,7 +164,7 @@ func (s *Schema) checkContentModelsUnambiguous() error {
 		}
 	}
 	for _, mgd := range s.modelGroups {
-		b := &automaton{s: s}
+		b := &automaton{s: s, unfold: unfoldCopies}
 		first, _, _, err := b.addModelGroup(mgd.ModelGroup())
 		if err != nil {
 			return err
@@ -346,7 +367,7 @@ func wildcardsOverlap(a, b Wildcard) (bool, error) {
 // copy 1 did — which is precisely the statement that an unfolded copy is the same
 // source particle, at every depth beneath it as well as at its own leaf.
 func (b *automaton) addParticle(p Particle) ([]int, []int, bool, error) {
-	copies, mandatory, loop := unfoldCopies(p.Occurs())
+	copies, mandatory, loop := b.unfold(p.Occurs())
 	if copies == 0 {
 		return nil, nil, true, nil // a vacuous {0,0} particle accepts only the empty sequence
 	}
@@ -376,10 +397,13 @@ func (b *automaton) addParticle(p Particle) ([]int, []int, bool, error) {
 	return seq.first, seq.last, seq.emptiable, nil
 }
 
-// unfoldCopies computes how many copies of a particle's {term} fragment to emit
-// for an occurrence range, how many of them are mandatory, and whether the last
-// one carries a loop-back edge. See maxMandatoryCopies for why the copy count is
-// bounded without changing any verdict.
+// unfoldCopies is the automaton.unfold policy cos-nonambig is decided over: how
+// many copies of a particle's {term} fragment to emit for an occurrence range,
+// how many of them are mandatory, and whether the last one carries a loop-back
+// edge. See maxMandatoryCopies for why bounding the copy count changes no
+// cos-nonambig verdict — and for why that argument is quantified over that
+// constraint alone, so a consumer deciding some other fact must supply its own
+// unfolding rather than inherit this one.
 func unfoldCopies(o Occurs) (copies, mandatory int, loop bool) {
 	bound, bounded := o.Max()
 	if bounded && bound == 0 {

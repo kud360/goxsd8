@@ -465,7 +465,11 @@ compiles, is documented, and has **zero** callers module-wide.
   bisectable.
 - `go test ./conformance -run TestConformance -count=1` compares;
   the same command under `GOXSD_RATCHET=1` re-baselines **upward only**.
-  A regression fails loudly and must never be committed.
+  A regression fails loudly and must never be committed. The one class
+  that deletes a line is a sanctioned applicability removal — a case the
+  suite's own `@version` metadata scopes away from an XSD 1.1 processor —
+  and only against the arbiter's asserted per-lane count (issue #576;
+  rules in `conformance/testdata/expectations/README.md`).
 
 ### Cohort isolation is deliberate (a steward ruling, 2026-07-19)
 
