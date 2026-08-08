@@ -1555,47 +1555,29 @@ func (p *producer) declares(elem *Element) bool {
 	return containingSchema(elem) == p.schemaElem
 }
 
-// facetKindOf maps a plain-lexical constraining-facet element's local name to its
-// [xsd.FacetKind]. enumeration and assertion are deliberately absent — their
-// {value} is not a lexical string, so restrictionFacets handles them separately
-// (assertion through xsd.NewAssertionsFacet, enumeration by rejection).
+// facetKindOf maps a PLAIN-LEXICAL constraining-facet element's local name to its
+// [xsd.FacetKind], delegating the name↔kind bijection to
+// [builtin.FacetKindByName] rather than retyping it: that one scan covers §4.3's
+// whole constraining-facet set including the precisionDecimal extension facets
+// maxScale/minScale (xsd-precisionDecimal.md §4.2/§4.3), which have exactly the
+// totalDigits shape — {value} is the value attribute's xs:integer lexical form,
+// {fixed} the fixed attribute's boolean — and so need no arm of their own here
+// (#323).
+//
+// The two non-lexical kinds are excluded: enumeration's and assertions' {value}
+// is not a lexical string (§4.3.5/§4.3.13), so xsd.NewFacet panics on both, and
+// restrictionFacets handles them separately (assertion through
+// xsd.NewAssertionsFacet, enumeration by rejection) in checks that run strictly
+// above this lookup. Excluding them HERE too is belt-and-suspenders, not
+// redundant: the bridge table spells the assertions facet in the plural, so the
+// singular <assertion> element those upstream checks intercept would not shield
+// a schema's literal <assertions> child from reaching NewFacet.
 func facetKindOf(local string) (xsd.FacetKind, bool) {
-	switch local {
-	case "length":
-		return xsd.FacetLength, true
-	case "minLength":
-		return xsd.FacetMinLength, true
-	case "maxLength":
-		return xsd.FacetMaxLength, true
-	case "pattern":
-		return xsd.FacetPattern, true
-	case "whiteSpace":
-		return xsd.FacetWhiteSpace, true
-	case "maxInclusive":
-		return xsd.FacetMaxInclusive, true
-	case "maxExclusive":
-		return xsd.FacetMaxExclusive, true
-	case "minInclusive":
-		return xsd.FacetMinInclusive, true
-	case "minExclusive":
-		return xsd.FacetMinExclusive, true
-	case "totalDigits":
-		return xsd.FacetTotalDigits, true
-	case "fractionDigits":
-		return xsd.FacetFractionDigits, true
-	case "explicitTimezone":
-		return xsd.FacetExplicitTimezone, true
-	case "maxScale":
-		// xr-maxScale/xr-minScale (xsd-precisionDecimal.md §4.2.2/§4.3.2): the two
-		// precisionDecimal extension facets have exactly the totalDigits shape —
-		// {value} is the value attribute's xs:integer lexical form, {fixed} the
-		// fixed attribute's boolean (false when absent) — so they take the generic
-		// plain-lexical path, not the enumeration rejection.
-		return xsd.FacetMaxScale, true
-	case "minScale":
-		return xsd.FacetMinScale, true
+	kind, ok := builtin.FacetKindByName(builtin.FacetName(local))
+	if !ok || kind == xsd.FacetEnumeration || kind == xsd.FacetAssertions {
+		return 0, false
 	}
-	return 0, false
+	return kind, true
 }
 
 // isXSD reports whether el's expanded name is {XMLSchemaNS}local.

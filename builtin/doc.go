@@ -104,4 +104,17 @@
 // count- and token-valued facet constraints and the list/union applicable-facet
 // sets itself. Producers call this right after xsd.NewSimpleType; a caller that
 // does not gets the weaker guarantee documented on value.ValidateLexical.
+//
+// # Facet names
+//
+//	func FacetKindByName(name FacetName) (xsd.FacetKind, bool)
+//
+// The FacetName strings the generated table is keyed by and the xsd.FacetKind
+// enum the component model carries are two spellings of one closed set (§4.3),
+// bridged by a single ordered table this package owns. FacetKindByName is that
+// bridge's one public direction, so a producer mapping a constraining-facet
+// element name to a FacetKind consults it instead of hand-typing an inverse
+// copy that can drift (STYLE D3/T4) — the drift that silently dropped
+// maxScale/minScale twice. It answers the name→kind question only;
+// whether a facet may be applied to a given datatype remains TypeSpec.Applies.
 package builtin
