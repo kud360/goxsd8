@@ -66,7 +66,11 @@ var (
 // A token's rejection — whether from its Parse or from one of the item type's
 // facets — is already the right cvc-datatype-valid-family error (cvc-pattern-valid,
 // cvc-minInclusive-valid, cvc-maxInclusive-valid, cvc-fractionDigits-valid, …),
-// so it propagates unchanged with no rewrap.
+// so it propagates unchanged with no rewrap. That unchanged propagation is also
+// what carries a facet-pipeline PRECONDITION fault in the ITEM type out to the
+// caller still discriminable (IsFacetPrecondition, ValidateLexical): no rewrap means
+// no rule re-attribution, and the caller deciding validity — which is not this
+// mapping — is the one that must tell the fault from a rejection.
 //
 // Canonical is deliberately nil: no current cohort needs a canonical list form,
 // and per the Mapping doc a nil Canonical means "this whole type has no

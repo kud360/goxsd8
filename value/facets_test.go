@@ -106,21 +106,149 @@ func TestScaleFacetCheckValue(t *testing.T) {
 	}
 }
 
-// TestScaleFacetNonScaledPanics confirms a candidate lacking the Scaled
-// capability under a scale facet is a caught schema-construction error
-// (cos-applicable-facets §4.1.5), not a validity verdict — the boundFacet
-// panic convention.
-func TestScaleFacetNonScaledPanics(t *testing.T) {
+// plainBackend maps every name it holds to a Mapping whose Parse yields the literal
+// itself — a bare Go string, a Value implementing NONE of the facet capabilities
+// (no Ordered, Lengthed, DigitCounted, Scaled or TimezoneAware). It is how a test
+// reaches the facet-precondition cohort through the real pipeline: pairing any value
+// facet with this value space is exactly the cos-applicable-facets (§4.1.5) violation
+// builtin.CheckSimpleTypeRestriction exists to reject.
+type plainBackend map[xsd.QName]bool
+
+func (b plainBackend) Mapping(typ xsd.QName) (Mapping, bool) {
+	if !b[typ] {
+		return Mapping{}, false
+	}
+	return Mapping{Parse: func(lexical string, _ Context) (Value, error) {
+		return lexical, nil
+	}}, true
+}
+
+// preconditionType builds a primitive carrying a length facet (§4.3.1) beside its
+// whiteSpace entry, so a plainBackend-governed literal reaches lengthFacet.CheckValue
+// without the Lengthed capability and ValidateLexical reports a facet-precondition
+// fault for EVERY literal.
+//
+// length rather than a bound facet, deliberately: a length facet's {value} is a plain
+// count, so compile() succeeds and the fault arises in the VALUE-FACET stage — which
+// is the stage the three discriminating callers (valueSpace.ValidDefault's gate 4,
+// dispatchUnion, checkEnumerationRestriction) actually have to handle. A bound facet
+// would fault inside compile() instead, where ValidDefault's gate 3 would mask gate 4.
+func preconditionType(t *testing.T, local string) *xsd.SimpleType {
+	t.Helper()
+	st, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: local},
+		[]xsd.Facet{
+			xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true),
+			xsd.NewFacet(xsd.FacetLength, []string{"2"}, false),
+		}, nil)
+	if err != nil {
+		t.Fatalf("NewPrimitiveType(%s): %v", local, err)
+	}
+	return st
+}
+
+// TestValueFacetCapabilityFaultsAreErrors pins five of the six cos-applicable-facets
+// (§4.1.5) capability sites: a candidate lacking the capability its facet needs is a
+// caught schema-construction fault, REPORTED as an *xsderr.Error charged to
+// cos-applicable-facets and discriminable through IsFacetPrecondition — never a
+// panic, and never a validity verdict about the candidate.
+//
+// The distinction is the whole point: an ordinary facet rejection carries the facet's
+// own cvc-* rule and means "this value is invalid", while these mean "this type could
+// not have been valid for any value", which three callers must answer differently
+// (ValidateLexical's contract). A test that only asserted "some error" would not
+// notice the two being conflated.
+func TestValueFacetCapabilityFaultsAreErrors(t *testing.T) {
+	stringPrim := primType(t, "string", "preserve")
+	lf, err := newLengthFacet(stringPrim, xsd.NewFacet(xsd.FacetLength, []string{"2"}, false))
+	if err != nil {
+		t.Fatalf("newLengthFacet: %v", err)
+	}
+	df, err := newDigitsFacet(xsd.NewFacet(xsd.FacetTotalDigits, []string{"2"}, false))
+	if err != nil {
+		t.Fatalf("newDigitsFacet: %v", err)
+	}
+	tf, err := newExplicitTimezoneFacet(xsd.NewFacet(xsd.FacetExplicitTimezone, []string{"required"}, false))
+	if err != nil {
+		t.Fatalf("newExplicitTimezoneFacet: %v", err)
+	}
 	sf, err := newScaleFacet(xsd.NewFacet(xsd.FacetMaxScale, []string{"2"}, false))
 	if err != nil {
 		t.Fatalf("newScaleFacet: %v", err)
 	}
-	defer func() {
-		if recover() == nil {
-			t.Error("CheckValue(non-Scaled): want panic, got none")
+
+	cases := []struct {
+		name    string
+		facet   ValueFacet
+		missing string
+	}{
+		{"bound facet on a candidate that is not Ordered", boundFacet{limit: intValue(1), kind: xsd.FacetMaxInclusive}, "Ordered"},
+		{"length facet on a candidate that is not Lengthed", lf, "Lengthed"},
+		{"digit facet on a candidate that is not DigitCounted", df, "DigitCounted"},
+		{"explicitTimezone facet on a candidate that is not TimezoneAware", tf, "TimezoneAware"},
+		{"scale facet on a candidate that is not Scaled", sf, "Scaled"},
+	}
+	// A bare Go string carries no capability at all, so every facet above faults on it.
+	const bare = "no capabilities"
+	for _, c := range cases {
+		got := c.facet.CheckValue(bare)
+		if got == nil {
+			t.Errorf("%s: CheckValue = nil, want a %s precondition fault", c.name, c.missing)
+			continue
 		}
-	}()
-	_ = sf.CheckValue("not scaled")
+		if !IsFacetPrecondition(got) {
+			t.Errorf("%s: IsFacetPrecondition = false, want true — a caller cannot tell this fault from a rejection: %v", c.name, got)
+		}
+		if r, _ := xsderr.RuleOf(got); r != "cos-applicable-facets" {
+			t.Errorf("%s: CheckValue charged %s, want cos-applicable-facets (§4.1.5)", c.name, r)
+		}
+	}
+}
+
+// TestNewBoundFacetUnorderedLimitIsError pins the SIXTH capability site, the only one
+// on the construction side: a bound facet whose own {value} parses to a value that is
+// not Ordered faults at compile() rather than at check time. It is driven end to end
+// through the exported ValidateLexical to prove the fault also PROPAGATES out of
+// compile unchanged and stays discriminable there.
+func TestNewBoundFacetUnorderedLimitIsError(t *testing.T) {
+	qn := xsd.QName{Space: xsd.XMLSchemaNS, Local: "unorderedSpace"}
+	st, err := xsd.NewPrimitiveType(xsderr.Loc{}, qn, []xsd.Facet{
+		xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true),
+		xsd.NewFacet(xsd.FacetMaxInclusive, []string{"5"}, false),
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewPrimitiveType: %v", err)
+	}
+	_, verr := ValidateLexical(plainBackend{qn: true}, st, "1", nil)
+	if verr == nil {
+		t.Fatal("ValidateLexical(maxInclusive facet over an unordered value space) = nil error, want a precondition fault")
+	}
+	if !IsFacetPrecondition(verr) {
+		t.Errorf("IsFacetPrecondition = false, want true: %v", verr)
+	}
+	if r, _ := xsderr.RuleOf(verr); r != "cos-applicable-facets" {
+		t.Errorf("charged %s, want cos-applicable-facets (§4.1.5)", r)
+	}
+}
+
+// TestFacetRejectionIsNotAPrecondition is the mutation guard for every
+// discrimination site: an ORDINARY facet rejection — a real cvc-* validity verdict —
+// must NOT satisfy IsFacetPrecondition. Were the predicate ever widened to "any
+// facet-ish error", ValidDefault would report genuine invalid defaults undecided,
+// dispatchUnion would abort on a member that merely rejected, and
+// checkEnumerationRestriction would skip real §4.3.5.5 violations — three
+// false-ACCEPT regressions that no other test in this package would catch.
+func TestFacetRejectionIsNotAPrecondition(t *testing.T) {
+	sf, err := newScaleFacet(xsd.NewFacet(xsd.FacetMaxScale, []string{"2"}, false))
+	if err != nil {
+		t.Fatalf("newScaleFacet: %v", err)
+	}
+	rejection := sf.CheckValue(scaledStub{scale: 3, present: true})
+	if rejection == nil {
+		t.Fatal("CheckValue(scale 3 under maxScale 2) = nil, want a cvc-maxScale-valid rejection")
+	}
+	if IsFacetPrecondition(rejection) {
+		t.Errorf("IsFacetPrecondition(cvc-maxScale-valid rejection) = true, want false: %v", rejection)
+	}
 }
 
 // TestUnsupportedFacetKindRejected confirms an out-of-range numeric FacetKind —

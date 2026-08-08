@@ -389,3 +389,42 @@ func TestBoundRestrictionBaseSideRuleAttribution(t *testing.T) {
 		t.Fatalf("rule = %q (ok=%v), want minExclusive-valid-restriction (the BASE operand's own rule); err=%v", rule, ok, err)
 	}
 }
+
+// TestEnumerationRestrictionSkipsFacetPreconditionFault pins the "skip, don't
+// mis-attribute" answer §4.3.5.5 gets when the BASE type carries a facet that is not
+// applicable to its value space (cos-applicable-facets §4.1.5, IsFacetPrecondition):
+// the member is skipped and CheckFacetRestriction returns nil, rather than the fault
+// being re-charged as enumeration-valid-restriction against the DERIVED type.
+//
+// It is the same answer boundLimit already gives an unordered bound {value}, for the
+// same reason (STYLE E2): the applicability violation is the BASE's, charged upstream
+// by builtin.CheckSimpleTypeRestriction under §4.1.5, and naming §4.3.5.5 instead
+// would reject a schema whose enumeration may be entirely valid — under a constraint
+// with nothing to say about it.
+func TestEnumerationRestrictionSkipsFacetPreconditionFault(t *testing.T) {
+	base := preconditionType(t, "unmeasurable")
+	b := plainBackend{base.Name(): true}
+	enum := xsd.NewEnumerationFacet([]xsd.EnumerationMember{
+		xsd.NewEnumerationMember("ab", nil, nil),
+	})
+	derived, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
+		base.Variety(), base, []xsd.Facet{enum}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType: %v", err)
+	}
+	if err := CheckFacetRestriction(b, derived); err != nil {
+		t.Fatalf("CheckFacetRestriction over a base with an inapplicable facet = %v, want nil (skip, not re-charge)", err)
+	}
+
+	// The mutation guard: a member genuinely outside the base's value space is STILL
+	// charged, so the skip cannot have been widened into "ignore every base error".
+	// TestEnumerationMemberOutsideBaseFacets covers that with a bounded base; this
+	// repeats the assertion against the same helper shape so the two cannot drift.
+	bounded, bb := restrictionBase(t, bound(xsd.FacetMaxInclusive, "10"))
+	outOfSpace := xsd.NewEnumerationFacet([]xsd.EnumerationMember{
+		xsd.NewEnumerationMember("99", nil, nil),
+	})
+	if r, _ := xsderr.RuleOf(restrict(t, bb, bounded, outOfSpace)); r != "enumeration-valid-restriction" {
+		t.Errorf("out-of-space member charged %s, want enumeration-valid-restriction (§4.3.5.5)", r)
+	}
+}

@@ -410,3 +410,27 @@ func TestValidDefaultAcceptsConstructionStageFailures(t *testing.T) {
 		}
 	}
 }
+
+// TestValidDefaultAcceptsFacetPreconditionFaults pins GATE 4: a type carrying a facet
+// that is not applicable to its value space (cos-applicable-facets §4.1.5) is a fault
+// in the TYPE, so every literal is undecided — never decided-INVALID.
+//
+// Charging it would be a false schema rejection with teeth: checkSimpleDefault
+// (xsd/valueconstraintvalid.go) turns decided-invalid into an a-props-correct /
+// au-props-correct clause 2 rejection, and since the fault repeats for every literal,
+// no default whatsoever could have satisfied the clause. Gate 4 rather than gates 1–3
+// is what answers, because the pairing only becomes observable once a facet meets a
+// parsed value — which is why preconditionType uses a length facet (whose {value} is a
+// plain count, so compile() and gate 3 both pass) rather than a bound facet.
+func TestValidDefaultAcceptsFacetPreconditionFaults(t *testing.T) {
+	st := preconditionType(t, "unmeasurable")
+	vs := NewValueSpace(plainBackend{st.Name(): true})
+
+	// "ab" has length 2 and so would SATISFY the length facet if the value space were
+	// Lengthed at all: the undecided answer is the fault's, not a smuggled rejection.
+	for _, lexical := range []string{"ab", "abcd"} {
+		if valid, decided := vs.ValidDefault(st, vsFixed(lexical)); decided {
+			t.Errorf("ValidDefault(%q) = (%t, %t), want undecided (gate 4, fail-open)", lexical, valid, decided)
+		}
+	}
+}

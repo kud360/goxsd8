@@ -248,10 +248,13 @@ import (
 // The executor OWNS facet applicability (cos-applicable-facets §4.1.5): it
 // attaches a facet to the synthesized leaf only when builtin's applicable-facet
 // metadata says it applies to the base primitive, so an instance-level facet
-// violation always returns an *xsderr.Error through the normal path and the
-// panic precondition ValidateLexical documents is never reached. A case pairing
-// an inapplicable facet with a primitive (a schema-construction error, not an
-// instance validity case) is declined rather than fed through and crashed.
+// violation always returns an *xsderr.Error through the normal path and
+// ValidateLexical's facet PRECONDITION is never violated. A case pairing an
+// inapplicable facet with a primitive (a schema-construction error, not an instance
+// validity case) is declined rather than fed through. That ownership is EXECUTED, not
+// merely documented: every ValidateLexical call site in this file routes its error
+// through mustNotBeFacetPrecondition, which fails the run rather than let a
+// precondition fault be scored as an instance rejection.
 //
 // # The precisionDecimal cohort (issue #135)
 //
@@ -951,6 +954,7 @@ func decideLexicalByFacets(backend value.Backend, st *xsd.SimpleType, values []s
 	observedValid := true
 	for _, v := range values {
 		if _, err := value.ValidateLexical(backend, st, v, nil); err != nil {
+			mustNotBeFacetPrecondition(err, c, v)
 			observedValid = false
 			break
 		}
@@ -1123,6 +1127,7 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 		}
 		for _, v := range lt.values {
 			if _, verr := value.ValidateLexical(backend, leaf, v, nil); verr != nil {
+				mustNotBeFacetPrecondition(verr, c, v)
 				observedValid = false
 				break
 			}
@@ -1143,8 +1148,10 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 // exactly one member there, the whiteSpace facet with {value} = collapse and
 // {fixed} = true (§4.3.6.1 f-w-fixed), and cos-st-restricts clause 2.2.1.2
 // admits nothing else. It is spelled here because this cohort does not route
-// through the generated builtin table, and value.effectiveWhiteSpace panics on a
-// list-variety type with no whiteSpace mode in force.
+// through the generated builtin table, and a list-variety type with no whiteSpace
+// mode in force violates value.ValidateLexical's facet precondition
+// (value.effectiveWhiteSpace), which mustNotBeFacetPrecondition turns into a run
+// failure rather than a scored verdict.
 func constructedListFacets() []xsd.Facet {
 	return []xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}
 }
@@ -1216,6 +1223,7 @@ func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c 
 		return Fail()
 	}
 	_, verr := value.ValidateLexical(backend, leaf, raw, ctx)
+	mustNotBeFacetPrecondition(verr, c, raw)
 	observedValid := verr == nil
 	if observedValid == c.expect.wantsValid() {
 		return Pass()
@@ -1285,6 +1293,7 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 		return Fail()
 	}
 	_, verr := value.ValidateLexical(backend, leaf, raw, ctx)
+	mustNotBeFacetPrecondition(verr, c, raw)
 	observedValid := verr == nil
 	if observedValid == c.expect.wantsValid() {
 		return Pass()
@@ -1388,6 +1397,7 @@ func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, 
 	observedValid := true
 	for _, v := range values {
 		if _, verr := value.ValidateLexical(backend, leaf, v, nil); verr != nil {
+			mustNotBeFacetPrecondition(verr, c, v)
 			observedValid = false
 			break
 		}
@@ -1443,6 +1453,7 @@ func execD34Case(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c cas
 	observedValid := true
 	for _, e := range elems {
 		if _, verr := value.ValidateLexical(backend, leaves[e.typeKey], e.value, nil); verr != nil {
+			mustNotBeFacetPrecondition(verr, c, e.value)
 			observedValid = false
 			break
 		}
@@ -1687,6 +1698,7 @@ func execAnyURIShapeCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleTyp
 	observedValid := true
 	for _, l := range leaves {
 		if _, verr := value.ValidateLexical(backend, synth[l.typeName], l.value, nil); verr != nil {
+			mustNotBeFacetPrecondition(verr, c, l.value)
 			observedValid = false
 			break
 		}
@@ -1695,6 +1707,31 @@ func execAnyURIShapeCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleTyp
 		return Pass()
 	}
 	return Fail()
+}
+
+// mustNotBeFacetPrecondition converts this lane's applicability OWNERSHIP from prose
+// into an executed assertion. Every leaf reaching value.ValidateLexical here is
+// synthesized through buildOwnFacets, which declines a case pairing a facet with a
+// primitive the generated builtin table says it does not apply to
+// (cos-applicable-facets §4.1.5), or through buildListRestrictionFacets, which admits
+// enumeration and nothing else — one of the seven facets §4.1.5 makes applicable to a
+// list. Every leaf likewise carries the whiteSpace facet its variety requires
+// (§3.16.7.4, §4.3.6.1, constructedListFacets). So no synthesized type can violate
+// value.ValidateLexical's facet precondition, and value.IsFacetPrecondition must be
+// false at every call site in this file.
+//
+// If it is ever true, the leaf-synthesis logic has a hole, and the case must NOT be
+// scored: the fault is returned as an error, so a site that merely tested `err != nil`
+// would read it as "this instance is invalid" and, for an .nK case, AGREE with the
+// suite for entirely the wrong reason — a false pass the ratchet would then bank
+// permanently. Panicking fails the run loudly instead, the same stance the lane's
+// Seed precondition takes: a programming error in the harness, not a runtime
+// condition.
+func mustNotBeFacetPrecondition(err error, c caseSpec, lexical string) {
+	if !value.IsFacetPrecondition(err) {
+		return
+	}
+	panic(fmt.Sprintf("conformance: case %s: value.ValidateLexical reported a facet-pipeline precondition fault on %q, but this executor owns cos-applicable-facets applicability (buildOwnFacets), so the synthesized type is a harness bug and the case must not be scored: %v", c.id, lexical, err))
 }
 
 // strictGoverns reports whether st's governing mapping — its own or that of a
@@ -2385,7 +2422,8 @@ func mergesRepeatedChildren(kind xsd.FacetKind) bool {
 // order comes from the order slice). It returns ok=false — declining the case —
 // when a child names an unrecognized facet or a facet inapplicable to base
 // (cos-applicable-facets §4.1.5), so the synthesized leaf never carries a facet
-// that would trip ValidateLexical's panic precondition.
+// that would violate ValidateLexical's facet precondition
+// (mustNotBeFacetPrecondition asserts the "never").
 //
 // A repeated child of a kind that does NOT merge is declined for a different
 // reason: the schema is st-props-correct clause 4 invalid, and the same-kind

@@ -341,19 +341,14 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 // 19), and a construction-stage failure in the TYPE's facets, which is not a
 // verdict about this value constraint at all.
 //
-// GAP(xsd): this is the first finalize-phase check that enters package value's
-// FACET PIPELINE rather than calling a Mapping directly, and that pipeline PANICS
-// — by design, ValidateLexical's own doc — when a facet is paired with a value
-// lacking the capability it needs (a bound facet on an unordered value, a length
-// facet on an unlengthed one). Its precondition is cos-applicable-facets (§4.1.5),
-// which builtin.CheckSimpleTypeRestriction discharges for every type the PARSER
-// builds — so the parser path and the conformance suite cannot reach it, and the
-// ratchet is unaffected. A *SimpleType assembled by calling this package's
-// constructors directly bypasses that seam, so for a SchemaBuilder caller the
-// panic is newly reachable at FinalizeWith. Closing it means enforcing
-// cos-applicable-facets inside this package, which is a much larger change than
-// #371 and belongs to its own issue; recovering from the panic here is not an
-// option, since it marks a violated precondition, not a validity verdict.
+// This is the first finalize-phase check that enters the installed value space's
+// FACET pipeline rather than its Mapping alone, so it is also the first that can
+// meet a type carrying a facet not applicable to it (cos-applicable-facets §4.1.5) —
+// possible only for a *SimpleType assembled by calling this package's constructors
+// directly, since builtin.CheckSimpleTypeRestriction discharges applicability for
+// every type the PARSER builds. That fault is a fault of the TYPE, and the value
+// space reports it undecided rather than as a verdict, so it lands in the accepting
+// branch below: this clause never rejects a schema for it, and never crashes on it.
 func (s *Schema) checkSimpleDefault(rule xsderr.Rule, loc xsderr.Loc, owner string, t *SimpleType, vc ValueConstraint) error {
 	valid, decided := s.valueSpace.ValidDefault(t, vc)
 	if !decided || valid {

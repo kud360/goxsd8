@@ -360,6 +360,17 @@ func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // caller has already established that b governs the base (an unmapped base
 // returns early there), so ValidateLexical's no-mapping error is unreachable from
 // here.
+//
+// A facet-pipeline PRECONDITION fault in the BASE type's own facets is SKIPPED, not
+// charged (IsFacetPrecondition, ValidateLexical) — the same "skip, don't
+// mis-attribute" answer boundLimit gives an unordered bound {value} above, and for
+// the same reason (STYLE E2). §4.3.5.5 asks whether a member is in the base's value
+// space; a base carrying a facet not applicable to it has no well-defined value
+// space to be in, so the fault is an APPLICABILITY violation of the base —
+// builtin.CheckSimpleTypeRestriction's to charge, against the base, under §4.1.5 —
+// and re-charging it here as enumeration-valid-restriction against the DERIVED type
+// would name a constraint with nothing to say about it and reject a schema whose
+// enumeration may be perfectly valid.
 func (rc restrictionCheck) checkEnumerationRestriction(b Backend) error {
 	for _, own := range rc.owner.OwnFacets() {
 		if own.Kind() != xsd.FacetEnumeration {
@@ -369,7 +380,11 @@ func (rc restrictionCheck) checkEnumerationRestriction(b Backend) error {
 		// ok=true; the second result is discarded deliberately.
 		members, _ := own.EnumerationMembers()
 		for _, em := range members {
-			if _, err := ValidateLexical(b, rc.owner.Base(), em.Lexical(), newMemberContext(em)); err != nil {
+			_, err := ValidateLexical(b, rc.owner.Base(), em.Lexical(), newMemberContext(em))
+			if IsFacetPrecondition(err) {
+				continue
+			}
+			if err != nil {
 				return xsderr.Wrap(ruleEnumerationValidRestriction, rc.owner.Loc(), err)
 			}
 		}

@@ -77,12 +77,13 @@ func (vs valueSpace) EqualOrIdentical(ta *xsd.SimpleType, a xsd.ValueConstraint,
 // which a-props-correct clause 2 and au-props-correct clause 2 both charge: is
 // vc.{lexical form} Datatype Valid (§4.1.4) with respect to t? [ValidateLexical]
 // decides exactly that rule — all three of its clauses, over all three varieties
-// — so the whole of this method is the three gates that separate the errors it
+// — so the whole of this method is the four gates that separate the errors it
 // returns which ARE that verdict from the ones that are not. Every gate answers
 // undecided, never invalid, per the [xsd.ValueSpace] fail-open contract.
 //
-// The gates run BEFORE the pipeline, in this order, so that any error surviving
-// to the ValidateLexical call is guaranteed to be a verdict about the literal:
+// The first three gates run BEFORE the pipeline, in this order; the fourth reads
+// the pipeline's own error, because the fault it catches is only detectable once a
+// facet meets a value:
 //
 //  1. GAP(value): needsContext. A QName- or NOTATION-governed value space
 //     anywhere in t's variety closure needs the namespace bindings in scope at
@@ -110,8 +111,19 @@ func (vs valueSpace) EqualOrIdentical(ta *xsd.SimpleType, a xsd.ValueConstraint,
 //     (src-enumeration-value) — says nothing about vc.{lexical form}. Charging
 //     it as clause 2 would reject a schema for an unrelated facet, under the
 //     wrong rule ID and against the wrong component.
+//  4. [IsFacetPrecondition]. A facet paired with a value lacking the capability it
+//     needs (cos-applicable-facets §4.1.5), or a type with no usable whiteSpace mode
+//     where §3.16.7.4 guarantees one, is a fault in T ITSELF — discharged for
+//     parser-built types by builtin.CheckSimpleTypeRestriction, and the caller's own
+//     for a *[xsd.SimpleType] assembled through the xsd constructors directly. Unlike
+//     gates 1–3 it cannot be pre-checked here: the pairing is only observable once a
+//     facet meets a parsed value inside the pipeline. Reading it as clause 2 would
+//     reject the schema for a fault of the component rather than of the value
+//     constraint — under a rule that has nothing to say about it, and, since
+//     [ValidateLexical] would report the same fault for EVERY literal, for a default
+//     that no lexical could have satisfied.
 //
-// Two residues are recorded rather than papered over. GAP(value): item/member
+// One residue is recorded rather than papered over. GAP(value): item/member
 // facet compilation. The compile gate covers T's OWN effective facets only: a
 // list's ITEM type and a union's MEMBER types compile inside the dispatch
 // (listMapping's Parse recurses through validateLexical; dispatchUnion folds
@@ -119,10 +131,9 @@ func (vs valueSpace) EqualOrIdentical(ta *xsd.SimpleType, a xsd.ValueConstraint,
 // construction-stage failure down there still reaches the caller as a decided
 // reject. Closing that needs the pipeline itself to separate its construction
 // and verdict stages per member, which is a change to package value's own error
-// model, not to this adapter. And [ValidateLexical]
-// PANICS rather than erroring when a facet is paired with a value lacking the
-// capability it needs, a precondition discharged for parser-built types only —
-// see checkSimpleDefault (xsd/valueconstraintvalid.go) for who owns that.
+// model, not to this adapter. Gate 4 is NOT part of that residue: a precondition
+// fault propagates out of the item/member dispatch unchanged (list.go, union.go),
+// so it is caught here wherever in T's closure it arose.
 //
 // nil is passed as the [Context] for the same reason values does: gate 1 has
 // already excluded every context-dependent literal.
@@ -137,6 +148,9 @@ func (vs valueSpace) ValidDefault(t *xsd.SimpleType, vc xsd.ValueConstraint) (bo
 		return false, false
 	}
 	if _, err := ValidateLexical(vs.b, t, vc.LexicalForm(), nil); err != nil {
+		if IsFacetPrecondition(err) {
+			return false, false // gate 4
+		}
 		return false, true
 	}
 	return true, true

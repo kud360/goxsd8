@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // whiteSpace is the value of the whiteSpace facet (Datatypes §4.3.6,
@@ -117,41 +118,75 @@ func whiteSpaceInForce(st *xsd.SimpleType) whiteSpace {
 }
 
 // effectiveWhiteSpace is the INSTANCE-VALIDATION view of whiteSpaceInForce: the
-// same resolution, but with the missing-mode states classified.
+// same resolution, but with the missing-mode states classified. Three states, no
+// redundant encoding (STYLE D3 — the "is a mode in force" bool the comma-ok result
+// once carried is derivable from ws itself, so it is not a third result):
 //
-// The comma-ok result models whether a whiteSpace facet is in force at all.
-// applicable=true returns the resolved mode. applicable=false (ws is the zero
-// value) means whiteSpace is CATEGORICALLY not applicable to st: this happens
-// only for a union {variety}, whose applicable facets are pattern, enumeration
-// and assertions — whiteSpace is conspicuously absent (cos-applicable-facets
-// §4.1.5), and a union's normalization is instead deferred per active basic
-// member (§4.3.6). A caller that ignores the bool and feeds the zero ws to
-// normalizeWhiteSpace still panics there, so the false result cannot silently
-// degrade into a wrong normalization.
+//   - err == nil, ws != 0 — the resolved mode.
+//   - err == nil, ws == 0 — whiteSpace is CATEGORICALLY not applicable to st, and
+//     the normalization stage is skipped rather than defaulted.
+//   - err != nil — st carries no usable mode where §3.16.7.4/§4.3.6.1 guarantee
+//     one: a facetPrecondition fault of whoever built st (ValidateLexical).
 //
-// Every OTHER missing-mode state is an UNCHANGED internal-consistency panic, not
-// relaxed: a whiteSpace facet whose Values() is multi-valued (a malformed
-// generated table), an unrecognized {value} string (table/code drift), and an
-// ABSENT facet on a non-union (atomic or list) type — an atomic type's {facets}
-// always carries a whiteSpace entry (§3.16.7.4) and a list's carries the
-// materialized fixed collapse facet (§4.3.6.1), so its absence there is a
-// schema-construction bug, never a legitimate "not applicable" case. Only the
-// confirmed-union case is relaxed to (0, false). The three now share one panic
-// site and so one message, naming all three causes: they are indistinguishable
-// to a caller anyway (each is "this type has no usable whiteSpace mode and is not
-// a union"), and collapsing them is what keeps the resolution itself single.
-func effectiveWhiteSpace(st *xsd.SimpleType) (ws whiteSpace, applicable bool) {
+// The not-applicable arm is exactly cos-applicable-facets' (§4.1.5) three
+// no-facets-applicable cases: an ABSENT {variety} (xs:anySimpleType), an ATOMIC
+// {variety} whose {primitive type definition} is
+// absent (xs:anyAtomicType), and a UNION, whose applicable facets are pattern,
+// enumeration and assertions — whiteSpace conspicuously absent, its normalization
+// deferred per ·active basic member· instead (§4.3.6). The first two are the
+// ·special· datatypes, which §4.1.4 makes unconditionally Datatype Valid, so
+// demanding a whiteSpace facet of them would false-reject the two widest types in
+// the language.
+//
+// Every OTHER missing-mode state is the fault: a whiteSpace facet whose Values() is
+// multi-valued (a malformed generated table), an unrecognized {value} string
+// (table/code drift), and an ABSENT facet on an atomic type WITH a primitive or on a
+// list — an atomic type's {facets} always carries a whiteSpace entry (§3.16.7.4) and
+// a list's carries the materialized fixed collapse facet (§4.3.6.1). The three share
+// one error site and so one message, naming all three causes: they are
+// indistinguishable to a caller anyway (each is "this type has no usable whiteSpace
+// mode and is not one §4.1.5 exempts"), and collapsing them is what keeps the
+// resolution itself single.
+//
+// The rule is xsderr.RuleComponentInvariant, deliberately NOT a §4.3.6 facet ID:
+// §4.3.6.3 states outright that "there are no Validation Rules associated with
+// whiteSpace", so there is no cvc-* to charge, and §4.3.6.4
+// whiteSpace-valid-restriction constrains restriction ORDERING alone (a {value} more
+// permissive than the parent whiteSpace's), which says nothing about a mode's
+// presence or its {value} domain.
+func effectiveWhiteSpace(st *xsd.SimpleType) (whiteSpace, error) {
 	if ws := whiteSpaceInForce(st); ws != 0 {
-		return ws, true
+		return ws, nil
 	}
-	// No usable mode. For a union {variety} this is spec-mandated (whiteSpace is
-	// not an applicable facet, cos-applicable-facets §4.1.5), so the stage is
-	// "not applicable" rather than an error. Drive it off the sealed xsd.Variety
-	// sum, matching lengthExemptPrimitive's .(xsd.Atomic) idiom.
-	if _, isUnion := st.Variety().(xsd.Union); isUnion {
-		return 0, false
+	if noFacetsApplicable(st) {
+		return 0, nil
 	}
-	panic(fmt.Sprintf("value: type %s has no whiteSpace facet in force with exactly one {value} drawn from preserve/replace/collapse (§3.16.7.4, §4.3.6.1)", st.Name()))
+	return 0, facetPrecondition(xsderr.RuleComponentInvariant, st.Loc(),
+		"value: type %s has no whiteSpace facet in force with exactly one {value} drawn from preserve/replace/collapse (§3.16.7.4, §4.3.6.1)", st.Name())
+}
+
+// noFacetsApplicable reports whether cos-applicable-facets (§4.1.5) makes NO
+// ·constraining facet· applicable to st: its first three cases, which the clause
+// keys on {variety} and {primitive type definition} alone —
+//
+//	"{variety} is absent … no facets are applicable"
+//	"{variety} is atomic and {primitive type definition} is absent … no facets"
+//	"{variety} is union … pattern, enumeration, assertions" (no whiteSpace)
+//
+// — where the union case belongs because whiteSpace is not in its permitted set.
+// It is driven off the sealed xsd.Variety sum rather than a name comparison against
+// xs:anySimpleType/xs:anyAtomicType, so it holds for any component in those shapes
+// and matches lengthExemptPrimitive's .(xsd.Atomic) idiom.
+func noFacetsApplicable(st *xsd.SimpleType) bool {
+	switch v := st.Variety().(type) {
+	case nil:
+		return true
+	case xsd.Atomic:
+		return v.Primitive() == nil
+	case xsd.Union:
+		return true
+	}
+	return false
 }
 
 // whiteSpaceOf maps a whiteSpace facet's {value} token to its typed mode
