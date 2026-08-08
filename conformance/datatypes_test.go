@@ -1429,11 +1429,11 @@ func TestNSContextLookup(t *testing.T) {
 // MULTIPLE children, each dispatched to its own type by the child's declared
 // type= (or by the global element its ref= names). Both polarities are asserted
 // for the decidable cases — v14/v23/v24 (atomic), v16 (list, dv_list §4.1.4
-// cl.2.2), v17 (union, dv_union cl.2.3) and ii01[,a-f]/ii02. The still
-// out-of-reach shapes (v15's complexType-typed children, v18's and v19-v22's
-// multi-step restriction chains) must be DECLINED — Fail under BOTH polarities,
-// which is what distinguishes a decline from a verdict — so they remain honest
-// gaps rather than mis-decided cases. Skips when the submodule is absent.
+// cl.2.2), v17 (union, dv_union cl.2.3), v18 and v19–v22 (multi-step restriction
+// chains, issue #574) and ii01[,a-f]/ii02. The one still out-of-reach shape,
+// v15's complexType-typed children, must be DECLINED — Fail under BOTH polarities,
+// which is what distinguishes a decline from a verdict — so it remains an honest
+// gap rather than a mis-decided case. Skips when the submodule is absent.
 func TestDatatypesD34Cohort(t *testing.T) {
 	if _, err := os.Stat(suitePath()); err != nil {
 		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
@@ -1444,8 +1444,12 @@ func TestDatatypesD34Cohort(t *testing.T) {
 	invalidDir := filepath.Join(suiteRoot, "ibmData", "instance_invalid", "D3_3_4")
 
 	// The valid cases are decided VALID and Pass against their true expectation.
+	// v18 and v19–v22 join them with issue #574: their named types restrict OTHER
+	// schema types (one to three steps deep, ultimately grounded in the
+	// precisionDecimal builtin), which buildD34Type now resolves through d34TypeRef.
 	for _, f := range []string{
 		"d3_3_4v14.xml", "d3_3_4v16.xml", "d3_3_4v17.xml", "d3_3_4v23.xml", "d3_3_4v24.xml",
+		"d3_3_4v18.xml", "d3_3_4v19.xml", "d3_3_4v20.xml", "d3_3_4v21.xml", "d3_3_4v22.xml",
 	} {
 		c := caseSpec{kind: kindInstance, doc: filepath.Join(validDir, f), expect: expectValid()}
 		if got := exec(c); !got.IsPass() {
@@ -1511,20 +1515,48 @@ func TestDatatypesD34Cohort(t *testing.T) {
 		}
 	}
 
-	// The still out-of-reach shapes are DECLINED, each for its own reason — v15's
-	// sequence children are typed by a COMPLEX type, v18's and v19-v22's named
-	// types are multi-step restriction chains over other schema types, which
-	// buildD34Types cannot back. A decline shows up as Fail under BOTH polarities,
-	// which is exactly what separates it from a computed verdict.
-	for _, f := range []string{
-		"d3_3_4v15.xml", "d3_3_4v18.xml",
-		"d3_3_4v19.xml", "d3_3_4v20.xml", "d3_3_4v21.xml", "d3_3_4v22.xml",
-	} {
-		for _, declaredValid := range []bool{true, false} {
-			c := caseSpec{kind: kindInstance, doc: filepath.Join(validDir, f), expect: expectValidity(declaredValid)}
-			if exec(c).IsPass() {
-				t.Errorf("%s (declared valid=%v): must decline the out-of-reach shape (honest gap)", f, declaredValid)
-			}
+	// The one still out-of-reach shape is DECLINED: v15's sequence children are
+	// typed by a COMPLEX type, so no simple-type declaration governs them and
+	// readD34Case rejects the shape. A decline shows up as Fail under BOTH
+	// polarities, which is exactly what separates it from a computed verdict.
+	for _, declaredValid := range []bool{true, false} {
+		c := caseSpec{kind: kindInstance, doc: filepath.Join(validDir, "d3_3_4v15.xml"), expect: expectValidity(declaredValid)}
+		if exec(c).IsPass() {
+			t.Errorf("d3_3_4v15.xml (declared valid=%v): must decline the out-of-reach shape (honest gap)", declaredValid)
 		}
+	}
+
+	// The chain is really WALKED, not flattened (issue #574). v22 derives three
+	// steps deep — decMaxExclusive_MinInclusive restricts sv:decDigitsMaxExclusive,
+	// which restricts sv:decDigits, which restricts the precisionDecimal builtin —
+	// so the built leaf's {base type definition} must be the DECLARED intermediate,
+	// never the builtin, while its {primitive type definition} stays precisionDecimal
+	// at every step (st-restrict-facets clause 2, §3.16.6.2), which is what makes
+	// computing facet applicability from the primitive correct. A regression to a
+	// builtin-only base lookup fails the first assertion; a regression that flattened
+	// the base to the primitive fails the second.
+	backend := strict.New()
+	seededTypes, err := builtin.Seed(backend)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	sym := make(map[xsd.QName]*xsd.SimpleType, len(seededTypes))
+	for _, ty := range seededTypes {
+		sym[ty.Name()] = ty
+	}
+	chainDecls, _, ok := readD34Case(filepath.Join(validDir, "d3_3_4v22.xml"))
+	if !ok {
+		t.Fatal("readD34Case must accept the multi-step-chain d3_3_4v22 shape")
+	}
+	built := buildD34Types(backend, sym, chainDecls)
+	derived, ok := built["decMaxExclusive_MinInclusive"]
+	if !ok {
+		t.Fatal("buildD34Types must back decMaxExclusive_MinInclusive, whose base is another schema type")
+	}
+	if got := derived.Base().Name().Local; got != "d34-decDigitsMaxExclusive" {
+		t.Errorf("decMaxExclusive_MinInclusive.Base() = %q, want the declared intermediate d34-decDigitsMaxExclusive", got)
+	}
+	if got := primitiveOfType(derived).Name().Local; got != "precisionDecimal" {
+		t.Errorf("primitiveOfType(decMaxExclusive_MinInclusive) = %q, want precisionDecimal", got)
 	}
 }
