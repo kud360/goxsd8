@@ -14,6 +14,18 @@
 // suite.xml when the type left XSD 1.1, and shares one test set
 // (common/introspection.testSet) with the main index, discovered once.
 //
+// A test set, test group, schema test or instance test may declare a
+// `version` attribute listing the versions and FEATURES it applies to,
+// OR-connected: a processor supporting any listed token runs it. A level
+// listing no token this processor supports is not applicable and yields no
+// cases — it is absent from the run and from every expectation file, not
+// declined and not scored (issue #446). This processor supports exactly the
+// token `1.1`, so groups scoped to XSD 1.0 only, and groups scoped to the
+// `full-xpath-in-CTA` feature whose engine is unlanded, are both out of
+// scope. An absent `version` applies to everything. This is unrelated to
+// `expected/@version`, whose tokens are AND-connected and only choose which
+// declared outcome binds.
+//
 // # Lanes and expectation files
 //
 // Expectations are committed at conformance/testdata/expectations/, one

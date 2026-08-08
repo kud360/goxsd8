@@ -32,6 +32,15 @@ import (
 // (testdata/xsdtests/common/xsts.xsd, the suite's own catalog schema), so
 // discovery keeps every one of them (caseSpec.doc plus caseSpec.extraDocs).
 //
+// # Applicability
+//
+// A testSet, testGroup, schemaTest or instanceTest may carry a `version`
+// attribute whose tokens are OR-connected APPLICABILITY filters — "is this test
+// for me at all?" — and a level the suite scopes away from this processor yields
+// no cases at all (versionApplicable, issue #446). That is a different attribute
+// job from `expected/@version`, whose tokens are AND-connected and merely pick
+// which declared outcome binds (resolveExpected).
+//
 // # Case IDs
 //
 // A case ID is `<testSet-name>/<testGroup-name>/<kind>/<test-name>` where kind
@@ -252,12 +261,14 @@ type testSetRef struct {
 // omitted so a set file with an unexpected root decodes to zero groups rather
 // than erroring the whole run.
 type testSet struct {
-	Name   string      `xml:"name,attr"`
-	Groups []testGroup `xml:"testGroup"`
+	Name    string      `xml:"name,attr"`
+	Version string      `xml:"version,attr"`
+	Groups  []testGroup `xml:"testGroup"`
 }
 
 type testGroup struct {
 	Name          string         `xml:"name,attr"`
+	Version       string         `xml:"version,attr"`
 	SchemaTests   []validityTest `xml:"schemaTest"`
 	InstanceTests []validityTest `xml:"instanceTest"`
 }
@@ -274,6 +285,7 @@ type testGroup struct {
 // declares exactly one <instanceDocument>.
 type validityTest struct {
 	Name        string     `xml:"name,attr"`
+	Version     string     `xml:"version,attr"`
 	SchemaDocs  []docRef   `xml:"schemaDocument"`
 	InstanceDoc docRef     `xml:"instanceDocument"`
 	Expected    []expected `xml:"expected"`
@@ -360,12 +372,109 @@ func casesFromIndex(indexPath string, seen, seenSets map[string]struct{}) ([]cas
 	return cases, nil
 }
 
+// supportedVersionTokens is the ONE encoding (STYLE D3) of which xsts.xsd
+// `version` tokens this processor claims support for. Every applicability
+// decision reads it, so no "1.1" literal is repeated at the decode sites.
+//
+// It holds exactly "1.1". xmlschema11-1.md §4.2.2 fixes the decimal "representing
+// the version of XSD supported by the processor" at 1.1 for a processor
+// conforming to that specification, and this processor targets that version
+// alone. §4.2.2 is borrowed for that ONE fact and nothing else: what §4.2.2
+// itself governs is vc:minVersion/vc:maxVersion, the spec-normative conditional
+// inclusion of schema-document CONTENT — an unrelated mechanism from the suite's
+// `version` attribute, which is harness metadata defined solely by
+// testdata/xsdtests/common/xsts.xsd. The two happen to need the same number; do
+// not merge their readings.
+//
+// FEATURE tokens are deliberately NOT in the set. ts:version-info is an open
+// list over ts:version-token, so a token need not be a version number at all:
+// xsts.xsd:1854-1855 enumerates `restricted-xpath-in-CTA` and
+// `full-xpath-in-CTA` as processor FEATURES, and the pinned suite uses
+// `full-xpath-in-CTA` on 20 test groups (all in CTA.testSet) and `Unicode_4.0.0`
+// on one instanceTest. THE RULING, stated rather than defaulted (issue #446):
+// this processor's XPath engine is unlanded (M6/M7), so it supports neither full
+// XPath in conditional type assignment nor any declared Unicode version, and
+// those tokens are unsupported — the groups carrying only such a token are
+// inapplicable and produce no cases. Scoring this processor against a feature it
+// has never claimed is precisely the defect the XSD-1.0 groups exhibited, and
+// declaring support here to keep the case count up would be the same mistake
+// with the sign flipped. When the XPath engine lands, adding its token to this
+// slice is the whole change.
+var supportedVersionTokens = []string{"1.1"}
+
+// versionApplicable reports whether a level of the suite catalog is applicable to
+// this processor, given that level's `version` attribute value.
+//
+// The tokens are OR-connected: xsts.xsd:1449-1458 (the ts:version-info
+// annotation) states that on testSuite, testSet, testGroup, schemaTest and
+// instanceTest "the tokens have an implicit or connecting them: if a processor
+// configuration supports any of them, the tests included are applicable". One
+// supported token is therefore enough, so version="1.0 1.1" IS applicable here
+// while version="1.0" is not.
+//
+// An ABSENT (or whitespace-only) value is applicable to everything, and that is
+// its OWN case, not a consequence of the OR: an empty token list cannot satisfy
+// "supports any of them", so a bare any-match loop would silently drop the
+// overwhelming majority of the suite. `version` is use="optional" at every
+// declaration site (xsts.xsd:228 testSuite, :319 testSet, :468 testGroup, :631
+// schemaTest, :780 instanceTest, :956 expected) and ts:version-info declares no
+// default, so absence carries no token list at all: the suite scopes nothing, and
+// nothing is excluded.
+//
+// This is NOT resolveExpected's job and must not be folded into it. `expected`
+// (xsts.xsd:956) is the one declaration site where the connector is an AND, and
+// what it decides is WHICH declared outcome binds a processor that already runs
+// the case. Different level, different connector, different question.
+func versionApplicable(version string) bool {
+	tokens := strings.Fields(version)
+	if len(tokens) == 0 {
+		return true
+	}
+	for _, tok := range tokens {
+		if slices.Contains(supportedVersionTokens, tok) {
+			return true
+		}
+	}
+	return false
+}
+
 // casesFromSet flattens one testSet into cases, recording each ID in seen to
 // enforce suite-wide uniqueness.
+//
+// A level the suite scopes away from this processor contributes NOTHING: not a
+// declined case, not a scored one, no line in any expectation file (issue #446).
+// The filter runs at every level that carries an OR-connected `version` and that
+// this decode shape already exposes — the set, each group, and each
+// schemaTest/instanceTest (both are validityTest, so covering both is free).
+// Measured at the current submodule pin, that drops 28 test groups in two
+// separately-decided categories, 8 scoped to XSD 1.0 only (saxonMeta:
+// Missing/missing001..006, VC/vc902, PDecimal/pdecimal001a) and 20 scoped to
+// full-xpath-in-CTA only (CTA), plus one XSD-1.0-only testSet (saxonMeta/Missing,
+// whose 6 groups are individually scoped the same way), 6 XSD-1.0-only
+// schemaTests and 30 non-1.1 instanceTests inside otherwise-applicable groups.
+//
+// instanceTest is filtered NOW rather than deferred: the instance lane scores
+// nothing yet, so this is the cheap moment, and one shared predicate at all four
+// levels is less code than a documented exception at one of them.
+//
+// The testSuite root is deliberately NOT filtered. Neither suite.xml nor
+// extra-suite.xml carries `version`, so the guard could never fire, and an
+// applicability check able to empty the whole run silently is a hazard this
+// harness gains nothing by holding. Re-pinning onto a versioned testSuite root
+// is when to add it.
 func casesFromSet(set testSet, setDir string, seen map[string]struct{}) ([]caseSpec, error) {
+	if !versionApplicable(set.Version) {
+		return nil, nil
+	}
 	var out []caseSpec
 	for _, g := range set.Groups {
+		if !versionApplicable(g.Version) {
+			continue
+		}
 		for _, st := range g.SchemaTests {
+			if !versionApplicable(st.Version) {
+				continue
+			}
 			c, err := makeCase(set.Name, g.Name, kindSchema, st, setDir, seen)
 			if err != nil {
 				return nil, err
@@ -373,6 +482,9 @@ func casesFromSet(set testSet, setDir string, seen map[string]struct{}) ([]caseS
 			out = append(out, c)
 		}
 		for _, it := range g.InstanceTests {
+			if !versionApplicable(it.Version) {
+				continue
+			}
 			c, err := makeCase(set.Name, g.Name, kindInstance, it, setDir, seen)
 			if err != nil {
 				return nil, err
