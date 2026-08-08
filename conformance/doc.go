@@ -80,6 +80,28 @@
 // The runner supports single-case reproduction for debugging:
 // GOXSD_CASE=<case-id> narrows the run to one case with debug logging.
 //
+// # The decline census
+//
+// An executor either DECIDES a case — it observes this processor's outcome and
+// compares that with the suite's declared one — or DECLINES it, because no
+// reader recognized the fixture's shape. Both record `fail`, so a decline is a
+// snapshot of engine capability taken when the decline code was WRITTEN, and
+// nothing re-checked it: d3_3_4v16 stayed wrongly declined for nine days after
+// the capability that covers it landed, until an unrelated reader edit stumbled
+// over it (issue #327).
+//
+// Every run therefore re-attempts each recorded failure with its declared
+// outcome flipped, which separates decided failures (the flipped run passes)
+// from declines (Fail under both polarities), and logs the per-lane decline
+// count (visible with -v). That count is the harvest queue's size, so it moves
+// visibly at the landing that widens an engine. The census reports only: it
+// scores no case and writes no expectation.
+//
+//	GOXSD_DECLINES=1
+//	    Additionally logs the candidate case IDs themselves, sorted. Opt-in
+//	    because a lane still awaiting its milestone declines every case it
+//	    claims and would bury the run's other reporting.
+//
 // # Missing suite
 //
 // TestConformance FAILS when testdata/xsdtests is not populated, naming
