@@ -142,8 +142,10 @@ represents it**:
   **Where they are rejected is currently split, and that split is not the
   design — it is drift to be repaired** (steward audits 2026-07-26 and
   2026-08-02; tracked as **#271**). The phase-3 home holds the references
-  `xsd` stores as QNames: the complex-type base chain
-  (`ct-props-correct` cl. 3), the `<group ref>` graph
+  `xsd` defers rather than resolving eagerly: the complex-type base chain
+  (`ct-props-correct` cl. 3 — a `TypeDefinitionOrRef` since #505, whose
+  by-name arm is the deferred one and whose owned arm is already
+  resolved), the `<group ref>` graph
   (`mg-props-correct` cl. 2), and substitution-group affiliation
   (`e-props-correct` cl. 5), all in `xsd/resolve.go`. But `xsd` stores a
   simple type's `{base type definition}` as a **live pointer**, not a QName,
@@ -172,9 +174,10 @@ represents it**:
   (#183) landed 2026-07-27 and `<redefine>` (#286) after them, with the
   refactor still undone — and `<redefine>` is where the cost first showed:
   `src-expredef` cl. 1.1 needs a complex type whose base is an ANONYMOUS
-  component, which the QName-valued `{base type definition}` cannot hold, so
-  a redefining `complexType` is declined rather than produced. `<list>`/
-  `<union>` in the producer are still ahead of it
+  component, which the QName-valued `{base type definition}` could not hold,
+  so a redefining `complexType` was declined rather than produced until #505
+  moved that slot onto `TypeDefinitionOrRef` — one slot, not the refactor.
+  `<list>`/`<union>` in the producer are still ahead of it
   (`parser/produce.go` declines them today), so that half of the ordering
   argument is still live and is now the last cheap moment.
 - All child collections are slices in document order. Maps exist only as

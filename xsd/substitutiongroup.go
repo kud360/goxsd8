@@ -165,15 +165,16 @@ func (s *Schema) affiliationChainReaches(m ElementDeclaration, head QName) bool 
 // today. Do not read the silence above as delegation to a check that exists; it
 // is an unimplemented rule, recorded in the #249 arbiter review.
 //
-// The starting type is reached through typeOf, the package's one {type
-// definition} slot reader (STYLE T4), so an ANONYMOUS inline type participates in
-// the walk as its own first step rather than being skipped; every step past the
-// first is a named {base type definition} and so a Schema.Type point lookup. No
-// map is ranged (STYLE D2). An anonymous H.{type definition} can therefore end
-// the walk only by being M.{type definition} itself: a {base type definition} is
-// a QName, so nothing else can reach an unnamed type, and sameTypeDefinition
-// reports two anonymous types as distinct on the licence §3.4.6.5's no-identity
-// Note grants.
+// EVERY step is reached through typeOf, the package's one type-slot reader
+// (STYLE T4) — the starting {type definition} and each {base type definition}
+// after it — so an ANONYMOUS type participates in the walk rather than ending
+// it. That matters in both directions: an anonymous inline type is M's own first
+// step, and the anonymous src-expredef clause 1.1 original a redefining complex
+// type owns is an intermediate step. Ending the walk on one would return TRUE, a
+// fail-OPEN accept and not a conservative refusal (#505). No map is ranged
+// (STYLE D2). An anonymous H.{type definition} can end the walk only by being
+// M.{type definition} itself, since sameTypeDefinition reports two anonymous
+// types as distinct on the licence §3.4.6.5's no-identity Note grants.
 func (s *Schema) derivationAdmitsSubstitution(m, h ElementDeclaration) bool {
 	headType, ok := s.typeOf(h.TypeDefinition())
 	if !ok {

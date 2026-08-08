@@ -129,8 +129,9 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 // replaces, not to itself (src-expredef, parser/redefine.go). Two things differ
 // from <include>: a non-empty <redefine> whose schemaLocation does not resolve is
 // an ERROR (src-redefine clause 1) rather than a silent skip, and a redefining
-// <complexType> is declined as not yet produced (see parser/doc.go's composition
-// gaps). §4.2.4 marks the mechanism ·deprecated·.
+// <simpleType>/<complexType> is PAIRED with the {name}-·absent· original
+// src-expredef clause 1.1 defines, so its self-derivation is a real derivation.
+// §4.2.4 marks the mechanism ·deprecated·.
 //
 // Errors are schema-validity verdicts as *[xsderr.Error] values (src-include,
 // src-import, src-import-noselfimport, src-override, src-redefine, src-expredef,

@@ -41,7 +41,7 @@ import (
 // xs:anyType, resolves cross-references, and rejects duplicate top-level names
 // within a kind. The ref= identity-constraint form, the
 // not-yet-produced complexType forms (<simpleContent> <restriction>,
-// inline anonymous local types) and the redefining <complexType> (#286) are
+// inline anonymous local types) are
 // SILENTLY SKIPPED
 // or declined (§3.1.2 permits ignoring a not-yet-produced representation), NOT
 // rejected.
@@ -352,17 +352,18 @@ import (
 // a simple type left restricting itself, surfaces as the rule it breaks), and an
 // unmatched override child is really ignored (§4.2.5) rather than added.
 //
-// <xs:redefine> is DECIDED as of #286, for the three redefinable kinds the
-// producer maps. The assembly follows it, so the document it names is in the
+// <xs:redefine> is DECIDED as of #286, and for ALL FOUR redefinable kinds as of
+// #505. The assembly follows it, so the document it names is in the
 // closure and gated like any other, and the redefinition's own clauses —
 // src-redefine clause 1 (a non-empty <redefine> whose schemaLocation does not
 // resolve is an ERROR, unlike <include>), clause 5, clauses 6.1.1/6.1.2, clause
 // 7.1, and src-expredef's requirement of a top-level definition item of the
-// appropriate name and kind — are enforced genuinely. A redefining <complexType>
-// is the one shape still DECLINED (redefineDecidable): the producer refuses it
-// as not-yet-produced rather than emitting the self-derivation src-expredef
-// clause 1.1's {name}-·absent· pairing is there to avoid, and a decline is a
-// limitation, not a verdict. §F.2 clause 1's "or <redefine>" scope is no longer
+// appropriate name and kind — are enforced genuinely. A redefining
+// <simpleType>/<complexType> is paired with the {name}-·absent· original of
+// src-expredef clause 1.1, so its self-derivation is a real derivation rather
+// than the circularity the pairing exists to avoid, and each redefining child is
+// gated by the predicate its own element type is gated by anywhere else
+// (redefineDecidable). §F.2 clause 1's "or <redefine>" scope is no longer
 // empty either: an <override> in force over a document now substitutes for that
 // document's <redefine> children too, restricted to the four element types
 // <redefine>'s own content model admits.
@@ -638,10 +639,10 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 				return false
 			}
 		case "redefine":
-			// Admitted (#286) for the three redefinable kinds the producer maps.
-			// Like <override> the document it points at is gated by the closure
-			// walk, and its own children are gated here — but by a NARROWER
-			// predicate, since a redefining <complexType> is declined outright.
+			// Admitted (#286, all four redefinable kinds as of #505). Like
+			// <override> the document it points at is gated by the closure walk,
+			// and its own children are gated here, each by the predicate its own
+			// element type is gated by anywhere else.
 			if !redefineDecidable(el) {
 				return false
 			}
@@ -661,11 +662,17 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 // so each is gated by the very predicate a top-level child of any document is
 // gated by — with one subtraction.
 //
-// <complexType> is the subtraction: parser/redefine.go declines a redefining
-// complex type outright (src-expredef clause 1.1's {name}-·absent· paired base is
-// not representable while xsd.ComplexType carries {base type definition} as a
-// QName reference), and a decline is a limitation, not a verdict. Admitting it
-// would risk exactly the wrong-reason "invalid" the allowlist exists to refuse.
+// There is no subtraction as of #505: a redefining <complexType> is produced,
+// paired with the {name}-·absent· original src-expredef clause 1.1 defines, so it
+// is gated by complexTypeDecidable exactly as a top-level one is. The pairing
+// puts the original in no by-name index, which narrows nothing this predicate can
+// see — every clause a redefinition turns on reads the base COMPONENT, and
+// finalize reaches it through the {base type definition} slot. What it does NOT
+// reach is the original itself: Phase D's derivation checks quantify over the
+// schema's type definitions and so produce no verdict for it (GAP(xsd),
+// xsd/complexderivation.go). That is an under-rejection on a component the
+// redefinition's own verdict already covers structurally, the same safe direction
+// as the two fail-open clauses below.
 //
 // A child with no name= declines rather than being waved through: the pairing is
 // keyed on (element type, name), and src-expredef requires a top-level definition
@@ -699,6 +706,10 @@ func redefineDecidable(el *parser.Element) bool {
 			if !simpleTypeDecidable(c) {
 				return false
 			}
+		case "complexType":
+			if !complexTypeDecidable(c) {
+				return false
+			}
 		case "group":
 			if !groupDecidable(c) {
 				return false
@@ -708,8 +719,7 @@ func redefineDecidable(el *parser.Element) bool {
 				return false
 			}
 		default:
-			// <complexType> (declined, see above) and every element type §4.2.4's
-			// content model does not admit at all.
+			// Every element type §4.2.4's content model does not admit at all.
 			return false
 		}
 	}

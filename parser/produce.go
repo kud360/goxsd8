@@ -815,11 +815,13 @@ func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleTy
 // NAME an anonymous type, so it can be no cycle's entry point and this
 // name-keyed sentinel would never see it. It can nonetheless sit ON a chain that
 // closes: src-expredef clause 1.1's original is an anonymous type whose own base=
-// names a top-level type again, so a cycle can run THROUGH it. The rejection for
-// that one is the on-stack sentinel below, reached at the named type the chain
-// comes back to, and its finalize-side twin xsd/resolve.go's
-// checkComplexBaseAcyclic, which descends the anonymous hop for exactly this
-// reason (#505).
+// names a top-level type again, so a cycle can run THROUGH it. PRINCIPLES 9's
+// "construction order makes one impossible" therefore does NOT discharge the
+// anonymous hop, and the blanket claim that it did was false the moment #505
+// landed. The rejection for such a chain is the on-stack sentinel below, reached
+// at the named type the chain comes back to, and its finalize-side twin
+// xsd/resolve.go's checkComplexBaseAcyclic, which descends the anonymous hop for
+// exactly this reason.
 //
 // A name already on the build stack (the PRESENT-nil memo state) is a circular
 // {base type definition} chain, charged ct-props-correct clause 3 (§3.4.6.1).
