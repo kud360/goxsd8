@@ -1,8 +1,11 @@
 package parser
 
 import (
+	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/kud360/goxsd8/parser/xmltree"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -107,16 +110,24 @@ type overrideSet struct {
 	index map[componentKey]*Element
 
 	// id is the set's canonical identity, likewise derived from entries at
-	// construction: the ordered (kind, name, source location) triples. It is the
-	// override half of docKey, so that one document overridden two DIFFERENT ways
-	// is read twice — the spec's own outcome ("the resulting schema will have
-	// duplicate and conflicting versions of some components", §4.2.5) — while one
-	// overridden the same way twice, or reached again around an <include>/<override>
-	// cycle, is read once. Because every reachable set is drawn from the finitely
-	// many children of the finitely many <override> elements of the assembly, the
-	// space of ids is finite and the load-once index that keys on it terminates the
-	// walk §4.2.5's note requires processors to close (STYLE D4: identity, not a
-	// cycle guard).
+	// construction: the ordered (kind, name, ·canonical content·) triples, where
+	// the third member is the substituting element's structure alone (see
+	// [writeCanonicalElement]) and NOT its source location. It is the override half
+	// of docKey, so that one document overridden two DIFFERENT ways is read twice —
+	// the spec's own outcome ("the resulting schema will have duplicate and
+	// conflicting versions of some components", §4.2.5) — while one overridden the
+	// same way twice, whether by the same <override> element reached again around an
+	// <include>/<override> cycle or by two DISTINCT elements declaring the same
+	// substitutions, is read once, which is §4.2.5's "multiple equivalent overrides
+	// of the same schema document will not constitute a violation of clause 2 of
+	// Schema Properties Correct".
+	//
+	// Because every reachable set is drawn from the finitely many children of the
+	// finitely many <override> elements of the assembly, the space of ids is finite
+	// — content equality is coarser than element identity, so it can only close the
+	// walk sooner — and the load-once index that keys on it terminates the walk
+	// §4.2.5's note requires processors to close (STYLE D4: identity, not a cycle
+	// guard).
 	id string
 }
 
@@ -180,14 +191,124 @@ func buildOverrideSet(entries []overrideEntry) *overrideSet {
 	var id strings.Builder
 	for _, e := range entries {
 		index[e.key] = e.elem
-		id.WriteString(e.key.kind)
-		id.WriteByte(' ')
-		id.WriteString(e.key.name)
-		id.WriteByte('@')
-		id.WriteString(e.elem.Loc().String())
+		writeToken(&id, e.key.kind)
+		writeToken(&id, e.key.name)
+		writeCanonicalElement(&id, e.elem)
 		id.WriteByte('\n')
 	}
 	return &overrideSet{entries: entries, index: index, id: id.String()}
+}
+
+// writeCanonicalElement writes el's ·canonical content·: an unambiguous
+// serialization of the element's own structure, from which its POSITION in a
+// source document is absent. Two <override> children serialize alike exactly
+// when they declare the same substitution, whatever documents they were written
+// in, which is what lets §4.2.5's "multiple equivalent overrides of the same
+// schema document" reach one document identity (see [overrideSet].id).
+//
+// §4.2.5 mandates no comparator for this. It offers fn:deep-equal only for the
+// DIFFERENT question of detecting that override(E,D) is idempotent ("either by
+// comparing the input and output of the override transformation using a
+// comparator such as ... or by observing the conditions that cause override(E,D)
+// to be idempotent"), and frames the equivalence that matters here in terms of
+// the resulting components — "the necessity of establishing identity component by
+// component" — not the syntax of the elements. So what is serialized is chosen to
+// be CONSERVATIVE in the one direction that matters: it may fail to equate two
+// overrides that do produce identical components (a residual over-rejection, the
+// direction §4.2.5 tolerates as the baseline behaviour), and must never equate
+// two that do not, which would silently accept the "duplicate and conflicting
+// versions of some components" the same section says are non-conforming.
+//
+// The serialization is therefore total over everything the tree retains that can
+// reach a component — resolved element name, attributes, character data, child
+// order, recursively — plus the in-scope namespace bindings at EVERY element,
+// because an attribute value may be a QName whose meaning is the binding its
+// prefix has where it occurs (Datatypes §3.3.18): two textually identical type=
+// values under different bindings name different types and must not collapse.
+// Bindings are written per element rather than once per entry so that a child
+// which declares its own is not mistaken for one that inherits.
+//
+// Excluded, deliberately: source location, and with it the base URI a nested
+// XPath expression takes as its static context (§3.13.2) — that base URI is the
+// document position this identity exists to look past, and two equivalent
+// overrides written in two documents necessarily differ in it. Attributes are
+// sorted by expanded name because their order carries no XML semantics; sorting
+// (rather than hashing into a map) keeps the result deterministic (STYLE D2).
+func writeCanonicalElement(b *strings.Builder, el *Element) {
+	b.WriteByte('E')
+	writeToken(b, el.Name().Space())
+	writeToken(b, el.Name().Local())
+
+	// The default namespace resolves for every element — to "" (no default) when
+	// none is in scope — so it needs no presence marker beside the prefixed
+	// bindings, which inScopePrefixes already returns sorted by prefix.
+	def, _ := el.lookupPrefix("")
+	writeToken(b, def)
+	prefixes := el.inScopePrefixes()
+	writeCount(b, len(prefixes))
+	for _, ns := range prefixes {
+		writeToken(b, ns.Prefix())
+		writeToken(b, ns.URI())
+	}
+
+	attrs := slices.Clone(el.Attributes())
+	slices.SortFunc(attrs, func(x, y xmltree.Attribute) int {
+		if c := strings.Compare(x.Name().Space(), y.Name().Space()); c != 0 {
+			return c
+		}
+		return strings.Compare(x.Name().Local(), y.Name().Local())
+	})
+	writeCount(b, len(attrs))
+	for _, a := range attrs {
+		writeToken(b, a.Name().Space())
+		writeToken(b, a.Name().Local())
+		writeToken(b, a.Value())
+	}
+
+	children := el.Children()
+	writeCount(b, len(children))
+	for _, child := range children {
+		writeCanonicalNode(b, child)
+	}
+}
+
+// writeCanonicalNode writes one child node's ·canonical content·, dispatching
+// over [Node]'s two arms (STYLE T2's sealed-sum exception). Character data is
+// compared verbatim, as the tree retains it: whitespace inside an <annotation>
+// reaches the component, so normalizing it here would equate two overrides that
+// do not produce identical components.
+func writeCanonicalNode(b *strings.Builder, n Node) {
+	switch node := n.(type) {
+	case *Element:
+		writeCanonicalElement(b, node)
+	case *Text:
+		b.WriteByte('T')
+		writeToken(b, node.Data())
+	default:
+		// Unreachable while Node stays sealed. A third arm added without extending
+		// this function must not silently equate nodes it cannot see, so it degrades
+		// to the node's LOCATION, which distinguishes distinct nodes unconditionally:
+		// the identity then over-rejects exactly as it did before content equality
+		// replaced Loc, never over-collapses.
+		b.WriteByte('?')
+		writeToken(b, node.Loc().String())
+	}
+}
+
+// writeToken writes s length-prefixed, so that a serialization is unambiguous
+// whatever bytes the schema document contains: no separator can be forged by a
+// name, an attribute value or a run of character data.
+func writeToken(b *strings.Builder, s string) {
+	writeCount(b, len(s))
+	b.WriteString(s)
+}
+
+// writeCount writes a delimited item count, which is what makes a nested
+// serialization self-terminating: the reader of an element's children knows how
+// many follow without an end marker any content could impersonate.
+func writeCount(b *strings.Builder, n int) {
+	b.WriteString(strconv.Itoa(n))
+	b.WriteByte(':')
 }
 
 // mergedUnder composes this override set — the one a nested <override> element
