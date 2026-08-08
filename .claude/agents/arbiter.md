@@ -87,3 +87,29 @@ flipped case must be explainable by the diff under judgment; an
 unexplained upward flip blocks the commit and becomes an issue. If a
 change cannot pass without a downgrade, the change is wrong, not the
 expectation.
+
+**Sanctioned applicability removals** (issue #576, repo-owner ruling) are
+the one class that deletes a line. When suite discovery stops producing a
+case because the W3C suite's own `@version` metadata scopes it away from
+an XSD 1.1 processor, that is a sanctioned removal, not a `Vanished`
+regression. You bank one by asserting the count, per lane, on your own
+ratchet run:
+
+```sh
+GOXSD_RATCHET_REMOVALS=schema=34,instance=65 \
+  GOXSD_RATCHET=1 go test ./conformance -run TestConformance -count=1
+```
+
+Any other number refuses the entire merge. You never assert a count you
+have not read off a run: take the removals from the read-only run's lane
+log first, verify each against the diff, then assert. The assertion is
+arbiter-only and applies to ratchet runs only — set without
+`GOXSD_RATCHET=1` the run fails outright.
+
+A verdict that banks removals must **enumerate the removed case IDs and
+state the applicability justification for each** — which `@version` token
+scopes it away and why this processor does not claim that token. "The
+runner withheld them" is not a justification; the runner's classification
+is what makes them eligible, your reading is what makes them right.
+Nothing else is relaxed: genuine `Regressed` and genuine `Vanished` cases
+still abort the merge whatever the removal assertion says.

@@ -14,6 +14,21 @@
 // suite.xml when the type left XSD 1.1, and shares one test set
 // (common/introspection.testSet) with the main index, discovered once.
 //
+// A test set, test group, schema test or instance test may declare a
+// `version` attribute listing the versions and FEATURES it applies to,
+// OR-connected: a processor supporting any listed token runs it. A level
+// listing no token this processor supports is not applicable and yields no
+// cases — it is absent from the run, not declined and not scored (issue
+// #446); discovery WITHHOLDS every case it would have produced, which is
+// what makes an already-committed expectation for one a sanctioned
+// applicability removal (below) rather than a Vanished regression. This
+// processor supports exactly the
+// token `1.1`, so groups scoped to XSD 1.0 only, and groups scoped to the
+// `full-xpath-in-CTA` feature whose engine is unlanded, are both out of
+// scope. An absent `version` applies to everything. This is unrelated to
+// `expected/@version`, whose tokens are AND-connected and only choose which
+// declared outcome binds.
+//
 // # Lanes and expectation files
 //
 // Expectations are committed at conformance/testdata/expectations/, one
@@ -31,7 +46,8 @@
 // suite's declared outcome; `fail` records a known gap so a regression is
 // loud and an improvement is harvestable. A missing lane file is an empty
 // lane, not an error. Expectation files are machine-written only — never
-// edited by hand, and NEVER edited downward.
+// edited by hand, and NEVER edited downward. A line leaves a file only as a
+// sanctioned applicability removal (below).
 //
 // A suite case may declare validity="indeterminate": the Working Group could
 // not agree the case has one right answer, and the suite's own catalog DTD
@@ -49,33 +65,75 @@
 //	LoadExpectations(path) (map[string]Status, error)
 //	    Missing file => empty lane.
 //
-//	Compare(expected, actual) Delta
+//	Compare(expected, actual, withheld) (Delta, error)
 //	    Delta partitions cases into Improved (expected fail, now pass),
 //	    Regressed (expected pass, now fail — never acceptable), New (no
-//	    expectation yet), and Vanished (expected case the run no longer
-//	    produced).
+//	    expectation yet), Removed (a sanctioned applicability removal —
+//	    see below) and Vanished (expected case the run no longer produced
+//	    and did not withhold). withheld is the runner's authoritative list
+//	    of case IDs discovery declined to produce; an ID it does not name
+//	    can never be Removed. A withheld case the run also produced is a
+//	    runner bug and is returned as an error.
 //
-//	Ratchet(expected, actual) (map[string]Status, error)
+//	Ratchet(expected, actual, withheld, removals) (map[string]Status, error)
 //	    Upward-only merge: Improved flips to pass, New is recorded at its
-//	    observed status. Any Regressed or Vanished case aborts the entire
-//	    merge with an error — the ratchet refuses to move at all rather
-//	    than record a downgrade.
+//	    observed status, and Removed cases have their lines DELETED. Any
+//	    Regressed or Vanished case aborts the entire merge with an error —
+//	    the ratchet refuses to move at all rather than record a downgrade —
+//	    and so does a Removed count other than the one removals asserts
+//	    (AssertRemovals; the zero RemovalAssertion asserts none). Ratchet
+//	    decides ONE lane; the runner merges every lane before it writes any,
+//	    so a refusal here withholds every lane's file (issue #581).
 //
 //	WriteExpectations(path, m) error
 //	    Always sorted by case ID (STYLE D1/D2).
+//
+// # Sanctioned applicability removals
+//
+// The W3C suite carries its own applicability metadata: a testSet, testGroup,
+// schemaTest or instanceTest may be scoped to processor versions or features
+// this XSD 1.1 processor does not claim, in which case the case was never this
+// processor's to score. When discovery withholds such a case, its committed
+// expectation is a SANCTIONED REMOVAL rather than a Vanished regression, and
+// banking it deletes the line (issue #576, a repo-owner ruling; a merely
+// tolerated removal would be re-offered and re-refused on every later run).
+//
+// Two independent locks keep that from becoming a way to lower a score. The
+// classifier is the runner's withheld set — an ID no discovery level named is
+// Vanished, full stop, and no narrative can move it. The second lock is the
+// arbiter's per-lane asserted count: unless the number of removals in EVERY lane
+// is exactly the number that lane's run predicted, the entire merge is refused
+// and no lane's file is written (issue #581), so a removal that silently
+// appears, disappears, or changes lane cannot pass. Everything else is
+// unchanged — scores still only move up, and genuine Regressed and Vanished
+// cases still abort the merge whatever the assertion says.
 //
 // # Running
 //
 //	go test ./conformance -run TestConformance -count=1
 //	    Read-only: runs the suite, Compares against committed
-//	    expectations, fails on any Regressed case. Improved cases are
-//	    logged (visible with -v), never written: a non-arbiter agent can
-//	    thus see the upward movement pending banking (issue #303).
+//	    expectations, fails on any Regressed case. Improved cases and
+//	    sanctioned applicability removals are logged (visible with -v),
+//	    never written: a non-arbiter agent can thus see the movement
+//	    pending banking (issue #303) without being able to bank it.
 //
 //	GOXSD_RATCHET=1 go test ./conformance -run TestConformance -count=1
 //	    Additionally Ratchets each lane and rewrites its file. Arbiter
 //	    only (see docs/WORKFLOW.md); every flipped case must be
-//	    explainable by the diff under judgment.
+//	    explainable by the diff under judgment. Writing is all-or-nothing
+//	    across lanes (issue #581): every lane is merged first, and one
+//	    lane's refusal leaves EVERY lane's file untouched, so a refused
+//	    run never leaves a half-banked tree behind its FAIL.
+//
+//	GOXSD_RATCHET_REMOVALS=<lane>=<n>,...
+//	    The arbiter's per-lane assertion of how many sanctioned
+//	    applicability removals this run will bank, e.g.
+//	    `schema=34,instance=65`. Any other number refuses the entire merge
+//	    — every lane's, not only the miscounted lane's — as does a name no
+//	    lane carries. It covers a ratchet run ONLY: set without
+//	    GOXSD_RATCHET=1, the run FAILS rather than quietly ignoring it —
+//	    the same rule GOXSD_SUITE_OPTIONAL follows below. Unset, every lane
+//	    asserts none, which refuses any removal.
 //
 // The runner supports single-case reproduction for debugging:
 // GOXSD_CASE=<case-id> narrows the run to one case with debug logging.

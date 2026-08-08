@@ -237,11 +237,6 @@ BoeingXSDTestCases/ipo5/schema/ipo5 fail
 BoeingXSDTestCases/ipo6/schema/ipo6 fail
 CTA/cta0001/schema/cta0001 fail
 CTA/cta0002/schema/cta0002 fail
-CTA/cta0003/schema/cta0003 fail
-CTA/cta0004/schema/cta0004 fail
-CTA/cta0005/schema/cta0005 fail
-CTA/cta0006/schema/cta0006 fail
-CTA/cta0007/schema/cta0007 fail
 CTA/cta0008/schema/cta0008 pass
 CTA/cta0009/schema/cta0009 pass
 CTA/cta0010/schema/cta0010 pass
@@ -250,19 +245,6 @@ CTA/cta0012/schema/cta0012 pass
 CTA/cta0013/schema/cta0013 pass
 CTA/cta0014/schema/cta0014 fail
 CTA/cta0015/schema/cta0015 fail
-CTA/cta0016/schema/cta0016 fail
-CTA/cta0017/schema/cta0017 fail
-CTA/cta0018/schema/cta0018 fail
-CTA/cta0019/schema/cta0019 fail
-CTA/cta0020/schema/cta0020 fail
-CTA/cta0021/schema/cta0021 fail
-CTA/cta0022/schema/cta0022 fail
-CTA/cta0023/schema/cta0023 fail
-CTA/cta0024/schema/cta0024 fail
-CTA/cta0025/schema/cta0025 fail
-CTA/cta0026/schema/cta0026 fail
-CTA/cta0027/schema/cta0027 fail
-CTA/cta0028/schema/cta0028 fail
 CTA/cta0040/schema/cta0040 pass
 CTA/cta0041/schema/cta0041 pass
 CTA/cta0042/schema/cta0042 fail
@@ -270,8 +252,6 @@ CTA/cta0043/schema/cta0043 fail
 CTA/cta0044/schema/cta0044 pass
 CTA/cta0045/schema/cta0042 pass
 CTA/cta9001err/schema/cta9001err fail
-CTA/cta9002err/schema/cta9002err fail
-CTA/cta9003err/schema/cta9003err fail
 CTA/cta9004err/schema/cta9004err pass
 CTA/cta9005err/schema/cta9005err pass
 CTA/cta9006err/schema/cta9006err fail
@@ -5257,7 +5237,6 @@ MS-IdentityConstraint2006-07-15/idH027/schema/idH027 pass
 MS-IdentityConstraint2006-07-15/idH028/schema/idH028 pass
 MS-IdentityConstraint2006-07-15/idH029/schema/idH029 pass
 MS-IdentityConstraint2006-07-15/idH030/schema/idH030 pass
-MS-IdentityConstraint2006-07-15/idH031/schema/idH031 fail
 MS-IdentityConstraint2006-07-15/idH031a/schema/idH031 fail
 MS-IdentityConstraint2006-07-15/idH032/schema/idH032 pass
 MS-IdentityConstraint2006-07-15/idH034/schema/idH034 pass
@@ -5634,7 +5613,6 @@ MS-IdentityConstraint2006-07-15/idK007/schema/idK007 pass
 MS-IdentityConstraint2006-07-15/idK008/schema/idK008 pass
 MS-IdentityConstraint2006-07-15/idK009/schema/idK009 pass
 MS-IdentityConstraint2006-07-15/idK010/schema/idK010 pass
-MS-IdentityConstraint2006-07-15/idK011/schema/idK011 fail
 MS-IdentityConstraint2006-07-15/idK011a/schema/idK011 fail
 MS-IdentityConstraint2006-07-15/idK012/schema/idK012 fail
 MS-IdentityConstraint2006-07-15/idK013/schema/idK013 pass
@@ -5717,9 +5695,7 @@ MS-IdentityConstraint2006-07-15/idL072/schema/idL072 fail
 MS-IdentityConstraint2006-07-15/idL073/schema/idL073 fail
 MS-IdentityConstraint2006-07-15/idL074/schema/idL074 fail
 MS-IdentityConstraint2006-07-15/idL075/schema/idL075 fail
-MS-IdentityConstraint2006-07-15/idL076/schema/idL076 pass
 MS-IdentityConstraint2006-07-15/idL076a/schema/idL076 pass
-MS-IdentityConstraint2006-07-15/idL077/schema/idL077 fail
 MS-IdentityConstraint2006-07-15/idL077a/schema/idL077 fail
 MS-IdentityConstraint2006-07-15/idL078/schema/idL078 pass
 MS-IdentityConstraint2006-07-15/idL079/schema/idL079 pass
@@ -7096,7 +7072,6 @@ MS-Particles2006-07-15/particlesZ021/schema/particlesZ021 fail
 MS-Particles2006-07-15/particlesZ022/schema/particlesZ022 pass
 MS-Particles2006-07-15/particlesZ023/schema/particlesZ023 pass
 MS-Particles2006-07-15/particlesZ024/schema/particlesZ024 pass
-MS-Particles2006-07-15/particlesZ026/schema/particlesZ026 fail
 MS-Particles2006-07-15/particlesZ026a/schema/particlesZ026 fail
 MS-Particles2006-07-15/particlesZ028/schema/particlesZ028 pass
 MS-Particles2006-07-15/particlesZ030_a/schema/particlesZ030_a fail
@@ -10167,7 +10142,6 @@ MS-SimpleType2006-07-15/stZ069/schema/stZ069 fail
 MS-SimpleType2006-07-15/stZ070/schema/stZ070 fail
 MS-SimpleType2006-07-15/stZ071/schema/stZ071 fail
 MS-SimpleType2006-07-15/stZ072/schema/stZ072 fail
-MS-SimpleType2006-07-15/stZ073b/schema/stZ073b fail
 MS-SimpleType2006-07-15/stZ073ba/schema/stZ073b fail
 MS-SimpleType2006-07-15/stZ074/schema/stZ074 fail
 MS-SimpleType2006-07-15/stZ075/schema/stZ075 fail
@@ -10491,12 +10465,6 @@ MS-Wildcards2006-07-15/wildZ013c/schema/wildZ013c pass
 MS-Wildcards2006-07-15/wildZ013d/schema/wildZ013d pass
 MS-Wildcards2006-07-15/wildZ013e/schema/wildZ013e pass
 MS-Wildcards2006-07-15/wildZ013f/schema/wildZ013f pass
-Missing/missing001/schema/missing001.xsd fail
-Missing/missing002/schema/missing001.xsd pass
-Missing/missing003/schema/missing003.xsd fail
-Missing/missing004/schema/missing004.xsd pass
-Missing/missing005/schema/missing005.xsd pass
-Missing/missing006/schema/missing006.xsd fail
 NIST2004-01-14/atomic-ID-enumeration-1/schema/NISTSchema-SV-IV-atomic-ID-enumeration-2 fail
 NIST2004-01-14/atomic-ID-enumeration-2/schema/NISTSchema-SV-IV-atomic-ID-enumeration-3 fail
 NIST2004-01-14/atomic-ID-enumeration-3/schema/NISTSchema-SV-IV-atomic-ID-enumeration-4 fail
@@ -14546,7 +14514,6 @@ Override/over029/schema/over029.xsd pass
 Override/over030/schema/over030.xsd fail
 Override/over031/schema/over031.xsd pass
 PDecimal/pdecimal001/schema/pdecimal001.xsd pass
-PDecimal/pdecimal001a/schema/pdecimal001.xsd fail
 PDecimal/pdecimal002/schema/pdecimal002.xsd pass
 PDecimal/pdecimal003/schema/pdecimal003.xsd pass
 PDecimal/pdecimal004/schema/pdecimal004.xsd pass
@@ -14917,7 +14884,6 @@ VC/vc022/schema/vc022.xsd pass
 VC/vc023/schema/vc023.xsd pass
 VC/vc024-11/schema/vc024-11.xsd pass
 VC/vc901/schema/vc901.xsd fail
-VC/vc902/schema/vc902.xsd pass
 VC/vc903/schema/vc902.xsd fail
 VC/vc904/schema/vc904.xsd fail
 VC/vc905/schema/vc905.xsd fail

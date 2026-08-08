@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -31,6 +32,16 @@ import (
 // schemaDocuments, an ordered set to be loaded "one by one, in order"
 // (testdata/xsdtests/common/xsts.xsd, the suite's own catalog schema), so
 // discovery keeps every one of them (caseSpec.doc plus caseSpec.extraDocs).
+//
+// # Applicability
+//
+// A testSet, testGroup, schemaTest or instanceTest may carry a `version`
+// attribute whose tokens are OR-connected APPLICABILITY filters — "is this test
+// for me at all?" — and a level the suite scopes away from this processor yields
+// no cases at all (versionApplicable, issue #446); the cases it would have
+// produced are recorded as WITHHELD instead (discovery, issue #576). That is a
+// different attribute job from `expected/@version`, whose tokens are
+// AND-connected and merely pick which declared outcome binds (resolveExpected).
 //
 // # Case IDs
 //
@@ -210,7 +221,96 @@ func defaultLanes() []lane {
 
 // laneFile is the committed expectation file for a lane.
 func laneFile(name string) string {
-	return filepath.Join(expectationsDir, name+".txt")
+	return laneFileIn(expectationsDir, name)
+}
+
+// laneFileIn is the ONE construction of a lane's file name (STYLE D3), over the
+// directory holding it. ratchetAll takes that directory as an argument so its
+// write phase is exercisable against a temp directory rather than only against
+// the committed expectations.
+func laneFileIn(dir, name string) string {
+	return filepath.Join(dir, name+".txt")
+}
+
+// ratchetRemovalsEnv names the arbiter's per-lane assertion of how many
+// sanctioned applicability removals a ratchet run is expected to bank
+// (issue #576):
+//
+//	GOXSD_RATCHET_REMOVALS=schema=34,instance=65
+//
+// It is arbiter-only and covers the ratchet path ALONE: TestConformance fails
+// outright when it is set without GOXSD_RATCHET=1, on the same reasoning as
+// suiteOptionalEnv (issue #309) — an opt-in that changes what the ratchet will
+// bank must never half-apply to a read-only run. Absent, every lane asserts the
+// zero RemovalAssertion, so any removal at all refuses the merge.
+//
+// The count is asserted PER LANE because the real figures are per lane: a
+// removal drifting from one lane to another cannot net out to a passing total.
+const ratchetRemovalsEnv = "GOXSD_RATCHET_REMOVALS"
+
+// removalAssertions resolves one run's per-lane removal assertions. raw and set
+// are ratchetRemovalsEnv's os.LookupEnv pair and ratcheting is whether
+// GOXSD_RATCHET=1; taking them as arguments keeps the gate a pure decision the
+// tests can exercise in both directions.
+//
+// The gate itself: an unset variable asserts nothing on either path, and a
+// variable set WITHOUT the ratchet is an error that ends the run. It is never
+// parsed-and-ignored, because a read-only run that accepted the assertion would
+// report agreement with a figure it never checked and could not bank.
+func removalAssertions(raw string, set, ratcheting bool) (map[string]RemovalAssertion, error) {
+	if !set {
+		return nil, nil
+	}
+	if !ratcheting {
+		return nil, fmt.Errorf(
+			"%s is set but GOXSD_RATCHET=1 is not: asserting sanctioned removals is arbiter-only and never applies to a read-only run",
+			ratchetRemovalsEnv)
+	}
+	return parseRemovalAssertions(raw)
+}
+
+// parseRemovalAssertions parses ratchetRemovalsEnv's value into one
+// RemovalAssertion per named lane. Lanes it does not name assert nothing.
+//
+// Every malformed spelling is an error rather than a skipped entry: an assertion
+// nothing reads — a typo'd lane name, a repeated lane, a count that is not a
+// non-negative number — would let a run appear to have asserted a figure while
+// the lane it meant still refuses (or, worse, still banks against the zero
+// assertion). The map is an internal lookup keyed by lane, never iterated into
+// output (STYLE D2).
+func parseRemovalAssertions(raw string) (map[string]RemovalAssertion, error) {
+	out := map[string]RemovalAssertion{}
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		name, count, ok := strings.Cut(entry, "=")
+		if !ok {
+			return nil, fmt.Errorf("entry %q: want `<lane>=<count>`", entry)
+		}
+		name = strings.TrimSpace(name)
+		if !isLaneName(name) {
+			return nil, fmt.Errorf("entry %q: no lane is named %q", entry, name)
+		}
+		if _, dup := out[name]; dup {
+			return nil, fmt.Errorf("entry %q: lane %q is asserted twice", entry, name)
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(count))
+		if err != nil {
+			return nil, fmt.Errorf("entry %q: count: %w", entry, err)
+		}
+		if n < 0 {
+			return nil, fmt.Errorf("entry %q: count %d is negative", entry, n)
+		}
+		out[name] = AssertRemovals(n)
+	}
+	return out, nil
+}
+
+// isLaneName reports whether name is one of the committed lanes.
+func isLaneName(name string) bool {
+	return slices.ContainsFunc(defaultLanes(), func(l lane) bool { return l.name == name })
 }
 
 // runLane executes every case the lane claims and returns the observed status
@@ -252,12 +352,14 @@ type testSetRef struct {
 // omitted so a set file with an unexpected root decodes to zero groups rather
 // than erroring the whole run.
 type testSet struct {
-	Name   string      `xml:"name,attr"`
-	Groups []testGroup `xml:"testGroup"`
+	Name    string      `xml:"name,attr"`
+	Version string      `xml:"version,attr"`
+	Groups  []testGroup `xml:"testGroup"`
 }
 
 type testGroup struct {
 	Name          string         `xml:"name,attr"`
+	Version       string         `xml:"version,attr"`
 	SchemaTests   []validityTest `xml:"schemaTest"`
 	InstanceTests []validityTest `xml:"instanceTest"`
 }
@@ -274,6 +376,7 @@ type testGroup struct {
 // declares exactly one <instanceDocument>.
 type validityTest struct {
 	Name        string     `xml:"name,attr"`
+	Version     string     `xml:"version,attr"`
 	SchemaDocs  []docRef   `xml:"schemaDocument"`
 	InstanceDoc docRef     `xml:"instanceDocument"`
 	Expected    []expected `xml:"expected"`
@@ -288,23 +391,76 @@ type expected struct {
 	Version  string `xml:"version,attr"`
 }
 
+// discovery is everything one pass over the suite catalog found: the cases to
+// execute, and the IDs of the cases discovery deliberately WITHHELD because the
+// suite's own applicability metadata scopes them away from this processor. The
+// two are disjoint by construction — a withheld level yields no caseSpec — and
+// Compare consumes the pair to tell a sanctioned applicability removal from a
+// Vanished regression (issue #576). parseSuite returns both sorted by case ID.
+type discovery struct {
+	cases    []caseSpec
+	withheld []string
+}
+
+// withholdTest records the ID of one schemaTest or instanceTest the suite scoped
+// away from this processor. withholdGroup and withholdSet record every case the
+// coarser levels would have produced, in catalog order; the caller stops
+// descending at the level it withheld, so recording is not double-counted.
+//
+// All three build IDs through caseID — the same construction makeCase uses —
+// because Compare matches a withheld ID against a committed expectation by exact
+// string, so an ID assembled a second way would silently classify a sanctioned
+// removal as a Vanished regression.
+//
+// The one reading that withholds anything is the suite's OR-connected `version`
+// metadata (versionApplicable, issue #446), whose four filter sites in
+// casesFromSet are these recorders' only callers. The landing order was
+// deliberate — the ratchet had to know how to bank a sanctioned removal, under
+// the arbiter's asserted count, before discovery was allowed to make one.
+func (d *discovery) withholdTest(setName, groupName, kind, testName string) {
+	d.withheld = append(d.withheld, caseID(setName, groupName, kind, testName))
+}
+
+func (d *discovery) withholdGroup(setName string, g testGroup) {
+	for _, st := range g.SchemaTests {
+		d.withholdTest(setName, g.Name, kindSchema, st.Name)
+	}
+	for _, it := range g.InstanceTests {
+		d.withholdTest(setName, g.Name, kindInstance, it.Name)
+	}
+}
+
+func (d *discovery) withholdSet(set testSet) {
+	for _, g := range set.Groups {
+		d.withholdGroup(set.Name, g)
+	}
+}
+
+// absorb merges one nested pass's result into this one, preserving catalog order
+// within each list; parseSuite sorts once at the end.
+func (d *discovery) absorb(found discovery) {
+	d.cases = append(d.cases, found.cases...)
+	d.withheld = append(d.withheld, found.withheld...)
+}
+
 // parseSuite discovers every case reachable from the suite index (and its
-// auxiliary extra-suite sibling), sorted by ID (STYLE D1). It errors on a
-// malformed reference, an unreadable set, a case with no declared expectation,
-// or a duplicate case ID.
-func parseSuite(indexPath string) ([]caseSpec, error) {
+// auxiliary extra-suite sibling), sorted by ID (STYLE D1), alongside the IDs
+// discovery withheld as inapplicable. It errors on a malformed reference, an
+// unreadable set, a case with no declared expectation, or a duplicate case ID.
+func parseSuite(indexPath string) (discovery, error) {
 	seen := map[string]struct{}{}
 	seenSets := map[string]struct{}{}
-	var cases []caseSpec
+	var d discovery
 	for _, index := range suiteIndexPaths(indexPath) {
 		found, err := casesFromIndex(index, seen, seenSets)
 		if err != nil {
-			return nil, err
+			return discovery{}, err
 		}
-		cases = append(cases, found...)
+		d.absorb(found)
 	}
-	slices.SortFunc(cases, func(a, b caseSpec) int { return strings.Compare(a.id, b.id) })
-	return cases, nil
+	slices.SortFunc(d.cases, func(a, b caseSpec) int { return strings.Compare(a.id, b.id) })
+	slices.Sort(d.withheld)
+	return d, nil
 }
 
 // suiteIndexPaths returns the discovery indices rooted at primary: the primary
@@ -331,13 +487,13 @@ func suiteIndexPaths(primary string) []string {
 // than one index — common/introspection.testSet is listed in both suite.xml and
 // extra-suite.xml — is processed by the FIRST index to reach it, so its cases are
 // discovered once rather than surfacing as a spurious duplicate-ID error.
-func casesFromIndex(indexPath string, seen, seenSets map[string]struct{}) ([]caseSpec, error) {
+func casesFromIndex(indexPath string, seen, seenSets map[string]struct{}) (discovery, error) {
 	idx, err := decodeSuiteIndex(indexPath)
 	if err != nil {
-		return nil, err
+		return discovery{}, err
 	}
 	baseDir := filepath.Dir(indexPath)
-	var cases []caseSpec
+	var d discovery
 	for _, ref := range idx.Refs {
 		if ref.Href == "" {
 			continue
@@ -349,38 +505,150 @@ func casesFromIndex(indexPath string, seen, seenSets map[string]struct{}) ([]cas
 		seenSets[setPath] = struct{}{}
 		set, err := decodeTestSet(setPath)
 		if err != nil {
-			return nil, fmt.Errorf("test set %s: %w", ref.Href, err)
+			return discovery{}, fmt.Errorf("test set %s: %w", ref.Href, err)
 		}
 		found, err := casesFromSet(set, filepath.Dir(setPath), seen)
 		if err != nil {
-			return nil, fmt.Errorf("test set %s: %w", ref.Href, err)
+			return discovery{}, fmt.Errorf("test set %s: %w", ref.Href, err)
 		}
-		cases = append(cases, found...)
+		d.absorb(found)
 	}
-	return cases, nil
+	return d, nil
+}
+
+// supportedVersionTokens is the ONE encoding (STYLE D3) of which xsts.xsd
+// `version` tokens this processor claims support for. Every applicability
+// decision reads it, so no "1.1" literal is repeated at the decode sites.
+//
+// It holds exactly "1.1". xmlschema11-1.md §4.2.2 fixes the decimal "representing
+// the version of XSD supported by the processor" at 1.1 for a processor
+// conforming to that specification, and this processor targets that version
+// alone. §4.2.2 is borrowed for that ONE fact and nothing else: what §4.2.2
+// itself governs is vc:minVersion/vc:maxVersion, the spec-normative conditional
+// inclusion of schema-document CONTENT — an unrelated mechanism from the suite's
+// `version` attribute, which is harness metadata defined solely by
+// testdata/xsdtests/common/xsts.xsd. The two happen to need the same number; do
+// not merge their readings.
+//
+// FEATURE tokens are deliberately NOT in the set. ts:version-info is an open
+// list over ts:version-token, so a token need not be a version number at all:
+// xsts.xsd:1854-1855 enumerates `restricted-xpath-in-CTA` and
+// `full-xpath-in-CTA` as processor FEATURES, and the pinned suite uses
+// `full-xpath-in-CTA` on 20 test groups (all in CTA.testSet) and `Unicode_4.0.0`
+// on one instanceTest. THE RULING, stated rather than defaulted (issue #446):
+// this processor's XPath engine is unlanded (M6/M7), so it supports neither full
+// XPath in conditional type assignment nor any declared Unicode version, and
+// those tokens are unsupported — the groups carrying only such a token are
+// inapplicable and produce no cases. Scoring this processor against a feature it
+// has never claimed is precisely the defect the XSD-1.0 groups exhibited, and
+// declaring support here to keep the case count up would be the same mistake
+// with the sign flipped. When the XPath engine lands, adding its token to this
+// slice is the whole change.
+var supportedVersionTokens = []string{"1.1"}
+
+// versionApplicable reports whether a level of the suite catalog is applicable to
+// this processor, given that level's `version` attribute value.
+//
+// The tokens are OR-connected: xsts.xsd:1449-1458 (the ts:version-info
+// annotation) states that on testSuite, testSet, testGroup, schemaTest and
+// instanceTest "the tokens have an implicit or connecting them: if a processor
+// configuration supports any of them, the tests included are applicable". One
+// supported token is therefore enough, so version="1.0 1.1" IS applicable here
+// while version="1.0" is not.
+//
+// An ABSENT (or whitespace-only) value is applicable to everything, and that is
+// its OWN case, not a consequence of the OR: an empty token list cannot satisfy
+// "supports any of them", so a bare any-match loop would silently drop the
+// overwhelming majority of the suite. `version` is use="optional" at every
+// declaration site (xsts.xsd:228 testSuite, :319 testSet, :468 testGroup, :631
+// schemaTest, :780 instanceTest, :956 expected) and ts:version-info declares no
+// default, so absence carries no token list at all: the suite scopes nothing, and
+// nothing is excluded.
+//
+// This is NOT resolveExpected's job and must not be folded into it. `expected`
+// (xsts.xsd:956) is the one declaration site where the connector is an AND, and
+// what it decides is WHICH declared outcome binds a processor that already runs
+// the case. Different level, different connector, different question.
+func versionApplicable(version string) bool {
+	tokens := strings.Fields(version)
+	if len(tokens) == 0 {
+		return true
+	}
+	for _, tok := range tokens {
+		if slices.Contains(supportedVersionTokens, tok) {
+			return true
+		}
+	}
+	return false
 }
 
 // casesFromSet flattens one testSet into cases, recording each ID in seen to
 // enforce suite-wide uniqueness.
-func casesFromSet(set testSet, setDir string, seen map[string]struct{}) ([]caseSpec, error) {
-	var out []caseSpec
+//
+// A level the suite scopes away from this processor contributes NO CASE: not a
+// declined case, not a scored one (issue #446). It is not silent either — every
+// case the level would have produced is RECORDED as withheld through
+// discovery.withholdSet/withholdGroup/withholdTest (issue #576), so an ID that
+// already has a committed expectation classifies as a sanctioned Delta.Removed
+// rather than a Vanished regression, and the arbiter banks it only against an
+// asserted per-lane count. Withholding at the coarsest level that decided it is
+// what keeps the two sets disjoint: the loop stops descending there, so no case
+// is both produced and withheld.
+//
+// The filter runs at every level that carries an OR-connected `version` and that
+// this decode shape already exposes — the set, each group, and each
+// schemaTest/instanceTest (both are validityTest, so covering both is free).
+// Measured at the current submodule pin, that drops 28 test groups in two
+// separately-decided categories, 8 scoped to XSD 1.0 only (saxonMeta:
+// Missing/missing001..006, VC/vc902, PDecimal/pdecimal001a) and 20 scoped to
+// full-xpath-in-CTA only (CTA), plus one XSD-1.0-only testSet (saxonMeta/Missing,
+// whose 6 groups are individually scoped the same way), 6 XSD-1.0-only
+// schemaTests and 30 non-1.1 instanceTests inside otherwise-applicable groups.
+//
+// instanceTest is filtered NOW rather than deferred: the instance lane scores
+// nothing yet, so this is the cheap moment, and one shared predicate at all four
+// levels is less code than a documented exception at one of them.
+//
+// The testSuite root is deliberately NOT filtered. Neither suite.xml nor
+// extra-suite.xml carries `version`, so the guard could never fire, and an
+// applicability check able to empty the whole run silently is a hazard this
+// harness gains nothing by holding. Re-pinning onto a versioned testSuite root
+// is when to add it.
+func casesFromSet(set testSet, setDir string, seen map[string]struct{}) (discovery, error) {
+	var d discovery
+	if !versionApplicable(set.Version) {
+		d.withholdSet(set)
+		return d, nil
+	}
 	for _, g := range set.Groups {
+		if !versionApplicable(g.Version) {
+			d.withholdGroup(set.Name, g)
+			continue
+		}
 		for _, st := range g.SchemaTests {
+			if !versionApplicable(st.Version) {
+				d.withholdTest(set.Name, g.Name, kindSchema, st.Name)
+				continue
+			}
 			c, err := makeCase(set.Name, g.Name, kindSchema, st, setDir, seen)
 			if err != nil {
-				return nil, err
+				return discovery{}, err
 			}
-			out = append(out, c)
+			d.cases = append(d.cases, c)
 		}
 		for _, it := range g.InstanceTests {
+			if !versionApplicable(it.Version) {
+				d.withholdTest(set.Name, g.Name, kindInstance, it.Name)
+				continue
+			}
 			c, err := makeCase(set.Name, g.Name, kindInstance, it, setDir, seen)
 			if err != nil {
-				return nil, err
+				return discovery{}, err
 			}
-			out = append(out, c)
+			d.cases = append(d.cases, c)
 		}
 	}
-	return out, nil
+	return d, nil
 }
 
 // makeCase builds one caseSpec, resolving its document path(s) relative to the
@@ -388,7 +656,7 @@ func casesFromSet(set testSet, setDir string, seen map[string]struct{}) ([]caseS
 // <schemaDocument> is the case's doc and the rest, in document order, are its
 // extraDocs; an instanceTest has its one <instanceDocument> and no extras.
 func makeCase(setName, groupName, kind string, t validityTest, setDir string, seen map[string]struct{}) (caseSpec, error) {
-	id := setName + "/" + groupName + "/" + kind + "/" + t.Name
+	id := caseID(setName, groupName, kind, t.Name)
 	if _, dup := seen[id]; dup {
 		return caseSpec{}, fmt.Errorf("duplicate case id %q", id)
 	}
@@ -408,6 +676,15 @@ func makeCase(setName, groupName, kind string, t validityTest, setDir string, se
 		extraDocs: extra,
 		expect:    want,
 	}, nil
+}
+
+// caseID renders the stable ID of one catalog entry,
+// `<testSet>/<testGroup>/<kind>/<test-name>` (see "Case IDs" above). It is the
+// ONE construction (STYLE D3): makeCase stamps a produced case with it and
+// discovery.withholdTest stamps a withheld one, so the produced and withheld
+// sets Compare partitions are comparable by exact string.
+func caseID(setName, groupName, kind, testName string) string {
+	return setName + "/" + groupName + "/" + kind + "/" + testName
 }
 
 // caseDocs returns the href of the document under test and the set-relative

@@ -468,6 +468,16 @@ of the LANDED commit is the arbiter's figure, not the branch's prediction
   that now do better, refuses to write anything worse.
 - Every expectation change must be explainable; "it flipped and I don't
   know why" blocks the commit and becomes an issue.
+- **A line leaves a lane file only as a sanctioned applicability
+  removal** (issue #576, repo-owner ruling): discovery stopped producing
+  the case because the W3C suite's own `@version` metadata scopes it away
+  from an XSD 1.1 processor, so it was never ours to score. That is not a
+  `Vanished` regression — but it is banked only when the runner itself
+  withheld the case AND the arbiter's ratchet run asserted the per-lane
+  count, `GOXSD_RATCHET_REMOVALS=schema=34,instance=65`. Any other number
+  refuses the whole merge; a read-only run only logs removals. Genuine
+  `Regressed` and `Vanished` cases still abort the merge whatever the
+  assertion says. Details in `conformance/testdata/expectations/README.md`.
 - **A read-only conformance PASS is evidence of NO REGRESSION only, never
   of the whole ratchet write.** `Compare` fails on `Regressed` cases;
   `Improved` cases still pass, but the read-only run now LOGS them, so

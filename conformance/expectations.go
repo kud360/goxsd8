@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -38,7 +39,7 @@ func (s Status) String() string {
 }
 
 // Delta partitions a comparison of committed expectations against an observed
-// run into the four disjoint change classes the ratchet reasons about. Each
+// run into the five disjoint change classes the ratchet reasons about. Each
 // field lists case IDs in sorted order (STYLE D1); a case appears in at most
 // one field. Cases that are expected and still observed at the same status are
 // unchanged and appear in no field.
@@ -51,9 +52,17 @@ type Delta struct {
 	Regressed []string
 	// New lists observed cases that carry no committed expectation yet.
 	New []string
-	// Vanished lists expected cases the run no longer produced — an expected
-	// case that silently disappeared is treated as a regression by the ratchet.
+	// Vanished lists expected cases the run no longer produced and that
+	// discovery did NOT claim to withhold — an expected case that silently
+	// disappeared is treated as a regression by the ratchet.
 	Vanished []string
+	// Removed lists expected cases the run no longer produced BECAUSE
+	// discovery ruled them inapplicable: the W3C suite's own applicability
+	// metadata scopes them away from this XSD 1.1 processor, so they were
+	// never this processor's cases to score (issue #576). This is a
+	// sanctioned removal, not a regression — but only the arbiter's ratchet
+	// run, asserting how many it expects, may bank one; see Ratchet.
+	Removed []string
 }
 
 // LoadExpectations reads a lane's committed expectation file into a map keyed by
@@ -125,15 +134,48 @@ func parseStatus(tok string) (Status, error) {
 }
 
 // Compare partitions the observed run (actual) against committed expectations
-// into a Delta. The four classes are disjoint and every listed slice is sorted
+// into a Delta. The five classes are disjoint and every listed slice is sorted
 // (STYLE D1/D2): Improved (expected fail, now pass), Regressed (expected pass,
-// now fail), New (observed but unexpected), and Vanished (expected but no
-// longer observed).
-func Compare(expected, actual map[string]Status) Delta {
+// now fail), New (observed but unexpected), Removed (expected, and absent
+// because discovery withheld it) and Vanished (expected, absent, and NOT
+// withheld).
+//
+// withheld carries the case IDs discovery deliberately did not produce because
+// the suite's own applicability metadata scopes them away from this processor
+// (conformance/runner.go). It is AUTHORITATIVE input from the runner, never a
+// heuristic Compare infers from the diff: an expected-but-absent case is Removed
+// only when the runner named it, and Vanished in every other circumstance. Order
+// and duplicates within withheld are insignificant, and an ID listed there that
+// carries no committed expectation is a no-op rather than an error.
+//
+// A withheld ID the run nevertheless observed is a runner bug — discovery
+// claiming both to withhold and to produce one case — and is reported as an
+// error rather than resolved by letting one side win.
+func Compare(expected, actual map[string]Status, withheld []string) (Delta, error) {
+	held := make(map[string]struct{}, len(withheld))
+	var contradicted []string
+	for _, id := range withheld {
+		held[id] = struct{}{}
+		if _, observed := actual[id]; observed {
+			contradicted = append(contradicted, id)
+		}
+	}
+	if len(contradicted) > 0 {
+		slices.Sort(contradicted)
+		contradicted = slices.Compact(contradicted)
+		return Delta{}, fmt.Errorf(
+			"discovery both withheld and produced %d case(s): %v",
+			len(contradicted), contradicted)
+	}
+
 	var d Delta
 	for id, want := range expected {
-		got, ok := actual[id]
-		if !ok {
+		got, observed := actual[id]
+		if !observed {
+			if _, sanctioned := held[id]; sanctioned {
+				d.Removed = append(d.Removed, id)
+				continue
+			}
 			d.Vanished = append(d.Vanished, id)
 			continue
 		}
@@ -154,20 +196,62 @@ func Compare(expected, actual map[string]Status) Delta {
 	slices.Sort(d.Regressed)
 	slices.Sort(d.New)
 	slices.Sort(d.Vanished)
-	return d
+	slices.Sort(d.Removed)
+	return d, nil
 }
+
+// RemovalAssertion is the arbiter's prediction of how many sanctioned
+// applicability removals one lane's ratchet run will bank (issue #576). It is a
+// SECOND, independent lock, not the classifier: it never decides which cases are
+// sanctioned — the runner's withheld set does that — it only refuses to bank a
+// set whose size the arbiter did not predict. Construct values only via
+// AssertRemovals (STYLE T7).
+//
+// The zero value asserts none, which is the pre-#576 behaviour: a caller that
+// says nothing refuses any removal at all. There is no "did the caller assert?"
+// flag beside the count, because asserting zero and asserting nothing permit
+// exactly the same set — one fact, one encoding (STYLE D3).
+type RemovalAssertion struct {
+	n int
+}
+
+// AssertRemovals is the arbiter's assertion that exactly n sanctioned
+// applicability removals are expected in this lane. Ratchet refuses the whole
+// merge on any other number, so the count is checked machinery rather than a
+// claim an agent can make in prose.
+func AssertRemovals(n int) RemovalAssertion { return RemovalAssertion{n: n} }
 
 // Ratchet computes the upward-only merge of expectations with an observed run.
 // Improved cases flip to pass and New cases are recorded at their observed
-// status; unchanged cases keep their expectation. Any Regressed or Vanished
-// case aborts the entire merge with an error — the ratchet refuses to move at
-// all rather than record a downgrade. The input maps are never mutated.
-func Ratchet(expected, actual map[string]Status) (map[string]Status, error) {
-	d := Compare(expected, actual)
+// status; unchanged cases keep their expectation. The input maps are never
+// mutated.
+//
+// Three conditions abort the entire merge — the ratchet refuses to move at all
+// rather than record a downgrade:
+//
+//   - any Regressed or Vanished case, unconditionally and whatever removals
+//     asserts;
+//   - a withheld ID the run also produced (Compare's runner-bug error);
+//   - a Removed count other than the one removals asserts, in either direction,
+//     which for the zero RemovalAssertion means any removal at all.
+//
+// Banking a sanctioned removal DELETES the case's line from the merged map: a
+// removal that were merely tolerated would be re-offered, and re-refused, on
+// every subsequent run.
+func Ratchet(expected, actual map[string]Status, withheld []string, removals RemovalAssertion) (map[string]Status, error) {
+	d, err := Compare(expected, actual, withheld)
+	if err != nil {
+		return nil, fmt.Errorf("ratchet refuses to move: %w", err)
+	}
 	if len(d.Regressed) > 0 || len(d.Vanished) > 0 {
 		return nil, fmt.Errorf(
 			"ratchet refuses to move: %d regressed %v, %d vanished %v",
 			len(d.Regressed), d.Regressed, len(d.Vanished), d.Vanished)
+	}
+	if len(d.Removed) != removals.n {
+		return nil, fmt.Errorf(
+			"ratchet refuses to move: run asserted %d sanctioned applicability removal(s), found %d %v",
+			removals.n, len(d.Removed), d.Removed)
 	}
 
 	merged := maps.Clone(expected)
@@ -180,7 +264,64 @@ func Ratchet(expected, actual map[string]Status) (map[string]Status, error) {
 	for _, id := range d.New {
 		merged[id] = actual[id]
 	}
+	for _, id := range d.Removed {
+		delete(merged, id)
+	}
 	return merged, nil
+}
+
+// laneRun is one lane's completed run: the lane's name, the expectations
+// committed for it, and the statuses this run observed. It carries a lane from
+// the observation pass to the merge, so every lane can be merged before any
+// lane is written (ratchetAll). Nothing derivable is stored (STYLE D3): the
+// lane's file comes from its name, and the withheld set is the run's rather
+// than any one lane's.
+type laneRun struct {
+	name     string
+	expected map[string]Status
+	actual   map[string]Status
+}
+
+// ratchetAll merges every lane and then writes every lane, in two separated
+// phases: no lane's file is written unless EVERY lane merged without error.
+// Ratchet is a per-lane function and refuses only the merge it was asked for;
+// this is what makes one lane's refusal cost the whole run, so a single wrong
+// removal assertion can no longer leave a half-banked tree behind a failing run
+// (issue #581). Every refusal is collected rather than the first one ending the
+// pass — an arbiter correcting one asserted count should see all of them at
+// once, and none of them wrote anything.
+//
+// runs is a slice so lanes merge and write in the caller's fixed order (STYLE
+// D1); removals is an internal lookup keyed by lane name, read by key and never
+// iterated (STYLE D2), so a lane it does not name asserts the zero
+// RemovalAssertion. dir is the directory holding the committed lane files.
+//
+// The write phase is not itself transactional: WriteExpectations renames each
+// lane's file into place separately, so an I/O fault partway through can still
+// leave earlier lanes written. That is a failing disk rather than a refused
+// merge — the refusals this function exists to contain are all decided in the
+// first phase, before anything is opened for writing.
+func ratchetAll(dir string, runs []laneRun, withheld []string, removals map[string]RemovalAssertion) error {
+	merged := make([]map[string]Status, len(runs))
+	var refused []error
+	for i, r := range runs {
+		m, err := Ratchet(r.expected, r.actual, withheld, removals[r.name])
+		if err != nil {
+			refused = append(refused, fmt.Errorf("lane %s: %w", r.name, err))
+			continue
+		}
+		merged[i] = m
+	}
+	if len(refused) > 0 {
+		return fmt.Errorf("no lane was written: %w", errors.Join(refused...))
+	}
+
+	for i, r := range runs {
+		if err := WriteExpectations(laneFileIn(dir, r.name), merged[i]); err != nil {
+			return fmt.Errorf("lane %s: writing expectations: %w", r.name, err)
+		}
+	}
+	return nil
 }
 
 // WriteExpectations writes a lane's expectations to path, one case per line as
