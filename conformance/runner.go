@@ -221,7 +221,15 @@ func defaultLanes() []lane {
 
 // laneFile is the committed expectation file for a lane.
 func laneFile(name string) string {
-	return filepath.Join(expectationsDir, name+".txt")
+	return laneFileIn(expectationsDir, name)
+}
+
+// laneFileIn is the ONE construction of a lane's file name (STYLE D3), over the
+// directory holding it. ratchetAll takes that directory as an argument so its
+// write phase is exercisable against a temp directory rather than only against
+// the committed expectations.
+func laneFileIn(dir, name string) string {
+	return filepath.Join(dir, name+".txt")
 }
 
 // ratchetRemovalsEnv names the arbiter's per-lane assertion of how many

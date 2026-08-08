@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -394,6 +395,110 @@ func TestWriteThenLoadRoundTrips(t *testing.T) {
 		if got[id] != w {
 			t.Errorf("case %q: got %v want %v", id, got[id], w)
 		}
+	}
+}
+
+// TestRatchetAllWritesNoLaneUnlessEveryLaneMerged is the regression test for
+// issue #581. A refusal used to cost only the lane that earned it: the run
+// failed, but every sibling lane was still merged and REWRITTEN, so a single
+// typo'd count left a half-banked tree behind a FAIL. The negative control that
+// found it asserted schema=33 against a true 34 while instance was right; this
+// is that shape at unit scale, and the assertion that matters is that the
+// correct lane's file is untouched too.
+func TestRatchetAllWritesNoLaneUnlessEveryLaneMerged(t *testing.T) {
+	const (
+		schemaBefore   = "gone fail\nkept pass\n"
+		instanceBefore = "improving fail\n"
+	)
+	dir := t.TempDir()
+	seedLane(t, dir, "schema", schemaBefore)
+	seedLane(t, dir, "instance", instanceBefore)
+
+	runs := []laneRun{
+		{
+			name:     "schema",
+			expected: map[string]Status{"gone": Fail(), "kept": Pass()},
+			actual:   map[string]Status{"kept": Pass()},
+		},
+		{
+			name:     "instance",
+			expected: map[string]Status{"improving": Fail()},
+			actual:   map[string]Status{"improving": Pass()},
+		},
+	}
+	withheld := []string{"gone"}
+
+	// The schema lane asserts 2 removals against the 1 discovery withheld; the
+	// instance lane is asserted correctly and on its own would bank an upward
+	// flip.
+	wrong := map[string]RemovalAssertion{"schema": AssertRemovals(2), "instance": AssertRemovals(0)}
+	err := ratchetAll(dir, runs, withheld, wrong)
+	if err == nil {
+		t.Fatal("a removal count one lane did not assert must refuse the run")
+	}
+	if !strings.Contains(err.Error(), "schema") {
+		t.Errorf("the refusal must name the lane that earned it: %v", err)
+	}
+	assertLaneFile(t, dir, "schema", schemaBefore)
+	assertLaneFile(t, dir, "instance", instanceBefore)
+
+	// Positive control: asserted right, every lane is written — the refusal
+	// above withheld the write, it did not merely fail to compute one.
+	right := map[string]RemovalAssertion{"schema": AssertRemovals(1)}
+	if err := ratchetAll(dir, runs, withheld, right); err != nil {
+		t.Fatalf("every lane merged, so every lane must be written: %v", err)
+	}
+	assertLaneFile(t, dir, "schema", "kept pass\n")
+	assertLaneFile(t, dir, "instance", "improving pass\n")
+}
+
+// TestRatchetAllReportsEveryRefusal proves the merge pass collects refusals
+// instead of ending at the first one: an arbiter correcting one lane should not
+// have to re-run to discover the next lane refuses too. Neither lane's file is
+// created, which is the same guarantee stated over a lane that has none yet.
+func TestRatchetAllReportsEveryRefusal(t *testing.T) {
+	dir := t.TempDir()
+	runs := []laneRun{
+		{name: "schema", expected: map[string]Status{"a": Pass()}, actual: map[string]Status{}},
+		{name: "instance", expected: map[string]Status{"b": Pass()}, actual: map[string]Status{}},
+	}
+
+	err := ratchetAll(dir, runs, nil, nil)
+	if err == nil {
+		t.Fatal("two vanished cases in two lanes must refuse the run")
+	}
+	for _, name := range []string{"schema", "instance"} {
+		if !strings.Contains(err.Error(), "lane "+name) {
+			t.Errorf("lane %s refused but is unreported: %v", name, err)
+		}
+	}
+	entries, readErr := os.ReadDir(dir)
+	if readErr != nil {
+		t.Fatalf("reading lane directory: %v", readErr)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a refused run wrote %d file(s): %v", len(entries), entries)
+	}
+}
+
+// seedLane writes a lane's committed file before a ratchetAll call, so the test
+// can prove afterwards whether that exact content survived.
+func seedLane(t *testing.T, dir, name, body string) {
+	t.Helper()
+	if err := os.WriteFile(laneFileIn(dir, name), []byte(body), 0o644); err != nil {
+		t.Fatalf("seeding lane %s: %v", name, err)
+	}
+}
+
+// assertLaneFile checks a lane's file holds exactly want.
+func assertLaneFile(t *testing.T, dir, name, want string) {
+	t.Helper()
+	got, err := os.ReadFile(laneFileIn(dir, name))
+	if err != nil {
+		t.Fatalf("reading lane %s: %v", name, err)
+	}
+	if string(got) != want {
+		t.Errorf("lane %s:\ngot:\n%s\nwant:\n%s", name, got, want)
 	}
 }
 

@@ -81,7 +81,9 @@
 //	    Regressed or Vanished case aborts the entire merge with an error —
 //	    the ratchet refuses to move at all rather than record a downgrade —
 //	    and so does a Removed count other than the one removals asserts
-//	    (AssertRemovals; the zero RemovalAssertion asserts none).
+//	    (AssertRemovals; the zero RemovalAssertion asserts none). Ratchet
+//	    decides ONE lane; the runner merges every lane before it writes any,
+//	    so a refusal here withholds every lane's file (issue #581).
 //
 //	WriteExpectations(path, m) error
 //	    Always sorted by case ID (STYLE D1/D2).
@@ -99,9 +101,10 @@
 // Two independent locks keep that from becoming a way to lower a score. The
 // classifier is the runner's withheld set — an ID no discovery level named is
 // Vanished, full stop, and no narrative can move it. The second lock is the
-// arbiter's per-lane asserted count: Ratchet refuses the entire merge unless the
-// number of removals is exactly the number the run predicted, so a removal that
-// silently appears, disappears, or changes lane cannot pass. Everything else is
+// arbiter's per-lane asserted count: unless the number of removals in EVERY lane
+// is exactly the number that lane's run predicted, the entire merge is refused
+// and no lane's file is written (issue #581), so a removal that silently
+// appears, disappears, or changes lane cannot pass. Everything else is
 // unchanged — scores still only move up, and genuine Regressed and Vanished
 // cases still abort the merge whatever the assertion says.
 //
@@ -117,16 +120,20 @@
 //	GOXSD_RATCHET=1 go test ./conformance -run TestConformance -count=1
 //	    Additionally Ratchets each lane and rewrites its file. Arbiter
 //	    only (see docs/WORKFLOW.md); every flipped case must be
-//	    explainable by the diff under judgment.
+//	    explainable by the diff under judgment. Writing is all-or-nothing
+//	    across lanes (issue #581): every lane is merged first, and one
+//	    lane's refusal leaves EVERY lane's file untouched, so a refused
+//	    run never leaves a half-banked tree behind its FAIL.
 //
 //	GOXSD_RATCHET_REMOVALS=<lane>=<n>,...
 //	    The arbiter's per-lane assertion of how many sanctioned
 //	    applicability removals this run will bank, e.g.
-//	    `schema=34,instance=65`. Any other number refuses the lane's whole
-//	    merge, as does a name no lane carries. It covers a ratchet run
-//	    ONLY: set without GOXSD_RATCHET=1, the run FAILS rather than
-//	    quietly ignoring it — the same rule GOXSD_SUITE_OPTIONAL follows
-//	    below. Unset, every lane asserts none, which refuses any removal.
+//	    `schema=34,instance=65`. Any other number refuses the entire merge
+//	    — every lane's, not only the miscounted lane's — as does a name no
+//	    lane carries. It covers a ratchet run ONLY: set without
+//	    GOXSD_RATCHET=1, the run FAILS rather than quietly ignoring it —
+//	    the same rule GOXSD_SUITE_OPTIONAL follows below. Unset, every lane
+//	    asserts none, which refuses any removal.
 //
 // The runner supports single-case reproduction for debugging:
 // GOXSD_CASE=<case-id> narrows the run to one case with debug logging.
