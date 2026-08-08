@@ -431,6 +431,38 @@ func TestProduceIdentityConstraintRefToAnnotationOnlyNameUnresolvable(t *testing
 	assertRule(t, err, "src-resolve")
 }
 
+func TestProduceIdentityConstraintRefToForeignHostedNameUnresolvable(t *testing.T) {
+	// §A gives the schema for schema documents no element wildcard outside
+	// <appinfo>/<documentation>, so a <key name="hidden"> written under a
+	// foreign-namespace host corresponds to no component wherever that host
+	// stands: {identity-constraint definitions} has no hidden at all, and the
+	// ref= must fail src-resolve clause 1.7 rather than reach the buried <key>.
+	// Neither host is inside an <annotation> — the OTHER exclusion, pinned by
+	// TestProduceIdentityConstraintRefToAnnotationOnlyNameUnresolvable — so only
+	// the namespace check can reject these. The ref= comes FIRST in document
+	// order so no already-built component can stand in for the missing one
+	// (symbols.builtIC).
+	const hidden = `<xs:key name="hidden"><xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key>`
+	tests := []struct {
+		name string
+		host string
+	}{{
+		name: "foreign host at the top level",
+		host: `<f:host>` + hidden + `</f:host>`,
+	}, {
+		name: "foreign host under a global element",
+		host: `<xs:element name="carrier"><f:host>` + hidden + `</f:host></xs:element>`,
+	}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := produce(t, `<xs:schema xmlns:xs="`+xsdNS+`" xmlns:f="urn:f">`+
+				`<xs:element name="user"><xs:key ref="hidden"/></xs:element>`+
+				tt.host+`</xs:schema>`)
+			assertRule(t, err, "src-resolve")
+		})
+	}
+}
+
 func TestProduceXPathExpressionProperties(t *testing.T) {
 	constraints := idcOf(t, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"`+
 		` targetNamespace="urn:t" xmlns:tns="urn:t" xmlns="urn:d">`+
