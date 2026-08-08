@@ -848,13 +848,17 @@ func (s *Schema) matchPositions(p position, b contentAutomaton, live liveSet) []
 //
 // The FOLD runs over the distinct source particles (liveSet's representatives),
 // while the RESULT names every live position they cover. Folding a repeated copy
-// would add nothing: copies of one particle carry one {namespace constraint} and
-// §3.10.6.3's union is idempotent (case 3 unions equal enumerations, case 4
-// intersects equal exclusion sets, and a name disallowed by an operand is not
-// allowed by that same operand), so X ∪ X = X. The guard is therefore on the
-// number of DISTINCT wildcard particles: one particle's copies are decided by
-// cos-ns-subset alone in positionAdmits, which has already answered for all of
-// them, exactly as a single wildcard is.
+// would add nothing DIFFERENT: copies of one particle carry one identical
+// {namespace constraint} value (addParticle's allocator reset makes particleID
+// -> {term} a function), so re-including a copy would hand
+// UnionNamespaceConstraint an operand already in constraints, never a new one —
+// this is a claim about which OPERANDS the fold sees, not that §3.10.6.3's union
+// is idempotent as a relation: it is not (the GAP above is exactly a case where
+// folding drops a sibling keyword, so X ∪ X can differ from X for a constraint
+// that carries one). The guard is therefore on the number of DISTINCT wildcard
+// particles: one particle's copies are decided by cos-ns-subset alone in
+// positionAdmits, which has already answered for all of them, exactly as a
+// single wildcard is.
 func coveringWildcardUnion(sub NamespaceConstraint, b contentAutomaton, live liveSet) []int {
 	var wildcards []int
 	var constraints []NamespaceConstraint
