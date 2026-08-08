@@ -394,3 +394,39 @@ func TestSeedIdempotentIndependentGraphs(t *testing.T) {
 		}
 	}
 }
+
+// TestFacetKindByNameCoversTheGeneratedTable pins the EXPORTED half of the
+// name↔kind bijection parser.facetKindOf now delegates to (#323), reached only
+// through the public surface: it walks every FacetName the generated Types table
+// is keyed by, requires each to resolve, and then requires the resolved kinds to
+// cover the WHOLE closed xsd.FacetKind range with no two names colliding on one
+// kind. A FacetKind added without a bridge-table row — or a row misspelled
+// against the generated table — fails here instead of becoming a silent lookup
+// miss in the parser, which is exactly how maxScale/minScale were dropped once
+// already (#219).
+func TestFacetKindByNameCoversTheGeneratedTable(t *testing.T) {
+	seen := make(map[xsd.FacetKind]builtin.FacetName)
+	for _, spec := range builtin.Types {
+		for _, f := range spec.Facets {
+			kind, ok := builtin.FacetKindByName(f.Name)
+			if !ok {
+				t.Errorf("FacetKindByName(%q) = (_, false), want a kind: %s lists it as applicable", f.Name, spec.Name)
+				continue
+			}
+			if prior, dup := seen[kind]; dup && prior != f.Name {
+				t.Errorf("FacetKindByName maps both %q and %q to %s; the bijection is not injective", prior, f.Name, kind)
+			}
+			seen[kind] = f.Name
+		}
+	}
+	for k := xsd.FacetLength; k <= xsd.FacetMinScale; k++ {
+		if _, ok := seen[k]; !ok {
+			t.Errorf("no builtin facet name resolves to FacetKind %s", k)
+		}
+	}
+	// §4.3.13 spells the facet "assertions"; "assertion" is the ELEMENT name a
+	// schema writes. parser.facetKindOf leans on the two being distinct.
+	if _, ok := builtin.FacetKindByName("assertion"); ok {
+		t.Error(`FacetKindByName("assertion") = (_, true), want false: the facet is spelled "assertions"`)
+	}
+}

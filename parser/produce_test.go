@@ -1130,6 +1130,21 @@ func TestProduceChargesFacetValueRestriction(t *testing.T) {
 			"cos-st-restricts",
 		},
 		{
+			// #219/#323 regression guard: maxScale is a precisionDecimal-only
+			// extension facet (xsd-precisionDecimal.md §4.2), so on xs:int it must be
+			// RECOGNIZED as a facet, land in {facets}, and only then be rejected on
+			// applicability grounds. A lookup that silently dropped it — the defect
+			// two hand-typed name↔kind tables already shipped once — would produce no
+			// error at all, so a nil err here is the false-accept, not a pass.
+			"precisionDecimal extension facet inapplicable to the primitive",
+			`<xs:simpleType name="scaled">
+			   <xs:restriction base="xs:int">
+			     <xs:maxScale value="2"/>
+			   </xs:restriction>
+			 </xs:simpleType>`,
+			"cos-st-restricts",
+		},
+		{
 			"length may not move across a restriction",
 			`<xs:simpleType name="lenbase">
 			   <xs:restriction base="xs:string">

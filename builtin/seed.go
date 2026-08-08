@@ -319,5 +319,18 @@ func facetKind(name FacetName) (xsd.FacetKind, bool) {
 	return 0, false
 }
 
+// FacetKindByName maps a builtin facet name (§4.3) to its [xsd.FacetKind],
+// scanning facetNames — the SAME ordered bridge table facetName and this file's
+// facetKind already scan. It is the exported twin of facetKind, added so
+// parser.facetKindOf stops hand-typing a THIRD inverse copy of this bijection
+// (#323); a future FacetKind now needs one new facetNames row, not three
+// synchronized edits. ok is false only for a name outside §4.3's constraining-facet
+// set. The returned kind may be [xsd.FacetEnumeration] or [xsd.FacetAssertions],
+// whose {value} is not a lexical string and which [xsd.NewFacet] therefore panics
+// on; a caller feeding this result to NewFacet must exclude both itself.
+func FacetKindByName(name FacetName) (xsd.FacetKind, bool) {
+	return facetKind(name)
+}
+
 // qname bundles a builtin local name with the XSD namespace.
 func qname(local string) xsd.QName { return xsd.QName{Space: xsd.XMLSchemaNS, Local: local} }
