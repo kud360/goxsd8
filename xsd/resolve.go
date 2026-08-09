@@ -270,8 +270,8 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 
 // resolveTypeDefinition resolves the {type definition} slot of an element or
 // attribute declaration (§3.3.2.1 dcl.elt.common, §3.2.2.2 dcl.att.local),
-// exhaustively over TypeDefinitionOrRef's two arms. ctx names the referring site
-// for the message and loc positions it at the owning declaration; the
+// exhaustively over TypeDefinitionOrRef's three arms. ctx names the referring
+// site for the message and loc positions it at the owning declaration; the
 // InlineTypeDefinition arm re-roots that position at the inline type itself.
 //
 //   - nil is an absent {type definition}: src-resolve has nothing to resolve.
@@ -283,6 +283,30 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 //     genuine no-op; a ComplexType still carries a by-name {base type
 //     definition} and a particle tree, so it is descended exactly as a top-level
 //     one is.
+//   - SubstitutionGroupHeadTypeRef names the element declaration that OWNS the
+//     inherited anonymous type. It is NOT charged src-resolve clause 1.3 when it
+//     names nothing — see below — and it is not descended either: the head is
+//     itself an entry of s.elements, so its own inline type is walked when its
+//     turn comes, exactly once.
+//
+// TWO §5.3 READINGS OF ONE NAME, and they must not be mixed up. That head name
+// reaches this component through {substitution group affiliations}, the ONE
+// reference slot Phase A deliberately does not hard-fail: a substitutionGroup
+// naming nothing is a VALID schema whose members are ·absent· (§5.3 Missing
+// Sub-components; W3C saxonData/Missing missing002 pins it, and resolveElementDecl
+// carries the full argument). Charging src-resolve clause 1.3 HERE, on the
+// {type definition} the same absent name induced, would reject exactly the
+// schema Phase A just decided to allow, so the miss returns nil and clause 3
+// simply contributes no type — which is also what typeOf answers, and what
+// checkElementSubstitutableForHeads skips on.
+//
+// The ONE rejection this arm does carry is a representation invariant, not a
+// spec clause: an OWNER-OF-OWNER chain, where the named head's own {type
+// definition} is itself a SubstitutionGroupHeadTypeRef. The producer walks to
+// the TERMINAL head precisely so that never happens, and typeOf's read is
+// DEPTH-1 on the strength of it; rejecting the chain here is what makes typeOf's
+// not-ok branch unreachable for any schema that survived finalize, rather than a
+// silent fail-open (STYLE P3).
 func (s *Schema) resolveTypeDefinition(ref TypeDefinitionOrRef, loc xsderr.Loc, ctx string) error {
 	switch r := ref.(type) {
 	case nil:
@@ -299,6 +323,16 @@ func (s *Schema) resolveTypeDefinition(ref TypeDefinitionOrRef, loc xsderr.Loc, 
 		default:
 			panic("xsd: resolveTypeDefinition: non-exhaustive TypeDefinition switch")
 		}
+	case SubstitutionGroupHeadTypeRef:
+		head, ok := s.Element(r.Head)
+		if !ok {
+			return nil // an ·absent· head (§5.3), not a src-resolve clause 1.3 failure
+		}
+		if _, chained := head.TypeDefinition().(SubstitutionGroupHeadTypeRef); chained {
+			return xsderr.New(xsderr.RuleComponentInvariant, loc,
+				"%s inherits its type from the substitution group head %s (§3.3.2.1 dcl.elt.common clause 3), but that head's own {type definition} is itself inherited from a further head, and this variant must name the declaration that OWNS the anonymous type", ctx, r.Head)
+		}
+		return nil
 	default:
 		panic("xsd: resolveTypeDefinition: non-exhaustive TypeDefinitionOrRef switch")
 	}

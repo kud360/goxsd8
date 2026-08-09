@@ -56,20 +56,37 @@ func (*SimpleType) typeDefinition() {}
 //     src-expredef clause 1.1 (§4.2.4) makes able to hold an anonymous
 //     already-resolved component (see ComplexType.Base).
 //
-// It is a sealed sum (STYLE T2/T7): TypeDefinitionRef and InlineTypeDefinition
-// are its only implementations, sealed by the unexported typeDefinitionOrRef
-// method, so consumers exhaustively switch the two branches and no third variant
-// is representable. It copies attributeuse.go's AttributeDeclarationOrRef
-// precedent exactly, and for the same reason: the XML mappings that populate the
-// slot differ fundamentally in OWNERSHIP of the type definition they yield.
+// It is a sealed sum (STYLE T2/T7): TypeDefinitionRef, InlineTypeDefinition and
+// SubstitutionGroupHeadTypeRef are its only implementations, sealed by the
+// unexported typeDefinitionOrRef method, so consumers exhaustively switch the
+// three branches and no fourth variant is representable. It copies
+// attributeuse.go's AttributeDeclarationOrRef precedent exactly, and for the same
+// reason: the XML mappings that populate the slot differ fundamentally in
+// OWNERSHIP of the type definition they yield.
 //
-//   - TypeDefinitionRef covers §3.3.2.1 dcl.elt.common clauses 2-4, §3.2.2.2
-//     dcl.att.local's type= and xs:anySimpleType tiers, and every ordinary
-//     base= of §3.4.2: the type is a top-level component reachable BY NAME,
-//     possibly forward-referenced, so only a deferred QName is available at
-//     parse time.
+//   - TypeDefinitionRef covers §3.3.2.1 dcl.elt.common clauses 2 and 4, clause
+//     3's NAMED-head case, §3.2.2.2 dcl.att.local's type= and xs:anySimpleType
+//     tiers, and every ordinary base= of §3.4.2: the type is a top-level
+//     component reachable BY NAME, possibly forward-referenced, so only a
+//     deferred QName is available at parse time.
 //   - InlineTypeDefinition covers the three mapping rules that OWN the type
 //     they yield outright; see that type.
+//   - SubstitutionGroupHeadTypeRef covers §3.3.2.1 clause 3's ANONYMOUS-head
+//     case: the one mapping that references a type definition the slot neither
+//     owns nor can name, because the OWNER is another Element Declaration. See
+//     that type.
+//
+// NOT EVERY ARM IS LEGAL IN EVERY SLOT, and the whole arm × slot legality table
+// lives in exactly one place, checkTypeDefinitionOrRef's typeDefinitionSlot
+// switch: SubstitutionGroupHeadTypeRef is admitted only by an ELEMENT
+// declaration's {type definition}, since neither §3.2.2.2 nor §3.4.2 has a
+// clause-3 analog to produce one. Making that unrepresentable at COMPILE time
+// would take a second sealed interface for the element slot alone, which forks
+// typeOf and checkTypeDefinitionOrRef (STYLE T4) and changes
+// ElementDeclaration.TypeDefinition()'s return type; it is deliberately not
+// done. A runtime rejection charged to xsderr.RuleComponentInvariant is the
+// established precedent here — NewElementDeclaration rejects an
+// InlineTypeDefinition wrapping a ComplexType the same way.
 //
 // A nil TypeDefinitionOrRef is the single encoding of an ABSENT slot, in EVERY
 // property this sum serves — the state a programmatically built declaration is
@@ -87,11 +104,16 @@ func (*SimpleType) typeDefinition() {}
 type TypeDefinitionOrRef interface{ typeDefinitionOrRef() }
 
 // TypeDefinitionRef is the variant naming a top-level type definition: the
-// type/@type of §3.3.2/§3.2.2, the {type definition} an element inherits from
-// its substitution-group head (§3.3.2.1 clause 3), the xs:anyType /
-// xs:anySimpleType default (§3.3.2.1 clause 4, §3.2.2.2), and the base= of a
-// §3.4.2 derivation. All are reachable by name, so all are this arm. The field
-// is read-only by convention; do not mutate it after construction.
+// type/@type of §3.3.2/§3.2.2, the {type definition} an element inherits from a
+// substitution-group head whose own type is NAMED (§3.3.2.1 clause 3), the
+// xs:anyType / xs:anySimpleType default (§3.3.2.1 clause 4, §3.2.2.2), and the
+// base= of a §3.4.2 derivation. All are reachable by name, so all are this arm.
+// The field is read-only by convention; do not mutate it after construction.
+//
+// Clause 3's other half is NOT this arm: a head whose own {type definition} is
+// the ANONYMOUS type of its own inline <complexType> has no name for this arm to
+// carry, and the member does not own it either, so that case is
+// SubstitutionGroupHeadTypeRef.
 //
 // Name is a PRESENT reference, never the absent (zero) QName: a reference that
 // names nothing could not be followed, so it is not a resolution failure to
@@ -105,7 +127,16 @@ type TypeDefinitionRef struct{ Name QName }
 //
 // Ownership, not XML provenance, is this arm's invariant, and all four
 // properties below are stated in those terms. THREE mapping rules produce it,
-// and a fourth would be admitted on the same footing:
+// and a fourth would be admitted on the same footing — but only a fourth that
+// OWNS what it yields. §3.3.2.1 clause 3's anonymous-head case is the mapping
+// that does not: the head's inline <complexType> already has an owner (the head
+// declaration, named by its {context}), so a member inheriting it gets the
+// non-owning SubstitutionGroupHeadTypeRef instead of a second owner here. The
+// copy that would let it be this arm is literally unconstructible —
+// NewElementDeclarationOwningType rejects a type whose {context} names another
+// declaration.
+//
+// The three rules that do own what they yield:
 //
 //   - §3.3.2.1 dcl.elt.common clause 1 — the anonymous type of an inline
 //     <simpleType>/<complexType> child of an <element>;
@@ -156,6 +187,46 @@ type TypeDefinitionRef struct{ Name QName }
 // convention; do not mutate it after construction.
 type InlineTypeDefinition struct{ Definition TypeDefinition }
 
+// SubstitutionGroupHeadTypeRef is the variant carrying the {type definition} an
+// element inherits BY CONSTRUCTION from the substitution-group head that OWNS an
+// anonymous type: §3.3.2.1 dcl.elt.common clause 3, "the declared {type
+// definition} of the Element Declaration ·resolved· to by the first QName in the
+// ·actual value· of the substitutionGroup attribute", in the case where that
+// declared type is the head's own inline <complexType> child.
+//
+// OWNERSHIP is why this is a third arm rather than either existing one.
+// InlineTypeDefinition means the slot OWNS the type it holds; a member does not
+// own the head's, and the owning copy is not merely undesirable but literally
+// unconstructible — an anonymous complex type's {context} names exactly one
+// Element Declaration (§3.4.2.1 dcl.ctd.common), and
+// NewElementDeclarationOwningType rejects a definition whose {context} names
+// another declaration. TypeDefinitionRef is unavailable for the opposite reason:
+// an anonymous type has no {name} for a by-name lookup to find, which is exactly
+// what {context} exists to substitute for (§3.4.1, Appendix G.1.11).
+//
+// §3.4.6.5's no-identity Note settles that this must be the SAME component and
+// not a structurally equal copy: it lists "when an element's type definition
+// defaults to being the same type definition as that of its substitution-group
+// head" among the cases where component identity IS determined by this
+// specification. This arm is how that identity is encoded — one component, one
+// owner, one {context}, referenced from a second slot (STYLE D3).
+//
+// Head names an ELEMENT DECLARATION, a different symbol space from
+// TypeDefinitionRef.Name: it is followed through Schema.Element, never
+// Schema.Type. It is the TERMINAL head — the declaration that actually carries
+// the anonymous type — which for a chain of affiliations may differ from this
+// declaration's own substitutionGroup[0]. That is what makes typeOf's read
+// DEPTH-1 by definition rather than by producer convention: the owner is the
+// only component whose own {type definition} slot can hold the type, so
+// following Head once always lands on it.
+//
+// Head is a PRESENT reference, never the absent (zero) QName, on the same
+// footing as TypeDefinitionRef.Name. The arm is legal ONLY in an Element
+// Declaration's {type definition} slot; see TypeDefinitionOrRef for the arm ×
+// slot table and checkTypeDefinitionOrRef for its one implementation. The field
+// is read-only by convention; do not mutate it after construction.
+type SubstitutionGroupHeadTypeRef struct{ Head QName }
+
 // typeDefinitionOrRef marks TypeDefinitionRef as a TypeDefinitionOrRef; see the
 // TypeDefinitionOrRef doc.
 func (TypeDefinitionRef) typeDefinitionOrRef() {}
@@ -164,13 +235,29 @@ func (TypeDefinitionRef) typeDefinitionOrRef() {}
 // the TypeDefinitionOrRef doc.
 func (InlineTypeDefinition) typeDefinitionOrRef() {}
 
+// typeDefinitionOrRef marks SubstitutionGroupHeadTypeRef as a
+// TypeDefinitionOrRef; see the TypeDefinitionOrRef doc.
+func (SubstitutionGroupHeadTypeRef) typeDefinitionOrRef() {}
+
 // typeOf is the one way this package turns a TypeDefinitionOrRef slot into a
-// component, exhaustively over the sum's two arms: an InlineTypeDefinition IS
+// component, exhaustively over the sum's three arms: an InlineTypeDefinition IS
 // the component (it is in no by-name symbol table, so a lookup would miss it),
-// while a TypeDefinitionRef is the by-name Schema.Type lookup. ok is false for an
-// absent (nil) slot and for an unresolvable name — the cases every caller treats
-// as "not decidable by this clause", never as a violation (a dangling name was
+// a TypeDefinitionRef is the by-name Schema.Type lookup, and a
+// SubstitutionGroupHeadTypeRef is a Schema.ELEMENT lookup followed by a single
+// read of that head's own {type definition} slot. ok is false for an absent
+// (nil) slot and for an unresolvable name — the cases every caller treats as
+// "not decidable by this clause", never as a violation (a dangling name was
 // already charged src-resolve by resolve.go's Phase A).
+//
+// The head read is DEPTH-1 and carries no recursion and no visited set (STYLE
+// D4): SubstitutionGroupHeadTypeRef.Head names the OWNER of the anonymous type,
+// so the owner's own slot holds the component itself and never a second head
+// reference. That is enforced rather than assumed — an owner-of-owner chain
+// answers ok=false here, and Phase A rejects one outright
+// (resolveTypeDefinition), so for any schema that survived finalize this branch
+// is unreachable. A read-time accessor must not loop on a programmatically built
+// graph that checkSubstitutionGroupsAcyclic has not yet seen, which is why the
+// non-recursion is a rule of this function and not a caller's obligation.
 //
 // It answers for EVERY slot the sum serves — an element or attribute
 // declaration's {type definition} and a complex type's {base type definition}
@@ -187,10 +274,67 @@ func (s *Schema) typeOf(ref TypeDefinitionOrRef) (TypeDefinition, bool) {
 		return s.Type(r.Name)
 	case InlineTypeDefinition:
 		return r.Definition, true
+	case SubstitutionGroupHeadTypeRef:
+		head, ok := s.Element(r.Head)
+		if !ok {
+			return nil, false // an ·absent· head (§5.3); see resolveElementDecl
+		}
+		if _, chained := head.TypeDefinition().(SubstitutionGroupHeadTypeRef); chained {
+			return nil, false // an owner-of-owner chain; Phase A rejects it
+		}
+		// The guard above leaves only the nil, by-name and inline arms, so this
+		// re-entry cannot reach this case again: one hop, then the ordinary read.
+		return s.typeOf(head.TypeDefinition())
 	default:
 		panic("xsd: typeOf: non-exhaustive TypeDefinitionOrRef switch")
 	}
 }
+
+// typeDefinitionSlot names WHICH of the three properties a TypeDefinitionOrRef
+// is filling. It exists because the sum's arms are not uniformly legal across
+// them — §3.3.2.1 dcl.elt.common clause 3 has no analog in §3.2.2.2 or §3.4.2,
+// so SubstitutionGroupHeadTypeRef belongs to the element slot alone — and the
+// arm × slot legality table must be TOTAL and live in ONE place, so that a
+// FOURTH slot added later has to answer for every arm rather than silently
+// admitting one by omission.
+//
+// It also supplies the property label the rejection messages carry, which used
+// to be passed in as a string literal by each caller (STYLE T1: a closed set is
+// a type, not a string).
+//
+// The zero value is invalid, mirroring the exported closed sets in
+// closedsets.go; the constants start at iota+1.
+type typeDefinitionSlot uint8
+
+const (
+	// elementTypeSlot is an Element Declaration's {type definition} (§3.3.1).
+	elementTypeSlot typeDefinitionSlot = iota + 1
+	// attributeTypeSlot is an Attribute Declaration's {type definition} (§3.2.1).
+	attributeTypeSlot
+	// baseTypeSlot is a Complex Type Definition's {base type definition}
+	// (§3.4.1).
+	baseTypeSlot
+)
+
+// property is the §3 property name this slot fills, as it appears in a
+// rejection message.
+func (s typeDefinitionSlot) property() string {
+	switch s {
+	case elementTypeSlot, attributeTypeSlot:
+		return "{type definition}"
+	case baseTypeSlot:
+		return "{base type definition}"
+	default:
+		panic("xsd: typeDefinitionSlot.property: unknown slot")
+	}
+}
+
+// admitsHeadInherited reports whether this slot may hold a
+// SubstitutionGroupHeadTypeRef. Only the element slot may: §3.3.2.1
+// dcl.elt.common clause 3 is the sole mapping rule that yields one, and neither
+// §3.2.2.2 dcl.att.local (three tiers, no clause-3 analog) nor §3.4.2's base=
+// has anything like it.
+func (s typeDefinitionSlot) admitsHeadInherited() bool { return s == elementTypeSlot }
 
 // checkTypeDefinitionOrRef rejects the encodings of a TypeDefinitionOrRef slot
 // that the sum's doc declares illegal, charged to xsderr.RuleComponentInvariant:
@@ -199,12 +343,14 @@ func (s *Schema) typeOf(ref TypeDefinitionOrRef) (TypeDefinition, bool) {
 // zero-named AttributeDeclarationRef on. A nil ref is the legal encoding of an
 // absent slot and passes.
 //
-// ctx names the owning component AND the property, because the sum serves more
-// than one — "element declaration {urn:x}e {type definition}", "complex type
-// {urn:x}T {base type definition}". The property name is deliberately NOT a
-// literal in the format strings: hard-coding "{type definition}" made every
-// message lie the moment {base type definition} adopted the sum (#505).
-func checkTypeDefinitionOrRef(loc xsderr.Loc, ref TypeDefinitionOrRef, ctx string) error {
+// It decides two things at once, and deliberately in one place: whether the ARM
+// is well formed, and whether that arm is legal in THIS slot. owner names the
+// owning component — "element declaration {urn:x}e", "complex type {urn:x}T" —
+// and slot supplies the property name that completes the phrase, so no caller
+// spells "{type definition}" as a literal: hard-coding it made every message lie
+// the moment {base type definition} adopted the sum (#505).
+func checkTypeDefinitionOrRef(loc xsderr.Loc, ref TypeDefinitionOrRef, slot typeDefinitionSlot, owner string) error {
+	ctx := owner + " " + slot.property()
 	switch r := ref.(type) {
 	case nil:
 		return nil
@@ -222,6 +368,16 @@ func checkTypeDefinitionOrRef(loc xsderr.Loc, ref TypeDefinitionOrRef, ctx strin
 		if r.Definition.Name() != (QName{}) {
 			return xsderr.New(xsderr.RuleComponentInvariant, loc,
 				"%s is an InlineTypeDefinition wrapping the NAMED type %s, but a named type definition is reachable by name and so is always the TypeDefinitionRef variant", ctx, r.Definition.Name())
+		}
+		return nil
+	case SubstitutionGroupHeadTypeRef:
+		if !slot.admitsHeadInherited() {
+			return xsderr.New(xsderr.RuleComponentInvariant, loc,
+				"%s is a SubstitutionGroupHeadTypeRef naming the substitution group head %s, but that variant encodes §3.3.2.1 dcl.elt.common clause 3, which only an ELEMENT declaration's {type definition} has; this property has no clause-3 analog", ctx, r.Head)
+		}
+		if r.Head == (QName{}) {
+			return xsderr.New(xsderr.RuleComponentInvariant, loc,
+				"%s is a SubstitutionGroupHeadTypeRef carrying the absent (zero) QName, but that variant names the element declaration that OWNS the inherited anonymous type; an absent slot is the nil one", ctx)
 		}
 		return nil
 	default:

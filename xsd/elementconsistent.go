@@ -185,9 +185,21 @@ func (s *Schema) checkGroupElementsConsistent(g ModelGroup, containing ComplexTy
 //
 // Clause 1 is decided by WHICH ARM of TypeDefinitionOrRef each declaration
 // carries, not by comparing a QName against zero: only the by-name
-// TypeDefinitionRef arm has a ·non-absent· {name} at all. An InlineTypeDefinition
-// is anonymous by construction, and a nil slot has no {type definition} to name,
-// so both fail clause 1 — the two states the old zero-QName encoding conflated.
+// TypeDefinitionRef arm has a ·non-absent· {name} at all. Each of the other three
+// states fails clause 1, and each for its own reason — the distinctions the old
+// zero-QName encoding conflated:
+//
+//   - a nil slot has no {type definition} to name;
+//   - an InlineTypeDefinition is anonymous by construction;
+//   - a SubstitutionGroupHeadTypeRef inherits the head's ANONYMOUS type
+//     (§3.3.2.1 dcl.elt.common clause 3, the anonymous-head case), which has no
+//     {name} either — its Head field names an element declaration, not a type,
+//     so reading it as a type name here would compare two different symbol
+//     spaces.
+//
+// The last is reached by the same fall-through as the first two, deliberately:
+// clause 1 is about the TYPE's {name}, and the inherited type genuinely has
+// none.
 func checkSameTypeDefinition(name QName, decls []ElementDeclaration) error {
 	if len(decls) < 2 {
 		return nil
