@@ -18,17 +18,21 @@ import "github.com/kud360/goxsd8/xsderr"
 //   - clause 3: a non-empty {substitution group affiliations} forces
 //     {scope}.{variety} = global.
 //
-// Clauses 2 (Element Default Valid) and 7 (type-table alternatives validly
-// substitutable) are cross-component finalize-phase constraints needing resolved
-// type and element components; they are NOT enforced here and are not enforced
-// anywhere yet. Clauses 4 and 5 are likewise finalize-phase, and both ARE
-// enforced there rather than in this constructor, each needing more than the
-// declaration in hand: clause 4 (validly-substitutable) needs the resolved
-// {type definition} of the declaration AND of every head it is affiliated to
-// (resolve.go's Phase D, substitutiongrouptypes.go's checkSubstitutionGroupTypes,
-// #395), and clause 5 (no circular substitution groups) needs the whole
-// {substitution group affiliations} graph, which only exists once the schema set
-// is assembled (resolve.go's checkSubstitutionGroupsAcyclic, #173).
+// Clause 7 (type-table alternatives validly substitutable) is a cross-component
+// finalize-phase constraint needing resolved type and element components; it is
+// NOT enforced here and is not enforced anywhere yet. Clauses 2, 4 and 5 are
+// likewise finalize-phase, and all three ARE enforced there rather than in this
+// constructor, each needing more than the declaration in hand: clause 2 (Element
+// Default Valid, §3.3.6.2 cos-valid-default) needs the resolved {type
+// definition}'s {content type} and, for its clause 2.2, an ·emptiable· verdict
+// over that content type's particle (resolve.go's Phase E,
+// elementdefaultvalid.go's checkElementDefaultValid, #463); clause 4
+// (validly-substitutable) needs the resolved {type definition} of the declaration
+// AND of every head it is affiliated to (resolve.go's Phase D,
+// substitutiongrouptypes.go's checkSubstitutionGroupTypes, #395), and clause 5
+// (no circular substitution groups) needs the whole {substitution group
+// affiliations} graph, which only exists once the schema set is assembled
+// (resolve.go's checkSubstitutionGroupsAcyclic, #173).
 const ruleEPropsCorrect xsderr.Rule = "e-props-correct"
 
 // TypeTable is the {type table} property record of an element declaration
@@ -356,8 +360,9 @@ func (s Scope) Parent() (ElementScopeParent, bool) {
 // clauses 1.1 and 1.3) and that the substitution-group graph is acyclic
 // (e-props-correct clause 5), but does NOT rewrite the references into resolved
 // components: the QNames are retained, and a consumer follows them by read-time
-// schema.Type/schema.Element lookups. The remaining cross-component clauses that
-// need resolved components (clauses 2, 4, 7) stay deferred.
+// schema.Type/schema.Element lookups. Of the cross-component clauses that need
+// resolved components, clauses 2 (#463) and 4 (#395) are charged by finalize's
+// later phases; clause 7 stays deferred.
 //
 // The whole {scope} record is carried, {parent} included (a Scope value, not a
 // bare ScopeVariety): a local declaration names the Complex Type Definition or
