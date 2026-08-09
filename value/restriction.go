@@ -68,11 +68,11 @@ const (
 //     enumeration facet's {value} must be in the ·value space· of the {base type
 //     definition}.
 //
-// It is the value-aware second half of a two-part seam whose entry point is
-// builtin.CheckSimpleTypeRestriction; that function charges the atomic
-// applicable-facet clause 1.3.1 first and then delegates here. A caller that
-// builds an xsd.SimpleType through the xsd constructors directly, bypassing that
-// entry point, gets neither check.
+// It is the value-aware second half of a two-part charge whose entry point is the
+// installed xsd.SimpleTypeRestrictionChecker (builtin.NewRestrictionChecker):
+// that implementation charges the atomic applicable-facet clause 1.3.1 first and
+// then delegates here. A schema finalized with no such checker installed gets
+// neither check.
 //
 // b supplies the value space. When b has NO governing mapping for the base type,
 // every comparison below is skipped and CheckFacetRestriction returns nil: an
@@ -197,8 +197,8 @@ func (rc restrictionCheck) checkBoundAgainstBase(own xsd.Facet, rule xsderr.Rule
 // value does not implement Ordered, in which case the caller SKIPS this facet
 // rather than rejecting: a bound facet on a non-ordered value space is an
 // APPLICABILITY violation (cos-applicable-facets §4.1.5), already charged
-// upstream by builtin.CheckSimpleTypeRestriction, and re-charging it here under
-// a bound rule would name the wrong constraint (STYLE E2).
+// upstream by the xsd.SimpleTypeRestrictionChecker that delegates here, and
+// re-charging it under a bound rule would name the wrong constraint (STYLE E2).
 //
 // A wrong {value} count, or a lexical the base type's mapping cannot parse, IS
 // rejected under rule: every numbered condition of the SCC presupposes that the
@@ -366,8 +366,8 @@ func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // mis-attribute" answer boundLimit gives an unordered bound {value} above, and for
 // the same reason (STYLE E2). §4.3.5.5 asks whether a member is in the base's value
 // space; a base carrying a facet not applicable to it has no well-defined value
-// space to be in, so the fault is an APPLICABILITY violation of the base —
-// builtin.CheckSimpleTypeRestriction's to charge, against the base, under §4.1.5 —
+// space to be in, so the fault is an APPLICABILITY violation of the base — the
+// xsd.SimpleTypeRestrictionChecker's to charge, against the base, under §4.1.5 —
 // and re-charging it here as enumeration-valid-restriction against the DERIVED type
 // would name a constraint with nothing to say about it and reject a schema whose
 // enumeration may be perfectly valid.

@@ -113,9 +113,9 @@ func (vs valueSpace) EqualOrIdentical(ta *xsd.SimpleType, a xsd.ValueConstraint,
 //     wrong rule ID and against the wrong component.
 //  4. [IsFacetPrecondition]. A facet paired with a value lacking the capability it
 //     needs (cos-applicable-facets §4.1.5), or a type with no usable whiteSpace mode
-//     where §3.16.7.4 guarantees one, is a fault in T ITSELF — discharged for
-//     parser-built types by builtin.CheckSimpleTypeRestriction, and the caller's own
-//     for a *[xsd.SimpleType] assembled through the xsd constructors directly. Unlike
+//     where §3.16.7.4 guarantees one, is a fault in T ITSELF — the first half
+//     discharged wherever an xsd.SimpleTypeRestrictionChecker is installed, as the
+//     parser installs one, and the caller's own where none is. Unlike
 //     gates 1–3 it cannot be pre-checked here: the pairing is only observable once a
 //     facet meets a parsed value inside the pipeline. Reading it as clause 2 would
 //     reject the schema for a fault of the component rather than of the value

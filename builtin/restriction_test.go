@@ -28,7 +28,7 @@ func seededIndex(t *testing.T) (map[string]*xsd.SimpleType, value.Backend) {
 }
 
 // restrictBuiltin builds a restriction of the named builtin carrying ownFacets
-// and runs the whole cos-st-restricts entry point over it.
+// and runs the whole cos-st-restricts capability over it.
 func restrictBuiltin(t *testing.T, local string, ownFacets ...xsd.Facet) error {
 	t.Helper()
 	idx, backend := seededIndex(t)
@@ -41,13 +41,13 @@ func restrictBuiltin(t *testing.T, local string, ownFacets ...xsd.Facet) error {
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	return builtin.CheckSimpleTypeRestriction(backend, st)
+	return builtin.NewRestrictionChecker(backend).CheckRestriction(st)
 }
 
-// TestCheckSimpleTypeRestrictionApplicability covers cos-st-restricts clause
+// TestRestrictionCheckerApplicability covers cos-st-restricts clause
 // 1.3.1 against the GENERATED per-primitive table: a facet the primitive's row
 // lists is accepted, one it does not is rejected under cos-st-restricts.
-func TestCheckSimpleTypeRestrictionApplicability(t *testing.T) {
+func TestRestrictionCheckerApplicability(t *testing.T) {
 	cases := []struct {
 		name     string
 		base     string
@@ -83,20 +83,20 @@ func TestCheckSimpleTypeRestrictionApplicability(t *testing.T) {
 	}
 }
 
-// TestCheckSimpleTypeRestrictionInheritedFacetsApplicable guards against a
+// TestRestrictionCheckerInheritedFacetsApplicable guards against a
 // false-reject: a restriction's {facets} include everything inherited from the
 // builtin base, and every one of those must still be applicable. xs:integer
 // carries an inherited fractionDigits and pattern from the decimal chain.
-func TestCheckSimpleTypeRestrictionInheritedFacetsApplicable(t *testing.T) {
+func TestRestrictionCheckerInheritedFacetsApplicable(t *testing.T) {
 	if err := restrictBuiltin(t, "integer", xsd.NewFacet(xsd.FacetTotalDigits, []string{"3"}, false)); err != nil {
 		t.Fatalf("restriction of xs:integer rejected: %v", err)
 	}
 }
 
-// TestCheckSimpleTypeRestrictionDelegatesToValue proves the entry point does not
+// TestRestrictionCheckerDelegatesToValue proves the entry point does not
 // stop at applicability: a facet that IS applicable but widens the base's value
 // space is still rejected, under the bound facet's own rule from package value.
-func TestCheckSimpleTypeRestrictionDelegatesToValue(t *testing.T) {
+func TestRestrictionCheckerDelegatesToValue(t *testing.T) {
 	// xs:byte's value space is bounded [-128, 127] by inherited minInclusive /
 	// maxInclusive facets, so a maxInclusive of 200 widens it.
 	err := restrictBuiltin(t, "byte", xsd.NewFacet(xsd.FacetMaxInclusive, []string{"200"}, false))
@@ -149,15 +149,16 @@ func TestEnumerationMemberValueSpaceMembership(t *testing.T) {
 	}
 }
 
-// TestCheckSimpleTypeRestrictionSeededBuiltins is the regression guard for the
+// TestRestrictionCheckerSeededBuiltins is the regression guard for the
 // whole seam: every builtin datatype Seed produces must itself pass the check it
 // gates other types with, or the entry point is mis-specified rather than the
 // schemas it rejects being invalid.
-func TestCheckSimpleTypeRestrictionSeededBuiltins(t *testing.T) {
+func TestRestrictionCheckerSeededBuiltins(t *testing.T) {
 	idx, backend := seededIndex(t)
+	checker := builtin.NewRestrictionChecker(backend)
 	for _, name := range builtinNames(idx) {
-		if err := builtin.CheckSimpleTypeRestriction(backend, idx[name]); err != nil {
-			t.Errorf("seeded builtin xs:%s fails CheckSimpleTypeRestriction: %v", name, err)
+		if err := checker.CheckRestriction(idx[name]); err != nil {
+			t.Errorf("seeded builtin xs:%s fails the restriction checker: %v", name, err)
 		}
 	}
 }

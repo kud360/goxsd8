@@ -90,19 +90,23 @@
 //
 // # Restriction checking
 //
-//	func CheckSimpleTypeRestriction(b value.Backend, t *xsd.SimpleType) error
+//	func NewRestrictionChecker(b value.Backend) xsd.SimpleTypeRestrictionChecker
 //
-// CheckSimpleTypeRestriction is the entry point for the facet-VALUE half of
-// cos-st-restricts (§3.16.6.2) on an already-constructed xsd.SimpleType: it
-// charges clause 1.3.1 — facet applicability for an ATOMIC type, answered
-// against Types/TypeSpec.Applies rather than a second hand-typed table — and
-// then delegates the bound and enumeration value-space constraints to
-// value.CheckFacetRestriction. It lives here because it is the only package
-// holding both the generated applicability table and an edge to package value;
-// package xsd, a pure leaf, can depend on neither, so it charges only the
-// count- and token-valued facet constraints and the list/union applicable-facet
-// sets itself. Producers call this right after xsd.NewSimpleType; a caller that
-// does not gets the weaker guarantee documented on value.ValidateLexical.
+// NewRestrictionChecker returns the sole implementation of the facet-VALUE half
+// of cos-st-restricts (§3.16.6.2): it charges clause 1.3.1 — facet applicability
+// for an ATOMIC type, answered against Types/TypeSpec.Applies rather than a
+// second hand-typed table — and then delegates the bound and enumeration
+// value-space constraints to value.CheckFacetRestriction. It lives here because
+// this is the only package holding both the generated applicability table and an
+// edge to package value; package xsd, a pure leaf, can depend on neither, so it
+// charges only the count- and token-valued facet constraints and the list/union
+// applicable-facet sets itself, and takes the rest as a capability.
+//
+// A caller installs one at xsd.SchemaBuilder.FinalizeWith, which is what the
+// parser does; xsd's finalize pass then charges every simple type the assembled
+// schema reaches, the anonymous inline ones no index holds included. A schema
+// finalized with no checker installed gets the weaker guarantee documented on
+// value.ValidateLexical.
 //
 // # Facet names
 //

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/internal/schemaloc"
 	"github.com/kud360/goxsd8/loader"
@@ -797,7 +798,7 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 			return nil, err
 		}
 	}
-	return builder.FinalizeWith(value.NewValueSpace(backend))
+	return builder.FinalizeWith(value.NewValueSpace(backend), builtin.NewRestrictionChecker(backend))
 }
 
 // readRootDocument resolves the location [Parse] was handed and reads the schema

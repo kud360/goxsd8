@@ -47,28 +47,37 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     and its <element ref>s and substitution groups followed — Unique Particle
 //     Attribution (cos-nonambig, particleattribution.go) and Element Declarations
 //     Consistent (cos-element-consistent, elementconsistent.go).
-//   - Phase D (derivation validity), in three steps. It first MATERIALISES the two
-//     attribute-side properties whose mapping rules a producer cannot finish,
-//     because each needs the resolved base: {attribute uses}, whose §3.4.2.4
-//     clause 3 folds the {base type definition}'s uses into every complex type's
-//     own (attributeusefold.go, #401), and {attribute wildcard}, whose §3.4.2.5
-//     clause 2.2 unions an EXTENSION's own ·complete wildcard· with its ·base
-//     wildcard· (attributewildcardfold.go, #265). The two are independent
-//     properties, so their relative order carries no verdict; both precede the
-//     checks. It then rejects the derivation-relative constraints that need that
-//     resolved base — the ct-props-correct (§3.4.6.1) clauses 2 and 4,
-//     derivation-ok-restriction (§3.4.6.3) for every restriction-derived complex
-//     type, and cos-ct-extends (§3.4.6.2) for every extension-derived one
-//     (complexderivation.go, complexextension.go, defaultbinding.go,
-//     effectivetotalrange.go). It finishes on the one derivation verdict
-//     quantified over ELEMENT declarations rather than types — e-props-correct
-//     (§3.3.6.1) clause 4 (c-vs-sg), which requires a declaration's {type
-//     definition} to be ·validly substitutable· for that of each member of its
-//     {substitution group affiliations}, subject to that member's {substitution
-//     group exclusions} (substitutiongrouptypes.go). It shares the phase because
-//     it is the same cos-ct-derived-ok/cos-st-derived-ok engine pair under a
-//     different quantifier; see checkSubstitutionGroupTypes for the ordering
-//     argument.
+//   - Phase D (derivation validity), in four steps. It OPENS on the simple-type
+//     side: checkSimpleTypeDerivations puts every Simple Type Definition the
+//     finalized schema reaches — anonymous inline ones included, which no index
+//     holds — to the installed SimpleTypeRestrictionChecker, charging the
+//     facet-VALUE half of Derivation Valid (Restriction, Simple) (§3.16.6.2,
+//     cos-st-restricts). That step reads only live pointers, so unlike the three
+//     after it it depends on no earlier phase and its position carries no
+//     verdict; it runs first so a schema whose simple types are themselves
+//     invalid says so before any complex-type derivation verdict computed over
+//     them. Its walk carries no visited set, for the reason its own doc records.
+//     It then MATERIALISES the two attribute-side properties whose mapping rules
+//     a producer cannot finish, because each needs the resolved base: {attribute
+//     uses}, whose §3.4.2.4 clause 3 folds the {base type definition}'s uses
+//     into every complex type's own (attributeusefold.go, #401), and {attribute
+//     wildcard}, whose §3.4.2.5 clause 2.2 unions an EXTENSION's own ·complete
+//     wildcard· with its ·base wildcard· (attributewildcardfold.go, #265). The
+//     two are independent properties, so their relative order carries no
+//     verdict; both precede the checks. It then rejects the derivation-relative
+//     constraints that need that resolved base — the ct-props-correct (§3.4.6.1)
+//     clauses 2 and 4, derivation-ok-restriction (§3.4.6.3) for every
+//     restriction-derived complex type, and cos-ct-extends (§3.4.6.2) for every
+//     extension-derived one (complexderivation.go, complexextension.go,
+//     defaultbinding.go, effectivetotalrange.go). It finishes on the one
+//     derivation verdict quantified over ELEMENT declarations rather than types
+//     — e-props-correct (§3.3.6.1) clause 4 (c-vs-sg), which requires a
+//     declaration's {type definition} to be ·validly substitutable· for that of
+//     each member of its {substitution group affiliations}, subject to that
+//     member's {substitution group exclusions} (substitutiongrouptypes.go). It
+//     shares the phase because it is the same
+//     cos-ct-derived-ok/cos-st-derived-ok engine pair under a different
+//     quantifier; see checkSubstitutionGroupTypes for the ordering argument.
 //   - Phase E (value-constraint validity), in two walks over the same file
 //     (valueconstraintvalid.go). The DESCENDING walk rejects an Attribute Use whose
 //     own {value constraint} contradicts its resolved {attribute declaration}'s
@@ -99,13 +108,16 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // can supply (substitutiongroup.go).
 //
 // Phase D runs last, and its position after each earlier phase is load-bearing
-// too — it needs Phase A's resolvability, Phase B's acyclicity (it walks {base
-// type definition} chains and <group ref> edges with no visited set), and Phase
-// C's cos-element-consistent (which is what makes the ·locally declared type· of
-// an element name within one content model a function rather than a relation,
-// without which derivation-ok-restriction clause 4 and its cos-ct-extends
-// clause-1.6 twin would not be statable). See checkComplexDerivations' own doc
-// for the full statement.
+// too — its COMPLEX-type steps need Phase A's resolvability, Phase B's
+// acyclicity (they walk {base type definition} chains and <group ref> edges with
+// no visited set), and Phase C's cos-element-consistent (which is what makes the
+// ·locally declared type· of an element name within one content model a function
+// rather than a relation, without which derivation-ok-restriction clause 4 and
+// its cos-ct-extends clause-1.6 twin would not be statable). See
+// checkComplexDerivations' own doc for the full statement. Its SIMPLE-type step
+// is the exception and is exempt from all three, for the reason its own doc
+// records: every edge it follows is a live pointer, so it could sit in any phase
+// and is placed here for topical fit rather than for ordering.
 //
 // Phase E runs LAST. Its position is not load-bearing the way Phase D's is — it
 // reads one component at a time and follows no chain, apart from the ·emptiable·
@@ -175,6 +187,9 @@ func (s *Schema) resolve() error {
 	if err := s.checkElementDeclarationsConsistent(); err != nil {
 		return err
 	}
+	if err := s.checkSimpleTypeDerivations(); err != nil {
+		return err
+	}
 	s.foldAttributeUses()
 	if err := s.foldAttributeWildcards(); err != nil {
 		return err
@@ -224,7 +239,10 @@ func (s *Schema) resolveReferences() error {
 			// simple-type base reference in this package for a producer to even
 			// misuse into a dangling ref or a cycle. Hence st-props-correct clause
 			// 2 / cos-st-restricts clause 3.3 need no check here, and none of the
-			// complex-type asymmetry applies: nothing to resolve.
+			// complex-type asymmetry applies: nothing to RESOLVE. The simple type
+			// is not thereby unvisited by finalize: Phase D's
+			// checkSimpleTypeDerivations walks this same slot, and five more, to
+			// charge the facet-value half of cos-st-restricts.
 		default:
 			panic("xsd: resolveReferences: non-exhaustive TypeDefinition switch")
 		}
@@ -280,9 +298,11 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 //     table, so the SLOT itself needs no resolution. Its own internal references
 //     still do, and differ by variant: a *SimpleType's {base}/{item}/{member}
 //     are live pointers set at construction (see resolveReferences), so it is a
-//     genuine no-op; a ComplexType still carries a by-name {base type
-//     definition} and a particle tree, so it is descended exactly as a top-level
-//     one is.
+//     genuine no-op FOR RESOLUTION — this is inventory slot 6 of Phase D's
+//     checkSimpleTypeDerivations, which is where such an inline type is reached
+//     for the checks it does owe; a ComplexType still carries a by-name {base
+//     type definition} and a particle tree, so it is descended exactly as a
+//     top-level one is.
 //   - SubstitutionGroupHeadTypeRef names the element declaration that OWNS the
 //     inherited anonymous type. It is NOT charged src-resolve clause 1.3 when it
 //     names nothing — see below — and it is not descended either: the head is
@@ -459,7 +479,10 @@ func (s *Schema) resolveComplexType(c ComplexType) error {
 	switch ct := c.ContentType().(type) {
 	case EmptyContent, SimpleContent:
 		// Empty carries no reference. Simple carries a *SimpleType {simple type
-		// definition}, a live pointer resolved by construction (not a QName ref).
+		// definition}, a live pointer resolved by construction (not a QName ref),
+		// so this pass genuinely has nothing to do with it — which is why it is
+		// inventory slot 3 of Phase D's checkSimpleTypeDerivations, the one walk
+		// that does descend it.
 	case ElementContent:
 		return s.resolveParticle(ct.Particle, c.Loc())
 	default:
@@ -618,6 +641,231 @@ func (s *Schema) resolveTypeTable(tt TypeTable, loc xsderr.Loc) error {
 // type; the kind-specific lookup rejects a same-name non-type as dangling.
 func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 	return s.resolveTypeDefinition(a.TypeDefinition(), a.Loc(), "attribute declaration "+a.Name().String()+" {type definition}")
+}
+
+// checkSimpleTypeDerivations is Phase D's simple-type step: it puts every Simple
+// Type Definition the finalized Schema reaches to the installed
+// [SimpleTypeRestrictionChecker], which charges the facet-VALUE half of
+// Derivation Valid (Restriction, Simple) (§3.16.6.2, cos-st-restricts) — clause
+// 1.3.1's atomic applicability and the value-space constraints of clauses 1.3.2 /
+// 2.2.2.5 / 3.2.2.5. Consolidating the charge here is this project's
+// architecture, not a spec mandate: §4.1 is explicitly agnostic about when a
+// processor assembles a schema, and the reason to make it a finalize pass is
+// PRINCIPLES 9 — one place that sees the whole assembled graph beats a charge
+// scattered over whichever producer happened to build a component.
+//
+// THE DESCENT INVENTORY IS SIX SLOTS, and it is exhaustive over the places a
+// *SimpleType can live. It is written out here, with one reason per slot, so that
+// the next slot added to this package is forced to be considered against it — a
+// walk that reaches only the indexed types is a FALSE ACCEPT, since an anonymous
+// simple type is in no index at all:
+//
+//  1. s.types roots — the named types. The only slot an index-only walk reaches,
+//     and the only one from which every other is entered.
+//  2. the {base type definition} hop, walked as a live owned pointer. An
+//     ANONYMOUS inline base hangs off this field and nowhere else: no index holds
+//     it and no declaration slot names it, so dropping this hop would lose
+//     coverage of every <simpleType><restriction><simpleType> base.
+//  3. SimpleContent.{simple type definition} (complextype.go). resolveComplexType
+//     explicitly does not descend it — it is a live pointer, so Phase A has
+//     nothing to resolve there — which leaves this walk as its only visitor.
+//  4. ListDerivation.Item (simpletype.go). An anonymous item type is in no index.
+//  5. UnionDerivation.Members (simpletype.go). Ditto, for every member, walked in
+//     the declared order the property preserves (STYLE D2).
+//  6. the InlineTypeDefinition/*SimpleType arm of a {type definition} or {base
+//     type definition} slot — resolveTypeDefinition's own no-op arm. This is the
+//     declaration-slot inline hop: an <element> or <attribute> whose type is
+//     written out in place.
+//
+// Reaching slots 3 and 6 means walking the same tree Phase A and Phase E walk —
+// types, then element declarations, then attribute declarations, then model group
+// definitions, then attribute group definitions, each descending into particles
+// and attribute uses. Attribute group definitions are walked although Phase A
+// does not walk them, for Phase E's reason (valueconstraintvalid.go) plus one of
+// this pass's own: the produce-time call this pass replaces charged every simple
+// type the producer CONSTRUCTED, whatever slot it ended up in, so a walk that
+// skipped a slot the producer can fill would be a silent regression.
+//
+// NO VISITED SET (STYLE D4, and STYLE D3's no-memoized-cache-without-a-profile).
+// A shared base is re-visited once per type that derives from it, which is
+// O(n·depth) and correct; memoizing the verdict would be a cache with no measured
+// hot path, and one whose keys are the very pointers the walk is enumerating.
+// TERMINATION IS BY CONSTRUCTION: the {base}/{item}/{member} slots are live
+// pointers set once in NewSimpleType with no setter, and a member or base must
+// pre-exist the type that names it, so the simple-type graph cannot contain a
+// cycle for a guard to catch (PRINCIPLES 9). The by-name edges — a
+// TypeDefinitionRef base, an <element ref>, a <group ref> — are never followed
+// here; each names a component this pass reaches in its own right, and the
+// by-value nesting they leave behind is a finite tree. The complex-type inline
+// base IS followed, which Phase B has already made acyclic. When #636 defers the
+// simple-type base to a QName reference, this argument stops holding and is
+// replaced by a Phase B checkSimpleBaseAcyclic running first.
+//
+// Roots are walked in document order and a base chain bottom-up — a type's base,
+// item and members are charged before the type itself — so the first reported
+// failure is deterministic (STYLE D1/D2) and is the most basic one: a fault in a
+// base is reported against the base, not against everything derived from it.
+func (s *Schema) checkSimpleTypeDerivations() error {
+	for _, t := range s.types {
+		switch t := t.(type) {
+		case ComplexType:
+			if err := s.checkComplexTypeSimpleTypes(t); err != nil {
+				return err
+			}
+		case *SimpleType:
+			if err := s.checkSimpleTypeGraph(t); err != nil {
+				return err
+			}
+		default:
+			panic("xsd: checkSimpleTypeDerivations: non-exhaustive TypeDefinition switch")
+		}
+	}
+	for _, e := range s.elements {
+		if err := s.checkTypeDefinitionSimpleTypes(e.TypeDefinition()); err != nil {
+			return err
+		}
+	}
+	for _, a := range s.attributes {
+		if err := s.checkTypeDefinitionSimpleTypes(a.TypeDefinition()); err != nil {
+			return err
+		}
+	}
+	for _, mgd := range s.modelGroups {
+		if err := s.checkModelGroupSimpleTypes(mgd.ModelGroup()); err != nil {
+			return err
+		}
+	}
+	for _, g := range s.attributeGroups {
+		for _, u := range g.AttributeUses() {
+			if err := s.checkAttributeUseSimpleTypes(u); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkSimpleTypeGraph charges the installed checker against t and everything
+// reachable from it: inventory slots 2 (the {base type definition} hop), 4
+// (ListDerivation.Item) and 5 (UnionDerivation.Members). The derived readers are
+// deliberately not used to enumerate them — Item and Members report the property
+// a restriction INHERITS from its base, which this walk already reaches through
+// the base hop, whereas the stored arm is the only thing that names the component
+// this type itself owns.
+//
+// A nil t is the end of a base chain (xs:anySimpleType's absent base) or an
+// absent item/member, not a fault: st-props-correct clause 1 and the
+// checkListGraph/checkUnionGraph clauses own that verdict at construction, and
+// re-charging it here would name a rule this pass does not own (STYLE E2).
+func (s *Schema) checkSimpleTypeGraph(t *SimpleType) error {
+	if t == nil {
+		return nil
+	}
+	if err := s.checkSimpleTypeGraph(t.base); err != nil {
+		return err
+	}
+	switch d := t.derivation.(type) {
+	case ListDerivation:
+		if err := s.checkSimpleTypeGraph(d.Item); err != nil {
+			return err
+		}
+	case UnionDerivation:
+		for _, m := range d.Members {
+			if err := s.checkSimpleTypeGraph(m); err != nil {
+				return err
+			}
+		}
+	}
+	return s.restrictionChecker.CheckRestriction(t)
+}
+
+// checkTypeDefinitionSimpleTypes descends a {type definition}/{base type
+// definition} slot — inventory slot 6. Only the InlineTypeDefinition arm is
+// descended: a TypeDefinitionRef names a top-level type this pass walks in its
+// own right, and a SubstitutionGroupHeadTypeRef names the HEAD declaration that
+// owns the anonymous type, which is itself an entry of s.elements (charging it
+// from the member too would report the failure at the wrong declaration).
+func (s *Schema) checkTypeDefinitionSimpleTypes(ref TypeDefinitionOrRef) error {
+	inline, ok := ref.(InlineTypeDefinition)
+	if !ok {
+		return nil
+	}
+	switch d := inline.Definition.(type) {
+	case *SimpleType:
+		return s.checkSimpleTypeGraph(d)
+	case ComplexType:
+		return s.checkComplexTypeSimpleTypes(d)
+	default:
+		panic("xsd: checkTypeDefinitionSimpleTypes: non-exhaustive TypeDefinition switch")
+	}
+}
+
+// checkComplexTypeSimpleTypes descends one complex type for simple types: its
+// {base type definition} slot (an inline base may be a simple type, or a complex
+// one with simple content), its {attribute uses}, and its {content type} — where
+// SimpleContent's {simple type definition} is inventory slot 3, the slot no other
+// pass descends. The descent mirrors resolveComplexType's.
+func (s *Schema) checkComplexTypeSimpleTypes(c ComplexType) error {
+	if err := s.checkTypeDefinitionSimpleTypes(c.Base()); err != nil {
+		return err
+	}
+	for _, u := range c.AttributeUses() {
+		if err := s.checkAttributeUseSimpleTypes(u); err != nil {
+			return err
+		}
+	}
+	switch ct := c.ContentType().(type) {
+	case EmptyContent:
+		return nil // empty content holds no type definition
+	case SimpleContent:
+		return s.checkSimpleTypeGraph(ct.SimpleType)
+	case ElementContent:
+		return s.checkParticleSimpleTypes(ct.Particle)
+	default:
+		panic("xsd: checkComplexTypeSimpleTypes: non-exhaustive ContentType switch")
+	}
+}
+
+// checkParticleSimpleTypes descends one particle's {term}, mirroring resolveTerm:
+// an <element ref>/<group ref> is a by-name leaf owned by the component it names,
+// never descended here.
+func (s *Schema) checkParticleSimpleTypes(p Particle) error {
+	t, ok := p.Term().(ResolvedTerm)
+	if !ok {
+		return nil
+	}
+	switch inner := t.Term.(type) {
+	case ElementDeclaration:
+		return s.checkTypeDefinitionSimpleTypes(inner.TypeDefinition())
+	case ModelGroup:
+		return s.checkModelGroupSimpleTypes(inner)
+	case Wildcard:
+		return nil // a wildcard carries no type definition
+	default:
+		panic("xsd: checkParticleSimpleTypes: non-exhaustive Term switch")
+	}
+}
+
+// checkModelGroupSimpleTypes descends every particle of a model group in
+// document order (STYLE D2).
+func (s *Schema) checkModelGroupSimpleTypes(g ModelGroup) error {
+	for _, p := range g.Particles() {
+		if err := s.checkParticleSimpleTypes(p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkAttributeUseSimpleTypes descends the LOCAL declaration an attribute use
+// owns; an <attribute ref> names a global declaration this pass walks through
+// s.attributes instead.
+func (s *Schema) checkAttributeUseSimpleTypes(u AttributeUse) error {
+	d, ok := u.AttributeDeclaration().(LocalAttributeDeclaration)
+	if !ok {
+		return nil
+	}
+	return s.checkTypeDefinitionSimpleTypes(d.Declaration.TypeDefinition())
 }
 
 // checkComplexBaseAcyclic is Phase B for the complex-type base chain

@@ -70,9 +70,10 @@
 // [xsderr.RuleComponentInvariant] rather than to any cvc-* rule. A caller that reads
 // one as "this literal is invalid" turns a construction bug into a false reject, so
 // every caller in this package that decides validity discriminates it explicitly and
-// an external caller is expected to do the same. Applicability itself is
-// builtin.CheckSimpleTypeRestriction's to enforce, which is what discharges the
-// whole class for any type the parser builds.
+// an external caller is expected to do the same. Applicability itself is the
+// xsd.SimpleTypeRestrictionChecker capability's to enforce — builtin.NewRestrictionChecker
+// is the implementation, and a Schema finalized with it installed has the whole
+// class discharged for every simple type it reaches.
 //
 // The list and union varieties recurse rather than adding stages. A list runs
 // this whole pipeline against the ITEM TYPE per whitespace-delimited item — the
@@ -103,9 +104,10 @@
 // (maxInclusive/maxExclusive/minInclusive/minExclusive valid restriction
 // §4.3.7.4–§4.3.10.4, enumeration valid restriction §4.3.5.5) — the half of
 // cos-st-restricts that package xsd, a pure leaf with no value spaces, cannot
-// reach. Call it through builtin.CheckSimpleTypeRestriction, which charges facet
-// APPLICABILITY first and then delegates here; a type built through the xsd
-// constructors alone gets neither.
+// reach. Reach it through builtin.NewRestrictionChecker, the
+// xsd.SimpleTypeRestrictionChecker installed at xsd.SchemaBuilder.FinalizeWith:
+// that implementation charges facet APPLICABILITY first and then delegates here.
+// A schema finalized without it gets neither check.
 //
 // # Value-constraint validity and comparison (the xsd.ValueSpace seam)
 //

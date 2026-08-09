@@ -62,7 +62,10 @@ func (s *stubValueSpace) ValidDefault(_ *SimpleType, vc ValueConstraint) (bool, 
 
 // vcSchema is bSchema with a ValueSpace installed: it finalizes through
 // FinalizeWith so the {value} halves of au-props-correct clause 3 and
-// loc-testSubP clauses 4.2/5.2.2 are decidable.
+// loc-testSubP clauses 4.2/5.2.2 are decidable. The other capability the seam
+// takes is the undecided one — cos-st-restricts' facet-value half needs the
+// generated applicability table, which this leaf cannot reach (its coverage is
+// pinned from package builtin instead).
 func vcSchema(t *testing.T, vs ValueSpace, build func(*SchemaBuilder)) (*Schema, error) {
 	t.Helper()
 	b := NewSchemaBuilder()
@@ -73,7 +76,7 @@ func vcSchema(t *testing.T, vs ValueSpace, build func(*SchemaBuilder)) (*Schema,
 	if build != nil {
 		build(b)
 	}
-	return b.FinalizeWith(vs)
+	return b.FinalizeWith(vs, undecidedRestrictionChecker{})
 }
 
 // vcGlobalFixed adds a global attribute declaration g of type str whose {value
@@ -347,20 +350,32 @@ func TestFinalizeWithoutValueSpaceFailsOpen(t *testing.T) {
 	}
 	b = NewSchemaBuilder()
 	build(b)
-	if _, err := b.FinalizeWith(&stubValueSpace{same: false, decided: true}); err == nil {
+	if _, err := b.FinalizeWith(&stubValueSpace{same: false, decided: true}, undecidedRestrictionChecker{}); err == nil {
 		t.Fatal("FinalizeWith a decided-not-identical value space must reject the same schema")
 	}
 }
 
-// TestFinalizeWithNilValueSpacePanics pins the nil guard: a nil capability is a
-// caller bug, not a schema-validity condition.
-func TestFinalizeWithNilValueSpacePanics(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("FinalizeWith(nil) must panic")
-		}
-	}()
-	_, _ = NewSchemaBuilder().FinalizeWith(nil)
+// TestFinalizeWithNilCapabilityPanics pins the nil guard on BOTH parameters: a
+// nil capability is a caller bug, not a schema-validity condition, and one seam
+// installing two capabilities must not accept a half-installed pair.
+func TestFinalizeWithNilCapabilityPanics(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		call func()
+	}{
+		{"nil ValueSpace", func() { _, _ = NewSchemaBuilder().FinalizeWith(nil, undecidedRestrictionChecker{}) }},
+		{"nil SimpleTypeRestrictionChecker", func() { _, _ = NewSchemaBuilder().FinalizeWith(undecidedValueSpace{}, nil) }},
+		{"both nil", func() { _, _ = NewSchemaBuilder().FinalizeWith(nil, nil) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatalf("FinalizeWith with a %s must panic", tc.name)
+				}
+			}()
+			tc.call()
+		})
+	}
 }
 
 // vcLoc is a recognizable position, so a clause-2 test can pin that the rejection

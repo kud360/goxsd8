@@ -398,7 +398,7 @@ func TestBoundRestrictionBaseSideRuleAttribution(t *testing.T) {
 //
 // It is the same answer boundLimit already gives an unordered bound {value}, for the
 // same reason (STYLE E2): the applicability violation is the BASE's, charged upstream
-// by builtin.CheckSimpleTypeRestriction under §4.1.5, and naming §4.3.5.5 instead
+// by the xsd.SimpleTypeRestrictionChecker under §4.1.5, and naming §4.3.5.5 instead
 // would reject a schema whose enumeration may be entirely valid — under a constraint
 // with nothing to say about it.
 func TestEnumerationRestrictionSkipsFacetPreconditionFault(t *testing.T) {

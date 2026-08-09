@@ -127,6 +127,19 @@
 // (which installs none) is the fully fail-open configuration.
 // value.NewValueSpace is the implementation the parser installs.
 //
+// FinalizeWith installs a SECOND capability at the same seam, and it is
+// deliberately a second interface rather than a fourth ValueSpace method:
+// SimpleTypeRestrictionChecker charges the facet-VALUE half of
+// cos-st-restricts (§3.16.6.2) — the atomic applicability clause, whose
+// per-primitive applicable sets come from a generated table, and the bound
+// and enumeration constraints, which need a value space. That one is
+// REJECT-CAPABLE: it answers with an error carrying a per-facet rule ID,
+// which finalize returns as the schema's rejection, so bundling it with the
+// fail-open comparisons would make an incoherent capability mix
+// representable (T1). checkSimpleTypeDerivations puts every simple type
+// the assembled schema reaches to it, anonymous inline ones included;
+// builtin.NewRestrictionChecker is the implementation the parser installs.
+//
 // # Walk API
 //
 // Traversal of a type's effective content model. The reusable core is an
