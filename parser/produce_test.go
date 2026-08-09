@@ -1883,23 +1883,101 @@ func TestProduceElementInlineTypeOutranksSubstitutionGroupHead(t *testing.T) {
 	}
 }
 
-// TestProduceElementTypeFromSubstitutionGroupHeadInline pins the one clause-3
-// shape this producer declines instead of mapping: the head's type is an inline
-// anonymous definition, which the member's {type definition} would have to BE,
-// and an anonymous type reaches a declaration only through the owning-type
-// constructor that ties it to one owner. Falling through to xs:anyType would
-// hand e-props-correct clause 4 a type wider than the head's and reject a schema
-// that violates nothing, so the limitation is reported as a limitation (#342).
+// TestProduceElementTypeFromSubstitutionGroupHeadInline pins the clause-3 shape
+// #342 closed: the head's own {type definition} is the anonymous type of its
+// inline <complexType>, which the member's {type definition} must BE and not
+// merely equal (§3.4.6.5's no-identity Note names this very case as one where
+// component identity IS determined). The member's slot references the OWNING
+// head — no name could reach the type, and no second declaration could own it —
+// and the schema is accepted rather than declined.
+//
+// Two edges are pinned, direct and transitive, because the walk goes to the
+// TERMINAL head: an intermediate head is skipped over, so both members name the
+// same owner and neither slot is an owner-of-owner chain.
 func TestProduceElementTypeFromSubstitutionGroupHeadInline(t *testing.T) {
-	body := `<xs:element name="head"><xs:complexType><xs:sequence/></xs:complexType></xs:element>` +
+	for _, tc := range []struct {
+		name   string
+		body   string
+		member string
+		want   xsd.QName
+	}{
+		{
+			name: "direct",
+			body: `<xs:element name="head"><xs:complexType><xs:sequence/></xs:complexType></xs:element>` +
+				`<xs:element name="member" substitutionGroup="head"/>`,
+			member: "member",
+			want:   xsd.QName{Local: "head"},
+		},
+		{
+			// The chain's middle link inherits the same anonymous type, so the
+			// walk reports the terminal owner for BOTH declarations.
+			name: "transitive, through a head that inherits too",
+			body: `<xs:element name="top"><xs:complexType><xs:sequence/></xs:complexType></xs:element>` +
+				`<xs:element name="head" substitutionGroup="top"/>` +
+				`<xs:element name="member" substitutionGroup="head"/>`,
+			member: "member",
+			want:   xsd.QName{Local: "top"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := produce(t, wrap("", tc.body))
+			if err != nil {
+				t.Fatalf("Produce: %v", err)
+			}
+			ed, ok := s.Element(xsd.QName{Local: tc.member})
+			if !ok {
+				t.Fatalf("element %s not found", tc.member)
+			}
+			inherited, ok := ed.TypeDefinition().(xsd.SubstitutionGroupHeadTypeRef)
+			if !ok {
+				t.Fatalf("{type definition} = %#v, want an xsd.SubstitutionGroupHeadTypeRef", ed.TypeDefinition())
+			}
+			if inherited.Head != tc.want {
+				t.Fatalf("{type definition} head = %s, want the owning head %s", inherited.Head, tc.want)
+			}
+			owner, ok := s.Element(tc.want)
+			if !ok {
+				t.Fatalf("owning head %s not found", tc.want)
+			}
+			if _, owns := owner.TypeDefinition().(xsd.InlineTypeDefinition); !owns {
+				t.Fatalf("the named head's own {type definition} = %#v, want the inline anonymous type it owns", owner.TypeDefinition())
+			}
+		})
+	}
+}
+
+// TestProduceElementTypeFromSubstitutionGroupHeadInlineSimple pins the clause-3
+// shape still declined after #342, and pins WHY it is a different limitation
+// from the one #342 closed: the sharing mechanism would express it, but
+// produceElement declines a top-level <element> with an inline <simpleType>
+// outright (#442, which owns both halves), so a member must never be handed a
+// reference to a head this producer can never build. It is reported as a
+// producer limitation, never as a fabricated rule verdict (STYLE E2).
+func TestProduceElementTypeFromSubstitutionGroupHeadInlineSimple(t *testing.T) {
+	body := `<xs:element name="head"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:element>` +
 		`<xs:element name="member" substitutionGroup="head"/>`
 	_, err := produce(t, wrap("", body))
 	if err == nil {
-		t.Fatalf("expected a declined-mapping error for an anonymous head type, got nil")
+		t.Fatalf("expected a declined-mapping error for an inline <simpleType> head type, got nil")
 	}
 	if _, charged := xsderr.RuleOf(err); charged {
 		t.Fatalf("a producer limitation was charged as a spec rule: %v", err)
 	}
+}
+
+// TestProduceElementTypeFromSubstitutionGroupNonFirstHeadAnonymous is the
+// residual #342 deliberately did NOT close, pinned so a later widening is a
+// choice rather than an accident: with substitutionGroup="h1 h2", clause 3 reads
+// h1 alone, so the member is typed by h1's NAMED type while h2 owns an anonymous
+// one. The construction-identity shortcut in e-props-correct clause 4
+// (sameAnonymousTypeByConstruction) must not admit that edge — the two types are
+// genuinely different components and the ordinary anonymous rule rejects it.
+func TestProduceElementTypeFromSubstitutionGroupNonFirstHeadAnonymous(t *testing.T) {
+	body := `<xs:element name="h1" type="xs:anyType"/>` +
+		`<xs:element name="h2"><xs:complexType><xs:sequence/></xs:complexType></xs:element>` +
+		`<xs:element name="member" substitutionGroup="h1 h2"/>`
+	_, err := produce(t, wrap("", body))
+	assertRule(t, err, "e-props-correct")
 }
 
 // TestProduceElementTypeFromCircularSubstitutionGroup pins that clause 3's walk

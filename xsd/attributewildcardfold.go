@@ -230,6 +230,13 @@ func (s *Schema) clause2AttributeWildcard(f *attributeWildcardFold, c ComplexTyp
 // has none" — so a base left at the producer's clause-1 value makes a legal
 // restriction of it a FALSE REJECT whenever that base only INHERITED its own
 // wildcard (#505).
+//
+// The default arm is UNREACHABLE BY CONSTRUCTION rather than merely unexercised:
+// the sum's third variant, SubstitutionGroupHeadTypeRef, is rejected in this slot
+// by checkTypeDefinitionOrRef's baseTypeSlot case (§3.4.2 has no clause-3
+// analog), so no ComplexType can hold one as its {base type definition}. It stays
+// a panic rather than becoming a silent ·absent· answer, for the same reason the
+// paragraph above gives.
 func (s *Schema) baseAttributeWildcard(f *attributeWildcardFold, c ComplexType, i int) (*Wildcard, TypeDefinitionOrRef, error) {
 	switch b := c.Base().(type) {
 	case nil:

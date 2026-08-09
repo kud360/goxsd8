@@ -752,7 +752,7 @@ func collapsedExtensionBase(a ComplexType) TypeDefinitionOrRef {
 // context-checked against its real owner, and M is never a component a consumer
 // can reach.
 func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, base TypeDefinitionOrRef, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
-	if err := checkTypeDefinitionOrRef(loc, base, complexTypeLabel(name)+" {base type definition}"); err != nil {
+	if err := checkTypeDefinitionOrRef(loc, base, baseTypeSlot, complexTypeLabel(name)); err != nil {
 		return ComplexType{}, err
 	}
 	switch derivationMethod {

@@ -172,6 +172,14 @@ func (s *Schema) foldComponentAttributeUses(f *attributeUseFold, c ComplexType, 
 // base's {attribute uses} to CHARGE its derivations, checkRestrictionAttributes
 // and checkRestrictionRequiredAttributes (complexderivation.go), so a base left
 // under-reporting them makes a legal restriction of it a FALSE REJECT (#505).
+//
+// The default arm is UNREACHABLE BY CONSTRUCTION rather than merely unexercised:
+// the sum's third variant, SubstitutionGroupHeadTypeRef, is rejected in this slot
+// by checkTypeDefinitionOrRef's baseTypeSlot case (§3.4.2 has no clause-3
+// analog), so no ComplexType can hold one as its {base type definition}. It stays
+// a panic rather than becoming a silent clause-3.3 miss: a miss would drop the
+// inherited {attribute uses}, which is the pass→fail flip the paragraph above
+// records.
 func (s *Schema) baseAttributeUses(f *attributeUseFold, c ComplexType, i int) ([]AttributeUse, TypeDefinitionOrRef, bool) {
 	switch b := c.Base().(type) {
 	case nil:

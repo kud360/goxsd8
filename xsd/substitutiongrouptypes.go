@@ -140,6 +140,21 @@ func (s *Schema) checkSubstitutionGroupTypes() error {
 // Both skips are fail-open — they withhold a rejection, never invent one — and
 // neither can mask a failure the spec states, since clause 4 quantifies over
 // members and predicates over type definitions that must be there to be read.
+//
+// A THIRD case is not a skip but a clause-4 PASS decided before ·validly
+// derived· is consulted: the two sides are the SAME component. Clause 2.1 of
+// cos-ct-derived-ok is that identity test and it precedes the blocking-keyword
+// test (derivedOKComplex charges 2.1 before clause 1), so answering it early
+// changes no verdict — it only reaches an identity sameTypeDefinition cannot
+// see. sameTypeDefinition compares expanded names and reports two ANONYMOUS
+// types as different, which is §3.4.6.5's no-identity licence read correctly for
+// the general case and WRONGLY here: §3.3.2.1 clause 3 makes a member's {type
+// definition} the head's own component, and §3.4.6.5's no-identity Note names
+// that very case — "when an element's type definition defaults to being the same
+// type definition as that of its substitution-group head" — among the ones where
+// component identity IS determined. Without the shortcut, a member sharing its
+// head's inline anonymous type falls past clause 2.1, walks the base chain, and
+// is FALSE-REJECTED under a rule the schema does not violate (#342).
 func (s *Schema) checkElementSubstitutableForHeads(e ElementDeclaration) error {
 	if len(e.substitutionGroupAffiliations) == 0 {
 		return nil
@@ -157,6 +172,9 @@ func (s *Schema) checkElementSubstitutableForHeads(e ElementDeclaration) error {
 		if !ok {
 			continue
 		}
+		if sameAnonymousTypeByConstruction(memberType, headType) {
+			continue // cos-ct-derived-ok clause 2.1: one component, reached twice
+		}
 		if s.validlyDerived(memberType, headType, head.substitutionGroupExclusions) {
 			continue
 		}
@@ -165,4 +183,65 @@ func (s *Schema) checkElementSubstitutableForHeads(e ElementDeclaration) error {
 			e.Name(), typeDefinitionLabel(memberType), typeDefinitionLabel(headType), aff, head.substitutionGroupExclusions)
 	}
 	return nil
+}
+
+// sameAnonymousTypeByConstruction reports whether a and b are ONE anonymous
+// complex type definition reached through two slots — the identity §3.3.2.1
+// dcl.elt.common clause 3 constructs when a member inherits its head's inline
+// <complexType>, and the one §3.4.6.5's no-identity Note singles out as
+// determined by the specification.
+//
+// It is decided on the {context} ComponentID (§3.4.1 ctd-context), because that
+// is the identity mechanism this package already has for a component with no
+// {name} to be compared by (componentid.go; Appendix G.1.11 says the property
+// exists "to simplify testing for the identity of anonymous type definitions").
+// Three properties of that choice are load-bearing:
+//
+//   - it is compared with ==, never reflect.DeepEqual, which is IDENTITY-BLIND
+//     for a ComponentID and would report two distinct mints as equal (see
+//     ComponentID);
+//   - it survives the by-value copy a ComplexType undergoes on every read, so
+//     the head's own slot and the member's inherited read compare equal;
+//   - it is slot-shape independent, so ONE test covers both the direct edge (a
+//     member affiliated to the owning head) and the chain edge (a member and an
+//     intermediate head that both name the same terminal owner), with no arm
+//     pattern-matching and no walk.
+//
+// A NAMED type has an ·absent· {context} per §3.4.1's XOR and answers false
+// here; sameTypeDefinition already decides those by expanded name, correctly. A
+// present {context} always carries a minted identity — checkComplexTypeContext
+// rejects the zero one at construction — so equality here is never two unminted
+// components accidentally matching.
+//
+// It deliberately does NOT generalize into sameTypeDefinition: comparing ALL
+// anonymous types by {context} would change cos-ct-derived-ok clause 2.1
+// everywhere it is charged, is unmodeled for *SimpleType (whose §3.16.1
+// {context} this package does not carry, #206), and carries its own ratchet
+// exposure. That widening is a separate landing.
+func sameAnonymousTypeByConstruction(a, b TypeDefinition) bool {
+	ida, aOK := anonymousComplexTypeIdentity(a)
+	if !aOK {
+		return false
+	}
+	idb, bOK := anonymousComplexTypeIdentity(b)
+	if !bOK {
+		return false
+	}
+	return ida == idb
+}
+
+// anonymousComplexTypeIdentity reads the {context} identity of an anonymous
+// Complex Type Definition. ok is false for a *SimpleType (no modeled {context},
+// #206) and for a NAMED complex type, whose {context} is ·absent· by §3.4.1's
+// XOR and which is compared by expanded name instead.
+func anonymousComplexTypeIdentity(t TypeDefinition) (ComponentID, bool) {
+	c, isComplex := t.(ComplexType)
+	if !isComplex {
+		return ComponentID{}, false
+	}
+	context, present := c.Context()
+	if !present {
+		return ComponentID{}, false
+	}
+	return context.ID(), true
 }
