@@ -42,11 +42,11 @@ Milestones, from GitHub:
 |---|---:|---:|---|
 | M0–M2 | 8 | 0 | done |
 | M3 — Datatypes | 12 | 1 | complete; one follow-up open |
-| M4 — Schema parsing | 70 | 42 | **active** |
+| M4 — Schema parsing | 71 | 41 | **active** |
 | M5 — Instance validation | 0 | 1 | epic #250 filed, **uncarved** |
 | M6–M12 | 0 | 0 | not filed |
 
-Queue: 148 open issues — 133 `ready`, 15 `blocked`, 0 `needs-replan`,
+Queue: 150 open issues — 135 `ready`, 15 `blocked`, 0 `needs-replan`,
 2 `epic`.
 
 **Next planning action: carve M5.** Its stated precondition — #180, #181,

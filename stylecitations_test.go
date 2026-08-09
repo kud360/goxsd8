@@ -86,6 +86,15 @@ var allowedBadStyleCitations = []styleCitationAllowance{
 	{file: "xsd/resolve.go", token: "8", count: 2},
 	{file: "xsd/schema.go", token: "T7", count: 3},
 	{file: "xsd/simpletype.go", token: "T7", count: 3},
+	// Landed by #636 while this guard was in review, so it grandfathers in
+	// rather than being caught before merge — the one entry here that is
+	// NEW debt, not inherited. Its `STYLE T2/T7` decorates a sealed sum,
+	// and T2 (capabilities are interfaces, not type switches) is the rule
+	// that governs sealed sums; T7 looks like CLAUDE.md's headline 7, the
+	// positional-citation defect #540 names. Left uncorrected on purpose:
+	// 30 other sites cite T7, and deciding what they all become is #382's
+	// question, not this file's.
+	{file: "xsd/simpletyperef.go", token: "T7", count: 1},
 	{file: "xsd/term.go", token: "T7", count: 2},
 	{file: "xsd/typedefinition.go", token: "T7", count: 4},
 }
