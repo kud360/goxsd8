@@ -48,7 +48,9 @@ const (
 	// document attribute fails its own declared type and no Structures Schema
 	// Representation Constraint covers the case — notably an unrecognized ##
 	// token in notQName, whose value space is fixed by xs:qnameList/xs:qnameListA
-	// (§3.10.2) rather than by any src-wildcard clause.
+	// (§3.10.2) rather than by any src-wildcard clause, and a QName-valued
+	// attribute whose local part is empty (bindQName), which no src-* clause
+	// reaches because they all presuppose a well-formed QName.
 	ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 )
 
@@ -1160,7 +1162,7 @@ func (p *producer) resolveBase(restriction *Element) (*xsd.SimpleType, error) {
 		return p.constructSimpleType(xsd.QName{}, inline)
 	}
 
-	qn, err := p.resolveQName(restriction, baseLex)
+	qn, err := p.resolveQName(restriction, baseLex, "base")
 	if err != nil {
 		return nil, err
 	}
@@ -1346,7 +1348,7 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 		// <simpleType> (#442), a limitation of a type this element never reaches,
 		// and letting it run would fail an element clause 1 fully decides.
 	case hasType:
-		name, qerr := p.resolveQName(elem, typeLex) // case 2
+		name, qerr := p.resolveQName(elem, typeLex, "type") // case 2
 		if qerr != nil {
 			return xsd.ElementDeclaration{}, qerr
 		}
@@ -1414,7 +1416,7 @@ func (p *producer) substitutionGroupAffiliations(elem *Element) ([]xsd.QName, er
 	}
 	var heads []xsd.QName
 	for _, item := range strings.Fields(lexical) {
-		head, err := p.resolveQName(elem, item)
+		head, err := p.resolveQName(elem, item, "substitutionGroup")
 		if err != nil {
 			return nil, err
 		}
@@ -1504,7 +1506,7 @@ func (p *producer) substitutionGroupHeadType(at *Element, head xsd.QName) (xsd.T
 			return nil, fmt.Errorf("parser: <element> at %s inherits its {type definition} from the substitution group head %s (§3.3.2.1 dcl.elt.common clause 3), whose type is an inline <simpleType> that a top-level <element> is not yet produced with", at.Loc(), head)
 		}
 		if lex, has := src.elem.Attr("type"); has { // clause 2
-			name, err := src.owner.resolveQName(src.elem, lex)
+			name, err := src.owner.resolveQName(src.elem, lex, "type")
 			if err != nil {
 				return nil, err
 			}
@@ -1518,7 +1520,7 @@ func (p *producer) substitutionGroupHeadType(at *Element, head xsd.QName) (xsd.T
 		if len(items) == 0 {
 			return xsd.TypeDefinitionRef{Name: anyTypeName}, nil
 		}
-		next, err := src.owner.resolveQName(src.elem, items[0])
+		next, err := src.owner.resolveQName(src.elem, items[0], "substitutionGroup")
 		if err != nil {
 			return nil, err
 		}
@@ -1754,7 +1756,7 @@ func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.Attribu
 
 	typeName := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"} // §3.2.2.1
 	if hasType {
-		typeName, err = p.resolveQName(elem, typeLex)
+		typeName, err = p.resolveQName(elem, typeLex, "type")
 		if err != nil {
 			return xsd.AttributeDeclaration{}, err
 		}
@@ -1798,8 +1800,13 @@ func valueConstraintOf(elem *Element, rule xsderr.Rule) (*xsd.ValueConstraint, e
 // notQName, whose items §3.10.2's {disallowed names} mapping takes as plain QName
 // values — takes bindQName directly: src-resolve governs ·resolution·, so
 // charging clause 4 there would reject a name the spec never asks to resolve.
-func (p *producer) resolveQName(elem *Element, lexical string) (xsd.QName, error) {
-	qn, err := p.bindQName(elem, lexical)
+//
+// attr is the local name of the schema-document attribute lexical was read from
+// (or whose whitespace-separated list lexical is an item of); it is diagnostic
+// only, naming the construct the author wrote in the lexical rejection bindQName
+// charges (STYLE E1).
+func (p *producer) resolveQName(elem *Element, lexical, attr string) (xsd.QName, error) {
+	qn, err := p.bindQName(elem, lexical, attr)
 	if err != nil {
 		return xsd.QName{}, err
 	}
@@ -1816,11 +1823,30 @@ func (p *producer) resolveQName(elem *Element, lexical string) (xsd.QName, error
 // unqualifiedRefNS: the no-namespace name (src-resolve clause 4.1.1) normally,
 // the assembly's namespace under chameleon coercion, deliberately never the
 // schema's own targetNamespace otherwise.
-func (p *producer) bindQName(elem *Element, lexical string) (xsd.QName, error) {
+//
+// A lexical with an EMPTY LOCAL PART — the whole value empty (type=""), or a
+// prefix with nothing after the colon (type="xs:") — is rejected before any of
+// that, charged cvc-datatype-valid (Datatypes §4.1.4) at attr: it is not in the
+// ·lexical space· of xs:QName, the type the schema for schema documents declares
+// for every QName-valued attribute (Structures §5.1, Appendix A), because a
+// QName's local part is an NCName (§3.3.18, §3.4.7.1) and the NCName pattern
+// cannot match the empty string. That is a LEXICAL fault, logically prior to and
+// independent of namespace binding (PRINCIPLES 19), so it is decided first and
+// never charged src-resolve, whose clauses presuppose a well-formed QName and
+// govern ·resolution· alone (§3.17.6.2). Charging it here is also what keeps the
+// zero xsd.QName out of a reference slot downstream, where an xsd constructor's
+// representation-invariant backstop would report an author's mistake as
+// xsderr.RuleComponentInvariant, a caller fault (#343).
+func (p *producer) bindQName(elem *Element, lexical, attr string) (xsd.QName, error) {
 	before, after, found := strings.Cut(lexical, ":")
 	prefix, local := "", before
 	if found {
 		prefix, local = before, after
+	}
+	if local == "" {
+		return xsd.QName{}, xsderr.New(ruleDatatypeValid, elem.Loc(),
+			"<%s> %s value %q is not in the ·lexical space· of xs:QName, the type the schema for schema documents declares for it: a QName's local part is an NCName (Datatypes §3.3.18, §3.4.7.1) and is never empty",
+			elem.Name().Local(), attr, lexical)
 	}
 
 	if prefix == "" {
