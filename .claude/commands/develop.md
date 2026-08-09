@@ -2,85 +2,75 @@
 description: One develop iteration — survey the WIP index, resume or start an issue branch, ground, implement, judge, land. Stop after one issue.
 ---
 
-Run ONE develop iteration per docs/WORKFLOW.md (the branch scheme section
-is normative). You are the orchestrator: delegate all specialist work to
-the subagents; never skip the arbiter; never wait for a human — abort
-hanging commands and log the failure. The container is ephemeral:
-**anything not pushed does not exist** — checkpoint (commit + push the
-WIP branch) at every step boundary.
+One iteration, then stop. You are the orchestrator: you delegate all
+specialist work, you never skip the arbiter, and you never wait for a
+human — abort hanging commands and log the failure.
 
-1. **Survey** — `git fetch origin` and list in-flight work:
-   `git ls-remote --heads origin 'refs/heads/wip/*'`. If the local tree
-   is somehow dirty, push it to `parked/untriaged-<YYYYMMDD-HHMMSS>` and
-   log it. NEVER `git clean`, `git restore .`, `git checkout -- <file>`,
-   or any stashing.
+docs/WORKFLOW.md is normative for the branch scheme, checkpointing, scope,
+landing and parking; this file is the sequence. **Checkpoint (commit +
+push) at every step boundary** — it is both the crash guard and the lease
+heartbeat.
 
-2. **Pick** — partition `wip/*` by lease: a branch whose tip
-   (`git log -1 --format=%cI origin/wip/issue-<N>`) is newer than the
-   **2h claim TTL** is LIVE — off-limits, along with its issue; older is
-   EXPIRED — resumable.
-   - **Resuming beats starting**: oldest EXPIRED `wip/issue-<N>` whose
-     issue is open and not `needs-replan` → `git switch wip/issue-<N>`,
-     merge `origin/main` in if main moved — never rebase (non-trivial
-     conflicts → park it, comment, pick again), read the issue's newest
-     `RESUME:` comment, continue from its "Next:" at the matching step
-     below.
-   - Otherwise take the highest-priority `ready` issue with closed
+1. **Survey.** `git config core.hooksPath .githooks` (idempotent, and a
+   fresh clone carries no local config), then `git fetch --prune origin`
+   — without `--prune` the local view keeps refs for branches GitHub
+   deleted at merge. A dirty local tree
+   gets pushed to `parked/untriaged-<YYYYMMDD-HHMMSS>` and logged — never
+   cleaned.
+
+2. **Pick.** Classify the branches rather than re-deriving them by hand
+   (#399):
+
+   ```sh
+   gh issue list --state all --json number,state,labels | go tool wipsurvey
+   ```
+
+   It reports each `wip/issue-<N>` as LIVE, EXPIRED or RETIRED. LIVE
+   branches and their issues are off-limits; RETIRED ones are not work.
+   - **Resuming beats starting.** Take the oldest EXPIRED `wip/issue-<N>`
+     whose issue is open and not `needs-replan`; merge `origin/main` in if
+     main moved (never rebase; if the conflicts are not tractable, park it
+     and pick again), read the newest `RESUME:` comment, continue from its
+     "Next:" at the matching step below.
+   - Otherwise claim the highest-priority `ready` issue with closed
      dependencies and no live branch:
-     `git switch -c wip/issue-<N> origin/main` and
-     `git push -u origin HEAD` — the push is the claim. Push rejected →
-     lost the race; fetch and pick again.
-   - Neither → delegate to **cartographer** to plan, then STOP.
+     `git switch -c wip/issue-<N> origin/main && git push -u origin HEAD`.
+     The push is the claim; a rejected push means you lost the race — fetch
+     and pick again.
+   - Nothing to resume and nothing ready → delegate to **cartographer**,
+     then stop.
 
-   Any rejected push to `wip/*` at any later step means another session
-   holds the branch: fetch, abandon the local attempt, and stop (log
-   it). NEVER force-push a `wip/*` or `parked/*` ref.
+3. **Ground.** Search the open queue for this issue's primary file path
+   and identifier and record what any hit was (duplicate or adjacent).
+   Ask the **oracle** for the clauses and rule IDs in scope, and post its
+   answer verbatim as a `GROUNDING:` comment — that comment is the only
+   durable copy.
 
-3. **Ground** — delegate spec questions to **oracle**. Post the answer
-   verbatim as a `GROUNDING:` comment on the issue — that comment is the
-   only durable copy; never name a session-local path in it. CHECKPOINT
-   (`git commit -am "wip #<N>: grounding" && git push`).
+4. **Implement.** If the issue's `## Surface` is non-"none", have
+   **warden** pre-flight the planned shape before any code exists; shape
+   errors are cheapest before they are built. Then delegate to **mason**,
+   always with worktree isolation. Only once mason reports completion,
+   fast-forward-merge its local branch into `wip/issue-<N>`. If the change
+   added or altered public API, warden reviews the diff too. Post both
+   verdicts on the issue.
 
-4. **Implement** — if the issue's `## Surface` section is non-"none",
-   have **warden** review the PLANNED surface first (the Surface sketch
-   plus mason's intended type shapes — a one-comment design pre-flight,
-   posted on the issue) BEFORE any code is written; shape errors are
-   cheapest before they're built. Then delegate to **mason**, ALWAYS
-   with worktree isolation — never into your own checkout, which has
-   exactly one writer (docs/WORKFLOW.md, "One writer per checkout").
-   Mason commits on the isolated worktree's local branch; that branch
-   is never pushed. NEVER commit on a live subagent's behalf, including
-   in reaction to a stop-hook "uncommitted changes" warning. Only once
-   mason REPORTS completion, fast-forward-merge its local branch into
-   `wip/issue-<N>` and discard the worktree. Public API added/changed →
-   **warden** reviews the diff too; post its verdict on the issue.
-   CHECKPOINT.
+   Mason may absorb adjacent work under docs/WORKFLOW.md's scope rule.
+   Absorbed items belong in the commit body, not in a new issue.
 
-5. **Judge** — delegate to **arbiter** (it reviews the branch diff
-   against main). CHECKPOINT after each verdict. On reject: ONE repair
-   round by mason (edit flagged lines only), re-judge. On a second
-   reject: PARK — checkpoint the branch one final time, post the
-   findings on the issue, relabel `needs-replan` (that alone retires
-   the branch; nothing is renamed or deleted), then go to step 6's log
-   entry (committed on main) and stop. Never solicit a third round.
+5. **Judge.** Delegate to **arbiter**. On reject: one repair round by
+   mason, then re-judge. On a second reject: park per WORKFLOW, then go to
+   step 6's log entry and stop.
 
-6. **Land** — delegate the log entry to **chronicler** (docs/LOG on the
-   WIP branch, BEFORE landing), checkpoint. Then land through GitHub,
-   never a local merge: open a PR from `wip/issue-<N>` to `main`
-   (`Closes #<N>` in the body) and squash-merge it via the Merge API
-   with the CLAUDE.md commit format as squash title and body. GitHub
-   lands the ONE session commit, closes the issue, and auto-deletes the
-   branch.
+6. **Land.** Delegate the log entry to **chronicler** first, so it rides
+   the session commit. Verify WORKFLOW's two landing preconditions
+   yourself — the LOG entry is in `git diff origin/main...HEAD`, and
+   `git log HEAD..origin/main` is empty — then open the PR and
+   squash-merge it via the Merge API using CLAUDE.md's commit format. A PR
+   may close more than one issue when a landing carried more than one.
 
-7. **Post-land pass** — delegate to **cartographer** (its "Post-land
-   pass" procedure): (a) unblock — scan `blocked` issues whose
-   `Depends on:` mentions the just-closed issue; any whose dependencies
-   are now ALL closed gets relabeled `ready` with a one-line comment
-   naming the landing; (b) harvest follow-ups from THIS landing while
-   they're fresh — the log entry's "Next:"/deferred items and the issue
-   thread's advisory verdict notes each get filed as an issue or
-   explicitly dismissed in a comment.
+7. **Post-land.** Delegate to **cartographer**: unblock whatever this
+   landing unblocked, and dispose of every follow-up this session raised
+   while it is still fresh.
 
-If the session must end early at any point: CHECKPOINT + a `RESUME:` /
-"Next:" comment on the issue is a successful hand-off. Budget: one issue
-per session.
+Ending early at a checkpoint with a good `RESUME:` comment is a successful
+session. Budget: one landing.

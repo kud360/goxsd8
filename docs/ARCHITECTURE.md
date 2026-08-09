@@ -41,8 +41,19 @@ present-tense sentence in their sections below as "will", not "does". Only
 `builtin`, `builtin/strict`, `loader`, `parser`, `parser/xmltree`,
 `conformance` and `cmd/goxsd8` carry code today.
 
-Nothing imports `conformance`. Nothing in the library imports an adapter's
-decoder (`encoding/xml`, `encoding/json`, BER) except that adapter.
+**The module has two tiers, and the dependency rules govern the first.**
+The **library** is what a consumer imports — the packages above plus
+`cmd/goxsd8` — and it is the published surface the warden and steward
+guard. **Repo infrastructure** is `conformance` and `tools/*`: code that
+exists to build and verify the library, ships to no one, and is outside
+the export interface entirely.
+
+Nothing in the library imports infrastructure. Infrastructure may import
+the library, and may import other infrastructure — so a tool needing the
+expectations file format calls `conformance.LoadExpectations` rather than
+becoming a second reader of a format that already has an owner. Nothing in
+the library imports an adapter's decoder (`encoding/xml`,
+`encoding/json`, BER) except that adapter.
 
 ## Lexical space vs value space
 
