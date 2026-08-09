@@ -885,8 +885,8 @@ MS-Additional2006-07-15/addB106/schema/addB106 fail
 MS-Additional2006-07-15/addB107/schema/addB107 pass
 MS-Additional2006-07-15/addB108/schema/addB108 fail
 MS-Additional2006-07-15/addB109/schema/addB109 pass
-MS-Additional2006-07-15/addB110/schema/addB110 fail
-MS-Additional2006-07-15/addB111/schema/addB111 fail
+MS-Additional2006-07-15/addB110/schema/addB110 pass
+MS-Additional2006-07-15/addB111/schema/addB111 pass
 MS-Additional2006-07-15/addB112/schema/addB112 fail
 MS-Additional2006-07-15/addB113/schema/addB113 pass
 MS-Additional2006-07-15/addB114/schema/addB114 fail
@@ -10084,7 +10084,7 @@ MS-SimpleType2006-07-15/stZ002/schema/stZ002 fail
 MS-SimpleType2006-07-15/stZ003/schema/stZ003 fail
 MS-SimpleType2006-07-15/stZ004/schema/stZ004 pass
 MS-SimpleType2006-07-15/stZ005/schema/stZ005 fail
-MS-SimpleType2006-07-15/stZ006/schema/stZ006 fail
+MS-SimpleType2006-07-15/stZ006/schema/stZ006 pass
 MS-SimpleType2006-07-15/stZ007/schema/stZ007 fail
 MS-SimpleType2006-07-15/stZ008/schema/stZ008 pass
 MS-SimpleType2006-07-15/stZ009/schema/stZ009 fail
