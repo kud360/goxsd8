@@ -1614,6 +1614,245 @@ func TestProduceElementBlockSubstitutionNarrowsGroup(t *testing.T) {
 	assertRule(t, err, "cos-nonambig")
 }
 
+// TestProduceElementFinalMapped pins §3.3.2.1's {substitution group exclusions}
+// row, which states itself entirely by reference: "As for {disallowed
+// substitutions} above, but using the final and finalDefault [attributes] in
+// place of the block and blockDefault [attributes] and with the relevant set
+// being {extension, restriction}". So it is the same ·effective value· case
+// analysis over a different attribute pair, and the one thing that is NOT the
+// same is the size of the set — "#all" is TWO keywords here, and substitution is
+// not one of them however the attribute spells it.
+func TestProduceElementFinalMapped(t *testing.T) {
+	all := []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction}
+	for _, tc := range []struct {
+		name         string
+		finalDefault string
+		final        string
+		want         []xsd.DerivationMethod
+	}{
+		{name: "absent is the empty set"},
+		{name: "empty final is the empty set", final: `final=""`},
+		{name: "#all is two keywords, not three", final: `final="#all"`, want: all},
+		{name: "one keyword", final: `final="restriction"`, want: []xsd.DerivationMethod{xsd.DerivationRestriction}},
+		{name: "canonical order not lexical", final: `final="restriction extension"`, want: all},
+		{name: "the same set spelled the other way", final: `final="extension restriction"`, want: all},
+		// substitution is a member of {disallowed substitutions}' relevant set and
+		// NOT of this one, so it is ignored here exactly as list/union are —
+		// xsd.NewElementDeclaration would reject it as a tableau violation.
+		{name: "substitution ignored", final: `final="substitution extension"`,
+			want: []xsd.DerivationMethod{xsd.DerivationExtension}},
+		{name: "unrecognized items ignored", final: `final="list union restriction"`,
+			want: []xsd.DerivationMethod{xsd.DerivationRestriction}},
+		{name: "finalDefault fallback", finalDefault: ` finalDefault="extension"`,
+			want: []xsd.DerivationMethod{xsd.DerivationExtension}},
+		{name: "final overrides finalDefault", finalDefault: ` finalDefault="#all"`, final: `final="restriction"`,
+			want: []xsd.DerivationMethod{xsd.DerivationRestriction}},
+		// An EMPTY final= is PRESENT, so it is the ·effective value· and wins over
+		// finalDefault — the case lost by treating "" as absent.
+		{name: "empty final overrides finalDefault", finalDefault: ` finalDefault="#all"`, final: `final=""`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"` + tc.finalDefault + `>` +
+				`<xs:element name="e" type="xs:string" ` + tc.final + `/></xs:schema>`
+			s, err := produce(t, doc)
+			if err != nil {
+				t.Fatalf("Produce: %v", err)
+			}
+			ed, ok := s.Element(xsd.QName{Local: "e"})
+			if !ok {
+				t.Fatalf("element e not found")
+			}
+			if got := ed.SubstitutionGroupExclusions(); !slices.Equal(got, tc.want) {
+				t.Fatalf("{substitution group exclusions} = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestProduceElementFinalBlocksSubstitution is why the mapping above exists at
+// all: {substitution group exclusions} is read by exactly one rule,
+// e-props-correct clause 4 (c-vs-sg), and with the property left universally
+// empty that rule would admit every member of every head whatever final= says.
+// The two schemas differ only in the head's final=.
+func TestProduceElementFinalBlocksSubstitution(t *testing.T) {
+	schema := func(final string) string {
+		return `<xs:complexType name="H"><xs:sequence/></xs:complexType>` +
+			`<xs:complexType name="M"><xs:complexContent><xs:restriction base="H">` +
+			`<xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>` +
+			`<xs:element name="head" type="H" ` + final + `/>` +
+			`<xs:element name="member" type="M" substitutionGroup="head"/>`
+	}
+	if _, err := produce(t, wrap("", schema(""))); err != nil {
+		t.Fatalf("an unblocked restriction-derived member was rejected: %v", err)
+	}
+	_, err := produce(t, wrap("", schema(`final="restriction"`)))
+	assertRule(t, err, "e-props-correct")
+}
+
+// TestProduceElementLocalFinalNotMapped pins the deliberate confinement of the
+// mapping to the TOP-LEVEL form: a local <element> carries no final attribute
+// (§3.3.2 gives it to the top-level form alone), so only finalDefault could
+// reach it, and the property is unreadable on a local declaration — clause 4
+// reads it on a substitution group HEAD, and an affiliation names a top-level
+// declaration. Mapping it there would be a fact with no reader.
+func TestProduceElementLocalFinalNotMapped(t *testing.T) {
+	doc := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" finalDefault="#all">` +
+		`<xs:complexType name="CT"><xs:sequence>` +
+		`<xs:element name="e" type="xs:string"/>` +
+		`</xs:sequence></xs:complexType></xs:schema>`
+	s, err := produce(t, doc)
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, ok := s.Type(xsd.QName{Local: "CT"})
+	if !ok {
+		t.Fatalf("complexType CT not found")
+	}
+	local, ok := topGroup(t, td.(xsd.ComplexType)).Particles()[0].Term().(xsd.ResolvedTerm).Term.(xsd.ElementDeclaration)
+	if !ok {
+		t.Fatalf("first particle {term} is not a local element declaration")
+	}
+	if got := local.SubstitutionGroupExclusions(); got != nil {
+		t.Fatalf("local declaration {substitution group exclusions} = %v, want empty", got)
+	}
+}
+
+// TestProduceElementTypeFromSubstitutionGroupHead pins §3.3.2.1's {type
+// definition} clause 3 — "the declared {type definition} of the Element
+// Declaration ·resolved· to by the FIRST QName in the ·actual value· of the
+// substitutionGroup attribute" — and its place in the four-tier chain: an inline
+// child and type= both outrank it, and it outranks clause 4's xs:anyType.
+func TestProduceElementTypeFromSubstitutionGroupHead(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want xsd.QName
+	}{
+		{
+			name: "inherited from the head",
+			body: `<xs:element name="head" type="xs:string"/>` +
+				`<xs:element name="member" substitutionGroup="head"/>`,
+			want: xsd.QName{Space: xsdNS, Local: "string"},
+		},
+		{
+			// §3.1.3 allows forward reference, and the pre-scan is what makes it
+			// resolve: the head is declared AFTER the member here.
+			name: "head declared later",
+			body: `<xs:element name="member" substitutionGroup="head"/>` +
+				`<xs:element name="head" type="xs:string"/>`,
+			want: xsd.QName{Space: xsdNS, Local: "string"},
+		},
+		{
+			// The head has no type= of its own, so clause 3 applies to IT too and
+			// the declared type comes from further up the chain.
+			name: "inherited transitively",
+			body: `<xs:element name="top" type="xs:string"/>` +
+				`<xs:element name="head" substitutionGroup="top"/>` +
+				`<xs:element name="member" substitutionGroup="head"/>`,
+			want: xsd.QName{Space: xsdNS, Local: "string"},
+		},
+		{
+			// "the FIRST QName" is literal: every item feeds {substitution group
+			// affiliations}, only the first feeds {type definition}. Both heads are
+			// typed xs:anyType so the affiliation to the second still stands.
+			name: "first affiliation only",
+			body: `<xs:element name="h1" type="xs:anyType"/>` +
+				`<xs:element name="h2" type="xs:anyType"/>` +
+				`<xs:element name="member" substitutionGroup="h1 h2"/>`,
+			want: anyTypeQN,
+		},
+		{
+			// type= is clause 2 and outranks clause 3: the member is xs:string, not
+			// the head's xs:anyType. (It must still satisfy clause 4, which it does
+			// — every type is ·validly substitutable· for xs:anyType.)
+			name: "type= outranks the head",
+			body: `<xs:element name="head" type="xs:anyType"/>` +
+				`<xs:element name="member" type="xs:string" substitutionGroup="head"/>`,
+			want: xsd.QName{Space: xsdNS, Local: "string"},
+		},
+		{
+			// A head naming no declaration is an ·absent· member under §5.3, so
+			// there is no declared type to inherit and clause 4 applies.
+			name: "absent head falls through to xs:anyType",
+			body: `<xs:element name="member" substitutionGroup="nosuchhead"/>`,
+			want: anyTypeQN,
+		},
+		{
+			// The head is itself a clause-4 declaration, so the member inherits
+			// exactly xs:anyType — not a fallback but the head's real type.
+			name: "untyped head is xs:anyType",
+			body: `<xs:element name="head"/>` +
+				`<xs:element name="member" substitutionGroup="head"/>`,
+			want: anyTypeQN,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := produce(t, wrap("", tc.body))
+			if err != nil {
+				t.Fatalf("Produce: %v", err)
+			}
+			ed, ok := s.Element(xsd.QName{Local: "member"})
+			if !ok {
+				t.Fatalf("element member not found")
+			}
+			if got := declaredTypeName(t, ed.TypeDefinition()); got != tc.want {
+				t.Fatalf("{type definition} = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestProduceElementInlineTypeOutranksSubstitutionGroupHead pins the top of the
+// four-tier chain against clause 3: an inline <complexType> child is tier 1 and
+// wins, so the member keeps its own anonymous type rather than inheriting the
+// head's.
+func TestProduceElementInlineTypeOutranksSubstitutionGroupHead(t *testing.T) {
+	body := `<xs:element name="head" type="xs:anyType"/>` +
+		`<xs:element name="member" substitutionGroup="head">` +
+		`<xs:complexType><xs:sequence/></xs:complexType></xs:element>`
+	s, err := produce(t, wrap("", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	ed, ok := s.Element(xsd.QName{Local: "member"})
+	if !ok {
+		t.Fatalf("element member not found")
+	}
+	if _, inline := ed.TypeDefinition().(xsd.InlineTypeDefinition); !inline {
+		t.Fatalf("{type definition} = %#v, want the member's own inline anonymous type", ed.TypeDefinition())
+	}
+}
+
+// TestProduceElementTypeFromSubstitutionGroupHeadInline pins the one clause-3
+// shape this producer declines instead of mapping: the head's type is an inline
+// anonymous definition, which the member's {type definition} would have to BE,
+// and an anonymous type reaches a declaration only through the owning-type
+// constructor that ties it to one owner. Falling through to xs:anyType would
+// hand e-props-correct clause 4 a type wider than the head's and reject a schema
+// that violates nothing, so the limitation is reported as a limitation (#342).
+func TestProduceElementTypeFromSubstitutionGroupHeadInline(t *testing.T) {
+	body := `<xs:element name="head"><xs:complexType><xs:sequence/></xs:complexType></xs:element>` +
+		`<xs:element name="member" substitutionGroup="head"/>`
+	_, err := produce(t, wrap("", body))
+	if err == nil {
+		t.Fatalf("expected a declined-mapping error for an anonymous head type, got nil")
+	}
+	if _, charged := xsderr.RuleOf(err); charged {
+		t.Fatalf("a producer limitation was charged as a spec rule: %v", err)
+	}
+}
+
+// TestProduceElementTypeFromCircularSubstitutionGroup pins that clause 3's walk
+// TERMINATES on a circular affiliation chain rather than looping: the cycle is
+// e-props-correct clause 5's to charge, at finalize, over the whole graph. It is
+// the shape of W3C MS-Additional test111869.
+func TestProduceElementTypeFromCircularSubstitutionGroup(t *testing.T) {
+	body := `<xs:element name="e1" substitutionGroup="e2"/>` +
+		`<xs:element name="e2" substitutionGroup="e1"/>`
+	_, err := produce(t, wrap("", body))
+	assertRule(t, err, "e-props-correct")
+}
+
 // TestProduceLocalElementSubstitutionGroupRejected is e-props-correct clause 3
 // (§3.3.6.1) on the LOCAL path: the attribute is use="prohibited" on
 // xs:localElement (§3.3.2), and this producer runs no meta-schema validation pass
