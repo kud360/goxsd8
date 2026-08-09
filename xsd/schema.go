@@ -569,8 +569,9 @@ func (s *Schema) Notations() []Notation {
 //
 // That order is a guaranteed stable part of this method's contract, even though
 // §3.17.1 words the property as an unordered "A set of Identity-Constraint
-// Definition components". It is a different scope from [ElementDeclaration.IdentityConstraints],
-// which reports one element declaration's own §3.3.1 property.
+// Definition components". It is a different scope from
+// [ElementDeclaration.IdentityConstraints], which reports one element
+// declaration's own §3.3.1 property.
 //
 // The slice is copied: mutating the result does not affect s. The definitions
 // in it are shared with s and immutable. An empty {identity-constraint

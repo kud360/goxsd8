@@ -571,8 +571,8 @@ func TestProduceComplexTypeEmpty(t *testing.T) {
 	if ct.DerivationMethod() != xsd.DerivationRestriction {
 		t.Fatalf("derivation = %s, want restriction", ct.DerivationMethod())
 	}
-	if ct.BaseTypeDefinitionName() != anyTypeQN {
-		t.Fatalf("base = %s, want xs:anyType", ct.BaseTypeDefinitionName())
+	if ct.Base() != (xsd.TypeDefinitionOrRef(xsd.TypeDefinitionRef{Name: anyTypeQN})) {
+		t.Fatalf("base = %#v, want a TypeDefinitionRef naming xs:anyType", ct.Base())
 	}
 }
 
@@ -652,8 +652,8 @@ func TestProduceComplexContentRestriction(t *testing.T) {
 	}
 	td, _ := s.Type(xsd.QName{Space: "urn:x", Local: "CT"})
 	ct := td.(xsd.ComplexType)
-	if ct.BaseTypeDefinitionName() != (xsd.QName{Space: "urn:x", Local: "Base"}) {
-		t.Fatalf("base = %s, want {urn:x}Base", ct.BaseTypeDefinitionName())
+	if ct.Base() != (xsd.TypeDefinitionOrRef(xsd.TypeDefinitionRef{Name: xsd.QName{Space: "urn:x", Local: "Base"}})) {
+		t.Fatalf("base = %#v, want a TypeDefinitionRef naming {urn:x}Base", ct.Base())
 	}
 	if ct.ContentType().Variety() != xsd.ContentElementOnly {
 		t.Fatalf("variety = %s, want element-only", ct.ContentType().Variety())

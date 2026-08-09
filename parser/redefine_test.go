@@ -2,6 +2,7 @@ package parser_test
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -244,9 +245,11 @@ func TestParseRedefineSimpleTypeClause5Rejected(t *testing.T) {
 // TestParseRedefineComplexTypeClause5Rejected covers src-redefine clause 5's
 // complex-type half — "a restriction or extension among its grand-children the
 // ·actual value· of whose base [attribute] must be the same as … its own name
-// attribute plus target namespace". The clause is charged BEFORE the declined
-// production of a redefining complex type, so the verdict is the rule the
-// document breaks rather than the implementation's limit.
+// attribute plus target namespace". The clause is charged BEFORE the
+// src-expredef pairing is attempted, and the ordering is what this test
+// discriminates: base="tns:other" names a type that DOES exist, so a producer
+// that paired first would build an ordinary extension of it and accept the
+// document instead of charging the rule it breaks.
 func TestParseRedefineComplexTypeClause5Rejected(t *testing.T) {
 	_, err := parseMap(t, "main.xsd", map[string]string{
 		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
@@ -260,14 +263,51 @@ func TestParseRedefineComplexTypeClause5Rejected(t *testing.T) {
 	mustRule(t, err, "src-redefine")
 }
 
-// TestParseRedefineComplexTypeDeclined pins the slice's one deliberate decline
-// (see parser/redefine.go's GAP header): a well-formed self-deriving redefining
-// <complexType> is refused with a plain "not yet produced" error, never with a
-// fabricated rule verdict and never by emitting a self-derivation. It
-// over-rejects, which is the safe direction; the assertion is what will fail
-// loudly when the xsd component model grows an anonymous resolved base.
-func TestParseRedefineComplexTypeDeclined(t *testing.T) {
-	_, err := parseMap(t, "main.xsd", map[string]string{
+// mustComplexType returns the assembled schema's complex type definition named
+// name.
+func mustComplexType(t *testing.T, s *xsd.Schema, name xsd.QName) xsd.ComplexType {
+	t.Helper()
+	td, ok := s.Type(name)
+	if !ok {
+		t.Fatalf("type definition %s not found in assembled schema", name)
+	}
+	ct, ok := td.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("type definition %s is a %T, want an xsd.ComplexType", name, td)
+	}
+	return ct
+}
+
+// mustOwnedBase returns the anonymous {base type definition} c owns, failing
+// unless the slot really is the InlineTypeDefinition arm holding an ANONYMOUS
+// complex type — src-expredef clause 1.1's original.
+func mustOwnedBase(t *testing.T, c xsd.ComplexType) xsd.ComplexType {
+	t.Helper()
+	inline, owns := c.Base().(xsd.InlineTypeDefinition)
+	if !owns {
+		t.Fatalf("%s {base type definition} = %#v, want the InlineTypeDefinition holding src-expredef clause 1.1's original", c.Name(), c.Base())
+	}
+	base, isComplex := inline.Definition.(xsd.ComplexType)
+	if !isComplex {
+		t.Fatalf("%s owns a %T as its base, want an xsd.ComplexType", c.Name(), inline.Definition)
+	}
+	if base.Name() != (xsd.QName{}) {
+		t.Fatalf("%s's owned base is named %s, but src-expredef clause 1.1 makes its {name} absent", c.Name(), base.Name())
+	}
+	return base
+}
+
+// TestParseRedefineComplexTypePairsWithOriginal is the src-expredef clause
+// 1.1/1.2 pairing itself, on the shape the pairing exists to make work: a
+// redefining <complexType> whose <extension> grand-child names ITSELF as base.
+//
+// What is pinned is that the derivation is a real one and not a self-loop — the
+// {base type definition} is the anonymous, {name}-·absent· component built from
+// the REDEFINED document's own declaration, carrying that declaration's content —
+// and that the pairing passes finalize rather than tripping ct-props-correct
+// clause 3, which is exactly what a naive base-names-itself encoding would do.
+func TestParseRedefineComplexTypePairsWithOriginal(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
 		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
 			`<xs:complexType name="ct"><xs:complexContent><xs:extension base="tns:ct">`+
 			`<xs:sequence><xs:element name="extra" type="xs:string"/></xs:sequence>`+
@@ -276,16 +316,249 @@ func TestParseRedefineComplexTypeDeclined(t *testing.T) {
 		"lib.xsd": wrap("urn:a", `<xs:complexType name="ct">`+
 			`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`),
 	})
-	if err == nil {
-		t.Fatalf("Parse succeeded: a redefining <complexType> is not produced yet and must decline")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
 	}
-	var xe *xsderr.Error
-	if errors.As(err, &xe) {
-		t.Fatalf("error = %v, want a plain \"not yet produced\" Go error rather than a rule verdict", err)
+	ct := mustComplexType(t, s, xsd.QName{Space: "urn:a", Local: "ct"})
+	if ct.DerivationMethod() != xsd.DerivationExtension {
+		t.Fatalf("{derivation method} = %s, want extension", ct.DerivationMethod())
 	}
-	if !strings.Contains(err.Error(), "not yet produced") {
-		t.Fatalf("error = %v, want it to say the redefining <complexType> is not yet produced", err)
+	base := mustOwnedBase(t, ct)
+
+	// The original is S2's declaration, so its OWN base is the ordinary
+	// xs:anyType of the implicit-content form — never the redefinition, which
+	// is the false circularity the pairing prevents.
+	wantAnyType := xsd.TypeDefinitionOrRef(xsd.TypeDefinitionRef{Name: xsd.QName{Space: xsdNS, Local: "anyType"}})
+	if base.Base() != wantAnyType {
+		t.Fatalf("the clause-1.1 original's own {base type definition} = %#v, want a TypeDefinitionRef naming xs:anyType", base.Base())
 	}
+	// Its {context} is the redefining component (clause 1.1), not a declaration.
+	context, present := base.Context()
+	if !present {
+		t.Fatal("the clause-1.1 original has no {context}, which the §3.4.1 tableau makes Required when {name} is absent")
+	}
+	if _, isCTD := context.(xsd.ComplexTypeDefinitionContext); !isCTD {
+		t.Fatalf("the clause-1.1 original's {context} = %T, want a ComplexTypeDefinitionContext naming the redefining component", context)
+	}
+	// The original carries S2's content, the redefinition S2's plus its own.
+	if got := elementNamesOf(t, base); !slices.Equal(got, []string{"a"}) {
+		t.Fatalf("the clause-1.1 original's content model declares %v, want the redefined document's [a]", got)
+	}
+	if got := elementNamesOf(t, ct); !slices.Equal(got, []string{"a", "extra"}) {
+		t.Fatalf("the redefinition's content model declares %v, want [a extra] (§3.4.2.3.3 clause 4.2)", got)
+	}
+}
+
+// elementNamesOf lists, in document order, the local names of the element
+// declarations directly in c's {content type} particle tree.
+func elementNamesOf(t *testing.T, c xsd.ComplexType) []string {
+	t.Helper()
+	ec, ok := c.ContentType().(xsd.ElementContent)
+	if !ok {
+		t.Fatalf("{content type} = %T, want element-only content", c.ContentType())
+	}
+	var names []string
+	var walk func(term xsd.TermOrRef)
+	walk = func(term xsd.TermOrRef) {
+		resolved, ok := term.(xsd.ResolvedTerm)
+		if !ok {
+			return
+		}
+		switch inner := resolved.Term.(type) {
+		case xsd.ElementDeclaration:
+			names = append(names, inner.Name().Local)
+		case xsd.ModelGroup:
+			for _, p := range inner.Particles() {
+				walk(p.Term())
+			}
+		}
+	}
+	walk(ec.Particle.Term())
+	return names
+}
+
+// TestParseRedefineComplexTypeReferencesResolveToRedefinition is src-expredef's
+// stated purpose, pinned apart from the base wiring: "references to names of
+// redefined components in BOTH the <redefine>ing and the <redefine>d schema
+// documents ·resolve· to the redefined component". D1's own reference and D2's
+// must both reach the redefinition, so both elements' declared type must be the
+// name of a type carrying the redefinition's extra particle.
+func TestParseRedefineComplexTypeReferencesResolveToRedefinition(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+			`<xs:complexType name="ct"><xs:complexContent><xs:extension base="tns:ct">`+
+			`<xs:sequence><xs:element name="extra" type="xs:string"/></xs:sequence>`+
+			`</xs:extension></xs:complexContent></xs:complexType>`+
+			`</xs:redefine>`+
+			`<xs:element name="inD1" type="tns:ct"/>`),
+		"lib.xsd": wrap("urn:a", `<xs:complexType name="ct">`+
+			`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`+
+			`<xs:element name="inD2" type="tns:ct"/>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	// One component holds the name, and it is the redefinition: nothing else
+	// could carry both particles.
+	ct := mustComplexType(t, s, xsd.QName{Space: "urn:a", Local: "ct"})
+	if got := elementNamesOf(t, ct); !slices.Equal(got, []string{"a", "extra"}) {
+		t.Fatalf("{urn:a}ct declares %v, want the REDEFINITION's [a extra]", got)
+	}
+	for _, name := range []string{"inD1", "inD2"} {
+		ed, ok := s.Element(xsd.QName{Space: "urn:a", Local: name})
+		if !ok {
+			t.Fatalf("element declaration %s not found in assembled schema", name)
+		}
+		ref, byName := ed.TypeDefinition().(xsd.TypeDefinitionRef)
+		if !byName || ref.Name != (xsd.QName{Space: "urn:a", Local: "ct"}) {
+			t.Fatalf("%s {type definition} = %#v, want a TypeDefinitionRef naming {urn:a}ct", name, ed.TypeDefinition())
+		}
+	}
+}
+
+// TestParseRedefineComplexTypeInheritsOriginalAttributes pins the two finalize
+// folds across the anonymous base: §3.4.2.4 clause 3 and §3.4.2.5 clause 2.2 both
+// name the {base type definition}'s property, and the base here is in no by-name
+// index, so a fold that only followed names would leave the redefinition without
+// the attribute use and the wildcard its original declares — which REJECTS
+// instances carrying them (#505).
+func TestParseRedefineComplexTypeInheritsOriginalAttributes(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+			`<xs:complexType name="ct"><xs:complexContent><xs:extension base="tns:ct">`+
+			`<xs:sequence/><xs:attribute name="own" type="xs:string"/>`+
+			`</xs:extension></xs:complexContent></xs:complexType>`+
+			`</xs:redefine>`),
+		"lib.xsd": wrap("urn:a", `<xs:complexType name="ct"><xs:sequence/>`+
+			`<xs:attribute name="inherited" type="xs:string"/>`+
+			`<xs:anyAttribute namespace="urn:w"/>`+
+			`</xs:complexType>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	ct := mustComplexType(t, s, xsd.QName{Space: "urn:a", Local: "ct"})
+	var got []string
+	for _, u := range ct.AttributeUses() {
+		got = append(got, attributeUseLocalName(t, u))
+	}
+	if !slices.Equal(got, []string{"own", "inherited"}) {
+		t.Fatalf("redefinition {attribute uses} = %v, want its own then the clause-1.1 original's ([own inherited], §3.4.2.4 clause 3.1)", got)
+	}
+	if _, present := ct.AttributeWildcard(); !present {
+		t.Fatal("redefinition {attribute wildcard} is absent, but §3.4.2.5 clause 2.2 unions in the ·base wildcard· its original declares")
+	}
+}
+
+// TestParseRedefineRestrictionOverInheritingOriginal pins the OTHER half of the
+// same two folds: not the redefinition's own properties, but the ORIGINAL's.
+//
+// The original here declares no attribute of its own — it extends a named type
+// that does — so its {attribute uses} and {attribute wildcard} are entirely
+// clause-3/clause-2.2 inherited. derivation-ok-restriction clause 3 (c-ran) reads
+// exactly those two properties OFF THE BASE to charge the redefining restriction:
+// checkRestrictionAttributes demands the base declare or admit every use the
+// restriction declares, and checkRestrictionAttributeWildcard demands the base
+// have a wildcard when the restriction does. A fold that computed the original's
+// values without STORING them back into the {base type definition} slot that owns
+// it left both readers seeing a base that declares nothing, and each rejected a
+// legal redefinition — fail-CLOSED, not the under-rejection a skipped constraint
+// gives (#505).
+//
+// The control is the same shape written without <redefine> at all, which this
+// implementation has always accepted: the two must agree, since <redefine>
+// changes where the base component comes from and not whether the derivation is
+// valid.
+func TestParseRedefineRestrictionOverInheritingOriginal(t *testing.T) {
+	for _, c := range []struct{ name, inherited, restricted string }{
+		{
+			name:       "attribute use",
+			inherited:  `<xs:attribute name="gattr" type="xs:string"/>`,
+			restricted: `<xs:attribute name="gattr" type="xs:string"/>`,
+		},
+		{
+			name:       "attribute wildcard",
+			inherited:  `<xs:anyAttribute namespace="urn:w"/>`,
+			restricted: `<xs:anyAttribute namespace="urn:w"/>`,
+		},
+		{
+			// The restriction declares NO wildcard of its own, so its own
+			// folded {attribute wildcard} is ·absent· — and the base's
+			// inherited one is the only thing that admits the name it
+			// declares a use for (·default binding·, defaultbinding.go). A
+			// storeback that wrote only the types whose own folded value was
+			// present would drop the base re-seat on exactly this shape.
+			name:       "attribute use admitted only by the inherited wildcard",
+			inherited:  `<xs:anyAttribute namespace="##any"/>`,
+			restricted: `<xs:attribute name="loc" type="xs:string"/>`,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			lib := wrap("urn:a", `<xs:complexType name="g"><xs:sequence/>`+c.inherited+`</xs:complexType>`+
+				`<xs:complexType name="ct"><xs:complexContent><xs:extension base="tns:g">`+
+				`<xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`)
+			if _, err := parseMap(t, "main.xsd", map[string]string{
+				"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+					`<xs:complexType name="ct"><xs:complexContent><xs:restriction base="tns:ct">`+
+					`<xs:sequence/>`+c.restricted+
+					`</xs:restriction></xs:complexContent></xs:complexType>`+
+					`</xs:redefine>`),
+				"lib.xsd": lib,
+			}); err != nil {
+				t.Fatalf("Parse: %v\nwant the redefining restriction ACCEPTED: the clause 1.1 original inherits the %s c-ran reads off the base", err, c.name)
+			}
+			// Control: the identical derivation with the original named, so the
+			// base is an ordinary by-name component and no anonymous slot is
+			// involved.
+			if _, err := parseMap(t, "main.xsd", map[string]string{
+				"main.xsd": wrap("urn:a", `<xs:complexType name="g"><xs:sequence/>`+c.inherited+`</xs:complexType>`+
+					`<xs:complexType name="orig"><xs:complexContent><xs:extension base="tns:g">`+
+					`<xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`+
+					`<xs:complexType name="ct"><xs:complexContent><xs:restriction base="tns:orig">`+
+					`<xs:sequence/>`+c.restricted+
+					`</xs:restriction></xs:complexContent></xs:complexType>`),
+			}); err != nil {
+				t.Fatalf("control (no <redefine>): %v\nthe redefine form must not be judged more harshly than this", err)
+			}
+		})
+	}
+}
+
+// attributeUseLocalName reads the local part of an attribute use's declared name,
+// through whichever arm of the {attribute declaration} slot it carries.
+func attributeUseLocalName(t *testing.T, u xsd.AttributeUse) string {
+	t.Helper()
+	switch d := u.AttributeDeclaration().(type) {
+	case xsd.AttributeDeclarationRef:
+		return d.Name.Local
+	case xsd.LocalAttributeDeclaration:
+		return d.Declaration.Name().Local
+	default:
+		t.Fatalf("attribute use carries a %T, which is neither arm of AttributeDeclarationOrRef", u.AttributeDeclaration())
+		return ""
+	}
+}
+
+// TestParseRedefineComplexTypeMutualBaseTerminates is the termination case the
+// pairing creates and nothing else does: D2 declares ct base="u" and u base="ct",
+// and D1 redefines ct. The chain runs redefinition → anonymous original → u →
+// redefinition, so it CLOSES through an anonymous hop that no by-name walk can
+// see. It must terminate — a walk that recursed through the hop without counting
+// it would not — and it must be REJECTED as the circularity it is, under
+// ct-props-correct clause 3.
+func TestParseRedefineComplexTypeMutualBaseTerminates(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+			`<xs:complexType name="ct"><xs:complexContent><xs:extension base="tns:ct">`+
+			`<xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`+
+			`</xs:redefine>`),
+		"lib.xsd": wrap("urn:a",
+			`<xs:complexType name="ct"><xs:complexContent><xs:extension base="tns:u">`+
+				`<xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`+
+				`<xs:complexType name="u"><xs:complexContent><xs:extension base="tns:ct">`+
+				`<xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`),
+	})
+	mustRule(t, err, "ct-props-correct", "clause 3")
 }
 
 // TestParseRedefineGroupResolvesToOriginal is src-expredef clause 2 for a model

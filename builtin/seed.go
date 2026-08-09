@@ -46,14 +46,13 @@ func (e *MissingPrimitivesError) Error() string {
 // Types in Types order — one element per row and nothing else, so the anonymous
 // intermediate lists described below are NOT in it. xs:anySimpleType has no row
 // in Types (it has no facets and cannot be a restriction base, §3.2.1.3), so
-// Seed prepends it. Its
-// xs:anySimpleType and xs:anyAtomicType nodes are the canonical shared
-// singletons from package xsd ([xsd.AnySimpleType]/[xsd.AnyAtomicType]), so
-// every primitive's {base type definition} is the one xs:anyAtomicType identity
-// and pointer identity (see [xsd.SimpleType]) holds across the whole graph.
-// xs:anyType is a Complex Type Definition, outside [xsd.SimpleType]'s scope, and
-// is NEVER in the returned slice; it remains a parser-level structural concern
-// (M4).
+// Seed prepends it. Its xs:anySimpleType and xs:anyAtomicType nodes are the
+// canonical shared singletons from package xsd
+// ([xsd.AnySimpleType]/[xsd.AnyAtomicType]), so every primitive's {base type
+// definition} is the one xs:anyAtomicType identity and pointer identity (see
+// [xsd.SimpleType]) holds across the whole graph. xs:anyType is a Complex Type
+// Definition, outside [xsd.SimpleType]'s scope, and is NEVER in the returned
+// slice; it remains a parser-level structural concern (M4).
 //
 // Each component carries its {name}, its {base type definition} as a fully
 // linked pointer chain up to the shared xs:anySimpleType node, its {variety}
@@ -62,10 +61,11 @@ func (e *MissingPrimitivesError) Error() string {
 // an empty {final}. {facets} holds only value-bearing (default-carrying) facets;
 // facet APPLICABILITY that carries no default — notably precisionDecimal's
 // maxScale/minScale — is not materialized here and is answered instead via
-// [Types]/[TypeSpec.Applies], not the component's {facets}. A derived atomic type's {primitive type definition} points
-// at its primitive ancestor; a primitive datatype's own {primitive type
-// definition} is itself, wired via [xsd.NewPrimitiveType]. Only xs:anyAtomicType
-// carries an absent {primitive type definition} (the zero xsd.Atomic{}).
+// [Types]/[TypeSpec.Applies], not the component's {facets}. A derived atomic
+// type's {primitive type definition} points at its primitive ancestor; a
+// primitive datatype's own {primitive type definition} is itself, wired via
+// [xsd.NewPrimitiveType]. Only xs:anyAtomicType carries an absent {primitive
+// type definition} (the zero xsd.Atomic{}).
 //
 // # The list datatypes' anonymous intermediate step
 //

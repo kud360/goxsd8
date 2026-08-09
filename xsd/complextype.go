@@ -36,10 +36,10 @@ import "github.com/kud360/goxsd8/xsderr"
 //     base graph, which only exists once the schema set is assembled;
 //   - clause 4 (no two {attribute uses} share an {attribute declaration}
 //     expanded name) needs the Ref variant of {attribute declaration} resolved,
-//     so it too is enforced at finalize (Phase D,
-//     checkAttributeUseNamesUnique, #262) rather than at shape time (unlike
-//     AttributeGroupDefinition, whose own ag-props-correct clause 2 is enforced
-//     at shape time over uses it already owns);
+//     so it too is enforced at finalize (Phase D, checkAttributeUseNamesUnique,
+//     #262) rather than at shape time (unlike AttributeGroupDefinition, whose
+//     own ag-props-correct clause 2 is enforced at shape time over uses it
+//     already owns);
 //   - clause 5 ({content type}.{open content} non-absent ⇒ {variety} is
 //     element-only or mixed) is satisfied BY CONSTRUCTION and gets no runtime
 //     check anywhere, at shape time or at finalize: {open content} is a field
@@ -262,17 +262,19 @@ type ComplexTypeContext interface {
 type ElementDeclarationContext struct{ Component ComponentID }
 
 // ComplexTypeDefinitionContext is the {context} arm naming a containing Complex
-// Type Definition. §3.4.1's tableau declares it, and NO mapping rule in
-// Structures reaches it: §3.4.2.1 dcl.ctd.common has exactly one case, which
-// yields an Element Declaration, and the §3.4.1 <complexType> content model has
-// no slot for a nested unnamed <complexType> child. That is a spec-text
-// asymmetry, not an implementation gap — the arm exists so the §3.4.1 value
-// space stays whole for ct-props-correct (§3.4.6.1) clause 1 bookkeeping and so
-// a caller assembling a schema programmatically is not rejected for building a
-// legal component state. Its sibling std-context (§3.16.1) is a four-member sum
-// with every arm reachable, so an unreachable arm here is shape, not an edge
-// case. It carries no GAP marker because there is nothing to complete: the
-// absence is permanent and correct.
+// Type Definition. §3.4.1's tableau declares it, and no mapping rule in
+// Structures §3.4.2 reaches it: §3.4.2.1 dcl.ctd.common has exactly one case,
+// which yields an Element Declaration, and the §3.4.1 <complexType> content
+// model has no slot for a nested unnamed <complexType> child.
+//
+// ONE rule outside §3.4.2 does reach it: §4.2.4 src-expredef clause 1.1, whose
+// {name}-·absent· ORIGINAL has "its {context} … the redefining component" —
+// which for a redefining <complexType> is a Complex Type Definition. That is the
+// arm's producer-reachable case, minted and checked by NewComplexTypeOwningBase
+// (#505). Before that landing the arm existed only so the §3.4.1 value space
+// stayed whole for ct-props-correct (§3.4.6.1) clause 1 bookkeeping and so a
+// caller assembling a schema programmatically was not rejected for building a
+// legal component state.
 //
 // Component is the containing definition's minted identity, present under the
 // same rule as ElementDeclarationContext's. The field is read-only by
@@ -328,17 +330,19 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 //
 // Like the other §3 component shapes in this package, ComplexType is a
 // STRUCTURAL holder built before resolution. {base type definition} is carried
-// as a pre-resolution QName REFERENCE (baseTypeDefinitionName), not a resolved
-// simple-or-complex type. Finalize (resolve.go, #173) VALIDATES that the
-// reference resolves to a type definition (src-resolve clause 1.1) and that the
-// complex-type base chain is acyclic except xs:anyType's self-derivation
-// (ct-props-correct clause 3), but does NOT rewrite it into a resolved
-// component: the QName is retained, and a consumer follows it by a read-time
-// schema.Type(name) lookup. Finalize also charges ct-props-correct clauses 2 and
-// 4 and, against the resolved base, derivation-ok-restriction (§3.4.6.3) for a
-// restriction and cos-ct-extends (§3.4.6.2) for an extension (Phase D,
-// complexderivation.go and complexextension.go, #262/#264). Clause 1's remaining
-// resolved parts stay deferred.
+// as a TypeDefinitionOrRef (typedefinition.go): ordinarily a pre-resolution
+// TypeDefinitionRef naming a top-level type, and for the one mapping rule that
+// needs an already-resolved anonymous base — §4.2.4 src-expredef clause 1.1's
+// redefine pairing — an InlineTypeDefinition owning it outright. Finalize
+// (resolve.go, #173) VALIDATES that a named reference resolves to a type
+// definition (src-resolve clause 1.1) and that the complex-type base chain is
+// acyclic except xs:anyType's self-derivation (ct-props-correct clause 3), but
+// does NOT rewrite a name into a resolved component: the QName is retained, and
+// a consumer follows the slot with Base. Finalize also charges ct-props-correct
+// clauses 2 and 4 and, against the resolved base, derivation-ok-restriction
+// (§3.4.6.3) for a restriction and cos-ct-extends (§3.4.6.2) for an extension
+// (Phase D, complexderivation.go and complexextension.go, #262/#264). Clause 1's
+// remaining resolved parts stay deferred.
 //
 // {attribute uses} and {attribute wildcard} are the TWO properties Finalize
 // completes rather than merely checks, because each has a mapping clause that
@@ -374,11 +378,11 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 //
 // The XOR needs no runtime check, because it is enforced by a CONSTRUCTION-PATH
 // PARTITION rather than by re-validating two independently optional fields:
-// NewComplexType builds the named variety and takes no context, and
-// NewAnonymousComplexType builds the anonymous one and takes no name. It is the
-// same move NewGlobalScope/NewLocalScope make for {scope}'s tableau
-// correlation, and it banks the same payoff: a named type carrying a context,
-// and an anonymous one missing one, are both unrepresentable.
+// NewComplexType and NewComplexTypeOwningBase build the named variety and take
+// no context, and NewAnonymousComplexType builds the anonymous one and takes no
+// name. It is the same move NewGlobalScope/NewLocalScope make for {scope}'s
+// tableau correlation, and it banks the same payoff: a named type carrying a
+// context, and an anonymous one missing one, are both unrepresentable.
 //
 // loc and {context} are two different NON-property facts about a component and
 // are easy to conflate: loc is PROVENANCE, where the declaring element sits in
@@ -391,14 +395,15 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // one, {context} and all, for an inline <complexType> child of an <element>
 // (#340).
 //
-// Construct only through NewComplexType (named) or NewAnonymousComplexType
-// (anonymous), which reject the tableau-shape states ct-props-correct (§3.4.6.1)
-// clause 1 forbids so they are unrepresentable (STYLE T1). Neither is the full
-// property-correctness check (see ruleCTPropsCorrect's doc for exactly which
-// clauses are deferred). ComplexType is immutable after construction, and
-// remains so with a {context}: the cell a ComponentID points at is opaque and
-// holds no mutable state, so copying a ComplexType is still a complete copy —
-// the copies share one {context} identity, which is the point.
+// Construct only through NewComplexType (named), NewComplexTypeOwningBase (named,
+// owning its base) or NewAnonymousComplexType (anonymous), which reject the
+// tableau-shape states ct-props-correct (§3.4.6.1) clause 1 forbids so they are
+// unrepresentable (STYLE T1). Neither is the full property-correctness check (see
+// ruleCTPropsCorrect's doc for exactly which clauses are deferred). ComplexType
+// is immutable after construction, and remains so with a {context}: the cell a
+// ComponentID points at is opaque and holds no mutable state, so copying a
+// ComplexType is still a complete copy — the copies share one {context} identity,
+// which is the point.
 type ComplexType struct {
 	loc  xsderr.Loc // source position; provenance, not a §3.4.1 property
 	name QName
@@ -408,12 +413,15 @@ type ComplexType struct {
 	// because only NewComplexType and NewAnonymousComplexType write this
 	// pair; newComplexType itself can express both-present and
 	// neither-present and does not check.
-	context                ComplexTypeContext
-	baseTypeDefinitionName QName
-	derivationMethod       DerivationMethod
-	final                  []DerivationMethod
-	abstract               bool
-	attributeUses          []AttributeUse
+	context ComplexTypeContext
+	// base is the {base type definition} property. nil ⇔ ·absent·, the one
+	// encoding of absence this sum has in every slot it serves; see Base for
+	// why a state ct-props-correct clause 1 makes Required is representable.
+	base             TypeDefinitionOrRef
+	derivationMethod DerivationMethod
+	final            []DerivationMethod
+	abstract         bool
+	attributeUses    []AttributeUse
 	// prohibitedAttributeNames is a mapping input, not a §3.4.1 property: the
 	// expanded names this type's OWN source declaration gave use="prohibited"
 	// (§3.4.2.4 clause 3.2.2). See the type doc.
@@ -468,13 +476,17 @@ type ComplexType struct {
 // of one field that has nothing to check.
 //
 // baseTypeDefinitionName is a pre-resolution QName reference, not a resolved
-// component; nothing resolves it yet (#173). attributeWildcard is a pointer so
-// absence (nil) is distinct from a present zero record (mirroring
-// attributegroupdefinition.go's *Wildcard slot); when non-nil the pointed-to
-// value is COPIED into the struct and hasAttributeWildcard is set — the pointer
-// itself is never stored, so the caller's value is not aliased. Every slice
-// parameter is copied; the caller's backing arrays are not aliased, and an empty
-// input is held as nil.
+// component; nothing resolves it yet (#173). It is lifted into the {base type
+// definition} slot by baseTypeDefinitionRef, so the zero QName is stored as the
+// nil (·absent·) slot rather than as a nameless reference — see Base. A base
+// this entry point cannot express, the anonymous already-resolved one of
+// src-expredef clause 1.1, has its own entry point in NewComplexTypeOwningBase.
+// attributeWildcard is a pointer so absence (nil) is distinct from a present
+// zero record (mirroring attributegroupdefinition.go's *Wildcard slot); when
+// non-nil the pointed-to value is COPIED into the struct and
+// hasAttributeWildcard is set — the pointer itself is never stored, so the
+// caller's value is not aliased. Every slice parameter is copied; the caller's
+// backing arrays are not aliased, and an empty input is held as nil.
 //
 // loc is the source position charged to any rejection AND retained: Loc reports
 // it back as the definition's provenance. Pass the position of this
@@ -487,7 +499,118 @@ func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, fi
 		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
 			"complex type definition has an absent {name}, but the §3.4.1 tableau makes {context} Required when {name} is absent; build an anonymous complex type through NewAnonymousComplexType (ct-props-correct clause 1)")
 	}
-	return newComplexType(loc, name, nil, baseTypeDefinitionName, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+	return newComplexType(loc, name, nil, baseTypeDefinitionRef(baseTypeDefinitionName), final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+}
+
+// baseTypeDefinitionRef lifts a pre-resolution base QName into the {base type
+// definition} slot: the zero QName is the ·absent· base, which the sum encodes
+// as nil and never as a nameless TypeDefinitionRef (which
+// checkTypeDefinitionOrRef rejects as an illegal representation). It is the ONE
+// place the QName-shaped constructor parameters meet the sum, so the two
+// encodings of absence cannot drift apart (STYLE D3).
+func baseTypeDefinitionRef(name QName) TypeDefinitionOrRef {
+	if name == (QName{}) {
+		return nil
+	}
+	return TypeDefinitionRef{Name: name}
+}
+
+// NewComplexTypeOwningBase builds a NAMED ComplexType whose {base type
+// definition} is the ANONYMOUS, already-resolved component §4.2.4 src-expredef
+// clause 1.1 pairs a redefining <complexType> with: "one component which
+// corresponds to the top-level definition item with the same name in the
+// <redefine>d schema document … except that its {name} is ·absent· and its
+// {context} is the redefining component". It is NewComplexType's parameter list
+// with the base-QName slot replaced, in place, by the owned definition and
+// preceded by the redefining type's own minted identity; every other parameter,
+// check, copy and rejection is identical, because all three entry points run one
+// shared core. base is wrapped in an InlineTypeDefinition here, so a caller never
+// spells that arm.
+//
+// It is the ONLY construction path for a complex type that owns its base, and it
+// exists to make ONE state unrepresentable that no shape check could reach: an
+// owned original whose {context} names some OTHER component, which is the
+// redefine-side form of the context-tracking hazard PRINCIPLES 16 names for
+// <override>. It adds three rejections beyond NewComplexType's, all charged to
+// xsderr.RuleComponentInvariant because a ComponentID is this package's
+// representation rather than a spec-visible name — the footing
+// checkComplexTypeContext already stands on:
+//
+//   - an unminted (zero) id: there would be nothing to compare the {context}
+//     against;
+//   - a {context} that is a ComplexTypeDefinitionContext naming a DIFFERENT
+//     identity;
+//   - a {context} that is an ElementDeclarationContext: clause 1.1 makes the
+//     original's {context} "the redefining component", which for a redefining
+//     <complexType> is a Complex Type Definition and never a declaration.
+//
+// A base that is NAMED (its {context} therefore ·absent· per §3.4.1's XOR) is
+// rejected by the shared core's checkTypeDefinitionOrRef, which admits only an
+// anonymous type in the InlineTypeDefinition arm.
+//
+// # Why an identity, and why it is not stored
+//
+// id is NOT stored on the built type. Its whole role is this construction-time
+// comparison, and a field written but never read is dead state (STYLE D3); the
+// landing that adds an ID→component resolver adds the field together with its
+// reader (see ComponentID), exactly as NewElementDeclarationOwningType's doc
+// already commits this repo to. That makes the back-pointer's target
+// unobservable, which is admissible only BECAUSE the token is never stored: for
+// a NAMED, top-level component like this one, identity normally IS its expanded
+// name, so a stored token would be a second encoding of that identity (STYLE
+// D3).
+//
+// The name cannot serve in the token's place. §3.4.1's {context} is carried as a
+// ComplexTypeContext, whose arms hold a ComponentID and not a QName (see
+// ComplexTypeContext for why: §3.4.2.1's other case targets a frequently LOCAL
+// element declaration, which is not name-unique). Adding a name-carrying arm to
+// make this one case expressible would fork the §3.4.1 sum in two for a single
+// mapping rule, and every exhaustive switch over it would grow a case that means
+// the same thing as an existing one (STYLE T4).
+func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base ComplexType, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
+	if name.Local == "" {
+		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
+			"complex type definition has an absent {name}, but the §3.4.1 tableau makes {context} Required when {name} is absent; build an anonymous complex type through NewAnonymousComplexType (ct-props-correct clause 1)")
+	}
+	if id == (ComponentID{}) {
+		return ComplexType{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
+			"complex type %s owns its {base type definition} but carries an unminted identity, which that base's {context} back-pointer could not name; mint one with NewComponentID", name)
+	}
+	if err := checkOwnedBaseContext(loc, id, name, base); err != nil {
+		return ComplexType{}, err
+	}
+	return newComplexType(loc, name, nil, InlineTypeDefinition{Definition: base}, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+}
+
+// checkOwnedBaseContext rejects an owned anonymous base whose {context} (§3.4.1
+// ctd-context) does not name the redefining type's identity id. An ABSENT
+// {context} means base is NAMED, which the shared core's
+// checkTypeDefinitionOrRef rejects with the message that fits it; this checker
+// passes it through rather than duplicating that verdict (STYLE T4).
+//
+// The switch is exhaustive over ComplexTypeContext's sealed sum; the default arm
+// asserts the invariant and is unreachable for any value an outside package can
+// produce, since complexTypeContext is unexported. It is checkOwnedTypeContext's
+// twin (elementdeclaration.go) with the two arms' verdicts swapped, because the
+// two ownership edges point at different kinds of container.
+func checkOwnedBaseContext(loc xsderr.Loc, id ComponentID, name QName, base ComplexType) error {
+	context, present := base.Context()
+	if !present {
+		return nil
+	}
+	switch c := context.(type) {
+	case ComplexTypeDefinitionContext:
+		if c.ID() != id {
+			return xsderr.New(xsderr.RuleComponentInvariant, loc,
+				"complex type %s owns an anonymous {base type definition} whose {context} names a DIFFERENT complex type definition, but src-expredef clause 1.1 makes that {context} the redefining component itself; mint one identity per redefinition and pass it to both", name)
+		}
+		return nil
+	case ElementDeclarationContext:
+		return xsderr.New(xsderr.RuleComponentInvariant, loc,
+			"complex type %s owns an anonymous {base type definition} whose {context} is an ElementDeclarationContext, but src-expredef clause 1.1 makes the redefined original's {context} the redefining component, which here is a Complex Type Definition and never an Element Declaration", name)
+	default:
+		panic("xsd: checkOwnedBaseContext: non-exhaustive ComplexTypeContext switch")
+	}
 }
 
 // NewAnonymousComplexType builds an ANONYMOUS ComplexType — one whose {name} is
@@ -507,8 +630,8 @@ func NewComplexType(loc xsderr.Loc, name QName, baseTypeDefinitionName QName, fi
 //     invariant we own. See checkComplexTypeContext.
 //
 // There is no third check for "named AND contexted": that state does not
-// type-check at this layer, because this constructor accepts no name and
-// NewComplexType accepts no context.
+// type-check at this layer, because this constructor accepts no name and neither
+// NewComplexType nor NewComplexTypeOwningBase accepts a context.
 //
 // The parser calls this for the inline anonymous <complexType> of a local or a
 // global <element> (#340), always with an ElementDeclarationContext naming the
@@ -521,7 +644,7 @@ func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTyp
 	if err := checkComplexTypeContext(loc, context); err != nil {
 		return ComplexType{}, err
 	}
-	return newComplexType(loc, QName{}, context, baseTypeDefinitionName, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+	return newComplexType(loc, QName{}, context, baseTypeDefinitionRef(baseTypeDefinitionName), final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
 }
 
 // newCollapsedExtension builds the collapsed intermediate M that cos-ct-extends
@@ -529,17 +652,23 @@ func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTyp
 // whose {base type definition} is ·xs:anyType·, that the Note's re-ordering
 // yields (collapsedintermediate.go computes the properties it is handed).
 //
-// It is newComplexType's THIRD caller, and it re-establishes that function's
-// {name}/{context} XOR precondition the way NewComplexType does: it passes a's
-// {name} and no {context}. Building M through the validating core rather than as
-// a bare ComplexType literal is what keeps every ct-props-correct clause-1 shape
-// check on it — a literal inside this package would bypass all of them, which is
-// the one construction hole this type's whole design exists to close (STYLE T1).
+// It is newComplexType's FOURTH caller, and it re-establishes that function's
+// {name}/{context} XOR precondition by borrowing A's identity pair WHOLE: M takes
+// a's {name} AND a's {context}. A is itself a validly constructed component, so
+// exactly one of that pair is present and the XOR holds however A was built —
+// which is the only formulation that survives A being the ANONYMOUS src-expredef
+// clause 1.1 original (#505). Passing a's {name} with a hard-coded nil {context}
+// held only while every A was named; for an anonymous A it would build a type
+// that is neither named nor contexted, the one state §3.4.1's tableau forbids
+// outright. Building M through the validating core rather than as a bare
+// ComplexType literal is what keeps every ct-props-correct clause-1 shape check on
+// it — a literal inside this package would bypass all of them, which is the one
+// construction hole this type's whole design exists to close (STYLE T1).
 //
 // M is a VALUE with a lifetime of one constraint check. It is never added to a
 // SchemaBuilder, never written into s.types or s.typeIndex, and never reachable
 // from a resolver: it corresponds to no <complexType> element, so a schema that
-// could see it would report a component no document declares. Its {name} is a's
+// could see it would report a component no document declares. Its identity is a's
 // only so that the base walks derivation-ok-restriction performs off it terminate
 // on real components; every error the check produces is re-charged against T
 // before it reaches a caller (checkExtensionTwoStepDerivable).
@@ -565,22 +694,67 @@ func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTyp
 // "prefix" for every chain: the direction is fail-open — clause 1.5 never rejects
 // on assertions — and no other reader of M.{assertions} exists.
 func newCollapsedExtension(loc xsderr.Loc, a ComplexType, p collapsedProperties) (ComplexType, error) {
-	return newComplexType(loc, a.Name(), nil, a.Name(), nil, DerivationExtension, false,
+	context, _ := a.Context()
+	return newComplexType(loc, a.Name(), context, collapsedExtensionBase(a), nil, DerivationExtension, false,
 		p.uses, nil, p.wildcard, p.content, nil, a.assertions, nil)
 }
 
-// newComplexType is the shared core of NewComplexType and
-// NewAnonymousComplexType: every check and copy that does not concern the
-// {name}/{context} pair lives here exactly once (STYLE T4).
+// collapsedExtensionBase is M's {base type definition}: a reference to A, in
+// whichever arm of TypeDefinitionOrRef can express A (#505). It is what makes the
+// base walks derivation-ok-restriction performs off M — key-ldtype case 3's
+// recursion in locallyDeclaredAttributeType and locallyDeclaredElementType
+// (complexderivation.go) — reach A and then A's own ancestors, which is the
+// whole reason M carries A's identity at all.
 //
-// PRECONDITION, enforced by its THREE CALLERS and not by itself: exactly one of
+// The arm follows from A's {name}, which is the ONE fact that distinguishes them
+// and is never separately stored (see TypeDefinitionOrRef):
+//
+//   - A is NAMED: a TypeDefinitionRef, resolved by the ordinary Schema.Type
+//     lookup, exactly as every base= produced from a document is.
+//   - A is ANONYMOUS: A is the src-expredef clause 1.1 original a redefining
+//     <complexType> owns, which is in no by-name symbol table, so a ref could not
+//     name it and the InlineTypeDefinition arm carries the component itself.
+//
+// The InlineTypeDefinition arm's OWNERSHIP invariant is not violated by the
+// second holder this creates. The arm's owner is the redefining type's own
+// {base type definition} slot; M is a throwaway VALUE outside the component model
+// altogether — never registered, never reachable from a resolver, discarded when
+// the clause-1.5 check returns — so the copy it holds can neither be observed
+// beside the original nor diverge from it (the divergence that doc warns of needs
+// a fold writing through one holder, and no fold runs over M).
+func collapsedExtensionBase(a ComplexType) TypeDefinitionOrRef {
+	if a.Name() == (QName{}) {
+		return InlineTypeDefinition{Definition: a}
+	}
+	return TypeDefinitionRef{Name: a.Name()}
+}
+
+// newComplexType is the shared core of NewComplexType,
+// NewComplexTypeOwningBase and NewAnonymousComplexType: every check and copy
+// that does not concern the {name}/{context} pair lives here exactly once
+// (STYLE T4).
+//
+// PRECONDITION, enforced by its FOUR CALLERS and not by itself: exactly one of
 // name and context is present, per the §3.4.1 tableau's XOR. This layer can
 // express both-present and neither-present and does not reject either; the
 // partition's guarantee comes from the entry points, each of which accepts only
-// one half of the pair — the two exported ones by their parameter lists, and
-// newCollapsedExtension by passing a name and a nil context explicitly. Any
-// further caller added here must re-establish the XOR itself.
-func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
+// one half of the pair — the three exported ones by their parameter lists, and
+// newCollapsedExtension by copying the already-validated pair off the ancestor A
+// it collapses onto. Any further caller added here must re-establish the XOR
+// itself.
+//
+// A SECOND precondition belongs to NewComplexTypeOwningBase alone: a base
+// holding an InlineTypeDefinition arrived through it, so the owned component's
+// {context} has been checked against the owner's identity. This layer cannot
+// express that check — it takes no identity — and does not attempt one.
+// newCollapsedExtension is outside that precondition and needs no such check: the
+// anonymous base it may pass is A itself, already constructed and already
+// context-checked against its real owner, and M is never a component a consumer
+// can reach.
+func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, base TypeDefinitionOrRef, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
+	if err := checkTypeDefinitionOrRef(loc, base, complexTypeLabel(name)+" {base type definition}"); err != nil {
+		return ComplexType{}, err
+	}
 	switch derivationMethod {
 	case DerivationExtension, DerivationRestriction:
 	default:
@@ -610,13 +784,13 @@ func newComplexType(loc xsderr.Loc, name QName, context ComplexTypeContext, base
 		return ComplexType{}, err
 	}
 	c := ComplexType{
-		loc:                    loc,
-		name:                   name,
-		context:                context,
-		baseTypeDefinitionName: baseTypeDefinitionName,
-		derivationMethod:       derivationMethod,
-		abstract:               abstract,
-		contentType:            contentType,
+		loc:              loc,
+		name:             name,
+		context:          context,
+		base:             base,
+		derivationMethod: derivationMethod,
+		abstract:         abstract,
+		contentType:      contentType,
 	}
 	if len(final) > 0 {
 		c.final = append([]DerivationMethod(nil), final...)
@@ -698,20 +872,40 @@ func (c ComplexType) Loc() xsderr.Loc {
 	return c.loc
 }
 
-// BaseTypeDefinitionName returns the {base type definition} property (Required)
-// as a pre-resolution QName reference.
+// Base returns the {base type definition} property (§3.4.1) as the
+// TypeDefinitionOrRef sum, which a consumer switches exhaustively over:
 //
-// This is NOT the resolved {base type definition} component (§3.4.1). Finalize
-// (#173) validates the name resolves to a type definition (src-resolve clause
-// 1.1) and that the base chain is acyclic (ct-props-correct clause 3), but adds
-// no resolved-component accessor: the QName is retained, and a consumer obtains
-// the component by a read-time schema.Type(name) lookup, mirroring the
-// TypeDefinitionRef arm of ElementDeclaration.TypeDefinition. A base is always
-// reachable by name here — a complex type's {base type definition} is never the
-// inline anonymous kind this producer builds — so this slot stays a bare QName
-// rather than a TypeDefinitionOrRef.
-func (c ComplexType) BaseTypeDefinitionName() QName {
-	return c.baseTypeDefinitionName
+//   - TypeDefinitionRef is the ordinary case, a PRE-RESOLUTION reference by
+//     name. Finalize (#173) validates that it resolves to a type definition
+//     (src-resolve clause 1.1) and that the base chain is acyclic
+//     (ct-props-correct clause 3), but does not rewrite it: the QName is
+//     retained, and a consumer obtains the component by a read-time
+//     schema.Type(name) lookup, exactly as for ElementDeclaration.TypeDefinition.
+//   - InlineTypeDefinition is the ALREADY-RESOLVED anonymous component §4.2.4
+//     src-expredef clause 1.1 pairs a redefining <complexType> with; it is in no
+//     symbol table, so it is reachable only through this slot, and no lookup
+//     will find it. See NewComplexTypeOwningBase.
+//   - nil is an ·absent· base. ct-props-correct (§3.4.6.1) clause 1 makes {base
+//     type definition} Required, so nil is a state the spec's tableau does not
+//     describe — but it IS representable, deliberately: the constructors do not
+//     reject it, and finalize reads it as "the chain ends here" rather than as a
+//     violation. Clause 1's Required-ness is not enforced at construction, and
+//     closing that state is a behaviour change with its own ratchet risk, kept
+//     apart from the slot's re-encoding (#505).
+func (c ComplexType) Base() TypeDefinitionOrRef {
+	return c.base
+}
+
+// complexTypeLabel renders a complex type being CONSTRUCTED as the owner phrase
+// of a rejection message, from its {name} alone — the component does not exist
+// yet, so valueconstraintvalid.go's complexTypeOwner, which takes one, cannot
+// serve. An absent name (the anonymous variety) has no QName to print, so it is
+// described by what it is instead (STYLE E1).
+func complexTypeLabel(name QName) string {
+	if name == (QName{}) {
+		return "anonymous complex type"
+	}
+	return "complex type " + name.String()
 }
 
 // DerivationMethod returns the {derivation method} property: DerivationExtension

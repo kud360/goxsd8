@@ -94,9 +94,8 @@ func (AttributeDeclarationRef) attributeDeclarationRef()   {}
 // half, the Ref case, and clause 2 (Simple Default Valid, needs a resolved {type
 // definition}) are not. The whole of clause 3 — both halves, both variants — and
 // clause 2 are decided at finalize by Phase E instead (valueconstraintvalid.go,
-// #371). The §3.5.4 key-evc effective
-// value constraint is computed at finalize instead of here, for the same reason
-// (defaultbinding.go, #262).
+// #371). The §3.5.4 key-evc effective value constraint is computed at finalize
+// instead of here, for the same reason (defaultbinding.go, #262).
 //
 // {required} is the derived boolean fact (true for a "required" use= token,
 // §3.5.1). The §3.2.2 use= XML token itself (AttributeUseToken) is a parse-time

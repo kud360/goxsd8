@@ -32,32 +32,30 @@
 // # Current coverage
 //
 // [New] returns a backend covering the primitive cohort so far — xs:decimal,
-// xs:precisionDecimal,
-// xs:boolean, xs:string, xs:anyURI, xs:float, xs:double, xs:hexBinary,
-// xs:base64Binary, xs:duration, xs:dateTime, the six remaining
+// xs:precisionDecimal, xs:boolean, xs:string, xs:anyURI, xs:float, xs:double,
+// xs:hexBinary, xs:base64Binary, xs:duration, xs:dateTime, the six remaining
 // seven-property date/time siblings xs:time, xs:date, xs:gYearMonth, xs:gYear,
 // xs:gMonthDay, xs:gDay and xs:gMonth, and xs:QName and xs:NOTATION
-// (context-resolved, no canonical form) — with spec-exact
-// parse, canonical and comparison. With xs:precisionDecimal mapped, strict now
-// covers all 20 builtin primitives; its maxScale/minScale facets are applicable
-// AND enforced at instance validation (cvc-maxScale-valid, cvc-minScale-valid)
-// by value/facets.go's scaleFacet, which reads ·scale· through this cohort's
-// value.Scaled capability (#133). xs:dateTimeStamp
-// (§3.4.28) is also covered: a restriction of xs:dateTime fixing
-// explicitTimezone=required, it reuses dateTimeVal through dateTime's mapping
-// verbatim (no separate canonical mapping exists, §3.4.28.1), its mandatory
-// timezone enforced by the generic explicitTimezone facet pipeline.
-// xs:yearMonthDuration (§3.4.26) and xs:dayTimeDuration (§3.4.27) are also
-// covered: restrictions of xs:duration to its year-month / day-time half, each
-// with its OWN Parse gating the narrower lexical space (a cross-half literal is
-// cvc-datatype-valid) and its own Canonical. dayTimeDuration reuses durationVal's
-// canonical rendering (its ·months· is always 0); yearMonthDuration cannot, and
-// its zero value (·months·=0) has no canonical representation at all (§3.4.26.1
-// Note), surfaced as a plain, non-verdict error rather than a fabricated lexical.
-// The remaining
-// representations above (the rest of the string family) and the
-// value.Emitter fast path remain future milestones. The cohort is certified
-// by value/backendtest.Run: each type's value carries exactly the capability
+// (context-resolved, no canonical form) — with spec-exact parse, canonical and
+// comparison. With xs:precisionDecimal mapped, strict now covers all 20 builtin
+// primitives; its maxScale/minScale facets are applicable AND enforced at
+// instance validation (cvc-maxScale-valid, cvc-minScale-valid) by
+// value/facets.go's scaleFacet, which reads ·scale· through this cohort's
+// value.Scaled capability (#133). xs:dateTimeStamp (§3.4.28) is also covered: a
+// restriction of xs:dateTime fixing explicitTimezone=required, it reuses
+// dateTimeVal through dateTime's mapping verbatim (no separate canonical mapping
+// exists, §3.4.28.1), its mandatory timezone enforced by the generic
+// explicitTimezone facet pipeline. xs:yearMonthDuration (§3.4.26) and
+// xs:dayTimeDuration (§3.4.27) are also covered: restrictions of xs:duration to
+// its year-month / day-time half, each with its OWN Parse gating the narrower
+// lexical space (a cross-half literal is cvc-datatype-valid) and its own
+// Canonical. dayTimeDuration reuses durationVal's canonical rendering (its
+// ·months· is always 0); yearMonthDuration cannot, and its zero value
+// (·months·=0) has no canonical representation at all (§3.4.26.1 Note), surfaced
+// as a plain, non-verdict error rather than a fabricated lexical. The remaining
+// representations above (the rest of the string family) and the value.Emitter
+// fast path remain future milestones. The cohort is certified by
+// value/backendtest.Run: each type's value carries exactly the capability
 // interfaces its applicable facets require (cos-applicable-facets), documented
 // per type on [New].
 //

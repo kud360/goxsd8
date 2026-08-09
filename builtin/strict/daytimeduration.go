@@ -8,11 +8,11 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// dayTimeDurationLexical is the dayTimeDuration lexical space
-// (§3.4.27.1, dayTimeDurationLexicalRep, nt-43): durationLexical with the pre-'T'
-// year and month alternatives deleted, keeping the day alternative and the whole
-// post-'T' time grammar (so "PT5M" — minutes after 'T' — stays accepted; only the
-// pre-'T' month branch is dropped). Anchored so the whole literal must match; a
+// dayTimeDurationLexical is the dayTimeDuration lexical space (§3.4.27.1,
+// dayTimeDurationLexicalRep, nt-43): durationLexical with the pre-'T' year and
+// month alternatives deleted, keeping the day alternative and the whole post-'T'
+// time grammar (so "PT5M" — minutes after 'T' — stays accepted; only the pre-'T'
+// month branch is dropped). Anchored so the whole literal must match; a
 // year/month character (Y, or a pre-'T' M) is outside this space, the narrower
 // gate Parse must apply itself (value/backend.go).
 var dayTimeDurationLexical = regexp.MustCompile(`^-?P((([0-9]+D)(T(([0-9]+H)([0-9]+M)?([0-9]+(\.[0-9]+)?S)?|([0-9]+M)([0-9]+(\.[0-9]+)?S)?|([0-9]+(\.[0-9]+)?S)))?)|(T(([0-9]+H)([0-9]+M)?([0-9]+(\.[0-9]+)?S)?|([0-9]+M)([0-9]+(\.[0-9]+)?S)?|([0-9]+(\.[0-9]+)?S))))$`)

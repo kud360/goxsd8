@@ -83,8 +83,8 @@ func TestProduceExtensionSuffixSequence(t *testing.T) {
 	if dct.DerivationMethod() != xsd.DerivationExtension {
 		t.Fatalf("D {derivation method} = %s, want extension", dct.DerivationMethod())
 	}
-	if dct.BaseTypeDefinitionName() != xq("B") {
-		t.Fatalf("D {base type definition} = %s, want %s", dct.BaseTypeDefinitionName(), xq("B"))
+	if dct.Base() != (xsd.TypeDefinitionOrRef(xsd.TypeDefinitionRef{Name: xq("B")})) {
+		t.Fatalf("D {base type definition} = %#v, want a TypeDefinitionRef naming %s", dct.Base(), xq("B"))
 	}
 
 	ec := elementContentOf(t, s, xq("D"))

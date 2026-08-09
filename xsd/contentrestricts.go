@@ -556,12 +556,11 @@ const maxProductStates = 4096
 //     SUPERSET of the star's and so of the interleave — a single-member ·all·
 //     already reads as that member repeated — so an R modelled that way admits sequences
 //     R does not, and charging their absence from B would false-reject. B needs
-//     no such leniency
-//     for the mirror-image reason: the same over-approximation makes B look
-//     larger, which can only accept. This is the NARROW §3.4.6.3 all-group
-//     allowance, not the broader implementation-defined (a)/(b)/(c) clause that
-//     the pre-#263 stub relied on; being spec-licensed rather than a deliberate
-//     incompleteness, it carries no GAP marker.
+//     no such leniency for the mirror-image reason: the same over-approximation
+//     makes B look larger, which can only accept. This is the NARROW §3.4.6.3
+//     all-group allowance, not the broader implementation-defined (a)/(b)/(c)
+//     clause that the pre-#263 stub relied on; being spec-licensed rather than a
+//     deliberate incompleteness, it carries no GAP marker.
 //   - a content model whose exact unfolding would exceed maxContentPositions on
 //     either side. This one alone is a RESOURCE ceiling rather than a modelling
 //     gap — it bounds the automaton's size, see maxContentPositions for what that
@@ -1036,10 +1035,10 @@ func elementPositionBinding(p position) defaultBinding {
 //
 // A top-level ·all· is the shape the spec's own wording names, and cos-all-limited
 // (§3.8.6.2) confines an ·all· to that position or to another ·all· reached
-// through a <group ref>, so the tree walk and the spec's
-// "T.{content type}.{particle}.{term}.{compositor} = all" agree on every content
-// model the grammar admits. The walk carries no visited set, licensed by Phase
-// B's checkModelGroupsAcyclic (PRINCIPLES 9).
+// through a <group ref>, so the tree walk and the spec's "T.{content
+// type}.{particle}.{term}.{compositor} = all" agree on every content model the
+// grammar admits. The walk carries no visited set, licensed by Phase B's
+// checkModelGroupsAcyclic (PRINCIPLES 9).
 func (s *Schema) usesAllCompositor(t TermOrRef) bool {
 	switch t := t.(type) {
 	case ResolvedTerm:

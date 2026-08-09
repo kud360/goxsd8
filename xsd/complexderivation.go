@@ -77,6 +77,36 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // returns element-only or mixed and nothing else, so the forbidden state is
 // unrepresentable and a runtime test would be dead code. See complextype.go's
 // ruleCTPropsCorrect doc, which records the by-construction discharge.
+//
+// GAP(xsd): this walk quantifies over s.types, so an ANONYMOUS complex type —
+// one reachable only through a slot that owns it — gets NO verdict from any
+// constraint above. That covers the inline <complexType> of an element or
+// attribute declaration (#438/#414) and, since #505, the src-expredef clause 1.1
+// ORIGINAL a redefining complex type owns, which the spec makes a full component
+// "as defined in Schema Component Details (§3)" and therefore subject to these
+// same rules. Closing it means a declaration-descending walk over the owning
+// slots, which is one change for all three; #584 owns it.
+//
+// DIRECTION, per reader rather than in general (STYLE P3a). What is withheld is
+// a VERDICT, never a property value: the two folds now materialise §3.4.2.4
+// clause 3 and §3.4.2.5 clause 2 on an anonymous type reachable as a {base type
+// definition} and re-seat it into the owning slot, so the readers that charge a
+// derivation AGAINST its base — checkRestrictionAttributes,
+// checkRestrictionRequiredAttributes and checkRestrictionAttributeWildcard, each
+// of which rejects on a base that reports FEWER attribute uses or no wildcard —
+// see the complete set (attributeusefold.go's baseAttributeUses,
+// attributewildcardfold.go's baseAttributeWildcard). Withholding that value was
+// fail-CLOSED through exactly those three, which is why it is closed here rather
+// than deferred (#505).
+//
+// The two properties are still unfolded on an anonymous type owned by an ELEMENT
+// or ATTRIBUTE declaration, which no {base type definition} slot can reach (an
+// anonymous type is unnameable, so only a redefinition can hold one as its base).
+// Its readers are checkComplexTypeAttributeUses (valueconstraintvalid.go) and
+// resolveComplexType (resolve.go), which quantify over the set to charge each
+// MEMBER: a smaller set means fewer charges, so both under-reject. No reader
+// charges on a member being absent from that set. Adding the missing Phase-D
+// verdict likewise only adds rejections that are not made today.
 func (s *Schema) checkComplexDerivations() error {
 	for _, t := range s.types {
 		c, ok := t.(ComplexType)
@@ -115,9 +145,12 @@ func (s *Schema) checkCTPropsCorrectResolved(c ComplexType) error {
 
 // checkSimpleBaseIsExtension is ct-props-correct clause 2. An absent or
 // unresolvable base is skipped: the reference was already charged src-resolve by
-// Phase A, and an absent one has no variety to read.
+// Phase A, and an absent one has no variety to read. The base is reached through
+// typeOf, so an anonymous inline base is decided rather than skipped — skipping
+// it would wave the clause through unchecked for every redefining complex type
+// (STYLE T4, #505).
 func (s *Schema) checkSimpleBaseIsExtension(c ComplexType) error {
-	base, ok := s.Type(c.BaseTypeDefinitionName())
+	base, ok := s.typeOf(c.Base())
 	if !ok {
 		return nil
 	}
@@ -128,7 +161,7 @@ func (s *Schema) checkSimpleBaseIsExtension(c ComplexType) error {
 		return nil
 	}
 	return xsderr.New(ruleCTPropsCorrect, xsderr.Loc{},
-		"complex type %s has the simple type %s as its {base type definition} but {derivation method} = %s, and ct-props-correct clause 2 requires extension", c.Name(), c.BaseTypeDefinitionName(), c.DerivationMethod())
+		"complex type %s has the simple type %s as its {base type definition} but {derivation method} = %s, and ct-props-correct clause 2 requires extension", c.Name(), typeDefinitionLabel(base), c.DerivationMethod())
 }
 
 // checkAttributeUseNamesUnique is ct-props-correct clause 4. The uses are walked
@@ -196,19 +229,15 @@ func (s *Schema) checkComplexTypeRestriction(t ComplexType) error {
 	if t.DerivationMethod() != DerivationRestriction {
 		return nil
 	}
-	baseName := t.BaseTypeDefinitionName()
-	if baseName == (QName{}) {
-		return nil
-	}
-	if t.Name() == anyTypeName && baseName == anyTypeName {
-		return nil
-	}
-	base, ok := s.Type(baseName)
+	base, ok := s.typeOf(t.Base())
 	if !ok {
-		return nil // a dangling base was already charged src-resolve by Phase A
+		return nil // an absent base, or a dangling one Phase A already charged src-resolve
 	}
 	b, ok := base.(ComplexType)
 	if !ok {
+		return nil
+	}
+	if t.Name() == anyTypeName && b.Name() == anyTypeName {
 		return nil
 	}
 	return s.checkDerivationOKRestriction(t, b)
@@ -245,7 +274,7 @@ func checkRestrictionAssertions(t, b ComplexType) error {
 	}
 	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 		"complex type %s restricts %s, but %s's {assertions} (%d) are not a prefix of %s's (%d), which derivation-ok-restriction clause 5 requires: §3.4.2.1 clause 1 places the base's assertions, in order, ahead of the type's own <assert> children",
-		t.Name(), b.Name(), b.Name(), len(b.assertions), t.Name(), len(t.assertions))
+		t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b), len(b.assertions), t.Name(), len(t.assertions))
 }
 
 // checkRestrictionBaseFinal is clause 1: B's {final} must not contain
@@ -255,7 +284,7 @@ func checkRestrictionBaseFinal(t, b ComplexType) error {
 		return nil
 	}
 	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-		"complex type %s restricts %s, but %s has restriction in its {final}, which derivation-ok-restriction clause 1 forbids", t.Name(), b.Name(), b.Name())
+		"complex type %s restricts %s, but %s has restriction in its {final}, which derivation-ok-restriction clause 1 forbids", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b))
 }
 
 // checkRestrictionContentType is clause 2, a DISJUNCTION over four branches: the
@@ -291,7 +320,7 @@ func (s *Schema) checkRestrictionContentType(t, b ComplexType) error {
 		return nil // clause 2.4
 	}
 	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-		"complex type %s restricts %s, but its %s {content type} is not a valid restriction of the base's %s {content type} under any branch of derivation-ok-restriction clause 2 (2.1 base is xs:anyType, 2.2 simple content, 2.3 empty content, 2.4.1 element-only/mixed match, 2.4.2 the content model ·restricts· the base's per cos-content-act-restrict §3.4.6.4)", t.Name(), b.Name(), t.ContentType().Variety(), b.ContentType().Variety())
+		"complex type %s restricts %s, but its %s {content type} is not a valid restriction of the base's %s {content type} under any branch of derivation-ok-restriction clause 2 (2.1 base is xs:anyType, 2.2 simple content, 2.3 empty content, 2.4.1 element-only/mixed match, 2.4.2 the content model ·restricts· the base's per cos-content-act-restrict §3.4.6.4)", t.Name(), typeDefinitionLabel(b), t.ContentType().Variety(), b.ContentType().Variety())
 }
 
 // restrictionSimpleContentOK is clause 2.2: 2.2.1 T's {content type}.{variety} is
@@ -391,7 +420,7 @@ func (s *Schema) checkRestrictionAttributes(t, b ComplexType) error {
 		general, ok := s.attributeDefaultBinding(b, name)
 		if !ok {
 			return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-				"complex type %s restricts %s but declares an attribute use for %s, which %s neither declares nor admits through an {attribute wildcard}, so an element valid against the restriction can carry an attribute the base rejects (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), name, b.Name())
+				"complex type %s restricts %s but declares an attribute use for %s, which %s neither declares nor admits through an {attribute wildcard}, so an element valid against the restriction can carry an attribute the base rejects (derivation-ok-restriction clause 3, c-ran)", t.Name(), typeDefinitionLabel(b), name, typeDefinitionLabel(b))
 		}
 		if err := s.checkBindingSubsumes(name, t, b, general, attributeUseBinding{use: u}); err != nil {
 			return err
@@ -461,13 +490,13 @@ func checkRestrictionAttributeWildcard(t, b ComplexType) error {
 	bw, baseHas := b.AttributeWildcard()
 	if !baseHas {
 		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-			"complex type %s restricts %s and declares an {attribute wildcard}, but %s has none, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 2.2, c-avaw)", t.Name(), b.Name(), b.Name())
+			"complex type %s restricts %s and declares an {attribute wildcard}, but %s has none, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 2.2, c-avaw)", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b))
 	}
 	if wildcardSubset(tw.NamespaceConstraint(), bw.NamespaceConstraint()) {
 		return nil
 	}
 	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-		"complex type %s restricts %s but its {attribute wildcard} admits expanded names %s's does not, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 2.2, c-avaw, and cos-ns-subset)", t.Name(), b.Name(), b.Name())
+		"complex type %s restricts %s but its {attribute wildcard} admits expanded names %s's does not, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 2.2, c-avaw, and cos-ns-subset)", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b))
 }
 
 // checkRestrictionRequiredAttributes is the cvc-complex-type clause 3 half of
@@ -496,13 +525,13 @@ func checkRestrictionRequiredAttributes(t, b ComplexType) error {
 		tu, ok := findAttributeUse(t.attributeUses, name)
 		if !ok {
 			return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-				"complex type %s restricts %s but its {attribute uses} carry no use for attribute %s, which the base requires, so an element omitting it is valid against the restriction and not against the base (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 3)", t.Name(), b.Name(), name)
+				"complex type %s restricts %s but its {attribute uses} carry no use for attribute %s, which the base requires, so an element omitting it is valid against the restriction and not against the base (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 3)", t.Name(), typeDefinitionLabel(b), name)
 		}
 		if tu.Required() {
 			continue
 		}
 		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
-			"complex type %s restricts %s but declares attribute %s as optional where the base requires it, so an element omitting it is valid against the restriction and not against the base (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 3)", t.Name(), b.Name(), name)
+			"complex type %s restricts %s but declares attribute %s as optional where the base requires it, so an element omitting it is valid against the restriction and not against the base (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 3)", t.Name(), typeDefinitionLabel(b), name)
 	}
 	return nil
 }
@@ -590,7 +619,7 @@ func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType, k locallyD
 			continue
 		}
 		return xsderr.New(k.rule, xsderr.Loc{},
-			"complex type %s %s %s, but the ·locally declared type· %s of attribute %s within the %s is not ·validly substitutable· for the base's %s %s (%s)", t.Name(), k.verb, b.Name(), typeDefinitionLabel(within), name, k.relation, typeDefinitionLabel(base), k.limitation, k.clause)
+			"complex type %s %s %s, but the ·locally declared type· %s of attribute %s within the %s is not ·validly substitutable· for the base's %s %s (%s)", t.Name(), k.verb, typeDefinitionLabel(b), typeDefinitionLabel(within), name, k.relation, typeDefinitionLabel(base), k.limitation, k.clause)
 	}
 	return nil
 }
@@ -613,7 +642,7 @@ func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType, k locallyDec
 			continue
 		}
 		return xsderr.New(k.rule, xsderr.Loc{},
-			"complex type %s %s %s, but the ·locally declared type· %s of element %s within the %s is not ·validly substitutable· for the base's %s %s (%s)", t.Name(), k.verb, b.Name(), typeDefinitionLabel(within), name, k.relation, typeDefinitionLabel(base), k.limitation, k.clause)
+			"complex type %s %s %s, but the ·locally declared type· %s of element %s within the %s is not ·validly substitutable· for the base's %s %s (%s)", t.Name(), k.verb, typeDefinitionLabel(b), typeDefinitionLabel(within), name, k.relation, typeDefinitionLabel(base), k.limitation, k.clause)
 	}
 	return nil
 }
@@ -687,11 +716,14 @@ func (s *Schema) contentModelDeclarations(c ComplexType) []containedElement {
 	return contents.elements
 }
 
-// baseComplexType resolves c's {base type definition} when it is another Complex
-// Type Definition. It is false for an absent, unresolvable or simple base — the
-// three ways key-ldtype's case-3 recursion terminates without an answer.
+// baseComplexType is typeOf (typedefinition.go) narrowed to a COMPLEX base: it
+// resolves c's {base type definition} when it is another Complex Type
+// Definition, and is false for an absent, unresolvable or simple base — the
+// three ways key-ldtype's case-3 recursion terminates without an answer. It
+// re-derives no lookup of its own, so an anonymous inline base (src-expredef
+// clause 1.1) is followed here exactly as a named one is (STYLE T4).
 func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
-	base, ok := s.Type(c.BaseTypeDefinitionName())
+	base, ok := s.typeOf(c.Base())
 	if !ok {
 		return ComplexType{}, false
 	}
@@ -757,6 +789,12 @@ func (s *Schema) validlySubstitutable(sub, super TypeDefinition, blocked []Deriv
 // Two ANONYMOUS types both present as the zero QName and are reported as NOT
 // identical, exactly the licence §3.4.6.5's no-identity Note grants — the same
 // call typeAlternativesEquivalent already makes for key-equiv-ta clause 5.
+//
+// The walk follows the {base type definition} SLOT through typeOf, both arms.
+// Terminating at an InlineTypeDefinition instead would answer FALSE for every
+// type derived through a redefining complex type — an over-REJECT, not a
+// conservative answer, because a false here is what makes an instance
+// validation fail (#505).
 func (s *Schema) derivedOKComplex(d ComplexType, b TypeDefinition, blocked []DerivationMethod) bool {
 	subset := complexBlockingSubset(blocked)
 	for {
@@ -766,19 +804,15 @@ func (s *Schema) derivedOKComplex(d ComplexType, b TypeDefinition, blocked []Der
 		if containsDerivationMethod(subset, d.DerivationMethod()) {
 			return false // clause 1
 		}
-		baseName := d.BaseTypeDefinitionName()
-		if baseName == (QName{}) {
-			return false
+		base, ok := s.typeOf(d.Base())
+		if !ok {
+			return false // an absent base, or a dangling one Phase A already charged
 		}
-		if baseName == typeDefinitionName(b) {
+		if sameTypeDefinition(base, b) {
 			return true // clause 2.2
 		}
-		if baseName == anyTypeName {
+		if typeDefinitionName(base) == anyTypeName {
 			return false // clause 2.3.1
-		}
-		base, ok := s.Type(baseName)
-		if !ok {
-			return false
 		}
 		next, ok := base.(ComplexType)
 		if !ok {

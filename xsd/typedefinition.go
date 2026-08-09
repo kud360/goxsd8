@@ -46,53 +46,80 @@ func (ComplexType) typeDefinition() {}
 // pointer, not the value.
 func (*SimpleType) typeDefinition() {}
 
-// TypeDefinitionOrRef is the {type definition} slot of an Element Declaration
-// (§3.3.1) or an Attribute Declaration (§3.2.1). It is a sealed sum (STYLE
-// T2/T7): TypeDefinitionRef and InlineTypeDefinition are its only
-// implementations, sealed by the unexported typeDefinitionOrRef method, so
-// consumers exhaustively switch the two branches and no third variant is
-// representable. It copies attributeuse.go's AttributeDeclarationOrRef
-// precedent exactly, and for the same reason: the two XML mappings that
-// populate the slot differ fundamentally in OWNERSHIP of the type definition
-// they yield.
+// TypeDefinitionOrRef is a slot holding a reference to a type definition. It
+// serves TWO §3 properties, which is why its doc is written in terms of the slot
+// rather than of one property:
 //
-//   - TypeDefinitionRef covers §3.3.2.1 dcl.elt.common clauses 2-4 and §3.2.2.2
-//     dcl.att.local's type= and xs:anySimpleType tiers: the type is a top-level
-//     component reachable BY NAME, possibly forward-referenced, so only a
-//     deferred QName is available at parse time.
-//   - InlineTypeDefinition covers §3.3.2.1 clause 1 and §3.2.2.2's first tier:
-//     the anonymous type corresponding to an inline <simpleType>/<complexType>
-//     child, built in the same producer call, in no symbol table, so this slot
-//     is its SOLE owner.
+//   - the {type definition} of an Element Declaration (§3.3.1) or an Attribute
+//     Declaration (§3.2.1);
+//   - the {base type definition} of a Complex Type Definition (§3.4.1), which
+//     src-expredef clause 1.1 (§4.2.4) makes able to hold an anonymous
+//     already-resolved component (see ComplexType.Base).
 //
-// A nil TypeDefinitionOrRef is the single encoding of an ABSENT {type
-// definition} — the state a programmatically built declaration is in before the
-// §3.3.2.1/§3.2.2.2 defaulting tiers are applied. It replaces the zero QName
-// that used to carry that meaning, which was ambiguous: the same QName{} also
-// had to stand for "anonymous type" (STYLE D3, one fact one encoding).
-// Anonymity is now DERIVED from which arm the slot holds, never separately
-// stored: an InlineTypeDefinition is anonymous by construction, a
+// It is a sealed sum (STYLE T2/T7): TypeDefinitionRef and InlineTypeDefinition
+// are its only implementations, sealed by the unexported typeDefinitionOrRef
+// method, so consumers exhaustively switch the two branches and no third variant
+// is representable. It copies attributeuse.go's AttributeDeclarationOrRef
+// precedent exactly, and for the same reason: the XML mappings that populate the
+// slot differ fundamentally in OWNERSHIP of the type definition they yield.
+//
+//   - TypeDefinitionRef covers §3.3.2.1 dcl.elt.common clauses 2-4, §3.2.2.2
+//     dcl.att.local's type= and xs:anySimpleType tiers, and every ordinary
+//     base= of §3.4.2: the type is a top-level component reachable BY NAME,
+//     possibly forward-referenced, so only a deferred QName is available at
+//     parse time.
+//   - InlineTypeDefinition covers the three mapping rules that OWN the type
+//     they yield outright; see that type.
+//
+// A nil TypeDefinitionOrRef is the single encoding of an ABSENT slot, in EVERY
+// property this sum serves — the state a programmatically built declaration is
+// in before the §3.3.2.1/§3.2.2.2 defaulting tiers are applied, and the state a
+// ComplexType built with no base name is in. The meaning of nil is a property of
+// the SUM, not of the slot the caller reached it through: a consumer that
+// followed a slot must never read nil as "the ur-type" or as any other present
+// component, because typeOf and resolveTypeDefinition answer for all slots at
+// once and cannot be made arm-meaning-dependent on the caller's origin. It
+// replaces the zero QName that used to carry that meaning, which was ambiguous:
+// the same QName{} also had to stand for "anonymous type" (STYLE D3, one fact
+// one encoding). Anonymity is now DERIVED from which arm the slot holds, never
+// separately stored: an InlineTypeDefinition is anonymous by construction, a
 // TypeDefinitionRef never is.
 type TypeDefinitionOrRef interface{ typeDefinitionOrRef() }
 
-// TypeDefinitionRef is the {type definition} variant naming a top-level type
-// definition: the type/@type of §3.3.2/§3.2.2, the {type definition} an element
-// inherits from its substitution-group head (§3.3.2.1 clause 3), or the
-// xs:anyType / xs:anySimpleType default (§3.3.2.1 clause 4, §3.2.2.2). All four
-// are reachable by name, so all four are this arm. The field is read-only by
-// convention; do not mutate it after construction.
+// TypeDefinitionRef is the variant naming a top-level type definition: the
+// type/@type of §3.3.2/§3.2.2, the {type definition} an element inherits from
+// its substitution-group head (§3.3.2.1 clause 3), the xs:anyType /
+// xs:anySimpleType default (§3.3.2.1 clause 4, §3.2.2.2), and the base= of a
+// §3.4.2 derivation. All are reachable by name, so all are this arm. The field
+// is read-only by convention; do not mutate it after construction.
 //
 // Name is a PRESENT reference, never the absent (zero) QName: a reference that
 // names nothing could not be followed, so it is not a resolution failure to
-// defer to finalize but an illegal representation. NewElementDeclaration and
-// NewAttributeDeclaration reject one, exactly as NewAttributeUse rejects a
-// zero-named AttributeDeclarationRef.
+// defer to finalize but an illegal representation. NewElementDeclaration,
+// NewAttributeDeclaration and the ComplexType constructors reject one, exactly
+// as NewAttributeUse rejects a zero-named AttributeDeclarationRef.
 type TypeDefinitionRef struct{ Name QName }
 
-// InlineTypeDefinition is the {type definition} variant owning the anonymous
-// type definition corresponding to an inline <simpleType>/<complexType> child
-// (§3.3.2.1 dcl.elt.common clause 1, §3.2.2.2 dcl.att.local's first tier),
-// carried by value because the declaration is its sole owner.
+// InlineTypeDefinition is the variant that OWNS the anonymous type definition it
+// wraps, carried by value because the slot holding it is its sole owner.
+//
+// Ownership, not XML provenance, is this arm's invariant, and all four
+// properties below are stated in those terms. THREE mapping rules produce it,
+// and a fourth would be admitted on the same footing:
+//
+//   - §3.3.2.1 dcl.elt.common clause 1 — the anonymous type of an inline
+//     <simpleType>/<complexType> child of an <element>;
+//   - §3.2.2.2 dcl.att.local's first tier — the same for an <attribute>;
+//   - §4.2.4 src-expredef clause 1.1 — the {name}-·absent· ORIGINAL a redefining
+//     <simpleType>/<complexType> is paired with, which is not an XML child of
+//     anything in the redefining document at all: it corresponds to the
+//     REDEFINED document's own top-level definition item, "as defined in Schema
+//     Component Details (§3), except that its {name} is ·absent· and its
+//     {context} is the redefining component". It satisfies every property below
+//     — it is registered nowhere, it is built in the same producer call, the
+//     {base type definition} slot holding it is its sole owner, and its {name}
+//     is absent — so it is this arm rather than a fourth one recording
+//     provenance the component model does not otherwise carry (STYLE T4).
 //
 // The wrapped definition is deliberately NOT registered in the schema's
 // {type definitions} (SchemaBuilder.AddType). §3.17.2's XML Mapping Summary
@@ -112,20 +139,21 @@ type TypeDefinitionRef struct{ Name QName }
 //
 // This slot does not populate the wrapped type's own {context} property, and it
 // is not the place to: {context} is the BACK-pointer of this same edge, and the
-// caller supplies it. The caller mints one xsd.ComponentID for the declaration
-// before either component exists and threads it into both — into the wrapped
-// type through NewAnonymousComplexType's context argument, and into the
-// declaration through NewElementDeclarationOwningType, which is the only entry
-// point that accepts a wrapped COMPLEX type and checks the two agree (#340).
-// That property is §3.4.1 ctd-context; see ComplexTypeContext. A wrapped SIMPLE
-// type's own {context} (§3.16.1 std-context) is a separate property and is still
-// unmodeled here.
+// caller supplies it. The caller mints one xsd.ComponentID for the OWNER before
+// either component exists and threads it into both — into the wrapped type
+// through NewAnonymousComplexType's context argument, and into the owner through
+// the one entry point that accepts a wrapped COMPLEX type and checks the two
+// agree: NewElementDeclarationOwningType for a declaration (#340),
+// NewComplexTypeOwningBase for a redefining complex type (#505). That property
+// is §3.4.1 ctd-context; see ComplexTypeContext. A wrapped SIMPLE type's own
+// {context} (§3.16.1 std-context) is a separate property and is still unmodeled
+// here.
 //
 // Definition is always present and always ANONYMOUS (its Name() is the zero
 // QName): a named type is reachable by name and so is always the
-// TypeDefinitionRef arm. NewElementDeclaration and NewAttributeDeclaration
-// reject both violations. The field is read-only by convention; do not mutate
-// it after construction.
+// TypeDefinitionRef arm. NewElementDeclaration, NewAttributeDeclaration and the
+// ComplexType constructors reject both violations. The field is read-only by
+// convention; do not mutate it after construction.
 type InlineTypeDefinition struct{ Definition TypeDefinition }
 
 // typeDefinitionOrRef marks TypeDefinitionRef as a TypeDefinitionOrRef; see the
@@ -136,13 +164,46 @@ func (TypeDefinitionRef) typeDefinitionOrRef() {}
 // the TypeDefinitionOrRef doc.
 func (InlineTypeDefinition) typeDefinitionOrRef() {}
 
-// checkTypeDefinitionOrRef rejects the encodings of a {type definition} slot
-// that TypeDefinitionOrRef's doc declares illegal, charged to
-// xsderr.RuleComponentInvariant: these are representation invariants this
-// package owns, not spec clauses a schema author can violate, which is the same
-// footing NewAttributeUse rejects a zero-named AttributeDeclarationRef on. ctx
-// names the declaring component kind for the message. A nil ref is the legal
-// encoding of an absent {type definition} and passes.
+// typeOf is the one way this package turns a TypeDefinitionOrRef slot into a
+// component, exhaustively over the sum's two arms: an InlineTypeDefinition IS
+// the component (it is in no by-name symbol table, so a lookup would miss it),
+// while a TypeDefinitionRef is the by-name Schema.Type lookup. ok is false for an
+// absent (nil) slot and for an unresolvable name — the cases every caller treats
+// as "not decidable by this clause", never as a violation (a dangling name was
+// already charged src-resolve by resolve.go's Phase A).
+//
+// It answers for EVERY slot the sum serves — an element or attribute
+// declaration's {type definition} and a complex type's {base type definition}
+// alike — and deliberately takes the slot rather than the owning component, so
+// it can never become arm-meaning-dependent on where the caller came from. Every
+// consumer goes through this helper, through its complex-only narrowing
+// baseComplexType (complexderivation.go), or through its narrowed sibling
+// simpleTypeOf; none re-derives a bare-name lookup of its own (STYLE T4).
+func (s *Schema) typeOf(ref TypeDefinitionOrRef) (TypeDefinition, bool) {
+	switch r := ref.(type) {
+	case nil:
+		return nil, false
+	case TypeDefinitionRef:
+		return s.Type(r.Name)
+	case InlineTypeDefinition:
+		return r.Definition, true
+	default:
+		panic("xsd: typeOf: non-exhaustive TypeDefinitionOrRef switch")
+	}
+}
+
+// checkTypeDefinitionOrRef rejects the encodings of a TypeDefinitionOrRef slot
+// that the sum's doc declares illegal, charged to xsderr.RuleComponentInvariant:
+// these are representation invariants this package owns, not spec clauses a
+// schema author can violate, which is the same footing NewAttributeUse rejects a
+// zero-named AttributeDeclarationRef on. A nil ref is the legal encoding of an
+// absent slot and passes.
+//
+// ctx names the owning component AND the property, because the sum serves more
+// than one — "element declaration {urn:x}e {type definition}", "complex type
+// {urn:x}T {base type definition}". The property name is deliberately NOT a
+// literal in the format strings: hard-coding "{type definition}" made every
+// message lie the moment {base type definition} adopted the sum (#505).
 func checkTypeDefinitionOrRef(loc xsderr.Loc, ref TypeDefinitionOrRef, ctx string) error {
 	switch r := ref.(type) {
 	case nil:
@@ -150,17 +211,17 @@ func checkTypeDefinitionOrRef(loc xsderr.Loc, ref TypeDefinitionOrRef, ctx strin
 	case TypeDefinitionRef:
 		if r.Name == (QName{}) {
 			return xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"%s {type definition} is a TypeDefinitionRef carrying the absent (zero) QName, but that variant names a type definition reachable by name; an absent {type definition} is the nil slot and an anonymous one is InlineTypeDefinition", ctx)
+				"%s is a TypeDefinitionRef carrying the absent (zero) QName, but that variant names a type definition reachable by name; an absent slot is the nil one and an anonymous type is InlineTypeDefinition", ctx)
 		}
 		return nil
 	case InlineTypeDefinition:
 		if r.Definition == nil {
 			return xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"%s {type definition} is an InlineTypeDefinition with no definition, but that variant owns the anonymous type definition outright; an absent {type definition} is the nil slot", ctx)
+				"%s is an InlineTypeDefinition with no definition, but that variant owns the anonymous type definition outright; an absent slot is the nil one", ctx)
 		}
 		if r.Definition.Name() != (QName{}) {
 			return xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"%s {type definition} is an InlineTypeDefinition wrapping the NAMED type %s, but a named type definition is reachable by name and so is always the TypeDefinitionRef variant", ctx, r.Definition.Name())
+				"%s is an InlineTypeDefinition wrapping the NAMED type %s, but a named type definition is reachable by name and so is always the TypeDefinitionRef variant", ctx, r.Definition.Name())
 		}
 		return nil
 	default:
