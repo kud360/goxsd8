@@ -48,31 +48,19 @@ import (
 // §3.4.2 base fold its case-1 clauses read is now done — clause 1.2's
 // {attribute uses} (§3.4.2.4 clause 3, #401), clause 1.3's {attribute wildcard}
 // (§3.4.2.5 clause 2.2, #265) and clause 1.7's {assertions} (§3.4.2.1 clause 1,
-// #346). THREE cos-ct-extends clauses cannot reject inside the admitted shape —
-// 1.5, 1.1 and 2.2 — and they cannot for two DIFFERENT reasons, which this
-// inventory keeps apart.
+// #346). ONE cos-ct-extends clause cannot reject inside the admitted shape:
+// clause 1.5.
 //
 // Clause 1.5 (two-step derivability) is an ENGINE approximation: it is proven
 // only for a pure-extension chain, and a chain that mixes extension and
 // restriction steps is accepted unconditionally (GAP(xsd) in
 // xsd/complexextension.go, follow-up #392). That marker, not this comment,
-// carries its retirement.
+// carries its retirement. Case 2 (simple base) is complete.
 //
-// Clauses 1.1 and 2.2 — "B.{final} does not contain extension", for a complex
-// and a simple base respectively — are instead DATA-DEAD: both checks are
-// written, correct and tested, but nothing maps {final} from final=/finalDefault=
-// (every producer construction site passes a literal nil: parser/produce_complex.go
-// for complex types, parser/produce.go for simple ones), so finalContains never
-// sees extension and both clauses pass VACUOUSLY. That is a producer MAPPING
-// gap, not an engine one. Until #436 maps {final}, these two are
-// unreachable-to-reject and the count here is three; when #436 lands they go
-// live and it drops back to one — clause 1.5 alone. Case 2 (simple base) is
-// therefore complete only in its clause 2.1.
-//
-// All three are UNDER-rejections — the lane can report "valid" for a schema a
-// complete processor rejects, never "invalid" for a valid one — so they are
-// recorded gaps of the same shape as the ones the admitted <restriction> path
-// already carries, not fabricated verdicts.
+// It is an UNDER-rejection — the lane can report "valid" for a schema a complete
+// processor rejects, never "invalid" for a valid one — so it is a recorded gap
+// of the same shape as the ones the admitted <restriction> path already carries,
+// not a fabricated verdict.
 //
 // # Why "Parse returns nil" is not, by itself, evidence of validity
 //
@@ -866,17 +854,14 @@ func anonymousComplexTypeDecidable(el *parser.Element) bool {
 // cos-ct-extends (§3.4.6.2) judges them (#264), and its case-1 clauses read only
 // folds that are now done — 1.2 over §3.4.2.4 clause 3's {attribute uses}
 // (#401), 1.3 over §3.4.2.5 clause 2.2's {attribute wildcard} (#265) and 1.7
-// over §3.4.2.1 clause 1's {assertions} (#346). Three of its clauses still
-// cannot reject: case 1's 1.5 (two-step derivability), proven only for a
-// pure-extension chain and otherwise accepted unconditionally, an engine
-// approximation (GAP(xsd), xsd/complexextension.go, #392); and — until #436 maps
-// {final} — case 1's 1.1 and case 2's 2.2, whose "B.{final} does not contain
-// extension" test reads a property the producer never populates and so passes
-// vacuously, leaving case 2 complete only in its clause 2.1. The file comment
-// above carries the full inventory and why the two kinds differ. All three are
-// UNDER-rejections, the same safe direction as cos-nonambig and ct-props-correct
-// clause 4 already are on the admitted <restriction> path, so they bound what
-// this lane can claim rather than letting it fabricate an "invalid".
+// over §3.4.2.1 clause 1's {assertions} (#346). One of its clauses still cannot
+// reject: case 1's 1.5 (two-step derivability), proven only for a pure-extension
+// chain and otherwise accepted unconditionally, an engine approximation
+// (GAP(xsd), xsd/complexextension.go, #392). Case 2 is complete. The file comment
+// above carries the full inventory. That clause is an UNDER-rejection, the same
+// safe direction as cos-nonambig and ct-props-correct clause 4 already are on the
+// admitted <restriction> path, so it bounds what this lane can claim rather than
+// letting it fabricate an "invalid".
 //
 // A <group ref>/<attributeGroup ref> IS produced (#177) and admitted: its target
 // resolves genuinely at finalize (or fails src-resolve). Real structural
