@@ -111,6 +111,9 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 	// needs an including document to borrow a namespace from).
 	p := newProducer(doc, attrOr(doc.Root(), "targetNamespace"), nil, nil, nil, builder, sym)
 	p.prescan()
+	if err := p.checkDefaultOpenContent(); err != nil {
+		return nil, err
+	}
 	if err := p.run(); err != nil {
 		return nil, err
 	}

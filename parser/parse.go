@@ -774,10 +774,14 @@ type fetched struct {
 // document's pre-scan runs before any document is produced, so a base= or
 // <attributeGroup ref> in one document reaches a definition contributed by
 // another (§4.2.3 clause 3.1.2, c-incl-incl); the builtins are seeded once, by
-// newSymbols, for the whole assembly. backend supplies the finalized schema's
-// value space too ([value.NewValueSpace]), so the finalize-time {value}
-// comparisons (au-props-correct clause 3, loc-testSubP clauses 4.2/5.2.2) and the
-// Simple Default Valid checks (a-props-correct clause 2, au-props-correct clause
+// newSymbols, for the whole assembly. Every document's <defaultOpenContent> is
+// judged in that same pre-produce pass (checkDefaultOpenContent), so §3.4.2.3.3
+// clause 5.2 can only ever select one whose grammar already holds — including
+// through an on-demand base build into a document not yet produced. backend
+// supplies the finalized schema's value space too ([value.NewValueSpace]), so the
+// finalize-time {value} comparisons (au-props-correct clause 3, loc-testSubP
+// clauses 4.2/5.2.2) and the Simple Default Valid checks (a-props-correct clause
+// 2, au-props-correct clause
 // 2) decide rather than fail open — see [Produce] for the full statement.
 func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 	builder := xsd.NewSchemaBuilder()
@@ -789,6 +793,9 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 	for _, d := range a.docs {
 		p := newProducer(d.doc, d.tns, d.ov, d.rd, d.redefines, builder, sym)
 		p.prescan()
+		if err := p.checkDefaultOpenContent(); err != nil {
+			return nil, err
+		}
 		producers = append(producers, p)
 	}
 	for i, p := range producers {

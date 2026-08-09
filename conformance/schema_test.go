@@ -128,6 +128,17 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"complexType with openContent mode=none", `<xs:complexType name="T"><xs:openContent mode="none"/><xs:sequence/></xs:complexType>`},
 		{"complexContent restriction with openContent", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:restriction base="B"><xs:openContent mode="suffix"><xs:any/></xs:openContent><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`},
 		{"top-level defaultOpenContent with any", `<xs:defaultOpenContent><xs:any/></xs:defaultOpenContent><xs:complexType name="T"><xs:sequence/></xs:complexType>`},
+		// #352 admits the two malformed shapes #230 had to decline as well. Both are
+		// now rejected by the producer's pre-produce pass for ANY document that
+		// declares a <defaultOpenContent>, so each is a real verdict rather than one
+		// contingent on some complex type of the document reaching clause 5.2: the
+		// childless form its content model forbids, and a mode outside its
+		// (interleave|suffix) enumeration — "none" is legal on a type's OWN
+		// <openContent> but not here, and every other token is out of the
+		// enumeration outright.
+		{"top-level defaultOpenContent with no any child", `<xs:defaultOpenContent/>`},
+		{"top-level defaultOpenContent with mode=none", `<xs:defaultOpenContent mode="none"><xs:any/></xs:defaultOpenContent>`},
+		{"top-level defaultOpenContent with an out-of-enumeration mode", `<xs:defaultOpenContent mode="bogus"><xs:any/></xs:defaultOpenContent>`},
 	}
 	for _, tc := range cases {
 		if !schemaShapeDecidable(schemaDoc(t, tc.body)) {
@@ -197,17 +208,6 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"override child that is a list-variety simpleType", `<xs:override schemaLocation="b.xsd"><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType></xs:override>`},
 		{"override child of an out-of-model kind", `<xs:override schemaLocation="b.xsd"><xs:include schemaLocation="c.xsd"/></xs:override>`},
 		{"include beside an undecidable kind still declines", `<xs:include schemaLocation="lib.xsd"/><xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
-		// #230 admits <defaultOpenContent> only WITH the <any> child its content
-		// model makes mandatory: the producer rejects the childless form, but only
-		// once some complex type of the document reaches clause 5.2, so admitting it
-		// would make the verdict depend on unrelated content.
-		{"top-level defaultOpenContent with no any child", `<xs:defaultOpenContent/>`},
-		// Same lazy shape, same decline: mode="none" is legal on a type's own
-		// <openContent> but out of <defaultOpenContent>'s (interleave|suffix)
-		// enumeration, and so is any other token — both are rejected only once some
-		// complex type reaches clause 5.2.
-		{"top-level defaultOpenContent with mode=none", `<xs:defaultOpenContent mode="none"><xs:any/></xs:defaultOpenContent>`},
-		{"top-level defaultOpenContent with an out-of-enumeration mode", `<xs:defaultOpenContent mode="bogus"><xs:any/></xs:defaultOpenContent>`},
 	}
 	for _, tc := range cases {
 		if schemaShapeDecidable(schemaDoc(t, tc.body)) {

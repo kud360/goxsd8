@@ -317,10 +317,19 @@ func TestProduceMisplacedOpenContent(t *testing.T) {
 	}
 }
 
-// TestProduceDefaultOpenContentGrammar pins the two <defaultOpenContent> shapes
-// the schema for schema documents forbids — a missing <any> (its content model is
-// (annotation?, any)) and mode="none" (its enumeration is interleave|suffix
-// alone) — as plain grammar faults rather than a silently ignored default.
+// TestProduceDefaultOpenContentGrammar pins the <defaultOpenContent> shapes the
+// schema for schema documents forbids — a missing <any> (its content model is
+// (annotation?, any)) and any mode outside its interleave|suffix enumeration,
+// "none" included — as plain grammar faults rather than a silently ignored
+// default.
+//
+// Each is checked twice: beside a complex type that reaches §3.4.2.3.3 clause
+// 5.2 and would consult the default, and ALONE in a document holding no complex
+// type at all. The second half is what pins the rejection as EAGER (#352): it is
+// charged because the element is malformed, not because some unrelated
+// declaration of the same document happened to look at it. Neither is an xsderr
+// rule verdict — <defaultOpenContent> has no Schema Component Constraint of its
+// own, and ct-props-correct (§3.4.6.1) clause 1 reaches no component here.
 func TestProduceDefaultOpenContentGrammar(t *testing.T) {
 	cases := []struct {
 		name string
@@ -329,19 +338,65 @@ func TestProduceDefaultOpenContentGrammar(t *testing.T) {
 	}{
 		{"no <any> child", `<xs:defaultOpenContent/>`, "no <any> child"},
 		{"mode=none", `<xs:defaultOpenContent mode="none"><xs:any/></xs:defaultOpenContent>`, `mode="none"`},
+		{"out-of-enumeration mode", `<xs:defaultOpenContent mode="bogus"><xs:any/></xs:defaultOpenContent>`, `mode="bogus"`},
+	}
+	bodies := []struct {
+		name string
+		rest string
+	}{
+		{"with a type reaching clause 5.2", `
+			<xs:complexType name="T"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`},
+		{"alone in the document", ""},
 	}
 	for _, tc := range cases {
-		_, err := produce(t, wrap("urn:x", tc.def+`
-			<xs:complexType name="T"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`))
-		if err == nil {
-			t.Errorf("%s: Produce accepted it", tc.name)
-			continue
+		for _, b := range bodies {
+			name := tc.name + " " + b.name
+			_, err := produce(t, wrap("urn:x", tc.def+b.rest))
+			if err == nil {
+				t.Errorf("%s: Produce accepted it", name)
+				continue
+			}
+			if _, ok := xsderr.RuleOf(err); ok {
+				t.Errorf("%s: error = %v, want a plain grammar fault rather than a rule verdict", name, err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("%s: error = %v, want it to mention %s", name, err, tc.want)
+			}
 		}
-		if _, ok := xsderr.RuleOf(err); ok {
-			t.Errorf("%s: error = %v, want a plain grammar fault rather than a rule verdict", tc.name, err)
-		}
-		if !strings.Contains(err.Error(), tc.want) {
-			t.Errorf("%s: error = %v, want it to mention %s", tc.name, err, tc.want)
-		}
+	}
+}
+
+// TestProduceDefaultOpenContentGrammarAcrossDocuments pins the same grammar
+// verdict for a malformed <defaultOpenContent> in an INCLUDED document whose own
+// production has not started yet: the root's <extension base=> builds the base
+// type through the declaring document's producer on demand, and §3.4.2.3.3 clause
+// 5.2.1 then selects that document's default.
+//
+// This is what forces the check to run for every document of the assembly before
+// any of them is produced rather than at the head of each production (#352). A
+// per-document-run check would leave this default unjudged at the moment clause
+// 5.2 picks it, and openContentOf would reach its childless-·wildcard element·
+// panic — a crash where a verdict belongs.
+func TestProduceDefaultOpenContentGrammarAcrossDocuments(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `
+			<xs:include schemaLocation="lib.xsd"/>
+			<xs:complexType name="D">
+				<xs:complexContent>
+					<xs:extension base="tns:B"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:extension>
+				</xs:complexContent>
+			</xs:complexType>`),
+		"lib.xsd": wrap("urn:a", `
+			<xs:defaultOpenContent/>
+			<xs:complexType name="B"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`),
+	})
+	if err == nil {
+		t.Fatal("Parse accepted an included document whose <defaultOpenContent> has no <any> child")
+	}
+	if _, ok := xsderr.RuleOf(err); ok {
+		t.Errorf("error = %v, want a plain grammar fault rather than a rule verdict", err)
+	}
+	if !strings.Contains(err.Error(), "no <any> child") {
+		t.Errorf("error = %v, want it to mention the missing <any> child", err)
 	}
 }
