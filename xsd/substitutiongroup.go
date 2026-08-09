@@ -154,16 +154,14 @@ func (s *Schema) affiliationChainReaches(m ElementDeclaration, head QName) bool 
 // (defaultbinding.go) skips identically: there is no component to walk, and a
 // dangling name was already charged src-resolve by resolve.go's Phase A.
 //
-// GAP(xsd): requiring the chain to exist at all belongs to e-props-correct
-// clause 4 (§3.3.6.1, c-vs-sg: "For each member M of E.{substitution group
-// affiliations}, E.{type definition} is ·validly substitutable· for M.{type
-// definition}, subject to the blocking keywords in M.{substitution group
-// exclusions}"), and NOTHING in this package enforces it: no check function
-// implements clause 4, and {substitution group exclusions}, the property it
-// reads, is stored and exposed but consulted by no constraint. A member whose
-// {type definition} does not ·derive· from its head's is therefore accepted
-// today. Do not read the silence above as delegation to a check that exists; it
-// is an unimplemented rule, recorded in the #249 arbiter review.
+// Requiring the chain to exist at all belongs to e-props-correct clause 4
+// (§3.3.6.1, c-vs-sg: "For each member M of E.{substitution group affiliations},
+// E.{type definition} is ·validly substitutable· for M.{type definition},
+// subject to the blocking keywords in M.{substitution group exclusions}"), and
+// the silence above IS delegation to a check that exists: checkSubstitutionGroupTypes
+// (substitutiongrouptypes.go) charges clause 4 at finalize, so no *Schema
+// carrying an affiliation edge whose member type does not ·derive· from its
+// head's reaches this predicate at all (#395).
 //
 // EVERY step is reached through typeOf, the package's one type-slot reader
 // (STYLE T4) — the starting {type definition} and each {base type definition}

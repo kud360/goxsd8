@@ -79,6 +79,28 @@ func sgElement(t *testing.T, name QName, typeDef TypeDefinitionOrRef, disallowed
 	return e
 }
 
+// sgLink builds the intermediate declaration a clause 2.3 test routes its
+// affiliation edge through when the verdict under test is a BLOCK or a missing
+// ·derivation·: a global declaration with an ABSENT {type definition}, itself
+// affiliated to head. The member is then affiliated to the link rather than to
+// the head, so the chain reaches the head in two hops instead of one.
+//
+// It is what keeps such a schema constructible. e-props-correct clause 4
+// (c-vs-sg, substitutiongrouptypes.go) requires the {type definition} of each
+// DIRECT affiliation member to be ·validly substitutable· for its head's, so a
+// member wired straight to a head whose type blocks it — or which it does not
+// ·derive· from at all — is rejected at Finalize, and the clause 2.3 reading
+// under test would be unobservable through any *Schema that exists. Clause 4
+// skips an edge either of whose endpoints has an absent {type definition} (there
+// is no component to read one from), while clause 2.3 reads the two ENDPOINT
+// declarations of the membership question and nothing between them. So the link
+// leaves every verdict below exactly as it was and pins it where the spec leaves
+// it observable: on a TRANSITIVE chain, which clause 4 does not walk.
+func sgLink(t *testing.T, name, head QName) ElementDeclaration {
+	t.Helper()
+	return sgElement(t, name, nil, nil, head)
+}
+
 // sgSchema finalizes a schema built by add. It carries no content model at all:
 // these tests read the membership relation itself, not a constraint that
 // consumes it.
@@ -163,13 +185,15 @@ func TestSubstitutionGroupClause23HeadDisallowedSubstitutions(t *testing.T) {
 // (2): H.{type definition}.{prohibited substitutions}, read off the endpoint of
 // the ·derivation· and not off any type the walk passes through. Head's own
 // {disallowed substitutions} is empty here, so only union member (2) can block.
+// The affiliation runs through sgLink; see its doc for why.
 func TestSubstitutionGroupClause23HeadTypeProhibitedSubstitutions(t *testing.T) {
 	member := func(prohibited ...DerivationMethod) *Schema {
 		return sgSchema(t, func(b *SchemaBuilder) {
 			b.AddType(sgType(t, sq("H"), QName{}, DerivationRestriction, prohibited...))
 			b.AddType(sgType(t, sq("M"), sq("H"), DerivationExtension))
 			b.AddElement(sgElement(t, sq("head"), sgRef(sq("H")), nil))
-			b.AddElement(sgElement(t, sq("member"), sgRef(sq("M")), nil, sq("head")))
+			b.AddElement(sgLink(t, sq("link"), sq("head")))
+			b.AddElement(sgElement(t, sq("member"), sgRef(sq("M")), nil, sq("link")))
 		})
 	}
 	expectMembership(t, member(DerivationExtension), sq("member"), sq("head"), false)
@@ -219,13 +243,15 @@ func TestSubstitutionGroupClause23MemberTypeProhibitedSubstitutionsIgnored(t *te
 // member's inline type reaches head's type by extension, which head's {type
 // definition} prohibits. A walk that skipped an unnamed type — or looked it up by
 // its zero QName — would find no derivation method and wrongly admit the member.
+// The affiliation runs through sgLink; see its doc for why.
 func TestSubstitutionGroupClause23AnonymousMemberType(t *testing.T) {
 	member := func(prohibited ...DerivationMethod) *Schema {
 		return sgSchema(t, func(b *SchemaBuilder) {
 			b.AddType(sgType(t, sq("H"), QName{}, DerivationRestriction, prohibited...))
 			anon := sgType(t, QName{}, sq("H"), DerivationExtension)
 			b.AddElement(sgElement(t, sq("head"), sgRef(sq("H")), nil))
-			b.AddElement(dOwnInline(t, sq("member"), anon, NewGlobalScope(), sq("head")))
+			b.AddElement(sgLink(t, sq("link"), sq("head")))
+			b.AddElement(dOwnInline(t, sq("member"), anon, NewGlobalScope(), sq("link")))
 		})
 	}
 	expectMembership(t, member(DerivationExtension), sq("member"), sq("head"), false)
@@ -266,6 +292,7 @@ func TestSubstitutionGroupClause23SimpleTypeOnDerivationChain(t *testing.T) {
 // definition} is absent) without reaching H.{type definition}, so no ·derivation·
 // exists, no {derivation method} is involved, and clause 2.3 blocks nothing —
 // the same vacuous reading TestSubstitutionGroupClause23NoDerivation records.
+// The affiliation runs through sgLink; see its doc for why.
 func TestSubstitutionGroupClause23SimpleTypeChainNotReachingHead(t *testing.T) {
 	s := sgSchema(t, func(b *SchemaBuilder) {
 		b.AddType(sgType(t, sq("H"), QName{}, DerivationRestriction, DerivationExtension))
@@ -273,7 +300,8 @@ func TestSubstitutionGroupClause23SimpleTypeChainNotReachingHead(t *testing.T) {
 		b.AddType(unrelated)
 		b.AddType(sgSimpleContentType(t, sq("C"), unrelated))
 		b.AddElement(sgElement(t, sq("head"), sgRef(sq("H")), []DerivationMethod{DerivationExtension}))
-		b.AddElement(sgElement(t, sq("member"), sgRef(sq("C")), nil, sq("head")))
+		b.AddElement(sgLink(t, sq("link"), sq("head")))
+		b.AddElement(sgElement(t, sq("member"), sgRef(sq("C")), nil, sq("link")))
 	})
 	expectMembership(t, s, sq("member"), sq("head"), true)
 }
@@ -282,16 +310,18 @@ func TestSubstitutionGroupClause23SimpleTypeChainNotReachingHead(t *testing.T) {
 // derivationAdmitsSubstitution: clause 2.3 is a BLOCKING clause, so a member
 // whose {type definition} does not ·reach· head's at all involves no {derivation
 // method}s and is blocked by nothing. Requiring the derivation is
-// e-props-correct clause 4's job (c-vs-sg), not this rule's — and clause 4 is
-// unimplemented here, so this pins silence, not delegation (see the GAP on
-// derivationAdmitsSubstitution).
+// e-props-correct clause 4's job (c-vs-sg), not this rule's — and clause 4
+// charges it one DIRECT affiliation edge at a time, which is why routing the
+// member to the head through sgLink leaves this predicate the only thing
+// deciding membership over the chain as a whole.
 func TestSubstitutionGroupClause23NoDerivation(t *testing.T) {
 	s := sgSchema(t, func(b *SchemaBuilder) {
 		b.AddType(sgType(t, sq("H"), QName{}, DerivationRestriction, DerivationExtension))
 		b.AddType(sgType(t, sq("Unrelated"), QName{}, DerivationRestriction))
 		b.AddType(sgType(t, sq("M"), sq("Unrelated"), DerivationExtension))
 		b.AddElement(sgElement(t, sq("head"), sgRef(sq("H")), []DerivationMethod{DerivationExtension}))
-		b.AddElement(sgElement(t, sq("member"), sgRef(sq("M")), nil, sq("head")))
+		b.AddElement(sgLink(t, sq("link"), sq("head")))
+		b.AddElement(sgElement(t, sq("member"), sgRef(sq("M")), nil, sq("link")))
 	})
 	expectMembership(t, s, sq("member"), sq("head"), true)
 }

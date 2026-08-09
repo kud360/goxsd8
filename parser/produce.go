@@ -187,6 +187,27 @@ type symbols struct {
 	// document's §F.1 chameleon coercion.
 	modelGroups map[xsd.QName]typeSource
 
+	// elements maps each top-level <element>'s expanded name to its source (raw
+	// element plus the producer of the document that declares it), filled by the
+	// pre-scan so §3.3.2.1's {type definition} clause 3 — "the declared {type
+	// definition} of the Element Declaration ·resolved· to by the first QName in
+	// the ·actual value· of the substitutionGroup attribute" — reaches a HEAD
+	// declared later in the document or in another document of the assembly
+	// (§3.1.3: forward reference to named declarations is allowed).
+	//
+	// It holds SOURCES, not built components, and clause 3 reads only the head's
+	// type= attribute off them (substitutionGroupHeadType) rather than building
+	// the head declaration on demand: an Element Declaration is not memoized the
+	// way a type is, so building one here would produce a second component for
+	// the same name and register its identity constraints twice.
+	//
+	// The owning producer is carried for the reason every other index carries one:
+	// the head's type= is a QName in the HEAD's document, so it resolves under that
+	// document's in-scope prefix bindings and §F.1 chameleon coercion (src-resolve
+	// clause 4.1.1). Resolved under a referring producer instead, an unqualified
+	// or differently-prefixed head type would name the wrong type.
+	elements map[xsd.QName]typeSource
+
 	// identityConstraints maps each NAMED <unique>/<key>/<keyref>'s expanded name
 	// to its source, filled by the pre-scan so a <key ref="…"> reaches its
 	// definition regardless of document order (§3.1.3: "forward reference to named
@@ -339,6 +360,7 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 		complexTypes:        make(map[xsd.QName]typeSource),
 		attributeGroups:     make(map[xsd.QName]typeSource),
 		modelGroups:         make(map[xsd.QName]typeSource),
+		elements:            make(map[xsd.QName]typeSource),
 		identityConstraints: make(map[xsd.QName]identityConstraintSource),
 		built:               built,
 		builtGroups:         make(map[xsd.QName]*xsd.ModelGroupDefinition),
@@ -419,9 +441,11 @@ func (p *producer) chameleon() bool {
 
 // prescan registers this document's top-level named <simpleType>s and
 // <complexType>s (forward base= references, §3.1.3/§3.4.2), named
-// <attributeGroup>s (forward <attributeGroup ref> inlining, §3.6.2.1) and named
+// <attributeGroup>s (forward <attributeGroup ref> inlining, §3.6.2.1), named
 // <group>s (forward <group ref> resolution for §3.4.2.3.3 clause 4.2.3's
-// sub-case test, resolveModelGroup) in the assembly-wide symbol table, building
+// sub-case test, resolveModelGroup) and top-level <element>s (forward
+// substitutionGroup= heads for §3.3.2.1's {type definition} clause 3,
+// substitutionGroupHeadType) in the assembly-wide symbol table, building
 // nothing yet. EVERY document's prescan runs before ANY document's run, so a
 // reference in one document reaches a definition in another (§4.2.3
 // c-incl-incl). Names are minted in the effective target namespace, so a
@@ -481,6 +505,8 @@ func (p *producer) prescan() {
 			p.symbols.attributeGroups[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		case isXSD(el, "group"):
 			p.symbols.modelGroups[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
+		case isXSD(el, "element"):
+			p.symbols.elements[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		}
 	}
 }
@@ -1254,6 +1280,13 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 // dcl.ctd.common) and the {scope}.{parent} of its own nested local elements
 // (#340). The two paths differ only in the {scope} the declaration itself gets.
 //
+// This is also the ONLY path that can reach the chain's clause 3, the head's
+// declared type: substitutionGroup= is legal on a top-level <element> alone
+// (§3.3.2), so produceLocalElement rejects it outright and localDeclaredType has
+// no tier for it. Clause 3 is decided by substitutionGroupHeadType, from the
+// FIRST resolved affiliation, which is why the affiliations are mapped before
+// the type here.
+//
 // Tier 1's inline <simpleType> child is the one form still declined on this
 // path: #229 widened §3.2.2.2/§3.3.2.3's LOCAL mapping only, and the global
 // simple-type widening is a separate, adjacent change. It is declined with a
@@ -1285,18 +1318,28 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 		return xsd.ElementDeclaration{}, err
 	}
 
-	typeName := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"} // §3.3.2.1 case 4
-	if hasType {
-		typeName, err = p.resolveQName(elem, typeLex)
-		if err != nil {
-			return xsd.ElementDeclaration{}, err
-		}
-	}
 	constraints, err := p.identityConstraintsOf(elem)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
 	affiliations, err := p.substitutionGroupAffiliations(elem)
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
+	typeName := anyTypeName // §3.3.2.1 case 4
+	switch {
+	case inlineComplex != nil:
+		// Clause 1 wins outright and typeName is never read on this path (the
+		// inline branch below builds the type itself), so the lower clauses must
+		// not run at all: clause 3's lookup can decline the HEAD's inline
+		// anonymous type (#342), a limitation of a type this element never
+		// reaches, and letting it run would fail an element clause 1 fully
+		// decides.
+	case hasType:
+		typeName, err = p.resolveQName(elem, typeLex) // case 2
+	case len(affiliations) > 0:
+		typeName, err = p.substitutionGroupHeadType(elem, affiliations[0]) // case 3
+	}
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
@@ -1308,10 +1351,10 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 			return xsd.ElementDeclaration{}, err
 		}
 		return xsd.NewElementDeclarationOwningType(elem.Loc(), edID, qname, ct, nil, xsd.NewGlobalScope(), vc,
-			false, constraints, affiliations, nil, false, p.disallowedSubstitutions(elem), nil)
+			false, constraints, affiliations, p.substitutionGroupExclusions(elem), false, p.disallowedSubstitutions(elem), nil)
 	}
 	return xsd.NewElementDeclaration(elem.Loc(), qname, xsd.TypeDefinitionRef{Name: typeName}, nil, xsd.NewGlobalScope(), vc,
-		false, constraints, affiliations, nil, false, p.disallowedSubstitutions(elem), nil)
+		false, constraints, affiliations, p.substitutionGroupExclusions(elem), false, p.disallowedSubstitutions(elem), nil)
 }
 
 // substitutionGroupAffiliations maps the substitutionGroup attribute of a
@@ -1343,12 +1386,12 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 // form returns from produceElementParticle before that check, ignoring the
 // attribute instead of rejecting it (see the GAP marker on that branch).
 //
-// {substitution group exclusions} — an <element>'s own final=/finalDefault, the
-// one member of this attribute family the producer still leaves unmapped — is
-// deliberately NOT mapped alongside it. The property is read by exactly one rule,
-// e-props-correct clause 4 (c-vs-sg), which this package does not implement and
-// which xsd/substitutiongroup.go records as unimplemented; mapping a property no
-// constraint consults would add a fact with no reader.
+// {substitution group exclusions} — the final=/finalDefault twin — is mapped
+// alongside it by substitutionGroupExclusions, for the same operational reason:
+// e-props-correct clause 4 (c-vs-sg) reads it on the HEAD of an affiliation
+// edge, and xsd enforces that clause (xsd/substitutiongrouptypes.go, #395), so
+// leaving it universally empty would silently un-block every head that spells
+// final= on itself.
 func (p *producer) substitutionGroupAffiliations(elem *Element) ([]xsd.QName, error) {
 	lexical, ok := elem.Attr("substitutionGroup")
 	if !ok {
@@ -1365,98 +1408,172 @@ func (p *producer) substitutionGroupAffiliations(elem *Element) ([]xsd.QName, er
 	return heads, nil
 }
 
-// derivationKeyword pairs a keyword token as the block=/final= attribute
-// grammars spell it with the xsd.DerivationMethod that token names. A keyword
-// SET is a slice of these, written in the order its mapping table's case 2
-// writes the set; that order is what makes effectiveDerivationSet's result
-// canonical rather than lexical.
-type derivationKeyword struct {
-	token  string
-	method xsd.DerivationMethod
+// substitutionGroupHeadType is §3.3.2.1 dcl.elt.common's {type definition} case
+// 3: "The declared {type definition} of the Element Declaration ·resolved· to by
+// the first QName in the ·actual value· of the substitutionGroup attribute, if
+// present." head is that first QName — the caller passes affiliations[0], so the
+// "first item alone" reading is applied to the RESOLVED list rather than
+// re-derived from the lexical form (STYLE T4); every item feeds {substitution
+// group affiliations}, but only the first feeds this property.
+//
+// It reads the head's SOURCE rather than its built component (symbols.elements),
+// which is what makes a forward or cross-document head resolve: the head may be
+// declared after this member or in another document, and every document's
+// pre-scan runs before any document's run. Building the head declaration on
+// demand is not an option — element declarations carry no build memo, so a
+// second construction would register the head's identity constraints a second
+// time and fabricate a sch-props-correct clause 2 collision.
+//
+// The result is a NAME, not a component, because that is what the {type
+// definition} slot of a produced declaration holds (xsd.TypeDefinitionRef);
+// finalize resolves it exactly as a type= would be. Three cases yield case 4's
+// xs:anyType instead, each of them the honest answer rather than a fallback:
+//
+//   - the head names no top-level <element> in the assembly. The affiliation is
+//     an ·absent· member under §5.3 (Missing Sub-components) — a valid schema,
+//     W3C saxonData/Missing missing002 — so there is no declaration to take a
+//     declared type from, and e-props-correct clause 4 skips the same edge
+//     (xsd/substitutiongrouptypes.go);
+//   - the head carries neither type= nor substitutionGroup=, so ITS own {type
+//     definition} is case 4's xs:anyType and the member inherits exactly that;
+//   - the walk returns to a head it has already visited. That is a circular
+//     substitution group, which e-props-correct clause 5 rejects at finalize
+//     (xsd/resolve.go's checkSubstitutionGroupsAcyclic) over the whole graph;
+//     seen is a walk-scoped TERMINATION guard and never a verdict, the same split
+//     symbols.builtGroups' on-stack half records. It is read only by key, so no
+//     map iteration reaches any output (STYLE D2).
+//
+// A head whose type is an INLINE <simpleType>/<complexType> child is declined
+// with a plain "not yet produced" error rather than mapped: case 3 makes the
+// member's {type definition} the head's own anonymous component, and this
+// package cannot express that — an anonymous type reaches a declaration only
+// through xsd.NewElementDeclarationOwningType, whose {context} check ties it to
+// the ONE declaration that owns it (§3.4.2.1 dcl.ctd.common). Falling through to
+// xs:anyType here would be worse than declining now that clause 4 is live: the
+// fabricated wider type is not ·validly substitutable· for the head's, so the
+// schema would be REJECTED under a rule it does not violate (STYLE E2 — never
+// fabricate a verdict for a producer limitation). #342 owns closing it.
+func (p *producer) substitutionGroupHeadType(at *Element, head xsd.QName) (xsd.QName, error) {
+	seen := map[xsd.QName]bool{}
+	for !seen[head] {
+		seen[head] = true
+		src, ok := p.symbols.elements[head]
+		if !ok {
+			return anyTypeName, nil // an ·absent· head (§5.3)
+		}
+		if lex, has := src.elem.Attr("type"); has {
+			return src.owner.resolveQName(src.elem, lex)
+		}
+		if childElement(src.elem, xsd.XMLSchemaNS, "simpleType") != nil || childElement(src.elem, xsd.XMLSchemaNS, "complexType") != nil {
+			return xsd.QName{}, fmt.Errorf("parser: <element> at %s inherits its {type definition} from the substitution group head %s (§3.3.2.1 dcl.elt.common clause 3), whose type is an inline anonymous definition this producer cannot yet share with a second declaration", at.Loc(), head)
+		}
+		lexHeads, has := src.elem.Attr("substitutionGroup")
+		if !has {
+			return anyTypeName, nil // the head's own {type definition} is case 4
+		}
+		items := strings.Fields(lexHeads)
+		if len(items) == 0 {
+			return anyTypeName, nil
+		}
+		next, err := src.owner.resolveQName(src.elem, items[0])
+		if err != nil {
+			return xsd.QName{}, err
+		}
+		head = next
+	}
+	return anyTypeName, nil // a circular affiliation chain; clause 5 charges it at finalize
 }
 
-// elementBlockingKeywords is the keyword set of an <element>'s {disallowed
-// substitutions} (§3.3.2.1 dcl.elt.common): THREE members, the only one of the
-// three sets here that contains substitution.
-var elementBlockingKeywords = []derivationKeyword{
-	{"extension", xsd.DerivationExtension},
-	{"restriction", xsd.DerivationRestriction},
-	{"substitution", xsd.DerivationSubstitution},
-}
+// elementBlockKeywords is the ·relevant set· the {disallowed substitutions} row
+// draws from — the §3.3.1 subset of {substitution, extension, restriction} — in
+// the canonical order the row's own case 2 writes it in. It is the only one of
+// the four sets here that contains substitution.
+var elementBlockKeywords = []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction, xsd.DerivationSubstitution}
 
-// complexTypeKeywords is the keyword set of BOTH complex-type properties in this
-// family — {prohibited substitutions} and {final} (§3.4.2.1 dcl.ctd.common). It
-// is one set for the two because the table defines the second entirely by
-// reference to the first: "[a]s for {prohibited substitutions} above, but using
-// the final and finalDefault attributes in place of the block and blockDefault
-// attributes". TWO members: substitution is not among them though blockDefault's
-// grammar admits it, and neither list nor union is though finalDefault's does.
-// Both §3.4.1 property definitions say "a subset of {extension, restriction}".
-var complexTypeKeywords = []derivationKeyword{
-	{"extension", xsd.DerivationExtension},
-	{"restriction", xsd.DerivationRestriction},
-}
+// elementFinalKeywords is the ·relevant set· the {substitution group exclusions}
+// row draws from: {extension, restriction} (§3.3.1, §3.3.2.1), TWO keywords and
+// not the block row's three. substitution is not one of them, and
+// xsd.NewElementDeclaration rejects a set containing it as an e-props-correct
+// clause 1 tableau violation.
+//
+// It has the same MEMBERS as complexTypeKeywords below and is deliberately a
+// separate var, not an alias: §3.3.2.1's row states this relevant set in its own
+// right ("with the relevant set being {extension, restriction}") while §3.4.2.1
+// states the complex-type one, so these are two spec facts that happen to
+// coincide, not one fact written twice — STYLE D3 forbids the latter and says
+// nothing about the former. Sharing one var would silently couple an element
+// property to a complex-type property.
+var elementFinalKeywords = []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction}
 
-// simpleTypeFinalKeywords is the keyword set of a simple type's {final}
+// complexTypeKeywords is the ·relevant set· of BOTH complex-type properties in
+// this family — {prohibited substitutions} and {final} (§3.4.2.1
+// dcl.ctd.common). It is one set for the two because the table defines the
+// second entirely by reference to the first: "[a]s for {prohibited
+// substitutions} above, but using the final and finalDefault attributes in place
+// of the block and blockDefault attributes". TWO members: substitution is not
+// among them though blockDefault's grammar admits it, and neither list nor union
+// is though finalDefault's does. Both §3.4.1 property definitions say "a subset
+// of {extension, restriction}".
+var complexTypeKeywords = []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction}
+
+// simpleTypeFinalKeywords is the ·relevant set· of a simple type's {final}
 // (§3.16.2.1 map.std.common): FOUR members, in the order that rule's case 2
-// writes them. It is the widest of the three and is exactly finalDefault's own
-// vocabulary, so nothing is ever dropped on this path.
-var simpleTypeFinalKeywords = []derivationKeyword{
-	{"restriction", xsd.DerivationRestriction},
-	{"extension", xsd.DerivationExtension},
-	{"list", xsd.DerivationList},
-	{"union", xsd.DerivationUnion},
-}
+// writes them. It is the widest of the four sets here and is exactly
+// finalDefault's own vocabulary, so nothing is ever dropped on this path.
+var simpleTypeFinalKeywords = []xsd.DerivationMethod{xsd.DerivationRestriction, xsd.DerivationExtension, xsd.DerivationList, xsd.DerivationUnion}
 
 // effectiveDerivationSet is the three-case ·effective block value· analysis that
 // every member of the block=/final= mapping family runs: {disallowed
-// substitutions} (§3.3.2.1), {prohibited substitutions} and {final} on a complex
-// type (§3.4.2.1), and {final} on a simple type (§3.16.2.1). The four mappings
-// differ in exactly two things — the attribute-name pair and the keyword set —
-// so they are ONE function taking both rather than four copies of the case
-// analysis (STYLE T4).
+// substitutions} and {substitution group exclusions} on an element (§3.3.2.1),
+// {prohibited substitutions} and {final} on a complex type (§3.4.2.1), and
+// {final} on a simple type (§3.16.2.1). The five mappings differ in exactly two
+// things — the attribute-name pair and the ·relevant set· — so they are ONE
+// function taking both rather than five copies of the case analysis (STYLE T4).
 //
-// The EBV is localAttr on elem if PRESENT, otherwise defaultAttr on the ancestor
+// The EBV is local on elem if PRESENT, otherwise fallback on the ancestor
 // <schema> if present, otherwise the empty string. "Present" is a test on the
 // attribute, not on its value: a local block=""/final="" is present, so it wins
 // over the schema-level default and takes case 1 below — the distinction a "" ==
 // absent reading would lose. Then the empty string maps to the empty set (case
-// 1), "#all" to the whole keyword set (case 2), and anything else to the
-// keywords its whitespace-separated list contains (case 3).
+// 1), "#all" to the whole relevant set (case 2), and anything else to the
+// relevant-set members its whitespace-separated list names (case 3).
 //
-// Items outside the keyword set are IGNORED, never rejected, on both paths. Each
-// table says so of its own Default attribute — blockDefault "may include values
-// other than restriction or extension", and "those values are ignored in the
+// Items outside relevant are IGNORED, never rejected, on both paths. Each table
+// says so of its own Default attribute — blockDefault "may include values other
+// than restriction or extension", and "those values are ignored in the
 // determination of {prohibited substitutions} for complex type definitions (they
 // are used elsewhere)" — and the local attributes are treated the same way from
 // the other side: their vocabulary is fixed by the schema for schema documents,
 // which this producer runs no validation pass against, so an out-of-vocabulary
-// local token is a grammar fault nothing here is positioned to charge.
+// local token is a grammar fault nothing here is positioned to charge. It is
+// also what makes final="substitution" contribute nothing to {substitution group
+// exclusions} and a shared finalDefault="list" nothing to a complex type's
+// {final}.
 //
-// The result is in the keyword set's own fixed order, not the attribute's
-// lexical order. These properties ARE sets drawn from a fixed set, so one set
-// must have one encoding (STYLE D2): final="restriction extension" and
-// final="extension restriction" must build the identical component.
-func (p *producer) effectiveDerivationSet(elem *Element, localAttr, defaultAttr string, keywords []derivationKeyword) []xsd.DerivationMethod {
-	ebv, ok := elem.Attr(localAttr)
+// The result is in relevant's own fixed order, not the attribute's lexical
+// order. These properties ARE sets drawn from a fixed set, so one set must have
+// one encoding (STYLE D2): final="restriction extension" and final="extension
+// restriction" must build the identical component. Each token is matched against
+// xsd.DerivationMethod's own String(), which returns the verbatim spec token, so
+// no relevant set writes the token spellings down a second time beside the
+// methods that already carry them (STYLE D3). Case 2 returns a fresh slice,
+// never relevant itself, so no caller can reach a package-level set.
+func (p *producer) effectiveDerivationSet(elem *Element, local, fallback string, relevant []xsd.DerivationMethod) []xsd.DerivationMethod {
+	ebv, ok := elem.Attr(local)
 	if !ok {
-		ebv, _ = p.schemaElem.Attr(defaultAttr)
+		ebv, _ = p.schemaElem.Attr(fallback)
 	}
 	if ebv == "" {
 		return nil // case 1
 	}
-	if ebv == "#all" { // case 2
-		all := make([]xsd.DerivationMethod, 0, len(keywords))
-		for _, k := range keywords {
-			all = append(all, k.method)
-		}
-		return all
+	if ebv == "#all" {
+		return slices.Clone(relevant) // case 2
 	}
 	items := strings.Fields(ebv)
 	var set []xsd.DerivationMethod // case 3
-	for _, k := range keywords {
-		if slices.Contains(items, k.token) {
-			set = append(set, k.method)
+	for _, m := range relevant {
+		if slices.Contains(items, m.String()) {
+			set = append(set, m)
 		}
 	}
 	return set
@@ -1477,11 +1594,38 @@ func (p *producer) effectiveDerivationSet(elem *Element, localAttr, defaultAttr 
 // by side in one <xs:all>. Half the pair is not a smaller change, it is a wrong
 // one.
 //
-// An <element>'s final= — {substitution group exclusions} — has no such mapping
-// here; see substitutionGroupAffiliations for why that one property of the
-// family is left unmapped.
+// The result is in the spec's own canonical order — extension, restriction,
+// substitution, the order the table's case 2 writes the set in — rather than in
+// the attribute's lexical order; effectiveDerivationSet's doc carries the STYLE
+// D2 reasoning, which is the same for every member of the family.
+//
+// The ·relevant set· it draws from is elementBlockKeywords; the case analysis
+// itself lives in effectiveDerivationSet, which the other four members of the
+// family reuse unchanged.
 func (p *producer) disallowedSubstitutions(elem *Element) []xsd.DerivationMethod {
-	return p.effectiveDerivationSet(elem, "block", "blockDefault", elementBlockingKeywords)
+	return p.effectiveDerivationSet(elem, "block", "blockDefault", elementBlockKeywords)
+}
+
+// substitutionGroupExclusions maps an <element>'s final attribute into
+// {substitution group exclusions} (§3.3.2.1 dcl.elt.common, whose row for the
+// property reads in full: "As for {disallowed substitutions} above, but using
+// the final and finalDefault [attributes] in place of the block and blockDefault
+// [attributes] and with the relevant set being {extension, restriction}"). So it
+// is disallowedSubstitutions' case analysis over a different attribute pair and
+// a different ·relevant set·, which is exactly what effectiveDerivationSet takes
+// as parameters (STYLE T4) — including "#all", whose expansion here is the TWO
+// keywords of elementFinalKeywords and not the three of the block row.
+//
+// It is mapped for the TOP-LEVEL form only. A local <element> carries no final
+// attribute at all (§3.3.2 gives it to the top-level form alone), so its EBV
+// could come only from the ancestor <schema>'s finalDefault — and the property
+// would be unreadable there whatever it held: e-props-correct clause 4 reads
+// {substitution group exclusions} on the HEAD of an affiliation edge, an
+// affiliation ·resolves· by expanded name and so names a top-level declaration,
+// and clause 3 keeps a local declaration out of the property in the first place.
+// Mapping it on the local path would add a fact with no reader (STYLE D4).
+func (p *producer) substitutionGroupExclusions(elem *Element) []xsd.DerivationMethod {
+	return p.effectiveDerivationSet(elem, "final", "finalDefault", elementFinalKeywords)
 }
 
 // complexTypeProhibitedSubstitutions maps a <complexType>'s block attribute into

@@ -777,6 +777,28 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 //   - sub simple: sub is validly derived from super subject to blocked, per
 //     cos-st-derived-ok.
 //
+// The union is the ONLY thing this adds over validlyDerived below, and it is
+// the whole of the first case: super's own {prohibited substitutions} joins the
+// caller's blocking keywords, so a type that blocks restriction admits no
+// restriction of itself however empty the caller's set was.
+func (s *Schema) validlySubstitutable(sub, super TypeDefinition, blocked []DerivationMethod) bool {
+	if sup, ok := super.(ComplexType); ok {
+		blocked = unionDerivationMethods(blocked, sup.prohibitedSubstitutions)
+	}
+	return s.validlyDerived(sub, super, blocked)
+}
+
+// validlyDerived is the ·derivation· half of key-val-sub-type without its
+// {prohibited substitutions} union: sub is validly ·derived· from super subject
+// to exactly the blocking keywords in blocked, by cos-ct-derived-ok (§3.4.6.5)
+// when sub is complex and cos-st-derived-ok (§3.16.6.3) when it is simple.
+//
+// It exists as its own function because e-props-correct clause 4 (c-vs-sg,
+// substitutiongrouptypes.go) needs this relation and NOT ·validly substitutable·
+// — see the comment there for the three spec passages and the W3C cases that
+// settle the difference. Splitting it out is also what keeps the two readings
+// one engine rather than two case analyses (STYLE T4).
+//
 // A simple sub against the complex super ·xs:anyType· is answered true up front.
 // Every simple type IS derived from xs:anyType — xs:anySimpleType's {base type
 // definition} is xs:anyType — but this package models no anyType node inside the
@@ -784,7 +806,7 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 // Answering false there would false-reject the extremely common shape of a
 // restriction that types an element the base left untyped (a bare <element>
 // defaults to xs:anyType, §3.3.2.1 case 4).
-func (s *Schema) validlySubstitutable(sub, super TypeDefinition, blocked []DerivationMethod) bool {
+func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationMethod) bool {
 	switch sup := super.(type) {
 	case ComplexType:
 		if sup.Name() == anyTypeName {
@@ -794,7 +816,7 @@ func (s *Schema) validlySubstitutable(sub, super TypeDefinition, blocked []Deriv
 		if !ok {
 			return false // a simple type is derived from no complex type but xs:anyType
 		}
-		return s.derivedOKComplex(sc, super, unionDerivationMethods(blocked, sup.prohibitedSubstitutions))
+		return s.derivedOKComplex(sc, super, blocked)
 	case *SimpleType:
 		if sc, ok := sub.(ComplexType); ok {
 			return s.derivedOKComplex(sc, super, blocked)
@@ -802,7 +824,7 @@ func (s *Schema) validlySubstitutable(sub, super TypeDefinition, blocked []Deriv
 		ss, ok := sub.(*SimpleType)
 		return ok && derivedOKSimple(ss, sup)
 	default:
-		panic("xsd: validlySubstitutable: non-exhaustive TypeDefinition switch")
+		panic("xsd: validlyDerived: non-exhaustive TypeDefinition switch")
 	}
 }
 

@@ -47,20 +47,28 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     and its <element ref>s and substitution groups followed — Unique Particle
 //     Attribution (cos-nonambig, particleattribution.go) and Element Declarations
 //     Consistent (cos-element-consistent, elementconsistent.go).
-//   - Phase D (complex-type derivation validity), in two steps. It first
-//     MATERIALISES the two attribute-side properties whose mapping rules a
-//     producer cannot finish, because each needs the resolved base: {attribute
-//     uses}, whose §3.4.2.4 clause 3 folds the {base type definition}'s uses into
-//     every complex type's own (attributeusefold.go, #401), and {attribute
-//     wildcard}, whose §3.4.2.5 clause 2.2 unions an EXTENSION's own
-//     ·complete wildcard· with its ·base wildcard· (attributewildcardfold.go,
-//     #265). The two are independent properties, so their relative order carries
-//     no verdict; both precede the checks. It then rejects the derivation-relative
-//     constraints that need that resolved base — the ct-props-correct (§3.4.6.1)
-//     clauses 2 and 4, derivation-ok-restriction (§3.4.6.3) for every
-//     restriction-derived complex type, and cos-ct-extends (§3.4.6.2) for every
-//     extension-derived one (complexderivation.go, complexextension.go,
-//     defaultbinding.go, effectivetotalrange.go).
+//   - Phase D (derivation validity), in three steps. It first MATERIALISES the two
+//     attribute-side properties whose mapping rules a producer cannot finish,
+//     because each needs the resolved base: {attribute uses}, whose §3.4.2.4
+//     clause 3 folds the {base type definition}'s uses into every complex type's
+//     own (attributeusefold.go, #401), and {attribute wildcard}, whose §3.4.2.5
+//     clause 2.2 unions an EXTENSION's own ·complete wildcard· with its ·base
+//     wildcard· (attributewildcardfold.go, #265). The two are independent
+//     properties, so their relative order carries no verdict; both precede the
+//     checks. It then rejects the derivation-relative constraints that need that
+//     resolved base — the ct-props-correct (§3.4.6.1) clauses 2 and 4,
+//     derivation-ok-restriction (§3.4.6.3) for every restriction-derived complex
+//     type, and cos-ct-extends (§3.4.6.2) for every extension-derived one
+//     (complexderivation.go, complexextension.go, defaultbinding.go,
+//     effectivetotalrange.go). It finishes on the one derivation verdict
+//     quantified over ELEMENT declarations rather than types — e-props-correct
+//     (§3.3.6.1) clause 4 (c-vs-sg), which requires a declaration's {type
+//     definition} to be ·validly substitutable· for that of each member of its
+//     {substitution group affiliations}, subject to that member's {substitution
+//     group exclusions} (substitutiongrouptypes.go). It shares the phase because
+//     it is the same cos-ct-derived-ok/cos-st-derived-ok engine pair under a
+//     different quantifier; see checkSubstitutionGroupTypes for the ordering
+//     argument.
 //   - Phase E (value-constraint validity), in two walks over the same file
 //     (valueconstraintvalid.go). The USE-side walk rejects an Attribute Use whose
 //     own {value constraint} contradicts its resolved {attribute declaration}'s
@@ -167,6 +175,9 @@ func (s *Schema) resolve() error {
 		return err
 	}
 	if err := s.checkComplexDerivations(); err != nil {
+		return err
+	}
+	if err := s.checkSubstitutionGroupTypes(); err != nil {
 		return err
 	}
 	if err := s.checkAttributeUseValueConstraints(); err != nil {

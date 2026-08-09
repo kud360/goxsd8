@@ -96,6 +96,21 @@ func uGlobal(t *testing.T, name QName, typeName QName, affiliations ...QName) El
 	return e
 }
 
+// uUntyped builds a global declaration with an ABSENT {type definition},
+// affiliated to head: the intermediate link that lets a member reach a head
+// whose type blocks it without tripping e-props-correct clause 4, which skips an
+// affiliation edge with no type definition on one end (substitutiongroup_test.go's
+// sgLink carries the full argument).
+func uUntyped(t *testing.T, name QName, head QName) ElementDeclaration {
+	t.Helper()
+	e, err := NewElementDeclaration(xsderr.Loc{}, name, nil, nil, NewGlobalScope(), nil, false, nil,
+		[]QName{head}, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("NewElementDeclaration: %v", err)
+	}
+	return e
+}
+
 func uWildcard(t *testing.T, variety NamespaceConstraintVariety, namespaces []Namespace, pc ProcessContents) Wildcard {
 	t.Helper()
 	nc, err := NewNamespaceConstraint(xsderr.Loc{}, variety, namespaces, nil, nil)
@@ -361,6 +376,11 @@ func TestUPAUnrelatedProhibitedSubstitutionsStillOverlap(t *testing.T) {
 // does block — the head's {type definition} prohibits extension and the member's
 // type reaches it by extension — the member is in no ·substitution group· of the
 // head, the two element particles do not ·overlap·, and the content model stands.
+//
+// The member is affiliated to the head through a TYPELESS link declaration, for
+// the reason substitutiongroup_test.go's sgLink records: e-props-correct clause
+// 4 would reject the direct edge at Finalize, and this test is about what
+// cos-nonambig does with a schema that stands.
 func TestUPASubstitutionBlockedByClause23(t *testing.T) {
 	head, err := NewComplexType(xsderr.Loc{}, uq("Head"), QName{}, nil, DerivationRestriction, false,
 		nil, nil, nil, EmptyContent{}, []DerivationMethod{DerivationExtension}, nil, nil)
@@ -380,7 +400,8 @@ func TestUPASubstitutionBlockedByClause23(t *testing.T) {
 		b.AddType(head)
 		b.AddType(derived)
 		b.AddElement(uGlobal(t, uq("head"), uq("Head")))
-		b.AddElement(uGlobal(t, uq("member"), uq("Derived"), uq("head")))
+		b.AddElement(uUntyped(t, uq("link"), uq("head")))
+		b.AddElement(uGlobal(t, uq("member"), uq("Derived"), uq("link")))
 	})
 	if err != nil {
 		t.Fatalf("a clause 2.3 non-member manufactured an ·overlap·: %v", err)
