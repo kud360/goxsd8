@@ -195,11 +195,17 @@ type symbols struct {
 	// declared later in the document or in another document of the assembly
 	// (§3.1.3: forward reference to named declarations is allowed).
 	//
-	// It holds SOURCES, not built components, and clause 3 reads only the head's
-	// type= attribute off them (substitutionGroupHeadType) rather than building
-	// the head declaration on demand: an Element Declaration is not memoized the
-	// way a type is, so building one here would produce a second component for
-	// the same name and register its identity constraints twice.
+	// It holds SOURCES, not built components, and clause 3 reads only ATTRIBUTES
+	// and CHILD SHAPES off them (substitutionGroupHeadType: an inline type child,
+	// then type=, then substitutionGroup= to walk on) rather than building the
+	// head declaration on demand: an Element Declaration is not memoized the way
+	// a type is, so building one here would produce a second component for the
+	// same name and register its identity constraints twice. Where the head's
+	// type is an inline anonymous <complexType>, the walk therefore yields a
+	// REFERENCE to the head (xsd.SubstitutionGroupHeadTypeRef) and finalize reads
+	// the head's own already-built {type definition} through it — the one place
+	// the built component is needed, reached after every declaration exists
+	// rather than during the pre-scan (#342).
 	//
 	// The owning producer is carried for the reason every other index carries one:
 	// the head's type= is a QName in the HEAD's document, so it resolves under that
@@ -1293,7 +1299,9 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 // plain "not yet produced" error, never a fabricated src-element verdict — the
 // schema is legal and it is this producer that is incomplete (STYLE E2) — and
 // conformance/schema.go's elementDecidable declines the shape so the limitation
-// never reaches a validity verdict.
+// never reaches a validity verdict. That decline is also why clause 3 declines a
+// head whose type is an inline <simpleType> rather than referencing it: a
+// reference to a declaration this path can never build would name nothing.
 func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDeclaration, error) {
 	typeLex, hasType := elem.Attr("type")
 	inlineSimple := childElement(elem, xsd.XMLSchemaNS, "simpleType")
@@ -1326,22 +1334,26 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	typeName := anyTypeName // §3.3.2.1 case 4
+	var typeDef xsd.TypeDefinitionOrRef = xsd.TypeDefinitionRef{Name: anyTypeName} // §3.3.2.1 case 4
 	switch {
 	case inlineComplex != nil:
-		// Clause 1 wins outright and typeName is never read on this path (the
+		// Clause 1 wins outright and typeDef is never read on this path (the
 		// inline branch below builds the type itself), so the lower clauses must
 		// not run at all: clause 3's lookup can decline the HEAD's inline
-		// anonymous type (#342), a limitation of a type this element never
-		// reaches, and letting it run would fail an element clause 1 fully
-		// decides.
+		// <simpleType> (#442), a limitation of a type this element never reaches,
+		// and letting it run would fail an element clause 1 fully decides.
 	case hasType:
-		typeName, err = p.resolveQName(elem, typeLex) // case 2
+		name, qerr := p.resolveQName(elem, typeLex) // case 2
+		if qerr != nil {
+			return xsd.ElementDeclaration{}, qerr
+		}
+		typeDef = xsd.TypeDefinitionRef{Name: name}
 	case len(affiliations) > 0:
-		typeName, err = p.substitutionGroupHeadType(elem, affiliations[0]) // case 3
-	}
-	if err != nil {
-		return xsd.ElementDeclaration{}, err
+		inherited, herr := p.substitutionGroupHeadType(elem, affiliations[0]) // case 3
+		if herr != nil {
+			return xsd.ElementDeclaration{}, herr
+		}
+		typeDef = inherited
 	}
 	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
 	if inlineComplex != nil {
@@ -1353,7 +1365,7 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 		return xsd.NewElementDeclarationOwningType(elem.Loc(), edID, qname, ct, nil, xsd.NewGlobalScope(), vc,
 			false, constraints, affiliations, p.substitutionGroupExclusions(elem), false, p.disallowedSubstitutions(elem), nil)
 	}
-	return xsd.NewElementDeclaration(elem.Loc(), qname, xsd.TypeDefinitionRef{Name: typeName}, nil, xsd.NewGlobalScope(), vc,
+	return xsd.NewElementDeclaration(elem.Loc(), qname, typeDef, nil, xsd.NewGlobalScope(), vc,
 		false, constraints, affiliations, p.substitutionGroupExclusions(elem), false, p.disallowedSubstitutions(elem), nil)
 }
 
@@ -1424,18 +1436,31 @@ func (p *producer) substitutionGroupAffiliations(elem *Element) ([]xsd.QName, er
 // second construction would register the head's identity constraints a second
 // time and fabricate a sch-props-correct clause 2 collision.
 //
-// The result is a NAME, not a component, because that is what the {type
-// definition} slot of a produced declaration holds (xsd.TypeDefinitionRef);
-// finalize resolves it exactly as a type= would be. Three cases yield case 4's
-// xs:anyType instead, each of them the honest answer rather than a fallback:
+// The result is a SLOT (xsd.TypeDefinitionOrRef), not a component, because that
+// is what a produced declaration's {type definition} holds; finalize resolves it.
+// Which arm depends on how the terminal head spells its own type:
+//
+//   - a NAMED type — the head's type= — is an xsd.TypeDefinitionRef, resolved at
+//     finalize exactly as this element's own type= would be;
+//   - an inline anonymous <complexType> is an xsd.SubstitutionGroupHeadTypeRef
+//     naming that head. Case 3 makes the member's {type definition} the head's
+//     own component, which no by-name reference can reach and no second
+//     declaration can OWN (§3.4.2.1 dcl.ctd.common ties an anonymous type's
+//     {context} to one declaration), so the slot references the OWNER instead —
+//     see that type, and §3.4.6.5's no-identity Note for why identity rather
+//     than a copy is what the spec asks for.
+//
+// Three cases yield case 4's xs:anyType instead, each of them the honest answer
+// rather than a fallback:
 //
 //   - the head names no top-level <element> in the assembly. The affiliation is
 //     an ·absent· member under §5.3 (Missing Sub-components) — a valid schema,
 //     W3C saxonData/Missing missing002 — so there is no declaration to take a
 //     declared type from, and e-props-correct clause 4 skips the same edge
 //     (xsd/substitutiongrouptypes.go);
-//   - the head carries neither type= nor substitutionGroup=, so ITS own {type
-//     definition} is case 4's xs:anyType and the member inherits exactly that;
+//   - the head carries neither a type child, type=, nor substitutionGroup=, so
+//     ITS own {type definition} is case 4's xs:anyType and the member inherits
+//     exactly that;
 //   - the walk returns to a head it has already visited. That is a circular
 //     substitution group, which e-props-correct clause 5 rejects at finalize
 //     (xsd/resolve.go's checkSubstitutionGroupsAcyclic) over the whole graph;
@@ -1443,45 +1468,61 @@ func (p *producer) substitutionGroupAffiliations(elem *Element) ([]xsd.QName, er
 //     symbols.builtGroups' on-stack half records. It is read only by key, so no
 //     map iteration reaches any output (STYLE D2).
 //
-// A head whose type is an INLINE <simpleType>/<complexType> child is declined
-// with a plain "not yet produced" error rather than mapped: case 3 makes the
-// member's {type definition} the head's own anonymous component, and this
-// package cannot express that — an anonymous type reaches a declaration only
-// through xsd.NewElementDeclarationOwningType, whose {context} check ties it to
-// the ONE declaration that owns it (§3.4.2.1 dcl.ctd.common). Falling through to
-// xs:anyType here would be worse than declining now that clause 4 is live: the
-// fabricated wider type is not ·validly substitutable· for the head's, so the
-// schema would be REJECTED under a rule it does not violate (STYLE E2 — never
-// fabricate a verdict for a producer limitation). #342 owns closing it.
-func (p *producer) substitutionGroupHeadType(at *Element, head xsd.QName) (xsd.QName, error) {
+// CLAUSE ORDER. The walk tests the inline type CHILD before type=, matching the
+// order §3.3.2.1's own table states ("the first of the following that applies",
+// clause 1 being the child). It used to test type= first, which was unobservable
+// — produceElement charges src-element clause 3 when a head carries both, so no
+// head that reaches this walk with both survives its own production — but with
+// clause 1 now yielding a real answer rather than a decline, the inverted order
+// would be a genuine mis-mapping rather than a harmless one (#342, the #395
+// post-land addendum). The both-present head is still rejected, by src-element
+// clause 3 at the head's own turn; this walk reads the head's SOURCE out of the
+// pre-scan index and never runs produceElement on it, so it deliberately charges
+// no verdict of its own here.
+//
+// ONE clause-1 shape stays declined, with a plain "not yet produced" error and
+// never a fabricated rule verdict (STYLE E2): a head whose type is an inline
+// <simpleType>. That is not a limitation of the sharing mechanism — the arm
+// would express it — but of the head itself: produceElement declines a top-level
+// <element> with an inline <simpleType> outright (#442), so a member must not be
+// handed a reference to a declaration this producer can never build.
+func (p *producer) substitutionGroupHeadType(at *Element, head xsd.QName) (xsd.TypeDefinitionOrRef, error) {
 	seen := map[xsd.QName]bool{}
 	for !seen[head] {
 		seen[head] = true
 		src, ok := p.symbols.elements[head]
 		if !ok {
-			return anyTypeName, nil // an ·absent· head (§5.3)
+			return xsd.TypeDefinitionRef{Name: anyTypeName}, nil // an ·absent· head (§5.3)
 		}
-		if lex, has := src.elem.Attr("type"); has {
-			return src.owner.resolveQName(src.elem, lex)
+		if childElement(src.elem, xsd.XMLSchemaNS, "complexType") != nil { // clause 1
+			return xsd.SubstitutionGroupHeadTypeRef{Head: head}, nil
 		}
-		if childElement(src.elem, xsd.XMLSchemaNS, "simpleType") != nil || childElement(src.elem, xsd.XMLSchemaNS, "complexType") != nil {
-			return xsd.QName{}, fmt.Errorf("parser: <element> at %s inherits its {type definition} from the substitution group head %s (§3.3.2.1 dcl.elt.common clause 3), whose type is an inline anonymous definition this producer cannot yet share with a second declaration", at.Loc(), head)
+		if childElement(src.elem, xsd.XMLSchemaNS, "simpleType") != nil {
+			return nil, fmt.Errorf("parser: <element> at %s inherits its {type definition} from the substitution group head %s (§3.3.2.1 dcl.elt.common clause 3), whose type is an inline <simpleType> that a top-level <element> is not yet produced with", at.Loc(), head)
+		}
+		if lex, has := src.elem.Attr("type"); has { // clause 2
+			name, err := src.owner.resolveQName(src.elem, lex)
+			if err != nil {
+				return nil, err
+			}
+			return xsd.TypeDefinitionRef{Name: name}, nil
 		}
 		lexHeads, has := src.elem.Attr("substitutionGroup")
 		if !has {
-			return anyTypeName, nil // the head's own {type definition} is case 4
+			return xsd.TypeDefinitionRef{Name: anyTypeName}, nil // the head's own {type definition} is case 4
 		}
 		items := strings.Fields(lexHeads)
 		if len(items) == 0 {
-			return anyTypeName, nil
+			return xsd.TypeDefinitionRef{Name: anyTypeName}, nil
 		}
 		next, err := src.owner.resolveQName(src.elem, items[0])
 		if err != nil {
-			return xsd.QName{}, err
+			return nil, err
 		}
 		head = next
 	}
-	return anyTypeName, nil // a circular affiliation chain; clause 5 charges it at finalize
+	// A circular affiliation chain; clause 5 charges it at finalize.
+	return xsd.TypeDefinitionRef{Name: anyTypeName}, nil
 }
 
 // elementBlockKeywords is the ·relevant set· the {disallowed substitutions} row

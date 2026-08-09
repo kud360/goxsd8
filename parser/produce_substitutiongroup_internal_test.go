@@ -12,10 +12,18 @@ import (
 // §3.3.2.1 dcl.elt.common's {type definition} chain, which the external
 // TestProduceElementInlineTypeOutranksSubstitutionGroupHead cannot reach: that
 // case gives the head a NAMED type, so clause 3's lookup succeeds there and the
-// clause order is unobservable. Here the head's type is an inline anonymous
-// <complexType>, the one shape substitutionGroupHeadType declines as a producer
-// limitation (#342) — and clause 1 decides this member outright, so that lookup
-// must never run for it.
+// clause order is unobservable. Here the head's type is an inline <simpleType>,
+// the one shape substitutionGroupHeadType still declines as a producer
+// limitation after #342 — because produceElement cannot build such a head at all
+// — and clause 1 decides this member outright, so that lookup must never run for
+// it.
+//
+// The head deliberately carries a <simpleType> rather than the <complexType>
+// this test used before #342: the complexType shape is now MAPPED, so running
+// clause 3 for it would no longer fail and the ordering would go unobserved
+// again. What the clause order decides is WHICH error the schema gets — the
+// spec's verdict on the member's own type, or a fabricated limitation about a
+// head type the member never inherits (STYLE E2).
 //
 // It is package-internal because the mapping is not observable through Produce:
 // two DISTINCT anonymous types are not the same type definition, so the same
@@ -23,12 +31,10 @@ import (
 // the producer maps, and every end-to-end run of this shape ends in an error.
 // Calling produceElement directly is the only way to read the mapped {type
 // definition}, the same reason TestProduceModelGroupDefinitionScopesLocalElements
-// is internal. What the clause order decides is WHICH error the schema gets: the
-// spec's verdict on the member's own type, or a fabricated limitation about a
-// head type the member never inherits (STYLE E2).
+// is internal.
 func TestProduceElementInlineTypeSkipsAnonymousHeadLookup(t *testing.T) {
 	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-		<xs:element name="head"><xs:complexType><xs:sequence/></xs:complexType></xs:element>
+		<xs:element name="head"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:element>
 		<xs:element name="member" substitutionGroup="head"><xs:complexType><xs:sequence/></xs:complexType></xs:element>
 	</xs:schema>`
 	d, err := ReadDocument("mem://sghead.xsd", strings.NewReader(doc))

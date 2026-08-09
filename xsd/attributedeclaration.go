@@ -406,7 +406,7 @@ func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefi
 		return AttributeDeclaration{}, xsderr.New(ruleAPropsCorrect, loc,
 			"attribute declaration has an absent {name}, but the §3.2.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (a-props-correct clause 1)")
 	}
-	if err := checkTypeDefinitionOrRef(loc, typeDefinition, "attribute declaration "+name.String()+" {type definition}"); err != nil {
+	if err := checkTypeDefinitionOrRef(loc, typeDefinition, attributeTypeSlot, "attribute declaration "+name.String()); err != nil {
 		return AttributeDeclaration{}, err
 	}
 	if valueConstraint != nil {

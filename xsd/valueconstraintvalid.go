@@ -207,6 +207,14 @@ func complexTypeOwner(c ComplexType) string {
 // top-level type this phase already walked in its own right, so only the
 // InlineTypeDefinition arm is descended.
 //
+// A SubstitutionGroupHeadTypeRef is deliberately NOT descended, and the type
+// assertion below is what keeps it that way. The type it inherits is the HEAD's
+// inline anonymous one, and the head is itself an entry of s.elements whose own
+// pass through here descends it — so descending from the member too would charge
+// clause 2 / au-props-correct a second time over the same components, and report
+// the failure at the member rather than at the declaration that actually spells
+// the offending default. One component, one charge, at its owner.
+//
 // The declaration's OWN clause is charged before the descent, so the failure a
 // reader is sent to is the outer one when a declaration and something nested
 // inside its inline type are both wrong (STYLE D1).

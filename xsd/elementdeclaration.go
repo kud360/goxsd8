@@ -353,16 +353,18 @@ func (s Scope) Parent() (ElementScopeParent, bool) {
 // STRUCTURAL holder built before resolution. {substitution group affiliations}
 // is carried as a list of pre-resolution QName REFERENCES (the substitutionGroup
 // names), and {type definition} as a TypeDefinitionOrRef — a by-name reference
-// for the type/@type, substitution-group and xs:anyType tiers of §3.3.2.1
-// dcl.elt.common, or the owned anonymous component itself for clause 1's inline
-// <simpleType>/<complexType> child. Finalize (resolve.go, #173) VALIDATES that
-// every by-name reference resolves against the schema indexes (src-resolve
-// clauses 1.1 and 1.3) and that the substitution-group graph is acyclic
-// (e-props-correct clause 5), but does NOT rewrite the references into resolved
-// components: the QNames are retained, and a consumer follows them by read-time
-// schema.Type/schema.Element lookups. Of the cross-component clauses that need
-// resolved components, clauses 2 (#463) and 4 (#395) are charged by finalize's
-// later phases; clause 7 stays deferred.
+// for the type/@type, NAMED-head substitution-group and xs:anyType tiers of
+// §3.3.2.1 dcl.elt.common, the owned anonymous component itself for clause 1's
+// inline <simpleType>/<complexType> child, or a reference to the OWNING HEAD for
+// clause 3's anonymous-head case (SubstitutionGroupHeadTypeRef, #342, the one
+// arm whose name lives in the ELEMENT symbol space rather than the type one).
+// Finalize (resolve.go, #173) VALIDATES that every by-name reference resolves
+// against the schema indexes (src-resolve clauses 1.1 and 1.3) and that the
+// substitution-group graph is acyclic (e-props-correct clause 5), but does NOT
+// rewrite the references into resolved components: the QNames are retained, and
+// a consumer follows them by read-time schema.Type/schema.Element lookups. Of
+// the cross-component clauses that need resolved components, clauses 2 (#463)
+// and 4 (#395) are charged by finalize's later phases; clause 7 stays deferred.
 //
 // The whole {scope} record is carried, {parent} included (a Scope value, not a
 // bare ScopeVariety): a local declaration names the Complex Type Definition or
@@ -559,7 +561,7 @@ func newElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefini
 		return ElementDeclaration{}, xsderr.New(ruleEPropsCorrect, loc,
 			"element declaration has an absent {name}, but the §3.3.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (e-props-correct clause 1)")
 	}
-	if err := checkTypeDefinitionOrRef(loc, typeDefinition, "element declaration "+name.String()+" {type definition}"); err != nil {
+	if err := checkTypeDefinitionOrRef(loc, typeDefinition, elementTypeSlot, "element declaration "+name.String()); err != nil {
 		return ElementDeclaration{}, err
 	}
 	for i, m := range substitutionGroupExclusions {
@@ -634,15 +636,22 @@ func (e ElementDeclaration) Loc() xsderr.Loc {
 
 // TypeDefinition returns the {type definition} property (Required) as the
 // TypeDefinitionOrRef sealed sum: a TypeDefinitionRef naming a top-level type
-// (§3.3.2.1 dcl.elt.common clauses 2-4), or an InlineTypeDefinition owning the
-// anonymous type of an inline <simpleType>/<complexType> child (clause 1). It is
-// nil only for a declaration built with an absent {type definition}.
+// (§3.3.2.1 dcl.elt.common clauses 2 and 4, and clause 3 with a NAMED-typed
+// head), an InlineTypeDefinition owning the anonymous type of an inline
+// <simpleType>/<complexType> child (clause 1), or a SubstitutionGroupHeadTypeRef
+// naming the head that OWNS the anonymous type this declaration inherits (clause
+// 3, anonymous-head case). It is nil only for a declaration built with an absent
+// {type definition}.
 //
-// The by-name arm is NOT resolved into a component here. Finalize (#173)
-// validates that the name resolves to a type definition (src-resolve clause 1.1)
-// but adds no resolved-component accessor: the QName is retained, and a consumer
-// obtains the component by a read-time schema.Type(name) lookup. The inline arm
-// needs no such lookup — it carries the component.
+// Neither reference arm is resolved into a component here. Finalize (#173)
+// validates that a TypeDefinitionRef's name resolves to a type definition
+// (src-resolve clause 1.1) but adds no resolved-component accessor: the QName is
+// retained, and a consumer obtains the component by a read-time
+// schema.Type(name) lookup. A SubstitutionGroupHeadTypeRef is followed instead
+// through schema.Element(head) — a different symbol space — and then one read of
+// that head's own {type definition}; a dangling head is an ·absent· member under
+// §5.3 and is not a finalize failure. The inline arm needs no lookup at all — it
+// carries the component.
 func (e ElementDeclaration) TypeDefinition() TypeDefinitionOrRef {
 	return e.typeDefinition
 }

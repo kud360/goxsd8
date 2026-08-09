@@ -1473,10 +1473,18 @@ func rejectBothInlineTypes(el *Element, inlineSimple, inlineComplex *Element) er
 //
 // GAP(parser): one clause-3 shape is DECLINED rather than mapped, and it is
 // declined on the global path, not here — a head whose own type is an inline
-// anonymous definition, which the member's {type definition} would have to BE
-// and which this package cannot share between two declarations. It is reported
-// as a producer limitation, never as a rule verdict (substitutionGroupHeadType).
-// #342 owns its retirement.
+// <simpleType>. The inline-<complexType> head it used to sit beside is mapped as
+// of #342, through xsd.SubstitutionGroupHeadTypeRef, which references the OWNING
+// head rather than copying a component whose {context} names one declaration. It
+// is reported as a producer limitation, never as a rule verdict
+// (substitutionGroupHeadType).
+//
+// What remains is NOT a residue of the sharing mechanism — the arm expresses it
+// perfectly well — but of a different limitation one level down: produceElement
+// declines a top-level <element> with an inline <simpleType> outright, so a
+// member must not be handed a reference to a head this producer can never build.
+// #442 owns that decline and therefore owns this one; it retires here the moment
+// it retires there, and no separate issue is needed for the clause-3 half.
 func (p *producer) localDeclaredType(el *Element, dflt xsd.QName) (xsd.TypeDefinitionOrRef, error) {
 	if inline := childElement(el, xsd.XMLSchemaNS, "simpleType"); inline != nil {
 		st, err := p.constructSimpleType(xsd.QName{}, inline) // tier 1
