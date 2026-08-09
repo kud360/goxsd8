@@ -71,12 +71,14 @@ func validateUnion(b Backend, st *xsd.SimpleType, rawLexical string, ctx Context
 	// clause 1 (cvc-pattern-valid, §4.3.4.4) on the literal as the active basic
 	// member normalized it, NOT on the raw one and not on a union-level
 	// normalization (a union has no whiteSpace facet to normalize with). A zero mode
-	// means the ·active basic member· is itself a type §4.1.5 makes facet-less: an
-	// ATOMIC member whose {primitive type definition} is absent, which cos-st-restricts
-	// clause 3.1 admits as a member because it rejects only the two ·special· ANCHOR
-	// nodes by identity, not every absent-primitive atomic a caller can build. Nothing
-	// normalizes there, so the raw literal is what clause 1 tests — the same `if ws != 0`
-	// guard validateLexical and facetValue apply.
+	// means the ·active basic member· is itself a type §4.1.5 makes facet-less: a
+	// member whose {variety} is ·absent·, §4.1.5's FIRST no-applicable-facets case
+	// (noFacetsApplicable's `case nil`). cos-st-restricts clause 3.1 admits such a
+	// member because it rejects only the two ·special· ANCHOR nodes by identity, not
+	// every caller-built type in their shape — one with no declared derivation and no
+	// {base type definition} derives no {variety} at all. Nothing normalizes there, so
+	// the raw literal is what clause 1 tests — the same `if ws != 0` guard
+	// validateLexical and facetValue apply.
 	lexical := rawLexical
 	if ws != 0 {
 		lexical = normalizeWhiteSpace(rawLexical, ws)

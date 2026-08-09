@@ -65,6 +65,7 @@ var allowedCollisionCitations = []citationAllowance{
 	{file: "xsd/example_test.go", number: 9, count: 1},
 	{file: "xsd/modelgroup.go", number: 9, count: 1},
 	{file: "xsd/resolve.go", number: 9, count: 4},
+	{file: "xsd/simpletype.go", number: 9, count: 1},
 	{file: "xsd/substitutiongroup.go", number: 9, count: 1},
 	{file: "xsd/substitutiongrouptypes.go", number: 9, count: 1},
 	{file: "xsd/valueconstraintvalid.go", number: 9, count: 1},

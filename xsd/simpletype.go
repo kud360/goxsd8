@@ -76,7 +76,7 @@ func (Union) variety()  {}
 // of the <simpleType> alternatives Structures §3.16.2.1 (map.std.common, "Common
 // mapping rules for Simple Type Definitions") mapped to produce the component,
 // carrying only the property that alternative MINTS. It is a sealed sum (STYLE
-// T2/T7, the PRINCIPLES 7 sealed-sum exception) mirroring term.go's TermOrRef.
+// T2/T7) mirroring term.go's TermOrRef.
 //
 // It exists so {variety}, {primitive type definition}, {item type definition}
 // and {member type definitions} need not be stored a second time beside the
@@ -741,7 +741,7 @@ func (t *SimpleType) Loc() xsderr.Loc {
 // TERMINATION: the walk follows {base type definition}, which is acyclic as
 // this package stands today — base is an unexported field with no setter, and
 // NewSimpleType demands a LIVE base pointer that must already exist, so a type
-// cannot appear on its own base chain (PRINCIPLES 5). That is a fact about
+// cannot appear on its own base chain (PRINCIPLES 9). That is a fact about
 // today's live-pointer base, not a permanent one: a deferred base reference
 // would invalidate it and force a visited-set or phase-ordering guard here.
 //
