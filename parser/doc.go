@@ -186,19 +186,22 @@
 //     definition}, <element ref>, <attribute ref>, <group ref>, keyref —
 //     are #434, which must also supply the ·lax assessment· fallback
 //     §5.3 requires on the validation side.
-//   - GAP(xsd): two DISTINCT <xs:override> (or <xs:redefine>) elements
-//     whose children are textually equivalent are treated as two different
-//     overrides (or redefinitions) of the same document, so overriding one
-//     document the same way down two paths yields duplicate components and
-//     a sch-props-correct clause 2 rejection where §4.2.5's note
-//     ("multiple equivalent overrides of the same schema document will not
-//     constitute a violation") — and §4.2.4's identically-worded note for
-//     <redefine> — wants none. Override identity here is the ordered list
-//     of substituted (element type, name, source location) triples, not
-//     the fn:deep-equal comparison §4.2.5 offers as one way of detecting
-//     closure; the SAME <xs:override> element reached twice is recognized,
-//     which is what terminates every cycle. This over-rejects, so it can
-//     lose a valid assembly, never accept an invalid one.
+//   - GAP(xsd): two DISTINCT <xs:redefine> elements whose children are
+//     textually equivalent are treated as two different redefinitions of
+//     the same document, so redefining one document the same way down two
+//     paths yields duplicate components and a sch-props-correct clause 2
+//     rejection where §4.2.4's note ("multiple equivalent <redefine>ing
+//     of the same schema document will not constitute a violation") wants
+//     none. Redefinition identity is the ordered list of redefined
+//     (element type, name, source location) triples, so the SAME
+//     <xs:redefine> element reached twice is recognized — which is what
+//     terminates every cycle — while two elements are not. This
+//     over-rejects, so it can lose a valid assembly, never accept an
+//     invalid one. <xs:override> no longer has this gap: its identity is
+//     the substituted elements' ·canonical content· with the source
+//     location left out (parser/override.go's writeCanonicalElement), so
+//     two distinct but equivalent <xs:override> elements do reach one
+//     document identity.
 //   - Two children of ONE <xs:override> with the same element type and
 //     name are reported under src-override, though §F.2's normative
 //     stylesheet resolves the pair as first-match-wins and the published
