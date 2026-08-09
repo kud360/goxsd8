@@ -143,7 +143,7 @@ tests directly: `value/example_test.go` (`ExampleOverride`),
 | [docs/STYLE.md](docs/STYLE.md) | non-negotiable code rules (cited by ID in reviews) |
 | [docs/PRINCIPLES.md](docs/PRINCIPLES.md) | the invariants and spec traps behind the rules |
 | [docs/PLAN.md](docs/PLAN.md) | roadmap M0–M12 |
-| [docs/WORKFLOW.md](docs/WORKFLOW.md) | the development loop |
+| [docs/WORKFLOW.md](docs/WORKFLOW.md) | the rules every development session obeys |
 | [docs/ROUTINES.md](docs/ROUTINES.md) | running the loop on Claude routines |
 | [docs/specs/](docs/specs/README.md) | the local W3C specs (ground truth, greppable) |
 

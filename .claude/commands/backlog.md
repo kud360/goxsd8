@@ -2,20 +2,23 @@
 description: Reconcile GitHub issues with reality and keep the ready queue dependency-ordered, consulting the user personas for API/CLI-facing work. Doc-only commit; no code changes.
 ---
 
-Run the **cartographer**'s full /backlog procedure (see its agent file and
-docs/WORKFLOW.md): survey reality (git log, docs/LOG, issues, ratchet
-lanes, `grep -rn "GAP("`), reconcile the issue list, keep `ready` issues
-with complete bodies ordered by dependency (no numeric cap — #347), and
-update docs/PLAN.md on drift.
+Delegate to the **cartographer** for its full /backlog pass: survey
+reality, reconcile the issue list against it, reconcile the branch
+namespace, and **rewrite docs/PLAN.md's Status section by replacement** —
+lane scores read from `conformance/testdata/expectations/*.txt`, milestone
+and queue counts read from GitHub, one date stamp for the section, and the
+next planning action named. Replace it; never leave the previous version
+beside the new one.
 
 For API- or CLI-facing milestones, **you** — this session, not the
-cartographer — delegate to **libuser** and **cliuser** (feed them only
-the current README and `go doc` output), then hand their reports to the
-cartographer to fold into issue bodies. See docs/WORKFLOW.md's
-`/backlog` bullet for why the duty sits here.
+cartographer — delegate to **libuser** and **cliuser**, giving each only
+the README and `go doc` output, then hand their reports to the
+cartographer to fold into issue bodies. A cartographer subagent cannot
+spawn them, and it has already read the source, so a persona it
+role-played itself would launder an insider's opinion as an outsider's
+(#416).
 
-Then delegate a session log entry to **chronicler**, commit any PLAN.md/
-doc edits (`meta: backlog <date>`), and land them the same way `wip/issue-`
-work lands — open a PR and squash-merge it via the GitHub Merge API in this
-same session (never leave the commit sitting on an unmerged branch). No code
-changes in this trigger.
+Then delegate a log entry to **chronicler**, commit as
+`meta: backlog <date>`, and land it by opening a PR and squash-merging it
+in this same session — never leave the commit on an unmerged branch. No
+code changes in this trigger.

@@ -1,42 +1,56 @@
 ---
-description: Weekly process retrospective + architecture audit — mine the log and git history for recurring friction, apply the smallest durable fix, then run the steward's drift review.
+description: Weekly process retrospective + architecture audit — recraft the process from what the evidence shows, then run the steward's drift review.
 ---
 
 Two delegations, in order — process first, architecture second.
 
-**Part 1 — process retro.** Delegate to the **chronicler**'s /retro duty
-(see its agent file):
+**Part 1 — process retro.** Delegate to the **chronicler**.
 
-1. Read the last ~2 weeks of docs/LOG, `git log`, `needs-replan`
-   issues, and the issue threads' verdict comments (repair rounds and
-   advisory notes live there, not in the log).
-2. Identify RECURRING friction (two sessions hitting the same wall is a
-   pattern; one-offs are not) and classify each pattern by where it
-   enters the pipeline — the fix belongs at the entry point.
-3. Audit the follow-up ledger: every "Next:", advisory note, and
-   promised follow-up in the window has a tracking issue or an explicit
-   dismissal; file the leaks.
-4. Apply the smallest durable fix — an edit to docs/WORKFLOW.md,
-   docs/STYLE.md, an agent prompt, a command file, or a new
-   docs/PRINCIPLES.md entry — in a dedicated `meta: retro <date>` commit.
-   Repeated manual toil becomes a `kind/tooling` issue instead.
-5. Log metric trends vs the previous retro (sessions/commit, repair
-   rounds/accept, rejects/accept, ratchet slope, ready-queue depth)
-   in the session log entry, then land the commit(s) via a PR opened and
-   squash-merged in the same session (as `wip/issue-` work lands), not just
-   a push.
+Read the evidence: the last ~2 weeks of docs/LOG, `git log`,
+`needs-replan` issues, and the issue threads themselves — repair rounds
+and advisory notes live in verdict comments, and the log under-reports
+them. Find friction that RECURS; two sessions hitting the same wall is a
+pattern, one session is an anecdote. Audit the follow-up ledger: every
+"Next:", advisory note and promised follow-up either has a tracking issue
+or gets explicitly dismissed.
 
-**Part 2 — architecture audit.** Delegate to the **steward** (its
-full audit procedure — see its agent file): import graph and exported
-surface vs docs/ARCHITECTURE.md, placement, duplicate concepts and
-representations (judged by upkeep cost, not existence), exported-symbol
-usage vs godoc intent, doc drift. Code findings become `kind/refactor`
-issues ranked by cost-of-delay — pre-1.0, movement is encouraged;
-post-1.0 (human-declared, docs/PLAN.md) the audit guards the surface
-instead. Doc corrections land in their own `meta: audit <date>` commit
-in the same session; code moves are NEVER made here — they go through
-the develop loop as issues.
+Then **recraft, do not append.** Take the whole process as it now stands
+— WORKFLOW, the command files, the agent files, STYLE, PRINCIPLES — and
+ask what it should say given everything now known, not what the smallest
+edit would be. A rule earned this week gets integrated into the text that
+governs its subject, which usually means rewriting that section so it
+reads as though the rule had always been there. Retire what the new
+understanding supersedes.
 
-Constitutional guardrail: the "one rule" in CLAUDE.md and the arbiter's
-ratchet-integrity section are NOT editable here — changes to those need a
+The failure mode this exists to prevent is accretion: a rule appended per
+incident, each carrying its own case history, until the documents are too
+long to read and agents grep them instead. Prefer one clear sentence to a
+paragraph of provenance — the evidence belongs in docs/LOG and on the
+issue thread, and a rule needs at most a bare `(#N)` pointer to it. If a
+section has grown to the point where nobody would read it, that is itself
+the finding, and rewriting it is the fix.
+
+Keep the ownership boundaries in CLAUDE.md's ground-truth table intact:
+each document owns its subject and none restates another. A fix that has
+to be stated in two places is a sign it belongs in neither.
+
+Repeated manual toil becomes a `kind/tooling` issue instead of a rule
+(PRINCIPLES 27). Land the result as a `meta: retro <date>` commit, opened
+and squash-merged as a PR in this same session, and log the metric trends
+against the previous retro: sessions per commit, repair rounds per accept,
+rejects per accept, ratchet slope, ready-queue depth.
+
+**Part 2 — architecture audit.** Delegate to the **steward** for its full
+audit. Code findings become `kind/refactor` issues ranked by cost-of-delay;
+doc corrections land in a `meta: audit <date>` commit in the same session;
+code moves are never made here — they go through the develop loop.
+
+The steward cannot file issues or merge its own PR (read-only tools, and
+GitHub has been unreachable from that context on every audit so far), so
+**the orchestrating session files what it returns and lands its commit.**
+Budget for that step: an audit that "filed nothing" is an orchestration
+miss, not a steward finding.
+
+Constitutional guardrail: CLAUDE.md's "one rule" and the arbiter's
+ratchet-integrity section are NOT editable here. They change only via a
 human-filed issue.

@@ -129,9 +129,13 @@ codified as rules in docs/STYLE.md.
     per conformance case; regressions are loud diffs; improvements are
     harvestable; `git blame` bisects verdict changes.
 
-22. **Small fix → re-baseline → commit.** One issue, one focused change,
-    one commit that carries its own expectation movement. Batched changes
-    make ratchet movement unattributable.
+22. **Small fix → re-baseline → commit.** One landing, one commit that
+    carries its own expectation movement. What must never share a commit
+    is two changes that could each move a lane, because that makes the
+    movement unattributable — a landing may otherwise carry whatever its
+    change makes necessary (docs/WORKFLOW.md, "Scope"). Deferring has its
+    own cost: a follow-up spends a whole landing and opens a hand-off
+    where premises decay.
 
 23. **Throwaway diagnostics are first-class.** An env-gated `zz_diag`
     test that dumps every wrong verdict is often the fastest route to the
