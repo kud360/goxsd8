@@ -656,7 +656,7 @@ func (p *producer) namesSelf(derivation *Element, qn xsd.QName) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	base, err := p.resolveQName(derivation, lexical)
+	base, err := p.resolveQName(derivation, lexical, "base")
 	if err != nil {
 		return false, err
 	}
@@ -779,7 +779,7 @@ func (p *producer) namesSelfRef(el *Element, qn xsd.QName) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	ref, err := p.resolveQName(el, lexical)
+	ref, err := p.resolveQName(el, lexical, "ref")
 	if err != nil {
 		return false, err
 	}

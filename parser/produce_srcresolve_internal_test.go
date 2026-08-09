@@ -30,7 +30,7 @@ func resolverFor(t *testing.T, doc string) func(string) (xsd.QName, error) {
 	if elem == nil {
 		t.Fatal("the test document has no top-level <element>")
 	}
-	return func(lexical string) (xsd.QName, error) { return p.resolveQName(elem, lexical) }
+	return func(lexical string) (xsd.QName, error) { return p.resolveQName(elem, lexical, "type") }
 }
 
 // TestResolveQNameLicensedNamespaces is package-internal because it pins

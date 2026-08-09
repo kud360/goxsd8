@@ -30,6 +30,18 @@ const RuleXMLWellFormed Rule = "xml-wf"
 // RuleXMLWellFormed it lets the Error carry a recognizable, non-empty Rule
 // instead of "", and IsValidRule accepts it as a documented, non-spec exemption
 // from the generated catalog.
+//
+// UNREACHABILITY IS THE PRECONDITION, and it is the standing convention for
+// every future guard (#343): a rejection may cite RuleComponentInvariant only
+// when the state it rejects is genuinely unreachable from a schema document —
+// when the XML mapping layer above the constructor cannot produce it. If a human
+// could type the schema document that produces the state, the producer owes it a
+// real spec rule first, charged at the construct the author wrote, and the
+// constructor guard is then a BACKSTOP for the programmatic caller rather than
+// the primary charge. Reaching this sentinel from a document is therefore a
+// defect in the producer, not a verdict about the document: it tells a
+// RuleOf/errors.As consumer that the library built something illegal, which is
+// the wrong thing to say about an author's mistake.
 const RuleComponentInvariant Rule = "component-invariant"
 
 // Loc identifies where an offending construct lives — the schema document or

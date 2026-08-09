@@ -410,35 +410,38 @@ func TestProduceNamelessTopLevelRejected(t *testing.T) {
 	}
 }
 
-// TestProduceNamelessBaseTypeRejectedOffDispatch reaches produceComplexType's own
-// nameless-{name} guard, which since #305 no longer lies on run's document-order
-// dispatch path (that fault is topLevelName's a step earlier). The remaining live
-// entry is resolveBaseType's ON-DEMAND build: prescan indexes a top-level
-// <complexType name=""> under QName{target, ""} — an empty local part nothing
-// filters — and a base="" lexical binds to exactly that name, so building the
-// derived type pulls the nameless one in before run ever dispatches on it.
+// TestProduceEmptyBaseClosesTheOnDemandNamelessBuild pins the document that used
+// to be the last schema-writable way into produceComplexType's nameless-{name}
+// guard, and pins that #343 closed it one step earlier.
 //
-// DOCUMENT ORDER IS LOAD-BEARING: the deriving <complexType> must come FIRST, or
-// run reaches the nameless declaration itself and topLevelName raises the fault,
-// which would leave the guard untested. Deleting the guard does not merely
-// change this message — production walks on into the nameless type's content and
-// complexTypeIdentity.scopeParent's zero-identity assertion panics, which is
-// exactly why the fault is charged here, before anything is built.
-func TestProduceNamelessBaseTypeRejectedOffDispatch(t *testing.T) {
+// The shape: prescan indexes a top-level <complexType name=""> under
+// QName{target, ""} — an empty local part nothing filters — and a base=""
+// lexical used to bind to exactly that name, so resolveBaseType's ON-DEMAND
+// build pulled the nameless type in before run ever dispatched on it (run's own
+// dispatch path raises the fault from topLevelName a step earlier, #305).
+// DOCUMENT ORDER IS STILL LOAD-BEARING for that: the deriving <complexType> comes
+// FIRST, or run reaches the nameless declaration itself and topLevelName answers.
+//
+// Since #343 the base="" lexical never binds to anything: bindQName rejects an
+// empty QName local part at the attribute, charging cvc-datatype-valid (Datatypes
+// §4.1.4) against the xs:QName the schema for schema documents declares for
+// base. So the verdict this document earns is that lexical one, positioned on the
+// <restriction>, and the nameless type is never built — which is also why the
+// panic the guard's doc describes (production walking into the nameless type
+// until complexTypeIdentity.scopeParent's zero-identity assertion fires) stays
+// out of reach. The guard itself is deliberately kept as an in-package backstop
+// and is NOT asserted here any more; nothing a schema author can write reaches
+// it.
+func TestProduceEmptyBaseClosesTheOnDemandNamelessBuild(t *testing.T) {
 	_, err := produce(t, wrap("", `<xs:complexType name="d"><xs:complexContent>`+
 		`<xs:restriction base=""><xs:sequence>`+
 		`<xs:element name="b" type="xs:string"/></xs:sequence></xs:restriction>`+
 		`</xs:complexContent></xs:complexType>`+
 		`<xs:complexType name=""><xs:sequence>`+
 		`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`))
-	if err == nil {
-		t.Fatalf("Produce succeeded, want a grammar fault for the base= reference's nameless <complexType>")
-	}
-	var xe *xsderr.Error
-	if errors.As(err, &xe) {
-		t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
-	}
-	if !strings.Contains(err.Error(), "top-level <complexType>") || !strings.Contains(err.Error(), "no usable name") {
-		t.Fatalf("error = %v, want the <complexType> grammar fault reporting the unusable name", err)
+	assertRule(t, err, "cvc-datatype-valid")
+	loc, ok := xsderr.LocOf(err)
+	if !ok || loc.URI != produceURI || loc.Line != 1 || loc.Col == 0 {
+		t.Fatalf("position = %v (found %t), want the <restriction> at %s:1 with a column", loc, ok, produceURI)
 	}
 }
