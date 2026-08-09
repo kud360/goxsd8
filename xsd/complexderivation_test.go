@@ -116,9 +116,9 @@ func dAssert(test string) Assertion {
 // definition} — dPrimitive builds those.
 func dSimple(t *testing.T, name QName, base *SimpleType) *SimpleType {
 	t.Helper()
-	st, err := NewSimpleType(xsderr.Loc{}, name, RestrictionDerivation{}, base, nil, nil)
+	st, err := newCheckedSimpleType(xsderr.Loc{}, name, RestrictionDerivation{}, base, nil, nil)
 	if err != nil {
-		t.Fatalf("NewSimpleType(%s): %v", name, err)
+		t.Fatalf("newCheckedSimpleType(%s): %v", name, err)
 	}
 	return st
 }
@@ -130,9 +130,9 @@ func dSimple(t *testing.T, name QName, base *SimpleType) *SimpleType {
 // shape directly on xs:anyAtomicType.
 func dPrimitive(t *testing.T, name QName) *SimpleType {
 	t.Helper()
-	st, err := NewPrimitiveType(xsderr.Loc{}, name, nil, nil)
+	st, err := newCheckedPrimitiveType(xsderr.Loc{}, name, nil, nil)
 	if err != nil {
-		t.Fatalf("NewPrimitiveType(%s): %v", name, err)
+		t.Fatalf("newCheckedPrimitiveType(%s): %v", name, err)
 	}
 	return st
 }
@@ -608,13 +608,13 @@ func TestDerivedOKComplexHonoursBlockingSet(t *testing.T) {
 	if !ok {
 		t.Fatalf("derived is not a ComplexType")
 	}
-	if !s.derivedOKComplex(d, base, nil) {
+	if ok, err := s.derivedOKComplex(d, base, nil); err != nil || !ok {
 		t.Fatalf("derived is not OK from base under the empty blocking set")
 	}
-	if s.derivedOKComplex(d, base, []DerivationMethod{DerivationRestriction}) {
+	if ok, err := s.derivedOKComplex(d, base, []DerivationMethod{DerivationRestriction}); err != nil || ok {
 		t.Fatalf("derived was accepted from base with restriction in the blocking set")
 	}
-	if !s.derivedOKComplex(d, base, restrictionBlockingKeywords) {
+	if ok, err := s.derivedOKComplex(d, base, restrictionBlockingKeywords); err != nil || !ok {
 		t.Fatalf("clause 4's {extension, list, union} set must not block a restriction")
 	}
 }

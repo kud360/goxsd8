@@ -44,6 +44,15 @@ package xsd
 // than one bundle precisely so that a reject-capable method is not representable
 // inside a fail-open interface (STYLE T1).
 //
+// EVERY METHOD TAKES A [TypeResolver], AND NO IMPLEMENTATION MAY STORE ONE. A
+// Simple Type Definition's {base type definition} may be a deferred reference by
+// name (simpletyperef.go), and answering any question below means walking that
+// chain — {variety}, the governing mapping, the facets in force are all read
+// through it. The resolver is therefore a per-call parameter, exactly as it is
+// on [SimpleTypeRestrictionChecker.CheckRestriction]: an implementation is built
+// once and installed into whichever schema finalize hands it, so a stored
+// resolver would silently tie one implementation to one schema.
+//
 // Install one with [SchemaBuilder.FinalizeWith]. A Schema finalized through plain
 // [SchemaBuilder.Finalize] has no value space and every question is undecided,
 // which is exactly the pre-existing fail-open behavior.
@@ -53,13 +62,13 @@ type ValueSpace interface {
 	// NOT the equal-or-identical union: clause 3 says "identical", and for the
 	// datatypes whose equality differs from their identity (float/double ±0,
 	// dateTime across timezone offsets, §2.2.2) the two verdicts differ.
-	Identical(ta *SimpleType, a ValueConstraint, tb *SimpleType, b ValueConstraint) (identical, decided bool)
+	Identical(r TypeResolver, ta *SimpleType, a ValueConstraint, tb *SimpleType, b ValueConstraint) (identical, decided bool)
 
 	// EqualOrIdentical is the equal-or-identical union (Datatypes §2.2.1/§2.2.2,
 	// "All comparisons for 'sameness' prescribed by this specification test for
 	// either equality or identity, not for identity alone") — what loc-testSubP
 	// (§3.4.6.4) clauses 4.2 and 5.2.2 compare two {value}s under.
-	EqualOrIdentical(ta *SimpleType, a ValueConstraint, tb *SimpleType, b ValueConstraint) (same, decided bool)
+	EqualOrIdentical(r TypeResolver, ta *SimpleType, a ValueConstraint, tb *SimpleType, b ValueConstraint) (same, decided bool)
 
 	// ValidDefault is Simple Default Valid (§3.2.6.2, cos-valid-simple-default)
 	// — what a-props-correct (§3.2.6.1) clause 2 and au-props-correct (§3.5.6)
@@ -116,7 +125,7 @@ type ValueSpace interface {
 	// and threading the datatype-layer reason out would file a cvc-* message
 	// under a schema-component rule ID. A user who wants the datatype-layer
 	// detail gets it from instance validation, where it is charged cvc-*.
-	ValidDefault(t *SimpleType, vc ValueConstraint) (valid, decided bool)
+	ValidDefault(r TypeResolver, t *SimpleType, vc ValueConstraint) (valid, decided bool)
 }
 
 // undecidedValueSpace is the ValueSpace a Schema finalized without one carries:
@@ -127,15 +136,15 @@ type ValueSpace interface {
 // calling FinalizeWith (STYLE T5).
 type undecidedValueSpace struct{}
 
-func (undecidedValueSpace) Identical(*SimpleType, ValueConstraint, *SimpleType, ValueConstraint) (bool, bool) {
+func (undecidedValueSpace) Identical(TypeResolver, *SimpleType, ValueConstraint, *SimpleType, ValueConstraint) (bool, bool) {
 	return false, false
 }
 
-func (undecidedValueSpace) EqualOrIdentical(*SimpleType, ValueConstraint, *SimpleType, ValueConstraint) (bool, bool) {
+func (undecidedValueSpace) EqualOrIdentical(TypeResolver, *SimpleType, ValueConstraint, *SimpleType, ValueConstraint) (bool, bool) {
 	return false, false
 }
 
-func (undecidedValueSpace) ValidDefault(*SimpleType, ValueConstraint) (bool, bool) {
+func (undecidedValueSpace) ValidDefault(TypeResolver, *SimpleType, ValueConstraint) (bool, bool) {
 	return false, false
 }
 

@@ -59,7 +59,7 @@ func (b stubItemBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 // SECOND derivation step and is built by the test that needs one.
 func listType(t *testing.T, item *xsd.SimpleType) *xsd.SimpleType {
 	t.Helper()
-	lst, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "lst"},
+	lst, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "lst"},
 		xsd.ListDerivation{Item: item}, xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
@@ -77,7 +77,10 @@ func TestGoverningMappingListResolves(t *testing.T) {
 	item := primType(t, "myitem", "collapse")
 	lst := listType(t, item)
 
-	m, ok := governingMapping(stubItemBackend{item: item.Name()}, lst)
+	m, ok, gerr := governingMapping(stubItemBackend{item: item.Name()}, noSchema{}, lst)
+	if gerr != nil {
+		t.Fatalf("governingMapping(list): %v", gerr)
+	}
 	if !ok {
 		t.Fatal("governingMapping(list) ok = false, want a resolved listMapping")
 	}
@@ -96,7 +99,7 @@ func TestGoverningMappingListResolves(t *testing.T) {
 	// An item type the backend does not map leaves the list ungoverned — the
 	// listGoverned half of the branch, pinned through governingMapping exactly as
 	// TestGoverningMappingUnionRequiresEveryMember pins unionGoverned.
-	if _, ok := governingMapping(emptyBackend{}, lst); ok {
+	if _, ok, gerr := governingMapping(emptyBackend{}, noSchema{}, lst); gerr != nil || ok {
 		t.Error("governingMapping(list, ungoverned item) ok = true, want false")
 	}
 }
@@ -145,7 +148,7 @@ func TestValidateLexicalListItemErrorPropagates(t *testing.T) {
 	leaf := listType(t, item)
 	b := stubItemBackend{item: item.Name()}
 
-	v, err := ValidateLexical(b, leaf, "aa bb ccc", nil)
+	v, err := ValidateLexical(b, noSchema{}, leaf, "aa bb ccc", nil)
 	if err != nil {
 		t.Fatalf("ValidateLexical(valid list) = %v, want accept", err)
 	}
@@ -153,7 +156,7 @@ func TestValidateLexicalListItemErrorPropagates(t *testing.T) {
 		t.Fatalf("ValidateLexical(valid list) value %T does not implement Lengthed", v)
 	}
 
-	_, err = ValidateLexical(b, leaf, "aa bad", nil)
+	_, err = ValidateLexical(b, noSchema{}, leaf, "aa bad", nil)
 	if err == nil {
 		t.Fatal("ValidateLexical(list with invalid item token) = nil, want the item's Parse error")
 	}
@@ -183,18 +186,18 @@ func TestValidateLexicalListItemTypeFacetsApply(t *testing.T) {
 	// stubItemBackend keys its value by token length, so "aa" and "bb" share a
 	// value and "ccc" does not: the enumeration admits the two-character items
 	// and excludes the three-character one.
-	item, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "enumitem"},
+	item, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "enumitem"},
 		xsd.RestrictionDerivation{}, prim, []xsd.Facet{enumOf("aa")}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(item restriction): %v", err)
 	}
 	leaf := listType(t, item)
 
-	if _, err := ValidateLexical(b, leaf, "aa bb", nil); err != nil {
+	if _, err := ValidateLexical(b, noSchema{}, leaf, "aa bb", nil); err != nil {
 		t.Fatalf("ValidateLexical(list of enumerated items) = %v, want accept", err)
 	}
 
-	_, err = ValidateLexical(b, leaf, "aa ccc", nil)
+	_, err = ValidateLexical(b, noSchema{}, leaf, "aa ccc", nil)
 	if err == nil {
 		t.Fatal("ValidateLexical(list with out-of-enumeration item) = nil, want the item type's own facet rejection (dv_list → dv_vfacets)")
 	}
@@ -240,12 +243,12 @@ func TestValidateLexicalListUnionItemTypeOwnFacetsApply(t *testing.T) {
 	// by the enumeration the union itself declares.
 	enumItem := unionRestriction(t, "enumItem", base, []xsd.Facet{enumOf("7")})
 	enumList := listType(t, enumItem)
-	if _, err := ValidateLexical(b, enumList, "7 7", nil); err != nil {
+	if _, err := ValidateLexical(b, noSchema{}, enumList, "7 7", nil); err != nil {
 		t.Fatalf("ValidateLexical(list of enumerated union items, %q) = %v, want accept", "7 7", err)
 	}
-	_, err := ValidateLexical(b, enumList, "7 8", nil)
+	_, err := ValidateLexical(b, noSchema{}, enumList, "7 8", nil)
 	if err == nil {
-		t.Fatal("ValidateLexical(list, token outside the union item type's enumeration) = nil, want the item type's own clause-3 rejection (dv_list → dv_vfacets)")
+		t.Fatal("ValidateLexical(list, noSchema{}, token outside the union item type's enumeration) = nil, want the item type's own clause-3 rejection (dv_list → dv_vfacets)")
 	}
 	if r, _ := xsderr.RuleOf(err); r != "cvc-enumeration-valid" {
 		t.Errorf("out-of-enumeration union item charged %s, want cvc-enumeration-valid (§4.3.5.4 on the union ITEM type)", r)
@@ -257,12 +260,12 @@ func TestValidateLexicalListUnionItemTypeOwnFacetsApply(t *testing.T) {
 	patItem := unionRestriction(t, "patItem", base,
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetPattern, []string{"[0-9]+"}, false)})
 	patList := listType(t, patItem)
-	if _, err := ValidateLexical(b, patList, "7 42", nil); err != nil {
+	if _, err := ValidateLexical(b, noSchema{}, patList, "7 42", nil); err != nil {
 		t.Fatalf("ValidateLexical(list of pattern-matching union items, %q) = %v, want accept", "7 42", err)
 	}
-	_, err = ValidateLexical(b, patList, "7 abc", nil)
+	_, err = ValidateLexical(b, noSchema{}, patList, "7 abc", nil)
 	if err == nil {
-		t.Fatal("ValidateLexical(list, token violating the union item type's pattern) = nil, want the item type's own clause-1 rejection (dv_list → dv_pattern)")
+		t.Fatal("ValidateLexical(list, noSchema{}, token violating the union item type's pattern) = nil, want the item type's own clause-1 rejection (dv_list → dv_pattern)")
 	}
 	if r, _ := xsderr.RuleOf(err); r != "cvc-pattern-valid" {
 		t.Errorf("pattern-violating union item charged %s, want cvc-pattern-valid (§4.3.4.4 on the union ITEM type)", r)
@@ -292,13 +295,13 @@ func TestListEnumerationResolvesThroughAnonymousBase(t *testing.T) {
 	item := primType(t, "myitem", "collapse")
 	b := stubItemBackend{item: item.Name()}
 
-	anon, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{},
+	anon, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{},
 		xsd.ListDerivation{Item: item}, xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(anonymous intermediate list): %v", err)
 	}
-	plural, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "NMTOKENS"},
+	plural, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "NMTOKENS"},
 		xsd.ListDerivation{Item: item}, anon,
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetMinLength, []string{"1"}, false)}, nil)
 	if err != nil {
@@ -306,16 +309,16 @@ func TestListEnumerationResolvesThroughAnonymousBase(t *testing.T) {
 	}
 	// stubItemBackend keys an item's value by token length, so "aa bb" and
 	// "aa ccc" are different list values.
-	leaf, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "twoShortTokens"},
+	leaf, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "twoShortTokens"},
 		xsd.ListDerivation{Item: item}, plural, []xsd.Facet{enumOf("aa bb")}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(user restriction of xs:NMTOKENS): %v", err)
 	}
 
-	if _, err := ValidateLexical(b, leaf, "aa bb", nil); err != nil {
+	if _, err := ValidateLexical(b, noSchema{}, leaf, "aa bb", nil); err != nil {
 		t.Fatalf("ValidateLexical(enumerated list value) = %v, want accept", err)
 	}
-	_, err = ValidateLexical(b, leaf, "aa ccc", nil)
+	_, err = ValidateLexical(b, noSchema{}, leaf, "aa ccc", nil)
 	if err == nil {
 		t.Fatal("ValidateLexical(out-of-enumeration list) = nil, want the enumeration's rejection")
 	}

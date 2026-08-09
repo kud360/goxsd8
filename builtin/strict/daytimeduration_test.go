@@ -77,11 +77,11 @@ func TestDayTimeDurationReject(t *testing.T) {
 func TestDayTimeDurationSeededPattern(t *testing.T) {
 	st := seededType(t, "dayTimeDuration")
 
-	if _, err := value.ValidateLexical(strict.New(), st, "P1DT2H3M4S", nil); err != nil {
+	if _, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1DT2H3M4S", nil); err != nil {
 		t.Fatalf("day-time dayTimeDuration should validate: %v", err)
 	}
 
-	_, err := value.ValidateLexical(strict.New(), st, "P1Y", nil)
+	_, err := value.ValidateLexical(strict.New(), noSchema{}, st, "P1Y", nil)
 	if err == nil {
 		t.Fatal("year-month literal must be rejected for dayTimeDuration, got nil")
 	}

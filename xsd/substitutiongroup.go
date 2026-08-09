@@ -228,9 +228,14 @@ walk:
 			// properties (§3.4.1) — but the ·derivation· runs THROUGH it: key-derived
 			// follows {base type definition} whatever kind the current type is, and
 			// a simple type's is the *SimpleType Base reports.
-			base := c.Base()
-			if base == nil {
-				return true // xs:anySimpleType tops the chain short of H.{type definition}
+			base, err := c.Base(s)
+			if err != nil || base == nil {
+				// An absent base is xs:anySimpleType topping the chain short of
+				// H.{type definition}. An unresolvable one is the same non-answer
+				// here: Phase A already charged src-resolve for it, and this
+				// predicate has no error to return, so it takes the accepting
+				// branch rather than inventing a blocking verdict.
+				return true
 			}
 			if sameTypeDefinition(base, headType) {
 				break walk // the ·derivation· has reached H.{type definition}

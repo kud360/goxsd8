@@ -36,12 +36,12 @@ func restrictBuiltin(t *testing.T, local string, ownFacets ...xsd.Facet) error {
 	if !ok {
 		t.Fatalf("builtin xs:%s not seeded", local)
 	}
-	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
+	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
 		xsd.RestrictionDerivation{}, base, ownFacets, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	return builtin.NewRestrictionChecker(backend).CheckRestriction(st)
+	return builtin.NewRestrictionChecker(backend).CheckRestriction(noSchema{}, st)
 }
 
 // TestRestrictionCheckerApplicability covers cos-st-restricts clause
@@ -157,7 +157,7 @@ func TestRestrictionCheckerSeededBuiltins(t *testing.T) {
 	idx, backend := seededIndex(t)
 	checker := builtin.NewRestrictionChecker(backend)
 	for _, name := range builtinNames(idx) {
-		if err := checker.CheckRestriction(idx[name]); err != nil {
+		if err := checker.CheckRestriction(noSchema{}, idx[name]); err != nil {
 			t.Errorf("seeded builtin xs:%s fails the restriction checker: %v", name, err)
 		}
 	}

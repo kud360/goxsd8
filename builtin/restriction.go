@@ -48,9 +48,10 @@ func NewRestrictionChecker(b value.Backend) xsd.SimpleTypeRestrictionChecker {
 type restrictionChecker struct{ backend value.Backend }
 
 // CheckRestriction implements [xsd.SimpleTypeRestrictionChecker] over
-// checkSimpleTypeRestriction.
-func (c restrictionChecker) CheckRestriction(t *xsd.SimpleType) error {
-	return checkSimpleTypeRestriction(c.backend, t)
+// checkSimpleTypeRestriction. r is forwarded, never stored: the checker is built
+// once, by NewRestrictionChecker, and serves whichever schema finalize hands it.
+func (c restrictionChecker) CheckRestriction(r xsd.TypeResolver, t *xsd.SimpleType) error {
+	return checkSimpleTypeRestriction(c.backend, r, t)
 }
 
 // checkSimpleTypeRestriction charges the facet-VALUE half of Derivation Valid
@@ -74,23 +75,26 @@ func (c restrictionChecker) CheckRestriction(t *xsd.SimpleType) error {
 //
 // The count- and token-valued constraints of those same clauses (length,
 // minLength, maxLength, totalDigits, fractionDigits, whiteSpace,
-// explicitTimezone, and the same-type consistency SCCs) are already charged
-// inside xsd.NewSimpleType, so t reaching this function has passed them.
+// explicitTimezone, and the same-type consistency SCCs) are charged by
+// xsd.SimpleType.CheckDerivation, which the same finalize pass runs against t
+// immediately BEFORE this one, so t reaching this function has passed them.
 //
-// This is a SEPARATE, post-construction charge rather than a hook inside
-// xsd.NewSimpleType because package xsd must not depend on this package or on
-// package value (PRINCIPLES 1). It is unexported because the ONE way to reach it
-// from outside is [NewRestrictionChecker]: a schema finalized without that
-// capability installed keeps the old, weaker guarantee — value/facets.go's
-// documented preconditions about facet applicability then remain the caller's to
-// honor — and a second, direct entry point would be an exported identifier with
-// no consumer (STYLE T5) growing callers against the function the capability seam
-// is meant to own.
-func checkSimpleTypeRestriction(b value.Backend, t *xsd.SimpleType) error {
-	if err := checkAtomicApplicableFacets(t); err != nil {
+// r resolves t's {base type definition} chain, which a compiled schema may defer
+// by name; it is forwarded to every reader and stored nowhere.
+//
+// This is a SEPARATE capability rather than a hook inside package xsd because
+// xsd must not depend on this package or on package value (PRINCIPLES 1). It is
+// unexported because the ONE way to reach it from outside is
+// [NewRestrictionChecker]: a schema finalized without that capability installed
+// keeps the old, weaker guarantee — value/facets.go's documented preconditions
+// about facet applicability then remain the caller's to honor — and a second,
+// direct entry point would be an exported identifier with no consumer (STYLE T5)
+// growing callers against the function the capability seam is meant to own.
+func checkSimpleTypeRestriction(b value.Backend, r xsd.TypeResolver, t *xsd.SimpleType) error {
+	if err := checkAtomicApplicableFacets(r, t); err != nil {
 		return err
 	}
-	return value.CheckFacetRestriction(b, t)
+	return value.CheckFacetRestriction(b, r, t)
 }
 
 // checkAtomicApplicableFacets charges cos-st-restricts clause 1.3.1 for an
@@ -110,19 +114,30 @@ func checkSimpleTypeRestriction(b value.Backend, t *xsd.SimpleType) error {
 // than rejected: the §4.1.5 footnote makes the applicable set of an
 // implementation-defined primitive implementation-defined, so there is nothing
 // to decide against.
-func checkAtomicApplicableFacets(t *xsd.SimpleType) error {
-	if _, ok := t.Variety().(xsd.Atomic); !ok {
+func checkAtomicApplicableFacets(r xsd.TypeResolver, t *xsd.SimpleType) error {
+	variety, err := t.Variety(r)
+	if err != nil {
+		return err
+	}
+	if _, ok := variety.(xsd.Atomic); !ok {
 		return nil
 	}
-	primitive := t.Primitive()
+	primitive, err := t.Primitive(r)
+	if err != nil {
+		return err
+	}
 	if primitive == nil {
-		return rejectAnyFacet(t, "an atomic simple type definition with an absent {primitive type definition}")
+		return rejectAnyFacet(r, t, "an atomic simple type definition with an absent {primitive type definition}")
 	}
 	spec, ok := typeSpecOf(primitive.Name())
 	if !ok {
 		return nil
 	}
-	for _, ef := range t.EffectiveFacets() {
+	eff, err := t.EffectiveFacets(r)
+	if err != nil {
+		return err
+	}
+	for _, ef := range eff {
 		kind := ef.Facet().Kind()
 		name, known := facetName(kind)
 		if known && spec.Applies(name) {
@@ -137,8 +152,11 @@ func checkAtomicApplicableFacets(t *xsd.SimpleType) error {
 
 // rejectAnyFacet rejects the first facet in t's {facets}, for the §4.1.5 case
 // where the applicable set is empty. subject names that case in the message.
-func rejectAnyFacet(t *xsd.SimpleType, subject string) error {
-	eff := t.EffectiveFacets()
+func rejectAnyFacet(r xsd.TypeResolver, t *xsd.SimpleType, subject string) error {
+	eff, err := t.EffectiveFacets(r)
+	if err != nil {
+		return err
+	}
 	if len(eff) == 0 {
 		return nil
 	}
@@ -202,7 +220,8 @@ var facetNames = []struct {
 
 // facetName maps an xsd.FacetKind to the FacetName the generated table is keyed
 // by, scanning facetNames. ok is false only for a FacetKind outside the closed
-// set, which xsd.NewSimpleType already rejects (st-props-correct clause 5); a
+// set, which xsd.SimpleType.CheckDerivation already rejects (st-props-correct
+// clause 5, charged immediately before this one by the same finalize pass); a
 // caller treats it as "not applicable".
 func facetName(kind xsd.FacetKind) (FacetName, bool) {
 	for _, e := range facetNames {

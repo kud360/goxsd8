@@ -343,7 +343,7 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 	if !hasType {
 		return nil
 	}
-	identical, decided := s.valueSpace.Identical(t, uvc, t, dvc)
+	identical, decided := s.valueSpace.Identical(s, t, uvc, t, dvc)
 	if decided && !identical {
 		return xsderr.New(ruleAuPropsCorrect, loc,
 			"%s fixes attribute %s to %q, but the attribute declaration fixes it to %q, and au-props-correct clause 3 requires the two {value}s to be identical", owner, n, uvc.LexicalForm(), dvc.LexicalForm())
@@ -449,7 +449,7 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 // *xsderr.Error, it does not panic), so it lands in the accepting branch below:
 // this clause never rejects a schema for it, and never crashes on it.
 func (s *Schema) checkSimpleDefault(rule xsderr.Rule, loc xsderr.Loc, owner string, t *SimpleType, vc ValueConstraint) error {
-	valid, decided := s.valueSpace.ValidDefault(t, vc)
+	valid, decided := s.valueSpace.ValidDefault(s, t, vc)
 	if !decided || valid {
 		return nil
 	}

@@ -364,7 +364,7 @@ func (s *Schema) fixedValueConstraintSubsumes(general, specific ElementDeclarati
 	if !ok {
 		return true
 	}
-	same, decided := s.valueSpace.EqualOrIdentical(st, svc, gt, gvc)
+	same, decided := s.valueSpace.EqualOrIdentical(s, st, svc, gt, gvc)
 	return same || !decided
 }
 
@@ -420,6 +420,17 @@ func disallowedSubstitutionsSuperset(specific, general ElementDeclaration) bool 
 // Skipping is fail-open, never a false reject. An ANONYMOUS type is no longer
 // among the skipped cases: typeOf hands back the inline component itself, so the
 // comparison is made rather than waved through.
+//
+// An unresolvable simple-type {base type definition} reached INSIDE the
+// derivation walk joins that same skipped class, for the same reason and with
+// the same polarity. This is the ONE consumer of validlySubstitutable that
+// cannot propagate the error — it sits inside loc-testSubP's bool chain, which
+// runs all the way down into contentrestricts.go's automaton because
+// cos-content-act-restrict clause 2 is one conjunct of a DISJUNCTION and so has
+// no error to return until the single site that charges the rule — and it
+// already folds exactly this class of fault into "accept". A schema reaching
+// here has survived Phase A, which charges src-resolve for every unresolvable
+// base a Schema reaches, so the case is unreachable rather than merely benign.
 func (s *Schema) declaredTypeRestricts(specific, general ElementDeclaration) bool {
 	sub, ok := s.typeOf(specific.TypeDefinition())
 	if !ok {
@@ -429,7 +440,8 @@ func (s *Schema) declaredTypeRestricts(specific, general ElementDeclaration) boo
 	if !ok {
 		return true
 	}
-	return s.validlySubstitutable(sub, super, restrictionBlockingKeywords)
+	substitutable, err := s.validlySubstitutable(sub, super, restrictionBlockingKeywords)
+	return err != nil || substitutable
 }
 
 // typeTablesAgree is loc-testSubP clause 4.6 (c-tt-equiv): the two {type table}s
@@ -480,6 +492,11 @@ func (s *Schema) checkAttributeUseSubsumes(n QName, t, b ComplexType, general, s
 // competent to charge. Skipping is fail-open, never a false reject. Both sides
 // are resolved through attributeUseType, the one encoding of "the simple type
 // governing this use" clause 5.2.2 also reads (STYLE T4).
+//
+// An unresolvable {base type definition} INSIDE either chain is a different
+// thing and is returned as the src-resolve error rather than skipped: this frame
+// charges an error already, so there is no bool to fold it into (see
+// validlyDerived). It is unreachable for a schema that survived Phase A.
 func (s *Schema) checkAttributeTypeDerivedOK(n QName, t, b ComplexType, general, specific AttributeUse) error {
 	gt, ok := s.attributeUseType(general)
 	if !ok {
@@ -489,7 +506,11 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, t, b ComplexType, general,
 	if !ok {
 		return nil
 	}
-	if derivedOKSimple(st, gt) {
+	derived, err := derivedOKSimple(s, st, gt)
+	if err != nil {
+		return err
+	}
+	if derived {
 		return nil
 	}
 	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
@@ -553,7 +574,7 @@ func (s *Schema) attributeValueConstraintsAgree(general, specific AttributeUse, 
 	if !ok {
 		return true
 	}
-	same, decided := s.valueSpace.EqualOrIdentical(st, svc, gt, gvc)
+	same, decided := s.valueSpace.EqualOrIdentical(s, st, svc, gt, gvc)
 	return same || !decided
 }
 

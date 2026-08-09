@@ -17,7 +17,7 @@ func TestLengthExemptPrimitive(t *testing.T) {
 	notationPrim := primType(t, "NOTATION", "collapse")
 	stringPrim := primType(t, "string", "preserve")
 
-	derivedQName, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "myqname"},
+	derivedQName, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "myqname"},
 		xsd.RestrictionDerivation{}, qnamePrim, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(myqname): %v", err)
@@ -34,14 +34,14 @@ func TestLengthExemptPrimitive(t *testing.T) {
 		{"string primitive", stringPrim, false},
 	}
 	for _, c := range cases {
-		if got := lengthExemptPrimitive(c.st); got != c.want {
-			t.Errorf("lengthExemptPrimitive(%s) = %v, want %v", c.name, got, c.want)
+		if got, err := lengthExemptPrimitive(noSchema{}, c.st); err != nil || got != c.want {
+			t.Errorf("lengthExemptPrimitive(noSchema{}, %s) = %v, want %v", c.name, got, c.want)
 		}
 	}
 
 	// A nil {variety} (xs:anySimpleType) is non-atomic: not exempt, no panic.
-	if lengthExemptPrimitive(xsd.AnySimpleType()) {
-		t.Error("lengthExemptPrimitive(anySimpleType) = true, want false (non-atomic variety)")
+	if got, err := lengthExemptPrimitive(noSchema{}, xsd.AnySimpleType()); err != nil || got {
+		t.Error("lengthExemptPrimitive(noSchema{}, anySimpleType) = true, want false (non-atomic variety)")
 	}
 }
 
@@ -159,7 +159,7 @@ func preconditionType(t *testing.T, local string) *xsd.SimpleType {
 // notice the two being conflated.
 func TestValueFacetCapabilityFaultsAreErrors(t *testing.T) {
 	stringPrim := primType(t, "string", "preserve")
-	lf, err := newLengthFacet(stringPrim, xsd.NewFacet(xsd.FacetLength, []string{"2"}, false))
+	lf, err := newLengthFacet(noSchema{}, stringPrim, xsd.NewFacet(xsd.FacetLength, []string{"2"}, false))
 	if err != nil {
 		t.Fatalf("newLengthFacet: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestNewBoundFacetUnorderedLimitIsError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPrimitiveType: %v", err)
 	}
-	_, verr := ValidateLexical(plainBackend{qn: true}, st, "1", nil)
+	_, verr := ValidateLexical(plainBackend{qn: true}, noSchema{}, st, "1", nil)
 	if verr == nil {
 		t.Fatal("ValidateLexical(maxInclusive facet over an unordered value space) = nil error, want a precondition fault")
 	}
@@ -253,20 +253,31 @@ func TestFacetRejectionIsNotAPrecondition(t *testing.T) {
 
 // TestUnsupportedFacetKindRejected confirms an out-of-range numeric FacetKind —
 // one outside the closed 16-member enum, hence unsupported by the processor — is
-// now rejected at schema construction by st-props-correct clause 5 (#46), so it
-// can never reach compile()'s facet-kind switch. This defends the #158/#133
-// bug class (a facet the processor cannot check must not be silently dropped)
-// one layer earlier than compile()'s fail-loud default, which remains in place
-// as defense-in-depth for a future in-range-but-unwired enum extension.
+// rejected by st-props-correct clause 5 (#46), so it can never reach compile()'s
+// facet-kind switch. This defends the #158/#133 bug class (a facet the processor
+// cannot check must not be silently dropped) one layer earlier than compile()'s
+// fail-loud default, which remains in place as defense-in-depth for a future
+// in-range-but-unwired enum extension.
+//
+// The rejection is charged by [xsd.SimpleType.CheckDerivation] rather than by
+// the constructor: clause 5 reads {facets}, which is the whole overlaid base
+// chain, and a deferred {base type definition} is not walkable until a resolver
+// is in hand (#636). The construct-then-check pairing is what every consumer of
+// a *xsd.SimpleType goes through, so "reaches compile()" still means "passed
+// this".
 func TestUnsupportedFacetKindRejected(t *testing.T) {
 	const unsupported = xsd.FacetKind(99) // outside the FacetKind enum
-	_, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "forged"},
+	forged, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "forged"},
 		[]xsd.Facet{xsd.NewFacet(unsupported, []string{"x"}, false)}, nil)
+	if err != nil {
+		t.Fatalf("NewPrimitiveType(unsupported facet): %v, want a well-formed component", err)
+	}
+	err = forged.CheckDerivation(noSchema{})
 	if err == nil {
-		t.Fatal("NewPrimitiveType(unsupported facet): want rejection, got nil")
+		t.Fatal("CheckDerivation(unsupported facet): want rejection, got nil")
 	}
 	if r, _ := xsderr.RuleOf(err); r != "st-props-correct" {
-		t.Errorf("NewPrimitiveType(unsupported facet) charged %s, want st-props-correct (clause 5)", r)
+		t.Errorf("CheckDerivation(unsupported facet) charged %s, want st-props-correct (clause 5)", r)
 	}
 }
 

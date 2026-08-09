@@ -12,7 +12,7 @@ import (
 // nil variety, nil base) for use as a SimpleContent {simple type definition}.
 func mustSimpleType(t *testing.T) *xsd.SimpleType {
 	t.Helper()
-	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Local: "st"}, nil, nil, nil, nil)
+	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Local: "st"}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType unexpected error: %v", err)
 	}

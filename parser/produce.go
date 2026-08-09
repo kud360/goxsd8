@@ -227,10 +227,17 @@ type symbols struct {
 	// local <element>.
 	identityConstraints map[xsd.QName]identityConstraintSource
 
-	// built is the memo + cycle guard for simple-type construction, mirroring
-	// xsd/resolve.go's color-map idiom collapsed into one map: an ABSENT key is
-	// unstarted, a PRESENT-nil value is on the build stack (being built), and a
-	// PRESENT-non-nil value is done. The pre-seeded builtins start out done.
+	// built is the build-once MEMO for simple-type construction: an ABSENT key is
+	// unbuilt, a PRESENT one is done, and there is no third state. The
+	// pre-seeded builtins start out done, which is also what gives a base=
+	// naming a builtin the canonical component by pointer identity.
+	//
+	// It is deliberately NOT a cycle guard, unlike its complex-type sibling
+	// builtComplex: a simple type's base= is deferred to a name at mapping time
+	// (xsd.SimpleTypeRef), so constructing one recurses into no other named
+	// simple type and there is nothing to bound. What still reads this map is
+	// resolveBaseType, which needs a live *xsd.SimpleType for a COMPLEX type's
+	// base= — see buildSimpleType.
 	built map[xsd.QName]*xsd.SimpleType
 
 	// builtComplex is the same memo + cycle guard for COMPLEX-type construction,
@@ -800,26 +807,37 @@ func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 	return xsd.QName{Space: p.target, Local: name}, nil
 }
 
-// buildSimpleType returns the compiled simple type named name, building it (and
-// its base chain) on demand with memoization and a cycle guard. name is the zero
-// QName only via constructSimpleType for anonymous inline types, which never
-// enter this memoized path.
+// buildSimpleType returns the compiled simple type named name, building it once
+// and memoizing the result. name is the zero QName only via constructSimpleType
+// for anonymous inline types, which never enter this memoized path.
+//
+// IT CARRIES NO CYCLE GUARD, and no longer needs one. The tri-state on-stack
+// sentinel this used to keep — and the st-props-correct clause 2 rejection built
+// on it — existed because constructSimpleType RECURSED through a named base to
+// obtain the live *xsd.SimpleType xsd.NewSimpleType demanded, so a circular
+// base= would have re-entered this function for the same name and not
+// terminated. The base is now DEFERRED: resolveBase emits an xsd.SimpleTypeRef
+// for every by-name base and builds nothing, so no named simple type can
+// re-enter its own construction and there is no recursion for a guard to bound.
+// The parser therefore charges neither st-props-correct clause 2 nor src-resolve
+// clause 1.1 for a simple type's base; finalize charges both, from xsd's
+// checkSimpleBaseAcyclic and simpleTypeOfRef.
+//
+// The MEMO survives, and is not optional: resolveBaseType reads it (and falls
+// through here on a miss) to obtain the live component a COMPLEX type's base=
+// still needs, because xsd.NewComplexType demands a complete base component at
+// construction. Its states are now two, not three — absent means unbuilt,
+// present means built — so "started but unrecorded" is not representable
+// (STYLE T1/D3).
 func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleType, error) {
-	if st, started := p.symbols.built[name]; started {
-		if st != nil {
-			return st, nil
-		}
-		// PRESENT-nil: name is on the current build stack — a circular base chain.
-		return nil, xsderr.New(ruleSTPropsCorr, elem.Loc(),
-			"circular simple type definition: %s derives ultimately from itself, but st-props-correct clause 2 requires every simple type derive from xs:anySimpleType", name)
+	if st, done := p.symbols.built[name]; done {
+		return st, nil
 	}
-	p.symbols.built[name] = nil // mark on-stack
-
 	st, err := p.constructSimpleType(name, elem)
 	if err != nil {
 		return nil, err
 	}
-	p.symbols.built[name] = st // replace the on-stack sentinel with the finished node
+	p.symbols.built[name] = st
 	return st, nil
 }
 
@@ -1136,12 +1154,25 @@ func restrictionOf(elem *Element) (*Element, error) {
 		"simpleType has no <restriction> child; this producer does not yet support <list> or <union> simple types")
 }
 
-// resolveBase resolves a <restriction>'s {base type definition} to a live
-// *SimpleType. It enforces src-simple-type clause 2 (§3.16.3): exactly one of a
-// base= attribute or an inline <simpleType> child, never both, never neither. A
-// base= is discharged EARLY here — unlike element/attribute type=, which defers
-// to finalize — because NewSimpleType demands a live base pointer at construction.
-func (p *producer) resolveBase(restriction *Element) (*xsd.SimpleType, error) {
+// resolveBase maps a <restriction>'s {base type definition} to the
+// [xsd.SimpleTypeOrRef] arm that slot takes. It enforces src-simple-type clause
+// 2 (§3.16.3): exactly one of a base= attribute or an inline <simpleType> child,
+// never both, never neither.
+//
+// WHICH ARM IS THE PRODUCER'S DECISION, and the split is by OWNERSHIP, the same
+// split resolveBaseType makes for a complex type (#505):
+//
+//   - an inline <simpleType> child, and the §4.2.4 src-expredef ORIGINAL a
+//     redefining <simpleType> is paired with, are built HERE and owned by this
+//     slot: xsd.OwnedSimpleType. Neither has a name for anything to look up.
+//   - EVERY by-name base= is xsd.SimpleTypeRef, with no lookup and no build.
+//     Not "every base= that is not already built", not "every base= that is not
+//     a builtin" — every one, which is what keeps the owned arm from becoming
+//     an escape hatch out of deferred resolution (xsd/simpletyperef.go). It is
+//     also what removes this function's whole former resolution ladder: the
+//     src-resolve clause 1.1 rejection a name with no target used to get here
+//     is charged once, at finalize.
+func (p *producer) resolveBase(restriction *Element) (xsd.SimpleTypeOrRef, error) {
 	baseLex, hasBase := restriction.Attr("base")
 	inline := childElement(restriction, xsd.XMLSchemaNS, "simpleType")
 
@@ -1156,7 +1187,11 @@ func (p *producer) resolveBase(restriction *Element) (*xsd.SimpleType, error) {
 
 	if inline != nil {
 		// Anonymous base: built inline, once, with an absent {name} (zero QName).
-		return p.constructSimpleType(xsd.QName{}, inline)
+		st, err := p.constructSimpleType(xsd.QName{}, inline)
+		if err != nil {
+			return nil, err
+		}
+		return xsd.OwnedSimpleType{Definition: st}, nil
 	}
 
 	qn, err := p.resolveQName(restriction, baseLex, "base")
@@ -1172,21 +1207,20 @@ func (p *producer) resolveBase(restriction *Element) (*xsd.SimpleType, error) {
 		// REDEFINED document's producer, so it enters no symbol table, is registered
 		// with no builder, and takes its own document's namespace and defaults. That
 		// is what keeps the redefinition an ordinary restriction rather than a
-		// self-derivation (st-props-correct clause 2).
-		return src.owner.constructSimpleType(xsd.QName{}, src.elem)
+		// self-derivation (st-props-correct clause 2) — the name would otherwise
+		// resolve back to the redefinition itself, which finalize's
+		// checkSimpleBaseAcyclic would then reject.
+		//
+		// It recurses one level per document across a redefine closure, which is
+		// finite: each hop moves to the REDEFINED document, and the chain of
+		// redefined documents is finite.
+		orig, err := src.owner.constructSimpleType(xsd.QName{}, src.elem)
+		if err != nil {
+			return nil, err
+		}
+		return xsd.OwnedSimpleType{Definition: orig}, nil
 	}
-	// Pre-seeded builtins and already-finished locals resolve directly.
-	if st, ok := p.symbols.built[qn]; ok && st != nil {
-		return st, nil
-	}
-	// An assembly-visible one (unbuilt or on-stack) recurses through its OWN
-	// document's producer, never p — see symbols.simpleTypes; buildSimpleType
-	// handles memo hit and cycle rejection.
-	if src, ok := p.symbols.simpleTypes[qn]; ok {
-		return src.owner.buildSimpleType(qn, src.elem)
-	}
-	return nil, xsderr.New(ruleSrcResolve, restriction.Loc(),
-		"base type %s does not resolve to any simple type in scope (src-resolve clause 1.1)", qn)
+	return xsd.SimpleTypeRef{Name: qn}, nil
 }
 
 // restrictionFacets maps the constraining-facet children of a <restriction> in

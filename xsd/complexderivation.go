@@ -310,7 +310,11 @@ func (s *Schema) checkRestrictionContentType(t, b ComplexType) error {
 	if b.Name() == anyTypeName {
 		return nil // clause 2.1
 	}
-	if s.restrictionSimpleContentOK(t, b) {
+	simpleOK, err := s.restrictionSimpleContentOK(t, b)
+	if err != nil {
+		return err
+	}
+	if simpleOK {
 		return nil // clause 2.2
 	}
 	if s.restrictionEmptyContentOK(t, b) {
@@ -326,19 +330,22 @@ func (s *Schema) checkRestrictionContentType(t, b ComplexType) error {
 // restrictionSimpleContentOK is clause 2.2: 2.2.1 T's {content type}.{variety} is
 // simple, AND one of 2.2.2.1 (ST validly derived from SB per cos-st-derived-ok,
 // §3.16.6.3) or 2.2.2.2 (B is mixed and B's {particle} is ·emptiable·).
-func (s *Schema) restrictionSimpleContentOK(t, b ComplexType) bool {
+func (s *Schema) restrictionSimpleContentOK(t, b ComplexType) (bool, error) {
 	tc, ok := t.ContentType().(SimpleContent)
 	if !ok {
-		return false // clause 2.2.1
+		return false, nil // clause 2.2.1
 	}
-	if bc, ok := b.ContentType().(SimpleContent); ok && derivedOKSimple(tc.SimpleType, bc.SimpleType) {
-		return true // clause 2.2.2.1
+	if bsc, ok := b.ContentType().(SimpleContent); ok {
+		derived, err := derivedOKSimple(s, tc.SimpleType, bsc.SimpleType)
+		if err != nil || derived {
+			return derived, err // clause 2.2.2.1
+		}
 	}
 	bc, ok := b.ContentType().(ElementContent)
 	if !ok || !bc.Mixed {
-		return false
+		return false, nil
 	}
-	return s.particleEmptiable(bc.Particle) // clause 2.2.2.2
+	return s.particleEmptiable(bc.Particle), nil // clause 2.2.2.2
 }
 
 // restrictionEmptyContentOK is clause 2.3: 2.3.1 T's {content type}.{variety} is
@@ -650,7 +657,11 @@ func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType, k locallyD
 		if !ok {
 			continue // no ·locally declared type· in B: the clause's precondition fails
 		}
-		if s.validlySubstitutable(within, base, k.blocked) {
+		substitutable, err := s.validlySubstitutable(within, base, k.blocked)
+		if err != nil {
+			return err
+		}
+		if substitutable {
 			continue
 		}
 		return xsderr.New(k.rule, xsderr.Loc{},
@@ -673,7 +684,11 @@ func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType, k locallyDec
 		if !ok {
 			continue // no ·locally declared type· in B: the clause's precondition fails
 		}
-		if s.validlySubstitutable(within, base, k.blocked) {
+		substitutable, err := s.validlySubstitutable(within, base, k.blocked)
+		if err != nil {
+			return err
+		}
+		if substitutable {
 			continue
 		}
 		return xsderr.New(k.rule, xsderr.Loc{},
@@ -781,7 +796,7 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 // the whole of the first case: super's own {prohibited substitutions} joins the
 // caller's blocking keywords, so a type that blocks restriction admits no
 // restriction of itself however empty the caller's set was.
-func (s *Schema) validlySubstitutable(sub, super TypeDefinition, blocked []DerivationMethod) bool {
+func (s *Schema) validlySubstitutable(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
 	if sup, ok := super.(ComplexType); ok {
 		blocked = unionDerivationMethods(blocked, sup.prohibitedSubstitutions)
 	}
@@ -805,16 +820,22 @@ func (s *Schema) validlySubstitutable(sub, super TypeDefinition, blocked []Deriv
 // simple-type graph (simpletype.go), so derivedOKSimple cannot see the last hop.
 // Answering false there would false-reject the extremely common shape of a
 // restriction that types an element the base left untyped (a bare <element>
-// defaults to xs:anyType, §3.3.2.1 case 4).
-func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationMethod) bool {
+// defaults to xs:anyType, §3.3.2.1 case 4). The error result is the src-resolve
+// clause 1.1 rejection an unresolvable simple-type {base type definition}
+// produces (simpletyperef.go). It is UNREACHABLE for any schema that survived
+// finalize's earlier phases — Phase A charges that rule for every base a Schema
+// reaches — and is propagated rather than folded into the verdict because
+// folding it either way would be a made-up answer: false is a false reject, true
+// a false accept.
+func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
 	switch sup := super.(type) {
 	case ComplexType:
 		if sup.Name() == anyTypeName {
-			return true
+			return true, nil
 		}
 		sc, ok := sub.(ComplexType)
 		if !ok {
-			return false // a simple type is derived from no complex type but xs:anyType
+			return false, nil // a simple type is derived from no complex type but xs:anyType
 		}
 		return s.derivedOKComplex(sc, super, blocked)
 	case *SimpleType:
@@ -822,7 +843,10 @@ func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationM
 			return s.derivedOKComplex(sc, super, blocked)
 		}
 		ss, ok := sub.(*SimpleType)
-		return ok && derivedOKSimple(ss, sup)
+		if !ok {
+			return false, nil
+		}
+		return derivedOKSimple(s, ss, sup)
 	default:
 		panic("xsd: validlyDerived: non-exhaustive TypeDefinition switch")
 	}
@@ -851,32 +875,36 @@ func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationM
 // Terminating at an InlineTypeDefinition instead would answer FALSE for every
 // type derived through a redefining complex type — an over-REJECT, not a
 // conservative answer, because a false here is what makes an instance
-// validation fail (#505).
-func (s *Schema) derivedOKComplex(d ComplexType, b TypeDefinition, blocked []DerivationMethod) bool {
+// validation fail (#505). The error result is validlyDerived's, and
+// unreachable for the same reason; see there.
+func (s *Schema) derivedOKComplex(d ComplexType, b TypeDefinition, blocked []DerivationMethod) (bool, error) {
 	subset := complexBlockingSubset(blocked)
 	for {
 		if sameTypeDefinition(d, b) {
-			return true // clause 2.1
+			return true, nil // clause 2.1
 		}
 		if containsDerivationMethod(subset, d.DerivationMethod()) {
-			return false // clause 1
+			return false, nil // clause 1
 		}
 		base, ok := s.typeOf(d.Base())
 		if !ok {
-			return false // an absent base, or a dangling one Phase A already charged
+			return false, nil // an absent base, or a dangling one Phase A already charged
 		}
 		if sameTypeDefinition(base, b) {
-			return true // clause 2.2
+			return true, nil // clause 2.2
 		}
 		if typeDefinitionName(base) == anyTypeName {
-			return false // clause 2.3.1
+			return false, nil // clause 2.3.1
 		}
 		next, ok := base.(ComplexType)
 		if !ok {
 			// clause 2.3.2.2: D's base is simple, so cos-st-derived-ok decides.
 			ds, dOK := base.(*SimpleType)
 			bs, bOK := b.(*SimpleType)
-			return dOK && bOK && derivedOKSimple(ds, bs)
+			if !dOK || !bOK {
+				return false, nil
+			}
+			return derivedOKSimple(s, ds, bs)
 		}
 		d = next // clause 2.3.2.1
 	}

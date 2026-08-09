@@ -906,7 +906,15 @@ func execLexicalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c
 // effective entry survives; an "optional" value (the date/time primitives'
 // default) leaves lexical membership complete and takes the ordinary parseOK path.
 func fixesTimezone(st *xsd.SimpleType) bool {
-	for _, ef := range st.EffectiveFacets() {
+	// This lane's types carry owned bases only, so the overlay walk cannot fail;
+	// an error would mean a by-name base appeared where none can, and reporting
+	// "does not fix the timezone" is the accepting direction, which routes the
+	// case through the ordinary parseOK path rather than scoring it.
+	eff, err := st.EffectiveFacets(noSchema{})
+	if err != nil {
+		return false
+	}
+	for _, ef := range eff {
 		f := ef.Facet()
 		if f.Kind() != xsd.FacetExplicitTimezone {
 			continue
@@ -935,7 +943,7 @@ func fixesTimezone(st *xsd.SimpleType) bool {
 func decideLexicalByFacets(backend value.Backend, st *xsd.SimpleType, values []string, c caseSpec) Status {
 	observedValid := true
 	for _, v := range values {
-		if _, err := value.ValidateLexical(backend, st, v, nil); err != nil {
+		if _, err := value.ValidateLexical(backend, noSchema{}, st, v, nil); err != nil {
 			mustNotBeFacetPrecondition(err, c, v)
 			observedValid = false
 			break
@@ -1097,19 +1105,19 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 		if !ok {
 			return Fail()
 		}
-		constructed, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{},
-			xsd.ListDerivation{Item: item}, xsd.AnySimpleType(), constructedListFacets(), nil)
+		constructed, err := synthSimpleType(xsd.QName{},
+			xsd.ListDerivation{Item: item}, xsd.AnySimpleType(), constructedListFacets())
 		if err != nil {
 			return Fail()
 		}
-		leaf, err := xsd.NewSimpleType(xsderr.Loc{},
+		leaf, err := synthSimpleType(
 			xsd.QName{Space: synthNS, Local: "myList-" + lt.itemType},
-			xsd.ListDerivation{Item: item}, constructed, ownFacets, nil)
+			xsd.ListDerivation{Item: item}, constructed, ownFacets)
 		if err != nil {
 			return Fail()
 		}
 		for _, v := range lt.values {
-			if _, verr := value.ValidateLexical(backend, leaf, v, nil); verr != nil {
+			if _, verr := value.ValidateLexical(backend, noSchema{}, leaf, v, nil); verr != nil {
 				mustNotBeFacetPrecondition(verr, c, v)
 				observedValid = false
 				break
@@ -1198,13 +1206,13 @@ func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c 
 	if !ok {
 		return Fail()
 	}
-	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
+	leaf, err := synthSimpleType(
 		xsd.QName{Space: synthNS, Local: base + "-facets"},
-		xsd.RestrictionDerivation{}, builtinType, ownFacets, nil)
+		xsd.RestrictionDerivation{}, builtinType, ownFacets)
 	if err != nil {
 		return Fail()
 	}
-	_, verr := value.ValidateLexical(backend, leaf, raw, ctx)
+	_, verr := value.ValidateLexical(backend, noSchema{}, leaf, raw, ctx)
 	mustNotBeFacetPrecondition(verr, c, raw)
 	observedValid := verr == nil
 	if observedValid == c.expect.wantsValid() {
@@ -1258,9 +1266,9 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 	if !ok {
 		return Fail()
 	}
-	middle, err := xsd.NewSimpleType(xsderr.Loc{},
+	middle, err := synthSimpleType(
 		xsd.QName{Space: synthNS, Local: "NOTATION-notation"},
-		xsd.RestrictionDerivation{}, notationType, middleFacets, nil)
+		xsd.RestrictionDerivation{}, notationType, middleFacets)
 	if err != nil {
 		return Fail()
 	}
@@ -1268,13 +1276,13 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 	if !ok {
 		return Fail()
 	}
-	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
+	leaf, err := synthSimpleType(
 		xsd.QName{Space: synthNS, Local: "NOTATION-facets"},
-		xsd.RestrictionDerivation{}, middle, leafFacets, nil)
+		xsd.RestrictionDerivation{}, middle, leafFacets)
 	if err != nil {
 		return Fail()
 	}
-	_, verr := value.ValidateLexical(backend, leaf, raw, ctx)
+	_, verr := value.ValidateLexical(backend, noSchema{}, leaf, raw, ctx)
 	mustNotBeFacetPrecondition(verr, c, raw)
 	observedValid := verr == nil
 	if observedValid == c.expect.wantsValid() {
@@ -1374,9 +1382,9 @@ func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, 
 	if !ok {
 		return Fail()
 	}
-	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
+	leaf, err := synthSimpleType(
 		xsd.QName{Space: synthNS, Local: "precisionDecimal-facets"},
-		xsd.RestrictionDerivation{}, builtinType, ownFacets, nil)
+		xsd.RestrictionDerivation{}, builtinType, ownFacets)
 	if err != nil {
 		return Fail()
 	}
@@ -1384,7 +1392,7 @@ func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, 
 	// unlike the QName cohort, no prefix resolution is involved.
 	observedValid := true
 	for _, v := range values {
-		if _, verr := value.ValidateLexical(backend, leaf, v, nil); verr != nil {
+		if _, verr := value.ValidateLexical(backend, noSchema{}, leaf, v, nil); verr != nil {
 			mustNotBeFacetPrecondition(verr, c, v)
 			observedValid = false
 			break
@@ -1439,7 +1447,7 @@ func execD34Case(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c cas
 	// integer), so a nil value.Context suffices — no prefix resolution is involved.
 	observedValid := true
 	for _, e := range elems {
-		if _, verr := value.ValidateLexical(backend, leaves[e.typeKey], e.value, nil); verr != nil {
+		if _, verr := value.ValidateLexical(backend, noSchema{}, leaves[e.typeKey], e.value, nil); verr != nil {
 			mustNotBeFacetPrecondition(verr, c, e.value)
 			observedValid = false
 			break
@@ -1538,8 +1546,8 @@ func buildD34Type(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, decl
 	if !ok || !strictGoverns(backend, base) {
 		return nil, false
 	}
-	primitive := base.Primitive()
-	if primitive == nil {
+	primitive, err := base.Primitive(noSchema{})
+	if err != nil || primitive == nil {
 		return nil, false
 	}
 	children := make([]facetChild, 0, len(decl.Restriction.Facets))
@@ -1553,16 +1561,85 @@ func buildD34Type(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, decl
 	return newD34SimpleType(name, xsd.RestrictionDerivation{}, base, ownFacets)
 }
 
-// newD34SimpleType constructs one synthesized cohort type, turning the
-// constructor's error into the cohort's honest ok=false decline: a component the
-// xsd constructors reject (an inapplicable facet, a member blocked by {final})
-// is a shape this executor cannot decide, not a verdict about instance data.
+// newD34SimpleType constructs one synthesized cohort type, turning the rejection
+// into the cohort's honest ok=false decline: a component this module refuses (an
+// inapplicable facet, a member blocked by {final}) is a shape this executor
+// cannot decide, not a verdict about instance data.
 func newD34SimpleType(name xsd.QName, derivation xsd.SimpleTypeDerivation, base *xsd.SimpleType, ownFacets []xsd.Facet) (*xsd.SimpleType, bool) {
-	st, err := xsd.NewSimpleType(xsderr.Loc{}, name, derivation, base, ownFacets, nil)
+	st, err := synthSimpleType(name, derivation, base, ownFacets)
 	if err != nil {
 		return nil, false
 	}
 	return st, true
+}
+
+// synthSimpleType is the ONE construction seam for every simple type this file
+// synthesizes (STYLE T4), and it does TWO things where a bare
+// xsd.NewSimpleType call would do one:
+//
+//   - it wraps base in [xsd.OwnedSimpleType]. Every type in this lane is
+//     assembled from live components with no xsd.Schema anywhere, which is
+//     precisely what that arm exists for.
+//   - it runs [xsd.SimpleType.CheckDerivation] against noSchema, which is where
+//     the graph rejections this lane DEPENDS ON now live. Those rejections used
+//     to fire inside xsd.NewSimpleType; they moved to a finalize pass this lane
+//     never reaches, so calling the shared entry point here is what keeps the
+//     lane's guarantees intact WITHOUT giving it a Schema. newD34SimpleType's
+//     ok=false decline and buildOwnFacets' st-props-correct clause-4 argument
+//     both name rejections that live behind this call: without it the executor
+//     would decide a case against a type the schema does not define — an
+//     agreement with the suite reached for the wrong reason, which the ratchet
+//     would lock in.
+//
+// It is deliberately NOT split into "construct" and "check": a constructed but
+// un-graph-checked type is exactly the state this lane must not be able to
+// observe.
+func synthSimpleType(name xsd.QName, derivation xsd.SimpleTypeDerivation, base *xsd.SimpleType, ownFacets []xsd.Facet) (*xsd.SimpleType, error) {
+	st, err := xsd.NewSimpleType(xsderr.Loc{}, name, derivation, xsd.OwnedSimpleType{Definition: base}, ownFacets, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := st.CheckDerivation(noSchema{}); err != nil {
+		return nil, err
+	}
+	return st, nil
+}
+
+// noSchema is the [xsd.TypeResolver] this Schema-less lane hands every xsd and
+// value entry point that takes one. It resolves NOTHING, and that is correct
+// rather than a stub-shaped compromise: every {base type definition} this lane
+// writes is an [xsd.OwnedSimpleType], so no by-name arm exists for it to be
+// consulted about. If one ever appeared, the reader would return the explicit
+// src-resolve error instead of walking a silently short chain, and the case
+// would decline rather than be scored against a truncated type.
+//
+// It is NOT a synthesized xsd.Schema and NOT a nil interface: a Schema would
+// cost this lane the Schema-less character it is kept for, and a nil interface
+// would panic on the first call rather than answer.
+type noSchema struct{}
+
+func (noSchema) Type(xsd.QName) (xsd.TypeDefinition, bool) { return nil, false }
+
+// mustBase and mustPrimitive are the resolver-threaded accessors applied to this
+// lane's owned-arm chains, where they cannot fail. They PANIC on an error rather
+// than declining, because an error here would mean a by-name base reached a lane
+// that never writes one — a harness bug of exactly the class
+// mustNotBeFacetPrecondition already refuses to score around, not a verdict
+// about instance data.
+func mustBase(t *xsd.SimpleType) *xsd.SimpleType {
+	base, err := t.Base(noSchema{})
+	if err != nil {
+		panic("conformance: " + err.Error())
+	}
+	return base
+}
+
+func mustPrimitive(t *xsd.SimpleType) *xsd.SimpleType {
+	p, err := t.Primitive(noSchema{})
+	if err != nil {
+		panic("conformance: " + err.Error())
+	}
+	return p
 }
 
 // d34UnionMembers resolves a <union>'s {member type definitions} in map.std.union
@@ -1683,9 +1760,9 @@ func execAnyURIShapeCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleTyp
 		if !ok {
 			return Fail()
 		}
-		leaf, err := xsd.NewSimpleType(xsderr.Loc{},
+		leaf, err := synthSimpleType(
 			xsd.QName{Space: synthNS, Local: "anyURI-" + l.typeName},
-			xsd.RestrictionDerivation{}, builtinType, ownFacets, nil)
+			xsd.RestrictionDerivation{}, builtinType, ownFacets)
 		if err != nil {
 			return Fail()
 		}
@@ -1698,7 +1775,7 @@ func execAnyURIShapeCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleTyp
 	// "http://a/x%20y" (§3.3.17.2 Note: no percent-decoding), so the case is invalid.
 	observedValid := true
 	for _, l := range leaves {
-		if _, verr := value.ValidateLexical(backend, synth[l.typeName], l.value, nil); verr != nil {
+		if _, verr := value.ValidateLexical(backend, noSchema{}, synth[l.typeName], l.value, nil); verr != nil {
 			mustNotBeFacetPrecondition(verr, c, l.value)
 			observedValid = false
 			break
@@ -1741,10 +1818,19 @@ func mustNotBeFacetPrecondition(err error, c caseSpec, lexical string) {
 // The integer family (xs:integer and its narrowings) has no strict mapping of its
 // own; its nearest mapped ancestor is xs:decimal, which strict supplies (#81).
 func strictGoverns(strictBackend value.Backend, st *xsd.SimpleType) bool {
-	for s := st; s != nil; s = s.Base() {
+	for s := st; s != nil; {
 		if _, ok := strictBackend.Mapping(s.Name()); ok {
 			return true
 		}
+		// noSchema resolves nothing, which this lane's owned-only base chains
+		// never need; an error therefore means a by-name base appeared where none
+		// can, and reporting "not strict-governed" declines the case rather than
+		// scoring it against a chain that could not be walked.
+		next, err := s.Base(noSchema{})
+		if err != nil {
+			return false
+		}
+		s = next
 	}
 	return false
 }

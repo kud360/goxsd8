@@ -81,7 +81,7 @@ func TestRestrictionCheckerRejectsAnonymousInlineSimpleType(t *testing.T) {
 			slot: "the anonymous {base type definition} of a named type (inventory slot 2)",
 			add: func(t *testing.T, b *xsd.SchemaBuilder, anon *xsd.SimpleType) {
 				t.Helper()
-				derived, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
+				derived, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
 					xsd.RestrictionDerivation{}, anon, nil, nil)
 				if err != nil {
 					t.Fatalf("NewSimpleType(derived): %v", err)
@@ -157,7 +157,7 @@ func finalizeSeeded(t *testing.T, backend value.Backend, base string, add func(*
 	if baseType == nil {
 		t.Fatalf("xs:%s not seeded", base)
 	}
-	anon, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{}, xsd.RestrictionDerivation{}, baseType, []xsd.Facet{facet}, nil)
+	anon, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{}, xsd.RestrictionDerivation{}, baseType, []xsd.Facet{facet}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(anonymous): %v", err)
 	}

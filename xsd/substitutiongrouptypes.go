@@ -175,7 +175,11 @@ func (s *Schema) checkElementSubstitutableForHeads(e ElementDeclaration) error {
 		if sameAnonymousTypeByConstruction(memberType, headType) {
 			continue // cos-ct-derived-ok clause 2.1: one component, reached twice
 		}
-		if s.validlyDerived(memberType, headType, head.substitutionGroupExclusions) {
+		derived, err := s.validlyDerived(memberType, headType, head.substitutionGroupExclusions)
+		if err != nil {
+			return err
+		}
+		if derived {
 			continue
 		}
 		return xsderr.New(ruleEPropsCorrect, e.Loc(),

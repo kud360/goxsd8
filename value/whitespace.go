@@ -100,21 +100,31 @@ func collapseSpace(s string) string {
 // comma-ok flag beside the mode (STYLE D3), and what lets effectiveWhiteSpace
 // decide, from st's {variety} alone, whether the absence is spec-mandated or a
 // construction bug.
-func whiteSpaceInForce(st *xsd.SimpleType) whiteSpace {
+//
+// r resolves st's {base type definition} chain, which the §3.16.6.4 overlay
+// walks; an unresolvable hop is returned as an error rather than folded into the
+// zero mode, because the zero mode means "no normalization applies" and a
+// truncated overlay would silently drop an inherited whiteSpace facet — leaving
+// a collapse-normalized type parsing its literals raw.
+func whiteSpaceInForce(r xsd.TypeResolver, st *xsd.SimpleType) (whiteSpace, error) {
 	if st == nil {
-		return 0
+		return 0, nil
 	}
-	for _, ef := range st.EffectiveFacets() {
+	eff, err := st.EffectiveFacets(r)
+	if err != nil {
+		return 0, err
+	}
+	for _, ef := range eff {
 		if ef.Facet().Kind() != xsd.FacetWhiteSpace {
 			continue
 		}
 		values := ef.Facet().Values()
 		if len(values) != 1 {
-			return 0
+			return 0, nil
 		}
-		return whiteSpaceOf(values[0])
+		return whiteSpaceOf(values[0]), nil
 	}
-	return 0
+	return 0, nil
 }
 
 // effectiveWhiteSpace is the INSTANCE-VALIDATION view of whiteSpaceInForce: the
@@ -153,11 +163,19 @@ func whiteSpaceInForce(st *xsd.SimpleType) whiteSpace {
 // whiteSpace-valid-restriction constrains restriction ORDERING alone (a {value} more
 // permissive than the parent whiteSpace's), which says nothing about a mode's
 // presence or its {value} domain.
-func effectiveWhiteSpace(st *xsd.SimpleType) (whiteSpace, error) {
-	if ws := whiteSpaceInForce(st); ws != 0 {
+func effectiveWhiteSpace(r xsd.TypeResolver, st *xsd.SimpleType) (whiteSpace, error) {
+	ws, err := whiteSpaceInForce(r, st)
+	if err != nil {
+		return 0, err
+	}
+	if ws != 0 {
 		return ws, nil
 	}
-	if noFacetsApplicable(st) {
+	none, err := noFacetsApplicable(r, st)
+	if err != nil {
+		return 0, err
+	}
+	if none {
 		return 0, nil
 	}
 	return 0, facetPrecondition(xsderr.RuleComponentInvariant, st.Loc(),
@@ -176,16 +194,21 @@ func effectiveWhiteSpace(st *xsd.SimpleType) (whiteSpace, error) {
 // It is driven off the sealed xsd.Variety sum rather than a name comparison against
 // xs:anySimpleType/xs:anyAtomicType, so it holds for any component in those shapes
 // and matches lengthExemptPrimitive's .(xsd.Atomic) idiom.
-func noFacetsApplicable(st *xsd.SimpleType) bool {
-	switch st.Variety().(type) {
-	case nil:
-		return true
-	case xsd.Atomic:
-		return st.Primitive() == nil
-	case xsd.Union:
-		return true
+func noFacetsApplicable(r xsd.TypeResolver, st *xsd.SimpleType) (bool, error) {
+	variety, err := st.Variety(r)
+	if err != nil {
+		return false, err
 	}
-	return false
+	switch variety.(type) {
+	case nil:
+		return true, nil
+	case xsd.Atomic:
+		primitive, err := st.Primitive(r)
+		return primitive == nil, err
+	case xsd.Union:
+		return true, nil
+	}
+	return false, nil
 }
 
 // whiteSpaceOf maps a whiteSpace facet's {value} token to its typed mode
