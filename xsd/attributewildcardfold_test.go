@@ -223,6 +223,96 @@ func TestDerivationOKRestrictionAttributeWildcardSubset(t *testing.T) {
 	}
 }
 
+// TestDerivationOKRestrictionAttributeWildcardSharedUse pins the clause-2.1
+// pre-emption inside the c-avaw half: cvc-complex-type clause 2.2 is reached only
+// "otherwise", so a name BOTH types govern with an {attribute use} is assessed by
+// clause 2.1 on both sides and B's notQName for it may not be charged against T's
+// wildcard (#430). The base is the counter-example verbatim — <xs:attribute
+// name="foo"/> beside <anyAttribute namespace="##any" notQName="foo"/> — and the
+// restriction opens its own wildcard to ##any.
+//
+// The first row is the shape that inherits the foo use through §3.4.2.4 clause
+// 3.2 without naming it, the second re-declares it (clause 3.2.1), and the two
+// must agree: whether the shared use is inherited or restated changes nothing
+// about which clause assesses an item named foo.
+//
+// The third row is the control that keeps the exemption from degenerating into
+// "condition 1 of cos-ns-subset is off". A notQName naming something NEITHER type
+// holds a use for is still a name only clause 2.2 can admit, so widening past it
+// is still a real c-ran violation.
+func TestDerivationOKRestrictionAttributeWildcardSharedUse(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		disallowed  QName
+		derivedUses []AttributeUse
+		wantReject  bool
+	}{
+		{"a name both types govern by an inherited {attribute use} is not charged",
+			uq("foo"), nil, false},
+		{"nor is one the restriction re-declares for itself",
+			uq("foo"), []AttributeUse{dAttr(t, uq("foo"), uq("str"))}, false},
+		{"a name no {attribute use} governs is still charged",
+			uq("bar"), nil, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := dFinalize(t, func(b *SchemaBuilder) {
+				b.AddType(dType(t, uq("base"), anyTypeName, EmptyContent{},
+					[]AttributeUse{dAttr(t, uq("foo"), uq("str"))},
+					wWild(t, cNC(t, NamespaceConstraintAny, nil, []QName{tc.disallowed}, nil), ProcessLax)))
+				b.AddType(dType(t, uq("derived"), uq("base"), EmptyContent{}, tc.derivedUses,
+					wWild(t, cNC(t, NamespaceConstraintAny, nil, nil, nil), ProcessLax)))
+			})
+			if !tc.wantReject {
+				if err != nil {
+					t.Fatalf("a restriction whose base disallows by name an attribute both types declare was rejected: %v", err)
+				}
+				return
+			}
+			expectRule(t, err, ruleDerivationOKRestriction)
+		})
+	}
+}
+
+// TestDerivationOKRestrictionAttributeWildcardUnsharedUse pins the asymmetry that
+// makes the exempt set an INTERSECTION: a use T holds and B does NOT exempts
+// nothing, because c-ran clause 3 still asks an item carrying that name to
+// satisfy cvc-complex-type clause 2 with respect to B, which — holding no use for
+// it — can only do so through clause 2.2.
+//
+// It calls the predicate directly rather than through Finalize because Finalize
+// charges this shape earlier: checkRestrictionAttributes walks T's uses first and
+// attributeDefaultBinding already refuses a name B neither declares nor admits.
+// Routing through Finalize would therefore pass on the strength of a different
+// check and say nothing about this one.
+func TestDerivationOKRestrictionAttributeWildcardUnsharedUse(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		baseUses   []AttributeUse
+		wantReject bool
+	}{
+		{"a use only the restriction holds exempts nothing",
+			nil, true},
+		{"the same use held by both sides does",
+			[]AttributeUse{dAttr(t, uq("bar"), uq("str"))}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := dType(t, uq("base"), anyTypeName, EmptyContent{}, tc.baseUses,
+				wWild(t, cNC(t, NamespaceConstraintAny, nil, []QName{uq("bar")}, nil), ProcessLax))
+			derived := dType(t, uq("derived"), uq("base"), EmptyContent{},
+				[]AttributeUse{dAttr(t, uq("bar"), uq("str"))},
+				wWild(t, cNC(t, NamespaceConstraintAny, nil, nil, nil), ProcessLax))
+			err := checkRestrictionAttributeWildcard(derived, base)
+			if !tc.wantReject {
+				if err != nil {
+					t.Fatalf("c-avaw charged a name both types govern with an {attribute use}: %v", err)
+				}
+				return
+			}
+			expectRule(t, err, ruleDerivationOKRestriction)
+		})
+	}
+}
+
 // TestCosCTExtendsClause13 pins cos-ct-extends clause 1.3 — B's {attribute
 // wildcard}.{namespace constraint} is a subset of T's — by calling the predicate
 // directly rather than through Finalize, because Finalize CANNOT reach its two

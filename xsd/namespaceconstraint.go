@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"slices"
 	"strconv"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -297,6 +298,37 @@ func (c NamespaceConstraint) hasDisallowedNameKeyword(k DisallowedNameKeyword) b
 		}
 	}
 	return false
+}
+
+// withoutDisallowedNames returns a copy of c carrying every property of c
+// unchanged except the QName half of {disallowed names}, from which each member
+// of names is dropped. The keyword half is untouched: the two halves are the one
+// §3.10.1 property split by consumer, not by meaning (see the type doc), and
+// only the QName half is a per-name membership test.
+//
+// It is the one derived-record path past NewNamespaceConstraint, and REMOVAL is
+// what keeps that sound: w-props-correct clauses 1-3 do not read {disallowed
+// names} at all, and clause 4 is a per-member test on the namespace name of each
+// member, which every survivor already passed at construction. Nothing this
+// method can produce is a state the constructor would have rejected (STYLE T1).
+//
+// The single caller is checkRestrictionAttributeWildcard (complexderivation.go),
+// which excises the names cvc-complex-type clause 2.1 claims on both sides of a
+// derivation before the record reaches wildcardSubset; see its doc for why the
+// cos-ns-subset relation itself is not given a name-set parameter (STYLE T4).
+func (c NamespaceConstraint) withoutDisallowedNames(names []QName) NamespaceConstraint {
+	if len(names) == 0 {
+		return c
+	}
+	kept := make([]QName, 0, len(c.disallowedNames))
+	for _, d := range c.disallowedNames {
+		if slices.Contains(names, d) {
+			continue
+		}
+		kept = append(kept, d)
+	}
+	c.disallowedNames = kept
+	return c
 }
 
 // AllowsName reports whether the expanded name is ·valid· with respect to this
