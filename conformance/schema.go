@@ -119,12 +119,13 @@ import (
 //  3. Top-level allowlist. Every top-level child element must be xsd:annotation,
 //     xsd:include, xsd:import, xsd:override, xsd:simpleType, xsd:element,
 //     xsd:attribute, xsd:complexType, xsd:attributeGroup (named definition),
-//     xsd:group (named definition), xsd:defaultOpenContent (only in the shape
-//     its declaration allows: with the <any> child its content model requires
-//     and, if mode= is present at all, a value from its interleave|suffix
-//     enumeration) or xsd:notation or xsd:redefine — anything else at top level
-//     (a non-xsd element, or an out-of-set local name) closes the false-accept
-//     gap above by DECLINING the whole case. Within the allowed kinds:
+//     xsd:group (named definition), xsd:defaultOpenContent (in every shape, as
+//     of #352: the two its declaration forbids are rejected by the producer for
+//     any document that declares one, so they are real verdicts rather than
+//     content-dependent ones) or xsd:notation or xsd:redefine — anything else at
+//     top level (a non-xsd element, or an out-of-set local name) closes the
+//     false-accept gap above by DECLINING the whole case. Within the allowed
+//     kinds:
 //     - include: always admitted (#242). Its own content model is (annotation?),
 //       so it contributes nothing the producer could silently skip; the
 //       decidability of the document it POINTS AT is established by the closure
@@ -595,22 +596,14 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 		case "defaultOpenContent":
 			// Read (#230) by every complex type of this document that has no
 			// <openContent> of its own (§3.4.2.3.3 clause 5.2), so it is no longer
-			// silently skipped. It is admitted only with the <any> child its content
-			// model makes mandatory: without one the producer rejects it as a grammar
-			// fault, which is a real verdict, but only for a document that also holds
-			// a complex type reaching clause 5.2 — admitting the childless form would
-			// therefore make the verdict depend on unrelated content.
-			if childXSD(el, "any") == nil {
-				return false
-			}
-			// Its mode enumeration is (interleave|suffix) — none is legal on a type's
-			// OWN <openContent> but not here, and every other token is out of the
-			// enumeration outright. Both are rejected by the same lazy path as the
-			// childless form, so the same decline applies: one principle, applied to
-			// the whole shape rather than half of it.
-			if mode, present := el.Attr("mode"); present && mode != "interleave" && mode != "suffix" {
-				return false
-			}
+			// silently skipped — and admitted in EVERY shape as of #352, malformed
+			// ones included. The two the schema for schema documents forbids (no
+			// <any> child; a mode outside interleave|suffix) are now rejected by the
+			// producer's pre-produce pass for any document that declares one, so both
+			// verdicts are real and unconditional. The narrower arm #230 wrote
+			// declined them only because that rejection used to be lazy — reachable
+			// solely through a complex type that got as far as clause 5.2 — which
+			// would have made the verdict depend on unrelated content.
 		case "redefine":
 			// Admitted (#286, all four redefinable kinds as of #505). Like
 			// <override> the document it points at is gated by the closure walk,
