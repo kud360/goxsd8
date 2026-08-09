@@ -508,10 +508,11 @@ func TestDerivedPropertiesFollowTheBaseChain(t *testing.T) {
 }
 
 // TestDerivedReadersAreTotal pins that the four derived readers never panic on
-// the partially-built shapes the constructors themselves produce and hand to
-// checkSTGraph: a type with a nil derivation AND a nil base (the anonymous
-// placeholder several callers build), and a restriction whose base's own base is
-// nil. Each returns the ·absent· value instead.
+// the partially-built shapes the constructors themselves produce and
+// CheckDerivation (derivation.go) later reads them off: a type with a nil
+// derivation AND a nil base (the anonymous placeholder several callers build),
+// and a restriction whose base's own base is nil. Each returns the ·absent·
+// value instead.
 func TestDerivedReadersAreTotal(t *testing.T) {
 	anon, err := newCheckedSimpleType(xsderr.Loc{}, QName{}, nil, nil, nil, nil)
 	if err != nil {
@@ -575,7 +576,7 @@ func TestUnionMembersPreserveSequenceVerbatim(t *testing.T) {
 
 // TestUnionMembershipIsCopiedBothWays proves the immutability that makes a
 // mutation-induced membership cycle structurally unrepresentable (see
-// checkSTGraph): NewSimpleType copies a UnionDerivation's Members IN
+// CheckDerivation): NewSimpleType copies a UnionDerivation's Members IN
 // (copyDerivation), and SimpleType.Members copies it OUT, so neither the
 // caller's backing array nor a returned slice aliases the component's own —
 // which is what the exported Members field would otherwise give away.

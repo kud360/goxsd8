@@ -457,12 +457,14 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 }
 
 // resolveComplexType descends a complex type's reference sites: its {base type
-// definition} (clause 1.1), each {attribute use}, and its {content type}
-// particle tree. It runs for an ANONYMOUS complex type too, reached through an
-// owning declaration's InlineTypeDefinition or through a redefining type's OWN
-// base slot (see resolveTypeDefinition), so the owner phrase in its message
-// comes from complexTypeOwner rather than from a {name} an anonymous type does
-// not have (STYLE T4).
+// definition} (clause 1.1), each {attribute use}, and its {content type} —
+// SimpleContent's {simple type definition}, whose own {base type definition} may
+// name a top-level type, or ElementContent's particle tree. It runs for an
+// ANONYMOUS complex type too, reached through an owning declaration's
+// InlineTypeDefinition or through a redefining type's OWN base slot (see
+// resolveTypeDefinition), so the owner phrase in its message comes from
+// complexTypeOwner rather than from a {name} an anonymous type does not have
+// (STYLE T4).
 //
 // The {base type definition} goes through resolveTypeDefinition, not through a
 // bare resolveTypeName, because it is a TypeDefinitionOrRef: an
@@ -740,16 +742,23 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 //     arm is deliberately not followed — it names a top-level type this pass
 //     reaches through slot 1 in its own right, so following it would re-charge
 //     the same component once per type deriving from it.
-//  3. SimpleContent.{simple type definition} (complextype.go). resolveComplexType
-//     explicitly does not descend it — it is a live pointer, so Phase A has
-//     nothing to resolve there — which leaves this walk as its only visitor.
+//  3. SimpleContent.{simple type definition} (complextype.go). Phase A descends
+//     this slot too (resolveComplexType), so the two passes must be told apart
+//     by what each TAKES it for: that simple type carries a SimpleTypeOrRef
+//     {base type definition} like any other, so Phase A descends it to LOOK UP
+//     a by-name base (src-resolve clause 1.1), and this pass descends it to
+//     CHARGE the two derivation halves. Neither visit substitutes for the
+//     other, and this pass has no second route to the slot — the type is
+//     anonymous, so no index holds it and no declaration slot names it.
 //  4. ListDerivation.Item (simpletype.go). An anonymous item type is in no index.
 //  5. UnionDerivation.Members (simpletype.go). Ditto, for every member, walked in
 //     the declared order the property preserves (STYLE D2).
 //  6. the InlineTypeDefinition/*SimpleType arm of a {type definition} or {base
-//     type definition} slot — resolveTypeDefinition's own no-op arm. This is the
-//     declaration-slot inline hop: an <element> or <attribute> whose type is
-//     written out in place.
+//     type definition} slot — the declaration-slot inline hop: an <element> or
+//     <attribute> whose type is written out in place. resolveTypeDefinition
+//     descends the same arm, and slot 3's split applies here unchanged: that
+//     arm resolves the inline type's own by-name base, this pass charges its
+//     derivation.
 //
 // Reaching slots 3 and 6 means walking the same tree Phase A and Phase E walk —
 // types, then element declarations, then attribute declarations, then model group
@@ -884,8 +893,9 @@ func (s *Schema) checkTypeDefinitionSimpleTypes(ref TypeDefinitionOrRef) error {
 // checkComplexTypeSimpleTypes descends one complex type for simple types: its
 // {base type definition} slot (an inline base may be a simple type, or a complex
 // one with simple content), its {attribute uses}, and its {content type} — where
-// SimpleContent's {simple type definition} is inventory slot 3, the slot no other
-// pass descends. The descent mirrors resolveComplexType's.
+// SimpleContent's {simple type definition} is inventory slot 3, the slot no
+// index reaches. The descent mirrors resolveComplexType's, which walks the same
+// three places for the reference half (see the inventory's slot 3).
 func (s *Schema) checkComplexTypeSimpleTypes(c ComplexType) error {
 	if err := s.checkTypeDefinitionSimpleTypes(c.Base()); err != nil {
 		return err
