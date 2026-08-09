@@ -166,20 +166,18 @@ func TestSeedBaseChainAndPrimitivePointer(t *testing.T) {
 	}
 	// A derived atomic type points {primitive type definition} at its primitive
 	// ancestor (decimal).
-	at, ok := integer.Variety().(xsd.Atomic)
-	if !ok {
+	if _, ok := integer.Variety().(xsd.Atomic); !ok {
 		t.Fatalf("integer variety = %T, want xsd.Atomic", integer.Variety())
 	}
-	if at.Primitive() != decimal {
-		t.Errorf("integer {primitive type definition} = %v, want the decimal node", at.Primitive())
+	if got := integer.Primitive(); got != decimal {
+		t.Errorf("integer {primitive type definition} = %v, want the decimal node", got)
 	}
 	// A primitive's own {primitive type definition} is itself (§3.16.1).
-	dat, ok := decimal.Variety().(xsd.Atomic)
-	if !ok {
+	if _, ok := decimal.Variety().(xsd.Atomic); !ok {
 		t.Fatalf("decimal variety = %T, want xsd.Atomic", decimal.Variety())
 	}
-	if dat.Primitive() != decimal {
-		t.Errorf("decimal {primitive type definition} must point at itself, got %v", dat.Primitive())
+	if got := decimal.Primitive(); got != decimal {
+		t.Errorf("decimal {primitive type definition} must point at itself, got %v", got)
 	}
 }
 
@@ -208,12 +206,11 @@ func TestSeedPrimitivesReportIsPrimitive(t *testing.T) {
 		if node.Base() != xsd.AnyAtomicType() {
 			t.Errorf("%q.Base() is not the canonical xsd.AnyAtomicType() anchor", spec.Name)
 		}
-		at, ok := node.Variety().(xsd.Atomic)
-		if !ok {
+		if _, ok := node.Variety().(xsd.Atomic); !ok {
 			t.Fatalf("%q variety = %T, want xsd.Atomic", spec.Name, node.Variety())
 		}
-		if at.Primitive() != node {
-			t.Errorf("%q {primitive type definition} must self-reference, got %v", spec.Name, at.Primitive())
+		if got := node.Primitive(); got != node {
+			t.Errorf("%q {primitive type definition} must self-reference, got %v", spec.Name, got)
 		}
 	}
 
@@ -233,11 +230,10 @@ func TestSeedListVarietyWired(t *testing.T) {
 	}
 	idx := byName(types)
 	nmtokens := idx["NMTOKENS"]
-	lst, ok := nmtokens.Variety().(xsd.List)
-	if !ok {
+	if _, ok := nmtokens.Variety().(xsd.List); !ok {
 		t.Fatalf("NMTOKENS variety = %T, want xsd.List", nmtokens.Variety())
 	}
-	if lst.Item() != idx["NMTOKEN"] {
+	if nmtokens.Item() != idx["NMTOKEN"] {
 		t.Errorf("NMTOKENS list item must be the shared NMTOKEN node")
 	}
 }
@@ -276,12 +272,11 @@ func TestSeedListTwoStepDerivation(t *testing.T) {
 			if anon.Base() != xsd.AnySimpleType() {
 				t.Errorf("intermediate list {base type definition} = %v, want xs:anySimpleType", anon.Base())
 			}
-			lst, ok := anon.Variety().(xsd.List)
-			if !ok {
+			if _, ok := anon.Variety().(xsd.List); !ok {
 				t.Fatalf("intermediate {variety} = %T, want xsd.List", anon.Variety())
 			}
-			if lst.Item() != idx[tc.item] {
-				t.Errorf("intermediate {item type definition} = %v, want the shared xs:%s node", lst.Item(), tc.item)
+			if anon.Item() != idx[tc.item] {
+				t.Errorf("intermediate {item type definition} = %v, want the shared xs:%s node", anon.Item(), tc.item)
 			}
 			own := anon.OwnFacets()
 			if len(own) != 1 || own[0].Kind() != xsd.FacetWhiteSpace {

@@ -163,7 +163,7 @@ func TestDatatypesExecutorAgreesWithSuite(t *testing.T) {
 
 // TestDatatypesFacetsStringFamily drives the executor over real derived
 // string-family Facets cases (issue #85): normalizedString and token restrictions
-// resolve to their xs:string primitive ancestor (strictGoverns/primitiveOfType,
+// resolve to their xs:string primitive ancestor (strictGoverns/Primitive(),
 // reused from #81) and the seeded type's inherited whiteSpace (replace/collapse)
 // normalizes the value before the string length/pattern checks. It asserts
 // agreement for both polarities and that a wrong expectation yields Fail, so the
@@ -214,7 +214,7 @@ func TestDatatypesFacetsStringFamily(t *testing.T) {
 // TestDatatypesFacetsWideStringFamily drives the executor over the wider
 // string-family Facets cohort (issue #106): language/Name/NCName/NMTOKEN
 // restrictions resolve to their xs:string primitive ancestor through the token
-// chain (strictGoverns/primitiveOfType, reused from #81), and the seeded type's
+// chain (strictGoverns/Primitive(), reused from #81), and the seeded type's
 // intrinsic pattern + whiteSpace=collapse apply before the own facets. It also
 // asserts the NCName cross-step pattern AND directly (§4.3.4.2 xr-pattern): a
 // colon-bearing value passes Name's \i\c* but must be rejected by NCName's own
@@ -1556,7 +1556,7 @@ func TestDatatypesD34Cohort(t *testing.T) {
 	if got := derived.Base().Name().Local; got != "d34-decDigitsMaxExclusive" {
 		t.Errorf("decMaxExclusive_MinInclusive.Base() = %q, want the declared intermediate d34-decDigitsMaxExclusive", got)
 	}
-	if got := primitiveOfType(derived).Name().Local; got != "precisionDecimal" {
-		t.Errorf("primitiveOfType(decMaxExclusive_MinInclusive) = %q, want precisionDecimal", got)
+	if got := derived.Primitive().Name().Local; got != "precisionDecimal" {
+		t.Errorf("decMaxExclusive_MinInclusive.Primitive() = %q, want precisionDecimal", got)
 	}
 }

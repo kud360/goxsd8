@@ -52,19 +52,12 @@ func newPrim(t *testing.T, local string) *xsd.SimpleType {
 
 // derive builds an atomic restriction of base named {urn:test, name} carrying
 // ownFacets, for the hand-built graphs these tests validate against. Its
-// {primitive type definition} is base's primitive ancestor, found by walking
-// Base() to IsPrimitive (§2.4.2).
+// {primitive type definition} is DERIVED from base's own chain (§3.16.2.1), so
+// the fixture never names one.
 func derive(t *testing.T, name string, base *xsd.SimpleType, ownFacets ...xsd.Facet) *xsd.SimpleType {
 	t.Helper()
-	var prim *xsd.SimpleType
-	for s := base; s != nil; s = s.Base() {
-		if s.IsPrimitive() {
-			prim = s
-			break
-		}
-	}
 	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: name},
-		xsd.NewAtomic(prim), base, ownFacets, nil)
+		xsd.RestrictionDerivation{}, base, ownFacets, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(%q): %v", name, err)
 	}

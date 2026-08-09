@@ -177,11 +177,11 @@ func effectiveWhiteSpace(st *xsd.SimpleType) (whiteSpace, error) {
 // xs:anySimpleType/xs:anyAtomicType, so it holds for any component in those shapes
 // and matches lengthExemptPrimitive's .(xsd.Atomic) idiom.
 func noFacetsApplicable(st *xsd.SimpleType) bool {
-	switch v := st.Variety().(type) {
+	switch st.Variety().(type) {
 	case nil:
 		return true
 	case xsd.Atomic:
-		return v.Primitive() == nil
+		return st.Primitive() == nil
 	case xsd.Union:
 		return true
 	}

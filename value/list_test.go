@@ -60,7 +60,7 @@ func (b stubItemBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 func listType(t *testing.T, item *xsd.SimpleType) *xsd.SimpleType {
 	t.Helper()
 	lst, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "lst"},
-		xsd.NewList(item), xsd.AnySimpleType(),
+		xsd.ListDerivation{Item: item}, xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
@@ -184,7 +184,7 @@ func TestValidateLexicalListItemTypeFacetsApply(t *testing.T) {
 	// value and "ccc" does not: the enumeration admits the two-character items
 	// and excludes the three-character one.
 	item, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "enumitem"},
-		prim.Variety(), prim, []xsd.Facet{enumOf("aa")}, nil)
+		xsd.RestrictionDerivation{}, prim, []xsd.Facet{enumOf("aa")}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(item restriction): %v", err)
 	}
@@ -293,13 +293,13 @@ func TestListEnumerationResolvesThroughAnonymousBase(t *testing.T) {
 	b := stubItemBackend{item: item.Name()}
 
 	anon, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{},
-		xsd.NewList(item), xsd.AnySimpleType(),
+		xsd.ListDerivation{Item: item}, xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(anonymous intermediate list): %v", err)
 	}
 	plural, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "NMTOKENS"},
-		xsd.NewList(item), anon,
+		xsd.ListDerivation{Item: item}, anon,
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetMinLength, []string{"1"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(xs:NMTOKENS): %v", err)
@@ -307,7 +307,7 @@ func TestListEnumerationResolvesThroughAnonymousBase(t *testing.T) {
 	// stubItemBackend keys an item's value by token length, so "aa bb" and
 	// "aa ccc" are different list values.
 	leaf, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "twoShortTokens"},
-		xsd.NewList(item), plural, []xsd.Facet{enumOf("aa bb")}, nil)
+		xsd.ListDerivation{Item: item}, plural, []xsd.Facet{enumOf("aa bb")}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(user restriction of xs:NMTOKENS): %v", err)
 	}

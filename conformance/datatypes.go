@@ -1098,13 +1098,13 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 			return Fail()
 		}
 		constructed, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{},
-			xsd.NewList(item), xsd.AnySimpleType(), constructedListFacets(), nil)
+			xsd.ListDerivation{Item: item}, xsd.AnySimpleType(), constructedListFacets(), nil)
 		if err != nil {
 			return Fail()
 		}
 		leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 			xsd.QName{Space: synthNS, Local: "myList-" + lt.itemType},
-			xsd.NewList(item), constructed, ownFacets, nil)
+			xsd.ListDerivation{Item: item}, constructed, ownFacets, nil)
 		if err != nil {
 			return Fail()
 		}
@@ -1200,7 +1200,7 @@ func execFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c 
 	}
 	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 		xsd.QName{Space: synthNS, Local: base + "-facets"},
-		xsd.NewAtomic(primitiveOfType(builtinType)), builtinType, ownFacets, nil)
+		xsd.RestrictionDerivation{}, builtinType, ownFacets, nil)
 	if err != nil {
 		return Fail()
 	}
@@ -1260,7 +1260,7 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 	}
 	middle, err := xsd.NewSimpleType(xsderr.Loc{},
 		xsd.QName{Space: synthNS, Local: "NOTATION-notation"},
-		xsd.NewAtomic(primitiveOfType(notationType)), notationType, middleFacets, nil)
+		xsd.RestrictionDerivation{}, notationType, middleFacets, nil)
 	if err != nil {
 		return Fail()
 	}
@@ -1270,7 +1270,7 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 	}
 	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 		xsd.QName{Space: synthNS, Local: "NOTATION-facets"},
-		xsd.NewAtomic(primitiveOfType(notationType)), middle, leafFacets, nil)
+		xsd.RestrictionDerivation{}, middle, leafFacets, nil)
 	if err != nil {
 		return Fail()
 	}
@@ -1376,7 +1376,7 @@ func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, 
 	}
 	leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 		xsd.QName{Space: synthNS, Local: "precisionDecimal-facets"},
-		xsd.NewAtomic(primitiveOfType(builtinType)), builtinType, ownFacets, nil)
+		xsd.RestrictionDerivation{}, builtinType, ownFacets, nil)
 	if err != nil {
 		return Fail()
 	}
@@ -1509,9 +1509,9 @@ func buildD34Types(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, dec
 //     the chain is xsd.NewSimpleType's (st-restrict-facets/key-facets-overlay
 //     §3.16.6.4), never re-implemented here. The base itself stays the leaf's
 //     {base type definition}, but facet APPLICABILITY is computed from the chain's
-//     ultimate primitive (primitiveOfType), because cos-applicable-facets (§4.1.5)
-//     keys on {primitive type definition}, which st-restrict-facets clause 2
-//     (§3.16.6.2) holds invariant at every step of an atomic chain.
+//     ultimate primitive (xsd.SimpleType.Primitive), because cos-applicable-facets
+//     (§4.1.5) keys on {primitive type definition}, which st-restrict-facets clause
+//     2 (§3.16.6.2) holds invariant at every step of an atomic chain.
 //
 // ok is false for any other shape, and equally for a reference that is declared but
 // not yet built — the caller's fixed point retries those.
@@ -1522,14 +1522,14 @@ func buildD34Type(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, decl
 		if !ok {
 			return nil, false
 		}
-		return newD34SimpleType(name, xsd.NewList(item), xsd.AnySimpleType(), constructedListFacets())
+		return newD34SimpleType(name, xsd.ListDerivation{Item: item}, xsd.AnySimpleType(), constructedListFacets())
 	}
 	if decl.Union != nil {
 		members, ok := d34UnionMembers(backend, sym, decls, built, key, *decl.Union)
 		if !ok {
 			return nil, false
 		}
-		return newD34SimpleType(name, xsd.NewUnion(members...), xsd.AnySimpleType(), nil)
+		return newD34SimpleType(name, xsd.UnionDerivation{Members: members}, xsd.AnySimpleType(), nil)
 	}
 	if decl.Restriction == nil {
 		return nil, false
@@ -1538,7 +1538,7 @@ func buildD34Type(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, decl
 	if !ok || !strictGoverns(backend, base) {
 		return nil, false
 	}
-	primitive := primitiveOfType(base)
+	primitive := base.Primitive()
 	if primitive == nil {
 		return nil, false
 	}
@@ -1550,15 +1550,15 @@ func buildD34Type(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, decl
 	if !ok {
 		return nil, false
 	}
-	return newD34SimpleType(name, xsd.NewAtomic(primitive), base, ownFacets)
+	return newD34SimpleType(name, xsd.RestrictionDerivation{}, base, ownFacets)
 }
 
 // newD34SimpleType constructs one synthesized cohort type, turning the
 // constructor's error into the cohort's honest ok=false decline: a component the
 // xsd constructors reject (an inapplicable facet, a member blocked by {final})
 // is a shape this executor cannot decide, not a verdict about instance data.
-func newD34SimpleType(name xsd.QName, variety xsd.Variety, base *xsd.SimpleType, ownFacets []xsd.Facet) (*xsd.SimpleType, bool) {
-	st, err := xsd.NewSimpleType(xsderr.Loc{}, name, variety, base, ownFacets, nil)
+func newD34SimpleType(name xsd.QName, derivation xsd.SimpleTypeDerivation, base *xsd.SimpleType, ownFacets []xsd.Facet) (*xsd.SimpleType, bool) {
+	st, err := xsd.NewSimpleType(xsderr.Loc{}, name, derivation, base, ownFacets, nil)
 	if err != nil {
 		return nil, false
 	}
@@ -1685,7 +1685,7 @@ func execAnyURIShapeCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleTyp
 		}
 		leaf, err := xsd.NewSimpleType(xsderr.Loc{},
 			xsd.QName{Space: synthNS, Local: "anyURI-" + l.typeName},
-			xsd.NewAtomic(primitiveOfType(builtinType)), builtinType, ownFacets, nil)
+			xsd.RestrictionDerivation{}, builtinType, ownFacets, nil)
 		if err != nil {
 			return Fail()
 		}
@@ -1747,20 +1747,6 @@ func strictGoverns(strictBackend value.Backend, st *xsd.SimpleType) bool {
 		}
 	}
 	return false
-}
-
-// primitiveOfType returns st's primitive ancestor (§2.4.2) by walking Base(), so
-// a synthesized leaf's {primitive type definition} points at the real primitive
-// (xs:decimal for the integer family) rather than st's immediate builtin base. A
-// directly-mapped primitive returns itself; the anySimpleType/anyAtomicType
-// anchors (never in this cohort) yield nil.
-func primitiveOfType(st *xsd.SimpleType) *xsd.SimpleType {
-	for s := st; s != nil; s = s.Base() {
-		if s.IsPrimitive() {
-			return s
-		}
-	}
-	return nil
 }
 
 // parseOK reports whether raw is in prim's lexical space, after applying prim's

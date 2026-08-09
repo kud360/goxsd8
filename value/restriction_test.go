@@ -71,7 +71,7 @@ func restrictionBase(t *testing.T, ownFacets ...xsd.Facet) (*xsd.SimpleType, Bac
 func restrict(t *testing.T, b Backend, base *xsd.SimpleType, ownFacets ...xsd.Facet) error {
 	t.Helper()
 	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
-		base.Variety(), base, ownFacets, nil)
+		xsd.RestrictionDerivation{}, base, ownFacets, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
@@ -330,7 +330,7 @@ func wsPrimitive(t *testing.T, mode string) (*xsd.SimpleType, Backend) {
 func TestFacetValueNormalizedAtConstruction(t *testing.T) {
 	base, b := wsPrimitive(t, "collapse")
 	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
-		base.Variety(), base,
+		xsd.RestrictionDerivation{}, base,
 		[]xsd.Facet{bound(xsd.FacetMaxInclusive, " 9 "), enumOf("\t7\n", "  8  ")}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
@@ -366,7 +366,7 @@ func TestFacetValueNormalizedAtConstruction(t *testing.T) {
 func TestFacetValueNotNormalizedUnderPreserve(t *testing.T) {
 	base, b := wsPrimitive(t, "preserve")
 	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
-		base.Variety(), base, []xsd.Facet{bound(xsd.FacetMaxInclusive, " 9 ")}, nil)
+		xsd.RestrictionDerivation{}, base, []xsd.Facet{bound(xsd.FacetMaxInclusive, " 9 ")}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
@@ -408,7 +408,7 @@ func TestEnumerationRestrictionSkipsFacetPreconditionFault(t *testing.T) {
 		xsd.NewEnumerationMember("ab", nil, nil),
 	})
 	derived, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
-		base.Variety(), base, []xsd.Facet{enum}, nil)
+		xsd.RestrictionDerivation{}, base, []xsd.Facet{enum}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
