@@ -396,8 +396,9 @@ func restrictionVarietyPairOK(tct, bct ContentType) bool {
 //     by B at all (cvc-complex-type clause 2.1: otherwise an element carrying it
 //     is valid against T and not against B), and B's binding for it must
 //     ·subsume· T's, which for an {attribute use} is loc-testSubP clause 5;
-//   - every expanded name T admits through its {attribute wildcard} must be
-//     admitted by B too (cvc-complex-type clause 2.2, c-avaw —
+//   - every expanded name T admits through its {attribute wildcard} AND no
+//     {attribute use} of T's already claims must be admitted by B too
+//     (cvc-complex-type clause 2.2, c-avaw, which clause 2.1 pre-empts per name —
 //     checkRestrictionAttributeWildcard);
 //   - every attribute B marks {required} must stay required in T
 //     (cvc-complex-type clause 3, checkRestrictionRequiredAttributes).
@@ -454,34 +455,39 @@ func (s *Schema) checkRestrictionAttributes(t, b ComplexType) error {
 // wildcard read as having none and this check FALSELY rejected its restrictions;
 // the fold is what makes the comparison sound, not merely more complete.
 //
-// GAP(xsd): the comparison is an over-approximation in the FAIL-CLOSED
-// direction, owned by #430. cvc-complex-type clause 2.2 is reached only
-// "otherwise", i.e. for a name with no matching {attribute use} in T, so a name
-// T holds a use for is outside the quantification even when T's wildcard also
-// admits it. wildcardSubset decides cos-ns-subset over {namespace constraint}s
-// alone and knows nothing of {attribute uses}, so a subset failure caused SOLELY
-// by a QName in B.{attribute wildcard}.{namespace constraint}.{disallowed names}
-// that B (and therefore T, by §3.4.2.4 clause 3.2) declares an {attribute use}
-// for is charged here though clause 3 does not require it.
+// What the comparison ranges over is names WITHOUT a matching {attribute use},
+// and that restriction is cvc-complex-type clause 2's own dispatch rather than a
+// refinement of it: clause 2.2 is reached only "otherwise", once clause 2.1
+// (c-ctma) has failed to find an attribute use of the item's expanded name, and
+// §3.4.4.2's Note states the precedence unconditionally — "the attribute use
+// always takes precedence, and the assessment of such items stands or falls
+// entirely on the basis of the attribute use and its {attribute declaration}".
+// wildcardSubset decides cos-ns-subset over {namespace constraint}s alone and
+// knows nothing of {attribute uses}, so the gate is applied HERE: the names
+// clause 2.1 claims are dropped from B's {disallowed names}
+// (sharedAttributeUseNames, withoutDisallowedNames) before the record is handed
+// to the relation. Teaching wildcardSubset the name set instead would put
+// cos-ns-subset in two encodings, which is what T4 forbids and what #262
+// declined to build.
 //
-// The error returned below has exactly one consumer chain, and every link
-// propagates a non-nil error as a rejection rather than reading it for anything
-// else: checkRestrictionAttributes → Schema.checkComplexTypeRestriction →
-// Schema.checkComplexDerivations → Schema.resolve → SchemaBuilder.Finalize (and
-// FinalizeWith), which returns it to the caller in place of a *Schema. So the
-// over-charge is a FALSE REJECT of a VALID schema, not a missed rejection: a
-// restriction whose base disallows BY NAME an attribute both types govern with an
-// {attribute use} — B declaring <xs:attribute name="foo"/> alongside
-// <anyAttribute namespace="##any" notQName="foo"/>, T restricting B with
-// <anyAttribute namespace="##any"/> and inheriting the foo use — is rejected by
-// Finalize today. Reachable from plain source syntax; no W3C suite case has the
-// shape, which is why neither the gate nor the ratchet measures it.
+// The exempt set is the INTERSECTION of the two {attribute uses} sets, never
+// either side alone, because the two directions are not symmetric:
 //
-// Narrowing it here would mean re-deriving cos-ns-subset with a name-set
-// parameter — the same relation in two encodings, which is what T4 forbids and
-// what #262 declined to build. #430 owns the choice between that and a
-// pre-filter of B's {disallowed names} against T's {attribute uses} at this call
-// site; nothing is narrowed yet, so the false reject above stands as described.
+//   - a name BOTH types hold a use for is assessed by clause 2.1 against T AND
+//     by clause 2.1 against B, so clause 2.2 fires on neither side and B's
+//     {disallowed names} entry for it cannot be charged however it got there.
+//     This is the shape #430 fixed: B declaring <xs:attribute name="foo"/>
+//     alongside <anyAttribute namespace="##any" notQName="foo"/>, T restricting
+//     it with <anyAttribute namespace="##any"/> and inheriting the foo use whole
+//     (§3.4.2.4 clause 3.2, attributeusefold.go), was a FALSE REJECT of a valid
+//     schema — Finalize returns this error to its caller in place of a *Schema.
+//   - a name only T holds a use for is NOT exempt: c-ran clause 3 still requires
+//     the item to satisfy clause 2 with respect to B, and B, having no use for
+//     it, can only satisfy it through clause 2.2 — so a B whose wildcard
+//     disallows that name is a genuine violation and stays charged. (The loop in
+//     checkRestrictionAttributes charges the same shape first, through
+//     attributeDefaultBinding; this half is what holds when a caller reaches it
+//     directly.)
 func checkRestrictionAttributeWildcard(t, b ComplexType) error {
 	tw, has := t.AttributeWildcard()
 	if !has {
@@ -492,11 +498,40 @@ func checkRestrictionAttributeWildcard(t, b ComplexType) error {
 		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
 			"complex type %s restricts %s and declares an {attribute wildcard}, but %s has none, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 2.2, c-avaw)", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b))
 	}
-	if wildcardSubset(tw.NamespaceConstraint(), bw.NamespaceConstraint()) {
+	bnc := bw.NamespaceConstraint().withoutDisallowedNames(sharedAttributeUseNames(t, b))
+	if wildcardSubset(tw.NamespaceConstraint(), bnc) {
 		return nil
 	}
 	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
 		"complex type %s restricts %s but its {attribute wildcard} admits expanded names %s's does not, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 2.2, c-avaw, and cos-ns-subset)", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b))
+}
+
+// sharedAttributeUseNames is the set of expanded names cvc-complex-type clause
+// 2.1 claims on BOTH sides of a derivation: the {attribute declaration} name of
+// every member of T.{attribute uses} that B holds a use for as well. An item
+// carrying such a name is assessed against an attribute use whichever of the two
+// types it is validated against, so clause 2.2 governs it on neither side.
+//
+// Both sides are read from the MATERIALISED sets (§3.4.2.4 clause 3,
+// attributeusefold.go), which is what makes the intersection the ordinary case
+// rather than a corner: clause 3.2 hands T the base's use unchanged whenever T
+// neither re-declares nor prohibits the name, so a restriction that touches no
+// attribute at all shares every one of B's uses. Read off B's own <attribute>
+// children instead, an inherited use would go missing and the exemption would
+// silently not apply.
+//
+// The walk is over T's set in document order (STYLE D2), and the result feeds a
+// membership test only.
+func sharedAttributeUseNames(t, b ComplexType) []QName {
+	var names []QName
+	for _, u := range t.attributeUses {
+		name := attributeUseName(u)
+		if !hasAttributeUseNamed(b.attributeUses, name) {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
 }
 
 // checkRestrictionRequiredAttributes is the cvc-complex-type clause 3 half of
