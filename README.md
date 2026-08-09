@@ -107,10 +107,8 @@ To back one type with your own mapping and inherit the rest, compose:
 `value.Override(strict.New(), money)` yields `money`'s mapping for every
 type `money` defines and `strict`'s for all the others.
 
-Two limits of `parser.Parse` worth knowing up front: a `<xs:redefine>` that
-redefines a `complexType` is declined (its `simpleType`, `group` and
-`attributeGroup` forms are followed in full); and
-`Parse` returns only the FIRST error, not a list of them.
+One limit of `parser.Parse` worth knowing up front: it returns only the
+FIRST error, not a list of them.
 
 The component model is also constructible directly, without a schema
 document: `xsd.NewSchemaBuilder()` → `Add*` → `Finalize()` returns an

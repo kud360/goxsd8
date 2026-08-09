@@ -52,6 +52,7 @@ translate the local times above and mind DST drift.
 ```sh
 go build ./... && go test ./... && go vet ./...   # gate, part 1
 golangci-lint run                                  # gate, part 2 (STYLE lint subset)
+go tool commentwrap ./...                          # gate, part 3 (ragged comment wraps; -fix reflows them)
 go test ./conformance -run TestConformance -count=1                 # conformance check
 GOXSD_RATCHET=1 go test ./conformance -run TestConformance -count=1 # ratchet (arbiter only)
 GOXSD_RATCHET_REMOVALS=schema=34,instance=65 GOXSD_RATCHET=1 go test ./conformance -run TestConformance -count=1 # + bank sanctioned applicability removals (arbiter only)

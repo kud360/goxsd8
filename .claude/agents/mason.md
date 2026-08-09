@@ -48,8 +48,9 @@ finding.
 
 ## Before handoff
 
-- `go build ./... && go test ./... && go vet ./...` and
-  `golangci-lint run` pass.
+- `go build ./... && go test ./... && go vet ./...`,
+  `golangci-lint run` and `go tool commentwrap ./...` pass
+  (`go tool commentwrap -fix ./...` reflows what it reports).
 - New behavior has unit tests that can actually fail (mutate the code
   mentally: would the test notice?).
 - Summarize for the arbiter: files touched, spec rules implemented,

@@ -33,9 +33,8 @@ func (b NamespaceBinding) Namespace() string {
 // modeled as a slice in a deterministic order — by {prefix}, as the
 // parser supplies it — per STYLE D2; order carries no spec weight, since
 // the property is a set, but determinism demands one), {default
-// namespace} (an optional
-// anyURI), {base URI} (an optional anyURI), and {expression} (the raw
-// XPath 2.0 expression text, Required).
+// namespace} (an optional anyURI), {base URI} (an optional anyURI), and
+// {expression} (the raw XPath 2.0 expression text, Required).
 //
 // {expression} is held VERBATIM — not parsed, not compiled, not evaluated.
 // Like Annotation, this package preserves the XPath text but never

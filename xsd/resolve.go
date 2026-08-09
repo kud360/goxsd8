@@ -185,12 +185,12 @@ func (s *Schema) resolve() error {
 // REFERRING component's position, never to the target's — the target is exactly
 // what does not exist, so it has none. Each helper therefore takes a loc
 // alongside its ctx phrase, and the descent threads down the position of the
-// nearest ENCLOSING component that retains one: a ComplexType,
-// ElementDeclaration, AttributeDeclaration or ModelGroupDefinition re-roots it at
-// its own Loc() as the walk enters it, while a Particle, AttributeUse, ModelGroup,
-// TypeTable or TypeAlternative inherits the enclosing component's, because none of
-// those five retains a position or exposes an accessor for one — nothing consumed
-// their positions when they were built, so none was minted (xsd doc.go, STYLE T5).
+// nearest ENCLOSING component that retains one: a ComplexType, ElementDeclaration,
+// AttributeDeclaration or ModelGroupDefinition re-roots it at its own Loc() as the
+// walk enters it, while a Particle, AttributeUse, ModelGroup, TypeTable or
+// TypeAlternative inherits the enclosing component's, because none of those five
+// retains a position or exposes an accessor for one — nothing consumed their
+// positions when they were built, so none was minted (xsd doc.go, STYLE T5).
 // Inheriting is not an approximation of the wrong thing: an inline particle tree or
 // attribute use belongs to exactly one such enclosing component, so its position
 // names the declaration a reader must open, one enclosing element out.
@@ -381,9 +381,16 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 // resolveComplexType descends a complex type's reference sites: its {base type
 // definition} (clause 1.1), each {attribute use}, and its {content type}
 // particle tree. It runs for an ANONYMOUS complex type too, reached through an
-// owning declaration's InlineTypeDefinition (see resolveTypeDefinition), so the
-// owner phrase in its message comes from complexTypeOwner rather than from a
-// {name} an anonymous type does not have (STYLE T4).
+// owning declaration's InlineTypeDefinition or through a redefining type's OWN
+// base slot (see resolveTypeDefinition), so the owner phrase in its message
+// comes from complexTypeOwner rather than from a {name} an anonymous type does
+// not have (STYLE T4).
+//
+// The {base type definition} goes through resolveTypeDefinition, not through a
+// bare resolveTypeName, because it is a TypeDefinitionOrRef: an
+// InlineTypeDefinition base needs no lookup but IS descended, so the anonymous
+// original of a redefine pairing has its own references resolved (src-expredef
+// clause 1.1 makes it a full component, subject to the ordinary rules).
 //
 // This is where the referrer-Loc convention re-roots: every rejection below this
 // point is positioned at c.Loc() until a nested declaration that retains its own
@@ -391,7 +398,7 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 // which is the right position for its base= and its attribute uses — nearer than
 // the owning declaration's.
 func (s *Schema) resolveComplexType(c ComplexType) error {
-	if _, err := resolveTypeName(s, c.BaseTypeDefinitionName(), c.Loc(), complexTypeOwner(c)+" {base type definition}"); err != nil {
+	if err := s.resolveTypeDefinition(c.Base(), c.Loc(), complexTypeOwner(c)+" {base type definition}"); err != nil {
 		return err
 	}
 	for _, u := range c.AttributeUses() {
@@ -575,11 +582,21 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 // "no visited set beyond the path-scoped guard" — so no runtime traversal
 // inherits it.
 //
-// Roots are iterated in document order (STYLE D2); an anonymous root (zero name)
-// is walked but never recorded (it can be no base's target, having no name to be
-// referenced by), so the first reported cycle is deterministic. path is read only
-// by key, never ranged, so which cycle member is named does not depend on Go map
-// iteration order either.
+// The walk follows the {base type definition} SLOT, both of its arms. Descending
+// the InlineTypeDefinition arm is not optional and is not defensive: a redefining
+// complex type's base is the anonymous src-expredef clause 1.1 original, whose
+// OWN base is a name again, so stopping at the inline hop would leave every cycle
+// running through a redefinition undetected — and the two attribute folds, which
+// do follow that hop, would then recurse without bound (#505). It costs no extra
+// guard: an inline base is a value owned by exactly one slot, so the nesting is
+// finite by construction and cannot itself close a loop.
+//
+// Roots are iterated in document order (STYLE D2); an anonymous node (zero name)
+// is walked but never recorded (it can be no NAMED base's target, having no name
+// to be referenced by, and its one owner is the node the walk just came from), so
+// the first reported cycle is deterministic. path is read only by key, never
+// ranged, so which cycle member is named does not depend on Go map iteration
+// order either.
 //
 // The cycle is symmetric, so any member on it would be a defensible position;
 // nextCT is the one already in hand at the rejection — the ComplexType the
@@ -602,27 +619,23 @@ func (s *Schema) checkComplexBaseAcyclic() error {
 		cur := ct
 		for {
 			name := cur.Name()
-			base := cur.BaseTypeDefinitionName()
-			if base == (QName{}) {
-				break // absent base ends the chain
-			}
-			if name == anyTypeName && base == anyTypeName {
+			if ref, byName := cur.Base().(TypeDefinitionRef); byName && name == anyTypeName && ref.Name == anyTypeName {
 				break // §3.4.7: xs:anyType is the one permitted self-based type
 			}
 			if name != (QName{}) {
 				path[name] = true
 			}
-			next, ok := s.Type(base)
+			next, ok := s.typeOf(cur.Base())
 			if !ok {
-				break // dangling base already reported by Phase A
+				break // absent base ends the chain; a dangling one Phase A reported
 			}
 			nextCT, ok := next.(ComplexType)
 			if !ok {
 				break // base is a simple type: chain terminates
 			}
-			if path[base] {
+			if nextName := nextCT.Name(); nextName != (QName{}) && path[nextName] {
 				return xsderr.New(ruleCTPropsCorrect, nextCT.Loc(),
-					"complex type %s participates in a circular {base type definition} chain, but ct-props-correct clause 3 forbids it (only xs:anyType may be its own base)", base)
+					"complex type %s participates in a circular {base type definition} chain, but ct-props-correct clause 3 forbids it (only xs:anyType may be its own base)", nextName)
 			}
 			cur = nextCT
 		}

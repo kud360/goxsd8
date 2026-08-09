@@ -24,10 +24,10 @@ comment on the issue under review.
    do. Judge the COMMITTED tree: a non-empty `git status` means what you
    verify is not what will land — say so and stop.
 2. Run the gate: `go build ./... && go test ./... && go vet ./...` and
-   `golangci-lint run` and
+   `golangci-lint run` and `go tool commentwrap ./...` and
    `go test ./conformance -run TestConformance -count=1`.
    Any failure → reject.
-   Those three commands are the whole gate; CLAUDE.md's "Commands" block
+   Those four commands are the whole gate; CLAUDE.md's "Commands" block
    is the single source of truth for that list. If your brief names a
    step that is not in it — `go tool logguard` is the standing example,
    proposed in #195 and never built — the brief is wrong. Say so in one

@@ -35,26 +35,37 @@ import "github.com/kud360/goxsd8/xsderr"
 // restriction in the chain.
 
 // attributeWildcardFold is one fold pass's working state: where each named
-// Complex Type Definition sits in s.types, the folded {attribute wildcard}
-// computed for each position, and which positions are done. It is a parameter
-// object rather than three parallel arguments threaded through the recursion, and
-// it is discarded when the pass returns — nothing derived from it outlives
+// Complex Type Definition sits in s.types, the folded COMPONENT computed for
+// each position, and which positions are done. It is a parameter object rather
+// than three parallel arguments threaded through the recursion, and it is
+// discarded when the pass returns — nothing derived from it outlives
 // foldAttributeWildcards.
 type attributeWildcardFold struct {
 	// position maps the expanded {name} of a COMPLEX type definition to its
-	// index in s.types. Simple types are deliberately absent: a base name that
+	// index in s.types. Simple types are deliberately absent: a base NAME that
 	// misses here is §3.4.2.5 clause 2.2.1.2's "otherwise ·absent·", which is
 	// exactly the answer a missing lookup gives. Names are unique across type
 	// definitions (sch-props-correct clause 2, enforced at Finalize), so the map
 	// is a function. It is a point-lookup index and never ranged (STYLE D2).
+	//
+	// It is consulted for the TypeDefinitionRef arm of a {base type definition}
+	// ONLY. An anonymous inline base has no name and so no position, which is
+	// not clause 2.2.1.2 but a base reached a different way; see
+	// baseAttributeWildcard.
 	position map[QName]int
-	// wildcards holds each position's folded value, nil for the ·absent·
-	// property — the same pointer-for-absence encoding NewComplexType's own
-	// parameter uses, so no second "present" flag is carried beside it (STYLE
-	// D3). folded is the memo mark, which nil cannot serve as: an absent
-	// property is a legitimate folded result.
-	wildcards []*Wildcard
-	folded    []bool
+	// types holds each position's folded COMPONENT — the type with its own
+	// clause-2 {attribute wildcard} stored AND, where its {base type
+	// definition} is an owned inline complex type, that base re-seated with
+	// ITS folded value. The component rather than the bare *Wildcard is the
+	// unit because the fold's output for a position is both, and carrying the
+	// wildcard beside the component it is already stored on would be one fact
+	// in two encodings (STYLE D3). Inside the recursion the value still
+	// travels as a *Wildcard, nil for the ·absent· property — the same
+	// pointer-for-absence encoding NewComplexType's own parameter uses.
+	// folded is the memo mark; a position it is false at holds the zero
+	// ComplexType, never a partial one.
+	types  []ComplexType
+	folded []bool
 }
 
 // foldAttributeWildcards materialises §3.4.2.5 clause 2 into every Complex Type
@@ -66,6 +77,11 @@ type attributeWildcardFold struct {
 // D3) — but a property OVERWRITTEN with the value §3.4.2.5 defines, so the spec's
 // value has exactly one encoding afterwards and the producer's partial one is gone
 // rather than kept beside it.
+//
+// It writes that property on EVERY complex type definition it folds, including
+// one held anonymously inside another's {base type definition} slot; see
+// baseAttributeWildcard for the reader that rejects when such a base is left
+// partial (#505).
 //
 // The two folds are independent — {attribute uses} and {attribute wildcard} are
 // different properties, and neither's rule reads the other — so their relative
@@ -89,9 +105,9 @@ type attributeWildcardFold struct {
 // so any future divergence fails closed as a w-props-correct rejection (STYLE P3).
 func (s *Schema) foldAttributeWildcards() error {
 	f := &attributeWildcardFold{
-		position:  make(map[QName]int, len(s.types)),
-		wildcards: make([]*Wildcard, len(s.types)),
-		folded:    make([]bool, len(s.types)),
+		position: make(map[QName]int, len(s.types)),
+		types:    make([]ComplexType, len(s.types)),
+		folded:   make([]bool, len(s.types)),
 	}
 	for i, t := range s.types {
 		c, ok := t.(ComplexType)
@@ -112,30 +128,32 @@ func (s *Schema) foldAttributeWildcards() error {
 	return nil
 }
 
-// foldTypeAttributeWildcard computes and memoises the {attribute wildcard} of the
-// Complex Type Definition at position i, recursing into its {base type definition}
-// first so the base's own value is already complete when clause 2.2 folds it in
-// (base-before-derived, STYLE D4). A nil result is the ·absent· property.
+// foldTypeAttributeWildcard computes and memoises the folded Complex Type
+// Definition at position i, recursing into its {base type definition} first so
+// the base's own value is already complete when clause 2.2 folds it in
+// (base-before-derived, STYLE D4).
 //
 // The recursion terminates for the same two reasons every other base walk in this
-// package does: Phase B has rejected every circular chain, and ·xs:anyType·'s
-// permitted self-derivation is excluded by j != i — the one self-edge §3.4.7
-// allows, which no acyclicity check can remove. ·xs:anyType· derives by
-// restriction, so clause 2.1 would return its own wildcard unchanged in any case.
-func (s *Schema) foldTypeAttributeWildcard(f *attributeWildcardFold, i int) (*Wildcard, error) {
+// package does: Phase B has rejected every circular chain — including one running
+// through an anonymous inline base, which Phase B descends for exactly this
+// reason (resolve.go's checkComplexBaseAcyclic) — and ·xs:anyType·'s permitted
+// self-derivation is excluded by j != i, the one self-edge §3.4.7 allows, which
+// no acyclicity check can remove. ·xs:anyType· derives by restriction, so clause
+// 2.1 would return its own wildcard unchanged in any case.
+func (s *Schema) foldTypeAttributeWildcard(f *attributeWildcardFold, i int) (ComplexType, error) {
 	if f.folded[i] {
-		return f.wildcards[i], nil
+		return f.types[i], nil
 	}
 	c, ok := s.types[i].(ComplexType)
 	if !ok {
 		panic("xsd: foldTypeAttributeWildcard: position of a non-complex type definition")
 	}
-	w, err := s.clause2AttributeWildcard(f, c, i)
+	folded, err := s.clause2AttributeWildcard(f, c, i)
 	if err != nil {
-		return nil, err
+		return ComplexType{}, err
 	}
-	f.wildcards[i], f.folded[i] = w, true
-	return w, nil
+	f.types[i], f.folded[i] = folded, true
+	return folded, nil
 }
 
 // clause2AttributeWildcard decides §3.4.2.5 clause 2 for one Complex Type
@@ -155,29 +173,107 @@ func (s *Schema) foldTypeAttributeWildcard(f *attributeWildcardFold, i int) (*Wi
 // carries the whole inherited union: clause 2.2.1.1 names the base's {attribute
 // wildcard} property, which is itself this rule's output, not the base's
 // <anyAttribute>.
-func (s *Schema) clause2AttributeWildcard(f *attributeWildcardFold, c ComplexType, i int) (*Wildcard, error) {
-	own := completeAttributeWildcard(c)
-	if c.DerivationMethod() != DerivationExtension {
-		return own, nil // clause 2.1
-	}
-	j, ok := f.position[c.BaseTypeDefinitionName()]
-	if !ok || j == i {
-		return own, nil // clause 2.2.1.2, then 2.2.2.1: the ·base wildcard· is ·absent·
-	}
-	base, err := s.foldTypeAttributeWildcard(f, j)
+//
+// It takes the component rather than a position because not every type it must
+// answer for HAS one — see foldComponentAttributeUses (attributeusefold.go) for
+// the same argument on the sibling property; i is the folding type's own
+// position, used only to exclude the ·xs:anyType· self-edge. It returns the
+// component with the folded value stored on it, and with its {base type
+// definition} slot carrying whatever baseAttributeWildcard answers must be
+// stored there.
+//
+// The base is folded even on the clause 2.1 branch, whose OWN value ignores it.
+// That is not wasted work: for an owned inline base it is the only pass that can
+// give that base its own clause-2 value, and a RESTRICTION over such a base is
+// exactly the case checkRestrictionAttributeWildcard charges — see
+// baseAttributeWildcard. For a named base it costs one memo hit, since the base
+// is folded at its own position in any case.
+func (s *Schema) clause2AttributeWildcard(f *attributeWildcardFold, c ComplexType, i int) (ComplexType, error) {
+	own := attributeWildcardProperty(c)
+	base, slot, err := s.baseAttributeWildcard(f, c, i)
 	if err != nil {
-		return nil, err
+		return ComplexType{}, err
 	}
-	return unionExtensionAttributeWildcard(c.loc, own, base)
+	c.base = slot
+	if c.DerivationMethod() != DerivationExtension {
+		return c, nil // clause 2.1: the ·complete wildcard· the producer already stored
+	}
+	w, err := unionExtensionAttributeWildcard(c.loc, own, base)
+	if err != nil {
+		return ComplexType{}, err
+	}
+	if w == nil {
+		return c, nil // both operands ·absent·; the property stays as it is
+	}
+	c.attributeWildcard, c.hasAttributeWildcard = *w, true
+	return c, nil
 }
 
-// completeAttributeWildcard is §3.4.2.5 clause 1's ·complete wildcard· for a type
-// the producer has already mapped: §3.6.2.2's combination of the type's own
-// <anyAttribute> with the referenced attribute groups' is exactly what
-// NewComplexType was given, so it is read back off the component rather than
-// recomputed (the producer's combineAttributeWildcards is its one encoding). nil is
-// the ·absent· property.
-func completeAttributeWildcard(c ComplexType) *Wildcard {
+// baseAttributeWildcard returns the ·base wildcard· of §3.4.2.5 clause 2.2.1 and
+// the {base type definition} SLOT to store back on c, exhaustively over that
+// slot's arms: 2.2.1.1's base {attribute wildcard} when the base is a Complex
+// Type Definition, and 2.2.1.2's ·absent· (a nil wildcard) otherwise — a base
+// that is absent, simple, unresolvable, or ·xs:anyType· reached by its own
+// self-edge.
+//
+// The InlineTypeDefinition arm is not a miss: the src-expredef clause 1.1
+// original a redefining complex type owns is in no position map, and reading that
+// as ·absent· would drop the wildcard a redefining EXTENSION inherits, so an
+// attribute its original admits would be rejected on the redefinition (#505).
+//
+// The returned slot is c's own in every arm but that one, so storing it is a
+// no-op there. The exception is the OWNED INLINE base, which nothing but this
+// slot can reach: re-seating it is what gives that base its own clause-2
+// {attribute wildcard} in the assembled schema, and not merely inside this pass.
+// checkRestrictionAttributeWildcard (complexderivation.go) reads a base's
+// {attribute wildcard} to CHARGE its restrictions — "T declares a wildcard but B
+// has none" — so a base left at the producer's clause-1 value makes a legal
+// restriction of it a FALSE REJECT whenever that base only INHERITED its own
+// wildcard (#505).
+func (s *Schema) baseAttributeWildcard(f *attributeWildcardFold, c ComplexType, i int) (*Wildcard, TypeDefinitionOrRef, error) {
+	switch b := c.Base().(type) {
+	case nil:
+		return nil, nil, nil
+	case TypeDefinitionRef:
+		j, ok := f.position[b.Name]
+		if !ok || j == i {
+			return nil, b, nil
+		}
+		folded, err := s.foldTypeAttributeWildcard(f, j)
+		if err != nil {
+			return nil, nil, err
+		}
+		return attributeWildcardProperty(folded), b, nil
+	case InlineTypeDefinition:
+		bc, isComplex := b.Definition.(ComplexType)
+		if !isComplex {
+			return nil, b, nil
+		}
+		folded, err := s.clause2AttributeWildcard(f, bc, i)
+		if err != nil {
+			return nil, nil, err
+		}
+		return attributeWildcardProperty(folded), InlineTypeDefinition{Definition: folded}, nil
+	default:
+		panic("xsd: baseAttributeWildcard: non-exhaustive TypeDefinitionOrRef switch")
+	}
+}
+
+// attributeWildcardProperty reads a Complex Type Definition's {attribute
+// wildcard} in the pointer-for-absence form this fold works in; nil is the
+// ·absent· property. It has one encoding and two readings, decided by which
+// component it is handed — there is no second accessor for the second reading
+// (STYLE T4):
+//
+//   - on a component as the producer mapped it, the value IS §3.4.2.5 clause 1's
+//     ·complete wildcard·. §3.6.2.2's combination of the type's own
+//     <anyAttribute> with the referenced attribute groups' is exactly what
+//     NewComplexType was given, so it is read back off the component rather than
+//     recomputed (the producer's combineAttributeWildcards is its one encoding).
+//   - on a component this fold has already returned, the value is the FOLDED
+//     {attribute wildcard} — which is what clause 2.2.1.1 names for the ·base
+//     wildcard·, the base's property and not the base's <anyAttribute>.
+func attributeWildcardProperty(c ComplexType) *Wildcard {
 	w, ok := c.AttributeWildcard()
 	if !ok {
 		return nil
@@ -224,28 +320,32 @@ func unionExtensionAttributeWildcard(loc xsderr.Loc, own, base *Wildcard) (*Wild
 	return &w, nil // clause 2.2.2.3
 }
 
-// storeFoldedAttributeWildcards writes each folded value back onto its Complex
-// Type Definition. ComplexType is a VALUE type held in two places — the
-// document-order s.types slice and the by-name s.typeIndex — so both are
-// re-seated; a consumer that reaches a type either way sees the same folded
-// property. The index entry exists only for a named type (an anonymous one is in
-// no §3.17.1 symbol table), and no anonymous type can be a {base type definition},
-// since a base is named by QName.
+// storeFoldedAttributeWildcards writes each folded component back into the
+// schema. ComplexType is a VALUE type held in two places — the document-order
+// s.types slice and the by-name s.typeIndex — so both are re-seated; a consumer
+// that reaches a type either way sees the same folded property. The index entry
+// exists only for a named type (an anonymous one is in no §3.17.1 symbol table).
 //
-// A nil folded value needs no store: the fold never turns a present property
-// absent — clause 2.1 keeps the ·complete wildcard·, and every clause 2.2 case
-// yields ·absent· only when BOTH operands are — so nil means the producer already
-// left the property absent and there is nothing to overwrite.
+// An ANONYMOUS base is in neither place, and is reached only through the owning
+// type's {base type definition} slot. It needs no store of its own here because
+// baseAttributeWildcard already re-seated that slot with the folded base, so
+// storing the owner stores the base with it; see storeFoldedAttributeUses
+// (attributeusefold.go) for the shared argument.
+//
+// A folded value that is ·absent· overwrites nothing: the fold never turns a
+// present property absent — clause 2.1 keeps the ·complete wildcard·, and every
+// clause 2.2 case yields ·absent· only when BOTH operands are — so an absent
+// result means the producer already left the property absent
+// (clause2AttributeWildcard stores only a present one). The COMPONENT is still
+// stored, because its {base type definition} slot may have been re-seated even
+// when its own wildcard was not: that is exactly the case of a restriction over
+// an owned inline base that inherited a wildcard the restriction does not
+// declare (#505).
 func (s *Schema) storeFoldedAttributeWildcards(f *attributeWildcardFold) {
-	for i, w := range f.wildcards {
-		if w == nil {
+	for i, c := range f.types {
+		if !f.folded[i] {
 			continue
 		}
-		c, ok := s.types[i].(ComplexType)
-		if !ok {
-			continue
-		}
-		c.attributeWildcard, c.hasAttributeWildcard = *w, true
 		s.types[i] = c
 		if c.Name() != (QName{}) {
 			s.typeIndex[c.Name()] = c

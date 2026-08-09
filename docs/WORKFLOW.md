@@ -176,7 +176,8 @@ work itself and never skips the arbiter.
    on the issue). **Checkpoint.**
 5. **Judge** — **arbiter** runs the gate
    (`go build ./... && go test ./... && go vet ./...` + the lint gate +
-   the conformance run), reviews the branch's committed diff against
+   `go tool commentwrap ./...` + the conformance run), reviews the
+   branch's committed diff against
    freshly-fetched `origin/main` (never a local `main` — see the branch
    scheme) per STYLE.md including the exported-surface diff (T5), and
    posts a verdict on the issue. **Checkpoint after each verdict.**
@@ -293,7 +294,8 @@ git commit
 
 `git diff --cached --stat` is a named step of the ritual, not an optional
 sanity check. The whole gate — `go build`, `go test`, `go vet`,
-`golangci-lint run`, the conformance suite — plus the arbiter's review
+`golangci-lint run`, `go tool commentwrap ./...`, the conformance
+suite — plus the arbiter's review
 read the WORKING TREE; nothing in them reads the index. A green gate
 therefore says nothing about what is actually staged: a fix made after
 `git add` gets silently reverted by the commit while every check honestly

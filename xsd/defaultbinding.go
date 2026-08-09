@@ -410,31 +410,6 @@ func (s *Schema) declaredTypeRestricts(specific, general ElementDeclaration) boo
 	return s.validlySubstitutable(sub, super, restrictionBlockingKeywords)
 }
 
-// typeOf is the one way this package turns an element or attribute declaration's
-// {type definition} slot into a component, exhaustively over
-// TypeDefinitionOrRef's two arms: an InlineTypeDefinition IS the component (it
-// is in no by-name symbol table, so a lookup would miss it), while a
-// TypeDefinitionRef is the by-name Schema.Type lookup. ok is false for an absent
-// (nil) slot and for an unresolvable name — the cases every caller treats as
-// "not decidable by this clause", never as a violation (a dangling name was
-// already charged src-resolve by resolve.go's Phase A).
-//
-// Every {type definition} consumer goes through this helper or through its
-// narrowed sibling simpleTypeOf; none re-derives a bare-name lookup of its own
-// (STYLE T4).
-func (s *Schema) typeOf(ref TypeDefinitionOrRef) (TypeDefinition, bool) {
-	switch r := ref.(type) {
-	case nil:
-		return nil, false
-	case TypeDefinitionRef:
-		return s.Type(r.Name)
-	case InlineTypeDefinition:
-		return r.Definition, true
-	default:
-		panic("xsd: typeOf: non-exhaustive TypeDefinitionOrRef switch")
-	}
-}
-
 // typeTablesAgree is loc-testSubP clause 4.6 (c-tt-equiv): the two {type table}s
 // are both ·absent·, or both present and ·equivalent· per key-equiv-tt. The
 // equivalence itself is elementconsistent.go's typeTablesEquivalent, the one

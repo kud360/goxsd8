@@ -165,15 +165,16 @@ func (s *Schema) affiliationChainReaches(m ElementDeclaration, head QName) bool 
 // today. Do not read the silence above as delegation to a check that exists; it
 // is an unimplemented rule, recorded in the #249 arbiter review.
 //
-// The starting type is reached through typeOf, the package's one {type
-// definition} slot reader (STYLE T4), so an ANONYMOUS inline type participates in
-// the walk as its own first step rather than being skipped; every step past the
-// first is a named {base type definition} and so a Schema.Type point lookup. No
-// map is ranged (STYLE D2). An anonymous H.{type definition} can therefore end
-// the walk only by being M.{type definition} itself: a {base type definition} is
-// a QName, so nothing else can reach an unnamed type, and sameTypeDefinition
-// reports two anonymous types as distinct on the licence §3.4.6.5's no-identity
-// Note grants.
+// EVERY step is reached through typeOf, the package's one type-slot reader
+// (STYLE T4) — the starting {type definition} and each {base type definition}
+// after it — so an ANONYMOUS type participates in the walk rather than ending
+// it. That matters in both directions: an anonymous inline type is M's own first
+// step, and the anonymous src-expredef clause 1.1 original a redefining complex
+// type owns is an intermediate step. Ending the walk on one would return TRUE, a
+// fail-OPEN accept and not a conservative refusal (#505). No map is ranged
+// (STYLE D2). An anonymous H.{type definition} can end the walk only by being
+// M.{type definition} itself, since sameTypeDefinition reports two anonymous
+// types as distinct on the licence §3.4.6.5's no-identity Note grants.
 func (s *Schema) derivationAdmitsSubstitution(m, h ElementDeclaration) bool {
 	headType, ok := s.typeOf(h.TypeDefinition())
 	if !ok {
@@ -209,16 +210,18 @@ walk:
 			if c.Name() == anyTypeName {
 				return true // §3.4.7: xs:anyType is its own base, so the chain ends here
 			}
-			base := c.BaseTypeDefinitionName()
-			if base == (QName{}) {
-				return true // an absent base ends the chain short of H.{type definition}
-			}
-			if base == typeDefinitionName(headType) {
-				break walk // the ·derivation· has reached H.{type definition}
-			}
-			next, ok := s.Type(base)
+			// The slot is followed through typeOf, BOTH arms: an anonymous
+			// src-expredef clause 1.1 base is a real step of the ·derivation·,
+			// and stopping on it would answer true — a fail-OPEN accept, not a
+			// conservative refusal (#505).
+			next, ok := s.typeOf(c.Base())
 			if !ok {
-				return true // a dangling base was already charged src-resolve by Phase A
+				// An absent base ends the chain short of H.{type definition}; a
+				// dangling one was already charged src-resolve by Phase A.
+				return true
+			}
+			if sameTypeDefinition(next, headType) {
+				break walk // the ·derivation· has reached H.{type definition}
 			}
 			cur = next
 		case *SimpleType:

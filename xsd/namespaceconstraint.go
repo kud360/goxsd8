@@ -111,9 +111,9 @@ func (n Namespace) URI() (string, bool) {
 // §3.10.1): the {namespace constraint} property of a Wildcard. It carries a
 // {variety}, a {namespaces} set, and both halves of {disallowed names} — its
 // literal-QName members and its defined/sibling keyword members. It is an
-// immutable value; construct it only through
-// NewNamespaceConstraint, which rejects every state Wildcard Properties Correct
-// (§3.10.6.1) forbids, so an ill-formed record is unrepresentable (STYLE T1).
+// immutable value; construct it only through NewNamespaceConstraint, which
+// rejects every state Wildcard Properties Correct (§3.10.6.1) forbids, so an
+// ill-formed record is unrepresentable (STYLE T1).
 //
 // The zero value is NOT a valid constraint (its {variety} is the invalid zero
 // NamespaceConstraintVariety); AllowsNamespace/AllowsName on a zero value are

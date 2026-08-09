@@ -102,8 +102,8 @@ func TestProduceGlobalElementInlineComplexType(t *testing.T) {
 		t.Fatalf("scope = %s, want global (§3.3.2.2)", ed.ScopeVariety())
 	}
 	ct := inlineComplexType(t, ed.TypeDefinition())
-	if ct.BaseTypeDefinitionName() != (xsd.QName{Space: xsdNS, Local: "anyType"}) {
-		t.Fatalf("{base type definition} = %s, want xs:anyType (§3.4.2.3.2)", ct.BaseTypeDefinitionName())
+	if ct.Base() != (xsd.TypeDefinitionOrRef(xsd.TypeDefinitionRef{Name: xsd.QName{Space: xsdNS, Local: "anyType"}})) {
+		t.Fatalf("{base type definition} = %#v, want a TypeDefinitionRef naming xs:anyType (§3.4.2.3.2)", ct.Base())
 	}
 	if len(ct.AttributeUses()) != 1 {
 		t.Fatalf("{attribute uses} has %d members, want the one declared <attribute>", len(ct.AttributeUses()))

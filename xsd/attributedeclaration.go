@@ -105,19 +105,23 @@ type AttributeComplexTypeScopeParent struct{ Name QName }
 // {context} a strict XOR, so an anonymous complex type carries a {context}
 // instead).
 //
-// Owner is the minted identity of the ELEMENT DECLARATION the anonymous complex
-// type is the {type definition} of — not a second identity for the type itself.
-// §3.4.2.1 dcl.ctd.common makes that declaration the type's own {context}, so the
-// type's ElementDeclarationContext.Component and this field hold the SAME
-// ComponentID: one mint per inline construct, one fact with one encoding (STYLE
-// D3), exactly as AnonymousComplexTypeScopeParent carries it on the element side.
+// Owner is the identity carried by the anonymous container's OWN {context}
+// (§3.4.1 ctd-context), whichever arm that is — an ElementDeclarationContext for
+// an inline <complexType> child (§3.4.2.1 dcl.ctd.common), or a
+// ComplexTypeDefinitionContext for the {name}-·absent· original of a redefinition
+// (§4.2.4 src-expredef clause 1.1), where no element declaration is involved at
+// all. It is not a second identity for the type itself. The invariant that holds
+// in both cases is the 1:1 pairing: the container's {context} identity and this
+// field hold the SAME ComponentID, one mint per pairing, one fact with one
+// encoding (STYLE D3), exactly as AnonymousComplexTypeScopeParent carries it on
+// the element side.
 //
 // Owner is a PRESENT identity, never the zero (unminted) ComponentID —
 // NewAttributeLocalScope rejects an unminted one, and the parser cannot produce
-// one: produceElement/produceLocalElement mint the owning identity BEFORE
-// produceComplexType is called on the inline <complexType>, so the identity every
-// attribute inside it is scoped to is already minted when the scope is built. The
-// field is read-only by convention; do not mutate it after construction.
+// one: it mints the owning identity BEFORE produceComplexType is called on the
+// anonymous type, so the identity every attribute inside it is scoped to is
+// already minted when the scope is built. The field is read-only by convention;
+// do not mutate it after construction.
 type AttributeAnonymousComplexTypeScopeParent struct{ Owner ComponentID }
 
 // AttributeGroupScopeParent is the AttributeScopeParent variant naming the
@@ -402,7 +406,7 @@ func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefi
 		return AttributeDeclaration{}, xsderr.New(ruleAPropsCorrect, loc,
 			"attribute declaration has an absent {name}, but the §3.2.1 tableau types it as a Required xs:NCName, whose value space excludes the empty string (a-props-correct clause 1)")
 	}
-	if err := checkTypeDefinitionOrRef(loc, typeDefinition, "attribute declaration "+name.String()); err != nil {
+	if err := checkTypeDefinitionOrRef(loc, typeDefinition, "attribute declaration "+name.String()+" {type definition}"); err != nil {
 		return AttributeDeclaration{}, err
 	}
 	if valueConstraint != nil {

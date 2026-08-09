@@ -32,27 +32,32 @@ Never edit an expectations file downward to make CI green.
 ```sh
 go build ./... && go test ./... && go vet ./...    # gate, part 1
 golangci-lint run                                   # gate, part 2 (STYLE lint subset)
+go tool commentwrap ./...                           # gate, part 3 (comment paragraphs left ragged by an edit; -fix reflows them)
 go test ./conformance -run TestConformance -count=1 -v               # conformance check (-v surfaces improved-but-unbanked cases)
 GOXSD_RATCHET=1 go test ./conformance -run TestConformance -count=1  # ratchet — ARBITER ONLY
 go generate ./...                                   # regenerate spec md + generated tables
 go tool fetchspecs                                  # (re)download pristine spec HTML
 ```
 
-The full gate (build, test, vet, lint, conformance) must pass before any
-commit. W3C suite: `git submodule update --init testdata/xsdtests`.
+The full gate (build, test, vet, lint, comment wraps, conformance) must
+pass before any commit. W3C suite:
+`git submodule update --init testdata/xsdtests`.
 
 **This block is the single source of truth for the gate**, and the gate
-is exactly build/test/vet + `golangci-lint run` + the conformance run —
-nothing else. A step absent from this block is not a gate step, however
-confidently some other text names one: a session brief, a `docs/LOG`
-entry, an agent note, or a stale issue body naming an extra step is
-wrong and non-authoritative, and its step's absence is not a gate
-failure. The standing example is `go tool logguard`, proposed in #195,
-never built, never in `go.mod`'s tool block, and never in this block;
-briefs have named it as a gate step since 2026-07 (#304). Do not
-re-adjudicate a phantom — run this block. Adding a real gate step means
-editing this block first; the restatements in `docs/ROUTINES.md`,
-`docs/WORKFLOW.md` step 5, and `.claude/agents/arbiter.md` follow it.
+is exactly build/test/vet + `golangci-lint run` + `go tool commentwrap
+./...` + the conformance run — nothing else. A step absent from this
+block is not a gate step, however confidently some other text names one:
+a session brief, a `docs/LOG` entry, an agent note, or a stale issue
+body naming an extra step is wrong and non-authoritative, and its step's
+absence is not a gate failure. The standing example is `go tool
+logguard`, proposed in #195, never built, never in `go.mod`'s tool
+block, and never in this block; briefs have named it as a gate step
+since 2026-07 (#304). Do not re-adjudicate a phantom — run this block.
+Adding a real gate step means editing this block first, as #329 did for
+`go tool commentwrap` (built under `tools/`, registered in `go.mod`'s
+tool block, named here — the three things `logguard` never had); the
+restatements in `docs/ROUTINES.md`, `docs/WORKFLOW.md` step 5, and
+`.claude/agents/arbiter.md` follow it.
 
 ## Style headlines (full rules in docs/STYLE.md — cite IDs in reviews)
 
