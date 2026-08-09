@@ -93,7 +93,9 @@ func TestGoverningMappingListResolves(t *testing.T) {
 		t.Errorf("list value Len = %d, want 2 (measured in list items, §4.3.1.3)", lv.Len())
 	}
 
-	// An item type the backend does not map leaves the list ungoverned.
+	// An item type the backend does not map leaves the list ungoverned — the
+	// listGoverned half of the branch, pinned through governingMapping exactly as
+	// TestGoverningMappingUnionRequiresEveryMember pins unionGoverned.
 	if _, ok := governingMapping(emptyBackend{}, lst); ok {
 		t.Error("governingMapping(list, ungoverned item) ok = true, want false")
 	}
