@@ -165,8 +165,9 @@ work itself and never skips the arbiter.
    adjacent issue to cross-reference, recorded either way, never silent
    overlap. Then ask the **oracle** for the exact spec clauses and rule
    IDs in scope. Post the answer verbatim as a comment on the issue
-   (`GROUNDING:` prefix); also save to `.agent/grounding-issue-<N>.md`
-   as session scratch. The citation goes in the commit. **Checkpoint.**
+   (`GROUNDING:` prefix) — that comment is the grounding's only durable
+   copy, so never point at a session-local path instead. The citation
+   goes in the commit. **Checkpoint.**
 4. **Implement** — if the issue's `## Surface` section is non-"none",
    **warden** pre-flights the planned surface (sketch + intended type
    shapes) before any code is written; post it on the issue. Then

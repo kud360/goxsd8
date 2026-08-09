@@ -37,8 +37,8 @@ WIP branch) at every step boundary.
    it). NEVER force-push a `wip/*` or `parked/*` ref.
 
 3. **Ground** — delegate spec questions to **oracle**. Post the answer
-   verbatim as a `GROUNDING:` comment on the issue; save a copy to
-   `.agent/grounding-issue-<N>.md` as scratch. CHECKPOINT
+   verbatim as a `GROUNDING:` comment on the issue — that comment is the
+   only durable copy; never name a session-local path in it. CHECKPOINT
    (`git commit -am "wip #<N>: grounding" && git push`).
 
 4. **Implement** — if the issue's `## Surface` section is non-"none",
