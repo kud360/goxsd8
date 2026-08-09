@@ -106,9 +106,13 @@
 // simpleType/complexType is paired with a hidden {name}-·absent· copy of
 // the definition it replaces, which is what its own base= resolves to; a
 // redefining group/attributeGroup self-reference resolves to the
-// original the same way (src-expredef, parser/redefine.go). §4.2.4 marks
-// the whole mechanism ·deprecated·. A non-empty <xs:redefine> whose
-// schemaLocation does not resolve is an ERROR (src-redefine clause
+// original the same way (src-expredef, parser/redefine.go). All four
+// redefinable kinds are produced; the hidden copy a redefining
+// complexType owns is anonymous, so what finalize does and does not
+// charge against it is recorded on xsd's checkComplexDerivations with the
+// same limitation for every other anonymous type. §4.2.4 marks the whole
+// mechanism ·deprecated·. A non-empty <xs:redefine> whose schemaLocation
+// does not resolve is an ERROR (src-redefine clause
 // 1) where an <xs:include>'s is explicitly not one (src-include clause
 // 2.4). Documents are loaded once, keyed by resolved location, the
 // namespace they were reached under, the override applied to them and
@@ -144,21 +148,6 @@
 //
 // # Composition gaps
 //
-//   - GAP(xsd): a redefining <xs:complexType> is declined, not
-//     produced. src-expredef clause 1.1 pairs it with a {name}-·absent·
-//     copy of the type it replaces as its {base type definition}, and
-//     [xsd.ComplexType] carries {base type definition} as a
-//     pre-resolution QName reference, so the pairing has nowhere to
-//     live: the only representable form would name the redefinition
-//     itself as its own base, which Finalize (rightly, for what it would
-//     be handed) rejects under ct-props-correct clause 3. The decline is
-//     a plain "not yet produced" error, never a fabricated rule
-//     violation, and it OVER-rejects — a valid redefining complex type
-//     is refused, never accepted wrongly. Closing it needs an
-//     xsd-package change (a complex type able to hold an anonymous
-//     resolved base), which is library surface #286 did not open; it
-//     needs a follow-up issue of its own. Redefining simpleType, group
-//     and attributeGroup are produced in full.
 //   - GAP(xsd): src-redefine clauses 6.2.2 and 7.2.2 — the
 //     no-self-reference branches — are fail-open. 6.2.2 asks whether the
 //     redefining group's {model group} accepts a SUBSET of the element

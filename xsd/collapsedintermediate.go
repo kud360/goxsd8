@@ -73,9 +73,10 @@ func (s *Schema) collapsedExtension(t ComplexType) (ComplexType, bool, error) {
 	acc := collapsedProperties{
 		uses: a.attributeUses,
 		// The FOLDED {attribute wildcard}, which for A is §3.4.2.5 clause 2's
-		// output; completeAttributeWildcard is the accessor, and after Phase D's
-		// fold the value it reads back is the folded one.
-		wildcard: completeAttributeWildcard(a),
+		// output; attributeWildcardProperty is the accessor, and after Phase D's
+		// fold the value it reads back is the folded one — which is precisely the
+		// second of that accessor's two documented readings (#505).
+		wildcard: attributeWildcardProperty(a),
 		content:  a.ContentType(),
 	}
 	for i := len(steps) - 1; i >= 0; i-- {
@@ -205,7 +206,7 @@ func collapsedAttributeUses(own, acc []AttributeUse) []AttributeUse {
 //   - checkRestrictionRequiredAttributes (complexderivation.go) reads
 //     {attribute uses} only: UNAFFECTED.
 func collapsedAttributeWildcard(loc xsderr.Loc, c ComplexType, base *Wildcard) (*Wildcard, error) {
-	return unionExtensionAttributeWildcard(loc, completeAttributeWildcard(c), base)
+	return unionExtensionAttributeWildcard(loc, attributeWildcardProperty(c), base)
 }
 
 // collapsedContentType re-applies one extension step's own ·effective content· to

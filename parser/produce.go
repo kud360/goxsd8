@@ -796,18 +796,33 @@ func (p *producer) buildSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleTy
 // derived type can be built at all.
 //
 // It is the single entry point for a NAMED complex type: run's top-level
-// dispatch and resolveBaseType's on-demand construction both go through it, so a
-// named type is mapped exactly once. It populates the memo only — registering
-// the component with the builder is run's job, at the type's own document-order
-// position.
+// dispatch, produceRedefinition's redefining <complexType>, and
+// resolveBaseType's on-demand construction all go through it, so a named type is
+// mapped exactly once. That is what makes a reference to a redefined name
+// resolve to the REDEFINITION from both documents, as src-expredef's note
+// requires: the redefining declaration is what prescanRedefine registered under
+// that name, so every route ends at this one memo entry. It populates the memo
+// only — registering the component with the builder is run's or
+// produceRedefinition's job, at the type's own document-order position.
 //
-// An inline ANONYMOUS <complexType> deliberately does NOT come through here: it
-// calls produceComplexType directly (produceElement, produceLocalElement).
-// Neither of this function's two services applies to it — the memo is keyed by
-// name and an anonymous type has none, and it can be no cycle member for exactly
-// the same reason, since a {base type definition} chain is followed BY NAME and
-// nothing can name it (STYLE D4 / PRINCIPLES 9: no cycle check where the
-// construction order makes one impossible).
+// An ANONYMOUS <complexType> deliberately does NOT come through here: it calls
+// produceComplexType directly (produceElement and produceLocalElement for an
+// inline child, redefinedComplexBase for src-expredef clause 1.1's original).
+// The memo is keyed by name and an anonymous type has none, so it would have
+// nothing to key on.
+//
+// Nor can it MEMBER a cycle this function's guard would catch — but the reason
+// is narrower than it once was, and the difference is load-bearing. Nothing can
+// NAME an anonymous type, so it can be no cycle's entry point and this
+// name-keyed sentinel would never see it. It can nonetheless sit ON a chain that
+// closes: src-expredef clause 1.1's original is an anonymous type whose own base=
+// names a top-level type again, so a cycle can run THROUGH it. PRINCIPLES 9's
+// "construction order makes one impossible" therefore does NOT discharge the
+// anonymous hop, and the blanket claim that it did was false the moment #505
+// landed. The rejection for such a chain is the on-stack sentinel below, reached
+// at the named type the chain comes back to, and its finalize-side twin
+// xsd/resolve.go's checkComplexBaseAcyclic, which descends the anonymous hop for
+// exactly this reason.
 //
 // A name already on the build stack (the PRESENT-nil memo state) is a circular
 // {base type definition} chain, charged ct-props-correct clause 3 (§3.4.6.1).
@@ -828,7 +843,7 @@ func (p *producer) buildComplexType(name xsd.QName, elem *Element) (xsd.ComplexT
 	}
 	p.symbols.builtComplex[name] = nil // mark on-stack
 
-	ct, err := p.produceComplexType(namedComplexType(name), elem)
+	ct, err := p.produceComplexType(p.namedComplexTypeIdentity(name, elem), elem)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -836,10 +851,38 @@ func (p *producer) buildComplexType(name xsd.QName, elem *Element) (xsd.ComplexT
 	return ct, nil
 }
 
-// resolveBaseType identifies the {base type definition} COMPONENT a base=
-// attribute names (§3.4.2 preamble), building it on demand when it is a
-// not-yet-mapped complex or simple type of this assembly. at is the
-// <restriction>/<extension> carrying the base=, charged for a failure.
+// namedComplexTypeIdentity chooses which NAMED arm of complexTypeIdentity elem
+// is built under: the redefining one when elem is a <complexType> child of a
+// <redefine> this document followed, and the plain one otherwise.
+//
+// The question is asked HERE, of the element, rather than at produceRedefinition
+// alone, because that is not the only route to a redefining declaration:
+// prescanRedefine registers it under its own expanded name, so a reference to
+// the redefined name from either document arrives through resolveBaseType and
+// buildComplexType instead. Deciding by element makes every route agree, which
+// is what keeps the memo holding ONE component for that name (see
+// buildComplexType).
+//
+// The redefining arm mints the identity src-expredef clause 1.1 needs for the
+// original's {context}. One mint per redefinition, and only one is possible:
+// buildComplexType's memo means the redefining declaration is produced exactly
+// once per assembly.
+func (p *producer) namedComplexTypeIdentity(name xsd.QName, elem *Element) complexTypeIdentity {
+	if _, _, redefining := p.redefinitionOf(elem); redefining {
+		return redefiningComplexType{name: name, owner: xsd.NewComponentID()}
+	}
+	return namedComplexType{name: name}
+}
+
+// resolveBaseType identifies the {base type definition} a base= attribute names
+// (§3.4.2 preamble), in BOTH the forms a §3.4.2 mapping needs: the resolved
+// COMPONENT, which the content-type tableaux and §3.4.2.1 clause 1's
+// {assertions} fold read, and the xsd.TypeDefinitionOrRef SLOT the built
+// component stores. The two are returned together because one decision fixes
+// both, and splitting them would let a caller pair a component with a slot that
+// does not name it (STYLE D3). at is the <restriction>/<extension> carrying the
+// base=, charged for a failure; id is the identity of the type being built,
+// which is what makes the redefine branch below reachable.
 //
 // A base of either variety is built through its OWN document's producer
 // (typeSource's owner), never through p: see symbols.simpleTypes and
@@ -854,27 +897,80 @@ func (p *producer) buildComplexType(name xsd.QName, elem *Element) (xsd.ComplexT
 // a simple type's base and that finalize charges for an unresolvable
 // {base type definition} reference (xsd/resolve.go's resolveTypeName). One rule,
 // three entry points, identical verdict.
-func (p *producer) resolveBaseType(at *Element, name xsd.QName) (xsd.TypeDefinition, error) {
+func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, name xsd.QName) (xsd.TypeDefinition, xsd.TypeDefinitionOrRef, error) {
+	if orig, owned, err := p.redefinedComplexBase(id, at, name); owned || err != nil {
+		if err != nil {
+			return nil, nil, err
+		}
+		return orig, xsd.InlineTypeDefinition{Definition: orig}, nil
+	}
 	if ct, done := p.symbols.builtComplex[name]; done && ct != nil {
-		return *ct, nil
+		return *ct, xsd.TypeDefinitionRef{Name: name}, nil
 	}
 	if src, ok := p.symbols.complexTypes[name]; ok {
 		// Unbuilt or on-stack: buildComplexType handles the memo hit and the
 		// ct-props-correct clause 3 cycle rejection alike.
 		ct, err := src.owner.buildComplexType(name, src.elem)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return ct, nil
+		return ct, xsd.TypeDefinitionRef{Name: name}, nil
 	}
 	if st, ok := p.symbols.built[name]; ok && st != nil {
-		return st, nil
+		return st, xsd.TypeDefinitionRef{Name: name}, nil
 	}
 	if src, ok := p.symbols.simpleTypes[name]; ok {
-		return src.owner.buildSimpleType(name, src.elem)
+		st, err := src.owner.buildSimpleType(name, src.elem)
+		if err != nil {
+			return nil, nil, err
+		}
+		return st, xsd.TypeDefinitionRef{Name: name}, nil
 	}
-	return nil, xsderr.New(ruleSrcResolve, at.Loc(),
+	return nil, nil, xsderr.New(ruleSrcResolve, at.Loc(),
 		"base type %s does not resolve to any type definition in scope (src-resolve clause 1.1)", name)
+}
+
+// redefinedComplexBase builds src-expredef clause 1.1's ORIGINAL when at's base=
+// is a redefining <complexType>'s self-reference: "one component which
+// corresponds to the top-level definition item with the same name in the
+// <redefine>d schema document, as defined in Schema Component Details (§3),
+// except that its {name} is ·absent· and its {context} is the redefining
+// component". owned is false for every other base=, which then resolves
+// ordinarily — including a base= inside a redefining type that names some OTHER
+// type, and a reference to the redefined name from anywhere else, both of which
+// src-expredef's own note requires to reach the REDEFINITION.
+//
+// It is the complex-type twin of resolveBase's redefine branch (see there), and
+// makes the same three moves for the same reasons:
+//
+//   - the source is the REDEFINED document's declaration (redefinedTypeBase),
+//     never the redefining one, so the original's own base= resolves to whatever
+//     that document said and is never re-pointed at the redefinition — the false
+//     circularity the pairing exists to prevent;
+//   - it is built under that document's OWN producer (src.owner), so it enters
+//     no symbol table, is registered with no builder, and takes its own
+//     document's target namespace and schema-level defaults;
+//   - it goes to produceComplexType DIRECTLY rather than through
+//     buildComplexType, because that memo is keyed by name and this component
+//     has none (see buildComplexType).
+//
+// The identity it is built with carries the REDEFINING type's minted
+// xsd.ComponentID, which is what makes the original's {context} point back at
+// its owner; xsd.NewComplexTypeOwningBase checks the two agree.
+func (p *producer) redefinedComplexBase(id complexTypeIdentity, at *Element, name xsd.QName) (xsd.ComplexType, bool, error) {
+	r, redefining := id.(redefiningComplexType)
+	if !redefining {
+		return xsd.ComplexType{}, false, nil
+	}
+	src, self := p.redefinedTypeBase(at, name)
+	if !self {
+		return xsd.ComplexType{}, false, nil
+	}
+	orig, err := src.owner.produceComplexType(redefineOriginalComplexType{owner: r.owner}, src.elem)
+	if err != nil {
+		return xsd.ComplexType{}, true, err
+	}
+	return orig, true, nil
 }
 
 // buildModelGroupDefinition returns the Model Group Definition named name,
@@ -1206,7 +1302,7 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
 	if inlineComplex != nil {
 		edID := xsd.NewComponentID()
-		ct, err := p.produceComplexType(anonymousComplexType(edID), inlineComplex)
+		ct, err := p.produceComplexType(elementOwnedComplexType{owner: edID}, inlineComplex)
 		if err != nil {
 			return xsd.ElementDeclaration{}, err
 		}
