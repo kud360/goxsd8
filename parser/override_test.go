@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/kud360/goxsd8/loader"
+	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -450,6 +452,117 @@ func TestParseOverrideRepeatedIdenticallyLoadsOnce(t *testing.T) {
 		t.Fatalf("Parse: %v", err)
 	}
 	mustElementType(t, s, xsd.QName{Space: "urn:a", Local: "doc"}, xsType("date"))
+}
+
+// readingsOf counts how many times the assembly of root read the document at
+// resolved location loc — [parser.AssemblyReport.Documents] is a list of
+// READINGS, one per docKey, so the count is exactly what the load-once index
+// decided. It reports the assembly error rather than failing on it, since a
+// duplicate reading is expected to be rejected.
+func readingsOf(t *testing.T, root, loc string, docs map[string]string) (int, error) {
+	t.Helper()
+	_, report, err := parser.ParseReport(root, parser.WithResolver(loader.Map(docs)))
+	n := 0
+	for _, d := range report.Documents() {
+		if d.Location == loc {
+			n++
+		}
+	}
+	return n, err
+}
+
+// TestParseOverrideEquivalentDistinctElementsLoadOnce is §4.2.5's note that
+// "multiple equivalent overrides of the same schema document will not constitute
+// a violation of clause 2 of Schema Properties Correct", for two DISTINCT
+// <override> elements — one in left.xsd, one in right.xsd — declaring the same
+// substitution over lib.xsd. Unlike
+// TestParseOverrideRepeatedIdenticallyLoadsOnce, no single element is reached
+// twice: the two agree only in content, down to an attribute order the
+// serialization normalizes because XML gives it no meaning.
+func TestParseOverrideEquivalentDistinctElementsLoadOnce(t *testing.T) {
+	docs := map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:include schemaLocation="left.xsd"/>`+
+			`<xs:include schemaLocation="right.xsd"/>`),
+		"left.xsd": wrap("urn:a", `<xs:override schemaLocation="lib.xsd">`+
+			`<xs:element name="doc" type="xs:date"/></xs:override>`),
+		"right.xsd": wrap("urn:a", `<xs:override schemaLocation="lib.xsd">`+
+			`<xs:element type="xs:date" name="doc"/></xs:override>`),
+		"lib.xsd": wrap("urn:a", `<xs:element name="doc" type="xs:string"/>`),
+	}
+	s, err := parseMap(t, "main.xsd", docs)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	mustElementType(t, s, xsd.QName{Space: "urn:a", Local: "doc"}, xsType("date"))
+
+	n, err := readingsOf(t, "main.xsd", "lib.xsd", docs)
+	if err != nil {
+		t.Fatalf("ParseReport: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("lib.xsd read %d times, want 1: two equivalent <override>s are one override", n)
+	}
+}
+
+// TestParseOverrideDifferentSubstitutionLoadsTwice is the other half of the same
+// note — "if the same schema document [is] overridden twice in different ways,
+// then the resulting schema will have duplicate and conflicting versions of some
+// components and will not be conforming". Content equality must not collapse two
+// substitutions that transform lib.xsd differently, however alike their (element
+// type, name) keys are.
+func TestParseOverrideDifferentSubstitutionLoadsTwice(t *testing.T) {
+	docs := map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:include schemaLocation="left.xsd"/>`+
+			`<xs:include schemaLocation="right.xsd"/>`),
+		"left.xsd": wrap("urn:a", `<xs:override schemaLocation="lib.xsd">`+
+			`<xs:element name="doc" type="xs:date"/></xs:override>`),
+		"right.xsd": wrap("urn:a", `<xs:override schemaLocation="lib.xsd">`+
+			`<xs:element name="doc" type="xs:time"/></xs:override>`),
+		"lib.xsd": wrap("urn:a", `<xs:element name="doc" type="xs:string"/>`),
+	}
+	_, err := parseMap(t, "main.xsd", docs)
+	if err == nil {
+		t.Fatalf("Parse succeeded, want a sch-props-correct clause 2 duplicate for the two readings of lib.xsd")
+	}
+	var xe *xsderr.Error
+	if !errors.As(err, &xe) {
+		t.Fatalf("error = %v, want an *xsderr.Error", err)
+	}
+	if xe.Rule != "sch-props-correct" {
+		t.Fatalf("rule = %q, want sch-props-correct", xe.Rule)
+	}
+
+	n, _ := readingsOf(t, "main.xsd", "lib.xsd", docs)
+	if n != 2 {
+		t.Fatalf("lib.xsd read %d times, want 2: two different overrides are two overrides", n)
+	}
+}
+
+// TestParseOverrideEquivalentTextDifferentBindingsLoadsTwice pins the same
+// conservatism where the difference is invisible in the markup: both <override>s
+// substitute a textually identical type="p:date", but p is bound to urn:a in one
+// document and to the XSD namespace in the other, so they name DIFFERENT types
+// (Datatypes §3.3.18 resolves a QName against the bindings in scope where it
+// occurs) and are two different transformations of lib.xsd.
+func TestParseOverrideEquivalentTextDifferentBindingsLoadsTwice(t *testing.T) {
+	override := `<xs:override schemaLocation="lib.xsd">` +
+		`<xs:element name="doc" type="p:date"/></xs:override>`
+	docs := map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:include schemaLocation="left.xsd"/>`+
+			`<xs:include schemaLocation="right.xsd"/>`),
+		"left.xsd":  wrapDefaults("urn:a", `xmlns:p="urn:a"`, override),
+		"right.xsd": wrapDefaults("urn:a", `xmlns:p="`+xsdNS+`"`, override),
+		"lib.xsd": wrap("urn:a", `<xs:simpleType name="date">`+
+			`<xs:restriction base="xs:string"/></xs:simpleType>`+
+			`<xs:element name="doc" type="xs:string"/>`),
+	}
+	n, err := readingsOf(t, "main.xsd", "lib.xsd", docs)
+	if err == nil {
+		t.Fatalf("Parse succeeded, want a rejection: p:date names {urn:a}date on one side and xs:date on the other")
+	}
+	if n != 2 {
+		t.Fatalf("lib.xsd read %d times, want 2: equal text under different prefix bindings is not an equal override", n)
+	}
 }
 
 // TestParseOverrideAndIncludeConflict is §4.2.5's closing note: a document that
