@@ -49,8 +49,13 @@ import "github.com/kud360/goxsd8/xsderr"
 // charge per component keeps the first reported failure deterministic and does not
 // re-run the same verdict once per referencing site. A LOCAL declaration is not in
 // that table at all — its sole owner is the AttributeUse holding it — so it is
-// charged from the use side instead. Together the two reach every declaration
-// exactly once; neither alone does.
+// charged from the use side instead. Together the two reach every declaration at
+// least once, at a stable Loc; neither alone does. Not exactly once: since #401
+// materialised inherited attribute uses, a LOCAL declaration owned by an
+// inherited use is re-checked at every complex type that inherits it (see
+// checkComplexTypeAttributeUses below, which spells out why the repeats are
+// harmless — the charge is at the declaration's OWN Loc, so neither the verdict
+// nor the reported position moves).
 //
 // D4 (no traversal state): the walk below carries no visited set, exactly as
 // Phase A's mirror walk does. It descends only BY-VALUE structure — a complex
@@ -241,8 +246,8 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 	// only site that can charge it (see the two walks, above). The Ref variant's
 	// target IS in that table and checkAttributeDeclarationDefaults charges it
 	// there, exactly once, however many uses reference it.
-	if local, isLocal := u.AttributeDeclaration().(LocalAttributeDeclaration); isLocal {
-		if err := s.checkAttributeDeclarationValueConstraint(local.Declaration); err != nil {
+	if owned, isOwned := s.ownedAttributeDeclaration(u); isOwned {
+		if err := s.checkAttributeDeclarationValueConstraint(owned); err != nil {
 			return err
 		}
 	}
@@ -326,10 +331,13 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 // — the ONE implementation of it in this package (STYLE T4), shared by
 // a-props-correct clause 2 and au-props-correct clause 2, which differ only in
 // which (type, value constraint) pair they hand it and which rule the failure is
-// charged to. The clause phrase in the message is DERIVED from rule rather than
-// passed alongside it: there are exactly two callers and rule already tells them
-// apart, so a second parameter would make "ruleAPropsCorrect + au-props-correct
-// clause 2" a representable, wrong state (STYLE D3).
+// charged to. The clause phrase in the message is DERIVED from rule — the rule's
+// own name plus " clause 2" — rather than passed alongside it or re-spelled here:
+// a second parameter would make "ruleAPropsCorrect + au-props-correct clause 2" a
+// representable, wrong state, and a hardcoded pair would spell both rule names a
+// second time and silently mislabel any further caller (STYLE D3). The suffix is
+// constant because cos-valid-simple-default is clause 2 of every rule that
+// charges it.
 //
 // The verdict is the installed ValueSpace's, and an UNDECIDED verdict ACCEPTS.
 // That is not laxity, it is the fail-open contract (ValueSpace, PRINCIPLES 20):
@@ -343,21 +351,38 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 //
 // This is the first finalize-phase check that enters the installed value space's
 // FACET pipeline rather than its Mapping alone, so it is also the first that can
-// meet a type carrying a facet not applicable to it (cos-applicable-facets §4.1.5) —
-// possible only for a *SimpleType assembled by calling this package's constructors
-// directly, since builtin.CheckSimpleTypeRestriction discharges applicability for
-// every type the PARSER builds. That fault is a fault of the TYPE, and the value
-// space reports it undecided rather than as a verdict, so it lands in the accepting
-// branch below: this clause never rejects a schema for it, and never crashes on it.
+// meet a facet-PRECONDITION fault of the type it is handed. There are two such
+// classes, and naming only the first would understate the exposure:
+//
+//   - a facet paired with a value lacking the capability it needs
+//     (cos-applicable-facets §4.1.5). §4.1.5 is ONE constraint whose cases split
+//     on {variety}, not two provisions; the split below it is this package's, not
+//     the spec's. checkVarietyApplicableFacets (derivation.go) discharges the list
+//     and union cases here, where the applicable set is a fixed literal, and the
+//     ATOMIC case's per-primitive table lookup is discharged outside this leaf by
+//     builtin.CheckSimpleTypeRestriction.
+//   - a type with NO whiteSpace facet in force where §3.16.7.4 (every primitive's
+//     {facets} carries one) and §4.3.6.1 (a list's materialized fixed collapse
+//     facet) guarantee one, which value/whitespace.go's effectiveWhiteSpace
+//     charges. Only atomic and list are exposed: a union has no whiteSpace facet
+//     at all under §4.1.5, so its absence there is spec-mandated, not a fault.
+//
+// Both are reachable only for a *SimpleType assembled by calling this package's
+// constructors directly — the second, for instance, from a NewPrimitiveType(loc,
+// name, nil, nil) that some backend then maps — never for a type the PARSER built,
+// which passes through builtin.CheckSimpleTypeRestriction and whose atomic types
+// inherit a primitive's whiteSpace facet while its lists carry the materialized
+// fixed collapse one. Either fault is a fault of the TYPE, and the value
+// space reports it undecided rather than as a verdict (#321 settled that contract:
+// the pipeline returns an *xsderr.Error, it does not panic), so it lands in the
+// accepting branch below: this clause never rejects a schema for it, and never
+// crashes on it.
 func (s *Schema) checkSimpleDefault(rule xsderr.Rule, loc xsderr.Loc, owner string, t *SimpleType, vc ValueConstraint) error {
 	valid, decided := s.valueSpace.ValidDefault(t, vc)
 	if !decided || valid {
 		return nil
 	}
-	clause := "a-props-correct clause 2"
-	if rule == ruleAuPropsCorrect {
-		clause = "au-props-correct clause 2"
-	}
+	clause := string(rule) + " clause 2"
 	return xsderr.New(rule, loc,
 		"%s has a {value constraint} of %q, which is not Datatype Valid with respect to its {type definition} (Datatypes §4.1.4 cvc-datatype-valid), so it is not a valid default (%s, cos-valid-simple-default §3.2.6.2)", owner, vc.LexicalForm(), clause)
 }
