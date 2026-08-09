@@ -9,13 +9,16 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// simpleTypeNamed builds a named *SimpleType (base xs:anySimpleType) for schema
-// symbol-table tests.
+// simpleTypeNamed builds a *SimpleType for schema symbol-table tests: a
+// primitive datatype, the shortest well-formed simple type a fixture can mint —
+// a bare restriction of xs:anySimpleType would carry that type's absent
+// {variety}, which st-props-correct clause 1 reserves for xs:anySimpleType
+// itself. An absent name yields the anonymous case these tests also need.
 func simpleTypeNamed(t *testing.T, name xsd.QName) *xsd.SimpleType {
 	t.Helper()
-	st, err := xsd.NewSimpleType(xsderr.Loc{}, name, nil, xsd.AnySimpleType(), nil, nil)
+	st, err := xsd.NewPrimitiveType(xsderr.Loc{}, name, nil, nil)
 	if err != nil {
-		t.Fatalf("NewSimpleType(%v): %v", name, err)
+		t.Fatalf("NewPrimitiveType(%v): %v", name, err)
 	}
 	return st
 }
@@ -332,7 +335,8 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 			return c.Loc()
 		}},
 		{"SimpleType", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
-			st, err := xsd.NewSimpleType(l, name, nil, xsd.AnySimpleType(), nil, nil)
+			base := primitiveAt(t, xsderr.Loc{})
+			st, err := xsd.NewSimpleType(l, name, base.Variety(), base, nil, nil)
 			if err != nil {
 				t.Fatalf("NewSimpleType: %v", err)
 			}
@@ -395,7 +399,8 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 func TestTypeDefinitionSumPromotesLoc(t *testing.T) {
 	stLoc := xsderr.Loc{URI: "s.xsd", Line: 2, Col: 1}
 	ctLoc := xsderr.Loc{URI: "s.xsd", Line: 7, Col: 1}
-	st, err := xsd.NewSimpleType(stLoc, xsd.QName{Space: "urn:ns", Local: "st"}, nil, xsd.AnySimpleType(), nil, nil)
+	base := simpleTypeNamed(t, xsd.QName{Space: "urn:ns", Local: "prim"})
+	st, err := xsd.NewSimpleType(stLoc, xsd.QName{Space: "urn:ns", Local: "st"}, base.Variety(), base, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
@@ -814,10 +819,7 @@ func TestSchemaEnumeratorsReturnCopies(t *testing.T) {
 // absent) is exempt from the §3.17.1 symbol tables (§3.4.1, §3.16.1) and so is
 // unreachable through Type, yet it IS part of {type definitions}.
 func TestSchemaTypesIncludesAnonymous(t *testing.T) {
-	anon, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{}, nil, xsd.AnySimpleType(), nil, nil)
-	if err != nil {
-		t.Fatalf("NewSimpleType(anonymous): %v", err)
-	}
+	anon := simpleTypeNamed(t, xsd.QName{})
 	b := xsd.NewSchemaBuilder()
 	b.AddType(simpleTypeNamed(t, qn("named")))
 	b.AddType(anon)

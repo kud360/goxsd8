@@ -131,7 +131,7 @@ func TestOwnedBaseAcyclicChainAccepted(t *testing.T) {
 func TestOwnedBaseAttributeFolds(t *testing.T) {
 	wildcard := dWildcard(t)
 	s := xSchema(t, func(b *SchemaBuilder) {
-		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dPrimitive(t, uq("str")))
 		b.AddType(dType(t, uq("u"), anyTypeName, EmptyContent{}, []AttributeUse{dAttr(t, uq("grand"), uq("str"))}, nil))
 		b.AddType(oPair(t, uq("ct"), uq("u"), DerivationExtension,
 			[]AttributeUse{dAttr(t, uq("own"), uq("str"))},
@@ -178,7 +178,7 @@ func TestOwnedBaseAttributeFolds(t *testing.T) {
 func TestOwnedBaseFoldIsStoredBack(t *testing.T) {
 	wildcard := dWildcard(t)
 	s := xSchema(t, func(b *SchemaBuilder) {
-		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dPrimitive(t, uq("str")))
 		b.AddType(dType(t, uq("u"), anyTypeName, EmptyContent{}, []AttributeUse{dAttr(t, uq("grand"), uq("str"))}, &wildcard))
 		b.AddType(oPair(t, uq("ct"), uq("u"), DerivationExtension,
 			[]AttributeUse{dAttr(t, uq("own"), uq("str"))},

@@ -158,7 +158,7 @@ func TestCosCTExtendsClause141(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := dFinalize(t, func(b *SchemaBuilder) {
-				str := dSimple(t, uq("str2"), AnyAtomicType())
+				str := dPrimitive(t, uq("str2"))
 				narrow := dSimple(t, uq("narrow2"), str)
 				b.AddType(str)
 				b.AddType(narrow)
@@ -185,7 +185,7 @@ func TestCosCTExtendsClause141(t *testing.T) {
 // element-only/mixed T by 1.4.3 alone. Each row pairs a T variety with a base
 // variety the selected branch rejects.
 func TestCosCTExtendsClause14BranchSelection(t *testing.T) {
-	str := dSimple(t, uq("str3"), AnyAtomicType())
+	str := dPrimitive(t, uq("str3"))
 	model := uGroup(t, CompositorSequence, rElem(t, 1, 1))
 	for _, tc := range []struct {
 		name        string
@@ -423,9 +423,9 @@ func TestCosCTExtendsClause2(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := dFinalize(t, func(b *SchemaBuilder) {
-				base, err := NewSimpleType(xsderr.Loc{}, uq("sbase"), Atomic{}, AnyAtomicType(), nil, tc.final)
+				base, err := NewPrimitiveType(xsderr.Loc{}, uq("sbase"), nil, tc.final)
 				if err != nil {
-					t.Fatalf("NewSimpleType(sbase): %v", err)
+					t.Fatalf("NewPrimitiveType(sbase): %v", err)
 				}
 				b.AddType(base)
 				b.AddType(xType(t, uq("derived"), uq("sbase"), tc.content(base), nil, nil))
@@ -657,7 +657,7 @@ func TestCosCTExtendsClause15MixedChainElementType(t *testing.T) {
 // nowhere in it.
 func TestCosCTExtendsClause15CollapsedIntermediate(t *testing.T) {
 	s := xSchema(t, func(b *SchemaBuilder) {
-		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dPrimitive(t, uq("str")))
 		b.AddType(dType(t, uq("cA"), anyTypeName, EmptyContent{}, []AttributeUse{dAttr(t, uq("a"), uq("str"))}, nil))
 		b.AddType(xType(t, uq("cE1"), uq("cA"), EmptyContent{}, []AttributeUse{dAttr(t, uq("b"), uq("str"))}, nil))
 		b.AddType(dProhibiting(t, uq("cR"), uq("cE1"), nil, []QName{uq("a")}))
@@ -706,7 +706,7 @@ func TestCosCTExtendsClause15CollapsedIntermediate(t *testing.T) {
 // the recovery DECLINES rather than returning a prefix that means nothing.
 func TestOwnAttributeUsesMixedChain(t *testing.T) {
 	s := xSchema(t, func(b *SchemaBuilder) {
-		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dPrimitive(t, uq("str")))
 		b.AddType(dType(t, uq("oA"), anyTypeName, EmptyContent{}, []AttributeUse{dAttr(t, uq("a"), uq("str"))}, nil))
 		b.AddType(xType(t, uq("oE1"), uq("oA"), EmptyContent{}, []AttributeUse{dAttr(t, uq("b"), uq("str"))}, nil))
 		b.AddType(dProhibiting(t, uq("oR"), uq("oE1"), nil, []QName{uq("a")}))
@@ -842,7 +842,7 @@ func TestCosCTExtendsClause15MixedChainThroughOwnedBase(t *testing.T) {
 //     precondition makes that its CALLER's obligation, which is this test.
 func TestCosCTExtendsClause15CollapsedOverAnonymousAncestor(t *testing.T) {
 	s := xSchema(t, func(b *SchemaBuilder) {
-		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dPrimitive(t, uq("str")))
 		b.AddType(oRedefiningRestriction(t, uq("mid"),
 			[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, []QName{uq("x")}))
 		b.AddType(xType(t, uq("derived"), uq("mid"), EmptyContent{},

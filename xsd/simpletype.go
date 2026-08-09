@@ -14,10 +14,13 @@ import (
 // same FacetKind (clause 4) — while checkSTGraph (derivation.go) makes the
 // cross-reference rejections once the {base}/{item}/{member} pointers are wired:
 // clause 3 (the {base type definition}'s {final} must not contain restriction),
-// clause 5 (every member of {facets} is processor-supported), and the Datatypes
-// §4.1.1 per-variety shape prose. Clause 2 (no circular derivation) is a
-// documented no-op — a cyclic base chain is unconstructible via this package's
-// constructors (see checkSTGraph).
+// clause 5 (every member of {facets} is processor-supported), the Datatypes
+// §4.1.1 per-variety shape prose, and two presence requirements from that
+// section's dc-defn property tableau — {variety}, which only xs:anySimpleType
+// may leave absent, and {primitive type definition}, whose absence bars every
+// type but a primitive datatype from naming xs:anyAtomicType as its base.
+// Clause 2 (no circular derivation) is a documented no-op — a cyclic base chain
+// is unconstructible via this package's constructors (see checkSTGraph).
 const ruleSTPropsCorrect xsderr.Rule = "st-props-correct"
 
 // Variety is a Simple Type Definition's {variety} (Structures §3.16.1,
@@ -569,6 +572,15 @@ type SimpleType struct {
 // whose base is xs:anyType, a Complex Type Definition outside this package's
 // scope); every other simple type has a non-nil simple-type base. variety may
 // be nil to model xs:anySimpleType's absent {variety}.
+//
+// The two ·special· types are constrained bases. xs:anySimpleType is the base a
+// ·constructed· list or union names (cos-st-restricts 2.2.1/3.2.1), and those
+// carry a {variety} of their own; a caller that names it while passing the
+// variety it would inherit — the absent one — is building the shape
+// st-props-correct clause 1 reserves for xs:anySimpleType itself. xs:anyAtomicType
+// may be named only by a primitive datatype (Datatypes §2.4.2), whose absent
+// {primitive type definition} the same clause reserves likewise, and which is
+// built through NewPrimitiveType instead.
 //
 // It rejects, charging Simple Type Definition Properties Correct
 // (§3.16.6.1, st-props-correct):

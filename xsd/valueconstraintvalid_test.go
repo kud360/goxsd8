@@ -67,7 +67,7 @@ func vcSchema(t *testing.T, vs ValueSpace, build func(*SchemaBuilder)) (*Schema,
 	t.Helper()
 	b := NewSchemaBuilder()
 	b.AddType(dAnyType(t))
-	str := dSimple(t, uq("str"), AnyAtomicType())
+	str := dPrimitive(t, uq("str"))
 	b.AddType(str)
 	b.AddType(dSimple(t, uq("narrow"), str))
 	if build != nil {
@@ -336,7 +336,7 @@ func TestPhaseEUnresolvableRefIsSkipped(t *testing.T) {
 func TestFinalizeWithoutValueSpaceFailsOpen(t *testing.T) {
 	build := func(b *SchemaBuilder) {
 		b.AddType(dAnyType(t))
-		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dPrimitive(t, uq("str")))
 		vcGlobalFixed(t, "7")(b)
 		b.AddType(dType(t, uq("t"), anyTypeName, EmptyContent{}, []AttributeUse{vcRefUse(t, ValueFixed, "07")}, nil))
 	}

@@ -219,7 +219,7 @@ func TestEPropsCorrectClause4AbsentTypeSkipped(t *testing.T) {
 func TestEPropsCorrectClause4SimpleTypes(t *testing.T) {
 	schema := func(memberBase func(head *SimpleType) *SimpleType) error {
 		return cvsFinalize(t, func(b *SchemaBuilder) {
-			head := sgSimple(t, sq("A"), AnyAtomicType())
+			head := dPrimitive(t, sq("A"))
 			b.AddType(head)
 			b.AddType(memberBase(head))
 			b.AddElement(cvsElement(t, sq("head"), sgRef(sq("A")), nil))
@@ -229,7 +229,7 @@ func TestEPropsCorrectClause4SimpleTypes(t *testing.T) {
 	if err := schema(func(head *SimpleType) *SimpleType { return sgSimple(t, sq("B"), head) }); err != nil {
 		t.Fatalf("a simple type restricting the head's was rejected: %v", err)
 	}
-	expectRule(t, schema(func(*SimpleType) *SimpleType { return sgSimple(t, sq("B"), AnyAtomicType()) }), ruleEPropsCorrect)
+	expectRule(t, schema(func(*SimpleType) *SimpleType { return dPrimitive(t, sq("B")) }), ruleEPropsCorrect)
 }
 
 // TestEPropsCorrectClause4IgnoresHeadTypeProhibitedSubstitutions pins the one

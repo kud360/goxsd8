@@ -125,6 +125,18 @@ const (
 //
 //   - st-props-correct clause 5 (each member of {facets} is supported by the
 //     processor) — via checkFacetsSupported.
+//   - st-props-correct clause 1 for the property tableau's {variety} clause
+//     (Datatypes §4.1.1 dc-defn: "Required for all Simple Type Definitions
+//     except ·xs:anySimpleType·, in which it is ·absent·"): only the type that
+//     IS xs:anySimpleType — the one with an absent {base type definition} — may
+//     carry an absent {variety}. This is what rejects a user-defined type on
+//     xs:anySimpleType (#480): the XML mapping gives a ·restriction· the
+//     {variety} of its {base type definition} (§3.16.2.1), so such a type
+//     inherits xs:anySimpleType's absent {variety} and violates the tableau.
+//     cos-st-restricts clause 1.1 does NOT reach that schema — its case 1
+//     selects on D.{variety} = atomic, which such a D does not have; 1.1 stays
+//     live in checkAtomicGraph for a producer that asserts an atomic D over a
+//     non-atomic B.
 //   - st-props-correct clause 3 (D.{base type definition}.{final} does not
 //     contain restriction). This single site also discharges cos-st-restricts
 //     clauses 1.2, 2.2.2.2, and 3.2.2.2 ("B.{final} does not contain
@@ -202,6 +214,10 @@ func checkSTGraph(loc xsderr.Loc, t *SimpleType) error {
 	if err := checkVarietyApplicableFacets(loc, t); err != nil {
 		return err
 	}
+	if t.variety == nil && !t.IsAnySimpleType() {
+		return xsderr.New(ruleSTPropsCorrect, loc,
+			"simple type restricting %s has an absent {variety}, which only xs:anySimpleType may have (st-props-correct clause 1)", t.base.name)
+	}
 	switch t.variety.(type) {
 	case Atomic:
 		return checkAtomicGraph(loc, t)
@@ -232,21 +248,48 @@ func checkFacetsSupported(loc xsderr.Loc, facets []Facet) error {
 	return nil
 }
 
-// checkAtomicGraph enforces the atomic-variety constraint on t (whose {variety}
-// is Atomic): cos-st-restricts clause 1.1 — either t is xs:anyAtomicType, or its
-// {base type definition} is itself an atomic simple type definition. This is the
-// same requirement as the Datatypes §4.1.1 shape prose ("if {variety} is atomic
-// then the {variety} of {base type definition} must be atomic, unless the base is
-// anySimpleType"): the sole base=anySimpleType exception applies only to
-// xs:anyAtomicType (whose base xs:anySimpleType has an absent {variety}), and
-// xs:anyAtomicType is a package singleton never built through this constructor.
+// checkAtomicGraph enforces the atomic-variety constraints on t (whose {variety}
+// is Atomic):
+//
+//   - cos-st-restricts clause 1.1 — either t is xs:anyAtomicType, or its {base
+//     type definition} is itself an atomic simple type definition. This is the
+//     same requirement as the Datatypes §4.1.1 shape prose ("if {variety} is
+//     atomic then the {variety} of {base type definition} must be atomic, unless
+//     the base is anySimpleType"): the sole base=anySimpleType exception applies
+//     only to xs:anyAtomicType (whose base xs:anySimpleType has an absent
+//     {variety}), and xs:anyAtomicType is a package singleton never built through
+//     this constructor.
+//   - st-props-correct clause 1 against the property tableau's {primitive type
+//     definition} clause (Datatypes §4.1.1 dc-defn: "required if {variety} is
+//     atomic ... The exception is ·anyAtomicType·, whose {primitive type
+//     definition} is ·absent·"): xs:anyAtomicType may not be named as the {base
+//     type definition} of anything but a primitive datatype (#480, Datatypes
+//     §2.4.2: "No ·user-defined· datatype may have anyAtomicType as its ·base
+//     type·"). st-restrict-facets clause 2 makes a restriction's {primitive type
+//     definition} the same as its base's, so a type restricting xs:anyAtomicType
+//     inherits that singleton's ·absent· one while the tableau requires it
+//     present — a contradiction, and one that needs no facet to trigger, unlike
+//     the narrower facet-applicability rejection (cos-st-restricts clause 1.3.1,
+//     charged above this package) that already covered the faceted schemas. The
+//     built-in primitives are exempt by the same tableau: a primitive datatype's
+//     {primitive type definition} is ITSELF (§3.16.1), the self-reference
+//     NewPrimitiveType wires and no other producer can, so the check is keyed on
+//     that self-reference rather than on a "this is a builtin" flag.
+//
+// The check is deliberately keyed on the base being xs:anyAtomicType and NOT
+// generalized to "every atomic type carries a present {primitive type
+// definition}". A caller that hands an absent {primitive type definition} to a
+// type whose base HAS one is violating st-restrict-facets clause 2 ("if {variety}
+// is atomic, the {primitive type definition} of R is the same as that of B"), a
+// different rule with no site here yet; charging it under st-props-correct would
+// be charge-imprecise (STYLE E2).
 //
 // Clause 1.2 (B.{final} does not contain restriction) is discharged by
 // checkSTGraph's clause-3 site (B is D's {base}); clause 1.3.2 is charged in
 // part by checkFacetRestrictions and clause 1.3.1 above this package (see
-// checkSTGraph). It reads only t.base — never the Atomic's primitive
-// pointer, which self-references on a primitive datatype (§3.16.1) and so
-// cannot drive a terminating base walk.
+// checkSTGraph). The clause-1.1 test reads only t.base — never the Atomic's
+// primitive pointer, which self-references on a primitive datatype (§3.16.1) and
+// so cannot drive a terminating base walk.
 func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
 	if t == anyAtomicType {
 		return nil
@@ -255,11 +298,15 @@ func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
 		return xsderr.New(ruleSTPropsCorrect, loc,
 			"atomic simple type has an absent {base type definition} (st-props-correct clause 1)")
 	}
-	if _, ok := t.base.variety.(Atomic); ok {
-		return nil
+	if _, ok := t.base.variety.(Atomic); !ok {
+		return xsderr.New(ruleCosSTRestricts, loc,
+			"atomic simple type {base type definition} %s is not an atomic simple type definition (cos-st-restricts clause 1.1)", t.base.name)
 	}
-	return xsderr.New(ruleCosSTRestricts, loc,
-		"atomic simple type {base type definition} %s is not an atomic simple type definition (cos-st-restricts clause 1.1)", t.base.name)
+	if t.base == anyAtomicType && t.variety.(Atomic).primitive != t {
+		return xsderr.New(ruleSTPropsCorrect, loc,
+			"atomic simple type may not name %s as its {base type definition} unless it is a primitive datatype: it inherits that type's absent {primitive type definition} (st-restrict-facets clause 2), which the property tableau requires present (st-props-correct clause 1)", t.base.name)
+	}
+	return nil
 }
 
 // checkListGraph enforces the list-variety constraints on t (whose {variety} is
