@@ -27,9 +27,8 @@
 // anySimpleType — a two-step derivation (§3.4.5/§3.4.10/§3.4.12) whose
 // intermediate node Seed materializes from the row's Variety, so on a list row
 // Base names that ANONYMOUS list's base, not the named type's (TypeSpec.Base).
-// The closed value types (Variety, Fundamental, Facet) are
-// hand-written in typespec.go; the type IsPrimitive helper reports
-// Base == "anyAtomicType".
+// The closed value types (Variety, Fundamental, Facet) are hand-written in
+// typespec.go; the type IsPrimitive helper reports Base == "anyAtomicType".
 //
 // gen_typespec.go is emitted by tools/typespecgen from the per-type
 // property subsections in docs/specs/md/xmlschema11-2.md (§3.3/§3.4,

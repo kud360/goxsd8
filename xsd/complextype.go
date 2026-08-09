@@ -36,10 +36,10 @@ import "github.com/kud360/goxsd8/xsderr"
 //     base graph, which only exists once the schema set is assembled;
 //   - clause 4 (no two {attribute uses} share an {attribute declaration}
 //     expanded name) needs the Ref variant of {attribute declaration} resolved,
-//     so it too is enforced at finalize (Phase D,
-//     checkAttributeUseNamesUnique, #262) rather than at shape time (unlike
-//     AttributeGroupDefinition, whose own ag-props-correct clause 2 is enforced
-//     at shape time over uses it already owns);
+//     so it too is enforced at finalize (Phase D, checkAttributeUseNamesUnique,
+//     #262) rather than at shape time (unlike AttributeGroupDefinition, whose
+//     own ag-props-correct clause 2 is enforced at shape time over uses it
+//     already owns);
 //   - clause 5 ({content type}.{open content} non-absent ⇒ {variety} is
 //     element-only or mixed) is satisfied BY CONSTRUCTION and gets no runtime
 //     check anywhere, at shape time or at finalize: {open content} is a field
@@ -338,11 +338,11 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // definition (src-resolve clause 1.1) and that the complex-type base chain is
 // acyclic except xs:anyType's self-derivation (ct-props-correct clause 3), but
 // does NOT rewrite a name into a resolved component: the QName is retained, and
-// a consumer follows the slot with Base. Finalize also charges ct-props-correct clauses 2 and
-// 4 and, against the resolved base, derivation-ok-restriction (§3.4.6.3) for a
-// restriction and cos-ct-extends (§3.4.6.2) for an extension (Phase D,
-// complexderivation.go and complexextension.go, #262/#264). Clause 1's remaining
-// resolved parts stay deferred.
+// a consumer follows the slot with Base. Finalize also charges ct-props-correct
+// clauses 2 and 4 and, against the resolved base, derivation-ok-restriction
+// (§3.4.6.3) for a restriction and cos-ct-extends (§3.4.6.2) for an extension
+// (Phase D, complexderivation.go and complexextension.go, #262/#264). Clause 1's
+// remaining resolved parts stay deferred.
 //
 // {attribute uses} and {attribute wildcard} are the TWO properties Finalize
 // completes rather than merely checks, because each has a mapping clause that
@@ -396,14 +396,14 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // (#340).
 //
 // Construct only through NewComplexType (named), NewComplexTypeOwningBase (named,
-// owning its base) or NewAnonymousComplexType
-// (anonymous), which reject the tableau-shape states ct-props-correct (§3.4.6.1)
-// clause 1 forbids so they are unrepresentable (STYLE T1). Neither is the full
-// property-correctness check (see ruleCTPropsCorrect's doc for exactly which
-// clauses are deferred). ComplexType is immutable after construction, and
-// remains so with a {context}: the cell a ComponentID points at is opaque and
-// holds no mutable state, so copying a ComplexType is still a complete copy —
-// the copies share one {context} identity, which is the point.
+// owning its base) or NewAnonymousComplexType (anonymous), which reject the
+// tableau-shape states ct-props-correct (§3.4.6.1) clause 1 forbids so they are
+// unrepresentable (STYLE T1). Neither is the full property-correctness check (see
+// ruleCTPropsCorrect's doc for exactly which clauses are deferred). ComplexType
+// is immutable after construction, and remains so with a {context}: the cell a
+// ComponentID points at is opaque and holds no mutable state, so copying a
+// ComplexType is still a complete copy — the copies share one {context} identity,
+// which is the point.
 type ComplexType struct {
 	loc  xsderr.Loc // source position; provenance, not a §3.4.1 property
 	name QName
@@ -480,14 +480,13 @@ type ComplexType struct {
 // definition} slot by baseTypeDefinitionRef, so the zero QName is stored as the
 // nil (·absent·) slot rather than as a nameless reference — see Base. A base
 // this entry point cannot express, the anonymous already-resolved one of
-// src-expredef clause 1.1, has its own entry point in
-// NewComplexTypeOwningBase. attributeWildcard is a pointer so
-// absence (nil) is distinct from a present zero record (mirroring
-// attributegroupdefinition.go's *Wildcard slot); when non-nil the pointed-to
-// value is COPIED into the struct and hasAttributeWildcard is set — the pointer
-// itself is never stored, so the caller's value is not aliased. Every slice
-// parameter is copied; the caller's backing arrays are not aliased, and an empty
-// input is held as nil.
+// src-expredef clause 1.1, has its own entry point in NewComplexTypeOwningBase.
+// attributeWildcard is a pointer so absence (nil) is distinct from a present
+// zero record (mirroring attributegroupdefinition.go's *Wildcard slot); when
+// non-nil the pointed-to value is COPIED into the struct and
+// hasAttributeWildcard is set — the pointer itself is never stored, so the
+// caller's value is not aliased. Every slice parameter is copied; the caller's
+// backing arrays are not aliased, and an empty input is held as nil.
 //
 // loc is the source position charged to any rejection AND retained: Loc reports
 // it back as the definition's provenance. Pass the position of this

@@ -37,11 +37,10 @@ func oPair(t *testing.T, name, originalBase QName, method DerivationMethod, ownU
 	return ct
 }
 
-// TestOwnedBaseContextMustNameTheOwner pins the state
-// NewComplexTypeOwningBase exists to make unrepresentable: an owned original
-// whose {context} names some OTHER component. It is the redefine-side form of
-// PRINCIPLES 16's context-tracking hazard, and no shape check downstream could
-// reach it.
+// TestOwnedBaseContextMustNameTheOwner pins the state NewComplexTypeOwningBase
+// exists to make unrepresentable: an owned original whose {context} names some
+// OTHER component. It is the redefine-side form of PRINCIPLES 16's
+// context-tracking hazard, and no shape check downstream could reach it.
 func TestOwnedBaseContextMustNameTheOwner(t *testing.T) {
 	stranger, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: NewComponentID()},
 		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)

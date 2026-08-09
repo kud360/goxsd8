@@ -104,14 +104,13 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 // is also what LICENSES the referring document to name that namespace at all
 // (src-resolve clause 4.2.2, §4.2.6.1), and the license reaches only the
 // document the element sits in — see parser/doc.go's Composition section.
-// Documents are read once each, keyed by
-// resolved location AND the namespace they were reached under AND the override
-// and redefinition applied to them, so a diamond or a
-// (spec-legal) cycle of <include>s, or a namespace imported repeatedly,
-// contributes its components once and does not trip sch-props-correct
-// (§3.17.6.1) clause 2. Reading once skips the re-COMPOSITION alone: every
-// <import> element is still judged against src-import clause 3, whether or not
-// it was the one that caused D2 to be read.
+// Documents are read once each, keyed by resolved location AND the namespace
+// they were reached under AND the override and redefinition applied to them, so
+// a diamond or a (spec-legal) cycle of <include>s, or a namespace imported
+// repeatedly, contributes its components once and does not trip
+// sch-props-correct (§3.17.6.1) clause 2. Reading once skips the re-COMPOSITION
+// alone: every <import> element is still judged against src-import clause 3,
+// whether or not it was the one that caused D2 to be read.
 //
 // An <xs:override> child (§4.2.5) is followed too: the document it names is
 // composed exactly as an <include>d one — §4.2.5 clause 3.1.2 defines an override
@@ -135,10 +134,10 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 //
 // Errors are schema-validity verdicts as *[xsderr.Error] values (src-include,
 // src-import, src-import-noselfimport, src-override, src-redefine, src-expredef,
-// src-resolve, sch-props-correct, …)
-// carrying the offending construct's location; a failure to resolve the ROOT
-// location, by contrast, is a plain I/O error, since the caller named a document
-// that must exist. Like [Produce], ParseReport returns only the first error.
+// src-resolve, sch-props-correct, …) carrying the offending construct's
+// location; a failure to resolve the ROOT location, by contrast, is a plain I/O
+// error, since the caller named a document that must exist. Like [Produce],
+// ParseReport returns only the first error.
 func ParseReport(location string, opts ...Option) (*xsd.Schema, *AssemblyReport, error) {
 	cfg := newConfig(opts)
 	root, resolved, err := readRootDocument(cfg.resolver, location)
@@ -268,9 +267,9 @@ type assembly struct {
 	// docs holds every discovered document in discovery order: depth-first,
 	// pre-order, over each <schema>'s <include>, <override> and <import> children
 	// in a single document-order pass. That order is the order components enter
-	// the builder,
-	// so it is user-visible in sch-props-correct duplicate reports (STYLE D1/D2)
-	// and must not be made to depend on which KIND of directive was seen.
+	// the builder, so it is user-visible in sch-props-correct duplicate reports
+	// (STYLE D1/D2) and must not be made to depend on which KIND of directive was
+	// seen.
 	docs []discovered
 
 	// unfollowed holds every ·inter-schema-document reference· (§4.2.1) that
@@ -312,15 +311,15 @@ func newAssembly(rootResolved, rootTNS string, cfg config) *assembly {
 }
 
 // discover appends doc to the assembly under resolved — the location the
-// resolver reported for it — tns — its effective target
-// namespace — and ov — the ·override pre-processing· in force over it — and then,
-// in ONE document-order pass, follows each of its top-level <include> (§4.2.3:
-// schema(D1) contains immed(D1) plus the components of schema(D2) for each
-// <include>d D2), <override> (§4.2.5: plus the components of
-// schema(override(E,Dold))) and <import> (§4.2.6.2: plus a set of components
-// identical to those of each imported S2) children depth-first. The three
-// directive kinds share the pass so that component entry order stays document
-// order rather than becoming directive-kind-dependent (STYLE D1).
+// resolver reported for it — tns — its effective target namespace — and ov — the
+// ·override pre-processing· in force over it — and then, in ONE document-order
+// pass, follows each of its top-level <include> (§4.2.3: schema(D1) contains
+// immed(D1) plus the components of schema(D2) for each <include>d D2), <override>
+// (§4.2.5: plus the components of schema(override(E,Dold))) and <import>
+// (§4.2.6.2: plus a set of components identical to those of each imported S2)
+// children depth-first. The three directive kinds share the pass so that
+// component entry order stays document order rather than becoming
+// directive-kind-dependent (STYLE D1).
 func (a *assembly) discover(doc *Document, resolved, tns string, ov *overrideSet, rd *redefineSet) error {
 	// The index this document's own <redefine> sets are recorded at. It is taken
 	// before the append, and the recursion below appends further documents, so the

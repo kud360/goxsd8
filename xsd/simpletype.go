@@ -869,17 +869,17 @@ func (t *SimpleType) EffectiveFacets() []EffectiveFacet {
 // members are trivially still present. No runtime rejection path is needed.
 //
 // FacetAssertions ACCUMULATES rather than replacing (Datatypes §4.3.13.2,
-// id="xr-assertions"). The assertions {value}
-// on a restriction is the base type's Assertions followed by the restriction's
-// own new Assertions, in that order — an append, never a set-union and never
-// deduplicated. So when acc already holds a FacetAssertions entry (the base's
-// accumulated {value}) and f is also FacetAssertions, the two are merged into a
-// single NewAssertionsFacet whose sequence is the existing (base) Assertions
-// PREPENDED before f's own, and that merged facet takes f's more-derived
-// position. The merged facet's declaring QName is f's — the most-derived
-// contributor (see EffectiveFacet's godoc for why per-assertion provenance is
-// not recoverable from the result). With no prior FacetAssertions entry in acc,
-// f is appended unchanged, exactly as for every other kind.
+// id="xr-assertions"). The assertions {value} on a restriction is the base
+// type's Assertions followed by the restriction's own new Assertions, in that
+// order — an append, never a set-union and never deduplicated. So when acc
+// already holds a FacetAssertions entry (the base's accumulated {value}) and f
+// is also FacetAssertions, the two are merged into a single NewAssertionsFacet
+// whose sequence is the existing (base) Assertions PREPENDED before f's own,
+// and that merged facet takes f's more-derived position. The merged facet's
+// declaring QName is f's — the most-derived contributor (see EffectiveFacet's
+// godoc for why per-assertion provenance is not recoverable from the result).
+// With no prior FacetAssertions entry in acc, f is appended unchanged, exactly
+// as for every other kind.
 //
 // Because the base's already-accumulated {value} is unconditionally PREPENDED
 // before f's own, the base type's assertions {value} is always a prefix of the

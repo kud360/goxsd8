@@ -432,12 +432,11 @@ func TestSchemaExecutorDecidesReachableExtraDocuments(t *testing.T) {
 			expectValid: true,
 		},
 		{
-			// The third directive the assembly follows: §4.2.5's
-			// src-override clauses 3.1.2 and 3.2.2 replace the <override> with an
-			// <include> and hand off to §4.2.3, so reachability is include's, which
-			// is why one composer serves both. The child names nothing in lib.xsd and is
-			// simply ignored (§F.2 clause 1) — the point here is the reach, not the
-			// substitution.
+			// The third directive the assembly follows: §4.2.5's src-override clauses
+			// 3.1.2 and 3.2.2 replace the <override> with an <include> and hand off to
+			// §4.2.3, so reachability is include's, which is why one composer serves
+			// both. The child names nothing in lib.xsd and is simply ignored (§F.2
+			// clause 1) — the point here is the reach, not the substitution.
 			name: "second document reached by the first's <override>",
 			docs: map[string]string{
 				"main.xsd": schemaSrc("urn:a", override("lib.xsd", `<xs:element name="e" type="xs:string"/>`)+

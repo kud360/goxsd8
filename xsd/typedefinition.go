@@ -193,11 +193,11 @@ func (s *Schema) typeOf(ref TypeDefinitionOrRef) (TypeDefinition, bool) {
 }
 
 // checkTypeDefinitionOrRef rejects the encodings of a TypeDefinitionOrRef slot
-// that the sum's doc declares illegal, charged to
-// xsderr.RuleComponentInvariant: these are representation invariants this
-// package owns, not spec clauses a schema author can violate, which is the same
-// footing NewAttributeUse rejects a zero-named AttributeDeclarationRef on. A nil
-// ref is the legal encoding of an absent slot and passes.
+// that the sum's doc declares illegal, charged to xsderr.RuleComponentInvariant:
+// these are representation invariants this package owns, not spec clauses a
+// schema author can violate, which is the same footing NewAttributeUse rejects a
+// zero-named AttributeDeclarationRef on. A nil ref is the legal encoding of an
+// absent slot and passes.
 //
 // ctx names the owning component AND the property, because the sum serves more
 // than one — "element declaration {urn:x}e {type definition}", "complex type

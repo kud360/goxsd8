@@ -14,10 +14,10 @@ import (
 // This file is the M1 harness seam (issue #6): it discovers the W3C suite's
 // cases from suite.xml (and its auxiliary extra-suite.xml sibling, which carries
 // the precisionDecimal test sets, issue #135) and routes each to exactly one
-// lane's executor. It is
-// test-only support code — nothing outside package conformance references it —
-// so it exports nothing; a later milestone wires in a real lane by extending
-// defaultLanes, never by touching the runner's control flow.
+// lane's executor. It is test-only support code — nothing outside package
+// conformance references it — so it exports nothing; a later milestone wires in
+// a real lane by extending defaultLanes, never by touching the runner's control
+// flow.
 //
 // # Suite shape
 //
@@ -27,9 +27,9 @@ import (
 // schemaTest/instanceTest has a name, its document reference(s)
 // (xlink:href to the document under test), and one or more expected children
 // declaring validity ("valid"|"invalid"|"indeterminate", plus rarer spellings
-// xsts.dtd allows), optionally qualified by a version. An
-// instanceTest names ONE instanceDocument; a schemaTest may name SEVERAL
-// schemaDocuments, an ordered set to be loaded "one by one, in order"
+// xsts.dtd allows), optionally qualified by a version. An instanceTest names
+// ONE instanceDocument; a schemaTest may name SEVERAL schemaDocuments, an
+// ordered set to be loaded "one by one, in order"
 // (testdata/xsdtests/common/xsts.xsd, the suite's own catalog schema), so
 // discovery keeps every one of them (caseSpec.doc plus caseSpec.extraDocs).
 //

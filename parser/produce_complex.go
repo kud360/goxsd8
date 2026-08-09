@@ -356,11 +356,11 @@ func ownedComplexBase(base xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 // folds would turn an unfolded anonymous extension into a FALSE rejection.
 // §3.4.2.1 clause 1's {assertions} fold is NOT among them and needs no issue of
 // its own: assertionsWithBase runs HERE, on every produced type, anonymous ones
-// included (#346). The
-// direction today is open (under-rejection), never fail-closed, and
-// conformance/schema.go's anonymousComplexTypeDecidable narrows the conformance
-// lane to the implicit-content shape, on which the two folds are provably the
-// identity (base xs:anyType, §3.4.7 empty uses and no wildcard to union).
+// included (#346). The direction today is open (under-rejection), never
+// fail-closed, and conformance/schema.go's anonymousComplexTypeDecidable narrows
+// the conformance lane to the implicit-content shape, on which the two folds are
+// provably the identity (base xs:anyType, §3.4.7 empty uses and no wildcard to
+// union).
 func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.ComplexType, error) {
 	if name, named := topLevelComplexTypeName(id); named && name.Local == "" {
 		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
@@ -1090,8 +1090,8 @@ func (p *producer) produceGroupParticle(group *Element, top bool, scopeParent xs
 // §3.4.2.3.3 clause 4.2.3 selects a sub-case by the {compositor} of the
 // ·base particle·'s {term}, and that choice fixes a {content type} synthesized at
 // produce time. xsd.ExtensionContentType reads it through the resolveModelGroup
-// callback this producer passes it — a read, which
-// leaves this particle untouched and charges nothing.
+// callback this producer passes it — a read, which leaves this particle untouched
+// and charges nothing.
 func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 	occ, elided, err := occursOf(el)
 	if err != nil {
@@ -1146,8 +1146,7 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 // buildModelGroupDefinition, which memoizes it so one <group> is mapped exactly
 // once however many demand-driven lookups reach it. The named form has exactly
 // one <all>/<choice>/<sequence> child, whose Model Group becomes {model group};
-// an absent child
-// yields the zero ModelGroup that NewModelGroupDefinition rejects
+// an absent child yields the zero ModelGroup that NewModelGroupDefinition rejects
 // (mgd-props-correct §3.7.6, {model group} Required). Occurrence on the child is
 // irrelevant here — a model group definition carries no {min occurs}/{max occurs}
 // (§3.7.2 note); those live solely on a <group ref> particle.
@@ -1172,10 +1171,9 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 // closing requirement) arrives here with an empty local part — plus direct
 // programmatic calls. resolveModelGroup's on-demand build does NOT reach it: its
 // only caller is xsd.ExtensionContentType's group-lookup callback, reading a
-// ModelGroupRef that only
-// produceGroupRefParticle mints, and xsd.NewParticle rejects an empty
-// ModelGroupRef local part as a component-invariant before any resolution
-// happens.
+// ModelGroupRef that only produceGroupRefParticle mints, and xsd.NewParticle
+// rejects an empty ModelGroupRef local part as a component-invariant before any
+// resolution happens.
 func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd.ModelGroupDefinition, error) {
 	if name.Local == "" {
 		return xsd.ModelGroupDefinition{}, fmt.Errorf("parser: top-level <group> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())

@@ -27,24 +27,20 @@ import (
 // transitively, those of every document reached through an <xs:include> child
 // (§4.2.3), chameleon coercion included (§F.1), an <xs:override> child (§4.2.5,
 // which composes the overridden document as an include of its §F.2-transformed
-// self), or an <xs:import> child (§4.2.6.2,
-// which coerces nothing: the imported document keeps its own namespace) — and
-// maps top-level
+// self), or an <xs:import> child (§4.2.6.2, which coerces nothing: the imported
+// document keeps its own namespace) — and maps top-level
 // <simpleType>/<element>/<attribute>/<attributeGroup>/<group>/<notation> and the
 // decidable subset of <complexType> (implicit content, both <complexContent>
-// alternants, and <simpleContent> <extension>; its particles including
-// <group ref>, local
-// element/attribute declarations, attribute uses including <attributeGroup ref>,
-// wildcards, <openContent> and the schema-level <defaultOpenContent> it falls
-// back to, and <assert> assertions) into xsd components, maps the name=
-// identity constraints of global and local <element>s (#178), seeds the ur-type
-// xs:anyType, resolves cross-references, and rejects duplicate top-level names
-// within a kind. The ref= identity-constraint form, the
-// not-yet-produced complexType forms (<simpleContent> <restriction>,
-// inline anonymous local types) are
-// SILENTLY SKIPPED
-// or declined (§3.1.2 permits ignoring a not-yet-produced representation), NOT
-// rejected.
+// alternants, and <simpleContent> <extension>; its particles including <group
+// ref>, local element/attribute declarations, attribute uses including
+// <attributeGroup ref>, wildcards, <openContent> and the schema-level
+// <defaultOpenContent> it falls back to, and <assert> assertions) into xsd
+// components, maps the name= identity constraints of global and local <element>s
+// (#178), seeds the ur-type xs:anyType, resolves cross-references, and rejects
+// duplicate top-level names within a kind. The ref= identity-constraint form and
+// the not-yet-produced complexType forms (<simpleContent> <restriction>, inline
+// anonymous local types) are SILENTLY SKIPPED or declined (§3.1.2 permits
+// ignoring a not-yet-produced representation), NOT rejected.
 //
 // The EXTENSION forms are DECIDED as of #336: Parse builds <complexContent>
 // <extension> and <simpleContent> <extension> types (#228; §3.4.2.3.3 clause 4.2,
@@ -84,13 +80,13 @@ import (
 // a document whose top-level content includes (say) an invalid <group> or an
 // undecidable <complexType> form alongside valid simpleType/element/attribute
 // would still assemble with no error — a FALSE ACCEPT. §3.1.2's licence
-// to ignore a representation is an
-// implementation choice about what to BUILD; it does not make the spec consider
-// such a document valid: the invalid complexType still makes the document
-// schema-INVALID under sch-props-correct clause 1 (§3.17.6.1), whichever
-// cvc-complex-type/cos-* rule it violates (oracle grounding, issue #175). So
-// "Parse returns nil" is genuine evidence of validity ONLY when the top-level
-// content is PROVABLY CONFINED to what the producer actually processes.
+// to ignore a representation is an implementation choice about what to BUILD; it
+// does not make the spec consider such a document valid: the invalid complexType
+// still makes the document schema-INVALID under sch-props-correct clause 1
+// (§3.17.6.1), whichever cvc-complex-type/cos-* rule it violates (oracle
+// grounding, issue #175). So "Parse returns nil" is genuine evidence of validity
+// ONLY when the top-level content is PROVABLY CONFINED to what the producer
+// actually processes.
 //
 // Since #242 that qualifier binds over a CLOSURE, not one document. The assembly
 // reads the whole <include>/<override>/<import> closure, so a composed document
@@ -112,19 +108,18 @@ import (
 //
 //  1. Readability. parser.ReadDocument is run on the root before anything else,
 //     and the assembly reads every composed document through it. ANY error
-//     DECLINES the case
-//     (Fail), never a validity verdict: a ReadDocument error does not distinguish
-//     a genuine XML well-formedness fault from a parser encoding LIMITATION.
-//     Well-formed UTF-16 input (BOM FF FE) is currently rejected as "invalid
-//     UTF-8" because UTF-16 decoding is not yet implemented, so treating that as
-//     observed-invalid would fabricate an "invalid" verdict for a well-formed
-//     document — a wrong-reason pass that would flip pass→fail once UTF-16
-//     decoding lands (a separate change). So malformed XML is NOT a claimed
-//     schema-well-formedness sub-cohort here; it is a declined recorded gap. For
-//     a COMPOSED document the decline comes through the report: a document that
-//     resolved but could not be read is one the assembly never took in, recorded
-//     as parser.UnfollowedUnreadable, and the error it also returns completes the
-//     conjunction in step 4.
+//     DECLINES the case (Fail), never a validity verdict: a ReadDocument error
+//     does not distinguish a genuine XML well-formedness fault from a parser
+//     encoding LIMITATION. Well-formed UTF-16 input (BOM FF FE) is currently
+//     rejected as "invalid UTF-8" because UTF-16 decoding is not yet implemented,
+//     so treating that as observed-invalid would fabricate an "invalid" verdict
+//     for a well-formed document — a wrong-reason pass that would flip pass→fail
+//     once UTF-16 decoding lands (a separate change). So malformed XML is NOT a
+//     claimed schema-well-formedness sub-cohort here; it is a declined recorded
+//     gap. For a COMPOSED document the decline comes through the report: a
+//     document that resolved but could not be read is one the assembly never took
+//     in, recorded as parser.UnfollowedUnreadable, and the error it also returns
+//     completes the conjunction in step 4.
 //  2. Root identity. If the root is not <schema> (IsSchema false) the case is
 //     DECLINED: §3.17.2 explicitly does NOT require <schema> to be the document
 //     root, so Parse's error there is a plain non-xsderr Go precondition fault,
@@ -135,28 +130,26 @@ import (
 //     assembly emits, and the document never enters the report to be gated.
 //  3. Top-level allowlist. Every top-level child element must be xsd:annotation,
 //     xsd:include, xsd:import, xsd:override, xsd:simpleType, xsd:element,
-//     xsd:attribute, xsd:complexType,
-//     xsd:attributeGroup (named definition), xsd:group (named definition),
-//     xsd:defaultOpenContent (only in the shape its declaration allows: with the
-//     <any> child its content model requires and, if mode= is present at all, a
-//     value from its interleave|suffix enumeration) or
-//     xsd:notation or xsd:redefine — anything else at top level (a
-//     non-xsd element, or an out-of-set local name) closes
-//     the false-accept gap above by DECLINING the whole case. Within the allowed
-//     kinds:
+//     xsd:attribute, xsd:complexType, xsd:attributeGroup (named definition),
+//     xsd:group (named definition), xsd:defaultOpenContent (only in the shape
+//     its declaration allows: with the <any> child its content model requires
+//     and, if mode= is present at all, a value from its interleave|suffix
+//     enumeration) or xsd:notation or xsd:redefine — anything else at top level
+//     (a non-xsd element, or an out-of-set local name) closes the false-accept
+//     gap above by DECLINING the whole case. Within the allowed kinds:
 //     - include: always admitted (#242). Its own content model is (annotation?),
 //       so it contributes nothing the producer could silently skip; the
 //       decidability of the document it POINTS AT is established by the closure
 //       gate, which runs this same allowlist over every document the assembly
 //       reported reading (and so, transitively, over that document's own
-//       <include>s and <import>s) —
-//       not by this allowlist entry. src-include (§4.2.3) itself imposes no shape
-//       constraint on the included document, only existence and targetNamespace
-//       agreement, both of which the assembly decides genuinely. An <include>
-//       whose schemaLocation does not resolve yields no document to gate: the
-//       assembly reports that (parser.UnfollowedLocationUnresolved) exactly as it
-//       does for an <import> that yields no D2, and execSchemaCase declines only
-//       if the parse then fails (#276).
+//       <include>s and <import>s) — not by this allowlist entry. src-include
+//       (§4.2.3) itself imposes no shape constraint on the included document,
+//       only existence and targetNamespace agreement, both of which the assembly
+//       decides genuinely. An <include> whose schemaLocation does not resolve
+//       yields no document to gate: the assembly reports that
+//       (parser.UnfollowedLocationUnresolved) exactly as it does for an <import>
+//       that yields no D2, and execSchemaCase declines only if the parse then
+//       fails (#276).
 //     - override: admitted (#183) when every child of it is a decidable source
 //       declaration in its own right (overrideDecidable), because §F.2 clause 1
 //       makes those children top-level declarations of the OVERRIDDEN document.
@@ -188,17 +181,15 @@ import (
 //     - complexType (top-level, or a <complexContent>/<simpleContent> derivation
 //       reached transitively): must lie within the producer's decidable subset per
 //       complexTypeDecidable — implicit content, either <complexContent>
-//       alternant, or <simpleContent> <extension>, whose
-//       content model is element/any/sequence/choice/all/<group ref>, whose
-//       attributes are local <attribute>/<anyAttribute>/<attributeGroup ref>,
-//       whose <openContent> maps to {open content} (#230) and
-//       whose <assert> children map to {assertions} (#178), with
-//       no <simpleContent> <restriction> and
-//       no inline anonymous local type. <simpleContent> <restriction> and
-//       the inline forms need a later producer slice, so Produce
-//       declines them with a plain limitation error, not a spec verdict. A <group ref>/
-//       <attributeGroup ref> IS produced (#177): its target resolves (or fails
-//       src-resolve) genuinely. A real structural violation inside an admitted
+//       alternant, or <simpleContent> <extension>, whose content model is
+//       element/any/sequence/choice/all/<group ref>, whose attributes are local
+//       <attribute>/<anyAttribute>/<attributeGroup ref>, whose <openContent> maps to
+//       {open content} (#230) and whose <assert> children map to {assertions} (#178),
+//       with no <simpleContent> <restriction> and no inline anonymous local type.
+//       <simpleContent> <restriction> and the inline forms need a later producer slice,
+//       so Produce declines them with a plain limitation error, not a spec verdict. A
+//       <group ref>/ <attributeGroup ref> IS produced (#177): its target resolves (or
+//       fails src-resolve) genuinely. A real structural violation inside an admitted
 //       shape (src-ct, cos-all-limited, src-wildcard, …) flows through as a genuine
 //       rejection.
 //     - attributeGroup (top-level named definition, §3.6.2): children only
@@ -219,26 +210,25 @@ import (
 //       unsupported variety, DECLINED) whose children include no <enumeration>
 //       (still a not-yet-produced facet rejected by src-simple-type §3.16.3;
 //       DECLINED). An <assertion> facet IS produced (#178, one assertions facet
-//       per restriction, Datatypes §4.3.13) and is admitted. An inline <simpleType> base child (the
-//       genuinely-supported anonymous nested base, §3.16.3 clause 2) is recursed
-//       into with the same two checks. The restriction's base=/inline-child
-//       exactly-one arrangement is NOT pre-checked: that IS the genuine
-//       src-simple-type clause 2 rule Produce correctly enforces, so a violation
-//       flows through as a real decidable rejection.
+//       per restriction, Datatypes §4.3.13) and is admitted. An inline
+//       <simpleType> base child (the genuinely-supported anonymous nested base,
+//       §3.16.3 clause 2) is recursed into with the same two checks. The
+//       restriction's base=/inline-child exactly-one arrangement is NOT
+//       pre-checked: that IS the genuine src-simple-type clause 2 rule Produce
+//       correctly enforces, so a violation flows through as a real decidable
+//       rejection.
 //     - annotation: always allowed, no further check.
-//  4. Decide. When every document of the closure passes,
-//     observed = (parser.ParseReport's err == nil): a nil error is genuine evidence of validity (no
-//     document of the assembly has any of the violations checked above, so a real
-//     one would surface), and a non-nil error is a REAL, implemented rejection
-//     (src-include §4.2.3, src-import and src-import-noselfimport §4.2.6.2,
-//     sch-props-correct clause 2
-//     duplicate-name §3.17.6.1, src-element §3.3.3, src-attribute §3.2.3,
-//     src-simple-type §3.16.3, src-override §4.2.5, src-resolve §3.17.6.2,
-//     st-props-correct,
-//     src-identity-constraint §3.11.3, c-props-correct §3.11.6.1,
-//     n-props-correct §3.14.6, and for
-//     the complex-type subset src-ct §3.4.3, cos-all-limited §3.8.6, src-wildcard
-//     §3.10.3, p-props-correct §3.9.6, cos-nonambig §3.8.6.4,
+//  4. Decide. When every document of the closure passes, observed =
+//     (parser.ParseReport's err == nil): a nil error is genuine evidence of
+//     validity (no document of the assembly has any of the violations checked
+//     above, so a real one would surface), and a non-nil error is a REAL,
+//     implemented rejection (src-include §4.2.3, src-import and
+//     src-import-noselfimport §4.2.6.2, sch-props-correct clause 2 duplicate-name
+//     §3.17.6.1, src-element §3.3.3, src-attribute §3.2.3, src-simple-type
+//     §3.16.3, src-override §4.2.5, src-resolve §3.17.6.2, st-props-correct,
+//     src-identity-constraint §3.11.3, c-props-correct §3.11.6.1, n-props-correct
+//     §3.14.6, and for the complex-type subset src-ct §3.4.3, cos-all-limited
+//     §3.8.6, src-wildcard §3.10.3, p-props-correct §3.9.6, cos-nonambig §3.8.6.4,
 //     cos-element-consistent §3.8.6.3, ct-props-correct §3.4.6.1 and
 //     derivation-ok-restriction §3.4.6.3), never a fabricated one — the shape
 //     allowlist excludes every case whose rejection would be a
@@ -269,20 +259,19 @@ import (
 // constraints of every <key>/<keyref>/<unique> ANYWHERE in the document
 // (§3.17.1), so two identically-named identity constraints under two different
 // element declarations DO collide — a genuine clause-2 rejection, not a
-// producer artifact. The executor
-// relies on Finalize's per-kind indexByName for exactly this, so no cross-kind
-// duplicate check is done here (that would be a false-INVALID verdict, a ratchet
-// regression risk).
+// producer artifact. The executor relies on Finalize's per-kind indexByName for
+// exactly this, so no cross-kind duplicate check is done here (that would be a
+// false-INVALID verdict, a ratchet regression risk).
 //
 // # Why no false ratchet-corrupting pass is possible
 //
 // Every "invalid" verdict this lane emits comes from ONE source: parser.Parse
 // rejecting an assembly EVERY document of which already passed the allowlist.
-// ReadDocument
-// errors never produce an "invalid" verdict — they decline (step 1) — precisely
-// because a ReadDocument error can be a parser encoding limitation (well-formed
-// UTF-16 misread as invalid UTF-8) rather than a real violation, and turning that
-// into "invalid" would fabricate a verdict for a well-formed document.
+// ReadDocument errors never produce an "invalid" verdict — they decline (step 1)
+// — precisely because a ReadDocument error can be a parser encoding limitation
+// (well-formed UTF-16 misread as invalid UTF-8) rather than a real violation, and
+// turning that into "invalid" would fabricate a verdict for a well-formed
+// document.
 //
 // A "valid" verdict coincides only with a truly-valid ground truth: a truly-valid
 // assembly (by definition) has none of the checked violations, so Parse
@@ -293,16 +282,15 @@ import (
 // not-yet-produced complexType forms — <simpleContent> <restriction>, inline
 // anonymous local types — and the produced-but-unjudged extension
 // forms) where the producer's rejection would be a limitation rather than a spec
-// violation, or its silence a missing rejection. A
-// suite-invalid case whose only defect is a rule finalize does NOT yet check
-// (cos-content-act-restrict — derivation-ok-restriction clause 2.4.2, #263 —
-// cos-ns-subset, #265, or the Open Content half of derivation-ok-restriction
-// clause 2.4, which xsd.Schema's content-model automaton fails open on:
-// xsd/contentrestricts.go's GAP(xsd), live for a produced {open content} since
-// #230) is produced cleanly, so the lane observes "valid",
-// disagrees with the suite, and records a still-failing gap — never a wrong
-// "invalid" pass. The remaining risk the allowlist closes is
-// the VACUOUS pass — a document of entirely skipped top-level content that would
+// violation, or its silence a missing rejection. A suite-invalid case whose only
+// defect is a rule finalize does NOT yet check (cos-content-act-restrict —
+// derivation-ok-restriction clause 2.4.2, #263 — cos-ns-subset, #265, or the Open
+// Content half of derivation-ok-restriction clause 2.4, which xsd.Schema's
+// content-model automaton fails open on: xsd/contentrestricts.go's GAP(xsd), live
+// for a produced {open content} since #230) is produced cleanly, so the lane
+// observes "valid", disagrees with the suite, and records a still-failing gap —
+// never a wrong "invalid" pass. The remaining risk the allowlist closes is the
+// VACUOUS pass — a document of entirely skipped top-level content that would
 // otherwise always "pass" through a producer doing nothing — which is why step 3
 // confines the whole top level of EVERY document in the closure to the processed
 // kinds and the decidable complexType subset.
@@ -311,25 +299,23 @@ import (
 //
 // <xs:include>, chameleon inclusion included, is DECIDED as of #242,
 // <xs:import> as of #182 and <xs:override> as of #183: the assembly follows all
-// three closures (#179/#182/#183) and the
-// closure gate covers every document in them, so an
-// include/chameleon/import/override case is now decided for the same reason a
-// single-document case is, not guessed. A composition directive that yields no D2
-// — an <import> with no schemaLocation, or an <include>, <override> or <import>
-// whose schemaLocation does not resolve — is REPORTED as unfollowed
-// (parser.AssemblyReport.Unfollowed) and declines the case only when the parse
-// ALSO fails: the missing document's components are then absent from the assembly and
-// the reference that wanted them failed src-resolve clauses 1-3 at finalize, a
-// FABRICATED "invalid" verdict, the one direction that can corrupt the ratchet.
-// The conjunction is the whole hazard (#276): where the parse succeeds despite the
-// missing document, §4.2.3 clause 2.4's "not an error ... the inclusion must not
-// be performed" is simply in force and the case is decided normally — the suite's
-// own cl. 2.4 tests (MS-Schema schD8 and friends) depend on that. The directives
-// are one hazard, not two: src-include clause 2.4 and src-import's "not an error"
-// text are parallel, and src-resolve clause 4 (cl.qnr.nsdeclared) licenses a
-// same-namespace reference (4.2.1) and a reference into a namespace with a PRESENT
-// <import> element (4.2.2) alike, whether or not that import's schemaLocation
-// resolved.
+// three closures (#179/#182/#183) and the closure gate covers every document in them,
+// so an include/chameleon/import/override case is now decided for the same reason a
+// single-document case is, not guessed. A composition directive that yields no D2 —
+// an <import> with no schemaLocation, or an <include>, <override> or <import> whose
+// schemaLocation does not resolve — is REPORTED as unfollowed
+// (parser.AssemblyReport.Unfollowed) and declines the case only when the parse ALSO
+// fails: the missing document's components are then absent from the assembly and the
+// reference that wanted them failed src-resolve clauses 1-3 at finalize, a FABRICATED
+// "invalid" verdict, the one direction that can corrupt the ratchet. The conjunction
+// is the whole hazard (#276): where the parse succeeds despite the missing document,
+// §4.2.3 clause 2.4's "not an error ... the inclusion must not be performed" is
+// simply in force and the case is decided normally — the suite's own cl. 2.4 tests
+// (MS-Schema schD8 and friends) depend on that. The directives are one hazard, not
+// two: src-include clause 2.4 and src-import's "not an error" text are parallel, and
+// src-resolve clause 4 (cl.qnr.nsdeclared) licenses a same-namespace reference
+// (4.2.1) and a reference into a namespace with a PRESENT <import> element (4.2.2)
+// alike, whether or not that import's schemaLocation resolved.
 //
 // Two import-adjacent gaps are the OTHER direction — fabricated "valid" — which
 // can only cost wins, never corrupt: src-resolve clause 4 (cl.qnr.nsdeclared,
@@ -346,11 +332,11 @@ import (
 // The document it points at, and every document that one <include>s or
 // <override>s — §4.2.5's ·target set· — is gated by the same closure gate that
 // covers an <include>'s target: all of them are documents the assembly read, so
-// all of them are in its report.
-// Verdicts on an admitted override case are genuine in both directions: the
-// substituted declarations are really produced (a violation among them, such as
-// a simple type left restricting itself, surfaces as the rule it breaks), and an
-// unmatched override child is really ignored (§4.2.5) rather than added.
+// all of them are in its report. Verdicts on an admitted override case are
+// genuine in both directions: the substituted declarations are really produced (a
+// violation among them, such as a simple type left restricting itself, surfaces
+// as the rule it breaks), and an unmatched override child is really ignored
+// (§4.2.5) rather than added.
 //
 // <xs:redefine> is DECIDED as of #286, and for ALL FOUR redefinable kinds as of
 // #505. The assembly follows it, so the document it names is in the
@@ -372,14 +358,13 @@ import (
 //
 // Inline anonymous types on element/attribute, list/union/enumeration
 // simpleTypes, ref= identity constraints and the not-yet-produced complexType
-// forms named above widen in with later slices (exactly
-// as the datatypes lane grew across #15/#57/#80); they stay DECLINED (Fail)
-// recorded gaps here, never guessed. UPA and EDC landed with #180,
-// derivation-ok-restriction with #262 and cos-ct-extends with #264, so the
-// admitted complexType cases those rules reject — restriction and extension
-// alike, the latter admitted by #336 — are now decided; the cases still turning
-// on cos-content-act-restrict (#263) stay failing gaps
-// rather than wins until that lands.
+// forms named above widen in with later slices (exactly as the datatypes lane
+// grew across #15/#57/#80); they stay DECLINED (Fail) recorded gaps here, never
+// guessed. UPA and EDC landed with #180, derivation-ok-restriction with #262
+// and cos-ct-extends with #264, so the admitted complexType cases those rules
+// reject — restriction and extension alike, the latter admitted by #336 — are
+// now decided; the cases still turning on cos-content-act-restrict (#263) stay
+// failing gaps rather than wins until that lands.
 //
 // A schemaTest with MORE THAN ONE <ts:schemaDocument> child declares a SET of
 // documents to be loaded "one by one, in order" (xsts.xsd, the suite's own
@@ -388,13 +373,12 @@ import (
 // assembly from the FIRST document provably consumed every other declared one
 // — which requires the first document's own <include>/<override>/<import> to
 // name them, those being the only directives the assembly follows, and is then
-// just the composition case above. A
-// <redefine> can never supply that reachability: a document carrying one is
-// DECLINED outright above, so nothing it names is ever reached. Documents
-// genuinely independent of each other need several roots merged into one schema,
-// which neither parser.ParseReport (one root) nor this harness offers, so those cases
-// are DECLINED (extraDocsInClosure) rather than decided against a schema the
-// suite did not declare.
+// just the composition case above. A <redefine> can never supply that reachability: a
+// document carrying one is DECLINED outright above, so nothing it names is ever
+// reached. Documents genuinely independent of each other need several roots merged
+// into one schema, which neither parser.ParseReport (one root) nor this harness
+// offers, so those cases are DECLINED (extraDocsInClosure) rather than decided
+// against a schema the suite did not declare.
 
 // newSchemaExec builds the schema lane's executor. The strict backend is built
 // once here (mirroring newDatatypesExec's strictBackend := strict.New()): it maps
@@ -494,14 +478,15 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 // loaded one by one, in order": the case is the SET, not any member of it. The
 // condition holds when the first document's own
 // <include>/<override>/<import>/<redefine> names the others — the four
-// directives the assembly follows — so it composes them. The check exists so that a case whose
-// documents the parser's OWN composition constructs already link is decided on
-// the declared set rather than declined for its member count. When the condition
-// does not hold (documents genuinely independent), the harness has no mechanism
-// to merge several roots into one schema, so any verdict it emitted would be a
-// verdict on a DIFFERENT schema than the one declared. It therefore DECLINES, as
-// it declines every other shape it cannot decide for the right reason, rather
-// than loading an arbitrary member or ignoring the rest.
+// directives the assembly follows — so it composes them. The check exists so
+// that a case whose documents the parser's OWN composition constructs already
+// link is decided on the declared set rather than declined for its member count.
+// When the condition does not hold (documents genuinely independent), the
+// harness has no mechanism to merge several roots into one schema, so any
+// verdict it emitted would be a verdict on a DIFFERENT schema than the one
+// declared. It therefore DECLINES, as it declines every other shape it cannot
+// decide for the right reason, rather than loading an arbitrary member or
+// ignoring the rest.
 //
 // Each extra document is resolved through the SAME resolver the parse used, under
 // a location string relative to the same root directory, so the resolved identity
@@ -576,11 +561,11 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			// silently skip. What each POINTS AT is the thing that could be skipped,
 			// and that is gated by closureDecidable, which runs this same function
 			// over every document the assembly reported reading. src-include's
-			// (§4.2.3) and src-import's (§4.2.6.2) own clauses
-			// are then enforced genuinely by the assembly. A directive that yields no
-			// D2 at all — an <import> with no schemaLocation, or either directive with
-			// one that does not resolve — is reported as unfollowed, not judged here,
-			// and declines the case only alongside a failed parse: see
+			// (§4.2.3) and src-import's (§4.2.6.2) own clauses are then enforced
+			// genuinely by the assembly. A directive that yields no D2 at all — an
+			// <import> with no schemaLocation, or either directive with one that does
+			// not resolve — is reported as unfollowed, not judged here, and declines
+			// the case only alongside a failed parse: see
 			// parser.AssemblyReport.Unfollowed and execSchemaCase.
 		case "element":
 			if !elementDecidable(el) {
@@ -853,9 +838,8 @@ func anonymousComplexTypeDecidable(el *parser.Element) bool {
 
 // complexTypeDecidable reports whether a <complexType> (top-level, or a nested
 // derivation reached through <complexContent>/<simpleContent>) lies within the
-// producer's
-// decidable subset — the shapes it fully builds AND finalize fully judges, so any
-// Produce error on it is a REAL structural violation
+// producer's decidable subset — the shapes it fully builds AND finalize fully
+// judges, so any Produce error on it is a REAL structural violation
 // (src-ct/cos-all-limited/src-wildcard/src-attribute/p-props-correct/src-resolve)
 // and its silence is a real absence of one. It declines:
 //
@@ -868,12 +852,12 @@ func anonymousComplexTypeDecidable(el *parser.Element) bool {
 //     <complexType> on a local OR global element is produced too (#340); neither
 //     declines here — see localElementDecidable/elementDecidable, and
 //     anonymousComplexTypeDecidable for the separate, narrower gate the
-//     anonymous complex-type shape passes through. An
-//     <openContent> is produced as of #230 (§3.4.2.3.3 clauses 5-6) and is
-//     admitted by contentDecidable wherever the schema for schema documents
-//     allows one; a MISPLACED one — beside <simpleContent>/<complexContent>, or
-//     directly under <complexContent> — is rejected by the producer as the
-//     grammar fault it is, so it needs no decline of its own;
+//     anonymous complex-type shape passes through. An <openContent> is produced
+//     as of #230 (§3.4.2.3.3 clauses 5-6) and is admitted by contentDecidable
+//     wherever the schema for schema documents allows one; a MISPLACED one —
+//     beside <simpleContent>/<complexContent>, or directly under
+//     <complexContent> — is rejected by the producer as the grammar fault it is,
+//     so it needs no decline of its own;
 //   - a <complexContent> carrying NEITHER alternant. §3.4.2.3 requires one of
 //     them, and the producer says so, but as a grammar fault about the source
 //     item rather than a rule verdict, so it is declined like any limitation.

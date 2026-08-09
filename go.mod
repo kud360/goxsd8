@@ -4,6 +4,7 @@ go 1.26
 
 tool (
 	github.com/kud360/goxsd8/tools/backendtestgen
+	github.com/kud360/goxsd8/tools/commentwrap
 	github.com/kud360/goxsd8/tools/fetchspecs
 	github.com/kud360/goxsd8/tools/hfnextract
 	github.com/kud360/goxsd8/tools/rulecat

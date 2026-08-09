@@ -46,8 +46,8 @@ func mustST(t *testing.T, name string, v Variety, base *SimpleType, facets []Fac
 // 3/1.2/2.2.2.2/3.2.2.2 (shared site), 2.2.1.1/3.2.1.1, the constructed-list
 // facet-shape clause 2.2.1.2 in all four of its failure modes (an extra facet, no
 // whiteSpace at all, a whiteSpace that is not collapse, an unfixed one), and
-// clause 5. Every
-// prerequisite type is built through the real constructors — no XML fixtures.
+// clause 5. Every prerequisite type is built through the real constructors — no
+// XML fixtures.
 func TestSTGraphChecks(t *testing.T) {
 	dec := mustPrim(t, "decimal")
 	str := mustPrim(t, "string")

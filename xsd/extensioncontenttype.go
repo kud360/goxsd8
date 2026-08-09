@@ -343,11 +343,10 @@ func (s *Schema) recoverExtensionStepContent(loc xsderr.Loc, c, b ContentType) (
 // content·). The merge tests 4.2.2 first, so an all-group base with a genuinely
 // empty effective content is read back as 4.2.3.1's stand-in; the two re-merge
 // to the same particle and differ only in a {variety} that cos-ct-extends clause
-// 1.4.3.2.2.1 already forces to agree.
-// The recovered explicitEmpty is TRUE on both rows, and on 4.2.2's it is exact
-// rather than conventional: the merge takes that row only for an ***empty***
-// ·effective content·, which §3.4.2.3.3 clause 3.1.2 produces only from an empty
-// ·explicit content·.
+// 1.4.3.2.2.1 already forces to agree. The recovered explicitEmpty is TRUE on
+// both rows, and on 4.2.2's it is exact rather than conventional: the merge
+// takes that row only for an ***empty*** ·effective content·, which §3.4.2.3.3
+// clause 3.1.2 produces only from an empty ·explicit content·.
 func recoverUnchangedBaseParticle(loc xsderr.Loc, mixed, baseIsAll bool) (recoveredContent, bool, error) {
 	if !baseIsAll {
 		return recoveredContent{explicitEmpty: true, effectiveMixed: mixed}, true, nil // 4.2.2

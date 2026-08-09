@@ -42,9 +42,9 @@ import (
 //     system cannot carry, carried by a scan.
 
 // inlineComplexType returns the inline <complexType> element of a single global
-// <element> whose body is ct — the exact *parser.Element
-// elementDecidable hands to anonymousComplexTypeDecidable, reached by
-// navigation rather than by any decidability predicate.
+// <element> whose body is ct — the exact *parser.Element elementDecidable hands
+// to anonymousComplexTypeDecidable, reached by navigation rather than by any
+// decidability predicate.
 func inlineComplexType(t *testing.T, ct string) *parser.Element {
 	t.Helper()
 	doc := schemaDoc(t, `<xs:element name="e"><xs:complexType>`+ct+`</xs:complexType></xs:element>`)

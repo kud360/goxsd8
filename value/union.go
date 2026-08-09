@@ -131,10 +131,10 @@ func validateUnion(b Backend, st *xsd.SimpleType, u xsd.Union, rawLexical string
 // swallowing a caller's construction fault, the worst of the outcomes available
 // here, so the fault propagates and the union is decided by nobody.
 //
-// A union whose {member type definitions} is EMPTY —
-// xs:error (Structures §3.16.7.3), whose value and lexical spaces are both empty —
-// falls out of the loop with zero candidates and so rejects every literal
-// including "", with no special case.
+// A union whose {member type definitions} is EMPTY — xs:error (Structures
+// §3.16.7.3), whose value and lexical spaces are both empty — falls out of the
+// loop with zero candidates and so rejects every literal including "", with no
+// special case.
 func dispatchUnion(b Backend, u xsd.Union, rawLexical string, ctx Context) (Value, whiteSpace, error) {
 	members := u.Members()
 	// Left nil so the common case — an early member accepts — allocates nothing;

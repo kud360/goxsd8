@@ -244,9 +244,9 @@ func checkFacetsSupported(loc xsderr.Loc, facets []Facet) error {
 // Clause 1.2 (B.{final} does not contain restriction) is discharged by
 // checkSTGraph's clause-3 site (B is D's {base}); clause 1.3.2 is charged in
 // part by checkFacetRestrictions and clause 1.3.1 above this package (see
-// checkSTGraph). It reads only
-// t.base — never the Atomic's primitive pointer, which self-references on a
-// primitive datatype (§3.16.1) and so cannot drive a terminating base walk.
+// checkSTGraph). It reads only t.base — never the Atomic's primitive
+// pointer, which self-references on a primitive datatype (§3.16.1) and so
+// cannot drive a terminating base walk.
 func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
 	if t == anyAtomicType {
 		return nil
