@@ -1328,6 +1328,13 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 	}
 	typeName := anyTypeName // §3.3.2.1 case 4
 	switch {
+	case inlineComplex != nil:
+		// Clause 1 wins outright and typeName is never read on this path (the
+		// inline branch below builds the type itself), so the lower clauses must
+		// not run at all: clause 3's lookup can decline the HEAD's inline
+		// anonymous type (#342), a limitation of a type this element never
+		// reaches, and letting it run would fail an element clause 1 fully
+		// decides.
 	case hasType:
 		typeName, err = p.resolveQName(elem, typeLex) // case 2
 	case len(affiliations) > 0:
