@@ -61,6 +61,14 @@ one).
 
 ## Before handoff
 
+- Your cwd is normally an **isolated git worktree** on its own local
+  branch, not the session's `wip/issue-<N>` checkout (docs/WORKFLOW.md,
+  "One writer per checkout" — the isolation is what lets you break lines
+  on purpose to test a test). Commit there and stop: never push, never
+  switch branches, and read an unfamiliar `git branch`/`git log` as that
+  worktree's own state rather than the session's. The orchestrator merges
+  your branch after you report — so an uncommitted edit at handoff is an
+  edit that does not exist.
 - `go build ./... && go test ./... && go vet ./...`,
   `golangci-lint run` and `go tool commentwrap ./...` pass
   (`go tool commentwrap -fix ./...` reflows what it reports).

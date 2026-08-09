@@ -172,9 +172,15 @@ work itself and never skips the arbiter.
    **warden** pre-flights the planned surface (sketch + intended type
    shapes) before any code is written; post it on the issue. Then
    **mason** makes the smallest change that closes the issue, per
-   docs/STYLE.md, committing on the WIP branch. New/changed public API
-   → **warden** reviews the diff before proceeding (post the verdict
-   on the issue). **Checkpoint.**
+   docs/STYLE.md — spawned WITH worktree isolation, never into the
+   orchestrator's own checkout, so it commits on the isolated
+   worktree's local branch (see "One writer per checkout"; mandatory
+   for every mason invocation). Only after mason reports completion —
+   never mid-flight, never because a stop hook warned about
+   uncommitted changes — fast-forward-merge that local branch into
+   `wip/issue-<N>`. New/changed public API → **warden** reviews the
+   diff before proceeding (post the verdict on the issue).
+   **Checkpoint.**
 5. **Judge** — **arbiter** runs the gate
    (`go build ./... && go test ./... && go vet ./...` + the lint gate +
    `go tool commentwrap ./...` + the conformance run), reviews the
@@ -336,6 +342,47 @@ GitHub: the issue thread, the pushed WIP branch, and main. Neither
 compaction nor a recycled container may be able to eat anything that
 can't be rebuilt from those. Wrapping up early at a checkpoint (time
 budget hit, second reject) is a first-class outcome, not a failure.
+
+**One writer per checkout** — a `wip/issue-<N>` checkout has exactly one
+writer, and it is the orchestrating session. Two writers in one tree is
+not a discipline failure that more care avoids; it is undefined
+behaviour, because every gate command and every `git commit` honestly
+reports on whatever happens to be in the tree at that instant, and the
+two writers interleave at moments neither chooses. An auto-commit fired
+into a shared checkout while a mason was mid mutation-check (deliberately
+breaking lines to confirm a test notices — `.claude/agents/mason.md`,
+"Before handoff") and pushed `206ea51` with two of those lines still
+broken, costing a full arbiter round (#350). The rules:
+
+- **Only the orchestrating session's own git commands write directly
+  into a `wip/issue-<N>` checkout.**
+- **Any subagent spawned to mutate code is spawned with worktree
+  isolation** — the harness's `isolation: "worktree"` option, which runs
+  the subagent in its own git worktree on its own local branch. This is
+  mandatory for every **mason** invocation, because a mason may run a
+  mutation-check at any point without announcing it. The isolated
+  worktree lives in the harness's own worktree area and its branch is
+  LOCAL-ONLY, never pushed to `origin`, so it mints no second ref under
+  `refs/heads/wip/` (see the branch scheme: one working branch per
+  issue).
+- **The orchestrator never commits on a live subagent's behalf, for any
+  reason** — including in reaction to a stop-hook "uncommitted changes"
+  warning, which fires on an in-progress edit exactly as readily as on a
+  finished one and is therefore not evidence that a tree is commit-ready
+  (that trigger, with no mutation-check running at all, is how the same
+  hazard recurred in #296). A subagent's tree is commit-ready only after
+  the subagent itself reports completion.
+- **After that report**, the orchestrator fast-forward-merges the
+  isolated worktree's local branch into its `wip/issue-<N>` checkout and
+  discards the worktree — the harness removes it by itself when the
+  subagent changed nothing — then checkpoints as normal. The worktree
+  never survives the step boundary it was spawned for.
+
+This is a different hazard from the stale index that
+`.githooks/pre-commit` guards (see "Merge-conflict resolution" below):
+there, one writer commits content it can no longer see; here, a second
+writer changes the content under the first. Neither guard substitutes
+for the other, and they are not merged.
 
 **Merge-conflict resolution** — the one path where the checkpoint
 ritual's `git add -A` is not what actually happens. Conflict resolution
