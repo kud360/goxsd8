@@ -46,7 +46,7 @@ func sgType(t *testing.T, name, base QName, method DerivationMethod, prohibited 
 // substitutions}, both being Complex Type Definition properties (§3.4.1).
 func sgSimple(t *testing.T, name QName, base *SimpleType) *SimpleType {
 	t.Helper()
-	st, err := NewSimpleType(xsderr.Loc{}, name, base.Variety(), base, nil, nil)
+	st, err := NewSimpleType(xsderr.Loc{}, name, RestrictionDerivation{}, base, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(%s): %v", name, err)
 	}

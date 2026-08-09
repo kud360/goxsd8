@@ -14,7 +14,7 @@ func facetBase(t *testing.T, ownFacets ...Facet) *SimpleType {
 	t.Helper()
 	prim := mustPrim(t, "string")
 	base, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "base"},
-		NewAtomic(prim), prim, ownFacets, nil)
+		RestrictionDerivation{}, prim, ownFacets, nil)
 	if err != nil {
 		t.Fatalf("build base: %v", err)
 	}
@@ -24,7 +24,7 @@ func facetBase(t *testing.T, ownFacets ...Facet) *SimpleType {
 // deriveFacets restricts base with ownFacets, returning the construction error.
 func deriveFacets(base *SimpleType, ownFacets ...Facet) error {
 	_, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "derived"},
-		base.variety, base, ownFacets, nil)
+		RestrictionDerivation{}, base, ownFacets, nil)
 	return err
 }
 
@@ -100,12 +100,12 @@ func TestCountFacetRestrictionVacuousWithoutBaseFacet(t *testing.T) {
 func TestCountFacetRestrictionTransitive(t *testing.T) {
 	base := facetBase(t, NewFacet(FacetMaxLength, []string{"8"}, false))
 	middle, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "middle"},
-		base.variety, base, nil, nil)
+		RestrictionDerivation{}, base, nil, nil)
 	if err != nil {
 		t.Fatalf("build middle: %v", err)
 	}
 	_, err = NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "leaf"},
-		middle.variety, middle, []Facet{NewFacet(FacetMaxLength, []string{"9"}, false)}, nil)
+		RestrictionDerivation{}, middle, []Facet{NewFacet(FacetMaxLength, []string{"9"}, false)}, nil)
 	wantRule(t, err, ruleMaxLengthValidRestriction)
 }
 
@@ -216,7 +216,7 @@ func TestCountFacetConsistency(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "t"},
-				NewAtomic(prim), prim, c.facets, nil)
+				RestrictionDerivation{}, prim, c.facets, nil)
 			if c.wantRule == "" {
 				if err != nil {
 					t.Fatalf("consistent facets rejected: %v", err)
@@ -255,19 +255,19 @@ func TestCountFacetValueMalformed(t *testing.T) {
 func TestListApplicableFacets(t *testing.T) {
 	item := mustPrim(t, "string")
 	constructed, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "constructedlist"},
-		NewList(item), anySimpleType, constructedListFacets(), nil)
+		ListDerivation{Item: item}, anySimpleType, constructedListFacets(), nil)
 	if err != nil {
 		t.Fatalf("constructed list rejected: %v", err)
 	}
 	baseList, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "goodlist"},
-		NewList(item), constructed,
+		ListDerivation{Item: item}, constructed,
 		[]Facet{NewFacet(FacetMinLength, []string{"1"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("list with an applicable facet rejected: %v", err)
 	}
 
 	_, err = NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "badconstructedlist"},
-		NewList(item), anySimpleType,
+		ListDerivation{Item: item}, anySimpleType,
 		[]Facet{NewFacet(FacetMaxInclusive, []string{"5"}, false)}, nil)
 	wantRule(t, err, ruleCosSTRestricts)
 	if !strings.Contains(err.Error(), "2.2.1.2") {
@@ -275,7 +275,7 @@ func TestListApplicableFacets(t *testing.T) {
 	}
 
 	_, err = NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "badrestrictedlist"},
-		NewList(item), baseList,
+		ListDerivation{Item: item}, baseList,
 		[]Facet{NewFacet(FacetMaxInclusive, []string{"5"}, false)}, nil)
 	wantRule(t, err, ruleCosSTRestricts)
 	if !strings.Contains(err.Error(), "2.2.2.4") {
@@ -292,16 +292,16 @@ func TestListApplicableFacets(t *testing.T) {
 // (TestUnionConstructedFacetsMustBeEmpty).
 func TestUnionApplicableFacets(t *testing.T) {
 	baseUnion := mustUnion(t, "baseunion")
-	member := baseUnion.variety.(Union).members[0]
+	member := baseUnion.Members()[0]
 	_, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "goodunion"},
-		NewUnion(member), baseUnion,
+		UnionDerivation{Members: []*SimpleType{member}}, baseUnion,
 		[]Facet{NewFacet(FacetPattern, []string{"a+"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("union with an applicable facet rejected: %v", err)
 	}
 
 	_, err = NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "badunion"},
-		NewUnion(member), baseUnion,
+		UnionDerivation{Members: []*SimpleType{member}}, baseUnion,
 		[]Facet{NewFacet(FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	wantRule(t, err, ruleCosSTRestricts)
 	if !strings.Contains(err.Error(), "3.2.2.4") {
@@ -315,7 +315,7 @@ func mustUnion(t *testing.T, local string) *SimpleType {
 	t.Helper()
 	member := mustPrim(t, local+"member")
 	u, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: local},
-		NewUnion(member), anySimpleType, nil, nil)
+		UnionDerivation{Members: []*SimpleType{member}}, anySimpleType, nil, nil)
 	if err != nil {
 		t.Fatalf("build union %s: %v", local, err)
 	}
@@ -331,12 +331,12 @@ func mustUnion(t *testing.T, local string) *SimpleType {
 func TestUnionConstructedFacetsMustBeEmpty(t *testing.T) {
 	member := mustPrim(t, "cufmember")
 	if _, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "emptyunion"},
-		NewUnion(member), anySimpleType, nil, nil); err != nil {
+		UnionDerivation{Members: []*SimpleType{member}}, anySimpleType, nil, nil); err != nil {
 		t.Fatalf("facet-free constructed union rejected: %v", err)
 	}
 
 	_, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "facetedunion"},
-		NewUnion(member), anySimpleType,
+		UnionDerivation{Members: []*SimpleType{member}}, anySimpleType,
 		[]Facet{NewFacet(FacetPattern, []string{"a+"}, false)}, nil)
 	wantRule(t, err, ruleCosSTRestricts)
 	if !strings.Contains(err.Error(), "3.2.1.2") {
@@ -352,7 +352,7 @@ func TestUnionConstructedFacetsMustBeEmpty(t *testing.T) {
 func TestAtomicVarietyApplicableFacetsNotCharged(t *testing.T) {
 	prim := mustPrim(t, "string")
 	if _, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "atomic"},
-		NewAtomic(prim), prim,
+		RestrictionDerivation{}, prim,
 		[]Facet{NewFacet(FacetMaxInclusive, []string{"5"}, false)}, nil); err != nil {
 		t.Fatalf("atomic applicability must not be charged in package xsd, got: %v", err)
 	}
@@ -369,7 +369,7 @@ func lengthChain(t *testing.T, steps ...[]Facet) error {
 	cur := mustPrim(t, "string")
 	for i, own := range steps {
 		next, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "step" + strconv.Itoa(i)},
-			cur.variety, cur, own, nil)
+			RestrictionDerivation{}, cur, own, nil)
 		if err != nil {
 			return err
 		}

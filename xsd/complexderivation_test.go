@@ -109,14 +109,14 @@ func dAssert(test string) Assertion {
 	return NewAssertion(NewXPathExpression(test, nil, nil, nil), nil)
 }
 
-// dSimple builds a named atomic simple type restricting base. It carries base's
-// {variety} the way the XML mapping does (§3.16.2.1), so the {primitive type
-// definition} propagates down the chain. base must not be xs:anyAtomicType, which
-// only a primitive datatype may name as its {base type definition} — dPrimitive
-// builds those.
+// dSimple builds a named atomic simple type restricting base. It declares a
+// plain ·restriction·, so its {variety} and {primitive type definition} derive
+// from base the way the XML mapping gives them (§3.16.2.1). base must not be
+// xs:anyAtomicType, which only a primitive datatype may name as its {base type
+// definition} — dPrimitive builds those.
 func dSimple(t *testing.T, name QName, base *SimpleType) *SimpleType {
 	t.Helper()
-	st, err := NewSimpleType(xsderr.Loc{}, name, base.Variety(), base, nil, nil)
+	st, err := NewSimpleType(xsderr.Loc{}, name, RestrictionDerivation{}, base, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(%s): %v", name, err)
 	}

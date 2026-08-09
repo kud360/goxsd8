@@ -55,17 +55,22 @@ func (e *MissingPrimitivesError) Error() string {
 // slice; it remains a parser-level structural concern (M4).
 //
 // Each component carries its {name}, its {base type definition} as a fully
-// linked pointer chain up to the shared xs:anySimpleType node, its {variety}
-// (atomic or list, with list item pointers resolved), its own {facets} (the
-// value-bearing spec defaults from the row, cos-applicable-facets §4.1.5), and
-// an empty {final}. {facets} holds only value-bearing (default-carrying) facets;
-// facet APPLICABILITY that carries no default — notably precisionDecimal's
-// maxScale/minScale — is not materialized here and is answered instead via
-// [Types]/[TypeSpec.Applies], not the component's {facets}. A derived atomic
-// type's {primitive type definition} points at its primitive ancestor; a
-// primitive datatype's own {primitive type definition} is itself, wired via
-// [xsd.NewPrimitiveType]. Only xs:anyAtomicType carries an absent {primitive
-// type definition} (the zero xsd.Atomic{}).
+// linked pointer chain up to the shared xs:anySimpleType node, its declared
+// [xsd.SimpleTypeDerivation] (restriction or list, with list item pointers
+// resolved), its own {facets} (the value-bearing spec defaults from the row,
+// cos-applicable-facets §4.1.5), and an empty {final}. {facets} holds only
+// value-bearing (default-carrying) facets; facet APPLICABILITY that carries no
+// default — notably precisionDecimal's maxScale/minScale — is not materialized
+// here and is answered instead via [Types]/[TypeSpec.Applies], not the
+// component's {facets}.
+//
+// {variety} and {primitive type definition} are not seeded at all: they are
+// DERIVED from the declared derivation and the base chain (§3.16.2.1), read
+// back through [xsd.SimpleType.Variety] and [xsd.SimpleType.Primitive]. A
+// derived atomic row declares a plain restriction, so its {primitive type
+// definition} resolves to its primitive ancestor; a primitive datatype is built
+// through [xsd.NewPrimitiveType] and is its own. Only xs:anyAtomicType has an
+// absent {primitive type definition}.
 //
 // # The list datatypes' anonymous intermediate step
 //
@@ -157,9 +162,10 @@ func Seed(b value.Backend) ([]*xsd.SimpleType, error) {
 			return nil, err
 		}
 		// A primitive's {base type definition} is xs:anyAtomicType and its
-		// {primitive type definition} is itself (§3.16.1); NewPrimitiveType wires
-		// both — the canonical anchor base and the self-reference — so IsPrimitive
-		// reports true.
+		// {primitive type definition} is itself (§3.16.1); NewPrimitiveType fixes
+		// the canonical anchor base and declares the package-private primitive
+		// derivation arm, so IsPrimitive reports true and Primitive() reports the
+		// node itself.
 		if spec.IsPrimitive() {
 			node, err := xsd.NewPrimitiveType(xsderr.Loc{}, qname(spec.Name), facets, nil)
 			if err != nil {
@@ -172,15 +178,15 @@ func Seed(b value.Backend) ([]*xsd.SimpleType, error) {
 		if err != nil {
 			return nil, err
 		}
-		variety, err := buildVariety(index, built, spec, build)
+		derivation, err := buildDerivation(spec, build)
 		if err != nil {
 			return nil, err
 		}
-		base, err = interposeListBase(spec, variety, base)
+		base, derivation, err = interposeListBase(spec, derivation, base)
 		if err != nil {
 			return nil, err
 		}
-		node, err := xsd.NewSimpleType(xsderr.Loc{}, qname(spec.Name), variety, base, facets, nil)
+		node, err := xsd.NewSimpleType(xsderr.Loc{}, qname(spec.Name), derivation, base, facets, nil)
 		if err != nil {
 			return nil, fmt.Errorf("builtin: constructing xs:%s: %w", spec.Name, err)
 		}
@@ -200,9 +206,15 @@ func Seed(b value.Backend) ([]*xsd.SimpleType, error) {
 	return out, nil
 }
 
-// interposeListBase returns the {base type definition} the row's named component
-// restricts. For an atomic row that is base unchanged; for a LIST row it is the
-// ANONYMOUS intermediate list component the row's named type actually restricts.
+// interposeListBase returns the {base type definition} and the declared
+// derivation the row's named component is built with. For an atomic row both are
+// its arguments unchanged; for a LIST row the base becomes the ANONYMOUS
+// intermediate list component the row's named type actually restricts, and the
+// named row's own derivation becomes a plain xsd.RestrictionDerivation — the
+// ListDerivation, and with it the {item type definition}, is minted ONCE, on the
+// interposed node. The named row re-derives its {item type definition} from that
+// base per §3.16.2.1 rather than carrying a second copy of the pointer (STYLE
+// D3).
 //
 // Datatypes §3.4.5/§3.4.10/§3.4.12 derive xs:NMTOKENS/xs:IDREFS/xs:ENTITIES from
 // xs:anySimpleType in TWO steps: "an anonymous list type is defined, whose item
@@ -219,61 +231,44 @@ func Seed(b value.Backend) ([]*xsd.SimpleType, error) {
 // REFUSED rather than quietly flattened back onto its stated base — a silent
 // fallback there would be a false-accept of a shape cos-st-restricts clause
 // 2.2.1.2 exists to reject.
-func interposeListBase(spec TypeSpec, variety xsd.Variety, base *xsd.SimpleType) (*xsd.SimpleType, error) {
+func interposeListBase(spec TypeSpec, derivation xsd.SimpleTypeDerivation, base *xsd.SimpleType) (*xsd.SimpleType, xsd.SimpleTypeDerivation, error) {
 	if _, ok := spec.Variety.(List); !ok {
-		return base, nil
+		return base, derivation, nil
 	}
 	if spec.Base != "anySimpleType" {
-		return nil, fmt.Errorf("builtin: list type %q has base %q, but a list row's first derivation step must restrict anySimpleType (§3.16.2.1 map.std.common case 2)", spec.Name, spec.Base)
+		return nil, nil, fmt.Errorf("builtin: list type %q has base %q, but a list row's first derivation step must restrict anySimpleType (§3.16.2.1 map.std.common case 2)", spec.Name, spec.Base)
 	}
-	node, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{}, variety, xsd.AnySimpleType(),
+	node, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{}, derivation, xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("builtin: constructing the anonymous list xs:%s restricts: %w", spec.Name, err)
+		return nil, nil, fmt.Errorf("builtin: constructing the anonymous list xs:%s restricts: %w", spec.Name, err)
 	}
-	return node, nil
+	return node, xsd.RestrictionDerivation{}, nil
 }
 
-// buildVariety translates a row's backend-neutral builtin.Variety into the
-// resolved xsd.Variety, wiring live component pointers via build.
-func buildVariety(index map[string]TypeSpec, built map[string]*xsd.SimpleType, spec TypeSpec, build func(string) (*xsd.SimpleType, error)) (xsd.Variety, error) {
+// buildDerivation translates a row's backend-neutral builtin.Variety into the
+// declared xsd.SimpleTypeDerivation the component is constructed with, wiring
+// live item pointers via build.
+//
+// An Atomic row yields a plain xsd.RestrictionDerivation: this path builds only
+// DERIVED atomic types — primitives take the NewPrimitiveType path in build, and
+// xs:anyAtomicType is the pre-seeded anchor — and a ·restriction· mints none of
+// {variety} or {primitive type definition} of its own, taking both from its base
+// (§3.16.2.1). Walking the table for the row's primitive ancestor, which this
+// used to do, would compute by hand exactly what xsd.SimpleType.Primitive now
+// derives from that base chain (STYLE D3).
+func buildDerivation(spec TypeSpec, build func(string) (*xsd.SimpleType, error)) (xsd.SimpleTypeDerivation, error) {
 	switch v := spec.Variety.(type) {
 	case Atomic:
-		// This path builds only DERIVED atomic types (primitives take the
-		// NewPrimitiveType path in build, and xs:anyAtomicType is the pre-seeded
-		// anchor). {primitive type definition} is the nearest primitive ancestor.
-		if pn, ok := primitiveName(index, spec.Name); ok && pn != spec.Name {
-			return xsd.NewAtomic(built[pn]), nil
-		}
-		return xsd.Atomic{}, nil
+		return xsd.RestrictionDerivation{}, nil
 	case List:
 		item, err := build(v.Item)
 		if err != nil {
 			return nil, err
 		}
-		return xsd.NewList(item), nil
+		return xsd.ListDerivation{Item: item}, nil
 	default:
 		return nil, fmt.Errorf("builtin: type %q has no variety", spec.Name)
-	}
-}
-
-// primitiveName returns the name of name's nearest primitive ancestor by
-// walking the base chain in the data table. ok is false when the chain reaches
-// xs:anySimpleType without passing a primitive (xs:anyAtomicType and the list
-// types).
-func primitiveName(index map[string]TypeSpec, name string) (string, bool) {
-	for {
-		t, ok := index[name]
-		if !ok {
-			return "", false
-		}
-		if t.IsPrimitive() {
-			return t.Name, true
-		}
-		if t.Base == "anySimpleType" {
-			return "", false
-		}
-		name = t.Base
 	}
 }
 

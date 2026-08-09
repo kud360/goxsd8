@@ -265,8 +265,8 @@ func validateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Conte
 	// clause 2.3's member dispatch (union.go), which composes st's own facets
 	// around the dispatched member's verdict rather than around st's own mapping.
 	// Atomic (cl.2.1) and list (cl.2.2) share the path below.
-	if u, ok := st.Variety().(xsd.Union); ok {
-		return validateUnion(b, st, u, rawLexical, ctx)
+	if _, ok := st.Variety().(xsd.Union); ok {
+		return validateUnion(b, st, rawLexical, ctx)
 	}
 
 	lexFacets, valFacets, err := compile(b, st)
@@ -443,17 +443,19 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 // member spoils the whole dispatch — both yielding the same (Mapping{}, false)
 // "ungoverned" outcome the atomic case returns.
 func governingMapping(b Backend, node *xsd.SimpleType) (Mapping, bool) {
-	if lst, ok := node.Variety().(xsd.List); ok {
-		if !listGoverned(b, lst) {
+	if _, ok := node.Variety().(xsd.List); ok {
+		item := node.Item()
+		if !listGoverned(b, item) {
 			return Mapping{}, false
 		}
-		return listMapping(b, lst.Item()), true
+		return listMapping(b, item), true
 	}
-	if u, ok := node.Variety().(xsd.Union); ok {
-		if !unionGoverned(b, u) {
+	if _, ok := node.Variety().(xsd.Union); ok {
+		members := node.Members()
+		if !unionGoverned(b, members) {
 			return Mapping{}, false
 		}
-		return unionMapping(b, u), true
+		return unionMapping(b, members), true
 	}
 	if s, ok := governingNode(b, node); ok {
 		return b.Mapping(s.Name())
@@ -910,17 +912,20 @@ func newLengthFacet(st *xsd.SimpleType, f xsd.Facet) (lengthFacet, error) {
 // length/minLength/maxLength facets are an unconditional no-op — "any {value}
 // is facet-valid" — per clause 1.3 of cvc-length-valid (§4.3.1.3),
 // cvc-minLength-valid (§4.3.2.3), and cvc-maxLength-valid (§4.3.3.3). It keys
-// off the atomic {variety}'s Primitive() (the resolved primitive, §3.16.1), not
+// off an atomic {variety}'s {primitive type definition} (§3.16.1), not
 // the value's Go type nor a blanket "is atomic" test: clause 1.3 is a case
 // split on the primitive, and the list case (clause 2) carries no such
 // exemption. A non-atomic {variety} (nil / list / union) or an absent primitive
 // (xs:anyAtomicType) is not exempt; this predicate never panics.
 func lengthExemptPrimitive(st *xsd.SimpleType) bool {
-	at, ok := st.Variety().(xsd.Atomic)
-	if !ok || at.Primitive() == nil {
+	if _, ok := st.Variety().(xsd.Atomic); !ok {
 		return false
 	}
-	name := at.Primitive().Name()
+	primitive := st.Primitive()
+	if primitive == nil {
+		return false
+	}
+	name := primitive.Name()
 	return name == qnameName || name == notationName
 }
 

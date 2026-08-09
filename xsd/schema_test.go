@@ -336,7 +336,7 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 		}},
 		{"SimpleType", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
 			base := primitiveAt(t, xsderr.Loc{})
-			st, err := xsd.NewSimpleType(l, name, base.Variety(), base, nil, nil)
+			st, err := xsd.NewSimpleType(l, name, xsd.RestrictionDerivation{}, base, nil, nil)
 			if err != nil {
 				t.Fatalf("NewSimpleType: %v", err)
 			}
@@ -400,7 +400,7 @@ func TestTypeDefinitionSumPromotesLoc(t *testing.T) {
 	stLoc := xsderr.Loc{URI: "s.xsd", Line: 2, Col: 1}
 	ctLoc := xsderr.Loc{URI: "s.xsd", Line: 7, Col: 1}
 	base := simpleTypeNamed(t, xsd.QName{Space: "urn:ns", Local: "prim"})
-	st, err := xsd.NewSimpleType(stLoc, xsd.QName{Space: "urn:ns", Local: "st"}, base.Variety(), base, nil, nil)
+	st, err := xsd.NewSimpleType(stLoc, xsd.QName{Space: "urn:ns", Local: "st"}, xsd.RestrictionDerivation{}, base, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}

@@ -117,9 +117,12 @@ const (
 // that need t's resolved {base type definition}, {item type definition}, and
 // {member type definitions} pointers — the checks checkSTProps (simpletype.go)
 // cannot make at the pure-property layer. NewSimpleType and NewPrimitiveType call
-// it after t.variety/t.base/t.ownFacets are wired, when those pointers are
+// it after t.derivation/t.base/t.ownFacets are wired, when those pointers are
 // already live (a simple type references its base/item/members by pointer, set
-// once at construction with no setter).
+// once at construction with no setter). It reads the four derived properties
+// through SimpleType.Variety/Primitive/Item/Members, which resolve them off the
+// declared derivation and the base chain (§3.16.2.1) and are total on the
+// partially-built receiver this runs against.
 //
 // It charges, per clause:
 //
@@ -176,10 +179,10 @@ const (
 // base chain, and {base} is an unexported field with no setter. cos-st-restricts
 // clause 3.3 (no-self-membership, checkUnionGraph) is retired by the same
 // argument — a union's members must pre-exist the union, so the union cannot be
-// in its own transitive membership. The Atomic/List/Union {variety} branches
-// carry unexported fields too, and NewUnion copies its membership in while
-// Union.Members copies it out, so no external caller can splice a cycle in after
-// construction either.
+// in its own transitive membership. NewSimpleType copies a UnionDerivation's
+// membership in (copyDerivation) while SimpleType.Members copies it out, so no
+// external caller can splice a cycle in through the exported Members field
+// after construction either.
 //
 // Still deferred here, and why:
 //
@@ -214,11 +217,12 @@ func checkSTGraph(loc xsderr.Loc, t *SimpleType) error {
 	if err := checkVarietyApplicableFacets(loc, t); err != nil {
 		return err
 	}
-	if t.variety == nil && !t.IsAnySimpleType() {
+	variety := t.Variety()
+	if variety == nil && !t.IsAnySimpleType() {
 		return xsderr.New(ruleSTPropsCorrect, loc,
 			"simple type restricting %s has an absent {variety}, which only xs:anySimpleType may have (st-props-correct clause 1)", t.base.name)
 	}
-	switch t.variety.(type) {
+	switch variety.(type) {
 	case Atomic:
 		return checkAtomicGraph(loc, t)
 	case List:
@@ -272,24 +276,36 @@ func checkFacetsSupported(loc xsderr.Loc, facets []Facet) error {
 //     the narrower facet-applicability rejection (cos-st-restricts clause 1.3.1,
 //     charged above this package) that already covered the faceted schemas. The
 //     built-in primitives are exempt by the same tableau: a primitive datatype's
-//     {primitive type definition} is ITSELF (§3.16.1), the self-reference
-//     NewPrimitiveType wires and no other producer can, so the check is keyed on
-//     that self-reference rather than on a "this is a builtin" flag.
+//     {primitive type definition} is ITSELF (§3.16.1), which it reports because
+//     it declares the package-private primitive derivation arm — minted only by
+//     NewPrimitiveType and forgeable by no producer — so the check is keyed on
+//     that arm (IsPrimitive) rather than on a "this is a builtin" flag.
 //
 // The check is deliberately keyed on the base being xs:anyAtomicType and NOT
 // generalized to "every atomic type carries a present {primitive type
-// definition}". A caller that hands an absent {primitive type definition} to a
-// type whose base HAS one is violating st-restrict-facets clause 2 ("if {variety}
-// is atomic, the {primitive type definition} of R is the same as that of B"), a
-// different rule with no site here yet; charging it under st-props-correct would
-// be charge-imprecise (STYLE E2).
+// definition}". A caller whose type inherits an absent {primitive type
+// definition} from a base that HAS one is violating st-restrict-facets clause 2
+// ("if {variety} is atomic, the {primitive type definition} of R is the same as
+// that of B"), a different rule with no site here yet; charging it under
+// st-props-correct would be charge-imprecise (STYLE E2).
 //
 // Clause 1.2 (B.{final} does not contain restriction) is discharged by
 // checkSTGraph's clause-3 site (B is D's {base}); clause 1.3.2 is charged in
 // part by checkFacetRestrictions and clause 1.3.1 above this package (see
-// checkSTGraph). The clause-1.1 test reads only t.base — never the Atomic's
-// primitive pointer, which self-references on a primitive datatype (§3.16.1) and
-// so cannot drive a terminating base walk.
+// checkSTGraph). The clause-1.1 test reads only t.base's own derived {variety} —
+// never t's {primitive type definition}, which self-references on a primitive
+// datatype (§3.16.1) and so cannot drive a terminating base walk.
+//
+// The two rejections above the #480 site — an absent base, and a non-atomic one
+// — are no longer reachable through this package's EXPORTED constructors now
+// that {variety} is derived: a RestrictionDerivation reports atomic only when
+// its base already does, and the two arms that mint atomic on their own fix
+// their base (NewPrimitiveType to the anchor) or are the anchor. They are kept
+// rather than deleted because checkSTGraph takes any *SimpleType, including the
+// struct-literal receivers this package builds directly (both anchors are
+// literals), and because the clause-1.1 test below dereferences t.base — the
+// same reason checkFacetsSupported keeps its own expected-unreachable rejection
+// instead of dropping it.
 func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
 	if t == anyAtomicType {
 		return nil
@@ -298,11 +314,11 @@ func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
 		return xsderr.New(ruleSTPropsCorrect, loc,
 			"atomic simple type has an absent {base type definition} (st-props-correct clause 1)")
 	}
-	if _, ok := t.base.variety.(Atomic); !ok {
+	if _, ok := t.base.Variety().(Atomic); !ok {
 		return xsderr.New(ruleCosSTRestricts, loc,
 			"atomic simple type {base type definition} %s is not an atomic simple type definition (cos-st-restricts clause 1.1)", t.base.name)
 	}
-	if t.base == anyAtomicType && t.variety.(Atomic).primitive != t {
+	if t.base == anyAtomicType && !t.IsPrimitive() {
 		return xsderr.New(ruleSTPropsCorrect, loc,
 			"atomic simple type may not name %s as its {base type definition} unless it is a primitive datatype: it inherits that type's absent {primitive type definition} (st-restrict-facets clause 2), which the property tableau requires present (st-props-correct clause 1)", t.base.name)
 	}
@@ -326,7 +342,7 @@ func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
 //     checkVarietyApplicableFacets and clause 2.2.2.5 in part by
 //     checkFacetRestrictions, both from checkSTGraph.
 func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
-	item := t.variety.(List).item
+	item := t.Item()
 	if item == nil {
 		return xsderr.New(ruleSTPropsCorrect, loc,
 			"list simple type has an absent {item type definition} (st-props-correct clause 1)")
@@ -335,7 +351,7 @@ func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
 		return xsderr.New(ruleCosSTRestricts, loc,
 			"list {item type definition} %s is a special type definition (cos-st-restricts clause 2.1)", item.name)
 	}
-	switch item.variety.(type) {
+	switch item.Variety().(type) {
 	case Atomic:
 	case Union:
 		if unionMembershipHasList(item) {
@@ -358,12 +374,11 @@ func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
 		}
 		return checkConstructedListFacets(loc, t)
 	}
-	baseList, ok := t.base.variety.(List)
-	if !ok {
+	if _, ok := t.base.Variety().(List); !ok {
 		return xsderr.New(ruleCosSTRestricts, loc,
 			"list simple type restricts base %s whose {variety} is not list (cos-st-restricts clause 2.2.2.1)", t.base.name)
 	}
-	if !derivedOKSimple(item, baseList.item) {
+	if !derivedOKSimple(item, t.base.Item()) {
 		return xsderr.New(ruleCosSTRestricts, loc,
 			"list {item type definition} %s is not validly derived from the base list's item type (cos-st-restricts clause 2.2.2.3 via cos-st-derived-ok §3.16.6.3)", item.name)
 	}
@@ -432,7 +447,7 @@ func checkConstructedListFacets(loc xsderr.Loc, t *SimpleType) error {
 //
 // Clause 3.3 (no-self-membership) is a documented no-op — see checkSTGraph.
 func checkUnionGraph(loc xsderr.Loc, t *SimpleType) error {
-	members := t.variety.(Union).members
+	members := t.Members()
 	for _, m := range members {
 		if m == nil {
 			return xsderr.New(ruleSTPropsCorrect, loc,
@@ -461,18 +476,18 @@ func checkUnionGraph(loc xsderr.Loc, t *SimpleType) error {
 		}
 		return nil
 	}
-	baseUnion, ok := t.base.variety.(Union)
-	if !ok {
+	if _, ok := t.base.Variety().(Union); !ok {
 		return xsderr.New(ruleCosSTRestricts, loc,
 			"union simple type restricts base %s whose {variety} is not union (cos-st-restricts clause 3.2.2.1)", t.base.name)
 	}
-	if len(members) != len(baseUnion.members) {
+	baseMembers := t.base.Members()
+	if len(members) != len(baseMembers) {
 		return xsderr.New(ruleCosSTRestricts, loc,
 			"union restriction has %d member type definitions but base union %s has %d (cos-st-restricts clause 3.2.2.3)",
-			len(members), t.base.name, len(baseUnion.members))
+			len(members), t.base.name, len(baseMembers))
 	}
 	for i, m := range members {
-		if !derivedOKSimple(m, baseUnion.members[i]) {
+		if !derivedOKSimple(m, baseMembers[i]) {
 			return xsderr.New(ruleCosSTRestricts, loc,
 				"union member %s is not validly derived from the corresponding base member (cos-st-restricts clause 3.2.2.3 via cos-st-derived-ok §3.16.6.3)", m.name)
 		}
@@ -510,7 +525,7 @@ func derivedOKSimple(d, b *SimpleType) bool {
 		return true
 	}
 	if b == anySimpleType {
-		switch d.variety.(type) {
+		switch d.Variety().(type) {
 		case List, Union:
 			return true
 		}
@@ -518,8 +533,8 @@ func derivedOKSimple(d, b *SimpleType) bool {
 	if d.base != nil && derivedOKSimple(d.base, b) {
 		return true
 	}
-	if bv, ok := b.variety.(Union); ok && len(b.EffectiveFacets()) == 0 {
-		for _, m := range bv.members {
+	if _, ok := b.Variety().(Union); ok && len(b.EffectiveFacets()) == 0 {
+		for _, m := range b.Members() {
 			if derivedOKSimple(d, m) {
 				return true
 			}
@@ -1129,7 +1144,7 @@ func checkLengthFreeStep(loc xsderr.Loc, t *SimpleType, eff []EffectiveFacet, ki
 // from the generated per-primitive table, so it lives in
 // builtin.CheckSimpleTypeRestriction.
 func checkVarietyApplicableFacets(loc xsderr.Loc, t *SimpleType) error {
-	switch t.variety.(type) {
+	switch t.Variety().(type) {
 	case List:
 		return checkApplicableFacetSet(loc, t, "list", listApplicableFacet)
 	case Union:
@@ -1165,7 +1180,7 @@ func checkApplicableFacetSet(loc xsderr.Loc, t *SimpleType, variety string, appl
 // (checkVarietyApplicableFacets returns early for a constructed union, whose
 // clause 3.2.1.2 checkUnionGraph charges), so union is always 3.2.2.4.
 func applicableClause(t *SimpleType) string {
-	if _, isList := t.variety.(List); !isList {
+	if _, isList := t.Variety().(List); !isList {
 		return "3.2.2.4"
 	}
 	if t.base == anySimpleType {
@@ -1281,20 +1296,19 @@ func scaleValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (int, error) {
 // union's transitive membership". u is expected to be a union; a non-union u
 // yields false. It recurses through member unions with no visited set: a union's
 // members pre-exist the union, so the transitive membership is finite and
-// acyclic and the recursion terminates — and because Union's membership is an
-// unexported field that NewUnion copies in and Union.Members copies out, a
-// mutation-induced cycle is structurally unrepresentable, not merely
+// acyclic and the recursion terminates — and because NewSimpleType copies a
+// UnionDerivation's membership in (copyDerivation) and SimpleType.Members copies
+// it out, a mutation-induced cycle is structurally unrepresentable, not merely
 // unconstructed.
 func unionMembershipHasList(u *SimpleType) bool {
-	uv, ok := u.variety.(Union)
-	if !ok {
+	if _, ok := u.Variety().(Union); !ok {
 		return false
 	}
-	for _, m := range uv.members {
+	for _, m := range u.Members() {
 		if m == nil {
 			continue
 		}
-		switch m.variety.(type) {
+		switch m.Variety().(type) {
 		case List:
 			return true
 		case Union:
