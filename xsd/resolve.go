@@ -748,8 +748,15 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 //     {base type definition} like any other, so Phase A descends it to LOOK UP
 //     a by-name base (src-resolve clause 1.1), and this pass descends it to
 //     CHARGE the two derivation halves. Neither visit substitutes for the
-//     other, and this pass has no second route to the slot — the type is
-//     anonymous, so no index holds it and no declaration slot names it.
+//     other. The slot usually holds a NAMED type today — every arm the
+//     producer currently builds for it (parser/produce_complex.go's
+//     simpleContentSimpleType) reuses an EXISTING component, so this descent
+//     ordinarily re-charges a component slot 1 also reaches, which is
+//     harmless and already licensed by the NO VISITED SET paragraph below.
+//     But the slot CAN hold a component no index reaches — the anonymous
+//     type an eventual <simpleContent><restriction> producer would
+//     synthesize — so dropping this hop would be a false accept for that
+//     case.
 //  4. ListDerivation.Item (simpletype.go). An anonymous item type is in no index.
 //  5. UnionDerivation.Members (simpletype.go). Ditto, for every member, walked in
 //     the declared order the property preserves (STYLE D2).
@@ -893,9 +900,9 @@ func (s *Schema) checkTypeDefinitionSimpleTypes(ref TypeDefinitionOrRef) error {
 // checkComplexTypeSimpleTypes descends one complex type for simple types: its
 // {base type definition} slot (an inline base may be a simple type, or a complex
 // one with simple content), its {attribute uses}, and its {content type} — where
-// SimpleContent's {simple type definition} is inventory slot 3, the slot no
-// index reaches. The descent mirrors resolveComplexType's, which walks the same
-// three places for the reference half (see the inventory's slot 3).
+// SimpleContent's {simple type definition} is inventory slot 3. The descent
+// mirrors resolveComplexType's, which walks the same three places for the
+// reference half (see the inventory's slot 3 for why both passes need it).
 func (s *Schema) checkComplexTypeSimpleTypes(c ComplexType) error {
 	if err := s.checkTypeDefinitionSimpleTypes(c.Base()); err != nil {
 		return err
