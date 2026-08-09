@@ -1173,6 +1173,66 @@ func TestProduceChargesFacetValueRestriction(t *testing.T) {
 	}
 }
 
+// TestProduceSpecialBaseRejected pins #480: neither ·special· datatype may be
+// named as the {base type definition} of a user-defined simple type
+// (xmlschema11-2.md §2.4.2 "No ·user-defined· datatype may have anyAtomicType as
+// its ·base type·", Structures §3.16.1's parallel statement for both). Both
+// rejections are st-props-correct clause 1 against the Datatypes §4.1.1 property
+// tableau, reached through the {variety} the XML mapping copies off the base
+// (§3.16.2.1): xs:anySimpleType's is ·absent·, which only xs:anySimpleType may
+// be, and xs:anyAtomicType's carries an ·absent· {primitive type definition},
+// which only xs:anyAtomicType may have. Both fire with NO facet present — the
+// pre-existing facet-applicability path (cos-st-restricts clause 1.3.1) only saw
+// a schema that named one, which is why three of these four cases were accepted
+// before.
+func TestProduceSpecialBaseRejected(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		body string
+	}{
+		{"anyAtomicType, no facets",
+			`<xs:simpleType name="t"><xs:restriction base="xs:anyAtomicType"/></xs:simpleType>`},
+		{"anyAtomicType, facet present",
+			`<xs:simpleType name="t"><xs:restriction base="xs:anyAtomicType"><xs:pattern value="a"/></xs:restriction></xs:simpleType>`},
+		{"anySimpleType, no facets",
+			`<xs:simpleType name="t"><xs:restriction base="xs:anySimpleType"/></xs:simpleType>`},
+		{"anySimpleType, facet present",
+			`<xs:simpleType name="t"><xs:restriction base="xs:anySimpleType"><xs:pattern value="a"/></xs:restriction></xs:simpleType>`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:special", c.body))
+			assertRule(t, err, xsderr.Rule("st-props-correct"))
+		})
+	}
+}
+
+// TestProduceSpecialTypesStayUsable is the false-reject guard for #480's
+// rejection: it is scoped to the {base type definition} of a ·restriction·, so
+// the built-in primitives — which legitimately DO have xs:anyAtomicType as their
+// base (xmlschema11-2.md §2.4.2) — must still seed and resolve, a restriction of
+// one must still produce, and naming either ·special· type where a type is merely
+// REFERENCED (an element's type=) must stay legal.
+func TestProduceSpecialTypesStayUsable(t *testing.T) {
+	s, err := produce(t, wrap("urn:special",
+		`<xs:simpleType name="short"><xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleType>`+
+			`<xs:element name="a" type="xs:anyAtomicType"/>`+
+			`<xs:element name="b" type="xs:anySimpleType"/>`))
+	if err != nil {
+		t.Fatalf("Produce rejected a schema that only REFERENCES the special types: %v", err)
+	}
+	prim, ok := s.Type(xsd.QName{Space: xsdNS, Local: "string"})
+	if !ok {
+		t.Fatal("xs:string is not in {type definitions}: the primitives must still seed")
+	}
+	st, ok := prim.(*xsd.SimpleType)
+	if !ok {
+		t.Fatalf("xs:string = %T, want *xsd.SimpleType", prim)
+	}
+	if !st.IsPrimitive() {
+		t.Error("xs:string.IsPrimitive() = false, want true: a primitive's base is still xs:anyAtomicType")
+	}
+}
+
 // TestProduceAcceptsNarrowingRestriction is the false-reject guard for the same
 // seam: a legitimately narrowing restriction of a builtin must still produce.
 func TestProduceAcceptsNarrowingRestriction(t *testing.T) {

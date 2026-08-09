@@ -55,7 +55,7 @@ func fEqual(a, b []string) bool {
 // base's already-folded set in its own order.
 func TestAttributeUsesFoldRestriction(t *testing.T) {
 	s := xSchema(t, func(b *SchemaBuilder) {
-		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dPrimitive(t, uq("str")))
 		b.AddType(dType(t, uq("A"), anyTypeName, EmptyContent{},
 			[]AttributeUse{dAttr(t, uq("x"), uq("str")), dAttr(t, uq("y"), uq("str"))}, nil))
 		b.AddType(dType(t, uq("B"), uq("A"), EmptyContent{}, nil, nil))
@@ -84,7 +84,7 @@ func TestAttributeUsesFoldRestriction(t *testing.T) {
 // is optional and the restriction's required, so the two are distinguishable.
 func TestAttributeUsesFoldRestrictionKeepsOwnUse(t *testing.T) {
 	s := xSchema(t, func(b *SchemaBuilder) {
-		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dPrimitive(t, uq("str")))
 		b.AddType(dType(t, uq("A"), anyTypeName, EmptyContent{},
 			[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, nil))
 		b.AddType(dType(t, uq("B"), uq("A"), EmptyContent{},
@@ -104,7 +104,7 @@ func TestAttributeUsesFoldRestrictionKeepsOwnUse(t *testing.T) {
 // base's uses UNCONDITIONALLY, appended after its own.
 func TestAttributeUsesFoldExtension(t *testing.T) {
 	s := xSchema(t, func(b *SchemaBuilder) {
-		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dPrimitive(t, uq("str")))
 		b.AddType(dType(t, uq("A"), anyTypeName, EmptyContent{},
 			[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, nil))
 		b.AddType(xType(t, uq("E"), uq("A"), EmptyContent{},
@@ -123,7 +123,7 @@ func TestAttributeUsesFoldExtension(t *testing.T) {
 // on that self-derivation nor invents a member for it.
 func TestAttributeUsesFoldSimpleBase(t *testing.T) {
 	s := xSchema(t, func(b *SchemaBuilder) {
-		str := dSimple(t, uq("str"), AnyAtomicType())
+		str := dPrimitive(t, uq("str"))
 		b.AddType(str)
 		b.AddType(xType(t, uq("S"), uq("str"), SimpleContent{SimpleType: str},
 			[]AttributeUse{dAttr(t, uq("u"), uq("str"))}, nil))
@@ -195,7 +195,7 @@ func dProhibiting(t *testing.T, name, base QName, uses []AttributeUse, prohibite
 // walked up the chain.
 func TestAttributeUsesFoldProhibited(t *testing.T) {
 	s := xSchema(t, func(b *SchemaBuilder) {
-		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dPrimitive(t, uq("str")))
 		b.AddType(dType(t, uq("A"), anyTypeName, EmptyContent{},
 			[]AttributeUse{dAttr(t, uq("x"), uq("str")), dAttr(t, uq("y"), uq("str"))}, nil))
 		b.AddType(dProhibiting(t, uq("B"), uq("A"), nil, []QName{uq("x")}))
@@ -223,7 +223,7 @@ func TestAttributeUsesFoldProhibited(t *testing.T) {
 // inherits the name regardless (clause 3.1 is unconditional).
 func TestAttributeUsesFoldProhibitedIgnoredOnExtension(t *testing.T) {
 	s := xSchema(t, func(b *SchemaBuilder) {
-		b.AddType(dSimple(t, uq("str"), AnyAtomicType()))
+		b.AddType(dPrimitive(t, uq("str")))
 		b.AddType(dType(t, uq("A"), anyTypeName, EmptyContent{},
 			[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, nil))
 		ext, err := NewComplexType(xsderr.Loc{}, uq("E"), uq("A"), nil, DerivationExtension, false,

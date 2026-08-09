@@ -109,12 +109,30 @@ func dAssert(test string) Assertion {
 	return NewAssertion(NewXPathExpression(test, nil, nil, nil), nil)
 }
 
-// dSimple builds a named atomic simple type restricting base.
+// dSimple builds a named atomic simple type restricting base. It carries base's
+// {variety} the way the XML mapping does (§3.16.2.1), so the {primitive type
+// definition} propagates down the chain. base must not be xs:anyAtomicType, which
+// only a primitive datatype may name as its {base type definition} — dPrimitive
+// builds those.
 func dSimple(t *testing.T, name QName, base *SimpleType) *SimpleType {
 	t.Helper()
-	st, err := NewSimpleType(xsderr.Loc{}, name, Atomic{}, base, nil, nil)
+	st, err := NewSimpleType(xsderr.Loc{}, name, base.Variety(), base, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(%s): %v", name, err)
+	}
+	return st
+}
+
+// dPrimitive builds a named primitive datatype: the {base type definition} is
+// xs:anyAtomicType and the {primitive type definition} is the node itself
+// (§3.16.1). It is what a fixture needing a plain atomic type to hang
+// declarations off must build, since st-props-correct clause 1 admits no other
+// shape directly on xs:anyAtomicType.
+func dPrimitive(t *testing.T, name QName) *SimpleType {
+	t.Helper()
+	st, err := NewPrimitiveType(xsderr.Loc{}, name, nil, nil)
+	if err != nil {
+		t.Fatalf("NewPrimitiveType(%s): %v", name, err)
 	}
 	return st
 }
@@ -148,10 +166,10 @@ func dFinalize(t *testing.T, build func(*SchemaBuilder)) error {
 	b := NewSchemaBuilder()
 	b.AddType(dAnyType(t))
 	b.AddType(uNamedType(t, uq("T")))
-	str := dSimple(t, uq("str"), AnyAtomicType())
+	str := dPrimitive(t, uq("str"))
 	b.AddType(str)
 	b.AddType(dSimple(t, uq("narrow"), str))
-	b.AddType(dSimple(t, uq("other"), AnyAtomicType()))
+	b.AddType(dPrimitive(t, uq("other")))
 	build(b)
 	_, err := b.Finalize()
 	return err
@@ -245,9 +263,9 @@ func TestDerivationOKRestrictionClause22(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := dFinalize(t, func(b *SchemaBuilder) {
-				str := dSimple(t, uq("str2"), AnyAtomicType())
+				str := dPrimitive(t, uq("str2"))
 				narrow := dSimple(t, uq("narrow2"), str)
-				other := dSimple(t, uq("other2"), AnyAtomicType())
+				other := dPrimitive(t, uq("other2"))
 				b.AddType(str)
 				b.AddType(narrow)
 				b.AddType(other)

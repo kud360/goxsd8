@@ -17,7 +17,7 @@ func bSchema(t *testing.T, build func(*SchemaBuilder)) *Schema {
 	t.Helper()
 	b := NewSchemaBuilder()
 	b.AddType(dAnyType(t))
-	str := dSimple(t, uq("str"), AnyAtomicType())
+	str := dPrimitive(t, uq("str"))
 	b.AddType(str)
 	b.AddType(dSimple(t, uq("narrow"), str))
 	if build != nil {

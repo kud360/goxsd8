@@ -89,6 +89,41 @@ func TestSTGraphChecks(t *testing.T) {
 			return e
 		}, ruleCosSTRestricts, "clause 1.1"},
 
+		// --- the two ·special· types as a {base type definition} (#480). Each D
+		// carries the {variety} its base has, which is what the XML mapping gives
+		// a ·restriction· (§3.16.2.1) and what the parser hands NewSimpleType, so
+		// these are the components a real <restriction base="xs:any*Type"/>
+		// produces — with and without a facet, since the pre-existing
+		// facet-applicability path only saw the faceted ones. ---
+		{"base xs:anyAtomicType, no facets", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{}, anyAtomicType, nil, nil)
+			return e
+		}, ruleSTPropsCorrect, "{primitive type definition}"},
+		{"base xs:anyAtomicType, facet present", func() error {
+			_, e := NewSimpleType(loc, qn, Atomic{}, anyAtomicType,
+				[]Facet{NewFacet(FacetPattern, []string{"a"}, false)}, nil)
+			return e
+		}, ruleSTPropsCorrect, "{primitive type definition}"},
+		{"base xs:anySimpleType, no facets", func() error {
+			_, e := NewSimpleType(loc, qn, anySimpleType.variety, anySimpleType, nil, nil)
+			return e
+		}, ruleSTPropsCorrect, "{variety}"},
+		{"base xs:anySimpleType, facet present", func() error {
+			_, e := NewSimpleType(loc, qn, anySimpleType.variety, anySimpleType,
+				[]Facet{NewFacet(FacetPattern, []string{"a"}, false)}, nil)
+			return e
+		}, ruleSTPropsCorrect, "{variety}"},
+		{"a primitive datatype may name xs:anyAtomicType", func() error {
+			_, e := NewPrimitiveType(loc, qn, nil, nil)
+			return e
+		}, "", ""},
+		{"the xs:anyAtomicType anchor itself is exempt", func() error {
+			return checkSTGraph(loc, anyAtomicType)
+		}, "", ""},
+		{"the xs:anySimpleType anchor itself is exempt", func() error {
+			return checkSTGraph(loc, anySimpleType)
+		}, "", ""},
+
 		// --- shared {final}-blocking site (clause 3 / 1.2 / 2.2.2.2 / 3.2.2.2) ---
 		{"base {final} contains restriction (clause 3)", func() error {
 			_, e := NewSimpleType(loc, qn, NewAtomic(dec), baseFinalRestrict, nil, nil)

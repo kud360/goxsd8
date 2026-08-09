@@ -344,12 +344,18 @@ func TestDispatchUnionAbortsOnFacetPreconditionFault(t *testing.T) {
 //
 // The state is reachable, not hypothetical: cos-st-restricts clause 3.1 rejects the two
 // ·special· ANCHOR nodes as members by identity, so an absent-primitive atomic a caller
-// builds itself passes that check and can be a member. Without the guard,
-// normalizeWhiteSpace panics on the zero mode — the very panic class this cohort exists
-// to remove.
+// builds itself passes that check and can be a member. It restricts a PRIMITIVE rather
+// than xs:anyAtomicType, which st-props-correct clause 1 now reserves for the primitives
+// themselves (#480) — the member's own {primitive type definition} is still absent, which
+// is what this test is about. Without the guard, normalizeWhiteSpace panics on the zero
+// mode — the very panic class this cohort exists to remove.
 func TestValidateLexicalUnionMemberWithNoApplicableFacets(t *testing.T) {
+	prim, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "prim"}, nil, nil)
+	if err != nil {
+		t.Fatalf("NewPrimitiveType(prim): %v", err)
+	}
 	member, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "noPrimitive"},
-		xsd.NewAtomic(nil), xsd.AnyAtomicType(), nil, nil)
+		xsd.NewAtomic(nil), prim, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(atomic with absent {primitive type definition}): %v", err)
 	}

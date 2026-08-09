@@ -46,7 +46,7 @@ func sgType(t *testing.T, name, base QName, method DerivationMethod, prohibited 
 // substitutions}, both being Complex Type Definition properties (§3.4.1).
 func sgSimple(t *testing.T, name QName, base *SimpleType) *SimpleType {
 	t.Helper()
-	st, err := NewSimpleType(xsderr.Loc{}, name, Atomic{}, base, nil, nil)
+	st, err := NewSimpleType(xsderr.Loc{}, name, base.Variety(), base, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(%s): %v", name, err)
 	}
@@ -248,7 +248,7 @@ func TestSubstitutionGroupClause23AnonymousMemberType(t *testing.T) {
 func TestSubstitutionGroupClause23SimpleTypeOnDerivationChain(t *testing.T) {
 	member := func(disallowed DerivationMethod) *Schema {
 		return sgSchema(t, func(b *SchemaBuilder) {
-			head := sgSimple(t, sq("A"), AnyAtomicType())
+			head := dPrimitive(t, sq("A"))
 			mid := sgSimple(t, sq("B"), head)
 			b.AddType(head)
 			b.AddType(mid)
@@ -269,7 +269,7 @@ func TestSubstitutionGroupClause23SimpleTypeOnDerivationChain(t *testing.T) {
 func TestSubstitutionGroupClause23SimpleTypeChainNotReachingHead(t *testing.T) {
 	s := sgSchema(t, func(b *SchemaBuilder) {
 		b.AddType(sgType(t, sq("H"), QName{}, DerivationRestriction, DerivationExtension))
-		unrelated := sgSimple(t, sq("Unrelated"), AnyAtomicType())
+		unrelated := dPrimitive(t, sq("Unrelated"))
 		b.AddType(unrelated)
 		b.AddType(sgSimpleContentType(t, sq("C"), unrelated))
 		b.AddElement(sgElement(t, sq("head"), sgRef(sq("H")), []DerivationMethod{DerivationExtension}))
