@@ -102,7 +102,7 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // The two properties are still unfolded on an anonymous type owned by an ELEMENT
 // or ATTRIBUTE declaration, which no {base type definition} slot can reach (an
 // anonymous type is unnameable, so only a redefinition can hold one as its base).
-// Its readers are checkComplexTypeAttributeUses (valueconstraintvalid.go) and
+// Its readers are checkComplexTypeValueConstraints (valueconstraintvalid.go) and
 // resolveComplexType (resolve.go), which quantify over the set to charge each
 // MEMBER: a smaller set means fewer charges, so both under-reject. No reader
 // charges on a member being absent from that set. Adding the missing Phase-D

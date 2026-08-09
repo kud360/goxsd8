@@ -5,8 +5,8 @@ import "github.com/kud360/goxsd8/xsderr"
 // This file is Phase E of the finalize resolution pass (resolve.go): the
 // value-constraint validity constraints neither NewAttributeDeclaration,
 // NewAttributeUse, nor any earlier phase can decide, because each needs a
-// RESOLVED {type definition} or {attribute declaration}. Three clauses land here,
-// all reading the same two components:
+// RESOLVED {type definition} or {attribute declaration}. Four clauses land here,
+// three of them reading the same two components:
 //
 //   - a-props-correct (§3.2.6.1) clause 2: "if there is a {value constraint},
 //     then it is a valid default with respect to the {type definition} as
@@ -15,13 +15,21 @@ import "github.com/kud360/goxsd8/xsderr"
 //     ·absent·, then it is a valid default with respect to U.{attribute
 //     declaration}.{type definition} as defined in Simple Default Valid."
 //   - au-props-correct clause 3, below.
+//   - e-props-correct (§3.3.6.1) clause 2, the ELEMENT-side counterpart of the
+//     first two, which routes through Element Default Valid (Immediate)
+//     (§3.3.6.2, cos-valid-default) rather than reaching Simple Default Valid
+//     directly. Its predicate lives in elementdefaultvalid.go; only its walk
+//     sites are here, because they are the SAME descent (STYLE T4).
 //
-// The two clause 2s are ONE predicate — cos-valid-simple-default over a (type,
-// value constraint) pair — differing only in which type and which constraint they
-// pair. They therefore share one implementation, checkSimpleDefault (STYLE T4,
-// #371); a second, parallel one for either call site would be a design failure.
-// Both are gated on PRESENCE: with no {value constraint} the clause is not
-// reached at all, which is not the same as reached-and-vacuously-satisfied.
+// The two attribute clause 2s are ONE predicate — cos-valid-simple-default over a
+// (type, value constraint) pair — differing only in which type and which
+// constraint they pair. They therefore share one implementation, checkSimpleDefault
+// (STYLE T4, #371); a second, parallel one for either call site would be a design
+// failure. cos-valid-default's clause 1 is the THIRD caller of that same
+// implementation (#463), reached once the element-side case analysis has picked
+// out which simple type governs. All are gated on PRESENCE: with no {value
+// constraint} the clause is not reached at all, which is not the same as
+// reached-and-vacuously-satisfied.
 //
 // Clause 3, verbatim: "If U.{attribute declaration} has {value constraint}.
 // {variety} = fixed and U itself has a {value constraint}, then U.{value
@@ -53,9 +61,30 @@ import "github.com/kud360/goxsd8/xsderr"
 // least once, at a stable Loc; neither alone does. Not exactly once: since #401
 // materialised inherited attribute uses, a LOCAL declaration owned by an
 // inherited use is re-checked at every complex type that inherits it (see
-// checkComplexTypeAttributeUses below, which spells out why the repeats are
+// checkComplexTypeValueConstraints below, which spells out why the repeats are
 // harmless — the charge is at the declaration's OWN Loc, so neither the verdict
 // nor the reported position moves).
+//
+// THE ELEMENT SIDE DOES NOT SPLIT THAT WAY, and the reason is a measured fact
+// about this codebase, not a symmetry argument (#463). SchemaBuilder.AddElement
+// has exactly one producer caller — the top-level <element> arm of
+// parser/produce.go — so s.elements holds GLOBAL declarations only; a local
+// <element name="..."> becomes a sibling Element Declaration inside its
+// particle's {term} (parser/produce_complex.go's produceLocalElement) and enters
+// no table at all. It nonetheless carries a {value constraint}, mapped by the
+// same valueConstraintOf the global path uses, and e-props-correct is charged
+// against "all element declarations" with no scope exemption (§3.3.6, oracle
+// grounding on #463). Measuring the W3C suite settles the size of the gap: of
+// the 242 <element> items carrying default= or fixed= across testdata/xsdtests,
+// 102 (in 52 schema documents, at nesting depths 4 to 6) are local. So clause 2
+// is charged by DESCENT — the walk below, which already reaches every element
+// declaration on its way to their inline types' attribute uses — and never by a
+// second loop over s.elements, which would miss two fifths of the declarations
+// the rule quantifies over. This is the opposite conclusion from
+// checkSubstitutionGroupTypes' (clause 4 IS complete over s.elements alone), and
+// deliberately so: that argument rests on clause 3 confining a {substitution
+// group affiliations} to a global scope, and no clause confines a {value
+// constraint}.
 //
 // D4 (no traversal state): the walk below carries no visited set, exactly as
 // Phase A's mirror walk does. It descends only BY-VALUE structure — a complex
@@ -65,11 +94,18 @@ import "github.com/kud360/goxsd8/xsderr"
 // (checkComplexBaseAcyclic, checkModelGroupsAcyclic) for the by-name edges it
 // deliberately does not take, so no cycle check is needed (PRINCIPLES 9).
 
-// checkAttributeUseValueConstraints is Phase E's use-side walk: it charges
+// checkComponentValueConstraints is Phase E's DESCENDING walk: it charges
 // au-props-correct clauses 2 and 3 — and, for a use owning a LOCAL declaration,
 // that declaration's own a-props-correct clause 2 — against every Attribute Use
-// the compiled schema holds, walking in document order so the first reported
-// failure is deterministic (STYLE D1/D2 — no index map is ranged).
+// the compiled schema holds, and e-props-correct clause 2 against every Element
+// Declaration it holds, walking in document order so the first reported failure
+// is deterministic (STYLE D1/D2 — no index map is ranged).
+//
+// The two duties share ONE descent rather than getting a walk each (STYLE T4):
+// every element declaration the attribute-use side descends THROUGH on its way to
+// an inline complex type is exactly an element declaration clause 2 quantifies
+// over, so a second traversal of the same tree would be a parallel copy of five
+// functions that visits the same components in the same order.
 //
 // The walk mirrors Phase A's descent site for site, because the two must reach
 // the same attribute uses: top-level type definitions, then top-level element
@@ -90,23 +126,23 @@ import "github.com/kud360/goxsd8/xsderr"
 // ref> was never vetted for resolvability: an unresolvable one is SKIPPED here
 // (attributeUseDeclaration reports no declaration), not charged src-resolve,
 // which is fail-open and never a false reject.
-func (s *Schema) checkAttributeUseValueConstraints() error {
+func (s *Schema) checkComponentValueConstraints() error {
 	for _, t := range s.types {
 		c, ok := t.(ComplexType)
 		if !ok {
 			continue // a simple type has no {attribute uses}
 		}
-		if err := s.checkComplexTypeAttributeUses(c); err != nil {
+		if err := s.checkComplexTypeValueConstraints(c); err != nil {
 			return err
 		}
 	}
 	for _, e := range s.elements {
-		if err := s.checkElementAttributeUses(e); err != nil {
+		if err := s.checkElementValueConstraints(e); err != nil {
 			return err
 		}
 	}
 	for _, mgd := range s.modelGroups {
-		if err := s.checkModelGroupAttributeUses(mgd.ModelGroup()); err != nil {
+		if err := s.checkModelGroupValueConstraints(mgd.ModelGroup()); err != nil {
 			return err
 		}
 	}
@@ -120,10 +156,11 @@ func (s *Schema) checkAttributeUseValueConstraints() error {
 	return nil
 }
 
-// checkComplexTypeAttributeUses charges clause 3 for c's own {attribute uses} and
-// then descends c's {content type} particle tree, where a nested element
-// declaration may carry an inline complex type with attribute uses of its own.
-// The descent mirrors resolveComplexType's.
+// checkComplexTypeValueConstraints charges au-props-correct clauses 2 and 3 for
+// c's own {attribute uses} and then descends c's {content type} particle tree,
+// where a nested element declaration owes e-props-correct clause 2 in its own
+// right and may carry an inline complex type with attribute uses of its own. The
+// descent mirrors resolveComplexType's.
 //
 // Since #401 materialised §3.4.2.4 clause 3, an INHERITED use is a member here
 // too, so it is re-checked at every type that inherits it and charged against
@@ -131,7 +168,15 @@ func (s *Schema) checkAttributeUseValueConstraints() error {
 // the use genuinely a property of the derived type and that is the position a
 // reader is looking at. The extra passes cannot change the verdict: the walk is
 // over a set, and a use that passed once passes again.
-func (s *Schema) checkComplexTypeAttributeUses(c ComplexType) error {
+//
+// The same repetition reaches the element side, by a different route: an
+// extension's {content type} particle contains the base's, so a local declaration
+// inside a base content model is re-charged at every type extending it. It is
+// harmless for the same reason and one more — e-props-correct clause 2 is charged
+// at the DECLARATION's own Loc (checkElementDefaultValid), which no enclosing type
+// can move, so neither the verdict nor the reported position depends on which
+// route reached it.
+func (s *Schema) checkComplexTypeValueConstraints(c ComplexType) error {
 	for _, u := range c.AttributeUses() {
 		if err := s.checkAttributeUseValueConstraint(u, c.Loc(), complexTypeOwner(c)); err != nil {
 			return err
@@ -141,7 +186,7 @@ func (s *Schema) checkComplexTypeAttributeUses(c ComplexType) error {
 	if !ok {
 		return nil // Empty and Simple content carry no particle tree
 	}
-	return s.checkParticleAttributeUses(ct.Particle)
+	return s.checkParticleValueConstraints(ct.Particle)
 }
 
 // complexTypeOwner renders c as the owner phrase of a rejection message. An
@@ -156,11 +201,25 @@ func complexTypeOwner(c ComplexType) string {
 	return "complex type " + n.String()
 }
 
-// checkElementAttributeUses descends an element declaration's inline {type
-// definition}, mirroring resolveElementDecl/resolveTypeDefinition: a
-// TypeDefinitionRef names a top-level type this phase already walked in its own
-// right, so only the InlineTypeDefinition arm is descended.
-func (s *Schema) checkElementAttributeUses(e ElementDeclaration) error {
+// checkElementValueConstraints charges e-props-correct (§3.3.6.1) clause 2
+// against one element declaration and then descends its inline {type definition},
+// mirroring resolveElementDecl/resolveTypeDefinition: a TypeDefinitionRef names a
+// top-level type this phase already walked in its own right, so only the
+// InlineTypeDefinition arm is descended.
+//
+// The declaration's OWN clause is charged before the descent, so the failure a
+// reader is sent to is the outer one when a declaration and something nested
+// inside its inline type are both wrong (STYLE D1).
+//
+// Every element declaration in the schema passes through here exactly this way —
+// a global one from checkComponentValueConstraints' s.elements loop, a local one
+// from checkParticleValueConstraints — which is what makes clause 2's quantifier
+// ("all element declarations", §3.3.6) complete; see this file's head for the
+// measurement behind that shape.
+func (s *Schema) checkElementValueConstraints(e ElementDeclaration) error {
+	if err := s.checkElementDefaultValid(e); err != nil {
+		return err
+	}
 	inline, ok := e.TypeDefinition().(InlineTypeDefinition)
 	if !ok {
 		return nil
@@ -169,34 +228,34 @@ func (s *Schema) checkElementAttributeUses(e ElementDeclaration) error {
 	if !ok {
 		return nil // an inline *SimpleType has no {attribute uses}
 	}
-	return s.checkComplexTypeAttributeUses(c)
+	return s.checkComplexTypeValueConstraints(c)
 }
 
-// checkParticleAttributeUses descends one particle's {term}, mirroring
+// checkParticleValueConstraints descends one particle's {term}, mirroring
 // resolveTerm: an <element ref>/<group ref> is a by-name leaf owned by the
 // component it names, never descended here.
-func (s *Schema) checkParticleAttributeUses(p Particle) error {
+func (s *Schema) checkParticleValueConstraints(p Particle) error {
 	t, ok := p.Term().(ResolvedTerm)
 	if !ok {
 		return nil
 	}
 	switch inner := t.Term.(type) {
 	case ElementDeclaration:
-		return s.checkElementAttributeUses(inner)
+		return s.checkElementValueConstraints(inner)
 	case ModelGroup:
-		return s.checkModelGroupAttributeUses(inner)
+		return s.checkModelGroupValueConstraints(inner)
 	case Wildcard:
 		return nil // a wildcard carries no declaration
 	default:
-		panic("xsd: checkParticleAttributeUses: non-exhaustive Term switch")
+		panic("xsd: checkParticleValueConstraints: non-exhaustive Term switch")
 	}
 }
 
-// checkModelGroupAttributeUses descends every particle of a model group in
+// checkModelGroupValueConstraints descends every particle of a model group in
 // document order.
-func (s *Schema) checkModelGroupAttributeUses(g ModelGroup) error {
+func (s *Schema) checkModelGroupValueConstraints(g ModelGroup) error {
 	for _, p := range g.Particles() {
-		if err := s.checkParticleAttributeUses(p); err != nil {
+		if err := s.checkParticleValueConstraints(p); err != nil {
 			return err
 		}
 	}
@@ -329,15 +388,18 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 
 // checkSimpleDefault is Simple Default Valid (§3.2.6.2, cos-valid-simple-default)
 // — the ONE implementation of it in this package (STYLE T4), shared by
-// a-props-correct clause 2 and au-props-correct clause 2, which differ only in
-// which (type, value constraint) pair they hand it and which rule the failure is
-// charged to. The clause phrase in the message is DERIVED from rule — the rule's
-// own name plus " clause 2" — rather than passed alongside it or re-spelled here:
-// a second parameter would make "ruleAPropsCorrect + au-props-correct clause 2" a
-// representable, wrong state, and a hardcoded pair would spell both rule names a
-// second time and silently mislabel any further caller (STYLE D3). The suffix is
-// constant because cos-valid-simple-default is clause 2 of every rule that
-// charges it.
+// a-props-correct clause 2, au-props-correct clause 2, and — through
+// cos-valid-default clause 1, which defers to it for both of its own arms —
+// e-props-correct clause 2. The three differ only in which (type, value
+// constraint) pair they hand it and which rule the failure is charged to; the
+// element-side caller does a case analysis first (elementdefaultvalid.go) to work
+// out which simple type that is. The clause phrase in the message is DERIVED from
+// rule — the rule's own name plus " clause 2" — rather than passed alongside it
+// or re-spelled here: a second parameter would make "ruleAPropsCorrect +
+// au-props-correct clause 2" a representable, wrong state, and a hardcoded pair
+// would spell both rule names a second time and silently mislabel any further
+// caller (STYLE D3). The suffix is constant because cos-valid-simple-default is
+// clause 2 of every rule that charges it.
 //
 // The verdict is the installed ValueSpace's, and an UNDECIDED verdict ACCEPTS.
 // That is not laxity, it is the fail-open contract (ValueSpace, PRINCIPLES 20):

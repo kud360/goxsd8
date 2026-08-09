@@ -529,14 +529,17 @@ func TestPhaseEClause2PrecedesClause3(t *testing.T) {
 
 // TestPhaseEClause2ClauseDerivesFromRule pins checkSimpleDefault's message to the
 // rule it is charged under: the clause phrase is the rule's own name plus " clause
-// 2", never a hardcoded pair with one of them as the default (STYLE D3). Both of
-// today's callers are asserted, so the two phrases the message may carry are
-// nailed down byte for byte; a third caller inherits the same derivation rather
-// than the wrong branch of an if.
+// 2", never a hardcoded pair with one of them as the default (STYLE D3). All three
+// of today's callers are asserted, so the three phrases the message may carry are
+// nailed down byte for byte; a fourth caller inherits the same derivation rather
+// than the wrong branch of an if. The third, e-props-correct (#463), is the one
+// that would have broken a hardcoded pair — it is a different rule reaching the
+// same predicate through cos-valid-default clause 1, and its own clause number is
+// 2 as well, which is why the constant suffix still holds.
 //
-// It calls the helper directly rather than through a schema because the two
+// It calls the helper directly rather than through a schema because the three
 // callers reach it from different walks, and what is under test is the message,
-// not either walk.
+// not any of the walks.
 func TestPhaseEClause2ClauseDerivesFromRule(t *testing.T) {
 	for _, tc := range []struct {
 		rule xsderr.Rule
@@ -544,6 +547,7 @@ func TestPhaseEClause2ClauseDerivesFromRule(t *testing.T) {
 	}{
 		{ruleAPropsCorrect, "a-props-correct clause 2"},
 		{ruleAuPropsCorrect, "au-props-correct clause 2"},
+		{ruleEPropsCorrect, "e-props-correct clause 2"},
 	} {
 		t.Run(string(tc.rule), func(t *testing.T) {
 			s := &Schema{valueSpace: vcOnly("7")}

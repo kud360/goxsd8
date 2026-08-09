@@ -70,14 +70,18 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     different quantifier; see checkSubstitutionGroupTypes for the ordering
 //     argument.
 //   - Phase E (value-constraint validity), in two walks over the same file
-//     (valueconstraintvalid.go). The USE-side walk rejects an Attribute Use whose
+//     (valueconstraintvalid.go). The DESCENDING walk rejects an Attribute Use whose
 //     own {value constraint} contradicts its resolved {attribute declaration}'s
 //     fixed one — au-props-correct (§3.5.6) clause 3, both the variety half and
 //     the {value}-identity half — and an Attribute Use or LOCAL Attribute
 //     Declaration whose own {value constraint} is not a valid default with
 //     respect to the resolved {type definition} (au-props-correct clause 2 and
 //     a-props-correct (§3.2.6.1) clause 2, both over the one shared
-//     cos-valid-simple-default (§3.2.6.2) predicate, #371). The DECLARATION-side
+//     cos-valid-simple-default (§3.2.6.2) predicate, #371). The same descent
+//     charges e-props-correct (§3.3.6.1) clause 2 against every Element
+//     Declaration it passes through, global or local, deciding cos-valid-default
+//     (§3.3.6.2) — clause 1 through that same shared predicate, clause 2 through
+//     particleEmptiable (elementdefaultvalid.go, #463). The DECLARATION-side
 //     walk charges a-props-correct clause 2 against every GLOBAL Attribute
 //     Declaration. Both walks are needed and neither duplicates the other: a
 //     local declaration is reachable only through its owning use, a global one
@@ -104,14 +108,15 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // for the full statement.
 //
 // Phase E runs LAST. Its position is not load-bearing the way Phase D's is — it
-// reads one component at a time and follows no chain — but it needs Phase A's
-// resolvability (an <attribute ref> must name a real declaration, and a
-// TypeDefinitionRef a real type, before either can be read) and it charges the
-// narrowest, most component-local failure of the five, so reporting it after the
-// structural phases keeps the first reported failure the most structural one. Its
-// two walks run use-side first, declaration-side second, which is arbitrary — no
-// verdict depends on the order, only which of two independent failures is
-// reported first.
+// reads one component at a time and follows no chain, apart from the ·emptiable·
+// verdict cos-valid-default clause 2.2 takes over a particle's own subtree — but
+// it needs Phase A's resolvability (an <attribute ref> must name a real
+// declaration, and a TypeDefinitionRef a real type, before either can be read)
+// and it charges the narrowest, most component-local failure of the five, so
+// reporting it after the structural phases keeps the first reported failure the
+// most structural one. Its two walks run descending first, declaration-side
+// second, which is arbitrary — no verdict depends on the order, only which of two
+// independent failures is reported first.
 //
 // resolve stores no RESOLUTION result: a consumer that later wants the component
 // behind a reference obtains it by a read-time index lookup
@@ -180,7 +185,7 @@ func (s *Schema) resolve() error {
 	if err := s.checkSubstitutionGroupTypes(); err != nil {
 		return err
 	}
-	if err := s.checkAttributeUseValueConstraints(); err != nil {
+	if err := s.checkComponentValueConstraints(); err != nil {
 		return err
 	}
 	return s.checkAttributeDeclarationDefaults()
