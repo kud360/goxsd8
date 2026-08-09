@@ -31,123 +31,126 @@ const ruleSTPropsCorrect xsderr.Rule = "st-props-correct"
 // the absent variety that only xs:anySimpleType has (§3.16.1: "Required for all
 // Simple Type Definitions except ·xs:anySimpleType·, in which it is ·absent·").
 //
+// The three branches are EMPTY markers: each carries the §3.16.1 token and
+// nothing else. {variety} is not a stored property of a SimpleType at all — it
+// is DERIVED from the component's declared SimpleTypeDerivation and its {base
+// type definition} chain per §3.16.2.1 (see SimpleType.Variety), and the three
+// properties that used to ride these branches are read off the owning component
+// instead: {primitive type definition} through SimpleType.Primitive, {item type
+// definition} through SimpleType.Item, {member type definitions} through
+// SimpleType.Members. Storing a copy on the branch as well would be one fact in
+// two encodings (STYLE D3), and minting a fresh data-carrying branch per
+// Variety call would additionally allocate a component-identity-carrying value
+// on every read with no measured hot path (STYLE D3/D4).
+//
 // This is deliberately NOT the same type as builtin.Variety, and the two are
 // not unified. builtin.Variety is the pre-resolution data-table shape: it has
 // only Atomic and List (no builtin has union variety), and its List.Item is a
 // bare name string, because the builtin table is generated before any type
-// component exists to point at. xsd.Variety is the post-resolution component
-// shape (phased construction, PRINCIPLES D4): its branches carry live
-// *SimpleType pointers into the compiled model, and it adds Union, which
-// user-defined simple types need. Resolving a builtin.Variety into an
-// xsd.Variety is a producer's job in a later phase, not an identity.
+// component exists to point at. xsd.Variety is the post-resolution token set
+// (phased construction, PRINCIPLES D4), and it adds Union, which user-defined
+// simple types need. Translating a builtin.Variety into a declared
+// SimpleTypeDerivation is a producer's job in a later phase, not an identity.
 type Variety interface{ variety() }
 
-// Atomic is the atomic {variety} (Datatypes §2.4.1.1). It carries the
-// {primitive type definition} (§3.16.1): a live pointer to this type's
-// primitive ancestor — which for a primitive datatype is the type itself
-// (§3.16.1: "the {primitive type definition} of a primitive datatype is that
-// datatype itself"), wired via NewPrimitiveType — or nil for the one exception,
-// xs:anyAtomicType, whose {primitive type definition} is ·absent·. Build one
-// through NewAtomic and read it back through Primitive; the field is
-// unexported, so an Atomic is immutable to every external caller by
-// construction, not by convention (STYLE T1).
-type Atomic struct{ primitive *SimpleType }
+// Atomic is the atomic {variety} (Datatypes §2.4.1.1). It is an empty marker:
+// the associated {primitive type definition} (§3.16.1) is read off the owning
+// component through SimpleType.Primitive, which derives it from the base chain.
+type Atomic struct{}
 
-// NewAtomic builds the atomic {variety} carrying primitive as its {primitive
-// type definition}. A nil primitive models the ·absent· {primitive type
-// definition} that only xs:anyAtomicType has (§3.16.1), which is exactly what
-// the zero value Atomic{} denotes: that literal stays directly constructible
-// even with an unexported field (Go permits a zero composite literal of a type
-// with unexported fields from another package) and is a legal, meaningful
-// state, so NewAtomic is not the only path to a valid Atomic — it is the only
-// path that SETS a specific primitive pointer.
-//
-// It performs no validation. At {variety}-construction time the owning
-// *SimpleType may still be under construction — NewPrimitiveType wires the
-// self-referential {primitive type definition} before the node escapes — so
-// there is nothing coherent to check here. The cross-component invariants on an
-// atomic type are charged later, by checkAtomicGraph (derivation.go), once the
-// owning type's {base type definition} is wired.
-func NewAtomic(primitive *SimpleType) Atomic { return Atomic{primitive: primitive} }
+// List is the list {variety} (Datatypes §2.4.1.2). It is an empty marker: the
+// associated {item type definition} (§3.16.1) is read off the owning component
+// through SimpleType.Item, which derives it from the base chain.
+type List struct{}
 
-// Primitive returns the {primitive type definition} (§3.16.1). It is nil when
-// that property is ·absent·, which happens only for xs:anyAtomicType — nil
-// means absent is the whole contract here, so there is no second "present"
-// result to report.
-func (a Atomic) Primitive() *SimpleType { return a.primitive }
-
-// List is the list {variety} (Datatypes §2.4.1.2). It carries the {item type
-// definition} (§3.16.1), a live pointer to the list's item type. Build one
-// through NewList and read it back through Item; the field is unexported, so a
-// List is immutable to every external caller by construction, not by convention
-// (STYLE T1).
-type List struct{ item *SimpleType }
-
-// NewList builds the list {variety} carrying item as its {item type
-// definition}. A nil item models an absent one, which is exactly what the zero
-// value List{} denotes: that literal stays directly constructible even with an
-// unexported field and is a representable state, so NewList is not the only
-// path to a valid List — it is the only path that SETS a specific item pointer.
-//
-// It performs no validation. At {variety}-construction time the owning
-// *SimpleType does not exist yet, so a list's shape constraints cannot be
-// judged here; they are charged later by checkListGraph (derivation.go), which
-// rejects an absent item under st-props-correct and enforces cos-st-restricts
-// clause 2 against the owning type's {base type definition}.
-func NewList(item *SimpleType) List { return List{item: item} }
-
-// Item returns the {item type definition} (§3.16.1). It is nil when that
-// property is absent — a state checkListGraph rejects at SimpleType
-// construction, so it is not reachable on a constructor-built type.
-func (l List) Item() *SimpleType { return l.item }
-
-// Union is the union {variety} (Datatypes §2.4.1.3). It carries the {member
-// type definitions} (§3.16.1) in document order; the sequence may be empty.
-// Build one through NewUnion and read it back through Members; the field is
-// unexported and both the constructor and the accessor copy the slice, so a
-// Union's membership is immutable to every external caller by construction, not
-// by convention (STYLE T1). That is what makes a mutation-induced membership
-// cycle structurally unrepresentable, which the recursive membership walks in
-// derivation.go rely on for termination.
-type Union struct{ members []*SimpleType }
-
-// NewUnion builds the union {variety} carrying members as its {member type
-// definitions}. The members slice is COPIED in document order; the caller's
-// backing array is not aliased, so a later mutation of it cannot reach the
-// Union. The sequence is preserved verbatim: not sorted, not deduplicated, and
-// not filtered of nils — position is load-bearing (cos-st-restricts clause
-// 3.2.2.3 pairs a restriction's members with the base's POSITIONALLY,
-// PRINCIPLES 11). An empty or nil members argument yields the zero value
-// Union{}, which stays directly constructible even with an unexported field and
-// is a legal state (an empty {member type definitions}), so NewUnion is not the
-// only path to a valid Union — it is the only path that SETS a specific
-// membership.
-//
-// It performs no validation. At {variety}-construction time the owning
-// *SimpleType does not exist yet, so the membership constraints cannot be judged
-// here; they are charged later by checkUnionGraph (derivation.go), which rejects
-// a nil member under st-props-correct and enforces cos-st-restricts clause 3
-// against the owning type's {base type definition}.
-func NewUnion(members ...*SimpleType) Union {
-	if len(members) == 0 {
-		return Union{}
-	}
-	return Union{members: append([]*SimpleType(nil), members...)}
-}
-
-// Members returns the {member type definitions} (§3.16.1) in document order. It
-// returns a copy: mutating the result does not affect u. An empty membership
-// yields nil.
-func (u Union) Members() []*SimpleType {
-	if len(u.members) == 0 {
-		return nil
-	}
-	return append([]*SimpleType(nil), u.members...)
-}
+// Union is the union {variety} (Datatypes §2.4.1.3). It is an empty marker: the
+// associated {member type definitions} (§3.16.1) are read off the owning
+// component through SimpleType.Members, which derives them from the base chain.
+type Union struct{}
 
 func (Atomic) variety() {}
 func (List) variety()   {}
 func (Union) variety()  {}
+
+// SimpleTypeDerivation is a Simple Type Definition's DECLARED derivation: which
+// of the <simpleType> alternatives Structures §3.16.2.1 (map.std.common, "Common
+// mapping rules for Simple Type Definitions") mapped to produce the component,
+// carrying only the property that alternative MINTS. It is a sealed sum (STYLE
+// T2/T7, the PRINCIPLES 7 sealed-sum exception) mirroring term.go's TermOrRef.
+//
+// It exists so {variety}, {primitive type definition}, {item type definition}
+// and {member type definitions} need not be stored a second time beside the
+// {base type definition} they are computed from (STYLE D3). §3.16.2.1 gives a
+// ·restriction· none of the four properties of its own — it inherits every one
+// from its base — so the derived readers (SimpleType.Variety, .Primitive,
+// .Item, .Members) walk the base chain to the nearest ancestor whose arm mints
+// the property asked for.
+//
+// The sum has arms this package does not export. A primitive datatype's arm is
+// package-private and minted only by NewPrimitiveType, because primitiveness is
+// a DECLARED fact about a builtin datatype (Datatypes §2.4.2 dt-primitive), not
+// one recoverable from the graph: a primitive and a user-defined restriction of
+// xs:anyAtomicType are both "a restriction whose base is the anchor", and
+// telling them apart is what keeps #480's rejection (derivation.go's
+// checkAtomicGraph) from becoming a false accept. An exported empty struct
+// would be forgeable by any caller, so the arm — and the second package-private
+// arm carrying xs:anyAtomicType's own ·absent·-primitive encoding — stay
+// unexported.
+//
+// Consequently there is no exported reader for the stored arm: handing external
+// code a sealed sum it cannot switch exhaustively would erode the capability
+// (STYLE T2). The exported reader surface is exactly SimpleType.Variety,
+// .Primitive, .Item, .Members and .IsPrimitive.
+type SimpleTypeDerivation interface{ simpleTypeDerivation() }
+
+// RestrictionDerivation is the ·restriction· alternative (§3.16.2.1, the
+// map.std.restriction case). It carries nothing: a restriction mints none of
+// {variety}, {primitive type definition}, {item type definition} or {member
+// type definitions}, taking each from its {base type definition} instead, which
+// is exactly what the derived readers on SimpleType walk the chain to find. It
+// is why a restriction of xs:NMTOKENS reports xs:NMTOKEN as its {item type
+// definition} without any producer copying the pointer down.
+type RestrictionDerivation struct{}
+
+// ListDerivation is the ·list· alternative (§3.16.2.1): {variety} is list and
+// the component mints the {item type definition} carried here. Item is exported
+// on the TermOrRef precedent (term.go); NewSimpleType stores the arm by value,
+// and SimpleType.Item is the read path.
+type ListDerivation struct{ Item *SimpleType }
+
+// UnionDerivation is the ·union· alternative (§3.16.2.1): {variety} is union
+// and the component mints the {member type definitions} carried here, in
+// document order. The sequence is preserved verbatim — not sorted, not
+// deduplicated, not filtered of nils — because position is load-bearing
+// (cos-st-restricts clause 3.2.2.3 pairs a restriction's members with the
+// base's POSITIONALLY, PRINCIPLES 11). Members is exported on the TermOrRef
+// precedent (term.go); NewSimpleType COPIES it in and SimpleType.Members copies
+// it out, so the stored membership cannot be mutated through a slice the caller
+// still holds.
+type UnionDerivation struct{ Members []*SimpleType }
+
+// primitiveDerivation is the primitive-datatype arm (Datatypes §2.4.2,
+// dt-primitive): {variety} is atomic and the {primitive type definition} is the
+// component ITSELF (§3.16.1: "the {primitive type definition} of a primitive
+// datatype is that datatype itself"). It is deliberately unexported and minted
+// ONLY by NewPrimitiveType — see SimpleTypeDerivation's godoc for why an
+// exported empty struct here would re-open #480's false accept.
+type primitiveDerivation struct{}
+
+// anyAtomicDerivation is xs:anyAtomicType's own arm (Datatypes §4.1.6), minted
+// only for the anyAtomicType package singleton. It is the fifth state the other
+// arms cannot express: {variety} is atomic BY FIAT — the anchor's base
+// xs:anySimpleType has an ·absent· {variety}, so no restriction arm could
+// inherit one — while its {primitive type definition} is ·absent· and it is not
+// itself primitive. Encoding it as its own arm rather than as nil-ness of the
+// derivation keeps "the derivation is absent" from acquiring a second meaning.
+type anyAtomicDerivation struct{}
+
+func (RestrictionDerivation) simpleTypeDerivation() {}
+func (ListDerivation) simpleTypeDerivation()        {}
+func (UnionDerivation) simpleTypeDerivation()       {}
+func (primitiveDerivation) simpleTypeDerivation()   {}
+func (anyAtomicDerivation) simpleTypeDerivation()   {}
 
 // FacetKind is the closed set of facet kinds the Facet/EffectiveFacets/
 // restriction-merging machinery treats uniformly — 16 members: the 14 core
@@ -551,6 +554,12 @@ func (m EnumerationMember) DefaultNamespace() (string, bool) {
 // (union-of-complex, {context}, {annotations}) is out of this component's
 // scope.
 //
+// What it STORES is narrower than what it reports: the declared
+// SimpleTypeDerivation, not {variety}. That property, and {primitive type
+// definition}/{item type definition}/{member type definitions} with it, are
+// derived on demand from the derivation and the {base type definition} chain
+// per §3.16.2.1 (STYLE D3) — see Variety, Primitive, Item and Members.
+//
 // Unlike the value-typed components in this package (Occurs, Notation),
 // SimpleType is handled through a *SimpleType pointer: components reference one
 // another by pointer once resolved (phased construction, PRINCIPLES D4), and
@@ -559,28 +568,32 @@ func (m EnumerationMember) DefaultNamespace() (string, bool) {
 // interchangeable. Construct only through NewSimpleType; a SimpleType is
 // immutable after construction.
 type SimpleType struct {
-	loc       xsderr.Loc // source position; provenance, not a §3.16.1 property
-	name      QName
-	variety   Variety
-	base      *SimpleType
-	ownFacets []Facet
-	final     []DerivationMethod
+	loc        xsderr.Loc // source position; provenance, not a §3.16.1 property
+	name       QName
+	derivation SimpleTypeDerivation
+	base       *SimpleType
+	ownFacets  []Facet
+	final      []DerivationMethod
 }
 
 // NewSimpleType builds a Simple Type Definition. base is the {base type
 // definition}: nil means this type IS xs:anySimpleType (the one simple type
 // whose base is xs:anyType, a Complex Type Definition outside this package's
-// scope); every other simple type has a non-nil simple-type base. variety may
-// be nil to model xs:anySimpleType's absent {variety}.
+// scope); every other simple type has a non-nil simple-type base. derivation is
+// the declared §3.16.2.1 alternative the component was mapped from, and it is
+// what {variety}, {primitive type definition}, {item type definition} and
+// {member type definitions} are DERIVED from — none of the four is passed or
+// stored (STYLE D3). It may be nil to model xs:anySimpleType, which was mapped
+// from no alternative at all and whose {variety} is ·absent·.
 //
 // The two ·special· types are constrained bases. xs:anySimpleType is the base a
 // ·constructed· list or union names (cos-st-restricts 2.2.1/3.2.1), and those
-// carry a {variety} of their own; a caller that names it while passing the
-// variety it would inherit — the absent one — is building the shape
-// st-props-correct clause 1 reserves for xs:anySimpleType itself. xs:anyAtomicType
-// may be named only by a primitive datatype (Datatypes §2.4.2), whose absent
-// {primitive type definition} the same clause reserves likewise, and which is
-// built through NewPrimitiveType instead.
+// declare a ListDerivation or UnionDerivation that mints a {variety} of its
+// own; a caller that names it under a RestrictionDerivation inherits the absent
+// {variety} instead, which is the shape st-props-correct clause 1 reserves for
+// xs:anySimpleType itself. xs:anyAtomicType may be named only by a primitive
+// datatype (Datatypes §2.4.2), whose absent {primitive type definition} the same
+// clause reserves likewise, and which is built through NewPrimitiveType instead.
 //
 // It rejects, charging Simple Type Definition Properties Correct
 // (§3.16.6.1, st-props-correct):
@@ -593,7 +606,8 @@ type SimpleType struct {
 //   - two ownFacets of the same FacetKind (clause 4: "not more than one member
 //     of {facets} of the same kind").
 //
-// ownFacets and final are copied; the caller's backing arrays are not aliased.
+// ownFacets and final are copied; the caller's backing arrays are not aliased,
+// and so is a UnionDerivation's Members (see copyDerivation).
 //
 // loc is the source position charged to any rejection AND retained: Loc reports
 // it back as the type's provenance. Pass the position of this type's own
@@ -602,11 +616,11 @@ type SimpleType struct {
 // real parser position — a synthesized or programmatically built type, as every
 // seeded built-in datatype is — passes the zero xsderr.Loc{}, which reads as
 // "unknown".
-func NewSimpleType(loc xsderr.Loc, name QName, variety Variety, base *SimpleType, ownFacets []Facet, final []DerivationMethod) (*SimpleType, error) {
+func NewSimpleType(loc xsderr.Loc, name QName, derivation SimpleTypeDerivation, base *SimpleType, ownFacets []Facet, final []DerivationMethod) (*SimpleType, error) {
 	if err := checkSTProps(loc, ownFacets, final); err != nil {
 		return nil, err
 	}
-	t := &SimpleType{loc: loc, name: name, variety: variety, base: base}
+	t := &SimpleType{loc: loc, name: name, derivation: copyDerivation(derivation), base: base}
 	t.setOwnFacetsFinal(ownFacets, final)
 	if err := checkSTGraph(loc, t); err != nil {
 		return nil, err
@@ -614,27 +628,48 @@ func NewSimpleType(loc xsderr.Loc, name QName, variety Variety, base *SimpleType
 	return t, nil
 }
 
-// NewPrimitiveType builds a primitive datatype (Datatypes §2.4.2): one of the
-// types whose {base type definition} is xs:anyAtomicType (§3.16.1). It fixes the
-// {base type definition} to the canonical xs:anyAtomicType anchor (see
-// AnyAtomicType) so IsPrimitive reports true and pointer identity holds across
-// every graph, and it wires the self-referential {primitive type definition} —
-// a primitive's {primitive type definition} is itself (§3.16.1) — so the
-// returned node's {variety} is an Atomic whose Primitive() reports that same
-// node.
+// copyDerivation returns derivation with any caller-owned backing array copied,
+// so the stored arm cannot be mutated through a slice the caller still holds.
+// UnionDerivation.Members is the only such array — every other arm is empty or
+// carries a single pointer — and a mutable membership is what would otherwise
+// let a caller splice a cycle into a union's transitive membership after
+// construction, which the recursive membership walks in derivation.go rely on
+// being impossible for termination.
 //
-// The self-reference is established inside this constructor, before the node
-// escapes, so the node is immutable to every external caller. ownFacets and
-// final follow NewSimpleType's contract and are validated identically
-// (st-props-correct); they are copied, not aliased. loc follows NewSimpleType's
-// contract too: it is charged to any rejection AND retained, so Loc reports it
-// back as the type's provenance.
+// The sequence is copied verbatim: not sorted, not deduplicated, not filtered
+// of nils (cos-st-restricts clause 3.2.2.3 pairs members POSITIONALLY,
+// PRINCIPLES 11). An empty membership is returned unchanged; there is nothing
+// to alias, and SimpleType.Members reports it as nil either way.
+func copyDerivation(derivation SimpleTypeDerivation) SimpleTypeDerivation {
+	u, ok := derivation.(UnionDerivation)
+	if !ok || len(u.Members) == 0 {
+		return derivation
+	}
+	return UnionDerivation{Members: append([]*SimpleType(nil), u.Members...)}
+}
+
+// NewPrimitiveType builds a primitive datatype (Datatypes §2.4.2): one of the
+// types whose {base type definition} is xs:anyAtomicType (§3.16.1). It fixes
+// the {base type definition} to the canonical xs:anyAtomicType anchor (see
+// AnyAtomicType) so pointer identity holds across every graph, and it declares
+// the package-private primitive derivation arm — the sole mint of it, which is
+// what makes primitiveness unforgeable from outside this package (see
+// SimpleTypeDerivation). From that arm the returned node's {variety} derives as
+// Atomic, its {primitive type definition} as the node ITSELF (§3.16.1: "the
+// {primitive type definition} of a primitive datatype is that datatype
+// itself"), and IsPrimitive as true.
+//
+// The arm is set inside this constructor, before the node escapes, so the node
+// is immutable to every external caller. ownFacets and final follow
+// NewSimpleType's contract and are validated identically (st-props-correct);
+// they are copied, not aliased. loc follows NewSimpleType's contract too: it is
+// charged to any rejection AND retained, so Loc reports it back as the type's
+// provenance.
 func NewPrimitiveType(loc xsderr.Loc, name QName, ownFacets []Facet, final []DerivationMethod) (*SimpleType, error) {
 	if err := checkSTProps(loc, ownFacets, final); err != nil {
 		return nil, err
 	}
-	t := &SimpleType{loc: loc, name: name, base: anyAtomicType}
-	t.variety = Atomic{primitive: t}
+	t := &SimpleType{loc: loc, name: name, derivation: primitiveDerivation{}, base: anyAtomicType}
 	t.setOwnFacetsFinal(ownFacets, final)
 	if err := checkSTGraph(loc, t); err != nil {
 		return nil, err
@@ -694,10 +729,109 @@ func (t *SimpleType) Loc() xsderr.Loc {
 	return t.loc
 }
 
-// Variety returns the {variety} property: an Atomic, List, or Union value, or
-// nil for xs:anySimpleType, whose {variety} is absent (§3.16.1).
+// Variety returns the {variety} property (§3.16.1): Atomic{}, List{} or
+// Union{}, or nil when the property is ·absent· — which is xs:anySimpleType.
+//
+// It is DERIVED, never stored (STYLE D3). §3.16.2.1 gives a ·restriction· the
+// {variety} of its {base type definition}, so a RestrictionDerivation delegates
+// to the base and the answer comes from the nearest ancestor whose arm mints
+// one: a list or union alternative, the primitive arm (atomic), or
+// xs:anyAtomicType's own arm (atomic by fiat, Datatypes §4.1.6).
+//
+// TERMINATION: the walk follows {base type definition}, which is acyclic as
+// this package stands today — base is an unexported field with no setter, and
+// NewSimpleType demands a LIVE base pointer that must already exist, so a type
+// cannot appear on its own base chain (PRINCIPLES 5). That is a fact about
+// today's live-pointer base, not a permanent one: a deferred base reference
+// would invalidate it and force a visited-set or phase-ordering guard here.
+//
+// It is TOTAL — it never panics. When the chain runs out at a nil base it
+// returns nil, the ·absent· value. That matters because checkSTGraph calls it
+// from INSIDE NewSimpleType, on a t whose base and derivation may both still be
+// nil (the anonymous-placeholder shape several callers build).
 func (t *SimpleType) Variety() Variety {
-	return t.variety
+	switch t.derivation.(type) {
+	case primitiveDerivation, anyAtomicDerivation:
+		return Atomic{}
+	case ListDerivation:
+		return List{}
+	case UnionDerivation:
+		return Union{}
+	case RestrictionDerivation:
+		if t.base == nil {
+			return nil
+		}
+		return t.base.Variety()
+	}
+	return nil
+}
+
+// Primitive returns the {primitive type definition} property (§3.16.1). It is
+// nil when that property is ·absent·: on a list or union, on xs:anySimpleType,
+// and on xs:anyAtomicType, the one atomic type the Datatypes §4.1.1 property
+// tableau exempts from carrying one.
+//
+// It is DERIVED, never stored (STYLE D3): a primitive datatype's {primitive
+// type definition} is itself, and st-restrict-facets clause 2 gives a
+// restriction the same one as its base, so the answer is the nearest primitive
+// ancestor on the {base type definition} chain. It is TOTAL and terminates for
+// the reasons Variety's godoc states.
+func (t *SimpleType) Primitive() *SimpleType {
+	switch t.derivation.(type) {
+	case primitiveDerivation:
+		return t
+	case RestrictionDerivation:
+		if t.base == nil {
+			return nil
+		}
+		return t.base.Primitive()
+	}
+	return nil
+}
+
+// Item returns the {item type definition} property (§3.16.1). It is nil when
+// that property is ·absent·, which is every {variety} but list — a state
+// checkListGraph rejects for a list at construction, so a constructor-built
+// list always reports a non-nil item.
+//
+// It is DERIVED, never stored (STYLE D3): the ·list· alternative mints it and a
+// ·restriction· takes its base's (§3.16.2.1), so a restriction of xs:NMTOKENS
+// reports xs:NMTOKEN without any producer copying the pointer down. It is TOTAL
+// and terminates for the reasons Variety's godoc states.
+func (t *SimpleType) Item() *SimpleType {
+	switch d := t.derivation.(type) {
+	case ListDerivation:
+		return d.Item
+	case RestrictionDerivation:
+		if t.base == nil {
+			return nil
+		}
+		return t.base.Item()
+	}
+	return nil
+}
+
+// Members returns the {member type definitions} property (§3.16.1) in document
+// order. It returns a copy: mutating the result does not affect t. An absent or
+// empty membership yields nil.
+//
+// It is DERIVED, never stored (STYLE D3): the ·union· alternative mints it and
+// a ·restriction· takes its base's (§3.16.2.1). It is TOTAL and terminates for
+// the reasons Variety's godoc states.
+func (t *SimpleType) Members() []*SimpleType {
+	switch d := t.derivation.(type) {
+	case UnionDerivation:
+		if len(d.Members) == 0 {
+			return nil
+		}
+		return append([]*SimpleType(nil), d.Members...)
+	case RestrictionDerivation:
+		if t.base == nil {
+			return nil
+		}
+		return t.base.Members()
+	}
+	return nil
 }
 
 // Base returns the {base type definition} property. It is nil if and only if
@@ -716,13 +850,20 @@ func (t *SimpleType) IsAnySimpleType() bool {
 }
 
 // IsPrimitive reports whether this type is a primitive datatype (Datatypes
-// §2.4.2). A type is primitive if and only if its {base type definition} is
-// xs:anyAtomicType (§3.16.1: "A type definition has ·xs:anyAtomicType· as its
-// {base type definition} if and only if it is one of the primitive
-// datatypes."). The two special types xs:anySimpleType and xs:anyAtomicType are
+// §2.4.2). The two special types xs:anySimpleType and xs:anyAtomicType are
 // themselves not primitive, and this returns false for them.
+//
+// It reads the declared derivation — the package-private arm only
+// NewPrimitiveType mints — rather than testing {base type definition} ==
+// xs:anyAtomicType. The two agree on every component this package can build,
+// because §3.16.1's "a type definition has ·xs:anyAtomicType· as its {base type
+// definition} if and only if it is one of the primitive datatypes" is enforced
+// from the other side: checkAtomicGraph (derivation.go) rejects any type but a
+// primitive that names the anchor as its base (#480). Reading the arm is what
+// keeps that rejection decidable at all — see SimpleTypeDerivation's godoc.
 func (t *SimpleType) IsPrimitive() bool {
-	return t.base == anyAtomicType
+	_, ok := t.derivation.(primitiveDerivation)
+	return ok
 }
 
 // Final returns the {final} property in document order. It returns a copy:
@@ -951,10 +1092,11 @@ func AnySimpleType() *SimpleType { return anySimpleType }
 // AnyAtomicType returns the canonical xs:anyAtomicType anchor (Datatypes
 // §4.1.6): the special atomic type that is the {base type definition} of every
 // primitive datatype, an immutable package singleton. A producer roots every
-// primitive on THIS node (NewPrimitiveType does so) so IsPrimitive — which tests
-// {base type definition} == xs:anyAtomicType by pointer — holds across the whole
-// graph. Its own {primitive type definition} is absent (the zero Atomic{},
-// §3.16.1). The returned node is read-only; do not mutate it.
+// primitive on THIS node (NewPrimitiveType does so) so the pointer-identity
+// tests that key on the anchor — checkAtomicGraph's #480 rejection,
+// isSpecialType — hold across the whole graph. The anchor reports Atomic
+// {variety} while its own {primitive type definition} is ·absent· and
+// IsPrimitive is false. The returned node is read-only; do not mutate it.
 func AnyAtomicType() *SimpleType { return anyAtomicType }
 
 // anySimpleType is the xs:anySimpleType anchor (§3.16.1): the root of the
@@ -968,10 +1110,13 @@ var anySimpleType = &SimpleType{
 // anyAtomicType is the xs:anyAtomicType anchor (Datatypes §4.1.6): the special
 // atomic type that is the {base type definition} of every primitive datatype.
 // Its {base type definition} is anySimpleType, and it is the one atomic type
-// whose {primitive type definition} is itself absent (the zero Atomic{}).
-// Exposed to producers through AnyAtomicType.
+// whose {primitive type definition} is itself ·absent·. Its derivation is the
+// package-private anyAtomicDerivation arm, which is the ONLY encoding of that
+// triple — atomic {variety}, absent {primitive type definition}, not primitive
+// — and is minted here and nowhere else. Exposed to producers through
+// AnyAtomicType.
 var anyAtomicType = &SimpleType{
-	name:    QName{Space: XMLSchemaNS, Local: "anyAtomicType"},
-	variety: Atomic{},
-	base:    anySimpleType,
+	name:       QName{Space: XMLSchemaNS, Local: "anyAtomicType"},
+	derivation: anyAtomicDerivation{},
+	base:       anySimpleType,
 }

@@ -1107,11 +1107,14 @@ func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.Simp
 	if err != nil {
 		return nil, err
 	}
-	// {variety} of a restriction is the {variety} of its base (§3.16.2.1). Reusing
-	// base.Variety() propagates the base's own {primitive type definition} pointer
-	// for an atomic base (warden finding #4), and the item/member pointers for a
-	// list/union base.
-	st, err := xsd.NewSimpleType(elem.Loc(), name, base.Variety(), base, facets, p.simpleTypeFinal(elem))
+	// The declared derivation is ·restriction· — this producer's only
+	// <simpleType> alternative today (restrictionOf rejects <list>/<union>). It
+	// carries no property of its own: §3.16.2.1 gives a restriction the
+	// {variety}, {primitive type definition}, {item type definition} and {member
+	// type definitions} of its {base type definition}, and xsd.SimpleType derives
+	// all four from the base chain, so the producer no longer re-derives any of
+	// them here (STYLE D3).
+	st, err := xsd.NewSimpleType(elem.Loc(), name, xsd.RestrictionDerivation{}, base, facets, p.simpleTypeFinal(elem))
 	if err != nil {
 		return nil, err
 	}

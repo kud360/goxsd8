@@ -25,11 +25,11 @@ func TestInterposeListBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build item primitive: %v", err)
 	}
-	listVariety := xsd.NewList(item)
+	listDerivation := xsd.ListDerivation{Item: item}
 
 	t.Run("list row interposes the anonymous list", func(t *testing.T) {
 		spec := TypeSpec{Name: "NMTOKENS", Base: "anySimpleType", Variety: List{Item: "item"}}
-		got, err := interposeListBase(spec, listVariety, xsd.AnySimpleType())
+		got, derivation, err := interposeListBase(spec, listDerivation, xsd.AnySimpleType())
 		if err != nil {
 			t.Fatalf("interposeListBase: %v", err)
 		}
@@ -42,22 +42,34 @@ func TestInterposeListBase(t *testing.T) {
 		if got.Base() != xsd.AnySimpleType() {
 			t.Errorf("interposed list {base type definition} = %v, want xs:anySimpleType", got.Base())
 		}
+		// The ListDerivation — and with it the {item type definition} — is minted
+		// ONCE, on the interposed node; the named row restricts it and re-derives
+		// the item from the base rather than carrying a second copy (STYLE D3).
+		if got.Item() != item {
+			t.Errorf("interposed list {item type definition} = %v, want the item primitive", got.Item())
+		}
+		if derivation != (xsd.SimpleTypeDerivation)(xsd.RestrictionDerivation{}) {
+			t.Errorf("named list row derivation = %#v, want xsd.RestrictionDerivation{}", derivation)
+		}
 	})
 
 	t.Run("atomic row keeps its base", func(t *testing.T) {
 		spec := TypeSpec{Name: "token", Base: "normalizedString", Variety: Atomic{}}
-		got, err := interposeListBase(spec, xsd.NewAtomic(item), item)
+		got, derivation, err := interposeListBase(spec, xsd.RestrictionDerivation{}, item)
 		if err != nil {
 			t.Fatalf("interposeListBase: %v", err)
 		}
 		if got != item {
 			t.Errorf("interposeListBase(atomic row) = %v, want the base it was handed", got)
 		}
+		if derivation != (xsd.SimpleTypeDerivation)(xsd.RestrictionDerivation{}) {
+			t.Errorf("atomic row derivation = %#v, want the one it was handed", derivation)
+		}
 	})
 
 	t.Run("list row with a non-anySimpleType base is refused", func(t *testing.T) {
 		spec := TypeSpec{Name: "weirdList", Base: "token", Variety: List{Item: "item"}}
-		got, err := interposeListBase(spec, listVariety, item)
+		got, _, err := interposeListBase(spec, listDerivation, item)
 		if err == nil {
 			t.Fatalf("interposeListBase(list row based on %q) = %v, want a refusal", spec.Base, got)
 		}

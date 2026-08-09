@@ -37,7 +37,7 @@ func restrictBuiltin(t *testing.T, local string, ownFacets ...xsd.Facet) error {
 		t.Fatalf("builtin xs:%s not seeded", local)
 	}
 	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
-		base.Variety(), base, ownFacets, nil)
+		xsd.RestrictionDerivation{}, base, ownFacets, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}

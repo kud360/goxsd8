@@ -72,11 +72,10 @@ func CheckSimpleTypeRestriction(b value.Backend, t *xsd.SimpleType) error {
 // implementation-defined primitive implementation-defined, so there is nothing
 // to decide against.
 func checkAtomicApplicableFacets(t *xsd.SimpleType) error {
-	atomic, ok := t.Variety().(xsd.Atomic)
-	if !ok {
+	if _, ok := t.Variety().(xsd.Atomic); !ok {
 		return nil
 	}
-	primitive := atomic.Primitive()
+	primitive := t.Primitive()
 	if primitive == nil {
 		return rejectAnyFacet(t, "an atomic simple type definition with an absent {primitive type definition}")
 	}

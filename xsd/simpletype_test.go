@@ -280,7 +280,7 @@ func TestFacetKindHasFixed(t *testing.T) {
 // st-props-correct.
 func TestNewSimpleTypeRejectsSubstitutionFinal(t *testing.T) {
 	dec := mustPrim(t, "decimal")
-	_, err := NewSimpleType(xsderr.Loc{}, QName{}, NewAtomic(dec), dec, nil,
+	_, err := NewSimpleType(xsderr.Loc{}, QName{}, RestrictionDerivation{}, dec, nil,
 		[]DerivationMethod{DerivationRestriction, DerivationSubstitution})
 	if err == nil {
 		t.Fatal("NewSimpleType accepted DerivationSubstitution in {final}, want rejection")
@@ -295,7 +295,7 @@ func TestNewSimpleTypeRejectsSubstitutionFinal(t *testing.T) {
 func TestNewSimpleTypeAcceptsLegalFinal(t *testing.T) {
 	final := []DerivationMethod{DerivationRestriction, DerivationExtension, DerivationList, DerivationUnion}
 	dec := mustPrim(t, "decimal")
-	st, err := NewSimpleType(xsderr.Loc{}, QName{}, NewAtomic(dec), dec, nil, final)
+	st, err := NewSimpleType(xsderr.Loc{}, QName{}, RestrictionDerivation{}, dec, nil, final)
 	if err != nil {
 		t.Fatalf("NewSimpleType rejected legal {final}: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestNewSimpleTypeRejectsDuplicateFacetKind(t *testing.T) {
 		NewFacet(FacetMinLength, []string{"2"}, false),
 	}
 	dec := mustPrim(t, "decimal")
-	_, err := NewSimpleType(xsderr.Loc{}, QName{}, NewAtomic(dec), dec, facets, nil)
+	_, err := NewSimpleType(xsderr.Loc{}, QName{}, RestrictionDerivation{}, dec, facets, nil)
 	if err == nil {
 		t.Fatal("NewSimpleType accepted duplicate facet kind, want rejection")
 	}
@@ -352,12 +352,37 @@ func TestAnchorsNilContract(t *testing.T) {
 	if anyAtomicType.Base() != anySimpleType {
 		t.Error("anyAtomicType.Base() is not anySimpleType")
 	}
-	at, ok := anyAtomicType.Variety().(Atomic)
-	if !ok {
+	if _, ok := anyAtomicType.Variety().(Atomic); !ok {
 		t.Fatalf("anyAtomicType.Variety() type = %T, want Atomic", anyAtomicType.Variety())
 	}
-	if at.Primitive() != nil {
+	if anyAtomicType.Primitive() != nil {
 		t.Error("anyAtomicType {primitive type definition} is not absent")
+	}
+	if anyAtomicType.IsPrimitive() {
+		t.Error("anyAtomicType.IsPrimitive() = true, want false")
+	}
+}
+
+// TestAnyAtomicTypeResolvedTriple pins xs:anyAtomicType's own encoding: it is
+// the ONE component that is atomic by fiat (Datatypes §4.1.6) while its
+// {primitive type definition} is ·absent· and it is not itself a primitive
+// datatype. No other arm of SimpleTypeDerivation can express that triple —
+// a restriction would inherit xs:anySimpleType's absent {variety}, and the
+// primitive arm would report the node as its own {primitive type definition} —
+// so the anchor carries a package-private arm of its own rather than being keyed
+// on nil-ness of the derivation, which would give "absent derivation" a second
+// meaning. checkAtomicGraph reads t.base.Variety() for EVERY primitive, so the
+// first of the three is load-bearing for the whole primitive cohort.
+func TestAnyAtomicTypeResolvedTriple(t *testing.T) {
+	anchor := AnyAtomicType()
+	if _, ok := anchor.Variety().(Atomic); !ok {
+		t.Errorf("AnyAtomicType().Variety() = %T, want Atomic", anchor.Variety())
+	}
+	if got := anchor.Primitive(); got != nil {
+		t.Errorf("AnyAtomicType().Primitive() = %v, want nil (·absent·)", got)
+	}
+	if anchor.IsPrimitive() {
+		t.Error("AnyAtomicType().IsPrimitive() = true, want false")
 	}
 }
 
@@ -373,7 +398,7 @@ func TestIsPrimitive(t *testing.T) {
 	}
 	// A derived type restricting the primitive.
 	derived, err := NewSimpleType(xsderr.Loc{}, QName{Space: XMLSchemaNS, Local: "integer"},
-		NewAtomic(prim), prim, nil, nil)
+		RestrictionDerivation{}, prim, nil, nil)
 	if err != nil {
 		t.Fatalf("building derived: %v", err)
 	}
@@ -392,42 +417,137 @@ func TestIsPrimitive(t *testing.T) {
 	}
 }
 
-// TestVarietyConstructorsRoundTrip checks that the three {variety} branches
-// round-trip what their constructors were given, and that their zero values —
-// still directly constructible despite the unexported fields — report the
-// absent/empty state.
-func TestVarietyConstructorsRoundTrip(t *testing.T) {
+// TestDerivedPropertiesFollowTheBaseChain checks the §3.16.2.1 mapping the four
+// derived readers implement: each arm mints its own property, and a
+// RestrictionDerivation mints none — it reports whatever the nearest ancestor
+// that DOES mint one reports, with no producer copying a pointer down. The
+// two-step chains are the point: a restriction of a restriction of a primitive
+// still reports that primitive, and a restriction of a list still reports the
+// list's item.
+func TestDerivedPropertiesFollowTheBaseChain(t *testing.T) {
 	prim, err := NewPrimitiveType(xsderr.Loc{}, QName{Local: "prim"}, nil, nil)
 	if err != nil {
 		t.Fatalf("building prim: %v", err)
 	}
+	derived := mustSimple(t, "derived", RestrictionDerivation{}, prim, nil)
+	derived2 := mustSimple(t, "derived2", RestrictionDerivation{}, derived, nil)
 
-	if got := NewAtomic(prim).Primitive(); got != prim {
-		t.Errorf("NewAtomic(prim).Primitive() = %v, want the prim node", got)
+	list := mustSimple(t, "list", ListDerivation{Item: prim}, anySimpleType, constructedListFacets())
+	listRestricted := mustSimple(t, "listRestricted", RestrictionDerivation{}, list, nil)
+
+	other, err := NewPrimitiveType(xsderr.Loc{}, QName{Local: "other"}, nil, nil)
+	if err != nil {
+		t.Fatalf("building other: %v", err)
 	}
-	if got := (Atomic{}).Primitive(); got != nil {
-		t.Errorf("Atomic{}.Primitive() = %v, want nil (absent)", got)
+	union := mustSimple(t, "union", UnionDerivation{Members: []*SimpleType{prim, other}}, anySimpleType, nil)
+	unionRestricted := mustSimple(t, "unionRestricted",
+		UnionDerivation{Members: []*SimpleType{prim, other}}, union, nil)
+
+	// {variety}: minted by the list/union/primitive arms, inherited by restriction.
+	for _, c := range []struct {
+		name string
+		st   *SimpleType
+		want Variety
+	}{
+		{"prim", prim, Atomic{}},
+		{"derived2", derived2, Atomic{}},
+		{"list", list, List{}},
+		{"listRestricted", listRestricted, List{}},
+		{"union", union, Union{}},
+		{"unionRestricted", unionRestricted, Union{}},
+		{"anySimpleType", anySimpleType, nil},
+	} {
+		if got := c.st.Variety(); got != c.want {
+			t.Errorf("%s.Variety() = %#v, want %#v", c.name, got, c.want)
+		}
 	}
-	if got := NewList(prim).Item(); got != prim {
-		t.Errorf("NewList(prim).Item() = %v, want the prim node", got)
+
+	// {primitive type definition}: a primitive is its own; a restriction takes
+	// its base's; list and union have none.
+	for _, c := range []struct {
+		name string
+		st   *SimpleType
+		want *SimpleType
+	}{
+		{"prim", prim, prim},
+		{"derived", derived, prim},
+		{"derived2", derived2, prim},
+		{"list", list, nil},
+		{"union", union, nil},
+	} {
+		if got := c.st.Primitive(); got != c.want {
+			t.Errorf("%s.Primitive() = %v, want %v", c.name, got, c.want)
+		}
 	}
-	if got := (List{}).Item(); got != nil {
-		t.Errorf("List{}.Item() = %v, want nil (absent)", got)
+
+	// {item type definition}: minted by the list arm, inherited by restriction.
+	if got := list.Item(); got != prim {
+		t.Errorf("list.Item() = %v, want prim", got)
 	}
-	if got := (Union{}).Members(); got != nil {
-		t.Errorf("Union{}.Members() = %v, want nil (empty)", got)
+	if got := listRestricted.Item(); got != prim {
+		t.Errorf("listRestricted.Item() = %v, want prim (derived from the base list, no copy)", got)
 	}
-	if got := NewUnion().Members(); got != nil {
-		t.Errorf("NewUnion().Members() = %v, want nil (empty)", got)
+	if got := derived.Item(); got != nil {
+		t.Errorf("derived.Item() = %v, want nil (an atomic type has no {item type definition})", got)
+	}
+
+	// {member type definitions}: minted by the union arm, inherited by
+	// restriction, and returned in document order.
+	for _, c := range []struct {
+		name string
+		st   *SimpleType
+	}{{"union", union}, {"unionRestricted", unionRestricted}} {
+		got := c.st.Members()
+		if len(got) != 2 || got[0] != prim || got[1] != other {
+			t.Errorf("%s.Members() = %v, want [prim other]", c.name, got)
+		}
+	}
+	if got := derived.Members(); got != nil {
+		t.Errorf("derived.Members() = %v, want nil", got)
 	}
 }
 
-// TestNewUnionPreservesSequenceVerbatim proves NewUnion neither sorts,
-// deduplicates, nor drops nil members: position is load-bearing, because
-// cos-st-restricts clause 3.2.2.3 pairs a restriction's members with the base's
-// positionally, and checkUnionGraph — not the constructor — is what rejects a
-// nil member.
-func TestNewUnionPreservesSequenceVerbatim(t *testing.T) {
+// TestDerivedReadersAreTotal pins that the four derived readers never panic on
+// the partially-built shapes the constructors themselves produce and hand to
+// checkSTGraph: a type with a nil derivation AND a nil base (the anonymous
+// placeholder several callers build), and a restriction whose base's own base is
+// nil. Each returns the ·absent· value instead.
+func TestDerivedReadersAreTotal(t *testing.T) {
+	anon, err := NewSimpleType(xsderr.Loc{}, QName{}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(nil derivation, nil base): %v", err)
+	}
+	// A restriction whose base chain runs out: anon's own base is nil.
+	overAnon := &SimpleType{name: QName{Local: "overAnon"}, derivation: RestrictionDerivation{}, base: anon}
+
+	for _, c := range []struct {
+		name string
+		st   *SimpleType
+	}{{"nil derivation and nil base", anon}, {"restriction over a nil-based base", overAnon}} {
+		if got := c.st.Variety(); got != nil {
+			t.Errorf("%s: Variety() = %#v, want nil", c.name, got)
+		}
+		if got := c.st.Primitive(); got != nil {
+			t.Errorf("%s: Primitive() = %v, want nil", c.name, got)
+		}
+		if got := c.st.Item(); got != nil {
+			t.Errorf("%s: Item() = %v, want nil", c.name, got)
+		}
+		if got := c.st.Members(); got != nil {
+			t.Errorf("%s: Members() = %v, want nil", c.name, got)
+		}
+		if c.st.IsPrimitive() {
+			t.Errorf("%s: IsPrimitive() = true, want false", c.name)
+		}
+	}
+}
+
+// TestUnionMembersPreserveSequenceVerbatim proves a UnionDerivation's membership
+// is neither sorted, deduplicated, nor stripped of nil members: position is
+// load-bearing, because cos-st-restricts clause 3.2.2.3 pairs a restriction's
+// members with the base's positionally, and checkUnionGraph — not the
+// constructor — is what rejects a nil member.
+func TestUnionMembersPreserveSequenceVerbatim(t *testing.T) {
 	a, err := NewPrimitiveType(xsderr.Loc{}, QName{Local: "a"}, nil, nil)
 	if err != nil {
 		t.Fatalf("building a: %v", err)
@@ -437,8 +557,12 @@ func TestNewUnionPreservesSequenceVerbatim(t *testing.T) {
 		t.Fatalf("building b: %v", err)
 	}
 
-	got := NewUnion(b, a, b, nil).Members()
 	want := []*SimpleType{b, a, b, nil}
+	// checkUnionGraph rejects the nil member, so the component is built as a
+	// struct literal: what is under test is copyDerivation and Members, not the
+	// graph check.
+	u := &SimpleType{derivation: copyDerivation(UnionDerivation{Members: want})}
+	got := u.Members()
 	if len(got) != len(want) {
 		t.Fatalf("Members() length = %d, want %d", len(got), len(want))
 	}
@@ -451,9 +575,10 @@ func TestNewUnionPreservesSequenceVerbatim(t *testing.T) {
 
 // TestUnionMembershipIsCopiedBothWays proves the immutability that makes a
 // mutation-induced membership cycle structurally unrepresentable (see
-// checkSTGraph): NewUnion copies the caller's slice IN, and Members copies it
-// OUT, so neither the caller's backing array nor a returned slice aliases the
-// Union's own.
+// checkSTGraph): NewSimpleType copies a UnionDerivation's Members IN
+// (copyDerivation), and SimpleType.Members copies it OUT, so neither the
+// caller's backing array nor a returned slice aliases the component's own —
+// which is what the exported Members field would otherwise give away.
 func TestUnionMembershipIsCopiedBothWays(t *testing.T) {
 	a, err := NewPrimitiveType(xsderr.Loc{}, QName{Local: "a"}, nil, nil)
 	if err != nil {
@@ -465,12 +590,12 @@ func TestUnionMembershipIsCopiedBothWays(t *testing.T) {
 	}
 
 	src := []*SimpleType{a}
-	u := NewUnion(src...)
+	u := mustSimple(t, "u", UnionDerivation{Members: src}, anySimpleType, nil)
 
 	// Mutating the caller's backing array must not reach u.
 	src[0] = b
 	if got := u.Members(); len(got) != 1 || got[0] != a {
-		t.Errorf("after mutating the caller's slice, Members() = %v, want [a] — NewUnion must copy in", got)
+		t.Errorf("after mutating the caller's slice, Members() = %v, want [a] — NewSimpleType must copy in", got)
 	}
 
 	// Mutating a returned slice must not reach u either.
@@ -479,6 +604,16 @@ func TestUnionMembershipIsCopiedBothWays(t *testing.T) {
 	if got := u.Members(); len(got) != 1 || got[0] != a {
 		t.Errorf("after mutating a Members() result, Members() = %v, want [a] — Members must copy out", got)
 	}
+}
+
+// mustSimple builds a named simple type through NewSimpleType or fails the test.
+func mustSimple(t *testing.T, name string, derivation SimpleTypeDerivation, base *SimpleType, ownFacets []Facet) *SimpleType {
+	t.Helper()
+	st, err := NewSimpleType(xsderr.Loc{}, QName{Local: name}, derivation, base, ownFacets, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(%s): %v", name, err)
+	}
+	return st
 }
 
 // mkAssertion builds a bare Assertion carrying only the given XPath test, the
@@ -538,7 +673,7 @@ func TestEffectiveFacetsAssertionsAccumulateTwoLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, NewAtomic(base), base,
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, RestrictionDerivation{}, base,
 		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("@c = 1")})}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -574,12 +709,12 @@ func TestEffectiveFacetsAssertionsAccumulateThreeLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := NewSimpleType(xsderr.Loc{}, QName{Local: "B"}, NewAtomic(a), a,
+	b, err := NewSimpleType(xsderr.Loc{}, QName{Local: "B"}, RestrictionDerivation{}, a,
 		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("b1"), mkAssertion("b2")})}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := NewSimpleType(xsderr.Loc{}, QName{Local: "C"}, NewAtomic(a), b,
+	c, err := NewSimpleType(xsderr.Loc{}, QName{Local: "C"}, RestrictionDerivation{}, b,
 		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("c1")})}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -602,7 +737,7 @@ func TestEffectiveFacetsReplaceKindStillReplaces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, NewAtomic(base), base,
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, RestrictionDerivation{}, base,
 		[]Facet{NewFacet(FacetMaxInclusive, []string{"50"}, false)}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -632,7 +767,7 @@ func TestEffectiveFacetsAssertionsMixedWithReplaceKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, NewAtomic(base), base,
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, RestrictionDerivation{}, base,
 		[]Facet{
 			NewFacet(FacetMaxLength, []string{"4"}, false),
 			NewAssertionsFacet([]Assertion{mkAssertion("derived1")}),
@@ -682,7 +817,7 @@ func TestEffectiveFacetsPatternKeepsBothTwoLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, NewAtomic(base), base,
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, RestrictionDerivation{}, base,
 		[]Facet{NewFacet(FacetPattern, []string{"a.*"}, false)}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -705,12 +840,12 @@ func TestEffectiveFacetsPatternKeepsBothThreeLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := NewSimpleType(xsderr.Loc{}, QName{Local: "B"}, NewAtomic(a), a,
+	b, err := NewSimpleType(xsderr.Loc{}, QName{Local: "B"}, RestrictionDerivation{}, a,
 		[]Facet{NewFacet(FacetPattern, []string{"b1"}, false)}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := NewSimpleType(xsderr.Loc{}, QName{Local: "C"}, NewAtomic(a), b,
+	c, err := NewSimpleType(xsderr.Loc{}, QName{Local: "C"}, RestrictionDerivation{}, b,
 		[]Facet{NewFacet(FacetPattern, []string{"c1"}, false)}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -731,7 +866,7 @@ func TestEffectiveFacetsAssertionsBaseHasNoneDerivedAdds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, NewAtomic(base), base,
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, RestrictionDerivation{}, base,
 		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("d1")})}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -758,7 +893,7 @@ func TestEffectiveFacetsAssertionsBaseHasDerivedAddsNone(t *testing.T) {
 	}
 
 	// (1) derived declares NO assertions facet: base's facet is inherited as-is.
-	noFacet, err := NewSimpleType(xsderr.Loc{}, QName{Local: "noFacet"}, NewAtomic(base), base,
+	noFacet, err := NewSimpleType(xsderr.Loc{}, QName{Local: "noFacet"}, RestrictionDerivation{}, base,
 		[]Facet{NewFacet(FacetLength, []string{"3"}, false)}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -771,7 +906,7 @@ func TestEffectiveFacetsAssertionsBaseHasDerivedAddsNone(t *testing.T) {
 
 	// (2) derived declares an EMPTY assertions facet: base's Assertions survive,
 	// but the merged facet takes the derived's position and Declaring.
-	emptyFacet, err := NewSimpleType(xsderr.Loc{}, QName{Local: "emptyFacet"}, NewAtomic(base), base,
+	emptyFacet, err := NewSimpleType(xsderr.Loc{}, QName{Local: "emptyFacet"}, RestrictionDerivation{}, base,
 		[]Facet{NewAssertionsFacet(nil)}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -792,7 +927,7 @@ func TestEffectiveFacetsAssertionsNoDedup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, NewAtomic(base), base,
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, RestrictionDerivation{}, base,
 		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("@x = 1")})}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -811,7 +946,7 @@ func TestEffectiveFacetsAssertionsMergeCopyIndependence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, NewAtomic(base), base,
+	derived, err := NewSimpleType(xsderr.Loc{}, QName{Local: "derived"}, RestrictionDerivation{}, base,
 		[]Facet{NewAssertionsFacet([]Assertion{mkAssertion("d1")})}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -834,7 +969,7 @@ func TestOwnVsEffectiveFacets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mid, err := NewSimpleType(xsderr.Loc{}, QName{Local: "mid"}, NewAtomic(prim), prim,
+	mid, err := NewSimpleType(xsderr.Loc{}, QName{Local: "mid"}, RestrictionDerivation{}, prim,
 		[]Facet{
 			NewFacet(FacetMinLength, []string{"1"}, false),
 			NewFacet(FacetMaxLength, []string{"10"}, false),
@@ -842,7 +977,7 @@ func TestOwnVsEffectiveFacets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaf, err := NewSimpleType(xsderr.Loc{}, QName{Local: "leaf"}, NewAtomic(prim), mid,
+	leaf, err := NewSimpleType(xsderr.Loc{}, QName{Local: "leaf"}, RestrictionDerivation{}, mid,
 		[]Facet{NewFacet(FacetMaxLength, []string{"5"}, false)}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -904,7 +1039,7 @@ func TestOwnVsEffectiveFacets(t *testing.T) {
 	// An anonymous restriction (zero {name}) that contributes its own facet
 	// reports the zero QName as provenance — the zero-value-means-anonymous
 	// convention, not a missing value.
-	anon, err := NewSimpleType(xsderr.Loc{}, QName{}, NewAtomic(prim), leaf,
+	anon, err := NewSimpleType(xsderr.Loc{}, QName{}, RestrictionDerivation{}, leaf,
 		[]Facet{NewFacet(FacetLength, []string{"3"}, false)}, nil)
 	if err != nil {
 		t.Fatal(err)

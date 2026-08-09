@@ -274,11 +274,10 @@ func governingType(b Backend, node *xsd.SimpleType) (*xsd.SimpleType, bool) {
 // §3.3.19). An absent {primitive type definition} (xs:anyAtomicType alone,
 // §3.16.1) is not one of them.
 func contextDependent(t *xsd.SimpleType) bool {
-	a, ok := t.Variety().(xsd.Atomic)
-	if !ok {
+	if _, ok := t.Variety().(xsd.Atomic); !ok {
 		return false
 	}
-	p := a.Primitive()
+	p := t.Primitive()
 	if p == nil {
 		return false
 	}
@@ -304,21 +303,23 @@ func contextDependent(t *xsd.SimpleType) bool {
 // xsd constructors already forbid, NOT a reachable one: NewSimpleType rejects an
 // absent {item type definition} and an absent member under st-props-correct
 // (checkListGraph/checkUnionGraph, xsd/derivation.go), so no *xsd.SimpleType that
-// exists can hold either, and xsd.List.Item's own doc says as much. They stay
-// because everything below them is nil-hostile too — the recursive Variety() call
-// they gate, and governingMapping on the very next line — so removing them would
-// trade a documented impossibility for a crash rather than for a verdict. No
-// visited set is needed — a SimpleType's variety graph is a tree,
-// since List and Union are built by value from already-complete item/member
-// pointers and so cannot reach back to t (PRINCIPLES 9).
+// exists can hold either, and xsd.SimpleType.Item's own doc says as much. They
+// stay because everything below them is nil-hostile too — the recursive
+// Variety() call they gate, and governingMapping on the very next line — so
+// removing them would trade a documented impossibility for a crash rather than
+// for a verdict. No visited set is needed — a SimpleType's item/member graph is
+// a tree, since a ListDerivation and a UnionDerivation are built from
+// already-complete item/member pointers and so cannot reach back to t
+// (PRINCIPLES 9).
 func needsContext(t *xsd.SimpleType) bool {
-	switch v := t.Variety().(type) {
+	switch t.Variety().(type) {
 	case xsd.Atomic:
 		return contextDependent(t)
 	case xsd.List:
-		return v.Item() != nil && needsContext(v.Item())
+		item := t.Item()
+		return item != nil && needsContext(item)
 	case xsd.Union:
-		for _, m := range v.Members() {
+		for _, m := range t.Members() {
 			if m != nil && needsContext(m) {
 				return true
 			}

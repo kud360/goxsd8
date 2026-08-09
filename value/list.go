@@ -124,10 +124,11 @@ func listMapping(b Backend, item *xsd.SimpleType) Mapping {
 	}
 }
 
-// listGoverned reports whether b governs lst's {item type definition}, the list's
-// analogue of unionGoverned — the same question ("does the backend govern what
-// this constructed variety is built from?") asked in the same shape, so
-// governingMapping's two constructed-variety branches read alike (STYLE T4).
+// listGoverned reports whether b governs item, a list's {item type definition}
+// — the list's analogue of unionGoverned, the same question ("does the backend
+// govern what this constructed variety is built from?") asked in the same
+// shape, so governingMapping's two constructed-variety branches read alike
+// (STYLE T4).
 //
 // An ungoverned item type leaves the WHOLE list ungoverned. dv_list (§4.1.4
 // cl.2.2) decides a list literal by deciding each space-delimited substring
@@ -145,8 +146,8 @@ func listMapping(b Backend, item *xsd.SimpleType) Mapping {
 // constraint on {member type definitions}, so a union nests arbitrarily deep. This
 // predicate RELIES ON the list invariant rather than enforcing it — nothing here
 // re-checks the item type's {variety}.
-func listGoverned(b Backend, lst xsd.List) bool {
-	_, ok := governingMapping(b, lst.Item())
+func listGoverned(b Backend, item *xsd.SimpleType) bool {
+	_, ok := governingMapping(b, item)
 	return ok
 }
 

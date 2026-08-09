@@ -69,7 +69,7 @@ func allDigits(s string) bool {
 func unionType2(t *testing.T, local string, members ...*xsd.SimpleType) *xsd.SimpleType {
 	t.Helper()
 	u, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
-		xsd.NewUnion(members...), xsd.AnySimpleType(), nil, nil)
+		xsd.UnionDerivation{Members: members}, xsd.AnySimpleType(), nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union %q): %v", local, err)
 	}
@@ -83,9 +83,9 @@ func unionType2(t *testing.T, local string, members ...*xsd.SimpleType) *xsd.Sim
 // (cos-applicable-facets §4.1.5) — can be exercised on a real component.
 func unionRestriction(t *testing.T, local string, base *xsd.SimpleType, own []xsd.Facet) *xsd.SimpleType {
 	t.Helper()
-	members := base.Variety().(xsd.Union).Members()
+	members := base.Members()
 	u, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
-		xsd.NewUnion(members...), base, own, nil)
+		xsd.UnionDerivation{Members: members}, base, own, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union restriction %q): %v", local, err)
 	}
@@ -337,27 +337,30 @@ func TestDispatchUnionAbortsOnFacetPreconditionFault(t *testing.T) {
 }
 
 // TestValidateLexicalUnionMemberWithNoApplicableFacets pins the zero-mode guard in
-// validateUnion's clause-1 stage. When the ·active basic member· is an ATOMIC type
-// whose {primitive type definition} is absent, cos-applicable-facets (§4.1.5) makes NO
-// facet applicable to it, so it resolves no whiteSpace mode and the union's own pattern
-// stage must test the RAW literal rather than normalize with the zero mode.
+// validateUnion's clause-1 stage. When the ·active basic member· is a type
+// cos-applicable-facets (§4.1.5) makes NO facet applicable to, it resolves no
+// whiteSpace mode and the union's own pattern stage must test the RAW literal rather
+// than normalize with the zero mode.
 //
 // The state is reachable, not hypothetical: cos-st-restricts clause 3.1 rejects the two
-// ·special· ANCHOR nodes as members by identity, so an absent-primitive atomic a caller
-// builds itself passes that check and can be a member. It restricts a PRIMITIVE rather
-// than xs:anyAtomicType, which st-props-correct clause 1 now reserves for the primitives
-// themselves (#480) — the member's own {primitive type definition} is still absent, which
-// is what this test is about. Without the guard, normalizeWhiteSpace panics on the zero
+// ·special· ANCHOR nodes as members by IDENTITY, so a caller-built type in the same
+// SHAPE as an anchor — no declared derivation, no {base type definition} — passes that
+// check and can be a member. Its {variety} is ·absent·, which is §4.1.5's first
+// no-applicable-facets case. Without the guard, normalizeWhiteSpace panics on the zero
 // mode — the very panic class this cohort exists to remove.
+//
+// The member used to be an atomic type carrying an explicitly absent {primitive type
+// definition} over a primitive base — §4.1.5's SECOND case. That shape is no longer
+// representable (#478): {primitive type definition} is derived from the base chain, so
+// a type over a primitive base always reports that primitive, and only xs:anyAtomicType
+// is atomic-with-absent-primitive — which clause 3.1 refuses as a member. The guard
+// under test is unchanged; the reachable witness for it moved from §4.1.5's second case
+// to its first.
 func TestValidateLexicalUnionMemberWithNoApplicableFacets(t *testing.T) {
-	prim, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "prim"}, nil, nil)
+	member, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "absentVariety"},
+		nil, nil, nil, nil)
 	if err != nil {
-		t.Fatalf("NewPrimitiveType(prim): %v", err)
-	}
-	member, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "noPrimitive"},
-		xsd.NewAtomic(nil), prim, nil, nil)
-	if err != nil {
-		t.Fatalf("NewSimpleType(atomic with absent {primitive type definition}): %v", err)
+		t.Fatalf("NewSimpleType(absent {variety}, absent {base type definition}): %v", err)
 	}
 	u := unionType2(t, "facetlessMember", member)
 
