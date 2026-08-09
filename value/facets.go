@@ -321,9 +321,26 @@ func validateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Conte
 }
 
 // compile builds the pattern (lexical) and value facet checkers for st from its
-// EffectiveFacets once, so pattern regexes are compiled and facet {value}s are
-// parsed at this construction point — not per validated literal. A bad pattern
-// or an unmappable declaring type surfaces here as an *xsderr.Error.
+// EffectiveFacets: pattern regexes are translated and compiled here and facet
+// {value}s are parsed here, so the stage runners downstream do neither. A bad
+// pattern or an unmappable declaring type surfaces here as an *xsderr.Error, at
+// the point the checkers are built rather than mid-stage.
+//
+// It runs once per validateLexical CALL, not once per type — which is once per
+// atomic literal validated, once per union member attempt (validateUnion compiles
+// the union's own facets, then every member the dispatch tries re-enters
+// validateLexical and compiles its own), and once per LIST ITEM, since
+// listMapping.Parse decides each whitespace-delimited token by recursing through
+// validateLexical (list.go; dv_list §4.1.4 cl.2.2). So validating a 500-item
+// xs:byte list translates and compiles the item type's pattern regexes 500 times.
+// Nothing is amortized across calls and nothing memoizes st's checkers: a cache
+// here would be derivable state without a profile behind it (STYLE D3,
+// PRINCIPLES 6), and there is no hot path to profile today — validate/ does not
+// reach ValidateLexical at all, and the only list-validating consumer is the
+// conformance harness over fixtures of a handful of items each. It becomes real
+// performance work — measure first, then amortize behind one seam — when
+// xs:IDREFS/xs:NMTOKENS/xs:ENTITIES reach the validator and long lists are
+// validated in anger.
 //
 // The whiteSpace facet is consumed by the normalize stage, not as a checker;
 // explicitTimezone is a value facet handled here (cvc-explicitTimezone-valid,
@@ -420,13 +437,14 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 // shares its {variety} (Structures §3.16.1: a list's {item type definition} is
 // never itself a list, and cos-st-restricts clause 3.2 makes a union restriction's
 // base a union) — so if node is neither, none of its ancestors are either and the
-// atomic loop below is unchanged. An ungoverned item type leaves the list
-// ungoverned, and an ungoverned MEMBER leaves the union ungoverned (unionGoverned
-// explains why one unmapped member spoils the whole dispatch) — the same
-// (Mapping{}, false) "ungoverned" outcome the atomic case returns.
+// atomic loop below is unchanged. Either constructed branch is ungoverned when
+// what it is built from is: listGoverned (list.go) carries why an ungoverned item
+// type leaves the whole list ungoverned, unionGoverned (union.go) why one unmapped
+// member spoils the whole dispatch — both yielding the same (Mapping{}, false)
+// "ungoverned" outcome the atomic case returns.
 func governingMapping(b Backend, node *xsd.SimpleType) (Mapping, bool) {
 	if lst, ok := node.Variety().(xsd.List); ok {
-		if _, ok := governingMapping(b, lst.Item()); !ok {
+		if !listGoverned(b, lst) {
 			return Mapping{}, false
 		}
 		return listMapping(b, lst.Item()), true

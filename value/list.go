@@ -124,6 +124,32 @@ func listMapping(b Backend, item *xsd.SimpleType) Mapping {
 	}
 }
 
+// listGoverned reports whether b governs lst's {item type definition}, the list's
+// analogue of unionGoverned — the same question ("does the backend govern what
+// this constructed variety is built from?") asked in the same shape, so
+// governingMapping's two constructed-variety branches read alike (STYLE T4).
+//
+// An ungoverned item type leaves the WHOLE list ungoverned. dv_list (§4.1.4
+// cl.2.2) decides a list literal by deciding each space-delimited substring
+// against the item type, so with no mapping for that type there is no token the
+// list could decide and no value it could build. Reporting the list ungoverned
+// keeps an unmapped type a BACKEND gap rather than a validity verdict about
+// instance data: it surfaces as ValidateLexical's "no backend mapping governs"
+// cvc-datatype-valid error, the same way an ungoverned atomic type does.
+//
+// This is ONE delegation, not a walk or a recursion: the {item type definition}
+// "must not itself be a list type ... or have any basic members which are list
+// types" (§3.16.1 std-item_type_definition), so the question bottoms out one level
+// down structurally. Note the asymmetry with unionGoverned, which needs a real
+// per-member loop: §3.16.1 std-member_type_definitions puts no such flatness
+// constraint on {member type definitions}, so a union nests arbitrarily deep. This
+// predicate RELIES ON the list invariant rather than enforcing it — nothing here
+// re-checks the item type's {variety}.
+func listGoverned(b Backend, lst xsd.List) bool {
+	_, ok := governingMapping(b, lst.Item())
+	return ok
+}
+
 // listValue is a list-variety value: the ordered sequence of item values
 // produced by listMapping.Parse (§4.1.4 cl.2.2). Its capabilities realize the
 // list-applicable facets — length in items (§4.3.1.3) and enumeration by
