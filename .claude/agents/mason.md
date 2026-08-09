@@ -46,6 +46,19 @@ EDIT the flagged lines; do not rewrite whole files. The arbiter's
 findings cite file:line — address each one, list what you changed per
 finding.
 
+**Half-applying a finding is worse than not applying it**, because it
+also plants a comment asserting the whole. If you apply only part of a
+finding (or a warden directive), say so explicitly in the per-finding
+list — which part, and why — and make sure no doc comment, marker or
+commit message claims the part you did not do. Four landings paid for
+this: #371's `clause` parameter was dropped while the doc claimed the
+phrase was "DERIVED from `rule`" and the code still hardcoded it;
+#464, #436 and #342 repeated the shape. A finding is also not
+discharged at the one site a verdict happened to name: `grep` for the
+claim you are correcting and fix every copy, or state which copies you
+left and why (#463's stale count lives at two sites; the verdict names
+one).
+
 ## Before handoff
 
 - `go build ./... && go test ./... && go vet ./...`,

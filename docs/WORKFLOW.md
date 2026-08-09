@@ -216,6 +216,53 @@ work itself and never skips the arbiter.
    the WIP branch FIRST (PRINCIPLES 29) and checkpoints; then land
    through GitHub, never a local merge:
 
+   0. **Two verified preconditions, in this order, before the PR is
+      opened.** Both are checks the orchestrating session performs and
+      states; neither is anyone else's to volunteer.
+
+      **(a) The LOG entry is IN the branch's diff.** Not "the chronicler
+      was invoked" — the entry is present in
+      `git diff origin/main...HEAD -- docs/LOG/`, and that command is
+      the check. The entry rides the session commit or the session does
+      not land (PRINCIPLES 29). *Ruling, 2026-08-09 /retro, on seven
+      arbiter-raised sightings and two counter-examples:* an arbiter
+      verdict line reporting a missing LOG entry is a **symptom of this
+      step being skipped**, not a role boundary working as designed —
+      the earlier reading recorded in the 2026-08-01 #331 entry does not
+      survive. The arbiter may still say it; it is under no obligation
+      to, and a session that relies on the reminder has already skipped
+      the step. Do NOT add a LOG check to `.claude/agents/arbiter.md`,
+      and do not build a mechanical guard here (that is #304's subject).
+
+      **(b) `origin/main` has not moved past the verdict's base.** Fetch
+      and check `git log HEAD..origin/main` is EMPTY. If it is not, the
+      base has drifted and the branch owes, in order:
+
+      - **Merge `origin/main` forward** (never rebase — WORKFLOW forbids
+        force-push on a WIP branch, so a merge is the only mechanism);
+        follow the merge-conflict ritual below, and **name the absorbed
+        SHAs in the log entry and the PR body**.
+      - **Re-run the FULL gate on the COMMITTED merged tree — always,
+        a conflict-free auto-merge included.** A clean merge is not
+        evidence of a compatible merge: #392's fourth merge type-checked
+        and introduced a false reject that only the gate found. If an
+        absorbed commit changed the gate itself, re-read CLAUDE.md's
+        "Commands" block and run the gate it now names, not the one you
+        remember (#329 added `go tool commentwrap ./...` mid-branch).
+      - **Then buy a second, gate-only arbiter round IF AND ONLY IF the
+        verdict rests on a measurement the moved base can invalidate** —
+        a banked ratchet figure, a withheld-set count, a lane delta.
+        A green gate the session has just re-run is not such a
+        measurement, so a doc-only or comment-only landing lands on the
+        verdict it already has. (Both halves are required: "always buy a
+        round" taxes every cheap landing for a risk it cannot run;
+        "re-run and land" silently drops the case where the moved base
+        changes what a banked figure means.)
+
+      Re-verify `git log HEAD..origin/main` is empty after the merge —
+      main can drift again while the PR is open, and one branch paid
+      four merge cycles in a single session.
+
    1. Open a PR from `wip/issue-<N>` to `main`; the body carries
       `Closes #<N>` plus a pointer to the arbiter's accept verdict.
    2. Squash-merge it via the Merge API (MCP `merge_pull_request` with
@@ -239,6 +286,20 @@ work itself and never skips the arbiter.
    a comment, while the context is fresh. The dependency graph and the
    follow-up ledger react to landings immediately instead of waiting
    for the next /backlog.
+
+   **A hand-off is not a disposition.** An advisory that is real but too
+   small to carry an issue of its own has exactly two dispositions:
+   **filed**, or **written into a comment on the specific issue that
+   will absorb it, in the session that raises it**. "Handed to the
+   post-land pass as a candidate", "its right home is whichever issue
+   next touches X", and "recorded here so a later session can pick it
+   up" are NOT dispositions — the post-land pass keeps no ledger to
+   check them against, so an item disposed of that way is untracked the
+   moment the session ends. #330's two sub-threshold doc-citation
+   advisories went out through that phrasing, the pass then ran, and it
+   carried neither; two later entries re-stated them as an open leak.
+   If no issue is a plausible home, the advisory is above threshold
+   after all — file it.
 
 Budget: one issue per session. Nothing works? A checkpointed WIP branch
 + a good RESUME comment is a successful session. Never wait for a human;
@@ -304,6 +365,32 @@ squash-merged PR (#179). `.githooks/pre-commit` now refuses any commit
 where a path has both staged and unstaged changes, which catches this
 mechanically — but only in a session that ran step 1's
 `git config core.hooksPath .githooks`, so the discipline stays yours too.
+
+**The `docs/LOG` tail is the conflict every pre-land merge hits**, because
+every session appends to the same month file at the same point, and it is
+the one file where a plausible-looking resolution can silently delete
+someone else's landed history (the log is append-only — PRINCIPLES 29).
+Both sides are almost always PURE APPENDS, so the resolution is
+positional and nothing else: base, then the other side's entries in the
+other side's own order, then yours, each byte-identical to its authored
+form. Nothing is reflowed, reordered, merged or "tidied". Then prove it
+rather than counting headings — reconstruct each parent's version of the
+file from the resolved one and compare:
+
+```sh
+git show :2:docs/LOG/<yyyy>-<mm>.md > /tmp/ours   # or the merge parents'
+git show :3:docs/LOG/<yyyy>-<mm>.md > /tmp/theirs # blobs, pre-resolution
+# each must appear in the resolved file as an unbroken, unedited prefix/run
+```
+
+Heading arithmetic passes while an entry is silently dropped; a
+byte-for-byte reconstruction of both parents cannot. Do not read the
+scale of the drift off the expectations diff either — a landing can
+append a LOG entry while touching no lane file at all, so a resolver
+reasoning from `conformance/testdata/expectations/` under-counts what it
+must preserve. (That the month file is ONE append point, and therefore
+forces this merge on finished branches with zero logic overlap, is a
+layout question tracked separately as #600.)
 
 **Park** (second reject, or a resume whose merge won't resolve):
 checkpoint the branch one final time, label the issue `needs-replan`,
