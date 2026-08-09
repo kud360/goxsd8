@@ -769,10 +769,7 @@ func (p *producer) openContentType(owner *Element, explicit xsd.ContentType) (xs
 	if err := checkOpenContentAny(owner); err != nil {
 		return nil, err
 	}
-	we, err := p.wildcardElement(owner, explicit)
-	if err != nil {
-		return nil, err
-	}
+	we := p.wildcardElement(owner, explicit)
 	if we == nil {
 		return explicit, nil // clause 6.1: the ·wildcard element· is ·absent·
 	}
@@ -792,7 +789,7 @@ func (p *producer) openContentType(owner *Element, explicit xsd.ContentType) (xs
 // is (clause 4, since clause 6.1 would ignore it). The schema-level
 // <defaultOpenContent> is NOT governed by these clauses — src-ct is a constraint
 // on <complexType> — so its own mandatory <any> is checked as a grammar fault by
-// defaultOpenContentElem instead.
+// checkDefaultOpenContent instead, eagerly, before anything is produced.
 func checkOpenContentAny(owner *Element) error {
 	oc := childElement(owner, xsd.XMLSchemaNS, "openContent")
 	if oc == nil {
@@ -820,24 +817,21 @@ func checkOpenContentAny(owner *Element) error {
 //
 // appliesToEmpty is read here and nowhere else: §3.4.1's Open Content record has
 // no such property, so it must not travel past this selection (STYLE D3).
-func (p *producer) wildcardElement(owner *Element, explicit xsd.ContentType) (*Element, error) {
+func (p *producer) wildcardElement(owner *Element, explicit xsd.ContentType) *Element {
 	if own := childElement(owner, xsd.XMLSchemaNS, "openContent"); own != nil {
-		return own, nil // clause 5.1
+		return own // clause 5.1
 	}
-	def, err := p.defaultOpenContentElem()
-	if err != nil {
-		return nil, err
-	}
+	def := p.defaultOpenContentElem()
 	if def == nil {
-		return nil, nil // clause 5.3: this document declares no default
+		return nil // clause 5.3: this document declares no default
 	}
 	if explicit.Variety() != xsd.ContentEmpty {
-		return def, nil // clause 5.2.1
+		return def // clause 5.2.1
 	}
 	if appliesToEmpty, _ := boolAttr(def, "appliesToEmpty"); appliesToEmpty {
-		return def, nil // clause 5.2.2
+		return def // clause 5.2.2
 	}
-	return nil, nil // clause 5.3
+	return nil // clause 5.3
 }
 
 // defaultOpenContentElem returns the <defaultOpenContent> child of THIS
@@ -854,23 +848,57 @@ func (p *producer) wildcardElement(owner *Element, explicit xsd.ContentType) (*E
 //
 // The <schema> content model admits at most one <defaultOpenContent>; a
 // malformed document with several is mapped by its first, so the verdict is the
-// same every run (STYLE D1). Both rejections are plain grammar faults rather
-// than xsderr rule verdicts: <defaultOpenContent>'s content model makes the
-// <any> mandatory and its mode enumeration is only (interleave | suffix) —
-// "none" is legal on <openContent> alone — and no Schema Representation
-// Constraint restates either.
-func (p *producer) defaultOpenContentElem() (*Element, error) {
-	def := childElement(p.schemaElem, xsd.XMLSchemaNS, "defaultOpenContent")
+// same every run (STYLE D1). This is a PURE LOOKUP with no rejection path of its
+// own: checkDefaultOpenContent has already judged the element's grammar for
+// every document of the assembly by the time any complex type consults it, which
+// is what keeps that verdict independent of whether any type reaches clause 5.2.
+func (p *producer) defaultOpenContentElem() *Element {
+	return childElement(p.schemaElem, xsd.XMLSchemaNS, "defaultOpenContent")
+}
+
+// checkDefaultOpenContent enforces the two schema for schema documents grammar
+// rules on this document's <defaultOpenContent>: its content model (annotation?,
+// any) makes the <any> child mandatory, and its mode attribute is restricted to
+// (interleave | suffix) — "none" is an <openContent> mode alone.
+//
+// Both are plain grammar faults rather than xsderr rule verdicts, because no
+// Schema Component Constraint governs <defaultOpenContent> at all: it is pure
+// schema-document-level source grammar, consumed by §3.4.2.3.3
+// (dcl.ctd.ctcc.common) clause 5.2's mapping, while ct-props-correct (§3.4.6.1)
+// clause 1 is scoped to a Complex Type Definition's §3.4.1 property tableau —
+// and no such component is in view here — and src-ct (§3.4.3) clauses 3-4 are
+// constraints on <complexType>. The mode enumeration is therefore NOT routed
+// through openContentModeOf, whose out-of-enumeration charge is ct-props-correct
+// and whose job is to yield a {mode} value this check has no use for.
+//
+// Running it once per document, ahead of production, is what makes the verdict
+// content-INDEPENDENT: a malformed <defaultOpenContent> is rejected because it
+// is malformed, not because some complex type of the same document happened to
+// have an ·explicit content type· that reaches clause 5.2 and consults it.
+//
+// It is called beside the pre-scan, for every document of the assembly, rather
+// than from run: a base= in the document produced FIRST builds its base type
+// through the DECLARING document's producer on demand (symbols.typeSource), so a
+// per-run check would let a neighbour document's still-unjudged default be
+// selected by clause 5.2 first — and a childless one would then reach
+// openContentOf's panic instead of any verdict at all.
+func (p *producer) checkDefaultOpenContent() error {
+	def := p.defaultOpenContentElem()
 	if def == nil {
-		return nil, nil
-	}
-	if openContentModeIsNone(def) {
-		return nil, fmt.Errorf(`parser: <defaultOpenContent> at %s has mode="none", but the schema for schema documents admits only interleave or suffix there ("none" is an <openContent> mode)`, def.Loc())
+		return nil
 	}
 	if childElement(def, xsd.XMLSchemaNS, "any") == nil {
-		return nil, fmt.Errorf("parser: <defaultOpenContent> at %s has no <any> child, but the schema for schema documents makes it mandatory", def.Loc())
+		return fmt.Errorf("parser: <defaultOpenContent> at %s has no <any> child, but the schema for schema documents makes it mandatory", def.Loc())
 	}
-	return def, nil
+	mode, present := def.Attr("mode")
+	if !present {
+		return nil
+	}
+	switch strings.TrimSpace(mode) {
+	case "interleave", "suffix":
+		return nil
+	}
+	return fmt.Errorf(`parser: <defaultOpenContent> at %s has mode=%q, but the schema for schema documents admits only interleave or suffix there ("none" is an <openContent> mode)`, def.Loc(), mode)
 }
 
 // openContentOf computes §3.4.2.3.3 clause 6's {open content} from the
@@ -893,9 +921,10 @@ func (p *producer) openContentOf(we *Element, explicit xsd.ContentType) (*xsd.Op
 	if anyElem == nil {
 		// Unreachable: a mode≠"none" <openContent> without an <any> was rejected by
 		// checkOpenContentAny (src-ct clause 3) and a <defaultOpenContent> without
-		// one by defaultOpenContentElem, and those are the only two elements clause
-		// 5 can select. Panicking names the broken invariant rather than fabricating
-		// a verdict for a source shape that cannot reach here.
+		// one by checkDefaultOpenContent before ANY document of the assembly was
+		// produced, and those are the only two elements clause 5 can select.
+		// Panicking names the broken invariant rather than fabricating a verdict for
+		// a source shape that cannot reach here.
 		panic("parser: openContentOf: ·wildcard element· with mode other than none has no <any> child")
 	}
 	w, err := p.produceWildcard(anyElem)
@@ -982,6 +1011,13 @@ func openContentModeIsNone(we *Element) bool {
 // out-of-enumeration token is what is left, charged to ct-props-correct clause 1
 // (§3.4.6.1), the §3.4.1 tableau the {mode} property belongs to, exactly as
 // xsd.NewOpenContent charges a mode it cannot represent.
+//
+// That charge is reachable for a type's OWN <openContent> alone, which is where
+// a Complex Type Definition is in view to charge it against. The other
+// ·wildcard element· clause 5 can select, the schema-level <defaultOpenContent>,
+// still passes through here — but only ever on the interleave/suffix arms, its
+// whole enumeration having been settled by checkDefaultOpenContent as a grammar
+// fault, since ct-props-correct reaches no component there.
 func openContentModeOf(we *Element) (xsd.OpenContentMode, error) {
 	mode, ok := we.Attr("mode")
 	if !ok {
