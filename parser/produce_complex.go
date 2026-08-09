@@ -24,6 +24,12 @@ var anySimpleTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"
 // and no attribute uses, and whose {base type definition} is itself (the sole
 // permitted self-derivation, any-type-itself). checkComplexBaseAcyclic (#173)
 // recognises that self-derivation by name, so the seeded value passes finalize.
+//
+// Its {final} and {prohibited substitutions} stay EMPTY, and that is the mapped
+// value rather than an unmapped one: §3.4.2.1's EBV is read off a source
+// <complexType> and its ancestor <schema>, and the ur-type has neither — §3.4.7
+// specifies the component outright. Nothing a document says, finalDefault=
+// included, can make xs:anyType final.
 func seedAnyType() (xsd.ComplexType, error) {
 	anyNS, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintAny, nil, nil, nil)
 	if err != nil {
@@ -402,8 +408,8 @@ func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (
 	// PROVABLY the identity — and it is the seeded xs:anyType that any lookup
 	// would find, since builtComplex holds it before any document is produced and
 	// a name already in that memo is never rebuilt.
-	return p.newComplexType(id, el.Loc(), xsd.TypeDefinitionRef{Name: anyTypeName}, nil,
-		xsd.DerivationRestriction, abstract, uses, prohibited, wildcard, content, nil, p.assertionsOf(el), nil)
+	return p.newComplexType(id, el.Loc(), xsd.TypeDefinitionRef{Name: anyTypeName}, p.complexTypeFinal(el),
+		xsd.DerivationRestriction, abstract, uses, prohibited, wildcard, content, p.complexTypeProhibitedSubstitutions(el), p.assertionsOf(el), nil)
 }
 
 // produceSimpleContent maps a <complexType><simpleContent> (§3.4.2.2) into a
@@ -450,8 +456,8 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 	// {assertions} (§3.4.2.1): clause 1's members of the resolved base's own
 	// {assertions} — nothing at all when it is a simple type, the common case
 	// here — ahead of clause 2's <assert> children of <extension>.
-	return p.newComplexType(id, ctElem.Loc(), baseRef, nil,
-		xsd.DerivationExtension, abstract, uses, prohibited, wildcard, content, nil, assertionsWithBase(base, p.assertionsOf(ext)), nil)
+	return p.newComplexType(id, ctElem.Loc(), baseRef, p.complexTypeFinal(ctElem),
+		xsd.DerivationExtension, abstract, uses, prohibited, wildcard, content, p.complexTypeProhibitedSubstitutions(ctElem), assertionsWithBase(base, p.assertionsOf(ext)), nil)
 }
 
 // simpleContentSimpleType is the §3.4.2.2 {simple type definition} tableau for
@@ -546,8 +552,8 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 	// {assertions} (§3.4.2.1): clause 1's members of the resolved base's own
 	// {assertions}, then clause 2's <assert> children of the derivation alternant
 	// — not of the enclosing <complexType> — in this explicit complex-content form.
-	return p.newComplexType(id, ctElem.Loc(), baseRef, nil,
-		method, abstract, uses, prohibited, wildcard, content, nil, assertionsWithBase(base, p.assertionsOf(derivation)), nil)
+	return p.newComplexType(id, ctElem.Loc(), baseRef, p.complexTypeFinal(ctElem),
+		method, abstract, uses, prohibited, wildcard, content, p.complexTypeProhibitedSubstitutions(ctElem), assertionsWithBase(base, p.assertionsOf(derivation)), nil)
 }
 
 // complexContentDerivation returns the <restriction> or <extension> child of a

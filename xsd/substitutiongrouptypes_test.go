@@ -231,3 +231,40 @@ func TestEPropsCorrectClause4SimpleTypes(t *testing.T) {
 	}
 	expectRule(t, schema(func(*SimpleType) *SimpleType { return sgSimple(t, sq("B"), AnyAtomicType()) }), ruleEPropsCorrect)
 }
+
+// TestEPropsCorrectClause4IgnoresHeadTypeProhibitedSubstitutions pins the one
+// term clause 4 does NOT read: the head TYPE's {prohibited substitutions}.
+// Composing the clause's own words with key-val-sub-type's complex/complex arm
+// would union that property into the blocking set and reject the first schema
+// below; §3.3.3 ("An empty {substitution group exclusions} allows a declaration
+// to be named in the {substitution group affiliations} of other element
+// declarations having … some type ·derived· therefrom"), §3.4.1's list of what
+// {prohibited substitutions} governs, and W3C sunData ElemDecl
+// disallowedSubst00503m3/m4/m5 all say it stands. See
+// checkElementSubstitutableForHeads for the full reading.
+//
+// The second schema is the control that keeps this from being satisfied by a
+// checker that stopped reading blocking keywords altogether: the SAME derivation
+// step, blocked by the head's {substitution group exclusions} instead, is still
+// rejected. The third pins that the property genuinely still bites where it
+// belongs — cos-equiv-derived-ok-rec clause 2.3 keeps the member out of the
+// head's ·substitution group· in exactly the schema clause 4 accepts.
+func TestEPropsCorrectClause4IgnoresHeadTypeProhibitedSubstitutions(t *testing.T) {
+	build := func(b *SchemaBuilder, exclusions []DerivationMethod) {
+		b.AddType(sgType(t, sq("H"), QName{}, DerivationRestriction, DerivationExtension))
+		b.AddType(sgType(t, sq("M"), sq("H"), DerivationExtension))
+		b.AddElement(cvsElement(t, sq("head"), sgRef(sq("H")), exclusions))
+		b.AddElement(cvsElement(t, sq("member"), sgRef(sq("M")), nil, sq("head")))
+	}
+	if err := cvsFinalize(t, func(b *SchemaBuilder) { build(b, nil) }); err != nil {
+		t.Fatalf("the head TYPE blocks extension but the head DECLARATION excludes nothing, so clause 4 must accept: %v", err)
+	}
+	expectRule(t, cvsFinalize(t, func(b *SchemaBuilder) {
+		build(b, []DerivationMethod{DerivationExtension})
+	}), ruleEPropsCorrect)
+
+	s := sgSchema(t, func(b *SchemaBuilder) { build(b, nil) })
+	if s.inSubstitutionGroupOf(sq("member"), sq("head")) {
+		t.Fatal("clause 4 accepted the affiliation, but the head type's {prohibited substitutions} must still keep the member out of its ·substitution group· (cos-equiv-derived-ok-rec clause 2.3)")
+	}
+}

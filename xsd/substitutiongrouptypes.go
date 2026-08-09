@@ -85,7 +85,37 @@ func (s *Schema) checkSubstitutionGroupTypes() error {
 // The blocking keyword set is M's {substitution group exclusions}, never E's,
 // and never either declaration's {disallowed substitutions} — that property
 // feeds cos-equiv-derived-ok-rec clause 2.1, a distinct rule over a distinct
-// attribute. It is read off the unexported field rather than through
+// attribute — and never M.{type definition}.{prohibited substitutions} either.
+// That last exclusion is a deliberate reading of clause 4 AGAINST its own words:
+// the clause says ·validly substitutable·, whose complex/complex arm unions the
+// target type's {prohibited substitutions} into the blocking set
+// (key-val-sub-type), so a literal composition would reject every affiliation
+// whose head TYPE blocks the member's derivation. Three passages say it must
+// not, and the suite agrees:
+//
+//   - §3.3.3: "An empty {substitution group exclusions} allows a declaration to
+//     be named in the {substitution group affiliations} of other element
+//     declarations having the same declared {type definition} or some type
+//     ·derived· therefrom" — naming the head is governed by the exclusions
+//     ALONE, and an empty set excludes nothing;
+//   - §3.4.1's prose on {prohibited substitutions} lists what that property
+//     governs — an xsi:type override, ·substitution group· MEMBERSHIP inside a
+//     model group, and a local element's type in a restriction — and declaring
+//     an affiliation is not among them. Membership is cos-equiv-derived-ok-rec
+//     clause 2.3, which unions the head type's set itself (substitutiongroup.go);
+//   - XSD 1.0's clause 4 read "validly derived ... given the value of the
+//     {substitution group exclusions}", with no union, and §3.3.3's prose
+//     survived the 1.1 rewording unchanged.
+//
+// W3C sunData ElemDecl disallowedSubst00503m3/m4/m5 pin it end to end: a head
+// typed by a complexType carrying block="restriction" (respectively
+// "restriction extension"), with a member typed by a RESTRICTION of that type,
+// is a VALID schema in which the member is merely not ·substitutable· for the
+// head. The union reading rejects all three. So this charges ·validly derived·
+// (validlyDerived, complexderivation.go) over the exclusions, which is clause 4
+// with its one over-broad term removed and nothing else changed.
+//
+// The set is read off the unexported field rather than through
 // SubstitutionGroupExclusions(), whose defensive copy would be allocated only to
 // be discarded: validlySubstitutable never retains or mutates the slice
 // (unionDerivationMethods and complexBlockingSubset both build fresh ones). Same
@@ -127,11 +157,11 @@ func (s *Schema) checkElementSubstitutableForHeads(e ElementDeclaration) error {
 		if !ok {
 			continue
 		}
-		if s.validlySubstitutable(memberType, headType, head.substitutionGroupExclusions) {
+		if s.validlyDerived(memberType, headType, head.substitutionGroupExclusions) {
 			continue
 		}
 		return xsderr.New(ruleEPropsCorrect, e.Loc(),
-			"element declaration %s is typed %s, which is not ·validly substitutable· for %s, the {type definition} of the substitution group head %s it is affiliated to, subject to that head's {substitution group exclusions} %v; e-props-correct clause 4 (c-vs-sg) requires it to be",
+			"element declaration %s is typed %s, which is not validly ·derived· from %s, the {type definition} of the substitution group head %s it is affiliated to, subject to that head's {substitution group exclusions} %v; e-props-correct clause 4 (c-vs-sg) requires it to be",
 			e.Name(), typeDefinitionLabel(memberType), typeDefinitionLabel(headType), aff, head.substitutionGroupExclusions)
 	}
 	return nil
