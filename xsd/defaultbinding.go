@@ -137,6 +137,28 @@ func (s *Schema) attributeUseDeclaration(u AttributeUse) (AttributeDeclaration, 
 	}
 }
 
+// ownedAttributeDeclaration is attributeUseDeclaration narrowed to the
+// declaration a use OWNS: ok is true only for the Local variant, whose sibling
+// declaration belongs to no §3.17.1 symbol table and so has no other site that
+// could charge it. The Ref variant names a GLOBAL declaration the schema's
+// {attribute declarations} holds and charges in its own right, so it reports
+// false rather than that declaration — a use is not its owner.
+//
+// It is a sibling of attributeUseDeclaration rather than a type assertion at the
+// call site so that the switch over the sealed AttributeDeclarationOrRef sum is
+// written once per concern and a new variant is a compile-or-panic here, not a
+// silently wrong answer there (STYLE T4).
+func (s *Schema) ownedAttributeDeclaration(u AttributeUse) (AttributeDeclaration, bool) {
+	switch d := u.attributeDeclaration.(type) {
+	case LocalAttributeDeclaration:
+		return d.Declaration, true
+	case AttributeDeclarationRef:
+		return AttributeDeclaration{}, false
+	default:
+		panic("xsd: ownedAttributeDeclaration: non-exhaustive AttributeDeclarationOrRef switch")
+	}
+}
+
 // effectiveValueConstraint is the ·effective value constraint· of an attribute
 // use (Structures §3.5.4, key-evc): U.{value constraint} if present, otherwise
 // U.{attribute declaration}.{value constraint} if present, otherwise ·absent·.

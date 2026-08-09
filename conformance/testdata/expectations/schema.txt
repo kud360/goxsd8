@@ -6620,7 +6620,7 @@ MS-Particles2006-07-15/particlesIg013/schema/particlesIg013 pass
 MS-Particles2006-07-15/particlesIg014/schema/particlesIg014 pass
 MS-Particles2006-07-15/particlesIg015/schema/particlesIg015 pass
 MS-Particles2006-07-15/particlesIg016/schema/particlesIg016 pass
-MS-Particles2006-07-15/particlesIh001/schema/particlesIh001 fail
+MS-Particles2006-07-15/particlesIh001/schema/particlesIh001 pass
 MS-Particles2006-07-15/particlesIj001/schema/particlesIj001 pass
 MS-Particles2006-07-15/particlesIj002/schema/particlesIj002 pass
 MS-Particles2006-07-15/particlesIj003/schema/particlesIj003 pass
@@ -10126,8 +10126,8 @@ MS-SimpleType2006-07-15/stZ044/schema/stZ044 pass
 MS-SimpleType2006-07-15/stZ045/schema/stZ045 fail
 MS-SimpleType2006-07-15/stZ046/schema/stZ046 fail
 MS-SimpleType2006-07-15/stZ047/schema/stZ047 fail
-MS-SimpleType2006-07-15/stZ048/schema/stZ048 fail
-MS-SimpleType2006-07-15/stZ049/schema/stZ049 fail
+MS-SimpleType2006-07-15/stZ048/schema/stZ048 pass
+MS-SimpleType2006-07-15/stZ049/schema/stZ049 pass
 MS-SimpleType2006-07-15/stZ050/schema/stZ050 pass
 MS-SimpleType2006-07-15/stZ051/schema/stZ051 pass
 MS-SimpleType2006-07-15/stZ052/schema/stZ052 pass
@@ -15268,7 +15268,7 @@ substitution-groups/sg-and-defined-Sibling-1/schema/snneg pass
 substitution-groups/sg-and-defined-Sibling-2/schema/negsn pass
 substitution-groups/sg-and-defined-Sibling-3/schema/snbranch pass
 substitutionGroup/s2_2_2si01/schema/s2_2_2si01s pass
-substitutionGroup/s2_2_2si02/schema/s2_2_2si02s fail
+substitutionGroup/s2_2_2si02/schema/s2_2_2si02s pass
 substitutionGroup/s2_2_2v01/schema/s2_2_2v01s pass
 substitutionGroup/s2_2_2v02/schema/s2_2_2v02s pass
 substitutionGroup/s2_2_2v03/schema/s2_2_2v03s pass

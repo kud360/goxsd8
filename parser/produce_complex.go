@@ -1459,25 +1459,24 @@ func rejectBothInlineTypes(el *Element, inlineSimple, inlineComplex *Element) er
 // xsd.InlineTypeDefinition: it goes into no symbol table, so the declaration is
 // its sole owner. Its {context} (§3.16.1) is not populated (#206).
 //
-// GAP(xsd): the element chain's clause 3 — "The declared {type definition} of the
-// Element Declaration ·resolved· to by the FIRST QName in the ·actual value· of
-// the substitutionGroup attribute, if present" — is still not implemented, here
-// or on the global path (produceElement); a substitutionGroup-bearing element
-// with no type= and no inline child falls straight through to clause 4's
-// xs:anyType, which is wider than the head's type. That direction under-rejects
-// at validation, never false-rejects a valid schema. The attribute chain has no
-// clause-3 analog, so this gap is the element's alone. #342 owns its retirement.
+// The element chain's clause 3 — "The declared {type definition} of the Element
+// Declaration ·resolved· to by the FIRST QName in the ·actual value· of the
+// substitutionGroup attribute, if present" — has no tier here, and its absence is
+// not a gap: it is UNREACHABLE on this chain. substitutionGroup= is legal only on
+// a top-level <element> (use="prohibited" on xs:localElement, §3.3.2), the
+// caller charges e-props-correct clause 3 for a local one, and the attribute
+// chain has no clause-3 analog at all. The reachable half is implemented on the
+// global path, by produceElement through substitutionGroupHeadType (#395, which
+// needed it because e-props-correct clause 4 reads the resulting type). The two
+// mappings deliberately read the list differently: {substitution group
+// affiliations} resolves EVERY item, clause 3 the first one only.
 //
-// Note what is NOT in the gap since #281: substitutionGroup= IS read, and its
-// items ARE mapped into {substitution group affiliations}, by
-// produceElement/substitutionGroupAffiliations on the global path — the only path
-// the attribute is legal on, since this function's caller charges e-props-correct
-// clause 3 for a local one. The residue here is the {type definition} tier alone,
-// and the two mappings deliberately read the list differently: affiliations
-// resolve EVERY item, clause 3 the first one only. Closing it needs the HEAD's
-// own DECLARED type, which is recursive (the head may itself be a clause-3 case)
-// and lives behind a name this single-document producer may not have mapped yet,
-// so it belongs to the resolved-component phase, not here.
+// GAP(parser): one clause-3 shape is DECLINED rather than mapped, and it is
+// declined on the global path, not here — a head whose own type is an inline
+// anonymous definition, which the member's {type definition} would have to BE
+// and which this package cannot share between two declarations. It is reported
+// as a producer limitation, never as a rule verdict (substitutionGroupHeadType).
+// #342 owns its retirement.
 func (p *producer) localDeclaredType(el *Element, dflt xsd.QName) (xsd.TypeDefinitionOrRef, error) {
 	if inline := childElement(el, xsd.XMLSchemaNS, "simpleType"); inline != nil {
 		st, err := p.constructSimpleType(xsd.QName{}, inline) // tier 1
