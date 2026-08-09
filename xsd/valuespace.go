@@ -34,6 +34,16 @@ package xsd
 // turns a decided negative into a schema rejection (PRINCIPLES 20's direction,
 // applied to value spaces).
 //
+// That contract is the deliberate OPPOSITE of the other capability installed at
+// the same seam, [SimpleTypeRestrictionChecker], and the two must not be
+// implemented against each other's. That one is REJECT-CAPABLE: it answers with
+// an error, and a non-nil answer is a real *xsderr.Error carrying a per-facet
+// rule ID that finalize returns as the schema's rejection. This one can never
+// produce a rejection of its own — it hands back a verdict a caller may charge —
+// and its undecided answer is an instruction to accept. Two capabilities rather
+// than one bundle precisely so that a reject-capable method is not representable
+// inside a fail-open interface (STYLE T1).
+//
 // Install one with [SchemaBuilder.FinalizeWith]. A Schema finalized through plain
 // [SchemaBuilder.Finalize] has no value space and every question is undecided,
 // which is exactly the pre-existing fail-open behavior.

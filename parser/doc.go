@@ -24,7 +24,11 @@
 //	                    substitution groups) are rejected HERE, once, with
 //	                    their named src-/cos- rule and location. UPA,
 //	                    particle-restriction, and EDC checks run against
-//	                    the finalized shape.
+//	                    the finalized shape, as does the facet-value half
+//	                    of cos-st-restricts, over every simple type the
+//	                    assembled schema reaches
+//	                    (builtin.NewRestrictionChecker, installed at
+//	                    xsd.SchemaBuilder.FinalizeWith).
 //
 // The phase structure makes cycle REJECTION unnecessary at traversal
 // time — no traversal carries a `seen` set in order to detect a

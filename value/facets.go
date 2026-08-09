@@ -177,13 +177,13 @@ func IsFacetPrecondition(err error) bool {
 // PRECONDITION (caller-guarded, not PRE-checked here — but a violation is
 // reported, see below): every facet on st is applicable to st per
 // cos-applicable-facets (§4.1.5), and b maps st's governing type. The
-// applicability half of that precondition is DISCHARGED for any st built through
-// the parser, whose sole xsd.NewSimpleType call site follows construction with
-// builtin.CheckSimpleTypeRestriction (cos-st-restricts clause 1.3.1 for the
-// atomic case, clauses 2.2.2.4/3.2.2.4 inside package xsd for list and union). It
-// remains the CALLER's to honor for an st assembled by calling the xsd
-// constructors directly, which bypasses that seam entirely — so a violated
-// precondition is reachable, and it is REPORTED rather than assumed away.
+// applicability half of that precondition is DISCHARGED for any st reachable in a
+// schema finalized with an xsd.SimpleTypeRestrictionChecker installed, as the
+// parser always does (cos-st-restricts clause 1.3.1 for the atomic case, clauses
+// 2.2.2.4/3.2.2.4 inside package xsd for list and union). It remains the CALLER's
+// to honor for an st assembled through the xsd constructors and finalized without
+// that capability, or never finalized at all — so a violated precondition is
+// reachable, and it is REPORTED rather than assumed away.
 //
 // st may be atomic, list or union variety, and EACH is decided end to end — the
 // three cases of cvc-datatype-valid clause 2 (§4.1.4). Atomic (cl.2.1) and list

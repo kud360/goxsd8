@@ -114,7 +114,7 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 	if err := p.run(); err != nil {
 		return nil, err
 	}
-	return builder.FinalizeWith(value.NewValueSpace(backend))
+	return builder.FinalizeWith(value.NewValueSpace(backend), builtin.NewRestrictionChecker(backend))
 }
 
 // symbols is the ASSEMBLY-WIDE symbol table: one set of indexes shared by every
@@ -292,11 +292,13 @@ type symbols struct {
 	builtIC map[xsd.QName]xsd.IdentityConstraint
 
 	// backend is the assembly's [value.Backend], retained past the one-time
-	// [builtin.Seed] call so constructSimpleType can charge the value-space
-	// facet constraints of cos-st-restricts ([builtin.CheckSimpleTypeRestriction])
-	// on every simple type it builds. It lives here rather than on the
-	// per-document producer for the same reason the indexes do: it is
-	// assembly-wide and identical for every document.
+	// [builtin.Seed] call so the assembly's two finalize-time capabilities —
+	// [value.NewValueSpace] and [builtin.NewRestrictionChecker], the latter
+	// charging the facet-value half of cos-st-restricts over every simple type
+	// the finalized schema reaches — are built from the SAME backend the builtins
+	// were seeded from. It lives here rather than on the per-document producer
+	// for the same reason the indexes do: it is assembly-wide and identical for
+	// every document.
 	backend value.Backend
 }
 
@@ -1088,14 +1090,16 @@ func (p *producer) resolveModelGroup(name xsd.QName) (xsd.ModelGroup, bool, erro
 // anonymous inline type has no name to key on and is unreferenceable, so it is
 // built here directly, once.
 //
-// The finished component is then charged with the facet-VALUE sub-clauses of
-// cos-st-restricts (§3.16.6.2) through [builtin.CheckSimpleTypeRestriction] —
-// facet applicability against the primitive, and the bound/enumeration
-// constraints in the base type's value space. That check needs both the builtin
+// It does NOT charge the facet-VALUE sub-clauses of cos-st-restricts (§3.16.6.2)
+// — facet applicability against the primitive, and the bound/enumeration
+// constraints in the base type's value space. Those need both the builtin
 // applicability table and a [value.Backend], neither of which package xsd may
-// depend on, so it cannot live inside xsd.NewSimpleType and runs here instead,
-// at this package's SOLE NewSimpleType call site. A rejection is returned as-is:
-// it is already an *xsderr.Error carrying the specific per-facet rule.
+// depend on, so they are taken as a finalize-time capability instead: [Produce]
+// installs [builtin.NewRestrictionChecker] at [xsd.SchemaBuilder.FinalizeWith]
+// and xsd's checkSimpleTypeDerivations pass charges every simple type the
+// assembled schema reaches. Charging it here instead would reach only the types
+// THIS function builds, and would have to be repeated at every future
+// construction site.
 func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleType, error) {
 	restriction, err := restrictionOf(elem)
 	if err != nil {
@@ -1116,14 +1120,7 @@ func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.Simp
 	// type definitions} of its {base type definition}, and xsd.SimpleType derives
 	// all four from the base chain, so the producer no longer re-derives any of
 	// them here (STYLE D3).
-	st, err := xsd.NewSimpleType(elem.Loc(), name, xsd.RestrictionDerivation{}, base, facets, p.simpleTypeFinal(elem))
-	if err != nil {
-		return nil, err
-	}
-	if err := builtin.CheckSimpleTypeRestriction(p.symbols.backend, st); err != nil {
-		return nil, err
-	}
-	return st, nil
+	return xsd.NewSimpleType(elem.Loc(), name, xsd.RestrictionDerivation{}, base, facets, p.simpleTypeFinal(elem))
 }
 
 // restrictionOf returns the single <restriction> child of a <simpleType>. A

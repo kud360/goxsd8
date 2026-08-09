@@ -111,7 +111,7 @@ func TestScaleFacetCheckValue(t *testing.T) {
 // (no Ordered, Lengthed, DigitCounted, Scaled or TimezoneAware). It is how a test
 // reaches the facet-precondition cohort through the real pipeline: pairing any value
 // facet with this value space is exactly the cos-applicable-facets (§4.1.5) violation
-// builtin.CheckSimpleTypeRestriction exists to reject.
+// the xsd.SimpleTypeRestrictionChecker exists to reject.
 type plainBackend map[xsd.QName]bool
 
 func (b plainBackend) Mapping(typ xsd.QName) (Mapping, bool) {

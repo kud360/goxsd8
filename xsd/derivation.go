@@ -189,10 +189,12 @@ const (
 //   - cos-st-restricts clause 1.3.1 (a facet is applicable to an ATOMIC D) and
 //     the value-space half of 1.3.2 / 2.2.2.5 / 3.2.2.5 — the four bound facets
 //     and enumeration, which need a lexical→value mapping. Both live above this
-//     pure leaf: applicability against the generated per-primitive table in
-//     builtin.CheckSimpleTypeRestriction, the value-space comparisons in
-//     value.CheckFacetRestriction, wired together at the parser's sole
-//     NewSimpleType call site.
+//     pure leaf: applicability against the generated per-primitive table, the
+//     value-space comparisons in value.CheckFacetRestriction. They are taken
+//     back as a finalize-time capability, SimpleTypeRestrictionChecker
+//     (restrictionchecker.go), which checkSimpleTypeDerivations puts every simple
+//     type an assembled Schema reaches to; builtin.NewRestrictionChecker is the
+//     implementation that wires the two halves together.
 //
 // The two constructed-variety facet-shape clauses — 2.2.1.2 for a list and its
 // union sibling 3.2.1.2 — are BOTH charged here, in checkListGraph and
@@ -1141,8 +1143,9 @@ func checkLengthFreeStep(loc xsderr.Loc, t *SimpleType, eff []EffectiveFacet, ki
 //     spec's case split has not selected (STYLE E2) while changing no verdict.
 //
 // The ATOMIC case, clause 1.3.1, is NOT charged here — its applicable set comes
-// from the generated per-primitive table, so it lives in
-// builtin.CheckSimpleTypeRestriction.
+// from the generated per-primitive table, which lives above this leaf, so it is
+// charged at finalize by the installed SimpleTypeRestrictionChecker
+// (restrictionchecker.go) instead of at construction.
 func checkVarietyApplicableFacets(loc xsderr.Loc, t *SimpleType) error {
 	switch t.Variety().(type) {
 	case List:

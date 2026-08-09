@@ -429,24 +429,25 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 //     on {variety}, not two provisions; the split below it is this package's, not
 //     the spec's. checkVarietyApplicableFacets (derivation.go) discharges the list
 //     and union cases here, where the applicable set is a fixed literal, and the
-//     ATOMIC case's per-primitive table lookup is discharged outside this leaf by
-//     builtin.CheckSimpleTypeRestriction.
+//     ATOMIC case's per-primitive table lookup is discharged by the installed
+//     SimpleTypeRestrictionChecker (restrictionchecker.go), whose Phase D pass
+//     runs before this one.
 //   - a type with NO whiteSpace facet in force where §3.16.7.4 (every primitive's
 //     {facets} carries one) and §4.3.6.1 (a list's materialized fixed collapse
 //     facet) guarantee one, which value/whitespace.go's effectiveWhiteSpace
 //     charges. Only atomic and list are exposed: a union has no whiteSpace facet
 //     at all under §4.1.5, so its absence there is spec-mandated, not a fault.
 //
-// Both are reachable only for a *SimpleType assembled by calling this package's
-// constructors directly — the second, for instance, from a NewPrimitiveType(loc,
-// name, nil, nil) that some backend then maps — never for a type the PARSER built,
-// which passes through builtin.CheckSimpleTypeRestriction and whose atomic types
-// inherit a primitive's whiteSpace facet while its lists carry the materialized
-// fixed collapse one. Either fault is a fault of the TYPE, and the value
-// space reports it undecided rather than as a verdict (#321 settled that contract:
-// the pipeline returns an *xsderr.Error, it does not panic), so it lands in the
-// accepting branch below: this clause never rejects a schema for it, and never
-// crashes on it.
+// Both are reachable only for a *SimpleType in a Schema finalized with NO
+// SimpleTypeRestrictionChecker installed — the second, for instance, from a
+// NewPrimitiveType(loc, name, nil, nil) that some backend then maps. Neither is
+// reachable for a type the PARSER built: it installs one, so the first fault is
+// already rejected by Phase D, and its atomic types inherit a primitive's
+// whiteSpace facet while its lists carry the materialized fixed collapse one.
+// Either fault is a fault of the TYPE, and the value space reports it undecided
+// rather than as a verdict (#321 settled that contract: the pipeline returns an
+// *xsderr.Error, it does not panic), so it lands in the accepting branch below:
+// this clause never rejects a schema for it, and never crashes on it.
 func (s *Schema) checkSimpleDefault(rule xsderr.Rule, loc xsderr.Loc, owner string, t *SimpleType, vc ValueConstraint) error {
 	valid, decided := s.valueSpace.ValidDefault(t, vc)
 	if !decided || valid {

@@ -347,8 +347,8 @@ func TestUnionConstructedFacetsMustBeEmpty(t *testing.T) {
 // TestAtomicVarietyApplicableFacetsNotCharged pins the placement decision: the
 // ATOMIC applicable-facet clause (1.3.1) is NOT charged in this package — it
 // needs the generated per-primitive table — so an inapplicable-looking facet on
-// an atomic type still constructs here and is rejected one layer up, by
-// builtin.CheckSimpleTypeRestriction.
+// an atomic type still constructs here and is rejected at finalize instead, by
+// the installed SimpleTypeRestrictionChecker.
 func TestAtomicVarietyApplicableFacetsNotCharged(t *testing.T) {
 	prim := mustPrim(t, "string")
 	if _, err := NewSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "atomic"},

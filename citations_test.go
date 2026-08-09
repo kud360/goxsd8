@@ -64,7 +64,12 @@ var allowedCollisionCitations = []citationAllowance{
 	{file: "xsd/effectivetotalrange.go", number: 9, count: 1},
 	{file: "xsd/example_test.go", number: 9, count: 1},
 	{file: "xsd/modelgroup.go", number: 9, count: 1},
-	{file: "xsd/resolve.go", number: 9, count: 4},
+	// Two of these six are #629's checkSimpleTypeDerivations, reviewed against
+	// the topic each argues: "detect those once, at finalize" for consolidating
+	// the cos-st-restricts facet-value charge into a finalize pass, and "then no
+	// traversal ever needs a seen set" for that pass walking the simple-type
+	// graph with no visited map. Neither is PRINCIPLES 5.
+	{file: "xsd/resolve.go", number: 9, count: 6},
 	{file: "xsd/simpletype.go", number: 9, count: 1},
 	{file: "xsd/substitutiongroup.go", number: 9, count: 1},
 	{file: "xsd/substitutiongrouptypes.go", number: 9, count: 1},

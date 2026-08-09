@@ -17,7 +17,43 @@ import (
 // rejection.
 const ruleCosSTRestricts xsderr.Rule = "cos-st-restricts"
 
-// CheckSimpleTypeRestriction charges the facet-VALUE half of Derivation Valid
+// NewRestrictionChecker returns the [xsd.SimpleTypeRestrictionChecker] a caller
+// installs at [xsd.SchemaBuilder.FinalizeWith], so the finalize pass
+// checkSimpleTypeDerivations can charge the facet-VALUE half of cos-st-restricts
+// against every simple type a schema reaches — the anonymous inline ones no index
+// holds included.
+//
+// It is the sole implementation of that interface, and it lives in this package
+// because this package alone holds both edges the charge needs: the generated
+// per-primitive applicability table (Types/TypeSpec.Applies) and an edge to
+// package value for the value-space clauses. Package xsd, a pure leaf, may depend
+// on neither (PRINCIPLES 1), which is exactly why the capability is taken as an
+// input there rather than called directly.
+//
+// It charges cos-st-restricts clause 1.3.1 for an ATOMIC type — every facet in
+// its {facets} must be applicable to its {primitive type definition}
+// (cos-applicable-facets, Datatypes §4.1.5), answered against the generated
+// table — and then delegates the value-space constraints of clauses 1.3.2 /
+// 2.2.2.5 / 3.2.2.5 to [value.CheckFacetRestriction], for which b supplies the
+// value space. Applicability runs FIRST so the delegate may assume a bound
+// facet's value space really is ordered. See [xsd.SimpleTypeRestrictionChecker]
+// for the reject-capable contract this satisfies.
+func NewRestrictionChecker(b value.Backend) xsd.SimpleTypeRestrictionChecker {
+	return restrictionChecker{backend: b}
+}
+
+// restrictionChecker is NewRestrictionChecker's return value: a value type
+// carrying only the backend, since the check is a pure function of (backend,
+// type) and holds no state between calls.
+type restrictionChecker struct{ backend value.Backend }
+
+// CheckRestriction implements [xsd.SimpleTypeRestrictionChecker] over
+// checkSimpleTypeRestriction.
+func (c restrictionChecker) CheckRestriction(t *xsd.SimpleType) error {
+	return checkSimpleTypeRestriction(c.backend, t)
+}
+
+// checkSimpleTypeRestriction charges the facet-VALUE half of Derivation Valid
 // (Restriction, Simple) (cos-st-restricts, Structures §3.16.6.2) on an
 // already-constructed Simple Type Definition: the sub-clauses package xsd cannot
 // reach from a pure leaf with no applicability table and no value spaces.
@@ -41,13 +77,16 @@ const ruleCosSTRestricts xsderr.Rule = "cos-st-restricts"
 // explicitTimezone, and the same-type consistency SCCs) are already charged
 // inside xsd.NewSimpleType, so t reaching this function has passed them.
 //
-// This is a SEPARATE, post-construction call rather than a hook inside
+// This is a SEPARATE, post-construction charge rather than a hook inside
 // xsd.NewSimpleType because package xsd must not depend on this package or on
-// package value (PRINCIPLES 1). A caller that constructs simple types directly
-// through the xsd constructors and never calls this function keeps the old,
-// weaker guarantee: value/facets.go's documented preconditions about facet
-// applicability then remain the caller's to honor.
-func CheckSimpleTypeRestriction(b value.Backend, t *xsd.SimpleType) error {
+// package value (PRINCIPLES 1). It is unexported because the ONE way to reach it
+// from outside is [NewRestrictionChecker]: a schema finalized without that
+// capability installed keeps the old, weaker guarantee — value/facets.go's
+// documented preconditions about facet applicability then remain the caller's to
+// honor — and a second, direct entry point would be an exported identifier with
+// no consumer (STYLE T5) growing callers against the function the capability seam
+// is meant to own.
+func checkSimpleTypeRestriction(b value.Backend, t *xsd.SimpleType) error {
 	if err := checkAtomicApplicableFacets(t); err != nil {
 		return err
 	}

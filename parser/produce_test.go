@@ -1099,12 +1099,13 @@ func TestProduceNotQNameLiteralMembers(t *testing.T) {
 	}
 }
 
-// TestProduceChargesFacetValueRestriction proves the producer's sole
-// xsd.NewSimpleType call site is followed by builtin.CheckSimpleTypeRestriction:
-// a widening bound (cos-st-restricts clause 1.3.2 via
-// minInclusive-valid-restriction §4.3.10.4) and an inapplicable facet (clause
-// 1.3.1 via cos-applicable-facets §4.1.5) are BOTH rejected here, neither of
-// which xsd.NewSimpleType can decide on its own.
+// TestProduceChargesFacetValueRestriction proves the producer installs
+// builtin.NewRestrictionChecker at finalize: a widening bound (cos-st-restricts
+// clause 1.3.2 via minInclusive-valid-restriction §4.3.10.4) and an inapplicable
+// facet (clause 1.3.1 via cos-applicable-facets §4.1.5) are BOTH rejected out of
+// produce(), neither of which xsd.NewSimpleType can decide on its own. The charge
+// moved from the sole xsd.NewSimpleType call site to xsd's finalize pass, so what
+// this pins is the SEAM being wired, not where the call sits.
 func TestProduceChargesFacetValueRestriction(t *testing.T) {
 	cases := []struct {
 		name     string

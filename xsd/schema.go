@@ -183,6 +183,14 @@ type Schema struct {
 	// ask. It is never nil: Finalize installs undecidedValueSpace{}, so every
 	// consumer calls it unconditionally.
 	valueSpace ValueSpace
+
+	// restrictionChecker charges the facet-VALUE half of cos-st-restricts (see
+	// SimpleTypeRestrictionChecker), which this package cannot decide either: it
+	// needs the generated per-primitive applicability table and a lexical→value
+	// mapping. checkSimpleTypeDerivations (resolve.go) puts every simple type the
+	// schema reaches to it. It is never nil: Finalize installs
+	// undecidedRestrictionChecker{}, so that pass calls it unconditionally.
+	restrictionChecker SimpleTypeRestrictionChecker
 }
 
 // Finalize builds the immutable Schema from the accumulated components. It
@@ -226,62 +234,73 @@ type Schema struct {
 // Every OTHER sch-props-correct clause (in particular clause 1's remaining
 // cross-reference-dependent requirements) stays deferred to later passes.
 //
-// Finalize installs NO value space, so every question the resolution pass would
-// put to one — the {value}-identity comparisons (au-props-correct §3.5.6 clause
-// 3, loc-testSubP §3.4.6.4 clauses 4.2 and 5.2.2) and the Simple Default Valid
+// Finalize installs NEITHER of the two capabilities the resolution pass takes as
+// inputs, so every question that would go to one goes unanswered. No value
+// space: the {value}-identity comparisons (au-props-correct §3.5.6 clause 3,
+// loc-testSubP §3.4.6.4 clauses 4.2 and 5.2.2) and the Simple Default Valid
 // checks (§3.2.6.2, charged by a-props-correct §3.2.6.1 clause 2 and
-// au-props-correct clause 2) — is undecided and fails open, the behavior this
-// entry point has always had. A caller that can supply the lexical→value mapping
-// calls [SchemaBuilder.FinalizeWith] instead.
+// au-props-correct clause 2) are undecided and fail open. No
+// [SimpleTypeRestrictionChecker]: the facet-VALUE half of cos-st-restricts
+// (§3.16.6.2) is charged against no simple type at all. Both are the behavior
+// this entry point has always had. A caller that can supply the lexical→value
+// mapping and the per-primitive applicability table calls
+// [SchemaBuilder.FinalizeWith] instead.
 func (b *SchemaBuilder) Finalize() (*Schema, error) {
-	return b.finalize(undecidedValueSpace{})
+	return b.finalize(undecidedValueSpace{}, undecidedRestrictionChecker{})
 }
 
-// FinalizeWith is [SchemaBuilder.Finalize] with a value space installed: vs
-// answers the value-space questions package xsd cannot (see [ValueSpace]), so the
-// resolution pass can decide au-props-correct (§3.5.6) clause 3, loc-testSubP
-// (§3.4.6.4) clauses 4.2 and 5.2.2, and Simple Default Valid (§3.2.6.2) under
-// a-props-correct (§3.2.6.1) clause 2 and au-props-correct clause 2, instead of
-// waving them through. It is otherwise identical to Finalize — same components,
-// same indexes, same rejections — and can only NARROW what is accepted, never
-// widen it: vs reports "undecided" wherever it cannot decide, and undecided is
-// accept.
+// FinalizeWith is [SchemaBuilder.Finalize] with both finalize-time capabilities
+// installed. vs answers the value-space questions package xsd cannot (see
+// [ValueSpace]), so the resolution pass can decide au-props-correct (§3.5.6)
+// clause 3, loc-testSubP (§3.4.6.4) clauses 4.2 and 5.2.2, and Simple Default
+// Valid (§3.2.6.2) under a-props-correct (§3.2.6.1) clause 2 and au-props-correct
+// clause 2, instead of waving them through. rc answers the other one (see
+// [SimpleTypeRestrictionChecker]), so checkSimpleTypeDerivations can charge the
+// facet-VALUE half of Derivation Valid (Restriction, Simple) (§3.16.6.2,
+// cos-st-restricts) against every simple type the schema reaches. It is otherwise
+// identical to Finalize — same components, same indexes — and can only NARROW
+// what is accepted, never widen it: vs reports "undecided" wherever it cannot
+// decide and undecided is accept, and rc returns a nil error wherever it cannot
+// judge.
 //
-// Two component faults it does NOT check, and cannot. A *[SimpleType] assembled
-// through this package's constructors may carry a facet that is not applicable to
-// it (cos-applicable-facets, Datatypes §4.1.5) — the ATOMIC case of that clause,
-// whose per-primitive applicability table lives outside this leaf, since the list
-// and union cases are decided here by checkVarietyApplicableFacets
-// (derivation.go). And an atomic or list *[SimpleType] may carry no whiteSpace
-// facet in force at all, where Structures §3.16.7.4 and Datatypes §4.3.6.1
-// guarantee one (a union is exempt, not faulty: §4.1.5 leaves whiteSpace out of
-// its applicable set). builtin.CheckSimpleTypeRestriction — which a producer calls
-// right after [NewSimpleType], and which the parser always calls — owns the
-// applicability half, and a caller that skips it gets no diagnosis of either fault
-// here. What it does NOT get either is a wrong answer: a value space asked to
+// One component fault the value space still does NOT diagnose, whatever is
+// installed: an atomic or list *[SimpleType] carrying no whiteSpace facet in
+// force at all, where Structures §3.16.7.4 and Datatypes §4.3.6.1 guarantee one
+// (a union is exempt, not faulty: §4.1.5 leaves whiteSpace out of its applicable
+// set). What a caller does NOT get is a wrong answer: a value space asked to
 // validate a default against such a type reports the fault undecided rather than
 // as a verdict, so this entry point neither rejects the schema for it nor fails
-// (see checkSimpleDefault, valueconstraintvalid.go).
+// (see checkSimpleDefault, valueconstraintvalid.go). The sibling fault — a facet
+// that is not applicable to its type (cos-applicable-facets, Datatypes §4.1.5) —
+// used to be undiagnosable here too and no longer is: its ATOMIC case is exactly
+// what rc charges, over the whole reachable simple-type graph, and the list and
+// union cases were already decided by checkVarietyApplicableFacets
+// (derivation.go) at construction.
 //
-// It is a second entry point rather than a setter on the builder because a
-// ValueSpace is a finalize-time INPUT, not accumulated schema state: a mutable
-// setter would make "builder with a value space installed" and "builder without"
-// two states of one type, which is exactly what the SchemaBuilder/Schema split
-// exists to avoid (STYLE T1/T7).
+// It is a second entry point rather than a pair of setters on the builder because
+// both are finalize-time INPUTS, not accumulated schema state: a mutable setter
+// would make "builder with a capability installed" and "builder without" two
+// states of one type, which is exactly what the SchemaBuilder/Schema split exists
+// to avoid (STYLE T1/T7). For the same reason the two arrive at ONE seam and not
+// two: a third entry point, or an options struct whose nil members were legal,
+// would make a partially installed schema representable.
 //
-// It panics if vs is nil, on the same grounds as [SchemaBuilder.AddType]'s nil
-// guard: a nil capability is a caller/producer bug, not a schema-validity
-// condition.
-func (b *SchemaBuilder) FinalizeWith(vs ValueSpace) (*Schema, error) {
+// It panics if EITHER vs or rc is nil, on the same grounds as
+// [SchemaBuilder.AddType]'s nil guard: a nil capability is a caller/producer bug,
+// not a schema-validity condition.
+func (b *SchemaBuilder) FinalizeWith(vs ValueSpace, rc SimpleTypeRestrictionChecker) (*Schema, error) {
 	if vs == nil {
 		panic("xsd: SchemaBuilder.FinalizeWith: nil ValueSpace")
 	}
-	return b.finalize(vs)
+	if rc == nil {
+		panic("xsd: SchemaBuilder.FinalizeWith: nil SimpleTypeRestrictionChecker")
+	}
+	return b.finalize(vs, rc)
 }
 
 // finalize is the one assembly path both entry points take; they differ only in
-// the ValueSpace they install (STYLE T4).
-func (b *SchemaBuilder) finalize(vs ValueSpace) (*Schema, error) {
+// the capabilities they install (STYLE T4).
+func (b *SchemaBuilder) finalize(vs ValueSpace, rc SimpleTypeRestrictionChecker) (*Schema, error) {
 	typeIndex, err := indexByName(b.types, "type definitions")
 	if err != nil {
 		return nil, err
@@ -327,6 +346,7 @@ func (b *SchemaBuilder) finalize(vs ValueSpace) (*Schema, error) {
 		notationIndex:       notationIndex,
 		idcIndex:            idcIndex,
 		valueSpace:          vs,
+		restrictionChecker:  rc,
 	}
 	if err := s.resolve(); err != nil {
 		return nil, err
