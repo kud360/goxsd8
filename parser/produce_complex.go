@@ -331,14 +331,16 @@ func ownedComplexBase(base xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 // xs:topLevelComplexType in the schema for schema documents, and §3.4.3 src-ct
 // states no clause of its own for it, incorporating the condition only by
 // reference). Since #305 that fault is unreachable from run's document-order
-// dispatch, which now takes every top-level name from topLevelName. What this
-// guard still covers is the OTHER entry path into buildComplexType:
-// resolveBaseType's on-demand build, whose name comes from a base= lexical
-// resolved against the prescan index — where an empty local part is a name
-// nothing filtered — and any direct programmatic call. Deleting it would make
-// that path's verdict depend on whether the content happens to hold a local
-// element, whose xsd.NewLocalScope would charge e-props-correct, an unrelated
-// rule, and only sometimes: the #206 defect, on the path #305 does not touch.
+// dispatch, which now takes every top-level name from topLevelName, and since
+// #343 it is unreachable from a schema DOCUMENT at all: the other entry path
+// into buildComplexType — resolveBaseType's on-demand build, whose name comes
+// from a base= lexical resolved against the prescan index — can no longer carry
+// an empty local part, because bindQName now rejects one as a lexical
+// cvc-datatype-valid fault at the base attribute itself. What the guard covers
+// is therefore a direct in-package call alone, and it is kept as the backstop
+// for one: deleting it would make that path's verdict depend on whether the
+// content happens to hold a local element, whose xsd.NewLocalScope would charge
+// e-props-correct, an unrelated rule, and only sometimes — the #206 defect.
 // The ANONYMOUS arm cannot reach the rejection at all: it carries no name to be
 // missing, and its own equivalent — an unminted owner — is unconstructible,
 // since produceElement/produceLocalElement mint the identity before calling.
@@ -439,7 +441,17 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 	if ext == nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <simpleContent> with <restriction> is not yet produced (§3.4.2.2 cases 1-2 synthesize a new anonymous simple type from the <restriction>'s facet children)")
 	}
-	baseName, err := p.resolveQName(ext, attrOr(ext, "base"))
+	baseLex, hasBase := ext.Attr("base")
+	if !hasBase {
+		// Appendix A declares base use="required" on xs:extensionType, and §3.4.3
+		// states no Schema Representation Constraint for its absence, so a missing
+		// base is a plain grammar fault carrying no rule — the same reading
+		// produceGroupRefParticle gives a <group> with no ref. It is charged here
+		// rather than handed to resolveQName as an empty lexical, which would report
+		// an absent attribute as a base="" the author never wrote.
+		return xsd.ComplexType{}, fmt.Errorf("parser: the <extension> of a <simpleContent> at %s must carry a base attribute, but none is present", ext.Loc())
+	}
+	baseName, err := p.resolveQName(ext, baseLex, "base")
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -526,7 +538,16 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 		mixed = ccMixed
 	}
 	abstract, _ := boolAttr(ctElem, "abstract")
-	baseName, err := p.resolveQName(derivation, attrOr(derivation, "base"))
+	baseLex, hasBase := derivation.Attr("base")
+	if !hasBase {
+		// base is use="required" on both xs:extensionType and xs:complexRestrictionType
+		// (Appendix A) and §3.4.3 states no clause for its absence, so this is a plain
+		// grammar fault of the same kind as the missing alternant above — and charging
+		// it here keeps an absent attribute from being reported as a base="" the
+		// author never wrote.
+		return xsd.ComplexType{}, fmt.Errorf("parser: the <%s> of a <complexContent> at %s must carry a base attribute, but none is present", derivation.Name().Local(), derivation.Loc())
+	}
+	baseName, err := p.resolveQName(derivation, baseLex, "base")
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -1114,7 +1135,7 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 		// missing ref is a plain well-formedness fault, not an xsderr rule.
 		return nil, fmt.Errorf("parser: a <group> in a content model must be a reference (carry a ref attribute), but none is present")
 	}
-	qn, err := p.resolveQName(el, ref)
+	qn, err := p.resolveQName(el, ref, "ref")
 	if err != nil {
 		return nil, err
 	}
@@ -1179,7 +1200,9 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 // only caller is xsd.ExtensionContentType's group-lookup callback, reading a
 // ModelGroupRef that only produceGroupRefParticle mints, and xsd.NewParticle
 // rejects an empty ModelGroupRef local part as a component-invariant before any
-// resolution happens.
+// resolution happens — a backstop produceGroupRefParticle no longer reaches
+// since #343, whose bindQName rejects the <group ref=""> lexical at the
+// attribute (cvc-datatype-valid) before a ModelGroupRef is minted at all.
 func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd.ModelGroupDefinition, error) {
 	if name.Local == "" {
 		return xsd.ModelGroupDefinition{}, fmt.Errorf("parser: top-level <group> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
@@ -1300,7 +1323,7 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 	// tracks it yet (STYLE P3 requires an issue reference only when an issue does
 	// own the retirement).
 	if ref, hasRef := el.Attr("ref"); hasRef {
-		qn, err := p.resolveQName(el, ref)
+		qn, err := p.resolveQName(el, ref, "ref")
 		if err != nil {
 			return nil, err
 		}
@@ -1497,7 +1520,7 @@ func (p *producer) localDeclaredType(el *Element, dflt xsd.QName) (xsd.TypeDefin
 	if !hasType {
 		return xsd.TypeDefinitionRef{Name: dflt}, nil
 	}
-	qn, err := p.resolveQName(el, typeLex) // tier 2
+	qn, err := p.resolveQName(el, typeLex, "type") // tier 2
 	if err != nil {
 		return nil, err
 	}
@@ -1609,7 +1632,7 @@ func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error
 			continue
 		}
 		if ref, hasRef := el.Attr("ref"); hasRef {
-			qn, err := p.resolveQName(el, ref)
+			qn, err := p.resolveQName(el, ref, "ref")
 			if err != nil {
 				return nil, err
 			}
@@ -1753,7 +1776,7 @@ func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]str
 	if !ok {
 		return fmt.Errorf("parser: a nested <attributeGroup> must be a reference (carry a ref attribute), but none is present")
 	}
-	qn, err := p.resolveQName(el, ref)
+	qn, err := p.resolveQName(el, ref, "ref")
 	if err != nil {
 		return err
 	}
@@ -1851,7 +1874,7 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
 				"attribute has both ref and type, but src-attribute clause 3 forbids a type with ref")
 		}
-		qn, err := p.resolveQName(el, ref)
+		qn, err := p.resolveQName(el, ref, "ref")
 		if err != nil {
 			return nil, err
 		}
@@ -2029,7 +2052,7 @@ func (p *producer) disallowedNames(el *Element) ([]xsd.QName, []xsd.DisallowedNa
 			keywords = append(keywords, kw)
 			continue
 		}
-		qn, err := p.bindQName(el, tok)
+		qn, err := p.bindQName(el, tok, "notQName")
 		if err != nil {
 			return nil, nil, err
 		}

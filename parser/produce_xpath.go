@@ -177,7 +177,7 @@ func (p *producer) referencedIdentityConstraint(el *Element, category xsd.Identi
 		return xsd.IdentityConstraint{}, err
 	}
 	refLex, _ := el.Attr("ref") // present: the caller took this arm on !hasName
-	qn, err := p.resolveQName(el, refLex)
+	qn, err := p.resolveQName(el, refLex, "ref")
 	if err != nil {
 		return xsd.IdentityConstraint{}, err
 	}
@@ -289,7 +289,7 @@ func (p *producer) constructIdentityConstraint(name xsd.QName, el *Element, cate
 		}
 		// Only the QName is retained: the link to the referenced definition is a
 		// finalize-phase resolution (src-resolve clause 1.7), never made here.
-		qn, err := p.resolveQName(el, referLex)
+		qn, err := p.resolveQName(el, referLex, "refer")
 		if err != nil {
 			return xsd.IdentityConstraint{}, err
 		}
