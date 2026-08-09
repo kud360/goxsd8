@@ -23,9 +23,6 @@ const ruleMgdPropsCorrect xsderr.Rule = "mgd-props-correct"
 // solely on the particles that refer to it (§3.7.2 note), so there is nothing to
 // store here for occurrence.
 //
-// Ratchet impact: unchanged. This is a leaf shape with no parser producer; the
-// schema conformance lane moves only when the producer (#176) wires it in.
-//
 // Construct only through NewModelGroupDefinition, which rejects an absent {name}
 // and an absent (zero) {model group} so both Required-property violations are
 // unrepresentable (STYLE T1). ModelGroupDefinition is immutable after

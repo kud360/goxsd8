@@ -26,9 +26,6 @@ import "github.com/kud360/goxsd8/xsderr"
 // invariant of the abstract Particle component; rejecting Occurs{0,0} here would
 // contradict landed occurs.go and the plain-nonNegativeInteger §3.9.1 tableau.
 //
-// Ratchet impact: unchanged. This is a leaf shape with no parser producer; the
-// schema conformance lane moves only when the producer (#176) wires it in.
-//
 // Construct only through NewParticle, which rejects an absent {term} so the
 // Required-property violation is unrepresentable (STYLE T1), and a ref variant
 // carrying the absent (zero) QName so an unresolvable reference is unbuildable.

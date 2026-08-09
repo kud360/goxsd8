@@ -38,9 +38,6 @@ const ruleAgPropsCorrect xsderr.Rule = "ag-props-correct"
 // members whose {attribute declaration}s share an expanded name, which
 // NewAttributeGroupDefinition enforces.
 //
-// Ratchet impact: unchanged. This is a leaf shape with no parser producer; the
-// schema conformance lane moves only when the producer (#174/#175) wires it in.
-//
 // Construct only through NewAttributeGroupDefinition, which rejects the states
 // ag-props-correct (§3.6.6) clauses 1 and 2 forbid so they are unrepresentable
 // (STYLE T1). AttributeGroupDefinition is immutable after construction.
