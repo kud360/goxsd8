@@ -87,22 +87,37 @@ const (
 // comparing it against the base's {facets} is vacuous, and it was already charged
 // against the base's own base when the base was constructed. This mirrors
 // xsd/derivation.go's checkScaleValueRestriction.
-func CheckFacetRestriction(b Backend, t *xsd.SimpleType) error {
-	base := t.Base()
+//
+// r resolves t's {base type definition}, which a compiled schema may defer by
+// name (xsd.SimpleTypeOrRef). Like [ValidateLexical]'s it is a PARAMETER stored
+// nowhere — not on restrictionCheck, whose fields are the three resolved facts
+// one pass needs and not the capability that produced them.
+func CheckFacetRestriction(b Backend, r xsd.TypeResolver, t *xsd.SimpleType) error {
+	base, err := t.Base(r)
+	if err != nil {
+		return err
+	}
 	if base == nil {
 		// t IS xs:anySimpleType: no {base type definition} to restrict, and it
 		// carries no facets of its own (§3.16.1).
 		return nil
 	}
-	m, ok := governingMapping(b, base)
+	m, ok, err := governingMapping(b, r, base)
+	if err != nil {
+		return err
+	}
 	if !ok {
 		return nil
 	}
-	rc := restrictionCheck{mapping: m, whiteSpace: whiteSpaceInForce(base), owner: t}
-	if err := rc.checkBoundRestrictions(); err != nil {
+	ws, err := whiteSpaceInForce(r, base)
+	if err != nil {
 		return err
 	}
-	return rc.checkEnumerationRestriction(b)
+	rc := restrictionCheck{mapping: m, whiteSpace: ws, base: base, owner: t}
+	if err := rc.checkBoundRestrictions(r); err != nil {
+		return err
+	}
+	return rc.checkEnumerationRestriction(b, r)
 }
 
 // restrictionCheck is the resolved context one CheckFacetRestriction pass needs:
@@ -113,18 +128,29 @@ func CheckFacetRestriction(b Backend, t *xsd.SimpleType) error {
 // mapping of its own: membership in the base's value space is decided by running
 // each member through the base type definition itself, checkEnumerationRestriction.)
 //
-// The {base type definition} itself is deliberately NOT a field: it is exactly
-// owner.Base(), so carrying it would be a second encoding of one fact (STYLE D3).
+// The {base type definition} IS a field, and that is a change of fact rather
+// than a duplication of one. It used to be omitted because owner.Base() was a
+// free pointer read, so carrying it would have been a second encoding (STYLE
+// D3); the slot is now a SimpleTypeOrRef whose by-name arm needs a resolver and
+// can fail, so the resolved component is a RESULT — of exactly the same kind as
+// mapping and whiteSpace beside it, each resolved once and carried so that every
+// comparison in one pass is made against the same three facts. Re-resolving per
+// method would instead need the resolver itself on this struct, which is what
+// the capability contract forbids.
 type restrictionCheck struct {
 	mapping Mapping
-	// whiteSpace is the mode in force on owner.Base() — the type whose value
-	// space every facet {value} compared in this pass must be a member of — or the
-	// zero mode when none is (a union {variety}, or a base carrying no usable
-	// whiteSpace facet). It is resolved by whiteSpaceInForce and APPLIED by
-	// facetValue, the same pair that parses facet {value}s at instance-pipeline
-	// construction; this pass adds no normalization of its own.
+	// whiteSpace is the mode in force on base — the type whose value space every
+	// facet {value} compared in this pass must be a member of — or the zero mode
+	// when none is (a union {variety}, or a base carrying no usable whiteSpace
+	// facet). It is resolved by whiteSpaceInForce and APPLIED by facetValue, the
+	// same pair that parses facet {value}s at instance-pipeline construction;
+	// this pass adds no normalization of its own.
 	whiteSpace whiteSpace
-	owner      *xsd.SimpleType
+	// base is owner's resolved {base type definition}, non-nil by construction:
+	// CheckFacetRestriction returns before building this value when the base is
+	// absent (owner IS xs:anySimpleType).
+	base  *xsd.SimpleType
+	owner *xsd.SimpleType
 }
 
 // checkBoundRestrictions charges the four bound-facet valid-restriction SCCs
@@ -138,7 +164,7 @@ type restrictionCheck struct {
 // Both loops walk their operands in document order — t's own facets as declared,
 // the base's {facets} as EffectiveFacets yields them — so which violation is
 // reported first is deterministic (STYLE D2).
-func (rc restrictionCheck) checkBoundRestrictions() error {
+func (rc restrictionCheck) checkBoundRestrictions(r xsd.TypeResolver) error {
 	for _, own := range rc.owner.OwnFacets() {
 		kind := own.Kind()
 		if !isBoundKind(kind) {
@@ -152,7 +178,7 @@ func (rc restrictionCheck) checkBoundRestrictions() error {
 		if !ordered {
 			continue
 		}
-		if err := rc.checkBoundAgainstBase(own, rule, ownV); err != nil {
+		if err := rc.checkBoundAgainstBase(r, own, rule, ownV); err != nil {
 			return err
 		}
 	}
@@ -169,8 +195,12 @@ func (rc restrictionCheck) checkBoundRestrictions() error {
 // is a minExclusive-valid-restriction problem wherever it is noticed; reporting
 // it as, say, maxInclusive-valid-restriction would name a constraint that has
 // nothing to say about it (STYLE E2).
-func (rc restrictionCheck) checkBoundAgainstBase(own xsd.Facet, rule xsderr.Rule, ownV Ordered) error {
-	for _, ef := range rc.owner.Base().EffectiveFacets() {
+func (rc restrictionCheck) checkBoundAgainstBase(r xsd.TypeResolver, own xsd.Facet, rule xsderr.Rule, ownV Ordered) error {
+	baseEff, err := rc.base.EffectiveFacets(r)
+	if err != nil {
+		return err
+	}
+	for _, ef := range baseEff {
 		baseF := ef.Facet()
 		if !isBoundKind(baseF.Kind()) {
 			continue
@@ -371,7 +401,7 @@ func minInclusiveRestrictionViolates(base xsd.FacetKind, ord Ordering) bool {
 // and re-charging it here as enumeration-valid-restriction against the DERIVED type
 // would name a constraint with nothing to say about it and reject a schema whose
 // enumeration may be perfectly valid.
-func (rc restrictionCheck) checkEnumerationRestriction(b Backend) error {
+func (rc restrictionCheck) checkEnumerationRestriction(b Backend, r xsd.TypeResolver) error {
 	for _, own := range rc.owner.OwnFacets() {
 		if own.Kind() != xsd.FacetEnumeration {
 			continue
@@ -380,7 +410,7 @@ func (rc restrictionCheck) checkEnumerationRestriction(b Backend) error {
 		// ok=true; the second result is discarded deliberately.
 		members, _ := own.EnumerationMembers()
 		for _, em := range members {
-			_, err := ValidateLexical(b, rc.owner.Base(), em.Lexical(), newMemberContext(em))
+			_, err := ValidateLexical(b, r, rc.base, em.Lexical(), newMemberContext(em))
 			if IsFacetPrecondition(err) {
 				continue
 			}

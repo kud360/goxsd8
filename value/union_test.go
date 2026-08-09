@@ -68,7 +68,7 @@ func allDigits(s string) bool {
 // must restrict a union base, which unionRestriction builds).
 func unionType2(t *testing.T, local string, members ...*xsd.SimpleType) *xsd.SimpleType {
 	t.Helper()
-	u, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
+	u, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
 		xsd.UnionDerivation{Members: members}, xsd.AnySimpleType(), nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union %q): %v", local, err)
@@ -83,8 +83,11 @@ func unionType2(t *testing.T, local string, members ...*xsd.SimpleType) *xsd.Sim
 // (cos-applicable-facets §4.1.5) — can be exercised on a real component.
 func unionRestriction(t *testing.T, local string, base *xsd.SimpleType, own []xsd.Facet) *xsd.SimpleType {
 	t.Helper()
-	members := base.Members()
-	u, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
+	members, merr := base.Members(noSchema{})
+	if merr != nil {
+		t.Fatalf("Members(%q base): %v", local, merr)
+	}
+	u, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
 		xsd.UnionDerivation{Members: members}, base, own, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union restriction %q): %v", local, err)
@@ -120,7 +123,7 @@ func TestValidateLexicalUnionFirstMemberWins(t *testing.T) {
 		{"non-digits skips the numeric member", numFirst, "abc", unionMemberVal{member: "text", lexical: "abc"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			v, err := ValidateLexical(b, tc.st, tc.lexical, nil)
+			v, err := ValidateLexical(b, noSchema{}, tc.st, tc.lexical, nil)
 			if err != nil {
 				t.Fatalf("ValidateLexical(%s, %q) = %v, want accept", tc.st.Name(), tc.lexical, err)
 			}
@@ -150,7 +153,7 @@ func TestValidateLexicalUnionNestedRecursion(t *testing.T) {
 
 	// "abc" is rejected by the numeric member, so the nested union is tried and its
 	// own first member — the basic member "text" — decides.
-	v, err := ValidateLexical(b, outer, "abc", nil)
+	v, err := ValidateLexical(b, noSchema{}, outer, "abc", nil)
 	if err != nil {
 		t.Fatalf("ValidateLexical(nested union, %q) = %v, want accept via the nested member", "abc", err)
 	}
@@ -160,7 +163,7 @@ func TestValidateLexicalUnionNestedRecursion(t *testing.T) {
 
 	// "7" is accepted by the DIRECT numeric member first, so the nested union is
 	// never reached — order is preserved across the nesting.
-	v, err = ValidateLexical(b, outer, "7", nil)
+	v, err = ValidateLexical(b, noSchema{}, outer, "7", nil)
 	if err != nil {
 		t.Fatalf("ValidateLexical(nested union, %q) = %v, want accept", "7", err)
 	}
@@ -188,7 +191,7 @@ func TestValidateLexicalUnionPatternUsesActiveMemberWhiteSpace(t *testing.T) {
 	const raw = "  7   7  "
 	onCollapsed := unionRestriction(t, "onCollapsed", base,
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetPattern, []string{"7 7"}, false)})
-	v, err := ValidateLexical(b, onCollapsed, raw, nil)
+	v, err := ValidateLexical(b, noSchema{}, onCollapsed, raw, nil)
 	if err != nil {
 		t.Fatalf("ValidateLexical(union pattern %q, raw %q) = %v, want accept (pattern sees the member-collapsed literal)", "7 7", raw, err)
 	}
@@ -198,7 +201,7 @@ func TestValidateLexicalUnionPatternUsesActiveMemberWhiteSpace(t *testing.T) {
 
 	onRaw := unionRestriction(t, "onRaw", base,
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetPattern, []string{raw}, false)})
-	_, err = ValidateLexical(b, onRaw, raw, nil)
+	_, err = ValidateLexical(b, noSchema{}, onRaw, raw, nil)
 	if err == nil {
 		t.Fatalf("ValidateLexical(union pattern %q, raw %q) = nil, want the pattern to reject the RAW spelling", raw, raw)
 	}
@@ -227,7 +230,7 @@ func TestValidateLexicalUnionEnumerationPostDispatch(t *testing.T) {
 		xsd.NewEnumerationFacet([]xsd.EnumerationMember{xsd.NewEnumerationMember("7", nil, nil)}),
 	})
 
-	v, err := ValidateLexical(b, enumerated, "7", nil)
+	v, err := ValidateLexical(b, noSchema{}, enumerated, "7", nil)
 	if err != nil {
 		t.Fatalf("ValidateLexical(union enumeration, %q) = %v, want accept", "7", err)
 	}
@@ -239,7 +242,7 @@ func TestValidateLexicalUnionEnumerationPostDispatch(t *testing.T) {
 	// rejection here can only come from the union's own enumeration facet running
 	// after the dispatch.
 	for _, lexical := range []string{"8", "abc"} {
-		_, err := ValidateLexical(b, enumerated, lexical, nil)
+		_, err := ValidateLexical(b, noSchema{}, enumerated, lexical, nil)
 		if err == nil {
 			t.Fatalf("ValidateLexical(union enumeration, %q) = nil, want an enumeration rejection", lexical)
 		}
@@ -257,7 +260,7 @@ func TestValidateLexicalUnionEnumerationPostDispatch(t *testing.T) {
 func TestValidateLexicalUnionEmptyMembershipRejectsEverything(t *testing.T) {
 	empty := unionType2(t, "errorLike")
 	for _, lexical := range []string{"", " ", "0", "anything"} {
-		v, err := ValidateLexical(memberBackend{}, empty, lexical, nil)
+		v, err := ValidateLexical(memberBackend{}, noSchema{}, empty, lexical, nil)
 		if err == nil {
 			t.Fatalf("ValidateLexical(empty union, %q) = (%#v, nil), want a rejection (§3.16.7.3)", lexical, v)
 		}
@@ -279,7 +282,7 @@ func TestGoverningMappingUnionRequiresEveryMember(t *testing.T) {
 	u := unionType2(t, "partly", num, text)
 
 	partial := memberBackend{num.Name(): allDigits}
-	if _, ok := governingMapping(partial, u); ok {
+	if _, ok, gerr := governingMapping(partial, noSchema{}, u); gerr != nil || ok {
 		t.Error("governingMapping(union with one unmapped member) ok = true, want false (an unmapped member is a BACKEND gap, not a verdict)")
 	}
 
@@ -287,7 +290,10 @@ func TestGoverningMappingUnionRequiresEveryMember(t *testing.T) {
 		num.Name():  allDigits,
 		text.Name(): func(string) bool { return true },
 	}
-	m, ok := governingMapping(full, u)
+	m, ok, gerr := governingMapping(full, noSchema{}, u)
+	if gerr != nil {
+		t.Fatalf("governingMapping(fully mapped union): %v", gerr)
+	}
 	if !ok {
 		t.Fatal("governingMapping(fully mapped union) ok = false, want a resolved unionMapping")
 	}
@@ -317,7 +323,7 @@ func TestDispatchUnionAbortsOnFacetPreconditionFault(t *testing.T) {
 	b := plainBackend{faulting.Name(): true, accepting.Name(): true}
 	u := unionType2(t, "faultingFirst", faulting, accepting)
 
-	v, err := ValidateLexical(b, u, "ab", nil)
+	v, err := ValidateLexical(b, noSchema{}, u, "ab", nil)
 	if err == nil {
 		t.Fatalf("ValidateLexical(union whose member 0 faults) = (%#v, nil): member 1 wrongly decided a union member 0 never decided", v)
 	}
@@ -331,8 +337,8 @@ func TestDispatchUnionAbortsOnFacetPreconditionFault(t *testing.T) {
 	num := primType(t, "numeric", "collapse")
 	text := primType(t, "text2", "preserve")
 	mb := memberBackend{num.Name(): allDigits, text.Name(): func(string) bool { return true }}
-	if _, err := ValidateLexical(mb, unionType2(t, "numFirst2", num, text), "abc", nil); err != nil {
-		t.Errorf("ValidateLexical(union, literal only member 1 accepts) = %v, want accept via member 1", err)
+	if _, err := ValidateLexical(mb, noSchema{}, unionType2(t, "numFirst2", num, text), "abc", nil); err != nil {
+		t.Errorf("ValidateLexical(union, noSchema{}, literal only member 1 accepts) = %v, want accept via member 1", err)
 	}
 }
 
@@ -357,7 +363,7 @@ func TestDispatchUnionAbortsOnFacetPreconditionFault(t *testing.T) {
 // under test is unchanged; the reachable witness for it moved from §4.1.5's second case
 // to its first.
 func TestValidateLexicalUnionMemberWithNoApplicableFacets(t *testing.T) {
-	member, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "absentVariety"},
+	member, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "absentVariety"},
 		nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(absent {variety}, absent {base type definition}): %v", err)
@@ -365,7 +371,7 @@ func TestValidateLexicalUnionMemberWithNoApplicableFacets(t *testing.T) {
 	u := unionType2(t, "facetlessMember", member)
 
 	const raw = "  x  "
-	v, verr := ValidateLexical(plainBackend{member.Name(): true}, u, raw, nil)
+	v, verr := ValidateLexical(plainBackend{member.Name(): true}, noSchema{}, u, raw, nil)
 	if verr != nil {
 		t.Fatalf("ValidateLexical(union over a facet-less member) = %v, want accept", verr)
 	}

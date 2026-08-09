@@ -192,7 +192,7 @@ func TestParseOverrideReplacementIsReferenceable(t *testing.T) {
 	if !ok {
 		t.Fatalf("type {urn:a}short is %T, want *xsd.SimpleType", td)
 	}
-	base := st.Base()
+	base := mustBase(t, s, st)
 	if base == nil {
 		t.Fatalf("type {urn:a}short has no base type definition")
 	}

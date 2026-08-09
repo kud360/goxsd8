@@ -96,7 +96,7 @@
 //
 // # Construction-time facet checks
 //
-//	func CheckFacetRestriction(b Backend, t *xsd.SimpleType) error
+//	func CheckFacetRestriction(b Backend, r xsd.TypeResolver, t *xsd.SimpleType) error
 //
 // [CheckFacetRestriction] is the once-per-type counterpart of that pipeline: it
 // charges the value-space Schema Component Constraints relating a simple type's
@@ -108,6 +108,26 @@
 // xsd.SimpleTypeRestrictionChecker installed at xsd.SchemaBuilder.FinalizeWith:
 // that implementation charges facet APPLICABILITY first and then delegates here.
 // A schema finalized without it gets neither check.
+//
+// # The resolver, threaded and never stored
+//
+// A Simple Type Definition's {base type definition} may be a DEFERRED reference
+// by name (xsd.SimpleTypeOrRef), so every read of a derived property — {variety},
+// {primitive type definition}, {facets}, the governing mapping under the
+// widest-space rule — is a chain walk that needs an [xsd.TypeResolver] to follow.
+// [ValidateLexical] and [CheckFacetRestriction] therefore take one as a
+// PARAMETER, and this package stores one NOWHERE: not on a [Backend], not on a
+// compiled facet checker, not on the xsd.ValueSpace [NewValueSpace] returns. One
+// backend and one value space consequently serve every schema, which is what the
+// capability seams at xsd.SchemaBuilder.FinalizeWith assume. A caller validating
+// against a Schema-less graph — one assembled entirely from live components, as
+// builtin.Seed produces — passes a resolver that resolves nothing, which is total
+// there because such a graph holds no by-name base to look up.
+//
+// An UNRESOLVABLE base surfaces as the src-resolve error xsd.SimpleType.Base
+// produces, propagated unchanged. It is neither a validity verdict about the
+// literal nor a facet-pipeline precondition fault: it says the TYPE could not be
+// read at all.
 //
 // # Value-constraint validity and comparison (the xsd.ValueSpace seam)
 //

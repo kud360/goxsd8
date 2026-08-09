@@ -57,7 +57,7 @@ func newPrim(t *testing.T, local string) *xsd.SimpleType {
 func derive(t *testing.T, name string, base *xsd.SimpleType, ownFacets ...xsd.Facet) *xsd.SimpleType {
 	t.Helper()
 	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: name},
-		xsd.RestrictionDerivation{}, base, ownFacets, nil)
+		xsd.RestrictionDerivation{}, xsd.OwnedSimpleType{Definition: base}, ownFacets, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(%q): %v", name, err)
 	}
@@ -85,7 +85,11 @@ func TestWidestSpaceInheritedBound(t *testing.T) {
 	// primitive, §3.16.7.4) and this maxInclusive; isolate the latter.
 	var maxIncl xsd.EffectiveFacet
 	var found bool
-	for _, ef := range leaf.EffectiveFacets() {
+	leafEff, efErr := leaf.EffectiveFacets(noSchema{})
+	if efErr != nil {
+		t.Fatalf("leaf.EffectiveFacets: %v", efErr)
+	}
+	for _, ef := range leafEff {
 		if ef.Facet().Kind() == xsd.FacetMaxInclusive {
 			maxIncl = ef
 			found = true
@@ -103,11 +107,11 @@ func TestWidestSpaceInheritedBound(t *testing.T) {
 	}
 
 	// "150" > 100: rejected via the declaring type's decimal space.
-	_, err := value.ValidateLexical(New(), leaf, "150", nil)
+	_, err := value.ValidateLexical(New(), noSchema{}, leaf, "150", nil)
 	wantRule(t, err, "cvc-maxInclusive-valid")
 
 	// "50" ≤ 100: accepted.
-	_, err = value.ValidateLexical(New(), leaf, "50", nil)
+	_, err = value.ValidateLexical(New(), noSchema{}, leaf, "50", nil)
 	wantAccept(t, err)
 }
 
@@ -125,16 +129,16 @@ func TestBoundFacetNaNExcluded(t *testing.T) {
 
 	// (1) NaN instance, numeric bound: NaN is incomparable with 10, so excluded.
 	maxTen := derive(t, "maxTen", floatPrim, xsd.NewFacet(xsd.FacetMaxInclusive, []string{"10"}, false))
-	_, err := value.ValidateLexical(New(), maxTen, "NaN", nil)
+	_, err := value.ValidateLexical(New(), noSchema{}, maxTen, "NaN", nil)
 	wantRule(t, err, "cvc-maxInclusive-valid")
 	// A comparable in-range instance still passes the same facet.
-	_, err = value.ValidateLexical(New(), maxTen, "5", nil)
+	_, err = value.ValidateLexical(New(), noSchema{}, maxTen, "5", nil)
 	wantAccept(t, err)
 
 	// (2) NaN bound value: no float is comparable with NaN, so the restricted
 	// value space is empty and every instance — even 5 — is excluded.
 	maxNaN := derive(t, "maxNaN", floatPrim, xsd.NewFacet(xsd.FacetMinInclusive, []string{"NaN"}, false))
-	_, err = value.ValidateLexical(New(), maxNaN, "5", nil)
+	_, err = value.ValidateLexical(New(), noSchema{}, maxNaN, "5", nil)
 	wantRule(t, err, "cvc-minInclusive-valid")
 }
 
@@ -146,10 +150,10 @@ func TestPatternFacet(t *testing.T) {
 	stringPrim := newPrim(t, "string")
 	lower := derive(t, "lower", stringPrim, xsd.NewFacet(xsd.FacetPattern, []string{"[a-z]+"}, false))
 
-	_, err := value.ValidateLexical(New(), lower, "abc", nil)
+	_, err := value.ValidateLexical(New(), noSchema{}, lower, "abc", nil)
 	wantAccept(t, err)
 
-	_, err = value.ValidateLexical(New(), lower, "ab3", nil)
+	_, err = value.ValidateLexical(New(), noSchema{}, lower, "ab3", nil)
 	wantRule(t, err, "cvc-pattern-valid")
 }
 
@@ -166,15 +170,15 @@ func TestPatternFacetTwoStepAND(t *testing.T) {
 	derived := derive(t, "threeChars", base, xsd.NewFacet(xsd.FacetPattern, []string{".{3}"}, false))
 
 	// Matches both patterns: three chars, all lowercase.
-	_, err := value.ValidateLexical(New(), derived, "abc", nil)
+	_, err := value.ValidateLexical(New(), noSchema{}, derived, "abc", nil)
 	wantAccept(t, err)
 
 	// Matches derived (three chars) but violates base ([a-z]+): rejected.
-	_, err = value.ValidateLexical(New(), derived, "a1z", nil)
+	_, err = value.ValidateLexical(New(), noSchema{}, derived, "a1z", nil)
 	wantRule(t, err, "cvc-pattern-valid")
 
 	// Matches base ([a-z]+) but violates derived (not three chars): rejected.
-	_, err = value.ValidateLexical(New(), derived, "abcd", nil)
+	_, err = value.ValidateLexical(New(), noSchema{}, derived, "abcd", nil)
 	wantRule(t, err, "cvc-pattern-valid")
 }
 
@@ -188,10 +192,10 @@ func TestEnumerationFacet(t *testing.T) {
 		xsd.NewEnumerationMember("blue", nil, nil),
 	}))
 
-	_, err := value.ValidateLexical(New(), colors, "green", nil)
+	_, err := value.ValidateLexical(New(), noSchema{}, colors, "green", nil)
 	wantAccept(t, err)
 
-	_, err = value.ValidateLexical(New(), colors, "purple", nil)
+	_, err = value.ValidateLexical(New(), noSchema{}, colors, "purple", nil)
 	wantRule(t, err, "cvc-enumeration-valid")
 }
 
@@ -207,26 +211,26 @@ func TestExplicitTimezoneFacet(t *testing.T) {
 
 	// required: a value WITH a timezone passes; one WITHOUT is rejected.
 	required := derive(t, "tzRequired", dtPrim, xsd.NewFacet(xsd.FacetExplicitTimezone, []string{"required"}, false))
-	if _, err := value.ValidateLexical(New(), required, withTZ, nil); err != nil {
+	if _, err := value.ValidateLexical(New(), noSchema{}, required, withTZ, nil); err != nil {
 		t.Fatalf("required should accept a value with a timezone: %v", err)
 	}
-	_, err := value.ValidateLexical(New(), required, noTZ, nil)
+	_, err := value.ValidateLexical(New(), noSchema{}, required, noTZ, nil)
 	wantRule(t, err, "cvc-explicitTimezone-valid")
 
 	// prohibited: a value WITHOUT a timezone passes; one WITH is rejected.
 	prohibited := derive(t, "tzProhibited", dtPrim, xsd.NewFacet(xsd.FacetExplicitTimezone, []string{"prohibited"}, false))
-	if _, err := value.ValidateLexical(New(), prohibited, noTZ, nil); err != nil {
+	if _, err := value.ValidateLexical(New(), noSchema{}, prohibited, noTZ, nil); err != nil {
 		t.Fatalf("prohibited should accept a value without a timezone: %v", err)
 	}
-	_, err = value.ValidateLexical(New(), prohibited, withTZ, nil)
+	_, err = value.ValidateLexical(New(), noSchema{}, prohibited, withTZ, nil)
 	wantRule(t, err, "cvc-explicitTimezone-valid")
 
 	// optional: both accepted.
 	optional := derive(t, "tzOptional", dtPrim, xsd.NewFacet(xsd.FacetExplicitTimezone, []string{"optional"}, false))
-	if _, err := value.ValidateLexical(New(), optional, withTZ, nil); err != nil {
+	if _, err := value.ValidateLexical(New(), noSchema{}, optional, withTZ, nil); err != nil {
 		t.Fatalf("optional should accept a value with a timezone: %v", err)
 	}
-	if _, err := value.ValidateLexical(New(), optional, noTZ, nil); err != nil {
+	if _, err := value.ValidateLexical(New(), noSchema{}, optional, noTZ, nil); err != nil {
 		t.Fatalf("optional should accept a value without a timezone: %v", err)
 	}
 }
@@ -238,7 +242,7 @@ func TestExplicitTimezoneFacet(t *testing.T) {
 func TestExplicitTimezoneFacetMalformed(t *testing.T) {
 	dtPrim := newPrim(t, "dateTime")
 	bad := derive(t, "tzBad", dtPrim, xsd.NewFacet(xsd.FacetExplicitTimezone, []string{"maybe"}, false))
-	_, err := value.ValidateLexical(New(), bad, "2002-10-10T12:00:00Z", nil)
+	_, err := value.ValidateLexical(New(), noSchema{}, bad, "2002-10-10T12:00:00Z", nil)
 	wantRule(t, err, "cvc-explicitTimezone-valid")
 }
 
@@ -248,17 +252,17 @@ func TestDigitsFacets(t *testing.T) {
 	decimalPrim := newPrim(t, "decimal")
 
 	total3 := derive(t, "total3", decimalPrim, xsd.NewFacet(xsd.FacetTotalDigits, []string{"3"}, false))
-	if _, err := value.ValidateLexical(New(), total3, "123", nil); err != nil {
+	if _, err := value.ValidateLexical(New(), noSchema{}, total3, "123", nil); err != nil {
 		t.Fatalf("totalDigits=3 should accept 123: %v", err)
 	}
-	_, err := value.ValidateLexical(New(), total3, "1234", nil)
+	_, err := value.ValidateLexical(New(), noSchema{}, total3, "1234", nil)
 	wantRule(t, err, "cvc-totalDigits-valid")
 
 	frac2 := derive(t, "frac2", decimalPrim, xsd.NewFacet(xsd.FacetFractionDigits, []string{"2"}, false))
-	if _, err := value.ValidateLexical(New(), frac2, "1.23", nil); err != nil {
+	if _, err := value.ValidateLexical(New(), noSchema{}, frac2, "1.23", nil); err != nil {
 		t.Fatalf("fractionDigits=2 should accept 1.23: %v", err)
 	}
-	_, err = value.ValidateLexical(New(), frac2, "1.234", nil)
+	_, err = value.ValidateLexical(New(), noSchema{}, frac2, "1.234", nil)
 	wantRule(t, err, "cvc-fractionDigits-valid")
 }
 
@@ -268,18 +272,18 @@ func TestLengthFacets(t *testing.T) {
 	stringPrim := newPrim(t, "string")
 
 	len3 := derive(t, "len3", stringPrim, xsd.NewFacet(xsd.FacetLength, []string{"3"}, false))
-	if _, err := value.ValidateLexical(New(), len3, "abc", nil); err != nil {
+	if _, err := value.ValidateLexical(New(), noSchema{}, len3, "abc", nil); err != nil {
 		t.Fatalf("length=3 should accept abc: %v", err)
 	}
-	_, err := value.ValidateLexical(New(), len3, "abcd", nil)
+	_, err := value.ValidateLexical(New(), noSchema{}, len3, "abcd", nil)
 	wantRule(t, err, "cvc-length-valid")
 
 	min3 := derive(t, "min3", stringPrim, xsd.NewFacet(xsd.FacetMinLength, []string{"3"}, false))
-	_, err = value.ValidateLexical(New(), min3, "ab", nil)
+	_, err = value.ValidateLexical(New(), noSchema{}, min3, "ab", nil)
 	wantRule(t, err, "cvc-minLength-valid")
 
 	max3 := derive(t, "max3", stringPrim, xsd.NewFacet(xsd.FacetMaxLength, []string{"3"}, false))
-	_, err = value.ValidateLexical(New(), max3, "abcd", nil)
+	_, err = value.ValidateLexical(New(), noSchema{}, max3, "abcd", nil)
 	wantRule(t, err, "cvc-maxLength-valid")
 }
 
@@ -303,15 +307,15 @@ func TestLengthFacetsQNameNotationExempt(t *testing.T) {
 	for _, prim := range []string{"QName", "NOTATION"} {
 		p := newPrim(t, prim)
 		len3 := derive(t, prim+"-len3", p, xsd.NewFacet(xsd.FacetLength, []string{"3"}, false))
-		if _, err := value.ValidateLexical(New(), len3, "abcde", ctx); err != nil {
+		if _, err := value.ValidateLexical(New(), noSchema{}, len3, "abcde", ctx); err != nil {
 			t.Errorf("%s length=3 must accept abcde (clause 1.3 exemption), got %v", prim, err)
 		}
 		min6 := derive(t, prim+"-min6", p, xsd.NewFacet(xsd.FacetMinLength, []string{"6"}, false))
-		if _, err := value.ValidateLexical(New(), min6, "abcde", ctx); err != nil {
+		if _, err := value.ValidateLexical(New(), noSchema{}, min6, "abcde", ctx); err != nil {
 			t.Errorf("%s minLength=6 must accept abcde (clause 1.3 exemption), got %v", prim, err)
 		}
 		max2 := derive(t, prim+"-max2", p, xsd.NewFacet(xsd.FacetMaxLength, []string{"2"}, false))
-		if _, err := value.ValidateLexical(New(), max2, "abcde", ctx); err != nil {
+		if _, err := value.ValidateLexical(New(), noSchema{}, max2, "abcde", ctx); err != nil {
 			t.Errorf("%s maxLength=2 must accept abcde (clause 1.3 exemption), got %v", prim, err)
 		}
 	}
@@ -334,14 +338,14 @@ func TestQNameEnumerationSchemaContext(t *testing.T) {
 
 	// Instance value "foo:fo" under an instance context binding foo=myNamespace
 	// resolves to {myNamespace, fo}, matching the member's {myNamespace, fo}.
-	if _, err := value.ValidateLexical(New(), colors, "foo:fo", nsContext{"foo": schemaNS}); err != nil {
+	if _, err := value.ValidateLexical(New(), noSchema{}, colors, "foo:fo", nsContext{"foo": schemaNS}); err != nil {
 		t.Errorf("foo:fo (instance foo=myNamespace) must match member {myNamespace, fo}, got %v", err)
 	}
 
 	// Same lexical value, but the instance binds foo to a DIFFERENT namespace, so it
 	// resolves to {otherNS, fo} and does not match the member — the member context
 	// is the schema's, decided independently of the instance's binding.
-	_, err := value.ValidateLexical(New(), colors, "foo:fo", nsContext{"foo": "otherNS"})
+	_, err := value.ValidateLexical(New(), noSchema{}, colors, "foo:fo", nsContext{"foo": "otherNS"})
 	wantRule(t, err, "cvc-enumeration-valid")
 }
 
@@ -356,6 +360,6 @@ func TestQNameEnumerationUnresolvableMember(t *testing.T) {
 		// "bar" is unbound: no NamespaceBindings, no default namespace.
 		xsd.NewEnumerationMember("bar:x", nil, nil),
 	}))
-	_, err := value.ValidateLexical(New(), bad, "bar:x", nsContext{"bar": "urn:bar"})
+	_, err := value.ValidateLexical(New(), noSchema{}, bad, "bar:x", nsContext{"bar": "urn:bar"})
 	wantRule(t, err, "src-enumeration-value")
 }

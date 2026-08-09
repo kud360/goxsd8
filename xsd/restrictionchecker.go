@@ -43,11 +43,13 @@ package xsd
 // has always had (see undecidedRestrictionChecker).
 type SimpleTypeRestrictionChecker interface {
 	// CheckRestriction charges the clauses above against one already-constructed
-	// Simple Type Definition. It takes no resolver: t's {base type definition},
-	// {item type definition} and {member type definitions} are live pointers set
-	// at construction (simpletype.go), so an implementation reads the whole
-	// derivation chain off t alone.
-	CheckRestriction(t *SimpleType) error
+	// Simple Type Definition. r resolves t's {base type definition} chain, which
+	// may be deferred by name (simpletyperef.go) — every reader an
+	// implementation needs (Variety, Primitive, EffectiveFacets, Base) takes one.
+	// It is a PARAMETER and must be stored nowhere: an implementation is built
+	// once, by [NewValueSpace]'s sibling constructor, and serves whichever schema
+	// finalize hands it, so a stored resolver would tie it to one.
+	CheckRestriction(r TypeResolver, t *SimpleType) error
 }
 
 // undecidedRestrictionChecker is the SimpleTypeRestrictionChecker a Schema
@@ -65,6 +67,6 @@ type SimpleTypeRestrictionChecker interface {
 // [SimpleTypeRestrictionChecker].
 type undecidedRestrictionChecker struct{}
 
-func (undecidedRestrictionChecker) CheckRestriction(*SimpleType) error { return nil }
+func (undecidedRestrictionChecker) CheckRestriction(TypeResolver, *SimpleType) error { return nil }
 
 var _ SimpleTypeRestrictionChecker = undecidedRestrictionChecker{}

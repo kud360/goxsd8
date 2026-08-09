@@ -18,17 +18,21 @@
 //	                    seeded once per assembly with the builtins
 //	                    (builtin.Seed).
 //	phase 3  finalize — components completed in dependency order: a
-//	                    component's base/item/member types are finished
-//	                    before it is. Spec-forbidden circularities
-//	                    (circular unions, circular groups, circular
-//	                    substitution groups) are rejected HERE, once, with
-//	                    their named src-/cos- rule and location. UPA,
-//	                    particle-restriction, and EDC checks run against
-//	                    the finalized shape, as does the facet-value half
-//	                    of cos-st-restricts, over every simple type the
-//	                    assembled schema reaches
-//	                    (builtin.NewRestrictionChecker, installed at
-//	                    xsd.SchemaBuilder.FinalizeWith).
+//	                    component's item/member types are finished before
+//	                    it is, and a SIMPLE type's base= is deferred to a
+//	                    name this phase resolves. Spec-forbidden
+//	                    circularities (circular simple-type and
+//	                    complex-type base chains, circular groups,
+//	                    circular substitution groups) are rejected HERE,
+//	                    once, with their named src-/cos- rule and
+//	                    location. UPA, particle-restriction, and EDC
+//	                    checks run against the finalized shape, as do BOTH
+//	                    halves of cos-st-restricts over every simple type
+//	                    the assembled schema reaches: the graph half
+//	                    through xsd.SimpleType.CheckDerivation and the
+//	                    facet-value half through
+//	                    builtin.NewRestrictionChecker, installed at
+//	                    xsd.SchemaBuilder.FinalizeWith.
 //
 // The phase structure makes cycle REJECTION unnecessary at traversal
 // time — no traversal carries a `seen` set in order to detect a

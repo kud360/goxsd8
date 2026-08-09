@@ -7,20 +7,26 @@ import (
 )
 
 // ruleSTPropsCorrect is Simple Type Definition Properties Correct (Structures
-// §3.16.6.1, id="st-props-correct"). The package charges it across two layers:
-// checkSTProps (below) makes the pure-property rejections at construction — a
-// {final} token outside the legal simple-type subset (restriction, extension,
-// list, union — §3.16.1 / Datatypes §4.1.1 tableau) and two own facets of the
-// same FacetKind (clause 4) — while checkSTGraph (derivation.go) makes the
-// cross-reference rejections once the {base}/{item}/{member} pointers are wired:
-// clause 3 (the {base type definition}'s {final} must not contain restriction),
-// clause 5 (every member of {facets} is processor-supported), the Datatypes
-// §4.1.1 per-variety shape prose, and two presence requirements from that
-// section's dc-defn property tableau — {variety}, which only xs:anySimpleType
-// may leave absent, and {primitive type definition}, whose absence bars every
-// type but a primitive datatype from naming xs:anyAtomicType as its base.
-// Clause 2 (no circular derivation) is a documented no-op — a cyclic base chain
-// is unconstructible via this package's constructors (see checkSTGraph).
+// §3.16.6.1, id="st-props-correct"). The package charges it across three layers:
+//
+//   - checkSTProps (below) makes the pure-property rejections at construction —
+//     a {final} token outside the legal simple-type subset (restriction,
+//     extension, list, union — §3.16.1 / Datatypes §4.1.1 tableau) and two own
+//     facets of the same FacetKind (clause 4).
+//   - SimpleType.CheckDerivation (derivation.go) makes the cross-reference
+//     rejections, at finalize, once the {base type definition} reference is
+//     resolvable: clause 3 (the base's {final} must not contain restriction),
+//     clause 5 (every member of {facets} is processor-supported), the Datatypes
+//     §4.1.1 per-variety shape prose, and two presence requirements from that
+//     section's dc-defn property tableau — {variety}, which only
+//     xs:anySimpleType may leave absent, and {primitive type definition}, whose
+//     absence bars every type but a primitive datatype from naming
+//     xs:anyAtomicType as its base.
+//   - Schema.checkSimpleBaseAcyclic (resolve.go) charges clause 2 (no circular
+//     derivation) in finalize's Phase B. It is no longer a no-op: a cyclic base
+//     chain became REPRESENTABLE the moment {base type definition} became a
+//     deferred SimpleTypeRef, so the rule that a live-pointer base made
+//     structurally unnecessary now needs a real check.
 const ruleSTPropsCorrect xsderr.Rule = "st-props-correct"
 
 // Variety is a Simple Type Definition's {variety} (Structures §3.16.1,
@@ -560,6 +566,12 @@ func (m EnumerationMember) DefaultNamespace() (string, bool) {
 // derived on demand from the derivation and the {base type definition} chain
 // per §3.16.2.1 (STYLE D3) — see Variety, Primitive, Item and Members.
 //
+// The {base type definition} is a SimpleTypeOrRef, which may be a DEFERRED
+// reference by name (simpletyperef.go). Every reader that walks the chain —
+// Base, Variety, Primitive, Item, Members, EffectiveFacets — therefore takes a
+// TypeResolver and returns an error: an unresolvable base is a failure the
+// caller must see, never a silently short chain, which would be a false accept.
+//
 // Unlike the value-typed components in this package (Occurs, Notation),
 // SimpleType is handled through a *SimpleType pointer: components reference one
 // another by pointer once resolved (phased construction, PRINCIPLES D4), and
@@ -571,20 +583,21 @@ type SimpleType struct {
 	loc        xsderr.Loc // source position; provenance, not a §3.16.1 property
 	name       QName
 	derivation SimpleTypeDerivation
-	base       *SimpleType
+	base       SimpleTypeOrRef
 	ownFacets  []Facet
 	final      []DerivationMethod
 }
 
 // NewSimpleType builds a Simple Type Definition. base is the {base type
-// definition}: nil means this type IS xs:anySimpleType (the one simple type
-// whose base is xs:anyType, a Complex Type Definition outside this package's
-// scope); every other simple type has a non-nil simple-type base. derivation is
-// the declared §3.16.2.1 alternative the component was mapped from, and it is
-// what {variety}, {primitive type definition}, {item type definition} and
-// {member type definitions} are DERIVED from — none of the four is passed or
-// stored (STYLE D3). It may be nil to model xs:anySimpleType, which was mapped
-// from no alternative at all and whose {variety} is ·absent·.
+// definition} slot (SimpleTypeOrRef, simpletyperef.go): nil means this type IS
+// xs:anySimpleType (the one simple type whose base is xs:anyType, a Complex Type
+// Definition outside this package's scope); every other simple type carries
+// either a SimpleTypeRef naming its base or an OwnedSimpleType holding it.
+// derivation is the declared §3.16.2.1 alternative the component was mapped
+// from, and it is what {variety}, {primitive type definition}, {item type
+// definition} and {member type definitions} are DERIVED from — none of the four
+// is passed or stored (STYLE D3). It may be nil to model xs:anySimpleType, which
+// was mapped from no alternative at all and whose {variety} is ·absent·.
 //
 // The two ·special· types are constrained bases. xs:anySimpleType is the base a
 // ·constructed· list or union names (cos-st-restricts 2.2.1/3.2.1), and those
@@ -606,6 +619,20 @@ type SimpleType struct {
 //   - two ownFacets of the same FacetKind (clause 4: "not more than one member
 //     of {facets} of the same kind").
 //
+// and, charging xsderr.RuleComponentInvariant, the two illegal encodings of the
+// base slot itself — a SimpleTypeRef naming nothing and an OwnedSimpleType
+// holding nothing (checkSimpleTypeOrRef).
+//
+// Everything the CROSS-REFERENCE constraints decide — every cos-st-restricts
+// sub-clause and st-props-correct clauses 1, 2, 3 and 5 — is charged at
+// FINALIZE, not here, because a deferred base cannot be followed at
+// construction: CheckDerivation (derivation.go) charges the graph clauses and
+// Schema.checkSimpleBaseAcyclic charges clause 2. A component this constructor
+// returns is well FORMED, not yet known to be well DERIVED; the one entry point
+// that settles the latter is CheckDerivation, which finalize runs over every
+// simple type an assembled Schema reaches and which a Schema-less caller runs
+// itself.
+//
 // ownFacets and final are copied; the caller's backing arrays are not aliased,
 // and so is a UnionDerivation's Members (see copyDerivation).
 //
@@ -616,15 +643,15 @@ type SimpleType struct {
 // real parser position — a synthesized or programmatically built type, as every
 // seeded built-in datatype is — passes the zero xsderr.Loc{}, which reads as
 // "unknown".
-func NewSimpleType(loc xsderr.Loc, name QName, derivation SimpleTypeDerivation, base *SimpleType, ownFacets []Facet, final []DerivationMethod) (*SimpleType, error) {
+func NewSimpleType(loc xsderr.Loc, name QName, derivation SimpleTypeDerivation, base SimpleTypeOrRef, ownFacets []Facet, final []DerivationMethod) (*SimpleType, error) {
+	if err := checkSimpleTypeOrRef(loc, base); err != nil {
+		return nil, err
+	}
 	if err := checkSTProps(loc, ownFacets, final); err != nil {
 		return nil, err
 	}
 	t := &SimpleType{loc: loc, name: name, derivation: copyDerivation(derivation), base: base}
 	t.setOwnFacetsFinal(ownFacets, final)
-	if err := checkSTGraph(loc, t); err != nil {
-		return nil, err
-	}
 	return t, nil
 }
 
@@ -662,18 +689,19 @@ func copyDerivation(derivation SimpleTypeDerivation) SimpleTypeDerivation {
 // The arm is set inside this constructor, before the node escapes, so the node
 // is immutable to every external caller. ownFacets and final follow
 // NewSimpleType's contract and are validated identically (st-props-correct);
-// they are copied, not aliased. loc follows NewSimpleType's contract too: it is
-// charged to any rejection AND retained, so Loc reports it back as the type's
-// provenance.
+// they are copied, not aliased. The base is fixed as an OwnedSimpleType holding
+// the anchor — never a SimpleTypeRef — because the anchor's identity is what
+// checkAtomicGraph's #480 rejection keys on, and a name-based base would make
+// that identity depend on which Schema resolved it. loc follows NewSimpleType's
+// contract too: it is charged to any rejection AND retained, so Loc reports it
+// back as the type's provenance. Like NewSimpleType it charges no
+// cross-reference constraint; CheckDerivation does, at finalize.
 func NewPrimitiveType(loc xsderr.Loc, name QName, ownFacets []Facet, final []DerivationMethod) (*SimpleType, error) {
 	if err := checkSTProps(loc, ownFacets, final); err != nil {
 		return nil, err
 	}
-	t := &SimpleType{loc: loc, name: name, derivation: primitiveDerivation{}, base: anyAtomicType}
+	t := &SimpleType{loc: loc, name: name, derivation: primitiveDerivation{}, base: OwnedSimpleType{Definition: anyAtomicType}}
 	t.setOwnFacetsFinal(ownFacets, final)
-	if err := checkSTGraph(loc, t); err != nil {
-		return nil, err
-	}
 	return t, nil
 }
 
@@ -738,32 +766,36 @@ func (t *SimpleType) Loc() xsderr.Loc {
 // one: a list or union alternative, the primitive arm (atomic), or
 // xs:anyAtomicType's own arm (atomic by fiat, Datatypes §4.1.6).
 //
-// TERMINATION: the walk follows {base type definition}, which is acyclic as
-// this package stands today — base is an unexported field with no setter, and
-// NewSimpleType demands a LIVE base pointer that must already exist, so a type
-// cannot appear on its own base chain (PRINCIPLES 9). That is a fact about
-// today's live-pointer base, not a permanent one: a deferred base reference
-// would invalidate it and force a visited-set or phase-ordering guard here.
+// r follows the {base type definition} chain, which may be a deferred
+// SimpleTypeRef (simpletyperef.go). An unresolvable base is returned as an
+// ERROR, never as a short chain answering nil: nil is the ·absent· {variety}
+// only xs:anySimpleType may carry, so reporting it for a base that merely could
+// not be found would hand every caller st-props-correct clause 1's shape for a
+// type that does not have it.
 //
-// It is TOTAL — it never panics. When the chain runs out at a nil base it
-// returns nil, the ·absent· value. That matters because checkSTGraph calls it
-// from INSIDE NewSimpleType, on a t whose base and derivation may both still be
-// nil (the anonymous-placeholder shape several callers build).
-func (t *SimpleType) Variety() Variety {
+// TERMINATION: the walk carries no visited set (STYLE D4). Every base chain a
+// finalized Schema holds is acyclic, which Schema.checkSimpleBaseAcyclic
+// establishes in Phase B before any pass that walks one runs (resolve.go,
+// PRINCIPLES 9). A caller resolving against something other than a finalized
+// Schema owes the same guarantee — the Schema-less callers in this module get it
+// from OwnedSimpleType-only chains, where a base must pre-exist the type naming
+// it and so cannot close a loop.
+func (t *SimpleType) Variety(r TypeResolver) (Variety, error) {
 	switch t.derivation.(type) {
 	case primitiveDerivation, anyAtomicDerivation:
-		return Atomic{}
+		return Atomic{}, nil
 	case ListDerivation:
-		return List{}
+		return List{}, nil
 	case UnionDerivation:
-		return Union{}
+		return Union{}, nil
 	case RestrictionDerivation:
-		if t.base == nil {
-			return nil
+		base, err := t.Base(r)
+		if err != nil || base == nil {
+			return nil, err
 		}
-		return t.base.Variety()
+		return base.Variety(r)
 	}
-	return nil
+	return nil, nil
 }
 
 // Primitive returns the {primitive type definition} property (§3.16.1). It is
@@ -774,41 +806,49 @@ func (t *SimpleType) Variety() Variety {
 // It is DERIVED, never stored (STYLE D3): a primitive datatype's {primitive
 // type definition} is itself, and st-restrict-facets clause 2 gives a
 // restriction the same one as its base, so the answer is the nearest primitive
-// ancestor on the {base type definition} chain. It is TOTAL and terminates for
-// the reasons Variety's godoc states.
-func (t *SimpleType) Primitive() *SimpleType {
+// ancestor on the {base type definition} chain. r resolves that chain and an
+// unresolvable base is an error, for the reasons Variety's godoc states.
+func (t *SimpleType) Primitive(r TypeResolver) (*SimpleType, error) {
 	switch t.derivation.(type) {
 	case primitiveDerivation:
-		return t
+		return t, nil
 	case RestrictionDerivation:
-		if t.base == nil {
-			return nil
+		base, err := t.Base(r)
+		if err != nil || base == nil {
+			return nil, err
 		}
-		return t.base.Primitive()
+		return base.Primitive(r)
 	}
-	return nil
+	return nil, nil
 }
 
 // Item returns the {item type definition} property (§3.16.1). It is nil when
 // that property is ·absent·, which is every {variety} but list — a state
-// checkListGraph rejects for a list at construction, so a constructor-built
-// list always reports a non-nil item.
+// checkListGraph rejects for a list, so a list that passed CheckDerivation
+// always reports a non-nil item.
 //
 // It is DERIVED, never stored (STYLE D3): the ·list· alternative mints it and a
 // ·restriction· takes its base's (§3.16.2.1), so a restriction of xs:NMTOKENS
-// reports xs:NMTOKEN without any producer copying the pointer down. It is TOTAL
-// and terminates for the reasons Variety's godoc states.
-func (t *SimpleType) Item() *SimpleType {
+// reports xs:NMTOKEN without any producer copying the pointer down.
+//
+// It takes a resolver NOT for symmetry with Variety/Primitive but because that
+// inheritance hop IS the {base type definition} slot: the ListDerivation.Item
+// SLOT stays a plain *SimpleType (see SimpleTypeOrRef), yet a ·restriction· of a
+// named list reaches its item only THROUGH a base that may be a SimpleTypeRef.
+// Answering nil there would report an absent {item type definition} for a list
+// that has one, which checkListGraph turns into a false reject.
+func (t *SimpleType) Item(r TypeResolver) (*SimpleType, error) {
 	switch d := t.derivation.(type) {
 	case ListDerivation:
-		return d.Item
+		return d.Item, nil
 	case RestrictionDerivation:
-		if t.base == nil {
-			return nil
+		base, err := t.Base(r)
+		if err != nil || base == nil {
+			return nil, err
 		}
-		return t.base.Item()
+		return base.Item(r)
 	}
-	return nil
+	return nil, nil
 }
 
 // Members returns the {member type definitions} property (§3.16.1) in document
@@ -816,35 +856,49 @@ func (t *SimpleType) Item() *SimpleType {
 // empty membership yields nil.
 //
 // It is DERIVED, never stored (STYLE D3): the ·union· alternative mints it and
-// a ·restriction· takes its base's (§3.16.2.1). It is TOTAL and terminates for
-// the reasons Variety's godoc states.
-func (t *SimpleType) Members() []*SimpleType {
+// a ·restriction· takes its base's (§3.16.2.1). It takes a resolver for exactly
+// the reason Item does, and not for symmetry — see there.
+func (t *SimpleType) Members(r TypeResolver) ([]*SimpleType, error) {
 	switch d := t.derivation.(type) {
 	case UnionDerivation:
 		if len(d.Members) == 0 {
-			return nil
+			return nil, nil
 		}
-		return append([]*SimpleType(nil), d.Members...)
+		return append([]*SimpleType(nil), d.Members...), nil
 	case RestrictionDerivation:
-		if t.base == nil {
-			return nil
+		base, err := t.Base(r)
+		if err != nil || base == nil {
+			return nil, err
 		}
-		return t.base.Members()
+		return base.Members(r)
 	}
-	return nil
+	return nil, nil
 }
 
-// Base returns the {base type definition} property. It is nil if and only if
-// IsAnySimpleType reports true — that is, when this type IS xs:anySimpleType,
-// whose real base (xs:anyType) is a Complex Type Definition outside this
-// package's scope. For every other simple type Base is a non-nil *SimpleType.
-func (t *SimpleType) Base() *SimpleType {
-	return t.base
+// Base resolves and returns the {base type definition} property. It is nil, with
+// a nil error, if and only if IsAnySimpleType reports true — that is, when this
+// type IS xs:anySimpleType, whose real base (xs:anyType) is a Complex Type
+// Definition outside this package's scope.
+//
+// The stored slot is a SimpleTypeOrRef (simpletyperef.go), so for a by-name base
+// this is the src-resolve clause 1.1 lookup against r. It is the ONE reader of
+// that slot in this package and the single encoding of the resolution (STYLE
+// T4): Variety, Primitive, Item, Members and EffectiveFacets all walk the chain
+// through it.
+//
+// A base that r cannot resolve is an ERROR, never (nil, nil): a caller reading a
+// missing base as the end of the chain would compute {variety}, {primitive type
+// definition} or {facets} off a truncated chain and accept what the full chain
+// forbids.
+func (t *SimpleType) Base(r TypeResolver) (*SimpleType, error) {
+	return simpleTypeOfRef(r, t.base, t.loc, simpleTypeLabel(t)+" {base type definition}")
 }
 
 // IsAnySimpleType reports whether this type is xs:anySimpleType, the root of the
-// simple-type hierarchy (§3.16.1). It is exactly the condition Base() == nil,
-// exposed as a predicate so callers do not infer this identity from nil-ness.
+// simple-type hierarchy (§3.16.1). It is exactly the condition "the {base type
+// definition} slot is absent", exposed as a predicate so callers do not infer
+// this identity from nil-ness. It needs no resolver and cannot fail: absence is
+// a property of the SLOT, decided without following anything (SimpleTypeOrRef).
 func (t *SimpleType) IsAnySimpleType() bool {
 	return t.base == nil
 }
@@ -973,11 +1027,21 @@ func (f EffectiveFacet) Declaring() QName {
 // derived (§4.3.4.2 xr-pattern), so EffectiveFacets can return several
 // FacetPattern entries for a multi-step-pattern chain. It returns a fresh slice
 // each call; mutating it does not affect t.
-func (t *SimpleType) EffectiveFacets() []EffectiveFacet {
+//
+// r resolves each {base type definition} hop, which may be a deferred
+// SimpleTypeRef; an unresolvable one is returned as an error rather than ending
+// the chain, because a truncated overlay silently DROPS every inherited facet
+// above the break, which is a false accept of any literal those facets exclude.
+func (t *SimpleType) EffectiveFacets(r TypeResolver) ([]EffectiveFacet, error) {
 	// Collect the base chain most-derived first (t, then its base, ...).
 	var chain []*SimpleType
-	for s := t; s != nil; s = s.base {
+	for s := t; s != nil; {
 		chain = append(chain, s)
+		next, err := s.Base(r)
+		if err != nil {
+			return nil, err
+		}
+		s = next
 	}
 
 	// Overlay least-derived first so more-derived facets win. Each facet
@@ -990,9 +1054,9 @@ func (t *SimpleType) EffectiveFacets() []EffectiveFacet {
 	}
 
 	if len(result) == 0 {
-		return nil
+		return nil, nil
 	}
-	return result
+	return result, nil
 }
 
 // overlayFacet applies a single more-derived facet onto acc per the §3.16.6.4
@@ -1118,5 +1182,5 @@ var anySimpleType = &SimpleType{
 var anyAtomicType = &SimpleType{
 	name:       QName{Space: XMLSchemaNS, Local: "anyAtomicType"},
 	derivation: anyAtomicDerivation{},
-	base:       anySimpleType,
+	base:       OwnedSimpleType{Definition: anySimpleType},
 }

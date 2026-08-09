@@ -68,21 +68,21 @@ func TestEffectiveWhiteSpace(t *testing.T) {
 	preservePrim := primType(t, "string", "preserve")
 	collapsePrim := primType(t, "decimal", "collapse")
 
-	if got, err := effectiveWhiteSpace(preservePrim); got != preserveWS || err != nil {
-		t.Errorf("effectiveWhiteSpace(string primitive) = (%d, %v), want (preserve %d, nil)", got, err, preserveWS)
+	if got, err := effectiveWhiteSpace(noSchema{}, preservePrim); got != preserveWS || err != nil {
+		t.Errorf("effectiveWhiteSpace(noSchema{}, string primitive) = (%d, %v), want (preserve %d, nil)", got, err, preserveWS)
 	}
-	if got, err := effectiveWhiteSpace(collapsePrim); got != collapseWS || err != nil {
-		t.Errorf("effectiveWhiteSpace(decimal primitive) = (%d, %v), want (collapse %d, nil)", got, err, collapseWS)
+	if got, err := effectiveWhiteSpace(noSchema{}, collapsePrim); got != collapseWS || err != nil {
+		t.Errorf("effectiveWhiteSpace(noSchema{}, decimal primitive) = (%d, %v), want (collapse %d, nil)", got, err, collapseWS)
 	}
 
 	// A derivation with no own whiteSpace facet inherits the primitive's entry.
-	derived, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "d"},
+	derived, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "d"},
 		xsd.RestrictionDerivation{}, collapsePrim, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	if got, err := effectiveWhiteSpace(derived); got != collapseWS || err != nil {
-		t.Errorf("effectiveWhiteSpace(inheriting derivation) = (%d, %v), want (collapse %d, nil)", got, err, collapseWS)
+	if got, err := effectiveWhiteSpace(noSchema{}, derived); got != collapseWS || err != nil {
+		t.Errorf("effectiveWhiteSpace(noSchema{}, inheriting derivation) = (%d, %v), want (collapse %d, nil)", got, err, collapseWS)
 	}
 }
 
@@ -92,14 +92,14 @@ func TestEffectiveWhiteSpace(t *testing.T) {
 func TestEffectiveWhiteSpaceOverride(t *testing.T) {
 	stringPrim := primType(t, "string", "preserve") // primitive says preserve
 	// A derived step re-declares whiteSpace=collapse; the overlay surfaces it.
-	collapsed, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "token-like"},
+	collapsed, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "token-like"},
 		xsd.RestrictionDerivation{}, stringPrim,
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	if got, err := effectiveWhiteSpace(collapsed); got != collapseWS || err != nil {
-		t.Errorf("effectiveWhiteSpace(overriding derivation) = (%d, %v), want (collapse %d, nil) (§3.16.6.4)", got, err, collapseWS)
+	if got, err := effectiveWhiteSpace(noSchema{}, collapsed); got != collapseWS || err != nil {
+		t.Errorf("effectiveWhiteSpace(noSchema{}, overriding derivation) = (%d, %v), want (collapse %d, nil) (§3.16.6.4)", got, err, collapseWS)
 	}
 }
 
@@ -118,18 +118,18 @@ func TestEffectiveWhiteSpaceNoFacetErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPrimitiveType: %v", err)
 	}
-	ws, err := effectiveWhiteSpace(bare)
+	ws, err := effectiveWhiteSpace(noSchema{}, bare)
 	if err == nil {
-		t.Fatalf("effectiveWhiteSpace(atomic, no whiteSpace facet) = (%d, nil), want a component-invariant error", ws)
+		t.Fatalf("effectiveWhiteSpace(noSchema{}, atomic, no whiteSpace facet) = (%d, nil), want a component-invariant error", ws)
 	}
 	if ws != whiteSpace(0) {
-		t.Errorf("effectiveWhiteSpace(atomic, no whiteSpace facet) ws = %d, want zero value 0", ws)
+		t.Errorf("effectiveWhiteSpace(noSchema{}, atomic, no whiteSpace facet) ws = %d, want zero value 0", ws)
 	}
 	if r, _ := xsderr.RuleOf(err); r != xsderr.RuleComponentInvariant {
-		t.Errorf("effectiveWhiteSpace(atomic, no whiteSpace facet) charged %s, want %s (§4.3.6.3: no Validation Rules are associated with whiteSpace)", r, xsderr.RuleComponentInvariant)
+		t.Errorf("effectiveWhiteSpace(noSchema{}, atomic, no whiteSpace facet) charged %s, want %s (§4.3.6.3: no Validation Rules are associated with whiteSpace)", r, xsderr.RuleComponentInvariant)
 	}
 	if !IsFacetPrecondition(err) {
-		t.Error("effectiveWhiteSpace(atomic, no whiteSpace facet): IsFacetPrecondition = false, want true — callers cannot tell the fault from a verdict")
+		t.Error("effectiveWhiteSpace(noSchema{}, atomic, no whiteSpace facet): IsFacetPrecondition = false, want true — callers cannot tell the fault from a verdict")
 	}
 }
 
@@ -150,27 +150,27 @@ func TestEffectiveWhiteSpaceNoFacetErrors(t *testing.T) {
 // three no-usable-mode states onto this one error, so it guards the same branch.
 func TestEffectiveWhiteSpaceListNoUsableModeErrors(t *testing.T) {
 	item := primType(t, "string", "preserve")
-	constructed, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "goodList"},
+	constructed, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "goodList"},
 		xsd.ListDerivation{Item: item}, xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(constructed list): %v", err)
 	}
-	list, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "bareList"},
+	list, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "bareList"},
 		xsd.ListDerivation{Item: item}, constructed,
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"not-a-whiteSpace-token"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
 	}
-	ws, err := effectiveWhiteSpace(list)
+	ws, err := effectiveWhiteSpace(noSchema{}, list)
 	if err == nil {
-		t.Fatalf("effectiveWhiteSpace(list, unrecognized whiteSpace {value}) = (%d, nil), want a component-invariant error", ws)
+		t.Fatalf("effectiveWhiteSpace(noSchema{}, list, unrecognized whiteSpace {value}) = (%d, nil), want a component-invariant error", ws)
 	}
 	if r, _ := xsderr.RuleOf(err); r != xsderr.RuleComponentInvariant {
-		t.Errorf("effectiveWhiteSpace(list, unrecognized whiteSpace {value}) charged %s, want %s", r, xsderr.RuleComponentInvariant)
+		t.Errorf("effectiveWhiteSpace(noSchema{}, list, unrecognized whiteSpace {value}) charged %s, want %s", r, xsderr.RuleComponentInvariant)
 	}
 	if !IsFacetPrecondition(err) {
-		t.Error("effectiveWhiteSpace(list, unrecognized whiteSpace {value}): IsFacetPrecondition = false, want true")
+		t.Error("effectiveWhiteSpace(noSchema{}, list, unrecognized whiteSpace {value}): IsFacetPrecondition = false, want true")
 	}
 }
 
@@ -195,13 +195,13 @@ func TestEffectiveWhiteSpaceNoFacetsApplicable(t *testing.T) {
 		{"union (whiteSpace not in its applicable set)", unionType(t)},
 	}
 	for _, c := range cases {
-		ws, err := effectiveWhiteSpace(c.st)
+		ws, err := effectiveWhiteSpace(noSchema{}, c.st)
 		if err != nil {
-			t.Errorf("effectiveWhiteSpace(%s) = (%d, %v), want (0, nil) — §4.1.5 makes no facet applicable", c.name, ws, err)
+			t.Errorf("effectiveWhiteSpace(noSchema{}, %s) = (%d, %v), want (0, nil) — §4.1.5 makes no facet applicable", c.name, ws, err)
 			continue
 		}
 		if ws != whiteSpace(0) {
-			t.Errorf("effectiveWhiteSpace(%s) ws = %d, want zero value 0", c.name, ws)
+			t.Errorf("effectiveWhiteSpace(noSchema{}, %s) ws = %d, want zero value 0", c.name, ws)
 		}
 	}
 }
@@ -215,7 +215,7 @@ func TestEffectiveWhiteSpaceNoFacetsApplicable(t *testing.T) {
 // a naive caller would read as a false reject.
 func TestValidateLexicalSpecialDatatypesDoNotFault(t *testing.T) {
 	for _, st := range []*xsd.SimpleType{xsd.AnySimpleType(), xsd.AnyAtomicType()} {
-		_, err := ValidateLexical(emptyBackend{}, st, "  raw  literal  ", nil)
+		_, err := ValidateLexical(emptyBackend{}, noSchema{}, st, "  raw  literal  ", nil)
 		if err == nil {
 			t.Errorf("ValidateLexical(%s) = nil error, want the ungoverned cvc-datatype-valid error", st.Name())
 			continue
@@ -236,14 +236,14 @@ func TestValidateLexicalSpecialDatatypesDoNotFault(t *testing.T) {
 // no-facets-applicable arm nor the fault, so no list special-casing is needed.
 func TestEffectiveWhiteSpaceListResolvesCollapse(t *testing.T) {
 	item := primType(t, "string", "preserve")
-	list, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "collapseList"},
+	list, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "collapseList"},
 		xsd.ListDerivation{Item: item}, xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
 	}
-	if got, err := effectiveWhiteSpace(list); got != collapseWS || err != nil {
-		t.Errorf("effectiveWhiteSpace(list) = (%d, %v), want (collapse %d, nil) (§4.3.6.1)", got, err, collapseWS)
+	if got, err := effectiveWhiteSpace(noSchema{}, list); got != collapseWS || err != nil {
+		t.Errorf("effectiveWhiteSpace(noSchema{}, list) = (%d, %v), want (collapse %d, nil) (§4.3.6.1)", got, err, collapseWS)
 	}
 }
 
@@ -260,7 +260,7 @@ func TestValidateLexicalUnionWhiteSpaceStageNoPanic(t *testing.T) {
 	union := unionType(t)
 	// emptyBackend maps nothing, so no member of the union is governed and
 	// ValidateLexical returns its normal cvc-datatype-valid error.
-	v, err := ValidateLexical(emptyBackend{}, union, "  raw  literal  ", nil)
+	v, err := ValidateLexical(emptyBackend{}, noSchema{}, union, "  raw  literal  ", nil)
 	if err == nil {
 		t.Fatalf("ValidateLexical(union) = (%v, nil), want a real error (no governing mapping)", v)
 	}
@@ -276,7 +276,7 @@ func unionType(t *testing.T) *xsd.SimpleType {
 	t.Helper()
 	strPrim := primType(t, "string", "preserve")
 	decPrim := primType(t, "decimal", "collapse")
-	union, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "u"},
+	union, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "u"},
 		xsd.UnionDerivation{Members: []*xsd.SimpleType{strPrim, decPrim}}, xsd.AnySimpleType(), nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union): %v", err)

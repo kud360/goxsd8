@@ -171,6 +171,9 @@ func Seed(b value.Backend) ([]*xsd.SimpleType, error) {
 			if err != nil {
 				return nil, fmt.Errorf("builtin: constructing xs:%s: %w", spec.Name, err)
 			}
+			if err := node.CheckDerivation(noSchema{}); err != nil {
+				return nil, fmt.Errorf("builtin: constructing xs:%s: %w", spec.Name, err)
+			}
 			built[name] = node
 			return node, nil
 		}
@@ -186,8 +189,11 @@ func Seed(b value.Backend) ([]*xsd.SimpleType, error) {
 		if err != nil {
 			return nil, err
 		}
-		node, err := xsd.NewSimpleType(xsderr.Loc{}, qname(spec.Name), derivation, base, facets, nil)
+		node, err := xsd.NewSimpleType(xsderr.Loc{}, qname(spec.Name), derivation, xsd.OwnedSimpleType{Definition: base}, facets, nil)
 		if err != nil {
+			return nil, fmt.Errorf("builtin: constructing xs:%s: %w", spec.Name, err)
+		}
+		if err := node.CheckDerivation(noSchema{}); err != nil {
 			return nil, fmt.Errorf("builtin: constructing xs:%s: %w", spec.Name, err)
 		}
 		built[name] = node
@@ -238,13 +244,33 @@ func interposeListBase(spec TypeSpec, derivation xsd.SimpleTypeDerivation, base 
 	if spec.Base != "anySimpleType" {
 		return nil, nil, fmt.Errorf("builtin: list type %q has base %q, but a list row's first derivation step must restrict anySimpleType (§3.16.2.1 map.std.common case 2)", spec.Name, spec.Base)
 	}
-	node, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{}, derivation, xsd.AnySimpleType(),
+	node, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{}, derivation, xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()},
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("builtin: constructing the anonymous list xs:%s restricts: %w", spec.Name, err)
 	}
+	if err := node.CheckDerivation(noSchema{}); err != nil {
+		return nil, nil, fmt.Errorf("builtin: constructing the anonymous list xs:%s restricts: %w", spec.Name, err)
+	}
 	return node, xsd.RestrictionDerivation{}, nil
 }
+
+// noSchema is the [xsd.TypeResolver] this package's Schema-less construction
+// passes to [xsd.SimpleType.CheckDerivation]: it resolves NOTHING, which is
+// exactly right here. Seed assembles the whole builtin graph out of live
+// components before any xsd.Schema exists, so every {base type definition} it
+// writes is an xsd.OwnedSimpleType and no by-name arm is ever reached. If one
+// ever were, the reader would return the explicit src-resolve error rather than
+// silently walking a short chain, and Seed would fail with it — the correct
+// verdict for a graph that claims a base it cannot produce.
+//
+// It is a local adapter and not a shared exported one. The conformance datatypes
+// lane declares its own two-line twin for the same reason, and exporting a
+// resolves-nothing resolver from package xsd would add public surface whose only
+// consumers are two Schema-less lanes inside this module (STYLE T5).
+type noSchema struct{}
+
+func (noSchema) Type(xsd.QName) (xsd.TypeDefinition, bool) { return nil, false }
 
 // buildDerivation translates a row's backend-neutral builtin.Variety into the
 // declared xsd.SimpleTypeDerivation the component is constructed with, wiring

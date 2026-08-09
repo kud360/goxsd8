@@ -423,9 +423,9 @@ func TestCosCTExtendsClause2(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := dFinalize(t, func(b *SchemaBuilder) {
-				base, err := NewPrimitiveType(xsderr.Loc{}, uq("sbase"), nil, tc.final)
+				base, err := newCheckedPrimitiveType(xsderr.Loc{}, uq("sbase"), nil, tc.final)
 				if err != nil {
-					t.Fatalf("NewPrimitiveType(sbase): %v", err)
+					t.Fatalf("newCheckedPrimitiveType(sbase): %v", err)
 				}
 				b.AddType(base)
 				b.AddType(xType(t, uq("derived"), uq("sbase"), tc.content(base), nil, nil))

@@ -243,8 +243,19 @@ func IsFacetPrecondition(err error) bool {
 // validated instance's context): newEnumFacet resolves each member's prefixes
 // against the bindings in scope where its <enumeration> was written (§3.3.18),
 // carried per member on the facet, never against this instance scope.
-func ValidateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, error) {
-	v, _, err := validateLexical(b, st, rawLexical, ctx)
+// r resolves st's {base type definition} chain, which a compiled schema may
+// defer by name (xsd.SimpleTypeOrRef). It is a PARAMETER at this entry point and
+// is stored NOWHERE in this package — not on [Backend], not on a compiled facet,
+// not on the [xsd.ValueSpace] this package returns — so one backend and one
+// value space serve every schema. An unresolvable base surfaces as the
+// src-resolve error [xsd.SimpleType.Base] produces, which is neither a validity
+// verdict about rawLexical nor a facet-pipeline precondition fault: it says the
+// TYPE could not be read at all. A caller resolving against an assembled
+// xsd.Schema passes it; one validating against a Schema-less graph passes a stub
+// that resolves nothing, which is correct because such a graph carries no
+// by-name base to resolve.
+func ValidateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, error) {
+	v, _, err := validateLexical(b, r, st, rawLexical, ctx)
 	return v, err
 }
 
@@ -260,16 +271,20 @@ func ValidateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Conte
 // and only the callee knows which member that was. No caller outside this package
 // needs it, so the exported wrapper drops it rather than widening the API
 // (STYLE T5).
-func validateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, whiteSpace, error) {
+func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, whiteSpace, error) {
 	// {variety} dispatch, cvc-datatype-valid clause 2 (§4.1.4): a union takes
 	// clause 2.3's member dispatch (union.go), which composes st's own facets
 	// around the dispatched member's verdict rather than around st's own mapping.
 	// Atomic (cl.2.1) and list (cl.2.2) share the path below.
-	if _, ok := st.Variety().(xsd.Union); ok {
-		return validateUnion(b, st, rawLexical, ctx)
+	variety, err := st.Variety(r)
+	if err != nil {
+		return nil, 0, err
+	}
+	if _, ok := variety.(xsd.Union); ok {
+		return validateUnion(b, r, st, rawLexical, ctx)
 	}
 
-	lexFacets, valFacets, err := compile(b, st)
+	lexFacets, valFacets, err := compile(b, r, st)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -281,7 +296,7 @@ func validateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Conte
 	// whose {variety} or {primitive type definition} is absent. Those normalize
 	// nothing and the literal is parsed as written — the same `if ws != 0` guard
 	// facetValue applies to a facet's own {value}.
-	ws, err := effectiveWhiteSpace(st)
+	ws, err := effectiveWhiteSpace(r, st)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -301,7 +316,10 @@ func validateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Conte
 	// lexical mapping: the candidate value is produced by st's OWN governing
 	// mapping (its own, or its nearest mapped ancestor's — the widest-space rule
 	// governs facet {value}s, not the application-facing candidate).
-	m, ok := governingMapping(b, st)
+	m, ok, err := governingMapping(b, r, st)
+	if err != nil {
+		return nil, 0, err
+	}
 	if !ok {
 		return nil, 0, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
 			"value: no backend mapping governs type %s", st.Name())
@@ -346,10 +364,14 @@ func validateLexical(b Backend, st *xsd.SimpleType, rawLexical string, ctx Conte
 // explicitTimezone is a value facet handled here (cvc-explicitTimezone-valid,
 // §4.3.14.3). assertions remain out of this runner's scope — they are a separate
 // later stage, not an atomic value facet — and are skipped.
-func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error) {
+func compile(b Backend, r xsd.TypeResolver, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error) {
 	var lexFacets []LexicalFacet
 	var valFacets []ValueFacet
-	for _, ef := range st.EffectiveFacets() {
+	eff, err := st.EffectiveFacets(r)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, ef := range eff {
 		switch ef.Facet().Kind() {
 		case xsd.FacetWhiteSpace:
 			// Consumed by the whiteSpace normalize stage, not a checker.
@@ -360,13 +382,13 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 			}
 			lexFacets = append(lexFacets, pf)
 		case xsd.FacetEnumeration:
-			enf, err := newEnumFacet(b, st, ef)
+			enf, err := newEnumFacet(b, r, st, ef)
 			if err != nil {
 				return nil, nil, err
 			}
 			valFacets = append(valFacets, enf)
 		case xsd.FacetMaxInclusive, xsd.FacetMaxExclusive, xsd.FacetMinInclusive, xsd.FacetMinExclusive:
-			bf, err := newBoundFacet(b, st, ef)
+			bf, err := newBoundFacet(b, r, st, ef)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -378,7 +400,7 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 			}
 			valFacets = append(valFacets, df)
 		case xsd.FacetLength, xsd.FacetMinLength, xsd.FacetMaxLength:
-			lf, err := newLengthFacet(st, ef.Facet())
+			lf, err := newLengthFacet(r, st, ef.Facet())
 			if err != nil {
 				return nil, nil, err
 			}
@@ -442,25 +464,39 @@ func compile(b Backend, st *xsd.SimpleType) ([]LexicalFacet, []ValueFacet, error
 // type leaves the whole list ungoverned, unionGoverned (union.go) why one unmapped
 // member spoils the whole dispatch — both yielding the same (Mapping{}, false)
 // "ungoverned" outcome the atomic case returns.
-func governingMapping(b Backend, node *xsd.SimpleType) (Mapping, bool) {
-	if _, ok := node.Variety().(xsd.List); ok {
-		item := node.Item()
-		if !listGoverned(b, item) {
-			return Mapping{}, false
+func governingMapping(b Backend, r xsd.TypeResolver, node *xsd.SimpleType) (Mapping, bool, error) {
+	variety, err := node.Variety(r)
+	if err != nil {
+		return Mapping{}, false, err
+	}
+	if _, ok := variety.(xsd.List); ok {
+		item, err := node.Item(r)
+		if err != nil {
+			return Mapping{}, false, err
 		}
-		return listMapping(b, item), true
-	}
-	if _, ok := node.Variety().(xsd.Union); ok {
-		members := node.Members()
-		if !unionGoverned(b, members) {
-			return Mapping{}, false
+		governed, err := listGoverned(b, r, item)
+		if err != nil || !governed {
+			return Mapping{}, false, err
 		}
-		return unionMapping(b, members), true
+		return listMapping(b, r, item), true, nil
 	}
-	if s, ok := governingNode(b, node); ok {
-		return b.Mapping(s.Name())
+	if _, ok := variety.(xsd.Union); ok {
+		members, err := node.Members(r)
+		if err != nil {
+			return Mapping{}, false, err
+		}
+		governed, err := unionGoverned(b, r, members)
+		if err != nil || !governed {
+			return Mapping{}, false, err
+		}
+		return unionMapping(b, r, members), true, nil
 	}
-	return Mapping{}, false
+	s, ok, err := governingNode(b, r, node)
+	if err != nil || !ok {
+		return Mapping{}, false, err
+	}
+	m, ok := b.Mapping(s.Name())
+	return m, ok, nil
 }
 
 // governingNode walks from node (inclusive) up the base chain and returns the
@@ -470,13 +506,18 @@ func governingMapping(b Backend, node *xsd.SimpleType) (Mapping, bool) {
 // (valuespace.go) for the node's identity. It applies NO {variety} test: each
 // caller states its own (see governingMapping for why one test on node settles
 // the whole chain).
-func governingNode(b Backend, node *xsd.SimpleType) (*xsd.SimpleType, bool) {
-	for s := node; s != nil; s = s.Base() {
+func governingNode(b Backend, r xsd.TypeResolver, node *xsd.SimpleType) (*xsd.SimpleType, bool, error) {
+	for s := node; s != nil; {
 		if _, ok := b.Mapping(s.Name()); ok {
-			return s, true
+			return s, true, nil
 		}
+		next, err := s.Base(r)
+		if err != nil {
+			return nil, false, err
+		}
+		s = next
 	}
-	return nil, false
+	return nil, false, nil
 }
 
 // declaringFacetSpace resolves the two things a Constraining Facet's raw {value}
@@ -514,18 +555,30 @@ func governingNode(b Backend, node *xsd.SimpleType) (*xsd.SimpleType, bool) {
 // normalization stage consumes without consulting Declaring(). A caller that
 // nonetheless passed the zero QName would match the nearest anonymous node from
 // leaf upward, which is the same nearest-declaration rule a named match gets.
-func declaringFacetSpace(b Backend, leaf *xsd.SimpleType, declaring xsd.QName) (m Mapping, ws whiteSpace, ok bool) {
-	for s := leaf; s != nil; s = s.Base() {
+func declaringFacetSpace(b Backend, r xsd.TypeResolver, leaf *xsd.SimpleType, declaring xsd.QName) (m Mapping, ws whiteSpace, ok bool, err error) {
+	for s := leaf; s != nil; {
+		base, err := s.Base(r)
+		if err != nil {
+			return Mapping{}, 0, false, err
+		}
 		if s.Name() != declaring {
+			s = base
 			continue
 		}
-		m, ok := governingMapping(b, s)
-		if !ok {
-			return Mapping{}, 0, false
+		m, ok, err := governingMapping(b, r, s)
+		if err != nil {
+			return Mapping{}, 0, false, err
 		}
-		return m, whiteSpaceInForce(s.Base()), true
+		if !ok {
+			return Mapping{}, 0, false, nil
+		}
+		ws, err := whiteSpaceInForce(r, base)
+		if err != nil {
+			return Mapping{}, 0, false, err
+		}
+		return m, ws, true, nil
 	}
-	return Mapping{}, 0, false
+	return Mapping{}, 0, false, nil
 }
 
 // facetValue turns a Constraining Facet's RAW {value} attribute string into a
@@ -622,8 +675,11 @@ type enumFacet struct {
 // §4.3.5.3), so the bare cvc-datatype-valid Parse returns is remapped to that
 // construction-time rule — the sibling of src-pattern-value newPatternFacet
 // already uses.
-func newEnumFacet(b Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (enumFacet, error) {
-	m, ws, ok := declaringFacetSpace(b, st, ef.Declaring())
+func newEnumFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.EffectiveFacet) (enumFacet, error) {
+	m, ws, ok, err := declaringFacetSpace(b, r, st, ef.Declaring())
+	if err != nil {
+		return enumFacet{}, err
+	}
 	if !ok {
 		return enumFacet{}, xsderr.New(ruleCvcEnumerationValid, xsderr.Loc{},
 			"enumeration: no backend mapping governs declaring type %s", ef.Declaring())
@@ -747,10 +803,13 @@ type boundFacet struct {
 // newBoundFacet parses the single bound {value} via the declaring type's
 // mapping (widest-space rule), whiteSpace-normalized through its base's mode
 // first (declaringFacetSpace/facetValue), and requires the result to be Ordered.
-func newBoundFacet(b Backend, st *xsd.SimpleType, ef xsd.EffectiveFacet) (boundFacet, error) {
+func newBoundFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.EffectiveFacet) (boundFacet, error) {
 	kind := ef.Facet().Kind()
 	rule := boundRule(kind)
-	m, ws, ok := declaringFacetSpace(b, st, ef.Declaring())
+	m, ws, ok, err := declaringFacetSpace(b, r, st, ef.Declaring())
+	if err != nil {
+		return boundFacet{}, err
+	}
 	if !ok {
 		return boundFacet{}, xsderr.New(rule, xsderr.Loc{},
 			"%s: no backend mapping governs declaring type %s", kind, ef.Declaring())
@@ -898,13 +957,17 @@ type lengthFacet struct {
 // newLengthFacet reads the facet's plain nonNegativeInteger {value} (a count),
 // so no declaring-mapping lookup. It records st's clause-1.3 exemption
 // (QName/NOTATION {primitive type definition}) via lengthExemptPrimitive.
-func newLengthFacet(st *xsd.SimpleType, f xsd.Facet) (lengthFacet, error) {
+func newLengthFacet(r xsd.TypeResolver, st *xsd.SimpleType, f xsd.Facet) (lengthFacet, error) {
 	rule := lengthRule(f.Kind())
 	n, err := facetCount(f, rule)
 	if err != nil {
 		return lengthFacet{}, err
 	}
-	return lengthFacet{limit: n, kind: f.Kind(), exempt: lengthExemptPrimitive(st)}, nil
+	exempt, err := lengthExemptPrimitive(r, st)
+	if err != nil {
+		return lengthFacet{}, err
+	}
+	return lengthFacet{limit: n, kind: f.Kind(), exempt: exempt}, nil
 }
 
 // lengthExemptPrimitive reports whether st's resolved {primitive type
@@ -916,17 +979,24 @@ func newLengthFacet(st *xsd.SimpleType, f xsd.Facet) (lengthFacet, error) {
 // the value's Go type nor a blanket "is atomic" test: clause 1.3 is a case
 // split on the primitive, and the list case (clause 2) carries no such
 // exemption. A non-atomic {variety} (nil / list / union) or an absent primitive
-// (xs:anyAtomicType) is not exempt; this predicate never panics.
-func lengthExemptPrimitive(st *xsd.SimpleType) bool {
-	if _, ok := st.Variety().(xsd.Atomic); !ok {
-		return false
+// (xs:anyAtomicType) is not exempt; this predicate never panics. An unresolvable
+// {base type definition} on the way to either property is returned as an error
+// rather than read as "not exempt", which would apply a length bound the spec
+// exempts and false-reject every QName value under it.
+func lengthExemptPrimitive(r xsd.TypeResolver, st *xsd.SimpleType) (bool, error) {
+	variety, err := st.Variety(r)
+	if err != nil {
+		return false, err
 	}
-	primitive := st.Primitive()
-	if primitive == nil {
-		return false
+	if _, ok := variety.(xsd.Atomic); !ok {
+		return false, nil
+	}
+	primitive, err := st.Primitive(r)
+	if err != nil || primitive == nil {
+		return false, err
 	}
 	name := primitive.Name()
-	return name == qnameName || name == notationName
+	return name == qnameName || name == notationName, nil
 }
 
 // qnameName and notationName are the two {primitive type definition} QNames

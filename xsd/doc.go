@@ -17,7 +17,12 @@
 //   - Immutable after construction. Construction happens in phases
 //     (parse → resolve → finalize) so no traversal ever needs a cycle
 //     check (D4); spec-forbidden circularities are rejected at finalize
-//     with their named src-/cos- rule.
+//     with their named src-/cos- rule. That covers the SIMPLE-type
+//     {base type definition} chain too, now that the slot holds a
+//     deferred reference (SimpleTypeOrRef): st-props-correct clause 2 is
+//     charged by a finalize check like its complex-type twin, and the
+//     unguarded chain walks behind Variety/Primitive/Item/Members/
+//     EffectiveFacets rest on it having run — see Schema.resolve.
 //
 //   - Every child collection is a slice in document order. Maps exist
 //     only as internal lookup indexes and never determine order (D2).
@@ -139,6 +144,15 @@
 // representable (T1). checkSimpleTypeDerivations puts every simple type
 // the assembled schema reaches to it, anonymous inline ones included;
 // builtin.NewRestrictionChecker is the implementation the parser installs.
+//
+// Both capabilities' methods take a TypeResolver and none may store one: a
+// simple type's {base type definition} may be deferred by name, so every
+// question either capability answers means walking a chain only a resolver
+// can follow, and an implementation built once must serve whichever schema
+// finalize hands it. The same pass also puts every simple type to
+// SimpleType.CheckDerivation first — the GRAPH half of cos-st-restricts,
+// which this package owns and which the constructors charged while the
+// base was a live pointer.
 //
 // # Walk API
 //

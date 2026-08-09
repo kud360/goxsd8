@@ -14,7 +14,7 @@ import (
 // the list/union applicable-facet clauses 2.2.2.4 and 3.2.2.4 and the count- and
 // token-valued part of the facet-constraint clauses 1.3.2 / 2.2.2.5 / 3.2.2.5.
 // Its remaining facet-value sub-clauses need an applicability table or a value
-// space and are charged above this pure leaf — see checkSTGraph.
+// space and are charged above this pure leaf — see SimpleType.CheckDerivation.
 const ruleCosSTRestricts xsderr.Rule = "cos-st-restricts"
 
 // The precisionDecimal scale-facet Schema Component Constraints, charged at
@@ -113,16 +113,35 @@ const (
 	ruleFractionDigitsLETotalDigits xsderr.Rule = "fractionDigits-totalDigits"
 )
 
-// checkSTGraph enforces the cross-reference Simple Type Definition constraints
-// that need t's resolved {base type definition}, {item type definition}, and
-// {member type definitions} pointers — the checks checkSTProps (simpletype.go)
-// cannot make at the pure-property layer. NewSimpleType and NewPrimitiveType call
-// it after t.derivation/t.base/t.ownFacets are wired, when those pointers are
-// already live (a simple type references its base/item/members by pointer, set
-// once at construction with no setter). It reads the four derived properties
-// through SimpleType.Variety/Primitive/Item/Members, which resolve them off the
-// declared derivation and the base chain (§3.16.2.1) and are total on the
-// partially-built receiver this runs against.
+// CheckDerivation enforces the cross-reference Simple Type Definition
+// constraints that need t's RESOLVED {base type definition}, {item type
+// definition} and {member type definitions} — the checks checkSTProps
+// (simpletype.go) cannot make at the pure-property layer, because the base slot
+// may be a deferred SimpleTypeRef that only a resolver can follow
+// (simpletyperef.go). It reads the four derived properties through
+// SimpleType.Variety/Primitive/Item/Members, which resolve them off the declared
+// derivation and the base chain (§3.16.2.1) against r.
+//
+// It is EXPORTED because it has two real consumers, and one implementation
+// serving both is what keeps the rule single (STYLE T5/T4):
+//
+//   - finalize. Schema.checkSimpleTypeDerivations (resolve.go) runs it over
+//     every Simple Type Definition an assembled Schema reaches, with the Schema
+//     itself as the resolver. That is where a parsed schema's simple types are
+//     charged.
+//   - a Schema-LESS assembler. A caller that builds a *SimpleType graph
+//     programmatically and never finalizes — builtin.Seed, and the conformance
+//     datatypes lane, which synthesizes types with no Schema anywhere — runs it
+//     itself against a resolver of its own. Before the base deferred, those
+//     callers got these rejections from NewSimpleType; without this entry point
+//     they would get them from nowhere, deciding cases against types the schema
+//     does not define.
+//
+// An unresolvable base is returned VERBATIM as the src-resolve clause 1.1 error
+// SimpleType.Base produces, not folded into one of the clauses below: the
+// clauses each presuppose a base that exists, and charging "no such type" as,
+// say, cos-st-restricts clause 1.1 would name a constraint with nothing to say
+// about it (STYLE E2).
 //
 // It charges, per clause:
 //
@@ -173,16 +192,21 @@ const (
 //     gives for those two varieties.
 //
 // st-props-correct clause 2 (the {base} chain terminates at a primitive or
-// xs:anySimpleType — no circular derivation) is a documented no-op: a cyclic
-// {base} chain is structurally unrepresentable, because NewSimpleType demands a
-// live base pointer that must already exist, so a type cannot appear on its own
-// base chain, and {base} is an unexported field with no setter. cos-st-restricts
-// clause 3.3 (no-self-membership, checkUnionGraph) is retired by the same
-// argument — a union's members must pre-exist the union, so the union cannot be
-// in its own transitive membership. NewSimpleType copies a UnionDerivation's
-// membership in (copyDerivation) while SimpleType.Members copies it out, so no
-// external caller can splice a cycle in through the exported Members field
-// after construction either.
+// xs:anySimpleType — no circular derivation) is NOT charged here, and its
+// verdict is PRESUPPOSED by every unguarded chain walk below. With a deferred
+// {base type definition} a cycle is representable, so the clause is a real check
+// again: Schema.checkSimpleBaseAcyclic charges it in finalize's Phase B, which
+// runs BEFORE the Phase D pass that calls this one (resolve.go, PRINCIPLES 9).
+// A Schema-less caller running this method owes the same guarantee, and gets it
+// for free on an OwnedSimpleType-only chain, where a base must pre-exist the
+// type holding it. cos-st-restricts clause 3.3 (no-self-membership,
+// checkUnionGraph) remains a documented no-op on the ORIGINAL argument, which
+// the deferral does not touch: a union's members are live *SimpleType pointers
+// that must pre-exist the union, so the union cannot be in its own transitive
+// membership. NewSimpleType copies a UnionDerivation's membership in
+// (copyDerivation) while SimpleType.Members copies it out, so no external caller
+// can splice a cycle in through the exported Members field after construction
+// either.
 //
 // Still deferred here, and why:
 //
@@ -202,35 +226,42 @@ const (
 // the anonymous intermediate list a named list datatype restricts (§3.4.5/
 // §3.4.10/§3.4.12); with that node interposed, xs:NMTOKENS/xs:IDREFS/xs:ENTITIES
 // are restrictions of a real list and the clause no longer touches them.
-func checkSTGraph(loc xsderr.Loc, t *SimpleType) error {
-	if err := checkFacetsSupported(loc, t.ownFacets); err != nil {
+func (t *SimpleType) CheckDerivation(r TypeResolver) error {
+	if err := checkFacetsSupported(t.loc, t.ownFacets); err != nil {
 		return err
 	}
-	if t.base != nil && finalContains(t.base.final, DerivationRestriction) {
-		return xsderr.New(ruleSTPropsCorrect, loc,
-			"simple type {base type definition} %s has restriction in its {final}, which blocks derivation (st-props-correct clause 3)", t.base.name)
-	}
-	if err := checkScaleFacets(loc, t); err != nil {
+	base, err := t.Base(r)
+	if err != nil {
 		return err
 	}
-	if err := checkFacetRestrictions(loc, t); err != nil {
+	if base != nil && finalContains(base.final, DerivationRestriction) {
+		return xsderr.New(ruleSTPropsCorrect, t.loc,
+			"simple type {base type definition} %s has restriction in its {final}, which blocks derivation (st-props-correct clause 3)", base.name)
+	}
+	if err := checkScaleFacets(r, t, base); err != nil {
 		return err
 	}
-	if err := checkVarietyApplicableFacets(loc, t); err != nil {
+	if err := checkFacetRestrictions(r, t, base); err != nil {
 		return err
 	}
-	variety := t.Variety()
+	variety, err := t.Variety(r)
+	if err != nil {
+		return err
+	}
+	if err := checkVarietyApplicableFacets(r, t, base, variety); err != nil {
+		return err
+	}
 	if variety == nil && !t.IsAnySimpleType() {
-		return xsderr.New(ruleSTPropsCorrect, loc,
-			"simple type restricting %s has an absent {variety}, which only xs:anySimpleType may have (st-props-correct clause 1)", t.base.name)
+		return xsderr.New(ruleSTPropsCorrect, t.loc,
+			"simple type restricting %s has an absent {variety}, which only xs:anySimpleType may have (st-props-correct clause 1)", base.name)
 	}
 	switch variety.(type) {
 	case Atomic:
-		return checkAtomicGraph(loc, t)
+		return checkAtomicGraph(r, t, base)
 	case List:
-		return checkListGraph(loc, t)
+		return checkListGraph(r, t, base)
 	case Union:
-		return checkUnionGraph(loc, t)
+		return checkUnionGraph(r, t, base)
 	}
 	return nil
 }
@@ -292,9 +323,9 @@ func checkFacetsSupported(loc xsderr.Loc, facets []Facet) error {
 // st-props-correct would be charge-imprecise (STYLE E2).
 //
 // Clause 1.2 (B.{final} does not contain restriction) is discharged by
-// checkSTGraph's clause-3 site (B is D's {base}); clause 1.3.2 is charged in
+// CheckDerivation's clause-3 site (B is D's {base}); clause 1.3.2 is charged in
 // part by checkFacetRestrictions and clause 1.3.1 above this package (see
-// checkSTGraph). The clause-1.1 test reads only t.base's own derived {variety} —
+// CheckDerivation). The clause-1.1 test reads only base's own derived {variety} —
 // never t's {primitive type definition}, which self-references on a primitive
 // datatype (§3.16.1) and so cannot drive a terminating base walk.
 //
@@ -303,26 +334,34 @@ func checkFacetsSupported(loc xsderr.Loc, facets []Facet) error {
 // that {variety} is derived: a RestrictionDerivation reports atomic only when
 // its base already does, and the two arms that mint atomic on their own fix
 // their base (NewPrimitiveType to the anchor) or are the anchor. They are kept
-// rather than deleted because checkSTGraph takes any *SimpleType, including the
-// struct-literal receivers this package builds directly (both anchors are
-// literals), and because the clause-1.1 test below dereferences t.base — the
-// same reason checkFacetsSupported keeps its own expected-unreachable rejection
+// rather than deleted because CheckDerivation runs on any *SimpleType, including
+// the struct-literal receivers this package builds directly (both anchors are
+// literals), and because the clause-1.1 test below dereferences base — the same
+// reason checkFacetsSupported keeps its own expected-unreachable rejection
 // instead of dropping it.
-func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
+//
+// base is t's already-resolved {base type definition}, passed down rather than
+// re-resolved: CheckDerivation resolves it once per type so a by-name base costs
+// one lookup for the whole check (STYLE D3 — the same fact, not a second one).
+func checkAtomicGraph(r TypeResolver, t, base *SimpleType) error {
 	if t == anyAtomicType {
 		return nil
 	}
-	if t.base == nil {
-		return xsderr.New(ruleSTPropsCorrect, loc,
+	if base == nil {
+		return xsderr.New(ruleSTPropsCorrect, t.loc,
 			"atomic simple type has an absent {base type definition} (st-props-correct clause 1)")
 	}
-	if _, ok := t.base.Variety().(Atomic); !ok {
-		return xsderr.New(ruleCosSTRestricts, loc,
-			"atomic simple type {base type definition} %s is not an atomic simple type definition (cos-st-restricts clause 1.1)", t.base.name)
+	baseVariety, err := base.Variety(r)
+	if err != nil {
+		return err
 	}
-	if t.base == anyAtomicType && !t.IsPrimitive() {
-		return xsderr.New(ruleSTPropsCorrect, loc,
-			"atomic simple type may not name %s as its {base type definition} unless it is a primitive datatype: it inherits that type's absent {primitive type definition} (st-restrict-facets clause 2), which the property tableau requires present (st-props-correct clause 1)", t.base.name)
+	if _, ok := baseVariety.(Atomic); !ok {
+		return xsderr.New(ruleCosSTRestricts, t.loc,
+			"atomic simple type {base type definition} %s is not an atomic simple type definition (cos-st-restricts clause 1.1)", base.name)
+	}
+	if base == anyAtomicType && !t.IsPrimitive() {
+		return xsderr.New(ruleSTPropsCorrect, t.loc,
+			"atomic simple type may not name %s as its {base type definition} unless it is a primitive datatype: it inherits that type's absent {primitive type definition} (st-restrict-facets clause 2), which the property tableau requires present (st-props-correct clause 1)", base.name)
 	}
 	return nil
 }
@@ -339,49 +378,72 @@ func checkAtomicGraph(loc xsderr.Loc, t *SimpleType) error {
 //     checkConstructedListFacets.
 //   - restricted (B is a real list): clause 2.2.2.1 — B.{variety} is list; clause
 //     2.2.2.3 — the item is validly derived from B's item (cos-st-derived-ok,
-//     §3.16.6.3). Clause 2.2.2.2 (B.{final}) is discharged by checkSTGraph's
+//     §3.16.6.3). Clause 2.2.2.2 (B.{final}) is discharged by CheckDerivation's
 //     clause-3 site; clause 2.2.2.4 (facet applicability) by
 //     checkVarietyApplicableFacets and clause 2.2.2.5 in part by
-//     checkFacetRestrictions, both from checkSTGraph.
-func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
-	item := t.Item()
+//     checkFacetRestrictions, both from CheckDerivation.
+func checkListGraph(r TypeResolver, t, base *SimpleType) error {
+	item, err := t.Item(r)
+	if err != nil {
+		return err
+	}
 	if item == nil {
-		return xsderr.New(ruleSTPropsCorrect, loc,
+		return xsderr.New(ruleSTPropsCorrect, t.loc,
 			"list simple type has an absent {item type definition} (st-props-correct clause 1)")
 	}
 	if isSpecialType(item) {
-		return xsderr.New(ruleCosSTRestricts, loc,
+		return xsderr.New(ruleCosSTRestricts, t.loc,
 			"list {item type definition} %s is a special type definition (cos-st-restricts clause 2.1)", item.name)
 	}
-	switch item.Variety().(type) {
+	itemVariety, err := item.Variety(r)
+	if err != nil {
+		return err
+	}
+	switch itemVariety.(type) {
 	case Atomic:
 	case Union:
-		if unionMembershipHasList(item) {
-			return xsderr.New(ruleCosSTRestricts, loc,
+		hasList, err := unionMembershipHasList(r, item)
+		if err != nil {
+			return err
+		}
+		if hasList {
+			return xsderr.New(ruleCosSTRestricts, t.loc,
 				"list {item type definition} %s is a union with a list type in its transitive membership (cos-st-restricts clause 2.1)", item.name)
 		}
 	default:
-		return xsderr.New(ruleCosSTRestricts, loc,
+		return xsderr.New(ruleCosSTRestricts, t.loc,
 			"list {item type definition} %s has a {variety} that is neither atomic nor union (cos-st-restricts clause 2.1)", item.name)
 	}
 
-	if t.base == nil {
-		return xsderr.New(ruleSTPropsCorrect, loc,
+	if base == nil {
+		return xsderr.New(ruleSTPropsCorrect, t.loc,
 			"list simple type has an absent {base type definition} (st-props-correct clause 1)")
 	}
-	if t.base == anySimpleType {
+	if base == anySimpleType {
 		if finalContains(item.final, DerivationList) {
-			return xsderr.New(ruleCosSTRestricts, loc,
+			return xsderr.New(ruleCosSTRestricts, t.loc,
 				"list {item type definition} %s has list in its {final}, blocking its use as a list item (cos-st-restricts clause 2.2.1.1)", item.name)
 		}
-		return checkConstructedListFacets(loc, t)
+		return checkConstructedListFacets(t)
 	}
-	if _, ok := t.base.Variety().(List); !ok {
-		return xsderr.New(ruleCosSTRestricts, loc,
-			"list simple type restricts base %s whose {variety} is not list (cos-st-restricts clause 2.2.2.1)", t.base.name)
+	baseVariety, err := base.Variety(r)
+	if err != nil {
+		return err
 	}
-	if !derivedOKSimple(item, t.base.Item()) {
-		return xsderr.New(ruleCosSTRestricts, loc,
+	if _, ok := baseVariety.(List); !ok {
+		return xsderr.New(ruleCosSTRestricts, t.loc,
+			"list simple type restricts base %s whose {variety} is not list (cos-st-restricts clause 2.2.2.1)", base.name)
+	}
+	baseItem, err := base.Item(r)
+	if err != nil {
+		return err
+	}
+	ok, err := derivedOKSimple(r, item, baseItem)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return xsderr.New(ruleCosSTRestricts, t.loc,
 			"list {item type definition} %s is not validly derived from the base list's item type (cos-st-restricts clause 2.2.2.3 via cos-st-derived-ok §3.16.6.3)", item.name)
 	}
 	return nil
@@ -404,25 +466,25 @@ func checkListGraph(loc xsderr.Loc, t *SimpleType) error {
 // map.std.common case 3 manufactures exactly that one-member set for every
 // <list> alternative — which is also why the clause bites only on a
 // programmatically built component, never on one parsed from a schema document.
-func checkConstructedListFacets(loc xsderr.Loc, t *SimpleType) error {
+func checkConstructedListFacets(t *SimpleType) error {
 	for _, f := range t.ownFacets {
 		if f.kind == FacetWhiteSpace {
 			continue
 		}
-		return xsderr.New(ruleCosSTRestricts, loc,
+		return xsderr.New(ruleCosSTRestricts, t.loc,
 			"list simple type constructed directly from xs:anySimpleType carries facet %s, but its {facets} must contain only whiteSpace = collapse with {fixed} = true (cos-st-restricts clause 2.2.1.2)", f.kind)
 	}
 	ws, ok := findFacet(t.ownFacets, FacetWhiteSpace)
 	if !ok {
-		return xsderr.New(ruleCosSTRestricts, loc,
+		return xsderr.New(ruleCosSTRestricts, t.loc,
 			"list simple type constructed directly from xs:anySimpleType has no whiteSpace facet, but its {facets} must contain whiteSpace = collapse with {fixed} = true (cos-st-restricts clause 2.2.1.2)")
 	}
 	if v := ws.Values(); len(v) != 1 || v[0] != "collapse" {
-		return xsderr.New(ruleCosSTRestricts, loc,
+		return xsderr.New(ruleCosSTRestricts, t.loc,
 			"list simple type constructed directly from xs:anySimpleType has whiteSpace %q, but its {facets} must contain whiteSpace = collapse with {fixed} = true (cos-st-restricts clause 2.2.1.2)", v)
 	}
 	if fixed, _ := ws.Fixed(); !fixed {
-		return xsderr.New(ruleCosSTRestricts, loc,
+		return xsderr.New(ruleCosSTRestricts, t.loc,
 			"list simple type constructed directly from xs:anySimpleType has an unfixed whiteSpace facet, but its {facets} must contain whiteSpace = collapse with {fixed} = true (cos-st-restricts clause 2.2.1.2)")
 	}
 	return nil
@@ -443,54 +505,68 @@ func checkConstructedListFacets(loc xsderr.Loc, t *SimpleType) error {
 //   - restricted (B is a real union): clause 3.2.2.1 — B.{variety} is union;
 //     clause 3.2.2.3 — each member is validly derived from the CORRESPONDING
 //     (positional, PRINCIPLES 11) base member (cos-st-derived-ok, §3.16.6.3).
-//     Clause 3.2.2.2 (B.{final}) is discharged by checkSTGraph's clause-3 site;
+//     Clause 3.2.2.2 (B.{final}) is discharged by CheckDerivation's clause-3 site;
 //     clause 3.2.2.4 (facet applicability) by checkVarietyApplicableFacets and
-//     clause 3.2.2.5 in part by checkFacetRestrictions, both from checkSTGraph.
+//     clause 3.2.2.5 in part by checkFacetRestrictions, both from CheckDerivation.
 //
-// Clause 3.3 (no-self-membership) is a documented no-op — see checkSTGraph.
-func checkUnionGraph(loc xsderr.Loc, t *SimpleType) error {
-	members := t.Members()
+// Clause 3.3 (no-self-membership) is a documented no-op — see CheckDerivation.
+func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
+	members, err := t.Members(r)
+	if err != nil {
+		return err
+	}
 	for _, m := range members {
 		if m == nil {
-			return xsderr.New(ruleSTPropsCorrect, loc,
+			return xsderr.New(ruleSTPropsCorrect, t.loc,
 				"union {member type definitions} contains an absent member (st-props-correct clause 1)")
 		}
 		if isSpecialType(m) {
-			return xsderr.New(ruleCosSTRestricts, loc,
+			return xsderr.New(ruleCosSTRestricts, t.loc,
 				"union {member type definitions} contains special type definition %s (cos-st-restricts clause 3.1)", m.name)
 		}
 	}
 
-	if t.base == nil {
-		return xsderr.New(ruleSTPropsCorrect, loc,
+	if base == nil {
+		return xsderr.New(ruleSTPropsCorrect, t.loc,
 			"union simple type has an absent {base type definition} (st-props-correct clause 1)")
 	}
-	if t.base == anySimpleType {
+	if base == anySimpleType {
 		for _, m := range members {
 			if finalContains(m.final, DerivationUnion) {
-				return xsderr.New(ruleCosSTRestricts, loc,
+				return xsderr.New(ruleCosSTRestricts, t.loc,
 					"union member %s has union in its {final}, blocking its use as a union member (cos-st-restricts clause 3.2.1.1)", m.name)
 			}
 		}
 		if len(t.ownFacets) > 0 {
-			return xsderr.New(ruleCosSTRestricts, loc,
+			return xsderr.New(ruleCosSTRestricts, t.loc,
 				"union simple type constructed directly from xs:anySimpleType carries facet %s, but its {facets} must be empty (cos-st-restricts clause 3.2.1.2)", t.ownFacets[0].kind)
 		}
 		return nil
 	}
-	if _, ok := t.base.Variety().(Union); !ok {
-		return xsderr.New(ruleCosSTRestricts, loc,
-			"union simple type restricts base %s whose {variety} is not union (cos-st-restricts clause 3.2.2.1)", t.base.name)
+	baseVariety, err := base.Variety(r)
+	if err != nil {
+		return err
 	}
-	baseMembers := t.base.Members()
+	if _, ok := baseVariety.(Union); !ok {
+		return xsderr.New(ruleCosSTRestricts, t.loc,
+			"union simple type restricts base %s whose {variety} is not union (cos-st-restricts clause 3.2.2.1)", base.name)
+	}
+	baseMembers, err := base.Members(r)
+	if err != nil {
+		return err
+	}
 	if len(members) != len(baseMembers) {
-		return xsderr.New(ruleCosSTRestricts, loc,
+		return xsderr.New(ruleCosSTRestricts, t.loc,
 			"union restriction has %d member type definitions but base union %s has %d (cos-st-restricts clause 3.2.2.3)",
-			len(members), t.base.name, len(baseMembers))
+			len(members), base.name, len(baseMembers))
 	}
 	for i, m := range members {
-		if !derivedOKSimple(m, baseMembers[i]) {
-			return xsderr.New(ruleCosSTRestricts, loc,
+		ok, err := derivedOKSimple(r, m, baseMembers[i])
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return xsderr.New(ruleCosSTRestricts, t.loc,
 				"union member %s is not validly derived from the corresponding base member (cos-st-restricts clause 3.2.2.3 via cos-st-derived-ok §3.16.6.3)", m.name)
 		}
 	}
@@ -512,37 +588,70 @@ func checkUnionGraph(loc xsderr.Loc, t *SimpleType) error {
 // member of b (recursion descends b's transitive membership, checking each
 // intervening union's {facets} emptiness at its own level, clause 2.2.4.3).
 //
-// It walks d's {base} chain and b's members with no visited set: both are finite
-// and acyclic on every graph this package can build, so the recursion terminates
-// (a cyclic {base} chain or membership is structurally unrepresentable — see
-// checkSTGraph).
-func derivedOKSimple(d, b *SimpleType) bool {
+// It walks d's {base} chain and b's members with no visited set (STYLE D4). The
+// membership side is finite and acyclic by construction (a member must pre-exist
+// the union naming it); the base-chain side rests on the acyclicity proof
+// CheckDerivation's doc states — Phase B's checkSimpleBaseAcyclic for a
+// finalized Schema, owned-only chains for a Schema-less caller.
+//
+// r resolves each {base type definition} hop, so an unresolvable one is an
+// ERROR rather than a false "not derived": answering false for a base that
+// merely could not be found would reject a valid restriction.
+func derivedOKSimple(r TypeResolver, d, b *SimpleType) (bool, error) {
 	if d == nil || b == nil {
-		return false
+		return false, nil
 	}
 	if d == b {
-		return true
+		return true, nil
 	}
-	if d.base == b {
-		return true
+	dBase, err := d.Base(r)
+	if err != nil {
+		return false, err
+	}
+	if dBase == b {
+		return true, nil
 	}
 	if b == anySimpleType {
-		switch d.Variety().(type) {
+		dVariety, err := d.Variety(r)
+		if err != nil {
+			return false, err
+		}
+		switch dVariety.(type) {
 		case List, Union:
-			return true
+			return true, nil
 		}
 	}
-	if d.base != nil && derivedOKSimple(d.base, b) {
-		return true
-	}
-	if _, ok := b.Variety().(Union); ok && len(b.EffectiveFacets()) == 0 {
-		for _, m := range b.Members() {
-			if derivedOKSimple(d, m) {
-				return true
-			}
+	if dBase != nil {
+		ok, err := derivedOKSimple(r, dBase, b)
+		if err != nil || ok {
+			return ok, err
 		}
 	}
-	return false
+	bVariety, err := b.Variety(r)
+	if err != nil {
+		return false, err
+	}
+	if _, ok := bVariety.(Union); !ok {
+		return false, nil
+	}
+	bFacets, err := b.EffectiveFacets(r)
+	if err != nil {
+		return false, err
+	}
+	if len(bFacets) != 0 {
+		return false, nil
+	}
+	members, err := b.Members(r)
+	if err != nil {
+		return false, err
+	}
+	for _, m := range members {
+		ok, err := derivedOKSimple(r, d, m)
+		if err != nil || ok {
+			return ok, err
+		}
+	}
+	return false, nil
 }
 
 // isSpecialType reports whether t is one of the two special datatypes,
@@ -566,27 +675,31 @@ func finalContains(final []DerivationMethod, d DerivationMethod) bool {
 // Component Constraints at construction (see the rule constants above). It reads
 // the {facets} property directly through SimpleType.EffectiveFacets (the
 // §3.16.6.4 overlay), so a facet inherited unchanged through several restriction
-// levels is compared transitively with no manual ancestor walk. t.base is nil
-// only for xs:anySimpleType, which carries no facets, so the base-relative SCCs
-// are vacuous there; the minScale ≤ maxScale consistency SCC is not
-// restriction-specific and runs on every type's own effective {facets}.
-func checkScaleFacets(loc xsderr.Loc, t *SimpleType) error {
-	if t.base != nil {
-		baseEff := t.base.EffectiveFacets()
-		if err := checkScaleValueRestriction(loc, t, baseEff, FacetMaxScale, ruleMaxScaleValidRestriction); err != nil {
+// levels is compared transitively with no manual ancestor walk. base — t's
+// already-resolved {base type definition} — is nil only for xs:anySimpleType,
+// which carries no facets, so the base-relative SCCs are vacuous there; the
+// minScale ≤ maxScale consistency SCC is not restriction-specific and runs on
+// every type's own effective {facets}.
+func checkScaleFacets(r TypeResolver, t, base *SimpleType) error {
+	if base != nil {
+		baseEff, err := base.EffectiveFacets(r)
+		if err != nil {
 			return err
 		}
-		if err := checkScaleValueRestriction(loc, t, baseEff, FacetMinScale, ruleMinScaleValidRestriction); err != nil {
+		if err := checkScaleValueRestriction(t.loc, t, baseEff, FacetMaxScale, ruleMaxScaleValidRestriction); err != nil {
 			return err
 		}
-		if err := checkScaleFixed(loc, t, baseEff, FacetMaxScale, ruleMaxScaleFixed); err != nil {
+		if err := checkScaleValueRestriction(t.loc, t, baseEff, FacetMinScale, ruleMinScaleValidRestriction); err != nil {
 			return err
 		}
-		if err := checkScaleFixed(loc, t, baseEff, FacetMinScale, ruleMinScaleFixed); err != nil {
+		if err := checkScaleFixed(t.loc, t, baseEff, FacetMaxScale, ruleMaxScaleFixed); err != nil {
+			return err
+		}
+		if err := checkScaleFixed(t.loc, t, baseEff, FacetMinScale, ruleMinScaleFixed); err != nil {
 			return err
 		}
 	}
-	return checkScaleConsistency(loc, t)
+	return checkScaleConsistency(r, t)
 }
 
 // checkScaleValueRestriction charges maxScale-valid-restriction (§4.2.4) or
@@ -672,8 +785,12 @@ func checkScaleFixed(loc xsderr.Loc, t *SimpleType, baseEff []EffectiveFacet, ki
 // t's OWN effective {facets} after overlay. It rejects when both facets are in
 // force and minScale's {value} exceeds maxScale's. The spec's Note explicitly
 // disclaims any cross-check against totalDigits.
-func checkScaleConsistency(loc xsderr.Loc, t *SimpleType) error {
-	eff := t.EffectiveFacets()
+func checkScaleConsistency(r TypeResolver, t *SimpleType) error {
+	loc := t.loc
+	eff, err := t.EffectiveFacets(r)
+	if err != nil {
+		return err
+	}
 	minF, hasMin := findEffectiveFacet(eff, FacetMinScale)
 	maxF, hasMax := findEffectiveFacet(eff, FacetMaxScale)
 	if !hasMin || !hasMax {
@@ -705,13 +822,17 @@ func checkScaleConsistency(loc xsderr.Loc, t *SimpleType) error {
 // unchanged through several restriction levels is compared transitively with no
 // manual ancestor walk, and it compares t's OWN facets against the base's
 // EFFECTIVE ones: an inherited-only facet equals the base's effective value and
-// cannot cross it. t.base is nil only for xs:anySimpleType, which carries no
-// facets, so the base-relative SCCs are vacuous there; the same-type consistency
-// SCCs are not restriction-specific and run on every type's own effective
-// {facets}.
-func checkFacetRestrictions(loc xsderr.Loc, t *SimpleType) error {
-	if t.base != nil {
-		baseEff := t.base.EffectiveFacets()
+// cannot cross it. base — t's already-resolved {base type definition} — is nil
+// only for xs:anySimpleType, which carries no facets, so the base-relative SCCs
+// are vacuous there; the same-type consistency SCCs are not restriction-specific
+// and run on every type's own effective {facets}.
+func checkFacetRestrictions(r TypeResolver, t, base *SimpleType) error {
+	if base != nil {
+		loc := t.loc
+		baseEff, err := base.EffectiveFacets(r)
+		if err != nil {
+			return err
+		}
 		if err := checkCountRestriction(loc, t, baseEff, FacetLength, ruleLengthValidRestriction); err != nil {
 			return err
 		}
@@ -734,7 +855,7 @@ func checkFacetRestrictions(loc xsderr.Loc, t *SimpleType) error {
 			return err
 		}
 	}
-	return checkFacetConsistency(loc, t)
+	return checkFacetConsistency(r, t)
 }
 
 // checkCountRestriction charges one of the five count-valued "<facet> valid
@@ -899,12 +1020,16 @@ func checkTimezoneRestriction(loc xsderr.Loc, t *SimpleType, baseEff []Effective
 // called here rather than beside the *-valid-restriction checks because it is
 // one half of the same SCC as checkLengthCoexistence, and because it constrains
 // t even when t declares no own facet of either kind.
-func checkFacetConsistency(loc xsderr.Loc, t *SimpleType) error {
-	eff := t.EffectiveFacets()
+func checkFacetConsistency(r TypeResolver, t *SimpleType) error {
+	loc := t.loc
+	eff, err := t.EffectiveFacets(r)
+	if err != nil {
+		return err
+	}
 	if err := checkLengthCoexistence(loc, eff); err != nil {
 		return err
 	}
-	if err := checkLengthDerivationHistory(loc, t, eff); err != nil {
+	if err := checkLengthDerivationHistory(r, t, eff); err != nil {
 		return err
 	}
 	if err := checkCountOrder(loc, eff, FacetMinLength, FacetMaxLength,
@@ -1013,14 +1138,14 @@ func checkLengthCoexistence(loc xsderr.Loc, eff []EffectiveFacet) error {
 // rather than an inert pass-through. Union steps are walked through but can
 // never match: the length family is not applicable to a union, so no union
 // carries the facet the clause asks for.
-func checkLengthDerivationHistory(loc xsderr.Loc, t *SimpleType, eff []EffectiveFacet) error {
+func checkLengthDerivationHistory(r TypeResolver, t *SimpleType, eff []EffectiveFacet) error {
 	if _, ok := findEffectiveFacet(eff, FacetLength); !ok {
 		return nil
 	}
-	if err := checkLengthFreeStep(loc, t, eff, FacetMinLength, ruleMinLengthValidRestriction, "1.2"); err != nil {
+	if err := checkLengthFreeStep(r, t, eff, FacetMinLength, ruleMinLengthValidRestriction, "1.2"); err != nil {
 		return err
 	}
-	return checkLengthFreeStep(loc, t, eff, FacetMaxLength, ruleMaxLengthValidRestriction, "2.2")
+	return checkLengthFreeStep(r, t, eff, FacetMaxLength, ruleMaxLengthValidRestriction, "2.2")
 }
 
 // checkLengthFreeStep runs one side of checkLengthDerivationHistory: kind is
@@ -1052,8 +1177,8 @@ func checkLengthDerivationHistory(loc xsderr.Loc, t *SimpleType, eff []Effective
 //     specify it.
 //
 // t itself is a candidate step for the same reason. No cycle guard is needed or
-// wanted (STYLE D4): {base} is unexported and demanded live at construction, so
-// the chain is acyclic by construction.
+// wanted (STYLE D4): the chain's acyclicity is the proof CheckDerivation's doc
+// states, established by Phase B before this runs.
 //
 // GAP(xsd): the two readings above make this check REJECT LESS than the
 // strictest reading of clauses 1.2/2.2 — one that admits only STRICT ancestors
@@ -1071,18 +1196,18 @@ func checkLengthDerivationHistory(loc xsderr.Loc, t *SimpleType, eff []Effective
 // The withheld rejection is an UNDER-rejection for every consumer of this
 // error, so no valid schema can be false-rejected by it. The error returned here
 // reaches exactly one place — checkFacetConsistency -> checkFacetRestrictions ->
-// checkSTGraph — and a non-nil checkSTGraph return is the only thing any caller
-// ever sees of it. Its readers are the two constructors NewSimpleType and
-// NewPrimitiveType, which return it verbatim; through them,
-// parser.producer.constructSimpleType (which returns it as the schema document's
-// rejection), builtin.Seed's build closure and builtin.interposeListBase (which
-// fail Seed with it), and any library caller of those two exported
-// constructors; and downstream conformance.execSchemaCase, which scores a nil
-// error as "observed valid". Every one of them reads a WITHHELD error as a
-// schema ACCEPTED that a stricter processor rejects; not one of them treats a
-// missing error as grounds to reject anything, so the gap cannot turn into a
-// false reject at any of them.
-func checkLengthFreeStep(loc xsderr.Loc, t *SimpleType, eff []EffectiveFacet, kind FacetKind, valueRule xsderr.Rule, clause string) error {
+// CheckDerivation — and a non-nil CheckDerivation return is the only thing any
+// caller ever sees of it. Its readers are Schema.checkSimpleTypeDerivations,
+// which returns it as the finalized schema's rejection (and through it
+// parser.Produce and parser.Parse); builtin.Seed's build closure and
+// builtin.interposeListBase, which fail Seed with it; the Schema-less
+// conformance datatypes lane, which turns it into an ok=false decline; and any
+// library caller of the exported CheckDerivation. Every one of them reads a
+// WITHHELD error as a schema ACCEPTED that a stricter processor rejects; not one
+// of them treats a missing error as grounds to reject anything, so the gap
+// cannot turn into a false reject at any of them.
+func checkLengthFreeStep(r TypeResolver, t *SimpleType, eff []EffectiveFacet, kind FacetKind, valueRule xsderr.Rule, clause string) error {
+	loc := t.loc
 	inForce, ok := findEffectiveFacet(eff, kind)
 	if !ok {
 		return nil
@@ -1091,8 +1216,12 @@ func checkLengthFreeStep(loc xsderr.Loc, t *SimpleType, eff []EffectiveFacet, ki
 	if err != nil {
 		return err
 	}
-	for s := t; s != nil; s = s.base {
-		stepF, has := findEffectiveFacet(s.EffectiveFacets(), kind)
+	for s := t; s != nil; {
+		stepEff, err := s.EffectiveFacets(r)
+		if err != nil {
+			return err
+		}
+		stepF, has := findEffectiveFacet(stepEff, kind)
 		if !has {
 			break
 		}
@@ -1106,6 +1235,11 @@ func checkLengthFreeStep(loc xsderr.Loc, t *SimpleType, eff []EffectiveFacet, ki
 		if _, specified := findFacet(s.ownFacets, FacetLength); !specified {
 			return nil
 		}
+		next, err := s.Base(r)
+		if err != nil {
+			return err
+		}
+		s = next
 	}
 	return xsderr.New(ruleLengthMinLengthMaxLength, loc,
 		"simple type {facets} has length alongside %s {value} %d, but every derivation step at which %s held that {value} also specified length (%s clause %s)",
@@ -1127,7 +1261,7 @@ func checkLengthFreeStep(loc xsderr.Loc, t *SimpleType, eff []EffectiveFacet, ki
 //     freshly-constructed list the clause that covers {facets}, 2.2.1.2, is
 //     itself CHARGED — in checkListGraph, by checkConstructedListFacets, whose
 //     closed-set test is strictly stronger than this one. This site is not
-//     redundant with it: checkSTGraph runs checkVarietyApplicableFacets before
+//     redundant with it: CheckDerivation runs checkVarietyApplicableFacets before
 //     checkListGraph, so a facet that is inapplicable to a list at all is
 //     rejected here, reported as an applicability violation rather than as a
 //     closed-set shape violation. On that path the rejection is likewise
@@ -1146,29 +1280,35 @@ func checkLengthFreeStep(loc xsderr.Loc, t *SimpleType, eff []EffectiveFacet, ki
 // from the generated per-primitive table, which lives above this leaf, so it is
 // charged at finalize by the installed SimpleTypeRestrictionChecker
 // (restrictionchecker.go) instead of at construction.
-func checkVarietyApplicableFacets(loc xsderr.Loc, t *SimpleType) error {
-	switch t.Variety().(type) {
+func checkVarietyApplicableFacets(r TypeResolver, t, base *SimpleType, variety Variety) error {
+	switch variety.(type) {
 	case List:
-		return checkApplicableFacetSet(loc, t, "list", listApplicableFacet)
+		return checkApplicableFacetSet(r, t, base, "list", listApplicableFacet)
 	case Union:
-		if t.base == anySimpleType {
+		if base == anySimpleType {
 			return nil
 		}
-		return checkApplicableFacetSet(loc, t, "union", unionApplicableFacet)
+		return checkApplicableFacetSet(r, t, base, "union", unionApplicableFacet)
 	}
 	return nil
 }
 
 // checkApplicableFacetSet rejects the FIRST facet of t's {facets}, in the
 // document order EffectiveFacets yields (STYLE D2), that applicable rejects.
-func checkApplicableFacetSet(loc xsderr.Loc, t *SimpleType, variety string, applicable func(FacetKind) bool) error {
-	for _, ef := range t.EffectiveFacets() {
+// variety is the label naming t's own {variety} in the message; base is t's
+// already-resolved {base type definition}, which applicableClause needs.
+func checkApplicableFacetSet(r TypeResolver, t, base *SimpleType, variety string, applicable func(FacetKind) bool) error {
+	eff, err := t.EffectiveFacets(r)
+	if err != nil {
+		return err
+	}
+	for _, ef := range eff {
 		if applicable(ef.facet.kind) {
 			continue
 		}
-		return xsderr.New(ruleCosSTRestricts, loc,
+		return xsderr.New(ruleCosSTRestricts, t.loc,
 			"simple type {facets} carries %s, which is not applicable to a %s simple type definition (cos-st-restricts clause %s via cos-applicable-facets §4.1.5)",
-			ef.facet.kind, variety, applicableClause(t))
+			ef.facet.kind, variety, applicableClause(variety, base))
 	}
 	return nil
 }
@@ -1182,11 +1322,16 @@ func checkApplicableFacetSet(loc xsderr.Loc, t *SimpleType, variety string, appl
 // union path only ever reaches here in its restricted branch
 // (checkVarietyApplicableFacets returns early for a constructed union, whose
 // clause 3.2.1.2 checkUnionGraph charges), so union is always 3.2.2.4.
-func applicableClause(t *SimpleType) string {
-	if _, isList := t.Variety().(List); !isList {
+//
+// It takes the variety LABEL and the already-resolved base its one caller
+// already holds, rather than re-deriving both from t: re-resolving would repeat
+// a lookup for no new fact (STYLE D3), and it keeps this message helper
+// infallible.
+func applicableClause(variety string, base *SimpleType) string {
+	if variety != "list" {
 		return "3.2.2.4"
 	}
-	if t.base == anySimpleType {
+	if base == anySimpleType {
 		return "2.2.1.2"
 	}
 	return "2.2.2.4"
@@ -1303,22 +1448,35 @@ func scaleValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (int, error) {
 // UnionDerivation's membership in (copyDerivation) and SimpleType.Members copies
 // it out, a mutation-induced cycle is structurally unrepresentable, not merely
 // unconstructed.
-func unionMembershipHasList(u *SimpleType) bool {
-	if _, ok := u.Variety().(Union); !ok {
-		return false
+func unionMembershipHasList(r TypeResolver, u *SimpleType) (bool, error) {
+	uVariety, err := u.Variety(r)
+	if err != nil {
+		return false, err
 	}
-	for _, m := range u.Members() {
+	if _, ok := uVariety.(Union); !ok {
+		return false, nil
+	}
+	members, err := u.Members(r)
+	if err != nil {
+		return false, err
+	}
+	for _, m := range members {
 		if m == nil {
 			continue
 		}
-		switch m.Variety().(type) {
+		mVariety, err := m.Variety(r)
+		if err != nil {
+			return false, err
+		}
+		switch mVariety.(type) {
 		case List:
-			return true
+			return true, nil
 		case Union:
-			if unionMembershipHasList(m) {
-				return true
+			has, err := unionMembershipHasList(r, m)
+			if err != nil || has {
+				return has, err
 			}
 		}
 	}
-	return false
+	return false, nil
 }
