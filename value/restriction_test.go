@@ -70,12 +70,12 @@ func restrictionBase(t *testing.T, ownFacets ...xsd.Facet) (*xsd.SimpleType, Bac
 // CheckFacetRestriction over it.
 func restrict(t *testing.T, b Backend, base *xsd.SimpleType, ownFacets ...xsd.Facet) error {
 	t.Helper()
-	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
+	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
 		xsd.RestrictionDerivation{}, base, ownFacets, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	return CheckFacetRestriction(b, st)
+	return CheckFacetRestriction(b, noSchema{}, st)
 }
 
 func bound(kind xsd.FacetKind, v string) xsd.Facet {
@@ -238,7 +238,7 @@ func TestCheckFacetRestrictionNoBackendMappingFailsOpen(t *testing.T) {
 // a nil dereference.
 func TestCheckFacetRestrictionAnySimpleType(t *testing.T) {
 	b := intBackend{mapped: xsd.QName{Space: xsd.XMLSchemaNS, Local: "int"}}
-	if err := CheckFacetRestriction(b, xsd.AnySimpleType()); err != nil {
+	if err := CheckFacetRestriction(b, noSchema{}, xsd.AnySimpleType()); err != nil {
 		t.Fatalf("CheckFacetRestriction(anySimpleType) = %v, want nil", err)
 	}
 }
@@ -265,10 +265,10 @@ func TestBoundRestrictionViolatesIncomparable(t *testing.T) {
 // (xs:anyAtomicType), and a {value} outside the §4.3.6.1 domain. Each answers the
 // zero mode, which facetValue reads as "parse the lexical unchanged".
 func TestWhiteSpaceInForceNoUsableMode(t *testing.T) {
-	if got := whiteSpaceInForce(nil); got != 0 {
+	if got, err := whiteSpaceInForce(noSchema{}, nil); err != nil || got != 0 {
 		t.Errorf("whiteSpaceInForce(nil) = %d, want zero mode 0", got)
 	}
-	if got := whiteSpaceInForce(xsd.AnyAtomicType()); got != 0 {
+	if got, err := whiteSpaceInForce(noSchema{}, xsd.AnyAtomicType()); err != nil || got != 0 {
 		t.Errorf("whiteSpaceInForce(anyAtomicType) = %d, want zero mode 0", got)
 	}
 
@@ -277,7 +277,7 @@ func TestWhiteSpaceInForceNoUsableMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build bogus primitive: %v", err)
 	}
-	if got := whiteSpaceInForce(bogus); got != 0 {
+	if got, err := whiteSpaceInForce(noSchema{}, bogus); err != nil || got != 0 {
 		t.Errorf("whiteSpaceInForce(out-of-domain {value}) = %d, want zero mode 0", got)
 	}
 
@@ -286,7 +286,7 @@ func TestWhiteSpaceInForceNoUsableMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build fine primitive: %v", err)
 	}
-	if got := whiteSpaceInForce(ok); got != collapseWS {
+	if got, err := whiteSpaceInForce(noSchema{}, ok); err != nil || got != collapseWS {
 		t.Errorf("whiteSpaceInForce = %d, want collapse %d", got, collapseWS)
 	}
 }
@@ -329,14 +329,14 @@ func wsPrimitive(t *testing.T, mode string) (*xsd.SimpleType, Backend) {
 // value — the shape this test would report before the fix.
 func TestFacetValueNormalizedAtConstruction(t *testing.T) {
 	base, b := wsPrimitive(t, "collapse")
-	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
+	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
 		xsd.RestrictionDerivation{}, base,
 		[]xsd.Facet{bound(xsd.FacetMaxInclusive, " 9 "), enumOf("\t7\n", "  8  ")}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
 
-	v, err := ValidateLexical(b, st, " 7 ", nil)
+	v, err := ValidateLexical(b, noSchema{}, st, " 7 ", nil)
 	if err != nil {
 		t.Fatalf("ValidateLexical(\" 7 \") = %v, want the enumeration member 7 to match", err)
 	}
@@ -346,7 +346,7 @@ func TestFacetValueNormalizedAtConstruction(t *testing.T) {
 
 	// The bound really is 9, not an unparsed string: 8 is enumerated and under
 	// the bound, so only the enumeration can reject it, and it does not.
-	if _, err := ValidateLexical(b, st, "8", nil); err != nil {
+	if _, err := ValidateLexical(b, noSchema{}, st, "8", nil); err != nil {
 		t.Errorf("ValidateLexical(\"8\") = %v, want valid under maxInclusive \" 9 \"", err)
 	}
 
@@ -365,12 +365,12 @@ func TestFacetValueNormalizedAtConstruction(t *testing.T) {
 // the normalization is genuinely mode-driven.
 func TestFacetValueNotNormalizedUnderPreserve(t *testing.T) {
 	base, b := wsPrimitive(t, "preserve")
-	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
+	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
 		xsd.RestrictionDerivation{}, base, []xsd.Facet{bound(xsd.FacetMaxInclusive, " 9 ")}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	if _, err := ValidateLexical(b, st, "7", nil); err == nil {
+	if _, err := ValidateLexical(b, noSchema{}, st, "7", nil); err == nil {
 		t.Error("ValidateLexical under a preserve base with maxInclusive \" 9 \" = nil error, want the padded facet {value} to be rejected")
 	}
 }
@@ -407,12 +407,12 @@ func TestEnumerationRestrictionSkipsFacetPreconditionFault(t *testing.T) {
 	enum := xsd.NewEnumerationFacet([]xsd.EnumerationMember{
 		xsd.NewEnumerationMember("ab", nil, nil),
 	})
-	derived, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
+	derived, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "derived"},
 		xsd.RestrictionDerivation{}, base, []xsd.Facet{enum}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}
-	if err := CheckFacetRestriction(b, derived); err != nil {
+	if err := CheckFacetRestriction(b, noSchema{}, derived); err != nil {
 		t.Fatalf("CheckFacetRestriction over a base with an inapplicable facet = %v, want nil (skip, not re-charge)", err)
 	}
 

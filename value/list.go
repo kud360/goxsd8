@@ -81,7 +81,7 @@ var (
 // Canonical is deliberately nil: no current cohort needs a canonical list form,
 // and per the Mapping doc a nil Canonical means "this whole type has no
 // canonical form", which callers must treat as such rather than an error.
-func listMapping(b Backend, item *xsd.SimpleType) Mapping {
+func listMapping(b Backend, r xsd.TypeResolver, item *xsd.SimpleType) Mapping {
 	return Mapping{
 		Parse: func(lexical string, ctx Context) (Value, error) {
 			// This split is the only point at which the ITEM type's whiteSpace mode
@@ -113,7 +113,7 @@ func listMapping(b Backend, item *xsd.SimpleType) Mapping {
 			tokens := strings.Fields(lexical)
 			items := make([]Value, 0, len(tokens))
 			for _, tok := range tokens {
-				v, _, err := validateLexical(b, item, tok, ctx)
+				v, _, err := validateLexical(b, r, item, tok, ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -146,9 +146,9 @@ func listMapping(b Backend, item *xsd.SimpleType) Mapping {
 // constraint on {member type definitions}, so a union nests arbitrarily deep. This
 // predicate RELIES ON the list invariant rather than enforcing it — nothing here
 // re-checks the item type's {variety}.
-func listGoverned(b Backend, item *xsd.SimpleType) bool {
-	_, ok := governingMapping(b, item)
-	return ok
+func listGoverned(b Backend, r xsd.TypeResolver, item *xsd.SimpleType) (bool, error) {
+	_, ok, err := governingMapping(b, r, item)
+	return ok, err
 }
 
 // listValue is a list-variety value: the ordered sequence of item values

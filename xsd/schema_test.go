@@ -16,9 +16,9 @@ import (
 // itself. An absent name yields the anonymous case these tests also need.
 func simpleTypeNamed(t *testing.T, name xsd.QName) *xsd.SimpleType {
 	t.Helper()
-	st, err := xsd.NewPrimitiveType(xsderr.Loc{}, name, nil, nil)
+	st, err := newCheckedPrimitiveType(xsderr.Loc{}, name, nil, nil)
 	if err != nil {
-		t.Fatalf("NewPrimitiveType(%v): %v", name, err)
+		t.Fatalf("newCheckedPrimitiveType(%v): %v", name, err)
 	}
 	return st
 }
@@ -309,7 +309,7 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 
 	primitiveAt := func(t *testing.T, loc xsderr.Loc) *xsd.SimpleType {
 		t.Helper()
-		st, err := xsd.NewPrimitiveType(loc, name, nil, nil)
+		st, err := newCheckedPrimitiveType(loc, name, nil, nil)
 		if err != nil {
 			t.Fatalf("NewPrimitiveType: %v", err)
 		}
@@ -336,7 +336,7 @@ func TestTopLevelComponentsRetainLoc(t *testing.T) {
 		}},
 		{"SimpleType", func(t *testing.T, l xsderr.Loc) xsderr.Loc {
 			base := primitiveAt(t, xsderr.Loc{})
-			st, err := xsd.NewSimpleType(l, name, xsd.RestrictionDerivation{}, base, nil, nil)
+			st, err := newCheckedSimpleType(l, name, xsd.RestrictionDerivation{}, base, nil, nil)
 			if err != nil {
 				t.Fatalf("NewSimpleType: %v", err)
 			}
@@ -400,7 +400,7 @@ func TestTypeDefinitionSumPromotesLoc(t *testing.T) {
 	stLoc := xsderr.Loc{URI: "s.xsd", Line: 2, Col: 1}
 	ctLoc := xsderr.Loc{URI: "s.xsd", Line: 7, Col: 1}
 	base := simpleTypeNamed(t, xsd.QName{Space: "urn:ns", Local: "prim"})
-	st, err := xsd.NewSimpleType(stLoc, xsd.QName{Space: "urn:ns", Local: "st"}, xsd.RestrictionDerivation{}, base, nil, nil)
+	st, err := newCheckedSimpleType(stLoc, xsd.QName{Space: "urn:ns", Local: "st"}, xsd.RestrictionDerivation{}, base, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType: %v", err)
 	}

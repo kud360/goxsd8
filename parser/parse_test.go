@@ -240,15 +240,15 @@ func TestParseSimpleTypeBaseBuiltUnderItsOwnProducer(t *testing.T) {
 				t.Fatalf("Parse: %v", err)
 			}
 			base := assembledSimpleType(t, s, xsd.QName{Space: "urn:x", Local: "Base"})
-			if got := base.Base().Name(); got != (xsd.QName{Space: "urn:x", Local: "Root"}) {
+			if got := mustBase(t, s, base).Name(); got != (xsd.QName{Space: "urn:x", Local: "Root"}) {
 				t.Fatalf("{urn:x}Base's {base type definition} = %s, want {urn:x}Root — the base= was resolved under the wrong document", got)
 			}
 			// Component identity (xsd/typedefinition.go): whichever producer asked
 			// for the build, the assembly holds ONE component per name.
-			if root := assembledSimpleType(t, s, xsd.QName{Space: "urn:x", Local: "Root"}); base.Base() != root {
+			if root := assembledSimpleType(t, s, xsd.QName{Space: "urn:x", Local: "Root"}); mustBase(t, s, base) != root {
 				t.Errorf("{urn:x}Base's base is a rebuilt twin, not {type definitions}' own {urn:x}Root")
 			}
-			if d := assembledSimpleType(t, s, xsd.QName{Space: "urn:x", Local: "D"}); d.Base() != base {
+			if d := assembledSimpleType(t, s, xsd.QName{Space: "urn:x", Local: "D"}); mustBase(t, s, d) != base {
 				t.Errorf("{urn:x}D's base is a rebuilt twin, not {type definitions}' own {urn:x}Base")
 			}
 		})

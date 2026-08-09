@@ -61,15 +61,27 @@ var allowedCollisionCitations = []citationAllowance{
 	{file: "xsd/complexderivation.go", number: 9, count: 1},
 	{file: "xsd/complexextension.go", number: 9, count: 1},
 	{file: "xsd/contentrestricts.go", number: 9, count: 3},
+	// #636: CheckDerivation's termination note, which records that its
+	// unguarded base-chain walks presuppose the acyclicity proof Phase B
+	// establishes — item 9's "then no traversal ever needs a `seen` set", read
+	// as the obligation it places on a traversal rather than as a licence.
+	{file: "xsd/derivation.go", number: 9, count: 1},
 	{file: "xsd/effectivetotalrange.go", number: 9, count: 1},
 	{file: "xsd/example_test.go", number: 9, count: 1},
 	{file: "xsd/modelgroup.go", number: 9, count: 1},
-	// Two of these six are #629's checkSimpleTypeDerivations, reviewed against
-	// the topic each argues: "detect those once, at finalize" for consolidating
-	// the cos-st-restricts facet-value charge into a finalize pass, and "then no
-	// traversal ever needs a seen set" for that pass walking the simple-type
-	// graph with no visited map. Neither is PRINCIPLES 5.
-	{file: "xsd/resolve.go", number: 9, count: 6},
+	// Reviewed against the topic each argues, and every one is item 9's FIRST
+	// half — "Parse raw, resolve names, finalize in dependency order — then no
+	// traversal ever needs a `seen` set" — not PRINCIPLES 5. Two are #629's
+	// checkSimpleTypeDerivations (consolidating the cos-st-restricts
+	// facet-value charge into a finalize pass, and walking the simple-type
+	// graph with no visited map). Three more are #636's: the phase narration's
+	// statement that the unguarded chain walks in derivation.go rest on Phase
+	// B, checkSimpleBaseAcyclic's own record that a cycle used to be
+	// unconstructible, and resolveSimpleType's owned-only descent. The second
+	// half of item 9 — "Where the spec permits reference cycles it also names
+	// the rule that forbids the harmful ones; detect those once, at finalize"
+	// — is what the three colour-map guards cite.
+	{file: "xsd/resolve.go", number: 9, count: 9},
 	{file: "xsd/simpletype.go", number: 9, count: 1},
 	{file: "xsd/substitutiongroup.go", number: 9, count: 1},
 	{file: "xsd/substitutiongrouptypes.go", number: 9, count: 1},

@@ -39,17 +39,17 @@ type stubValueSpace struct {
 	defaultCalls     int
 }
 
-func (s *stubValueSpace) Identical(*SimpleType, ValueConstraint, *SimpleType, ValueConstraint) (bool, bool) {
+func (s *stubValueSpace) Identical(TypeResolver, *SimpleType, ValueConstraint, *SimpleType, ValueConstraint) (bool, bool) {
 	s.calls++
 	return s.same, s.decided
 }
 
-func (s *stubValueSpace) EqualOrIdentical(*SimpleType, ValueConstraint, *SimpleType, ValueConstraint) (bool, bool) {
+func (s *stubValueSpace) EqualOrIdentical(TypeResolver, *SimpleType, ValueConstraint, *SimpleType, ValueConstraint) (bool, bool) {
 	s.calls++
 	return s.same, s.decided
 }
 
-func (s *stubValueSpace) ValidDefault(_ *SimpleType, vc ValueConstraint) (bool, bool) {
+func (s *stubValueSpace) ValidDefault(_ TypeResolver, _ *SimpleType, vc ValueConstraint) (bool, bool) {
 	s.defaultCalls++
 	if s.undecidedDefault {
 		return false, false

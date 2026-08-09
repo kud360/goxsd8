@@ -39,14 +39,14 @@ func TestInterposeListBase(t *testing.T) {
 		if got.Name() != (xsd.QName{}) {
 			t.Errorf("interposed list {name} = %v, want absent", got.Name())
 		}
-		if got.Base() != xsd.AnySimpleType() {
-			t.Errorf("interposed list {base type definition} = %v, want xs:anySimpleType", got.Base())
+		if base, err := got.Base(noSchema{}); err != nil || base != xsd.AnySimpleType() {
+			t.Errorf("interposed list {base type definition} is not xs:anySimpleType")
 		}
 		// The ListDerivation — and with it the {item type definition} — is minted
 		// ONCE, on the interposed node; the named row restricts it and re-derives
 		// the item from the base rather than carrying a second copy (STYLE D3).
-		if got.Item() != item {
-			t.Errorf("interposed list {item type definition} = %v, want the item primitive", got.Item())
+		if gotItem, err := got.Item(noSchema{}); err != nil || gotItem != item {
+			t.Errorf("interposed list {item type definition} is not the item primitive")
 		}
 		if derivation != (xsd.SimpleTypeDerivation)(xsd.RestrictionDerivation{}) {
 			t.Errorf("named list row derivation = %#v, want xsd.RestrictionDerivation{}", derivation)

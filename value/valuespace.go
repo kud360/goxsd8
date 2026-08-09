@@ -55,8 +55,8 @@ type valueSpace struct{ b Backend }
 
 // Identical is Datatypes §2.2.1's identity relation, which au-props-correct
 // clause 3 compares two {value}s under.
-func (vs valueSpace) Identical(ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint) (bool, bool) {
-	av, bv, ok := vs.values(ta, a, tb, b)
+func (vs valueSpace) Identical(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint) (bool, bool) {
+	av, bv, ok := vs.values(r, ta, a, tb, b)
 	if !ok {
 		return false, false
 	}
@@ -65,8 +65,8 @@ func (vs valueSpace) Identical(ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xs
 
 // EqualOrIdentical is the §2.2.1/§2.2.2 equal-or-identical union, which
 // loc-testSubP clauses 4.2 and 5.2.2 compare two {value}s under.
-func (vs valueSpace) EqualOrIdentical(ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint) (bool, bool) {
-	av, bv, ok := vs.values(ta, a, tb, b)
+func (vs valueSpace) EqualOrIdentical(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint) (bool, bool) {
+	av, bv, ok := vs.values(r, ta, a, tb, b)
 	if !ok {
 		return false, false
 	}
@@ -137,17 +137,29 @@ func (vs valueSpace) EqualOrIdentical(ta *xsd.SimpleType, a xsd.ValueConstraint,
 //
 // nil is passed as the [Context] for the same reason values does: gate 1 has
 // already excluded every context-dependent literal.
-func (vs valueSpace) ValidDefault(t *xsd.SimpleType, vc xsd.ValueConstraint) (bool, bool) {
-	if needsContext(t) {
+//
+// An UNRESOLVABLE {base type definition} in t's own chain — the src-resolve
+// error r's readers produce — is undecided, not a verdict: gates 1-3 each walk
+// that chain and each answers undecided on the error, which is the right
+// polarity, since the fault says t could not be READ and says nothing about
+// vc.{lexical form}. The residue is a break deeper inside a list's item or a
+// union's member closure than gates 1-3 reach, which would surface from
+// [ValidateLexical] and be read as decided-invalid. It is unreachable for the
+// caller this interface exists for: an xsd.Schema charges src-resolve for
+// every such break in Phase A and again in Phase D's first step, both of which
+// run before Phase E asks this question at all.
+func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.ValueConstraint) (bool, bool) {
+	needs, err := needsContext(r, t)
+	if err != nil || needs {
 		return false, false
 	}
-	if _, ok := governingMapping(vs.b, t); !ok {
+	if _, ok, err := governingMapping(vs.b, r, t); err != nil || !ok {
 		return false, false
 	}
-	if _, _, err := compile(vs.b, t); err != nil {
+	if _, _, err := compile(vs.b, r, t); err != nil {
 		return false, false
 	}
-	if _, err := ValidateLexical(vs.b, t, vc.LexicalForm(), nil); err != nil {
+	if _, err := ValidateLexical(vs.b, r, t, vc.LexicalForm(), nil); err != nil {
 		if IsFacetPrecondition(err) {
 			return false, false // gate 4
 		}
@@ -174,12 +186,16 @@ func (vs valueSpace) ValidDefault(t *xsd.SimpleType, vc xsd.ValueConstraint) (bo
 // reporting "not the same value" for what is really "not a value at all". nil is
 // passed as the [Context] because sharedMapping has already excluded the two
 // context-dependent primitives.
-func (vs valueSpace) values(ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint) (Value, Value, bool) {
-	m, ok := vs.sharedMapping(ta, tb)
+func (vs valueSpace) values(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint) (Value, Value, bool) {
+	m, ok := vs.sharedMapping(r, ta, tb)
 	if !ok {
 		return nil, nil, false
 	}
-	aws, bws := whiteSpaceInForce(ta), whiteSpaceInForce(tb)
+	aws, aerr := whiteSpaceInForce(r, ta)
+	bws, berr := whiteSpaceInForce(r, tb)
+	if aerr != nil || berr != nil {
+		return nil, nil, false // an unresolvable base: undecided, never a verdict
+	}
 	if aws == 0 || bws == 0 {
 		return nil, nil, false
 	}
@@ -232,20 +248,23 @@ func (vs valueSpace) values(ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.S
 // and loc-testSubP clauses 4.2/5.2.2 accept), never a false reject. Closing it
 // needs the value constraint to retain the in-scope bindings of the schema
 // document that wrote it, which is a producer-side change: deferred, follow-up
-// issue to be filed.
-func (vs valueSpace) sharedMapping(ta, tb *xsd.SimpleType) (Mapping, bool) {
-	ga, ok := governingType(vs.b, ta)
-	if !ok {
+// issue to be filed. An unresolvable {base type definition} on either side joins
+// the refused cases: the widest-space walk cannot finish, so there is no shared
+// mapping to name, and refusing is the fail-open answer this whole adapter owes.
+func (vs valueSpace) sharedMapping(r xsd.TypeResolver, ta, tb *xsd.SimpleType) (Mapping, bool) {
+	ga, ok, err := governingType(vs.b, r, ta)
+	if err != nil || !ok {
 		return Mapping{}, false
 	}
-	gb, ok := governingType(vs.b, tb)
-	if !ok {
+	gb, ok, err := governingType(vs.b, r, tb)
+	if err != nil || !ok {
 		return Mapping{}, false
 	}
 	if ga != gb {
 		return Mapping{}, false // incommensurable: two different value spaces
 	}
-	if contextDependent(ga) {
+	dependent, err := contextDependent(r, ga)
+	if err != nil || dependent {
 		return Mapping{}, false // see the GAP(value) above
 	}
 	return vs.b.Mapping(ga.Name())
@@ -262,26 +281,34 @@ func (vs valueSpace) sharedMapping(ta, tb *xsd.SimpleType) (Mapping, bool) {
 //
 // Only the atomic {variety} resolves: see sharedMapping for why list and union
 // are refused.
-func governingType(b Backend, node *xsd.SimpleType) (*xsd.SimpleType, bool) {
-	if _, ok := node.Variety().(xsd.Atomic); !ok {
-		return nil, false
+func governingType(b Backend, r xsd.TypeResolver, node *xsd.SimpleType) (*xsd.SimpleType, bool, error) {
+	variety, err := node.Variety(r)
+	if err != nil {
+		return nil, false, err
 	}
-	return governingNode(b, node)
+	if _, ok := variety.(xsd.Atomic); !ok {
+		return nil, false, nil
+	}
+	return governingNode(b, r, node)
 }
 
 // contextDependent reports whether t's {primitive type definition} is QName or
 // NOTATION — the two primitives whose lexical mapping needs a [Context] (§3.3.18,
 // §3.3.19). An absent {primitive type definition} (xs:anyAtomicType alone,
 // §3.16.1) is not one of them.
-func contextDependent(t *xsd.SimpleType) bool {
-	if _, ok := t.Variety().(xsd.Atomic); !ok {
-		return false
+func contextDependent(r xsd.TypeResolver, t *xsd.SimpleType) (bool, error) {
+	variety, err := t.Variety(r)
+	if err != nil {
+		return false, err
 	}
-	p := t.Primitive()
-	if p == nil {
-		return false
+	if _, ok := variety.(xsd.Atomic); !ok {
+		return false, nil
 	}
-	return p.Name() == qnameName || p.Name() == notationName
+	p, err := t.Primitive(r)
+	if err != nil || p == nil {
+		return false, err
+	}
+	return p.Name() == qnameName || p.Name() == notationName, nil
 }
 
 // needsContext reports whether t's value space is governed, anywhere in its
@@ -299,33 +326,48 @@ func contextDependent(t *xsd.SimpleType) bool {
 // union undecided: dispatch takes the first member that accepts, so a member
 // that could only be decided WITH context could change the verdict.
 //
-// The nil guards on Item() and each member are belt-and-braces over a state the
-// xsd constructors already forbid, NOT a reachable one: NewSimpleType rejects an
-// absent {item type definition} and an absent member under st-props-correct
-// (checkListGraph/checkUnionGraph, xsd/derivation.go), so no *xsd.SimpleType that
-// exists can hold either, and xsd.SimpleType.Item's own doc says as much. They
-// stay because everything below them is nil-hostile too — the recursive
-// Variety() call they gate, and governingMapping on the very next line — so
-// removing them would trade a documented impossibility for a crash rather than
-// for a verdict. No visited set is needed — a SimpleType's item/member graph is
-// a tree, since a ListDerivation and a UnionDerivation are built from
-// already-complete item/member pointers and so cannot reach back to t
-// (PRINCIPLES 9).
-func needsContext(t *xsd.SimpleType) bool {
-	switch t.Variety().(type) {
+// The nil guards on Item and each member are belt-and-braces over a state a
+// checked component cannot be in, NOT a reachable one:
+// xsd.SimpleType.CheckDerivation rejects an absent {item type definition} and an
+// absent member under st-props-correct (checkListGraph/checkUnionGraph,
+// xsd/derivation.go), so no *xsd.SimpleType that has passed it can hold either,
+// and xsd.SimpleType.Item's own doc says as much. They stay because everything
+// below them is nil-hostile too — the recursive Variety() call they gate, and
+// governingMapping on the very next line — so removing them would trade a
+// documented impossibility for a crash rather than for a verdict. No visited set
+// is needed — a SimpleType's item/member graph is a tree, since a ListDerivation
+// and a UnionDerivation are built from already-complete item/member pointers and
+// so cannot reach back to t (PRINCIPLES 9).
+func needsContext(r xsd.TypeResolver, t *xsd.SimpleType) (bool, error) {
+	variety, err := t.Variety(r)
+	if err != nil {
+		return false, err
+	}
+	switch variety.(type) {
 	case xsd.Atomic:
-		return contextDependent(t)
+		return contextDependent(r, t)
 	case xsd.List:
-		item := t.Item()
-		return item != nil && needsContext(item)
+		item, err := t.Item(r)
+		if err != nil || item == nil {
+			return false, err
+		}
+		return needsContext(r, item)
 	case xsd.Union:
-		for _, m := range t.Members() {
-			if m != nil && needsContext(m) {
-				return true
+		members, err := t.Members(r)
+		if err != nil {
+			return false, err
+		}
+		for _, m := range members {
+			if m == nil {
+				continue
+			}
+			needs, err := needsContext(r, m)
+			if err != nil || needs {
+				return needs, err
 			}
 		}
 	}
-	return false
+	return false, nil
 }
 
 // identical reports Datatypes §2.2.1's identity relation over two values, with

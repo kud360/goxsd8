@@ -25,7 +25,7 @@ func vsPrim(t *testing.T, local string) *xsd.SimpleType {
 // values live in base's space, governed by base's mapping.
 func vsDerived(t *testing.T, local string, base *xsd.SimpleType) *xsd.SimpleType {
 	t.Helper()
-	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
+	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
 		xsd.RestrictionDerivation{}, base, nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(%s): %v", local, err)
@@ -62,11 +62,11 @@ func TestValueSpaceDecidesInOneSpace(t *testing.T) {
 		{"an unmappable lexical is undecided, never a mismatch", prim, prim, "zzz", "1", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			same, decided := vs.Identical(tc.ta, vsFixed(tc.a), tc.tb, vsFixed(tc.b))
+			same, decided := vs.Identical(noSchema{}, tc.ta, vsFixed(tc.a), tc.tb, vsFixed(tc.b))
 			if same != tc.wantSame || decided != tc.wantDecided {
 				t.Errorf("Identical = (%t, %t), want (%t, %t)", same, decided, tc.wantSame, tc.wantDecided)
 			}
-			same, decided = vs.EqualOrIdentical(tc.ta, vsFixed(tc.a), tc.tb, vsFixed(tc.b))
+			same, decided = vs.EqualOrIdentical(noSchema{}, tc.ta, vsFixed(tc.a), tc.tb, vsFixed(tc.b))
 			if same != tc.wantSame || decided != tc.wantDecided {
 				t.Errorf("EqualOrIdentical = (%t, %t), want (%t, %t)", same, decided, tc.wantSame, tc.wantDecided)
 			}
@@ -87,10 +87,10 @@ func TestValueSpaceRefusesIncommensurableSpaces(t *testing.T) {
 
 	// Both mappings parse "1" to the same Go value, so a naive comparison would
 	// happily report "the same" — the refusal must be structural, not value-based.
-	if same, decided := vs.Identical(intPrim, vsFixed("1"), otherPrim, vsFixed("1")); decided {
+	if same, decided := vs.Identical(noSchema{}, intPrim, vsFixed("1"), otherPrim, vsFixed("1")); decided {
 		t.Errorf("Identical across two governing mappings = (%t, %t), want undecided", same, decided)
 	}
-	if same, decided := vs.EqualOrIdentical(intPrim, vsFixed("1"), otherPrim, vsFixed("1")); decided {
+	if same, decided := vs.EqualOrIdentical(noSchema{}, intPrim, vsFixed("1"), otherPrim, vsFixed("1")); decided {
 		t.Errorf("EqualOrIdentical across two governing mappings = (%t, %t), want undecided", same, decided)
 	}
 }
@@ -103,13 +103,13 @@ func TestValueSpaceRefusesUngovernedAndNonAtomic(t *testing.T) {
 	vs := NewValueSpace(intBackend{mapped: prim.Name()})
 
 	unmapped := vsPrim(t, "unmapped")
-	lst, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "lst"},
+	lst, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "lst"},
 		xsd.ListDerivation{Item: prim}, xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
 	}
-	uni, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "uni"},
+	uni, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "uni"},
 		xsd.UnionDerivation{Members: []*xsd.SimpleType{prim}}, xsd.AnySimpleType(), nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union): %v", err)
@@ -125,10 +125,10 @@ func TestValueSpaceRefusesUngovernedAndNonAtomic(t *testing.T) {
 		{"xs:anySimpleType, which has no variety at all", xsd.AnySimpleType()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, decided := vs.Identical(tc.ta, vsFixed("1"), prim, vsFixed("1")); decided {
+			if _, decided := vs.Identical(noSchema{}, tc.ta, vsFixed("1"), prim, vsFixed("1")); decided {
 				t.Error("Identical decided, want undecided")
 			}
-			if _, decided := vs.EqualOrIdentical(prim, vsFixed("1"), tc.ta, vsFixed("1")); decided {
+			if _, decided := vs.EqualOrIdentical(noSchema{}, prim, vsFixed("1"), tc.ta, vsFixed("1")); decided {
 				t.Error("EqualOrIdentical decided, want undecided")
 			}
 		})
@@ -146,10 +146,10 @@ func TestValueSpaceRefusesQNameAndNOTATION(t *testing.T) {
 			prim := vsPrim(t, local)
 			vs := NewValueSpace(intBackend{mapped: prim.Name()})
 			derived := vsDerived(t, "d", prim)
-			if _, decided := vs.Identical(prim, vsFixed("1"), prim, vsFixed("1")); decided {
+			if _, decided := vs.Identical(noSchema{}, prim, vsFixed("1"), prim, vsFixed("1")); decided {
 				t.Errorf("Identical on xs:%s decided, want undecided", local)
 			}
-			if _, decided := vs.EqualOrIdentical(derived, vsFixed("1"), prim, vsFixed("1")); decided {
+			if _, decided := vs.EqualOrIdentical(noSchema{}, derived, vsFixed("1"), prim, vsFixed("1")); decided {
 				t.Errorf("EqualOrIdentical on a derivation of xs:%s decided, want undecided", local)
 			}
 		})
@@ -165,11 +165,11 @@ func TestIdentityIsNotTheEqualOrIdenticalUnion(t *testing.T) {
 	prim := vsPrim(t, "loose")
 	vs := NewValueSpace(looseBackend{mapped: prim.Name()})
 
-	same, decided := vs.Identical(prim, vsFixed("1"), prim, vsFixed("2"))
+	same, decided := vs.Identical(noSchema{}, prim, vsFixed("1"), prim, vsFixed("2"))
 	if same || !decided {
 		t.Errorf("Identical(equal-but-not-identical) = (%t, %t), want (false, true)", same, decided)
 	}
-	same, decided = vs.EqualOrIdentical(prim, vsFixed("1"), prim, vsFixed("2"))
+	same, decided = vs.EqualOrIdentical(noSchema{}, prim, vsFixed("1"), prim, vsFixed("2"))
 	if !same || !decided {
 		t.Errorf("EqualOrIdentical(equal-but-not-identical) = (%t, %t), want (true, true)", same, decided)
 	}
@@ -254,7 +254,7 @@ func (b looseBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 // facet the list stage needs in force (§4.3.6, effectiveWhiteSpace).
 func vsList(t *testing.T, local string, item *xsd.SimpleType) *xsd.SimpleType {
 	t.Helper()
-	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
+	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
 		xsd.ListDerivation{Item: item}, xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
@@ -267,7 +267,7 @@ func vsList(t *testing.T, local string, item *xsd.SimpleType) *xsd.SimpleType {
 // facet: it is categorically not applicable (cos-applicable-facets §4.1.5).
 func vsUnion(t *testing.T, local string, members ...*xsd.SimpleType) *xsd.SimpleType {
 	t.Helper()
-	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
+	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
 		xsd.UnionDerivation{Members: members}, xsd.AnySimpleType(), nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union %s): %v", local, err)
@@ -305,7 +305,7 @@ func TestValidDefaultDecidesGovernedTypes(t *testing.T) {
 		{"a union no member accepts", vsUnion(t, "u", prim), "zzz", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			valid, decided := vs.ValidDefault(tc.t, vsFixed(tc.lexical))
+			valid, decided := vs.ValidDefault(noSchema{}, tc.t, vsFixed(tc.lexical))
 			if !decided {
 				t.Fatalf("ValidDefault = (%t, false), want a decided verdict", valid)
 			}
@@ -342,7 +342,7 @@ func TestValidDefaultAcceptsUngovernedTypes(t *testing.T) {
 		{"a union with one ungoverned MEMBER", vsUnion(t, "u", prim, unmapped)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if valid, decided := vs.ValidDefault(tc.t, vsFixed("zzz not a value of anything")); decided {
+			if valid, decided := vs.ValidDefault(noSchema{}, tc.t, vsFixed("zzz not a value of anything")); decided {
 				t.Errorf("ValidDefault = (%t, %t), want undecided (fail-open)", valid, decided)
 			}
 		})
@@ -376,7 +376,7 @@ func TestValidDefaultAcceptsContextDependentTypes(t *testing.T) {
 				{"a list of a union of it", vsList(t, "lu", vsUnion(t, "u2", prim))},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					if valid, decided := vs.ValidDefault(tc.t, vsFixed("p:local")); decided {
+					if valid, decided := vs.ValidDefault(noSchema{}, tc.t, vsFixed("p:local")); decided {
 						t.Errorf("ValidDefault = (%t, %t), want undecided (fail-open)", valid, decided)
 					}
 				})
@@ -404,7 +404,7 @@ func TestValidDefaultAcceptsConstructionStageFailures(t *testing.T) {
 	vs := NewValueSpace(intBackend{mapped: qn})
 
 	for _, lexical := range []string{"1", "zzz"} {
-		if valid, decided := vs.ValidDefault(bad, vsFixed(lexical)); decided {
+		if valid, decided := vs.ValidDefault(noSchema{}, bad, vsFixed(lexical)); decided {
 			t.Errorf("ValidDefault(%q) = (%t, %t), want undecided (fail-open)", lexical, valid, decided)
 		}
 	}
@@ -428,7 +428,7 @@ func TestValidDefaultAcceptsFacetPreconditionFaults(t *testing.T) {
 	// "ab" has length 2 and so would SATISFY the length facet if the value space were
 	// Lengthed at all: the undecided answer is the fault's, not a smuggled rejection.
 	for _, lexical := range []string{"ab", "abcd"} {
-		if valid, decided := vs.ValidDefault(st, vsFixed(lexical)); decided {
+		if valid, decided := vs.ValidDefault(noSchema{}, st, vsFixed(lexical)); decided {
 			t.Errorf("ValidDefault(%q) = (%t, %t), want undecided (gate 4, fail-open)", lexical, valid, decided)
 		}
 	}

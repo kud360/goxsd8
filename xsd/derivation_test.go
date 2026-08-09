@@ -11,7 +11,7 @@ import (
 // test; it is the atomic building block for the derivation-graph tests.
 func mustPrim(t *testing.T, local string) *SimpleType {
 	t.Helper()
-	st, err := NewPrimitiveType(xsderr.Loc{}, QName{Space: XMLSchemaNS, Local: local}, nil, nil)
+	st, err := newCheckedPrimitiveType(xsderr.Loc{}, QName{Space: XMLSchemaNS, Local: local}, nil, nil)
 	if err != nil {
 		t.Fatalf("build primitive %s: %v", local, err)
 	}
@@ -32,22 +32,21 @@ func constructedListFacets() []Facet {
 // the prerequisite base/item/member types the negative cases restrict.
 func mustST(t *testing.T, name string, d SimpleTypeDerivation, base *SimpleType, facets []Facet, final []DerivationMethod) *SimpleType {
 	t.Helper()
-	st, err := NewSimpleType(xsderr.Loc{}, QName{Local: name}, d, base, facets, final)
+	st, err := newCheckedSimpleType(xsderr.Loc{}, QName{Local: name}, d, base, facets, final)
 	if err != nil {
 		t.Fatalf("build %s: %v", name, err)
 	}
 	return st
 }
 
-// TestSTGraphChecks exercises checkSTGraph and the per-variety cos-st-restricts
+// TestSTGraphChecks exercises SimpleType.CheckDerivation and the per-variety cos-st-restricts
 // case checks in derivation.go: both polarities for atomic (clause 1.1), list
 // (clause 2, both the constructed B==anySimpleType and restricted branches),
-// union (clause 3, both branches), the {final}-blocking clause
-// 3/1.2/2.2.2.2/3.2.2.2 (shared site), 2.2.1.1/3.2.1.1, the constructed-list
-// facet-shape clause 2.2.1.2 in all four of its failure modes (an extra facet, no
-// whiteSpace at all, a whiteSpace that is not collapse, an unfixed one), and
-// clause 5. Every prerequisite type is built through the real constructors — no
-// XML fixtures.
+// union (clause 3, both branches), the {final}-blocking clause 3/1.2/2.2.2.2/3.2.2.2 (shared
+// site), 2.2.1.1/3.2.1.1, the constructed-list facet-shape clause 2.2.1.2 in all four of its
+// failure modes (an extra facet, no whiteSpace at all, a whiteSpace that is not collapse, an
+// unfixed one), and clause 5. Every prerequisite type is built through the real constructors
+// — no XML fixtures.
 func TestSTGraphChecks(t *testing.T) {
 	dec := mustPrim(t, "decimal")
 	str := mustPrim(t, "string")
@@ -81,7 +80,7 @@ func TestSTGraphChecks(t *testing.T) {
 	}{
 		// --- atomic (cos-st-restricts case 1) ---
 		{"atomic ok (1.1)", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, dec, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, dec, nil, nil)
 			return e
 		}, "", ""},
 		// D is built as a struct literal, not through NewSimpleType, because an
@@ -89,11 +88,11 @@ func TestSTGraphChecks(t *testing.T) {
 		// {variety} is derived: a RestrictionDerivation reports atomic only when
 		// its base does, and the two arms that mint atomic on their own fix their
 		// base (NewPrimitiveType to the anchor) or are the anchor. The clause-1.1
-		// site is retained rather than deleted because checkSTGraph also runs on
+		// site is retained rather than deleted because CheckDerivation also runs on
 		// package-internal receivers built exactly this way (both anchors are), so
 		// this case still proves the rule the site charges.
 		{"atomic non-atomic base (1.1)", func() error {
-			return checkSTGraph(loc, &SimpleType{name: qn, derivation: primitiveDerivation{}, base: listOverDec})
+			return (&SimpleType{loc: loc, name: qn, derivation: primitiveDerivation{}, base: OwnedSimpleType{Definition: listOverDec}}).CheckDerivation(noSchema{})
 		}, ruleCosSTRestricts, "clause 1.1"},
 
 		// --- the two ·special· types as a {base type definition} (#480). Each D
@@ -104,134 +103,134 @@ func TestSTGraphChecks(t *testing.T) {
 		// saw the faceted ones. Each D therefore DERIVES its base's {variety} and
 		// {primitive type definition} rather than being handed them. ---
 		{"base xs:anyAtomicType, no facets", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, anyAtomicType, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, anyAtomicType, nil, nil)
 			return e
 		}, ruleSTPropsCorrect, "{primitive type definition}"},
 		{"base xs:anyAtomicType, facet present", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, anyAtomicType,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, anyAtomicType,
 				[]Facet{NewFacet(FacetPattern, []string{"a"}, false)}, nil)
 			return e
 		}, ruleSTPropsCorrect, "{primitive type definition}"},
 		{"base xs:anySimpleType, no facets", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, anySimpleType, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, anySimpleType, nil, nil)
 			return e
 		}, ruleSTPropsCorrect, "{variety}"},
 		{"base xs:anySimpleType, facet present", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, anySimpleType,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, anySimpleType,
 				[]Facet{NewFacet(FacetPattern, []string{"a"}, false)}, nil)
 			return e
 		}, ruleSTPropsCorrect, "{variety}"},
 		{"a primitive datatype may name xs:anyAtomicType", func() error {
-			_, e := NewPrimitiveType(loc, qn, nil, nil)
+			_, e := newCheckedPrimitiveType(loc, qn, nil, nil)
 			return e
 		}, "", ""},
 		{"the xs:anyAtomicType anchor itself is exempt", func() error {
-			return checkSTGraph(loc, anyAtomicType)
+			return anyAtomicType.CheckDerivation(noSchema{})
 		}, "", ""},
 		{"the xs:anySimpleType anchor itself is exempt", func() error {
-			return checkSTGraph(loc, anySimpleType)
+			return anySimpleType.CheckDerivation(noSchema{})
 		}, "", ""},
 
 		// --- shared {final}-blocking site (clause 3 / 1.2 / 2.2.2.2 / 3.2.2.2) ---
 		{"base {final} contains restriction (clause 3)", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, baseFinalRestrict, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, baseFinalRestrict, nil, nil)
 			return e
 		}, ruleSTPropsCorrect, "clause 3"},
 
 		// --- clause 5 (facet support) ---
 		{"unsupported facet (clause 5)", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, dec, []Facet{badFacet}, nil)
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, dec, []Facet{badFacet}, nil)
 			return e
 		}, ruleSTPropsCorrect, "clause 5"},
 
 		// --- list (cos-st-restricts case 2) ---
 		{"list ok constructed atomic item", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType, constructedListFacets(), nil)
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType, constructedListFacets(), nil)
 			return e
 		}, "", ""},
 		{"list ok constructed atomic-union item", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: unionAllAtomic}, anySimpleType, constructedListFacets(), nil)
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: unionAllAtomic}, anySimpleType, constructedListFacets(), nil)
 			return e
 		}, "", ""},
 		{"list special item (2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: anyAtomicType}, anySimpleType, constructedListFacets(), nil)
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: anyAtomicType}, anySimpleType, constructedListFacets(), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.1"},
 		{"list nested-list item (2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: listOverDec}, anySimpleType, constructedListFacets(), nil)
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: listOverDec}, anySimpleType, constructedListFacets(), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.1"},
 		{"list union-with-list item (2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: unionWithList}, anySimpleType, constructedListFacets(), nil)
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: unionWithList}, anySimpleType, constructedListFacets(), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.1"},
 		{"list constructed item {final} has list (2.2.1.1)", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: itemFinalList}, anySimpleType, constructedListFacets(), nil)
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: itemFinalList}, anySimpleType, constructedListFacets(), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.1.1"},
 		{"list constructed extra facet (2.2.1.2)", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType,
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType,
 				append(constructedListFacets(), NewFacet(FacetMinLength, []string{"1"}, false)), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.1.2"},
 		{"list constructed no facets (2.2.1.2)", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.1.2"},
 		{"list constructed whiteSpace not collapse (2.2.1.2)", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType,
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType,
 				[]Facet{NewFacet(FacetWhiteSpace, []string{"preserve"}, true)}, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.1.2"},
 		{"list constructed whiteSpace unfixed (2.2.1.2)", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType,
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType,
 				[]Facet{NewFacet(FacetWhiteSpace, []string{"collapse"}, false)}, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.1.2"},
 		{"list ok restricted same item", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: dec}, listOverDec, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, listOverDec, nil, nil)
 			return e
 		}, "", ""},
 		{"list ok restricted derived item (2.2.2.3 chain)", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: int2}, listOverDec, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: int2}, listOverDec, nil, nil)
 			return e
 		}, "", ""},
 		{"list restricted non-list base (2.2.2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: dec}, dec, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, dec, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.2.1"},
 		{"list restricted item not derived (2.2.2.3)", func() error {
-			_, e := NewSimpleType(loc, qn, ListDerivation{Item: str}, listOverDec, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: str}, listOverDec, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.2.3"},
 
 		// --- union (cos-st-restricts case 3) ---
 		{"union ok constructed", func() error {
-			_, e := NewSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec, str}}, anySimpleType, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec, str}}, anySimpleType, nil, nil)
 			return e
 		}, "", ""},
 		{"union special member (3.1)", func() error {
-			_, e := NewSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec, anyAtomicType}}, anySimpleType, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec, anyAtomicType}}, anySimpleType, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.1"},
 		{"union constructed member {final} has union (3.2.1.1)", func() error {
-			_, e := NewSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{memberFinalUnion}}, anySimpleType, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{memberFinalUnion}}, anySimpleType, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.2.1.1"},
 		{"union ok restricted corresponding members", func() error {
-			_, e := NewSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec, str}}, unionDecStr, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec, str}}, unionDecStr, nil, nil)
 			return e
 		}, "", ""},
 		{"union restricted non-union base (3.2.2.1)", func() error {
-			_, e := NewSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec, str}}, dec, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec, str}}, dec, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.2.2.1"},
 		{"union restricted member count mismatch (3.2.2.3)", func() error {
-			_, e := NewSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec}}, unionDecStr, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec}}, unionDecStr, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.2.2.3"},
 		{"union restricted member not derived (3.2.2.3)", func() error {
-			_, e := NewSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{str, dec}}, unionDecStr, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{str, dec}}, unionDecStr, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.2.2.3"},
 	}
@@ -297,22 +296,22 @@ func TestScaleFacetSCCs(t *testing.T) {
 	}{
 		// --- maxScale-valid-restriction (§4.2.4): may only move down ---
 		{"maxScale narrows below base ok", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, baseMax5,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, baseMax5,
 				[]Facet{scaleFacet(FacetMaxScale, "3", false)}, nil)
 			return e
 		}, ""},
 		{"maxScale equals base ok", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, baseMax5,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, baseMax5,
 				[]Facet{scaleFacet(FacetMaxScale, "5", false)}, nil)
 			return e
 		}, ""},
 		{"maxScale above base rejected", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, baseMax5,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, baseMax5,
 				[]Facet{scaleFacet(FacetMaxScale, "7", false)}, nil)
 			return e
 		}, ruleMaxScaleValidRestriction},
 		{"maxScale vacuous no base maxScale ok", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, pdec,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, pdec,
 				[]Facet{scaleFacet(FacetMaxScale, "9", false)}, nil)
 			return e
 		}, ""},
@@ -320,31 +319,31 @@ func TestScaleFacetSCCs(t *testing.T) {
 			// A malformed scale {value} ("abc") reaches scaleValue through the
 			// public NewFacet/NewSimpleType API; it must charge a real *xsderr.Error,
 			// not panic (regression guard for #157).
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, baseMax5,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, baseMax5,
 				[]Facet{scaleFacet(FacetMaxScale, "abc", false)}, nil)
 			return e
 		}, ruleMaxScaleValidRestriction},
 
 		// --- minScale-valid-restriction (§4.3.4): may only move up ---
 		{"minScale above base ok", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, baseMin2,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, baseMin2,
 				[]Facet{scaleFacet(FacetMinScale, "4", false)}, nil)
 			return e
 		}, ""},
 		{"minScale equals base ok", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, baseMin2,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, baseMin2,
 				[]Facet{scaleFacet(FacetMinScale, "2", false)}, nil)
 			return e
 		}, ""},
 		{"minScale below base rejected", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, baseMin2,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, baseMin2,
 				[]Facet{scaleFacet(FacetMinScale, "1", false)}, nil)
 			return e
 		}, ruleMinScaleValidRestriction},
 
 		// --- minScale ≤ maxScale consistency (anchor minScale-totalDigits) ---
 		{"minScale gt maxScale rejected", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, pdec,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, pdec,
 				[]Facet{
 					scaleFacet(FacetMinScale, "5", false),
 					scaleFacet(FacetMaxScale, "2", false),
@@ -352,7 +351,7 @@ func TestScaleFacetSCCs(t *testing.T) {
 			return e
 		}, ruleMinScaleLEMaxScale},
 		{"minScale eq maxScale ok", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, pdec,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, pdec,
 				[]Facet{
 					scaleFacet(FacetMinScale, "3", false),
 					scaleFacet(FacetMaxScale, "3", false),
@@ -362,28 +361,28 @@ func TestScaleFacetSCCs(t *testing.T) {
 
 		// --- f-ms-fixed (§4.2.1): fixed base maxScale may not be overridden ---
 		{"fixed maxScale repeated identical ok", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, baseMaxFixed5,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, baseMaxFixed5,
 				[]Facet{scaleFacet(FacetMaxScale, "5", true)}, nil)
 			return e
 		}, ""},
 		{"fixed maxScale further-narrowing rejected", func() error {
 			// value 3 satisfies maxScale-valid-restriction (3 < 5) yet still
 			// overrides the {fixed} base facet — proves f-ms-fixed is independent.
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, baseMaxFixed5,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, baseMaxFixed5,
 				[]Facet{scaleFacet(FacetMaxScale, "3", true)}, nil)
 			return e
 		}, ruleMaxScaleFixed},
 
 		// --- f-mns-fixed (§4.3.1): fixed base minScale may not be overridden ---
 		{"fixed minScale repeated identical ok", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, baseMinFixed2,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, baseMinFixed2,
 				[]Facet{scaleFacet(FacetMinScale, "2", true)}, nil)
 			return e
 		}, ""},
 		{"fixed minScale further-widening rejected", func() error {
 			// value 4 satisfies minScale-valid-restriction (4 > 2) yet still
 			// overrides the {fixed} base facet — proves f-mns-fixed is independent.
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, baseMinFixed2,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, baseMinFixed2,
 				[]Facet{scaleFacet(FacetMinScale, "4", true)}, nil)
 			return e
 		}, ruleMinScaleFixed},
@@ -392,12 +391,12 @@ func TestScaleFacetSCCs(t *testing.T) {
 		{"chain C overrides inherited fixed maxScale rejected", func() error {
 			// C restricts B which restricts A; A fixes maxScale=5, B declares no
 			// own scale facet, so C inherits the fixed facet transitively.
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, chainB,
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, chainB,
 				[]Facet{scaleFacet(FacetMaxScale, "4", true)}, nil)
 			return e
 		}, ruleMaxScaleFixed},
 		{"chain C inherits fixed maxScale unchanged ok", func() error {
-			_, e := NewSimpleType(loc, qn, RestrictionDerivation{}, chainB, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, RestrictionDerivation{}, chainB, nil, nil)
 			return e
 		}, ""},
 	}
@@ -449,8 +448,8 @@ func TestDerivedOKSimple(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := derivedOKSimple(tc.d, tc.b); got != tc.want {
-				t.Fatalf("derivedOKSimple = %v, want %v", got, tc.want)
+			if got, err := derivedOKSimple(noSchema{}, tc.d, tc.b); err != nil || got != tc.want {
+				t.Fatalf("derivedOKSimple = %v (err %v), want %v", got, err, tc.want)
 			}
 		})
 	}

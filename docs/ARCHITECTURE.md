@@ -162,58 +162,47 @@ represents it**:
   are complete before it is. Spec-forbidden circularities are rejected with
   their named rule, once.
 
-  **Where they are rejected is currently split, and that split is not the
-  design — it is drift to be repaired** (steward audits 2026-07-26 and
-  2026-08-02; tracked as **#271**). The phase-3 home holds the references
+  **Where they are rejected used to be split by per-component
+  representation accident, and the simple-type half of that drift is now
+  repaired** (steward audits 2026-07-26 and 2026-08-02; tracked as **#271**,
+  superseded by **#478** → **#629**/**#636**). Phase 3 holds every reference
   `xsd` defers rather than resolving eagerly: the complex-type base chain
   (`ct-props-correct` cl. 3 — a `TypeDefinitionOrRef` since #505, whose
-  by-name arm is the deferred one and whose owned arm is already
-  resolved), the `<group ref>` graph
-  (`mg-props-correct` cl. 2), and substitution-group affiliation
-  (`e-props-correct` cl. 5), all in `xsd/resolve.go`. But `xsd` stores a
-  simple type's `{base type definition}` as a **live pointer**, not a QName,
-  and inlines `<attributeGroup ref>` at mapping time with no ref component —
-  so those two must be resolved eagerly by the producer, and their
-  circularity rejection (`st-props-correct` cl. 2) lives in
-  `parser/produce.go`, carrying its own copy of `resolve.go`'s color-map
-  idiom. One spec concern, two homes, chosen by per-component representation
-  accident; `src-resolve` cl. 1.1 is consequently charged from both packages.
+  by-name arm is the deferred one and whose owned arm is already resolved),
+  the SIMPLE-type base chain (`st-props-correct` cl. 2 — a
+  `SimpleTypeOrRef` since #636, with the same two-arm shape), the
+  `<group ref>` graph (`mg-props-correct` cl. 2), and substitution-group
+  affiliation (`e-props-correct` cl. 5), all in `xsd/resolve.go`. Because
+  the simple-type base is a reference again, every reader that walks it —
+  `Base`, `Variety`, `Primitive`, `Item`, `Members`, `EffectiveFacets` —
+  takes an `xsd.TypeResolver` and returns an error, and the packages above
+  `xsd` thread that resolver as a parameter and store it nowhere.
 
-  **The split has since widened, as predicted.** `parser/produce.go`'s
-  `buildComplexType` now also charges `ct-props-correct` cl. 3 from the
-  producer — the same rule with the same verdict that `xsd/resolve.go`'s
-  `checkComplexBaseAcyclic` charges — because demand-driven eager base
-  construction would otherwise not terminate. The code documents that as
-  two entry points for two construction paths, and on its own terms it is
-  right; but the reason a second entry point is needed at all is the
-  eager-pointer representation #271 exists to remove. So the count is now
-  **two rules charged from both packages**, not one.
+  **What remains of the split.** `parser/produce.go`'s `buildComplexType`
+  still charges `ct-props-correct` cl. 3 from the producer — the same rule
+  with the same verdict `xsd/resolve.go`'s `checkComplexBaseAcyclic`
+  charges — because `xsd.NewComplexType` still demands a complete base
+  component at construction, so demand-driven eager base construction would
+  otherwise not terminate. That is now the LAST rule charged from both
+  packages: the simple-type twin died with #636, which also removed the
+  producer's `src-resolve` cl. 1.1 charge for a simple type's base. The
+  producer also still inlines `<attributeGroup ref>` at mapping time with no
+  ref component, which is a different representation and not this concern.
 
-  Unifying on the QName-plus-index representation is a pre-1.0 refactor.
-  Its original ordering advice was "land before `<list>`/`<union>` (which
-  add item/member pointers) and before
-  `<import>`/`<redefine>`/`<override>` (which re-point base references)".
-  **Most of that window has closed**: `<import>` (#182) and `<override>`
-  (#183) landed 2026-07-27 and `<redefine>` (#286) after them, with the
-  refactor still undone — and `<redefine>` is where the cost first showed:
-  `src-expredef` cl. 1.1 needs a complex type whose base is an ANONYMOUS
-  component, which the QName-valued `{base type definition}` could not hold,
-  so a redefining `complexType` was declined rather than produced until #505
-  moved that slot onto `TypeDefinitionOrRef` — one slot, not the refactor.
-  `<list>`/`<union>` in the producer are still ahead of it
-  (`parser/produce.go` declines them today), so that half of the ordering
-  argument is still live and is now the last cheap moment.
-
-  **Re-checked 2026-08-09: unchanged and still open.** `parser/produce.go`
-  still carries `st-props-correct` cl. 2's own colour map, `xsd/resolve.go`
-  still owns `checkComplexBaseAcyclic`, and `parser/produce.go:1134` still
-  declines `<list>`/`<union>`, so the window named above has not closed. No
-  new rule joined the two charged from both packages this window.
+  Moving the complex-type base onto the same footing is the remaining
+  pre-1.0 refactor. The original ordering advice — "land before
+  `<list>`/`<union>` (which add item/member pointers)" — is still live for
+  the simple-type side in one narrow sense: `ListDerivation.Item` and
+  `UnionDerivation.Members` deliberately stayed `*SimpleType` in #636,
+  because the producer declines `<list>`/`<union>` today
+  (`parser/produce.go`'s `restrictionOf`), so nothing can put a name in
+  those slots. **#447 — which teaches the producer `<list>`/`<union>` — must
+  widen them to `SimpleTypeOrRef` as part of that work.**
 - All child collections are slices in document order. Maps exist only as
   internal indexes and never determine any order.
 - Nothing derivable is stored (STYLE D3): no effective-facet caches —
-  compute `Merge(base.EffectiveFacets(), declared)` on demand; no status
-  booleans beside the facts that imply them.
+  compute `base.EffectiveFacets(resolver)` overlaid with the declared set on
+  demand; no status booleans beside the facts that imply them.
 - The model is **read-only** after construction; mutation/editing APIs are
   out of scope. `Finalize` performs a bounded set of mutations before it
   returns — **two** as of 2026-08-09, run in this order from

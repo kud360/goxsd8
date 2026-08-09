@@ -70,11 +70,11 @@ func TestDateTimeStampSeededExplicitTimezone(t *testing.T) {
 		t.Fatal("Seed did not return the xs:dateTimeStamp component")
 	}
 
-	if _, err := value.ValidateLexical(strict.New(), dts, "2002-10-10T12:00:00Z", nil); err != nil {
+	if _, err := value.ValidateLexical(strict.New(), noSchema{}, dts, "2002-10-10T12:00:00Z", nil); err != nil {
 		t.Fatalf("tz-bearing dateTimeStamp should validate: %v", err)
 	}
 
-	_, err = value.ValidateLexical(strict.New(), dts, "2002-10-10T12:00:00", nil)
+	_, err = value.ValidateLexical(strict.New(), noSchema{}, dts, "2002-10-10T12:00:00", nil)
 	if err == nil {
 		t.Fatal("tz-absent dateTimeStamp must be rejected, got nil")
 	}

@@ -53,17 +53,24 @@ import (
 // active: clause 2.3 fixes B from member validity alone, so a literal that its
 // active member accepts but st's own pattern or enumeration rejects is a
 // rejection, never a retry against a later member.
-func validateUnion(b Backend, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, whiteSpace, error) {
-	members := st.Members()
-	if !unionGoverned(b, members) {
-		return nil, 0, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-			"value: no backend mapping governs type %s", st.Name())
-	}
-	lexFacets, valFacets, err := compile(b, st)
+func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, whiteSpace, error) {
+	members, err := st.Members(r)
 	if err != nil {
 		return nil, 0, err
 	}
-	v, ws, err := dispatchUnion(b, members, rawLexical, ctx)
+	governed, err := unionGoverned(b, r, members)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !governed {
+		return nil, 0, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
+			"value: no backend mapping governs type %s", st.Name())
+	}
+	lexFacets, valFacets, err := compile(b, r, st)
+	if err != nil {
+		return nil, 0, err
+	}
+	v, ws, err := dispatchUnion(b, r, members, rawLexical, ctx)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -138,12 +145,12 @@ func validateUnion(b Backend, st *xsd.SimpleType, rawLexical string, ctx Context
 // §3.16.7.3), whose value and lexical spaces are both empty — falls out of the
 // loop with zero candidates and so rejects every literal including "", with no
 // special case.
-func dispatchUnion(b Backend, members []*xsd.SimpleType, rawLexical string, ctx Context) (Value, whiteSpace, error) {
+func dispatchUnion(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, rawLexical string, ctx Context) (Value, whiteSpace, error) {
 	// Left nil so the common case — an early member accepts — allocates nothing;
 	// the slice only materializes on the path that actually reports rejections.
 	var rejections []string
 	for i, m := range members {
-		v, ws, err := validateLexical(b, m, rawLexical, ctx)
+		v, ws, err := validateLexical(b, r, m, rawLexical, ctx)
 		if err == nil {
 			return v, ws, nil
 		}
@@ -176,10 +183,10 @@ func dispatchUnion(b Backend, members []*xsd.SimpleType, rawLexical string, ctx 
 // is the active member's, which this mapping cannot name having dropped the member
 // it dispatched to. Per the Mapping doc a nil Canonical means "this type has no
 // canonical form", which callers must treat as such rather than as an error.
-func unionMapping(b Backend, members []*xsd.SimpleType) Mapping {
+func unionMapping(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType) Mapping {
 	return Mapping{
 		Parse: func(lexical string, ctx Context) (Value, error) {
-			v, _, err := dispatchUnion(b, members, lexical, ctx)
+			v, _, err := dispatchUnion(b, r, members, lexical, ctx)
 			return v, err
 		},
 	}
@@ -202,11 +209,20 @@ func unionMapping(b Backend, members []*xsd.SimpleType) Mapping {
 // An EMPTY membership is vacuously governed, which is right for xs:error
 // (§3.16.7.3): its value space is empty, so its mapping's whole job is to reject
 // every literal — what dispatchUnion does with zero candidates.
-func unionGoverned(b Backend, members []*xsd.SimpleType) bool {
+func unionGoverned(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType) (bool, error) {
 	for _, m := range members {
-		if _, ok := governingMapping(b, m); !ok {
-			return false
+		ok, err := governingMappingExists(b, r, m)
+		if err != nil || !ok {
+			return false, err
 		}
 	}
-	return true
+	return true, nil
+}
+
+// governingMappingExists is unionGoverned's per-member question, split out only
+// so the loop reads as one decision per member rather than three results
+// unpacked inline.
+func governingMappingExists(b Backend, r xsd.TypeResolver, m *xsd.SimpleType) (bool, error) {
+	_, ok, err := governingMapping(b, r, m)
+	return ok, err
 }

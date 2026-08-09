@@ -255,10 +255,10 @@ func TestDerivedOKComplexThroughOwnedBase(t *testing.T) {
 	ct := mustComplex(t, s, uq("ct"))
 	u, _ := s.Type(uq("u"))
 	unrelated, _ := s.Type(uq("unrelated"))
-	if !s.derivedOKComplex(ct, u, nil) {
+	if ok, err := s.derivedOKComplex(ct, u, nil); err != nil || !ok {
 		t.Error("ct is NOT reported as derived from u, but its base chain reaches u through the owned anonymous original")
 	}
-	if s.derivedOKComplex(ct, unrelated, nil) {
+	if ok, err := s.derivedOKComplex(ct, unrelated, nil); err != nil || ok {
 		t.Error("ct is reported as derived from an unrelated type, so the walk is answering true without reaching it")
 	}
 }

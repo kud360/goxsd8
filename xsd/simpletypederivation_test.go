@@ -22,7 +22,7 @@ type stubRestrictionChecker struct {
 	seen   []*SimpleType
 }
 
-func (c *stubRestrictionChecker) CheckRestriction(t *SimpleType) error {
+func (c *stubRestrictionChecker) CheckRestriction(_ TypeResolver, t *SimpleType) error {
 	c.seen = append(c.seen, t)
 	if c.reject != nil && t == c.reject {
 		return xsderr.New(xsderr.Rule("cos-st-restricts"), t.Loc(),
@@ -106,9 +106,9 @@ func TestCheckSimpleTypeDerivationsDescendsEverySlot(t *testing.T) {
 			if !tc.anonymous {
 				name = uq("target")
 			}
-			target, err := NewSimpleType(xsderr.Loc{}, name, RestrictionDerivation{}, prim, nil, nil)
+			target, err := newCheckedSimpleType(xsderr.Loc{}, name, RestrictionDerivation{}, prim, nil, nil)
 			if err != nil {
-				t.Fatalf("NewSimpleType(target): %v", err)
+				t.Fatalf("newCheckedSimpleType(target): %v", err)
 			}
 			if tc.anonymous && target.Name() != (QName{}) {
 				t.Fatal("the target must be anonymous, or the case degenerates into slot 1")
@@ -211,10 +211,10 @@ func indexOfType(seen []*SimpleType, want *SimpleType) int {
 // constructed directly from xs:anySimpleType (§4.3.6.1).
 func dList(t *testing.T, name QName, item *SimpleType) *SimpleType {
 	t.Helper()
-	st, err := NewSimpleType(xsderr.Loc{}, name, ListDerivation{Item: item}, anySimpleType,
+	st, err := newCheckedSimpleType(xsderr.Loc{}, name, ListDerivation{Item: item}, anySimpleType,
 		[]Facet{NewFacet(FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
-		t.Fatalf("NewSimpleType(list %s): %v", name, err)
+		t.Fatalf("newCheckedSimpleType(list %s): %v", name, err)
 	}
 	return st
 }
@@ -223,9 +223,9 @@ func dList(t *testing.T, name QName, item *SimpleType) *SimpleType {
 // cos-st-restricts clause 3.2.1 gives a <union>.
 func dUnion(t *testing.T, name QName, members ...*SimpleType) *SimpleType {
 	t.Helper()
-	st, err := NewSimpleType(xsderr.Loc{}, name, UnionDerivation{Members: members}, anySimpleType, nil, nil)
+	st, err := newCheckedSimpleType(xsderr.Loc{}, name, UnionDerivation{Members: members}, anySimpleType, nil, nil)
 	if err != nil {
-		t.Fatalf("NewSimpleType(union %s): %v", name, err)
+		t.Fatalf("newCheckedSimpleType(union %s): %v", name, err)
 	}
 	return st
 }

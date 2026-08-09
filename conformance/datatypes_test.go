@@ -285,10 +285,10 @@ func TestDatatypesFacetsWideStringFamily(t *testing.T) {
 	if ncname == nil {
 		t.Fatal("xs:NCName not seeded")
 	}
-	if _, verr := value.ValidateLexical(backend, ncname, "abc", nil); verr != nil {
+	if _, verr := value.ValidateLexical(backend, noSchema{}, ncname, "abc", nil); verr != nil {
 		t.Errorf("NCName should accept %q: %v", "abc", verr)
 	}
-	_, verr := value.ValidateLexical(backend, ncname, "a:b", nil)
+	_, verr := value.ValidateLexical(backend, noSchema{}, ncname, "a:b", nil)
 	if verr == nil {
 		t.Fatal("NCName must reject a colon-bearing value via its intrinsic pattern")
 	}
@@ -819,7 +819,7 @@ func TestDatatypesLexicalDateTimeStampTimezone(t *testing.T) {
 
 	// The rejection reason is cvc-explicitTimezone-valid, not a lexical failure —
 	// proving the value-based facet, not Parse, decides the tz-absent literal.
-	_, verr := value.ValidateLexical(backend, dts, "2002-10-10T12:00:00", nil)
+	_, verr := value.ValidateLexical(backend, noSchema{}, dts, "2002-10-10T12:00:00", nil)
 	if verr == nil {
 		t.Fatal("tz-absent dateTimeStamp must be rejected via value.ValidateLexical, got nil")
 	}
@@ -914,7 +914,7 @@ func TestDatatypesLexicalIntegerFamily(t *testing.T) {
 		{"5.0", "cvc-pattern-valid"}, // the pattern gate runs before the value facets
 	}
 	for _, r := range rules {
-		_, verr := value.ValidateLexical(backend, byteType, r.lexical, nil)
+		_, verr := value.ValidateLexical(backend, noSchema{}, byteType, r.lexical, nil)
 		if verr == nil {
 			t.Fatalf("xs:byte %q must be rejected via value.ValidateLexical, got nil", r.lexical)
 		}
@@ -1039,7 +1039,7 @@ func TestDatatypesLexicalIntXFamily(t *testing.T) {
 		{"integer", "+0.0", "cvc-pattern-valid"},
 	}
 	for _, r := range rules {
-		_, verr := value.ValidateLexical(backend, seeded(r.local), r.lexical, nil)
+		_, verr := value.ValidateLexical(backend, noSchema{}, seeded(r.local), r.lexical, nil)
 		if verr == nil {
 			t.Fatalf("xs:%s %q must be rejected via value.ValidateLexical, got nil", r.local, r.lexical)
 		}
@@ -1053,7 +1053,7 @@ func TestDatatypesLexicalIntXFamily(t *testing.T) {
 	// bound is being spuriously inherited from a narrowing sibling and the family
 	// really is arbitrary precision (builtin/strict/doc.go).
 	for _, lex := range []string{"2147483648", "-2147483649", "12345678901234567890123456789"} {
-		if _, verr := value.ValidateLexical(backend, seeded("integer"), lex, nil); verr != nil {
+		if _, verr := value.ValidateLexical(backend, noSchema{}, seeded("integer"), lex, nil); verr != nil {
 			t.Errorf("xs:integer %q must be accepted (it carries no bounds, §3.4.13.3), got %v", lex, verr)
 		}
 	}
@@ -1172,7 +1172,7 @@ func TestDatatypesLexicalHalfBoundedIntegerFamily(t *testing.T) {
 		if fixesTimezone(st) {
 			t.Errorf("fixesTimezone(xs:%s) = true, want false (the two routing arms are independent)", fam.local)
 		}
-		if got := st.Base().Name().Local; got != fam.base {
+		if got := mustBase(st).Name().Local; got != fam.base {
 			t.Errorf("xs:%s base = xs:%s, want xs:%s — the two-hop chain is the premise the overlay walk has to cross", fam.local, got, fam.base)
 		}
 	}
@@ -1203,7 +1203,7 @@ func TestDatatypesLexicalHalfBoundedIntegerFamily(t *testing.T) {
 		{"positiveInteger", "0", "cvc-minInclusive-valid"},
 	}
 	for _, r := range rules {
-		_, verr := value.ValidateLexical(backend, seeded(r.local), r.lexical, nil)
+		_, verr := value.ValidateLexical(backend, noSchema{}, seeded(r.local), r.lexical, nil)
 		if verr == nil {
 			t.Fatalf("xs:%s %q must be rejected via value.ValidateLexical, got nil", r.local, r.lexical)
 		}
@@ -1227,7 +1227,7 @@ func TestDatatypesLexicalHalfBoundedIntegerFamily(t *testing.T) {
 		{"positiveInteger", "12345678901234567890123456789"},
 	}
 	for _, a := range accepts {
-		if _, verr := value.ValidateLexical(backend, seeded(a.local), a.lexical, nil); verr != nil {
+		if _, verr := value.ValidateLexical(backend, noSchema{}, seeded(a.local), a.lexical, nil); verr != nil {
 			t.Errorf("xs:%s %q must be accepted (29 digits, and the type is unbounded on that side), got %v", a.local, a.lexical, verr)
 		}
 	}
@@ -1553,10 +1553,10 @@ func TestDatatypesD34Cohort(t *testing.T) {
 	if !ok {
 		t.Fatal("buildD34Types must back decMaxExclusive_MinInclusive, whose base is another schema type")
 	}
-	if got := derived.Base().Name().Local; got != "d34-decDigitsMaxExclusive" {
+	if got := mustBase(derived).Name().Local; got != "d34-decDigitsMaxExclusive" {
 		t.Errorf("decMaxExclusive_MinInclusive.Base() = %q, want the declared intermediate d34-decDigitsMaxExclusive", got)
 	}
-	if got := derived.Primitive().Name().Local; got != "precisionDecimal" {
+	if got := mustPrimitive(derived).Name().Local; got != "precisionDecimal" {
 		t.Errorf("decMaxExclusive_MinInclusive.Primitive() = %q, want precisionDecimal", got)
 	}
 }

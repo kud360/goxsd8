@@ -105,7 +105,7 @@ func TestParseRedefineSimpleTypeResolvesToOriginal(t *testing.T) {
 	// Its base is the hidden original — the same name, {name} absent — carrying
 	// lib.xsd's own facet. Anything else (a nil base, a base named {urn:a}code) is
 	// the false circularity src-expredef's pairing exists to prevent.
-	base := code.Base()
+	base := mustBase(t, s, code)
 	if base == nil {
 		t.Fatalf("redefined {urn:a}code has no {base type definition}")
 	}

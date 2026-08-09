@@ -109,15 +109,15 @@ func TestProduceSimpleTypeWithFacetAndBackReference(t *testing.T) {
 	if !ok {
 		t.Fatalf("Foo is not a *SimpleType")
 	}
-	if base := st.Base(); base == nil || base.Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
+	if base := mustBase(t, s, st); base == nil || base.Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
 		t.Fatalf("Foo base = %v, want {xs}string", base)
 	}
 	// {variety} and {primitive type definition} must derive off the base chain
 	// (§3.16.2.1), with no producer-side propagation.
-	if _, ok := st.Variety().(xsd.Atomic); !ok {
-		t.Fatalf("Foo variety = %T, want Atomic", st.Variety())
+	if _, ok := mustVariety(t, s, st).(xsd.Atomic); !ok {
+		t.Fatalf("Foo variety = %T, want Atomic", mustVariety(t, s, st))
 	}
-	if prim := st.Primitive(); prim == nil || prim.Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
+	if prim := mustPrimitive(t, s, st); prim == nil || prim.Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
 		t.Fatalf("Foo {primitive} = %v, want {xs}string", prim)
 	}
 	if fs := st.OwnFacets(); len(fs) != 1 || fs[0].Kind() != xsd.FacetMinLength {
@@ -126,7 +126,7 @@ func TestProduceSimpleTypeWithFacetAndBackReference(t *testing.T) {
 }
 
 // simpleTypeOf produces doc's body and returns the named simple type.
-func simpleTypeOf(t *testing.T, name, body string) *xsd.SimpleType {
+func simpleTypeOf(t *testing.T, name, body string) (*xsd.SimpleType, *xsd.Schema) {
 	t.Helper()
 	s, err := produce(t, wrap("", body))
 	if err != nil {
@@ -140,7 +140,10 @@ func simpleTypeOf(t *testing.T, name, body string) *xsd.SimpleType {
 	if !ok {
 		t.Fatalf("type %s = %T, want *xsd.SimpleType", name, td)
 	}
-	return st
+	// The Schema comes back with the type: a produced base= is an
+	// xsd.SimpleTypeRef, so every derived-property read on st is a lookup against
+	// this schema (fixture_ext_test.go).
+	return st, s
 }
 
 // TestProduceSiblingPatternsFoldIntoOneFacet pins xr-pattern (§4.3.4.2): the
@@ -149,7 +152,7 @@ func simpleTypeOf(t *testing.T, name, body string) *xsd.SimpleType {
 // separate ANDed steps (cvc-pattern-valid §4.3.4.4) and, being two same-kind
 // ownFacets, is rejected by st-props-correct clause 4 before that.
 func TestProduceSiblingPatternsFoldIntoOneFacet(t *testing.T) {
-	st := simpleTypeOf(t, "st", `<xs:simpleType name="st">
+	st, sch := simpleTypeOf(t, "st", `<xs:simpleType name="st">
 	  <xs:restriction base="xs:string">
 	    <xs:minLength value="1"/>
 	    <xs:pattern value="[a-z]+"/>
@@ -172,11 +175,11 @@ func TestProduceSiblingPatternsFoldIntoOneFacet(t *testing.T) {
 	}
 
 	for _, lex := range []string{"abc", "123"} {
-		if _, err := value.ValidateLexical(strict.New(), st, lex, nil); err != nil {
+		if _, err := value.ValidateLexical(strict.New(), sch, st, lex, nil); err != nil {
 			t.Errorf("ValidateLexical(%q) = %v, want accept (matches one same-step pattern)", lex, err)
 		}
 	}
-	if _, err := value.ValidateLexical(strict.New(), st, "a1", nil); err == nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "a1", nil); err == nil {
 		t.Error(`ValidateLexical("a1") = nil, want a cvc-pattern-valid rejection (matches neither branch)`)
 	}
 }
@@ -184,7 +187,7 @@ func TestProduceSiblingPatternsFoldIntoOneFacet(t *testing.T) {
 // TestProduceSinglePatternUnchanged keeps the one-<pattern> case at exactly one
 // {value} member (xr-pattern case 1: R is that value).
 func TestProduceSinglePatternUnchanged(t *testing.T) {
-	st := simpleTypeOf(t, "st", `<xs:simpleType name="st">
+	st, sch := simpleTypeOf(t, "st", `<xs:simpleType name="st">
 	  <xs:restriction base="xs:string"><xs:pattern value="[a-z]+"/></xs:restriction>
 	</xs:simpleType>`)
 
@@ -195,10 +198,10 @@ func TestProduceSinglePatternUnchanged(t *testing.T) {
 	if got := facets[0].Values(); !slices.Equal(got, []string{"[a-z]+"}) {
 		t.Fatalf("pattern {value} = %q, want [[a-z]+]", got)
 	}
-	if _, err := value.ValidateLexical(strict.New(), st, "abc", nil); err != nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "abc", nil); err != nil {
 		t.Errorf(`ValidateLexical("abc") = %v, want accept`, err)
 	}
-	if _, err := value.ValidateLexical(strict.New(), st, "ABC", nil); err == nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "ABC", nil); err == nil {
 		t.Error(`ValidateLexical("ABC") = nil, want a cvc-pattern-valid rejection`)
 	}
 }
@@ -207,7 +210,7 @@ func TestProduceSinglePatternUnchanged(t *testing.T) {
 // folding same-step siblings must not fold ACROSS derivation steps, which stay
 // separate effective facets and are ANDed.
 func TestProduceCrossStepPatternsStillANDed(t *testing.T) {
-	st := simpleTypeOf(t, "derived", `<xs:simpleType name="base">
+	st, sch := simpleTypeOf(t, "derived", `<xs:simpleType name="base">
 	  <xs:restriction base="xs:string">
 	    <xs:pattern value="[a-z]+"/>
 	    <xs:pattern value="[0-9]+"/>
@@ -218,7 +221,7 @@ func TestProduceCrossStepPatternsStillANDed(t *testing.T) {
 	</xs:simpleType>`)
 
 	patterns := 0
-	for _, ef := range st.EffectiveFacets() {
+	for _, ef := range mustEffectiveFacets(t, sch, st) {
 		if ef.Facet().Kind() == xsd.FacetPattern {
 			patterns++
 		}
@@ -226,15 +229,15 @@ func TestProduceCrossStepPatternsStillANDed(t *testing.T) {
 	if patterns != 2 {
 		t.Fatalf("effective pattern facets = %d, want 2 (one per derivation step)", patterns)
 	}
-	if _, err := value.ValidateLexical(strict.New(), st, "abc", nil); err != nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "abc", nil); err != nil {
 		t.Errorf(`ValidateLexical("abc") = %v, want accept (matches both steps)`, err)
 	}
 	// "ab" satisfies the base step's OR-set but not the derived step's .{3}.
-	if _, err := value.ValidateLexical(strict.New(), st, "ab", nil); err == nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "ab", nil); err == nil {
 		t.Error(`ValidateLexical("ab") = nil, want rejection: cross-step patterns are ANDed`)
 	}
 	// "A1c" satisfies the derived step but neither base branch.
-	if _, err := value.ValidateLexical(strict.New(), st, "A1c", nil); err == nil {
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "A1c", nil); err == nil {
 		t.Error(`ValidateLexical("A1c") = nil, want rejection: the base step's patterns still apply`)
 	}
 }
@@ -311,7 +314,7 @@ func TestProduceRestrictionFacetInterleaving(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			st := simpleTypeOf(t, "st", `<xs:simpleType name="st">
+			st, _ := simpleTypeOf(t, "st", `<xs:simpleType name="st">
 			  <xs:restriction base="xs:string">`+tc.children+`</xs:restriction>
 			</xs:simpleType>`)
 
@@ -348,11 +351,15 @@ func TestProduceSimpleTypeForwardReferenceChain(t *testing.T) {
 	bST := bTD.(*xsd.SimpleType)
 	aTD, _ := s.Type(xsd.QName{Space: "urn:x", Local: "A"})
 	aST := aTD.(*xsd.SimpleType)
-	if bST.Base() != aST {
-		t.Fatalf("B.Base() is not the same *SimpleType as A (pointer identity broken)")
+	// B's base= is a by-name xsd.SimpleTypeRef, so component identity is asserted
+	// by RESOLVING it through the finalized Schema — which is the only way it can
+	// be asserted now, and the stronger claim: the reference resolves to the very
+	// component {type definitions} holds, not to a rebuilt twin.
+	if mustBase(t, s, bST) != aST {
+		t.Fatalf("B's resolved {base type definition} is not the same *SimpleType as A (component identity broken)")
 	}
-	if aST.Base() == nil || aST.Base().Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
-		t.Fatalf("A base = %v, want {xs}string", aST.Base())
+	if base := mustBase(t, s, aST); base == nil || base.Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
+		t.Fatalf("A base = %v, want {xs}string", base)
 	}
 }
 
@@ -362,7 +369,60 @@ func TestProduceSimpleTypeCircularRejected(t *testing.T) {
 		`<xs:simpleType name="B"><xs:restriction base="tns:A"/></xs:simpleType>`
 	_, err := produce(t, wrap("urn:x", body))
 	assertRule(t, err, "st-props-correct")
+	// The rule ID alone no longer identifies WHICH check spoke: the producer's own
+	// on-stack cycle guard is gone (a by-name base= is deferred, so constructing a
+	// simple type recurses into no other), and st-props-correct has several
+	// clauses. Naming the clause is what keeps this test testing the circularity
+	// rather than passing on some earlier clause-1 rejection reached first.
+	if got := err.Error(); !strings.Contains(got, "st-props-correct clause 2") ||
+		!strings.Contains(got, "circular {base type definition} chain") {
+		t.Fatalf("rejection = %q, want finalize's checkSimpleBaseAcyclic charging st-props-correct clause 2", got)
+	}
 }
+
+// TestProducedNamedBaseIsAlwaysARef is ruling 4(a)'s pin, and it is the only
+// thing that detects the drift it forbids: EVERY by-name base= must be stored as
+// an xsd.SimpleTypeRef, never as an xsd.OwnedSimpleType wrapping the resolved
+// component. The owned arm is legal — an inline <simpleType> base and the
+// src-expredef original both take it — so nothing about the type system stops a
+// producer from "helpfully" resolving a name and storing the result, which would
+// opt that one call site out of deferred resolution silently.
+//
+// The base is read through a resolver that resolves NOTHING: an owned arm would
+// answer with its component, a by-name arm must fail. That is the observation
+// the exported surface allows — the arm itself is not readable — and it is
+// exact, because those are the only two arms.
+func TestProducedNamedBaseIsAlwaysARef(t *testing.T) {
+	// A names a BUILTIN (already constructed and memoized, the case most likely
+	// to tempt a producer into storing the live pointer) and B names a local type.
+	body := `<xs:simpleType name="A"><xs:restriction base="xs:string"/></xs:simpleType>` +
+		`<xs:simpleType name="B"><xs:restriction base="tns:A"/></xs:simpleType>`
+	s, err := produce(t, wrap("urn:x", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	for _, local := range []string{"A", "B"} {
+		td, ok := s.Type(xsd.QName{Space: "urn:x", Local: local})
+		if !ok {
+			t.Fatalf("type {urn:x}%s not found", local)
+		}
+		st := td.(*xsd.SimpleType)
+		if _, err := st.Base(noResolver{}); err == nil {
+			t.Fatalf("%s's produced base= resolved without a schema, so it is stored as an OwnedSimpleType; ruling 4(a) requires every by-name base to be an xsd.SimpleTypeRef", local)
+		}
+		// And it IS resolvable through the schema, so the ref is not merely broken.
+		if base := mustBase(t, s, st); base == nil {
+			t.Fatalf("%s's base= does not resolve through the finalized schema", local)
+		}
+	}
+}
+
+// noResolver resolves nothing. It is the probe TestProducedNamedBaseIsAlwaysARef
+// uses to tell the two {base type definition} arms apart from outside package
+// xsd: an owned arm needs no resolver and answers, a by-name arm cannot.
+type noResolver struct{}
+
+func (noResolver) Type(xsd.QName) (xsd.TypeDefinition, bool) { return nil, false }
 
 func TestProduceRestrictionBaseAndInlineRejected(t *testing.T) {
 	body := `<xs:simpleType name="Bad"><xs:restriction base="xs:string"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:restriction></xs:simpleType>`
@@ -488,12 +548,12 @@ func TestProduceAnonymousInlineBaseRestriction(t *testing.T) {
 	}
 	td, _ := s.Type(xsd.QName{Local: "Wrap"})
 	st := td.(*xsd.SimpleType)
-	anon := st.Base()
+	anon := mustBase(t, s, st)
 	if anon == nil || anon.Name() != (xsd.QName{}) {
 		t.Fatalf("Wrap base is not an anonymous (zero-QName) simple type: %v", anon)
 	}
-	if anon.Base() == nil || anon.Base().Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
-		t.Fatalf("anonymous base's base = %v, want {xs}string", anon.Base())
+	if base := mustBase(t, s, anon); base == nil || base.Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
+		t.Fatalf("anonymous base's base = %v, want {xs}string", base)
 	}
 }
 
@@ -527,8 +587,16 @@ func TestProduceSkipsOutOfScope(t *testing.T) {
 
 // complexType reads the produced complex type named local (no namespace) from a
 // schema built from body, failing on any Produce error or a missing/ wrong-kind
-// type.
+// type. Use complexTypeIn where the assembled Schema is needed too — reading a
+// produced simple type's {base type definition} is a lookup against it.
 func complexType(t *testing.T, body, local string) xsd.ComplexType {
+	t.Helper()
+	ct, _ := complexTypeIn(t, body, local)
+	return ct
+}
+
+// complexTypeIn is complexType plus the assembled Schema the type was read from.
+func complexTypeIn(t *testing.T, body, local string) (xsd.ComplexType, *xsd.Schema) {
 	t.Helper()
 	s, err := produce(t, wrap("", body))
 	if err != nil {
@@ -542,7 +610,7 @@ func complexType(t *testing.T, body, local string) xsd.ComplexType {
 	if !ok {
 		t.Fatalf("%s is %T, want xsd.ComplexType", local, td)
 	}
-	return ct
+	return ct, s
 }
 
 // topGroup extracts the top model group of an element-content complex type.
@@ -1255,7 +1323,7 @@ func TestProduceAcceptsNarrowingRestriction(t *testing.T) {
 // facetKindOf's unknown-name branch and were silently dropped, which also left
 // every scale Schema Component Constraint unreachable from a parsed schema.
 func TestProduceScaleFacetsReachTheFacetSet(t *testing.T) {
-	st := simpleTypeOf(t, "Scaled", `<xs:simpleType name="Scaled">
+	st, _ := simpleTypeOf(t, "Scaled", `<xs:simpleType name="Scaled">
 	   <xs:restriction base="xs:precisionDecimal">
 	     <xs:maxScale value="4" fixed="true"/>
 	     <xs:minScale value="2"/>
@@ -1361,7 +1429,7 @@ func TestProduceFacetFixedActualValue(t *testing.T) {
 	for _, c := range cases {
 		for _, s := range fixedFacetSchemas(c.attrs) {
 			t.Run(s.facet+"/"+c.name, func(t *testing.T) {
-				st := simpleTypeOf(t, "st", s.body)
+				st, _ := simpleTypeOf(t, "st", s.body)
 				facets := st.OwnFacets()
 				if len(facets) != 1 {
 					t.Fatalf("own facets = %v, want exactly one <%s>", facets, s.facet)
@@ -1445,8 +1513,8 @@ func TestProduceLocalElementInlineSimpleType(t *testing.T) {
 		t.Fatalf("local element = %s, want {}code", ed.Name())
 	}
 	st := inlineSimpleType(t, ed.TypeDefinition())
-	if st.Base() == nil || st.Base().Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
-		t.Fatalf("inline type base = %v, want {xs}string", st.Base())
+	if base := mustBase(t, s, st); base == nil || base.Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
+		t.Fatalf("inline type base = %v, want {xs}string", base)
 	}
 	if got := st.OwnFacets(); len(got) != 1 || got[0].Kind() != xsd.FacetMaxLength {
 		t.Fatalf("inline type own facets = %v, want one maxLength", got)
@@ -1465,7 +1533,7 @@ func TestProduceLocalAttributeInlineSimpleType(t *testing.T) {
 		`<xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:int">` +
 		`<xs:minInclusive value="1"/></xs:restriction></xs:simpleType></xs:attribute>` +
 		`</xs:complexType>`
-	ct := complexType(t, body, "CT")
+	ct, s := complexTypeIn(t, body, "CT")
 	uses := ct.AttributeUses()
 	if len(uses) != 1 {
 		t.Fatalf("attribute uses = %d, want 1", len(uses))
@@ -1475,8 +1543,8 @@ func TestProduceLocalAttributeInlineSimpleType(t *testing.T) {
 		t.Fatalf("decl scope = %s, want local", decl.ScopeVariety())
 	}
 	st := inlineSimpleType(t, decl.TypeDefinition())
-	if st.Base() == nil || st.Base().Name() != (xsd.QName{Space: xsdNS, Local: "int"}) {
-		t.Fatalf("inline type base = %v, want {xs}int", st.Base())
+	if base := mustBase(t, s, st); base == nil || base.Name() != (xsd.QName{Space: xsdNS, Local: "int"}) {
+		t.Fatalf("inline type base = %v, want {xs}int", base)
 	}
 }
 
