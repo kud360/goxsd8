@@ -45,9 +45,16 @@ WIP branch) at every step boundary.
    have **warden** review the PLANNED surface first (the Surface sketch
    plus mason's intended type shapes — a one-comment design pre-flight,
    posted on the issue) BEFORE any code is written; shape errors are
-   cheapest before they're built. Then delegate to **mason**,
-   committing on the WIP branch. Public API added/changed → **warden**
-   reviews the diff too; post its verdict on the issue. CHECKPOINT.
+   cheapest before they're built. Then delegate to **mason**, ALWAYS
+   with worktree isolation — never into your own checkout, which has
+   exactly one writer (docs/WORKFLOW.md, "One writer per checkout").
+   Mason commits on the isolated worktree's local branch; that branch
+   is never pushed. NEVER commit on a live subagent's behalf, including
+   in reaction to a stop-hook "uncommitted changes" warning. Only once
+   mason REPORTS completion, fast-forward-merge its local branch into
+   `wip/issue-<N>` and discard the worktree. Public API added/changed →
+   **warden** reviews the diff too; post its verdict on the issue.
+   CHECKPOINT.
 
 5. **Judge** — delegate to **arbiter** (it reviews the branch diff
    against main). CHECKPOINT after each verdict. On reject: ONE repair
