@@ -432,6 +432,114 @@ func TestUPAAllGroupNonEmptiableInSequencePasses(t *testing.T) {
 	}
 }
 
+// uAllThen builds sequence(all(members…), successor), the shape cos-all-limited
+// clause 1 (§3.8.6.2) keeps out of a schema document and the exported xsd
+// constructors reach directly.
+func uAllThen(t *testing.T, successor Particle, members ...Particle) ModelGroup {
+	t.Helper()
+	return uGroup(t, CompositorSequence,
+		uOne(t, ResolvedTerm{Term: uGroup(t, CompositorAll, members...)}),
+		successor,
+	)
+}
+
+// TestUPAAllGroupMandatoryMemberDoesNotCompeteWithSuccessor pins the false reject
+// #468 removes: in sequence(all(a, b), a) the two a particles do not ·compete·.
+// ·compete· (§3.8.4.2) asks for two ·paths· "identical except that one path has
+// P1 as its last item and the other has P2", so the prefix PATH is shared: either
+// it already attributed an a to the <all>'s member, in which case that member's
+// {max occurs} is spent and it cannot be the last item of the other path, or it
+// did not, in which case §3.8.4.1.3's S = S1 × S2 leaves the group incomplete and
+// the successor is not reachable at all. Transcribing the <all> as a bare
+// (a | b)* claims the group may end after EITHER member and false-rejects this.
+func TestUPAAllGroupMandatoryMemberDoesNotCompeteWithSuccessor(t *testing.T) {
+	g := uAllThen(t, uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
+	)
+	if err := uSchemaWithModel(t, g, nil); err != nil {
+		t.Fatalf("sequence(all(a, b), a) was rejected: %v", err)
+	}
+}
+
+// TestUPAAllGroupMandatoryMemberAfterOptionalPredecessor is the same model with a
+// leading optional particle, which puts the <all>'s ·first· set into the start
+// state beside z and so exercises the carve-out and the successor wiring at once.
+func TestUPAAllGroupMandatoryMemberAfterOptionalPredecessor(t *testing.T) {
+	g := uGroup(t, CompositorSequence,
+		uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uLocal(t, uq("z"), uq("T"))}),
+		uOne(t, ResolvedTerm{Term: uGroup(t, CompositorAll,
+			uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+			uOne(t, ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
+		)}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+	)
+	if err := uSchemaWithModel(t, g, nil); err != nil {
+		t.Fatalf("sequence(z?, all(a, b), a) was rejected: %v", err)
+	}
+}
+
+// TestUPAAllGroupThreeMandatoryMembersGeneralize pins that the fix is about the
+// SUBSET of members still owed and not about the two-member case: with three
+// mandatory members there are three orders, each ending on a different member, and
+// a rule that gated one member's ·last· positions on every other member being
+// ·emptiable· would return an empty exit set for all three.
+func TestUPAAllGroupThreeMandatoryMembersGeneralize(t *testing.T) {
+	g := uAllThen(t, uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("c"), uq("T"))}),
+	)
+	if err := uSchemaWithModel(t, g, nil); err != nil {
+		t.Fatalf("sequence(all(a, b, c), a) was rejected: %v", err)
+	}
+}
+
+// TestUPAAllGroupEmptiableMemberCompetesWithSuccessor is the negative direction,
+// and it is what keeps the fix from being indistinguishable from deleting the
+// check. In sequence(all(a, b?), b) the member b IS ·emptiable·, so the path
+// (all's a) leaves the group complete with b never taken: the sequence <a/><b/>
+// has one path ending at the <all>'s b and another, identical up to its last
+// item, ending at the successor b. The two ·compete· and cos-nonambig fires.
+func TestUPAAllGroupEmptiableMemberCompetesWithSuccessor(t *testing.T) {
+	g := uAllThen(t, uOne(t, ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+		uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
+	)
+	expectRule(t, uSchemaWithModel(t, g, nil), ruleCosNonambig)
+}
+
+// TestUPAAllGroupSatisfiedRepeatableMemberCompetesWithSuccessor is the other
+// residual: a member with {max occurs} past {min occurs} is satisfied after its
+// first occurrence, so it may still be taken once the group is complete. The
+// sequence <b/><a/><a/> has a path whose last item is the <all>'s a taken a
+// second time and another whose last item is the successor a, so cos-nonambig
+// fires here too — the exit state is not empty just because every member is
+// non-·emptiable·.
+func TestUPAAllGroupSatisfiedRepeatableMemberCompetesWithSuccessor(t *testing.T) {
+	g := uAllThen(t, uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+		uParticle(t, uOccurs(t, 1, 2), ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
+	)
+	expectRule(t, uSchemaWithModel(t, g, nil), ruleCosNonambig)
+}
+
+// TestUPAAllGroupNonEmptiableMemberBesideEmptiableOnePasses is the control for
+// the two negative pins above: in sequence(all(a, b?), a) the successor collides
+// with the NON-·emptiable· member, so the shared prefix path argument of
+// TestUPAAllGroupMandatoryMemberDoesNotCompeteWithSuccessor applies unchanged and
+// b's emptiability is beside the point — b never ·overlaps· a. A successor is
+// live in the exit state without thereby competing with anything.
+func TestUPAAllGroupNonEmptiableMemberBesideEmptiableOnePasses(t *testing.T) {
+	g := uAllThen(t, uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+		uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
+	)
+	if err := uSchemaWithModel(t, g, nil); err != nil {
+		t.Fatalf("sequence(all(a, b?), a) was rejected: %v", err)
+	}
+}
+
 // TestUPAGroupRefExpansion pins that a <group ref> is expanded, and that two
 // references to one definition are two DISTINCT particles (§3.8.6.4: "particles
 // at different points in the content model are always distinct from one another,
