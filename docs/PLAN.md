@@ -3615,6 +3615,364 @@ best taken opportunistically by any session touching `xsd/derivation.go`
   discharged, and the lane's live residual is now #574's partition above,
   not that list.
 
+Update (2026-08-09, daily backlog — **eighteen landings, the largest
+`schema`-lane window in the recorded sequence, and the first persona pass
+in four**). Since `006235e`, in order: #501 (`7dfd89a`), #576
+(`fc87875`), #446 (`af0b3c3`), #581 (`fce25f2`), #574 (`fb547c2`), #392
+(`a6536ae`), #329 (`1b41ad5`), #505 (`c6c6d2c`), #468 (`51dc129`), #379
+(`e0285cf`), #430 (`a37cdcf`), #436 (`ec97143`), #464 (`ce099a8`), #395
+(`2934d10`), #480 (`7eec170`), #330 (`06327ca`), #463 (`8de09bf`), #342
+(`432dbc6`), then the fifth weekly `/retro` (`343464f`, #528 and #598)
+and the steward architecture audit (`5cea66f`). Three facts dominate.
+**Band 6 was consumed nine deep** — every one of its ten published slots
+except #571 landed inside one window, which has never happened before.
+**The persona step ran for the first time since 2026-08-05**, after three
+consecutive surface-unchanged skips, and both personas found a real
+README defect. And **the working queue's head is now a `fail` → `pass`
+suite case again** (#585), which it has not been for several passes.
+
+Lanes, read off `conformance/testdata/expectations/*.txt` at `5cea66f`
+on 2026-08-09. Date-stamped per the preamble convention (#411); earlier
+paragraphs are **not** corrected in place:
+
+| lane | pass / total | movement since 2026-08-08 |
+|---|---|---|
+| `schema` | **9635 / 15398** | 9549 → 9635, **+86**; total 15432 → 15398, **−34** |
+| `datatypes` | **1156 / 1173** | 1151 → 1156, **+5** (#574) |
+| `instance` | 0 / 26361 | unchanged; total 26426 → 26361, **−65** |
+| `xpath`, `json`, `ber` | empty by design | unchanged |
+
+**The `schema` figure needs its arithmetic stated, because +86 is a net
+and the gross is +91.** Six landings moved it, each measured by the
+arbiter and each reconciling exactly against the next one's starting
+figure: #501 **+23** (9549 → 9572), #505 **+29** (9567 → 9596), #436
+**+17** (9596 → 9613), #395 **+4**, #480 **+3**, #463 **+15** (→ 9635).
+The missing five are **#446's applicability removal**: `af0b3c3` deleted
+34 `schema` and 65 `instance` lines for W3C groups whose own
+`testGroup/@version` scopes them away from a 1.1 processor, and five of
+the 34 were banked passes. **That is the first time a lane's pass count
+has legitimately gone down**, and it is the mechanism #576 built and #581
+made all-or-nothing, exercised for real. It is not a regression and must
+never be read as one — the denominator moved with it.
+
+***GAP ledger: 49 → 49 lines, 20 → 21 files — and the flat total hides
+both a real retirement and a new permanent false positive in the
+measurement itself.*** Per-file delta, `006235e` → `5cea66f`:
+
+| file | Δ | landing |
+|---|---|---|
+| `xsd/substitutiongroup.go` | **1 → 0** | **#395** — a fail-open marker RETIRED |
+| `parser/redefine.go` | **4 → 2** | **#505** — two clause-6.2/7.2 markers consolidated |
+| `parser/doc.go` | **5 → 4** | **#505** |
+| `conformance/schema.go` | **3 → 4** | **#505** — the `redefineDecidable` cross-reference |
+| `xsd/complextype.go` | **2 → 3** | **#392** — the vacuous clause-5 `{assertions}` |
+| `xsd/collapsedintermediate.go` | **0 → 1** | **#392** — a new file, new disclosure |
+| `tools/commentwrap/main.go` | **0 → 1** | **#329 — NOT a marker.** See below. |
+
+**Methodology correction, and it is permanent.** The established figure is
+`GAP(`-bearing **lines** across all `*.go`. As of #329 that grep has a
+false positive: `tools/commentwrap/main.go:630` is *prose about the
+marker convention* — *"the same discipline STYLE P3 puts on `GAP(`
+markers"* — not a fail-open site. The honest figures at `5cea66f` are
+therefore **47 production fail-open markers**, plus one test-file pin
+(`value/valuespace_test.go:139`, which names the marker it pins) and one
+tooling prose mention, for the 49 the grep returns. **Successor passes
+must subtract the commentwrap line or the ledger will read flat while it
+is actually falling.** Recorded here rather than filed: the count is a
+cartographer instrument, and its correction belongs with the instrument.
+
+**Totality holds, fifth consecutive pass** — every production marker maps
+to an open issue, checked by scanning fifteen lines forward from each for
+an issue reference and reading the residue by hand. Two known
+imprecisions survive and neither is new: `xsd/derivation.go:1041` is
+*owned* by **#555** and names nothing (#555's own first task is the
+repoint — its body says `:994`, which is line drift, not a stale
+premise), and `parser/produce_complex.go:1299` still reads *"Unowned: no
+issue tracks it yet"* when **#471** has tracked it since 2026-08-03,
+which is #471's own Acceptance. Marker-names-its-issue is 45 of 47.
+
+***Band 7 — the deliverable.*** Ordering doctrine unchanged: **measured
+lane movement first, then the integrity of the measurement, then false
+rejects, then under-rejects, then producer completeness.** Band 6 was
+consumed nine deep, so almost every slot below is newly derived rather
+than carried; where a slot is carried it says so.
+
+***Tier 1 — measured lane movement.***
+
+1. **#585** — **new to the band, entering at the head, and it is the
+   only entry in the tier.** A CHAINED `redefine` is rejected on a valid
+   schema: D2's own redefining children are never recorded as D1's
+   originals, so `src-expredef`'s closing requirement fires. It names its
+   suite case — `MS-Additional2006-07-15/addB007`, banked `fail`,
+   annotated in the suite itself *"Should allow to redefine a redefined
+   complexType"* — and moves it `fail` → `pass`. **It was filed on
+   2026-08-08 with no queue label at all** and was invisible to every
+   `label:ready` read for the whole window; relabelled `ready` this pass.
+   Its own "harder than it looks, do not start without a design pass"
+   note is a warden pre-flight signal, not a demotion, and its advice to
+   land the `simpleType` half first is the recommended split.
+2. **#442** — a top-level `element` with an inline `complexType` child is
+   unproduced, the last unwidened §3.3.2.1 tier-1 shape, and a banked
+   fixture rests on the decline. **Carried from Band 6's on-deck list**,
+   promoted because the six issues ahead of it there all landed.
+3. **#590** — the Saxon `pdecimal016` cohort, five `datatypes` cases,
+   declined because `decodePDecimalSchema` has no chain model. It is
+   #574's sibling by construction: #574 bought five decisions this window
+   by teaching one reader a chain, and this is the same widening one
+   cohort over. Buys **decisions**, not guaranteed passes — the same
+   honesty #574's Acceptance carried, and it is what makes the tier
+   truthful.
+
+***Tier 2 — integrity of the measurement.***
+
+4. **#595** — #392 landed clause 1.5's decision and converted **zero** of
+   #336's 139 decided-but-disagreeing `schema` cases, and nobody knows
+   which exit swallowed them. 139 cases is the largest measured cohort in
+   the queue and the single best pointer to where the `schema` lane's
+   next win is. The measurement #336's thread asked for and never got.
+5. **#596** — the fail-open inventory that describes clause 1.5 as
+   *"accepted unconditionally"*, which #392 falsified the day it was
+   written. **Its own conditional has now been discharged too**: it says
+   "TWO today, ZERO after #436", and #436 landed at `ec97143`, so the
+   figure is **zero today**. Posted to its thread rather than edited into
+   its body (see #515 below). Ranked immediately behind #595 deliberately
+   — a session taking #595 while this text stands reads the wrong
+   baseline straight out of the file comment it is measuring.
+6. **#515** — **promoted out of `kind/process` and into this tier, on
+   measured cost.** The GitHub MCP tool strips `<…>` tokens from issue
+   bodies, so a session that "updates" a body deletes every XML element
+   name in it. This pass owed four body edits (#596's discharged
+   conditional, #584's and #585's missing mandatory `## Depends on`,
+   #438's retarget) and downgraded all four to comments. That is
+   **three passes and six downgraded edits**, and it makes
+   `.claude/agents/cartographer.md` step 2 — *"fixed by editing that
+   body, not by commenting only"* — unexecutable for most of this
+   tracker. Compounded by **#527**, confirmed first-hand again this pass
+   (`gh` returns HTTP 403 in the same session in which every MCP call
+   succeeds), so there is currently **no** lossless read path for an
+   issue body at all: MCP strips, `gh` 403s. Either one alone would leave
+   a path. **#527 rides directly behind it** and is not given its own
+   slot only because #515 is the half that corrupts data rather than
+   merely blocking a read.
+7. **#571** — the decline census's polarity-independence premise is
+   prose, and an executor that reads `expect` before its terminal
+   comparison misclassifies a decline as decided. **The one Band 6 slot
+   that did not land**, carried at its published rank and for its
+   published reason: it protects a report, not the ratchet.
+
+***Tier 3 — false rejects (fail-closed).***
+
+8. **#606** — `disallowedNamesSubset` condition 2 (`##defined`)
+   over-approximates `c-avaw` exactly as condition 1 did before #430, and
+   the residual carries no owning `GAP` marker. Filed by #430's own
+   post-land pass this window; it is the same false-reject #430 landed to
+   remove, one condition over.
+9. **#603** — two DISTINCT but equivalent `redefine` elements get
+   different `docKey`s, so §4.2.4's *"multiple equivalent redefines will
+   not constitute a violation"* is over-rejected. This is the orphaned
+   half of #379's GAP bullet: #379 landed the `override` side this window
+   (`e0285cf`), and the `redefine` twin was filed rather than folded.
+   Pairs naturally with **#585** — both are `redefine` composition, both
+   in `parser/redefine.go`; a session taking #585 should read this first.
+10. **#604** — an XPath in a declaration substituted by `override` takes
+    `{base URI}` from D_new, not D_old, against §4.2.5's own
+    document-level-defaults note. Also filed by #379's post-land pass,
+    and #379 sharpened it: since canonical-content keying, two equivalent
+    overrides collapse onto whichever was reached first, so the wrong
+    base URI is now the *surviving* one.
+
+***Tier 4 — under-rejects (fail-open).***
+
+11. **#586** — the three approximations #392 left inside clause 1.5's
+    collapsed intermediate: an over-approximated `{attribute wildcard}`,
+    a vacuously-discharged clause 5 `{assertions}`, and the structural
+    inverter's decline. It owns two of the three GAP markers #392 added,
+    so it is the retirement path for the ledger rows this window created.
+12. **#413** — `{open content}` is folded into neither content-model
+    automaton, so `derivation-ok-restriction` clause 2.4 is fail-open for
+    every type carrying one. Ranked beside #586 because #596's corrected
+    disclosure cites both, and because clause 1.5 inherits this one
+    through 2.4.2 — one shape reachable two ways.
+13. **#504 → #503** — `src-redefine` clauses 6.2.2 and 7.2.2, the
+    no-self-reference branches, both fail-open. **#504 was `blocked` on
+    #501 and #501 landed this window** (`7dfd89a`); the unblock was
+    already applied by the develop loop's own post-land pass, verified
+    here rather than re-applied. Kept as an ordered pair: 6.2.2 (the
+    subset direction) before 7.2.2 (the restriction direction).
+14. **#414 → #584 → #438** — **a three-deep chain this pass established
+    and the queue did not previously show.** #414 decides whether both
+    finalize folds reach an `InlineTypeDefinition` complex type; #584 is
+    the declaration-descending Phase D walk the tree already names as the
+    owner (`xsd/complexderivation.go:88`, verbatim: *"#584 owns it"*);
+    #438 is the enumeration of which three checks that walk must charge.
+    Only **#414 is startable**. #584 was filed with no queue label and is
+    now `blocked` on #414 for #438's own stated reason — widening a
+    read-only walk ahead of the folds turns an unfolded anonymous
+    extension into a **false rejection**, which is the one direction this
+    family must not acquire.
+
+***Tier 5 — producer completeness.***
+
+15. **#478 → #447** — still a pair, still in that order, **carried
+    unchanged from Bands 5 and 6**. #447's cost is still the four
+    `datatypes` residuals `pdecimal019`/`020`.
+
+**On deck:** **#570** (bank a per-lane decline baseline so a landing
+announces its newly-decidable delta) — still sequenced behind #571 for
+its published reason, and now with **two** real consumers rather than
+one, since #574 landed and #590 is queued. Also on deck: **#591 → #593**
+(the instance-`caseSpec` schema fix and the root-attribute widening it
+unblocks — the only ordered pair among the #574 sweep survivors),
+**#592** and **#594** (the other two survivors, one case each),
+**#472** (`goxsd8 parse`, whose stock rose this pass — see the persona
+bullet), **#499**, **#578** and **#579** (the automaton-cost cluster #501
+left behind), and **#625**/**#626** (the two persona findings, both
+one-paragraph README fixes that any session can take opportunistically).
+
+- **Nothing closed as stale, obsolete or duplicate — and for the first
+  time that is a RULING rather than an absence.** #584 and #438 are
+  duplicates on the merits: #584's own Notes say it *"supersedes the
+  anonymous-type half of #414/#438"*, and the tree agrees in as many
+  words. **The merge was ruled against and the reason is recorded on both
+  threads.** Six live in-tree comments cite `#438` by number —
+  `parser/produce_complex.go:358` and `:361`, `conformance/schema.go:802`,
+  `conformance/schema_test.go:171`, `xsd/complexderivation.go:84`,
+  `xsd/componentid.go:62`. Closing it today makes all six name a closed
+  issue, which is the STYLE P3 defect class the repo already carries
+  three open issues about (#396, #471, #555), and `/backlog` is
+  doc-and-issue-only and cannot repoint them. **Tracker tidiness is not
+  worth minting six stale citations and a seventh issue to fix them.**
+  Disposition instead: #438 stays open, `blocked` on #584, and the
+  landing that implements #584 repoints the six citations and closes it
+  in the same commit. Near-miss pairs otherwise checked and all distinct:
+  **#585/#603** (both `redefine` composition — one is a chained-original
+  false reject, the other a `docKey` identity over-rejection; adjacent
+  files, neither a superset), **#596/#595** (disclosure vs. measurement,
+  explicitly independent in #596's own body), **#606/#430** (the landed
+  fix and its surviving second condition), and **#625/#492/#513** (three
+  distinct sentences about `SchemaBuilder` in two different documents).
+  The 2026-07-31 finding stands an **eighth** time.
+- **Two issues were filed with NO queue label and had been invisible for
+  a full window — a defect class this file has not recorded before.**
+  #584 and #585, both filed 2026-08-08 by #505's mason at the landing
+  boundary, carried `kind/` and `area/` labels but neither `ready` nor
+  `blocked`, so neither appeared in any `label:ready` queue read across
+  eighteen landings. **#585 is the head of Band 7.** Labelled this pass
+  (#585 `ready`, #584 `blocked`). Worth naming because the previous pass
+  could report *"every open issue now carries exactly one queue label"*
+  and this one cannot: the invariant broke silently and nothing in the
+  loop looks for it. It is cheap to check and belongs in the post-land
+  pass's own checklist.
+- **Blocked-issue audit — all fifteen honest after this pass's two
+  changes, and nothing was unblocked by this window's eighteen
+  closures.** #16, #56, #79, #548, #555 and **#622** wait on triggers
+  with nothing open in `## Depends on`, correctly labelled under #347's
+  ratified widening; #622 is the newest and names its trigger precisely
+  (a ruling, with instructions to relabel `ready` if the next `/retro`
+  passes without taking it — the best-specified trigger dependency filed
+  to date). #248→#250, #250→#79's tail, #267→#250, #345→#250,
+  #415→#407, #456→#455, #593→#591 and the new **#584→#414** and
+  **#438→#584** all name issues **verified still open** at `5cea66f`.
+  **#504 was `blocked` on #501, and #501 landed** — the unblock had
+  already been applied by the develop loop's post-land pass and is
+  verified here rather than re-applied, which is the post-land contract
+  working exactly as written. No other closed issue in this window
+  appears in any open `## Depends on`.
+- **Counts, reported and not adjudicated. 145 open: 130 `ready`, 15
+  `blocked`, 0 `needs-replan`, 0 unlabelled.** They reconcile exactly,
+  and they are measured directly at `5cea66f` rather than reconciled
+  arithmetically against 2026-08-08's 134 — that figure was read
+  mid-window and this window's filings straddle it, so an identity
+  against it would be false precision (the same caution the previous pass
+  applied to 2026-08-07's 130). Composition, from what was measured:
+  **twenty issues closed** (the eighteen landings plus #528 and #598,
+  both taken by the `/retro`); **twenty-three created inside the window
+  and still open** — twenty-one by the develop loop's own post-land
+  harvests (#590–#596, #600–#624) and two by #505's mason (#584, #585);
+  and **two filed by this pass** (#625, #626). The one
+  `needs-replan` the previous pass carried is gone: #446 was re-planned,
+  re-landed at `af0b3c3` and closed. Per #347 there is no target and no
+  delta against one; the number is an output. **The queue grew while
+  twenty issues closed**, which is the harvest-to-landing ratio #347
+  ratified — stated as an observation, not a problem.
+- **Step 4 (libuser/cliuser) RAN, for the first time since 2026-08-05,
+  and both personas found a real defect.** The orchestrating session —
+  which owns the step per `docs/WORKFLOW.md`'s `/backlog` bullet and
+  #416's resolution — ran both and handed the cartographer their reports;
+  the cartographer folded them and role-played neither. The trigger was
+  `README.md` changing for the first time in four windows: #505's landing
+  removed the redefine/`complexType` limitation note. **Both findings are
+  the same shape — a README sentence contradicting `go doc`, with `go
+  doc` correct both times.**
+  - **#625 (libuser), filed.** README presents `xsd.NewSchemaBuilder()`
+    as a peer of `parser.Parse` for ordinary consumers, while
+    `xsd/schema.go:26` opens *"INTENDED CALLER: a producer, not an
+    application author"*; and README says a worked example is *"tracked
+    in issue #203"* when **#203 closed `completed` on 2026-07-29** and
+    `Example_buildFinalizeQuery` (`xsd/example_test.go:159`) has shipped
+    since. Two published statements about one surface, and the wrong one
+    is the one a consumer reads first. The persona corroborated the
+    caveat by following the sequence: one element with an inline complex
+    type needs hand-built `ComplexType`, `ResolvedTerm`/`TermOrRef`
+    discrimination, `Particle`, `ModelGroup`, `AttributeDeclaration`,
+    scope-parent plumbing and minted `ComponentID`s.
+  - **#626 (cliuser), filed.** README says *"every invocation prints a
+    pointer to the contract and exits 2"*. `-h`/`-help`/`--help`/no-args
+    print the **full usage block to stdout and exit 0**;
+    `cmd/goxsd8/doc.go:26-29` states this correctly and `main.go`'s
+    `wantsHelp` implements it. A first-time user reading only README
+    mispredicts the first command they will type.
+  - **Everything else checked came back clean and is recorded so the next
+    pass does not re-derive it:** the #505 removal itself is correct
+    (`go doc ./parser` confirms all four redefinable kinds are produced),
+    and `Parse`/`Produce`'s first-error-only claim, `value.Override`
+    composition, `builtin.Seed`, and `loader.Dir`/`WithResolver`/
+    `WithBackend`/`WithLogger` defaults all match README.
+  - **#472 and #514 have now owed a persona pass for four windows and
+    this pass discharges that debt indirectly**: the cliuser hit both
+    from the outside. #514's defect (a typo'd subcommand and a
+    reserved-but-unbuilt one are indistinguishable) was reproduced
+    independently, and #472's stock rose — it is the landing that makes
+    README's whole CLI paragraph true rather than merely accurate.
+- **Branch namespace: four refs, and ONE IS LIVE.** `wip/issue-338` @
+  `40a5f7a`, tip pushed **2026-08-09 13:53Z, twenty-three minutes before
+  this survey** — inside the 2h lease, **in-flight and off-limits**. Its
+  tip commit is `docs: log the #338 landing`, and #622 and #624 were
+  filed against it at 13:58 and 14:12, so #338 is mid-landing as this
+  pass runs. **It is not for deletion and must not be swept up with the
+  other three.** `wip/issue-256` @ `c56d9f7`, `wip/issue-271` @
+  `c1c3824` and `wip/issue-287` @ `6d79251` are unchanged in name and SHA
+  for a **seventh** pass and remain **listed for human deletion**: their
+  issues are closed, #271's tip is already on `main` and carries no work,
+  #287 was superseded by #511's doc-only landing, and #256's two commits
+  are genuinely absent from `main` (a correct park). `wip/issue-446` is
+  **gone**, deleted by GitHub when #446's PR squash-merged at `af0b3c3` —
+  the branch scheme working as written, and the first of these four to
+  retire itself. No `parked/untriaged-*` refs. **#399 owns the retirement
+  signal, is `ready`, and is unpicked for a seventh pass**; its cost is
+  now seven passes of re-deriving three unchanged facts.
+- **#489's premise was falsified by this window and the correction is on
+  its thread.** Its title says the follow-up ledger *"has gone four
+  consecutive sessions unaudited"*. This window's post-land passes filed
+  **21 issues across 18 landings** — #590–#596, #600–#624 — one per
+  landing, sustained, several of them explicit dismissals-turned-filings
+  of exactly the advisory class #489 was filed over. The **standing**
+  ledger (advisories carried from before this window) has still never
+  been swept end to end, and #324's post-land pass has still never run at
+  all, so #489 is kept on its durable half and explicitly **not**
+  promoted on a leak rate this window contradicts.
+- **A correction to this file's own 2026-08-08 entry, recorded rather
+  than edited in place.** That entry's Band 6 preamble says the top tier
+  *"has been empty for several passes and is not empty now"*, with #574
+  the sole occupant. Read forward, that reads as a claim about scarcity
+  of lane-moving work; the window that followed landed **six** separate
+  `schema`-lane movers. The entry was accurate about the *queue* it could
+  see and wrong as a forecast, and the difference matters for how future
+  bands are read: **a thin top tier is a fact about what has been filed,
+  never about what is available.** Per the preamble's add-don't-rewrite
+  convention the dated paragraph stands; this bullet is the correction of
+  record.
+
 ## M5 — Instance validation (XML) — epic #250, not yet carved
 
 `validate` engine + `validate/xmlsrc`; greedy deterministic matching, IDC,
