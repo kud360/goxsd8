@@ -136,8 +136,11 @@
 // {namespace constraint} alone, while clauses 2-3 resolve the
 // defined/sibling keywords against the declaration graph and the
 // containing complex type the caller supplies), attribute-use lookup.
-// Of that algebra only Wildcard.AllowsName is exported today; the rest is
-// in-package machinery finalize drives.
+// Of that algebra Wildcard.AllowsName is the one canonical admission entry
+// point, and the only one a caller admitting a name should reach for;
+// NamespaceConstraint.AllowsName and NamespaceConstraint.AllowsNamespace
+// are exported beneath it as the {namespace constraint} property's own
+// lower-level accessors. The rest is in-package machinery finalize drives.
 //
 // Until a driver ships, a consumer traverses a content model by hand,
 // switching Particle.Term over the TermOrRef sealed sum and then, for the

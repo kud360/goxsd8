@@ -24,9 +24,6 @@ const ruleMgPropsCorrect xsderr.Rule = "mg-props-correct"
 // (§3.8.6.5/.6) all read the particles in order. It is held as a document-order
 // slice, never de-duplicated or reordered.
 //
-// Ratchet impact: unchanged. This is a leaf shape with no parser producer; the
-// schema conformance lane moves only when the producer (#176) wires it in.
-//
 // Construct only through NewModelGroup, which rejects an invalid {compositor} so
 // an ill-formed record is unrepresentable (STYLE T1). ModelGroup is immutable
 // after construction.
