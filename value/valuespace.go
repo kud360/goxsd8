@@ -300,9 +300,15 @@ func contextDependent(t *xsd.SimpleType) bool {
 // union undecided: dispatch takes the first member that accepts, so a member
 // that could only be decided WITH context could change the verdict.
 //
-// The nil guards on Item() and each member are not defensive noise: a
-// programmatically built list or union can hold a nil slot, and Variety() on nil
-// would panic. No visited set is needed — a SimpleType's variety graph is a tree,
+// The nil guards on Item() and each member are belt-and-braces over a state the
+// xsd constructors already forbid, NOT a reachable one: NewSimpleType rejects an
+// absent {item type definition} and an absent member under st-props-correct
+// (checkListGraph/checkUnionGraph, xsd/derivation.go), so no *xsd.SimpleType that
+// exists can hold either, and xsd.List.Item's own doc says as much. They stay
+// because everything below them is nil-hostile too — the recursive Variety() call
+// they gate, and governingMapping on the very next line — so removing them would
+// trade a documented impossibility for a crash rather than for a verdict. No
+// visited set is needed — a SimpleType's variety graph is a tree,
 // since List and Union are built by value from already-complete item/member
 // pointers and so cannot reach back to t (PRINCIPLES 9).
 func needsContext(t *xsd.SimpleType) bool {
