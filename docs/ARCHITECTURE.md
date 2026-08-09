@@ -17,17 +17,29 @@ Value implementations, parsing, validation, and generation live above them.
                  value/backendtest (conformance kit for any backend)
    builtin/strict  builtin/native  <user backends>   (implement value contracts)
                  regex           (one engine, XSD + F&O flavors)
-                 parser/xmltree  (position-tracking XML; independent)
+                 parser/xmltree  (position-tracking XML; imports xsderr only, and
+                                  nothing else in the module — independent of the
+                                  schema pipeline, not of the error currency)
                  loader          (schema resolution interfaces)
                  parser          (schema docs -> xsd components; imports xmltree, loader,
                                   xsd, value, builtin — and builtin/strict, as the DEFAULT
                                   backend Parse seeds when the caller supplies none)
-                 xpath           (XPath 2.0 engine; imports value)
-                 validate        (instance validation; adapters xmlsrc, jsonsrc, bersrc)
-                 codegen  codec  (generation; dataset ser/de)
+                 xpath           (XPath 2.0 engine; imports value)          [1]
+                 validate        (instance validation; adapters xmlsrc, jsonsrc, bersrc) [1]
+                 codegen  codec  (generation; dataset ser/de)               [1]
                  conformance     (harness + ratchet; test-only)
-                 cmd/goxsd8      (the CLI)
+                 cmd/goxsd8      (the CLI; help/usage only today)
 ```
+
+**[1] These boxes are DESTINATIONS, not shipped layers.** `xpath`, `validate`
+(and `validate/xmlsrc`, `validate/jsonsrc`, `validate/bersrc`), `codegen`,
+`codec` and `builtin/native` are `doc.go`-only today: `go doc` renders no
+exported identifier for any of them and they import nothing from this module,
+so the edges drawn above do not exist yet in `go list -deps`. Read every
+present-tense sentence in their sections below as "will", not "does". Only
+`xsderr`, `xsd`, `internal/schemaloc`, `value`, `value/backendtest`, `regex`,
+`builtin`, `builtin/strict`, `loader`, `parser`, `parser/xmltree`,
+`conformance` and `cmd/goxsd8` carry code today.
 
 Nothing imports `conformance`. Nothing in the library imports an adapter's
 decoder (`encoding/xml`, `encoding/json`, BER) except that adapter.
@@ -180,29 +192,79 @@ represents it**:
   `<list>`/`<union>` in the producer are still ahead of it
   (`parser/produce.go` declines them today), so that half of the ordering
   argument is still live and is now the last cheap moment.
+
+  **Re-checked 2026-08-09: unchanged and still open.** `parser/produce.go`
+  still carries `st-props-correct` cl. 2's own colour map, `xsd/resolve.go`
+  still owns `checkComplexBaseAcyclic`, and `parser/produce.go:1134` still
+  declines `<list>`/`<union>`, so the window named above has not closed. No
+  new rule joined the two charged from both packages this window.
 - All child collections are slices in document order. Maps exist only as
   internal indexes and never determine any order.
 - Nothing derivable is stored (STYLE D3): no effective-facet caches —
   compute `Merge(base.EffectiveFacets(), declared)` on demand; no status
   booleans beside the facts that imply them.
 - The model is **read-only** after construction; mutation/editing APIs are
-  out of scope. `Finalize` performs exactly **one** mutation before it
-  returns — `xsd/attributeusefold.go` materialises §3.4.2.4 clause 3's
-  inherited `{attribute uses}` into every complex type (#401). It is a
-  property OVERWRITE, not a cache of derivable state (STYLE D3): afterwards
-  the producer's partial value is gone rather than kept beside the correct
-  one. Read-only means read-only *after* `Finalize`, and there is one write
-  site, not a growing set.
+  out of scope. `Finalize` performs a bounded set of mutations before it
+  returns — **two** as of 2026-08-09, run in this order from
+  `xsd/resolve.go`:
+  `xsd/attributeusefold.go` materialises §3.4.2.4 clause 3's inherited
+  `{attribute uses}` into every complex type (#401), then
+  `xsd/attributewildcardfold.go` materialises §3.4.2.5 clause 2's
+  `{attribute wildcard}` the same way. Each is a property OVERWRITE, not a
+  cache of derivable state (STYLE D3): afterwards the producer's partial
+  value is gone rather than kept beside the correct one. Read-only means
+  read-only *after* `Finalize`.
+
+  The previous edition of this bullet said "there is one write site, not a
+  growing set". **The set grew** — that tripwire has fired once, and the two
+  folds are now near-identical parallel machinery (identical `position`
+  index, identical three-arm `Base()` switch, byte-identical `store…`
+  functions), which is a STYLE T4 finding filed rather than fixed here. The
+  standing limit is restated deliberately: a THIRD finalize-time write site
+  is a design change, not an increment, and belongs in a reviewed issue
+  before it is written.
+
+### Value spaces without a dependency (`xsd.ValueSpace`)
+
+A handful of finalize-time constraints need to know something about a *value*,
+not a lexical form: `au-props-correct` (§3.5.6) cl. 3 and `loc-testSubP`
+(§3.4.6.4) cl. 4.2/5.2.2 COMPARE two `{value}`s; `a-props-correct` (§3.2.6.1)
+cl. 2 and `au-props-correct` cl. 2 ask whether a `{lexical form}` denotes one
+at all (Simple Default Valid, §3.2.6.2). Answering any of them needs `value`,
+which sits ABOVE `xsd`. Rather than invert the DAG, the whole capability is
+taken as an **input**: `xsd.ValueSpace` is a consumer-side interface (STYLE
+T3) declared in `xsd`, installed through `SchemaBuilder.FinalizeWith`, and
+implemented by `value.NewValueSpace(backend)` — which is what `parser`
+installs. Plain `SchemaBuilder.Finalize` installs the unexported
+`undecidedValueSpace`, so there is one code path, never a nil check.
+
+Every method may answer **undecided**, and undecided always ACCEPTS
+(PRINCIPLES 20's direction applied to value spaces): an ungoverned type, a
+lexical the mapping cannot map, two incommensurable value spaces, or anything
+needing context a `ValueConstraint` does not carry. Plain `Finalize` is
+therefore the fully fail-open configuration, which is exactly the behaviour
+that predated the seam.
+
+The related identity currency is `xsd.ComponentID`: an opaque token minted by
+the producer (`NewComponentID`) before either endpoint exists, for the
+references a QName cannot carry — anonymous and local components. It is
+compared with `==`, never rendered (its underlying value is an address, so any
+textual or sorted form would be nondeterministic, D1/D2) and never derived
+from position. `Loc` is provenance, not identity.
 
 ### Why the finalize machinery lives in `xsd` (a steward ruling, 2026-08-02)
 
-`xsd` is by far the largest package, and roughly 6,700 of its non-test lines
-export **nothing at all**: `derivation.go`, `complexderivation.go`,
+`xsd` is by far the largest package, and roughly 9,750 of its non-test lines
+export **nothing at all** — 20 files as of 2026-08-09, up from 13 and ~6,700
+lines at the 2026-08-02 audit: `assertionprefix.go`, `attributeusefold.go`,
+`attributewildcardfold.go`, `collapsedintermediate.go`, `complexderivation.go`,
 `complexextension.go`, `contentrestricts.go`, `defaultbinding.go`,
-`elementconsistent.go`, `particleattribution.go`, `effectivetotalrange.go`,
-`substitutiongroup.go`, `valueconstraintvalid.go`, `wildcardadmit.go`,
-`attributeusefold.go`, `resolve.go`. That looks like a candidate for an
-`xsd/finalize` sub-package. **It is not; do not propose the split.**
+`derivation.go`, `effectivetotalrange.go`, `elementconsistent.go`,
+`elementdefaultvalid.go`, `namespaceconstraint_sets.go`,
+`namespaceconstraint_subset.go`, `particleattribution.go`, `resolve.go`,
+`substitutiongroup.go`, `substitutiongrouptypes.go`,
+`valueconstraintvalid.go`, `wildcardadmit.go`. That looks like a candidate for
+an `xsd/finalize` sub-package. **It is not; do not propose the split.**
 
 The constraint machinery reads and writes the components' *unexported*
 fields — `attributeusefold.go` reads `ComplexType.prohibitedAttributeNames`
@@ -272,20 +334,25 @@ Two access styles over the compiled model, one shared core:
   document and trip `sch-props-correct` cl. 2.
 
   Two properties of this seam are worth stating because consumers depend on
-  them: the backend is a caller-supplied `value.Backend` (`Produce` demands
-  it explicitly; only `Parse` defaults it to `builtin/strict`, which is the
-  one policy edge from `parser` to a concrete backend), and the assembled
-  **document set is not reported** — `Parse` returns components, not the
-  list of documents they came from. The conformance schema lane needs that
-  list to gate every document in a closure, so it re-walks the closure
-  itself. Location resolution is no longer duplicated to do so: both walks
-  call `internal/schemaloc.Resolve` (#259), so the byte-for-byte agreement
-  the harness depends on is structural rather than a comment promise. The
-  rest of the walk is still a copy — `assembly.discover`/`.include`/`.fetch`
-  and `attrValue`, tracked as **#272** — and it is **growing on schedule**:
-  `conformance/schema_closure.go` went from 315 to 396 lines (+26%) between
-  2026-07-27 and 2026-08-01 as `<import>`/`<override>`/multi-document gating
-  landed. Every composition feature raises the price of that port.
+  them. First, the backend is a caller-supplied `value.Backend` (`Produce`
+  demands it explicitly; only `Parse` defaults it to `builtin/strict`, which
+  is the one policy edge from `parser` to a concrete backend). Second, the
+  assembled **document set IS reported**, through the second entry point:
+  `ParseReport(location, opts…)` returns the components *and* an
+  `*AssemblyReport` naming every document read, in discovery order
+  (`AssembledDocument`), plus every ·inter-schema-document reference· (§4.2.1)
+  the assembly could not follow to one (`UnfollowedDirective`,
+  `UnfollowedReason`). `Parse` is the report-free convenience wrapper.
+
+  That closes **#272**, the audit's longest-standing duplication finding.
+  The conformance schema lane used to carry its own
+  `<include>`/`<import>`/`<override>` walk in order to gate every document in
+  a closure; location resolution was de-duplicated first, onto
+  `internal/schemaloc.Resolve` (#259), and the walk itself is now gone.
+  `conformance/schema_closure.go` fell from 396 lines to **106** — two
+  functions, `closureDecidable` and `closureReached`, that read the report.
+  The gated set is the assembled set *by construction* rather than by two
+  walks agreeing, so no new composition feature has to be ported twice.
 
 ## Regex (`regex`)
 
@@ -308,6 +375,11 @@ per STYLE T2), otherwise stdlib.
 
 ## XPath (`xpath`)
 
+**Status: the package ships nothing.** `xpath` is `doc.go`-only — `go doc`
+renders no exported identifier and it imports nothing from this module, the
+`imports value` edge in the DAG above included. Everything below is the
+destination; read it as "will", not "does".
+
 Full XPath 2.0 is the destination; the engine grows outward from the
 XSD-required subset:
 
@@ -326,6 +398,11 @@ assertion definitively unsatisfied — they are NOT fail-open (PRINCIPLES
 use `regex`'s F&O flavor, never the pattern-facet flavor.
 
 ## Validation (`validate`)
+
+**Status: neither the engine nor any adapter ships anything.** `validate`,
+`validate/xmlsrc`, `validate/jsonsrc` and `validate/bersrc` are `doc.go`-only
+(M5/M8/M11). Everything below is the destination, stated in present tense
+because it is a design contract.
 
 - Abstract infoset via marker interfaces; sources plug in as adapters:
   - `validate/xmlsrc` — XML instances via `parser/xmltree` (first),
@@ -454,11 +531,15 @@ compiles, is documented, and has **zero** callers module-wide.
   helpers are declared library surface in `loader/doc.go` for external
   users, which is the "documented contract it fulfills" half of T5.
   Re-check, do not re-file.
-- **`xsderr.IsValidRule`** — zero non-test consumers, and `xsderr/doc.go`
-  claims a module-wide test enforces it that does not exist. Tracked as
-  **#273**, together with the 63 sites (50 in `builtin/strict`, 13 in
-  `value`) that still pass bare string literals where the rest of the
-  module uses typed `xsderr.Rule` constants.
+- **`xsderr.IsValidRule`** — **resolved (#273); re-check, do not re-file.**
+  It still has zero non-test consumers, but the module-wide test
+  `xsderr/doc.go` claims now exists and passes:
+  `xsderr/rulecatalog_enforcement_test.go`'s
+  `TestEveryRuleConstantIsInTheCatalog` and `TestNoRuleStringLiterals` scan
+  every package. `IsValidRule` is that test's subject, which is T5's
+  "documented contract it fulfills". The 63 bare string literals the last
+  audit counted (50 in `builtin/strict`, 13 in `value`) are gone — a
+  module-wide scan finds **zero** string literals in a `Rule` position.
 
 ## Conformance & ratchet
 
@@ -503,11 +584,13 @@ to be edited in two triples to stay correct.
 
 The same ruling covers the *inner* `Restriction{Base, Facets}` decode struct
 that mirrors across the cohorts — and the mirror is three anonymous inline
-structs plus one already-named type, not four identical anonymous ones:
-`conformance/datatypes.go:1803` inside `lexicalSchema` (which captures only
-`base`, that cohort's fixtures carrying no facets), `:2790` inside
-`pdecimalSchema`, `:3468` inside `anyURISimpleType`, and the named
-`d34Restriction` at `:3034` that `d34SimpleType.Restriction` points at. Each
+structs plus one already-named type, not four identical anonymous ones, all in
+`conformance/datatypes.go`: the inline one inside `lexicalSchema` (which
+captures only `base`, that cohort's fixtures carrying no facets), the one
+inside `pdecimalSchema`, the one inside `anyURISimpleType`, and the named
+`d34Restriction` that `d34SimpleType.Restriction` points at. (Named, not cited
+by line: the line numbers this paragraph used to carry were all stale within a
+week — cite symbols in prose that outlives an edit.) Each
 decodes the frozen `<restriction base=..>` shape of its own cohort's fixtures,
 so the upkeep coupling that would make duplication expensive is absent at this
 inner level for exactly the reason it is absent at the triple level: one
