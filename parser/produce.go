@@ -1770,6 +1770,25 @@ func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 // produceAttribute maps a top-level <attribute> into a global Attribute
 // Declaration (§3.2.2.1 dcl.att.global). type= form only. qname reaches it from
 // topLevelName through run, for the reason produceElement's doc gives.
+//
+// It charges the src-attribute clauses (§3.2.3) that carry no parent guard:
+// 4 (type= and an inline <simpleType> mutually exclusive), 1 (default and fixed
+// mutually exclusive, via valueConstraintOf) and 2 and 5 (the default/fixed ×
+// use= corner, via useValueConstraintOK). Clause 3 is guarded by "if the item's
+// parent is not <schema>" and so does not reach this form.
+//
+// Clauses 2 and 5 are charged here even though §3.2.2's Note says use= is not
+// allowed on a top-level <attribute>: that prohibition belongs to the schema for
+// schema documents, which this producer does not enforce, so a use= token does
+// reach this function and src-attribute's own clauses bind the <attribute>
+// element information item whatever put the token there.
+//
+// GAP(parser): a use= on a top-level <attribute> that violates no src-attribute
+// clause — use="prohibited" with no fixed=, use="required" with no default=, a
+// token outside the enumeration — is accepted and ignored, where the schema for
+// schema documents prohibits the attribute outright (xs:topLevelAttribute,
+// xmlschema11-1.md:4713). That grammar layer is absent parser-wide; #518 owns the
+// top-level half of it and names use= among the attributes no producer reads.
 func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.AttributeDeclaration, error) {
 	typeLex, hasType := elem.Attr("type")
 	inline := childElement(elem, xsd.XMLSchemaNS, "simpleType") != nil
@@ -1785,6 +1804,9 @@ func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.Attribu
 
 	vc, err := valueConstraintOf(elem, ruleSrcAttribute)
 	if err != nil {
+		return xsd.AttributeDeclaration{}, err
+	}
+	if err := useValueConstraintOK(elem); err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
 

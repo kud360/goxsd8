@@ -930,12 +930,19 @@ func TestProduceLocalAttributeDefaultAndFixedRejected(t *testing.T) {
 // clause 5 (fixed present ⇒ use not "prohibited"), and clause 1 charged even under
 // use="prohibited", which maps the <attribute> to no component at all (§3.2.2) yet
 // leaves the representation constraint over the element item itself in force.
+//
+// All three production forms are covered, top-level included: clauses 2 and 5
+// carry no parent guard, and nothing in this parser stops a document from writing
+// use= on a top-level <attribute>.
 func TestProduceAttributeUseValueConstraintClauses(t *testing.T) {
 	inComplexType := func(attr string) string {
 		return "\n<xs:complexType name=\"CT\"><xs:sequence/>\n" + attr + "\n</xs:complexType>"
 	}
 	inAttributeGroup := func(attr string) string {
 		return "\n<xs:attributeGroup name=\"AG\">\n" + attr + "\n</xs:attributeGroup>"
+	}
+	atTopLevel := func(attr string) string {
+		return "\n\n" + attr // the blank line puts the <attribute> on line 3, as the nested forms do
 	}
 	for _, tc := range []struct {
 		name   string
@@ -950,6 +957,9 @@ func TestProduceAttributeUseValueConstraintClauses(t *testing.T) {
 		{"attributeGroup fixed+prohibited", inAttributeGroup(`<xs:attribute name="a" type="xs:string" fixed="fv" use="prohibited"/>`), "clause 5"},
 		{"ref fixed+prohibited", inComplexType(`<xs:attribute ref="tns:g" fixed="fv" use="prohibited"/>`) + `<xs:attribute name="g" type="xs:string"/>`, "clause 5"},
 		{"ref default+required", inComplexType(`<xs:attribute ref="tns:g" default="dv" use="required"/>`) + `<xs:attribute name="g" type="xs:string"/>`, "clause 2"},
+		{"top-level default+required", atTopLevel(`<xs:attribute name="a" type="xs:string" default="dv" use="required"/>`), "clause 2"},
+		{"top-level default+prohibited", atTopLevel(`<xs:attribute name="a" type="xs:string" default="dv" use="prohibited"/>`), "clause 2"},
+		{"top-level fixed+prohibited", atTopLevel(`<xs:attribute name="a" type="xs:string" fixed="fv" use="prohibited"/>`), "clause 5"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := produce(t, wrap("urn:x", tc.body))
@@ -970,7 +980,8 @@ func TestProduceAttributeUseValueConstraintClauses(t *testing.T) {
 
 // TestProduceAttributeUseValueConstraintAccepted is the reverse hazard of the
 // clauses above: every pairing src-attribute clauses 2 and 5 leave legal still
-// produces. Clause 5 forbids only "prohibited", never "required".
+// produces, in the nested form and at top level alike. Clause 5 forbids only
+// "prohibited", never "required".
 func TestProduceAttributeUseValueConstraintAccepted(t *testing.T) {
 	for _, attr := range []string{
 		`<xs:attribute name="a" type="xs:string" default="dv" use="optional"/>`,
@@ -984,6 +995,11 @@ func TestProduceAttributeUseValueConstraintAccepted(t *testing.T) {
 			body := `<xs:complexType name="CT"><xs:sequence/>` + attr + `</xs:complexType>`
 			if _, err := produce(t, wrap("", body)); err != nil {
 				t.Fatalf("Produce rejected a legal use=/value-constraint pairing: %v", err)
+			}
+		})
+		t.Run("top-level "+attr, func(t *testing.T) {
+			if _, err := produce(t, wrap("", attr)); err != nil {
+				t.Fatalf("Produce rejected a legal top-level use=/value-constraint pairing: %v", err)
 			}
 		})
 	}
