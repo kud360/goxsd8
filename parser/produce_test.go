@@ -925,6 +925,122 @@ func TestProduceLocalAttributeDefaultAndFixedRejected(t *testing.T) {
 	assertRule(t, err, "src-attribute")
 }
 
+// TestProduceAttributeUseValueConstraintClauses pins the default/fixed × use=
+// corner of src-attribute (§3.2.3): clause 2 (default present ⇒ use="optional"),
+// clause 5 (fixed present ⇒ use not "prohibited"), and clause 1 charged even under
+// use="prohibited", which maps the <attribute> to no component at all (§3.2.2) yet
+// leaves the representation constraint over the element item itself in force.
+//
+// All three production forms are covered, top-level included: clauses 2 and 5
+// carry no parent guard, and nothing in this parser stops a document from writing
+// use= on a top-level <attribute>.
+func TestProduceAttributeUseValueConstraintClauses(t *testing.T) {
+	inComplexType := func(attr string) string {
+		return "\n<xs:complexType name=\"CT\"><xs:sequence/>\n" + attr + "\n</xs:complexType>"
+	}
+	inAttributeGroup := func(attr string) string {
+		return "\n<xs:attributeGroup name=\"AG\">\n" + attr + "\n</xs:attributeGroup>"
+	}
+	atTopLevel := func(attr string) string {
+		return "\n\n" + attr // the blank line puts the <attribute> on line 3, as the nested forms do
+	}
+	for _, tc := range []struct {
+		name   string
+		body   string
+		clause string
+	}{
+		{"default+required", inComplexType(`<xs:attribute name="a" type="xs:string" default="dv" use="required"/>`), "clause 2"},
+		{"default+prohibited", inComplexType(`<xs:attribute name="a" type="xs:string" default="dv" use="prohibited"/>`), "clause 2"},
+		{"fixed+prohibited", inComplexType(`<xs:attribute name="a" type="xs:string" fixed="fv" use="prohibited"/>`), "clause 5"},
+		{"default+fixed+prohibited", inComplexType(`<xs:attribute name="a" type="xs:string" default="dv" fixed="fv" use="prohibited"/>`), "clause 1"},
+		{"attributeGroup default+required", inAttributeGroup(`<xs:attribute name="a" type="xs:string" default="dv" use="required"/>`), "clause 2"},
+		{"attributeGroup fixed+prohibited", inAttributeGroup(`<xs:attribute name="a" type="xs:string" fixed="fv" use="prohibited"/>`), "clause 5"},
+		{"ref fixed+prohibited", inComplexType(`<xs:attribute ref="tns:g" fixed="fv" use="prohibited"/>`) + `<xs:attribute name="g" type="xs:string"/>`, "clause 5"},
+		{"ref default+required", inComplexType(`<xs:attribute ref="tns:g" default="dv" use="required"/>`) + `<xs:attribute name="g" type="xs:string"/>`, "clause 2"},
+		{"top-level default+required", atTopLevel(`<xs:attribute name="a" type="xs:string" default="dv" use="required"/>`), "clause 2"},
+		{"top-level default+prohibited", atTopLevel(`<xs:attribute name="a" type="xs:string" default="dv" use="prohibited"/>`), "clause 2"},
+		{"top-level fixed+prohibited", atTopLevel(`<xs:attribute name="a" type="xs:string" fixed="fv" use="prohibited"/>`), "clause 5"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:x", tc.body))
+			assertRule(t, err, "src-attribute")
+			if want := "src-attribute " + tc.clause; !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want it to cite %s", err, want)
+			}
+			loc, ok := xsderr.LocOf(err)
+			if !ok {
+				t.Fatalf("error %v carries no position", err)
+			}
+			if loc.URI != produceURI || loc.Line != 3 {
+				t.Fatalf("position = %s:%d:%d, want the <attribute>'s own line 3 of %s", loc.URI, loc.Line, loc.Col, produceURI)
+			}
+		})
+	}
+}
+
+// TestProduceAttributeUseValueConstraintAccepted is the reverse hazard of the
+// clauses above: every pairing src-attribute clauses 2 and 5 leave legal still
+// produces, in the nested form and at top level alike. Clause 5 forbids only
+// "prohibited", never "required".
+func TestProduceAttributeUseValueConstraintAccepted(t *testing.T) {
+	for _, attr := range []string{
+		`<xs:attribute name="a" type="xs:string" default="dv" use="optional"/>`,
+		`<xs:attribute name="a" type="xs:string" default="dv"/>`,
+		`<xs:attribute name="a" type="xs:string" fixed="fv" use="required"/>`,
+		`<xs:attribute name="a" type="xs:string" fixed="fv" use="optional"/>`,
+		`<xs:attribute name="a" type="xs:string" fixed="fv"/>`,
+		`<xs:attribute name="a" type="xs:string" use="prohibited"/>`,
+	} {
+		t.Run(attr, func(t *testing.T) {
+			body := `<xs:complexType name="CT"><xs:sequence/>` + attr + `</xs:complexType>`
+			if _, err := produce(t, wrap("", body)); err != nil {
+				t.Fatalf("Produce rejected a legal use=/value-constraint pairing: %v", err)
+			}
+		})
+		t.Run("top-level "+attr, func(t *testing.T) {
+			if _, err := produce(t, wrap("", attr)); err != nil {
+				t.Fatalf("Produce rejected a legal top-level use=/value-constraint pairing: %v", err)
+			}
+		})
+	}
+}
+
+// TestProduceAttributeUseClause3ChargedUnderProhibited pins src-attribute
+// clause 3 (§3.2.3) against a prohibited local <attribute>: clause 3 has no
+// use= precondition, so it rejects exactly as it does under every other use=
+// value, not silently accepted because use="prohibited" maps to no component
+// at all (§3.2.2) (#358 defect 4). The neither-ref-nor-name case is a
+// DELIBERATE reject here, not a skip: clause 3.1's "exactly one of ref or
+// name" holds unconditionally, so <attribute use="prohibited"/> is rejected
+// the same way <attribute use="optional"/> already is.
+func TestProduceAttributeUseClause3ChargedUnderProhibited(t *testing.T) {
+	global := `<xs:attribute name="x" type="xs:string"/>`
+	for _, tc := range []struct {
+		name string
+		attr string
+	}{
+		{"ref and name", `<xs:attribute ref="tns:x" name="x" use="prohibited"/>`},
+		{"ref and type", `<xs:attribute ref="tns:x" type="xs:string" use="prohibited"/>`},
+		{"ref and form", `<xs:attribute ref="tns:x" form="qualified" use="prohibited"/>`},
+		{"ref and inline simpleType", `<xs:attribute ref="tns:x" use="prohibited">` +
+			`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`},
+		{"neither ref nor name", `<xs:attribute use="prohibited"/>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := "\n<xs:complexType name=\"CT\"><xs:sequence/>\n" + tc.attr + "\n</xs:complexType>\n" + global
+			_, err := produce(t, wrap("urn:x", body))
+			assertRule(t, err, "src-attribute")
+			if want := "src-attribute clause 3"; !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want it to cite %s", err, want)
+			}
+			loc, ok := xsderr.LocOf(err)
+			if !ok || loc.URI != produceURI {
+				t.Fatalf("error %v carries no position in %s", err, produceURI)
+			}
+		})
+	}
+}
+
 func TestProduceAnyAttributeWildcard(t *testing.T) {
 	body := `<xs:complexType name="CT"><xs:sequence/><xs:anyAttribute namespace="##other" processContents="lax"/></xs:complexType>`
 	ct := complexType(t, body, "CT")
