@@ -1453,8 +1453,10 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 	if err := rejectBothInlineTypes(el, inlineSimple, inlineComplex); err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	name, _ := el.Attr("name")
-	qname := xsd.QName{Space: p.localTargetNS(el, "elementFormDefault"), Local: name}
+	qname, err := declarationName(el, p.localTargetNS(el, "elementFormDefault"))
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
 	vc, err := valueConstraintOf(el, ruleSrcElement)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
@@ -1658,9 +1660,12 @@ func (p *producer) produceAttributeUses(parent *Element, scopeParent xsd.Attribu
 // unreachable — produceAttributeUses runs collectAttributeContent, which returns
 // produceAttributeUse's rejection of a neither-ref-nor-name <attribute> before
 // this function walks the same children — and the branch is kept as a fallback.
-// The one failure that IS surfaced here is an unresolvable ref= prefix —
+// The two failures that ARE surfaced here are an unresolvable ref= prefix —
 // src-resolve, charged by resolveQName for every other reference in this
-// producer, and a prohibited <attribute> earns no exemption from it.
+// producer — and a name= that is not an xs:NCName, charged cvc-datatype-valid
+// by declarationName for every other declaration name in it. A prohibited
+// <attribute> earns no exemption from either: both are faults of the schema
+// document, and neither needs a component to exist to be a fault.
 func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error) {
 	var names []xsd.QName
 	for _, child := range parent.Children() {
@@ -1679,11 +1684,14 @@ func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error
 			names = append(names, qn)
 			continue
 		}
-		name, hasName := el.Attr("name")
-		if !hasName {
+		if _, hasName := el.Attr("name"); !hasName {
 			continue // unreachable: produceAttributeUse already rejected this shape upstream
 		}
-		names = append(names, xsd.QName{Space: p.localTargetNS(el, "attributeFormDefault"), Local: name})
+		qn, err := declarationName(el, p.localTargetNS(el, "attributeFormDefault"))
+		if err != nil {
+			return nil, err
+		}
+		names = append(names, qn)
 	}
 	return names, nil
 }
@@ -2022,8 +2030,10 @@ func (p *producer) produceLocalAttribute(el *Element, scopeParent xsd.AttributeS
 		return xsd.AttributeDeclaration{}, xsderr.New(ruleSrcAttribute, el.Loc(),
 			"attribute has both a type attribute and an inline <simpleType> child, but src-attribute clause 4 forbids both")
 	}
-	name, _ := el.Attr("name")
-	qname := xsd.QName{Space: p.localTargetNS(el, "attributeFormDefault"), Local: name}
+	qname, err := declarationName(el, p.localTargetNS(el, "attributeFormDefault"))
+	if err != nil {
+		return xsd.AttributeDeclaration{}, err
+	}
 	typeDef, err := p.localDeclaredType(el, anySimpleTypeName)
 	if err != nil {
 		return xsd.AttributeDeclaration{}, err

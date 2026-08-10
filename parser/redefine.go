@@ -496,18 +496,24 @@ func (p *producer) produceRedefine(el *Element) error {
 }
 
 // produceRedefinition maps ONE redefining declaration. It charges, in order, the
-// closing requirement of src-expredef ("In all cases there must be a top-level
-// definition item of the appropriate name and kind in the <redefine>d schema
-// document"), then the src-redefine clause that constrains this kind's own shape
-// (5 for a type, 6 for a group, 7 for an attribute group), and only then builds.
+// name's own lexical validity (declarationName, cvc-datatype-valid: a redefining
+// declaration mints a top-level {name} like any other, and it is an xs:NCName
+// like any other), then the closing requirement of src-expredef ("In all cases
+// there must be a top-level definition item of the appropriate name and kind in
+// the <redefine>d schema document"), then the src-redefine clause that
+// constrains this kind's own shape (5 for a type, 6 for a group, 7 for an
+// attribute group), and only then builds. The lexical fault comes first because
+// both structural clauses presuppose a name that could address a component at
+// all (PRINCIPLES 19).
 //
-// The closing requirement comes first because every later step depends on the
-// original existing: clause 5's self-derivation would otherwise resolve to the
-// redefinition itself and be reported as a circularity, which is the wrong
-// verdict for a redefinition of a name the redefined document never declared.
-// It also subsumes src-redefine clauses 6.2.1 and 7.2.1, which say the same
-// thing for the no-self-reference branch ("its own name attribute plus target
-// namespace successfully ·resolves· to a model group definition in S2").
+// The closing requirement precedes the shape clause because every later step
+// depends on the original existing: clause 5's self-derivation would
+// otherwise resolve to the redefinition itself and be reported as a
+// circularity, which is the wrong verdict for a redefinition of a name the
+// redefined document never declared. It also subsumes src-redefine clauses
+// 6.2.1 and 7.2.1, which say the same thing for the no-self-reference branch
+// ("its own name attribute plus target namespace successfully ·resolves· to a
+// model group definition in S2").
 //
 // Its message says "was recorded from" rather than "the redefined schema
 // document declares no": the miss it reports is on rs.originals, which one
@@ -520,7 +526,10 @@ func (p *producer) produceRedefine(el *Element) error {
 // anyway — but a wrong-but-unreachable error string is exactly the shape that
 // survives unexamined, so the claim is narrowed to what is actually known here.
 func (p *producer) produceRedefinition(rs *redefineSet, e redefineEntry) error {
-	qn := xsd.QName{Space: p.target, Local: e.key.name}
+	qn, err := declarationName(e.elem, p.target)
+	if err != nil {
+		return err
+	}
 	if _, ok := rs.originals[e.key]; !ok {
 		return xsderr.New(ruleSrcExpRedefine, e.elem.Loc(),
 			"<redefine> redefines <%s> %s, but no top-level <%s> of that name was recorded from the redefined schema document: src-expredef requires \"a top-level definition item of the appropriate name and kind in the <redefine>d schema document\" in all cases",

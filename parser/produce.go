@@ -2,10 +2,12 @@ package parser
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/kud360/goxsd8/builtin"
+	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -661,8 +663,11 @@ func (p *producer) run() error {
 		decl := p.ov.replacement(el)
 		switch decl.Name().Local() {
 		case "simpleType":
-			name, _ := decl.Attr("name")
-			st, err := p.buildSimpleType(xsd.QName{Space: p.target, Local: name}, decl)
+			name, err := declarationName(decl, p.target)
+			if err != nil {
+				return err
+			}
+			st, err := p.buildSimpleType(name, decl)
 			if err != nil {
 				return err
 			}
@@ -760,7 +765,12 @@ func (p *producer) run() error {
 // target namespace (§3.17.2: a top-level declaration's {target namespace} is
 // the <schema>'s), rejecting one that cannot serve as a {name} at all.
 //
-// The rejection is a plain grammar fault, not an xsderr rule verdict, and it is
+// The name's LEXICAL rejection — a value that is not an xs:NCName — is
+// declarationName's, charged cvc-datatype-valid and shared with every other
+// declaration-name path in this producer. What remains here is the ABSENT-or-
+// EMPTY name.
+//
+// That rejection is a plain grammar fault, not an xsderr rule verdict, and it is
 // the same fault for all five kinds. The schema for schema documents makes name
 // use="required" with type xs:NCName on xs:topLevelComplexType, xs:namedGroup,
 // xs:namedAttributeGroup, xs:topLevelElement and xs:topLevelAttribute, so an
@@ -790,24 +800,97 @@ func (p *producer) run() error {
 // otherwise charge an unrelated rule, and only sometimes) — the defect #206
 // found for two of the five and this closes for all five.
 //
-// The other two top-level named kinds do not come through here. <notation> is
+// The other two top-level named kinds do not come through here, and take the
+// NCName check from declarationName directly. <notation>'s empty name is
 // covered where it is built: xsd.NewNotation rejects an empty {name} citing
 // n-props-correct (§3.14.6), which a nameless <notation> document already
 // produces end to end.
 //
 // GAP(parser): a top-level <simpleType> is the one kind still outside this
-// helper — run expands its name inline and xsd.NewSimpleType has no {name}
-// guard of its own, so a <simpleType> with an absent or empty name is currently
-// registered under QName{target, ""} and the document produces without error.
-// #305 scoped itself to the five kinds named above; what a schema so registered
-// goes on to do downstream is not established here, so no error direction is
-// claimed for it. Tracked as #523.
+// helper — run expands its name through declarationName alone and
+// xsd.NewSimpleType has no {name} guard of its own, so a <simpleType> with an
+// absent or empty name is currently registered under QName{target, ""} and the
+// document produces without error. #305 scoped itself to the five kinds named
+// above; what a schema so registered goes on to do downstream is not
+// established here, so no error direction is claimed for it. Tracked as #523.
 func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
-	name, _ := decl.Attr("name")
-	if name == "" {
+	qname, err := declarationName(decl, p.target)
+	if err != nil {
+		return xsd.QName{}, err
+	}
+	if qname.Local == "" {
 		return xsd.QName{}, fmt.Errorf("parser: top-level <%s> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", decl.Name().Local(), decl.Loc())
 	}
-	return xsd.QName{Space: p.target, Local: name}, nil
+	return qname, nil
+}
+
+// ncNameRE matches the NCName production ([Namespaces in XML] NT-NCName) — the
+// ·lexical space· of xs:NCName, which Datatypes §3.4.7.1 fixes with the single
+// pattern facet "\i\c* ∩ [\i-[:]][\c-[:]]*". It is compiled once from the
+// XSD-flavor pattern through [regex.Translate], so the NameStartChar/NameChar
+// code-point sets behind \i and \c are the generated, spec-cross-checked ones
+// the regex package owns rather than a hand-typed table (PRINCIPLES 26/27).
+// FlavorXSD output is whole-string anchored, so a match means the WHOLE string
+// is an NCName: any string containing ':' fails, as does one starting with a
+// digit, '.' or '-', as does the empty string.
+var ncNameRE = func() *regexp.Regexp {
+	goRE, err := regex.Translate(`[\i-[:]][\c-[:]]*`, regex.FlavorXSD, "")
+	if err != nil {
+		panic("parser: translating the NCName pattern: " + err.Error())
+	}
+	return regexp.MustCompile(goRE)
+}()
+
+// declarationName bundles el's name attribute with the target namespace ns into
+// the {name}/{target namespace} pair a named declaration carries, rejecting a
+// name that is not in the ·lexical space· of xs:NCName. It is the SINGLE
+// NCName check for every declaration name this producer maps — the five
+// top-level kinds routed through topLevelName, the top-level <simpleType>,
+// <notation> and <redefine> child that are not, and the local
+// <element>/<attribute> forms.
+//
+// The name attribute's ·actual value· is the whiteSpace-normalized one, and the
+// {name} it yields is that normalized string: xs:NCName carries whiteSpace =
+// collapse (§3.4.7.1), so <element name="a "> declares "a". Trimming the four
+// §4.3.6 whitespace characters is that normalization here, not a private copy of
+// the collapse algorithm (STYLE T4) — collapse's other step, folding interior
+// #x20 runs to one, cannot turn a non-NCName into an NCName, since no NCName
+// contains a space at all.
+//
+// The charge is cvc-datatype-valid (Datatypes §4.1.4), the same footing #343
+// put a QName-valued schema-document attribute on: Structures §5.1 makes a
+// schema document's validity against the Schema for Schema Documents (§A)
+// normative, §A types name as xs:NCName on every one of these productions, and
+// a value outside a datatype's lexical space is not ·datatype-valid·. No
+// Structures Schema Representation Constraint states a clause for it, so
+// charging src-ct, e-props-correct or a-props-correct instead would be a
+// fabricated verdict (STYLE E2).
+//
+// A name containing a colon takes this rejection and not the more specific
+// no-xmlns (§3.2.6.3), even when it reads xmlns: or xmlns:a. no-xmlns governs
+// the bare string "xmlns", which IS an NCName; its own Note derives the
+// xmlns:* prohibition FROM the NCName constraint, so the lexical rule is the
+// most specific one that applies to a colonized name (STYLE E2, one rule per
+// error).
+//
+// The EMPTY name keeps whatever rejection it has today and is deliberately not
+// recharged here, though the empty string is outside NCName's lexical space
+// too: topLevelName conflates an absent name attribute with an empty one on
+// purpose, and an ABSENT attribute is a missing-required-attribute fault
+// against §A rather than a lexical one, so charging cvc-datatype-valid for the
+// pair would mis-describe half of it. The local forms leave the empty name to
+// xsd.NewElementDeclaration's e-props-correct clause 1 and
+// xsd.NewAttributeDeclaration's a-props-correct clause 1, and a top-level
+// <simpleType> still has no empty-name guard at all (#523).
+func declarationName(el *Element, ns string) (xsd.QName, error) {
+	lexical, _ := el.Attr("name")
+	name := strings.Trim(lexical, "\x09\x0A\x0D\x20")
+	if name != "" && !ncNameRE.MatchString(name) {
+		return xsd.QName{}, xsderr.New(ruleDatatypeValid, el.Loc(),
+			"<%s> name %q is not in the ·lexical space· of xs:NCName, the type the schema for schema documents declares for it (Structures §5.1, §A): an NCName carries no colon and begins with a letter or '_' (Datatypes §3.4.7.1)",
+			el.Name().Local(), name)
+	}
+	return xsd.QName{Space: ns, Local: name}, nil
 }
 
 // buildSimpleType returns the compiled simple type named name, building it once
@@ -1752,11 +1835,14 @@ func (p *producer) simpleTypeFinal(stElem *Element) []xsd.DerivationMethod {
 // identifier} from system= and {public identifier} from public=, each absent
 // when its attribute is. Both absent is rejected inside [xsd.NewNotation]
 // (n-props-correct, §3.14.6) — §3.14.3 defines no Schema Representation
-// Constraint of its own. <notation> occurs only as a <schema> child (§3.17.2),
-// so there is no nested form to map.
+// Constraint of its own. A name that is not an xs:NCName is rejected by
+// declarationName first, before anything is built. <notation> occurs only as a
+// <schema> child (§3.17.2), so there is no nested form to map.
 func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
-	name, _ := elem.Attr("name")
-	qname := xsd.QName{Space: p.target, Local: name}
+	qname, err := declarationName(elem, p.target)
+	if err != nil {
+		return xsd.Notation{}, err
+	}
 	var systemID, publicID *string
 	if v, ok := elem.Attr("system"); ok {
 		systemID = &v
