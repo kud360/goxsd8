@@ -59,15 +59,22 @@ func dOwnInline(t *testing.T, name QName, ct ComplexType, scope Scope, affiliati
 // hands that same identity to the declaration.
 func dType(t *testing.T, name, base QName, content ContentType, uses []AttributeUse, wildcard *Wildcard) ComplexType {
 	t.Helper()
+	return dTypeAt(t, xsderr.Loc{}, name, base, content, uses, wildcard)
+}
+
+// dTypeAt is dType positioned at loc, for a test that asserts which component a
+// rejection is charged to.
+func dTypeAt(t *testing.T, loc xsderr.Loc, name, base QName, content ContentType, uses []AttributeUse, wildcard *Wildcard) ComplexType {
+	t.Helper()
 	if name.Local == "" {
-		ct, err := NewAnonymousComplexType(xsderr.Loc{}, ElementDeclarationContext{Component: NewComponentID()},
+		ct, err := NewAnonymousComplexType(loc, ElementDeclarationContext{Component: NewComponentID()},
 			base, nil, DerivationRestriction, false, uses, nil, wildcard, content, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("NewAnonymousComplexType: %v", err)
 		}
 		return ct
 	}
-	ct, err := NewComplexType(xsderr.Loc{}, name, base, nil, DerivationRestriction, false,
+	ct, err := NewComplexType(loc, name, base, nil, DerivationRestriction, false,
 		uses, nil, wildcard, content, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType(%s): %v", name, err)
