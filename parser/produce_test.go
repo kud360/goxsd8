@@ -925,6 +925,70 @@ func TestProduceLocalAttributeDefaultAndFixedRejected(t *testing.T) {
 	assertRule(t, err, "src-attribute")
 }
 
+// TestProduceAttributeUseValueConstraintClauses pins the default/fixed × use=
+// corner of src-attribute (§3.2.3): clause 2 (default present ⇒ use="optional"),
+// clause 5 (fixed present ⇒ use not "prohibited"), and clause 1 charged even under
+// use="prohibited", which maps the <attribute> to no component at all (§3.2.2) yet
+// leaves the representation constraint over the element item itself in force.
+func TestProduceAttributeUseValueConstraintClauses(t *testing.T) {
+	inComplexType := func(attr string) string {
+		return "\n<xs:complexType name=\"CT\"><xs:sequence/>\n" + attr + "\n</xs:complexType>"
+	}
+	inAttributeGroup := func(attr string) string {
+		return "\n<xs:attributeGroup name=\"AG\">\n" + attr + "\n</xs:attributeGroup>"
+	}
+	for _, tc := range []struct {
+		name   string
+		body   string
+		clause string
+	}{
+		{"default+required", inComplexType(`<xs:attribute name="a" type="xs:string" default="dv" use="required"/>`), "clause 2"},
+		{"default+prohibited", inComplexType(`<xs:attribute name="a" type="xs:string" default="dv" use="prohibited"/>`), "clause 2"},
+		{"fixed+prohibited", inComplexType(`<xs:attribute name="a" type="xs:string" fixed="fv" use="prohibited"/>`), "clause 5"},
+		{"default+fixed+prohibited", inComplexType(`<xs:attribute name="a" type="xs:string" default="dv" fixed="fv" use="prohibited"/>`), "clause 1"},
+		{"attributeGroup default+required", inAttributeGroup(`<xs:attribute name="a" type="xs:string" default="dv" use="required"/>`), "clause 2"},
+		{"attributeGroup fixed+prohibited", inAttributeGroup(`<xs:attribute name="a" type="xs:string" fixed="fv" use="prohibited"/>`), "clause 5"},
+		{"ref fixed+prohibited", inComplexType(`<xs:attribute ref="tns:g" fixed="fv" use="prohibited"/>`) + `<xs:attribute name="g" type="xs:string"/>`, "clause 5"},
+		{"ref default+required", inComplexType(`<xs:attribute ref="tns:g" default="dv" use="required"/>`) + `<xs:attribute name="g" type="xs:string"/>`, "clause 2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:x", tc.body))
+			assertRule(t, err, "src-attribute")
+			if want := "src-attribute " + tc.clause; !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want it to cite %s", err, want)
+			}
+			loc, ok := xsderr.LocOf(err)
+			if !ok {
+				t.Fatalf("error %v carries no position", err)
+			}
+			if loc.URI != produceURI || loc.Line != 3 {
+				t.Fatalf("position = %s:%d:%d, want the <attribute>'s own line 3 of %s", loc.URI, loc.Line, loc.Col, produceURI)
+			}
+		})
+	}
+}
+
+// TestProduceAttributeUseValueConstraintAccepted is the reverse hazard of the
+// clauses above: every pairing src-attribute clauses 2 and 5 leave legal still
+// produces. Clause 5 forbids only "prohibited", never "required".
+func TestProduceAttributeUseValueConstraintAccepted(t *testing.T) {
+	for _, attr := range []string{
+		`<xs:attribute name="a" type="xs:string" default="dv" use="optional"/>`,
+		`<xs:attribute name="a" type="xs:string" default="dv"/>`,
+		`<xs:attribute name="a" type="xs:string" fixed="fv" use="required"/>`,
+		`<xs:attribute name="a" type="xs:string" fixed="fv" use="optional"/>`,
+		`<xs:attribute name="a" type="xs:string" fixed="fv"/>`,
+		`<xs:attribute name="a" type="xs:string" use="prohibited"/>`,
+	} {
+		t.Run(attr, func(t *testing.T) {
+			body := `<xs:complexType name="CT"><xs:sequence/>` + attr + `</xs:complexType>`
+			if _, err := produce(t, wrap("", body)); err != nil {
+				t.Fatalf("Produce rejected a legal use=/value-constraint pairing: %v", err)
+			}
+		})
+	}
+}
+
 func TestProduceAnyAttributeWildcard(t *testing.T) {
 	body := `<xs:complexType name="CT"><xs:sequence/><xs:anyAttribute namespace="##other" processContents="lax"/></xs:complexType>`
 	ct := complexType(t, body, "CT")
