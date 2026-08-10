@@ -14930,8 +14930,8 @@ Wild/wild034/schema/wild034.xsd pass
 Wild/wild035/schema/wild035.xsd pass
 Wild/wild036/schema/wild036.xsd pass
 Wild/wild037/schema/wild037.xsd pass
-Wild/wild038/schema/wild038.xsd fail
-Wild/wild039/schema/wild039.xsd fail
+Wild/wild038/schema/wild038.xsd pass
+Wild/wild039/schema/wild039.xsd pass
 Wild/wild040/schema/wild040.xsd pass
 Wild/wild041/schema/wild041.xsd fail
 Wild/wild042/schema/wild042.xsd pass
