@@ -44,7 +44,7 @@ two texts disagree, the owner wins and the other is the bug.
 
 ```sh
 go build ./... && go test ./... && go vet ./...      # part 1
-golangci-lint run                                     # part 2 (STYLE lint subset)
+go tool lint                                          # part 2 (STYLE lint subset)
 go tool commentwrap ./...                             # part 3 (-fix reflows)
 go test ./conformance -run TestConformance -count=1 -v  # part 4 (-v surfaces improved-but-unbanked cases)
 ```

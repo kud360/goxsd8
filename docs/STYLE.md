@@ -189,9 +189,8 @@ offset index over the stream, not retained content.
 
 ## Enforcement
 
-The machine-checkable subset runs via `.golangci.yml`
-(`go tool golangci-lint run` if installed as a module tool, otherwise the
-`golangci-lint` binary): errcheck/errorlint/nilerr (S3, E1), revive
+The machine-checkable subset runs via `.golangci.yml` (`go tool lint`):
+errcheck/errorlint/nilerr (S3, E1), revive
 early-return/superfluous-else/indent-error-flow/exported (S1, S2, T5),
 exhaustive (T1/T2 closed sums), sloglint no-global (L1), forbidigo banning
 io.ReadAll and fmt.Print* in library code (P4, L1), plus govet/staticcheck/

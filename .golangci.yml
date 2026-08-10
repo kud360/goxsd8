@@ -48,6 +48,12 @@ linters:
       # tests may buffer and print freely
       - path: _test\.go
         linters: [forbidigo]
+      # These anchors match only because `go tool lint` gives each checkout a
+      # private results cache. golangci-lint keys that cache by package
+      # content, not by path, so a shared cache replays another checkout's
+      # issues under that checkout's absolute paths — which no anchored
+      # pattern can match (#450, #650).
+      #
       # CLIs under tools/ and cmd/ print to stdout by design
       - path: ^tools/
         linters: [forbidigo, sloglint]

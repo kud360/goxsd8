@@ -1,7 +1,7 @@
 #!/bin/sh
 # pre-commit — refuse to commit a stale index.
 #
-# The gate (go build / go test / go vet / golangci-lint / conformance)
+# The gate (go build / go test / go vet / go tool lint / conformance)
 # reads the WORKING TREE. Nothing in it reads the git index. So a file
 # that was staged and then edited again commits its stale staged content
 # while every gate command honestly reports green — which is how a broken

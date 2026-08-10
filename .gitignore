@@ -40,3 +40,6 @@ bin/
 
 # Isolated agent worktrees (Agent tool isolation:"worktree" scratch checkouts)
 .claude/worktrees/
+
+# Per-checkout golangci-lint results cache, created by `go tool lint` (#650)
+.lintcache/
