@@ -22,7 +22,7 @@ func localDecl(t *testing.T, name xsd.QName) xsd.LocalAttributeDeclaration {
 // given {value constraint} variety, for exercising au-props-correct clause 3.
 func localDeclVC(t *testing.T, kind xsd.ValueConstraintKind) xsd.LocalAttributeDeclaration {
 	t.Helper()
-	vc := xsd.NewValueConstraint(kind, "v")
+	vc := xsd.NewValueConstraint(kind, "v", nil, nil)
 	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, adLocalScope(t), &vc, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
@@ -120,7 +120,7 @@ func TestNewAttributeUseRejectsAbsentRefName(t *testing.T) {
 }
 
 func TestNewAttributeUseValueConstraintRoundTrip(t *testing.T) {
-	vc := xsd.NewValueConstraint(xsd.ValueDefault, "d")
+	vc := xsd.NewValueConstraint(xsd.ValueDefault, "d", nil, nil)
 	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, localDecl(t, xsd.QName{Local: "a"}), &vc, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
@@ -137,8 +137,8 @@ func TestNewAttributeUseValueConstraintRoundTrip(t *testing.T) {
 // TestNewAttributeUseClause3 exercises au-props-correct clause 3's variety half
 // for the Local case: a fixed declaration constrains the use's own variety.
 func TestNewAttributeUseClause3(t *testing.T) {
-	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "v")
-	deflt := xsd.NewValueConstraint(xsd.ValueDefault, "v")
+	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "v", nil, nil)
+	deflt := xsd.NewValueConstraint(xsd.ValueDefault, "v", nil, nil)
 	tests := []struct {
 		name    string
 		decl    xsd.AttributeDeclarationOrRef

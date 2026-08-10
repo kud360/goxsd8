@@ -240,10 +240,10 @@ installs. Plain `SchemaBuilder.Finalize` installs the unexported
 
 Every method may answer **undecided**, and undecided always ACCEPTS
 (PRINCIPLES 20's direction applied to value spaces): an ungoverned type, a
-lexical the mapping cannot map, two incommensurable value spaces, or anything
-needing context a `ValueConstraint` does not carry. Plain `Finalize` is
-therefore the fully fail-open configuration, which is exactly the behaviour
-that predated the seam.
+lexical the mapping cannot map, two incommensurable value spaces, or a QName
+prefix unresolvable in the context the `ValueConstraint` captured. Plain
+`Finalize` is therefore the fully fail-open configuration, which is exactly
+the behaviour that predated the seam.
 
 The related identity currency is `xsd.ComponentID`: an opaque token minted by
 the producer (`NewComponentID`) before either endpoint exists, for the

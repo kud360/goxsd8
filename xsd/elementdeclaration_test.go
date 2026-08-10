@@ -154,7 +154,7 @@ func TestNewElementDeclarationTypeTableAndValueConstraintPresent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewTypeTable: %v", err)
 	}
-	vc := xsd.NewValueConstraint(xsd.ValueFixed, "42")
+	vc := xsd.NewValueConstraint(xsd.ValueFixed, "42", nil, nil)
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, &tt, edLocalScope(t), &vc, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("NewElementDeclaration: %v", err)

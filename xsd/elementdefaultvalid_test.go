@@ -67,7 +67,7 @@ func eChild(t *testing.T) ElementDeclaration { return uLocal(t, uq("child"), uq(
 // because clause 2 states no requirement on the value.
 func TestEPropsCorrectClause2Dispatch(t *testing.T) {
 	sc := dPrimitive(t, uq("sc"))
-	bad := NewValueConstraint(ValueDefault, eBad)
+	bad := NewValueConstraint(ValueDefault, eBad, nil, nil)
 	for _, tc := range []struct {
 		name      string
 		typeName  QName
@@ -171,7 +171,7 @@ func TestEPropsCorrectClause2Dispatch(t *testing.T) {
 // a presence gate, not a vacuously-satisfied test, so the value space must not
 // even be consulted.
 func TestEPropsCorrectClause2PresenceGate(t *testing.T) {
-	valid := NewValueConstraint(ValueFixed, "7")
+	valid := NewValueConstraint(ValueFixed, "7", nil, nil)
 	for _, tc := range []struct {
 		name      string
 		vc        *ValueConstraint
@@ -207,7 +207,7 @@ func TestEPropsCorrectClause2PresenceGate(t *testing.T) {
 // global one does. Measured against the W3C suite, 102 of the 242 <element> items
 // with default=/fixed= are local.
 func TestEPropsCorrectClause2ReachesEveryElementSite(t *testing.T) {
-	bad := NewValueConstraint(ValueDefault, eBad)
+	bad := NewValueConstraint(ValueDefault, eBad, nil, nil)
 	local := func(name string) Particle {
 		return uOne(t, ResolvedTerm{Term: eScoped(t, name, uq("str"), &bad, uLocalScope(t))})
 	}
@@ -250,7 +250,7 @@ func TestEPropsCorrectClause2ReachesEveryElementSite(t *testing.T) {
 // ValueSpace verdict is the fail-open contract every consumer of checkSimpleDefault
 // inherits (PRINCIPLES 20).
 func TestEPropsCorrectClause2FailsOpen(t *testing.T) {
-	bad := NewValueConstraint(ValueDefault, eBad)
+	bad := NewValueConstraint(ValueDefault, eBad, nil, nil)
 	t.Run("an absent {type definition} is not decidable", func(t *testing.T) {
 		vs := vcOnly("7")
 		_, err := vcSchema(t, vs, func(b *SchemaBuilder) {

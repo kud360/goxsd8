@@ -150,13 +150,16 @@
 // It answers "undecided" — never a verdict — for everything it cannot decide: an
 // ungoverned type (the ·special· xs:anySimpleType and xs:anyAtomicType included,
 // for which Datatype Valid is unconditionally true), an unmappable lexical, the
-// context-dependent QName and NOTATION spaces, a construction-stage failure in
-// the type's own facets, a facet-pipeline precondition fault
-// ([IsFacetPrecondition]), the list and union varieties on the comparisons, and any
-// pair whose two types resolve to DIFFERENT governing mappings (the widest-space
-// rule above is what makes a general/specific pair on one base chain comparable
-// at all, and what makes anything else incommensurable). Undecided always accepts
-// on the xsd side, so this seam can only narrow what a schema set admits.
+// context-dependent QName and NOTATION spaces on the one-sided check (the
+// comparisons resolve them, under the bindings each value constraint captured,
+// and answer undecided only for a prefix that resolves to nothing), a
+// construction-stage failure in the type's own facets, a facet-pipeline
+// precondition fault ([IsFacetPrecondition]), the list and union varieties on the
+// comparisons, and any pair whose two types resolve to DIFFERENT governing mappings
+// (the widest-space rule above is what makes a general/specific pair on one base
+// chain comparable at all, and what makes anything else incommensurable). Undecided
+// always accepts on the xsd side, so this seam can only narrow what a schema set
+// admits.
 //
 // # Codegen seam
 //

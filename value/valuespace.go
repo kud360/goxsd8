@@ -87,12 +87,16 @@ func (vs valueSpace) EqualOrIdentical(r xsd.TypeResolver, ta *xsd.SimpleType, a 
 //
 //  1. GAP(value): needsContext. A QName- or NOTATION-governed value space
 //     anywhere in t's variety closure needs the namespace bindings in scope at
-//     the literal (§3.3.18/§3.3.19, PRINCIPLES 19), which xsd.ValueConstraint
-//     does not carry — and a nil [Context] makes a backend reject EVERY QName
-//     lexical, so without this gate every QName default would be a false reject.
-//     This is the same gap sharedMapping records, in its recursive form: the
-//     comparisons refuse list and union outright, so contextDependent on the
-//     type itself suffices there, while this method decides them.
+//     the literal (§3.3.18/§3.3.19, PRINCIPLES 19). vc now CARRIES those
+//     bindings, and the comparisons resolve them (sharedMapping), so what is
+//     still unclaimed here is the routing: this method does not refuse the list
+//     and union varieties, and threading a [Context] to the literal through
+//     validateUnion and listMapping — which re-derive their own dispatch — is a
+//     rejection surface of its own (a list OF QName, a union WITH a QName
+//     member), with its own grounding and its own ratchet attribution. Until
+//     that lands the whole closure stays undecided, because a nil [Context]
+//     makes a backend reject EVERY QName lexical and every QName default would
+//     be a false reject.
 //  2. GAP(value): governingMapping. An ungoverned type — no backend Mapping on
 //     it or any ancestor, an ungoverned item type, an ungoverned union member —
 //     makes validateLexical return a cvc-datatype-valid "no backend mapping
@@ -135,8 +139,9 @@ func (vs valueSpace) EqualOrIdentical(r xsd.TypeResolver, ta *xsd.SimpleType, a 
 // fault propagates out of the item/member dispatch unchanged (list.go, union.go),
 // so it is caught here wherever in T's closure it arose.
 //
-// nil is passed as the [Context] for the same reason values does: gate 1 has
-// already excluded every context-dependent literal.
+// nil is passed as the [Context] because gate 1 has already excluded every
+// context-dependent literal — unlike values, which parses each side under the
+// context its own value constraint captured.
 //
 // An UNRESOLVABLE {base type definition} in t's own chain — the src-resolve
 // error r's readers produce — is undecided, not a verdict: gates 1-3 each walk
@@ -180,12 +185,31 @@ func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.
 // union) yields the zero mode, which normalizeWhiteSpace refuses, so it is
 // reported undecided instead.
 //
+// Each side is also parsed under ITS OWN [Context], built from the namespace
+// bindings that side's value constraint captured where its {lexical form} was
+// written (§3.3.18/§3.3.19, PRINCIPLES 19). The two literals may come from
+// schema documents binding the same prefix differently, or different prefixes
+// to one namespace, so a single shared context would decide the comparison
+// wrongly in both directions.
+//
 // A Parse failure is undecided, never a verdict: a {lexical form} outside the
 // type's lexical space is au-props-correct clause 2 / cos-valid-simple-default's
 // business (§3.2.6.2), a separate obligation this adapter must not pre-empt by
-// reporting "not the same value" for what is really "not a value at all". nil is
-// passed as the [Context] because sharedMapping has already excluded the two
-// context-dependent primitives.
+// reporting "not the same value" for what is really "not a value at all".
+//
+// GAP(value): a QName or NOTATION prefix with no binding in the context its own
+// constraint captured takes that same path and stays undecided. It needs no
+// branch and no tri-state of its own — the mapping's Parse rejects the literal,
+// and this function reports the rejection undecided. Nor is it a spec category:
+// such a literal already fails Datatype Valid, so cos-valid-simple-default
+// clause 1 rejects the schema before either comparison is asked anything. What
+// it must not become is a NOT-same verdict, which every consumer of these two
+// methods charges on — xsd's checkAttributeUseValueConstraint
+// (valueconstraintvalid.go, au-props-correct clause 3),
+// fixedValueConstraintSubsumes and attributeValueConstraintsAgree
+// (defaultbinding.go, loc-testSubP clauses 4.2 and 5.2.2) each reject on
+// decided-and-not-same and accept on undecided — so a wrong NOT-same here is a
+// false schema rejection at all three.
 func (vs valueSpace) values(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueConstraint, tb *xsd.SimpleType, b xsd.ValueConstraint) (Value, Value, bool) {
 	m, ok := vs.sharedMapping(r, ta, tb)
 	if !ok {
@@ -199,15 +223,24 @@ func (vs valueSpace) values(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueC
 	if aws == 0 || bws == 0 {
 		return nil, nil, false
 	}
-	av, err := m.Parse(normalizeWhiteSpace(a.LexicalForm(), aws), nil)
+	av, err := m.Parse(normalizeWhiteSpace(a.LexicalForm(), aws), constraintContext(a))
 	if err != nil {
 		return nil, nil, false
 	}
-	bv, err := m.Parse(normalizeWhiteSpace(b.LexicalForm(), bws), nil)
+	bv, err := m.Parse(normalizeWhiteSpace(b.LexicalForm(), bws), constraintContext(b))
 	if err != nil {
 		return nil, nil, false
 	}
 	return av, bv, true
+}
+
+// constraintContext is the [Context] a value constraint's {lexical form} is
+// parsed under: the namespace bindings captured at the schema-document element
+// that wrote it (§3.3.18, fixed there by cos-valid-simple-default clause 2), on
+// the ONE nsContext this package resolves prefixes with (facets.go).
+func constraintContext(vc xsd.ValueConstraint) nsContext {
+	ns, ok := vc.DefaultNamespace()
+	return newNSContext(vc.NamespaceBindings(), ns, ok)
 }
 
 // sharedMapping resolves the ONE Mapping that governs both ta's and tb's values,
@@ -239,18 +272,18 @@ func (vs valueSpace) values(r xsd.TypeResolver, ta *xsd.SimpleType, a xsd.ValueC
 // is not a property two distinct nodes can be checked for by identity here, and
 // no comparison is better than a guessed one.
 //
-// GAP(value): the two context-dependent primitives, QName and NOTATION, are
-// refused too. Their lexical mapping resolves a prefix against the namespace
-// bindings in scope AT THE LITERAL (§3.3.18/§3.3.19, PRINCIPLES 19), and
-// xsd.ValueConstraint carries no such context — it is a {variety} and a {lexical
-// form} and nothing else — so the prefixes in two fixed values cannot be
-// resolved, let alone compared. Refusing is fail-open (au-props-correct clause 3
-// and loc-testSubP clauses 4.2/5.2.2 accept), never a false reject. Closing it
-// needs the value constraint to retain the in-scope bindings of the schema
-// document that wrote it, which is a producer-side change: deferred, follow-up
-// issue to be filed. An unresolvable {base type definition} on either side joins
-// the refused cases: the widest-space walk cannot finish, so there is no shared
-// mapping to name, and refusing is the fail-open answer this whole adapter owes.
+// The two context-dependent primitives, QName and NOTATION, are NOT refused:
+// each side's value constraint carries the namespace bindings in scope AT ITS
+// LITERAL (§3.3.18/§3.3.19, PRINCIPLES 19), which values resolves each side's
+// prefix under, so "a:x" and "b:x" compare SAME when both prefixes name one
+// namespace and "p:x" compares NOT-same across documents that bind "p"
+// differently — the two verdicts a lexical comparison gets wrong in opposite
+// directions. The prefix that resolves to nothing is values' residual, marked
+// there.
+//
+// An unresolvable {base type definition} on either side is refused: the
+// widest-space walk cannot finish, so there is no shared mapping to name, and
+// refusing is the fail-open answer this whole adapter owes.
 func (vs valueSpace) sharedMapping(r xsd.TypeResolver, ta, tb *xsd.SimpleType) (Mapping, bool) {
 	ga, ok, err := governingType(vs.b, r, ta)
 	if err != nil || !ok {
@@ -262,10 +295,6 @@ func (vs valueSpace) sharedMapping(r xsd.TypeResolver, ta, tb *xsd.SimpleType) (
 	}
 	if ga != gb {
 		return Mapping{}, false // incommensurable: two different value spaces
-	}
-	dependent, err := contextDependent(r, ga)
-	if err != nil || dependent {
-		return Mapping{}, false // see the GAP(value) above
 	}
 	return vs.b.Mapping(ga.Name())
 }
@@ -319,9 +348,10 @@ func contextDependent(r xsd.TypeResolver, t *xsd.SimpleType) (bool, error) {
 // EqualOrIdentical, does NOT refuse the list and union varieties: it needs one
 // type's mapping rather than a shared one across two, so ValidateLexical's own
 // list/union dispatch (facets.go, union.go) decides them, and a list OF QName or
-// a union WITH a QName member would otherwise reach a backend with a nil Context
-// and be rejected for want of bindings that are not a property of the value
-// constraint at all. governingMapping recurses the same closure for the same
+// a union WITH a QName member would otherwise reach a backend with the nil
+// Context ValidDefault passes and be rejected for want of bindings it never
+// threaded — the value constraint carries them, but the dispatch does not route
+// them (gate 1). governingMapping recurses the same closure for the same
 // reason (facets.go). For a union, ANY context-dependent member makes the whole
 // union undecided: dispatch takes the first member that accepts, so a member
 // that could only be decided WITH context could change the verdict.

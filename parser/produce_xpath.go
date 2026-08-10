@@ -33,12 +33,8 @@ import (
 // there is no error to return.
 func (p *producer) buildXPathExpression(hostElem *Element, exprAttr string) xsd.XPathExpression {
 	expr, _ := hostElem.Attr(exprAttr)
-	var bindings []xsd.NamespaceBinding
-	for _, ns := range hostElem.inScopePrefixes() {
-		bindings = append(bindings, xsd.NewNamespaceBinding(ns.Prefix(), ns.URI()))
-	}
 	baseURI := hostElem.BaseURI()
-	return xsd.NewXPathExpression(expr, bindings, p.xpathDefaultNamespace(hostElem), &baseURI)
+	return xsd.NewXPathExpression(expr, inScopeBindings(hostElem), p.xpathDefaultNamespace(hostElem), &baseURI)
 }
 
 // xpathDefaultNamespace computes an XPath Expression's {default namespace}

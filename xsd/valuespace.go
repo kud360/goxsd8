@@ -2,10 +2,11 @@ package xsd
 
 // ValueSpace is the lexical→value bridge this package needs but, as a pure leaf
 // (PRINCIPLES 1, doc.go), cannot implement: it requires package value, which is
-// layered ABOVE xsd. A ValueConstraint carries {lexical form} only, never {value}
-// (valueconstraint.go says why), so every question the §3.2.6.2, §3.5.6 and
-// §3.4.6.4 constraints ask ABOUT a {value} — "is this one the same as that one?",
-// "does this {lexical form} denote one at all?" — is answered here or not at all.
+// layered ABOVE xsd. A ValueConstraint carries {lexical form} and the namespace
+// context that lexical needs, never {value} (valueconstraint.go says why), so
+// every question the §3.2.6.2, §3.5.6 and §3.4.6.4 constraints ask ABOUT a
+// {value} — "is this one the same as that one?", "does this {lexical form} denote
+// one at all?" — is answered here or not at all.
 //
 // Two shapes of question sit behind the one interface. They share it because they
 // share an installation seam ([SchemaBuilder.FinalizeWith]) and one capability
@@ -26,13 +27,13 @@ package xsd
 // FAIL-OPEN CONTRACT, binding on every implementation: decided=false means "this
 // question was not answered". It is the answer for an ungoverned type, a lexical
 // the governing mapping cannot map, two incommensurable value spaces (ta and tb
-// resolving to different governing mappings), and any input whose verdict would
-// need context a ValueConstraint does not carry. A caller treats undecided as
-// "the clause is not competent to charge a failure" and accepts; an
-// implementation must never use undecided as licence to reject, must never report
-// a false NOT-same, and must never report a false NOT-valid, because every caller
-// turns a decided negative into a schema rejection (PRINCIPLES 20's direction,
-// applied to value spaces).
+// resolving to different governing mappings), and a QName or NOTATION literal
+// whose prefix its ValueConstraint's captured context does not bind. A caller
+// treats undecided as "the clause is not competent to charge a failure" and
+// accepts; an implementation must never use undecided as licence to reject, must
+// never report a false NOT-same, and must never report a false NOT-valid, because
+// every caller turns a decided negative into a schema rejection (PRINCIPLES 20's
+// direction, applied to value spaces).
 //
 // That contract is the deliberate OPPOSITE of the other capability installed at
 // the same seam, [SimpleTypeRestrictionChecker], and the two must not be
@@ -98,10 +99,11 @@ type ValueSpace interface {
 	//     — so answering "not valid" merely because no implementation maps them
 	//     would false-reject every typeless attribute default there is.
 	//   - a QName- or NOTATION-governed value space ANYWHERE in t's {item type
-	//     definition}/{member type definitions} closure. Their lexical mapping
-	//     resolves a prefix against the namespace bindings in scope AT THE
-	//     LITERAL (§3.3.18/§3.3.19, PRINCIPLES 19) and a ValueConstraint carries
-	//     no such context, so there is no verdict to be had.
+	//     definition}/{member type definitions} closure, unless the
+	//     implementation routes the namespace context vc captured
+	//     (§3.3.18/§3.3.19, PRINCIPLES 19) all the way to the literal's own
+	//     mapping — through the list and union dispatch included. Resolving a
+	//     prefix without that context is a guess, not a verdict.
 	//   - a construction-stage failure in T'S OWN facets: a pattern the
 	//     implementation cannot compile, an enumeration or bound facet whose
 	//     declaring type it cannot map. That is a statement about the TYPE, not

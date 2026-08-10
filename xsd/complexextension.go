@@ -771,14 +771,15 @@ func (s *Schema) extensionAllGroupPrefix(e, b Particle) bool {
 // read "identical" as "the clause is satisfied", every omission is FAIL-OPEN.
 
 // attributeUsesIdentical decides property identity between two Attribute Uses
-// (§3.5.1): {required}, {value constraint} (presence and both its fields), and
+// (§3.5.1): {required}, {value constraint} (presence, {variety} and {lexical
+// form} — sameRecord, which omits the namespace context deliberately), and
 // {inheritable}, plus the {attribute declaration} slot. {annotations} is not
 // compared — it carries no schema-significant content.
 func (s *Schema) attributeUsesIdentical(a, b AttributeUse) bool {
 	if a.required != b.required || a.inheritable != b.inheritable {
 		return false
 	}
-	if a.hasValueConstraint != b.hasValueConstraint || a.valueConstraint != b.valueConstraint {
+	if a.hasValueConstraint != b.hasValueConstraint || !a.valueConstraint.sameRecord(b.valueConstraint) {
 		return false
 	}
 	return s.attributeDeclarationsIdentical(a.attributeDeclaration, b.attributeDeclaration)
@@ -822,7 +823,7 @@ func (s *Schema) localAttributeDeclarationsIdentical(a, b AttributeDeclaration) 
 	if a.Name() != b.Name() || a.ScopeVariety() != b.ScopeVariety() || a.Inheritable() != b.Inheritable() {
 		return false
 	}
-	if a.hasValueConstraint != b.hasValueConstraint || a.valueConstraint != b.valueConstraint {
+	if a.hasValueConstraint != b.hasValueConstraint || !a.valueConstraint.sameRecord(b.valueConstraint) {
 		return false
 	}
 	return s.typeDefinitionSlotsIdentical(a.TypeDefinition(), b.TypeDefinition())
@@ -939,7 +940,7 @@ func (s *Schema) elementDeclarationsIdentical(a, b ElementDeclaration) bool {
 	if a.Name() != b.Name() || a.Nillable() != b.Nillable() || a.Abstract() != b.Abstract() {
 		return false
 	}
-	if a.hasValueConstraint != b.hasValueConstraint || a.valueConstraint != b.valueConstraint {
+	if a.hasValueConstraint != b.hasValueConstraint || !a.valueConstraint.sameRecord(b.valueConstraint) {
 		return false
 	}
 	if !derivationMethodsIdentical(a.disallowedSubstitutions, b.disallowedSubstitutions) {
