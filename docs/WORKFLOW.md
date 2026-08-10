@@ -126,6 +126,18 @@ chooses (#350).
 - After that report, fast-forward-merge the isolated branch into
   `wip/issue-<N>` and discard the worktree, then checkpoint.
 
+The orchestrator holds the pen itself only when the edit carries no design
+content and its scope is provable: a change a review verdict specifies
+verbatim, or text no compiler reads. Everything else is a mason round.
+
+**Every orchestrator edit is a new commit.** Amend and force-push of a
+pushed `wip/*` or `parked/*` ref are forbidden without exception —
+including one's own last commit, including to fix a commit message. An
+amended pushed ref leaves the judge no baseline to check the account
+against once the container is gone (#649). Disclose a breach on the thread
+and record it in the log; it is a process note the orchestrator owns, not
+a finding against the diff.
+
 ## Scope: what one landing carries
 
 A landing carries its issue's change plus whatever that change makes
@@ -175,14 +187,32 @@ the PR is opened — neither is anyone else's to volunteer:
    forbidden, so a merge is the only mechanism), naming absorbed SHAs in
    the log entry and PR body; **re-run the full gate on the committed
    merged tree**, auto-merges included, because a clean merge is not
-   evidence of a compatible one (#392); then buy a second, gate-only
-   arbiter round **only if** the verdict rests on a measurement the moved
-   base can invalidate — a banked ratchet figure, a lane delta. A green
-   gate just re-run is not such a measurement. Re-verify afterwards: main
-   can drift again while the PR is open.
+   evidence of a compatible one (#392); then re-judge per **After the
+   verdict**. Re-verify afterwards: main can drift again while the PR is
+   open.
 
 If an absorbed commit changed the gate itself, re-read CLAUDE.md's gate
 block and run what it names now, not what you remember.
+
+### After the verdict
+
+A verdict measures a tree, and the tree that lands must be that tree.
+Anything that moves it — a merge forward, a late finding, a fix turned up
+while writing the log — is judged by one question: can this change what
+the verdict measured?
+
+- **The diff changed** → a full new round.
+- **Only the base moved** → a gate-only round, and only when the verdict
+  rests on a measurement that base can invalidate: a banked ratchet
+  figure, a lane delta. A green gate just re-run is not such a
+  measurement.
+- **Provably nothing measured changed** → land it. Only text no compiler
+  reads qualifies, proved mechanically: the diff since the accepted commit
+  touches no line outside a comment or a `.md` file. It is its own commit,
+  carrying that proof in its body; re-run gate parts 1–3 and move no
+  ratchet figure.
+
+What no class admits goes to the post-land ledger.
 
 ## Merge-conflict resolution
 

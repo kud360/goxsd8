@@ -21,7 +21,7 @@ rewrite or reorder existing entries.
 - Decisions made and why
 - Surprises
 - Friction (anything that wasted time)
-- Next
+- Next — discharged before landing / owed to the post-land pass
 ```
 
 The log is where evidence lives. A rule in a process document should be
