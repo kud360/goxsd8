@@ -2,31 +2,22 @@ package parser_test
 
 import (
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// restrictionDocLine is the 1-based line the restricting <complexType> opens on
-// in the document restrictionDoc builds: the wrap() prologue and the base type
-// occupy lines 1-4.
-const restrictionDocLine = 5
-
 // restrictionDoc builds a two-type document — base B carrying baseAttr, and
-// restriction R re-declaring the same attribute as restrAttr — laid out so that
+// restriction R re-declaring the same attribute as restrAttr — over
+// derivationDoc's layout (produce_complexderivationloc_test.go), so
 // <complexType name="B"> opens on line 2 and <complexType name="R"> on
-// restrictionDocLine. The two lines differ so an assertion on the reported line
+// derivationDocLine. The two lines differ so an assertion on the reported line
 // distinguishes the spec's T from its B.
 func restrictionDoc(baseAttr, restrAttr string) string {
-	return wrap("urn:x", strings.Join([]string{
-		"",
-		`<xs:complexType name="B">` + baseAttr + `</xs:complexType>`,
-		"",
-		"",
-		`<xs:complexType name="R"><xs:complexContent><xs:restriction base="tns:B">` +
-			restrAttr + `</xs:restriction></xs:complexContent></xs:complexType>`,
-	}, "\n"))
+	return derivationDoc(
+		`<xs:complexType name="B">`+baseAttr+`</xs:complexType>`, "",
+		`<xs:complexType name="R"><xs:complexContent><xs:restriction base="tns:B">`+
+			restrAttr+`</xs:restriction></xs:complexContent></xs:complexType>`)
 }
 
 // TestRestrictionAttributeRejectionsCiteTheRestrictingType pins the POSITION of
@@ -79,8 +70,8 @@ func TestRestrictionAttributeRejectionsCiteTheRestrictingType(t *testing.T) {
 			if xe.Loc == (xsderr.Loc{}) {
 				t.Fatalf("loc is the zero Loc, rendering as %q: %v", xe.Loc, err)
 			}
-			if xe.Loc.URI != "main.xsd" || xe.Loc.Line != restrictionDocLine {
-				t.Fatalf("loc = %s, want main.xsd:%d — the restricting <complexType name=\"R\">", xe.Loc, restrictionDocLine)
+			if xe.Loc.URI != "main.xsd" || xe.Loc.Line != derivationDocLine {
+				t.Fatalf("loc = %s, want main.xsd:%d — the restricting <complexType name=\"R\">", xe.Loc, derivationDocLine)
 			}
 		})
 	}

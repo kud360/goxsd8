@@ -68,12 +68,15 @@
 // rejection can cite file:line:column instead of "?" — sch-props-correct
 // clause 2 (schema.go) was the first such consumer, resolve.go's Phase
 // A/B rejections (src-resolve, c-props-correct, ct-props-correct,
-// mg-props-correct, e-props-correct) the second, and defaultbinding.go's
-// derivation-ok-restriction clause 3 rejections the third: each is charged
-// to the REFERRING or offending component's own Loc, per the referrer-Loc
-// convention documented on resolveReferences — for clause 3 that is the
-// RESTRICTING complex type, the spec's T, which the constraint is stated
-// against and every one of its messages already names. The zero
+// mg-props-correct, e-props-correct) the second, defaultbinding.go's
+// derivation-ok-restriction clause 3 rejections the third, and
+// complexderivation.go's derivation-ok-restriction and ct-props-correct
+// rejections the fourth: each is charged to the REFERRING or offending
+// component's own Loc, per the referrer-Loc convention documented on
+// resolveReferences — for every derivation-ok-restriction clause that is
+// the RESTRICTING complex type, the spec's T, which the constraint is
+// stated against and every one of its messages already names, and for
+// ct-props-correct the complex type whose properties it checks. The zero
 // xsderr.Loc means the position is unknown, and is the correct value for a
 // component with no schema document behind it — parser.Produce's
 // synthesized xs:anyType and package builtin's seeded built-in datatypes
