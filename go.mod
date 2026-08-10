@@ -9,6 +9,7 @@ tool (
 	github.com/kud360/goxsd8/tools/gapaudit
 	github.com/kud360/goxsd8/tools/hfnextract
 	github.com/kud360/goxsd8/tools/lanestatus
+	github.com/kud360/goxsd8/tools/lint
 	github.com/kud360/goxsd8/tools/rulecat
 	github.com/kud360/goxsd8/tools/spec2md
 	github.com/kud360/goxsd8/tools/surface

@@ -21,7 +21,8 @@ translate the local times above and mind DST drift. Keep develop slots
 
 ## Environment requirements
 
-- Go ≥ 1.26, and `golangci-lint` for the lint gate.
+- Go ≥ 1.26. Nothing else: the lint gate fetches its pinned linter with
+  `go run`, which needs network access on a cold module cache.
 - `git submodule update --init testdata/xsdtests` (~215 MB, pinned W3C
   suite) — conformance runs skip without it.
 - Non-interactive `git push`: a push that prompts hangs a headless session
