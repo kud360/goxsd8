@@ -66,17 +66,20 @@
 // §3.x.1 property list has it. It is where the declaring element sits in
 // the schema document, retained from the constructor so a finalize-time
 // rejection can cite file:line:column instead of "?" — sch-props-correct
-// clause 2 (schema.go) was the first such consumer, and resolve.go's Phase
+// clause 2 (schema.go) was the first such consumer, resolve.go's Phase
 // A/B rejections (src-resolve, c-props-correct, ct-props-correct,
-// mg-props-correct, e-props-correct) are the second: each is charged to
-// the REFERRING or offending component's own Loc, per the referrer-Loc
-// convention documented on resolveReferences. The zero xsderr.Loc means
-// the position is unknown, and is the correct value for a component with
-// no schema document behind it — parser.Produce's synthesized xs:anyType
-// and package builtin's seeded built-in datatypes are the legitimate
-// zero-Loc producers. Other constructors take a loc to charge their own
-// rejections but do not retain it: nothing consumes those positions yet,
-// so no accessor is exported for them (T5).
+// mg-props-correct, e-props-correct) the second, and defaultbinding.go's
+// derivation-ok-restriction clause 3 rejections the third: each is charged
+// to the REFERRING or offending component's own Loc, per the referrer-Loc
+// convention documented on resolveReferences — for clause 3 that is the
+// RESTRICTING complex type, the spec's T, which the constraint is stated
+// against and every one of its messages already names. The zero
+// xsderr.Loc means the position is unknown, and is the correct value for a
+// component with no schema document behind it — parser.Produce's
+// synthesized xs:anyType and package builtin's seeded built-in datatypes
+// are the legitimate zero-Loc producers. Other constructors take a loc to
+// charge their own rejections but do not retain it: nothing consumes those
+// positions yet, so no accessor is exported for them (T5).
 //
 // # Query API
 //

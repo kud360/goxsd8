@@ -207,7 +207,7 @@ func (s *Schema) checkBindingSubsumes(n QName, t, b ComplexType, general, specif
 	if gIsUse && sIsUse {
 		return s.checkAttributeUseSubsumes(n, t, b, g.use, sp.use) // clause 5
 	}
-	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 		"complex type %s restricts %s, but %s's ·default binding· for attribute %s does not ·subsume· the restriction's (derivation-ok-restriction clause 3, c-ran, via loc-testSubP)", t.Name(), b.Name(), b.Name(), n)
 }
 
@@ -220,7 +220,7 @@ func checkKeywordSubsumes(n QName, t, b ComplexType, general wildcardKeywordBind
 	if keywordSubsumes(general, specific) {
 		return nil
 	}
-	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 		"complex type %s restricts %s, but %s binds attribute %s to a lax wildcard while the restriction binds it to a skip wildcard, and loc-testSubP clause 2 requires the specific binding not to be skip (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), b.Name(), n)
 }
 
@@ -472,7 +472,7 @@ func (s *Schema) checkAttributeUseSubsumes(n QName, t, b ComplexType, general, s
 		return err
 	}
 	if general.Inheritable() != specific.Inheritable() {
-		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+		return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 			"complex type %s restricts %s, but attribute %s has {inheritable} = %t there and %t in the base, and loc-testSubP clause 5.3 requires them to be equal (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), n, specific.Inheritable(), general.Inheritable())
 	}
 	return nil
@@ -513,7 +513,7 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, t, b ComplexType, general,
 	if derived {
 		return nil
 	}
-	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 		"complex type %s restricts %s but types attribute %s as %s, which is not validly derived from the base's %s (derivation-ok-restriction clause 3, c-ran, via loc-testSubP clause 5.1 and cos-st-derived-ok §3.16.6.3)", t.Name(), b.Name(), n, typeDefinitionLabel(st), typeDefinitionLabel(gt))
 }
 
@@ -549,13 +549,13 @@ func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, t, b ComplexType
 	}
 	svc, present := s.effectiveValueConstraint(specific)
 	if !present || svc.Kind() != ValueFixed {
-		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+		return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 			"complex type %s restricts %s, but the base fixes attribute %s to %q while the restriction leaves it unfixed, and loc-testSubP clause 5.2 requires a fixed ·effective value constraint· with the same value (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), n, gvc.LexicalForm())
 	}
 	if s.attributeValueConstraintsAgree(general, specific, gvc, svc) {
 		return nil // clause 5.2.2
 	}
-	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 		"complex type %s restricts %s and fixes attribute %s to %q, but the base fixes it to %q, and loc-testSubP clause 5.2.2 requires the two {value}s to be equal or identical (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), n, svc.LexicalForm(), gvc.LexicalForm())
 }
 

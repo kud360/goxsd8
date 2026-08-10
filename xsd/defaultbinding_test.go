@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -124,6 +125,51 @@ func TestBindingSubsumesKeywords(t *testing.T) {
 			}
 			if !tc.wantOK {
 				expectRule(t, err, ruleDerivationOKRestriction)
+			}
+		})
+	}
+}
+
+// TestBindingSubsumesChargesTheRestrictingType pins the POSITION of the two
+// derivation-ok-restriction clause 3 (c-ran) rejections in checkBindingSubsumes
+// and checkKeywordSubsumes: both are charged to the restricting complex type —
+// the spec's T, whose own §3.4.6.3 obligation clause 3 is (#359).
+//
+// These two sites are unreachable from a parsed document, because
+// checkRestrictionAttributes (complexderivation.go) always passes an
+// attributeUseBinding as the specific binding: no keyword general binding can
+// then fail keywordSubsumes, and no pair can reach the mismatched-kind
+// fallthrough. They are pinned here rather than in parser's end-to-end
+// TestRestrictionAttributeRejectionsCiteTheRestrictingType for exactly that
+// reason. b carries a DIFFERENT position, so charging the base instead fails.
+func TestBindingSubsumesChargesTheRestrictingType(t *testing.T) {
+	tLoc := xsderr.Loc{URI: "t.xsd", Line: 11, Col: 3}
+	bLoc := xsderr.Loc{URI: "b.xsd", Line: 22, Col: 5}
+	s := bSchema(t, nil)
+	tt := dTypeAt(t, tLoc, uq("t"), anyTypeName, EmptyContent{}, nil, nil)
+	bb := dTypeAt(t, bLoc, uq("b"), anyTypeName, EmptyContent{}, nil, nil)
+
+	for _, tc := range []struct {
+		name     string
+		general  defaultBinding
+		specific defaultBinding
+	}{
+		{"loc-testSubP fallthrough: an Element Declaration does not subsume an Attribute Use",
+			elementDeclarationBinding{decl: uLocal(t, uq("a"), uq("str"))},
+			attributeUseBinding{use: dAttr(t, uq("a"), uq("str"))}},
+		{"loc-testSubP clause 2: lax does not subsume skip",
+			wildcardKeywordBinding{keyword: ProcessLax},
+			wildcardKeywordBinding{keyword: ProcessSkip}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := s.checkBindingSubsumes(uq("a"), tt, bb, tc.general, tc.specific)
+			expectRule(t, err, ruleDerivationOKRestriction)
+			var xe *xsderr.Error
+			if !errors.As(err, &xe) {
+				t.Fatalf("error %v is not an *xsderr.Error", err)
+			}
+			if xe.Loc != tLoc {
+				t.Fatalf("loc = %s, want the restricting type's %s", xe.Loc, tLoc)
 			}
 		})
 	}
