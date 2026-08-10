@@ -114,12 +114,12 @@ func TestProduceAbsentNameAndEmptyRefRejected(t *testing.T) {
 	}
 }
 
-// TestProduceEmptyQNameLocalPartRejected pins bindQName's #343 lexical check —
-// a QName-valued schema attribute whose LOCAL PART is empty is not in the
-// ·lexical space· of xs:QName (Datatypes §3.3.18, whose local part is the NCName
-// of §3.4.7.1), the type Appendix A declares for every such attribute, so it
-// fails cvc-datatype-valid (§4.1.4) at the attribute the author wrote rather than
-// travelling on as the zero xsd.QName.
+// TestProduceQNameOutsideLexicalSpaceRejected pins bindQName's lexical check — a
+// QName-valued schema attribute outside the ·lexical space· of xs:QName
+// (Datatypes §3.3.18, whose prefix and local part are both the NCName of
+// §3.4.7.1), the type Appendix A declares for every such attribute, fails
+// cvc-datatype-valid (§4.1.4) at the attribute the author wrote rather than
+// travelling on as the zero xsd.QName or as a name nobody could declare.
 //
 // One row per CODE PATH into the check, not per attribute — every QName-valued
 // attribute in the producer reaches it through one of these three, and the
@@ -140,7 +140,18 @@ func TestProduceAbsentNameAndEmptyRefRejected(t *testing.T) {
 // lexical shapes the grounding calls the same fault — the whole value empty and
 // a prefix with nothing after the colon — are both exercised, since strings.Cut
 // reaches an empty local part by two different routes.
-func TestProduceEmptyQNameLocalPartRejected(t *testing.T) {
+//
+// #631 WIDENED the check to the two remaining shapes and their rows are here on
+// the same footing, each written so it cannot pass for the wrong reason:
+//
+//   - an EMPTY PREFIX (:T), whose row DECLARES the target the lexical names, so
+//     dropping the check makes the document produce cleanly (that was the silent
+//     false accept: :T bound to the in-scope default namespace as a synonym for
+//     T);
+//   - MORE THAN ONE COLON (xs:a:b), whose row would otherwise be rejected as
+//     src-resolve clause 1.1 for a type named "a:b" — so the row fails on the
+//     RULE ID, not on the verdict direction.
+func TestProduceQNameOutsideLexicalSpaceRejected(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2). Every body starts on
 	// line 2 of the wrapped document and puts the offending element on line 3.
 	cases := []struct {
@@ -169,6 +180,31 @@ func TestProduceEmptyQNameLocalPartRejected(t *testing.T) {
 			name: `notQName item with an empty local part`,
 			body: "\n" + `<xs:complexType name="CT"><xs:sequence>` + "\n" +
 				`<xs:any notQName="xs:"/>` + "\n" +
+				`</xs:sequence></xs:complexType>`,
+		},
+		{
+			// The declared T is what makes this row the false accept and not a
+			// missing-target rejection: :T resolves to T without the check (#631).
+			name: `type=":T" on a top-level <element>, with T declared`,
+			body: "\n" + `<xs:simpleType name="T"><xs:restriction base="xs:string"/></xs:simpleType>` + "\n" +
+				`<xs:element name="e" type=":T"/>`,
+		},
+		{
+			// The list-item path, same shape: the head it names is declared.
+			name: `substitutionGroup item with an empty prefix`,
+			body: "\n" + `<xs:element name="e" type="xs:string"/>` + "\n" +
+				`<xs:element name="f" type="xs:string" substitutionGroup=":e"/>`,
+		},
+		{
+			name: `type="xs:a:b" on a top-level <element>`,
+			body: "\n" + `<xs:element name="e" type="xs:a:b"/>`,
+		},
+		{
+			// bindQName DIRECTLY, where a second colon otherwise reaches {disallowed
+			// names} as a local part and no rejection ever comes (#631).
+			name: `notQName item with a colon in its local part`,
+			body: "\n" + `<xs:complexType name="CT"><xs:sequence>` + "\n" +
+				`<xs:any notQName="xs:a:b"/>` + "\n" +
 				`</xs:sequence></xs:complexType>`,
 		},
 	}

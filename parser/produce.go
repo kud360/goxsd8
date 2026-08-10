@@ -2010,29 +2010,58 @@ func (p *producer) resolveQName(elem *Element, lexical, attr string) (xsd.QName,
 // the assembly's namespace under chameleon coercion, deliberately never the
 // schema's own targetNamespace otherwise.
 //
-// A lexical with an EMPTY LOCAL PART — the whole value empty (type=""), or a
-// prefix with nothing after the colon (type="xs:") — is rejected before any of
-// that, charged cvc-datatype-valid (Datatypes §4.1.4) at attr: it is not in the
-// ·lexical space· of xs:QName, the type the schema for schema documents declares
-// for every QName-valued attribute (Structures §5.1, Appendix A), because a
-// QName's local part is an NCName (§3.3.18, §3.4.7.1) and the NCName pattern
-// cannot match the empty string. That is a LEXICAL fault, logically prior to and
-// independent of namespace binding (PRINCIPLES 19), so it is decided first and
-// never charged src-resolve, whose clauses presuppose a well-formed QName and
-// govern ·resolution· alone (§3.17.6.2). Charging it here is also what keeps the
+// Three lexical shapes are rejected before any of that, charged
+// cvc-datatype-valid (Datatypes §4.1.4) at attr: none is in the ·lexical space·
+// of xs:QName, the type the schema for schema documents declares for every
+// QName-valued attribute (Structures §5.1, Appendix A). §3.3.18 admits exactly
+// the strings matching the Namespaces in XML QName production, whose
+// PrefixedName ::= Prefix ':' LocalPart has an NCName on BOTH sides, and the
+// NCName pattern \i\c* ∩ [\i-[:]][\c-[:]]* (§3.4.7.1) matches neither the empty
+// string nor any string carrying a colon:
+//
+//   - an EMPTY LOCAL PART — the whole value empty (type=""), or a prefix with
+//     nothing after the colon (type="xs:");
+//   - an EMPTY PREFIX (type=":T"), which is not the unprefixed shape it is
+//     otherwise bound as: a value holding a colon can only be a PrefixedName,
+//     and an empty Prefix is no NCName (#631);
+//   - MORE THAN ONE COLON (type="xs:a:b"), which no split into Prefix ':'
+//     LocalPart can rescue, since a colon is outside NCName under either half.
+//     strings.Cut splits at the FIRST colon, so every extra colon lands in
+//     local and testing local alone decides the shape (#631).
+//
+// Each is a LEXICAL fault, logically prior to and independent of namespace
+// binding (PRINCIPLES 19), so all three are decided first and never charged
+// src-resolve, whose clauses presuppose a well-formed QName and govern
+// ·resolution· alone (§3.17.6.2). Charging them here is also what keeps the
 // zero xsd.QName out of a reference slot downstream, where an xsd constructor's
 // representation-invariant backstop would report an author's mistake as
 // xsderr.RuleComponentInvariant, a caller fault (#343).
+//
+// The check tests those three NCName properties only, deliberately not the whole
+// ncNameRE predicate declarationName applies to a name: xs:QName carries
+// whiteSpace = collapse (§3.3.18) and nothing normalizes a QName-valued
+// attribute before it arrives here, so matching the full pattern would recharge
+// padded lexicals (type="xs:string ") whose verdict this producer settles
+// elsewhere today.
 func (p *producer) bindQName(elem *Element, lexical, attr string) (xsd.QName, error) {
 	before, after, found := strings.Cut(lexical, ":")
 	prefix, local := "", before
 	if found {
 		prefix, local = before, after
 	}
-	if local == "" {
+	fault := ""
+	switch {
+	case local == "":
+		fault = "a QName's local part is an NCName and is never empty"
+	case found && prefix == "":
+		fault = "a QName's prefix is an NCName and is never empty"
+	case strings.Contains(local, ":"):
+		fault = "a QName's prefix and local part are both NCNames, and an NCName carries no colon, so a QName holds at most one"
+	}
+	if fault != "" {
 		return xsd.QName{}, xsderr.New(ruleDatatypeValid, elem.Loc(),
-			"<%s> %s value %q is not in the ·lexical space· of xs:QName, the type the schema for schema documents declares for it: a QName's local part is an NCName (Datatypes §3.3.18, §3.4.7.1) and is never empty",
-			elem.Name().Local(), attr, lexical)
+			"<%s> %s value %q is not in the ·lexical space· of xs:QName, the type the schema for schema documents declares for it: %s (Datatypes §3.3.18, §3.4.7.1)",
+			elem.Name().Local(), attr, lexical, fault)
 	}
 
 	if prefix == "" {
