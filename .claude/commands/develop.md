@@ -59,7 +59,8 @@ heartbeat.
 
 5. **Judge.** Delegate to **arbiter**. On reject: one repair round by
    mason, then re-judge. On a second reject: park per WORKFLOW, then go to
-   step 6's log entry and stop.
+   step 6's log entry and stop. On accept, dispose of the verdict's
+   remaining findings per WORKFLOW's **After the verdict** before step 6.
 
 6. **Land.** Delegate the log entry to **chronicler** first, so it rides
    the session commit. Verify WORKFLOW's two landing preconditions
