@@ -1827,6 +1827,16 @@ func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.Attribu
 // Attribute Use's (vc_au, §3.5.1) — the mapping from the two XML attributes to
 // the {variety}/{lexical form} record is identical; which component the result is
 // attached to is the caller's decision (§3.2.2.2 / §3.2.2.3).
+//
+// Every value constraint this producer builds is captured together with elem's
+// namespace context, which is what a QName- or NOTATION-governed {lexical form}
+// needs to denote a {value} at all (§3.3.18, adopted by §3.3.19): §3.2.6.2
+// cos-valid-simple-default clause 2 maps the lexical in the scope where it was
+// written, so the bindings must be taken here and travel with the record.
+// Because all four producer call sites funnel through this one function, an
+// element declaration's, an attribute declaration's and an attribute use's
+// constraints are captured alike — a-props-correct (§3.2.6.1) clause 2 and
+// au-props-correct (§3.5.6) clause 2 both.
 func valueConstraintOf(elem *Element, rule xsderr.Rule) (*xsd.ValueConstraint, error) {
 	defLex, hasDef := elem.Attr("default")
 	fixLex, hasFix := elem.Attr("fixed")
@@ -1834,15 +1844,49 @@ func valueConstraintOf(elem *Element, rule xsderr.Rule) (*xsd.ValueConstraint, e
 		return nil, xsderr.New(rule, elem.Loc(),
 			"declaration has both default and fixed, but %s clause 1 forbids both", rule)
 	}
-	if hasDef {
-		vc := xsd.NewValueConstraint(xsd.ValueDefault, defLex)
-		return &vc, nil
+	if !hasDef && !hasFix {
+		return nil, nil
 	}
+	bindings, defaultNS := namespaceContextOf(elem)
+	kind, lexical := xsd.ValueDefault, defLex
 	if hasFix {
-		vc := xsd.NewValueConstraint(xsd.ValueFixed, fixLex)
-		return &vc, nil
+		kind, lexical = xsd.ValueFixed, fixLex
 	}
-	return nil, nil
+	vc := xsd.NewValueConstraint(kind, lexical, bindings, defaultNS)
+	return &vc, nil
+}
+
+// namespaceContextOf materializes elem's in-scope namespace context for a QName
+// lexical written on it (§3.3.18): one Namespace Binding per PREFIXED in-scope
+// namespace, plus the default namespace an unprefixed name binds to.
+//
+// The default namespace is the plain in-scope xmlns default, NOT the
+// xpathDefaultNamespace chain (§3.13.2) — that one is XPath's alone, and reading
+// it here would silently bind an unprefixed QName default= to the target
+// namespace. xmlns="" undeclares the default namespace (Namespaces in XML 1.1)
+// and a declared one is never empty, so an empty lookup result means exactly "no
+// default namespace in scope" and yields nil, never a present "".
+func namespaceContextOf(elem *Element) ([]xsd.NamespaceBinding, *string) {
+	// ok is no signal here: the empty prefix always resolves (scope.lookup).
+	uri, _ := elem.lookupPrefix("")
+	if uri == "" {
+		return inScopeBindings(elem), nil
+	}
+	return inScopeBindings(elem), &uri
+}
+
+// inScopeBindings is the ONE mapping from an element's in-scope PREFIXED
+// namespaces to Namespace Bindings (STYLE T4), read by every property record
+// that carries a namespace context: an XPath Expression's {namespace bindings}
+// (§3.13.1 nb) and a Value Constraint's own (§3.3.18). The default namespace is
+// never among them — each caller obtains it from lookupPrefix(""), under its own
+// rule for what an absent one means.
+func inScopeBindings(elem *Element) []xsd.NamespaceBinding {
+	var bindings []xsd.NamespaceBinding
+	for _, ns := range elem.inScopePrefixes() {
+		bindings = append(bindings, xsd.NewNamespaceBinding(ns.Prefix(), ns.URI()))
+	}
+	return bindings
 }
 
 // resolveQName resolves a QName-valued lexical that must name a schema component

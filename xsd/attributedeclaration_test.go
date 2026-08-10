@@ -47,7 +47,7 @@ func TestNewAttributeDeclarationValidGlobalNoValueConstraint(t *testing.T) {
 }
 
 func TestNewAttributeDeclarationValueConstraintAndInheritablePresent(t *testing.T) {
-	vc := xsd.NewValueConstraint(xsd.ValueFixed, "en")
+	vc := xsd.NewValueConstraint(xsd.ValueFixed, "en", nil, nil)
 	a, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, adLocalScope(t), &vc, true, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)

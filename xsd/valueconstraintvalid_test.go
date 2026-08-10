@@ -84,7 +84,7 @@ func vcSchema(t *testing.T, vs ValueSpace, build func(*SchemaBuilder)) (*Schema,
 func vcGlobalFixed(t *testing.T, lexical string) func(*SchemaBuilder) {
 	t.Helper()
 	return func(b *SchemaBuilder) {
-		vc := NewValueConstraint(ValueFixed, lexical)
+		vc := NewValueConstraint(ValueFixed, lexical, nil, nil)
 		d, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), &vc, false, nil)
 		if err != nil {
 			t.Fatalf("NewAttributeDeclaration: %v", err)
@@ -97,7 +97,7 @@ func vcGlobalFixed(t *testing.T, lexical string) func(*SchemaBuilder) {
 // carrying its own {value constraint}.
 func vcRefUse(t *testing.T, kind ValueConstraintKind, lexical string) AttributeUse {
 	t.Helper()
-	vc := NewValueConstraint(kind, lexical)
+	vc := NewValueConstraint(kind, lexical, nil, nil)
 	u, err := NewAttributeUse(xsderr.Loc{}, false, AttributeDeclarationRef{Name: uq("g")}, &vc, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
@@ -173,12 +173,12 @@ func TestPhaseEClause3ValueHalf(t *testing.T) {
 // VARIETY mismatch there, so only the value half can reach Phase E — the rule
 // text draws no variant distinction and neither does the check.
 func TestPhaseEClause3LocalVariant(t *testing.T) {
-	declVC := NewValueConstraint(ValueFixed, "7")
+	declVC := NewValueConstraint(ValueFixed, "7", nil, nil)
 	decl, err := NewAttributeDeclaration(xsderr.Loc{}, uq("a"), TypeDefinitionRef{Name: uq("str")}, aLocalScope(t), &declVC, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
 	}
-	useVC := NewValueConstraint(ValueFixed, "07")
+	useVC := NewValueConstraint(ValueFixed, "07", nil, nil)
 	use, err := NewAttributeUse(xsderr.Loc{}, false, LocalAttributeDeclaration{Declaration: decl}, &useVC, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
@@ -210,7 +210,7 @@ func TestPhaseEClause3AntecedentNotMet(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			vs := &stubValueSpace{same: false, decided: true}
-			declVC := NewValueConstraint(tc.declKind, "7")
+			declVC := NewValueConstraint(tc.declKind, "7", nil, nil)
 			_, err := vcSchema(t, vs, func(b *SchemaBuilder) {
 				d, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), &declVC, false, nil)
 				if err != nil {
@@ -413,7 +413,7 @@ func TestPhaseEAPropsCorrectClause2(t *testing.T) {
 	for _, kind := range []ValueConstraintKind{ValueDefault, ValueFixed} {
 		t.Run(kind.String(), func(t *testing.T) {
 			vs := vcOnly("7")
-			vc := NewValueConstraint(kind, "not a value of str")
+			vc := NewValueConstraint(kind, "not a value of str", nil, nil)
 			_, err := vcSchema(t, vs, vcGlobalDecl(t, &vc))
 			expectRule(t, err, ruleAPropsCorrect)
 			if vs.defaultCalls == 0 {
@@ -436,7 +436,7 @@ func TestPhaseEAPropsCorrectClause2(t *testing.T) {
 // constraint}" is a presence gate, not a vacuously-satisfied test, so the value
 // space must not even be consulted.
 func TestPhaseEAPropsCorrectClause2Accepts(t *testing.T) {
-	valid := NewValueConstraint(ValueFixed, "7")
+	valid := NewValueConstraint(ValueFixed, "7", nil, nil)
 	for _, tc := range []struct {
 		name      string
 		vc        *ValueConstraint
@@ -463,7 +463,7 @@ func TestPhaseEAPropsCorrectClause2Accepts(t *testing.T) {
 // walk must charge it, still under a-props-correct and still at the DECLARATION's
 // own Loc.
 func TestPhaseEAPropsCorrectClause2LocalDeclaration(t *testing.T) {
-	declVC := NewValueConstraint(ValueDefault, "not a value of str")
+	declVC := NewValueConstraint(ValueDefault, "not a value of str", nil, nil)
 	decl, err := NewAttributeDeclaration(vcLoc, uq("a"), TypeDefinitionRef{Name: uq("str")}, aLocalScope(t), &declVC, false, nil)
 	if err != nil {
 		t.Fatalf("NewAttributeDeclaration: %v", err)
@@ -499,7 +499,7 @@ func TestPhaseEAuPropsCorrectClause2(t *testing.T) {
 	}{
 		{"the declaration has no {value constraint}: clause 3 cannot fire", nil},
 		{"the declaration is fixed to a valid lexical", func() *ValueConstraint {
-			vc := NewValueConstraint(ValueFixed, "7")
+			vc := NewValueConstraint(ValueFixed, "7", nil, nil)
 			return &vc
 		}()},
 	} {
@@ -566,7 +566,7 @@ func TestPhaseEClause2ClauseDerivesFromRule(t *testing.T) {
 	} {
 		t.Run(string(tc.rule), func(t *testing.T) {
 			s := &Schema{valueSpace: vcOnly("7")}
-			err := s.checkSimpleDefault(tc.rule, vcLoc, "attribute declaration g", nil, NewValueConstraint(ValueDefault, "not a value of str"))
+			err := s.checkSimpleDefault(tc.rule, vcLoc, "attribute declaration g", nil, NewValueConstraint(ValueDefault, "not a value of str", nil, nil))
 			expectRule(t, err, tc.rule)
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("message %q does not name %q", err.Error(), tc.want)
@@ -582,7 +582,7 @@ func TestPhaseEClause2ClauseDerivesFromRule(t *testing.T) {
 // — and every QName/NOTATION default, which no ValueConstraint can decide.
 func TestPhaseEClause2FailsOpenWhenUndecided(t *testing.T) {
 	build := func(b *SchemaBuilder) {
-		declVC := NewValueConstraint(ValueDefault, "not a value of str")
+		declVC := NewValueConstraint(ValueDefault, "not a value of str", nil, nil)
 		vcGlobalDecl(t, &declVC)(b)
 		bad := vcRefUse(t, ValueDefault, "also not a value of str")
 		b.AddType(dType(t, uq("t"), anyTypeName, EmptyContent{}, []AttributeUse{bad}, nil))

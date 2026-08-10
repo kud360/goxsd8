@@ -704,59 +704,69 @@ func newEnumFacet(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, ef xsd.Effe
 // namespace-declaration attributes, not a binding (WG ruling, bugzilla 4053).
 const xmlNamespaceURI = "http://www.w3.org/XML/1998/namespace"
 
-// memberContext adapts an xsd.EnumerationMember's namespace context to the
-// value.Context a QName/NOTATION Mapping.Parse consumes, so a prefixed member
-// resolves against the bindings in scope where its <enumeration> was written
-// (§3.3.18). Its reserved-prefix rules match conformance.nsContext exactly
-// (value cannot import the test-only conformance package, so this is a small
-// second implementation of the same logic): "xml" is always bound, "xmlns" is
-// never bindable, and the empty prefix resolves to the {default namespace} if one
-// is in scope (element-name semantics) else to no namespace. It is an internal
-// lookup, never ranged into output (STYLE D2).
-type memberContext struct {
+// nsContext is this package's ONE encoding of §3.3.18's prefix lookup (STYLE
+// T4): the value.Context a QName/NOTATION Mapping.Parse consumes, built from a
+// captured set of namespace bindings so a prefixed literal resolves against the
+// bindings in scope WHERE IT WAS WRITTEN — an enumeration facet member's
+// <enumeration> element (newMemberContext), a value constraint's
+// <element>/<attribute> element (constraintContext, valuespace.go). Its
+// reserved-prefix rules match conformance.nsContext exactly (value cannot import
+// the test-only conformance package, so this is a small second implementation of
+// the same logic): "xml" is always bound, "xmlns" is never bindable, and the
+// empty prefix resolves to the {default namespace} if one is in scope
+// (element-name semantics) else to no namespace.
+//
+// It is a value type, so every caller has a usable context and there is no
+// nil-Context path to reason about. The map is an internal lookup, never ranged
+// into output (STYLE D2).
+type nsContext struct {
 	bindings   map[string]string // non-empty prefix -> namespace name
 	defaultNS  string
 	hasDefault bool
 }
 
-// newMemberContext builds the per-member context from a member's namespace
-// bindings and {default namespace}. The empty prefix is modeled by the member's
-// DefaultNamespace, not a "" binding, so the bindings map holds only non-empty
-// prefixes.
-func newMemberContext(m xsd.EnumerationMember) memberContext {
-	binds := m.NamespaceBindings()
-	mc := memberContext{}
-	if len(binds) > 0 {
-		mc.bindings = make(map[string]string, len(binds))
-		for _, b := range binds {
-			mc.bindings[b.Prefix()] = b.Namespace()
+// newNSContext builds the context from captured bindings and a {default
+// namespace}, which hasDefault reports the presence of. The empty prefix is
+// modeled by that {default namespace}, not by a "" binding, so the bindings map
+// holds only non-empty prefixes.
+func newNSContext(bindings []xsd.NamespaceBinding, defaultNS string, hasDefault bool) nsContext {
+	c := nsContext{defaultNS: defaultNS, hasDefault: hasDefault}
+	if len(bindings) > 0 {
+		c.bindings = make(map[string]string, len(bindings))
+		for _, b := range bindings {
+			c.bindings[b.Prefix()] = b.Namespace()
 		}
 	}
-	if ns, ok := m.DefaultNamespace(); ok {
-		mc.defaultNS, mc.hasDefault = ns, true
-	}
-	return mc
+	return c
+}
+
+// newMemberContext builds the per-member context from an enumeration member's
+// own namespace bindings and {default namespace}.
+func newMemberContext(m xsd.EnumerationMember) nsContext {
+	ns, ok := m.DefaultNamespace()
+	return newNSContext(m.NamespaceBindings(), ns, ok)
 }
 
 // LookupNamespace resolves prefix per §3.3.18. The reserved prefix "xml" is
 // always bound (Namespaces in XML §3); "xmlns" is never bound (it falls through
-// to the unbound branch). The empty prefix (an unprefixed member) binds to the
+// to the unbound branch). The empty prefix (an unprefixed literal) binds to the
 // {default namespace} if in scope, else to no namespace (ok=true, "") —
-// element-name semantics, so an unprefixed member is never rejected as unbound. A
-// declared non-empty prefix resolves to its binding; any other non-empty prefix
+// element-name semantics, so an unprefixed literal is never rejected as unbound.
+// A declared non-empty prefix resolves to its binding; any other non-empty prefix
 // is genuinely unbound (ok=false), which the mapping's Parse turns into a
-// rejection remapped to src-enumeration-value (§4.3.5.3).
-func (mc memberContext) LookupNamespace(prefix string) (namespace string, ok bool) {
+// rejection — remapped to src-enumeration-value (§4.3.5.3) for a facet member,
+// and read as undecided for a value constraint (valuespace.go).
+func (c nsContext) LookupNamespace(prefix string) (namespace string, ok bool) {
 	if prefix == "xml" {
 		return xmlNamespaceURI, true
 	}
 	if prefix == "" {
-		if mc.hasDefault {
-			return mc.defaultNS, true
+		if c.hasDefault {
+			return c.defaultNS, true
 		}
 		return "", true
 	}
-	if ns, bound := mc.bindings[prefix]; bound {
+	if ns, bound := c.bindings[prefix]; bound {
 		return ns, true
 	}
 	return "", false

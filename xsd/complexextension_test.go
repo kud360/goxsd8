@@ -7,6 +7,38 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
+// sameRecord decides the property comparison that == decided before
+// ValueConstraint carried a namespace context, and it compares {variety} and
+// {lexical form} ONLY. Two constraints reaching one namespace through different
+// prefixes stay identical here: the predicates below read "identical" as "the
+// clause is satisfied", so tightening the relation would false-reject a legal
+// extension whose §3.4.2.4 clause-3 copy was written under other bindings.
+func TestValueConstraintSameRecordIgnoresNamespaceContext(t *testing.T) {
+	urn := "urn:a"
+	withA := NewValueConstraint(ValueFixed, "x", []NamespaceBinding{NewNamespaceBinding("a", urn)}, nil)
+	withB := NewValueConstraint(ValueFixed, "x", []NamespaceBinding{NewNamespaceBinding("b", urn)}, &urn)
+
+	for _, tc := range []struct {
+		name string
+		a, b ValueConstraint
+		want bool
+	}{
+		{"the same record", NewValueConstraint(ValueFixed, "x", nil, nil), NewValueConstraint(ValueFixed, "x", nil, nil), true},
+		{"a different {variety}", NewValueConstraint(ValueFixed, "x", nil, nil), NewValueConstraint(ValueDefault, "x", nil, nil), false},
+		{"a different {lexical form}", NewValueConstraint(ValueFixed, "x", nil, nil), NewValueConstraint(ValueFixed, "y", nil, nil), false},
+		{"a different namespace context", withA, withB, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.a.sameRecord(tc.b); got != tc.want {
+				t.Errorf("sameRecord = %t, want %t", got, tc.want)
+			}
+			if got := tc.b.sameRecord(tc.a); got != tc.want {
+				t.Errorf("sameRecord (reversed) = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
 // These tests are package-internal: checkComplexTypeExtension runs inside
 // SchemaBuilder.Finalize and is unexported (STYLE T5), so the assertions are
 // made on the error Finalize returns. The component builders come from

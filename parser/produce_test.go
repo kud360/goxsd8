@@ -884,6 +884,128 @@ func TestProduceLocalAttributeUseValueConstraints(t *testing.T) {
 	}
 }
 
+// TestProduceValueConstraintCapturesNamespaceContext pins the capture a QName
+// or NOTATION {lexical form} needs to denote a {value} at all (§3.3.18, adopted
+// by §3.3.19): every value constraint carries the namespace bindings in scope
+// at the element that wrote it, prefixed ones in document order plus the
+// default namespace an unprefixed literal binds to. It covers an element
+// declaration's constraint (a-props-correct clause 2's side) and an attribute
+// use's (au-props-correct clause 2's) together, and a prefix declared on the
+// <attribute> element itself, which only the element's OWN scope has.
+func TestProduceValueConstraintCapturesNamespaceContext(t *testing.T) {
+	doc := `<xs:schema xmlns:xs="` + xsdNS + `" xmlns:outer="urn:outer" xmlns="urn:default">` +
+		`<xs:element name="e" type="xs:string" fixed="outer:x"/>` +
+		`<xs:complexType name="CT"><xs:sequence/>` +
+		`<xs:attribute name="a" type="xs:string" xmlns:inner="urn:inner" default="inner:y"/>` +
+		`</xs:complexType></xs:schema>`
+	s, err := produce(t, doc)
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+
+	ed, ok := s.Element(xsd.QName{Local: "e"})
+	if !ok {
+		t.Fatal("element e not found")
+	}
+	evc, ok := ed.ValueConstraint()
+	if !ok {
+		t.Fatal("element e {value constraint} absent, want fixed")
+	}
+	wantElem := []string{"outer=urn:outer", "xml=" + xmlNS, "xs=" + xsdNS}
+	if got := bindingStrings(evc.NamespaceBindings()); !slices.Equal(got, wantElem) {
+		t.Errorf("element e captured bindings = %v, want %v", got, wantElem)
+	}
+	if ns, ok := evc.DefaultNamespace(); !ok || ns != "urn:default" {
+		t.Errorf("element e captured {default namespace} = (%q, %t), want (\"urn:default\", true)", ns, ok)
+	}
+
+	td, _ := s.Type(xsd.QName{Local: "CT"})
+	uses := td.(xsd.ComplexType).AttributeUses()
+	if len(uses) != 1 {
+		t.Fatalf("attribute uses = %d, want 1", len(uses))
+	}
+	avc, ok := uses[0].ValueConstraint()
+	if !ok {
+		t.Fatal("attribute use a {value constraint} absent, want default")
+	}
+	wantAttr := []string{"inner=urn:inner", "outer=urn:outer", "xml=" + xmlNS, "xs=" + xsdNS}
+	if got := bindingStrings(avc.NamespaceBindings()); !slices.Equal(got, wantAttr) {
+		t.Errorf("attribute use a captured bindings = %v, want %v", got, wantAttr)
+	}
+	if ns, ok := avc.DefaultNamespace(); !ok || ns != "urn:default" {
+		t.Errorf("attribute use a captured {default namespace} = (%q, %t), want (\"urn:default\", true)", ns, ok)
+	}
+}
+
+// With no default namespace in scope, the captured {default namespace} is
+// ABSENT rather than "": an unprefixed QName literal then binds to no namespace,
+// which is a different {value} from one bound to a namespace declared empty.
+func TestProduceValueConstraintWithoutDefaultNamespace(t *testing.T) {
+	s, err := produce(t, wrap("", `<xs:element name="e" type="xs:string" fixed="x"/>`))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	ed, ok := s.Element(xsd.QName{Local: "e"})
+	if !ok {
+		t.Fatal("element e not found")
+	}
+	vc, ok := ed.ValueConstraint()
+	if !ok {
+		t.Fatal("element e {value constraint} absent, want fixed")
+	}
+	if ns, present := vc.DefaultNamespace(); present {
+		t.Errorf("captured {default namespace} = (%q, %t), want absent", ns, present)
+	}
+}
+
+// TestProduceQNameValueConstraintsComparedAsValues is the captured context
+// reaching all the way to a verdict, through the real QName mapping: two fixed
+// QName {value}s are compared as {namespace name, local part} tuples (§3.3.18),
+// so au-props-correct (§3.5.6) clause 3 REJECTS one prefix bound differently on
+// the use and on the declaration, and ACCEPTS two different prefixes naming one
+// namespace — which a lexical comparison decides wrongly in both directions.
+func TestProduceQNameValueConstraintsComparedAsValues(t *testing.T) {
+	schema := func(declPrefix, declNS, usePrefix, useNS string) string {
+		return `<xs:schema xmlns:xs="` + xsdNS + `" targetNamespace="urn:x" xmlns:tns="urn:x">` +
+			`<xs:attribute name="g" type="xs:QName" fixed="` + declPrefix + `:x" xmlns:` + declPrefix + `="` + declNS + `"/>` +
+			`<xs:complexType name="CT"><xs:sequence/>` +
+			`<xs:attribute ref="tns:g" fixed="` + usePrefix + `:x" xmlns:` + usePrefix + `="` + useNS + `"/>` +
+			`</xs:complexType></xs:schema>`
+	}
+
+	t.Run("one prefix bound differently is a different value", func(t *testing.T) {
+		_, err := produce(t, schema("p", "urn:one", "p", "urn:two"))
+		assertRule(t, err, "au-props-correct")
+	})
+	t.Run("two prefixes naming one namespace are the same value", func(t *testing.T) {
+		if _, err := produce(t, schema("a", "urn:one", "b", "urn:one")); err != nil {
+			t.Fatalf("Produce: %v, want the two fixed QNames accepted as one {value}", err)
+		}
+	})
+	t.Run("the same binding and a different local part is a different value", func(t *testing.T) {
+		doc := `<xs:schema xmlns:xs="` + xsdNS + `" targetNamespace="urn:x" xmlns:tns="urn:x" xmlns:p="urn:one">` +
+			`<xs:attribute name="g" type="xs:QName" fixed="p:x"/>` +
+			`<xs:complexType name="CT"><xs:sequence/><xs:attribute ref="tns:g" fixed="p:y"/></xs:complexType>` +
+			`</xs:schema>`
+		_, err := produce(t, doc)
+		assertRule(t, err, "au-props-correct")
+	})
+}
+
+// xmlNS is the reserved prefix bound with no declaration anywhere (Namespaces
+// in XML §3), so it is in scope at — and captured by — every value constraint.
+const xmlNS = "http://www.w3.org/XML/1998/namespace"
+
+// bindingStrings renders captured bindings as "prefix=namespace" for comparison,
+// preserving the order they were captured in.
+func bindingStrings(bindings []xsd.NamespaceBinding) []string {
+	out := make([]string, 0, len(bindings))
+	for _, b := range bindings {
+		out = append(out, b.Prefix()+"="+b.Namespace())
+	}
+	return out
+}
+
 // TestProduceAttributeRefUseValueConstraint pins §3.5.1 vc_au for the
 // ref.att.local mapping (§3.2.2.3): fixed= on the <attribute ref="..."> element
 // populates that USE's own {value constraint}, leaving the referenced top-level

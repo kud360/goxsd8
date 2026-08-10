@@ -339,14 +339,14 @@ func (s *Schema) elementDeclarationSubsumes(general, specific ElementDeclaration
 // GAP(xsd): what remains fail-open here is exactly what the ValueSpace declines
 // to decide — a type no backend mapping governs, a {lexical form} that mapping
 // cannot map, two types resolving to DIFFERENT governing mappings (an
-// incommensurable cross-type comparison), and the context-dependent QName and
-// NOTATION spaces, whose lexicals need the in-scope namespace bindings of the
-// schema document that wrote them, which no ValueConstraint carries (see package
-// value's own GAP(value) marker). A {type definition} that is absent,
-// unresolvable, or COMPLEX (a simple-content complex type still bearing a value
-// constraint) is skipped here for the same reason simpleTypeOf's other callers
-// skip it: there is no simple type to name the value space. Every one of those
-// accepts, so none is ever a false reject (#265).
+// incommensurable cross-type comparison), and a QName or NOTATION lexical whose
+// prefix has no binding in the context its ValueConstraint captured (see package
+// value's own GAP(value) marker; a resolvable one IS compared). A {type
+// definition} that is absent, unresolvable, or COMPLEX (a simple-content complex
+// type still bearing a value constraint) is skipped here for the same reason
+// simpleTypeOf's other callers skip it: there is no simple type to name the
+// value space. Every one of those accepts, so none is ever a false reject
+// (#265).
 func (s *Schema) fixedValueConstraintSubsumes(general, specific ElementDeclaration) bool {
 	gvc, present := general.ValueConstraint()
 	if !present || gvc.Kind() != ValueFixed {
@@ -535,13 +535,12 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, t, b ComplexType, general,
 // GAP(xsd): what remains fail-open is exactly what the ValueSpace declines to
 // decide — an ungoverned type, an unmappable {lexical form}, two types resolving
 // to DIFFERENT governing mappings (an incommensurable cross-type comparison,
-// which clause 5.1 permits: S's type need only be DERIVED from G's), and the
-// context-dependent QName and NOTATION spaces, whose lexicals need the in-scope
-// namespace bindings of the schema document that wrote them and which no
-// ValueConstraint carries (see package value's own GAP(value) marker) — plus a
-// {type definition} that is absent, unresolvable, or complex, skipped exactly as
-// simpleTypeOf's other callers skip it. Every one of those accepts, so none is
-// ever a false reject (#265).
+// which clause 5.1 permits: S's type need only be DERIVED from G's), and a QName
+// or NOTATION lexical whose prefix has no binding in the context its
+// ValueConstraint captured (see package value's own GAP(value) marker; a
+// resolvable one IS compared) — plus a {type definition} that is absent,
+// unresolvable, or complex, skipped exactly as simpleTypeOf's other callers skip
+// it. Every one of those accepts, so none is ever a false reject (#265).
 func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, t, b ComplexType, general, specific AttributeUse) error {
 	gvc, present := s.effectiveValueConstraint(general)
 	if !present || gvc.Kind() != ValueFixed {

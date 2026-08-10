@@ -440,7 +440,7 @@ func TestDerivationOKRestrictionClause3RelaxedRequired(t *testing.T) {
 // restriction may not drop the base's ·effective value constraint· of {variety}
 // fixed.
 func TestDerivationOKRestrictionClause3DroppedFixed(t *testing.T) {
-	fixed := NewValueConstraint(ValueFixed, "7")
+	fixed := NewValueConstraint(ValueFixed, "7", nil, nil)
 	for _, tc := range []struct {
 		name      string
 		derivedVC *ValueConstraint

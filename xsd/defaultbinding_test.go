@@ -181,8 +181,8 @@ func TestBindingSubsumesAttributeUses(t *testing.T) {
 	s := bSchema(t, nil)
 	tt := dType(t, uq("t"), anyTypeName, EmptyContent{}, nil, nil)
 	bb := dType(t, uq("b"), anyTypeName, EmptyContent{}, nil, nil)
-	fixed := NewValueConstraint(ValueFixed, "7")
-	other := NewValueConstraint(ValueDefault, "7")
+	fixed := NewValueConstraint(ValueFixed, "7", nil, nil)
+	other := NewValueConstraint(ValueDefault, "7", nil, nil)
 
 	inheritable := func(u AttributeUse) AttributeUse {
 		u.inheritable = true
@@ -228,8 +228,8 @@ func TestBindingSubsumesAttributeUses(t *testing.T) {
 // TestEffectiveValueConstraintFallback pins key-evc's three-step fallback,
 // including the Ref variant, which is why the helper lives on *Schema at all.
 func TestEffectiveValueConstraintFallback(t *testing.T) {
-	declFixed := NewValueConstraint(ValueFixed, "7")
-	useDefault := NewValueConstraint(ValueDefault, "9")
+	declFixed := NewValueConstraint(ValueFixed, "7", nil, nil)
+	useDefault := NewValueConstraint(ValueDefault, "9", nil, nil)
 	s := bSchema(t, func(b *SchemaBuilder) {
 		global, err := NewAttributeDeclaration(xsderr.Loc{}, uq("g"), TypeDefinitionRef{Name: uq("str")}, NewAttributeGlobalScope(), &declFixed, false, nil)
 		if err != nil {
@@ -278,8 +278,8 @@ func vcElem(t *testing.T, local string, typeName QName, vc *ValueConstraint) Ele
 // still accepts. The two lexical forms differ, so a lexical comparison would
 // decide where only the value space may.
 func TestElementDeclarationSubsumesFixedValues(t *testing.T) {
-	gvc := NewValueConstraint(ValueFixed, "7")
-	svc := NewValueConstraint(ValueFixed, "07")
+	gvc := NewValueConstraint(ValueFixed, "7", nil, nil)
+	svc := NewValueConstraint(ValueFixed, "07", nil, nil)
 
 	for _, tc := range []struct {
 		name string
@@ -311,8 +311,8 @@ func TestElementDeclarationSubsumesFixedValues(t *testing.T) {
 // the clause with no value space to compare in, so it accepts without consulting
 // the ValueSpace at all.
 func TestElementDeclarationSubsumesFixedValuesSkipsUnresolvedType(t *testing.T) {
-	gvc := NewValueConstraint(ValueFixed, "7")
-	svc := NewValueConstraint(ValueFixed, "07")
+	gvc := NewValueConstraint(ValueFixed, "7", nil, nil)
+	svc := NewValueConstraint(ValueFixed, "07", nil, nil)
 	vs := &stubValueSpace{same: false, decided: true}
 	s, err := vcSchema(t, vs, nil)
 	if err != nil {
@@ -330,8 +330,8 @@ func TestElementDeclarationSubsumesFixedValuesSkipsUnresolvedType(t *testing.T) 
 // 5.2.2 the same way: two fixed ·effective value constraints· are compared in
 // the value space, and an undecided verdict accepts.
 func TestAttributeValueConstraintSubsumesFixedValues(t *testing.T) {
-	gvc := NewValueConstraint(ValueFixed, "7")
-	svc := NewValueConstraint(ValueFixed, "07")
+	gvc := NewValueConstraint(ValueFixed, "7", nil, nil)
+	svc := NewValueConstraint(ValueFixed, "07", nil, nil)
 
 	for _, tc := range []struct {
 		name    string

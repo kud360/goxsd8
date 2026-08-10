@@ -2,6 +2,7 @@ package value
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -34,7 +35,18 @@ func vsDerived(t *testing.T, local string, base *xsd.SimpleType) *xsd.SimpleType
 }
 
 func vsFixed(lexical string) xsd.ValueConstraint {
-	return xsd.NewValueConstraint(xsd.ValueFixed, lexical)
+	return xsd.NewValueConstraint(xsd.ValueFixed, lexical, nil, nil)
+}
+
+// vsFixedIn builds a fixed value constraint carrying the namespace context its
+// {lexical form} was written in (§3.3.18): defaultNS is nil when no default
+// namespace is in scope, and bindings are the prefixed ones.
+func vsFixedIn(lexical string, defaultNS *string, bindings ...xsd.NamespaceBinding) xsd.ValueConstraint {
+	return xsd.NewValueConstraint(xsd.ValueFixed, lexical, bindings, defaultNS)
+}
+
+func binding(prefix, namespace string) xsd.NamespaceBinding {
+	return xsd.NewNamespaceBinding(prefix, namespace)
 }
 
 // TestValueSpaceDecidesInOneSpace pins the whole point of the adapter: two
@@ -135,24 +147,120 @@ func TestValueSpaceRefusesUngovernedAndNonAtomic(t *testing.T) {
 	}
 }
 
-// TestValueSpaceRefusesQNameAndNOTATION pins the GAP(value) marker in
-// sharedMapping: QName and NOTATION lexicals resolve a prefix against the
-// bindings in scope where the literal was written (§3.3.18/§3.3.19), and
-// xsd.ValueConstraint carries no such context, so no comparison is attempted —
-// for a derivation of either primitive as much as for the primitive itself.
-func TestValueSpaceRefusesQNameAndNOTATION(t *testing.T) {
+// TestValueSpaceResolvesQNameAndNOTATION pins the comparison a lexical test
+// gets wrong in BOTH directions: each side's {lexical form} is resolved under
+// the namespace bindings ITS OWN value constraint captured (§3.3.18, adopted
+// verbatim by §3.3.19's "as given for QName"), so two prefixes naming one
+// namespace are the SAME {value} and one prefix bound differently across two
+// documents is NOT — the verdict au-props-correct clause 3 and loc-testSubP
+// clauses 4.2/5.2.2 turn into a rejection.
+//
+// Every case runs for NOTATION exactly as for QName, and the unprefixed cases
+// pin the ONE default-namespace rule §3.3.19 inherits: there is no
+// QName/NOTATION split.
+func TestValueSpaceResolvesQNameAndNOTATION(t *testing.T) {
+	urnA, urnB := "urn:a", "urn:b"
 	for _, local := range []string{"QName", "NOTATION"} {
 		t.Run(local, func(t *testing.T) {
 			prim := vsPrim(t, local)
-			vs := NewValueSpace(intBackend{mapped: prim.Name()})
+			vs := NewValueSpace(qnameBackend{mapped: prim.Name()})
 			derived := vsDerived(t, "d", prim)
-			if _, decided := vs.Identical(noSchema{}, prim, vsFixed("1"), prim, vsFixed("1")); decided {
-				t.Errorf("Identical on xs:%s decided, want undecided", local)
-			}
-			if _, decided := vs.EqualOrIdentical(noSchema{}, derived, vsFixed("1"), prim, vsFixed("1")); decided {
-				t.Errorf("EqualOrIdentical on a derivation of xs:%s decided, want undecided", local)
+
+			for _, tc := range []struct {
+				name        string
+				ta, tb      *xsd.SimpleType
+				a, b        xsd.ValueConstraint
+				wantSame    bool
+				wantDecided bool
+			}{
+				{
+					"different prefixes bound to one namespace are the same value",
+					prim, prim,
+					vsFixedIn("a:x", nil, binding("a", urnA)),
+					vsFixedIn("b:x", nil, binding("b", urnA)),
+					true, true,
+				},
+				{
+					"one prefix bound differently in two documents is not",
+					prim, prim,
+					vsFixedIn("p:x", nil, binding("p", urnA)),
+					vsFixedIn("p:x", nil, binding("p", urnB)),
+					false, true,
+				},
+				{
+					"the same binding and a different local part is not",
+					prim, prim,
+					vsFixedIn("p:x", nil, binding("p", urnA)),
+					vsFixedIn("p:y", nil, binding("p", urnA)),
+					false, true,
+				},
+				{
+					"an unprefixed literal binds to the default namespace in scope",
+					prim, prim,
+					vsFixedIn("x", &urnA),
+					vsFixedIn("a:x", nil, binding("a", urnA)),
+					true, true,
+				},
+				{
+					"an unprefixed literal with no default namespace binds to none",
+					prim, prim,
+					vsFixedIn("x", nil),
+					vsFixedIn("x", &urnA),
+					false, true,
+				},
+				{
+					"a derived type resolves under its own constraint's bindings too",
+					derived, prim,
+					vsFixedIn("d:x", nil, binding("d", urnA)),
+					vsFixedIn("a:x", nil, binding("a", urnA)),
+					true, true,
+				},
+				{
+					"an unresolvable prefix stays undecided, never a mismatch",
+					prim, prim,
+					vsFixedIn("gone:x", nil),
+					vsFixedIn("a:x", nil, binding("a", urnA)),
+					false, false,
+				},
+				{
+					"an unresolvable prefix on the second side too",
+					prim, prim,
+					vsFixedIn("a:x", nil, binding("a", urnA)),
+					vsFixedIn("gone:x", nil),
+					false, false,
+				},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					same, decided := vs.Identical(noSchema{}, tc.ta, tc.a, tc.tb, tc.b)
+					if same != tc.wantSame || decided != tc.wantDecided {
+						t.Errorf("Identical = (%t, %t), want (%t, %t)", same, decided, tc.wantSame, tc.wantDecided)
+					}
+					same, decided = vs.EqualOrIdentical(noSchema{}, tc.ta, tc.a, tc.tb, tc.b)
+					if same != tc.wantSame || decided != tc.wantDecided {
+						t.Errorf("EqualOrIdentical = (%t, %t), want (%t, %t)", same, decided, tc.wantSame, tc.wantDecided)
+					}
+				})
 			}
 		})
+	}
+}
+
+// TestValueSpaceResolvesReservedPrefixes pins the two reserved-prefix rules the
+// shared nsContext holds (Namespaces in XML §3): "xml" resolves with no
+// declaration anywhere in the captured context, and "xmlns" never resolves, so
+// a constraint using it stays undecided rather than comparing as a mismatch.
+func TestValueSpaceResolvesReservedPrefixes(t *testing.T) {
+	prim := vsPrim(t, "QName")
+	vs := NewValueSpace(qnameBackend{mapped: prim.Name()})
+	declared := "http://www.w3.org/XML/1998/namespace"
+
+	same, decided := vs.Identical(noSchema{}, prim, vsFixedIn("xml:lang", nil), prim,
+		vsFixedIn("d:lang", nil, binding("d", declared)))
+	if !same || !decided {
+		t.Errorf("Identical(xml: against its declared namespace) = (%t, %t), want (true, true)", same, decided)
+	}
+	if same, decided := vs.Identical(noSchema{}, prim, vsFixedIn("xmlns:x", nil), prim, vsFixedIn("xmlns:x", nil)); decided {
+		t.Errorf("Identical(xmlns: prefix) = (%t, %t), want undecided", same, decided)
 	}
 }
 
@@ -219,6 +327,46 @@ func (t twoTypeBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 			return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{}, "test backend: %q is not an integer", lexical)
 		}
 		return intValue(n), nil
+	}}, true
+}
+
+// qnameValue is the {namespace name, local part} tuple a QName or NOTATION
+// lexical denotes once its prefix is resolved (§3.3.18). §2.2.2 names no
+// equality exception for either type, so equality IS identity here and Eq alone
+// answers both relations.
+type qnameValue struct{ space, local string }
+
+func (q qnameValue) Eq(other Value) bool {
+	o, ok := other.(qnameValue)
+	return ok && o == q
+}
+
+// qnameBackend maps one name to a context-dependent mapping: it splits the
+// lexical at the colon and resolves the prefix through the [Context] it is
+// handed, rejecting an unbound prefix as an *xsderr.Error exactly as a real
+// backend would. A nil Context rejects everything, which is what makes a
+// dropped context visible as undecided rather than as a silent verdict.
+type qnameBackend struct{ mapped xsd.QName }
+
+func (b qnameBackend) Mapping(typ xsd.QName) (Mapping, bool) {
+	if typ != b.mapped {
+		return Mapping{}, false
+	}
+	return Mapping{Parse: func(lexical string, ctx Context) (Value, error) {
+		if ctx == nil {
+			return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+				"test backend: a QName lexical needs a context")
+		}
+		prefix, local := "", lexical
+		if i := strings.IndexByte(lexical, ':'); i >= 0 {
+			prefix, local = lexical[:i], lexical[i+1:]
+		}
+		ns, ok := ctx.LookupNamespace(prefix)
+		if !ok {
+			return nil, xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+				"test backend: prefix %q is not bound", prefix)
+		}
+		return qnameValue{space: ns, local: local}, nil
 	}}, true
 }
 
@@ -351,9 +499,10 @@ func TestValidDefaultAcceptsUngovernedTypes(t *testing.T) {
 
 // TestValidDefaultAcceptsContextDependentTypes pins needsContext, the recursive
 // form of contextDependent: a QName or NOTATION lexical resolves a prefix against
-// the bindings in scope where it was written (§3.3.18/§3.3.19, PRINCIPLES 19), and
-// xsd.ValueConstraint carries no such context, so no verdict is available — for a
-// list OF QName and a union WITH a QName member as much as for the primitive.
+// the bindings in scope where it was written (§3.3.18/§3.3.19, PRINCIPLES 19),
+// which this one-sided check does not route to the mapping — the comparisons do,
+// the list/union dispatch does not — so no verdict is available, for a list OF
+// QName and a union WITH a QName member as much as for the primitive.
 //
 // The backend here DOES map QName, so the ungoverned gate cannot be what accepts
 // these: only needsContext can. Without it every row would be a false reject,
