@@ -1651,12 +1651,20 @@ func (p *producer) produceAttributeUses(parent *Element, scopeParent xsd.Attribu
 // two forms mirror that function's split — a ref= resolves as a QName (§3.2.2.3),
 // a name= takes the local declaration's {target namespace} (§3.2.2.2).
 //
-// No src-attribute clause is charged here: produceAttributeUse charges clauses 1,
-// 2 and 5 upstream, before the same prohibited <attribute> declines to map, so
-// re-charging them would put them in two encodings. An element carrying neither
-// ref nor name simply has no expanded name to block and is skipped rather than
-// rejected. The one failure that IS surfaced is an unresolvable
-// ref= prefix — src-resolve, charged by resolveQName for every other reference in
+// No src-attribute clause is charged here: produceAttributeUse charges clauses
+// 1, 2, 3 and 5 upstream, unconditionally, before the same prohibited
+// <attribute> declines to map, so re-charging them would put them in two
+// encodings (#358). That upstream charge of clause 3 already rejects a
+// neither-ref-nor-name <attribute> before produceAttributeUses ever calls this
+// function (produceAttributeUses runs collectAttributeContent, which calls
+// produceAttributeUse over every <attribute> child and returns its error
+// immediately, before prohibitedAttributeNames walks the same children) — so by
+// the time this loop sees a prohibited <attribute>, it is guaranteed to carry
+// exactly one of ref/name. The `!hasName` branch below is therefore dead in
+// practice; it stays as a defensive fallback rather than an unproven assumption,
+// costing nothing since removing it would only add risk if that invariant ever
+// changes. The one failure that IS surfaced here is an unresolvable ref=
+// prefix — src-resolve, charged by resolveQName for every other reference in
 // this producer, and a prohibited <attribute> earns no exemption from it.
 func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error) {
 	var names []xsd.QName
@@ -1678,7 +1686,7 @@ func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error
 		}
 		name, hasName := el.Attr("name")
 		if !hasName {
-			continue // neither ref nor name: no expanded name to block
+			continue // unreachable: produceAttributeUse already rejected this shape upstream
 		}
 		names = append(names, xsd.QName{Space: p.localTargetNS(el, "attributeFormDefault"), Local: name})
 	}
@@ -1874,15 +1882,21 @@ func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.W
 // sibling local Attribute Declaration is built inline. It enforces the structural
 // src-attribute clauses (§3.2.3): 1 (default and fixed mutually exclusive, via
 // valueConstraintOf), 2 and 5 (the default/fixed × use= corner, via
-// useValueConstraintOK) and 3 (exactly one of ref/name; ref excludes type/form).
+// useValueConstraintOK) and 3 (exactly one of ref/name; ref excludes
+// simpleType/form/type).
 //
-// Clauses 1, 2 and 5 are charged BEFORE the use="prohibited" return, because a
-// Schema Representation Constraint holds of the <attribute> element information
-// item itself (§5.1: "any element information items which violate any of the
-// relevant Schema Representation Constraints"). Mapping to no component at all
-// (§3.2.2) skips the component-building half of the mapping, never the
-// validation: <attribute use="prohibited" default="d" fixed="f"/> violates
-// clause 1 exactly as the optional form does.
+// Clauses 1, 2, 3 and 5 are ALL charged BEFORE the use="prohibited" return,
+// because a Schema Representation Constraint holds of the <attribute> element
+// information item itself (§5.1: "any element information items which violate
+// any of the relevant Schema Representation Constraints"). Mapping to no
+// component at all (§3.2.2) skips the component-building half of the mapping,
+// never the validation: <attribute use="prohibited" default="d" fixed="f"/>
+// violates clause 1 exactly as the optional form does, and <attribute ref="a:x"
+// name="x" use="prohibited"/> violates clause 3.1 exactly as the non-prohibited
+// form does. This includes the neither-ref-nor-name shape (<attribute
+// use="prohibited"/>): clause 3.1 has no use= precondition, so that shape is
+// REJECTED under prohibited exactly as it already was under every other use=
+// value, not silently accepted as a no-op element (#358).
 //
 // default=/fixed= on the <attribute> element map to the USE's own {value
 // constraint} (§3.5.1 vc_au) for both forms: dcl.att.local (§3.2.2.2) leaves the
@@ -1905,27 +1919,37 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 	if err := useValueConstraintOK(el, use); err != nil {
 		return nil, err
 	}
+	ref, hasRef := el.Attr("ref")
+	_, hasName := el.Attr("name")
+	if hasRef && hasName {
+		return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
+			"attribute has both ref and name, but src-attribute clause 3 requires exactly one")
+	}
+	if !hasRef && !hasName {
+		return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
+			"attribute has neither ref nor name, but src-attribute clause 3 requires exactly one")
+	}
+	if hasRef {
+		if childElement(el, xsd.XMLSchemaNS, "simpleType") != nil {
+			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
+				"attribute has both ref and an inline <simpleType>, but src-attribute clause 3 forbids a simpleType with ref")
+		}
+		if _, hasForm := el.Attr("form"); hasForm {
+			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
+				"attribute has both ref and form, but src-attribute clause 3 forbids a form with ref")
+		}
+		if _, hasType := el.Attr("type"); hasType {
+			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
+				"attribute has both ref and type, but src-attribute clause 3 forbids a type with ref")
+		}
+	}
 	if use == "prohibited" {
 		return nil, nil
 	}
 	required := use == "required"
 	inheritable, _ := boolAttr(el, "inheritable")
 
-	ref, hasRef := el.Attr("ref")
-	_, hasName := el.Attr("name")
 	if hasRef {
-		if hasName {
-			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
-				"attribute has both ref and name, but src-attribute clause 3 requires exactly one")
-		}
-		if childElement(el, xsd.XMLSchemaNS, "simpleType") != nil {
-			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
-				"attribute has both ref and an inline <simpleType>, but src-attribute clause 3 forbids a type with ref")
-		}
-		if _, hasType := el.Attr("type"); hasType {
-			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
-				"attribute has both ref and type, but src-attribute clause 3 forbids a type with ref")
-		}
 		qn, err := p.resolveQName(el, ref, "ref")
 		if err != nil {
 			return nil, err
@@ -1935,10 +1959,6 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 			return nil, err
 		}
 		return &au, nil
-	}
-	if !hasName {
-		return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
-			"attribute has neither ref nor name, but src-attribute clause 3 requires exactly one")
 	}
 	decl, err := p.produceLocalAttribute(el, scopeParent)
 	if err != nil {

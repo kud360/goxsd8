@@ -989,6 +989,42 @@ func TestProduceAttributeUseValueConstraintAccepted(t *testing.T) {
 	}
 }
 
+// TestProduceAttributeUseClause3ChargedUnderProhibited pins src-attribute
+// clause 3 (§3.2.3) against a prohibited local <attribute>: clause 3 has no
+// use= precondition, so it rejects exactly as it does under every other use=
+// value, not silently accepted because use="prohibited" maps to no component
+// at all (§3.2.2) (#358 defect 4). The neither-ref-nor-name case is a
+// DELIBERATE reject here, not a skip: clause 3.1's "exactly one of ref or
+// name" holds unconditionally, so <attribute use="prohibited"/> is rejected
+// the same way <attribute use="optional"/> already is.
+func TestProduceAttributeUseClause3ChargedUnderProhibited(t *testing.T) {
+	global := `<xs:attribute name="x" type="xs:string"/>`
+	for _, tc := range []struct {
+		name string
+		attr string
+	}{
+		{"ref and name", `<xs:attribute ref="tns:x" name="x" use="prohibited"/>`},
+		{"ref and type", `<xs:attribute ref="tns:x" type="xs:string" use="prohibited"/>`},
+		{"ref and form", `<xs:attribute ref="tns:x" form="qualified" use="prohibited"/>`},
+		{"ref and inline simpleType", `<xs:attribute ref="tns:x" use="prohibited">` +
+			`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`},
+		{"neither ref nor name", `<xs:attribute use="prohibited"/>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := "\n<xs:complexType name=\"CT\"><xs:sequence/>\n" + tc.attr + "\n</xs:complexType>\n" + global
+			_, err := produce(t, wrap("urn:x", body))
+			assertRule(t, err, "src-attribute")
+			if want := "src-attribute clause 3"; !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want it to cite %s", err, want)
+			}
+			loc, ok := xsderr.LocOf(err)
+			if !ok || loc.URI != produceURI {
+				t.Fatalf("error %v carries no position in %s", err, produceURI)
+			}
+		})
+	}
+}
+
 func TestProduceAnyAttributeWildcard(t *testing.T) {
 	body := `<xs:complexType name="CT"><xs:sequence/><xs:anyAttribute namespace="##other" processContents="lax"/></xs:complexType>`
 	ct := complexType(t, body, "CT")
