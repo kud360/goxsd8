@@ -160,7 +160,7 @@ func (s *Schema) checkSimpleBaseIsExtension(c ComplexType) error {
 	if c.DerivationMethod() == DerivationExtension {
 		return nil
 	}
-	return xsderr.New(ruleCTPropsCorrect, xsderr.Loc{},
+	return xsderr.New(ruleCTPropsCorrect, c.Loc(),
 		"complex type %s has the simple type %s as its {base type definition} but {derivation method} = %s, and ct-props-correct clause 2 requires extension", c.Name(), typeDefinitionLabel(base), c.DerivationMethod())
 }
 
@@ -186,7 +186,7 @@ func checkAttributeUseNamesUnique(c ComplexType) error {
 	if !duplicate {
 		return nil
 	}
-	return xsderr.New(ruleCTPropsCorrect, xsderr.Loc{},
+	return xsderr.New(ruleCTPropsCorrect, c.Loc(),
 		"complex type %s has two {attribute uses} whose {attribute declaration}s share the expanded name %s, but ct-props-correct clause 4 forbids it", c.Name(), name)
 }
 
@@ -283,7 +283,7 @@ func checkRestrictionBaseFinal(t, b ComplexType) error {
 	if !finalContains(b.final, DerivationRestriction) {
 		return nil
 	}
-	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 		"complex type %s restricts %s, but %s has restriction in its {final}, which derivation-ok-restriction clause 1 forbids", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b))
 }
 
@@ -323,7 +323,7 @@ func (s *Schema) checkRestrictionContentType(t, b ComplexType) error {
 	if s.restrictionComplexContentOK(t.ContentType(), b.ContentType()) {
 		return nil // clause 2.4
 	}
-	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 		"complex type %s restricts %s, but its %s {content type} is not a valid restriction of the base's %s {content type} under any branch of derivation-ok-restriction clause 2 (2.1 base is xs:anyType, 2.2 simple content, 2.3 empty content, 2.4.1 element-only/mixed match, 2.4.2 the content model ·restricts· the base's per cos-content-act-restrict §3.4.6.4)", t.Name(), typeDefinitionLabel(b), t.ContentType().Variety(), b.ContentType().Variety())
 }
 
@@ -427,7 +427,7 @@ func (s *Schema) checkRestrictionAttributes(t, b ComplexType) error {
 		name := attributeUseName(u)
 		general, ok := s.attributeDefaultBinding(b, name)
 		if !ok {
-			return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+			return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 				"complex type %s restricts %s but declares an attribute use for %s, which %s neither declares nor admits through an {attribute wildcard}, so an element valid against the restriction can carry an attribute the base rejects (derivation-ok-restriction clause 3, c-ran)", t.Name(), typeDefinitionLabel(b), name, typeDefinitionLabel(b))
 		}
 		if err := s.checkBindingSubsumes(name, t, b, general, attributeUseBinding{use: u}); err != nil {
@@ -502,14 +502,14 @@ func checkRestrictionAttributeWildcard(t, b ComplexType) error {
 	}
 	bw, baseHas := b.AttributeWildcard()
 	if !baseHas {
-		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+		return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 			"complex type %s restricts %s and declares an {attribute wildcard}, but %s has none, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 2.2, c-avaw)", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b))
 	}
 	bnc := bw.NamespaceConstraint().withoutDisallowedNames(sharedAttributeUseNames(t, b))
 	if wildcardSubset(tw.NamespaceConstraint(), bnc) {
 		return nil
 	}
-	return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 		"complex type %s restricts %s but its {attribute wildcard} admits expanded names %s's does not, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 2.2, c-avaw, and cos-ns-subset)", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b))
 }
 
@@ -566,13 +566,13 @@ func checkRestrictionRequiredAttributes(t, b ComplexType) error {
 		name := attributeUseName(bu)
 		tu, ok := findAttributeUse(t.attributeUses, name)
 		if !ok {
-			return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+			return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 				"complex type %s restricts %s but its {attribute uses} carry no use for attribute %s, which the base requires, so an element omitting it is valid against the restriction and not against the base (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 3)", t.Name(), typeDefinitionLabel(b), name)
 		}
 		if tu.Required() {
 			continue
 		}
-		return xsderr.New(ruleDerivationOKRestriction, xsderr.Loc{},
+		return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
 			"complex type %s restricts %s but declares attribute %s as optional where the base requires it, so an element omitting it is valid against the restriction and not against the base (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 3)", t.Name(), typeDefinitionLabel(b), name)
 	}
 	return nil
@@ -664,7 +664,7 @@ func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType, k locallyD
 		if substitutable {
 			continue
 		}
-		return xsderr.New(k.rule, xsderr.Loc{},
+		return xsderr.New(k.rule, t.Loc(),
 			"complex type %s %s %s, but the ·locally declared type· %s of attribute %s within the %s is not ·validly substitutable· for the base's %s %s (%s)", t.Name(), k.verb, typeDefinitionLabel(b), typeDefinitionLabel(within), name, k.relation, typeDefinitionLabel(base), k.limitation, k.clause)
 	}
 	return nil
@@ -691,7 +691,7 @@ func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType, k locallyDec
 		if substitutable {
 			continue
 		}
-		return xsderr.New(k.rule, xsderr.Loc{},
+		return xsderr.New(k.rule, t.Loc(),
 			"complex type %s %s %s, but the ·locally declared type· %s of element %s within the %s is not ·validly substitutable· for the base's %s %s (%s)", t.Name(), k.verb, typeDefinitionLabel(b), typeDefinitionLabel(within), name, k.relation, typeDefinitionLabel(base), k.limitation, k.clause)
 	}
 	return nil

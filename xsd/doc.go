@@ -68,18 +68,28 @@
 // rejection can cite file:line:column instead of "?" — sch-props-correct
 // clause 2 (schema.go) was the first such consumer, resolve.go's Phase
 // A/B rejections (src-resolve, c-props-correct, ct-props-correct,
-// mg-props-correct, e-props-correct) the second, and defaultbinding.go's
-// derivation-ok-restriction clause 3 rejections the third: each is charged
-// to the REFERRING or offending component's own Loc, per the referrer-Loc
-// convention documented on resolveReferences — for clause 3 that is the
-// RESTRICTING complex type, the spec's T, which the constraint is stated
-// against and every one of its messages already names. The zero
-// xsderr.Loc means the position is unknown, and is the correct value for a
-// component with no schema document behind it — parser.Produce's
-// synthesized xs:anyType and package builtin's seeded built-in datatypes
-// are the legitimate zero-Loc producers. Other constructors take a loc to
-// charge their own rejections but do not retain it: nothing consumes those
-// positions yet, so no accessor is exported for them (T5).
+// mg-props-correct, e-props-correct) the second, defaultbinding.go's
+// derivation-ok-restriction clause 3 rejections the third, and
+// complexderivation.go's derivation-ok-restriction, ct-props-correct and
+// cos-ct-extends rejections the fourth: each is charged to the REFERRING
+// or offending component's own Loc, per the referrer-Loc convention
+// documented on resolveReferences — for every derivation-ok-restriction
+// clause that is the RESTRICTING complex type, the spec's T, which the
+// constraint is stated against and every one of its messages already
+// names, and for ct-props-correct the complex type whose properties it
+// checks. cos-ct-extends clause 1.6 (c-vs-ctd-e) is positioned by the
+// same two charge sites: derivation-ok-restriction clause 4's attribute
+// and element halves are parameterized by locallyDeclaredTypeCheck, whose
+// second literal is checkExtensionLocallyDeclaredTypes' — so a c-vs-ctd-e
+// rejection carries the EXTENDING type's Loc, charged from
+// complexderivation.go and NOT from any of complexextension.go's own
+// twenty charges. The zero xsderr.Loc means the position is unknown, and
+// is the correct value for a component with no schema document behind it —
+// parser.Produce's synthesized xs:anyType and package builtin's seeded
+// built-in datatypes are the legitimate zero-Loc producers. Other
+// constructors take a loc to charge their own rejections but do not retain
+// it: nothing consumes those positions yet, so no accessor is exported for
+// them (T5).
 //
 // # Query API
 //
