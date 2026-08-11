@@ -183,9 +183,12 @@ type ComplexTypeScopeParent struct{ Name QName }
 //
 // What holds in both cases, and is the invariant to rely on, is the 1:1 pairing:
 // the container's {context} identity and this field hold the SAME ComponentID,
-// one mint per pairing, one fact with one encoding (STYLE D3). Comparing them
-// with == is how NewElementDeclarationOwningType and NewComplexTypeOwningBase
-// each check that the anonymous type points back at its own owner.
+// one mint per OWNERSHIP EDGE, one fact with one encoding (STYLE D3). Comparing
+// them with == is how NewElementDeclarationOwningType, NewComplexTypeOwningBase
+// and NewAnonymousComplexTypeOwningBase each check that the anonymous type points
+// back at its own owner. A chained <redefine> stacks two such edges — a
+// redefining type owns an original which owns another — and mints a token for
+// each, so the two containers stay distinguishable (#585).
 //
 // Owner is a PRESENT identity, never the zero (unminted) ComponentID —
 // NewLocalScope rejects an unminted one. The field is read-only by convention;

@@ -28,7 +28,7 @@ hand-count:
 | `datatypes` | 1156 | 17 | 1173 |
 | `instance` | 0 | 26361 | 26361 |
 | `json` | — | — | 0 |
-| `schema` | 9706 | 5692 | 15398 |
+| `schema` | 9707 | 5691 | 15398 |
 | `xpath` | — | — | 0 |
 
 An em dash is a lane with no cases yet, which is a different claim from a
@@ -42,7 +42,10 @@ and all five one grammar family: #632 (NCName declaration names, +28), #631
 (empty QName prefix), #523 (nameless top-level `xs:simpleType`), #518
 (top-level `ref`) and #652 (the rest of the prohibited top-level attributes,
 +25). A band drained in family order is the ordering doctrine working; rows 1
-and 2 below continue the same family.
+and 2 below continue the same family. **#585 landed mid-pass** (PR #689,
+`schema` 9706 → 9707, +1, `MS-Additional2006-07-15/addB007`) after this
+section was first drafted; the table above is the merged tree's true figure,
+so the six-landing total is **9648 → 9707, +59**.
 
 Milestones, from GitHub:
 
@@ -54,8 +57,8 @@ Milestones, from GitHub:
 | M5 — Instance validation (XML) | 0 | 1 | epic #250 filed, **uncarved** |
 | M6–M12 | 0 | 0 | not filed |
 
-Queue: 157 open issues — 141 `ready`, 16 `blocked`, 0 `needs-replan`,
-2 `epic`. **44 of the 157 carry a milestone; 113 carry none** — the
+Queue: 156 open issues — 140 `ready`, 16 `blocked`, 0 `needs-replan`,
+2 `epic`. **44 of the 156 carry a milestone; 112 carry none** — the
 milestones track feature scope, and the process, doc and comment-accuracy
 issues that post-land passes file are deliberately outside them. Read the
 milestone table as feature progress, not as the queue.
@@ -64,13 +67,16 @@ The queue grew by five across five landings: five issues closed, ten filed.
 Eight of the ten are named follow-ups from one of the five landings, none of
 them a hand-off (#330) — the post-land passes working as specified. The other
 two (#687, #688) came from this pass's persona reports and are the only
-issues here that no landing produced.
+issues here that no landing produced. **#585 landed mid-pass** (PR #689,
+merged after this section was first drafted but before this branch's base
+was refreshed) — a sixth closure, counted in the totals above but not in the
+"five landings" figure, which still names the reconciliation this pass
+actually performed.
 
 Branch namespace, `origin` — report-only; a session never deletes a ref:
 
 | Branch | Verdict | Disposition |
 |---|---|---|
-| `wip/issue-585` | **LIVE** | Claimed and in flight. Arbiter REJECT on round 1 (2026-08-11), one repair round remains. Do not start #585. |
 | `wip/issue-256` | EXPIRED | Retired in place; issue closed and superseded by #470. |
 | `wip/issue-271` | EXPIRED | Retired in place; issue closed and superseded by #478/#479/#480. |
 | `wip/issue-287` | EXPIRED | Retired in place; issue closed, answered in the opposite direction by PR #511. |
@@ -96,46 +102,47 @@ nothing else**, accepting a stale band for one cycle. A fourth naming without
 that is evidence the trigger is wrong, not that the queue is busy.
 
 **Working band** — dependency-ordered top of the `ready` queue, so a session
-need not scan 141 issues. Take from the top; the ordering prefers slices that
-move a lane over horizontal completeness.
+need not scan 140 issues. Take from the top; the ordering prefers slices that
+move a lane over horizontal completeness. **#585 landed mid-pass (PR #689)**
+and is dropped from the band below rather than left as a stale claimed row.
 
 | # | Issue | Why here |
 |---:|---|---|
 | 1 | #675 | an identity-constraint `name` is never NCName-checked — **6 banked `fail` schema-lane cases are this one fault**, the largest named lane movement in the queue, and the `declarationName` predicate it must reuse landed with #632 |
 | 2 | #684 | top-level `xs:group`/`xs:attributeGroup` prohibited attributes — the DEFINITION half of the family #518/#652 just closed. 2 decidable cases; the other 6 are gated behind a conformance widening it deliberately scopes out |
-| 3 | #585 | **CLAIMED — do not start.** `wip/issue-585` is LIVE and in a repair round. Listed so the band is not read as free |
-| 4 | #686 | `sch-props-correct` clause 2 never fires when a redefined document carries two top-level definitions of one name. **Depends on #585** |
-| 5 | #506 | an `xs:override`-substituted `group` child loses self-reference resolution — false-reject |
-| 6 | #469 | cos-all-limited charged on the XML spelling, not the component — false accept in both clauses |
-| 7 | #503 + #504 | `src-redefine` clauses 7.2.2 and 6.2.2, both fail-open. **Coupled — read the note below before starting either** |
-| 8 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline |
-| 9 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes` lane, pdecimal019/020 the measured cost |
-| 10 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes` lane, #574's sibling widening |
-| 11 | #626 | README's CLI section is false about exit codes today; one sentence, and it should precede #472 |
-| 12 | #669 | README's Library snippet does not compile, and the example pointer omits `parser` and `xsd` |
-| 13 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
-| 14 | #672 + #687 | the two open CLI-contract decisions (`-version`; scoped help and the bareword `help`). One line each in `doc.go` now, a retrofit around a live dispatch after #472 |
-| 15 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 3 | #686 | `sch-props-correct` clause 2 never fires when a redefined document carries two top-level definitions of one name. Its `#585` dependency is now satisfied — #585 landed |
+| 4 | #506 | an `xs:override`-substituted `group` child loses self-reference resolution — false-reject |
+| 5 | #469 | cos-all-limited charged on the XML spelling, not the component — false accept in both clauses |
+| 6 | #503 + #504 | `src-redefine` clauses 7.2.2 and 6.2.2, both fail-open. **Coupled — read the note below before starting either** |
+| 7 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline |
+| 8 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes` lane, pdecimal019/020 the measured cost |
+| 9 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes` lane, #574's sibling widening |
+| 10 | #626 | README's CLI section is false about exit codes today; one sentence, and it should precede #472 |
+| 11 | #669 | README's Library snippet does not compile, and the example pointer omits `parser` and `xsd` |
+| 12 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
+| 13 | #672 + #687 | the two open CLI-contract decisions (`-version`; scoped help and the bareword `help`). One line each in `doc.go` now, a retrofit around a live dispatch after #472 |
+| 14 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
 
-Rows 1–10 move `schema` (rows 9 and 10 move `datatypes`); rows 11–15 are the
+Rows 1–9 move `schema` (rows 8 and 9 move `datatypes`); rows 10–14 are the
 M4-facing published surface, where two isolated persona passes have now found
 the same defects twice.
 
-**Rows 11–14 are ordered before row 15 on cost, not importance.** Each is a
+**Rows 10–13 are ordered before row 14 on cost, not importance.** Each is a
 sentence or a dispatch branch while the CLI surface is still empty; taken
 after #472 every one of them is a change to shipped behaviour. #472's own
 Acceptance already carries the `-version` decision, so if it is taken first it
 must discharge #672 rather than leave it contradicting the landing.
 
-**Row 7's coupling, recorded here because it exists only on an unlanded
-branch.** #585's warden review established that retiring the
-`conformance/schema.go` decidability residue for `group`/`attributeGroup`
-flips `MS-Schema2006-07-15/schL10` and `/schM5` from `pass` to `fail` unless
+**Row 6's coupling is now landed on `main`, not only on an issue thread.**
+#585's warden review established that retiring the `conformance/schema.go`
+decidability residue for `group`/`attributeGroup` flips
+`MS-Schema2006-07-15/schL10` and `/schM5` from `pass` to `fail` unless
 **both** #503 and #504 are in hand — each case turns on one clause alone, so
 whichever of the two lands second must carry the widening with it, and
-neither may retire the residue on its own. The binding comment is on
-`wip/issue-585`, **not on `main`**, so it disappears if #585 parks; it is
-restated on both issue threads.
+neither may retire the residue on its own. #585 landed with the binding
+comment written into `redefineDecidable` (`conformance/schema.go:648-666`,
+naming #503/#504 directly), so the coupling is now durable on `main` rather
+than tied to a branch's lifetime; it is also restated on both issue threads.
 
 ## Milestones
 

@@ -561,6 +561,136 @@ func TestParseRedefineComplexTypeMutualBaseTerminates(t *testing.T) {
 	mustRule(t, err, "ct-props-correct", "clause 3")
 }
 
+// chainedDocs is the two-level redefine chain both chained tests are built on:
+// d1 redefines d2 for one (kind, name), and d2 redefines d3 for the SAME one.
+// §4.2.4 clause 4.1.1 makes d2's redefining child a top-level definition of d2,
+// so d1's redefinition pairs with it under src-expredef clause 1.1 and it in turn
+// pairs with d3's declaration under clause 1.2 applied at d2's level.
+func chainedDocs(d1Child, d2Child, d3Decl string) map[string]string {
+	return map[string]string{
+		"d1.xsd": wrap("urn:a", `<xs:redefine schemaLocation="d2.xsd">`+d1Child+`</xs:redefine>`),
+		"d2.xsd": wrap("urn:a", `<xs:redefine schemaLocation="d3.xsd">`+d2Child+`</xs:redefine>`),
+		"d3.xsd": wrap("urn:a", d3Decl),
+	}
+}
+
+// TestParseRedefineChainedSimpleType pins the two-level chain for a
+// <simpleType>: d1's redefinition must reach d3's declaration THROUGH d2's, not
+// past it. §4.2.4 clause 4.1.2 excludes d3's own {urn:a}code from the components
+// d2 contributes — only d2's redefining component and the original inside it
+// exist there — so a base chain that skipped a level would silently drop d2's
+// redefinition from the type hierarchy d1 sees.
+func TestParseRedefineChainedSimpleType(t *testing.T) {
+	s, err := parseMap(t, "d1.xsd", chainedDocs(
+		`<xs:simpleType name="code"><xs:restriction base="tns:code">`+
+			`<xs:maxLength value="2"/></xs:restriction></xs:simpleType>`,
+		`<xs:simpleType name="code"><xs:restriction base="tns:code">`+
+			`<xs:maxLength value="4"/></xs:restriction></xs:simpleType>`,
+		`<xs:simpleType name="code"><xs:restriction base="xs:string">`+
+			`<xs:maxLength value="8"/></xs:restriction></xs:simpleType>`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	// One visible {urn:a}code, d1's, and each hidden original below it is
+	// {name}-·absent· (clause 1.1) and carries its own document's facet.
+	code := mustSimpleType(t, s, xsd.QName{Space: "urn:a", Local: "code"})
+	if got := facetValue(t, code, xsd.FacetMaxLength); got != "2" {
+		t.Fatalf("visible {urn:a}code maxLength = %q, want d1's 2", got)
+	}
+	fromD2 := mustBase(t, s, code)
+	if fromD2 == nil {
+		t.Fatal("d1's redefinition has no {base type definition}")
+	}
+	if got := fromD2.Name(); got != (xsd.QName{}) {
+		t.Fatalf("d1's clause-1.1 original is named %s, want ·absent·", got)
+	}
+	if got := facetValue(t, fromD2, xsd.FacetMaxLength); got != "4" {
+		t.Fatalf("d1's clause-1.1 original maxLength = %q, want d2's 4 — the chain skipped d2", got)
+	}
+	fromD3 := mustBase(t, s, fromD2)
+	if fromD3 == nil {
+		t.Fatal("d2's redefining declaration, built as d1's original, has no {base type definition}")
+	}
+	if got := fromD3.Name(); got != (xsd.QName{}) {
+		t.Fatalf("d2's clause-1.1 original is named %s, want ·absent·", got)
+	}
+	if got := facetValue(t, fromD3, xsd.FacetMaxLength); got != "8" {
+		t.Fatalf("d2's clause-1.1 original maxLength = %q, want d3's 8", got)
+	}
+}
+
+// TestParseRedefineChainedComplexType is the same chain for a <complexType>, the
+// shape MS-Additional2006-07-15/addB007 exercises. Both hops own their base, so
+// the middle component is at once d1's anonymous clause-1.1 original AND a
+// clause-1.2 redefining type over d3's — and the two anonymous levels must stay
+// DISTINCT containers, which is what the {context} comparison pins.
+func TestParseRedefineChainedComplexType(t *testing.T) {
+	s, err := parseMap(t, "d1.xsd", chainedDocs(
+		`<xs:complexType name="ct"><xs:complexContent><xs:extension base="tns:ct">`+
+			`<xs:sequence><xs:element name="c" type="xs:string"/></xs:sequence>`+
+			`</xs:extension></xs:complexContent></xs:complexType>`,
+		`<xs:complexType name="ct"><xs:complexContent><xs:extension base="tns:ct">`+
+			`<xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>`+
+			`</xs:extension></xs:complexContent></xs:complexType>`,
+		`<xs:complexType name="ct">`+
+			`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	ct := mustComplexType(t, s, xsd.QName{Space: "urn:a", Local: "ct"})
+	if got := elementNamesOf(t, ct); !slices.Equal(got, []string{"a", "b", "c"}) {
+		t.Fatalf("the visible {urn:a}ct declares %v, want [a b c] — one particle per level of the chain", got)
+	}
+	fromD2 := mustOwnedBase(t, ct)
+	if got := elementNamesOf(t, fromD2); !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("d1's clause-1.1 original declares %v, want [a b] — the chain skipped d2", got)
+	}
+	fromD3 := mustOwnedBase(t, fromD2)
+	if got := elementNamesOf(t, fromD3); !slices.Equal(got, []string{"a"}) {
+		t.Fatalf("d2's clause-1.1 original declares %v, want d3's [a]", got)
+	}
+	// Each original's {context} is the component that owns it, and the two are
+	// different components: one identity per ownership edge. Sharing one token
+	// would make the two anonymous levels indistinguishable containers.
+	outer := mustComplexTypeContext(t, fromD2)
+	inner := mustComplexTypeContext(t, fromD3)
+	if outer.ID() == inner.ID() {
+		t.Fatal("both chained originals carry the SAME {context} identity, but each names a different owner (src-expredef clause 1.1)")
+	}
+}
+
+// mustComplexTypeContext returns c's {context}, failing unless it is present and
+// is the ComplexTypeDefinitionContext arm src-expredef clause 1.1 requires.
+func mustComplexTypeContext(t *testing.T, c xsd.ComplexType) xsd.ComplexTypeDefinitionContext {
+	t.Helper()
+	context, present := c.Context()
+	if !present {
+		t.Fatal("clause-1.1 original has no {context}, which §3.4.1 makes Required when {name} is absent")
+	}
+	ctd, isCTD := context.(xsd.ComplexTypeDefinitionContext)
+	if !isCTD {
+		t.Fatalf("clause-1.1 original's {context} = %T, want a ComplexTypeDefinitionContext naming the component that owns it", context)
+	}
+	return ctd
+}
+
+// TestParseRedefineChainedGroupStillRefused pins the deliberate fail-CLOSED half
+// of the chain (the GAP( at chainedOriginal, parser/redefine.go): a chained
+// <group> — src-expredef clause 2's single-component kind — is refused under the
+// closing requirement even though §4.2.4 makes the schema valid, because the only
+// clauses it turns on are the fail-open 6.2.2 (#504) and 7.2.2 (#503). Retire this
+// test with the marker.
+func TestParseRedefineChainedGroupStillRefused(t *testing.T) {
+	_, err := parseMap(t, "d1.xsd", chainedDocs(
+		`<xs:group name="g"><xs:sequence><xs:group ref="tns:g"/>`+
+			`<xs:element name="c" type="xs:string"/></xs:sequence></xs:group>`,
+		`<xs:group name="g"><xs:sequence><xs:group ref="tns:g"/>`+
+			`<xs:element name="b" type="xs:string"/></xs:sequence></xs:group>`,
+		`<xs:group name="g"><xs:sequence>`+
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`))
+	mustRule(t, err, "src-expredef")
+}
+
 // TestParseRedefineGroupResolvesToOriginal is src-expredef clause 2 for a model
 // group definition: the self-reference "is ·resolved·" to "a component which
 // corresponds to the top-level definition item of that name and the appropriate

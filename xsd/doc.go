@@ -55,8 +55,10 @@
 // of each scope-parent sum — ElementScopeParent's
 // AnonymousComplexTypeScopeParent (§3.3.1 sc_e) and AttributeScopeParent's
 // AttributeAnonymousComplexTypeScopeParent (§3.2.1 sc_a). All three hold
-// the SAME token: one mint per inline construct serves the back-pointers
-// and the forward reference alike.
+// the SAME token: one mint per OWNERSHIP EDGE serves the back-pointers
+// and the forward reference alike. A chained §4.2.4 <redefine>, whose
+// anonymous originals nest, stacks two such edges and mints one token
+// for each, so the containers stay distinguishable.
 //
 // The eight component kinds a schema's §3.17.1 properties hold — element
 // and attribute declarations, complex and simple type definitions, model
