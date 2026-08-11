@@ -575,10 +575,6 @@ func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base C
 		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
 			"complex type definition has an absent {name}, but the §3.4.1 tableau makes {context} Required when {name} is absent; build an anonymous complex type through NewAnonymousComplexType (ct-props-correct clause 1)")
 	}
-	if id == (ComponentID{}) {
-		return ComplexType{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
-			"complex type %s owns its {base type definition} but carries an unminted identity, which that base's {context} back-pointer could not name; mint one with NewComponentID", name)
-	}
 	if err := checkOwnedBaseContext(loc, id, complexTypeLabel(name), base); err != nil {
 		return ComplexType{}, err
 	}
@@ -597,27 +593,27 @@ func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base C
 //
 // It is NewComplexTypeOwningBase's parameter list with the name argument replaced,
 // in place, by the context, and it applies both entry points' checks: the
-// nil-context and unminted-context rejections NewAnonymousComplexType charges, and
-// the unminted-id and {context}-must-name-the-owner rejections
-// NewComplexTypeOwningBase charges.
+// nil-context and unminted-context rejections NewAnonymousComplexType charges
+// (checkAnonymousComplexTypeContext), and the unminted-id and
+// {context}-must-name-the-owner rejections NewComplexTypeOwningBase charges
+// (checkOwnedBaseContext).
 //
 // id is this type's identity AS AN OWNER, and is DISTINCT from the identity its
 // own {context} carries: one ComponentID is minted per ownership edge, so a chain
 // C1 owns O2 owns O3 mints one token for C1→O2 (which is O2's {context}, and what
 // O2's local declarations report as {scope}.{parent}) and another for O2→O3. A
-// single token for both edges would make O2 and O3 indistinguishable containers.
+// single token for both edges would make O2 and O3 indistinguishable containers,
+// so this entry point REJECTS the collapse — the rejection is its own, because it
+// is the only constructor holding both edges of a chain at once: the owner-side
+// token and the {context} the same component takes from the level above it.
 // It is not stored, for the reason NewComplexTypeOwningBase's doc gives.
 func NewAnonymousComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, context ComplexTypeContext, base ComplexType, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
-	if context == nil {
-		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
-			"anonymous complex type definition has an absent {context}, but the §3.4.1 tableau requires it to be present when {name} is absent (ct-props-correct clause 1)")
-	}
-	if err := checkComplexTypeContext(loc, context); err != nil {
+	if err := checkAnonymousComplexTypeContext(loc, context); err != nil {
 		return ComplexType{}, err
 	}
-	if id == (ComponentID{}) {
+	if context.ID() == id {
 		return ComplexType{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
-			"anonymous complex type definition owns its {base type definition} but carries an unminted identity, which that base's {context} back-pointer could not name; mint one with NewComponentID")
+			"anonymous complex type definition owns its {base type definition} under the SAME identity its own {context} carries, but one identity is minted per ownership edge; the two containers would be indistinguishable, and the owned original's {context} would name this type's own container instead of this type; mint a separate identity with NewComponentID for each edge")
 	}
 	if err := checkOwnedBaseContext(loc, id, complexTypeLabel(QName{}), base); err != nil {
 		return ComplexType{}, err
@@ -625,14 +621,19 @@ func NewAnonymousComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, context C
 	return newComplexType(loc, QName{}, context, InlineTypeDefinition{Definition: base}, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
 }
 
-// checkOwnedBaseContext rejects an owned anonymous base whose {context} (§3.4.1
-// ctd-context) does not name the owning type's identity id. An ABSENT {context}
-// means base is NAMED, which the shared core's checkTypeDefinitionOrRef rejects
-// with the message that fits it; this checker passes it through rather than
-// duplicating that verdict (STYLE T4).
+// checkOwnedBaseContext rejects an owning type whose identity id is unminted, and
+// an owned anonymous base whose {context} (§3.4.1 ctd-context) does not name that
+// id. An ABSENT {context} means base is NAMED, which the shared core's
+// checkTypeDefinitionOrRef rejects with the message that fits it; this checker
+// passes it through rather than duplicating that verdict (STYLE T4).
 //
-// label names the owning type in the verdict, from complexTypeLabel, because both
-// owning entry points reach here and only one of them has a {name} to print.
+// The unminted-id rejection precedes the ABSENT-{context} pass-through, so it is
+// charged for a named base too: it is a fault in what the CALLER minted, and an
+// owning entry point that reached the core with the zero token would have written
+// a back-pointer target nothing can name.
+//
+// label names the owning type in both verdicts, from complexTypeLabel, because
+// both owning entry points reach here and only one of them has a {name} to print.
 //
 // The switch is exhaustive over ComplexTypeContext's sealed sum; the default arm
 // asserts the invariant and is unreachable for any value an outside package can
@@ -640,6 +641,10 @@ func NewAnonymousComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, context C
 // twin (elementdeclaration.go) with the two arms' verdicts swapped, because the
 // two ownership edges point at different kinds of container.
 func checkOwnedBaseContext(loc xsderr.Loc, id ComponentID, label string, base ComplexType) error {
+	if id == (ComponentID{}) {
+		return xsderr.New(xsderr.RuleComponentInvariant, loc,
+			"%s owns its {base type definition} but carries an unminted identity, which that base's {context} back-pointer could not name; mint one with NewComponentID", label)
+	}
 	context, present := base.Context()
 	if !present {
 		return nil
@@ -683,14 +688,24 @@ func checkOwnedBaseContext(loc xsderr.Loc, id ComponentID, label string, base Co
 // global <element> (#340), always with an ElementDeclarationContext naming the
 // declaration it is building; see ComplexTypeContext.
 func NewAnonymousComplexType(loc xsderr.Loc, context ComplexTypeContext, baseTypeDefinitionName QName, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
-	if context == nil {
-		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
-			"anonymous complex type definition has an absent {context}, but the §3.4.1 tableau requires it to be present when {name} is absent (ct-props-correct clause 1)")
-	}
-	if err := checkComplexTypeContext(loc, context); err != nil {
+	if err := checkAnonymousComplexTypeContext(loc, context); err != nil {
 		return ComplexType{}, err
 	}
 	return newComplexType(loc, QName{}, context, baseTypeDefinitionRef(baseTypeDefinitionName), final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+}
+
+// checkAnonymousComplexTypeContext charges the two rejections every anonymous
+// entry point owes its {context}: a nil one, which §3.4.1's tableau makes
+// Required when {name} is absent, and an arm carrying an unminted ComponentID.
+// Both anonymous constructors call it, so neither can drop one half (STYLE T4).
+// See NewAnonymousComplexType's doc for why the two rejections cite different
+// rules, and checkComplexTypeContext for the second.
+func checkAnonymousComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
+	if context == nil {
+		return xsderr.New(ruleCTPropsCorrect, loc,
+			"anonymous complex type definition has an absent {context}, but the §3.4.1 tableau requires it to be present when {name} is absent (ct-props-correct clause 1)")
+	}
+	return checkComplexTypeContext(loc, context)
 }
 
 // newCollapsedExtension builds the collapsed intermediate M that cos-ct-extends

@@ -124,9 +124,38 @@ func TestAnonymousOwnedBaseChain(t *testing.T) {
 	}
 }
 
+// TestAnonymousOwnedBaseRejectsCollapsedIdentity pins the ONE state only this
+// entry point can see: id, the token the owned original's {context} names, equal
+// to the token this type's OWN {context} names. One ComponentID is minted per
+// ownership edge, so a chain C1 owns O2 owns O3 needs two tokens; collapsing them
+// leaves O2 and O3 indistinguishable containers and makes the inner original's
+// {context} name C1 — the level ABOVE its actual owner.
+//
+// No other check reaches it. checkOwnedBaseContext compares the BASE's {context}
+// against id and is satisfied by the collapse (it is the same token at both
+// ends), and every downstream walk follows the InlineTypeDefinition slot rather
+// than the tokens, so the two containers merge silently.
+func TestAnonymousOwnedBaseRejectsCollapsedIdentity(t *testing.T) {
+	collapsed := NewComponentID()
+	inner, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: collapsed},
+		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAnonymousComplexType (the innermost clause-1.1 original): %v", err)
+	}
+	_, err = NewAnonymousComplexTypeOwningBase(xsderr.Loc{}, collapsed, ComplexTypeDefinitionContext{Component: collapsed},
+		inner, nil, DerivationExtension, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+	if err == nil {
+		t.Fatal("NewAnonymousComplexTypeOwningBase accepted ONE identity for both ownership edges, so the owning and owned containers are indistinguishable")
+	}
+	expectRule(t, err, xsderr.RuleComponentInvariant)
+	if !strings.Contains(err.Error(), "one identity is minted per ownership edge") {
+		t.Fatalf("message %q does not tell the caller to mint one identity per edge, which is the whole repair", err)
+	}
+}
+
 // TestAnonymousOwnedBaseRejections pins the four states
-// NewAnonymousComplexTypeOwningBase refuses. The first two are
-// NewAnonymousComplexType's tableau checks and the last two are
+// NewAnonymousComplexTypeOwningBase refuses beyond the collapse above. The first
+// two are NewAnonymousComplexType's tableau checks and the last two are
 // NewComplexTypeOwningBase's ownership checks: this entry point is the only one
 // that must charge both sets, so a copy that dropped either would be caught here
 // and nowhere else.

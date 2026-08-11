@@ -282,8 +282,20 @@ func (s *redefineSet) excepts(el *Element) bool {
 
 // recordOriginal notes the redefined document's own declaration for key, which
 // src-expredef clause 1.1 makes the hidden {name}-·absent· base of the redefining
-// type and clause 2 the target of a group/attributeGroup self-reference. Only
-// the redefined document's pre-scan calls it, once per key.
+// type and clause 2 the target of a group/attributeGroup self-reference.
+//
+// TWO writers call it, both from the redefined document's own pre-scan and both
+// in that one document-order pass over that document's <schema> children:
+// prescan, for a top-level declaration §4.2.4 clause 4.1.2 excepts, and
+// prescanRedefine, for the redefining child of a NESTED <redefine> that clause
+// 4.1.1 makes a top-level definition of this document too (a chained redefine,
+// #585). A document carrying BOTH for one key writes that key twice, and the
+// declaration LAST in its document order is the original the outer redefinition
+// pairs with.
+//
+// Clause 4.1.1 makes such a pair two top-level definitions sharing one expanded
+// name, which sch-props-correct (§3.17.6.1) clause 2 forbids. No check charges it
+// today, here or upstream, so the last write is taken rather than refused.
 func (s *redefineSet) recordOriginal(key componentKey, src typeSource) {
 	s.originals[key] = src
 }
