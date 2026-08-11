@@ -9832,7 +9832,7 @@ MS-SimpleType2006-07-15/stA011/schema/stA011 fail
 MS-SimpleType2006-07-15/stA012/schema/stA012 fail
 MS-SimpleType2006-07-15/stA013/schema/stA013 fail
 MS-SimpleType2006-07-15/stA014/schema/stA014 pass
-MS-SimpleType2006-07-15/stA015/schema/stA015 fail
+MS-SimpleType2006-07-15/stA015/schema/stA015 pass
 MS-SimpleType2006-07-15/stA016/schema/stA016 pass
 MS-SimpleType2006-07-15/stA017/schema/stA017 pass
 MS-SimpleType2006-07-15/stA018/schema/stA018 pass
