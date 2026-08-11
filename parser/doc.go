@@ -182,6 +182,16 @@
 //     (parser/redefine.go's chainedOriginal, where the marker sits).
 //     Retire it with #504 and #503, which own the only clauses such a
 //     chain turns on.
+//   - GAP(xsd): a REDEFINED document carrying two top-level definitions
+//     of the redefined name — §4.2.4 clause 4.1.1 counts a <xs:redefine>
+//     child among them — is ACCEPTED, where sch-props-correct
+//     (§3.17.6.1) clause 2 forbids the pair. Both declarations write one
+//     redefineSet.originals key and the later clobbers the earlier (see
+//     redefine.go's recordOriginal, where the marker sits), so the
+//     composed schema depends on their document order. Under-rejects,
+//     and only inside a redefinition: the same pair in a document
+//     nothing redefines is still charged clause 2 by indexByName. Owned
+//     by #686.
 //   - GAP(parser): a redefining declaration that an <xs:override>
 //     substitutes for under §F.2 clause 1 loses its self-reference
 //     resolution — see parser/override.go's GAP for the mechanism.

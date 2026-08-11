@@ -293,9 +293,29 @@ func (s *redefineSet) excepts(el *Element) bool {
 // declaration LAST in its document order is the original the outer redefinition
 // pairs with.
 //
-// Clause 4.1.1 makes such a pair two top-level definitions sharing one expanded
-// name, which sch-props-correct (§3.17.6.1) clause 2 forbids. No check charges it
-// today, here or upstream, so the last write is taken rather than refused.
+// GAP(xsd): the write is unconditional, so that second write clobbers the first
+// silently — where clause 4.1.1 makes the pair two top-level definitions sharing
+// one expanded name, which sch-props-correct (§3.17.6.1) clause 2 forbids. #686
+// owns the rejection and this marker's retirement.
+//
+// THIS LANDING withdrew that rejection for the prescan+prescanRedefine pair; it
+// is not inherited debt. origin/main charged it, but through neither writer:
+// produceRedefinition built the chained redefining child as a NAMED component of
+// this document, which collided in {type definitions} with the outer
+// redefinition's own and was rejected by indexByName (xsd/schema.go).
+// produceRedefinition's chained early return now withholds that component, and
+// the clause-1.1 original it becomes instead is {name}-·absent·, which indexByName
+// is required to skip (§3.4.1/§3.16.1 exempt anonymous type definitions from
+// clause 2). Restoring prescanRedefine's symbol registration alone does NOT bring
+// the rejection back. The prescan+prescan pair — two top-level declarations of one
+// excepted key — was never charged, on either tree.
+//
+// The direction is fail-OPEN, and the rs.originals entry written twice has exactly
+// two readers, neither able to see the clobbered one: produceRedefinition tests
+// only that the key is PRESENT, and originalFor (behind redefinedTypeBase,
+// redefinedGroupOriginal and redefinedAttributeGroupOriginal) returns the single
+// surviving typeSource. So an invalid schema is accepted, and which declaration
+// composes it is decided by document order in the redefined document.
 func (s *redefineSet) recordOriginal(key componentKey, src typeSource) {
 	s.originals[key] = src
 }
