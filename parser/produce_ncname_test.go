@@ -13,11 +13,11 @@ import (
 // at the declaration's own position — never registered as a {name} nobody can
 // reference, which is what a colonized or digit-initial name became before #632.
 //
-// One row per CODE PATH into declarationName, not per bad name: the five
-// top-level kinds routed through topLevelName, the top-level <simpleType> and
-// <notation> that are not, the two local declaration forms, and the prohibited
-// <attribute> that maps to no component at all (§3.4.2.4's Note) yet is still a
-// name in a schema document. Reverting any one call site leaves its row failing.
+// One row per CODE PATH into declarationName, not per bad name: the six
+// top-level kinds routed through topLevelName, the <notation> that is not, the
+// two local declaration forms, and the prohibited <attribute> that maps to no
+// component at all (§3.4.2.4's Note) yet is still a name in a schema document.
+// Reverting any one call site leaves its row failing.
 func TestProduceNonNCNameDeclarationNameRejected(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2). Every body starts on
 	// line 2 of the wrapped document and puts the offending declaration on the
@@ -53,8 +53,10 @@ func TestProduceNonNCNameDeclarationNameRejected(t *testing.T) {
 			wantLine: 2,
 		},
 		{
-			// Outside topLevelName: run expands a top-level <simpleType>'s name
-			// itself, and xsd.NewSimpleType carries no {name} guard (#523).
+			// The LEXICAL half of the <simpleType> arm, which stayed
+			// declarationName's when #523 routed that arm through topLevelName:
+			// "nsk:Test" is not empty, so the name reaches this check first and
+			// takes the rule verdict rather than the rule-less grammar fault.
 			name: `top-level <simpleType> name="nsk:Test"`,
 			body: "\n" + `<xs:simpleType name="nsk:Test">` + "\n" +
 				`<xs:restriction base="xs:string"/></xs:simpleType>`,

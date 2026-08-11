@@ -644,10 +644,10 @@ func compositionDirective(el *Element) bool {
 // REDEFINING document's producer, in its own document-order position there, and
 // this one survives only as the hidden original behind it (src-expredef).
 //
-// The five named kinds whose {name} the schema for schema documents makes
-// use="required" — <complexType>, <group>, <attributeGroup>, <element>,
-// <attribute> — take it from topLevelName, which rejects an unusable one before
-// any of them is built.
+// The six named kinds whose {name} the schema for schema documents makes
+// use="required" — <simpleType>, <complexType>, <group>, <attributeGroup>,
+// <element>, <attribute> — take it from topLevelName, which rejects an unusable
+// one before any of them is built.
 func (p *producer) run() error {
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
@@ -663,7 +663,7 @@ func (p *producer) run() error {
 		decl := p.ov.replacement(el)
 		switch decl.Name().Local() {
 		case "simpleType":
-			name, err := declarationName(decl, p.target)
+			name, err := p.topLevelName(decl)
 			if err != nil {
 				return err
 			}
@@ -760,10 +760,11 @@ func (p *producer) run() error {
 	return nil
 }
 
-// topLevelName expands the name attribute of a top-level <complexType>,
-// <group>, <attributeGroup>, <element> or <attribute> into this document's
-// target namespace (§3.17.2: a top-level declaration's {target namespace} is
-// the <schema>'s), rejecting one that cannot serve as a {name} at all.
+// topLevelName expands the name attribute of a top-level <simpleType>,
+// <complexType>, <group>, <attributeGroup>, <element> or <attribute> into this
+// document's target namespace (§3.17.2: a top-level declaration's {target
+// namespace} is the <schema>'s), rejecting one that cannot serve as a {name} at
+// all.
 //
 // The name's LEXICAL rejection — a value that is not an xs:NCName — is
 // declarationName's, charged cvc-datatype-valid and shared with every other
@@ -771,15 +772,17 @@ func (p *producer) run() error {
 // EMPTY name.
 //
 // That rejection is a plain grammar fault, not an xsderr rule verdict, and it is
-// the same fault for all five kinds. The schema for schema documents makes name
-// use="required" with type xs:NCName on xs:topLevelComplexType, xs:namedGroup,
-// xs:namedAttributeGroup, xs:topLevelElement and xs:topLevelAttribute, so an
-// absent attribute and an empty one are equally unusable — which is why the
-// presence flag is deliberately discarded rather than branched on. No numbered
-// Schema Representation Constraint states a clause of its own for it: §3.4.3
-// src-ct incorporates the schema for schema documents by reference over its own
-// five clauses (none about name), and §3.6.3 src-attribute_group is literally
-// "None as such". Charging src-ct, e-props-correct or a-props-correct here
+// the same fault for all six kinds. The schema for schema documents makes name
+// use="required" with type xs:NCName on xs:topLevelSimpleType,
+// xs:topLevelComplexType, xs:namedGroup, xs:namedAttributeGroup,
+// xs:topLevelElement and xs:topLevelAttribute, so an absent attribute and an
+// empty one are equally unusable — which is why the presence flag is
+// deliberately discarded rather than branched on. No numbered Schema
+// Representation Constraint states a clause of its own for it: §3.4.3 src-ct and
+// §3.16.3 src-simple-type each incorporate the schema for schema documents by
+// reference over their own clauses (none about name), and §3.6.3
+// src-attribute_group is literally "None as such". Charging src-ct,
+// src-simple-type, st-props-correct, e-props-correct or a-props-correct here
 // would be a fabricated verdict (STYLE E2); this is the footing <include> with
 // no schemaLocation already stands on (parse.go).
 //
@@ -793,26 +796,29 @@ func (p *producer) run() error {
 // fault belongs to the schema document's grammar and must be reported without
 // having built anything.
 //
+// For <simpleType> this helper is the ONLY enforcement there can be, and
+// xsd.NewSimpleType must not grow a matching {name} guard: §3.16.1's tableau
+// types Simple Type Definition's {name} "An xs:NCName value. Optional.",
+// unqualified, because an anonymous simple type nested in <attribute>,
+// <element>, <restriction>, <list> or <union> is a valid component with no
+// {name} at all (§3.16.1 std-context: "Required if {name} is absent"). A
+// constructor guard would reject every one of them. The required-name shape is
+// the top-level SYNTACTIC form's alone — xs:topLevelSimpleType against
+// xs:localSimpleType, whose name is use="prohibited" — so it can only be
+// enforced here, where the raw XML still distinguishes them (#523).
+//
 // Rejecting here, in run's dispatch, is what makes the verdict
-// CONTENT-INDEPENDENT: every one of the five kinds is judged before a single
+// CONTENT-INDEPENDENT: every one of the six kinds is judged before a single
 // child of it is walked, so a nameless declaration cannot be judged by whether
 // its content happens to hold a local element (whose own construction would
 // otherwise charge an unrelated rule, and only sometimes) — the defect #206
-// found for two of the five and this closes for all five.
+// found for two of them and this closes for all six.
 //
-// The other two top-level named kinds do not come through here, and take the
-// NCName check from declarationName directly. <notation>'s empty name is
+// <notation> is the one top-level named kind that does not come through here,
+// and takes the NCName check from declarationName directly. Its empty name is
 // covered where it is built: xsd.NewNotation rejects an empty {name} citing
 // n-props-correct (§3.14.6), which a nameless <notation> document already
 // produces end to end.
-//
-// GAP(parser): a top-level <simpleType> is the one kind still outside this
-// helper — run expands its name through declarationName alone and
-// xsd.NewSimpleType has no {name} guard of its own, so a <simpleType> with an
-// absent or empty name is currently registered under QName{target, ""} and the
-// document produces without error. #305 scoped itself to the five kinds named
-// above; what a schema so registered goes on to do downstream is not
-// established here, so no error direction is claimed for it. Tracked as #523.
 func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 	qname, err := declarationName(decl, p.target)
 	if err != nil {
@@ -844,10 +850,9 @@ var ncNameRE = func() *regexp.Regexp {
 // declarationName bundles el's name attribute with the target namespace ns into
 // the {name}/{target namespace} pair a named declaration carries, rejecting a
 // name that is not in the ·lexical space· of xs:NCName. It is the SINGLE
-// NCName check for every declaration name this producer maps — the five
-// top-level kinds routed through topLevelName, the top-level <simpleType>,
-// <notation> and <redefine> child that are not, and the local
-// <element>/<attribute> forms.
+// NCName check for every declaration name this producer maps — the six
+// top-level kinds routed through topLevelName, the <notation> and <redefine>
+// child that are not, and the local <element>/<attribute> forms.
 //
 // The name attribute's ·actual value· is the whiteSpace-normalized one, and the
 // {name} it yields is that normalized string: xs:NCName carries whiteSpace =
@@ -880,8 +885,7 @@ var ncNameRE = func() *regexp.Regexp {
 // against §A rather than a lexical one, so charging cvc-datatype-valid for the
 // pair would mis-describe half of it. The local forms leave the empty name to
 // xsd.NewElementDeclaration's e-props-correct clause 1 and
-// xsd.NewAttributeDeclaration's a-props-correct clause 1, and a top-level
-// <simpleType> still has no empty-name guard at all (#523).
+// xsd.NewAttributeDeclaration's a-props-correct clause 1.
 func declarationName(el *Element, ns string) (xsd.QName, error) {
 	lexical, _ := el.Attr("name")
 	name := strings.Trim(lexical, "\x09\x0A\x0D\x20")
