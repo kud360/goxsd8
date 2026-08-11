@@ -41,8 +41,8 @@ last pass — all five of them the top five rows of that pass's working band,
 and all five one grammar family: #632 (NCName declaration names, +28), #631
 (empty QName prefix), #523 (nameless top-level `xs:simpleType`), #518
 (top-level `ref`) and #652 (the rest of the prohibited top-level attributes,
-+25). A band drained in family order is the ordering doctrine working; rows 1
-and 2 below continue the same family. **#585 landed mid-pass** (PR #689,
++25). A band drained in family order is the ordering doctrine working; row 1
+below continues the same family. **#585 landed mid-pass** (PR #689,
 `schema` 9706 → 9707, +1, `MS-Additional2006-07-15/addB007`) after this
 section was first drafted; the table above is the merged tree's true figure,
 so the six-landing total is **9648 → 9707, +59**.
@@ -103,37 +103,36 @@ that is evidence the trigger is wrong, not that the queue is busy.
 
 **Working band** — dependency-ordered top of the `ready` queue, so a session
 need not scan 140 issues. Take from the top; the ordering prefers slices that
-move a lane over horizontal completeness. **#585 landed mid-pass (PR #689)**
-and is dropped from the band below rather than left as a stale claimed row.
+move a lane over horizontal completeness. **#506 (PR #694) and #675 (PR #695)
+have landed** and are dropped from the band below rather than left as stale
+claimed rows; #585 (PR #689) was dropped the same way one pass earlier.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #675 | an identity-constraint `name` is never NCName-checked — **6 banked `fail` schema-lane cases are this one fault**, the largest named lane movement in the queue, and the `declarationName` predicate it must reuse landed with #632 |
-| 2 | #684 | top-level `xs:group`/`xs:attributeGroup` prohibited attributes — the DEFINITION half of the family #518/#652 just closed. 2 decidable cases; the other 6 are gated behind a conformance widening it deliberately scopes out |
-| 3 | #686 | `sch-props-correct` clause 2 never fires when a redefined document carries two top-level definitions of one name. Its `#585` dependency is now satisfied — #585 landed |
-| 4 | #506 | an `xs:override`-substituted `group` child loses self-reference resolution — false-reject |
-| 5 | #469 | cos-all-limited charged on the XML spelling, not the component — false accept in both clauses |
-| 6 | #503 + #504 | `src-redefine` clauses 7.2.2 and 6.2.2, both fail-open. **Coupled — read the note below before starting either** |
-| 7 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline |
-| 8 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes` lane, pdecimal019/020 the measured cost |
-| 9 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes` lane, #574's sibling widening |
-| 10 | #626 | README's CLI section is false about exit codes today; one sentence, and it should precede #472 |
-| 11 | #669 | README's Library snippet does not compile, and the example pointer omits `parser` and `xsd` |
-| 12 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
-| 13 | #672 + #687 | the two open CLI-contract decisions (`-version`; scoped help and the bareword `help`). One line each in `doc.go` now, a retrofit around a live dispatch after #472 |
-| 14 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 1 | #684 | top-level `xs:group`/`xs:attributeGroup` prohibited attributes — the DEFINITION half of the family #518/#652 just closed. 2 decidable cases; the other 6 are gated behind a conformance widening it deliberately scopes out |
+| 2 | #686 | `sch-props-correct` clause 2 never fires when a redefined document carries two top-level definitions of one name. Its `#585` dependency is now satisfied — #585 landed |
+| 3 | #469 | cos-all-limited charged on the XML spelling, not the component — false accept in both clauses |
+| 4 | #503 + #504 | `src-redefine` clauses 7.2.2 and 6.2.2, both fail-open. **Coupled — read the note below before starting either** |
+| 5 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline |
+| 6 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes` lane, pdecimal019/020 the measured cost |
+| 7 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes` lane, #574's sibling widening |
+| 8 | #626 | README's CLI section is false about exit codes today; one sentence, and it should precede #472 |
+| 9 | #669 | README's Library snippet does not compile, and the example pointer omits `parser` and `xsd` |
+| 10 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
+| 11 | #672 + #687 | the two open CLI-contract decisions (`-version`; scoped help and the bareword `help`). One line each in `doc.go` now, a retrofit around a live dispatch after #472 |
+| 12 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
 
-Rows 1–9 move `schema` (rows 8 and 9 move `datatypes`); rows 10–14 are the
+Rows 1–7 move `schema` (rows 6 and 7 move `datatypes`); rows 8–12 are the
 M4-facing published surface, where two isolated persona passes have now found
 the same defects twice.
 
-**Rows 10–13 are ordered before row 14 on cost, not importance.** Each is a
+**Rows 8–11 are ordered before row 12 on cost, not importance.** Each is a
 sentence or a dispatch branch while the CLI surface is still empty; taken
 after #472 every one of them is a change to shipped behaviour. #472's own
 Acceptance already carries the `-version` decision, so if it is taken first it
 must discharge #672 rather than leave it contradicting the landing.
 
-**Row 6's coupling is now landed on `main`, not only on an issue thread.**
+**Row 4's coupling is now landed on `main`, not only on an issue thread.**
 #585's warden review established that retiring the `conformance/schema.go`
 decidability residue for `group`/`attributeGroup` flips
 `MS-Schema2006-07-15/schL10` and `/schM5` from `pass` to `fail` unless
