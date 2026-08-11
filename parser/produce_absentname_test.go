@@ -1,10 +1,108 @@
 package parser_test
 
 import (
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
 )
+
+// TestProduceTopLevelRefProhibited pins, END TO END from a schema DOCUMENT, that
+// a top-level <element> or <attribute> carrying ref is rejected FOR THE ref —
+// xs:topLevelElement and xs:topLevelAttribute both restrict it to
+// use="prohibited" (xmlschema11-1.md:5100, :4710), so the author's mistake is
+// the attribute, not the name it displaces.
+//
+// The fault is a plain grammar fault, never a rule verdict: src-element clause 2
+// and src-attribute clause 3 state the ref/name exclusivity inside a "if the
+// item's parent is not <schema>" antecedent that excludes exactly this case, and
+// the grammar reaches the two constraints only through their unnumbered
+// preamble, so charging src-element, src-attribute, e-props-correct or
+// a-props-correct would be fabricated (STYLE E2).
+//
+// Two row shapes, and each carries its own failure mode:
+//
+//   - ref ALONE — the seven suite witnesses' shape, which is rejected either
+//     way, so its assertions are the message ones: the diagnostic must name ref
+//     and must NOT be topLevelName's "no usable name", which is what answers if
+//     the guard runs in the wrong order or not at all;
+//   - ref AND name TOGETHER — where topLevelName is satisfied and nothing else
+//     in the producer reads ref, so without the guard the document PRODUCES and
+//     the row fails on the verdict, not on the wording.
+//
+// Every row DECLARES the target its ref names, so no row can pass as a dangling
+// reference, and the position assertion pins the offending element's own line
+// (STYLE E3, carried in the message text since a plain error holds no
+// xsderr.Loc). That ref stays legal on the LOCAL forms is not re-pinned here —
+// TestProduceAttributeRefUse and the substitution-group tables produce documents
+// full of local ref=, and a widened guard would fail them.
+func TestProduceTopLevelRefProhibited(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2). Every body starts
+	// on line 2 of the wrapped document.
+	cases := []struct {
+		name     string
+		body     string
+		wantLine int
+	}{
+		{
+			name: `top-level <element ref=>`,
+			body: "\n" + `<xs:element name="head" type="xs:string"/>` + "\n" +
+				`<xs:element ref="tns:head"/>`,
+			wantLine: 3,
+		},
+		{
+			name: `top-level <element ref=> with a name of its own`,
+			body: "\n" + `<xs:element name="head" type="xs:string"/>` + "\n" +
+				`<xs:element name="other" ref="tns:head" type="xs:string"/>`,
+			wantLine: 3,
+		},
+		{
+			name:     `top-level <element ref="">`,
+			body:     "\n" + `<xs:element ref=""/>`,
+			wantLine: 2,
+		},
+		{
+			name: `top-level <attribute ref=>`,
+			body: "\n" + `<xs:attribute name="head" type="xs:string"/>` + "\n" +
+				`<xs:attribute ref="tns:head"/>`,
+			wantLine: 3,
+		},
+		{
+			name: `top-level <attribute ref=> with a name of its own`,
+			body: "\n" + `<xs:attribute name="head" type="xs:string"/>` + "\n" +
+				`<xs:attribute name="other" ref="tns:head" type="xs:string"/>`,
+			wantLine: 3,
+		},
+		{
+			name:     `top-level <attribute ref="">`,
+			body:     "\n" + `<xs:attribute ref=""/>`,
+			wantLine: 2,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:po", tc.body))
+			if err == nil {
+				t.Fatalf("Produce succeeded, want a grammar fault for the prohibited ref")
+			}
+			var xe *xsderr.Error
+			if errors.As(err, &xe) {
+				t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+			}
+			if !strings.Contains(err.Error(), "carries a ref attribute") {
+				t.Fatalf("error = %v, want it to name ref as the prohibited attribute", err)
+			}
+			if strings.Contains(err.Error(), "no usable name") {
+				t.Fatalf("error = %v, want the ref fault rather than the absent-name one it causes", err)
+			}
+			if at := fmt.Sprintf("%s:%d:", produceURI, tc.wantLine); !strings.Contains(err.Error(), at) {
+				t.Fatalf("error = %v, want it positioned at %s (E3)", err, at)
+			}
+		})
+	}
+}
 
 // TestProduceAbsentNameAndEmptyRefRejected pins, END TO END from a schema
 // DOCUMENT, four shapes an author can write with no usable name: a nameless
