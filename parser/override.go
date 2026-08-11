@@ -53,9 +53,11 @@ import (
 // are candidate E2s and clause 1 substitutes for them exactly as it does for a
 // <schema> child. That substitution is applied where the redefine's children are
 // read — producer.prescanRedefine and producer.produceRedefine — through the same
-// [overrideSet.replacement] lookup used at a document's top level. Only four of
-// clause 1's seven element types can occur there, since <redefine>'s own content
-// model (§4.2.4) admits no <element>, <attribute> or <notation>.
+// [overrideSet.replacement] lookup used at a document's top level, plus a record
+// of the substitute's position in the <redefine>, which no tree carries here
+// ([redefineSet.recordSubstitute]). Only four of clause 1's seven element types
+// can occur there, since <redefine>'s own content model (§4.2.4) admits no
+// <element>, <attribute> or <notation>.
 //
 // This is distinct from, and not in tension with, §4.2.5's ·target set·
 // (key-targetset), which governs which further DOCUMENTS an <override> reaches
@@ -63,16 +65,6 @@ import (
 // or <redefine> elements": the override does not cascade into the document a
 // <redefine> names (parse.go's assembly.redefine passes no override on), only
 // into the redefinition items written inline in the document it already reaches.
-//
-// GAP(parser): a redefining declaration REPLACED under clause 1 loses its
-// self-reference resolution (#286). src-expredef pairs a redefining
-// <simpleType>/<group>/<attributeGroup> with the original it replaces by walking
-// up from the reference to the declaration that contains it, and a substituted
-// declaration is written under the <override>, not under the <redefine>, so the
-// walk does not find it and the self-reference resolves to the visible
-// redefinition instead — reported as a circular derivation or a circular group.
-// It OVER-rejects: an override-of-a-redefine-child assembly can be lost, never
-// wrongly accepted. Nothing else about the substitution is affected.
 
 // componentKey identifies an overridable source declaration by exactly the pair
 // §F.2 clause 1 matches on: the ELEMENT TYPE (the local name of the declaration

@@ -114,18 +114,20 @@
 // simpleType/complexType is paired with a hidden {name}-·absent· copy of
 // the definition it replaces, which is what its own base= resolves to; a
 // redefining group/attributeGroup self-reference resolves to the
-// original the same way (src-expredef, parser/redefine.go). All four
-// redefinable kinds are produced; the hidden copy a redefining
-// complexType owns is anonymous, so what finalize does and does not
-// charge against it is recorded on xsd's checkComplexDerivations with the
-// same limitation for every other anonymous type. A redefined document
-// that redefines a document of its OWN for the same name composes: clause
-// 4.1.1 makes its redefining child a top-level definition of it, so the
-// outer redefinition pairs with that child and the chain of hidden copies
-// runs one level deep per link (for a simpleType/complexType — see the
-// composition gaps for the clause-2 kinds). §4.2.4 marks the whole
-// mechanism ·deprecated·. A non-empty <xs:redefine> whose schemaLocation
-// does not resolve is an ERROR (src-redefine clause
+// original the same way (src-expredef, parser/redefine.go), and both
+// still do when an <xs:override> substitutes for the redefining child
+// (§F.2 clause 1). All four redefinable kinds are produced; the hidden
+// copy a redefining complexType owns is anonymous, so what finalize does
+// and does not charge against it is recorded on xsd's
+// checkComplexDerivations with the same limitation for every other
+// anonymous type. A redefined document that redefines a document of its
+// OWN for the same name composes: clause 4.1.1 makes its redefining child
+// a top-level definition of it, so the outer redefinition pairs with that
+// child and the chain of hidden copies runs one level deep per link (for
+// a simpleType/complexType — see the composition gaps for the clause-2
+// kinds). §4.2.4 marks the whole mechanism ·deprecated·. A non-empty
+// <xs:redefine> whose schemaLocation does not resolve is an ERROR
+// (src-redefine clause
 // 1) where an <xs:include>'s is explicitly not one (src-include clause
 // 2.4). Documents are loaded once, keyed by resolved location, the
 // namespace they were reached under, the override applied to them and
@@ -192,10 +194,6 @@
 //     and only inside a redefinition: the same pair in a document
 //     nothing redefines is still charged clause 2 by indexByName. Owned
 //     by #686.
-//   - GAP(parser): a redefining declaration that an <xs:override>
-//     substitutes for under §F.2 clause 1 loses its self-reference
-//     resolution — see parser/override.go's GAP for the mechanism.
-//     Over-rejects.
 //   - GAP(xsd): §5.3 (Missing Sub-components) is never reported as such.
 //     A namespace an <xs:import> declares but no document of the
 //     assembly supplies — a bare import, or one whose schemaLocation
