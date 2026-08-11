@@ -54,16 +54,17 @@ Milestones, from GitHub:
 | M5 — Instance validation (XML) | 0 | 1 | epic #250 filed, **uncarved** |
 | M6–M12 | 0 | 0 | not filed |
 
-Queue: 155 open issues — 139 `ready`, 16 `blocked`, 0 `needs-replan`,
-2 `epic`. **44 of the 155 carry a milestone; 111 carry none** — the
+Queue: 157 open issues — 141 `ready`, 16 `blocked`, 0 `needs-replan`,
+2 `epic`. **44 of the 157 carry a milestone; 113 carry none** — the
 milestones track feature scope, and the process, doc and comment-accuracy
 issues that post-land passes file are deliberately outside them. Read the
 milestone table as feature progress, not as the queue.
 
-The queue grew by three across five landings: five issues closed, eight
-filed. That is the post-land passes working as specified, not a backlog
-running away — every one of the eight is a named follow-up from one of the
-five landings, and none is a hand-off (#330).
+The queue grew by five across five landings: five issues closed, ten filed.
+Eight of the ten are named follow-ups from one of the five landings, none of
+them a hand-off (#330) — the post-land passes working as specified. The other
+two (#687, #688) came from this pass's persona reports and are the only
+issues here that no landing produced.
 
 Branch namespace, `origin` — report-only; a session never deletes a ref:
 
@@ -95,7 +96,7 @@ nothing else**, accepting a stale band for one cycle. A fourth naming without
 that is evidence the trigger is wrong, not that the queue is busy.
 
 **Working band** — dependency-ordered top of the `ready` queue, so a session
-need not scan 139 issues. Take from the top; the ordering prefers slices that
+need not scan 141 issues. Take from the top; the ordering prefers slices that
 move a lane over horizontal completeness.
 
 | # | Issue | Why here |
@@ -113,11 +114,18 @@ move a lane over horizontal completeness.
 | 11 | #626 | README's CLI section is false about exit codes today; one sentence, and it should precede #472 |
 | 12 | #669 | README's Library snippet does not compile, and the example pointer omits `parser` and `xsd` |
 | 13 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
-| 14 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 14 | #672 + #687 | the two open CLI-contract decisions (`-version`; scoped help and the bareword `help`). One line each in `doc.go` now, a retrofit around a live dispatch after #472 |
+| 15 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
 
-Rows 1–10 move `schema` (rows 9 and 10 move `datatypes`); rows 11–14 are the
+Rows 1–10 move `schema` (rows 9 and 10 move `datatypes`); rows 11–15 are the
 M4-facing published surface, where two isolated persona passes have now found
 the same defects twice.
+
+**Rows 11–14 are ordered before row 15 on cost, not importance.** Each is a
+sentence or a dispatch branch while the CLI surface is still empty; taken
+after #472 every one of them is a change to shipped behaviour. #472's own
+Acceptance already carries the `-version` decision, so if it is taken first it
+must discharge #672 rather than leave it contradicting the landing.
 
 **Row 7's coupling, recorded here because it exists only on an unlanded
 branch.** #585's warden review established that retiring the
