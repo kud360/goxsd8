@@ -104,6 +104,183 @@ func TestProduceTopLevelRefProhibited(t *testing.T) {
 	}
 }
 
+// TestProduceTopLevelProhibitedAttrsRejected pins, END TO END from a schema
+// DOCUMENT, the REST of the prohibited family the sibling table above covers for
+// ref: xs:topLevelElement restricts form, targetNamespace, minOccurs and
+// maxOccurs to use="prohibited" (xmlschema11-1.md:5101-:5104) and
+// xs:topLevelAttribute restricts form, use and targetNamespace (:4711-:4713).
+// The two lists are not symmetric — use is the <attribute> side's alone and the
+// occurrence pair the <element> side's — because neither attribute exists in the
+// other kind's grammar at any level.
+//
+// Every row DECLARES a name, so no row can pass as topLevelName's absent-name
+// fault, and each asserts the diagnostic names ITS OWN attribute: a guard that
+// checked one attribute and reported another would pass a table that only
+// asserted rejection. The fault is plain, never a rule verdict — the grammar
+// binds through src-element's and src-attribute's unnumbered "In addition to the
+// conditions imposed … by the schema for schema documents" preamble alone, and
+// src-attribute clause 6 / src-element clause 4 govern targetNamespace only on
+// the LOCAL declaration that may carry one (xmlschema11-1.md:868, :1321), so
+// charging any of them here would be fabricated (STYLE E2).
+func TestProduceTopLevelProhibitedAttrsRejected(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2). Every body starts
+	// on line 2 of the wrapped document.
+	cases := []struct {
+		name     string
+		body     string
+		wantAttr string
+		wantLine int
+	}{
+		{
+			name:     `top-level <element form=>`,
+			body:     "\n" + `<xs:element name="e" type="xs:string" form="qualified"/>`,
+			wantAttr: "form",
+			wantLine: 2,
+		},
+		{
+			// The value equals the schema's own target namespace, so no row can pass
+			// for being a namespace MISMATCH — the top-level form may not carry the
+			// attribute at all, whatever it says.
+			name:     `top-level <element targetNamespace=>`,
+			body:     "\n" + `<xs:element name="e" type="xs:string" targetNamespace="urn:po"/>`,
+			wantAttr: "targetNamespace",
+			wantLine: 2,
+		},
+		{
+			name:     `top-level <element minOccurs=>`,
+			body:     "\n" + `<xs:element name="e" type="xs:string" minOccurs="0"/>`,
+			wantAttr: "minOccurs",
+			wantLine: 2,
+		},
+		{
+			name:     `top-level <element maxOccurs=>`,
+			body:     "\n" + `<xs:element name="e" type="xs:string" maxOccurs="unbounded"/>`,
+			wantAttr: "maxOccurs",
+			wantLine: 2,
+		},
+		{
+			// Two prohibited attributes at once, written in the REVERSE of the
+			// grammar's declaration order: the check order is the grammar's, not the
+			// document's, so the reported attribute is stable (STYLE D2).
+			name:     `top-level <element maxOccurs= minOccurs=>`,
+			body:     "\n" + `<xs:element name="e" type="xs:string" maxOccurs="unbounded" minOccurs="0"/>`,
+			wantAttr: "minOccurs",
+			wantLine: 2,
+		},
+		{
+			name:     `top-level <attribute form=>`,
+			body:     "\n" + `<xs:attribute name="a" type="xs:string" form="qualified"/>`,
+			wantAttr: "form",
+			wantLine: 2,
+		},
+		{
+			name:     `top-level <attribute use=>`,
+			body:     "\n" + `<xs:attribute name="a" type="xs:string" use="required"/>`,
+			wantAttr: "use",
+			wantLine: 2,
+		},
+		{
+			// The pairing src-attribute clause 2 would otherwise charge: the
+			// prohibited attribute is the fault, and it wins because run rejects it
+			// before produceAttribute maps anything (the row this took over from
+			// TestProduceAttributeUseValueConstraintClauses).
+			name:     `top-level <attribute default= use=>`,
+			body:     "\n" + `<xs:attribute name="a" type="xs:string" default="dv" use="required"/>`,
+			wantAttr: "use",
+			wantLine: 2,
+		},
+		{
+			name:     `top-level <attribute targetNamespace=>`,
+			body:     "\n" + `<xs:attribute name="a" type="xs:string" targetNamespace="urn:po"/>`,
+			wantAttr: "targetNamespace",
+			wantLine: 2,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:po", tc.body))
+			if err == nil {
+				t.Fatalf("Produce succeeded, want a grammar fault for the prohibited %s", tc.wantAttr)
+			}
+			var xe *xsderr.Error
+			if errors.As(err, &xe) {
+				t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+			}
+			if want := fmt.Sprintf("carries a %s attribute", tc.wantAttr); !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want it to name %s as the prohibited attribute", err, tc.wantAttr)
+			}
+			if strings.Contains(err.Error(), "no usable name") {
+				t.Fatalf("error = %v, want the prohibited-attribute fault rather than an absent-name one", err)
+			}
+			if at := fmt.Sprintf("%s:%d:", produceURI, tc.wantLine); !strings.Contains(err.Error(), at) {
+				t.Fatalf("error = %v, want it positioned at %s (E3)", err, at)
+			}
+		})
+	}
+}
+
+// TestProduceProhibitedAttrsLegalElsewhere is the reverse hazard of the table
+// above, and the reason the guard carries a list per KIND rather than one merged
+// list.
+//
+// The local rows produce cleanly: form, use, targetNamespace, minOccurs and
+// maxOccurs are exactly what xs:localElement and xs:localAttribute admit, so a
+// guard that widened to every <element>/<attribute> would reject legal schemas
+// wholesale. Each local targetNamespace= repeats the schema's own, which
+// src-attribute clause 6.3 and src-element clause 4.3 leave unconstrained.
+//
+// The asymmetric rows pin what the guard must NOT CLAIM: use= on an <element>
+// and minOccurs=/maxOccurs= on an <attribute> appear in no grammar for those
+// elements at any level, so xs:topLevelElement and xs:topLevelAttribute do not
+// prohibit them and this guard may not say they do. They are asserted on the
+// message rather than on acceptance, since a later §A attribute-set check may
+// legitimately reject those documents for a different, true reason.
+func TestProduceProhibitedAttrsLegalElsewhere(t *testing.T) {
+	local := func(inner string) string {
+		return `<xs:complexType name="CT"><xs:sequence>` + inner + `</xs:sequence></xs:complexType>`
+	}
+	localAttr := func(inner string) string {
+		return `<xs:complexType name="CT"><xs:sequence/>` + inner + `</xs:complexType>`
+	}
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{`local <element form=>`, local(`<xs:element name="e" type="xs:string" form="qualified"/>`)},
+		{`local <element targetNamespace=>`, local(`<xs:element name="e" type="xs:string" targetNamespace="urn:po"/>`)},
+		{`local <element minOccurs=>`, local(`<xs:element name="e" type="xs:string" minOccurs="0"/>`)},
+		{`local <element maxOccurs=>`, local(`<xs:element name="e" type="xs:string" maxOccurs="unbounded"/>`)},
+		{`local <attribute form=>`, localAttr(`<xs:attribute name="a" type="xs:string" form="qualified"/>`)},
+		{`local <attribute use=>`, localAttr(`<xs:attribute name="a" type="xs:string" use="required"/>`)},
+		{`local <attribute targetNamespace=>`, localAttr(`<xs:attribute name="a" type="xs:string" targetNamespace="urn:po"/>`)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := produce(t, wrap("urn:po", tc.body)); err != nil {
+				t.Fatalf("Produce rejected a local declaration the grammar admits: %v", err)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{`top-level <element use=>`, `<xs:element name="e" type="xs:string" use="required"/>`},
+		{`top-level <attribute minOccurs=>`, `<xs:attribute name="a" type="xs:string" minOccurs="0"/>`},
+		{`top-level <attribute maxOccurs=>`, `<xs:attribute name="a" type="xs:string" maxOccurs="unbounded"/>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:po", tc.body))
+			if err == nil {
+				return
+			}
+			if strings.Contains(err.Error(), "prohibits on a top-level declaration") {
+				t.Fatalf("error = %v, want no top-level prohibition claimed for an attribute that kind's grammar never declares", err)
+			}
+		})
+	}
+}
+
 // TestProduceAbsentNameAndEmptyRefRejected pins, END TO END from a schema
 // DOCUMENT, four shapes an author can write with no usable name: a nameless
 // <element> on the local path (e-props-correct clause 1, §3.3.6.1 — the §3.3.1

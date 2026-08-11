@@ -648,8 +648,9 @@ func compositionDirective(el *Element) bool {
 // use="required" — <simpleType>, <complexType>, <group>, <attributeGroup>,
 // <element>, <attribute> — take it from topLevelName, which rejects an unusable
 // one before any of them is built. The two DECLARATION kinds pass
-// rejectTopLevelRef first, so a prohibited ref= is named as the fault it is
-// rather than reported as the missing name it causes.
+// rejectTopLevelProhibitedAttrs first, so an attribute the schema for schema
+// documents prohibits on the top-level form is named as the fault it is rather
+// than reported as the missing name it causes.
 func (p *producer) run() error {
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
@@ -675,7 +676,7 @@ func (p *producer) run() error {
 			}
 			p.builder.AddType(st)
 		case "element":
-			if err := rejectTopLevelRef(decl); err != nil {
+			if err := rejectTopLevelProhibitedAttrs(decl); err != nil {
 				return err
 			}
 			name, err := p.topLevelName(decl)
@@ -688,7 +689,7 @@ func (p *producer) run() error {
 			}
 			p.builder.AddElement(ed)
 		case "attribute":
-			if err := rejectTopLevelRef(decl); err != nil {
+			if err := rejectTopLevelProhibitedAttrs(decl); err != nil {
 				return err
 			}
 			name, err := p.topLevelName(decl)
@@ -838,12 +839,22 @@ func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 	return qname, nil
 }
 
-// rejectTopLevelRef rejects a top-level <element> or <attribute> carrying a ref
-// attribute, which the schema for schema documents prohibits outright:
-// xs:topLevelElement and xs:topLevelAttribute each restrict ref to
-// use="prohibited" (xmlschema11-1.md:5100, :4710) alongside the required name
-// (:5105, :4714). A top-level declaration declares; only the local forms
-// reference, and ref is legal there.
+// rejectTopLevelProhibitedAttrs rejects a top-level <element> or <attribute>
+// carrying any attribute the schema for schema documents prohibits on it:
+// xs:topLevelElement restricts ref, form, targetNamespace, minOccurs and
+// maxOccurs to use="prohibited" (xmlschema11-1.md:5100-:5104), and
+// xs:topLevelAttribute restricts ref, form, use and targetNamespace
+// (:4710-:4713), each alongside the required name (:5105, :4714). Every one of
+// them is legal on the corresponding LOCAL form, which is the whole distinction
+// the two grammar types draw.
+//
+// The two lists are NOT symmetric and neither contains the other: use is
+// prohibited on the <attribute> side alone and minOccurs/maxOccurs on the
+// <element> side alone, because each is absent from the other kind's grammar
+// entirely — xs:element has no use attribute at any level, and xs:attribute has
+// no occurrence attributes at any level. Checking use= on an <element> or
+// maxOccurs= on an <attribute> would reject as prohibited what the grammar never
+// admits in the first place.
 //
 // The fault carries NO numbered rule ID, and the reason is exact: src-element
 // clause 2 (§3.3.3) and src-attribute clause 3 (§3.2.3) both open "If the item's
@@ -855,22 +866,43 @@ func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 // src-element, src-attribute, e-props-correct or a-props-correct would be a
 // fabricated verdict (STYLE E2); this is the footing topLevelName's own grammar
 // fault and <include> with no schemaLocation (parse.go) already stand on.
+// src-attribute clause 6 and src-element clause 4 do govern targetNamespace
+// numerically (xmlschema11-1.md:868, :1321) and are a DIFFERENT constraint: they
+// bind the LOCAL declaration that writes an explicit targetNamespace, which the
+// grammar admits, and say nothing about the top-level form that may not write
+// one at all.
 //
 // It runs in run's dispatch BEFORE topLevelName, and the order is the whole
 // point: a document that writes ref at top level writes no name either, so the
 // name check would answer first and report "no usable name" — the consequence of
 // writing ref, never the mistake itself. Running before
 // produceElement/produceAttribute also keeps the verdict content-independent,
-// the discipline topLevelName's doc records.
+// the discipline topLevelName's doc records, and puts this fault ahead of the
+// src-attribute clauses produceAttribute charges over the same element item: a
+// top-level use= is the prohibited attribute first, whatever value constraint it
+// is paired with.
 //
-// ref alone is enforced. The sibling prohibitions on the same two grammar types
-// — form, use, targetNamespace, minOccurs, maxOccurs — are still read and
-// ignored, tracked by the GAP(parser) marker on produceAttribute.
-func rejectTopLevelRef(decl *Element) error {
-	if _, ok := decl.Attr("ref"); !ok {
+// The attributes are checked in the grammar's own declaration order, so a
+// document writing more than one of them is always reported at the same one
+// (STYLE D2).
+func rejectTopLevelProhibitedAttrs(decl *Element) error {
+	var grammar string
+	var prohibited []string
+	switch decl.Name().Local() {
+	case "element":
+		grammar, prohibited = "xs:topLevelElement", []string{"ref", "form", "targetNamespace", "minOccurs", "maxOccurs"}
+	case "attribute":
+		grammar, prohibited = "xs:topLevelAttribute", []string{"ref", "form", "use", "targetNamespace"}
+	default:
 		return nil
 	}
-	return fmt.Errorf("parser: top-level <%s> at %s carries a ref attribute, which the schema for schema documents prohibits on a top-level declaration: it must declare a name of its own, not reference another declaration", decl.Name().Local(), decl.Loc())
+	for _, attr := range prohibited {
+		if _, ok := decl.Attr(attr); !ok {
+			continue
+		}
+		return fmt.Errorf("parser: top-level <%s> at %s carries a %s attribute, which the schema for schema documents prohibits on a top-level declaration: %s restricts %s to use=\"prohibited\", and it is legal on the local form alone", decl.Name().Local(), decl.Loc(), attr, grammar, attr)
+	}
+	return nil
 }
 
 // ncNameRE matches the NCName production ([Namespaces in XML] NT-NCName) — the
@@ -1446,8 +1478,9 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 // qname is the expanded {name}/{target namespace}, taken from topLevelName by
 // the single caller (run) rather than read from the element here, so an
 // unusable name is a grammar fault charged before any of this mapping runs. The
-// same caller rejects a prohibited ref= one step earlier still
-// (rejectTopLevelRef).
+// same caller rejects the attributes xs:topLevelElement prohibits — ref, form,
+// targetNamespace, minOccurs, maxOccurs — one step earlier still
+// (rejectTopLevelProhibitedAttrs), so none of them reaches this mapping.
 //
 // Its {type definition} is §3.3.2.1 dcl.elt.common's tier chain, which is a
 // COMMON mapping rule — §3.3.2.2 supplements only {scope} and {target
@@ -1906,27 +1939,21 @@ func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 // Declaration (§3.2.2.1 dcl.att.global). type= form only. qname reaches it from
 // topLevelName through run, for the reason produceElement's doc gives.
 //
-// It charges the src-attribute clauses (§3.2.3) that carry no parent guard:
-// 4 (type= and an inline <simpleType> mutually exclusive), 1 (default and fixed
-// mutually exclusive, via valueConstraintOf) and 2 and 5 (the default/fixed ×
-// use= corner, via useValueConstraintOK). Clause 3 is guarded by "if the item's
-// parent is not <schema>" and so does not reach this form; the ref it governs is
-// prohibited outright on a top-level <attribute> and rejected in run by
-// rejectTopLevelRef, before this runs.
+// It charges the two src-attribute clauses (§3.2.3) this form can reach: 4
+// (type= and an inline <simpleType> mutually exclusive) and 1 (default and fixed
+// mutually exclusive, via valueConstraintOf). Clause 3 is guarded by "if the
+// item's parent is not <schema>" and so does not reach this form; the ref it
+// governs is prohibited outright on a top-level <attribute>, as are form, use
+// and targetNamespace, all rejected in run by rejectTopLevelProhibitedAttrs
+// before this runs.
 //
-// Clauses 2 and 5 are charged here even though §3.2.2's Note says use= is not
-// allowed on a top-level <attribute>: that prohibition belongs to the schema for
-// schema documents, of which this producer enforces the ref= half alone, so a
-// use= token does reach this function and src-attribute's own clauses bind the
-// <attribute> element information item whatever put the token there.
-//
-// GAP(parser): a use= on a top-level <attribute> that violates no src-attribute
-// clause — use="prohibited" with no fixed=, use="required" with no default=, a
-// token outside the enumeration — is accepted and ignored, where the schema for
-// schema documents prohibits the attribute outright (xs:topLevelAttribute,
-// xmlschema11-1.md:4712). #652 owns use= and the rest of that grammar layer's
-// prohibited family — form, targetNamespace, minOccurs, maxOccurs — on both
-// top-level declaration kinds.
+// Clauses 2 and 5 are the default/fixed × use= corner, and NEITHER can fire
+// here: each needs a use= present (an absent one reads as the declared default
+// "optional", which satisfies both), and a top-level use= is the prohibited
+// attribute a step earlier — §3.2.2's Note says so, and the schema for schema
+// documents is where that prohibition lives (#652). The clauses keep their
+// single encoding in useValueConstraintOK, which produceAttributeUse charges
+// over the local and ref= forms; this function no longer calls it.
 func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.AttributeDeclaration, error) {
 	typeLex, hasType := elem.Attr("type")
 	inline := childElement(elem, xsd.XMLSchemaNS, "simpleType") != nil
@@ -1942,9 +1969,6 @@ func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.Attribu
 
 	vc, err := valueConstraintOf(elem, ruleSrcAttribute)
 	if err != nil {
-		return xsd.AttributeDeclaration{}, err
-	}
-	if err := useValueConstraintOK(elem); err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
 
