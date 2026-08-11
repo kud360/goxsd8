@@ -339,15 +339,16 @@ func TestProduceTopLevelElementHasNoScopeParent(t *testing.T) {
 	}
 }
 
-// TestProduceNamelessTopLevelRejected pins that a top-level <complexType>,
-// <group>, <attributeGroup>, <element> or <attribute> with no usable name is
-// rejected the SAME way — one fault shape for all five kinds — whether or not
-// its content holds anything. name is use="required" with type xs:NCName in the
-// schema for schema documents (xs:topLevelComplexType, xs:namedGroup,
-// xs:namedAttributeGroup, xs:topLevelElement, xs:topLevelAttribute), so an
-// absent and an empty attribute are equally unusable, and no Schema
-// Representation Constraint states a clause of its own for any of them (§3.4.3
-// src-ct incorporates the schema for schema documents by reference; §3.6.3
+// TestProduceNamelessTopLevelRejected pins that a top-level <simpleType>,
+// <complexType>, <group>, <attributeGroup>, <element> or <attribute> with no
+// usable name is rejected the SAME way — one fault shape for all six kinds —
+// whether or not its content holds anything. name is use="required" with type
+// xs:NCName in the schema for schema documents (xs:topLevelSimpleType,
+// xs:topLevelComplexType, xs:namedGroup, xs:namedAttributeGroup,
+// xs:topLevelElement, xs:topLevelAttribute), so an absent and an empty attribute
+// are equally unusable, and no Schema Representation Constraint states a clause
+// of its own for any of them (§3.4.3 src-ct and §3.16.3 src-simple-type
+// incorporate the schema for schema documents by reference; §3.6.3
 // src-attribute_group is "None as such") — hence a plain grammar fault, not a
 // rule verdict. The two DECLARATION kinds are charged the same way here even
 // though xsd.NewElementDeclaration/xsd.NewAttributeDeclaration would later
@@ -356,17 +357,38 @@ func TestProduceTopLevelElementHasNoScopeParent(t *testing.T) {
 // before anything is built. Those two constructor verdicts stay pinned on the
 // LOCAL paths by TestProduceAbsentNameAndEmptyRefRejected.
 //
+// <simpleType> has NO constructor verdict behind it to fall back on and never
+// will: §3.16.1 types Simple Type Definition's {name} "Optional" so that
+// anonymous simple types stay constructible, which is why its rows here are the
+// only enforcement of the top-level form's required name (#523). That the
+// rejection did not also outlaw the anonymous form is pinned by
+// TestProduceAnonymousInlineBaseRestriction,
+// TestProduceLocalElementInlineSimpleType and
+// TestProduceLocalAttributeInlineSimpleType, each of which builds a nameless
+// <simpleType> that must still produce.
+//
 // The content-bearing rows are the regression guard, and they are why reverting
 // the topLevelName call in run's switch fails this test rather than merely
 // changing a message: before #206 the empty <complexType>/<group> bodies
 // produced silently while the bodies holding a local <element> failed with a
-// bogus e-props-correct, and before #305 a nameless <attributeGroup> was minted
-// under QName{tns, ""} and carried on.
+// bogus e-props-correct, before #305 a nameless <attributeGroup> was minted
+// under QName{tns, ""} and carried on, and before #523 a nameless <simpleType>
+// was minted the same way.
 func TestProduceNamelessTopLevelRejected(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		decl string
 	}{
+		// Each <simpleType> row carries a WELL-FORMED body, so the "no usable
+		// name" assertion cannot pass on a src-simple-type body fault standing in
+		// for the name fault. The facet-bearing row is the suite shape
+		// (MS-SimpleType2006-07-15/stA015).
+		{"simpleType absent name", `<xs:simpleType>` +
+			`<xs:restriction base="xs:string"/></xs:simpleType>`},
+		{"simpleType with a facet", `<xs:simpleType><xs:restriction base="xs:string">` +
+			`<xs:length value="3"/></xs:restriction></xs:simpleType>`},
+		{"simpleType with empty name", `<xs:simpleType name="">` +
+			`<xs:restriction base="xs:string"/></xs:simpleType>`},
 		{"complexType empty content", `<xs:complexType><xs:sequence/></xs:complexType>`},
 		{"complexType with local element", `<xs:complexType><xs:sequence>` +
 			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`},
