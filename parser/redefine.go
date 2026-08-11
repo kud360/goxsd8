@@ -85,6 +85,25 @@ import (
 // src-redefine clause 5 is charged BEFORE the pairing is attempted, so a
 // redefining complex type that does not derive from itself is rejected for that
 // rule rather than for a missing original.
+//
+// # The chain (#585)
+//
+// D2 may itself <redefine> a D3 for the SAME (kind, name). Clause 4.1.1 makes
+// D2's redefining child a top-level definition of D2, so it is what D1's clause
+// 1.1 pairs with — and clause 4.1.2, applied at D2's level, keeps D3's own
+// declaration out of D2's component set entirely, so wiring D1 straight to D3
+// would drop D2's redefinition from the hierarchy D1 sees. The pairing therefore
+// nests: D1's hidden original IS D2's redefining declaration, built anonymously,
+// owning D3's hidden original in turn. Each level mints its own identity for the
+// edge below it, so the anonymous levels stay distinct components
+// (redefineOriginalComplexType, produce_complex.go).
+//
+// Composing it needs no new resolution site. Both type-side sites already ask the
+// producer of the document the declaration came from — resolveBase recursing
+// through src.owner, and redefinedComplexBase through src.owner.produceComplexType
+// — so a declaration that is itself redefining meets its OWN set there. What was
+// missing was the recording: prescanRedefine now records a chained redefinition as
+// the outer set's original, which chainedOriginal gates.
 
 // redefineEntry is one non-<annotation> child of a <redefine> element paired
 // with the key it redefines on. Entries are kept as a SLICE in document order,
@@ -132,13 +151,16 @@ type redefineSet struct {
 	// originals holds, per redefined key, the top-level declaration of the
 	// REDEFINED document that the redefining one replaces — the component
 	// src-expredef clause 1.1 makes the hidden {name}-·absent· base and clause 2
-	// makes the target of a group/attributeGroup self-reference.
+	// makes the target of a group/attributeGroup self-reference. §4.2.4 clause
+	// 4.1.1 counts a <redefine> child of the redefined document among its
+	// top-level definitions, so a CHAINED redefinition is recorded here too (see
+	// producer.chainedOriginal).
 	//
 	// It is the ONE field filled after construction, by the redefined document's
-	// pre-scan (producer.prescan): it is not knowable when the set is read, since
-	// that document has not been fetched yet. Filling it is how the two producers
-	// meet, and it is written exactly once per key, from a single document-order
-	// pass over one document.
+	// pre-scan (producer.prescan and producer.prescanRedefine): it is not knowable
+	// when the set is read, since that document has not been fetched yet. Filling
+	// it is how the two producers meet, and it is written exactly once per key,
+	// from a single document-order pass over one document.
 	originals map[componentKey]typeSource
 
 	// id is the set's canonical identity, derived from entries at construction:
@@ -278,6 +300,34 @@ func declarationKey(el *Element) (componentKey, bool) {
 		return componentKey{}, false
 	}
 	return componentKey{kind: el.Name().Local(), name: name}, true
+}
+
+// chainedOriginal reports whether e, one of THIS document's own redefining
+// declarations, is itself excepted by the redefinition in force over this
+// document — a CHAINED <redefine>, where D1 redefines D2 and D2 redefines D3 for
+// one (kind, name). §4.2.4 clause 4.1.1 makes e a top-level definition of this
+// document, so it is what D1's src-expredef clause 1.1 pairs with and what clause
+// 4.1.2 excepts from the components this document contributes.
+//
+// GAP(xsd): only the two kinds src-expredef clause 1 PAIRS compose — <simpleType>
+// and <complexType>. A chained <group>/<attributeGroup>, whose clause 2 is a
+// single-component substitution, is still refused on a schema §4.2.4 makes valid,
+// and is retired in the landing that closes #504 and #503 — the two issues owning
+// src-redefine clauses 6.2.2 and 7.2.2, the only clauses such a chain turns on.
+// Composing it while both stay fail-open would decide nothing new and would trade
+// the rejection for a "valid" verdict on the two suite cases in that shape.
+// The direction is fail-CLOSED, and the value withheld for those two kinds — the
+// rs.originals entry — has exactly three readers, all of which see the miss:
+// produceRedefinition REJECTS on it, charging src-expredef's closing requirement;
+// redefinedGroupOriginal and redefinedAttributeGroupOriginal (through originalFor)
+// would answer "not a self-reference", and neither runs, because that rejection
+// precedes them.
+func (p *producer) chainedOriginal(e redefineEntry) bool {
+	switch e.key.kind {
+	case "simpleType", "complexType":
+		return p.rd.excepts(e.elem)
+	}
+	return false
 }
 
 // redefinableKind reports whether local is one of the four element types
@@ -444,6 +494,12 @@ func redefinedContainer(at *Element, kind string) *Element {
 // component". The redefined document's own pre-scan withholds the names it is
 // excepted of (§4.2.4 clause 4.1.2), so there is no contest between the two.
 //
+// This function withholds on the same terms and for the same clause: a redefining
+// declaration that some OUTER document redefines in turn is recorded as THAT
+// document's original instead of being registered under its own name (see
+// chainedOriginal), so a chain of any depth leaves exactly one visible component
+// per expanded name — the outermost redefinition's.
+//
 // Each child is first passed through the ·override pre-processing· in force over
 // this document: §F.2's governing sentence scopes its case analysis to "each
 // element information item E2 in the [children] of any <schema> OR <redefine>
@@ -457,6 +513,19 @@ func (p *producer) prescanRedefine(el *Element) {
 	for _, e := range rs.entries {
 		decl := p.ov.replacement(e.elem)
 		p.prescanIdentityConstraints(decl)
+		if p.chainedOriginal(e) {
+			// A CHAINED redefine: some outer document redefines THIS one for the same
+			// (kind, name), and §4.2.4 clause 4.1.1 makes this redefining child a
+			// top-level definition of this document — so it is the "top-level
+			// definition item … in the <redefine>d schema document" src-expredef's
+			// closing requirement demands, and clause 1.1's original the outer
+			// redefinition is paired with. Clause 4.1.2 excepts it from the components
+			// this document contributes, exactly as prescan excepts an ordinary
+			// top-level declaration, so it is recorded and NOT registered under its own
+			// name: the outer redefinition owns that name.
+			p.rd.recordOriginal(e.key, typeSource{elem: decl, owner: p})
+			continue
+		}
 		qn := xsd.QName{Space: p.target, Local: e.key.name}
 		src := typeSource{elem: decl, owner: p}
 		switch e.key.kind {
@@ -538,6 +607,17 @@ func (p *producer) produceRedefinition(rs *redefineSet, e redefineEntry) error {
 	decl := p.ov.replacement(e.elem)
 	if err := p.checkRedefinition(decl, qn); err != nil {
 		return err
+	}
+	if p.chainedOriginal(e) {
+		// A CHAINED redefine: an OUTER document redefines this one for the same
+		// (kind, name), so §4.2.4 clause 4.1.2 excepts this redefinition from the
+		// components this document contributes — the outer redefinition owns the
+		// name. Every rule above is still charged, because this declaration is a
+		// redefining one in its own right; only the component is withheld. It is
+		// built instead as the outer redefinition's src-expredef clause 1.1
+		// original, anonymous and under THIS producer, by the resolution site that
+		// meets the outer self-reference (resolveBase, redefinedComplexBase).
+		return nil
 	}
 	switch e.key.kind {
 	case "simpleType":
@@ -680,7 +760,7 @@ func (p *producer) namesSelf(derivation *Element, qn xsd.QName) (bool, error) {
 // exist, 6.1.1 requires exactly one and 6.1.2 requires its minOccurs and
 // maxOccurs both to be 1 (or ·absent·).
 //
-// GAP(xsd): clause 6.2 — the NO-self-reference branch — is fail-open (#286).
+// GAP(xsd): clause 6.2 — the NO-self-reference branch — is fail-open (#504).
 // 6.2.1 is charged (it is src-expredef's closing requirement, already enforced
 // by produceRedefinition), but 6.2.2 requires the redefining group's {model
 // group} to accept "a subset of the element sequences accepted by that model
@@ -708,7 +788,7 @@ func (p *producer) checkRedefinedGroup(decl *Element, qn xsd.QName) error {
 // NEITHER of clause 6.1's extra conditions (see
 // redefinedAttributeGroupOriginal).
 //
-// GAP(xsd): clause 7.2 — the NO-self-reference branch — is fail-open (#286).
+// GAP(xsd): clause 7.2 — the NO-self-reference branch — is fail-open (#503).
 // 7.2.1 is charged as src-expredef's closing requirement; 7.2.2 requires the
 // redefinition's {attribute uses}/{attribute wildcard}, viewed as a complex
 // type's, to satisfy clause 3 of derivation-ok-restriction (§3.4.6.3) against

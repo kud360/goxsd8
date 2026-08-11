@@ -81,6 +81,87 @@ func TestOwnedBaseRejectsElementDeclarationContext(t *testing.T) {
 	}
 }
 
+// TestAnonymousOwnedBaseChain pins NewAnonymousComplexTypeOwningBase's whole
+// reason to exist: the middle link of a CHAINED <redefine>, which is at once
+// src-expredef clause 1.1's {name}-·absent· original of the level above it and a
+// clause-1.2 type owning an original of its own. Neither of the other two
+// constructors can express it — NewComplexTypeOwningBase demands a {name}, and
+// NewAnonymousComplexType takes a base QName and would silently record the owned
+// original as an ABSENT base.
+//
+// One identity per ownership EDGE is what the two accessors pin apart: the middle
+// link's {context} names the outer owner, and the inner original's names the
+// middle link.
+func TestAnonymousOwnedBaseChain(t *testing.T) {
+	outer, middle := NewComponentID(), NewComponentID()
+	inner, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: middle},
+		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAnonymousComplexType (the innermost clause-1.1 original): %v", err)
+	}
+	mid, err := NewAnonymousComplexTypeOwningBase(xsderr.Loc{}, middle, ComplexTypeDefinitionContext{Component: outer},
+		inner, nil, DerivationExtension, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAnonymousComplexTypeOwningBase: %v", err)
+	}
+	if mid.Name() != (QName{}) {
+		t.Errorf("the middle link is named %s, but src-expredef clause 1.1 makes its {name} absent", mid.Name())
+	}
+	context, present := mid.Context()
+	if !present {
+		t.Fatal("the middle link has no {context}, which §3.4.1 makes Required when {name} is absent")
+	}
+	if context.ID() != outer {
+		t.Error("the middle link's {context} does not name the component that owns it")
+	}
+	held, owns := mid.Base().(InlineTypeDefinition)
+	if !owns {
+		t.Fatalf("the middle link's {base type definition} = %#v, want the InlineTypeDefinition holding the inner original", mid.Base())
+	}
+	innerContext, present := held.Definition.(ComplexType).Context()
+	if !present || innerContext.ID() != middle {
+		t.Error("the inner original's {context} does not name the middle link")
+	}
+}
+
+// TestAnonymousOwnedBaseRejections pins the four states
+// NewAnonymousComplexTypeOwningBase refuses. The first two are
+// NewAnonymousComplexType's tableau checks and the last two are
+// NewComplexTypeOwningBase's ownership checks: this entry point is the only one
+// that must charge both sets, so a copy that dropped either would be caught here
+// and nowhere else.
+func TestAnonymousOwnedBaseRejections(t *testing.T) {
+	id := NewComponentID()
+	good, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: id},
+		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAnonymousComplexType: %v", err)
+	}
+	stranger, err := NewAnonymousComplexType(xsderr.Loc{}, ComplexTypeDefinitionContext{Component: NewComponentID()},
+		anyTypeName, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAnonymousComplexType: %v", err)
+	}
+	for _, tc := range []struct {
+		what    string
+		id      ComponentID
+		context ComplexTypeContext
+		base    ComplexType
+	}{
+		{"a nil {context}", id, nil, good},
+		{"a {context} carrying an unminted identity", id, ComplexTypeDefinitionContext{}, good},
+		{"an unminted owner identity", ComponentID{}, ComplexTypeDefinitionContext{Component: NewComponentID()}, good},
+		{"an owned base whose {context} names a different component", id, ComplexTypeDefinitionContext{Component: NewComponentID()}, stranger},
+	} {
+		t.Run(tc.what, func(t *testing.T) {
+			if _, err := NewAnonymousComplexTypeOwningBase(xsderr.Loc{}, tc.id, tc.context, tc.base, nil,
+				DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil); err == nil {
+				t.Fatalf("NewAnonymousComplexTypeOwningBase accepted %s", tc.what)
+			}
+		})
+	}
+}
+
 // TestOwnedBaseRejectsNamedBase pins that the owned arm admits only an anonymous
 // component: a NAMED type is reachable by name and so is always the
 // TypeDefinitionRef arm (typedefinition.go).

@@ -270,11 +270,12 @@ type ElementDeclarationContext struct{ Component ComponentID }
 // ONE rule outside §3.4.2 does reach it: §4.2.4 src-expredef clause 1.1, whose
 // {name}-·absent· ORIGINAL has "its {context} … the redefining component" —
 // which for a redefining <complexType> is a Complex Type Definition. That is the
-// arm's producer-reachable case, minted and checked by NewComplexTypeOwningBase
-// (#505). Before that landing the arm existed only so the §3.4.1 value space
-// stayed whole for ct-props-correct (§3.4.6.1) clause 1 bookkeeping and so a
-// caller assembling a schema programmatically was not rejected for building a
-// legal component state.
+// arm's producer-reachable case, minted and checked by NewComplexTypeOwningBase,
+// and by NewAnonymousComplexTypeOwningBase when the redefining component is
+// itself such an original (a chained <redefine>, #585). Before that landing the
+// arm existed only so the §3.4.1 value space stayed whole for ct-props-correct
+// (§3.4.6.1) clause 1 bookkeeping and so a caller assembling a schema
+// programmatically was not rejected for building a legal component state.
 //
 // Component is the containing definition's minted identity, present under the
 // same rule as ElementDeclarationContext's. The field is read-only by
@@ -379,10 +380,11 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // The XOR needs no runtime check, because it is enforced by a CONSTRUCTION-PATH
 // PARTITION rather than by re-validating two independently optional fields:
 // NewComplexType and NewComplexTypeOwningBase build the named variety and take
-// no context, and NewAnonymousComplexType builds the anonymous one and takes no
-// name. It is the same move NewGlobalScope/NewLocalScope make for {scope}'s
-// tableau correlation, and it banks the same payoff: a named type carrying a
-// context, and an anonymous one missing one, are both unrepresentable.
+// no context, and NewAnonymousComplexType and NewAnonymousComplexTypeOwningBase
+// build the anonymous one and take no name. It is the same move
+// NewGlobalScope/NewLocalScope make for {scope}'s tableau correlation, and it
+// banks the same payoff: a named type carrying a context, and an anonymous one
+// missing one, are both unrepresentable.
 //
 // loc and {context} are two different NON-property facts about a component and
 // are easy to conflate: loc is PROVENANCE, where the declaring element sits in
@@ -396,9 +398,10 @@ func checkComplexTypeContext(loc xsderr.Loc, context ComplexTypeContext) error {
 // (#340).
 //
 // Construct only through NewComplexType (named), NewComplexTypeOwningBase (named,
-// owning its base) or NewAnonymousComplexType (anonymous), which reject the
+// owning its base), NewAnonymousComplexType (anonymous) or
+// NewAnonymousComplexTypeOwningBase (anonymous, owning its base), which reject the
 // tableau-shape states ct-props-correct (§3.4.6.1) clause 1 forbids so they are
-// unrepresentable (STYLE T1). Neither is the full property-correctness check (see
+// unrepresentable (STYLE T1). None is the full property-correctness check (see
 // ruleCTPropsCorrect's doc for exactly which clauses are deferred). ComplexType
 // is immutable after construction, and remains so with a {context}: the cell a
 // ComponentID points at is opaque and holds no mutable state, so copying a
@@ -576,24 +579,67 @@ func NewComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, name QName, base C
 		return ComplexType{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
 			"complex type %s owns its {base type definition} but carries an unminted identity, which that base's {context} back-pointer could not name; mint one with NewComponentID", name)
 	}
-	if err := checkOwnedBaseContext(loc, id, name, base); err != nil {
+	if err := checkOwnedBaseContext(loc, id, complexTypeLabel(name), base); err != nil {
 		return ComplexType{}, err
 	}
 	return newComplexType(loc, name, nil, InlineTypeDefinition{Definition: base}, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
 }
 
+// NewAnonymousComplexTypeOwningBase builds an ANONYMOUS ComplexType that itself
+// OWNS the §4.2.4 src-expredef clause 1.1 original of a further redefinition —
+// the shape a CHAINED <redefine> produces, where D1 redefines D2 and D2 redefines
+// D3 for one (kind, name). Clause 1.1 makes D1's original "the top-level
+// definition item with the same name in the <redefine>d schema document, as
+// defined in Schema Component Details (§3), except that its {name} is ·absent·
+// and its {context} is the redefining component" — and when that item is D2's own
+// redefining <complexType>, "as defined in §3" carries clause 1.2 with it, so the
+// original is anonymous AND owns an original of its own (D3's).
+//
+// It is NewComplexTypeOwningBase's parameter list with the name argument replaced,
+// in place, by the context, and it applies both entry points' checks: the
+// nil-context and unminted-context rejections NewAnonymousComplexType charges, and
+// the unminted-id and {context}-must-name-the-owner rejections
+// NewComplexTypeOwningBase charges.
+//
+// id is this type's identity AS AN OWNER, and is DISTINCT from the identity its
+// own {context} carries: one ComponentID is minted per ownership edge, so a chain
+// C1 owns O2 owns O3 mints one token for C1→O2 (which is O2's {context}, and what
+// O2's local declarations report as {scope}.{parent}) and another for O2→O3. A
+// single token for both edges would make O2 and O3 indistinguishable containers.
+// It is not stored, for the reason NewComplexTypeOwningBase's doc gives.
+func NewAnonymousComplexTypeOwningBase(loc xsderr.Loc, id ComponentID, context ComplexTypeContext, base ComplexType, final []DerivationMethod, derivationMethod DerivationMethod, abstract bool, attributeUses []AttributeUse, prohibitedAttributeNames []QName, attributeWildcard *Wildcard, contentType ContentType, prohibitedSubstitutions []DerivationMethod, assertions []Assertion, annotations []Annotation) (ComplexType, error) {
+	if context == nil {
+		return ComplexType{}, xsderr.New(ruleCTPropsCorrect, loc,
+			"anonymous complex type definition has an absent {context}, but the §3.4.1 tableau requires it to be present when {name} is absent (ct-props-correct clause 1)")
+	}
+	if err := checkComplexTypeContext(loc, context); err != nil {
+		return ComplexType{}, err
+	}
+	if id == (ComponentID{}) {
+		return ComplexType{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
+			"anonymous complex type definition owns its {base type definition} but carries an unminted identity, which that base's {context} back-pointer could not name; mint one with NewComponentID")
+	}
+	if err := checkOwnedBaseContext(loc, id, complexTypeLabel(QName{}), base); err != nil {
+		return ComplexType{}, err
+	}
+	return newComplexType(loc, QName{}, context, InlineTypeDefinition{Definition: base}, final, derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+}
+
 // checkOwnedBaseContext rejects an owned anonymous base whose {context} (§3.4.1
-// ctd-context) does not name the redefining type's identity id. An ABSENT
-// {context} means base is NAMED, which the shared core's
-// checkTypeDefinitionOrRef rejects with the message that fits it; this checker
-// passes it through rather than duplicating that verdict (STYLE T4).
+// ctd-context) does not name the owning type's identity id. An ABSENT {context}
+// means base is NAMED, which the shared core's checkTypeDefinitionOrRef rejects
+// with the message that fits it; this checker passes it through rather than
+// duplicating that verdict (STYLE T4).
+//
+// label names the owning type in the verdict, from complexTypeLabel, because both
+// owning entry points reach here and only one of them has a {name} to print.
 //
 // The switch is exhaustive over ComplexTypeContext's sealed sum; the default arm
 // asserts the invariant and is unreachable for any value an outside package can
 // produce, since complexTypeContext is unexported. It is checkOwnedTypeContext's
 // twin (elementdeclaration.go) with the two arms' verdicts swapped, because the
 // two ownership edges point at different kinds of container.
-func checkOwnedBaseContext(loc xsderr.Loc, id ComponentID, name QName, base ComplexType) error {
+func checkOwnedBaseContext(loc xsderr.Loc, id ComponentID, label string, base ComplexType) error {
 	context, present := base.Context()
 	if !present {
 		return nil
@@ -602,12 +648,12 @@ func checkOwnedBaseContext(loc xsderr.Loc, id ComponentID, name QName, base Comp
 	case ComplexTypeDefinitionContext:
 		if c.ID() != id {
 			return xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"complex type %s owns an anonymous {base type definition} whose {context} names a DIFFERENT complex type definition, but src-expredef clause 1.1 makes that {context} the redefining component itself; mint one identity per redefinition and pass it to both", name)
+				"%s owns an anonymous {base type definition} whose {context} names a DIFFERENT complex type definition, but src-expredef clause 1.1 makes that {context} the redefining component itself; mint one identity per ownership edge and pass it to both ends", label)
 		}
 		return nil
 	case ElementDeclarationContext:
 		return xsderr.New(xsderr.RuleComponentInvariant, loc,
-			"complex type %s owns an anonymous {base type definition} whose {context} is an ElementDeclarationContext, but src-expredef clause 1.1 makes the redefined original's {context} the redefining component, which here is a Complex Type Definition and never an Element Declaration", name)
+			"%s owns an anonymous {base type definition} whose {context} is an ElementDeclarationContext, but src-expredef clause 1.1 makes the redefined original's {context} the redefining component, which here is a Complex Type Definition and never an Element Declaration", label)
 	default:
 		panic("xsd: checkOwnedBaseContext: non-exhaustive ComplexTypeContext switch")
 	}
