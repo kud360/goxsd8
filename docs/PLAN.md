@@ -103,14 +103,21 @@ that is evidence the trigger is wrong, not that the queue is busy.
 
 **Working band** — dependency-ordered top of the `ready` queue, so a session
 need not scan 140 issues. Take from the top; the ordering prefers slices that
-move a lane over horizontal completeness. **#506 (PR #694) and #675 (PR #695)
-have landed** and are dropped from the band below rather than left as stale
-claimed rows; #585 (PR #689) was dropped the same way one pass earlier.
+move a lane over horizontal completeness. **#684 (PR #698) has landed** and is
+dropped from the band below rather than left as a stale claimed row; #506
+(PR #694), #675 (PR #695) and #585 (PR #689) were dropped the same way in the
+two passes before it.
+
+**Row 2 was placed by #684's post-land pass, not by a queue-wide survey.** #699
+is that landing's filed follow-up and the direct successor of the row it
+replaces, so it is banded next to the other redefine-family lane-mover rather
+than left invisible until the next `/backlog` — which, per the mechanism stated
+above, carves M5 and re-ranks nothing. Re-rank it there.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #684 | top-level `xs:group`/`xs:attributeGroup` prohibited attributes — the DEFINITION half of the family #518/#652 just closed. 2 decidable cases; the other 6 are gated behind a conformance widening it deliberately scopes out |
-| 2 | #686 | `sch-props-correct` clause 2 never fires when a redefined document carries two top-level definitions of one name. Its `#585` dependency is now satisfied — #585 landed |
+| 1 | #686 | `sch-props-correct` clause 2 never fires when a redefined document carries two top-level definitions of one name. Its `#585` dependency is now satisfied — #585 landed |
+| 2 | #699 | a redefining `xs:group`/`xs:attributeGroup` bypasses the prohibited-attribute guard #684 just landed — `produceRedefinition` never enters `run`'s dispatch. Grounding already done and cited across from #684; 2 decidable cases measured, the other 2 witnesses declined. **Adjacent to row 1 in `redefine.go` — see the note below** |
 | 3 | #469 | cos-all-limited charged on the XML spelling, not the component — false accept in both clauses |
 | 4 | #503 + #504 | `src-redefine` clauses 7.2.2 and 6.2.2, both fail-open. **Coupled — read the note below before starting either** |
 | 5 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline |
@@ -121,6 +128,13 @@ claimed rows; #585 (PR #689) was dropped the same way one pass earlier.
 | 10 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
 | 11 | #672 + #687 | the two open CLI-contract decisions (`-version`; scoped help and the bareword `help`). One line each in `doc.go` now, a retrofit around a live dispatch after #472 |
 | 12 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+
+**Rows 1 and 2 both work on `redefineSet`'s construction, in adjacent parts of
+`parser/redefine.go` — not the same function.** #686 is the `originals` write
+(`:324`); #699 may put its guard in `newRedefineSet` (`:195`), which is one of
+that map's feeders. Whichever is taken second re-reads the other's landing
+rather than its issue body. Neither gates the other, and the order between them
+is free.
 
 Rows 1–7 move `schema` (rows 6 and 7 move `datatypes`); rows 8–12 are the
 M4-facing published surface, where two isolated persona passes have now found
