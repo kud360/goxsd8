@@ -659,10 +659,16 @@ func compositionDirective(el *Element) bool {
 // The six named kinds whose {name} the schema for schema documents makes
 // use="required" — <simpleType>, <complexType>, <group>, <attributeGroup>,
 // <element>, <attribute> — take it from topLevelName, which rejects an unusable
-// one before any of them is built. The two DECLARATION kinds pass
-// rejectTopLevelProhibitedAttrs first, so an attribute the schema for schema
-// documents prohibits on the top-level form is named as the fault it is rather
-// than reported as the missing name it causes.
+// one before any of them is built. Four of them — <element>, <attribute>,
+// <group> and <attributeGroup> — pass rejectTopLevelProhibitedAttrs first, so an
+// attribute the schema for schema documents prohibits on the top-level form is
+// named as the fault it is rather than reported as the missing name it causes.
+// <simpleType> and <complexType> do not, because they have nothing to check:
+// xs:topLevelSimpleType (xmlschema11-2.md:3876) and xs:topLevelComplexType
+// (xmlschema11-1.md:4804) prohibit no attribute at all — each only makes name
+// use="required", and that pair's prohibitions sit on the LOCAL grammar types
+// instead (xs:localComplexType prohibits name, abstract, final and block,
+// :4816).
 func (p *producer) run() error {
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
@@ -729,6 +735,9 @@ func (p *producer) run() error {
 			}
 			p.builder.AddType(ct)
 		case "attributeGroup":
+			if err := rejectTopLevelProhibitedAttrs(decl); err != nil {
+				return err
+			}
 			name, err := p.topLevelName(decl)
 			if err != nil {
 				return err
@@ -739,6 +748,9 @@ func (p *producer) run() error {
 			}
 			p.builder.AddAttributeGroup(ag)
 		case "group":
+			if err := rejectTopLevelProhibitedAttrs(decl); err != nil {
+				return err
+			}
 			name, err := p.topLevelName(decl)
 			if err != nil {
 				return err
@@ -851,48 +863,73 @@ func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 	return qname, nil
 }
 
-// rejectTopLevelProhibitedAttrs rejects a top-level <element> or <attribute>
-// carrying any attribute the schema for schema documents prohibits on it:
-// xs:topLevelElement restricts ref, form, targetNamespace, minOccurs and
-// maxOccurs to use="prohibited" (xmlschema11-1.md:5100-:5104), and
-// xs:topLevelAttribute restricts ref, form, use and targetNamespace
-// (:4710-:4713), each alongside the required name (:5105, :4714). Every one of
+// rejectTopLevelProhibitedAttrs rejects a top-level <element>, <attribute>,
+// <group> or <attributeGroup> carrying any attribute the schema for schema
+// documents prohibits on it: xs:topLevelElement restricts ref, form,
+// targetNamespace, minOccurs and maxOccurs to use="prohibited"
+// (xmlschema11-1.md:5100-:5104), xs:topLevelAttribute restricts ref, form, use
+// and targetNamespace (:4710-:4713), xs:namedGroup restricts ref, minOccurs and
+// maxOccurs (:5210-:5212), and xs:namedAttributeGroup restricts ref (:5511),
+// each alongside the required name (:5105, :4714, :5209, :5510). Every one of
 // them is legal on the corresponding LOCAL form, which is the whole distinction
-// the two grammar types draw.
+// these grammar types draw.
 //
-// The two lists are NOT symmetric and neither contains the other: use is
-// prohibited on the <attribute> side alone and minOccurs/maxOccurs on the
-// <element> side alone, because each is absent from the other kind's grammar
-// entirely — xs:element has no use attribute at any level, and xs:attribute has
-// no occurrence attributes at any level. Checking use= on an <element> or
-// maxOccurs= on an <attribute> would reject as prohibited what the grammar never
-// admits in the first place.
+// The four lists are NOT symmetric and none contains another, because each names
+// only what its own kind's grammar admits SOMEWHERE. use is prohibited on the
+// <attribute> side alone and minOccurs/maxOccurs on the <element> side alone,
+// since xs:element has no use attribute at any level and xs:attribute no
+// occurrence attributes at any level. The same asymmetry separates the two
+// definition kinds: xs:group's base pulls in the xs:occurs attribute group
+// (:5167), so xs:namedGroup has an occurrence pair to prohibit, while
+// xs:attributeGroup never does, so xs:namedAttributeGroup has none — minOccurs
+// on a top-level <attributeGroup> is not prohibited, it is simply absent from
+// that grammar, a different fault this guard may not claim. Checking use= on an
+// <element>, maxOccurs= on an <attribute> or minOccurs= on an <attributeGroup>
+// would reject as prohibited what the grammar never admits in the first place.
 //
-// The fault carries NO numbered rule ID, and the reason is exact: src-element
-// clause 2 (§3.3.3) and src-attribute clause 3 (§3.2.3) both open "If the item's
-// parent is not <schema>", and each states the ref/name exclusivity inside that
-// antecedent (2.1, 3.1), which a top-level declaration does not satisfy. What
-// binds here is only those constraints' unnumbered preamble — "In addition to
-// the conditions imposed … by the schema for schema documents" — which
-// incorporates the grammar by reference without restating it. Charging
-// src-element, src-attribute, e-props-correct or a-props-correct would be a
-// fabricated verdict (STYLE E2); this is the footing topLevelName's own grammar
-// fault and <include> with no schemaLocation (parse.go) already stand on.
-// src-attribute clause 6 and src-element clause 4 do govern targetNamespace
-// numerically (xmlschema11-1.md:868, :1321) and are a DIFFERENT constraint: they
-// bind the LOCAL declaration that writes an explicit targetNamespace, which the
-// grammar admits, and say nothing about the top-level form that may not write
-// one at all.
+// The fault carries NO numbered rule ID for any of the four kinds, but the route
+// to that conclusion differs by kind and neither route may be swapped for the
+// other.
+//
+// For <element> and <attribute> the route is an antecedent that excludes the top
+// level: src-element clause 2 (§3.3.3) and src-attribute clause 3 (§3.2.3) both
+// open "If the item's parent is not <schema>", and each states the ref/name
+// exclusivity inside that antecedent (2.1, 3.1), which a top-level declaration
+// does not satisfy. What binds is only those constraints' unnumbered preamble —
+// "In addition to the conditions imposed … by the schema for schema documents" —
+// which incorporates the grammar by reference without restating it.
+//
+// For <group> and <attributeGroup> there is no antecedent to read, because there
+// is no schema representation constraint at all: §3.7.3 (:2286) and
+// src-attribute_group (§3.6.3, :2196) each read, in full, "None as such." There
+// is no src-mgd — that identifier appears nowhere in the spec, and neither does
+// any s4s-* one — and mgd-props-correct (§3.7.6) and ag-props-correct (§3.6.6)
+// are component constraints over the property tableau, which never sees the XML
+// attribute. What binds is §5.1 (:4289) directly: a schema document must be
+// "fully valid with respect to a schema corresponding to the Schema for Schema
+// Documents", an error condition independent of, and additional to, the numbered
+// Schema Representation Constraints listed beside it in the same section.
+//
+// Charging src-element, src-attribute, e-props-correct, a-props-correct,
+// mgd-props-correct or ag-props-correct here would be a fabricated verdict
+// (STYLE E2); this is the footing topLevelName's own grammar fault and <include>
+// with no schemaLocation (parse.go) already stand on. src-attribute clause 6 and
+// src-element clause 4 do govern targetNamespace numerically
+// (xmlschema11-1.md:868, :1321) and are a DIFFERENT constraint: they bind the
+// LOCAL declaration that writes an explicit targetNamespace, which the grammar
+// admits, and say nothing about the top-level form that may not write one at
+// all.
 //
 // It runs in run's dispatch BEFORE topLevelName, and the order is the whole
-// point: a document that writes ref at top level writes no name either, so the
-// name check would answer first and report "no usable name" — the consequence of
-// writing ref, never the mistake itself. Running before
-// produceElement/produceAttribute also keeps the verdict content-independent,
-// the discipline topLevelName's doc records, and puts this fault ahead of the
-// src-attribute clauses produceAttribute charges over the same element item: a
-// top-level use= is the prohibited attribute first, whatever value constraint it
-// is paired with.
+// point: a document that writes ref at top level writes no name either — on any
+// of the four kinds — so the name check would answer first and report "no usable
+// name", the consequence of writing ref, never the mistake itself. Running
+// before produceElement, produceAttribute, buildModelGroupDefinition and
+// buildAttributeGroup also keeps the verdict content-independent, the discipline
+// topLevelName's doc records, and puts this fault ahead of the src-attribute
+// clauses produceAttribute charges over the same element item: a top-level use=
+// is the prohibited attribute first, whatever value constraint it is paired
+// with.
 //
 // The attributes are checked in the grammar's own declaration order, so a
 // document writing more than one of them is always reported at the same one
@@ -905,6 +942,10 @@ func rejectTopLevelProhibitedAttrs(decl *Element) error {
 		grammar, prohibited = "xs:topLevelElement", []string{"ref", "form", "targetNamespace", "minOccurs", "maxOccurs"}
 	case "attribute":
 		grammar, prohibited = "xs:topLevelAttribute", []string{"ref", "form", "use", "targetNamespace"}
+	case "group":
+		grammar, prohibited = "xs:namedGroup", []string{"ref", "minOccurs", "maxOccurs"}
+	case "attributeGroup":
+		grammar, prohibited = "xs:namedAttributeGroup", []string{"ref"}
 	default:
 		return nil
 	}
@@ -912,7 +953,7 @@ func rejectTopLevelProhibitedAttrs(decl *Element) error {
 		if _, ok := decl.Attr(attr); !ok {
 			continue
 		}
-		return fmt.Errorf("parser: top-level <%s> at %s carries a %s attribute, which the schema for schema documents prohibits on a top-level declaration: %s restricts %s to use=\"prohibited\", and it is legal on the local form alone", decl.Name().Local(), decl.Loc(), attr, grammar, attr)
+		return fmt.Errorf("parser: top-level <%s> at %s carries a %s attribute, which the schema for schema documents prohibits on the top-level form: %s restricts %s to use=\"prohibited\", and it is legal on the local form alone", decl.Name().Local(), decl.Loc(), attr, grammar, attr)
 	}
 	return nil
 }

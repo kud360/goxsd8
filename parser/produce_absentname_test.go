@@ -219,19 +219,144 @@ func TestProduceTopLevelProhibitedAttrsRejected(t *testing.T) {
 	}
 }
 
-// TestProduceProhibitedAttrsLegalElsewhere is the reverse hazard of the table
+// TestProduceTopLevelDefinitionProhibitedAttrsRejected pins, END TO END from a
+// schema DOCUMENT, the same family on the two DEFINITION kinds: xs:namedGroup
+// restricts ref, minOccurs and maxOccurs to use="prohibited"
+// (xmlschema11-1.md:5210-:5212) and xs:namedAttributeGroup restricts ref
+// (:5511), each alongside the required name (:5209, :5510). The occurrence pair
+// is the <group> side's alone — xs:attributeGroup's grammar never pulls in
+// xs:occurs, so there is nothing on the <attributeGroup> side to prohibit.
+//
+// The fault is plain, never a rule verdict, and its footing is NOT the
+// declaration kinds': §3.7.3 and src-attribute_group (§3.6.3) both read "None as
+// such." in full, there is no src-mgd, and mgd-props-correct/ag-props-correct
+// see the property tableau rather than the XML attribute. What reaches this
+// document is §5.1's requirement that a schema document be fully valid against
+// the Schema for Schema Documents, which carries no numbered ID either — so
+// charging any of those rules would be fabricated (STYLE E2).
+//
+// Every ref row DECLARES the definition its ref names, so no row can pass as a
+// dangling reference, and the position assertion pins the offending element's
+// own line (STYLE E3, carried in the message text since a plain error holds no
+// xsderr.Loc). The rows that write a name of their own are otherwise documents
+// that PRODUCE cleanly, so reverting either guard arm fails them on the verdict;
+// the four nameless ones are rejected either way, so their assertions are the
+// message ones — the diagnostic must name ref and must NOT be topLevelName's "no
+// usable name", which is what answers if the guard runs in the wrong order or
+// not at all.
+func TestProduceTopLevelDefinitionProhibitedAttrsRejected(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2). Every body starts
+	// on line 2 of the wrapped document.
+	const (
+		targetGroup = `<xs:group name="G"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`
+		targetAG    = `<xs:attributeGroup name="AG"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`
+		groupModel  = `<xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence>`
+	)
+	cases := []struct {
+		name     string
+		body     string
+		wantAttr string
+		wantLine int
+	}{
+		{
+			name:     `top-level <group ref=>`,
+			body:     "\n" + targetGroup + "\n" + `<xs:group ref="tns:G"/>`,
+			wantAttr: "ref",
+			wantLine: 3,
+		},
+		{
+			name:     `top-level <group ref=> with a name of its own`,
+			body:     "\n" + targetGroup + "\n" + `<xs:group name="other" ref="tns:G">` + groupModel + `</xs:group>`,
+			wantAttr: "ref",
+			wantLine: 3,
+		},
+		{
+			name:     `top-level <group ref="">`,
+			body:     "\n" + `<xs:group ref=""/>`,
+			wantAttr: "ref",
+			wantLine: 2,
+		},
+		{
+			name:     `top-level <group minOccurs=>`,
+			body:     "\n" + `<xs:group name="G" minOccurs="0">` + groupModel + `</xs:group>`,
+			wantAttr: "minOccurs",
+			wantLine: 2,
+		},
+		{
+			name:     `top-level <group maxOccurs=>`,
+			body:     "\n" + `<xs:group name="G" maxOccurs="unbounded">` + groupModel + `</xs:group>`,
+			wantAttr: "maxOccurs",
+			wantLine: 2,
+		},
+		{
+			// Two prohibited attributes at once, written in the REVERSE of the
+			// grammar's declaration order: the check order is the grammar's, not the
+			// document's, so the reported attribute is stable (STYLE D2).
+			name:     `top-level <group maxOccurs= minOccurs=>`,
+			body:     "\n" + `<xs:group name="G" maxOccurs="unbounded" minOccurs="0">` + groupModel + `</xs:group>`,
+			wantAttr: "minOccurs",
+			wantLine: 2,
+		},
+		{
+			name:     `top-level <attributeGroup ref=>`,
+			body:     "\n" + targetAG + "\n" + `<xs:attributeGroup ref="tns:AG"/>`,
+			wantAttr: "ref",
+			wantLine: 3,
+		},
+		{
+			name: `top-level <attributeGroup ref=> with a name of its own`,
+			body: "\n" + targetAG + "\n" +
+				`<xs:attributeGroup name="other" ref="tns:AG"><xs:attribute name="b" type="xs:string"/></xs:attributeGroup>`,
+			wantAttr: "ref",
+			wantLine: 3,
+		},
+		{
+			name:     `top-level <attributeGroup ref="">`,
+			body:     "\n" + `<xs:attributeGroup ref=""/>`,
+			wantAttr: "ref",
+			wantLine: 2,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:po", tc.body))
+			if err == nil {
+				t.Fatalf("Produce succeeded, want a grammar fault for the prohibited %s", tc.wantAttr)
+			}
+			var xe *xsderr.Error
+			if errors.As(err, &xe) {
+				t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+			}
+			if want := fmt.Sprintf("carries a %s attribute", tc.wantAttr); !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want it to name %s as the prohibited attribute", err, tc.wantAttr)
+			}
+			if strings.Contains(err.Error(), "no usable name") {
+				t.Fatalf("error = %v, want the prohibited-attribute fault rather than an absent-name one", err)
+			}
+			if at := fmt.Sprintf("%s:%d:", produceURI, tc.wantLine); !strings.Contains(err.Error(), at) {
+				t.Fatalf("error = %v, want it positioned at %s (E3)", err, at)
+			}
+		})
+	}
+}
+
+// TestProduceProhibitedAttrsLegalElsewhere is the reverse hazard of the tables
 // above, and the reason the guard carries a list per KIND rather than one merged
 // list.
 //
 // The local rows produce cleanly: form, use, targetNamespace, minOccurs and
-// maxOccurs are exactly what xs:localElement and xs:localAttribute admit, so a
-// guard that widened to every <element>/<attribute> would reject legal schemas
-// wholesale. Each local targetNamespace= repeats the schema's own, which
-// src-attribute clause 6.3 and src-element clause 4.3 leave unconstrained.
+// maxOccurs are exactly what xs:localElement and xs:localAttribute admit, and
+// ref is REQUIRED on xs:groupRef and xs:attributeGroupRef, which are the only
+// forms a <group>/<attributeGroup> inside a complex type may take — so a guard
+// that widened to every <element>, <attribute>, <group> or <attributeGroup>
+// would reject legal schemas wholesale. Each local targetNamespace= repeats the
+// schema's own, which src-attribute clause 6.3 and src-element clause 4.3 leave
+// unconstrained.
 //
-// The asymmetric rows pin what the guard must NOT CLAIM: use= on an <element>
-// and minOccurs=/maxOccurs= on an <attribute> appear in no grammar for those
-// elements at any level, so xs:topLevelElement and xs:topLevelAttribute do not
+// The asymmetric rows pin what the guard must NOT CLAIM: use= on an <element>,
+// minOccurs=/maxOccurs= on an <attribute> and minOccurs=/maxOccurs= on an
+// <attributeGroup> appear in no grammar for those elements at any level, so
+// xs:topLevelElement, xs:topLevelAttribute and xs:namedAttributeGroup do not
 // prohibit them and this guard may not say they do. They are asserted on the
 // message rather than on acceptance, since a later §A attribute-set check may
 // legitimately reject those documents for a different, true reason.
@@ -242,6 +367,10 @@ func TestProduceProhibitedAttrsLegalElsewhere(t *testing.T) {
 	localAttr := func(inner string) string {
 		return `<xs:complexType name="CT"><xs:sequence/>` + inner + `</xs:complexType>`
 	}
+	const (
+		targetGroup = `<xs:group name="G"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`
+		targetAG    = `<xs:attributeGroup name="AG"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`
+	)
 	// A slice, not a map: subtest order is output (STYLE D2).
 	for _, tc := range []struct {
 		name string
@@ -254,6 +383,10 @@ func TestProduceProhibitedAttrsLegalElsewhere(t *testing.T) {
 		{`local <attribute form=>`, localAttr(`<xs:attribute name="a" type="xs:string" form="qualified"/>`)},
 		{`local <attribute use=>`, localAttr(`<xs:attribute name="a" type="xs:string" use="required"/>`)},
 		{`local <attribute targetNamespace=>`, localAttr(`<xs:attribute name="a" type="xs:string" targetNamespace="urn:po"/>`)},
+		{`local <group ref=>`, targetGroup + local(`<xs:group ref="tns:G"/>`)},
+		{`local <group ref= minOccurs=>`, targetGroup + local(`<xs:group ref="tns:G" minOccurs="0"/>`)},
+		{`local <group ref= maxOccurs=>`, targetGroup + local(`<xs:group ref="tns:G" maxOccurs="unbounded"/>`)},
+		{`local <attributeGroup ref=>`, targetAG + localAttr(`<xs:attributeGroup ref="tns:AG"/>`)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := produce(t, wrap("urn:po", tc.body)); err != nil {
@@ -268,13 +401,15 @@ func TestProduceProhibitedAttrsLegalElsewhere(t *testing.T) {
 		{`top-level <element use=>`, `<xs:element name="e" type="xs:string" use="required"/>`},
 		{`top-level <attribute minOccurs=>`, `<xs:attribute name="a" type="xs:string" minOccurs="0"/>`},
 		{`top-level <attribute maxOccurs=>`, `<xs:attribute name="a" type="xs:string" maxOccurs="unbounded"/>`},
+		{`top-level <attributeGroup minOccurs=>`, `<xs:attributeGroup name="AG" minOccurs="0"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`},
+		{`top-level <attributeGroup maxOccurs=>`, `<xs:attributeGroup name="AG" maxOccurs="unbounded"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := produce(t, wrap("urn:po", tc.body))
 			if err == nil {
 				return
 			}
-			if strings.Contains(err.Error(), "prohibits on a top-level declaration") {
+			if strings.Contains(err.Error(), "prohibits on the top-level form") {
 				t.Fatalf("error = %v, want no top-level prohibition claimed for an attribute that kind's grammar never declares", err)
 			}
 		})
