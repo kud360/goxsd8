@@ -909,9 +909,6 @@ func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 // "fully valid with respect to a schema corresponding to the Schema for Schema
 // Documents", an error condition independent of, and additional to, the numbered
 // Schema Representation Constraints listed beside it in the same section.
-// §3.7.2's own note (:2285) points at the same place — it leaves minOccurs and
-// maxOccurs unmentioned "because the schema for schema documents does not allow
-// them" on a named <group>.
 //
 // Charging src-element, src-attribute, e-props-correct, a-props-correct,
 // mgd-props-correct or ag-props-correct here would be a fabricated verdict
