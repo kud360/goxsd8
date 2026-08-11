@@ -13,10 +13,13 @@ import (
 // src-expredef's self-reference resolution through a different site — base= for
 // the two type kinds, ref= for the two group kinds.
 //
-// Every one of them is a false-circularity trap: if the substitute is not
-// recognized as the redefining declaration it stands in for, its self-reference
-// resolves to the visible redefinition and the assembly is rejected as a
-// circular derivation or a circular group.
+// In three of the four, unrecognized substitution is a false-circularity trap:
+// the self-reference resolves to the visible redefinition and the assembly is
+// rejected as a circular derivation or a circular group. The fourth,
+// attributeGroup, fails silently instead — the lost self-reference falls into
+// ordinary §3.6.2.1 inlining, meets the build's own visited set, and
+// contributes nothing, so the original's {attribute uses} vanish with no
+// diagnostic at all (an under-rejection, not a false reject).
 
 // TestParseOverrideRedefinedSimpleTypeResolvesToOriginal is src-expredef clause
 // 1.1 under substitution: main.xsd's <override> replaces mid.xsd's redefining
