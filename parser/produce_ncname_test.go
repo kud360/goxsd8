@@ -15,8 +15,10 @@ import (
 //
 // One row per CODE PATH into declarationName, not per bad name: the six
 // top-level kinds routed through topLevelName, the <notation> that is not, the
-// two local declaration forms, and the prohibited <attribute> that maps to no
-// component at all (§3.4.2.4's Note) yet is still a name in a schema document.
+// two local declaration forms, the prohibited <attribute> that maps to no
+// component at all (§3.4.2.4's Note) yet is still a name in a schema document,
+// and the identity constraint, whose name= form declares a component of the
+// schema (§3.17.1) without being a top-level item of the document at all.
 // Reverting any one call site leaves its row failing.
 func TestProduceNonNCNameDeclarationNameRejected(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2). Every body starts on
@@ -98,6 +100,17 @@ func TestProduceNonNCNameDeclarationNameRejected(t *testing.T) {
 				`</xs:restriction></xs:complexContent></xs:complexType>`,
 			wantLine: 5,
 		},
+		{
+			// produceIdentityConstraint, on the name= arm of
+			// src-identity-constraint clause 1's fork. Charged at the <unique>'s
+			// own position, not the host <element>'s, and not the empty-name
+			// c-props-correct clause 1 xsd.NewIdentityConstraint keeps.
+			name: `<unique> name="a:b"`,
+			body: "\n" + `<xs:element name="root">` + "\n" +
+				`<xs:unique name="a:b"><xs:selector xpath="."/><xs:field xpath="@a"/></xs:unique>` + "\n" +
+				`</xs:element>`,
+			wantLine: 3,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -112,6 +125,41 @@ func TestProduceNonNCNameDeclarationNameRejected(t *testing.T) {
 					loc.URI, loc.Line, loc.Col, produceURI, tc.wantLine)
 			}
 		})
+	}
+}
+
+// TestProduceEmptyIdentityConstraintNameChargedProps pins the other half of the
+// split declarationName leaves at the identity constraint: name="" is NOT the
+// lexical fault, even though the empty string is outside xs:NCName's ·lexical
+// space· too. It stays xsd.NewIdentityConstraint's c-props-correct clause 1
+// (§3.11.6.1), against §3.11.1's Required {name} — the verdict the W3C suite's
+// idA031/idB031/idC031 already take.
+func TestProduceEmptyIdentityConstraintNameChargedProps(t *testing.T) {
+	_, err := produce(t, wrap("", `<xs:element name="root">`+
+		`<xs:unique name=""><xs:selector xpath="."/><xs:field xpath="@a"/></xs:unique>`+
+		`</xs:element>`))
+	assertRule(t, err, "c-props-correct")
+}
+
+// TestProduceIdentityConstraintRefResolvesAgainstNormalizedIndex pins the
+// pre-scan index (indexIdentityConstraint) and the definition's own {name}
+// (produceIdentityConstraint) as minted by the SAME declarationName call: a
+// <key ref="k"> resolves to a definition written name=" k ", whose ·actual
+// value· xs:NCName's whiteSpace = collapse (§3.4.7.1) normalizes to "k".
+// Keying the index on the raw attribute instead leaves the reference charged
+// src-resolve clause 1.7 (§3.17.6.2) against a definition that is right there,
+// and builds a twin component under the raw name if it ever did resolve.
+func TestProduceIdentityConstraintRefResolvesAgainstNormalizedIndex(t *testing.T) {
+	s, err := produce(t, wrap("", `<xs:element name="root">`+
+		`<xs:key name=" k "><xs:selector xpath="a"/><xs:field xpath="@b"/></xs:key>`+
+		`</xs:element>`+
+		`<xs:element name="other"><xs:key ref="k"/></xs:element>`))
+	if err != nil {
+		t.Fatalf("Produce: %v, want <key ref=\"k\"> to resolve to the definition named \" k \"", err)
+	}
+	ics := s.IdentityConstraints()
+	if len(ics) != 1 || ics[0].Name() != (xsd.QName{Local: "k"}) {
+		t.Fatalf("{identity-constraint definitions} = %v, want exactly one definition named {,k}", ics)
 	}
 }
 

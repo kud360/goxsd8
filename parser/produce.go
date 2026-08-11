@@ -597,16 +597,28 @@ func (p *producer) prescanIdentityConstraints(el *Element) {
 // The caller owns the question of whether el is mapped at all
 // (prescanIdentityConstraints); this function owns only the question of whether
 // a mapped element declares an identity constraint.
+//
+// The key is minted by declarationName, the same predicate that mints the {name}
+// produceIdentityConstraint builds the definition under, so a ref= resolves
+// against exactly the expanded names the definitions carry — an index keyed on
+// the raw attribute would miss a whitespace-bearing name whose ·actual value·
+// the definition normalizes away (§3.4.7.1, whiteSpace = collapse). A name
+// declarationName REJECTS is left unindexed and its error dropped here: this
+// pre-scan reports nothing, and produceIdentityConstraint charges that same
+// value cvc-datatype-valid at the definition's own position (#675).
 func (p *producer) indexIdentityConstraint(el *Element) {
 	category, ok := identityConstraintCategoryOf(el.Name().Local())
 	if !ok {
 		return
 	}
-	name, ok := el.Attr("name")
-	if !ok {
+	if _, ok := el.Attr("name"); !ok {
 		return
 	}
-	p.symbols.identityConstraints[xsd.QName{Space: p.target, Local: name}] =
+	name, err := declarationName(el, p.target)
+	if err != nil {
+		return
+	}
+	p.symbols.identityConstraints[name] =
 		identityConstraintSource{elem: el, category: category, owner: p}
 }
 

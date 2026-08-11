@@ -127,8 +127,16 @@ func (p *producer) identityConstraintsOf(hostElem *Element) ([]xsd.IdentityConst
 //     deliberately NOT registered — a second registration under the same name
 //     would fabricate a sch-props-correct (§3.17.6.1) clause 2 collision against
 //     the very definition it reuses.
+//
+// The name's LEXICAL rejection — a value that is not an xs:NCName, which §3.11.2
+// types it as on all three elements — is declarationName's, charged
+// cvc-datatype-valid and shared with every other declaration-name path. It runs
+// AFTER clause 1's fork, which decides the form from the attribute's PRESENCE
+// and not its value, and so leaves the ref= arm untouched. The EMPTY name is
+// xsd.NewIdentityConstraint's, charged c-props-correct clause 1 (§3.11.6.1)
+// against §3.11.1's Required {name} — the same split topLevelName draws (#675).
 func (p *producer) produceIdentityConstraint(el *Element, category xsd.IdentityConstraintCategory) (xsd.IdentityConstraint, error) {
-	name, hasName := el.Attr("name")
+	_, hasName := el.Attr("name")
 	if _, hasRef := el.Attr("ref"); hasRef == hasName {
 		return xsd.IdentityConstraint{}, xsderr.New(ruleSrcIdentityConstraint, el.Loc(),
 			"<%s> must carry exactly one of name or ref, but src-identity-constraint clause 1 permits one and not both", el.Name().Local())
@@ -136,7 +144,11 @@ func (p *producer) produceIdentityConstraint(el *Element, category xsd.IdentityC
 	if !hasName {
 		return p.referencedIdentityConstraint(el, category)
 	}
-	ic, err := p.buildIdentityConstraint(xsd.QName{Space: p.target, Local: name}, el, category)
+	qname, err := declarationName(el, p.target)
+	if err != nil {
+		return xsd.IdentityConstraint{}, err
+	}
+	ic, err := p.buildIdentityConstraint(qname, el, category)
 	if err != nil {
 		return xsd.IdentityConstraint{}, err
 	}

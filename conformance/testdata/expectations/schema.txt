@@ -4925,9 +4925,9 @@ MS-IdentityConstraint2006-07-15/idA026/schema/idA026 fail
 MS-IdentityConstraint2006-07-15/idA027/schema/idA027 fail
 MS-IdentityConstraint2006-07-15/idA028/schema/idA028 fail
 MS-IdentityConstraint2006-07-15/idA029/schema/idA029 fail
-MS-IdentityConstraint2006-07-15/idA030/schema/idA030 fail
+MS-IdentityConstraint2006-07-15/idA030/schema/idA030 pass
 MS-IdentityConstraint2006-07-15/idA031/schema/idA031 pass
-MS-IdentityConstraint2006-07-15/idA032/schema/idA032 fail
+MS-IdentityConstraint2006-07-15/idA032/schema/idA032 pass
 MS-IdentityConstraint2006-07-15/idA033/schema/idA033 pass
 MS-IdentityConstraint2006-07-15/idA034/schema/idA034 pass
 MS-IdentityConstraint2006-07-15/idA035/schema/idA035 fail
@@ -4985,9 +4985,9 @@ MS-IdentityConstraint2006-07-15/idB026/schema/idB026 fail
 MS-IdentityConstraint2006-07-15/idB027/schema/idB027 fail
 MS-IdentityConstraint2006-07-15/idB028/schema/idB028 fail
 MS-IdentityConstraint2006-07-15/idB029/schema/idB029 fail
-MS-IdentityConstraint2006-07-15/idB030/schema/idB030 fail
+MS-IdentityConstraint2006-07-15/idB030/schema/idB030 pass
 MS-IdentityConstraint2006-07-15/idB031/schema/idB031 pass
-MS-IdentityConstraint2006-07-15/idB032/schema/idB032 fail
+MS-IdentityConstraint2006-07-15/idB032/schema/idB032 pass
 MS-IdentityConstraint2006-07-15/idB033/schema/idB033 pass
 MS-IdentityConstraint2006-07-15/idB034/schema/idB034 pass
 MS-IdentityConstraint2006-07-15/idB035/schema/idB035 fail
@@ -5045,9 +5045,9 @@ MS-IdentityConstraint2006-07-15/idC026/schema/idC026 fail
 MS-IdentityConstraint2006-07-15/idC027/schema/idC027 fail
 MS-IdentityConstraint2006-07-15/idC028/schema/idC028 fail
 MS-IdentityConstraint2006-07-15/idC029/schema/idC029 fail
-MS-IdentityConstraint2006-07-15/idC030/schema/idC030 fail
+MS-IdentityConstraint2006-07-15/idC030/schema/idC030 pass
 MS-IdentityConstraint2006-07-15/idC031/schema/idC031 pass
-MS-IdentityConstraint2006-07-15/idC032/schema/idC032 fail
+MS-IdentityConstraint2006-07-15/idC032/schema/idC032 pass
 MS-IdentityConstraint2006-07-15/idC033/schema/idC033 pass
 MS-IdentityConstraint2006-07-15/idC034/schema/idC034 pass
 MS-IdentityConstraint2006-07-15/idC035/schema/idC035 pass
