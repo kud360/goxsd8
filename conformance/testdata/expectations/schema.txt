@@ -786,7 +786,7 @@ MS-Additional2006-07-15/addB003/schema/addB003 pass
 MS-Additional2006-07-15/addB004/schema/addB004 fail
 MS-Additional2006-07-15/addB005/schema/addB005 pass
 MS-Additional2006-07-15/addB006/schema/addB006 fail
-MS-Additional2006-07-15/addB007/schema/addB007 fail
+MS-Additional2006-07-15/addB007/schema/addB007 pass
 MS-Additional2006-07-15/addB008/schema/addB008 pass
 MS-Additional2006-07-15/addB009/schema/addB009 pass
 MS-Additional2006-07-15/addB010/schema/addB010 pass

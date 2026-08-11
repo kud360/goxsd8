@@ -652,6 +652,18 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 // not decided, so a case turning on either observes "valid" where the suite says
 // "invalid" — a recorded gap, never a pass. The document the <redefine> POINTS AT
 // is gated by closureDecidable, exactly as an <include>'s target is.
+//
+// ONE fail-CLOSED residue sits alongside them, kept deliberately: a CHAINED
+// <redefine> of a <group>/<attributeGroup> — the redefined document redefining a
+// document of its own for the same name — is refused under src-expredef's closing
+// requirement, so such a case observes "invalid" whatever the suite says. The
+// producer carries the marker (parser/redefine.go's chainedOriginal, #585) and
+// #504/#503 own its retirement. The two suite cases in that shape,
+// MS-Schema2006-07-15/schL10 and /schM5, are declared invalid and turn on nothing
+// but the two fail-open clauses above, so the residue is the whole reason they
+// agree with the suite; retiring it moves them from right-for-the-wrong-reason to
+// a recorded gap, and closing #504/#503 to right. A chained <simpleType> or
+// <complexType> composes and is decided genuinely (MS-Additional2006-07-15/addB007).
 func redefineDecidable(el *parser.Element) bool {
 	for _, child := range el.Children() {
 		c, ok := child.(*parser.Element)

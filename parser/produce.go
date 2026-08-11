@@ -1173,19 +1173,26 @@ func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, name xsd
 //     buildComplexType, because that memo is keyed by name and this component
 //     has none (see buildComplexType).
 //
-// The identity it is built with carries the REDEFINING type's minted
+// The identity it is built with carries the OWNING type's minted
 // xsd.ComponentID, which is what makes the original's {context} point back at
 // its owner; xsd.NewComplexTypeOwningBase checks the two agree.
+//
+// The owning type is the redefining one at the first level and, under a CHAINED
+// <redefine>, another clause-1.1 original at every level below (#585) — so the
+// identity that supplies the mint is asked for it rather than being one arm
+// (redefineOriginalContext), and the recursion is what walks the chain. It
+// terminates for the reason resolveBase's does: each hop moves to the REDEFINED
+// document, and the chain of redefined documents is finite.
 func (p *producer) redefinedComplexBase(id complexTypeIdentity, at *Element, name xsd.QName) (xsd.ComplexType, bool, error) {
-	r, redefining := id.(redefiningComplexType)
-	if !redefining {
+	owner, owns := redefineOriginalContext(id)
+	if !owns {
 		return xsd.ComplexType{}, false, nil
 	}
 	src, self := p.redefinedTypeBase(at, name)
 	if !self {
 		return xsd.ComplexType{}, false, nil
 	}
-	orig, err := src.owner.produceComplexType(redefineOriginalComplexType{owner: r.owner}, src.elem)
+	orig, err := src.owner.produceComplexType(newRedefineOriginal(owner), src.elem)
 	if err != nil {
 		return xsd.ComplexType{}, true, err
 	}

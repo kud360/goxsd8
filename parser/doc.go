@@ -118,7 +118,12 @@
 // redefinable kinds are produced; the hidden copy a redefining
 // complexType owns is anonymous, so what finalize does and does not
 // charge against it is recorded on xsd's checkComplexDerivations with the
-// same limitation for every other anonymous type. §4.2.4 marks the whole
+// same limitation for every other anonymous type. A redefined document
+// that redefines a document of its OWN for the same name composes: clause
+// 4.1.1 makes its redefining child a top-level definition of it, so the
+// outer redefinition pairs with that child and the chain of hidden copies
+// runs one level deep per link (for a simpleType/complexType — see the
+// composition gaps for the clause-2 kinds). §4.2.4 marks the whole
 // mechanism ·deprecated·. A non-empty <xs:redefine> whose schemaLocation
 // does not resolve is an ERROR (src-redefine clause
 // 1) where an <xs:include>'s is explicitly not one (src-include clause
@@ -166,7 +171,27 @@
 //     original. Their 6.2.1/7.2.1 halves ARE charged, as src-expredef's
 //     closing requirement. Both UNDER-reject: a redefinition that widens
 //     rather than restricts is accepted, never wrongly refused. Owned by
-//     #286.
+//     #504 (6.2.2) and #503 (7.2.2).
+//   - GAP(xsd): a CHAINED <xs:redefine> of a <group> or an
+//     <attributeGroup> — one whose redefined document redefines a
+//     document of its own for the same name — is REFUSED under
+//     src-expredef's closing requirement, on a schema §4.2.4 clause
+//     4.1.1 makes valid. The two kinds src-expredef clause 1 pairs,
+//     simpleType and complexType, do compose. Fail-CLOSED, with one
+//     consumer: produceRedefinition's closing-requirement check
+//     (parser/redefine.go's chainedOriginal, where the marker sits).
+//     Retire it with #504 and #503, which own the only clauses such a
+//     chain turns on.
+//   - GAP(xsd): a REDEFINED document carrying two top-level definitions
+//     of the redefined name — §4.2.4 clause 4.1.1 counts a <xs:redefine>
+//     child among them — is ACCEPTED, where sch-props-correct
+//     (§3.17.6.1) clause 2 forbids the pair. Both declarations write one
+//     redefineSet.originals key and the later clobbers the earlier (see
+//     redefine.go's recordOriginal, where the marker sits), so the
+//     composed schema depends on their document order. Under-rejects,
+//     and only inside a redefinition: the same pair in a document
+//     nothing redefines is still charged clause 2 by indexByName. Owned
+//     by #686.
 //   - GAP(parser): a redefining declaration that an <xs:override>
 //     substitutes for under §F.2 clause 1 loses its self-reference
 //     resolution — see parser/override.go's GAP for the mechanism.

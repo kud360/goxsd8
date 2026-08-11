@@ -10,7 +10,9 @@ import (
 // complexTypeIdentity is unexported and never escapes the producer, so these
 // tests are package-internal. What they pin is the partition itself: which
 // xsd.ElementScopeParent / xsd.AttributeScopeParent variant each of the four arms
-// emits, and which xsd constructor each drives. The zero-value tests the struct
+// emits, and which xsd constructor each drives — five constructors over four
+// arms, because the redefine-original arm drives one of two depending on whether
+// the slot it is handed owns its base (#585). The zero-value tests the struct
 // shape needed are gone with the zero value: the sum has no arm that carries
 // neither a name nor an owner, so the state the panics guarded is
 // unrepresentable (#505).
@@ -29,7 +31,7 @@ func TestComplexTypeIdentityScopeParentArms(t *testing.T) {
 		// Deriving anonymity from owner-presence would emit the anonymous arm
 		// here and mis-scope every local element a redefinition declares.
 		{"redefining", redefiningComplexType{name: name, owner: owner}, xsd.ComplexTypeScopeParent{Name: name}},
-		{"redefine original", redefineOriginalComplexType{owner: owner}, xsd.AnonymousComplexTypeScopeParent{Owner: owner}},
+		{"redefine original", newRedefineOriginal(owner), xsd.AnonymousComplexTypeScopeParent{Owner: owner}},
 	} {
 		if got := scopeParentOf(tc.id); got != tc.want {
 			t.Errorf("%s identity scopeParentOf() = %#v, want %#v", tc.what, got, tc.want)
@@ -54,7 +56,7 @@ func TestComplexTypeIdentityAttributeScopeParentArms(t *testing.T) {
 		{"named", namedComplexType{name: name}, xsd.AttributeComplexTypeScopeParent{Name: name}},
 		{"element-owned", elementOwnedComplexType{owner: owner}, xsd.AttributeAnonymousComplexTypeScopeParent{Owner: owner}},
 		{"redefining", redefiningComplexType{name: name, owner: owner}, xsd.AttributeComplexTypeScopeParent{Name: name}},
-		{"redefine original", redefineOriginalComplexType{owner: owner}, xsd.AttributeAnonymousComplexTypeScopeParent{Owner: owner}},
+		{"redefine original", newRedefineOriginal(owner), xsd.AttributeAnonymousComplexTypeScopeParent{Owner: owner}},
 	} {
 		if got := attributeScopeParentOf(tc.id); got != tc.want {
 			t.Errorf("%s identity attributeScopeParentOf() = %#v, want %#v", tc.what, got, tc.want)
@@ -111,7 +113,7 @@ func TestComplexTypeIdentityRedefineArms(t *testing.T) {
 	name := xsd.QName{Space: "urn:po", Local: "T"}
 	owner := xsd.NewComponentID()
 
-	original, err := p.newComplexType(redefineOriginalComplexType{owner: owner}, xsderr.Loc{}, xsd.TypeDefinitionRef{Name: anyTypeName}, nil,
+	original, err := p.newComplexType(newRedefineOriginal(owner), xsderr.Loc{}, xsd.TypeDefinitionRef{Name: anyTypeName}, nil,
 		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("redefine-original newComplexType: %v", err)
@@ -144,6 +146,45 @@ func TestComplexTypeIdentityRedefineArms(t *testing.T) {
 	}
 	if inline.Definition.Name() != (xsd.QName{}) {
 		t.Error("redefining arm's owned base is named, but src-expredef clause 1.1 makes its {name} absent")
+	}
+}
+
+// TestComplexTypeIdentityChainedRedefineOriginal pins the arm a CHAINED
+// <redefine> reaches (#585): an ORIGINAL identity handed an OWNED base builds an
+// anonymous type that owns it in turn, rather than the by-name anonymous type the
+// same arm builds for an ordinary base. The two levels must carry DIFFERENT
+// {context} identities — one mint per ownership edge — which is the whole reason
+// the arm carries a second token.
+func TestComplexTypeIdentityChainedRedefineOriginal(t *testing.T) {
+	p := &producer{}
+	outer := newRedefineOriginal(xsd.NewComponentID())
+
+	// The inner original is built under the identity the outer one hands down,
+	// exactly as redefinedComplexBase does through redefineOriginalContext.
+	innerOwner, owns := redefineOriginalContext(outer)
+	if !owns {
+		t.Fatal("a redefine original cannot own a further original, so a chained <redefine> has nothing to pair with")
+	}
+	inner, err := p.newComplexType(newRedefineOriginal(innerOwner), xsderr.Loc{}, xsd.TypeDefinitionRef{Name: anyTypeName}, nil,
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("inner redefine-original newComplexType: %v", err)
+	}
+	chained, err := p.newComplexType(outer, xsderr.Loc{}, xsd.InlineTypeDefinition{Definition: inner}, nil,
+		xsd.DerivationExtension, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("chained redefine-original newComplexType: %v", err)
+	}
+	if chained.Name() != (xsd.QName{}) {
+		t.Errorf("the chained original built {name} = %s, want ·absent· (src-expredef clause 1.1)", chained.Name())
+	}
+	if _, held := chained.Base().(xsd.InlineTypeDefinition); !held {
+		t.Fatalf("the chained original's {base type definition} = %#v, want the InlineTypeDefinition holding the inner original — the owned base was dropped", chained.Base())
+	}
+	outerContext, _ := chained.Context()
+	innerContext, _ := inner.Context()
+	if outerContext.ID() == innerContext.ID() {
+		t.Error("both levels of the chain carry the same {context} identity, so the two anonymous containers are indistinguishable")
 	}
 }
 

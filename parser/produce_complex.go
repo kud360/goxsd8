@@ -80,7 +80,9 @@ func seedAnyType() (xsd.ComplexType, error) {
 //     NAMED and ALSO carries a minted identity, because src-expredef clause 1.1
 //     makes it the {context} of the anonymous original it is paired with;
 //   - redefineOriginalComplexType — that original: anonymous, contexted in the
-//     redefining component, carrying the same minted identity.
+//     redefining component, carrying the same minted identity, and itself owning
+//     a further original when a chained <redefine> put a redefining declaration
+//     in the redefined document (#585).
 //
 // The last two are why this is a sum and not a two-optional-field struct. The
 // struct it replaced derived "is this anonymous?" from owner-presence, which
@@ -129,13 +131,61 @@ type redefiningComplexType struct {
 // redefineOriginalComplexType identifies src-expredef clause 1.1's original: the
 // component "which corresponds to the top-level definition item with the same
 // name in the <redefine>d schema document … except that its {name} is ·absent·
-// and its {context} is the redefining component". owner is the redefining type's
-// minted identity, the same value its redefiningComplexType carries.
+// and its {context} is the redefining component".
 //
 // It is produced under the REDEFINED document's own producer, so its content
 // takes that document's target namespace and schema-level defaults; only the
 // {name}/{context} override travels with this identity.
-type redefineOriginalComplexType struct{ owner xsd.ComponentID }
+//
+// It carries TWO identities because an original may stand at both ends of an
+// ownership edge. A CHAINED <redefine> — D1 redefines D2, D2 redefines D3, one
+// (kind, name) throughout — makes D2's own redefining declaration the top-level
+// definition item clause 1.1 reads, so the original built from it is anonymous
+// AND owns an original of its own (D3's), under clause 1.2 applied at D2's level.
+// Build it through newRedefineOriginal, never as a literal, so ownedOriginal is
+// never the zero token.
+type redefineOriginalComplexType struct {
+	// owner is the identity of the component this original's {context} names —
+	// clause 1.1's "the redefining component", the same value that component's
+	// own identity carries — and the token its local declarations report as
+	// {scope}.{parent} (xsd.AnonymousComplexTypeScopeParent's 1:1 pairing).
+	owner xsd.ComponentID
+	// ownedOriginal is the identity minted for the edge running the other way:
+	// the {context} of the clause-1.1 original THIS one owns, when the
+	// declaration it is built from is itself a redefining declaration. One mint
+	// per edge — reusing owner for both would leave the two containers
+	// indistinguishable, and their {context}s equal.
+	ownedOriginal xsd.ComponentID
+}
+
+// newRedefineOriginal mints the identity of one clause-1.1 original: owner is the
+// identity of the component that owns it, and the original's own owner-side token
+// is minted here, one per ownership edge (see redefineOriginalComplexType).
+func newRedefineOriginal(owner xsd.ComponentID) redefineOriginalComplexType {
+	return redefineOriginalComplexType{owner: owner, ownedOriginal: xsd.NewComponentID()}
+}
+
+// redefineOriginalContext returns the identity a src-expredef clause 1.1 ORIGINAL
+// built under this type takes as its {context}, and false for the two arms that
+// can own no original. It is the one place the two directions of the "owner"
+// field are told apart: for a redefining type it is the mint clause 1.1's
+// original is paired with, and for an original that is ITSELF built from a
+// redefining declaration it is the second mint that original carries.
+//
+// The switch is exhaustive over the sealed sum; see topLevelComplexTypeName for
+// why the default arm is unreachable.
+func redefineOriginalContext(id complexTypeIdentity) (xsd.ComponentID, bool) {
+	switch i := id.(type) {
+	case redefiningComplexType:
+		return i.owner, true
+	case redefineOriginalComplexType:
+		return i.ownedOriginal, true
+	case namedComplexType, elementOwnedComplexType:
+		return xsd.ComponentID{}, false
+	default:
+		panic("parser: redefineOriginalContext: non-exhaustive complexTypeIdentity switch")
+	}
+}
 
 func (namedComplexType) complexTypeIdentity()            {}
 func (elementOwnedComplexType) complexTypeIdentity()     {}
@@ -239,6 +289,14 @@ func attributeScopeParentOf(id complexTypeIdentity) xsd.AttributeScopeParent {
 // production begins, so the mismatch is unreachable and is reported as a plain
 // producer fault rather than a fabricated rule violation.
 //
+// The ORIGINAL arm takes the slot BOTH ways, and is the one arm that does. It
+// owns an original of its own exactly when the declaration it is built from is
+// itself a redefining declaration — a chained <redefine>, where clause 1.1's
+// "as defined in Schema Component Details (§3)" carries clause 1.2 with it — and
+// carries a plain by-name base otherwise. Which it is, is the slot's own shape
+// and is read from it (STYLE D3): resolveBaseType already made that decision,
+// from the source element, when it chose the arm.
+//
 // The switch is exhaustive over the sealed sum; see topLevelComplexTypeName for
 // why the default arm is unreachable.
 func (p *producer) newComplexType(id complexTypeIdentity, loc xsderr.Loc, base xsd.TypeDefinitionOrRef, final []xsd.DerivationMethod, derivationMethod xsd.DerivationMethod, abstract bool, attributeUses []xsd.AttributeUse, prohibitedAttributeNames []xsd.QName, attributeWildcard *xsd.Wildcard, contentType xsd.ContentType, prohibitedSubstitutions []xsd.DerivationMethod, assertions []xsd.Assertion, annotations []xsd.Annotation) (xsd.ComplexType, error) {
@@ -257,7 +315,12 @@ func (p *producer) newComplexType(id complexTypeIdentity, loc xsderr.Loc, base x
 		return xsd.NewAnonymousComplexType(loc, xsd.ElementDeclarationContext{Component: i.owner}, baseTypeName(base), final,
 			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
 	case redefineOriginalComplexType:
-		return xsd.NewAnonymousComplexType(loc, xsd.ComplexTypeDefinitionContext{Component: i.owner}, baseTypeName(base), final,
+		context := xsd.ComplexTypeDefinitionContext{Component: i.owner}
+		if original, owns := ownedComplexBase(base); owns {
+			return xsd.NewAnonymousComplexTypeOwningBase(loc, i.ownedOriginal, context, original, final,
+				derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+		}
+		return xsd.NewAnonymousComplexType(loc, context, baseTypeName(base), final,
 			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
 	default:
 		panic("parser: newComplexType: non-exhaustive complexTypeIdentity switch")
