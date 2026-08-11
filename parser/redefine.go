@@ -142,10 +142,14 @@ type redefineSet struct {
 	// output (STYLE D2/D3).
 	index map[componentKey]struct{}
 
-	// byElem is the reverse of index, likewise derived from entries at
-	// construction: it answers "is THIS element a redefining declaration, and of
-	// what", which is what the three self-reference resolution sites ask after
-	// walking up from a base=/ref= to its containing declaration.
+	// byElem is the reverse of index, derived from entries at construction: it
+	// answers "is THIS element a redefining declaration, and of what", which is
+	// what the three self-reference resolution sites ask after walking up from a
+	// base=/ref= to its containing declaration.
+	//
+	// It has a SECOND writer, recordSubstitute, for the declaration §F.2 clause 1
+	// substitutes for a redefining child — the one element that is a redefining
+	// declaration of this set without being a child of its <redefine>.
 	byElem map[*Element]componentKey
 
 	// originals holds, per redefined key, the top-level declaration of the
@@ -318,6 +322,42 @@ func (s *redefineSet) excepts(el *Element) bool {
 // composes it is decided by document order in the redefined document.
 func (s *redefineSet) recordOriginal(key componentKey, src typeSource) {
 	s.originals[key] = src
+}
+
+// recordSubstitute indexes decl — the declaration §F.2 clause 1 puts in the
+// place of the redefining child this set holds under key — as a redefining
+// declaration of this set in its own right, so a self-reference written inside it
+// resolves to the original in S2 (src-expredef clause 2) exactly as the child's
+// own would have.
+//
+// It is what stands in for the re-parenting §F.2's normative stylesheet performs
+// and this parser does not: the `xs:schema | xs:redefine` template COPIES the
+// <redefine> wrapper with its own attributes — hence its own schemaLocation, and
+// so its own S2 — and puts the substitute "in the location corresponding to E2's
+// place in D2", which is inside that copy. No tree is rewritten here (see
+// parser/override.go), so the substitute stays physically parented under the
+// <override> that declares it, where the walk up from a base=/ref= cannot reach
+// the <redefine>. This index is where the spec's position is recorded instead.
+//
+// It is byElem's SECOND writer, and the only one that runs after construction:
+// the ·override pre-processing· in force over the redefining document is not
+// knowable when the set is read from its <redefine> element, since that document
+// has not been reached yet. It is called from producer.prescanRedefine, and EVERY
+// producer's pre-scan runs before ANY producer's run (assembly.compile), so the
+// index is complete before the first self-reference is resolved — the same
+// ordering originals depends on.
+//
+// The key is the REPLACED child's, never re-derived from decl: §F.2 clause 1
+// matches on (element type, name), so the two agree by construction and deriving
+// it twice would encode one fact twice (STYLE D3).
+//
+// One substitute can stand in for the children of TWO <redefine> elements of one
+// document, which redefinitionOf then answers with the first of them in document
+// order. That document declares two top-level definitions of one expanded name
+// whichever it answers with, and finalize rejects it under sch-props-correct
+// (§3.17.6.1) clause 2.
+func (s *redefineSet) recordSubstitute(key componentKey, decl *Element) {
+	s.byElem[decl] = key
 }
 
 // declarationKey identifies a top-level source declaration by the pair
@@ -536,7 +576,9 @@ func redefinedContainer(at *Element, kind string) *Element {
 // this document: §F.2's governing sentence scopes its case analysis to "each
 // element information item E2 in the [children] of any <schema> OR <redefine>
 // element information item within D2", so clause 1 substitutes for a <redefine>
-// child exactly as it does for a <schema> child.
+// child exactly as it does for a <schema> child. A substitute is recorded as a
+// redefining declaration of the set in its own right (recordSubstitute), which is
+// what keeps its self-reference resolving into S2.
 func (p *producer) prescanRedefine(el *Element) {
 	rs := p.redefineSetOf(el)
 	if rs == nil {
@@ -544,6 +586,9 @@ func (p *producer) prescanRedefine(el *Element) {
 	}
 	for _, e := range rs.entries {
 		decl := p.ov.replacement(e.elem)
+		if decl != e.elem {
+			rs.recordSubstitute(e.key, decl)
+		}
 		p.prescanIdentityConstraints(decl)
 		if p.chainedOriginal(e) {
 			// A CHAINED redefine: some outer document redefines THIS one for the same
