@@ -258,25 +258,52 @@ func TestProduceAllGroupLimitedCarriesPosition(t *testing.T) {
 	}
 }
 
-// TestProduceCompositorChildOfAllRejected pins Appendix A's xs:allModel, which
-// admits only <element>, <any> and <group> inside an <all>. The fault carries no
-// rule ID — §3.8.3 states none for <all> — and in particular is NOT
-// cos-all-limited: the component an <all> inside an <all> maps to is exactly
-// what clause 1.3 permits, so the document is ill-formed rather than the
-// component ill-shaped.
+// TestProduceCompositorChildOfAllRejected pins which mechanism refuses each
+// compositor child of an <all>, because the three do not share one.
+//
+// An <all> child is a bare grammar fault against Appendix A's xs:allModel, which
+// admits only <element>, <any> and <group> inside an <all>: it carries no rule
+// ID — §3.8.3 states none for <all> — and in particular is NOT cos-all-limited,
+// whose clause 1.3 permits the very component that spelling maps to, leaving the
+// document ill-formed rather than the component ill-shaped.
+//
+// A <sequence> or <choice> child is the opposite case: its component is exactly
+// what clause 2 forbids, so finalize charges cos-all-limited with a real Loc and
+// the parser must not pre-empt that with an unnamed fault.
 func TestProduceCompositorChildOfAllRejected(t *testing.T) {
-	for _, child := range []string{"all", "sequence", "choice"} {
-		t.Run(child, func(t *testing.T) {
-			body := `<xs:complexType name="CT"><xs:all><xs:` + child + `><xs:element name="a" type="xs:string"/></xs:` + child + `></xs:all></xs:complexType>`
+	for _, tc := range []struct {
+		child string
+		want  xsderr.Rule // empty: a grammar fault naming xs:allModel, no rule ID
+	}{
+		{child: "all"},
+		{child: "sequence", want: "cos-all-limited"},
+		{child: "choice", want: "cos-all-limited"},
+	} {
+		t.Run(tc.child, func(t *testing.T) {
+			body := `<xs:complexType name="CT"><xs:all><xs:` + tc.child + `><xs:element name="a" type="xs:string"/></xs:` + tc.child + `></xs:all></xs:complexType>`
 			_, err := produce(t, wrap("", body))
 			if err == nil {
-				t.Fatalf("<%s> inside an <all> was accepted, but xs:allModel admits only <element>, <any> and <group>", child)
+				t.Fatalf("<%s> inside an <all> was accepted", tc.child)
 			}
-			if _, ok := xsderr.RuleOf(err); ok {
-				t.Fatalf("error %v carries a rule ID, want a plain grammar fault", err)
+			if tc.want == "" {
+				if _, ok := xsderr.RuleOf(err); ok {
+					t.Fatalf("error %v carries a rule ID, want a plain grammar fault", err)
+				}
+				if !strings.Contains(err.Error(), "xs:allModel") {
+					t.Fatalf("error %v does not name xs:allModel", err)
+				}
+				return
 			}
-			if !strings.Contains(err.Error(), "xs:allModel") {
-				t.Fatalf("error %v does not name xs:allModel", err)
+			assertRule(t, err, tc.want)
+			if !strings.Contains(err.Error(), "clause 2") {
+				t.Fatalf("error %v does not name clause 2, which is the sub-clause a %s member violates", err, tc.child)
+			}
+			loc, ok := xsderr.LocOf(err)
+			if !ok {
+				t.Fatalf("error %v carries no position, want the enclosing complex type in %s (E3)", err, produceURI)
+			}
+			if loc.URI != produceURI || loc.Line == 0 || loc.Col == 0 {
+				t.Fatalf("position = %s:%d:%d, want a real line and column in %s", loc.URI, loc.Line, loc.Col, produceURI)
 			}
 		})
 	}

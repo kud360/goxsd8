@@ -1360,15 +1360,19 @@ func compositorChild(el *Element) *Element {
 // scopeParent is the Complex Type Definition or Model Group Definition the whole
 // content tree hangs under, threaded to each local element declaration.
 //
-// A compositor child of an <all> is refused: Appendix A's xs:allModel — the
-// group xs:complexType "all" restricts its content to — admits only <element>,
-// <any> and <group>, so an <all>/<choice>/<sequence> written directly inside an
-// <all> is a grammar fault. §3.8.3 gives <all> no Schema Representation
-// Constraint, so it carries no rule ID, the same footing as
-// produceGroupRefParticle's missing-ref fault. It is NOT cos-all-limited: the
-// component that spelling would map to — an all group among another all group's
-// {particles} at min=max=1 — is exactly what clause 1.3 permits, so charging
-// that rule would name a constraint the shape satisfies.
+// An <all> child of an <all> is refused here, and only that one. Appendix A's
+// xs:allModel — the group xs:complexType "all" restricts its content to —
+// admits just <element>, <any> and <group>, but the component that spelling maps
+// to, an all group among another all group's {particles} at min=max=1, is
+// exactly what cos-all-limited clause 1.3 permits: no Schema Component
+// Constraint can name the fault, so the grammar production is the only text that
+// forbids it. §3.8.3 states no Schema Representation Constraint for <all>
+// either, so the fault carries no rule ID, the same footing as
+// produceGroupRefParticle's missing-ref fault.
+//
+// A <sequence> or <choice> child is deliberately NOT refused here: it maps to
+// the shape cos-all-limited clause 2 forbids, and xsd/allgrouplimited.go charges
+// it at finalize with that rule ID and a positioned Loc.
 func (p *producer) groupParticles(group *Element, scopeParent xsd.ElementScopeParent) ([]xsd.Particle, error) {
 	var particles []xsd.Particle
 	inAll := group.Name().Local() == "all"
@@ -1390,8 +1394,8 @@ func (p *producer) groupParticles(group *Element, scopeParent xsd.ElementScopePa
 		case "any":
 			part, err = p.produceAnyParticle(el)
 		case "sequence", "choice", "all":
-			if inAll {
-				return nil, fmt.Errorf("parser: <%s> at %s is a child of an <all>, whose content Appendix A's xs:allModel restricts to <element>, <any> and <group>", el.Name().Local(), el.Loc())
+			if inAll && el.Name().Local() == "all" {
+				return nil, fmt.Errorf("parser: <all> at %s is a child of an <all>, whose content Appendix A's xs:allModel restricts to <element>, <any> and <group>", el.Loc())
 			}
 			part, err = p.produceGroupParticle(el, scopeParent)
 		case "group":
