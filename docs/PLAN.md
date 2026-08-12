@@ -132,23 +132,28 @@ horizontal completeness.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline — `schema` |
-| 2 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes`, pdecimal019/020 the measured cost |
-| 3 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes`, #574's sibling widening |
-| 4 | #504 | `src-redefine` clause 6.2.2, fail-open. **Startable now — #503 has landed**, and this landing carries the decidability widening. Read the coupling note below |
-| 5 | #626 | README's CLI section is false about exit codes today; one sentence, and it precedes #472 |
-| 6 | #669 | README's Library snippet does not compile, and the example pointer omits `parser`, `xsd`, and `xsd/example_test.go` |
-| 7 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
-| 8 | #672 + #687 | the open CLI-contract decisions (`-version`; scoped help, the bareword `help`, and the help-spelling variants a third persona pass just added) |
-| 9 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 1 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes`, pdecimal019/020 the measured cost |
+| 2 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes`, #574's sibling widening |
+| 3 | #504 | `src-redefine` clause 6.2.2, fail-open. **Startable now — #503 has landed**, and this landing carries the decidability widening. Read the coupling note below |
+| 4 | #626 | README's CLI section is false about exit codes today; one sentence, and it precedes #472 |
+| 5 | #669 | README's Library snippet does not compile, and the example pointer omits `parser`, `xsd`, and `xsd/example_test.go` |
+| 6 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
+| 7 | #672 + #687 | the open CLI-contract decisions (`-version`; scoped help, the bareword `help`, and the help-spelling variants a third persona pass just added) |
+| 8 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
 
-**#710 held row 1 and has landed** (PR #728, `0ad6aef`, ratchet unchanged by
-design). Its row is dropped rather than replaced: **#711 and #712 unblocked on
-it** and are `ready` and unbanded, because ranking them is a re-derivation this
-pass does not do. The M5 chain's head is now #711, and #713 — the lane driver
-that takes `instance` off zero — is two slices behind it rather than three.
+**#442 held row 1 and has landed** (PR #730, `1dfd13c`, `schema` 9751 → 9833).
+Its row is dropped rather than replaced. **That row's text was wrong about its
+own issue** — it read *"top-level `xs:attribute` with an inline
+`xs:simpleType`"*, and #442 was about `xs:element`. The `xs:attribute` analogue
+(§3.2.2.1 `dcl.att.global`) is real, still unproduced, and was owned by no issue
+precisely because this row read as though it were already in flight; it is now
+**#733**. #442's reclassified cases are **#731** and **#732**. None of the four
+is banded — ranking them is a re-derivation this pass does not do.
 
-**Rows 5–8 sit ahead of row 9 on cost, not importance.** Each is a sentence
+**#710's landing still stands two rows back**: the M5 chain's head is #711, and
+#713 — the lane driver that takes `instance` off zero — is two slices behind it.
+
+**Rows 4–7 sit ahead of row 8 on cost, not importance.** Each is a sentence
 or a dispatch branch while the CLI surface is still empty; taken after #472
 every one of them is a change to shipped behaviour. #472's own Acceptance carries the `-version` decision, so if it is
 taken first it must discharge #672 rather than leave it contradicting the
