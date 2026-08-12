@@ -56,6 +56,10 @@ var allowedCollisionCitations = []citationAllowance{
 	{file: "parser/produce.go", number: 9, count: 4},
 	{file: "value/union.go", number: 5, count: 1},
 	{file: "value/valuespace.go", number: 9, count: 1},
+	// #469: cos-all-limited follows <group ref> edges with no cycle guard,
+	// citing item 9's second half — the finalize pass that has already rejected
+	// the circular graph is what licenses the unguarded walk.
+	{file: "xsd/allgrouplimited.go", number: 9, count: 1},
 	{file: "xsd/attributeusefold.go", number: 9, count: 1},
 	{file: "xsd/attributewildcardfold.go", number: 9, count: 1},
 	{file: "xsd/complexderivation.go", number: 9, count: 1},

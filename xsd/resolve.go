@@ -44,11 +44,13 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     clause 2), and the substitution-group affiliation graph (e-props-correct
 //     clause 5). Every unguarded chain walk in derivation.go presupposes its
 //     simple-type half; see the paragraph below.
-//   - Phase C (content-model validity): reject the two §3.8.6 Model Group
+//   - Phase C (content-model validity): reject the three §3.8.6 Model Group
 //     constraints that read a whole content model with its <group ref>s expanded
-//     and its <element ref>s and substitution groups followed — Unique Particle
-//     Attribution (cos-nonambig, particleattribution.go) and Element Declarations
-//     Consistent (cos-element-consistent, elementconsistent.go).
+//     and its <element ref>s and substitution groups followed — All Group Limited
+//     (cos-all-limited, allgrouplimited.go), Unique Particle Attribution
+//     (cos-nonambig, particleattribution.go) and Element Declarations Consistent
+//     (cos-element-consistent, elementconsistent.go). cos-all-limited runs first
+//     within the phase, for the reason checkAllGroupsLimited records.
 //   - Phase D (derivation validity), in four steps. It OPENS on the simple-type
 //     side: checkSimpleTypeDerivations puts every Simple Type Definition the
 //     finalized schema reaches — anonymous inline ones included, which no index
@@ -196,6 +198,9 @@ func (s *Schema) resolve() error {
 		return err
 	}
 	if err := s.checkSubstitutionGroupsAcyclic(); err != nil {
+		return err
+	}
+	if err := s.checkAllGroupsLimited(); err != nil {
 		return err
 	}
 	if err := s.checkContentModelsUnambiguous(); err != nil {

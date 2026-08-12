@@ -73,7 +73,8 @@
 // mg-props-correct, e-props-correct) the second, defaultbinding.go's
 // derivation-ok-restriction clause 3 rejections the third, and
 // complexderivation.go's derivation-ok-restriction, ct-props-correct and
-// cos-ct-extends rejections the fourth: each is charged to the REFERRING
+// cos-ct-extends rejections the fourth, and allgrouplimited.go's
+// cos-all-limited rejections the fifth: each is charged to the REFERRING
 // or offending component's own Loc, per the referrer-Loc convention
 // documented on resolveReferences — for every derivation-ok-restriction
 // clause that is the RESTRICTING complex type, the spec's T, which the

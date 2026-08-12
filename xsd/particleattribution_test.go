@@ -448,20 +448,60 @@ func TestUPAAllGroupNonEmptiableInSequencePasses(t *testing.T) {
 		)}),
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("x"), uq("T"))}),
 	)
-	if err := uSchemaWithModel(t, g, nil); err != nil {
+	if err := uUPAOnly(t, g); err != nil {
 		t.Fatalf("x? then a non-emptiable <all> then x was rejected: %v", err)
 	}
 }
 
 // uAllThen builds sequence(all(members…), successor), the shape cos-all-limited
-// clause 1 (§3.8.6.2) keeps out of a schema document and the exported xsd
-// constructors reach directly.
+// (§3.8.6.2) clause 1 forbids.
 func uAllThen(t *testing.T, successor Particle, members ...Particle) ModelGroup {
 	t.Helper()
 	return uGroup(t, CompositorSequence,
 		uOne(t, ResolvedTerm{Term: uGroup(t, CompositorAll, members...)}),
 		successor,
 	)
+}
+
+// uUPAOnly puts one model group to the cos-nonambig automaton and to nothing
+// else, returning the first competing pair it finds.
+//
+// It exists for the sequence(all(…), successor) shape. Finalize charges
+// cos-all-limited on it now (#469), so uSchemaWithModel can no longer carry it
+// as far as the UPA construction — while the ·last·/exit-state behaviour these
+// tests pin is the automaton's, and stays live for every all group that IS
+// reachable. Every other UPA test goes through uSchemaWithModel, which is the
+// stronger driver: it proves the model survives the whole of finalize.
+//
+// The Schema is a real finalized one holding the leaf types the members name, so
+// the automaton's element-overlap questions are answered exactly as they are in
+// a finalize run; only the offending content model is fed in by hand.
+func uUPAOnly(t *testing.T, g ModelGroup) error {
+	t.Helper()
+	b := NewSchemaBuilder()
+	b.AddType(uNamedType(t, uq("T")))
+	b.AddType(uNamedType(t, uq("U")))
+	s, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	a := &automaton{s: s, unfold: unfoldCopies}
+	first, _, _, err := a.addModelGroup(g)
+	if err != nil {
+		return err
+	}
+	return a.check(first, "content model")
+}
+
+// TestUPAAllGroupInSequenceRejectedByAllLimited pins why uUPAOnly's seven
+// callers drive the automaton directly: the shape uAllThen builds does not
+// survive finalize at all, whatever cos-nonambig would say about it.
+func TestUPAAllGroupInSequenceRejectedByAllLimited(t *testing.T) {
+	g := uAllThen(t, uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
+		uOne(t, ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
+	)
+	expectRule(t, uSchemaWithModel(t, g, nil), ruleCosAllLimited)
 }
 
 // TestUPAAllGroupMandatoryMemberDoesNotCompeteWithSuccessor pins the false reject
@@ -478,7 +518,7 @@ func TestUPAAllGroupMandatoryMemberDoesNotCompeteWithSuccessor(t *testing.T) {
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
 	)
-	if err := uSchemaWithModel(t, g, nil); err != nil {
+	if err := uUPAOnly(t, g); err != nil {
 		t.Fatalf("sequence(all(a, b), a) was rejected: %v", err)
 	}
 }
@@ -495,7 +535,7 @@ func TestUPAAllGroupMandatoryMemberAfterOptionalPredecessor(t *testing.T) {
 		)}),
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
 	)
-	if err := uSchemaWithModel(t, g, nil); err != nil {
+	if err := uUPAOnly(t, g); err != nil {
 		t.Fatalf("sequence(z?, all(a, b), a) was rejected: %v", err)
 	}
 }
@@ -511,7 +551,7 @@ func TestUPAAllGroupThreeMandatoryMembersGeneralize(t *testing.T) {
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("c"), uq("T"))}),
 	)
-	if err := uSchemaWithModel(t, g, nil); err != nil {
+	if err := uUPAOnly(t, g); err != nil {
 		t.Fatalf("sequence(all(a, b, c), a) was rejected: %v", err)
 	}
 }
@@ -527,7 +567,7 @@ func TestUPAAllGroupEmptiableMemberCompetesWithSuccessor(t *testing.T) {
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
 		uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
 	)
-	expectRule(t, uSchemaWithModel(t, g, nil), ruleCosNonambig)
+	expectRule(t, uUPAOnly(t, g), ruleCosNonambig)
 }
 
 // TestUPAAllGroupSatisfiedRepeatableMemberCompetesWithSuccessor is the other
@@ -542,7 +582,7 @@ func TestUPAAllGroupSatisfiedRepeatableMemberCompetesWithSuccessor(t *testing.T)
 		uParticle(t, uOccurs(t, 1, 2), ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
 	)
-	expectRule(t, uSchemaWithModel(t, g, nil), ruleCosNonambig)
+	expectRule(t, uUPAOnly(t, g), ruleCosNonambig)
 }
 
 // TestUPAAllGroupNonEmptiableMemberBesideEmptiableOnePasses is the control for
@@ -556,7 +596,7 @@ func TestUPAAllGroupNonEmptiableMemberBesideEmptiableOnePasses(t *testing.T) {
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
 		uParticle(t, uOccurs(t, 0, 1), ResolvedTerm{Term: uLocal(t, uq("b"), uq("T"))}),
 	)
-	if err := uSchemaWithModel(t, g, nil); err != nil {
+	if err := uUPAOnly(t, g); err != nil {
 		t.Fatalf("sequence(all(a, b?), a) was rejected: %v", err)
 	}
 }

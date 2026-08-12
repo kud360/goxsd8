@@ -181,9 +181,14 @@ func TestAllowsElementWildcardNameSibling(t *testing.T) {
 		t.Fatalf("NewModelGroupDefinition: %v", err)
 	}
 
-	// depth-3 nesting: sequence > choice > all > element "deep".
+	// depth-3 nesting: sequence > choice > sequence > element "deep". The
+	// innermost group is not an all group, and cannot be: cos-all-limited
+	// (§3.8.6.2) clause 1 admits one only as a definition body, as a content
+	// particle, or inside another all group, so no nest below a choice holds one
+	// (#469). The arm under test is depth of ·indirect· containment, which the
+	// compositor does not enter into.
 	deep := wGroup(t, CompositorSequence, wParticle(t, ResolvedTerm{Term: wGroup(t, CompositorChoice,
-		wParticle(t, ResolvedTerm{Term: wGroup(t, CompositorAll,
+		wParticle(t, ResolvedTerm{Term: wGroup(t, CompositorSequence,
 			wParticle(t, ResolvedTerm{Term: wElement(t, wq("deep"), uLocalScope(t), nil, nil)}))}))}))
 
 	// The content model: direct local "direct", the deep nest, a <group ref>, an
@@ -214,7 +219,7 @@ func TestAllowsElementWildcardNameSibling(t *testing.T) {
 		wrongNS bool
 	}{
 		{name: "directly-contained", q: wq("direct"), admit: false, arm: "·directly contains· (the particle's own {term})"},
-		{name: "nested-groups", q: wq("deep"), admit: false, arm: "·indirectly contains· through nested sequence/choice/all"},
+		{name: "nested-groups", q: wq("deep"), admit: false, arm: "·indirectly contains· through three levels of nested model group"},
 		{name: "group-ref", q: wq("g"), admit: false, arm: "·indirectly contains· through <group ref> (§3.7.2)"},
 		{name: "element-ref", q: wq("head"), admit: false, arm: "·indirectly contains· through <element ref>"},
 		{name: "substitution-member", q: wq("member"), admit: false, arm: "·implicitly contains· (substitution group, §3.3.6.4)"},
