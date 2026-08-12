@@ -17,7 +17,7 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-08-11
+## Status — 2026-08-12
 
 Conformance lanes — **paste `go tool lanestatus` verbatim**, never a
 hand-count:
@@ -28,24 +28,20 @@ hand-count:
 | `datatypes` | 1156 | 17 | 1173 |
 | `instance` | 0 | 26361 | 26361 |
 | `json` | — | — | 0 |
-| `schema` | 9707 | 5691 | 15398 |
+| `schema` | 9745 | 5653 | 15398 |
 | `xpath` | — | — | 0 |
 
 An em dash is a lane with no cases yet, which is a different claim from a
 lane scoring zero. `datatypes` is M3 and effectively complete; `schema` is
-M4 and active; `instance` waits on M5; `xpath`, `json` and `ber` wait on
-M6/M7, M8 and M11.
+M4 and active; `instance` is M5 and is **carved as of today**; `xpath`,
+`json` and `ber` wait on M6/M7, M8 and M11.
 
-`schema` moved **9648 → 9706 pass, +58**, across the five landings since the
-last pass — all five of them the top five rows of that pass's working band,
-and all five one grammar family: #632 (NCName declaration names, +28), #631
-(empty QName prefix), #523 (nameless top-level `xs:simpleType`), #518
-(top-level `ref`) and #652 (the rest of the prohibited top-level attributes,
-+25). A band drained in family order is the ordering doctrine working; row 1
-below continues the same family. **#585 landed mid-pass** (PR #689,
-`schema` 9706 → 9707, +1, `MS-Additional2006-07-15/addB007`) after this
-section was first drafted; the table above is the merged tree's true figure,
-so the six-landing total is **9648 → 9707, +59**.
+`schema` moved **9707 → 9745, +38**, across six landings since the last
+pass. Four of the six moved it — #675 (+6), #684 (+2), #699 (+2) and #469
+(+28) — and #469 alone is three quarters of the total, on `cos-all-limited`
+becoming a finalize check over the resolved component graph. #506 and #686
+banked nothing and were not meant to: both are false-reject and
+unit-test-only fixes.
 
 Milestones, from GitHub:
 
@@ -53,131 +49,142 @@ Milestones, from GitHub:
 |---|---:|---:|---|
 | M0–M2 | 8 | 0 | done |
 | M3 — Datatypes vertical slice | 12 | 1 | complete; one follow-up open |
-| M4 — Schema parsing | 75 | 42 | **active** |
-| M5 — Instance validation (XML) | 0 | 1 | epic #250 filed, **uncarved** |
+| M4 — Schema parsing | 79 | 40 | **active** |
+| M5 — Instance validation (XML) | 0 | 13 | **carved today** — #710–#719, plus #720, #16 and the epic |
 | M6–M12 | 0 | 0 | not filed |
 
-Queue: 156 open issues — 140 `ready`, 16 `blocked`, 0 `needs-replan`,
-2 `epic`. **44 of the 156 carry a milestone; 112 carry none** — the
+Queue: 170 open issues — 142 `ready`, 28 `blocked`, 0 `needs-replan`,
+2 `epic`. **54 of the 170 carry a milestone; 116 carry none** — the
 milestones track feature scope, and the process, doc and comment-accuracy
 issues that post-land passes file are deliberately outside them. Read the
 milestone table as feature progress, not as the queue.
 
-The queue grew by five across five landings: five issues closed, ten filed.
-Eight of the ten are named follow-ups from one of the five landings, none of
-them a hand-off (#330) — the post-land passes working as specified. The other
-two (#687, #688) came from this pass's persona reports and are the only
-issues here that no landing produced. **#585 landed mid-pass** (PR #689,
-merged after this section was first drafted but before this branch's base
-was refreshed) — a sixth closure, counted in the totals above but not in the
-"five landings" figure, which still names the reconciliation this pass
-actually performed.
+**This pass filed thirteen issues and closed none.** Eleven are the M5 carve
+(#710–#719 plus #720); one is a libuser finding with no existing owner
+(#721); one is a defect in `wipsurvey` that this pass's own branch survey
+tripped over (#722).
 
-Branch namespace, `origin` — report-only; a session never deletes a ref:
+### What this pass did, and what it deliberately did not
+
+The last three Status sections named "carve M5 (#250)" as the next planning
+action and did not do it, and the 2026-08-11 section replaced that intention
+with a mechanism: *the next `/backlog` carves M5 and does nothing else,
+accepting a stale band for one cycle.* **The carve is done** — epic #250 is
+ten dependency-ordered slices, only the first of them `ready`.
+
+Three things were done beside it, each because skipping it would have left a
+known thing untracked:
+
+- **The two persona reports were folded** (step 5). They were produced fresh
+  today against the current published surface and handed to this pass;
+  leaving them undisposed is exactly the unfiled-advisory leak #489 and #330
+  exist to stop. One new issue (#721), one new subcommand filing (#720), and
+  seven confirmations on existing threads (#669, #409, #626, #672, #687,
+  #492, #472). Most findings were **already owned**: #409 and #626 are now
+  on their second and third independent sighting, and re-filing either would
+  have been the duplicate the queue search exists to prevent.
+- **#722 was filed** because step 2's own survey produced it: `wipsurvey`
+  reported a live session's branch as EXPIRED, and the prescribed response to
+  EXPIRED is to label its issue `needs-replan`. Dismissing that would have
+  been filing a known hazard as nothing.
+- **#250's body carries three wrong spec citations**, found while carving and
+  corrected on its thread (`cvc-assess-elt` is §3.3.4.6, `cvc-simple-type` is
+  §3.16.4, `cvc-model-group` is §3.8.4.3), along with a stale absolute lane
+  figure (#646's pattern). Corrected by comment, not by body edit, per #515.
+
+**What was not done: step 3's queue-wide reconciliation.** No stale issue was
+closed, no duplicate merged, no oversized issue split, and no open body
+outside the M5 family was audited for a stale premise. `gapaudit`'s group 1 is
+**empty** — no `GAP(` marker in the tree lacks an open tracker — so no
+`kind/gap` issue was owed. The working band below is re-ranked at its head
+only, not re-derived across 142 `ready` issues. That is the "and nothing else"
+the standing instruction bought, and it is spent here rather than silently.
+
+### Branch namespace, `origin` — report-only; a session never deletes a ref
 
 | Branch | Verdict | Disposition |
 |---|---|---|
+| `wip/issue-503` | **LIVE** | Claimed today; leave alone. See the note below. |
 | `wip/issue-256` | EXPIRED | Retired in place; issue closed and superseded by #470. |
 | `wip/issue-271` | EXPIRED | Retired in place; issue closed and superseded by #478/#479/#480. |
 | `wip/issue-287` | EXPIRED | Retired in place; issue closed, answered in the opposite direction by PR #511. |
 
-No `parked/*` branches. The three EXPIRED refs are listed for human triage
-and have been for several passes; `wipsurvey` reports them EXPIRED rather
-than RETIRED because a `gh`-less container runs it lease-only and cannot see
-issue state (#682).
+No `parked/*` branches. The three EXPIRED refs are listed for human triage and
+have been for several passes.
 
-**Next planning action: carve M5 (#250). This is the THIRD consecutive pass
-to name it and the third not to do it** (2026-08-09, 2026-08-10, today). Its
-stated precondition, #180–#183 draining, has been met since 2026-08-09, so
-nothing is blocking it but budget. Follow the pattern that worked for M4 (#79
-→ #167–#183): model and infoset shape slices first, then a lane bring-up
-slice that produces a real `instance` number early (the #175 analogue), then
-the validator fan-out.
+**`wip/issue-503` reads EXPIRED and is not** — this is #722. The ref points at
+exactly `origin/main` (`adf0356`, zero commits ahead), because a develop
+session's first act is to push the claim before any work commit, so
+`wipsurvey` dates the branch from the *previous landing's* committer date and
+reports *"tip pushed 4h37m ago, past the 2h claim TTL"*. Meanwhile #503's
+thread carries an oracle grounding, a placement decision and a **passing
+warden pre-flight**, all today, the last of them 80 minutes before this
+survey. Applying the prescribed EXPIRED response would have labelled a live
+issue `needs-replan` in the hour its design was approved. Until #722 lands,
+**read a zero-commit `wip/issue-N` against its issue thread before believing
+the verdict.**
 
-The reason it keeps sliding is now legible and should be acted on rather than
-restated: each pass finds enough real reconciliation — stale bodies, undisposed
-follow-ups, a band to reorder — to consume its whole budget, and the carve is a
-whole pass's work on its own. **The next `/backlog` should carve M5 and do
-nothing else**, accepting a stale band for one cycle. A fourth naming without
-that is evidence the trigger is wrong, not that the queue is busy.
+### Working band
 
-**Working band** — dependency-ordered top of the `ready` queue, so a session
-need not scan 140 issues. Take from the top; the ordering prefers slices that
-move a lane over horizontal completeness. **#469 (PR #708) has landed** and is
-dropped from the band below rather than left as a stale claimed row; #699
-(PR #705), #686 (PR #701), #684 (PR #698), #506 (PR #694), #675 (PR #695) and
-#585 (PR #689) were dropped the same way in the five passes before it.
-
-**Every row below is now the 2026-08-11 `/backlog`'s own ordering,
-contiguously** — its rows 6–14, renumbered. The two rows a post-land pass
-placed rather than a queue-wide survey, #686 and then #699, have both drained.
-Re-rank at the next `/backlog` — which, per the mechanism stated above, carves
-M5 and re-ranks nothing.
-
-**Three issues filed by the last two post-land passes are deliberately
-unbanded: #702, #703 and #706.** The band's ordering doctrine is "slices that
-move a lane", and none of the three does. #702 sweeps 17 comments citing
-§4.2.4 clause 4.1.1 for what `src-expredef` says; #703 is a duplicate
-top-level declaration never being produced at all, which is why
-`indexByName`'s clause-2 message cites one location twice; **#706 is a real
-false-accept but a measurably unreachable one** — an
-`xs:override`-substituted `xs:redefine` child bypasses the guard #699 just
-landed, and a walk of all 15470 suite `.xsd` files finds no document carrying
-both an `xs:override` and an `xs:redefine`, so it can move no lane and is
-unit-test-only. **#702 touches `parser/redefine.go`, `parser/doc.go`,
-`parser/parse.go`, `parser/produce.go` and `conformance/schema.go` — the files
-row 2 opens**, and it is cheaper for that landing to read a corrected comment
-than to copy the wrong clause number a third time. Row numbers in that
-sentence are the pre-#469 ones; the file it names is now opened by row 1.
-
-**#469's post-land pass filed nothing, and that is the finding, not a
-skipped step.** Both follow-ups its landing raised were dismissed with
-reasons on the issue thread: the `xsd/particleattribution.go` clause
-mis-citation it reported is not one — the bare `1.1` there is the XSD
-version, the reading Appendix G.1.3 item 8 states verbatim, and the file
-writes *clause* when it means a clause — and the ratchet-banking-shape
-question is a wording ruling for `/retro`, not implementation work. That
-second one now has two sightings (#675, then #469), which is `/retro`'s own
-threshold for a pattern.
+Dependency-ordered top of the `ready` queue, so a session need not scan 142
+issues. Take from the top; the ordering prefers slices that move a lane over
+horizontal completeness.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #503 + #504 | `src-redefine` clauses 7.2.2 and 6.2.2, both fail-open. **Coupled — read the note below before starting either** |
-| 2 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline |
-| 3 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes` lane, pdecimal019/020 the measured cost |
-| 4 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes` lane, #574's sibling widening |
-| 5 | #626 | README's CLI section is false about exit codes today; one sentence, and it should precede #472 |
-| 6 | #669 | README's Library snippet does not compile, and the example pointer omits `parser` and `xsd` |
-| 7 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
-| 8 | #672 + #687 | the two open CLI-contract decisions (`-version`; scoped help and the bareword `help`). One line each in `doc.go` now, a retrofit around a live dispatch after #472 |
-| 9 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 1 | #710 | the M5 infoset seam — the only **startable** step on the chain that takes `instance` off zero. Banks nothing itself; ranked first because 26361 cases at zero is the largest untouched mass in the project, and #713 is three sessions behind it |
+| 2 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline — `schema` |
+| 3 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes`, pdecimal019/020 the measured cost |
+| 4 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes`, #574's sibling widening |
+| 5 | #504 | `src-redefine` clause 6.2.2, fail-open. **Take after #503 lands** — read the coupling note below |
+| 6 | #626 | README's CLI section is false about exit codes today; one sentence, and it precedes #472 |
+| 7 | #669 | README's Library snippet does not compile, and the example pointer omits `parser`, `xsd`, and `xsd/example_test.go` |
+| 8 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
+| 9 | #672 + #687 | the open CLI-contract decisions (`-version`; scoped help, the bareword `help`, and the help-spelling variants a third persona pass just added) |
+| 10 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
 
-**`parser/redefine.go` has been rewritten twice in two days, so read it rather
-than an issue body that describes it.** #686 put its duplicate-key charge in
-`recordOriginal` and retired the `GAP(xsd)` there; #699 then added
-`rejectProhibitedAttrs` to `newRedefineSet`, a different feeder of the same
-struct. Row 2 and #706 both open that file next.
+**Rows 6–9 sit ahead of row 10 on cost, not importance.** Each is a sentence
+or a dispatch branch while the CLI surface is still empty; taken after #472
+every one of them is a change to shipped behaviour. #472's own Acceptance carries the `-version` decision, so if it is
+taken first it must discharge #672 rather than leave it contradicting the
+landing. **#720** (`goxsd8 validate`) is `blocked` behind #472 and #715 and is
+not a band row.
 
-Rows 1–5 move `schema` (rows 4 and 5 move `datatypes`); rows 6–10 are the
-M4-facing published surface, where two isolated persona passes have now found
-the same defects twice.
+**#503 is claimed and in flight** — its branch is live, its warden pre-flight
+passed today, and it is not a band row. Its coupling with #504 is unchanged and
+is durable on `main`: retiring `conformance/schema.go`'s decidability residue
+for `group`/`attributeGroup` flips `MS-Schema2006-07-15/schL10` and `/schM5`
+from `pass` to `fail` unless **both** clauses are in hand, because each case
+turns on one clause alone. Whichever lands second carries the widening; neither
+may retire the residue on its own. The binding comment is in
+`redefineDecidable` (`conformance/schema.go`), naming #503/#504 directly.
 
-**Rows 6–9 are ordered before row 10 on cost, not importance.** Each is a
-sentence or a dispatch branch while the CLI surface is still empty; taken
-after #472 every one of them is a change to shipped behaviour. #472's own
-Acceptance already carries the `-version` decision, so if it is taken first it
-must discharge #672 rather than leave it contradicting the landing.
+**Five issues are deliberately unbanded — #702, #703, #706, #721 and #722 —
+as are the nine `blocked` M5 slices, which are not `ready` and so cannot be
+banded at all.** The band's doctrine is "slices that move a lane", and none of
+the five does. #702 sweeps 17 comments citing §4.2.4 clause 4.1.1
+for what `src-expredef` says; #703 is a duplicate top-level declaration never
+being produced at all; #706 is a real false-accept but a measurably unreachable
+one — no document in the 15470-file suite carries both an `xs:override` and an
+`xs:redefine`, so it is unit-test-only. #721 wants a warden call on two shapes
+before it is workable. **#722 is the one to promote if a seventh pass wants a
+cheap high-value row**: it is the only unbanded issue whose absence can cause a
+future pass to actively damage the queue.
 
-**Row 2's coupling is now landed on `main`, not only on an issue thread.**
-#585's warden review established that retiring the `conformance/schema.go`
-decidability residue for `group`/`attributeGroup` flips
-`MS-Schema2006-07-15/schL10` and `/schM5` from `pass` to `fail` unless
-**both** #503 and #504 are in hand — each case turns on one clause alone, so
-whichever of the two lands second must carry the widening with it, and
-neither may retire the residue on its own. #585 landed with the binding
-comment written into `redefineDecidable` (`conformance/schema.go:648-666`,
-naming #503/#504 directly), so the coupling is now durable on `main` rather
-than tied to a branch's lifetime; it is also restated on both issue threads.
+**`parser/redefine.go` has been rewritten three times in four days, so read it
+rather than an issue body that describes it.** #686 put its duplicate-key
+charge in `recordOriginal`; #699 added `rejectProhibitedAttrs` to
+`newRedefineSet`; #506 inserted ~45 lines and moved every marker line number
+the #585 and #505 threads cite. Row 5 and #706 both open that file next, and
+#503's in-flight work is in it now.
+
+**Next planning action: the queue-wide reconciliation this pass bought its
+carve by skipping.** Step 3 has not run in full since 2026-08-10, and this
+pass audited a stale premise in exactly one body (#250's, by comment) out of
+142 `ready` issues. Run it against the whole `ready` set and re-derive the band
+from the result rather than re-ranking its head. The M5 chain needs no planning
+attention until #710 lands and #711/#712 unblock, which is a post-land pass's
+job, not a `/backlog`'s.
 
 ## Milestones
 
@@ -227,8 +234,18 @@ the whole of it.
 
 `validate` engine plus `validate/xmlsrc`: greedy deterministic matching,
 identity constraints, `xsi:type`/`xsi:nil`, wildcards, default and fixed
-values. **`instance` lane.** Filed as an epic and still uncarved; the
-carve is the Status section's named next planning action.
+values. **`instance` lane.**
+
+Carved 2026-08-12 into ten slices, #710–#719, dependency-ordered so that
+only the head is `ready`: the infoset seam and engine skeleton (#710), the
+`xmlsrc` adapter (#711), root dispatch (#712), then **the lane driver
+(#713), which takes `instance` off zero before the bulk of the `cvc-` work
+lands** — the #175 analogue, placed fourth so every slice after it reports
+a real number. The fan-out is #714–#719. The CLI's own `validate`
+subcommand is #720, `blocked` behind #472 and #715.
+
+The design constraints are fixed by `validate/doc.go` and PRINCIPLES 8, 11,
+13, 14 and 15, and the carve does not reopen them.
 
 ### M6 — XPath required subset
 
@@ -237,11 +254,14 @@ markers, IDC selector and field paths. Dynamic-error direction per
 PRINCIPLES 20. Not filed as an epic — speculative epics two milestones out
 earn nothing.
 
-One dangling dependency to repoint at the carve: **#56** (a per-assertion
-or CTA result must distinguish a genuine PASS from a fail-open
-"unevaluated") is blocked on the not-yet-filed evaluator issue. STYLE 9's
-fail-open discipline is only honest if a fail-open answer is
-distinguishable from a real pass.
+**#56** (a per-assertion or CTA result must distinguish a genuine PASS from
+a fail-open "unevaluated") stays blocked on the not-yet-filed evaluator
+issue, but its design question is no longer M6's alone: **#719** needs the
+same distinction one milestone early, because `cvc-assertion` is wired
+fail-open in M5 and the `instance` lane must decline every case whose
+outcome turns on an assertion. One encoding, decided in #719 and reused
+here (STYLE D4). STYLE 9's fail-open discipline is only honest if a
+fail-open answer is distinguishable from a real pass.
 
 ### M7 — XPath 2.0 growth
 
