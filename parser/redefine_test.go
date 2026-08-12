@@ -691,6 +691,89 @@ func TestParseRedefineChainedGroupStillRefused(t *testing.T) {
 	mustRule(t, err, "src-expredef")
 }
 
+// ctNamed is a plain top-level <complexType name="ct"> declaring one element
+// named child. The duplicate-original tests below turn on how MANY declarations
+// of {urn:a}ct one document carries, never on what any of them contains, so the
+// element name is only there to keep the declarations distinguishable.
+func ctNamed(child string) string {
+	return `<xs:complexType name="ct"><xs:sequence>` +
+		`<xs:element name="` + child + `" type="xs:string"/></xs:sequence></xs:complexType>`
+}
+
+// ctRedefining is the <redefine> child that redefines ct by extending it with one
+// element named child — the self-reference src-expredef clause 1.1 pairs with the
+// original.
+func ctRedefining(child string) string {
+	return `<xs:complexType name="ct"><xs:complexContent><xs:extension base="tns:ct">` +
+		`<xs:sequence><xs:element name="` + child + `" type="xs:string"/></xs:sequence>` +
+		`</xs:extension></xs:complexContent></xs:complexType>`
+}
+
+// TestParseRedefinedDocumentChainedPlusTopLevelRejected covers a redefined
+// document that carries BOTH a nested <redefine> child for ct — which §4.2.4
+// clause 4.1.1 makes a top-level definition of that document — and its own
+// top-level ct, while d1 redefines ct. Clause 4.1.2 excepts both from the
+// components d2 contributes, so neither reaches the by-name tables indexByName
+// polices and the pair is charged where they are collected instead
+// (redefineSet.recordOriginal), under sch-props-correct clause 2.
+func TestParseRedefinedDocumentChainedPlusTopLevelRejected(t *testing.T) {
+	_, err := parseMap(t, "d1.xsd", map[string]string{
+		"d1.xsd": wrap("urn:a", `<xs:redefine schemaLocation="d2.xsd">`+ctRedefining("c")+`</xs:redefine>`),
+		"d2.xsd": wrap("urn:a", `<xs:redefine schemaLocation="d3.xsd">`+ctRedefining("b")+`</xs:redefine>`+
+			ctNamed("dup")),
+		"d3.xsd": wrap("urn:a", ctNamed("a")),
+	})
+	mustRule(t, err, "sch-props-correct", "clause 2", "{urn:a}ct")
+}
+
+// TestParseRedefinedDocumentTwoTopLevelRejected is the same clause-2 collision
+// with no chain in it: the redefined document declares ct twice at top level, and
+// d1's redefinition excepts both under §4.2.4 clause 4.1.2, so the pre-scan alone
+// writes one key twice.
+func TestParseRedefinedDocumentTwoTopLevelRejected(t *testing.T) {
+	_, err := parseMap(t, "d1.xsd", map[string]string{
+		"d1.xsd": wrap("urn:a", `<xs:redefine schemaLocation="d2.xsd">`+ctRedefining("c")+`</xs:redefine>`),
+		"d2.xsd": wrap("urn:a", ctNamed("a")+ctNamed("dup")),
+	})
+	mustRule(t, err, "sch-props-correct", "clause 2", "{urn:a}ct")
+}
+
+// TestParseDuplicateTopLevelOutsideRedefinitionUnchanged pins the two shapes
+// recordOriginal must NOT displace. Nothing redefines the document declaring ct
+// twice, so §4.2.4 clause 4.1.2 excepts neither declaration, both become named
+// components, and indexByName (xsd/schema.go) charges clause 2 at finalize with
+// its own {type definitions} message. recordOriginal is unreachable here — both
+// its callers are gated on a redefinition being in force — and a duplicate check
+// written at the wrong seam would double-charge or replace these verdicts.
+func TestParseDuplicateTopLevelOutsideRedefinitionUnchanged(t *testing.T) {
+	cases := []struct {
+		name string
+		docs map[string]string
+	}{
+		{
+			name: "two top-level declarations",
+			docs: map[string]string{
+				"d1.xsd": wrap("urn:a", ctNamed("a")+ctNamed("dup")),
+			},
+		},
+		{
+			name: "redefine child plus a top-level declaration",
+			docs: map[string]string{
+				"d1.xsd": wrap("urn:a", `<xs:redefine schemaLocation="d2.xsd">`+ctRedefining("c")+`</xs:redefine>`+
+					ctNamed("dup")),
+				"d2.xsd": wrap("urn:a", ctNamed("a")),
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := parseMap(t, "d1.xsd", c.docs)
+			mustRule(t, err, "sch-props-correct", "schema {type definitions}",
+				"repeats the expanded name {urn:a}ct")
+		})
+	}
+}
+
 // TestParseRedefineGroupResolvesToOriginal is src-expredef clause 2 for a model
 // group definition: the self-reference "is ·resolved·" to "a component which
 // corresponds to the top-level definition item of that name and the appropriate

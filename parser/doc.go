@@ -125,9 +125,14 @@
 // a top-level definition of it, so the outer redefinition pairs with that
 // child and the chain of hidden copies runs one level deep per link (for
 // a simpleType/complexType — see the composition gaps for the clause-2
-// kinds). §4.2.4 marks the whole mechanism ·deprecated·. A non-empty
-// <xs:redefine> whose schemaLocation does not resolve is an ERROR
-// (src-redefine clause
+// kinds). A redefined document declaring the redefined name TWICE at top
+// level — clause 4.1.1 counts a nested <xs:redefine>'s child among those
+// declarations — is REJECTED under sch-props-correct (§3.17.6.1) clause
+// 2, charged where the pair is collected (parser/redefine.go's
+// recordOriginal) because clause 4.1.2 keeps both out of the by-name
+// tables finalize polices. §4.2.4 marks the whole mechanism
+// ·deprecated·. A non-empty <xs:redefine> whose schemaLocation does not
+// resolve is an ERROR (src-redefine clause
 // 1) where an <xs:include>'s is explicitly not one (src-include clause
 // 2.4). Documents are loaded once, keyed by resolved location, the
 // namespace they were reached under, the override applied to them and
@@ -184,16 +189,6 @@
 //     (parser/redefine.go's chainedOriginal, where the marker sits).
 //     Retire it with #504 and #503, which own the only clauses such a
 //     chain turns on.
-//   - GAP(xsd): a REDEFINED document carrying two top-level definitions
-//     of the redefined name — §4.2.4 clause 4.1.1 counts a <xs:redefine>
-//     child among them — is ACCEPTED, where sch-props-correct
-//     (§3.17.6.1) clause 2 forbids the pair. Both declarations write one
-//     redefineSet.originals key and the later clobbers the earlier (see
-//     redefine.go's recordOriginal, where the marker sits), so the
-//     composed schema depends on their document order. Under-rejects,
-//     and only inside a redefinition: the same pair in a document
-//     nothing redefines is still charged clause 2 by indexByName. Owned
-//     by #686.
 //   - GAP(xsd): §5.3 (Missing Sub-components) is never reported as such.
 //     A namespace an <xs:import> declares but no document of the
 //     assembly supplies — a bare import, or one whose schemaLocation
