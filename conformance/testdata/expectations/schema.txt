@@ -4721,9 +4721,9 @@ MS-Group2006-07-15/groupC010/schema/groupC010 pass
 MS-Group2006-07-15/groupC011/schema/groupC011 pass
 MS-Group2006-07-15/groupC012/schema/groupC012 pass
 MS-Group2006-07-15/groupD001/schema/groupD001 pass
-MS-Group2006-07-15/groupD002/schema/groupD002 fail
+MS-Group2006-07-15/groupD002/schema/groupD002 pass
 MS-Group2006-07-15/groupD003/schema/groupD003 pass
-MS-Group2006-07-15/groupD004/schema/groupD004 fail
+MS-Group2006-07-15/groupD004/schema/groupD004 pass
 MS-Group2006-07-15/groupE002/schema/groupE002 fail
 MS-Group2006-07-15/groupE003v/schema/groupE003v fail
 MS-Group2006-07-15/groupE004v/schema/groupE004v fail
