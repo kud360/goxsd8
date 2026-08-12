@@ -13,23 +13,37 @@ import (
 )
 
 // recorder is a slog.Handler that appends one line per record, so a test can
-// compare the walk's visits against an expected sequence.
-type recorder struct{ visits *[]string }
+// compare the walk's visits against an expected sequence. It qualifies each
+// key with the open groups rather than dropping them, so an expectation here
+// keeps describing the log the engine actually emits (STYLE L1).
+type recorder struct {
+	visits *[]string
+	prefix string
+}
 
 func (h recorder) Enabled(context.Context, slog.Level) bool { return true }
 
 func (h recorder) Handle(_ context.Context, r slog.Record) error {
 	parts := []string{r.Message}
 	r.Attrs(func(a slog.Attr) bool {
-		parts = append(parts, a.Key+"="+a.Value.String())
+		parts = append(parts, h.prefix+a.Key+"="+a.Value.String())
 		return true
 	})
 	*h.visits = append(*h.visits, strings.Join(parts, " "))
 	return nil
 }
 
-func (h recorder) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h recorder) WithGroup(string) slog.Handler      { return h }
+// WithAttrs panics rather than recording or dropping: the walk calls no
+// logger method that reaches it, so the day one does, the expectations here
+// must be rewritten to say what those attributes are.
+func (h recorder) WithAttrs([]slog.Attr) slog.Handler {
+	panic("validate_test: recorder.WithAttrs: the walk does not log with pre-bound attributes")
+}
+
+func (h recorder) WithGroup(name string) slog.Handler {
+	h.prefix += name + "."
+	return h
+}
 
 func recordingLogger() (*slog.Logger, *[]string) {
 	visits := new([]string)
@@ -88,17 +102,18 @@ func sampleTree() *testElement {
 
 // wantVisits is sampleTree's every information item, once each, in the order
 // cvc-assess-elt (§3.3.4.6) fixes: the element, then its [[attributes]], then
-// its [[children]] in document order, recursively.
+// its [[children]] in document order, recursively. Every key is qualified by
+// the "validate" group New installs (STYLE L1).
 var wantVisits = []string{
-	"assessing element name=root loc=instance.xml:1:1",
-	"assessing attribute name=id loc=instance.xml:1:23",
-	"assessing attribute name={urn:p}lang loc=instance.xml:1:31",
-	"assessing text chars=3 loc=instance.xml:2:3",
-	"assessing element name=a loc=instance.xml:3:3",
-	"assessing text chars=4 loc=instance.xml:3:6",
-	"assessing text chars=7 loc=instance.xml:4:3",
-	"assessing element name=b loc=instance.xml:5:3",
-	"assessing element name=c loc=instance.xml:5:6",
+	"assessing element validate.name=root validate.loc=instance.xml:1:1",
+	"assessing attribute validate.name=id validate.loc=instance.xml:1:23",
+	"assessing attribute validate.name={urn:p}lang validate.loc=instance.xml:1:31",
+	"assessing text validate.chars=3 validate.loc=instance.xml:2:3",
+	"assessing element validate.name=a validate.loc=instance.xml:3:3",
+	"assessing text validate.chars=4 validate.loc=instance.xml:3:6",
+	"assessing text validate.chars=7 validate.loc=instance.xml:4:3",
+	"assessing element validate.name=b validate.loc=instance.xml:5:3",
+	"assessing element validate.name=c validate.loc=instance.xml:5:6",
 }
 
 func TestAssessWalksEveryNodeOnceInDocumentOrder(t *testing.T) {
@@ -172,8 +187,8 @@ func TestAssessStopsAtASourceFault(t *testing.T) {
 		t.Errorf("Err() = %v, want it to wrap %v", res.Err(), fault)
 	}
 	want := []string{
-		"assessing element name=root loc=instance.xml:1:1",
-		"assessing element name=a loc=instance.xml:2:3",
+		"assessing element validate.name=root validate.loc=instance.xml:1:1",
+		"assessing element validate.name=a validate.loc=instance.xml:2:3",
 	}
 	if !slices.Equal(*visits, want) {
 		t.Errorf("walk visited\n\t%s\nwant\n\t%s",
@@ -181,9 +196,11 @@ func TestAssessStopsAtASourceFault(t *testing.T) {
 	}
 }
 
-// A Child built by neither constructor names no information item; the walk
-// stops on it rather than skipping it.
-func TestAssessRejectsZeroChild(t *testing.T) {
+// A Child built by neither constructor names no information item. That is an
+// adapter bug and not a fault in the source, so it panics — Result.Err is
+// reserved for the source faults that stop a walk, and routing both there
+// would report a bug in an adapter to a user as a broken document.
+func TestAssessPanicsOnZeroChild(t *testing.T) {
 	root := &testElement{
 		name: xsd.QName{Local: "root"},
 		kids: []Child{{}, ElementChild(&testElement{name: xsd.QName{Local: "z"}})},
@@ -196,19 +213,24 @@ func TestAssessRejectsZeroChild(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	res := v.Assess(root)
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("Assess did not panic on a Child holding neither arm")
+		}
+		if msg, ok := r.(string); !ok || !strings.Contains(msg, "Child holds neither arm") {
+			t.Errorf("Assess panicked with %v, wanted the message to name the empty Child", r)
+		}
+		// The walk stops at the empty child: root is visited, the sibling
+		// past it is not.
+		want := []string{"assessing element validate.name=root validate.loc=instance.xml:1:1"}
+		if !slices.Equal(*visits, want) {
+			t.Errorf("walk visited\n\t%s\nwant\n\t%s",
+				strings.Join(*visits, "\n\t"), strings.Join(want, "\n\t"))
+		}
+	}()
 
-	if res.Err() == nil {
-		t.Fatal("Err() = nil, want a fault for a Child holding neither arm")
-	}
-	if !strings.Contains(res.Err().Error(), "neither an element nor text") {
-		t.Errorf("Err() = %q, want it to name the empty Child", res.Err())
-	}
-	want := []string{"assessing element name=root loc=instance.xml:1:1"}
-	if !slices.Equal(*visits, want) {
-		t.Errorf("walk visited\n\t%s\nwant\n\t%s",
-			strings.Join(*visits, "\n\t"), strings.Join(want, "\n\t"))
-	}
+	v.Assess(root)
 }
 
 // The reference tree models xmlns:p the way an adapter must: not as an

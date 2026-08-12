@@ -57,9 +57,8 @@
 //
 // # Planned contract (M5 — not yet implemented)
 //
-// [Validator.Assess] decides no cvc- rule yet: it walks the source once
-// and returns an empty [Result]. Those decisions land on that walk, and
-// [Result] then carries every violation as an *xsderr.Error (cvc-* rule
-// + instance and/or schema Loc), in document order. Non-fatal warnings
-// get an accessor of their own the day something produces one.
+// [Result] will carry every violation as an *xsderr.Error (cvc-* rule +
+// instance and/or schema Loc), in document order, once the cvc-
+// decisions land on the walk [Validator.Assess] already makes. Non-fatal
+// warnings get an accessor of their own the day something produces one.
 package validate

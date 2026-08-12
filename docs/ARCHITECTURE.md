@@ -25,7 +25,7 @@ Value implementations, parsing, validation, and generation live above them.
                                   xsd, value, builtin — and builtin/strict, as the DEFAULT
                                   backend Parse seeds when the caller supplies none)
                  xpath           (XPath 2.0 engine; imports value)          [1]
-                 validate        (instance validation; adapters xmlsrc, jsonsrc, bersrc) [1]
+                 validate        (instance validation; adapters xmlsrc, jsonsrc, bersrc) [2]
                  codegen  codec  (generation; dataset ser/de)               [1]
                  conformance     (harness + ratchet; test-only)
                  cmd/goxsd8      (the CLI; help/usage only today)
@@ -37,9 +37,13 @@ and `builtin/native` are `doc.go`-only today: `go doc` renders no exported
 identifier for any of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
-`validate` carries the infoset seam and the assessment skeleton and imports
-`xsd` and `xsderr` (see its section); everything else in its box is still a
-destination. Only `xsderr`, `xsd`, `internal/schemaloc`, `value`,
+
+**[2] The infoset seam and the assessment skeleton ship; the three adapters
+do not.** `validate` exports the infoset views and `New`/`Validator`/`Result`
+and imports `xsd` and `xsderr` (see its section); `validate/xmlsrc`,
+`validate/jsonsrc` and `validate/bersrc` are destinations, on `[1]`'s terms.
+
+Only `xsderr`, `xsd`, `internal/schemaloc`, `value`,
 `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`, `parser`,
 `parser/xmltree`, `validate`, `conformance` and `cmd/goxsd8` carry code today.
 

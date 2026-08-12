@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"errors"
 	"os/exec"
 	"strings"
 	"testing"
@@ -43,6 +44,12 @@ func TestImportClosureExcludesDecoders(t *testing.T) {
 		"-f", "{{.ImportPath}}{{range .Imports}} {{.}}{{end}}",
 		modulePath+"/validate").Output()
 	if err != nil {
+		// The toolchain writes the reason to stderr; %v on the error alone
+		// renders "exit status 1" and nothing a reader can act on.
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			t.Fatalf("go list -deps: %v: %s", err, ee.Stderr)
+		}
 		t.Fatalf("go list -deps: %v", err)
 	}
 

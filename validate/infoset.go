@@ -93,12 +93,18 @@ type Text interface {
 // yields one child at a time and no walk ever holds a document (STYLE P4);
 // its shape is bufio.Scanner's and parser/xmltree's Reader.Token's (STYLE
 // T4).
+//
+// The engine reads an element's Attributes before it calls Children, calls
+// Children at most once per element, and drains the cursor before it
+// advances past that element; a cursor is abandoned undrained when a fault
+// stops the walk. An implementation need not support a second call, two
+// live cursors over one element, or a cursor read after the walk has left
+// its element.
 type Children interface {
 	// Next reports the next child and true, or the zero [Child] and false
 	// once the children are exhausted or a fault in the source stopped
 	// them — Err tells those two apart. Every child it yields is one built
-	// by [ElementChild] or [TextChild]; a zero Child stops the assessment
-	// with an Err, since it names no item.
+	// by [ElementChild] or [TextChild].
 	Next() (Child, bool)
 
 	// Err reports the fault in the source that ended the children early,

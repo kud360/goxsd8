@@ -98,8 +98,8 @@ func TestChildArms(t *testing.T) {
 		t.Errorf("TextChild(t).Element() = (%v,%v), want (nil,false)", got, ok)
 	}
 
-	// The zero Child holds neither arm; the walk turns one into a fault
-	// (TestAssessRejectsZeroChild), it is not silently skipped.
+	// The zero Child holds neither arm; the walk panics on one
+	// (TestAssessPanicsOnZeroChild), it is not silently skipped.
 	var zero Child
 	if _, ok := zero.Element(); ok {
 		t.Error("zero Child reports an element arm")

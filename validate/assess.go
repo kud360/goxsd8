@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 )
@@ -36,21 +37,35 @@ type walk struct {
 // element assesses one element information item: the item itself, then its
 // [[attributes]], then its [[children]].
 func (w *walk) element(e Element) {
-	w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
+	if w.log.Enabled(context.Background(), slog.LevelDebug) {
+		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
+	}
 	for _, a := range e.Attributes() {
 		w.attribute(a)
 	}
 	w.children(e)
 }
 
-// attribute assesses one attribute information item.
+// attribute assesses one attribute information item. Under the silent
+// default the guard leaves it with no body, which is what a walk that
+// decides no cvc- rule yet amounts to at an attribute — the cvc-attribute
+// (§3.2.4.1) decisions land here, so do not inline it away.
 func (w *walk) attribute(a Attribute) {
+	if !w.log.Enabled(context.Background(), slog.LevelDebug) {
+		return
+	}
 	w.log.Debug("assessing attribute", slog.Any("name", a.Name()), slog.Any("loc", a.Loc()))
 }
 
 // text assesses one run of character information items. It reports the run's
 // length rather than its content: instance data does not belong in a log.
+// Under the silent default the guard leaves it with no body, on the same
+// terms as attribute — the ·initial value· this run contributes to is
+// assembled here once cvc-type clause 3.1.3 arrives.
 func (w *walk) text(t Text) {
+	if !w.log.Enabled(context.Background(), slog.LevelDebug) {
+		return
+	}
 	w.log.Debug("assessing text", slog.Int("chars", len(t.Data())), slog.Any("loc", t.Loc()))
 }
 
@@ -65,7 +80,7 @@ func (w *walk) children(e Element) {
 		if !ok {
 			break
 		}
-		w.child(c, e)
+		w.child(c)
 		if w.res.err != nil {
 			return
 		}
@@ -75,16 +90,19 @@ func (w *walk) children(e Element) {
 	}
 }
 
-// child assesses one child of parent, whichever arm it holds.
-func (w *walk) child(c Child, parent Element) {
+// child assesses one child, whichever arm it holds. A Child holding neither
+// is an adapter bug, not a fault in the source, so it panics rather than
+// reaching [Result.Err] — that field means the walk stopped on a source
+// fault, and a CLI would otherwise report a bug in an adapter to a user as
+// a broken document.
+func (w *walk) child(c Child) {
 	if e, ok := c.Element(); ok {
 		w.element(e)
 		return
 	}
 	t, ok := c.Text()
 	if !ok {
-		w.res.err = fmt.Errorf("reading the children of %s at %s: a child is neither an element nor text, so it was not built by ElementChild or TextChild", parent.Name(), parent.Loc())
-		return
+		panic("validate: walk.child: Child holds neither arm; build one with ElementChild or TextChild")
 	}
 	w.text(t)
 }

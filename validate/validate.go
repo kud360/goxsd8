@@ -29,9 +29,9 @@ func newConfig(opts []Option) config {
 }
 
 // WithLogger sets the logger the validator reports assessment progress on,
-// at debug level. A nil logger selects the silent default
-// ([slog.DiscardHandler]), so assessment is quiet unless a logger is asked
-// for (STYLE L1).
+// at debug level, under the "validate" group [New] installs (STYLE L1). A
+// nil logger selects the silent default ([slog.DiscardHandler]), so
+// assessment is quiet unless a logger is asked for.
 func WithLogger(l *slog.Logger) Option {
 	if l == nil {
 		l = slog.New(slog.DiscardHandler)
@@ -64,7 +64,7 @@ func New(schema *xsd.Schema, opts ...Option) (*Validator, error) {
 		return nil, fmt.Errorf("validate: New: nil *xsd.Schema")
 	}
 	cfg := newConfig(opts)
-	return &Validator{schema: schema, log: cfg.log}, nil
+	return &Validator{schema: schema, log: cfg.log.WithGroup("validate")}, nil
 }
 
 // Schema returns the read-only view of the compiled schema an adapter needs
