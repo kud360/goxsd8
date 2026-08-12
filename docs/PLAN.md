@@ -103,59 +103,62 @@ that is evidence the trigger is wrong, not that the queue is busy.
 
 **Working band** — dependency-ordered top of the `ready` queue, so a session
 need not scan 140 issues. Take from the top; the ordering prefers slices that
-move a lane over horizontal completeness. **#686 (PR #701) has landed** and is
-dropped from the band below rather than left as a stale claimed row; #684
-(PR #698), #506 (PR #694), #675 (PR #695) and #585 (PR #689) were dropped the
-same way in the three passes before it.
+move a lane over horizontal completeness. **#699 (PR #705) has landed** and is
+dropped from the band below rather than left as a stale claimed row; #686
+(PR #701), #684 (PR #698), #506 (PR #694), #675 (PR #695) and #585 (PR #689)
+were dropped the same way in the four passes before it.
 
-**Row 1 was placed by #684's post-land pass, not by a queue-wide survey**, and
-inherits the top of the band now that #686 has landed out of it. Re-rank at the
-next `/backlog` — which, per the mechanism stated above, carves M5 and re-ranks
-nothing.
+**Every row below is now the 2026-08-11 `/backlog`'s own ordering,
+contiguously** — its rows 5–14, renumbered. The two rows a post-land pass
+placed rather than a queue-wide survey, #686 and then #699, have both drained.
+Re-rank at the next `/backlog` — which, per the mechanism stated above, carves
+M5 and re-ranks nothing.
 
-**#686's post-land pass filed #702 and #703 and banded neither.** Both are
-comment- and message-accuracy issues rather than lane-movers, so they belong in
-the queue and not in a band whose ordering doctrine is "slices that move a
-lane". #702 sweeps 17 comments citing §4.2.4 clause 4.1.1 for what `src-expredef`
-says; #703 is a duplicate top-level declaration never being produced at all,
-which is why `indexByName`'s clause-2 message cites one location twice. **#702
-touches `parser/redefine.go`, `parser/doc.go`, `parser/parse.go`,
-`parser/produce.go` and `conformance/schema.go` — the files rows 1 and 3 open**,
-and it is cheaper for those landings to read a corrected comment than to copy
-the wrong clause number a third time.
+**Three issues filed by the last two post-land passes are deliberately
+unbanded: #702, #703 and #706.** The band's ordering doctrine is "slices that
+move a lane", and none of the three does. #702 sweeps 17 comments citing
+§4.2.4 clause 4.1.1 for what `src-expredef` says; #703 is a duplicate
+top-level declaration never being produced at all, which is why
+`indexByName`'s clause-2 message cites one location twice; **#706 is a real
+false-accept but a measurably unreachable one** — an
+`xs:override`-substituted `xs:redefine` child bypasses the guard #699 just
+landed, and a walk of all 15470 suite `.xsd` files finds no document carrying
+both an `xs:override` and an `xs:redefine`, so it can move no lane and is
+unit-test-only. **#702 touches `parser/redefine.go`, `parser/doc.go`,
+`parser/parse.go`, `parser/produce.go` and `conformance/schema.go` — the files
+row 2 opens**, and it is cheaper for that landing to read a corrected comment
+than to copy the wrong clause number a third time.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #699 | a redefining `xs:group`/`xs:attributeGroup` bypasses the prohibited-attribute guard #684 just landed — `produceRedefinition` never enters `run`'s dispatch. Grounding already done and cited across from #684; 2 decidable cases measured, the other 2 witnesses declined |
-| 2 | #469 | cos-all-limited charged on the XML spelling, not the component — false accept in both clauses |
-| 3 | #503 + #504 | `src-redefine` clauses 7.2.2 and 6.2.2, both fail-open. **Coupled — read the note below before starting either** |
-| 4 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline |
-| 5 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes` lane, pdecimal019/020 the measured cost |
-| 6 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes` lane, #574's sibling widening |
-| 7 | #626 | README's CLI section is false about exit codes today; one sentence, and it should precede #472 |
-| 8 | #669 | README's Library snippet does not compile, and the example pointer omits `parser` and `xsd` |
-| 9 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
-| 10 | #672 + #687 | the two open CLI-contract decisions (`-version`; scoped help and the bareword `help`). One line each in `doc.go` now, a retrofit around a live dispatch after #472 |
-| 11 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 1 | #469 | cos-all-limited charged on the XML spelling, not the component — false accept in both clauses |
+| 2 | #503 + #504 | `src-redefine` clauses 7.2.2 and 6.2.2, both fail-open. **Coupled — read the note below before starting either** |
+| 3 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline |
+| 4 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes` lane, pdecimal019/020 the measured cost |
+| 5 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes` lane, #574's sibling widening |
+| 6 | #626 | README's CLI section is false about exit codes today; one sentence, and it should precede #472 |
+| 7 | #669 | README's Library snippet does not compile, and the example pointer omits `parser` and `xsd` |
+| 8 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
+| 9 | #672 + #687 | the two open CLI-contract decisions (`-version`; scoped help and the bareword `help`). One line each in `doc.go` now, a retrofit around a live dispatch after #472 |
+| 10 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
 
-**Row 1 re-reads `parser/redefine.go` as #686 left it, not as #686's issue body
-described it.** #686 put its duplicate-key charge in `recordOriginal` and
-retired the `GAP(xsd)` there; #699 may still put its own guard in
-`newRedefineSet`, a different feeder of the same struct. The two were banded
-adjacent while both were open, and that adjacency is now discharged in one
-direction only — read the landing.
+**`parser/redefine.go` has been rewritten twice in two days, so read it rather
+than an issue body that describes it.** #686 put its duplicate-key charge in
+`recordOriginal` and retired the `GAP(xsd)` there; #699 then added
+`rejectProhibitedAttrs` to `newRedefineSet`, a different feeder of the same
+struct. Row 2 and #706 both open that file next.
 
-Rows 1–6 move `schema` (rows 5 and 6 move `datatypes`); rows 7–11 are the
+Rows 1–5 move `schema` (rows 4 and 5 move `datatypes`); rows 6–10 are the
 M4-facing published surface, where two isolated persona passes have now found
 the same defects twice.
 
-**Rows 7–10 are ordered before row 11 on cost, not importance.** Each is a
+**Rows 6–9 are ordered before row 10 on cost, not importance.** Each is a
 sentence or a dispatch branch while the CLI surface is still empty; taken
 after #472 every one of them is a change to shipped behaviour. #472's own
 Acceptance already carries the `-version` decision, so if it is taken first it
 must discharge #672 rather than leave it contradicting the landing.
 
-**Row 3's coupling is now landed on `main`, not only on an issue thread.**
+**Row 2's coupling is now landed on `main`, not only on an issue thread.**
 #585's warden review established that retiring the `conformance/schema.go`
 decidability residue for `group`/`attributeGroup` flips
 `MS-Schema2006-07-15/schL10` and `/schM5` from `pass` to `fail` unless
