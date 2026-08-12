@@ -170,7 +170,7 @@ func (s *Schema) foldComponentAttributeUses(f *attributeUseFold, c ComplexType, 
 // slot can reach: re-seating it is what gives that base its own clause-3 set in
 // the assembled schema, and not merely inside this pass. Two constraints read a
 // base's {attribute uses} to CHARGE its derivations, checkRestrictionAttributes
-// and checkRestrictionRequiredAttributes (complexderivation.go), so a base left
+// and checkAttributeRestrictionRequired (attributerestriction.go), so a base left
 // under-reporting them makes a legal restriction of it a FALSE REJECT (#505).
 //
 // The default arm is UNREACHABLE BY CONSTRUCTION rather than merely unexercised:

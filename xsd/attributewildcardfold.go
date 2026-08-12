@@ -185,7 +185,7 @@ func (s *Schema) foldTypeAttributeWildcard(f *attributeWildcardFold, i int) (Com
 // The base is folded even on the clause 2.1 branch, whose OWN value ignores it.
 // That is not wasted work: for an owned inline base it is the only pass that can
 // give that base its own clause-2 value, and a RESTRICTION over such a base is
-// exactly the case checkRestrictionAttributeWildcard charges — see
+// exactly the case checkAttributeRestrictionWildcard charges — see
 // baseAttributeWildcard. For a named base it costs one memo hit, since the base
 // is folded at its own position in any case.
 func (s *Schema) clause2AttributeWildcard(f *attributeWildcardFold, c ComplexType, i int) (ComplexType, error) {
@@ -225,7 +225,7 @@ func (s *Schema) clause2AttributeWildcard(f *attributeWildcardFold, c ComplexTyp
 // no-op there. The exception is the OWNED INLINE base, which nothing but this
 // slot can reach: re-seating it is what gives that base its own clause-2
 // {attribute wildcard} in the assembled schema, and not merely inside this pass.
-// checkRestrictionAttributeWildcard (complexderivation.go) reads a base's
+// checkAttributeRestrictionWildcard (attributerestriction.go) reads a base's
 // {attribute wildcard} to CHARGE its restrictions — "T declares a wildcard but B
 // has none" — so a base left at the producer's clause-1 value makes a legal
 // restriction of it a FALSE REJECT whenever that base only INHERITED its own

@@ -92,7 +92,7 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // clause 3 and §3.4.2.5 clause 2 on an anonymous type reachable as a {base type
 // definition} and re-seat it into the owning slot, so the readers that charge a
 // derivation AGAINST its base — checkRestrictionAttributes,
-// checkRestrictionRequiredAttributes and checkRestrictionAttributeWildcard, each
+// checkAttributeRestrictionRequired and checkAttributeRestrictionWildcard, each
 // of which rejects on a base that reports FEWER attribute uses or no wildcard —
 // see the complete set (attributeusefold.go's baseAttributeUses,
 // attributewildcardfold.go's baseAttributeWildcard). Withholding that value was
@@ -393,189 +393,40 @@ func restrictionVarietyPairOK(tct, bct ContentType) bool {
 	return bc.Mixed // clause 2.4.1.2
 }
 
-// checkRestrictionAttributes is clause 3 (c-ran): for every element information
-// item whose [attributes] satisfy cvc-complex-type (§3.4.4.2) clauses 2 and 3
-// with respect to T, they must satisfy the same clauses with respect to B, and
-// B's ·default binding· for each attribute must ·subsume· T's (loc-testSubP).
-// Rendered statically over the component model, that is three obligations:
+// checkRestrictionAttributes is clause 3 (c-ran) for a complex type t
+// restricting the complex type b: it hands the clause to its one encoding,
+// checkAttributeRestriction (attributerestriction.go), which src-redefine clause
+// 7.2.2 shares (STYLE T4).
 //
-//   - every expanded name T admits through an {attribute use} must be admitted
-//     by B at all (cvc-complex-type clause 2.1: otherwise an element carrying it
-//     is valid against T and not against B), and B's binding for it must
-//     ·subsume· T's, which for an {attribute use} is loc-testSubP clause 5;
-//   - every expanded name T admits through its {attribute wildcard} AND no
-//     {attribute use} of T's already claims must be admitted by B too
-//     (cvc-complex-type clause 2.2, c-avaw, which clause 2.1 pre-empts per name —
-//     checkRestrictionAttributeWildcard);
-//   - every attribute B marks {required} must stay required in T
-//     (cvc-complex-type clause 3, checkRestrictionRequiredAttributes).
-//
-// The three run in that order, which is cvc-complex-type's own: clause 2's two
-// sub-cases before clause 3's. The uses are walked in document order, so the
-// first reported failure is deterministic (STYLE D2).
-//
-// Both quantifications range over the MATERIALISED sets (§3.4.2.4 clause 3,
-// attributeusefold.go), which is load-bearing in BOTH directions. In the reject
-// direction the fold on B is what keeps a valid schema valid: in a chain
-// A(@x) ← B(inheriting @x, re-declaring nothing) ← C(re-declaring @x), x is in
-// B.{attribute uses} by inheritance, and charging C for it would be a FALSE
-// REJECT. In the charge direction the fold on B is what makes
-// checkRestrictionRequiredAttributes see a required attribute T inherits from
-// higher up the chain rather than only the ones B declares itself.
+// Both sides are the MATERIALISED property sets (§3.4.2.4 clause 3,
+// attributeusefold.go; §3.4.2.5 clause 2, attributewildcardfold.go), which is
+// load-bearing in BOTH directions. In the reject direction the fold on B is what
+// keeps a valid schema valid: in a chain A(@x) ← B(inheriting @x, re-declaring
+// nothing) ← C(re-declaring @x), x is in B.{attribute uses} by inheritance, and
+// charging C for it would be a FALSE REJECT. In the charge direction the fold on
+// B is what makes checkAttributeRestrictionRequired see a required attribute T
+// inherits from higher up the chain rather than only the ones B declares itself.
 func (s *Schema) checkRestrictionAttributes(t, b ComplexType) error {
-	for _, u := range t.attributeUses {
-		name := attributeUseName(u)
-		general, ok := s.attributeDefaultBinding(b, name)
-		if !ok {
-			return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
-				"complex type %s restricts %s but declares an attribute use for %s, which %s neither declares nor admits through an {attribute wildcard}, so an element valid against the restriction can carry an attribute the base rejects (derivation-ok-restriction clause 3, c-ran)", t.Name(), typeDefinitionLabel(b), name, typeDefinitionLabel(b))
-		}
-		if err := s.checkBindingSubsumes(name, t, b, general, attributeUseBinding{use: u}); err != nil {
-			return err
-		}
-	}
-	if err := checkRestrictionAttributeWildcard(t, b); err != nil {
-		return err
-	}
-	return checkRestrictionRequiredAttributes(t, b)
+	return s.checkAttributeRestriction(complexTypeAttributeRestriction(t, b))
 }
 
-// checkRestrictionAttributeWildcard is the cvc-complex-type clause 2.2 (c-avaw)
-// half of c-ran: the names an element valid against T may carry WITHOUT a
-// matching {attribute use} are exactly those T's {attribute wildcard} admits, and
-// B must admit each of them too — through its own {attribute wildcard}, since no
-// finite {attribute uses} set covers the open name set a wildcard admits.
+// complexTypeAttributeRestriction is the c-ran clause 3 comparison a complex type
+// t restricting the complex type b states: t's two attribute properties as the
+// spec's T, b's as its B, charged to derivation-ok-restriction at t's own
+// position.
 //
-// So the obligation is a relation between the two wildcards, and it is decided by
-// wildcardSubset — Wildcard Subset (§3.10.6.2, cos-ns-subset), the ONE encoding of
-// that relation in this package (namespaceconstraint_subset.go, shared with the
-// element-side transition test in contentrestricts.go; STYLE T4). The direction
-// is T's constraint as sub and B's as super: T may admit fewer names than B, never
-// more. A T with no {attribute wildcard} admits nothing this way and discharges
-// the clause vacuously, which is why the absent case returns before B is read.
-//
-// Both sides are read off the type directly and neither walks a base chain,
-// because §3.4.2.5 makes that exact. A restriction's {attribute wildcard} is its
-// ·complete wildcard· — its own <anyAttribute>, clause 2.1 — and an extension's is
-// already the union of its own with its base's, materialised at finalize
-// (attributewildcardfold.go, clause 2.2). Before that fold, a B that inherited its
-// wildcard read as having none and this check FALSELY rejected its restrictions;
-// the fold is what makes the comparison sound, not merely more complete.
-//
-// What the comparison ranges over is names WITHOUT a matching {attribute use},
-// and that restriction is cvc-complex-type clause 2's own dispatch rather than a
-// refinement of it: clause 2.2 is reached only "otherwise", once clause 2.1
-// (c-ctma) has failed to find an attribute use of the item's expanded name, and
-// §3.4.4.2's Note states the precedence unconditionally — "the attribute use
-// always takes precedence, and the assessment of such items stands or falls
-// entirely on the basis of the attribute use and its {attribute declaration}".
-// wildcardSubset decides cos-ns-subset over {namespace constraint}s alone and
-// knows nothing of {attribute uses}, so the gate is applied HERE: the names
-// clause 2.1 claims are dropped from B's {disallowed names}
-// (sharedAttributeUseNames, withoutDisallowedNames) before the record is handed
-// to the relation. Teaching wildcardSubset the name set instead would put
-// cos-ns-subset in two encodings, which is what T4 forbids and what #262
-// declined to build.
-//
-// The exempt set is the INTERSECTION of the two {attribute uses} sets, never
-// either side alone, because the two directions are not symmetric:
-//
-//   - a name BOTH types hold a use for is assessed by clause 2.1 against T AND
-//     by clause 2.1 against B, so clause 2.2 fires on neither side and B's
-//     {disallowed names} entry for it cannot be charged however it got there.
-//     This is the shape #430 fixed: B declaring <xs:attribute name="foo"/>
-//     alongside <anyAttribute namespace="##any" notQName="foo"/>, T restricting
-//     it with <anyAttribute namespace="##any"/> and inheriting the foo use whole
-//     (§3.4.2.4 clause 3.2, attributeusefold.go), was a FALSE REJECT of a valid
-//     schema — Finalize returns this error to its caller in place of a *Schema.
-//   - a name only T holds a use for is NOT exempt: c-ran clause 3 still requires
-//     the item to satisfy clause 2 with respect to B, and B, having no use for
-//     it, can only satisfy it through clause 2.2 — so a B whose wildcard
-//     disallows that name is a genuine violation and stays charged. (The loop in
-//     checkRestrictionAttributes charges the same shape first, through
-//     attributeDefaultBinding; this half is what holds when a caller reaches it
-//     directly.)
-func checkRestrictionAttributeWildcard(t, b ComplexType) error {
-	tw, has := t.AttributeWildcard()
-	if !has {
-		return nil
+// b is named by typeDefinitionLabel rather than by b.Name(), since a {base type
+// definition} may be the ANONYMOUS complex type a redefining type owns (#505)
+// and has no name to print.
+func complexTypeAttributeRestriction(t, b ComplexType) attributeRestriction {
+	return attributeRestriction{
+		rule:    ruleDerivationOKRestriction,
+		loc:     t.Loc(),
+		verb:    "restricts",
+		clause:  "derivation-ok-restriction clause 3, c-ran",
+		derived: complexTypeAttributeSide(t, "complex type "+t.Name().String()),
+		base:    complexTypeAttributeSide(b, typeDefinitionLabel(b)),
 	}
-	bw, baseHas := b.AttributeWildcard()
-	if !baseHas {
-		return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
-			"complex type %s restricts %s and declares an {attribute wildcard}, but %s has none, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 2.2, c-avaw)", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b))
-	}
-	bnc := bw.NamespaceConstraint().withoutDisallowedNames(sharedAttributeUseNames(t, b))
-	if wildcardSubset(tw.NamespaceConstraint(), bnc) {
-		return nil
-	}
-	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
-		"complex type %s restricts %s but its {attribute wildcard} admits expanded names %s's does not, so an element valid against the restriction can carry a wildcard-admitted attribute the base rejects (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 2.2, c-avaw, and cos-ns-subset)", t.Name(), typeDefinitionLabel(b), typeDefinitionLabel(b))
-}
-
-// sharedAttributeUseNames is the set of expanded names cvc-complex-type clause
-// 2.1 claims on BOTH sides of a derivation: the {attribute declaration} name of
-// every member of T.{attribute uses} that B holds a use for as well. An item
-// carrying such a name is assessed against an attribute use whichever of the two
-// types it is validated against, so clause 2.2 governs it on neither side.
-//
-// Both sides are read from the MATERIALISED sets (§3.4.2.4 clause 3,
-// attributeusefold.go), which is what makes the intersection the ordinary case
-// rather than a corner: clause 3.2 hands T the base's use unchanged whenever T
-// neither re-declares nor prohibits the name, so a restriction that touches no
-// attribute at all shares every one of B's uses. Read off B's own <attribute>
-// children instead, an inherited use would go missing and the exemption would
-// silently not apply.
-//
-// The walk is over T's set in document order (STYLE D2), and the result feeds a
-// membership test only.
-func sharedAttributeUseNames(t, b ComplexType) []QName {
-	var names []QName
-	for _, u := range t.attributeUses {
-		name := attributeUseName(u)
-		if !hasAttributeUseNamed(b.attributeUses, name) {
-			continue
-		}
-		names = append(names, name)
-	}
-	return names
-}
-
-// checkRestrictionRequiredAttributes is the cvc-complex-type clause 3 half of
-// c-ran: an attribute B marks {required} must also be required in T, or an
-// attribute set that satisfies clause 3 with respect to T by omitting it fails
-// with respect to B.
-//
-// Both sides are the MATERIALISED {attribute uses} (§3.4.2.4 clause 3), so the
-// quantification is exact rather than an under-approximation. What the fold buys
-// is reach on the B side: a name B holds by inheritance from higher up the chain
-// is now a member of B.{attribute uses} and is compared, where before only the
-// uses the producer mapped onto B itself were.
-//
-// The two ways the clause can fail are both charged. A name T relaxes to optional
-// is one. A base-required name with NO member in T at all is the other, and it is
-// live: clause 3.2 inherits every base use T does not declare itself, so the only
-// way a required name goes missing is clause 3.2.2's <attribute use="prohibited">
-// blocking it (attributeusefold.go) — which is exactly the shape this half is
-// meant to charge, a restriction that prohibits an attribute its base requires.
-func checkRestrictionRequiredAttributes(t, b ComplexType) error {
-	for _, bu := range b.attributeUses {
-		if !bu.Required() {
-			continue
-		}
-		name := attributeUseName(bu)
-		tu, ok := findAttributeUse(t.attributeUses, name)
-		if !ok {
-			return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
-				"complex type %s restricts %s but its {attribute uses} carry no use for attribute %s, which the base requires, so an element omitting it is valid against the restriction and not against the base (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 3)", t.Name(), typeDefinitionLabel(b), name)
-		}
-		if tu.Required() {
-			continue
-		}
-		return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
-			"complex type %s restricts %s but declares attribute %s as optional where the base requires it, so an element omitting it is valid against the restriction and not against the base (derivation-ok-restriction clause 3, c-ran, via cvc-complex-type clause 3)", t.Name(), typeDefinitionLabel(b), name)
-	}
-	return nil
 }
 
 // findAttributeUse returns the member of a {attribute uses} set whose {attribute

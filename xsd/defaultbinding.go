@@ -59,26 +59,30 @@ func (elementDeclarationBinding) defaultBinding() {}
 func (attributeUseBinding) defaultBinding()       {}
 func (wildcardKeywordBinding) defaultBinding()    {}
 
-// attributeDefaultBinding computes c's ·default binding· (key-dft-binding) for an
-// attribute of expanded name n:
+// attributeDefaultBinding computes side's ·default binding· (key-dft-binding)
+// for an attribute of expanded name n. side is one half of a c-ran clause 3
+// comparison (attributerestriction.go) — the {attribute uses} and {attribute
+// wildcard} of a Complex Type Definition, or of an Attribute Group Definition
+// src-redefine clause 7.2.2 instructs be read as one:
 //
-//   - case 2: the member of c.{attribute uses} whose {attribute declaration}
-//     carries n. The property is the MATERIALISED one (§3.4.2.4 clause 3,
-//     attributeusefold.go), so an INHERITED use counts without any walk here.
-//     cvc-complex-type clause 2.1 makes such a use the ·context-determined
-//     declaration·, so it wins over any wildcard — including a wildcard on c
-//     itself, since case 2 is tested before cases 4/5/6. The set is exact for
-//     both derivation methods: clause 3.2.2's prohibited names are applied at the
-//     fold too, so a name a restriction prohibits is absent here rather than
-//     reported as the ancestor's use.
-//   - cases 4/5/6: otherwise, if c's {attribute wildcard} admits n, the wildcard's
-//     {process contents} keyword. This one is read off c ALONE, and that is exact
-//     for both derivation methods: the property is the MATERIALISED one (§3.4.2.5
-//     clause 2, attributewildcardfold.go), so a restriction carries its own
-//     ·complete wildcard· (clause 2.1) and an extension carries the cos-aw-union
-//     of its own with its base's (clause 2.2) without any walk here.
+//   - case 2: the member of side's {attribute uses} whose {attribute declaration}
+//     carries n. For a complex type the property is the MATERIALISED one
+//     (§3.4.2.4 clause 3, attributeusefold.go), so an INHERITED use counts
+//     without any walk here. cvc-complex-type clause 2.1 makes such a use the
+//     ·context-determined declaration·, so it wins over any wildcard — including
+//     a wildcard on the same side, since case 2 is tested before cases 4/5/6. The
+//     set is exact for both derivation methods: clause 3.2.2's prohibited names
+//     are applied at the fold too, so a name a restriction prohibits is absent
+//     here rather than reported as the ancestor's use.
+//   - cases 4/5/6: otherwise, if side's {attribute wildcard} admits n, the
+//     wildcard's {process contents} keyword. This one is read off that side
+//     ALONE, and that is exact for both derivation methods: the property is the
+//     MATERIALISED one (§3.4.2.5 clause 2, attributewildcardfold.go), so a
+//     restriction carries its own ·complete wildcard· (clause 2.1) and an
+//     extension carries the cos-aw-union of its own with its base's (clause 2.2)
+//     without any walk here.
 //
-// ok is false when c admits no attribute of that name at all — no member of
+// ok is false when side admits no attribute of that name at all — no member of
 // {attribute uses} and no admitting wildcard — in which case there is no binding
 // to compare and the CALLER charges the failure. Case 1 (·governing element
 // declaration·) is the element half and is not reachable here.
@@ -95,15 +99,14 @@ func (wildcardKeywordBinding) defaultBinding()    {}
 // attribute type. Falling through to the keyword is FAIL-OPEN — cases 4/5 are
 // weaker tests than case 3's clause-5 comparison — and never a false reject
 // (#265).
-func (s *Schema) attributeDefaultBinding(c ComplexType, n QName) (defaultBinding, bool) {
-	if u, ok := findAttributeUse(c.attributeUses, n); ok {
+func (s *Schema) attributeDefaultBinding(side attributeRestrictionSide, n QName) (defaultBinding, bool) {
+	if u, ok := findAttributeUse(side.uses, n); ok {
 		return attributeUseBinding{use: u}, true // case 2
 	}
-	w, has := c.AttributeWildcard()
-	if !has || !s.allowsAttributeWildcardName(w, n) {
+	if !side.hasWildcard || !s.allowsAttributeWildcardName(side.wildcard, n) {
 		return nil, false
 	}
-	return wildcardKeywordBinding{keyword: w.ProcessContents()}, true // cases 4/5/6
+	return wildcardKeywordBinding{keyword: side.wildcard.ProcessContents()}, true // cases 4/5/6
 }
 
 // attributeUseName is the expanded name of an attribute use's {attribute
@@ -181,11 +184,11 @@ func (s *Schema) effectiveValueConstraint(u AttributeUse) (ValueConstraint, bool
 	return d.ValueConstraint()
 }
 
-// checkBindingSubsumes charges derivation-ok-restriction clause 3 when general
-// does not ·subsume· specific (Structures §3.4.6.4, loc-testSubP). general is
-// the BASE type's binding (the spec's G) and specific the restriction's (S); n
-// names the attribute both are for, and t/b name the two complex types, for the
-// message.
+// checkBindingSubsumes charges c-ran clause 3 when general does not ·subsume·
+// specific (Structures §3.4.6.4, loc-testSubP). general is the BASE side's
+// binding (the spec's G) and specific the restriction's (S); n names the
+// attribute both are for, and r carries the rule, position and two side labels
+// the message is built from (attributerestriction.go).
 //
 //   - clause 1: G is skip — subsumes anything.
 //   - clause 2: G is lax and S is not skip.
@@ -198,17 +201,17 @@ func (s *Schema) effectiveValueConstraint(u AttributeUse) (ValueConstraint, bool
 // instance, is a real violation — under B the attribute would have to ·resolve·
 // to a declaration and be assessed strictly, which S's own use does not
 // guarantee.
-func (s *Schema) checkBindingSubsumes(n QName, t, b ComplexType, general, specific defaultBinding) error {
+func (s *Schema) checkBindingSubsumes(n QName, r attributeRestriction, general, specific defaultBinding) error {
 	if g, ok := general.(wildcardKeywordBinding); ok {
-		return checkKeywordSubsumes(n, t, b, g, specific)
+		return checkKeywordSubsumes(n, r, g, specific)
 	}
 	g, gIsUse := general.(attributeUseBinding)
 	sp, sIsUse := specific.(attributeUseBinding)
 	if gIsUse && sIsUse {
-		return s.checkAttributeUseSubsumes(n, t, b, g.use, sp.use) // clause 5
+		return s.checkAttributeUseSubsumes(n, r, g.use, sp.use) // clause 5
 	}
-	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
-		"complex type %s restricts %s, but %s's ·default binding· for attribute %s does not ·subsume· the restriction's (derivation-ok-restriction clause 3, c-ran, via loc-testSubP)", t.Name(), b.Name(), b.Name(), n)
+	return xsderr.New(r.rule, r.loc,
+		"%s %s %s, but %s's ·default binding· for attribute %s does not ·subsume· the restriction's (%s, via loc-testSubP)", r.derived.label, r.verb, r.base.label, r.base.label, n, r.clause)
 }
 
 // checkKeywordSubsumes decides loc-testSubP clauses 1-3, where the base's
@@ -216,12 +219,12 @@ func (s *Schema) checkBindingSubsumes(n QName, t, b ComplexType, general, specif
 // The predicate itself is keywordSubsumes, which the element half of the
 // definition shares (STYLE T4); only the message is built here, and only the
 // lax-versus-skip pairing of clause 2 can reach it.
-func checkKeywordSubsumes(n QName, t, b ComplexType, general wildcardKeywordBinding, specific defaultBinding) error {
+func checkKeywordSubsumes(n QName, r attributeRestriction, general wildcardKeywordBinding, specific defaultBinding) error {
 	if keywordSubsumes(general, specific) {
 		return nil
 	}
-	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
-		"complex type %s restricts %s, but %s binds attribute %s to a lax wildcard while the restriction binds it to a skip wildcard, and loc-testSubP clause 2 requires the specific binding not to be skip (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), b.Name(), n)
+	return xsderr.New(r.rule, r.loc,
+		"%s %s %s, but %s binds attribute %s to a lax wildcard while the restriction binds it to a skip wildcard, and loc-testSubP clause 2 requires the specific binding not to be skip (%s)", r.derived.label, r.verb, r.base.label, r.base.label, n, r.clause)
 }
 
 // keywordSubsumes is loc-testSubP clauses 1-3, where the general binding G is
@@ -464,16 +467,16 @@ func typeTablesAgree(general, specific ElementDeclaration) bool {
 // are Attribute Uses: 5.1 type derivation, 5.2 effective value constraint, 5.3
 // {inheritable} equality. The sub-clauses are checked in spec order so the first
 // reported failure is deterministic (STYLE D1).
-func (s *Schema) checkAttributeUseSubsumes(n QName, t, b ComplexType, general, specific AttributeUse) error {
-	if err := s.checkAttributeTypeDerivedOK(n, t, b, general, specific); err != nil {
+func (s *Schema) checkAttributeUseSubsumes(n QName, r attributeRestriction, general, specific AttributeUse) error {
+	if err := s.checkAttributeTypeDerivedOK(n, r, general, specific); err != nil {
 		return err
 	}
-	if err := s.checkAttributeValueConstraintSubsumes(n, t, b, general, specific); err != nil {
+	if err := s.checkAttributeValueConstraintSubsumes(n, r, general, specific); err != nil {
 		return err
 	}
 	if general.Inheritable() != specific.Inheritable() {
-		return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
-			"complex type %s restricts %s, but attribute %s has {inheritable} = %t there and %t in the base, and loc-testSubP clause 5.3 requires them to be equal (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), n, specific.Inheritable(), general.Inheritable())
+		return xsderr.New(r.rule, r.loc,
+			"%s %s %s, but attribute %s has {inheritable} = %t there and %t in the base, and loc-testSubP clause 5.3 requires them to be equal (%s)", r.derived.label, r.verb, r.base.label, n, specific.Inheritable(), general.Inheritable(), r.clause)
 	}
 	return nil
 }
@@ -493,11 +496,18 @@ func (s *Schema) checkAttributeUseSubsumes(n QName, t, b ComplexType, general, s
 // are resolved through attributeUseType, the one encoding of "the simple type
 // governing this use" clause 5.2.2 also reads (STYLE T4).
 //
+// Phase A's guarantee covers every side but ONE: the base of a src-redefine
+// clause 7.2.2 comparison is the redefined document's own definition, which
+// §4.2.4 clause 4.1.2 keeps out of the schema's properties, so no pass walked
+// its references. There the skip is a real gap rather than a discharged one; it
+// is marked, with its direction, at checkAttributeGroupRedefinitions
+// (redefinition.go).
+//
 // An unresolvable {base type definition} INSIDE either chain is a different
 // thing and is returned as the src-resolve error rather than skipped: this frame
 // charges an error already, so there is no bool to fold it into (see
 // validlyDerived). It is unreachable for a schema that survived Phase A.
-func (s *Schema) checkAttributeTypeDerivedOK(n QName, t, b ComplexType, general, specific AttributeUse) error {
+func (s *Schema) checkAttributeTypeDerivedOK(n QName, r attributeRestriction, general, specific AttributeUse) error {
 	gt, ok := s.attributeUseType(general)
 	if !ok {
 		return nil
@@ -513,8 +523,8 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, t, b ComplexType, general,
 	if derived {
 		return nil
 	}
-	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
-		"complex type %s restricts %s but types attribute %s as %s, which is not validly derived from the base's %s (derivation-ok-restriction clause 3, c-ran, via loc-testSubP clause 5.1 and cos-st-derived-ok §3.16.6.3)", t.Name(), b.Name(), n, typeDefinitionLabel(st), typeDefinitionLabel(gt))
+	return xsderr.New(r.rule, r.loc,
+		"%s %s %s but types attribute %s as %s, which is not validly derived from the base's %s (%s, via loc-testSubP clause 5.1 and cos-st-derived-ok §3.16.6.3)", r.derived.label, r.verb, r.base.label, n, typeDefinitionLabel(st), typeDefinitionLabel(gt), r.clause)
 }
 
 // checkAttributeValueConstraintSubsumes is loc-testSubP clause 5.2: with GVC and
@@ -541,21 +551,21 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, t, b ComplexType, general,
 // resolvable one IS compared) — plus a {type definition} that is absent,
 // unresolvable, or complex, skipped exactly as simpleTypeOf's other callers skip
 // it. Every one of those accepts, so none is ever a false reject (#265).
-func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, t, b ComplexType, general, specific AttributeUse) error {
+func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, r attributeRestriction, general, specific AttributeUse) error {
 	gvc, present := s.effectiveValueConstraint(general)
 	if !present || gvc.Kind() != ValueFixed {
 		return nil // clause 5.2.1
 	}
 	svc, present := s.effectiveValueConstraint(specific)
 	if !present || svc.Kind() != ValueFixed {
-		return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
-			"complex type %s restricts %s, but the base fixes attribute %s to %q while the restriction leaves it unfixed, and loc-testSubP clause 5.2 requires a fixed ·effective value constraint· with the same value (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), n, gvc.LexicalForm())
+		return xsderr.New(r.rule, r.loc,
+			"%s %s %s, but the base fixes attribute %s to %q while the restriction leaves it unfixed, and loc-testSubP clause 5.2 requires a fixed ·effective value constraint· with the same value (%s)", r.derived.label, r.verb, r.base.label, n, gvc.LexicalForm(), r.clause)
 	}
 	if s.attributeValueConstraintsAgree(general, specific, gvc, svc) {
 		return nil // clause 5.2.2
 	}
-	return xsderr.New(ruleDerivationOKRestriction, t.Loc(),
-		"complex type %s restricts %s and fixes attribute %s to %q, but the base fixes it to %q, and loc-testSubP clause 5.2.2 requires the two {value}s to be equal or identical (derivation-ok-restriction clause 3, c-ran)", t.Name(), b.Name(), n, svc.LexicalForm(), gvc.LexicalForm())
+	return xsderr.New(r.rule, r.loc,
+		"%s %s %s and fixes attribute %s to %q, but the base fixes it to %q, and loc-testSubP clause 5.2.2 requires the two {value}s to be equal or identical (%s)", r.derived.label, r.verb, r.base.label, n, svc.LexicalForm(), gvc.LexicalForm(), r.clause)
 }
 
 // attributeValueConstraintsAgree decides loc-testSubP clause 5.2.2's "SVC.{value}

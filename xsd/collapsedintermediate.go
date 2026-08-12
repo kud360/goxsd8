@@ -193,7 +193,7 @@ func collapsedAttributeUses(own, acc []AttributeUse) []AttributeUse {
 // The direction, over the three readers of M.{attribute wildcard} — all of them
 // reached through checkDerivationOKRestriction(t, M):
 //
-//   - checkRestrictionAttributeWildcard (complexderivation.go) asks
+//   - checkAttributeRestrictionWildcard (attributerestriction.go) asks
 //     wildcardSubset(T's constraint, M's). A wider M can only turn a rejection
 //     into an acceptance: FAIL-OPEN.
 //   - Schema.attributeDefaultBinding, reached from checkRestrictionAttributes,
@@ -203,7 +203,7 @@ func collapsedAttributeUses(own, acc []AttributeUse) []AttributeUse {
 //     FAIL-OPEN. Its {process contents} half is unaffected in any direction —
 //     the value is T's own, the same one the true collapse would carry, not a
 //     widened one, so wildcardKeywordBinding sees no substitute.
-//   - checkRestrictionRequiredAttributes (complexderivation.go) reads
+//   - checkAttributeRestrictionRequired (attributerestriction.go) reads
 //     {attribute uses} only: UNAFFECTED.
 func collapsedAttributeWildcard(loc xsderr.Loc, c ComplexType, base *Wildcard) (*Wildcard, error) {
 	return unionExtensionAttributeWildcard(loc, attributeWildcardProperty(c), base)

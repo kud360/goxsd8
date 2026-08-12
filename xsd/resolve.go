@@ -76,13 +76,17 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     clauses 2 and 4, derivation-ok-restriction (§3.4.6.3) for every
 //     restriction-derived complex type, and cos-ct-extends (§3.4.6.2) for every
 //     extension-derived one (complexderivation.go, complexextension.go,
-//     defaultbinding.go, effectivetotalrange.go). It finishes on the one
-//     derivation verdict quantified over ELEMENT declarations rather than types
-//     — e-props-correct (§3.3.6.1) clause 4 (c-vs-sg), which requires a
-//     declaration's {type definition} to be ·validly substitutable· for that of
-//     each member of its {substitution group affiliations}, subject to that
-//     member's {substitution group exclusions} (substitutiongrouptypes.go). It
-//     shares the phase because it is the same
+//     defaultbinding.go, effectivetotalrange.go). Immediately after those, over
+//     the same c-ran clause 3 apparatus, it charges the one constraint that
+//     compares two ATTRIBUTE GROUP definitions — src-redefine (§4.2.4) clause
+//     7.2.2, which requires a redefining <attributeGroup> carrying no
+//     self-reference to RESTRICT the definition it redefines (redefinition.go).
+//     It finishes on the one derivation verdict quantified over ELEMENT
+//     declarations rather than types — e-props-correct (§3.3.6.1) clause 4
+//     (c-vs-sg), which requires a declaration's {type definition} to be ·validly
+//     substitutable· for that of each member of its {substitution group
+//     affiliations}, subject to that member's {substitution group exclusions}
+//     (substitutiongrouptypes.go). It shares the phase because it is the same
 //     cos-ct-derived-ok/cos-st-derived-ok engine pair under a different
 //     quantifier; see checkSubstitutionGroupTypes for the ordering argument.
 //   - Phase E (value-constraint validity), in two walks over the same file
@@ -217,6 +221,9 @@ func (s *Schema) resolve() error {
 		return err
 	}
 	if err := s.checkComplexDerivations(); err != nil {
+		return err
+	}
+	if err := s.checkAttributeGroupRedefinitions(); err != nil {
 		return err
 	}
 	if err := s.checkSubstitutionGroupTypes(); err != nil {

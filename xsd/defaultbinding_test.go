@@ -63,7 +63,7 @@ func TestAttributeDefaultBindingCases(t *testing.T) {
 			uq("z"), false, false, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := s.attributeDefaultBinding(tc.ct, tc.query)
+			got, ok := s.attributeDefaultBinding(complexTypeAttributeSide(tc.ct, typeDefinitionLabel(tc.ct)), tc.query)
 			if ok != tc.wantOK {
 				t.Fatalf("attributeDefaultBinding ok = %t, want %t", ok, tc.wantOK)
 			}
@@ -119,7 +119,7 @@ func TestBindingSubsumesKeywords(t *testing.T) {
 			decl, use, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := s.checkBindingSubsumes(uq("a"), tt, bb, tc.general, tc.specific)
+			err := s.checkBindingSubsumes(uq("a"), complexTypeAttributeRestriction(tt, bb), tc.general, tc.specific)
 			if tc.wantOK && err != nil {
 				t.Fatalf("expected ·subsumes·, got %v", err)
 			}
@@ -162,7 +162,7 @@ func TestBindingSubsumesChargesTheRestrictingType(t *testing.T) {
 			wildcardKeywordBinding{keyword: ProcessSkip}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := s.checkBindingSubsumes(uq("a"), tt, bb, tc.general, tc.specific)
+			err := s.checkBindingSubsumes(uq("a"), complexTypeAttributeRestriction(tt, bb), tc.general, tc.specific)
 			expectRule(t, err, ruleDerivationOKRestriction)
 			var xe *xsderr.Error
 			if !errors.As(err, &xe) {
@@ -213,7 +213,7 @@ func TestBindingSubsumesAttributeUses(t *testing.T) {
 			dAttr(t, uq("a"), uq("str")), inheritable(dAttr(t, uq("a"), uq("str"))), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := s.checkBindingSubsumes(uq("a"), tt, bb,
+			err := s.checkBindingSubsumes(uq("a"), complexTypeAttributeRestriction(tt, bb),
 				attributeUseBinding{use: tc.general}, attributeUseBinding{use: tc.specific})
 			if tc.wantOK && err != nil {
 				t.Fatalf("expected ·subsumes·, got %v", err)
@@ -349,7 +349,7 @@ func TestAttributeValueConstraintSubsumesFixedValues(t *testing.T) {
 			}
 			tt := dType(t, uq("t"), anyTypeName, EmptyContent{}, nil, nil)
 			bb := dType(t, uq("b"), anyTypeName, EmptyContent{}, nil, nil)
-			err = s.checkBindingSubsumes(uq("a"), tt, bb,
+			err = s.checkBindingSubsumes(uq("a"), complexTypeAttributeRestriction(tt, bb),
 				attributeUseBinding{use: dAttrUse(t, uq("a"), uq("str"), false, &gvc)},
 				attributeUseBinding{use: dAttrUse(t, uq("a"), uq("narrow"), false, &svc)})
 			if tc.vs.calls == 0 {

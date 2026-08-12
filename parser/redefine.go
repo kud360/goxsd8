@@ -393,10 +393,11 @@ func declarationKey(el *Element) (componentKey, bool) {
 // GAP(xsd): only the two kinds src-expredef clause 1 PAIRS compose — <simpleType>
 // and <complexType>. A chained <group>/<attributeGroup>, whose clause 2 is a
 // single-component substitution, is still refused on a schema §4.2.4 makes valid,
-// and is retired in the landing that closes #504 and #503 — the two issues owning
-// src-redefine clauses 6.2.2 and 7.2.2, the only clauses such a chain turns on.
-// Composing it while both stay fail-open would decide nothing new and would trade
-// the rejection for a "valid" verdict on the two suite cases in that shape.
+// and is retired in the landing that closes #504 — the issue owning src-redefine
+// clause 6.2.2, now the only clause of the two such a chain turns on that is
+// still fail-open (7.2.2 is charged at finalize as of #503). Composing it while
+// 6.2.2 stays fail-open would trade a rejection for a "valid" verdict on the one
+// suite case in that shape whose invalidity turns on 6.2.2 alone.
 // The direction is fail-CLOSED, and the value withheld for those two kinds — the
 // rs.originals entry — has exactly three readers, all of which see the miss:
 // produceRedefinition REJECTS on it, charging src-expredef's closing requirement;
@@ -739,7 +740,15 @@ func (p *producer) produceRedefinition(rs *redefineSet, e redefineEntry) error {
 		if err != nil {
 			return err
 		}
-		p.builder.AddAttributeGroup(ag)
+		original, restricts, err := p.redefinedAttributeGroupRestricted(decl, qn)
+		if err != nil {
+			return err
+		}
+		if !restricts {
+			p.builder.AddAttributeGroup(ag) // clause 7.1: a self-reference, no restriction obligation
+			return nil
+		}
+		p.builder.AddRedefiningAttributeGroup(ag, original)
 		return nil
 	}
 	return fmt.Errorf("parser: <redefine> child <%s> at %s is outside §4.2.4's content model", e.key.kind, decl.Loc())
@@ -877,23 +886,59 @@ func (p *producer) checkRedefinedGroup(decl *Element, qn xsd.QName) error {
 // NEITHER of clause 6.1's extra conditions (see
 // redefinedAttributeGroupOriginal).
 //
-// GAP(xsd): clause 7.2 — the NO-self-reference branch — is fail-open (#503).
-// 7.2.1 is charged as src-expredef's closing requirement; 7.2.2 requires the
-// redefinition's {attribute uses}/{attribute wildcard}, viewed as a complex
-// type's, to satisfy clause 3 of derivation-ok-restriction (§3.4.6.3) against
-// the original's, which this producer cannot state without building both as
-// complex types. It UNDER-rejects: a restrictive attribute-group redefinition
-// that is not in fact a restriction is accepted, never wrongly refused.
+// It charges NOTHING on clause 7.2's no-self-reference branch, and nothing is
+// missing there. 7.2.1 is src-expredef's closing requirement, already charged by
+// produceRedefinition; 7.2.2 compares two assembled components and is charged at
+// finalize, over the pairing produceRedefinition hands
+// xsd.SchemaBuilder.AddRedefiningAttributeGroup
+// (redefinedAttributeGroupRestricted).
 func (p *producer) checkRedefinedAttributeGroup(decl *Element, qn xsd.QName) error {
 	refs, err := p.selfReferences(decl, qn, "attributeGroup", false)
 	if err != nil {
 		return err
 	}
 	if len(refs) <= 1 {
-		return nil // one self-reference: clause 7.1; none: clause 7.2, fail-open above
+		return nil // one self-reference: clause 7.1; none: clause 7.2, charged at finalize
 	}
 	return xsderr.New(ruleSrcRedefine, refs[1].Loc(),
 		"the redefining <attributeGroup> %s references itself %d times (the first at %s), but src-redefine clause 7.1 permits exactly one", qn, len(refs), refs[0].Loc())
+}
+
+// redefinedAttributeGroupRestricted returns the attribute group definition of S2
+// — the redefined schema document — that a redefining <attributeGroup> must
+// RESTRICT under src-redefine clause 7.2.2, built through the producer of the
+// document that declares it.
+//
+// ok is false on clause 7.1's branch, where decl carries a self-reference: that
+// branch states no restriction obligation at all, so the redefinition is added
+// as an ordinary attribute group definition. Which branch applies is clause 7's
+// own dispatch, and it is decided here the way checkRedefinedAttributeGroup
+// decides it — by counting self-references, the same walk under the same
+// exclusions, rather than by storing that count for a second reader (STYLE D3).
+//
+// A miss on originals is likewise reported as "no obligation", not as a fault:
+// produceRedefinition has already charged src-expredef's closing requirement for
+// exactly that miss, so this call is reached only when the entry is recorded.
+// buildAttributeGroup is not memoised by name, so building the original under
+// the same expanded name as the redefinition it pairs with is safe — the two
+// components are separate values, and only the redefinition is registered.
+func (p *producer) redefinedAttributeGroupRestricted(decl *Element, qn xsd.QName) (xsd.AttributeGroupDefinition, bool, error) {
+	refs, err := p.selfReferences(decl, qn, "attributeGroup", false)
+	if err != nil {
+		return xsd.AttributeGroupDefinition{}, false, err
+	}
+	if len(refs) > 0 {
+		return xsd.AttributeGroupDefinition{}, false, nil // clause 7.1
+	}
+	src, ok := p.originalFor(decl, qn, "attributeGroup")
+	if !ok {
+		return xsd.AttributeGroupDefinition{}, false, nil
+	}
+	original, err := src.owner.buildAttributeGroup(qn, src.elem)
+	if err != nil {
+		return xsd.AttributeGroupDefinition{}, false, err
+	}
+	return original, true, nil
 }
 
 // selfReferences collects, in document order, every descendant of decl of

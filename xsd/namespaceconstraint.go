@@ -312,7 +312,7 @@ func (c NamespaceConstraint) hasDisallowedNameKeyword(k DisallowedNameKeyword) b
 // member, which every survivor already passed at construction. Nothing this
 // method can produce is a state the constructor would have rejected (STYLE T1).
 //
-// The single caller is checkRestrictionAttributeWildcard (complexderivation.go),
+// The single caller is checkAttributeRestrictionWildcard (attributerestriction.go),
 // which excises the names cvc-complex-type clause 2.1 claims on both sides of a
 // derivation before the record reaches wildcardSubset; see its doc for why the
 // cos-ns-subset relation itself is not given a name-set parameter (STYLE T4).

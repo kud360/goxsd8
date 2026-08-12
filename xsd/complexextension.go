@@ -206,7 +206,7 @@ func (s *Schema) checkExtensionAttributeUses(t, b ComplexType) error {
 // defined by Wildcard Subset (§3.10.6.2)."
 //
 // The direction is the MIRROR of derivation-ok-restriction clause 3's wildcard
-// half (checkRestrictionAttributeWildcard): an extension must admit at least
+// half (checkAttributeRestrictionWildcard): an extension must admit at least
 // everything its base admits, so B's constraint is sub and T's is super — the
 // same one wildcardSubset (namespaceconstraint_subset.go), read the other way
 // round (STYLE T4). A B with no {attribute wildcard} discharges the clause
