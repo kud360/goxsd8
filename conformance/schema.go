@@ -192,20 +192,19 @@ import (
 //     - attribute: must have no inline <simpleType> child (src-attribute clause 4,
 //       §3.2.3). A bare attribute is FINE: it defaults to xs:anySimpleType
 //       (§3.2.2.1), which builtin.Seed always seeds, so type= is NOT required.
-//     - simpleType (top-level or any anonymous inline base reached transitively
-//       through a restriction chain): must have exactly one <restriction> child
-//       (no <list>/<union> — their absence of a <restriction> is an explicit
-//       src-simple-type rejection that conflates genuine invalidity with an
-//       unsupported variety, DECLINED) whose children include no <enumeration>
-//       (still a not-yet-produced facet rejected by src-simple-type §3.16.3;
-//       DECLINED). An <assertion> facet IS produced (#178, one assertions facet
-//       per restriction, Datatypes §4.3.13) and is admitted. An inline
-//       <simpleType> base child (the genuinely-supported anonymous nested base,
-//       §3.16.3 clause 2) is recursed into with the same two checks. The
-//       restriction's base=/inline-child exactly-one arrangement is NOT
-//       pre-checked: that IS the genuine src-simple-type clause 2 rule Produce
-//       correctly enforces, so a violation flows through as a real decidable
-//       rejection.
+//     - simpleType (top-level or any anonymous inline one reached transitively
+//       through a restriction, list, element or attribute chain): must choose the
+//       <list> or the <restriction> alternative. <list> is produced in both its
+//       forms (#447) and admitted; its inline <simpleType> item child is recursed
+//       into. <restriction> is admitted unless its children include an
+//       <enumeration> (still a not-yet-produced facet rejected by
+//       src-simple-type §3.16.3; DECLINED); an <assertion> facet IS produced
+//       (#178, one assertions facet per restriction, Datatypes §4.3.13) and is
+//       admitted, and an inline <simpleType> base child (§3.16.3 clause 2) is
+//       recursed into. <union> is produced by nothing, so it is DECLINED. Neither
+//       alternative's exactly-one-source arrangement is pre-checked: those ARE
+//       the genuine src-simple-type clauses 2 and 3 Produce correctly enforces,
+//       so a violation flows through as a real decidable rejection.
 //     - annotation: always allowed, no further check.
 //  4. Decide. When every document of the closure passes, observed =
 //     (parser.ParseReport's err == nil): a nil error is genuine evidence of
@@ -1125,16 +1124,31 @@ func localAttributeDecidable(el *parser.Element) bool {
 	return inline == nil || simpleTypeDecidable(inline)
 }
 
-// simpleTypeDecidable reports whether a <simpleType> (top-level or an anonymous
-// inline base reached through a restriction chain) is decidable: it must have
-// exactly one <restriction> child (no <list>/<union>, whose absence of a
-// <restriction> is an unsupported-variety rejection) whose children carry no
-// <enumeration> facet (still not produced). An <assertion> facet IS produced
-// (#178, one assertions facet per restriction, Datatypes §4.3.13) and is
-// admitted. An inline <simpleType> base child (the supported anonymous nested
-// base, §3.16.3 clause 2) is recursed into with the same checks.
-// src-simple-type §3.16.3.
+// simpleTypeDecidable reports whether a <simpleType> (top-level, or an anonymous
+// inline one reached through a restriction, list or element/attribute chain) is
+// decidable. Two of the three §3.16.2.1 alternatives are:
+//
+//   - <list> (#447): produced in both its forms, so it is admitted. Its
+//     itemType= is a deferred by-name reference resolved at finalize, whose
+//     src-resolve clause 1.1 failure is genuine; its inline <simpleType> child
+//     is recursed into with these same checks.
+//   - <restriction>: admitted unless a child is <enumeration>, the one facet
+//     still not produced. An <assertion> facet IS produced (#178, one assertions
+//     facet per restriction, Datatypes §4.3.13). An inline <simpleType> base
+//     child (§3.16.3 clause 2) is recursed into.
+//
+// <union> is DECLINED: the producer maps no union at all, so a case in that
+// shape would be scored against a schema it never built. It is the union-widening
+// follow-up to #447 that admits it.
+//
+// A <simpleType> naming TWO alternatives is admitted through whichever branch is
+// tested first, and correctly: the producer rejects that document outright
+// (simpleTypeBody), so the verdict is genuine whichever branch let it through.
 func simpleTypeDecidable(el *parser.Element) bool {
+	if list := childXSD(el, "list"); list != nil {
+		inline := childXSD(list, "simpleType")
+		return inline == nil || simpleTypeDecidable(inline)
+	}
 	restriction := childXSD(el, "restriction")
 	if restriction == nil {
 		return false

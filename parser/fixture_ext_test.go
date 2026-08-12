@@ -47,6 +47,18 @@ func mustPrimitive(t *testing.T, s *xsd.Schema, st *xsd.SimpleType) *xsd.SimpleT
 	return p
 }
 
+// mustItem resolves st's {item type definition} through s. A produced itemType=
+// is an [xsd.SimpleTypeRef], so this read is a schema lookup for exactly the
+// reason mustBase's is.
+func mustItem(t *testing.T, s *xsd.Schema, st *xsd.SimpleType) *xsd.SimpleType {
+	t.Helper()
+	item, err := st.Item(s)
+	if err != nil {
+		t.Fatalf("%s {item type definition}: %v", st.Name(), err)
+	}
+	return item
+}
+
 // mustEffectiveFacets resolves st's {facets} overlay through s.
 func mustEffectiveFacets(t *testing.T, s *xsd.Schema, st *xsd.SimpleType) []xsd.EffectiveFacet {
 	t.Helper()

@@ -60,7 +60,7 @@ func (b stubItemBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 func listType(t *testing.T, item *xsd.SimpleType) *xsd.SimpleType {
 	t.Helper()
 	lst, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "lst"},
-		xsd.ListDerivation{Item: item}, xsd.AnySimpleType(),
+		listOf(item), xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
@@ -296,13 +296,13 @@ func TestListEnumerationResolvesThroughAnonymousBase(t *testing.T) {
 	b := stubItemBackend{item: item.Name()}
 
 	anon, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{},
-		xsd.ListDerivation{Item: item}, xsd.AnySimpleType(),
+		listOf(item), xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(anonymous intermediate list): %v", err)
 	}
 	plural, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "NMTOKENS"},
-		xsd.ListDerivation{Item: item}, anon,
+		listOf(item), anon,
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetMinLength, []string{"1"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(xs:NMTOKENS): %v", err)
@@ -310,7 +310,7 @@ func TestListEnumerationResolvesThroughAnonymousBase(t *testing.T) {
 	// stubItemBackend keys an item's value by token length, so "aa bb" and
 	// "aa ccc" are different list values.
 	leaf, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "twoShortTokens"},
-		xsd.ListDerivation{Item: item}, plural, []xsd.Facet{enumOf("aa bb")}, nil)
+		listOf(item), plural, []xsd.Facet{enumOf("aa bb")}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(user restriction of xs:NMTOKENS): %v", err)
 	}

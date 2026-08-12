@@ -243,3 +243,130 @@ func TestDeferredBaseReadersResolveThroughSchema(t *testing.T) {
 		})
 	}
 }
+
+// TestItemAndMemberSlotsRejectAbsence pins the arm × slot legality table's
+// nil-illegal row: the {item type definition} and each {member type
+// definitions} entry admit no encoding of absence, so all three — a nil slot, a
+// ref naming nothing, an owned arm holding nothing — are refused at
+// CONSTRUCTION. That rejection is what lets checkListGraph and checkUnionGraph
+// read those slots with no absence case at all.
+func TestItemAndMemberSlotsRejectAbsence(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		derivation SimpleTypeDerivation
+		want       string
+	}{
+		{"a nil item", ListDerivation{}, "{item type definition} is absent"},
+		{"an item ref naming nothing", ListDerivation{Item: SimpleTypeRef{}}, "absent (zero) QName"},
+		{"an item owning nothing", ListDerivation{Item: OwnedSimpleType{}}, "no definition"},
+		{"a nil member", UnionDerivation{Members: []SimpleTypeOrRef{nil}}, "{member type definitions}[0] is absent"},
+		{"a member ref naming nothing", UnionDerivation{Members: []SimpleTypeOrRef{SimpleTypeRef{}}}, "absent (zero) QName"},
+		{"a member owning nothing", UnionDerivation{Members: []SimpleTypeOrRef{OwnedSimpleType{}}}, "no definition"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewSimpleType(xsderr.Loc{}, QName{Local: "D"}, tc.derivation, ownedBase(anySimpleType), nil, nil)
+			if err == nil {
+				t.Fatal("NewSimpleType = nil, want a component-invariant rejection")
+			}
+			if r, _ := xsderr.RuleOf(err); r != xsderr.RuleComponentInvariant {
+				t.Fatalf("charged %s, want %s", r, xsderr.RuleComponentInvariant)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("message does not name the illegal encoding (%q): %v", tc.want, err)
+			}
+		})
+	}
+}
+
+// TestEmptyUnionMembershipAccepted pins the other half of that table: an EMPTY
+// {member type definitions} sequence stays legal. §3.16.1 types the property as
+// "must be present (but may be empty)", and src-simple-type clause 4 — which
+// forbids the <union> element that would produce one — is a representation
+// constraint the producer charges, not a component invariant, so a min-length
+// rejection here would false-reject the programmatically built components
+// builtin and the conformance datatypes lane assemble.
+func TestEmptyUnionMembershipAccepted(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		members []SimpleTypeOrRef
+	}{
+		{"a nil membership", nil},
+		{"a zero-length membership", []SimpleTypeOrRef{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st, err := NewSimpleType(xsderr.Loc{}, QName{Local: "U"},
+				UnionDerivation{Members: tc.members}, ownedBase(anySimpleType), nil, nil)
+			if err != nil {
+				t.Fatalf("NewSimpleType(empty union) = %v, want an accepted component", err)
+			}
+			members, err := st.Members(noSchema{})
+			if err != nil {
+				t.Fatalf("U.Members: %v", err)
+			}
+			if len(members) != 0 {
+				t.Fatalf("U {member type definitions} = %v, want the empty sequence", members)
+			}
+		})
+	}
+}
+
+// TestDeferredItemResolvesThroughSchema pins the by-name ITEM arm end to end
+// inside this package: a list whose itemType= names a type declared later
+// resolves at finalize, and the same read against a resolves-nothing resolver
+// reports src-resolve rather than a nil item — the shape checkListGraph would
+// otherwise turn into a false reject.
+func TestDeferredItemResolvesThroughSchema(t *testing.T) {
+	prim, err := newCheckedPrimitiveType(xsderr.Loc{}, QName{Local: "item"}, nil, nil)
+	if err != nil {
+		t.Fatalf("NewPrimitiveType: %v", err)
+	}
+	list, err := NewSimpleType(xsderr.Loc{}, QName{Local: "L"},
+		ListDerivation{Item: SimpleTypeRef{Name: prim.Name()}}, ownedBase(anySimpleType),
+		[]Facet{NewFacet(FacetWhiteSpace, []string{"collapse"}, true)}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(list over a SimpleTypeRef item): %v", err)
+	}
+
+	b := NewSchemaBuilder()
+	b.AddType(prim)
+	b.AddType(list)
+	s, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	item, err := list.Item(s)
+	if err != nil {
+		t.Fatalf("L.Item(schema): %v", err)
+	}
+	if item != prim {
+		t.Fatalf("L.Item(schema) = %v, want the very component {type definitions} holds", item)
+	}
+	if _, err := list.Item(noSchema{}); err == nil {
+		t.Fatal("L.Item(resolver that resolves nothing) = nil error, want the src-resolve failure rather than a nil item")
+	}
+}
+
+// TestDanglingItemTypeRejectedAtFinalize pins the graph-layer wiring the by-name
+// item slot must join: an itemType= with nothing behind it is charged
+// src-resolve clause 1.1 by Phase A, exactly as a dangling base= is, rather than
+// being silently accepted because no pass happened to read the property.
+func TestDanglingItemTypeRejectedAtFinalize(t *testing.T) {
+	list, err := NewSimpleType(xsderr.Loc{}, QName{Local: "L"},
+		ListDerivation{Item: SimpleTypeRef{Name: QName{Local: "missing"}}}, ownedBase(anySimpleType),
+		[]Facet{NewFacet(FacetWhiteSpace, []string{"collapse"}, true)}, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType(list over a dangling item ref): %v", err)
+	}
+	b := NewSchemaBuilder()
+	b.AddType(list)
+	_, err = b.Finalize()
+	if err == nil {
+		t.Fatal("Finalize(list whose itemType= names nothing) = nil, want a src-resolve rejection")
+	}
+	if r, _ := xsderr.RuleOf(err); r != ruleSrcResolve {
+		t.Fatalf("charged %s, want %s", r, ruleSrcResolve)
+	}
+	if !strings.Contains(err.Error(), "{item type definition}") {
+		t.Fatalf("message does not name the slot that dangled: %v", err)
+	}
+}

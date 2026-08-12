@@ -255,19 +255,19 @@ func TestCountFacetValueMalformed(t *testing.T) {
 func TestListApplicableFacets(t *testing.T) {
 	item := mustPrim(t, "string")
 	constructed, err := newCheckedSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "constructedlist"},
-		ListDerivation{Item: item}, anySimpleType, constructedListFacets(), nil)
+		listOf(item), anySimpleType, constructedListFacets(), nil)
 	if err != nil {
 		t.Fatalf("constructed list rejected: %v", err)
 	}
 	baseList, err := newCheckedSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "goodlist"},
-		ListDerivation{Item: item}, constructed,
+		listOf(item), constructed,
 		[]Facet{NewFacet(FacetMinLength, []string{"1"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("list with an applicable facet rejected: %v", err)
 	}
 
 	_, err = newCheckedSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "badconstructedlist"},
-		ListDerivation{Item: item}, anySimpleType,
+		listOf(item), anySimpleType,
 		[]Facet{NewFacet(FacetMaxInclusive, []string{"5"}, false)}, nil)
 	wantRule(t, err, ruleCosSTRestricts)
 	if !strings.Contains(err.Error(), "2.2.1.2") {
@@ -275,7 +275,7 @@ func TestListApplicableFacets(t *testing.T) {
 	}
 
 	_, err = newCheckedSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "badrestrictedlist"},
-		ListDerivation{Item: item}, baseList,
+		listOf(item), baseList,
 		[]Facet{NewFacet(FacetMaxInclusive, []string{"5"}, false)}, nil)
 	wantRule(t, err, ruleCosSTRestricts)
 	if !strings.Contains(err.Error(), "2.2.2.4") {
@@ -294,14 +294,14 @@ func TestUnionApplicableFacets(t *testing.T) {
 	baseUnion := mustUnion(t, "baseunion")
 	member := mustMembers(baseUnion)[0]
 	_, err := newCheckedSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "goodunion"},
-		UnionDerivation{Members: []*SimpleType{member}}, baseUnion,
+		unionOf(member), baseUnion,
 		[]Facet{NewFacet(FacetPattern, []string{"a+"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("union with an applicable facet rejected: %v", err)
 	}
 
 	_, err = newCheckedSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "badunion"},
-		UnionDerivation{Members: []*SimpleType{member}}, baseUnion,
+		unionOf(member), baseUnion,
 		[]Facet{NewFacet(FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	wantRule(t, err, ruleCosSTRestricts)
 	if !strings.Contains(err.Error(), "3.2.2.4") {
@@ -315,7 +315,7 @@ func mustUnion(t *testing.T, local string) *SimpleType {
 	t.Helper()
 	member := mustPrim(t, local+"member")
 	u, err := newCheckedSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: local},
-		UnionDerivation{Members: []*SimpleType{member}}, anySimpleType, nil, nil)
+		unionOf(member), anySimpleType, nil, nil)
 	if err != nil {
 		t.Fatalf("build union %s: %v", local, err)
 	}
@@ -331,12 +331,12 @@ func mustUnion(t *testing.T, local string) *SimpleType {
 func TestUnionConstructedFacetsMustBeEmpty(t *testing.T) {
 	member := mustPrim(t, "cufmember")
 	if _, err := newCheckedSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "emptyunion"},
-		UnionDerivation{Members: []*SimpleType{member}}, anySimpleType, nil, nil); err != nil {
+		unionOf(member), anySimpleType, nil, nil); err != nil {
 		t.Fatalf("facet-free constructed union rejected: %v", err)
 	}
 
 	_, err := newCheckedSimpleType(xsderr.Loc{}, QName{Space: "urn:test", Local: "facetedunion"},
-		UnionDerivation{Members: []*SimpleType{member}}, anySimpleType,
+		unionOf(member), anySimpleType,
 		[]Facet{NewFacet(FacetPattern, []string{"a+"}, false)}, nil)
 	wantRule(t, err, ruleCosSTRestricts)
 	if !strings.Contains(err.Error(), "3.2.1.2") {

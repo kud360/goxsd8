@@ -22,7 +22,10 @@
 //     deferred reference (SimpleTypeOrRef): st-props-correct clause 2 is
 //     charged by a finalize check like its complex-type twin, and the
 //     unguarded chain walks behind Variety/Primitive/Item/Members/
-//     EffectiveFacets rest on it having run — see Schema.resolve.
+//     EffectiveFacets rest on it having run — see Schema.resolve. The
+//     {item type definition} and {member type definitions} slots hold
+//     that same sum, so an itemType= or memberTypes= naming a
+//     forward-declared type defers exactly as a base= does.
 //
 //   - Every child collection is a slice in document order. Maps exist
 //     only as internal lookup indexes and never determine order (D2).

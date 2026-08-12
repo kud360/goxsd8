@@ -432,16 +432,16 @@ func TestDerivedPropertiesFollowTheBaseChain(t *testing.T) {
 	derived := mustSimple(t, "derived", RestrictionDerivation{}, prim, nil)
 	derived2 := mustSimple(t, "derived2", RestrictionDerivation{}, derived, nil)
 
-	list := mustSimple(t, "list", ListDerivation{Item: prim}, anySimpleType, constructedListFacets())
+	list := mustSimple(t, "list", listOf(prim), anySimpleType, constructedListFacets())
 	listRestricted := mustSimple(t, "listRestricted", RestrictionDerivation{}, list, nil)
 
 	other, err := newCheckedPrimitiveType(xsderr.Loc{}, QName{Local: "other"}, nil, nil)
 	if err != nil {
 		t.Fatalf("building other: %v", err)
 	}
-	union := mustSimple(t, "union", UnionDerivation{Members: []*SimpleType{prim, other}}, anySimpleType, nil)
+	union := mustSimple(t, "union", unionOf(prim, other), anySimpleType, nil)
 	unionRestricted := mustSimple(t, "unionRestricted",
-		UnionDerivation{Members: []*SimpleType{prim, other}}, union, nil)
+		unionOf(prim, other), union, nil)
 
 	// {variety}: minted by the list/union/primitive arms, inherited by restriction.
 	for _, c := range []struct {
@@ -544,10 +544,10 @@ func TestDerivedReadersAreTotal(t *testing.T) {
 }
 
 // TestUnionMembersPreserveSequenceVerbatim proves a UnionDerivation's membership
-// is neither sorted, deduplicated, nor stripped of nil members: position is
-// load-bearing, because cos-st-restricts clause 3.2.2.3 pairs a restriction's
-// members with the base's positionally, and checkUnionGraph — not the
-// constructor — is what rejects a nil member.
+// is neither sorted nor deduplicated: position is load-bearing, because
+// cos-st-restricts clause 3.2.2.3 pairs a restriction's members with the base's
+// positionally. A repeated member is the case that would survive a
+// deduplicating copy unnoticed, so the sequence under test carries one.
 func TestUnionMembersPreserveSequenceVerbatim(t *testing.T) {
 	a, err := newCheckedPrimitiveType(xsderr.Loc{}, QName{Local: "a"}, nil, nil)
 	if err != nil {
@@ -558,11 +558,10 @@ func TestUnionMembersPreserveSequenceVerbatim(t *testing.T) {
 		t.Fatalf("building b: %v", err)
 	}
 
-	want := []*SimpleType{b, a, b, nil}
-	// checkUnionGraph rejects the nil member, so the component is built as a
-	// struct literal: what is under test is copyDerivation and Members, not the
-	// graph check.
-	u := &SimpleType{derivation: copyDerivation(UnionDerivation{Members: want})}
+	want := []*SimpleType{b, a, b}
+	// Built as a struct literal: what is under test is copyDerivation and
+	// Members, not the graph checks the constructor pairing would also run.
+	u := &SimpleType{derivation: copyDerivation(unionOf(want...))}
 	got := mustMembers(u)
 	if len(got) != len(want) {
 		t.Fatalf("Members() length = %d, want %d", len(got), len(want))
@@ -574,12 +573,12 @@ func TestUnionMembersPreserveSequenceVerbatim(t *testing.T) {
 	}
 }
 
-// TestUnionMembershipIsCopiedBothWays proves the immutability that makes a
-// mutation-induced membership cycle structurally unrepresentable (see
-// CheckDerivation): NewSimpleType copies a UnionDerivation's Members IN
-// (copyDerivation), and SimpleType.Members copies it OUT, so neither the
-// caller's backing array nor a returned slice aliases the component's own —
-// which is what the exported Members field would otherwise give away.
+// TestUnionMembershipIsCopiedBothWays proves the immutability that keeps the
+// constructor's every-entry-present verdict true after it is charged:
+// NewSimpleType copies a UnionDerivation's Members IN (copyDerivation), and
+// SimpleType.Members copies it OUT, so neither the caller's backing array nor a
+// returned slice aliases the component's own — which is what the exported
+// Members field would otherwise give away.
 func TestUnionMembershipIsCopiedBothWays(t *testing.T) {
 	a, err := newCheckedPrimitiveType(xsderr.Loc{}, QName{Local: "a"}, nil, nil)
 	if err != nil {
@@ -591,7 +590,7 @@ func TestUnionMembershipIsCopiedBothWays(t *testing.T) {
 	}
 
 	src := []*SimpleType{a}
-	u := mustSimple(t, "u", UnionDerivation{Members: src}, anySimpleType, nil)
+	u := mustSimple(t, "u", unionOf(src...), anySimpleType, nil)
 
 	// Mutating the caller's backing array must not reach u.
 	src[0] = b

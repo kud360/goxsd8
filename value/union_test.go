@@ -69,7 +69,7 @@ func allDigits(s string) bool {
 func unionType2(t *testing.T, local string, members ...*xsd.SimpleType) *xsd.SimpleType {
 	t.Helper()
 	u, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
-		xsd.UnionDerivation{Members: members}, xsd.AnySimpleType(), nil, nil)
+		unionOf(members...), xsd.AnySimpleType(), nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union %q): %v", local, err)
 	}
@@ -88,7 +88,7 @@ func unionRestriction(t *testing.T, local string, base *xsd.SimpleType, own []xs
 		t.Fatalf("Members(%q base): %v", local, merr)
 	}
 	u, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
-		xsd.UnionDerivation{Members: members}, base, own, nil)
+		unionOf(members...), base, own, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union restriction %q): %v", local, err)
 	}

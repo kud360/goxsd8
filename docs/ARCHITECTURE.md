@@ -196,14 +196,14 @@ represents it**:
   ref component, which is a different representation and not this concern.
 
   Moving the complex-type base onto the same footing is the remaining
-  pre-1.0 refactor. The original ordering advice — "land before
-  `<list>`/`<union>` (which add item/member pointers)" — is still live for
-  the simple-type side in one narrow sense: `ListDerivation.Item` and
-  `UnionDerivation.Members` deliberately stayed `*SimpleType` in #636,
-  because the producer declines `<list>`/`<union>` today
-  (`parser/produce.go`'s `restrictionOf`), so nothing can put a name in
-  those slots. **#447 — which teaches the producer `<list>`/`<union>` — must
-  widen them to `SimpleTypeOrRef` as part of that work.**
+  pre-1.0 refactor. On the simple-type side the deferral is complete:
+  `ListDerivation.Item` and `UnionDerivation.Members` are `SimpleTypeOrRef`
+  slots too as of #447, so an `itemType=` or `memberTypes=` naming a
+  forward-declared type defers exactly as a `base=` does, and all three are
+  resolved by one helper in one phase. `<union>` is the one arm the producer
+  still declines; the union-widening follow-up to #447 owns it, together
+  with the `cos-st-restricts` cl. 3.3 acyclicity guard a by-name membership
+  makes reachable.
 - All child collections are slices in document order. Maps exist only as
   internal indexes and never determine any order.
 - Nothing derivable is stored (STYLE D3): no effective-facet caches —

@@ -1360,11 +1360,12 @@ func (p *producer) resolveModelGroup(name xsd.QName) (xsd.ModelGroup, bool, erro
 }
 
 // constructSimpleType maps one <simpleType> element (named or anonymous) into a
-// component: it reads the single <restriction> child, resolves the base, maps
-// the own facets and {final} (§3.16.2.1, simpleTypeFinal), and constructs. It
-// does NOT memoize — the memo/cycle bookkeeping lives in buildSimpleType; an
-// anonymous inline type has no name to key on and is unreferenceable, so it is
-// built here directly, once.
+// component. It dispatches on which of the three §3.16.2.1 alternatives the
+// element's body chooses — <list> to constructListType, <union> to a decline,
+// <restriction> to the code below, which resolves the base, maps the own facets
+// and {final} (simpleTypeFinal), and constructs. It does NOT memoize — the
+// memo/cycle bookkeeping lives in buildSimpleType; an anonymous inline type has
+// no name to key on and is unreferenceable, so it is built here directly, once.
 //
 // It does NOT charge the facet-VALUE sub-clauses of cos-st-restricts (§3.16.6.2)
 // — facet applicability against the primitive, and the bound/enumeration
@@ -1377,39 +1378,143 @@ func (p *producer) resolveModelGroup(name xsd.QName) (xsd.ModelGroup, bool, erro
 // THIS function builds, and would have to be repeated at every future
 // construction site.
 func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleType, error) {
-	restriction, err := restrictionOf(elem)
+	body, err := simpleTypeBody(elem)
 	if err != nil {
 		return nil, err
 	}
-	base, err := p.resolveBase(restriction)
+	switch body.Name().Local() {
+	case "list":
+		return p.constructListType(name, elem, body)
+	case "union":
+		// GAP(parser): a <simpleType> whose body is <union> is not produced. The
+		// component model holds the shape — xsd.UnionDerivation's {member type
+		// definitions} are xsd.SimpleTypeOrRef slots, deferred by name exactly as
+		// itemType= is — so what remains is this mapping (§3.16.2.1 map.std.union:
+		// memberTypes= in attribute order, then the inline <simpleType> children in
+		// document order) and the cos-st-restricts clause 3.3 acyclicity guard a
+		// by-name membership makes reachable, which must land in the same commit.
+		// The union-widening follow-up to #447 owns both; patch its number in here
+		// once it is filed.
+		//
+		// It is a plain error and not a rule verdict: the schema is legal and this
+		// producer is incomplete, so charging src-simple-type would fabricate an
+		// invalidity (STYLE E2). The conformance schema lane declines a case in
+		// this shape rather than scoring it (simpleTypeDecidable).
+		return nil, fmt.Errorf("simpleType at %s uses the <union> alternative, which this producer does not yet map", body.Loc())
+	}
+	base, err := p.resolveBase(body)
 	if err != nil {
 		return nil, err
 	}
-	facets, err := p.restrictionFacets(restriction)
+	facets, err := p.restrictionFacets(body)
 	if err != nil {
 		return nil, err
 	}
-	// The declared derivation is ·restriction· — this producer's only
-	// <simpleType> alternative today (restrictionOf rejects <list>/<union>). It
-	// carries no property of its own: §3.16.2.1 gives a restriction the
-	// {variety}, {primitive type definition}, {item type definition} and {member
-	// type definitions} of its {base type definition}, and xsd.SimpleType derives
-	// all four from the base chain, so the producer no longer re-derives any of
-	// them here (STYLE D3).
+	// The declared derivation is ·restriction·. It carries no property of its
+	// own: §3.16.2.1 gives a restriction the {variety}, {primitive type
+	// definition}, {item type definition} and {member type definitions} of its
+	// {base type definition}, and xsd.SimpleType derives all four from the base
+	// chain, so the producer no longer re-derives any of them here (STYLE D3).
 	return xsd.NewSimpleType(elem.Loc(), name, xsd.RestrictionDerivation{}, base, facets, p.simpleTypeFinal(elem))
 }
 
-// restrictionOf returns the single <restriction> child of a <simpleType>. A
-// <simpleType> using <list> or <union> instead has no <restriction> child; that
-// is rejected explicitly (never silently skipped), since this slice only
-// implements the restriction case (§3.16.3 src-simple-type governs the required
-// <restriction>|<list>|<union> shape).
-func restrictionOf(elem *Element) (*Element, error) {
-	if r := childElement(elem, xsd.XMLSchemaNS, "restriction"); r != nil {
-		return r, nil
+// constructListType maps a <simpleType> whose body is <list> (§3.16.2.1
+// map.std.common case 2 plus map.std.list case 1) into ONE component — the very
+// one this <simpleType> element declares, named or anonymous:
+//
+//   - {variety} = list and {base type definition} = xs:anySimpleType, both
+//     directly, from map.std.common's <list> alternative. No anonymous
+//     intermediate component is synthesized: the two-step shape is a fact about
+//     xs:NMTOKENS/xs:IDREFS/xs:ENTITIES' own Datatypes definitions, encoded in
+//     builtin.Seed's interposeListBase, and generalizing it here would attribute
+//     this element's {name} and {context} to a phantom component.
+//   - {item type definition} from listItem.
+//   - {facets} = exactly one whiteSpace facet, {value} collapse and {fixed}
+//     true, which map.std.common {facets} case 3 MANUFACTURES for every <list>
+//     alternative. It is not optional bookkeeping: cos-st-restricts clause
+//     2.2.1.2 admits that set and nothing else, so a list produced without it is
+//     refused at finalize by xsd's checkConstructedListFacets.
+//
+// A <restriction> OF a named list type needs nothing here — it maps through the
+// ordinary restriction path, and map.std.list case 2 gives it the base's item,
+// which xsd.SimpleType.Item derives off the base chain (STYLE D3).
+func (p *producer) constructListType(name xsd.QName, elem, list *Element) (*xsd.SimpleType, error) {
+	item, err := p.listItem(list)
+	if err != nil {
+		return nil, err
 	}
-	return nil, xsderr.New(ruleSrcSimpleType, elem.Loc(),
-		"simpleType has no <restriction> child; this producer does not yet support <list> or <union> simple types")
+	whiteSpace := xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)
+	return xsd.NewSimpleType(elem.Loc(), name, xsd.ListDerivation{Item: item},
+		xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, []xsd.Facet{whiteSpace}, p.simpleTypeFinal(elem))
+}
+
+// listItem maps a <list>'s {item type definition} to the [xsd.SimpleTypeOrRef]
+// arm that slot takes, enforcing src-simple-type clause 3 (§3.16.3): exactly one
+// of an itemType= attribute or an inline <simpleType> child, never both, never
+// neither.
+//
+// The arm split is resolveBase's, by OWNERSHIP: an inline <simpleType> child is
+// built here and owned by the slot, and EVERY by-name itemType= is an
+// xsd.SimpleTypeRef with no lookup and no build, so a forward-referenced item
+// costs no resolution ladder here and its src-resolve clause 1.1 rejection is
+// charged once, at finalize.
+func (p *producer) listItem(list *Element) (xsd.SimpleTypeOrRef, error) {
+	itemLex, hasItem := list.Attr("itemType")
+	inline := childElement(list, xsd.XMLSchemaNS, "simpleType")
+
+	if hasItem && inline != nil {
+		return nil, xsderr.New(ruleSrcSimpleType, list.Loc(),
+			"list has both an itemType attribute and an inline <simpleType> child, but src-simple-type clause 3 allows only one")
+	}
+	if !hasItem && inline == nil {
+		return nil, xsderr.New(ruleSrcSimpleType, list.Loc(),
+			"list has neither an itemType attribute nor an inline <simpleType> child, but src-simple-type clause 3 requires exactly one")
+	}
+
+	if inline != nil {
+		// Anonymous item: built inline, once, with an absent {name} (zero QName).
+		st, err := p.constructSimpleType(xsd.QName{}, inline)
+		if err != nil {
+			return nil, err
+		}
+		return xsd.OwnedSimpleType{Definition: st}, nil
+	}
+
+	qn, err := p.resolveQName(list, itemLex, "itemType")
+	if err != nil {
+		return nil, err
+	}
+	return xsd.SimpleTypeRef{Name: qn}, nil
+}
+
+// simpleTypeBody returns the ONE §3.16.2.1 alternative a <simpleType> chooses —
+// its <restriction>, <list> or <union> child. Neither none nor more than one is
+// skipped silently: src-simple-type's preamble incorporates the schema for
+// schema documents, whose <simpleType> content model admits exactly one, and a
+// producer that picked a winner would drop the loser's whole mapping.
+//
+// The alternatives are examined in a fixed order so the rejection message is
+// deterministic (STYLE D1) rather than following document order into two
+// different messages for the same document.
+func simpleTypeBody(elem *Element) (*Element, error) {
+	var chosen *Element
+	for _, local := range []string{"restriction", "list", "union"} {
+		alt := childElement(elem, xsd.XMLSchemaNS, local)
+		if alt == nil {
+			continue
+		}
+		if chosen != nil {
+			return nil, xsderr.New(ruleSrcSimpleType, elem.Loc(),
+				"simpleType has both a <%s> and a <%s> child, but §3.16.2.1 admits exactly one of <restriction>, <list> and <union>",
+				chosen.Name().Local(), local)
+		}
+		chosen = alt
+	}
+	if chosen == nil {
+		return nil, xsderr.New(ruleSrcSimpleType, elem.Loc(),
+			"simpleType has no <restriction>, <list> or <union> child, but §3.16.2.1 requires exactly one of the three alternatives")
+	}
+	return chosen, nil
 }
 
 // resolveBase maps a <restriction>'s {base type definition} to the

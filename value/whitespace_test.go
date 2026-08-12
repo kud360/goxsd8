@@ -151,13 +151,13 @@ func TestEffectiveWhiteSpaceNoFacetErrors(t *testing.T) {
 func TestEffectiveWhiteSpaceListNoUsableModeErrors(t *testing.T) {
 	item := primType(t, "string", "preserve")
 	constructed, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "goodList"},
-		xsd.ListDerivation{Item: item}, xsd.AnySimpleType(),
+		listOf(item), xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(constructed list): %v", err)
 	}
 	list, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "bareList"},
-		xsd.ListDerivation{Item: item}, constructed,
+		listOf(item), constructed,
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"not-a-whiteSpace-token"}, false)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
@@ -237,7 +237,7 @@ func TestValidateLexicalSpecialDatatypesDoNotFault(t *testing.T) {
 func TestEffectiveWhiteSpaceListResolvesCollapse(t *testing.T) {
 	item := primType(t, "string", "preserve")
 	list, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "collapseList"},
-		xsd.ListDerivation{Item: item}, xsd.AnySimpleType(),
+		listOf(item), xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
@@ -277,7 +277,7 @@ func unionType(t *testing.T) *xsd.SimpleType {
 	strPrim := primType(t, "string", "preserve")
 	decPrim := primType(t, "decimal", "collapse")
 	union, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "u"},
-		xsd.UnionDerivation{Members: []*xsd.SimpleType{strPrim, decPrim}}, xsd.AnySimpleType(), nil, nil)
+		unionOf(strPrim, decPrim), xsd.AnySimpleType(), nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union): %v", err)
 	}
