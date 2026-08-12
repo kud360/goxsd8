@@ -1443,7 +1443,7 @@ MS-AttributeGroup2006-07-15/attgC024/schema/attgC024 pass
 MS-AttributeGroup2006-07-15/attgC025/schema/attgC025 pass
 MS-AttributeGroup2006-07-15/attgC026/schema/attgC026 pass
 MS-AttributeGroup2006-07-15/attgC027/schema/attgC027 pass
-MS-AttributeGroup2006-07-15/attgC028/schema/attgC028 fail
+MS-AttributeGroup2006-07-15/attgC028/schema/attgC028 pass
 MS-AttributeGroup2006-07-15/attgC029/schema/attgC029 pass
 MS-AttributeGroup2006-07-15/attgC030/schema/attgC030 pass
 MS-AttributeGroup2006-07-15/attgC031/schema/attgC031 pass
@@ -1504,8 +1504,8 @@ MS-AttributeGroup2006-07-15/attgD040/schema/attgD040 pass
 MS-AttributeGroup2006-07-15/attgD041/schema/attgD041 fail
 MS-AttributeGroup2006-07-15/attgD042/schema/attgD042 pass
 MS-AttributeGroup2006-07-15/attgZ001/schema/attgZ001 pass
-MS-AttributeGroup2006-07-15/attgZ002/schema/attgZ002 fail
-MS-AttributeGroup2006-07-15/attgZ003/schema/attgZ003 fail
+MS-AttributeGroup2006-07-15/attgZ002/schema/attgZ002 pass
+MS-AttributeGroup2006-07-15/attgZ003/schema/attgZ003 pass
 MS-ComplexType2006-07-15/ctA001/schema/ctA001 pass
 MS-ComplexType2006-07-15/ctA002/schema/ctA002 pass
 MS-ComplexType2006-07-15/ctA003/schema/ctA003 pass
@@ -9758,9 +9758,9 @@ MS-Schema2006-07-15/schL3/schema/schL3 pass
 MS-Schema2006-07-15/schL5/schema/schL5 pass
 MS-Schema2006-07-15/schL6/schema/schL6 fail
 MS-Schema2006-07-15/schL8/schema/schL8 fail
-MS-Schema2006-07-15/schM10/schema/schM10 fail
-MS-Schema2006-07-15/schM3/schema/schM3 fail
-MS-Schema2006-07-15/schM4/schema/schM4 fail
+MS-Schema2006-07-15/schM10/schema/schM10 pass
+MS-Schema2006-07-15/schM3/schema/schM3 pass
+MS-Schema2006-07-15/schM4/schema/schM4 pass
 MS-Schema2006-07-15/schM5/schema/schM5 pass
 MS-Schema2006-07-15/schM8/schema/schM8 pass
 MS-Schema2006-07-15/schM9/schema/schM9 pass

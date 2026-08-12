@@ -458,7 +458,7 @@ func TestParseRedefineComplexTypeInheritsOriginalAttributes(t *testing.T) {
 // clause-3/clause-2.2 inherited. derivation-ok-restriction clause 3 (c-ran) reads
 // exactly those two properties OFF THE BASE to charge the redefining restriction:
 // checkRestrictionAttributes demands the base declare or admit every use the
-// restriction declares, and checkRestrictionAttributeWildcard demands the base
+// restriction declares, and checkAttributeRestrictionWildcard demands the base
 // have a wildcard when the restriction does. A fold that computed the original's
 // values without STORING them back into the {base type definition} slot that owns
 // it left both readers seeing a base that declares nothing, and each rejected a
@@ -924,6 +924,75 @@ func TestParseRedefineAttributeGroupClause71Rejected(t *testing.T) {
 			`<xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`),
 	})
 	mustRule(t, err, "src-redefine", "7.1")
+}
+
+// TestParseRedefineAttributeGroupClause722Accepts is clause 7.2's control: a
+// redefining <attributeGroup> with NO self-reference that genuinely restricts
+// the original — one attribute narrowed to a derived type, one OPTIONAL
+// attribute dropped — is accepted, and the component the schema carries is the
+// redefinition's own <attribute> children alone (the Note under clause 7.2.2:
+// "No inheritance from the <redefine>d attribute group occurs").
+func TestParseRedefineAttributeGroupClause722Accepts(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+			`<xs:attributeGroup name="ag">`+
+			`<xs:attribute name="a" type="xs:token"/>`+
+			`</xs:attributeGroup>`+
+			`</xs:redefine>`),
+		"lib.xsd": wrap("urn:a", `<xs:attributeGroup name="ag">`+
+			`<xs:attribute name="a" type="xs:string"/>`+
+			`<xs:attribute name="b" type="xs:string"/></xs:attributeGroup>`),
+	})
+	if err != nil {
+		t.Fatalf("a restrictive clause-7.2 redefinition was rejected: %v", err)
+	}
+	ag := mustAttributeGroup(t, s, xsd.QName{Space: "urn:a", Local: "ag"})
+	if got := len(ag.AttributeUses()); got != 1 {
+		t.Fatalf("redefined {urn:a}ag has %d attribute uses, want 1: clause 7.2 inherits nothing from the original", got)
+	}
+}
+
+// TestParseRedefineAttributeGroupClause722Rejected covers src-redefine clause
+// 7.2.2 over the producer: a redefining <attributeGroup> with no self-reference
+// whose {attribute uses}/{attribute wildcard} do NOT satisfy clause 3 of
+// derivation-ok-restriction (§3.4.6.3, c-ran) against the original's is
+// rejected, charged to src-redefine — never to derivation-ok-restriction, which
+// is a rule about a complex type that does not exist here.
+//
+// The three shapes are the three the W3C suite's MS-AttributeGroup redefine
+// cohort mixes: an added attribute the original neither declares nor admits, a
+// re-typing that is not a derivation, and a required attribute dropped.
+func TestParseRedefineAttributeGroupClause722Rejected(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		redefining   string
+		original     string
+		messageNames string
+	}{
+		{"an added attribute the original does not admit",
+			`<xs:attribute name="a" type="xs:string"/><xs:attribute name="extra" type="xs:string"/>`,
+			`<xs:attribute name="a" type="xs:string"/>`,
+			"extra"},
+		{"a re-typing that is not a derivation",
+			`<xs:attribute name="a" type="xs:string"/>`,
+			`<xs:attribute name="a" type="xs:int"/>`,
+			"a"},
+		{"a required attribute the redefinition drops",
+			`<xs:attribute name="a" type="xs:string"/>`,
+			`<xs:attribute name="a" type="xs:string"/><xs:attribute name="r" type="xs:string" use="required"/>`,
+			"r"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseMap(t, "main.xsd", map[string]string{
+				"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+					`<xs:attributeGroup name="ag">`+tc.redefining+`</xs:attributeGroup>`+
+					`</xs:redefine>`),
+				"lib.xsd": wrap("urn:a", `<xs:attributeGroup name="ag">`+tc.original+`</xs:attributeGroup>`),
+			})
+			mustRule(t, err, "src-redefine", "7.2.2", tc.messageNames,
+				"the redefining attribute group {urn:a}ag", "the original attribute group {urn:a}ag")
+		})
+	}
 }
 
 // TestParseRedefineNamelessGroupRejected reaches produceModelGroupDefinition's

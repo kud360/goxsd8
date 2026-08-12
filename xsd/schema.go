@@ -44,6 +44,13 @@ type SchemaBuilder struct {
 	notations           []Notation
 	identityConstraints []IdentityConstraint
 	annotations         []Annotation
+
+	// attributeGroupRedefinitions holds the (redefinition, S2 original) pairings
+	// AddRedefiningAttributeGroup records, in the order they were added, for
+	// finalize to charge src-redefine clause 7.2.2 over (redefinition.go). It is
+	// not a §3.17.1 property: the redefinition itself is in attributeGroups like
+	// any other top-level definition, and the original is in no property at all.
+	attributeGroupRedefinitions []attributeGroupRedefinition
 }
 
 // NewSchemaBuilder returns an empty accumulating builder.
@@ -167,6 +174,10 @@ type Schema struct {
 	notations           []Notation
 	identityConstraints []IdentityConstraint
 	annotations         []Annotation
+
+	// attributeGroupRedefinitions carries the builder's pairings across finalize;
+	// checkAttributeGroupRedefinitions (redefinition.go) is its one reader.
+	attributeGroupRedefinitions []attributeGroupRedefinition
 
 	typeIndex           map[QName]TypeDefinition
 	elementIndex        map[QName]ElementDeclaration
@@ -338,6 +349,9 @@ func (b *SchemaBuilder) finalize(vs ValueSpace, rc SimpleTypeRestrictionChecker)
 		notations:           cloneSlice(b.notations),
 		identityConstraints: cloneSlice(b.identityConstraints),
 		annotations:         cloneSlice(b.annotations),
+
+		attributeGroupRedefinitions: cloneSlice(b.attributeGroupRedefinitions),
+
 		typeIndex:           typeIndex,
 		elementIndex:        elementIndex,
 		attributeIndex:      attributeIndex,

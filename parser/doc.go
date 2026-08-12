@@ -168,17 +168,18 @@
 //
 // # Composition gaps
 //
-//   - GAP(xsd): src-redefine clauses 6.2.2 and 7.2.2 — the
-//     no-self-reference branches — are fail-open. 6.2.2 asks whether the
+//   - GAP(xsd): src-redefine clause 6.2.2 — the <group>
+//     no-self-reference branch — is fail-open. It asks whether the
 //     redefining group's {model group} accepts a SUBSET of the element
 //     sequences the original accepts, a language-containment question
 //     needing the content-model engine cos-content-act-restrict (#263)
-//     needs; 7.2.2 asks whether the redefining attribute group satisfies
-//     clause 3 of derivation-ok-restriction (§3.4.6.3) against the
-//     original. Their 6.2.1/7.2.1 halves ARE charged, as src-expredef's
-//     closing requirement. Both UNDER-reject: a redefinition that widens
-//     rather than restricts is accepted, never wrongly refused. Owned by
-//     #504 (6.2.2) and #503 (7.2.2).
+//     needs. Its 6.2.1 half IS charged, as src-expredef's closing
+//     requirement. It UNDER-rejects: a redefinition that widens rather
+//     than restricts is accepted, never wrongly refused. Owned by #504.
+//     The <attributeGroup> twin, clause 7.2.2, is no longer a gap: the
+//     producer pairs the redefinition with the original it must restrict
+//     and xsd charges clause 3 of derivation-ok-restriction (§3.4.6.3)
+//     over the pair at finalize.
 //   - GAP(xsd): a CHAINED <xs:redefine> of a <group> or an
 //     <attributeGroup> — one whose redefined document redefines a
 //     document of its own for the same name — is REFUSED under

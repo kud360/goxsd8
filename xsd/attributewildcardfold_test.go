@@ -280,7 +280,7 @@ func TestDerivationOKRestrictionAttributeWildcardSharedUse(t *testing.T) {
 // it — can only do so through clause 2.2.
 //
 // It calls the predicate directly rather than through Finalize because Finalize
-// charges this shape earlier: checkRestrictionAttributes walks T's uses first and
+// charges this shape earlier: checkAttributeRestriction walks T's uses first and
 // attributeDefaultBinding already refuses a name B neither declares nor admits.
 // Routing through Finalize would therefore pass on the strength of a different
 // check and say nothing about this one.
@@ -301,7 +301,7 @@ func TestDerivationOKRestrictionAttributeWildcardUnsharedUse(t *testing.T) {
 			derived := dType(t, uq("derived"), uq("base"), EmptyContent{},
 				[]AttributeUse{dAttr(t, uq("bar"), uq("str"))},
 				wWild(t, cNC(t, NamespaceConstraintAny, nil, nil, nil), ProcessLax))
-			err := checkRestrictionAttributeWildcard(derived, base)
+			err := checkAttributeRestrictionWildcard(complexTypeAttributeRestriction(derived, base))
 			if !tc.wantReject {
 				if err != nil {
 					t.Fatalf("c-avaw charged a name both types govern with an {attribute use}: %v", err)

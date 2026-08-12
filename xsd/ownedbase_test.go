@@ -267,8 +267,8 @@ func TestOwnedBaseAttributeFolds(t *testing.T) {
 // it. Computing the value and discarding it leaves the original reporting the
 // producer's clause-1-and-2 set to every reader that follows Base() — and the
 // readers that follow it are derivation-ok-restriction clause 3's
-// (checkRestrictionAttributes, checkRestrictionRequiredAttributes,
-// checkRestrictionAttributeWildcard), each of which REJECTS on a base reporting
+// (checkRestrictionAttributes, checkAttributeRestrictionRequired,
+// checkAttributeRestrictionWildcard), each of which REJECTS on a base reporting
 // fewer attribute uses than it has. So the direction is fail-CLOSED, not an
 // under-report (#505).
 //

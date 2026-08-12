@@ -73,6 +73,11 @@ var allowedCollisionCitations = []citationAllowance{
 	{file: "xsd/effectivetotalrange.go", number: 9, count: 1},
 	{file: "xsd/example_test.go", number: 9, count: 1},
 	{file: "xsd/modelgroup.go", number: 9, count: 1},
+	// #503: the src-redefine clause 7.2.2 pass walks a single edge from a named
+	// attribute group definition to the off-index original it redefines, and
+	// records that no `seen` set belongs there — item 9's first half, the
+	// phased-construction licence, not PRINCIPLES 5.
+	{file: "xsd/redefinition.go", number: 9, count: 1},
 	// Reviewed against the topic each argues, and every one is item 9's FIRST
 	// half — "Parse raw, resolve names, finalize in dependency order — then no
 	// traversal ever needs a `seen` set" — not PRINCIPLES 5. Two are #629's
