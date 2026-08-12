@@ -31,15 +31,17 @@ Value implementations, parsing, validation, and generation live above them.
                  cmd/goxsd8      (the CLI; help/usage only today)
 ```
 
-**[1] These boxes are DESTINATIONS, not shipped layers.** `xpath`, `validate`
-(and `validate/xmlsrc`, `validate/jsonsrc`, `validate/bersrc`), `codegen`,
-`codec` and `builtin/native` are `doc.go`-only today: `go doc` renders no
-exported identifier for any of them and they import nothing from this module,
-so the edges drawn above do not exist yet in `go list -deps`. Read every
-present-tense sentence in their sections below as "will", not "does". Only
-`xsderr`, `xsd`, `internal/schemaloc`, `value`, `value/backendtest`, `regex`,
-`builtin`, `builtin/strict`, `loader`, `parser`, `parser/xmltree`,
-`conformance` and `cmd/goxsd8` carry code today.
+**[1] These boxes are DESTINATIONS, not shipped layers.** `xpath`,
+`validate/xmlsrc`, `validate/jsonsrc`, `validate/bersrc`, `codegen`, `codec`
+and `builtin/native` are `doc.go`-only today: `go doc` renders no exported
+identifier for any of them and they import nothing from this module, so the
+edges drawn above do not exist yet in `go list -deps`. Read every
+present-tense sentence in their sections below as "will", not "does".
+`validate` carries the infoset seam and the assessment skeleton and imports
+`xsd` and `xsderr` (see its section); everything else in its box is still a
+destination. Only `xsderr`, `xsd`, `internal/schemaloc`, `value`,
+`value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`, `parser`,
+`parser/xmltree`, `validate`, `conformance` and `cmd/goxsd8` carry code today.
 
 **The module has two tiers, and the dependency rules govern the first.**
 The **library** is what a consumer imports — the packages above plus
@@ -399,10 +401,13 @@ use `regex`'s F&O flavor, never the pattern-facet flavor.
 
 ## Validation (`validate`)
 
-**Status: neither the engine nor any adapter ships anything.** `validate`,
-`validate/xmlsrc`, `validate/jsonsrc` and `validate/bersrc` are `doc.go`-only
-(M5/M8/M11). Everything below is the destination, stated in present tense
-because it is a design contract.
+**Status: the engine ships the seam and decides nothing; no adapter ships
+anything.** `validate` exports the infoset views (`Element`, `Attribute`,
+`Text`, `Children`, `Child`) plus `New`/`Validator`/`Result`, and `Assess`
+walks a source once and charges no `cvc-` rule. `validate/xmlsrc`,
+`validate/jsonsrc` and `validate/bersrc` are `doc.go`-only (M5/M8/M11).
+Everything below not covered by that seam is the destination, stated in
+present tense because it is a design contract.
 
 - Abstract infoset via marker interfaces; sources plug in as adapters:
   - `validate/xmlsrc` — XML instances via `parser/xmltree` (first),
