@@ -29,7 +29,6 @@ const (
 	ruleSTPropsCorr           xsderr.Rule = "st-props-correct"
 	ruleCTPropsCorr           xsderr.Rule = "ct-props-correct"
 	ruleSrcCT                 xsderr.Rule = "src-ct"
-	ruleCosAllLimited         xsderr.Rule = "cos-all-limited"
 	ruleSrcWildcard           xsderr.Rule = "src-wildcard"
 	ruleParticleCorr          xsderr.Rule = "p-props-correct"
 	ruleWildcardCorr          xsderr.Rule = "w-props-correct"

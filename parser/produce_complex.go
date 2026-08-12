@@ -1153,32 +1153,34 @@ func (p *producer) explicitContent(group *Element, scopeParent xsd.ElementScopeP
 	if local == "group" {
 		return p.produceGroupRefParticle(group) // 2.2, <group ref> content-model child
 	}
-	return p.produceGroupParticle(group, true, scopeParent) // 2.2
+	return p.produceGroupParticle(group, scopeParent) // 2.2
 }
 
 // produceGroupParticle maps an <all>/<choice>/<sequence> element to a Particle
-// wrapping a Model Group (§3.8.2), with {particles} in document order. top marks
-// whether the group is the direct content particle of a complex type: an <all>
-// may only appear there (cos-all-limited §3.8.6.2, clause 1), never nested in a
-// <choice>/<sequence>. A minOccurs=maxOccurs=0 group maps to no component at all
-// (§3.8.2) — produceGroupParticle returns (nil, nil) — so the caller omits it.
-// The grammar's own {0,1} occurrence restriction on <all> is a separate concern,
+// wrapping a Model Group (§3.8.2), with {particles} in document order. A
+// minOccurs=maxOccurs=0 group maps to no component at all (§3.8.2) —
+// produceGroupParticle returns (nil, nil) — so the caller omits it. The
+// grammar's own {0,1} occurrence restriction on <all> is a separate concern,
 // enforced by allOccursGrammar in explicitContent (the sole path by which an
 // <all> legally reaches here), not repeated in this function.
+//
+// WHERE the resulting model group may appear is not decided here at all:
+// cos-all-limited (§3.8.6.2) is a Schema Component Constraint over
+// {term}/{particles}, and §3.7.2 xr.mgd3 makes a <group ref> particle's {term}
+// the referenced definition's {model group}, so a usage site's compositor is
+// invisible until references resolve. xsd's finalize pass charges it
+// (xsd/allgrouplimited.go, #469).
+//
 // scopeParent passes straight through: a model group is not a scope boundary
 // (§3.3.2.3 names only <complexType> and the named <group> as ancestors that
 // determine {scope}.{parent}).
-func (p *producer) produceGroupParticle(group *Element, top bool, scopeParent xsd.ElementScopeParent) (*xsd.Particle, error) {
+func (p *producer) produceGroupParticle(group *Element, scopeParent xsd.ElementScopeParent) (*xsd.Particle, error) {
 	local := group.Name().Local()
 	compositor, ok := compositorOf(local)
 	if !ok {
 		// A <group> reference is mapped by produceGroupRefParticle before it
 		// reaches here; any other name is an unexpected model-group child.
 		return nil, fmt.Errorf("parser: model group child <%s> is not a compositor (all/choice/sequence)", local)
-	}
-	if compositor == xsd.CompositorAll && !top {
-		return nil, xsderr.New(ruleCosAllLimited, group.Loc(),
-			"an <all> model group appears nested inside a <choice>/<sequence>, but cos-all-limited clause 1 permits it only as a complex type's content particle")
 	}
 	occ, elided, err := occursOf(group)
 	if err != nil {
@@ -1319,10 +1321,10 @@ func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd
 // occurrence). An absent compositor child returns the zero ModelGroup, deferring
 // the {model group}-Required rejection to NewModelGroupDefinition
 // (mgd-props-correct). cos-all-limited is not charged here: an <all> definition
-// body is legal; its limitation to a complex-type content particle is a usage-site
-// concern, mirroring produceGroupParticle's top-level treatment. scopeParent is
-// the enclosing definition, threaded to the local element declarations in the
-// body (§3.3.2.3 dcl.elt.local).
+// body is legal outright (§3.8.6.2 clause 1.1), and the constraint's usage-site
+// half is a component-shape verdict finalize owns (xsd/allgrouplimited.go).
+// scopeParent is the enclosing definition, threaded to the local element
+// declarations in the body (§3.3.2.3 dcl.elt.local).
 func (p *producer) buildDefinitionModelGroup(el *Element, scopeParent xsd.ElementScopeParent) (xsd.ModelGroup, error) {
 	group := compositorChild(el)
 	if group == nil {
@@ -1357,8 +1359,23 @@ func compositorChild(el *Element) *Element {
 // omitting each minOccurs=maxOccurs=0 child (which maps to no component, §3.9.2).
 // scopeParent is the Complex Type Definition or Model Group Definition the whole
 // content tree hangs under, threaded to each local element declaration.
+//
+// An <all> child of an <all> is refused here, and only that one. Appendix A's
+// xs:allModel — the group xs:complexType "all" restricts its content to —
+// admits just <element>, <any> and <group>, but the component that spelling maps
+// to, an all group among another all group's {particles} at min=max=1, is
+// exactly what cos-all-limited clause 1.3 permits: no Schema Component
+// Constraint can name the fault, so the grammar production is the only text that
+// forbids it. §3.8.3 states no Schema Representation Constraint for <all>
+// either, so the fault carries no rule ID, the same footing as
+// produceGroupRefParticle's missing-ref fault.
+//
+// A <sequence> or <choice> child is deliberately NOT refused here: it maps to
+// the shape cos-all-limited clause 2 forbids, and xsd/allgrouplimited.go charges
+// it at finalize with that rule ID and a positioned Loc.
 func (p *producer) groupParticles(group *Element, scopeParent xsd.ElementScopeParent) ([]xsd.Particle, error) {
 	var particles []xsd.Particle
+	inAll := group.Name().Local() == "all"
 	for _, child := range group.Children() {
 		el, ok := child.(*Element)
 		if !ok {
@@ -1377,7 +1394,10 @@ func (p *producer) groupParticles(group *Element, scopeParent xsd.ElementScopePa
 		case "any":
 			part, err = p.produceAnyParticle(el)
 		case "sequence", "choice", "all":
-			part, err = p.produceGroupParticle(el, false, scopeParent)
+			if inAll && el.Name().Local() == "all" {
+				return nil, fmt.Errorf("parser: <all> at %s is a child of an <all>, whose content Appendix A's xs:allModel restricts to <element>, <any> and <group>", el.Loc())
+			}
+			part, err = p.produceGroupParticle(el, scopeParent)
 		case "group":
 			part, err = p.produceGroupRefParticle(el)
 		default:
