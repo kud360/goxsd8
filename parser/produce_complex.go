@@ -2052,7 +2052,7 @@ func attributeUseToken(el *Element) string {
 // guarded by the element's parent, but only the local and ref= forms reach it:
 // both clauses need a use= present, and the top-level form may not carry one at
 // all (xs:topLevelAttribute, xmlschema11-1.md:4712, enforced in run by
-// rejectTopLevelProhibitedAttrs).
+// rejectProhibitedAttrs).
 //
 // The check lives here rather than in valueConstraintOf because that helper is
 // shared with <element> (charged src-element clause 1), and <element> has no use=

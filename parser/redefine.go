@@ -192,6 +192,17 @@ type redefineSet struct {
 // incorporates the schema for schema documents by reference without restating
 // it), reported as a plain error like an <include> with no schemaLocation, never
 // silently ignored: ignoring it would drop a declaration the author wrote.
+//
+// A child INSIDE that content model is read against the grammar type its kind
+// has here, which is the top level's own: §4.2.4's model reaches the global
+// <group> and <attributeGroup> element declarations through xs:redefinable
+// (xmlschema11-1.md:4465), so a redefining <group> is an xs:namedGroup and a
+// redefining <attributeGroup> an xs:namedAttributeGroup, prohibited attributes
+// and all. rejectProhibitedAttrs is the one encoding of those lists (STYLE T4)
+// and runs BEFORE the name attribute is read, so <group ref="tns:G"/> — which
+// writes no name — is reported for the ref it may not carry rather than for the
+// name that ref displaced, and before produceRedefinition can charge
+// src-expredef over the same child for naming no original.
 func newRedefineSet(el *Element) (*redefineSet, error) {
 	var entries []redefineEntry
 	for _, child := range el.Children() {
@@ -207,6 +218,9 @@ func newRedefineSet(el *Element) (*redefineSet, error) {
 		}
 		if !redefinableKind(c.Name().Local()) {
 			return nil, fmt.Errorf("parser: <redefine> at %s has a <%s> child at %s, but §4.2.4's content model admits only (annotation | (simpleType | complexType | group | attributeGroup)) — <element>, <attribute> and <notation> are <override>'s (§4.2.5), not <redefine>'s", el.Loc(), c.Name().Local(), c.Loc())
+		}
+		if err := rejectProhibitedAttrs(c, formRedefining); err != nil {
+			return nil, err
 		}
 		name, ok := c.Attr("name")
 		if !ok {

@@ -677,7 +677,7 @@ func compositionDirective(el *Element) bool {
 // use="required" — <simpleType>, <complexType>, <group>, <attributeGroup>,
 // <element>, <attribute> — take it from topLevelName, which rejects an unusable
 // one before any of them is built. Four of them — <element>, <attribute>,
-// <group> and <attributeGroup> — pass rejectTopLevelProhibitedAttrs first, so an
+// <group> and <attributeGroup> — pass rejectProhibitedAttrs first, so an
 // attribute the schema for schema documents prohibits on the top-level form is
 // named as the fault it is rather than reported as the missing name it causes.
 // <simpleType> and <complexType> do not, because they have nothing to check:
@@ -711,7 +711,7 @@ func (p *producer) run() error {
 			}
 			p.builder.AddType(st)
 		case "element":
-			if err := rejectTopLevelProhibitedAttrs(decl); err != nil {
+			if err := rejectProhibitedAttrs(decl, formTopLevel); err != nil {
 				return err
 			}
 			name, err := p.topLevelName(decl)
@@ -724,7 +724,7 @@ func (p *producer) run() error {
 			}
 			p.builder.AddElement(ed)
 		case "attribute":
-			if err := rejectTopLevelProhibitedAttrs(decl); err != nil {
+			if err := rejectProhibitedAttrs(decl, formTopLevel); err != nil {
 				return err
 			}
 			name, err := p.topLevelName(decl)
@@ -752,7 +752,7 @@ func (p *producer) run() error {
 			}
 			p.builder.AddType(ct)
 		case "attributeGroup":
-			if err := rejectTopLevelProhibitedAttrs(decl); err != nil {
+			if err := rejectProhibitedAttrs(decl, formTopLevel); err != nil {
 				return err
 			}
 			name, err := p.topLevelName(decl)
@@ -765,7 +765,7 @@ func (p *producer) run() error {
 			}
 			p.builder.AddAttributeGroup(ag)
 		case "group":
-			if err := rejectTopLevelProhibitedAttrs(decl); err != nil {
+			if err := rejectProhibitedAttrs(decl, formTopLevel); err != nil {
 				return err
 			}
 			name, err := p.topLevelName(decl)
@@ -880,15 +880,16 @@ func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 	return qname, nil
 }
 
-// rejectTopLevelProhibitedAttrs rejects a top-level <element>, <attribute>,
-// <group> or <attributeGroup> carrying any attribute the schema for schema
-// documents prohibits on it: xs:topLevelElement restricts ref, form,
-// targetNamespace, minOccurs and maxOccurs to use="prohibited"
-// (xmlschema11-1.md:5100-:5104), xs:topLevelAttribute restricts ref, form, use
-// and targetNamespace (:4710-:4713), xs:namedGroup restricts ref, minOccurs and
-// maxOccurs (:5210-:5212), and xs:namedAttributeGroup restricts ref (:5511),
-// each alongside the required name (:5105, :4714, :5209, :5510). Every one of
-// them is legal on the corresponding LOCAL form, which is the whole distinction
+// rejectProhibitedAttrs rejects a top-level <element>, <attribute>, <group> or
+// <attributeGroup>, or a redefining <group>/<attributeGroup> child of
+// <redefine>, carrying any attribute the schema for schema documents prohibits
+// on it: xs:topLevelElement restricts ref, form, targetNamespace, minOccurs and
+// maxOccurs to use="prohibited" (xmlschema11-1.md:5100-:5104),
+// xs:topLevelAttribute restricts ref, form, use and targetNamespace
+// (:4710-:4713), xs:namedGroup restricts ref, minOccurs and maxOccurs
+// (:5210-:5212), and xs:namedAttributeGroup restricts ref (:5511), each
+// alongside the required name (:5105, :4714, :5209, :5510). Every one of them
+// is legal on the corresponding LOCAL form, which is the whole distinction
 // these grammar types draw.
 //
 // The four lists are NOT symmetric and none contains another, because each names
@@ -937,11 +938,14 @@ func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 // admits, and say nothing about the top-level form that may not write one at
 // all.
 //
-// It runs in run's dispatch BEFORE topLevelName, and the order is the whole
-// point: a document that writes ref at top level writes no name either — on any
-// of the four kinds — so the name check would answer first and report "no usable
-// name", the consequence of writing ref, never the mistake itself. Running
-// before produceElement, produceAttribute, buildModelGroupDefinition and
+// BOTH callers run it BEFORE the name is read, and the order is the whole
+// point: a document that writes ref writes no name either — on any of the four
+// kinds — so the name check would answer first and report the absent name, the
+// consequence of writing ref, never the mistake itself. run's dispatch runs it
+// before topLevelName; newRedefineSet (redefine.go) runs it before the name
+// attribute it pairs a <redefine> child by, and so before produceRedefinition
+// charges src-expredef's pairing miss over the same child. Running before
+// produceElement, produceAttribute, buildModelGroupDefinition and
 // buildAttributeGroup also keeps the verdict content-independent, the discipline
 // topLevelName's doc records, and puts this fault ahead of the src-attribute
 // clauses produceAttribute charges over the same element item: a top-level use=
@@ -951,7 +955,7 @@ func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 // The attributes are checked in the grammar's own declaration order, so a
 // document writing more than one of them is always reported at the same one
 // (STYLE D2).
-func rejectTopLevelProhibitedAttrs(decl *Element) error {
+func rejectProhibitedAttrs(decl *Element, form declForm) error {
 	var grammar string
 	var prohibited []string
 	switch decl.Name().Local() {
@@ -970,10 +974,23 @@ func rejectTopLevelProhibitedAttrs(decl *Element) error {
 		if _, ok := decl.Attr(attr); !ok {
 			continue
 		}
-		return fmt.Errorf("parser: top-level <%s> at %s carries a %s attribute, which the schema for schema documents prohibits on the top-level form: %s restricts %s to use=\"prohibited\", and it is legal on the local form alone", decl.Name().Local(), decl.Loc(), attr, grammar, attr)
+		return fmt.Errorf("parser: %s <%s> at %s carries a %s attribute, which the schema for schema documents prohibits on the %s form: %s restricts %s to use=\"prohibited\", and it is legal on the local form alone", form, decl.Name().Local(), decl.Loc(), attr, form, grammar, attr)
 	}
 	return nil
 }
+
+// declForm names the position a named declaration is written in, and is read by
+// rejectProhibitedAttrs's diagnostic alone. The two positions share one grammar
+// type per kind — §4.2.4's content model reaches, through xs:redefinable
+// (xmlschema11-1.md:4465), the SAME global <group> and <attributeGroup> element
+// declarations (:5331, :5528) the top level does — so they share one prohibition
+// list and differ only in what the message calls the offending element.
+type declForm string
+
+const (
+	formTopLevel   declForm = "top-level"
+	formRedefining declForm = "redefining"
+)
 
 // ncNameRE matches the NCName production ([Namespaces in XML] NT-NCName) — the
 // ·lexical space· of xs:NCName, which Datatypes §3.4.7.1 fixes with the single
@@ -1557,7 +1574,7 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 // unusable name is a grammar fault charged before any of this mapping runs. The
 // same caller rejects the attributes xs:topLevelElement prohibits — ref, form,
 // targetNamespace, minOccurs, maxOccurs — one step earlier still
-// (rejectTopLevelProhibitedAttrs), so none of them reaches this mapping.
+// (rejectProhibitedAttrs), so none of them reaches this mapping.
 //
 // Its {type definition} is §3.3.2.1 dcl.elt.common's tier chain, which is a
 // COMMON mapping rule — §3.3.2.2 supplements only {scope} and {target
@@ -2021,7 +2038,7 @@ func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 // mutually exclusive, via valueConstraintOf). Clause 3 is guarded by "if the
 // item's parent is not <schema>" and so does not reach this form; the ref it
 // governs is prohibited outright on a top-level <attribute>, as are form, use
-// and targetNamespace, all rejected in run by rejectTopLevelProhibitedAttrs
+// and targetNamespace, all rejected in run by rejectProhibitedAttrs
 // before this runs.
 //
 // Clauses 2 and 5 are the default/fixed × use= corner, and NEITHER can fire
