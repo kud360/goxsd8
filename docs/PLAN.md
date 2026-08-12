@@ -104,7 +104,6 @@ the standing instruction bought, and it is spent here rather than silently.
 
 | Branch | Verdict | Disposition |
 |---|---|---|
-| `wip/issue-503` | **LIVE** | Claimed today; leave alone. See the note below. |
 | `wip/issue-256` | EXPIRED | Retired in place; issue closed and superseded by #470. |
 | `wip/issue-271` | EXPIRED | Retired in place; issue closed and superseded by #478/#479/#480. |
 | `wip/issue-287` | EXPIRED | Retired in place; issue closed, answered in the opposite direction by PR #511. |
@@ -112,17 +111,18 @@ the standing instruction bought, and it is spent here rather than silently.
 No `parked/*` branches. The three EXPIRED refs are listed for human triage and
 have been for several passes.
 
-**`wip/issue-503` reads EXPIRED and is not** — this is #722. The ref points at
-exactly `origin/main` (`adf0356`, zero commits ahead), because a develop
-session's first act is to push the claim before any work commit, so
-`wipsurvey` dates the branch from the *previous landing's* committer date and
-reports *"tip pushed 4h37m ago, past the 2h claim TTL"*. Meanwhile #503's
-thread carries an oracle grounding, a placement decision and a **passing
-warden pre-flight**, all today, the last of them 80 minutes before this
-survey. Applying the prescribed EXPIRED response would have labelled a live
-issue `needs-replan` in the hour its design was approved. Until #722 lands,
-**read a zero-commit `wip/issue-N` against its issue thread before believing
-the verdict.**
+**`wip/issue-503` read EXPIRED and was not** — this is #722, and the branch has
+since merged and been auto-deleted, which settles the question the way the
+survey did not. At survey time the ref pointed at exactly `origin/main`
+(`adf0356`, zero commits ahead), because a develop session's first act is to
+push the claim before any work commit, so `wipsurvey` dates the branch from the
+*previous landing's* committer date and reported *"tip pushed 4h37m ago, past
+the 2h claim TTL"*. Meanwhile #503's thread carried an oracle grounding, a
+placement decision and a **passing warden pre-flight**, all that day, the last
+of them 80 minutes before the survey; it landed three hours later. Applying the
+prescribed EXPIRED response would have labelled a live issue `needs-replan` in
+the hour its design was approved. Until #722 lands, **read a zero-commit
+`wip/issue-N` against its issue thread before believing the verdict.**
 
 ### Working band
 
@@ -136,7 +136,7 @@ horizontal completeness.
 | 2 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline — `schema` |
 | 3 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes`, pdecimal019/020 the measured cost |
 | 4 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes`, #574's sibling widening |
-| 5 | #504 | `src-redefine` clause 6.2.2, fail-open. **Take after #503 lands** — read the coupling note below |
+| 5 | #504 | `src-redefine` clause 6.2.2, fail-open. **Startable now — #503 has landed**, and this landing carries the decidability widening. Read the coupling note below |
 | 6 | #626 | README's CLI section is false about exit codes today; one sentence, and it precedes #472 |
 | 7 | #669 | README's Library snippet does not compile, and the example pointer omits `parser`, `xsd`, and `xsd/example_test.go` |
 | 8 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
@@ -150,14 +150,24 @@ taken first it must discharge #672 rather than leave it contradicting the
 landing. **#720** (`goxsd8 validate`) is `blocked` behind #472 and #715 and is
 not a band row.
 
-**#503 is claimed and in flight** — its branch is live, its warden pre-flight
-passed today, and it is not a band row. Its coupling with #504 is unchanged and
-is durable on `main`: retiring `conformance/schema.go`'s decidability residue
-for `group`/`attributeGroup` flips `MS-Schema2006-07-15/schL10` and `/schM5`
-from `pass` to `fail` unless **both** clauses are in hand, because each case
-turns on one clause alone. Whichever lands second carries the widening; neither
-may retire the residue on its own. The binding comment is in
-`redefineDecidable` (`conformance/schema.go`), naming #503/#504 directly.
+**#503 landed** (PR #724, `c7d178f`, `schema` 9745 → 9751), so the #503/#504
+coupling now has a direction rather than two safe orderings: **#504's landing
+carries the decidability widening.** The coupling itself is unchanged and
+durable on `main` — retiring `conformance/schema.go`'s decidability residue for
+`group`/`attributeGroup` flips `MS-Schema2006-07-15/schL10` and `/schM5` from
+`pass` to `fail` unless **both** clauses are in hand, because each case turns on
+one clause alone — and #503 correctly touched no gate, which is the only safe
+shape for whichever goes first. The binding comment is in `redefineDecidable`
+(`conformance/schema.go`). Its **prose** is now stale there and at three other
+sites, two of which still name the closed #503; that is **#726**, prose-only and
+forbidden to touch the gate code. #503's landing also left one `GAP(xsd)` naming
+no issue, now **#725** — so `gapaudit`'s group 1, reported empty above, has an
+owner again even though the marker text will not name it until #726 lands. Both
+were filed by #503's post-land pass, which **unblocked nothing**: all 28
+`blocked` bodies were scanned and none names #503 in any section. Every count in
+this section predates that pass — it closed one `ready` issue and filed two, and
+a post-land pass corrects no number here; the next `/backlog` re-derives them
+with the rest of the section.
 
 **Five issues are deliberately unbanded — #702, #703, #706, #721 and #722 —
 as are the nine `blocked` M5 slices, which are not `ready` and so cannot be
@@ -171,12 +181,13 @@ before it is workable. **#722 is the one to promote if a seventh pass wants a
 cheap high-value row**: it is the only unbanded issue whose absence can cause a
 future pass to actively damage the queue.
 
-**`parser/redefine.go` has been rewritten three times in four days, so read it
+**`parser/redefine.go` has been rewritten four times in five days, so read it
 rather than an issue body that describes it.** #686 put its duplicate-key
 charge in `recordOriginal`; #699 added `rejectProhibitedAttrs` to
 `newRedefineSet`; #506 inserted ~45 lines and moved every marker line number
-the #585 and #505 threads cite. Row 5 and #706 both open that file next, and
-#503's in-flight work is in it now.
+the #585 and #505 threads cite; #503 added the clause-7.1-vs-7.2 branch,
+repointed the `chainedOriginal` marker to #504 alone and deleted the clause-7.2
+gap. Row 5, #706 and #726 all open that file next.
 
 **Next planning action: the queue-wide reconciliation this pass bought its
 carve by skipping.** Step 3 has not run in full since 2026-08-10, and this
