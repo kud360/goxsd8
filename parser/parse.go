@@ -792,7 +792,9 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 	producers := make([]*producer, 0, len(a.docs))
 	for _, d := range a.docs {
 		p := newProducer(d.doc, d.tns, d.ov, d.rd, d.redefines, builder, sym)
-		p.prescan()
+		if err := p.prescan(); err != nil {
+			return nil, err
+		}
 		if err := p.checkDefaultOpenContent(); err != nil {
 			return nil, err
 		}

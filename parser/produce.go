@@ -54,6 +54,16 @@ const (
 	// attribute whose local part is empty (bindQName), which no src-* clause
 	// reaches because they all presuppose a well-formed QName.
 	ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
+	// ruleSchPropsCorrect is the Schema Properties Correct Schema Component
+	// Constraint (§3.17.6.1). The producer charges only clause 2 ("None of the
+	// {type definitions}, … properties contains two or more schema components with
+	// the same expanded name") and only for a REDEFINED document's own top-level
+	// definitions, which §4.2.4 clause 4.1.2 excepts from contributing components
+	// and so hides from the by-name symbol tables (redefineSet.recordOriginal).
+	// xsd.indexByName charges the same clause on the outermost assembled schema,
+	// for every pair that does reach it as two named components; the two are the
+	// same rule seen at either collection point.
+	ruleSchPropsCorrect xsderr.Rule = "sch-props-correct"
 )
 
 // Produce maps the TOP-LEVEL <simpleType>, <element>, <attribute>,
@@ -112,7 +122,9 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 	// its own targetNamespace and it is never a chameleon (§4.2.3 clause 2.3
 	// needs an including document to borrow a namespace from).
 	p := newProducer(doc, attrOr(doc.Root(), "targetNamespace"), nil, nil, nil, builder, sym)
-	p.prescan()
+	if err := p.prescan(); err != nil {
+		return nil, err
+	}
 	if err := p.checkDefaultOpenContent(); err != nil {
 		return nil, err
 	}
@@ -491,14 +503,16 @@ func (p *producer) chameleon() bool {
 // It also registers this document's named <unique>/<key>/<keyref>s for forward
 // <key ref="…"> resolution, but from the WHOLE subtree of each top-level
 // declaration rather than from its top level: see prescanIdentityConstraints.
-func (p *producer) prescan() {
+func (p *producer) prescan() error {
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
 		if !ok {
 			continue
 		}
 		if isXSD(el, "redefine") {
-			p.prescanRedefine(el)
+			if err := p.prescanRedefine(el); err != nil {
+				return err
+			}
 			continue
 		}
 		decl := p.ov.replacement(el)
@@ -515,7 +529,9 @@ func (p *producer) prescan() {
 			// original src-expredef pairs the redefining declaration with, recorded
 			// under THIS producer so its body is still mapped in its own document's
 			// context.
-			p.rd.recordOriginal(componentKey{kind: el.Name().Local(), name: name}, typeSource{elem: decl, owner: p})
+			if err := p.rd.recordOriginal(componentKey{kind: el.Name().Local(), name: name}, typeSource{elem: decl, owner: p}); err != nil {
+				return err
+			}
 			continue
 		}
 		switch {
@@ -531,6 +547,7 @@ func (p *producer) prescan() {
 			p.symbols.elements[xsd.QName{Space: p.target, Local: name}] = typeSource{elem: decl, owner: p}
 		}
 	}
+	return nil
 }
 
 // prescanIdentityConstraints registers every NAMED <unique>/<key>/<keyref> in

@@ -293,35 +293,30 @@ func (s *redefineSet) excepts(el *Element) bool {
 // prescan, for a top-level declaration §4.2.4 clause 4.1.2 excepts, and
 // prescanRedefine, for the redefining child of a NESTED <redefine> that clause
 // 4.1.1 makes a top-level definition of this document too (a chained redefine,
-// #585). A document carrying BOTH for one key writes that key twice, and the
-// declaration LAST in its document order is the original the outer redefinition
-// pairs with.
+// #585). A document carrying BOTH for one key declares two top-level definitions
+// of one expanded name, which sch-props-correct (§3.17.6.1) clause 2 forbids, so
+// the SECOND write is rejected instead of clobbering the first.
 //
-// GAP(xsd): the write is unconditional, so that second write clobbers the first
-// silently — where clause 4.1.1 makes the pair two top-level definitions sharing
-// one expanded name, which sch-props-correct (§3.17.6.1) clause 2 forbids. #686
-// owns the rejection and this marker's retirement.
+// The rejection is charged here rather than at finalize because neither
+// declaration ever becomes a named component: clause 4.1.2 excepts both from the
+// components this document contributes, so indexByName (xsd/schema.go) — which
+// charges the same clause for every pair that does reach the by-name symbol
+// tables — never sees them. The pair is nonetheless two members of one property
+// of schema(D2), the conforming schema src-redefine clause 4.1.1 requires the
+// redefined document correspond to.
 //
-// THIS LANDING withdrew that rejection for the prescan+prescanRedefine pair; it
-// is not inherited debt. origin/main charged it, but through neither writer:
-// produceRedefinition built the chained redefining child as a NAMED component of
-// this document, which collided in {type definitions} with the outer
-// redefinition's own and was rejected by indexByName (xsd/schema.go).
-// produceRedefinition's chained early return now withholds that component, and
-// the clause-1.1 original it becomes instead is {name}-·absent·, which indexByName
-// is required to skip (§3.4.1/§3.16.1 exempt anonymous type definitions from
-// clause 2). Restoring prescanRedefine's symbol registration alone does NOT bring
-// the rejection back. The prescan+prescan pair — two top-level declarations of one
-// excepted key — was never charged, on either tree.
-//
-// The direction is fail-OPEN, and the rs.originals entry written twice has exactly
-// two readers, neither able to see the clobbered one: produceRedefinition tests
-// only that the key is PRESENT, and originalFor (behind redefinedTypeBase,
-// redefinedGroupOriginal and redefinedAttributeGroupOriginal) returns the single
-// surviving typeSource. So an invalid schema is accepted, and which declaration
-// composes it is decided by document order in the redefined document.
-func (s *redefineSet) recordOriginal(key componentKey, src typeSource) {
+// The charge names the LATER declaration in document order and cites the first's
+// location, the way indexByName's does. Document order is the order both writers
+// walk, so no ordering work is needed (STYLE D2). ONE writer per key is the valid
+// chained redefine and stays valid.
+func (s *redefineSet) recordOriginal(key componentKey, src typeSource) error {
+	if first, dup := s.originals[key]; dup {
+		name := xsd.QName{Space: src.owner.target, Local: key.name}
+		return xsderr.New(ruleSchPropsCorrect, src.elem.Loc(),
+			"the <redefine>d document repeats the expanded name %s among its top-level <%s> definitions (first declared at %s), but sch-props-correct clause 2 forbids two components of the same kind sharing an expanded name", name, key.kind, first.elem.Loc())
+	}
 	s.originals[key] = src
+	return nil
 }
 
 // recordSubstitute indexes decl — the declaration §F.2 clause 1 puts in the
@@ -579,10 +574,10 @@ func redefinedContainer(at *Element, kind string) *Element {
 // child exactly as it does for a <schema> child. A substitute is recorded as a
 // redefining declaration of the set in its own right (recordSubstitute), which is
 // what keeps its self-reference resolving into S2.
-func (p *producer) prescanRedefine(el *Element) {
+func (p *producer) prescanRedefine(el *Element) error {
 	rs := p.redefineSetOf(el)
 	if rs == nil {
-		return
+		return nil
 	}
 	for _, e := range rs.entries {
 		decl := p.ov.replacement(e.elem)
@@ -600,7 +595,9 @@ func (p *producer) prescanRedefine(el *Element) {
 			// this document contributes, exactly as prescan excepts an ordinary
 			// top-level declaration, so it is recorded and NOT registered under its own
 			// name: the outer redefinition owns that name.
-			p.rd.recordOriginal(e.key, typeSource{elem: decl, owner: p})
+			if err := p.rd.recordOriginal(e.key, typeSource{elem: decl, owner: p}); err != nil {
+				return err
+			}
 			continue
 		}
 		qn := xsd.QName{Space: p.target, Local: e.key.name}
@@ -616,6 +613,7 @@ func (p *producer) prescanRedefine(el *Element) {
 			p.symbols.modelGroups[qn] = src
 		}
 	}
+	return nil
 }
 
 // produceRedefine maps the children of one <redefine> child of this document

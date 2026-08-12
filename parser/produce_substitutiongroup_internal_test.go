@@ -47,7 +47,10 @@ func TestProduceElementInlineTypeSkipsAnonymousHeadLookup(t *testing.T) {
 		t.Fatalf("newSymbols: %v", err)
 	}
 	p := newProducer(d, "", nil, nil, nil, builder, sym)
-	p.prescan() // registers head, so clause 3 would find it and decline
+	// The pre-scan registers the head, so clause 3 would find it and decline.
+	if err := p.prescan(); err != nil {
+		t.Fatalf("prescan: %v", err)
+	}
 
 	member := topLevelElementNamed(t, d, "member")
 	ed, err := p.produceElement(xsd.QName{Local: "member"}, member)

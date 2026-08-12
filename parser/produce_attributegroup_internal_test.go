@@ -53,8 +53,12 @@ func TestAttributeGroupComponentAndInlineFoldAgree(t *testing.T) {
 	// state, mirroring what compile() wires up.
 	basep := newProducer(baseDoc, "urn:x", nil, nil, nil, builder, sym)
 	rootp := newProducer(rootDoc, "urn:x", nil, nil, nil, builder, sym)
-	basep.prescan()
-	rootp.prescan()
+	if err := basep.prescan(); err != nil {
+		t.Fatalf("prescan(base): %v", err)
+	}
+	if err := rootp.prescan(); err != nil {
+		t.Fatalf("prescan(root): %v", err)
+	}
 
 	group := childElement(basep.schemaElem, xsd.XMLSchemaNS, "attributeGroup")
 	ag, err := basep.buildAttributeGroup(xsd.QName{Space: "urn:x", Local: "G"}, group)
@@ -131,7 +135,9 @@ func complexTypeAttributeUses(t *testing.T, doc, name string) []xsd.AttributeUse
 		t.Fatalf("newSymbols: %v", err)
 	}
 	p := newProducer(parsed, "urn:x", nil, nil, nil, builder, sym)
-	p.prescan()
+	if err := p.prescan(); err != nil {
+		t.Fatalf("prescan: %v", err)
+	}
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
 		if !ok || el.Name().Space() != xsd.XMLSchemaNS || el.Name().Local() != "complexType" {
