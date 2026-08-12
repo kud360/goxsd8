@@ -132,18 +132,23 @@ horizontal completeness.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #710 | the M5 infoset seam — the only **startable** step on the chain that takes `instance` off zero. Banks nothing itself; ranked first because 26361 cases at zero is the largest untouched mass in the project, and #713 is three sessions behind it |
-| 2 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline — `schema` |
-| 3 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes`, pdecimal019/020 the measured cost |
-| 4 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes`, #574's sibling widening |
-| 5 | #504 | `src-redefine` clause 6.2.2, fail-open. **Startable now — #503 has landed**, and this landing carries the decidability widening. Read the coupling note below |
-| 6 | #626 | README's CLI section is false about exit codes today; one sentence, and it precedes #472 |
-| 7 | #669 | README's Library snippet does not compile, and the example pointer omits `parser`, `xsd`, and `xsd/example_test.go` |
-| 8 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
-| 9 | #672 + #687 | the open CLI-contract decisions (`-version`; scoped help, the bareword `help`, and the help-spelling variants a third persona pass just added) |
-| 10 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 1 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline — `schema` |
+| 2 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes`, pdecimal019/020 the measured cost |
+| 3 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes`, #574's sibling widening |
+| 4 | #504 | `src-redefine` clause 6.2.2, fail-open. **Startable now — #503 has landed**, and this landing carries the decidability widening. Read the coupling note below |
+| 5 | #626 | README's CLI section is false about exit codes today; one sentence, and it precedes #472 |
+| 6 | #669 | README's Library snippet does not compile, and the example pointer omits `parser`, `xsd`, and `xsd/example_test.go` |
+| 7 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
+| 8 | #672 + #687 | the open CLI-contract decisions (`-version`; scoped help, the bareword `help`, and the help-spelling variants a third persona pass just added) |
+| 9 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
 
-**Rows 6–9 sit ahead of row 10 on cost, not importance.** Each is a sentence
+**#710 held row 1 and has landed** (PR #728, `0ad6aef`, ratchet unchanged by
+design). Its row is dropped rather than replaced: **#711 and #712 unblocked on
+it** and are `ready` and unbanded, because ranking them is a re-derivation this
+pass does not do. The M5 chain's head is now #711, and #713 — the lane driver
+that takes `instance` off zero — is two slices behind it rather than three.
+
+**Rows 5–8 sit ahead of row 9 on cost, not importance.** Each is a sentence
 or a dispatch branch while the CLI surface is still empty; taken after #472
 every one of them is a change to shipped behaviour. #472's own Acceptance carries the `-version` decision, so if it is
 taken first it must discharge #672 rather than leave it contradicting the
@@ -170,9 +175,11 @@ a post-land pass corrects no number here; the next `/backlog` re-derives them
 with the rest of the section.
 
 **Five issues are deliberately unbanded — #702, #703, #706, #721 and #722 —
-as are the nine `blocked` M5 slices, which are not `ready` and so cannot be
-banded at all.** The band's doctrine is "slices that move a lane", and none of
-the five does. #702 sweeps 17 comments citing §4.2.4 clause 4.1.1
+as are #711 and #712, and the seven M5 slices still `blocked`, which are not
+`ready` and so cannot be banded at all.** The band's doctrine is "slices that
+move a lane", and none of the five does — #711 and #712 do, and are unbanded
+only because #710's post-land pass ranks nothing.
+#702 sweeps 17 comments citing §4.2.4 clause 4.1.1
 for what `src-expredef` says; #703 is a duplicate top-level declaration never
 being produced at all; #706 is a real false-accept but a measurably unreachable
 one — no document in the 15470-file suite carries both an `xs:override` and an
@@ -187,15 +194,17 @@ charge in `recordOriginal`; #699 added `rejectProhibitedAttrs` to
 `newRedefineSet`; #506 inserted ~45 lines and moved every marker line number
 the #585 and #505 threads cite; #503 added the clause-7.1-vs-7.2 branch,
 repointed the `chainedOriginal` marker to #504 alone and deleted the clause-7.2
-gap. Row 5, #706 and #726 all open that file next.
+gap. Row 4 (#504), #706 and #726 all open that file next.
 
 **Next planning action: the queue-wide reconciliation this pass bought its
 carve by skipping.** Step 3 has not run in full since 2026-08-10, and this
 pass audited a stale premise in exactly one body (#250's, by comment) out of
 142 `ready` issues. Run it against the whole `ready` set and re-derive the band
-from the result rather than re-ranking its head. The M5 chain needs no planning
-attention until #710 lands and #711/#712 unblock, which is a post-land pass's
-job, not a `/backlog`'s.
+from the result rather than re-ranking its head. **The M5 condition this
+section set is discharged**: #710 landed and #711/#712 were unblocked by its
+post-land pass, so the chain now has two `ready` heads (#711, #712) competing
+with the band's M4 rows — that ranking is the reconciliation's, and it is the
+first thing it should settle.
 
 ## Milestones
 
@@ -247,10 +256,11 @@ the whole of it.
 identity constraints, `xsi:type`/`xsi:nil`, wildcards, default and fixed
 values. **`instance` lane.**
 
-Carved 2026-08-12 into ten slices, #710–#719, dependency-ordered so that
-only the head is `ready`: the infoset seam and engine skeleton (#710), the
-`xmlsrc` adapter (#711), root dispatch (#712), then **the lane driver
-(#713), which takes `instance` off zero before the bulk of the `cvc-` work
+Carved 2026-08-12 into ten slices, #710–#719, dependency-ordered so that a
+slice becomes `ready` as the one before it lands: the infoset seam and
+engine skeleton (**#710, landed**), the `xmlsrc` adapter (#711) and root
+dispatch (#712) — both `ready` — then **the lane driver (#713), which
+takes `instance` off zero before the bulk of the `cvc-` work
 lands** — the #175 analogue, placed fourth so every slice after it reports
 a real number. The fan-out is #714–#719. The CLI's own `validate`
 subcommand is #720, `blocked` behind #472 and #715.
