@@ -93,29 +93,34 @@ func (b *SchemaBuilder) AddRedefiningAttributeGroup(g, original AttributeGroupDe
 // here; the §3.6.2.2 union of any <attributeGroup ref> children is already in
 // both components, applied by the producer at mapping time (§3.6.2.1).
 //
-// PHASE ORDER: it runs immediately after checkComplexDerivations, and needs only
-// what that step needs — Phase A's resolvability, so an AttributeDeclarationRef
-// inside the REDEFINITION resolves, and Phase B's simple-type acyclicity, since
-// loc-testSubP clause 5.1 walks a {base type definition} chain with no visited
-// set. It follows no chain of its own: the pairing is a single edge from a named
-// definition to an off-index component, and §3.6.2.1 has already inlined every
-// <attributeGroup ref> at mapping time, so an AttributeGroupDefinition holds no
-// edge to another one and no visited set belongs here (PRINCIPLES 9).
+// PHASE ORDER: it runs immediately after checkComplexDerivations, and needs
+// Phase B's simple-type acyclicity, since loc-testSubP clause 5.1 walks a {base
+// type definition} chain with no visited set. It follows no chain of its own:
+// the pairing is a single edge from a named definition to an off-index
+// component, and §3.6.2.1 has already inlined every <attributeGroup ref> at
+// mapping time, so an AttributeGroupDefinition holds no edge to another one and
+// no visited set belongs here (PRINCIPLES 9). It draws no resolvability
+// guarantee from Phase A for either side — see the GAP below.
 //
-// GAP(xsd): a reference INSIDE the original — an <attribute ref>, or a type= on
-// one of its local <attribute> children — that names nothing the assembled
-// schema holds gets no src-resolve (§3.17.6.2) verdict, and no issue owns its
-// retirement yet. Phase A walks the schema's own §3.17.1 properties, and clause
-// 4.1.2 puts the original in none of them, so nothing charges it.
+// GAP(xsd): a reference on EITHER side — an <attribute ref>, or a type= on a
+// local <attribute> child, of the redefinition or of the original — that names
+// nothing the assembled schema holds gets no src-resolve (§3.17.6.2) verdict,
+// and no issue owns its retirement yet. This is not clause 4.1.2's doing:
+// resolveReferences (resolve.go) never walks s.attributeGroups for ANY
+// top-level attribute group, redefinition or not, so the redefinition side (in
+// {attribute group definitions} like any other component) is exactly as
+// unresolved as the original (which 4.1.2 additionally keeps out of every
+// property and index, but that exclusion costs it nothing here — it never had
+// Phase A coverage to lose).
 //
 // DIRECTION, per reader of the value that goes missing — the resolved
-// {attribute declaration} or {type definition} behind an original-side use
+// {attribute declaration} or {type definition} behind a use on either side
 // (STYLE P3a):
 //
 //   - attributeUseName and findAttributeUse read the use's own QName with NO
-//     resolution, so the original still REPORTS the use. That is what matters
-//     most: under-reporting B's {attribute uses} is what would make this check
-//     fail-CLOSED, and it does not happen.
+//     resolution, so the side still REPORTS the use. That is what matters
+//     most: under-reporting either side's {attribute uses} is what would make
+//     this check fail-CLOSED, and it does not happen.
 //   - checkAttributeTypeDerivedOK (defaultbinding.go) gets not-ok from
 //     attributeUseType and returns nil, leaving loc-testSubP clause 5.1
 //     undecided: FAIL-OPEN.

@@ -496,12 +496,14 @@ func (s *Schema) checkAttributeUseSubsumes(n QName, r attributeRestriction, gene
 // are resolved through attributeUseType, the one encoding of "the simple type
 // governing this use" clause 5.2.2 also reads (STYLE T4).
 //
-// Phase A's guarantee covers every side but ONE: the base of a src-redefine
-// clause 7.2.2 comparison is the redefined document's own definition, which
-// §4.2.4 clause 4.1.2 keeps out of the schema's properties, so no pass walked
-// its references. There the skip is a real gap rather than a discharged one; it
-// is marked, with its direction, at checkAttributeGroupRedefinitions
-// (redefinition.go).
+// Phase A's guarantee does not reach a src-redefine clause 7.2.2 comparison on
+// EITHER side: resolveReferences never walks s.attributeGroups for any
+// top-level attribute group, so neither the redefinition (an ordinary indexed
+// component) nor the original (which §4.2.4 clause 4.1.2 additionally keeps out
+// of every property and index, but that costs it nothing here — it never had
+// Phase A coverage to lose) was ever walked. There the skip is a real gap
+// rather than a discharged one, on both sides; it is marked, with its
+// direction, at checkAttributeGroupRedefinitions (redefinition.go).
 //
 // An unresolvable {base type definition} INSIDE either chain is a different
 // thing and is returned as the src-resolve error rather than skipped: this frame
