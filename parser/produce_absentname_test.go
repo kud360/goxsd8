@@ -340,6 +340,204 @@ func TestProduceTopLevelDefinitionProhibitedAttrsRejected(t *testing.T) {
 	}
 }
 
+// redefiningLib is the redefined document the two tables below pair with: it
+// declares every name they redefine, so no row can pass as a src-expredef
+// pairing miss — except the one row written to have one.
+const redefiningLib = `<xs:group name="G"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>` +
+	`<xs:attributeGroup name="AG"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>` +
+	`<xs:complexType name="CT"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`
+
+// redefining wraps one <redefine> child as the whole of main.xsd, putting the
+// child on line 3 for the position assertions (STYLE E3).
+func redefining(child string) map[string]string {
+	return map[string]string{
+		"main.xsd": wrap("urn:a", "\n"+`<xs:redefine schemaLocation="lib.xsd">`+"\n"+child+"\n"+`</xs:redefine>`),
+		"lib.xsd":  wrap("urn:a", redefiningLib),
+	}
+}
+
+// TestParseRedefiningDefinitionProhibitedAttrsRejected is the REDEFINE half of
+// the family the table above covers at the top level, and the same grammar types
+// govern both: §4.2.4's content model reaches the GLOBAL <group> and
+// <attributeGroup> element declarations through xs:redefinable
+// (xmlschema11-1.md:4465, :5331, :5528), so a redefining <group> is an
+// xs:namedGroup — ref, minOccurs and maxOccurs prohibited (:5210-:5212) — and a
+// redefining <attributeGroup> an xs:namedAttributeGroup, prohibiting ref alone
+// (:5511). The footing is §5.1's schema-for-schema-documents validity, which
+// carries no numbered rule ID, so every row asserts a PLAIN error: charging
+// src-redefine, src-expredef, mgd-props-correct or ag-props-correct here would
+// be fabricated (STYLE E2).
+//
+// It parses two documents rather than producing one because a redefinition needs
+// the redefined document — [Produce] follows no ·inter-schema-document
+// reference·, so its <redefine> children map to nothing at all and the tables
+// above cannot reach this half.
+//
+// Two ordering claims are pinned, and each is why the guard sits in
+// newRedefineSet rather than in produceRedefinition:
+//
+//   - the nameless rows, against the sibling grammar fault just below the guard
+//     — a <group ref="tns:G"/> writes no name, so without the guard it is
+//     reported for the name the ref displaced, which is the suite's own shape;
+//   - the LAST row, against src-expredef — its redefining <group> names nothing
+//     lib.xsd declares, so the pairing miss is live over the same child, and the
+//     ref must still be what is reported.
+//
+// Every named row but the last is a document that would otherwise PARSE, so
+// reverting the guard fails it on the verdict. The nameless rows and the last
+// one are rejected either way, so their assertions are the message ones: the
+// diagnostic names the attribute and the form, and is neither newRedefineSet's
+// absent-name wording nor a rule verdict.
+func TestParseRedefiningDefinitionProhibitedAttrsRejected(t *testing.T) {
+	const (
+		groupBody = `<xs:sequence><xs:group ref="tns:G"/><xs:element name="b" type="xs:string"/></xs:sequence>`
+		agBody    = `<xs:attributeGroup ref="tns:AG"/><xs:attribute name="b" type="xs:string"/>`
+	)
+	// A slice, not a map: subtest order is output (STYLE D2).
+	cases := []struct {
+		name     string
+		child    string
+		wantAttr string
+	}{
+		{
+			name:     `redefining <group ref=>`,
+			child:    `<xs:group ref="tns:G"/>`,
+			wantAttr: "ref",
+		},
+		{
+			name:     `redefining <group ref=> with a name of its own`,
+			child:    `<xs:group name="G" ref="tns:G">` + groupBody + `</xs:group>`,
+			wantAttr: "ref",
+		},
+		{
+			name:     `redefining <group minOccurs=>`,
+			child:    `<xs:group name="G" minOccurs="0">` + groupBody + `</xs:group>`,
+			wantAttr: "minOccurs",
+		},
+		{
+			name:     `redefining <group maxOccurs=>`,
+			child:    `<xs:group name="G" maxOccurs="100">` + groupBody + `</xs:group>`,
+			wantAttr: "maxOccurs",
+		},
+		{
+			// Two prohibited attributes at once, written in the REVERSE of the
+			// grammar's declaration order: the check order is the grammar's, not the
+			// document's, so the reported attribute is stable (STYLE D2).
+			name:     `redefining <group maxOccurs= minOccurs=>`,
+			child:    `<xs:group name="G" maxOccurs="100" minOccurs="0">` + groupBody + `</xs:group>`,
+			wantAttr: "minOccurs",
+		},
+		{
+			name:     `redefining <attributeGroup ref=>`,
+			child:    `<xs:attributeGroup ref="tns:AG"/>`,
+			wantAttr: "ref",
+		},
+		{
+			name:     `redefining <attributeGroup ref=> with a name of its own`,
+			child:    `<xs:attributeGroup name="AG" ref="tns:AG">` + agBody + `</xs:attributeGroup>`,
+			wantAttr: "ref",
+		},
+		{
+			name:     `redefining <group ref=> naming no original`,
+			child:    `<xs:group name="Absent" ref="tns:G"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>`,
+			wantAttr: "ref",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseMap(t, "main.xsd", redefining(tc.child))
+			if err == nil {
+				t.Fatalf("Parse succeeded, want a grammar fault for the prohibited %s", tc.wantAttr)
+			}
+			var xe *xsderr.Error
+			if errors.As(err, &xe) {
+				t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+			}
+			if want := fmt.Sprintf("carries a %s attribute", tc.wantAttr); !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want it to name %s as the prohibited attribute", err, tc.wantAttr)
+			}
+			if !strings.Contains(err.Error(), "prohibits on the redefining form") {
+				t.Fatalf("error = %v, want it to name the form it judged, which here is the redefining one", err)
+			}
+			if strings.Contains(err.Error(), "has no name attribute") {
+				t.Fatalf("error = %v, want the prohibited-attribute fault rather than the absent-name one it causes", err)
+			}
+			if !strings.Contains(err.Error(), "main.xsd:3:") {
+				t.Fatalf("error = %v, want it positioned at the redefining child's own line main.xsd:3 (E3)", err)
+			}
+		})
+	}
+}
+
+// TestParseRedefiningProhibitedAttrsLegalElsewhere is the reverse hazard of the
+// table above: the guard reads the <redefine> element's OWN children and nothing
+// below them, and it claims only what each kind's grammar declares.
+//
+// The parsing rows are a well-formed redefinition of each kind — the control
+// that fails if the guard ever fires on a redefining declaration carrying none
+// of the prohibited attributes — plus a local <group ref> with both occurrence
+// attributes DESCENDING from a redefining <complexType>, where xs:groupRef makes
+// ref required and xs:occurs makes minOccurs/maxOccurs legal, so a guard that
+// walked descendants would reject a legal schema.
+//
+// The last rows pin what the guard must NOT CLAIM: xs:attributeGroup's grammar
+// never pulls in xs:occurs, so xs:namedAttributeGroup has no occurrence pair to
+// prohibit and minOccurs= on a redefining <attributeGroup> is ABSENT from that
+// grammar, a different fault this guard may not name. They are asserted on the
+// message rather than on acceptance, since a later §A attribute-set check may
+// legitimately reject those documents for that other, true reason.
+func TestParseRedefiningProhibitedAttrsLegalElsewhere(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, tc := range []struct {
+		name  string
+		child string
+	}{
+		{
+			name:  `redefining <group>`,
+			child: `<xs:group name="G"><xs:sequence><xs:group ref="tns:G"/><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>`,
+		},
+		{
+			name:  `redefining <attributeGroup>`,
+			child: `<xs:attributeGroup name="AG"><xs:attributeGroup ref="tns:AG"/><xs:attribute name="b" type="xs:string"/></xs:attributeGroup>`,
+		},
+		{
+			name: `local <group ref= minOccurs= maxOccurs=> under a redefining <complexType>`,
+			child: `<xs:complexType name="CT"><xs:complexContent><xs:extension base="tns:CT">` +
+				`<xs:sequence><xs:group ref="tns:G" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>` +
+				`</xs:extension></xs:complexContent></xs:complexType>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := parseMap(t, "main.xsd", redefining(tc.child)); err != nil {
+				t.Fatalf("Parse rejected a redefinition the grammar admits: %v", err)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		name  string
+		child string
+	}{
+		{
+			name:  `redefining <attributeGroup minOccurs=>`,
+			child: `<xs:attributeGroup name="AG" minOccurs="0"><xs:attributeGroup ref="tns:AG"/></xs:attributeGroup>`,
+		},
+		{
+			name:  `redefining <attributeGroup maxOccurs=>`,
+			child: `<xs:attributeGroup name="AG" maxOccurs="unbounded"><xs:attributeGroup ref="tns:AG"/></xs:attributeGroup>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseMap(t, "main.xsd", redefining(tc.child))
+			if err == nil {
+				return
+			}
+			if strings.Contains(err.Error(), "prohibits on the redefining form") {
+				t.Fatalf("error = %v, want no prohibition claimed for an attribute that kind's grammar never declares", err)
+			}
+		})
+	}
+}
+
 // TestProduceProhibitedAttrsLegalElsewhere is the reverse hazard of the tables
 // above, and the reason the guard carries a list per KIND rather than one merged
 // list.
