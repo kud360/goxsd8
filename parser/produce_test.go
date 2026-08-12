@@ -454,22 +454,37 @@ func TestProduceElementTypeAndInlineRejected(t *testing.T) {
 	assertRule(t, err, "src-element")
 }
 
-// TestProduceElementInlineSimpleTypeStillDeclined pins the surviving asymmetry on
-// the GLOBAL path: #340 widened tier 1 for the inline <complexType> child only,
-// so the inline <simpleType> child of a TOP-LEVEL <element> is still unproduced.
-// It must fail as a LIMITATION carrying no rule — the schema is legal, and the
-// src-element verdict this used to fabricate said otherwise (STYLE E2).
-func TestProduceElementInlineSimpleTypeStillDeclined(t *testing.T) {
-	body := `<xs:element name="e"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:element>`
-	_, err := produce(t, wrap("", body))
-	if err == nil {
-		t.Fatal("Produce accepted a top-level <element> with an inline <simpleType>")
+// TestProduceElementInlineSimpleType pins §3.3.2.1 dcl.elt.common clause 1 on the
+// GLOBAL path (#442): a top-level <element> with an inline <simpleType> child
+// takes that anonymous type as its {type definition}, through the same
+// xsd.InlineTypeDefinition arm the local form uses, and the type carries the
+// restriction's own base and facets rather than a defaulted xs:anyType. Its
+// {scope} stays global — §3.3.2.2 dcl.elt.global supplements {scope} and {target
+// namespace} alone, so mapping tier 1 must not disturb it.
+func TestProduceElementInlineSimpleType(t *testing.T) {
+	body := `<xs:element name="e"><xs:simpleType><xs:restriction base="xs:string"><xs:maxLength value="3"/></xs:restriction></xs:simpleType></xs:element>`
+	s, err := produce(t, wrap("", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
 	}
-	if rule, ok := xsderr.RuleOf(err); ok {
-		t.Fatalf("error carries rule %s, want a plain limitation error for a legal schema", rule)
+	ed, ok := s.Element(xsd.QName{Local: "e"})
+	if !ok {
+		t.Fatal("element e not found")
 	}
-	if !strings.Contains(err.Error(), "inline <simpleType> is not yet produced") {
-		t.Fatalf("error = %v, want the inline-<simpleType> limitation", err)
+	if ed.ScopeVariety() != xsd.ScopeGlobal {
+		t.Fatalf("{scope}.{variety} = %v, want global", ed.ScopeVariety())
+	}
+	st := inlineSimpleType(t, ed.TypeDefinition())
+	if base := mustBase(t, s, st); base == nil || base.Name() != (xsd.QName{Space: xsdNS, Local: "string"}) {
+		t.Fatalf("inline type base = %v, want {xs}string", base)
+	}
+	if got := st.OwnFacets(); len(got) != 1 || got[0].Kind() != xsd.FacetMaxLength {
+		t.Fatalf("inline type own facets = %v, want one maxLength", got)
+	}
+	// The anonymous type is NOT registered in {type definitions}: it has no name
+	// to be resolved by.
+	if _, ok := s.Type(xsd.QName{}); ok {
+		t.Fatal("the anonymous inline type was registered in {type definitions}")
 	}
 }
 
@@ -2264,21 +2279,28 @@ func TestProduceElementTypeFromSubstitutionGroupHeadInline(t *testing.T) {
 }
 
 // TestProduceElementTypeFromSubstitutionGroupHeadInlineSimple pins the clause-3
-// shape still declined after #342, and pins WHY it is a different limitation
-// from the one #342 closed: the sharing mechanism would express it, but
-// produceElement declines a top-level <element> with an inline <simpleType>
-// outright (#442, which owns both halves), so a member must never be handed a
-// reference to a head this producer can never build. It is reported as a
-// producer limitation, never as a fabricated rule verdict (STYLE E2).
+// half #442 closed alongside its own: a head typed by an inline <simpleType>
+// yields the same xsd.SubstitutionGroupHeadTypeRef arm a <complexType> head
+// yields, since the member's {type definition} must BE the head's anonymous
+// component and no name reaches one. The arm was previously declined only because
+// the head itself was unproduced.
 func TestProduceElementTypeFromSubstitutionGroupHeadInlineSimple(t *testing.T) {
 	body := `<xs:element name="head"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:element>` +
 		`<xs:element name="member" substitutionGroup="head"/>`
-	_, err := produce(t, wrap("", body))
-	if err == nil {
-		t.Fatalf("expected a declined-mapping error for an inline <simpleType> head type, got nil")
+	s, err := produce(t, wrap("", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
 	}
-	if _, charged := xsderr.RuleOf(err); charged {
-		t.Fatalf("a producer limitation was charged as a spec rule: %v", err)
+	ed, ok := s.Element(xsd.QName{Local: "member"})
+	if !ok {
+		t.Fatal("element member not found")
+	}
+	inherited, isHeadRef := ed.TypeDefinition().(xsd.SubstitutionGroupHeadTypeRef)
+	if !isHeadRef {
+		t.Fatalf("{type definition} = %#v, want an xsd.SubstitutionGroupHeadTypeRef", ed.TypeDefinition())
+	}
+	if inherited.Head != (xsd.QName{Local: "head"}) {
+		t.Fatalf("{type definition} head = %s, want the owning head", inherited.Head)
 	}
 }
 

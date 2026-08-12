@@ -776,20 +776,28 @@ func overrideDecidable(el *parser.Element) bool {
 // (§3.4.7), so it resolves at finalize and is decided genuinely — type= is not
 // required.
 //
-// An inline <complexType> child IS produced (§3.3.2.1 dcl.elt.common clause 1,
-// #340) and is admitted when the anonymous type it maps to is itself decidable
-// — see anonymousComplexTypeDecidable, which is narrower than
-// complexTypeDecidable and says why. An inline <simpleType> child is still
-// declined: #229 and #340 widened tier 1 for the LOCAL <simpleType> and for the
-// <complexType> on both paths, leaving the GLOBAL inline <simpleType> as the one
-// unproduced tier-1 shape, which the producer declines as the limitation it is.
+// Both inline type children ARE produced (§3.3.2.1 dcl.elt.common clause 1) and
+// each is admitted when the anonymous type it maps to is itself decidable: a
+// <complexType> through anonymousComplexTypeDecidable, which is narrower than
+// complexTypeDecidable and says why (#340), and a <simpleType> through
+// simpleTypeDecidable, exactly as localElementDecidable gates the local form
+// (#229/#442). This function and localElementDecidable are therefore no longer
+// asymmetric about tier 1 — the tier is a COMMON mapping rule and the producer
+// now maps it on both paths, so a difference here would be the fabrication.
+//
+// This gate does NOT need a condition for a substitutionGroup= whose head is
+// typed by an inline <simpleType>: the producer maps that clause-3 shape to an
+// xsd.SubstitutionGroupHeadTypeRef naming the head, like the inline
+// <complexType> head beside it, so no member of such a head reaches a limitation
+// error (#442; before it, the head's own decline here is what kept the shape out
+// of reach).
 //
 // Its <unique>/<key>/<keyref> children impose no condition of their own: #178
 // produced the name= form and #240 the ref= form, so BOTH are mapped and both
 // src-identity-constraint (§3.11.3) and c-props-correct (§3.11.6.1) rejections on
 // them are genuine.
 func elementDecidable(el *parser.Element) bool {
-	if childXSD(el, "simpleType") != nil {
+	if st := childXSD(el, "simpleType"); st != nil && !simpleTypeDecidable(st) {
 		return false
 	}
 	inline := childXSD(el, "complexType")

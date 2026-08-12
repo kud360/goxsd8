@@ -1480,7 +1480,7 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 // dcl.ctd.common) and those nested scopes — and
 // xsd.NewElementDeclarationOwningType checks the two agree. The remaining tiers
 // (the inline <simpleType> form, the type= form, the xs:anyType default) are
-// mapped by localDeclaredType, shared with the local-attribute chain.
+// mapped by declaredType, shared with the local-attribute chain.
 //
 // src-element clause 3 (§3.3.3) is charged here for the both-present case, on the
 // same footing produceElement charges it for a global <element>: without it,
@@ -1562,7 +1562,7 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 		return xsd.NewElementDeclarationOwningType(el.Loc(), edID, qname, ct, nil, scope, vc,
 			nillable, constraints, nil, nil, false, p.disallowedSubstitutions(el), nil)
 	}
-	typeDef, err := p.localDeclaredType(el, anyTypeName)
+	typeDef, err := p.declaredType(el, anyTypeName)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
@@ -1588,48 +1588,42 @@ func rejectBothInlineTypes(el *Element, inlineSimple, inlineComplex *Element) er
 	return fmt.Errorf("parser: <element> at %s has both an inline <simpleType> and an inline <complexType> child, but the schema for schema documents allows at most one type child on an <element>", el.Loc())
 }
 
-// localDeclaredType maps the {type definition} of a local <element> or
-// <attribute> whose both-present and inline-<complexType> cases the caller has
-// already excluded. It is the ONE implementation of the two parallel mapping
-// chains — §3.3.2.1 dcl.elt.common for an element, §3.2.2.2 dcl.att.local for an
-// attribute — which agree on every tier this producer implements (STYLE T4):
+// declaredType maps the {type definition} of an <element> or <attribute> whose
+// both-present and inline-<complexType> cases the caller has already excluded.
+// It is the ONE implementation of the two parallel mapping chains — §3.3.2.1
+// dcl.elt.common for an element, §3.2.2.2 dcl.att.local for an attribute — which
+// agree on every tier this producer implements (STYLE T4):
 //
 //	tier 1  the anonymous type corresponding to the inline <simpleType> child;
 //	tier 2  the type definition the type= attribute ·resolves· to;
 //	last    dflt, the caller's fallback — xs:anyType for an element (§3.3.2.1
 //	        clause 4), xs:anySimpleType for an attribute (§3.2.2.2).
 //
+// It serves the GLOBAL <element> path as well as the two local ones (#442): the
+// tier chain is COMMON to both element forms — §3.3.2.2 dcl.elt.global
+// supplements {target namespace} and {scope} alone, never {type definition} — so
+// a top-level <element> has nothing to map differently here, and produceElement
+// calls this for tiers 1 and 2 rather than restating either.
+//
 // The anonymous type is built once, here, and handed to the declaration as an
 // xsd.InlineTypeDefinition: it goes into no symbol table, so the declaration is
-// its sole owner. Its {context} (§3.16.1) is not populated (#206).
+// its sole owner. Its {context} (§3.16.1 std-context) is a SEPARATE property
+// from the {type definition} this maps and stays unpopulated on every anonymous
+// simple type the producer builds, global and local alike (#206).
 //
 // The element chain's clause 3 — "The declared {type definition} of the Element
 // Declaration ·resolved· to by the FIRST QName in the ·actual value· of the
-// substitutionGroup attribute, if present" — has no tier here, and its absence is
-// not a gap: it is UNREACHABLE on this chain. substitutionGroup= is legal only on
-// a top-level <element> (use="prohibited" on xs:localElement, §3.3.2), the
-// caller charges e-props-correct clause 3 for a local one, and the attribute
-// chain has no clause-3 analog at all. The reachable half is implemented on the
-// global path, by produceElement through substitutionGroupHeadType (#395, which
-// needed it because e-props-correct clause 4 reads the resulting type). The two
-// mappings deliberately read the list differently: {substitution group
-// affiliations} resolves EVERY item, clause 3 the first one only.
-//
-// GAP(parser): one clause-3 shape is DECLINED rather than mapped, and it is
-// declined on the global path, not here — a head whose own type is an inline
-// <simpleType>. The inline-<complexType> head it used to sit beside is mapped as
-// of #342, through xsd.SubstitutionGroupHeadTypeRef, which references the OWNING
-// head rather than copying a component whose {context} names one declaration. It
-// is reported as a producer limitation, never as a rule verdict
-// (substitutionGroupHeadType).
-//
-// What remains is NOT a residue of the sharing mechanism — the arm expresses it
-// perfectly well — but of a different limitation one level down: produceElement
-// declines a top-level <element> with an inline <simpleType> outright, so a
-// member must not be handed a reference to a head this producer can never build.
-// #442 owns that decline and therefore owns this one; it retires here the moment
-// it retires there, and no separate issue is needed for the clause-3 half.
-func (p *producer) localDeclaredType(el *Element, dflt xsd.QName) (xsd.TypeDefinitionOrRef, error) {
+// substitutionGroup attribute, if present" — has no tier here, and its absence
+// is not a gap: no caller can reach it through this function. substitutionGroup=
+// is legal only on a top-level <element> (use="prohibited" on xs:localElement,
+// §3.3.2), produceLocalElement charges e-props-correct clause 3 for a local one,
+// and the attribute chain has no clause-3 analog at all. The global caller
+// decides it itself, BETWEEN tier 2 and dflt, through substitutionGroupHeadType
+// (#395, which needed it because e-props-correct clause 4 reads the resulting
+// type) — which is also why this function's dflt is never the answer on that
+// path. The two mappings deliberately read the list differently: {substitution
+// group affiliations} resolves EVERY item, clause 3 the first one only.
+func (p *producer) declaredType(el *Element, dflt xsd.QName) (xsd.TypeDefinitionOrRef, error) {
 	if inline := childElement(el, xsd.XMLSchemaNS, "simpleType"); inline != nil {
 		st, err := p.constructSimpleType(xsd.QName{}, inline) // tier 1
 		if err != nil {
@@ -2100,7 +2094,7 @@ func useValueConstraintOK(el *Element) error {
 // produceLocalAttribute maps the sibling local Attribute Declaration of a local
 // <attribute> (§3.2.2.2, {scope} = local, {value constraint} always absent on the
 // declaration — any default/fixed feeds the Attribute Use, #70). Its {type
-// definition} is mapped by localDeclaredType over §3.2.2.2's three tiers: the
+// definition} is mapped by declaredType over §3.2.2.2's three tiers: the
 // inline <simpleType> child (#229), the type= reference, or xs:anySimpleType.
 // src-attribute clause 4 (§3.2.3) rejects the both-present case first.
 //
@@ -2119,7 +2113,7 @@ func (p *producer) produceLocalAttribute(el *Element, scopeParent xsd.AttributeS
 	if err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
-	typeDef, err := p.localDeclaredType(el, anySimpleTypeName)
+	typeDef, err := p.declaredType(el, anySimpleTypeName)
 	if err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
