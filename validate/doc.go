@@ -4,17 +4,34 @@
 //
 // # The abstract infoset
 //
-// The engine consumes marker interfaces — element, attribute, and node
-// views with name, character content, namespace lookup, and Loc — never
-// a concrete decoder's types (PRINCIPLES 8). Adapters construct infoset
-// values and hand them over:
+// The engine consumes [Element], [Attribute], [Text] and the [Children]
+// cursor over the [Child] sum — never a concrete decoder's types
+// (PRINCIPLES 8). They carry the Appendix D properties a cvc- rule reads
+// off an information item, plus the Loc a diagnostic cites. Adapters
+// construct infoset values and hand them over:
 //
 //	validate/xmlsrc   XML instances via parser/xmltree      (M5)
 //	validate/jsonsrc  JSON instances                        (M8)
 //	validate/bersrc   BER-encoded instances                 (M11)
 //
-// The engine imports none of encoding/xml, encoding/json, or a BER
-// decoder; only the adapters do.
+// No package of this module in the engine's import closure imports
+// encoding/xml, encoding/json, or a BER decoder; only the adapters do.
+// (log/slog carries encoding/json into every closure in the module for
+// its JSONHandler — the test that pins this boundary says which form of
+// the ban each path is held to.)
+//
+// Assessment is streaming: [Children] is a pull cursor, so a source
+// yields one child at a time and the walk never holds a document.
+//
+// A later infoset property arrives as a NEW optional capability
+// interface the engine narrows to — interface{ BaseURI() string },
+// falling back to Loc().URI where an adapter does not implement it —
+// and NEVER as a method added to Element, Attribute or Text
+// (PRINCIPLES 3). Those three are implemented by adapter packages
+// outside this module, so a method added to one breaks every adapter at
+// once. [[prefix]], [[base URI]] and [[attribute type]] are the
+// Appendix D properties waiting on that route: no cvc- rule reads one
+// today.
 //
 // # Assessment semantics designed in from the start
 //
@@ -40,18 +57,8 @@
 //
 // # Planned contract (M5 — not yet implemented)
 //
-//	func New(schema *xsd.Schema, opts ...Option) (*Validator, error)
-//	    Options: WithLogger. The Validator is immutable and reusable.
-//	    It takes the one finalized [xsd.Schema] parser.Parse assembles —
-//	    the §3.17.1 Schema component is already multi-namespace-capable,
-//	    so there is no separate schema-set type.
-//
-//	func (v *Validator) Assess(root Element) *Result
-//	    Result carries every violation as an *xsderr.Error (cvc-* rule +
-//	    instance and/or schema Loc), in document order, plus non-fatal
-//	    warnings. Streaming-oriented: assessment walks the source once.
-//
-// The Validator exposes a minimal read-only schema view (STYLE T3) so
-// adapters can resolve root element declarations without reaching into
-// compiled internals.
+// [Result] will carry every violation as an *xsderr.Error (cvc-* rule +
+// instance and/or schema Loc), in document order, once the cvc-
+// decisions land on the walk [Validator.Assess] already makes. Non-fatal
+// warnings get an accessor of their own the day something produces one.
 package validate
