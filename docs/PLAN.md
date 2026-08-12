@@ -103,13 +103,13 @@ that is evidence the trigger is wrong, not that the queue is busy.
 
 **Working band** — dependency-ordered top of the `ready` queue, so a session
 need not scan 140 issues. Take from the top; the ordering prefers slices that
-move a lane over horizontal completeness. **#699 (PR #705) has landed** and is
-dropped from the band below rather than left as a stale claimed row; #686
-(PR #701), #684 (PR #698), #506 (PR #694), #675 (PR #695) and #585 (PR #689)
-were dropped the same way in the four passes before it.
+move a lane over horizontal completeness. **#469 (PR #708) has landed** and is
+dropped from the band below rather than left as a stale claimed row; #699
+(PR #705), #686 (PR #701), #684 (PR #698), #506 (PR #694), #675 (PR #695) and
+#585 (PR #689) were dropped the same way in the five passes before it.
 
 **Every row below is now the 2026-08-11 `/backlog`'s own ordering,
-contiguously** — its rows 5–14, renumbered. The two rows a post-land pass
+contiguously** — its rows 6–14, renumbered. The two rows a post-land pass
 placed rather than a queue-wide survey, #686 and then #699, have both drained.
 Re-rank at the next `/backlog` — which, per the mechanism stated above, carves
 M5 and re-ranks nothing.
@@ -127,20 +127,30 @@ both an `xs:override` and an `xs:redefine`, so it can move no lane and is
 unit-test-only. **#702 touches `parser/redefine.go`, `parser/doc.go`,
 `parser/parse.go`, `parser/produce.go` and `conformance/schema.go` — the files
 row 2 opens**, and it is cheaper for that landing to read a corrected comment
-than to copy the wrong clause number a third time.
+than to copy the wrong clause number a third time. Row numbers in that
+sentence are the pre-#469 ones; the file it names is now opened by row 1.
+
+**#469's post-land pass filed nothing, and that is the finding, not a
+skipped step.** Both follow-ups its landing raised were dismissed with
+reasons on the issue thread: the `xsd/particleattribution.go` clause
+mis-citation it reported is not one — the bare `1.1` there is the XSD
+version, the reading Appendix G.1.3 item 8 states verbatim, and the file
+writes *clause* when it means a clause — and the ratchet-banking-shape
+question is a wording ruling for `/retro`, not implementation work. That
+second one now has two sightings (#675, then #469), which is `/retro`'s own
+threshold for a pattern.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #469 | cos-all-limited charged on the XML spelling, not the component — false accept in both clauses |
-| 2 | #503 + #504 | `src-redefine` clauses 7.2.2 and 6.2.2, both fail-open. **Coupled — read the note below before starting either** |
-| 3 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline |
-| 4 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes` lane, pdecimal019/020 the measured cost |
-| 5 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes` lane, #574's sibling widening |
-| 6 | #626 | README's CLI section is false about exit codes today; one sentence, and it should precede #472 |
-| 7 | #669 | README's Library snippet does not compile, and the example pointer omits `parser` and `xsd` |
-| 8 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
-| 9 | #672 + #687 | the two open CLI-contract decisions (`-version`; scoped help and the bareword `help`). One line each in `doc.go` now, a retrofit around a live dispatch after #472 |
-| 10 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 1 | #503 + #504 | `src-redefine` clauses 7.2.2 and 6.2.2, both fail-open. **Coupled — read the note below before starting either** |
+| 2 | #442 | top-level `xs:attribute` with an inline `xs:simpleType` unproduced; a banked fixture rests on the decline |
+| 3 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes` lane, pdecimal019/020 the measured cost |
+| 4 | #590 | pdecimal016, the Saxon PDecimal cohort's five-case chain — `datatypes` lane, #574's sibling widening |
+| 5 | #626 | README's CLI section is false about exit codes today; one sentence, and it should precede #472 |
+| 6 | #669 | README's Library snippet does not compile, and the example pointer omits `parser` and `xsd` |
+| 7 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
+| 8 | #672 + #687 | the two open CLI-contract decisions (`-version`; scoped help and the bareword `help`). One line each in `doc.go` now, a retrofit around a live dispatch after #472 |
+| 9 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
 
 **`parser/redefine.go` has been rewritten twice in two days, so read it rather
 than an issue body that describes it.** #686 put its duplicate-key charge in
