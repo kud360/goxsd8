@@ -371,7 +371,7 @@ func (s *Schema) restrictionComplexContentOK(tct, bct ContentType) bool {
 	if !restrictionVarietyPairOK(tct, bct) {
 		return false
 	}
-	return s.contentTypeRestricts(tct, bct)
+	return s.contentTypeRestricts(tct, bct, restrictsFully)
 }
 
 // restrictionVarietyPairOK is clause 2.4.1: 2.4.1.1 T's {variety} is

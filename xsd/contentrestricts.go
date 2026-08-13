@@ -524,9 +524,36 @@ func positionsKey(states []int) string {
 // any known schema approaches it.
 const maxProductStates = 4096
 
+// contentRestrictionScope names WHICH of cos-content-act-restrict's two
+// conditions a caller is charging, because the two callers charge different
+// rules over the same walk and the difference is a spec reading, not a tuning
+// knob.
+//
+// It is a closed set of two, and every call site names its member literally, so
+// the narrower reading is a cited decision at the site that takes it rather than
+// an inherited default (STYLE T1).
+type contentRestrictionScope int
+
+const (
+	// restrictsFully is clauses 1 and 2 together: derivation-ok-restriction
+	// (§3.4.6.3) clause 2.4.2, which invokes cos-content-act-restrict whole.
+	restrictsFully contentRestrictionScope = iota
+	// restrictsLanguage is clause 1 alone — language containment, V(R) ⊆ V(B).
+	// src-redefine (§4.2.4) clause 6.2.2 states only that "the {model group} …
+	// accepts a subset of the element sequences accepted by that model group
+	// definition in S2", cites §3.7.2 for the mapping and cos-content-act-restrict
+	// for nothing; clause 2's ·default binding· subsumption is an extra condition
+	// specific to complex-type restriction and charging it here would reject a
+	// redefining group that retypes an element while accepting the same sequences
+	// (redefinition.go).
+	restrictsLanguage
+)
+
 // contentTypeRestricts is derivation-ok-restriction clause 2.4.2's delegate:
 // whether T's {content type} ·restricts· B's as defined in Content type
-// restricts (Complex Content) (§3.4.6.4, cos-content-act-restrict).
+// restricts (Complex Content) (§3.4.6.4, cos-content-act-restrict). scope selects
+// how much of that constraint is charged (contentRestrictionScope): the clause
+// 2.4.2 caller takes restrictsFully, src-redefine clause 6.2.2 restrictsLanguage.
 //
 // It answers a bool rather than an error because clause 2.4.2 sits inside
 // derivation-ok-restriction clause 2, a DISJUNCTION: the failure that reaches a
@@ -560,7 +587,11 @@ const maxProductStates = 4096
 //     makes B look larger, which can only accept. This is the NARROW §3.4.6.3
 //     all-group allowance, not the broader implementation-defined (a)/(b)/(c)
 //     clause that the pre-#263 stub relied on; being spec-licensed rather than a
-//     deliberate incompleteness, it carries no GAP marker.
+//     deliberate incompleteness, it carries no GAP marker FOR THAT CALLER. The
+//     licence is §3.4.6.3's and names clause 2.4.2, so it does not travel with
+//     this function: a restrictsLanguage caller charging some other rule inherits
+//     the leniency's fail-open behaviour and must carry its own marker for it
+//     (checkModelGroupRedefinitions, redefinition.go).
 //   - a content model whose exact unfolding would exceed maxContentPositions on
 //     either side. This one alone is a RESOURCE ceiling rather than a modelling
 //     gap — it bounds the automaton's size, see maxContentPositions for what that
@@ -568,7 +599,7 @@ const maxProductStates = 4096
 //     occurrence range does not reach the walk; the licence it leans on is the
 //     one contentModelRestricts' giveup site states, and the marker is at the
 //     branch itself.
-func (s *Schema) contentTypeRestricts(tct, bct ContentType) bool {
+func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestrictionScope) bool {
 	rc, ok := tct.(ElementContent)
 	if !ok {
 		return true
@@ -629,11 +660,13 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType) bool {
 	if err != nil {
 		return true // same unreachable error slot, same direction
 	}
-	return s.contentModelRestricts(r, b)
+	return s.contentModelRestricts(r, b, scope)
 }
 
 // contentModelRestricts walks the product of the two automata, deciding both
-// conditions of cos-content-act-restrict in one pass.
+// conditions of cos-content-act-restrict in one pass — or clause 1 alone, when
+// scope is restrictsLanguage. The walk is otherwise identical: clause 2 is a
+// per-transition test over the same matched set, never a separate traversal.
 //
 // States are drained FIFO from a slice seeded with the start pair, and each
 // state's R-positions are visited in ascending index order, so the walk order
@@ -664,7 +697,7 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType) bool {
 //
 // Both die with the walk; nothing survives into the Schema, and no automaton is
 // memoized anywhere (contentAutomatonOf builds one per call).
-func (s *Schema) contentModelRestricts(r, b contentAutomaton) bool {
+func (s *Schema) contentModelRestricts(r, b contentAutomaton, scope contentRestrictionScope) bool {
 	subsets := newSubsetTable()
 	liveOf := map[int]liveSet{}
 	start := productState{r: startState, b: subsets.intern([]int{startState})}
@@ -691,7 +724,7 @@ func (s *Schema) contentModelRestricts(r, b contentAutomaton) bool {
 				if len(matched) == 0 {
 					return false // clause 1: R can continue where B cannot
 				}
-				if !s.someBindingSubsumes(b, matched, r.positions[p]) {
+				if scope == restrictsFully && !s.someBindingSubsumes(b, matched, r.positions[p]) {
 					return false // clause 2, ctr-child-type-subsumption
 				}
 				id = subsets.intern(matched)
