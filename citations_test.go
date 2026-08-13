@@ -69,7 +69,9 @@ var allowedCollisionCitations = []citationAllowance{
 	// unguarded base-chain walks presuppose the acyclicity proof Phase B
 	// establishes — item 9's "then no traversal ever needs a `seen` set", read
 	// as the obligation it places on a traversal rather than as a licence.
-	{file: "xsd/derivation.go", number: 9, count: 1},
+	// #738 added the second: the same note for the unguarded MEMBERSHIP walks,
+	// which rest on Phase B's checkUnionMembershipAcyclic the same way.
+	{file: "xsd/derivation.go", number: 9, count: 2},
 	{file: "xsd/effectivetotalrange.go", number: 9, count: 1},
 	{file: "xsd/example_test.go", number: 9, count: 1},
 	{file: "xsd/modelgroup.go", number: 9, count: 1},
@@ -92,8 +94,9 @@ var allowedCollisionCitations = []citationAllowance{
 	// unconstructible, and resolveSimpleType's owned-only descent. The second
 	// half of item 9 — "Where the spec permits reference cycles it also names
 	// the rule that forbids the harmful ones; detect those once, at finalize"
-	// — is what the three colour-map guards cite.
-	{file: "xsd/resolve.go", number: 9, count: 9},
+	// — is what the colour-map guards cite, #738's checkUnionMembershipAcyclic
+	// (cos-st-restricts clause 3.3) included.
+	{file: "xsd/resolve.go", number: 9, count: 10},
 	{file: "xsd/simpletype.go", number: 9, count: 1},
 	{file: "xsd/substitutiongroup.go", number: 9, count: 1},
 	{file: "xsd/substitutiongrouptypes.go", number: 9, count: 1},

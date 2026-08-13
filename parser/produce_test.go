@@ -577,17 +577,226 @@ func TestProduceListOfListRejected(t *testing.T) {
 	}
 }
 
-// TestProduceSimpleTypeUnionDeclined pins the <union> carve: it is a plain
-// limitation error, never a fabricated rule verdict (STYLE E2), because the
-// schema is legal and only this producer is incomplete.
-func TestProduceSimpleTypeUnionDeclined(t *testing.T) {
-	body := `<xs:simpleType name="U"><xs:union memberTypes="xs:string xs:int"/></xs:simpleType>`
-	_, err := produce(t, wrap("", body))
-	if err == nil {
-		t.Fatal("expected a decline error for <union>, got nil")
+// TestProduceUnionMemberTypesAreRefs pins §3.16.2.4 map.std.union case 1a on the
+// memberTypes= form: the produced type's {variety} is union, its {base type
+// definition} is xs:anySimpleType directly (map.std.common case 2 — ONE
+// component, no anonymous intermediate), and every member is the DEFERRED
+// by-name arm, resolved against the schema and not at mapping time.
+func TestProduceUnionMemberTypesAreRefs(t *testing.T) {
+	body := `<xs:simpleType name="U"><xs:union memberTypes="tns:A xs:int"/></xs:simpleType>` +
+		`<xs:simpleType name="A"><xs:restriction base="xs:string"/></xs:simpleType>`
+	s, err := produce(t, wrap("urn:x", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
 	}
-	if _, ok := xsderr.RuleOf(err); ok {
-		t.Fatalf("union decline should be a plain limitation error, not an xsderr rule: %v", err)
+	td, ok := s.Type(xsd.QName{Space: "urn:x", Local: "U"})
+	if !ok {
+		t.Fatal("type U not found")
+	}
+	union := td.(*xsd.SimpleType)
+	if _, isUnion := mustVariety(t, s, union).(xsd.Union); !isUnion {
+		t.Errorf("U {variety} = %#v, want xsd.Union", mustVariety(t, s, union))
+	}
+	if base := mustBase(t, s, union); base != xsd.AnySimpleType() {
+		t.Errorf("U {base type definition} = %v, want xs:anySimpleType", base.Name())
+	}
+	// The by-name arms cannot be followed without the schema — which is what makes
+	// a forward-referenced memberTypes= item legal (A is declared AFTER the union
+	// here, and Produce still succeeded).
+	if _, err := union.Members(noResolver{}); err == nil {
+		t.Fatal("U's memberTypes= resolved without a schema, so a member is stored as an OwnedSimpleType; every by-name member must be an xsd.SimpleTypeRef")
+	}
+	want := []xsd.QName{{Space: "urn:x", Local: "A"}, {Space: xsdNS, Local: "int"}}
+	got := memberNames(mustMembers(t, s, union))
+	if !slices.Equal(got, want) {
+		t.Errorf("U {member type definitions} = %v, want %v in memberTypes= order", got, want)
+	}
+}
+
+// TestProduceUnionCarriesNoFacets pins §3.16.2.1 map.std.common {facets} case 4:
+// a produced union's {facets} is the EMPTY set, with no whiteSpace manufactured
+// the way the <list> alternative's case 3 manufactures one. Any facet here is
+// refused at finalize by xsd's checkUnionGraph under cos-st-restricts clause
+// 3.2.1.2, so this asserts on the emptiness itself and not merely on Produce
+// succeeding.
+func TestProduceUnionCarriesNoFacets(t *testing.T) {
+	union, s := simpleTypeOf(t, "U", `<xs:simpleType name="U"><xs:union memberTypes="xs:string xs:int"/></xs:simpleType>`)
+	if own := union.OwnFacets(); len(own) != 0 {
+		t.Errorf("U own {facets} = %v, want empty", own)
+	}
+	if eff := mustEffectiveFacets(t, s, union); len(eff) != 0 {
+		t.Errorf("U {facets} = %v, want empty", eff)
+	}
+}
+
+// TestProduceUnionInlineMembers pins map.std.union case 1b: every inline
+// <simpleType> child of a <union> is a member, in document order, built here and
+// owned by its slot, so each resolves with no schema at all.
+func TestProduceUnionInlineMembers(t *testing.T) {
+	body := `<xs:simpleType name="U"><xs:union>` +
+		`<xs:simpleType><xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleType>` +
+		`<xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType>` +
+		`</xs:union></xs:simpleType>`
+	union, s := simpleTypeOf(t, "U", body)
+	if _, err := union.Members(noResolver{}); err != nil {
+		t.Errorf("an inline member is not the owned arm: %v", err)
+	}
+	members := mustMembers(t, s, union)
+	if len(members) != 2 {
+		t.Fatalf("U has %d members, want the two inline children", len(members))
+	}
+	for i, m := range members {
+		if m.Name() != (xsd.QName{}) {
+			t.Errorf("inline member %d {name} = %v, want absent", i, m.Name())
+		}
+	}
+	// Document order, and each inline type's own body reached its component: the
+	// first member carries the maxLength, the second is the xs:int one.
+	var maxLength []string
+	for _, f := range mustEffectiveFacets(t, s, members[0]) {
+		if f.Facet().Kind() == xsd.FacetMaxLength {
+			maxLength = f.Facet().Values()
+		}
+	}
+	if len(maxLength) != 1 || maxLength[0] != "4" {
+		t.Errorf("first inline member maxLength {value} = %v, want [4]", maxLength)
+	}
+	if base := mustBase(t, s, members[1]); base == nil || base.Name() != (xsd.QName{Space: xsdNS, Local: "int"}) {
+		t.Errorf("second inline member restricts %v, want {xs}int", base)
+	}
+}
+
+// TestProduceUnionBothMemberSourcesInOrder is map.std.union case 1's ORDER pin,
+// and the only thing that detects the drift it forbids: the memberTypes= items
+// come first, in attribute-list order, and the inline children after them, in
+// document order — "(a) ·resolved· to by the items in the ·actual value· of the
+// memberTypes attribute … and (b) corresponding to the <simpleType>s among the
+// <union> children … in order". Both sources at once is legal (src-simple-type
+// clause 4 is not exclusive, unlike clause 3 for <list>), and the two never
+// interleave. cos-st-restricts clause 3.2.2.3 pairs a restricting union's
+// members with its base's POSITIONALLY, so any other order is a wrong component.
+func TestProduceUnionBothMemberSourcesInOrder(t *testing.T) {
+	// The inline members are declared with distinguishable bases, and the
+	// memberTypes= items are deliberately NOT in document-order-of-declaration, so
+	// a producer that sorted, or that appended sources the other way round, fails.
+	body := `<xs:simpleType name="U"><xs:union memberTypes="tns:B tns:A">` +
+		`<xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType>` +
+		`<xs:simpleType><xs:restriction base="xs:boolean"/></xs:simpleType>` +
+		`</xs:union></xs:simpleType>` +
+		`<xs:simpleType name="A"><xs:restriction base="xs:string"/></xs:simpleType>` +
+		`<xs:simpleType name="B"><xs:restriction base="xs:decimal"/></xs:simpleType>`
+	s, err := produce(t, wrap("urn:x", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, _ := s.Type(xsd.QName{Space: "urn:x", Local: "U"})
+	members := mustMembers(t, s, td.(*xsd.SimpleType))
+	if len(members) != 4 {
+		t.Fatalf("U has %d members, want 2 named + 2 inline", len(members))
+	}
+	// Positions 0-1 are the memberTypes= items, by name; positions 2-3 the inline
+	// children, anonymous and told apart by what each restricts.
+	wantNamed := []xsd.QName{{Space: "urn:x", Local: "B"}, {Space: "urn:x", Local: "A"}}
+	if got := memberNames(members[:2]); !slices.Equal(got, wantNamed) {
+		t.Errorf("U members[0:2] = %v, want %v — memberTypes= items first, in attribute order", got, wantNamed)
+	}
+	wantInlineBases := []xsd.QName{{Space: xsdNS, Local: "int"}, {Space: xsdNS, Local: "boolean"}}
+	var gotInlineBases []xsd.QName
+	for _, m := range members[2:] {
+		if m.Name() != (xsd.QName{}) {
+			t.Fatalf("U members[2:] holds the named %v, so the two sources interleaved", m.Name())
+		}
+		gotInlineBases = append(gotInlineBases, mustBase(t, s, m).Name())
+	}
+	if !slices.Equal(gotInlineBases, wantInlineBases) {
+		t.Errorf("U members[2:4] restrict %v, want %v — inline children last, in document order", gotInlineBases, wantInlineBases)
+	}
+}
+
+// memberNames returns the {name} of each member, for the order assertions above.
+func memberNames(members []*xsd.SimpleType) []xsd.QName {
+	names := make([]xsd.QName, 0, len(members))
+	for _, m := range members {
+		names = append(names, m.Name())
+	}
+	return names
+}
+
+// TestProduceUnionNeitherMemberTypesNorInlineRejected pins src-simple-type clause
+// 4: a <union> must carry a non-empty memberTypes= or at least one <simpleType>
+// child. The whitespace-only attribute is the same failure — it contributes no
+// item, so it is not "non-empty" — and not a union of nothing.
+func TestProduceUnionNeitherMemberTypesNorInlineRejected(t *testing.T) {
+	for _, tc := range []struct{ name, body string }{
+		{"no memberTypes and no child", `<xs:simpleType name="U"><xs:union/></xs:simpleType>`},
+		{"empty memberTypes", `<xs:simpleType name="U"><xs:union memberTypes=""/></xs:simpleType>`},
+		{"whitespace-only memberTypes", `<xs:simpleType name="U"><xs:union memberTypes="   "/></xs:simpleType>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("", tc.body))
+			assertRule(t, err, "src-simple-type")
+		})
+	}
+}
+
+// TestProduceUnionUnresolvableMemberRejected pins that a by-name member joins the
+// same graph layer a by-name base and itemType= do: a memberTypes= item with
+// nothing behind it is charged src-resolve clause 1.1 at finalize, never silently
+// accepted.
+func TestProduceUnionUnresolvableMemberRejected(t *testing.T) {
+	body := `<xs:simpleType name="U"><xs:union memberTypes="xs:string tns:Missing"/></xs:simpleType>`
+	_, err := produce(t, wrap("urn:x", body))
+	assertRule(t, err, "src-resolve")
+}
+
+// TestProduceUnionMembershipCycleRejected is this landing's termination argument
+// end to end, and the reason the guard had to ship in the producer's own commit:
+// a by-name membership makes a cycle representable, and the membership walks in
+// xsd/derivation.go and value/valuespace.go carry no visited set. Finalize's
+// checkUnionMembershipAcyclic charges cos-st-restricts clause 3.3
+// (no-self-membership) instead of the walks running forever.
+func TestProduceUnionMembershipCycleRejected(t *testing.T) {
+	for _, tc := range []struct{ name, body string }{
+		{"a union naming itself", `<xs:simpleType name="U"><xs:union memberTypes="tns:U"/></xs:simpleType>`},
+		{"two unions naming each other", `<xs:simpleType name="U"><xs:union memberTypes="tns:V"/></xs:simpleType>` +
+			`<xs:simpleType name="V"><xs:union memberTypes="tns:U"/></xs:simpleType>`},
+		// The cycle that is NOT member edges alone: V restricts U, so V's own
+		// membership is U's (map.std.union case 2) and V is derived from U — clause
+		// 3.3's second conjunct, "nor any type derived from it".
+		{"a union whose member restricts it", `<xs:simpleType name="U"><xs:union memberTypes="tns:V"/></xs:simpleType>` +
+			`<xs:simpleType name="V"><xs:restriction base="tns:U"/></xs:simpleType>`},
+		// Through an anonymous member, which no index holds: the inline union's own
+		// memberTypes= names the type that owns it.
+		{"a cycle through an inline member", `<xs:simpleType name="U"><xs:union>` +
+			`<xs:simpleType><xs:union memberTypes="tns:U"/></xs:simpleType></xs:union></xs:simpleType>`},
+		// The union is the ANONYMOUS inline base of M, so it is no root of the
+		// walk; the verdict is charged against M, whose membership is that union's
+		// and whose member X derives from it. This is the coverage claim
+		// checkUnionMembershipAcyclic's roots paragraph makes.
+		{"a cycle through an anonymous union base", `<xs:simpleType name="M"><xs:restriction>` +
+			`<xs:simpleType><xs:union memberTypes="tns:X"/></xs:simpleType></xs:restriction></xs:simpleType>` +
+			`<xs:simpleType name="X"><xs:restriction base="tns:M"/></xs:simpleType>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:x", tc.body))
+			assertRule(t, err, "cos-st-restricts")
+			if got := err.Error(); !strings.Contains(got, "cos-st-restricts clause 3.3") {
+				t.Fatalf("rejection = %q, want finalize's checkUnionMembershipAcyclic charging clause 3.3", got)
+			}
+		})
+	}
+}
+
+// TestProduceUnionMembershipDiamondAccepted guards the other polarity: one type
+// reached twice through different member paths is not a cycle, and the walk must
+// not report one just because a node is visited more than once.
+func TestProduceUnionMembershipDiamondAccepted(t *testing.T) {
+	body := `<xs:simpleType name="Top"><xs:union memberTypes="tns:L tns:R"/></xs:simpleType>` +
+		`<xs:simpleType name="L"><xs:union memberTypes="tns:Leaf"/></xs:simpleType>` +
+		`<xs:simpleType name="R"><xs:union memberTypes="tns:Leaf"/></xs:simpleType>` +
+		`<xs:simpleType name="Leaf"><xs:restriction base="xs:string"/></xs:simpleType>`
+	if _, err := produce(t, wrap("urn:x", body)); err != nil {
+		t.Fatalf("Produce(a diamond membership) = %v, want acceptance", err)
 	}
 }
 

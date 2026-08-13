@@ -369,10 +369,12 @@ func contextDependent(r xsd.TypeResolver, t *xsd.SimpleType) (bool, error) {
 // one. The ITEM edge cannot close a loop that reaches here: any cycle of
 // itemType= references contains a list whose item is a list, which
 // xsd.SimpleType.CheckDerivation rejects under cos-st-restricts clause 2.1
-// before a schema finalizes. The MEMBER edge rests on nothing constructing a
-// by-name union-membership cycle, which holds only because no producer emits a
-// union at all — see xsd/derivation.go's CheckDerivation clause 3.3 paragraph
-// and the guard #738 replaces it with.
+// before a schema finalizes. The MEMBER edge rests on xsd's finalize-time
+// checkUnionMembershipAcyclic, which charges cos-st-restricts clause 3.3
+// (no-self-membership) against the assembled membership graph — see
+// xsd/derivation.go's CheckDerivation clause 3.3 paragraph. A caller reaching
+// here with components that never went through xsd.Finalize owes that
+// acyclicity itself.
 func needsContext(r xsd.TypeResolver, t *xsd.SimpleType) (bool, error) {
 	variety, err := t.Variety(r)
 	if err != nil {

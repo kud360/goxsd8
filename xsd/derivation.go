@@ -201,19 +201,17 @@ const (
 // for free on an OwnedSimpleType-only chain, where a base must pre-exist the
 // type holding it.
 //
-// cos-st-restricts clause 3.3 (no-self-membership) is NOT charged, and the
-// argument for that is now a bounded one rather than a structural impossibility.
-// UnionDerivation.Members is a SimpleTypeOrRef sequence, so a by-name member CAN
-// name a union that reaches back — the exact repeal SimpleTypeRef bases performed
-// on the base chain — and the unguarded membership walks below
-// (unionMembershipHasList, derivedOKSimple) would not terminate on one. What
-// keeps that unconstructible is that no producer emits a UnionDerivation at all:
-// parser/produce.go declines <union>, so every union a parsed schema reaches has
-// an owned-only membership that must pre-exist it. #738 lands the <union>
-// producer arm and a Phase B checkUnionMembershipAcyclic charging clause 3.3 in
-// the SAME commit, and these walks come to rest on that guard the way the
-// base-chain walks rest on checkSimpleBaseAcyclic. A programmatic caller building
-// a by-name membership by hand today owes the acyclicity itself.
+// cos-st-restricts clause 3.3 (no-self-membership) is NOT charged here either,
+// and its verdict is PRESUPPOSED by every unguarded MEMBERSHIP walk below, on
+// the same terms. UnionDerivation.Members is a SimpleTypeOrRef sequence, so a
+// by-name member can name a union that reaches back — the exact repeal
+// SimpleTypeRef bases performed on the base chain — and unionMembershipHasList
+// and derivedOKSimple would not terminate on one. Schema.checkUnionMembershipAcyclic
+// charges the clause in finalize's Phase B, immediately after checkSimpleBaseAcyclic
+// and before the Phase D pass that calls this one (resolve.go, PRINCIPLES 9). A
+// Schema-less caller running this method owes the same guarantee, and gets it for
+// free on an OwnedSimpleType-only membership, where every member must pre-exist the
+// union holding it.
 //
 // Still deferred here, and why:
 //
@@ -524,7 +522,9 @@ func checkConstructedListFacets(t *SimpleType) error {
 // every encoding of absence per ENTRY at construction (an empty membership is
 // legal, an absent member is not).
 //
-// Clause 3.3 (no-self-membership) is not charged here — see CheckDerivation.
+// Clause 3.3 (no-self-membership) is not charged here: it quantifies over a
+// whole assembled membership graph rather than over one type's own properties,
+// so it is Phase B's checkUnionMembershipAcyclic — see CheckDerivation.
 func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 	members, err := t.Members(r)
 	if err != nil {
@@ -602,10 +602,10 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 // It walks d's {base} chain and b's members with no visited set (STYLE D4). The
 // base-chain side rests on the acyclicity proof CheckDerivation's doc states —
 // Phase B's checkSimpleBaseAcyclic for a finalized Schema, owned-only chains for
-// a Schema-less caller. The membership side rests on nothing constructing a
-// by-name union-membership cycle, which is true only because no producer emits a
-// UnionDerivation at all: see CheckDerivation's clause 3.3 paragraph for the
-// full statement and for the guard #738 replaces it with.
+// a Schema-less caller. The membership side rests on the same proof's other
+// half: Phase B's checkUnionMembershipAcyclic, which charges cos-st-restricts
+// clause 3.3, and owned-only memberships for a Schema-less caller. See
+// CheckDerivation's clause 3.3 paragraph for the full statement.
 //
 // r resolves each {base type definition} hop, so an unresolvable one is an
 // ERROR rather than a false "not derived": answering false for a base that
@@ -1456,11 +1456,10 @@ func scaleValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (int, error) {
 // negative form of clause 2.1's "no types whose {variety} is list among the
 // union's transitive membership". u is expected to be a union; a non-union u
 // yields false. It recurses through member unions with no visited set (STYLE
-// D4), which rests on nothing constructing a by-name union-membership cycle —
-// true only because no producer emits a UnionDerivation at all, since
-// UnionDerivation.Members itself now admits a forward by-name member. See
-// CheckDerivation's cos-st-restricts clause 3.3 paragraph for the full statement
-// and for the guard #738 replaces it with.
+// D4), which rests on the acyclicity proof CheckDerivation's clause 3.3
+// paragraph states — Phase B's checkUnionMembershipAcyclic for a finalized
+// Schema, owned-only memberships for a Schema-less caller — the same footing the
+// base-chain walks take from checkSimpleBaseAcyclic.
 func unionMembershipHasList(r TypeResolver, u *SimpleType) (bool, error) {
 	uVariety, err := u.Variety(r)
 	if err != nil {

@@ -59,6 +59,18 @@ func mustItem(t *testing.T, s *xsd.Schema, st *xsd.SimpleType) *xsd.SimpleType {
 	return item
 }
 
+// mustMembers resolves st's {member type definitions} through s. A produced
+// memberTypes= item is an [xsd.SimpleTypeRef], so this read is a schema lookup
+// for exactly the reason mustBase's is.
+func mustMembers(t *testing.T, s *xsd.Schema, st *xsd.SimpleType) []*xsd.SimpleType {
+	t.Helper()
+	members, err := st.Members(s)
+	if err != nil {
+		t.Fatalf("%s {member type definitions}: %v", st.Name(), err)
+	}
+	return members
+}
+
 // mustEffectiveFacets resolves st's {facets} overlay through s.
 func mustEffectiveFacets(t *testing.T, s *xsd.Schema, st *xsd.SimpleType) []xsd.EffectiveFacet {
 	t.Helper()

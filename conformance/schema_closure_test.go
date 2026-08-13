@@ -53,10 +53,10 @@ func closureGateIn(t *testing.T, root string, docs map[string]string) (declined,
 	return !closureDecidable(report) || (unfollowed && perr != nil), unfollowed
 }
 
-// undecidable is a top-level union-variety simpleType: a shape
-// schemaShapeDecidable refuses, because the producer maps no union at all, so a
+// undecidable is a top-level simpleType carrying an <enumeration> facet: a shape
+// schemaShapeDecidable refuses, because the producer maps no enumeration, so a
 // verdict on it would be scored against a schema that was never built.
-const undecidable = `<xs:simpleType name="U"><xs:union memberTypes="xs:string"/></xs:simpleType>`
+const undecidable = `<xs:simpleType name="U"><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType>`
 
 // decidableType is a top-level restriction-only simpleType — squarely inside the
 // producer's decidable subset.

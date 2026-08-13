@@ -1361,11 +1361,12 @@ func (p *producer) resolveModelGroup(name xsd.QName) (xsd.ModelGroup, bool, erro
 
 // constructSimpleType maps one <simpleType> element (named or anonymous) into a
 // component. It dispatches on which of the three §3.16.2.1 alternatives the
-// element's body chooses — <list> to constructListType, <union> to a decline,
-// <restriction> to the code below, which resolves the base, maps the own facets
-// and {final} (simpleTypeFinal), and constructs. It does NOT memoize — the
-// memo/cycle bookkeeping lives in buildSimpleType; an anonymous inline type has
-// no name to key on and is unreferenceable, so it is built here directly, once.
+// element's body chooses — <list> to constructListType, <union> to
+// constructUnionType, <restriction> to the code below, which resolves the base,
+// maps the own facets and {final} (simpleTypeFinal), and constructs. It does NOT
+// memoize — the memo/cycle bookkeeping lives in buildSimpleType; an anonymous
+// inline type has no name to key on and is unreferenceable, so it is built here
+// directly, once.
 //
 // It does NOT charge the facet-VALUE sub-clauses of cos-st-restricts (§3.16.6.2)
 // — facet applicability against the primitive, and the bound/enumeration
@@ -1386,20 +1387,7 @@ func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.Simp
 	case "list":
 		return p.constructListType(name, elem, body)
 	case "union":
-		// GAP(parser): a <simpleType> whose body is <union> is not produced. The
-		// component model holds the shape — xsd.UnionDerivation's {member type
-		// definitions} are xsd.SimpleTypeOrRef slots, deferred by name exactly as
-		// itemType= is — so what remains is this mapping (§3.16.2.4 map.std.union:
-		// memberTypes= in attribute order, then the inline <simpleType> children in
-		// document order) and the cos-st-restricts clause 3.3 acyclicity guard a
-		// by-name membership makes reachable, which must land in the same commit.
-		// #738 owns both.
-		//
-		// It is a plain error and not a rule verdict: the schema is legal and this
-		// producer is incomplete, so charging src-simple-type would fabricate an
-		// invalidity (STYLE E2). The conformance schema lane declines a case in
-		// this shape rather than scoring it (simpleTypeDecidable).
-		return nil, fmt.Errorf("simpleType at %s uses the <union> alternative, which this producer does not yet map", body.Loc())
+		return p.constructUnionType(name, elem, body)
 	}
 	base, err := p.resolveBase(body)
 	if err != nil {
@@ -1484,6 +1472,86 @@ func (p *producer) listItem(list *Element) (xsd.SimpleTypeOrRef, error) {
 		return nil, err
 	}
 	return xsd.SimpleTypeRef{Name: qn}, nil
+}
+
+// constructUnionType maps a <simpleType> whose body is <union> (§3.16.2.1
+// map.std.common plus §3.16.2.4 map.std.union case 1) into ONE component — the
+// very one this <simpleType> element declares, named or anonymous, on
+// constructListType's argument against synthesizing an intermediate:
+//
+//   - {variety} = union and {base type definition} = xs:anySimpleType, both
+//     directly, from map.std.common's <union> alternative ({base type
+//     definition} case 2).
+//   - {member type definitions} from unionMembers.
+//   - {facets} = the EMPTY set, which map.std.common {facets} case 4 gives every
+//     <union> alternative — the <list> alternative's manufactured whiteSpace
+//     (case 3) has no union twin. It is not an omission to be filled in later:
+//     cos-st-restricts clause 3.2.1.2 admits nothing else for a union
+//     constructed directly from xs:anySimpleType, so a produced union carrying
+//     any facet is refused at finalize by xsd's checkUnionGraph.
+//
+// A <restriction> OF a named union needs nothing here — it maps through the
+// ordinary restriction path, and map.std.union case 2 gives it the base's
+// membership, which xsd.SimpleType.Members derives off the base chain (STYLE
+// D3).
+func (p *producer) constructUnionType(name xsd.QName, elem, union *Element) (*xsd.SimpleType, error) {
+	members, err := p.unionMembers(union)
+	if err != nil {
+		return nil, err
+	}
+	return xsd.NewSimpleType(elem.Loc(), name, xsd.UnionDerivation{Members: members},
+		xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, nil, p.simpleTypeFinal(elem))
+}
+
+// unionMembers maps a <union>'s {member type definitions} to the
+// [xsd.SimpleTypeOrRef] sequence that property holds, in the ONE order
+// §3.16.2.4 map.std.union case 1 fixes: "(a) ·resolved· to by the items in the
+// ·actual value· of the memberTypes attribute of <union>, if any, and (b)
+// corresponding to the <simpleType>s among the <union> children, if any, in
+// order". Every memberTypes= item comes FIRST, in attribute-list order, then
+// every inline child, in document order; the two sources never interleave.
+// cos-st-restricts clause 3.2.2.3 pairs a restricting union's members with the
+// base's POSITIONALLY, so this order is a component property and not a
+// presentation choice (STYLE D2).
+//
+// It enforces src-simple-type clause 4 (§3.16.3): "either it has a non-empty
+// memberTypes attribute or it has at least one simpleType child". Unlike clause
+// 3 for <list>, the two sources are NOT mutually exclusive — both at once is
+// legal and common — so only the neither case is a rejection. A memberTypes=
+// present but whitespace-only contributes no item and so is not "non-empty"
+// under this clause.
+//
+// The arm split is resolveBase's, by OWNERSHIP: an inline <simpleType> child is
+// built here and owned by the slot, and EVERY by-name memberTypes= item is an
+// xsd.SimpleTypeRef with no lookup and no build, so a forward-referenced member
+// costs no resolution ladder here and its src-resolve clause 1.1 rejection is
+// charged once, at finalize.
+func (p *producer) unionMembers(union *Element) ([]xsd.SimpleTypeOrRef, error) {
+	memberLex, _ := union.Attr("memberTypes")
+	items := strings.Fields(memberLex)
+	inlines := childElements(union, xsd.XMLSchemaNS, "simpleType")
+	if len(items) == 0 && len(inlines) == 0 {
+		return nil, xsderr.New(ruleSrcSimpleType, union.Loc(),
+			"union has neither a non-empty memberTypes attribute nor a <simpleType> child, but src-simple-type clause 4 requires at least one of the two")
+	}
+
+	members := make([]xsd.SimpleTypeOrRef, 0, len(items)+len(inlines))
+	for _, item := range items {
+		qn, err := p.resolveQName(union, item, "memberTypes")
+		if err != nil {
+			return nil, err
+		}
+		members = append(members, xsd.SimpleTypeRef{Name: qn})
+	}
+	for _, inline := range inlines {
+		// Anonymous member: built inline, once, with an absent {name} (zero QName).
+		st, err := p.constructSimpleType(xsd.QName{}, inline)
+		if err != nil {
+			return nil, err
+		}
+		members = append(members, xsd.OwnedSimpleType{Definition: st})
+	}
+	return members, nil
 }
 
 // simpleTypeBody returns the ONE §3.16.2.1 alternative a <simpleType> chooses —
@@ -2503,6 +2571,24 @@ func childElement(el *Element, space, local string) *Element {
 		}
 	}
 	return nil
+}
+
+// childElements returns every child element of el with the expanded name
+// {space}local, in document order (STYLE D2). It is childElement's repeatable
+// twin, for the one content model that admits several — <union>'s inline
+// <simpleType> children (§3.16.2.4 map.std.union case 1b).
+func childElements(el *Element, space, local string) []*Element {
+	var found []*Element
+	for _, child := range el.Children() {
+		c, ok := child.(*Element)
+		if !ok {
+			continue
+		}
+		if name := c.Name(); name.Space() == space && name.Local() == local {
+			found = append(found, c)
+		}
+	}
+	return found
 }
 
 // facetFixed maps a facet element's fixed attribute to that facet's {fixed}
