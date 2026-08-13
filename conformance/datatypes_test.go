@@ -3,6 +3,7 @@ package conformance
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin"
@@ -1306,9 +1307,11 @@ func TestDatatypesLexicalQNameCohort(t *testing.T) {
 // Both polarities are asserted for the right reason — a wrong expectation must
 // yield Fail, exercised on the NaN-vs-bound case so a regression to accepting NaN
 // under a bound facet (violating the partial order) would surface. The two-step
-// chain / list / union shapes (pdecimal016/019/020) are declined by readPDecimalCase,
-// and the pdecimal006.n2 suite quirk (NaN matching a NaN enumeration member) is
-// pinned as spec-correct-VALID. Skips when the submodule is absent.
+// chain (pdecimal016) is decided with the more-derived minScale shadowing its
+// base's, the list and union shapes (pdecimal019/020) are declined by
+// readPDecimalCase, and the pdecimal006.n2 suite quirk (NaN matching a NaN
+// enumeration member) is pinned as spec-correct-VALID. Skips when the submodule is
+// absent.
 func TestDatatypesPDecimalCohort(t *testing.T) {
 	if _, err := os.Stat(suitePath()); err != nil {
 		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
@@ -1336,6 +1339,11 @@ func TestDatatypesPDecimalCohort(t *testing.T) {
 		{"pdecimal008.n1.xml", false}, // "12345" has 5 total digits
 		{"pdecimal010.v1.xml", true},  // minScale=4,maxScale=8
 		{"pdecimal010.n1.xml", false}, // "0.003" scale 3 < minScale 4
+		{"pdecimal016.v1.xml", true},  // u restricts t restricts precisionDecimal
+		{"pdecimal016.n1.xml", false}, // "2000000" scale 0 > maxScale -4
+		{"pdecimal016.n2.xml", false}, // "20" scale 0 > maxScale -4
+		{"pdecimal016.n3.xml", false}, // "0" scale 0: only an ABSENT scale is exempt
+		{"pdecimal016.n4.xml", false}, // "20000" scale 0 > maxScale -4
 	}
 	for _, tc := range cases {
 		c := caseSpec{kind: kindInstance, doc: filepath.Join(dir, tc.file), expect: expectValidity(tc.expectValid)}
@@ -1354,22 +1362,52 @@ func TestDatatypesPDecimalCohort(t *testing.T) {
 		t.Errorf("executor must Fail when the declared expectation is wrong (pdecimal002.n3 'NaN' fails minInclusive=0)")
 	}
 
-	// readPDecimalCase reads the direct-primitive shape whole and resolves the base.
-	children, values, ok := readPDecimalCase(filepath.Join(dir, "pdecimal001.v1.xml"))
+	// readPDecimalCase reads the direct-primitive shape whole, as the empty chain.
+	steps, values, ok := readPDecimalCase(filepath.Join(dir, "pdecimal001.v1.xml"))
 	if !ok {
 		t.Fatal("readPDecimalCase must accept the direct-precisionDecimal pdecimal001.v1 shape")
 	}
-	if len(children) != 0 || len(values) != 18 {
-		t.Errorf("readPDecimalCase(pdecimal001.v1) = children=%d values=%d, want children=0 values=18", len(children), len(values))
+	if len(steps) != 0 || len(values) != 18 {
+		t.Errorf("readPDecimalCase(pdecimal001.v1) = steps=%d values=%d, want steps=0 values=18", len(steps), len(values))
 	}
 
-	// The multi-step chain (016), list (019) and union (020) varieties are declined:
-	// this single-synthesized-leaf model cannot decide them, so they are honest gaps
-	// rather than mis-decided cases.
-	for _, rel := range []string{"pdecimal016.v1.xml", "pdecimal019.v1.xml", "pdecimal020.v1.xml"} {
+	// pdecimal016's chain arrives BASE-FIRST and unflattened: step 0 is t's pair of
+	// facets over the primitive, step 1 is u's lone minScale. Order and separation are
+	// load-bearing — st-restrict-facets (§3.16.6.4) overlays pairwise with the
+	// more-derived same-kind facet winning, so a reversed chain would hand
+	// xsd.NewSimpleType t-over-u and leave minScale at -9 instead of -6.
+	steps, _, ok = readPDecimalCase(filepath.Join(dir, "pdecimal016.v1.xml"))
+	if !ok {
+		t.Fatal("readPDecimalCase must accept pdecimal016's two-step chain (u restricts t restricts precisionDecimal)")
+	}
+	want := [][]facetChild{
+		{{name: "minScale", value: "-9"}, {name: "maxScale", value: "-4"}},
+		{{name: "minScale", value: "-6"}},
+	}
+	if !reflect.DeepEqual(steps, want) {
+		t.Errorf("readPDecimalCase(pdecimal016.v1) chain = %+v, want base-first %+v", steps, want)
+	}
+
+	// The list (019) and union (020) varieties are declined: a chain of restrictions
+	// cannot express either, so they are honest gaps rather than mis-decided cases.
+	for _, rel := range []string{"pdecimal019.v1.xml", "pdecimal020.v1.xml"} {
 		if _, _, ok := readPDecimalCase(filepath.Join(dir, rel)); ok {
-			t.Errorf("readPDecimalCase(%s) must decline the multi-step/list/union shape", rel)
+			t.Errorf("readPDecimalCase(%s) must decline the list/union shape", rel)
 		}
+	}
+
+	// The overlay's DIRECTION, decided end to end rather than only in the chain the
+	// reader hands over: scale −7 sits inside t's minScale=−9 but outside u's −6, and
+	// no suite fixture separates the two. The synthetic instance rides pdecimal016.xsd
+	// (pdecimalSchemaPath derives the schema from the case prefix), so a fold that
+	// applied the steps leaf-first would compute VALID and fail this claim.
+	shadowed := caseSpec{
+		kind:   kindInstance,
+		doc:    pdecimalShadowInstance(t, dir, "0.2e8"),
+		expect: expectInvalid(),
+	}
+	if !exec(shadowed).IsPass() {
+		t.Error("pdecimal016 chain: scale -7 must be INVALID — u's minScale=-6 shadows t's -9 (st-restrict-facets §3.16.6.4)")
 	}
 
 	// pdecimal006.n2 is a KNOWN suite quirk: "NaN" against an enumeration containing
@@ -1384,6 +1422,36 @@ func TestDatatypesPDecimalCohort(t *testing.T) {
 	if exec(caseSpec{kind: kindInstance, doc: n2, expect: expectInvalid()}).IsPass() {
 		t.Error("pdecimal006.n2 must Fail against the suite's invalid expectation (spec-correct disagreement, not a false pass)")
 	}
+}
+
+// pdecimalShadowInstance writes a one-literal PDecimal instance beside a copy of
+// the real pdecimal016.xsd in the test's temp dir, returning the instance path. The
+// copy is what lets the case carry a literal the suite never tests against the
+// cohort's only chain schema: pdecimalSchemaPath derives the schema from the
+// instance's case prefix, so the pair must share a directory. That directory
+// mirrors the suite's saxonData/PDecimal tail because pdecimalCase selects on it,
+// so the case reaches execPDecimalCase through the lane's real dispatch. It is a
+// fixture for this file only, never a suite case — nothing discovers it and
+// nothing scores it.
+func pdecimalShadowInstance(t *testing.T, suiteDir, literal string) string {
+	t.Helper()
+	schema, err := os.ReadFile(filepath.Join(suiteDir, "pdecimal016.xsd"))
+	if err != nil {
+		t.Fatalf("read pdecimal016.xsd: %v", err)
+	}
+	dir := filepath.Join(t.TempDir(), "saxonData", "PDecimal")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("make shadow dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pdecimal016.xsd"), schema, 0o600); err != nil {
+		t.Fatalf("write schema copy: %v", err)
+	}
+	instance := filepath.Join(dir, "pdecimal016.n9.xml")
+	doc := "<doc><e value=\"" + literal + "\"/></doc>\n"
+	if err := os.WriteFile(instance, []byte(doc), 0o600); err != nil {
+		t.Fatalf("write instance: %v", err)
+	}
+	return instance
 }
 
 // TestNSContextLookup proves nsContext resolves prefixes exactly as §3.3.18
