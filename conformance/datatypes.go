@@ -263,9 +263,10 @@ import (
 // against ONE tested type — the attribute value's type in the sibling
 // pdecimalNNN.xsd (schema-out-of-band, no noNamespaceSchemaLocation: derived from
 // the case-prefix filename, like the #146 item shape). execPDecimalCase synthesizes
-// that leaf (precisionDecimal as {primitive type definition}, its schema facets as
-// ownFacets) once and ANDs value.ValidateLexical over every literal, so the
-// instance is valid iff EVERY literal is — the suite's whole-document polarity.
+// that leaf (precisionDecimal as {primitive type definition}, the declared type's
+// restriction chain as one component per step) once and ANDs value.ValidateLexical
+// over every literal, so the instance is valid iff EVERY literal is — the suite's
+// whole-document polarity.
 //
 // precisionDecimal's spec-exact facet semantics fall out of the existing pipeline
 // with no new value code: totalDigits vacuously passes zero AND the specials
@@ -282,26 +283,27 @@ import (
 // precisionDecimal builtin, so the .v2 leading/trailing-whitespace instances
 // normalize before the lexical check.
 //
-// Only the directly-mapped and SINGLE-STEP restriction shapes are decided:
-// pdecimal001–008,010 (attribute typed xs:precisionDecimal, or a named simpleType
-// restricting it with one facet kind). The two-step chain (pdecimal016, a
-// restriction of a restriction), the list variety (pdecimal019, <list itemType>)
-// and the union variety (pdecimal020, <union memberTypes>) are DECLINED by
-// decodePDecimalSchema — a synthesized single leaf cannot carry a multi-step
-// effective-facet set nor a list/union variety — and honestly recorded as gaps
-// (Fail) rather than mis-decided. One further gap is a suite quirk, not a shape
-// limit: pdecimal006.n2 ("NaN" against a NaN-bearing enumeration) is spec-VALID
-// (identity match) but suite-declared invalid, so the spec-correct verdict records
-// a Fail against it (see execPDecimalCase). The IBM ibmData/D3_3_4 precisionDecimal
-// shape (several named types per schema, each tested by a dedicated element) is a
-// distinct, larger executor, now claimed by execD34Case (issue #162 — see its doc
-// comment for the multi-type dispatch, the decidable/declined split and the shared
-// spec rules); its list (v16) and union (v17) shapes joined the decidable set with
-// issue #223 and its multi-step restriction chains (v18, v19–v22) with issue #574,
-// while the one D3_3_4 shape still structurally out of reach — v15's
-// complexType-typed children — is declined honestly and recorded as a gap in the
-// datatypes lane, which is this repo's most complete lane rather than an inert one,
-// so the decline costs a real point.
+// Every ATOMIC shape is decided: pdecimal001–008,010 (attribute typed
+// xs:precisionDecimal, or a named simpleType restricting it) and pdecimal016 (u
+// restricts t restricts xs:precisionDecimal), whose chain decodePDecimalSchema
+// follows to the primitive however many steps it takes, one synthesized component
+// per step so the facet overlay stays xsd.NewSimpleType's (issue #590). The list
+// variety (pdecimal019, <list itemType>) and the union variety (pdecimal020,
+// <union memberTypes>) are DECLINED — a chain of restrictions cannot express
+// either — and honestly recorded as gaps (Fail) rather than mis-decided. One
+// further gap is a suite quirk, not a shape limit: pdecimal006.n2 ("NaN" against a
+// NaN-bearing enumeration) is spec-VALID (identity match) but suite-declared
+// invalid, so the spec-correct verdict records a Fail against it (see
+// execPDecimalCase). The IBM ibmData/D3_3_4 precisionDecimal shape (several named
+// types per schema, each tested by a dedicated element) is a distinct, larger
+// executor, now claimed by execD34Case (issue #162 — see its doc comment for the
+// multi-type dispatch, the decidable/declined split and the shared spec rules); its
+// list (v16) and union (v17) shapes joined the decidable set with issue #223 and
+// its multi-step restriction chains (v18, v19–v22) with issue #574, while the one
+// D3_3_4 shape still structurally out of reach — v15's complexType-typed children —
+// is declined honestly and recorded as a gap in the datatypes lane, which is this
+// repo's most complete lane rather than an inert one, so the decline costs a real
+// point.
 //
 // # The list-variety cohort (issues #75, #224)
 //
@@ -669,13 +671,13 @@ var facetsCase = regexp.MustCompile(
 // cohort (issue #135): saxonData/PDecimal/pdecimalNNN.{vK,nK}.xml. Each such
 // document is a <doc> root with repeated <e value="…"/> children, all validated
 // against ONE type — the attribute value's type declared in the sibling
-// pdecimalNNN.xsd (either xs:precisionDecimal directly or a single-step
-// restriction of it). The executor (execPDecimalCase) declines a case whose type
-// is a multi-step chain, list or union variety (pdecimal016/019/020), which this
-// synthesized-single-leaf model cannot decide — an honest recorded gap, never a
-// mis-decided one. The IBM ibmData/D3_3_4 precisionDecimal shape (several named
-// types per schema) is a distinct multi-type shape, claimed separately by
-// d34Case/execD34Case (issue #162), not this selector.
+// pdecimalNNN.xsd (either xs:precisionDecimal directly or a restriction chain of
+// any depth over it). The executor (execPDecimalCase) declines a case whose type
+// dead-ends short of the primitive — a list or union variety (pdecimal019/020),
+// or an unresolvable base — an honest recorded gap, never a mis-decided one. The
+// IBM ibmData/D3_3_4 precisionDecimal shape (several named types per schema) is
+// a distinct multi-type shape, claimed separately by d34Case/execD34Case (issue
+// #162), not this selector.
 var pdecimalCase = regexp.MustCompile(`saxonData/PDecimal/pdecimal[0-9]+\.[vn][0-9]+\.xml$`)
 
 // d34Case matches an IBM D3_3_4 precisionDecimal instance case (issue #162):
@@ -1292,20 +1294,26 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 }
 
 // execPDecimalCase decides a Saxon PDecimal cohort case (issue #135): every
-// tested <e value="…"/> literal is validated against ONE synthesized leaf — the
-// precisionDecimal primitive restricted by the attribute value's declared facets
-// — through the real facet pipeline (value.ValidateLexical). The instance is
-// valid iff EVERY literal is, mirroring the suite's whole-document polarity (a
-// .nK document carries at least one out-of-space or facet-invalid literal). The
-// pipeline already realizes precisionDecimal's spec-exact semantics: NaN fails
-// every bound facet (partial order, incomparable ⇒ excluded, §3.1), totalDigits
-// vacuously passes zero and the specials (value.TotalDigits reports 1, §4.1),
-// maxScale/minScale skip the specials' absent ·scale· (#133), and enumeration is
-// value-space "equal or identical" on ·numericalValue· (10 == 1.0E1; NaN matches
-// NaN via identity, §4.3.5.4). A case whose type is not a directly-mapped or
-// single-step precisionDecimal restriction (a multi-step chain, list or union —
-// pdecimal016/019/020), whose schema cannot be read, or that pairs an
-// inapplicable facet with the primitive is declined (Fail, a recorded gap).
+// tested <e value="…"/> literal is validated against the leaf the attribute
+// value's declared type names — the precisionDecimal primitive carrying that
+// type's restriction chain, one synthesized component per step — through the real
+// facet pipeline (value.ValidateLexical). The instance is valid iff EVERY literal
+// is, mirroring the suite's whole-document polarity (a .nK document carries at
+// least one out-of-space or facet-invalid literal). The pipeline already realizes
+// precisionDecimal's spec-exact semantics: NaN fails every bound facet (partial
+// order, incomparable ⇒ excluded, §3.1), totalDigits vacuously passes zero and the
+// specials (value.TotalDigits reports 1, §4.1), maxScale/minScale skip the
+// specials' absent ·scale· but NOT a scale of zero (#133,
+// cvc-maxScale/minScale-valid clause 2 §4.2.3/§4.3.3 exempts only an ABSENT
+// scale), and enumeration is value-space "equal or identical" on ·numericalValue·
+// (10 == 1.0E1; NaN matches NaN via identity, §4.3.5.4). A chain of any depth is
+// decided (issue #590: pdecimal016's u restricts t restricts xs:precisionDecimal),
+// with the facet overlay across it left to xsd.NewSimpleType
+// (st-restrict-facets/key-facets-overlay §3.16.6.4), never re-implemented here. A
+// case whose type dead-ends short of the primitive (an unresolvable base, or a
+// list/union body anywhere in the chain — pdecimal019/020), whose schema cannot be
+// read, or that pairs an inapplicable facet with the primitive is declined (Fail,
+// a recorded gap).
 //
 // One claimed case, pdecimal006.n2 (a lone "NaN" against an enumeration whose
 // members include "NaN"), is a KNOWN suite quirk: cvc-enumeration-valid matches
@@ -1366,7 +1374,7 @@ func execNotationFacetsCase(backend value.Backend, sym map[xsd.QName]*xsd.Simple
 // free.) NaN.xml in valid/D3_3_4 is not referenced by any testGroup, so parseSuite
 // never emits a case for it and the selector never sees it.
 func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c caseSpec) Status {
-	children, values, ok := readPDecimalCase(c.doc)
+	steps, values, ok := readPDecimalCase(c.doc)
 	if !ok {
 		return Fail()
 	}
@@ -1378,15 +1386,26 @@ func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, 
 	if !strictGoverns(backend, builtinType) {
 		return Fail()
 	}
-	ownFacets, ok := buildOwnFacets("precisionDecimal", children)
-	if !ok {
-		return Fail()
-	}
-	leaf, err := synthSimpleType(
-		xsd.QName{Space: synthNS, Local: "precisionDecimal-facets"},
-		xsd.RestrictionDerivation{}, builtinType, ownFacets)
-	if err != nil {
-		return Fail()
+	// One component per restriction step, base-first, so xsd.NewSimpleType performs
+	// the pairwise facet overlay (st-restrict-facets §3.16.6.4) at every step. The
+	// applicable-facet check is against precisionDecimal at every step because
+	// {primitive type definition} is invariant along an atomic chain (st-restrict-facets
+	// clause 2 §3.16.6.4, cos-applicable-facets §4.1.5) — a restriction never widens
+	// what applies. A chain of zero steps is the attribute typed xs:precisionDecimal
+	// directly, whose tested type IS the seeded builtin.
+	leaf := builtinType
+	for i, step := range steps {
+		ownFacets, ok := buildOwnFacets("precisionDecimal", step)
+		if !ok {
+			return Fail()
+		}
+		st, err := synthSimpleType(
+			xsd.QName{Space: synthNS, Local: fmt.Sprintf("precisionDecimal-facets%d", i)},
+			xsd.RestrictionDerivation{}, leaf, ownFacets)
+		if err != nil {
+			return Fail()
+		}
+		leaf = st
 	}
 	// precisionDecimal maps context-free (§3.2), so a nil value.Context suffices —
 	// unlike the QName cohort, no prefix resolution is involved.
@@ -2845,25 +2864,25 @@ func decodeNotationRestriction(path string) (baseStep, leafStep notationStep, ok
 }
 
 // readPDecimalCase reads one Saxon PDecimal cohort instance (issue #135): the
-// tested <e value="…"/> literals and the sole tested precisionDecimal type's
-// facet children. The schema is out-of-band (the instance carries no
-// noNamespaceSchemaLocation — the suite's testGroup pairs pdecimalNNN.{vK,nK}.xml
-// with the sibling pdecimalNNN.xsd), so pdecimalSchemaPath derives it from the
-// instance filename's case prefix. ok is false when the instance decodes to no
-// <e> value, the schema cannot be read, or the attribute value's type is not a
-// directly-mapped or single-step precisionDecimal restriction (a multi-step
-// chain, list or union — pdecimal016/019/020 — which this single-leaf model
-// cannot decide) — an honest decline, never a guess.
-func readPDecimalCase(instancePath string) (children []facetChild, values []string, ok bool) {
+// tested <e value="…"/> literals and the base-first restriction chain of the sole
+// tested precisionDecimal type, one []facetChild per step. The schema is
+// out-of-band (the instance carries no noNamespaceSchemaLocation — the suite's
+// testGroup pairs pdecimalNNN.{vK,nK}.xml with the sibling pdecimalNNN.xsd), so
+// pdecimalSchemaPath derives it from the instance filename's case prefix. ok is
+// false when the instance decodes to no <e> value, the schema cannot be read, or
+// the attribute value's type reaches a dead end rather than the precisionDecimal
+// primitive (an unresolvable base, or a list/union body anywhere in the chain —
+// pdecimal019/020) — an honest decline, never a guess.
+func readPDecimalCase(instancePath string) (steps [][]facetChild, values []string, ok bool) {
 	values, ok = decodePDecimalValues(instancePath)
 	if !ok {
 		return nil, nil, false
 	}
-	base, children, ok := decodePDecimalSchema(pdecimalSchemaPath(instancePath))
-	if !ok || base != "precisionDecimal" {
+	steps, ok = decodePDecimalSchema(pdecimalSchemaPath(instancePath))
+	if !ok {
 		return nil, nil, false
 	}
-	return children, values, true
+	return steps, values, true
 }
 
 // pdecimalSchemaPath derives the sibling schema path for a PDecimal instance from
@@ -2911,7 +2930,9 @@ func decodePDecimalValues(path string) (values []string, ok bool) {
 
 // pdecimalSchema mirrors the PDecimal cohort's schema shape: an <element name="e">
 // whose complexType declares the tested attribute "value", and the named
-// simpleTypes it may reference. Only the value attribute's own type matters.
+// simpleTypes it may reference. Only the value attribute's own type matters, but
+// every declaration is decoded because that type may reach precisionDecimal
+// through the others (pdecimal016's u restricts t restricts xs:precisionDecimal).
 type pdecimalSchema struct {
 	Elements []struct {
 		Name        string `xml:"name,attr"`
@@ -2922,56 +2943,120 @@ type pdecimalSchema struct {
 			} `xml:"attribute"`
 		} `xml:"complexType"`
 	} `xml:"element"`
-	SimpleTypes []struct {
-		Name        string `xml:"name,attr"`
-		Restriction struct {
-			Base   string `xml:"base,attr"`
-			Facets []struct {
-				XMLName xml.Name
-				Value   string `xml:"value,attr"`
-			} `xml:",any"`
-		} `xml:"restriction"`
-	} `xml:"simpleType"`
+	SimpleTypes []pdecimalSimpleType `xml:"simpleType"`
+}
+
+// pdecimalSimpleType is one named <simpleType> a PDecimal schema declares. Only a
+// <restriction base="B"> body is decoded, so an empty Base is what declines every
+// other body at any position in a chain, not just at its outermost type: a <list>
+// or <union> (pdecimal019/020), and equally a <restriction> naming its base as an
+// inline <simpleType> child. Restriction.Facets captures every OTHER restriction
+// child, so a shape this cohort does not model (an <annotation>) arrives as a
+// facetChild whose name names no facet kind and is declined by buildOwnFacets
+// rather than silently ignored.
+type pdecimalSimpleType struct {
+	Name        string `xml:"name,attr"`
+	Restriction struct {
+		Base   string `xml:"base,attr"`
+		Facets []struct {
+			XMLName xml.Name
+			Value   string `xml:"value,attr"`
+		} `xml:",any"`
+	} `xml:"restriction"`
 }
 
 // decodePDecimalSchema resolves the type of the tested attribute "value" on
-// element "e" and returns its precisionDecimal base plus facet children. Two
-// shapes are decided: an attribute typed xs:precisionDecimal directly (base
-// "precisionDecimal", no facets), or one typed as a named simpleType that is a
-// SINGLE-STEP restriction of precisionDecimal (base "precisionDecimal", its facet
-// children). Any other shape — a restriction of another named type (a multi-step
-// chain), or a list/union variety (whose simpleType carries no precisionDecimal
-// restriction, so its Restriction.Base is empty) — yields ok=false, declining the
-// case. ok is false too when the schema cannot be read or has no such attribute.
-func decodePDecimalSchema(path string) (base string, children []facetChild, ok bool) {
+// element "e" to its restriction chain over the precisionDecimal primitive: one
+// []facetChild per step, ordered BASE-FIRST (the step restricting the primitive
+// comes first). An attribute typed xs:precisionDecimal directly yields the empty
+// chain; a named simpleType yields one entry per <restriction> between it and the
+// primitive, however many steps that takes (st-props-correct clause 2 §3.16.6.1
+// follows {base type definition} zero or more times, so no depth is privileged).
+// ok is false on a genuine dead end — a base naming neither precisionDecimal nor a
+// type this schema declares, or a list/union body anywhere in the chain — and
+// equally when the schema cannot be read or declares no such attribute.
+func decodePDecimalSchema(path string) (steps [][]facetChild, ok bool) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", nil, false
+		return nil, false
 	}
 	var s pdecimalSchema
 	if err := xml.Unmarshal(data, &s); err != nil {
-		return "", nil, false
+		return nil, false
 	}
 	attrType, found := pdecimalValueType(s)
 	if !found {
-		return "", nil, false
+		return nil, false
 	}
 	if localName(attrType) == "precisionDecimal" {
-		return "precisionDecimal", nil, true
+		return nil, true
 	}
-	for _, st := range s.SimpleTypes {
-		if st.Name != attrType {
-			continue
+	chain, resolved := pdecimalChains(s)[attrType]
+	return chain, resolved
+}
+
+// pdecimalChains resolves every simple type the schema declares to its
+// base-first restriction chain over the precisionDecimal primitive, keyed by
+// declared name. A declaration this cohort cannot ground — a list or union body,
+// or a base that is neither precisionDecimal nor another declared type — is simply
+// absent from the result, which is how those shapes decline without being
+// special-cased.
+//
+// Declarations may reference one another in any document order, so the pass
+// repeats over the ordered declarations until a round resolves nothing new: a
+// declaration whose base is not resolved YET fails this round and is retried in
+// the next. That fixed point needs no cycle check and no depth counter (STYLE D4) —
+// a reference cycle just stops making progress and leaves its types unresolved,
+// which the caller reads as a decline. Iterating the ORDERED slice, never the
+// result map, keeps which declaration is attempted first deterministic (STYLE D2).
+func pdecimalChains(s pdecimalSchema) map[string][][]facetChild {
+	chains := make(map[string][][]facetChild, len(s.SimpleTypes))
+	for progress := true; progress; {
+		progress = false
+		for _, st := range s.SimpleTypes {
+			if _, done := chains[st.Name]; done {
+				continue
+			}
+			chain, ok := pdecimalChainOf(st, chains)
+			if !ok {
+				continue
+			}
+			chains[st.Name] = chain
+			progress = true
 		}
-		if localName(st.Restriction.Base) != "precisionDecimal" {
-			return "", nil, false
-		}
-		for _, f := range st.Restriction.Facets {
-			children = append(children, facetChild{name: f.XMLName.Local, value: f.Value})
-		}
-		return "precisionDecimal", children, true
 	}
-	return "", nil, false
+	return chains
+}
+
+// pdecimalChainOf extends the chain of st's base with st's OWN facet children,
+// keeping the result base-first. Each step stays a SEPARATE entry rather than
+// being concatenated into one flat list: st-restrict-facets (§3.16.6.4) overlays
+// facets pairwise, base-first, with the more-derived type's same-kind facet
+// shadowing its base's, and that overlay is xsd.NewSimpleType's to perform — a
+// flat list would let slice order decide the winner instead (STYLE D3).
+//
+// ok is false for a list or union body (empty Base), and for a base that is
+// neither the precisionDecimal primitive nor a declared type already resolved —
+// the caller's fixed point retries the latter.
+func pdecimalChainOf(st pdecimalSimpleType, chains map[string][][]facetChild) ([][]facetChild, bool) {
+	if st.Restriction.Base == "" {
+		return nil, false
+	}
+	var base [][]facetChild
+	if localName(st.Restriction.Base) != "precisionDecimal" {
+		resolved, ok := chains[st.Restriction.Base]
+		if !ok {
+			return nil, false
+		}
+		base = resolved
+	}
+	own := make([]facetChild, 0, len(st.Restriction.Facets))
+	for _, f := range st.Restriction.Facets {
+		own = append(own, facetChild{name: f.XMLName.Local, value: f.Value})
+	}
+	chain := make([][]facetChild, 0, len(base)+1)
+	chain = append(chain, base...)
+	return append(chain, own), true
 }
 
 // pdecimalValueType returns the type QName (prefix intact) of the tested

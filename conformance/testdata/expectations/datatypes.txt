@@ -1143,11 +1143,11 @@ PDecimal/pdecimal010/instance/pdecimal010.n3.xml pass
 PDecimal/pdecimal010/instance/pdecimal010.n4.xml pass
 PDecimal/pdecimal010/instance/pdecimal010.n5.xml pass
 PDecimal/pdecimal010/instance/pdecimal010.v1.xml pass
-PDecimal/pdecimal016/instance/pdecimal016.n1.xml fail
-PDecimal/pdecimal016/instance/pdecimal016.n2.xml fail
-PDecimal/pdecimal016/instance/pdecimal016.n3.xml fail
-PDecimal/pdecimal016/instance/pdecimal016.n4.xml fail
-PDecimal/pdecimal016/instance/pdecimal016.v1.xml fail
+PDecimal/pdecimal016/instance/pdecimal016.n1.xml pass
+PDecimal/pdecimal016/instance/pdecimal016.n2.xml pass
+PDecimal/pdecimal016/instance/pdecimal016.n3.xml pass
+PDecimal/pdecimal016/instance/pdecimal016.n4.xml pass
+PDecimal/pdecimal016/instance/pdecimal016.v1.xml pass
 PDecimal/pdecimal019/instance/pdecimal019.n1.xml fail
 PDecimal/pdecimal019/instance/pdecimal019.v1.xml fail
 PDecimal/pdecimal020/instance/pdecimal020.n1.xml fail
