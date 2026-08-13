@@ -63,9 +63,11 @@ func Validate(v *validate.Validator, r io.Reader, opts ...Option) (*validate.Res
 	if err != nil {
 		return nil, err
 	}
-	// GAP(xml): content after the document element is not inspected. Assess
-	// returns at the root's end tag, so a second document element or
-	// trailing character content is never read and never reported.
+	// GAP(xml): content OUTSIDE the document element is not inspected.
+	// Character data before it is dropped (see root), and anything after its
+	// end tag is never read: Assess returns there, so trailing character
+	// content and a second document element alike go unreported. XML 1.0
+	// §2.1 admits only Misc in either position. Tracked by #753.
 	return v.Assess(root), nil
 }
 
@@ -80,6 +82,9 @@ type walker struct {
 	// depth is the number of elements open at the stream's current
 	// position; 0 is the document level.
 	depth int
+	// n counts the tokens pulled so far, so an element can tell whether the
+	// stream still stands where it was yielded (see element.Children).
+	n int
 	// err is the walk's single latched source fault. Every cursor reports
 	// this one field and none keeps a copy of it (STYLE D3).
 	err error
@@ -98,6 +103,7 @@ func (w *walker) next() (xmltree.Node, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
+	w.n++
 	switch node.(type) {
 	case *xmltree.StartElement:
 		w.depth++
@@ -110,8 +116,9 @@ func (w *walker) next() (xmltree.Node, int, error) {
 }
 
 // root advances to the document element. Character data at the document
-// level is the prolog's whitespace: it belongs to no element, so it is
-// dropped rather than yielded to one.
+// level belongs to no element, so it is dropped rather than yielded to one
+// — whatever it holds: nothing here asks whether it is the whitespace XML
+// 1.0 §2.1 allows there, which is the GAP(xml) Validate marks.
 func (w *walker) root() (*element, error) {
 	for {
 		node, at, err := w.next()
@@ -125,6 +132,6 @@ func (w *walker) root() (*element, error) {
 		if !ok {
 			continue
 		}
-		return &element{w: w, start: start, depth: at + 1}, nil
+		return &element{w: w, start: start, depth: at + 1, n: w.n}, nil
 	}
 }

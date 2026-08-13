@@ -28,8 +28,8 @@
 // are never coalesced, because the engine assembles the ·initial value·
 // from the runs and a coalesced run would carry only the first one's Loc.
 //
-//   - GAP(xml): content after the document element is not inspected. The
-//     walk ends at the document element's end tag, so a second document
-//     element or trailing character content is neither read nor
-//     reported.
+//   - GAP(xml): content OUTSIDE the document element is not inspected:
+//     character data before it is dropped, and anything after its end tag
+//     is never read, so trailing character content and a second document
+//     element alike go unreported. Tracked by #753.
 package xmlsrc

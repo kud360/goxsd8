@@ -257,15 +257,57 @@ func TestCursorStaysExhausted(t *testing.T) {
 	}
 }
 
-// TestDocumentLevelCharDataIsDropped covers the prolog and the whitespace
-// around the document element: character data at depth 0 belongs to no
-// element, so it is yielded to none.
-func TestDocumentLevelCharDataIsDropped(t *testing.T) {
-	root := rootOf(t, "\n \n<r>in</r>\n \n")
+// TestPrologCharDataIsDropped covers the depth-0 rule alone: character data
+// read before the document element belongs to no element, so the root scan
+// drops it rather than yielding it to one. Character data after the document
+// element's end tag is a different mechanism — never read at all, which is
+// Validate's GAP(xml) — and is deliberately not in this fixture.
+func TestPrologCharDataIsDropped(t *testing.T) {
+	root := rootOf(t, "\n \n<r>in</r>")
 	got := trace(t, root)
 	want := []string{`element r @instance.xml:3:1`, `text "in" @instance.xml:3:4`}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("trace = %v, want %v", got, want)
+	}
+}
+
+// TestChildrenAfterTheWalkLeftTheElementPanics pins the cursor's other
+// direction: an engine that descends too LATE is refused, not answered
+// wrongly. A cursor keyed on depth alone, opened once the shared stream has
+// moved past the element it belongs to, yields whatever now stands at that
+// depth — the next sibling's children reported as this element's, or, past
+// the document's last token, io.EOF latched into the Result of a well-formed
+// document.
+func TestChildrenAfterTheWalkLeftTheElementPanics(t *testing.T) {
+	for _, tc := range []struct{ name, doc string }{
+		{name: "the walk moved on to a sibling", doc: `<r><a><x/></a><b><y/></b></r>`},
+		{name: "the walk reached the end of the document", doc: `<r><a><x/></a></r>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			kids := rootOf(t, tc.doc).Children()
+			first, ok := kids.Next()
+			if !ok {
+				t.Fatal("Next() reported no first child")
+			}
+			a, ok := first.Element()
+			if !ok {
+				t.Fatal("the first child is not an element")
+			}
+			// The parent advances, which correctly discards <a>'s undrained
+			// subtree: after this the stream is past everything <a> owns.
+			kids.Next()
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("Children returned a cursor over the tokens of some other element")
+				}
+				msg, ok := r.(string)
+				if !ok || !strings.Contains(msg, "validate/xmlsrc: Children called after the walk left a") {
+					t.Errorf("panicked with %v, want the contract violation naming <a>", r)
+				}
+			}()
+			a.Children()
+		})
 	}
 }
 
