@@ -28,7 +28,7 @@ hand-count:
 | `datatypes` | 1161 | 12 | 1173 |
 | `instance` | 0 | 26361 | 26361 |
 | `json` | — | — | 0 |
-| `schema` | 11411 | 3987 | 15398 |
+| `schema` | 11635 | 3763 | 15398 |
 | `xpath` | — | — | 0 |
 
 An em dash is a lane with no cases yet, which is a different claim from a lane
@@ -36,14 +36,14 @@ scoring zero. `datatypes` is M3 and **complete** — its last open issue closed
 this week; `schema` is M4 and active; `instance` is M5, carved, and **still at
 zero**; `xpath`, `json` and `ber` wait on M6/M7, M8 and M11.
 
-`schema` moved **9745 → 11411, +1666**, across seven landings since the last
+`schema` moved **9745 → 11635, +1890**, across eight landings since the last
 pass, each figure copied from its commit's `Ratchet:` line rather than
-recomputed: #503 (+6), #442 (+82), **#447 (+1572)**, #504 (+6), with #710 and
-#626 unchanged and not meant to move. `datatypes` moved **1156 → 1161, +5**, all
-of it #590. #447 alone is 94% of the schema total, and the figure is not the
-cohort its issue named: `simpleTypeDecidable` required a `restriction` child, so
-every schema using `xs:list` anywhere was declined wholesale regardless of what
-it tested. The arbiter attributed all 1572 case by case.
+recomputed: #503 (+6), #442 (+82), **#447 (+1572)**, #504 (+6), **#738 (+224)**,
+with #710 and #626 unchanged and not meant to move. `datatypes` moved **1156 →
+1161, +5**, all of it #590. #447 alone is 83% of the schema total, and the figure
+is not the cohort its issue named: `simpleTypeDecidable` required a `restriction`
+child, so every schema using `xs:list` anywhere was declined wholesale regardless
+of what it tested. The arbiter attributed all 1572 case by case.
 
 **`instance` is the lane to read.** M5's engine seam landed (#710) and the lane
 did not move, correctly — a seam has no source adapter and no driver. 26361
@@ -154,24 +154,59 @@ horizontal completeness.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #738 | produce a `simpleType` whose body is `union` — the sibling of #447's `list`, which moved `schema` **+1572**. Startable now; #447's landing unblocked it and left it seven named placeholder sites |
-| 2 | #711 | `validate/xmlsrc`: adapt `parser/xmltree` onto the infoset. **The `instance` lane's first mover** — 0 of 26361, and #713's driver is blocked on this and row 3 |
-| 3 | #712 | `cvc-assess-elt` and `cvc-elt` clauses 1–2 — root dispatch and the first real violation. The engine half of the same pair; a driver with no source or no dispatch moves nothing |
-| 4 | #740 | the `enumeration` facet is declined by the gate and, past it, refused with a **fabricated** `src-simple-type` verdict on a legal schema (STYLE E2). `pdecimal006` is the named cost, and it is the same two-refusal shape #447 already worked through |
-| 5 | #733 | a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and #442 moved `schema` **+82** |
-| 6 | #747 + #748 | the two findings this pass filed. #747's second fact is a divergence **#626 introduced yesterday**; #748's snippet will not compile against the signature `xmlsrc/doc.go` already commits |
-| 7 | #625 → #669 → #492 | the rest of README's Library block, in that order — #625's fix names the file #669 must add to the example list, and #492's belongs in the sentence at `README.md:115-116` rather than a new paragraph |
-| 8 | #514 + #687 + #672 | the open CLI-contract decisions: typo-vs-unbuilt, scoped help (now with a third case — `-h` after an unknown subcommand exits 0 and flags nothing), and `-version` |
-| 9 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 1 | #711 | `validate/xmlsrc`: adapt `parser/xmltree` onto the infoset. **The `instance` lane's first mover** — 0 of 26361, and #713's driver is blocked on this and row 2 |
+| 2 | #712 | `cvc-assess-elt` and `cvc-elt` clauses 1–2 — root dispatch and the first real violation. The engine half of the same pair; a driver with no source or no dispatch moves nothing |
+| 3 | #740 | the `enumeration` facet is declined by the gate and, past it, refused with a **fabricated** `src-simple-type` verdict on a legal schema (STYLE E2). `pdecimal006` is the named cost, and it is the same two-refusal shape #447 already worked through |
+| 4 | #733 | a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and #442 moved `schema` **+82** |
+| 5 | #747 + #748 | the two findings the 2026-08-13 pass filed. #747's second fact is a divergence **#626 introduced**; #748's snippet will not compile against the signature `xmlsrc/doc.go` already commits |
+| 6 | #625 → #669 → #492 | the rest of README's Library block, in that order — #625's fix names the file #669 must add to the example list, and #492's belongs in the sentence at `README.md:115-116` rather than a new paragraph |
+| 7 | #514 + #687 + #672 | the open CLI-contract decisions: typo-vs-unbuilt, scoped help (now with a third case — `-h` after an unknown subcommand exits 0 and flags nothing), and `-version` |
+| 8 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
 
-**Rows 6–8 sit ahead of row 9 on cost, not importance.** Each is a sentence or a
+**#738 held row 1 and has landed** (PR #750, `c754427`, `schema` 11411 → 11635,
+**+224**). Its row is dropped rather than replaced, and unlike the last three
+landings **its text was right about its own issue** — the sibling framing, the
+seven placeholder sites and the #447 analogy all held. What the row got wrong was
+the *size*: it invited a +1572-shaped expectation and the measurement is +224,
+because `union` is rarer in the suite than `list` and many union-bearing closures
+still decline on the `enumeration` fault row 3 owns. Mason predicted, then
+measured, then attributed the shortfall before the arbiter ran the lane, which is
+the behaviour the row was written to provoke.
+
+**The landing unblocked nothing.** All 26 `blocked` bodies were surveyed and none
+names #738 in `## Depends on` or anywhere else; the two whose subject is close
+enough to be worth reading in full — #555 (`length-minLength-maxLength`, whose
+`## Depends on` is a trigger and says in as many words not to re-scan it) and
+#593 (blocked on #591) — are unaffected. No label was flipped.
+
+**One follow-up filed, one issue amended, one confirmed, none banded** — ranking
+them is a re-derivation this pass does not do. **#751**: `cos-st-restricts`
+clause 3.2.1.1 became reachable from a schema document with this landing and
+nothing drives it that way — the union-member `final="union"` rejection is pinned
+only at the component level and an arbiter hand-run is the only evidence it fires
+end to end. **#740**'s `## Current state` section is amended by comment (three
+line references drifted, and its worked precedent
+`TestProduceSimpleContentRestrictionDeclined`, since the `union` decline it named
+was deleted by this landing); its scope and startability are unchanged. **#624**
+gets the `SimpleTypeOrRef` arm × slot line #738's Notes asked for — both arms are
+now producer-written, which makes it usable prior art for the pass-through that
+issue wants, and it stays `ready` with no code overlap. `gapaudit`'s marker side
+is clean: the one `GAP(parser)` marker was **deleted** rather than repointed, the
+sweep fell 46 → 45, and no marker names the now-closed #738.
+
+**Only the `schema` lane row and the per-landing ratchet sentence above were
+re-read; every other count in this section still dates from the 2026-08-13
+`/backlog` and the next one re-derives them.** A post-land pass is not `/backlog`
+and does not rewrite the section.
+
+**Rows 5–7 sit ahead of row 8 on cost, not importance.** Each is a sentence or a
 dispatch branch while the CLI surface is still empty; taken after #472 every one
 of them is a change to shipped behaviour. #472's own Acceptance carries the
 `-version` decision, so if it is taken first it must discharge #672 rather than
 leave it contradicting the landing. **#720** (`goxsd8 validate`) is `blocked`
 behind #472 and #715 and is not a band row.
 
-**Rows 2 and 3 are the pass's judgment call.** Horizontal completeness would put
+**Rows 1 and 2 are the pass's judgment call.** Horizontal completeness would put
 four more M4 parser gaps here; the doctrine says a slice that moves a lane wins,
 and `instance` is the only lane that has never moved. #713 is the payoff and it
 is `blocked` on exactly these two.
