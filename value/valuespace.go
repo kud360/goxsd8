@@ -356,18 +356,23 @@ func contextDependent(r xsd.TypeResolver, t *xsd.SimpleType) (bool, error) {
 // union undecided: dispatch takes the first member that accepts, so a member
 // that could only be decided WITH context could change the verdict.
 //
-// The nil guards on Item and each member are belt-and-braces over a state a
-// checked component cannot be in, NOT a reachable one:
-// xsd.SimpleType.CheckDerivation rejects an absent {item type definition} and an
-// absent member under st-props-correct (checkListGraph/checkUnionGraph,
-// xsd/derivation.go), so no *xsd.SimpleType that has passed it can hold either,
-// and xsd.SimpleType.Item's own doc says as much. They stay because everything
-// below them is nil-hostile too — the recursive Variety() call they gate, and
-// governingMapping on the very next line — so removing them would trade a
-// documented impossibility for a crash rather than for a verdict. No visited set
-// is needed — a SimpleType's item/member graph is a tree, since a ListDerivation
-// and a UnionDerivation are built from already-complete item/member pointers and
-// so cannot reach back to t (PRINCIPLES 9).
+// The nil guards on Item and each member are belt-and-braces over a state no
+// component can be in, NOT a reachable one: the ListDerivation.Item and
+// UnionDerivation.Members slots are xsd.SimpleTypeOrRefs that admit no encoding
+// of absence, rejected by xsd.NewSimpleType at construction, and an unresolvable
+// by-name one is an error out of Item/Members rather than a nil. They stay
+// because everything below them is nil-hostile too — the recursive Variety()
+// call they gate, and governingMapping on the very next line — so removing them
+// would trade a documented impossibility for a crash rather than for a verdict.
+//
+// No visited set is needed (PRINCIPLES 9), on two arguments that are no longer
+// one. The ITEM edge cannot close a loop that reaches here: any cycle of
+// itemType= references contains a list whose item is a list, which
+// xsd.SimpleType.CheckDerivation rejects under cos-st-restricts clause 2.1
+// before a schema finalizes. The MEMBER edge rests on nothing constructing a
+// by-name union-membership cycle, which holds only because no producer emits a
+// union at all — see xsd/derivation.go's CheckDerivation clause 3.3 paragraph
+// and the guard #738 replaces it with.
 func needsContext(r xsd.TypeResolver, t *xsd.SimpleType) (bool, error) {
 	variety, err := t.Variety(r)
 	if err != nil {

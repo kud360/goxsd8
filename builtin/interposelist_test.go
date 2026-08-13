@@ -25,7 +25,7 @@ func TestInterposeListBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build item primitive: %v", err)
 	}
-	listDerivation := xsd.ListDerivation{Item: item}
+	listDerivation := xsd.ListDerivation{Item: xsd.OwnedSimpleType{Definition: item}}
 
 	t.Run("list row interposes the anonymous list", func(t *testing.T) {
 		spec := TypeSpec{Name: "NMTOKENS", Base: "anySimpleType", Variety: List{Item: "item"}}

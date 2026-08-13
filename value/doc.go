@@ -111,21 +111,23 @@
 //
 // # The resolver, threaded and never stored
 //
-// A Simple Type Definition's {base type definition} may be a DEFERRED reference
-// by name (xsd.SimpleTypeOrRef), so every read of a derived property — {variety},
-// {primitive type definition}, {facets}, the governing mapping under the
-// widest-space rule — is a chain walk that needs an [xsd.TypeResolver] to follow.
-// [ValidateLexical] and [CheckFacetRestriction] therefore take one as a
-// PARAMETER, and this package stores one NOWHERE: not on a [Backend], not on a
-// compiled facet checker, not on the xsd.ValueSpace [NewValueSpace] returns. One
-// backend and one value space consequently serve every schema, which is what the
-// capability seams at xsd.SchemaBuilder.FinalizeWith assume. A caller validating
-// against a Schema-less graph — one assembled entirely from live components, as
+// A Simple Type Definition's {base type definition}, {item type definition} and
+// each of its {member type definitions} may be a DEFERRED reference by name
+// (xsd.SimpleTypeOrRef), so every read of a derived property — {variety},
+// {primitive type definition}, {item type definition}, {facets}, the governing
+// mapping under the widest-space rule — is a walk that needs an
+// [xsd.TypeResolver] to follow. [ValidateLexical] and [CheckFacetRestriction]
+// therefore take one as a PARAMETER, and this package stores one NOWHERE: not on
+// a [Backend], not on a compiled facet checker, not on the xsd.ValueSpace
+// [NewValueSpace] returns. One backend and one value space consequently serve
+// every schema, which is what the capability seams at
+// xsd.SchemaBuilder.FinalizeWith assume. A caller validating against a
+// Schema-less graph — one assembled entirely from live components, as
 // builtin.Seed produces — passes a resolver that resolves nothing, which is total
-// there because such a graph holds no by-name base to look up.
+// there because such a graph holds no by-name reference to look up.
 //
-// An UNRESOLVABLE base surfaces as the src-resolve error xsd.SimpleType.Base
-// produces, propagated unchanged. It is neither a validity verdict about the
+// An UNRESOLVABLE reference surfaces as the src-resolve error xsd.SimpleType.Base
+// and its siblings produce, propagated unchanged. It is neither a validity verdict about the
 // literal nor a facet-pipeline precondition fault: it says the TYPE could not be
 // read at all.
 //

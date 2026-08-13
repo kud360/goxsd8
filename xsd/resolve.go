@@ -1,6 +1,10 @@
 package xsd
 
-import "github.com/kud360/goxsd8/xsderr"
+import (
+	"fmt"
+
+	"github.com/kud360/goxsd8/xsderr"
+)
 
 // ruleSrcResolve is Schema Representation Constraint: QName resolution (Schema
 // Document) (Structures §3.17.6.2, id="src-resolve"): for a QName to resolve to
@@ -512,26 +516,25 @@ func (s *Schema) resolveComplexType(c ComplexType) error {
 }
 
 // resolveSimpleType descends a simple type's reference sites. There is exactly
-// one KIND of them — the {base type definition} slot, a SimpleTypeOrRef whose
-// by-name arm is the src-resolve clause 1.1 lookup (simpletyperef.go) — but
-// three PLACES it can sit, so the descent is written out:
+// one KIND of them — a SimpleTypeOrRef slot, whose by-name arm is the
+// src-resolve clause 1.1 lookup (simpletyperef.go) — sitting in three PLACES:
+// t's own {base type definition}, ListDerivation.Item, and each
+// UnionDerivation.Members entry. Every one goes through resolveSimpleTypeSlot,
+// which RESOLVES a by-name arm without following it and follows an owned one
+// (STYLE T4 — one encoding of the split, not one per slot).
 //
-//   - t's own base slot. A by-name arm is resolved and not followed: it names a
-//     top-level type this pass reaches in its own right, so following it would
-//     re-walk it once per derived type. An OWNED arm IS followed, for the reason
-//     checkComplexBaseAcyclic records for its own inline hop — a redefining
-//     <simpleType>'s anonymous src-expredef original has a by-name base of its
-//     own, so stopping at the owned hop would leave it unresolved.
-//   - ListDerivation.Item and UnionDerivation.Members. Those slots hold live
-//     pointers, but the components they hold have base slots like any other, and
-//     an ANONYMOUS item or member is in no index, so this is the only place its
-//     base reference is reached.
+// Resolving without following is what keeps the item and member edges from being
+// a fail-open: an itemType= or memberTypes= entry naming nothing is charged
+// src-resolve clause 1.1 here, in the same phase and by the same helper as a
+// dangling base=, rather than surfacing only if some later pass happened to read
+// the property.
 //
-// It carries no visited set (STYLE D4) and needs none: every edge it follows is
+// It carries no visited set (STYLE D4) and needs none: every edge it FOLLOWS is
 // an owned pointer, and an owned component must pre-exist the slot holding it,
 // so the owned graph is finite and acyclic. The by-name edges — the ones that
-// CAN close a cycle now that the base defers — are not followed here at all;
-// Phase B's checkSimpleBaseAcyclic is what rejects a cycle among them.
+// can close a cycle — are not followed here at all; each names a top-level type
+// this pass reaches in its own right, and Phase B's checkSimpleBaseAcyclic
+// rejects a cycle among the base ones.
 //
 // A rejection is positioned at the referring type's own Loc, which simpleTypeOfRef
 // takes from t — the referrer-Loc convention, with the simple type as its own
@@ -540,25 +543,38 @@ func (s *Schema) resolveSimpleType(t *SimpleType) error {
 	if t == nil {
 		return nil
 	}
-	if _, err := t.Base(s); err != nil {
+	if err := s.resolveSimpleTypeSlot(t, t.base, "{base type definition}"); err != nil {
 		return err
-	}
-	if owned, ok := t.base.(OwnedSimpleType); ok {
-		if err := s.resolveSimpleType(owned.Definition); err != nil {
-			return err
-		}
 	}
 	switch d := t.derivation.(type) {
 	case ListDerivation:
-		return s.resolveSimpleType(d.Item)
+		return s.resolveSimpleTypeSlot(t, d.Item, "{item type definition}")
 	case UnionDerivation:
-		for _, m := range d.Members {
-			if err := s.resolveSimpleType(m); err != nil {
+		for i, m := range d.Members {
+			if err := s.resolveSimpleTypeSlot(t, m, fmt.Sprintf("{member type definitions}[%d]", i)); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// resolveSimpleTypeSlot resolves one SimpleTypeOrRef slot of t — charging
+// src-resolve clause 1.1 for a by-name arm that names nothing — and then
+// descends only its OWNED arm.
+//
+// The owned arm IS descended, for the reason checkComplexBaseAcyclic records for
+// its own inline hop: an anonymous inline component is in no index, so this is
+// the only place ITS reference slots are reached — a redefining <simpleType>'s
+// anonymous src-expredef original has a by-name base of its own, and an inline
+// <list><simpleType> item has whatever its body declares.
+//
+// slot names the property for a rejection message ("{item type definition}").
+func (s *Schema) resolveSimpleTypeSlot(t *SimpleType, ref SimpleTypeOrRef, slot string) error {
+	if _, err := simpleTypeOfRef(s, ref, t.loc, simpleTypeLabel(t)+" "+slot); err != nil {
+		return err
+	}
+	return s.resolveSimpleType(ownedSimpleType(ref))
 }
 
 // resolveParticle descends a particle's {term}, carrying loc — the enclosing
@@ -794,16 +810,17 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 // hot path, and one whose keys are the very pointers the walk is enumerating.
 //
 // TERMINATION, in two halves. This pass's own DESCENT follows only OWNED
-// pointers — the owned base arm, ListDerivation.Item, UnionDerivation.Members,
-// and the by-value nesting of the complex-type slots — and an owned component
-// must pre-exist the slot holding it, so the descent is a finite tree
-// (PRINCIPLES 9). The by-NAME edges are never followed here: a SimpleTypeRef
-// base, a TypeDefinitionRef base, an <element ref>, a <group ref> each name a
-// component this pass reaches in its own right. What CheckDerivation does with
-// the chain is the other half, and it is NOT by construction: it walks the
-// by-name base chain unguarded, which is licensed by Phase B's
-// checkSimpleBaseAcyclic having run first (see resolve's phase narration). The
-// complex-type inline base IS followed, which Phase B has likewise made acyclic.
+// pointers — the owned arm of each of the three SimpleTypeOrRef slots (base,
+// ListDerivation.Item, UnionDerivation.Members) and the by-value nesting of the
+// complex-type slots — and an owned component must pre-exist the slot holding
+// it, so the descent is a finite tree (PRINCIPLES 9). The by-NAME edges are
+// never followed here: a SimpleTypeRef base, item or member, a TypeDefinitionRef
+// base, an <element ref>, a <group ref> each name a component this pass reaches
+// in its own right. What CheckDerivation does with the chain is the other half,
+// and it is NOT by construction: it walks the by-name base chain unguarded,
+// which is licensed by Phase B's checkSimpleBaseAcyclic having run first (see
+// resolve's phase narration). The complex-type inline base IS followed, which
+// Phase B has likewise made acyclic.
 //
 // Roots are walked in document order and a base chain bottom-up — a type's base,
 // item and members are charged before the type itself — so the first reported
@@ -857,27 +874,31 @@ func (s *Schema) checkSimpleTypeDerivations() error {
 // the base hop, whereas the stored arm is the only thing that names the component
 // this type itself owns.
 //
-// A nil t is an absent item/member, not a fault: st-props-correct clause 1 and
-// the checkListGraph/checkUnionGraph clauses own that verdict inside
-// CheckDerivation, and re-charging it here would name a rule this pass does not
-// own (STYLE E2).
+// All three slots are descended by OWNERSHIP alone (ownedSimpleType): a by-name
+// item, member or base names a top-level type this pass walks in its own right,
+// exactly as the base slot has done since #636, so following one would re-walk
+// it once per referring type — and would recurse forever on a schema whose
+// itemType= names the very list declaring it, a shape CheckDerivation rejects
+// under cos-st-restricts clause 2.1 without descending at all.
+//
+// A nil t is an owned arm that was absent, not a fault: only the base slot may be
+// absent, and st-props-correct clause 1 owns that verdict inside CheckDerivation,
+// so re-charging it here would name a rule this pass does not own (STYLE E2).
 func (s *Schema) checkSimpleTypeGraph(t *SimpleType) error {
 	if t == nil {
 		return nil
 	}
-	if owned, ok := t.base.(OwnedSimpleType); ok {
-		if err := s.checkSimpleTypeGraph(owned.Definition); err != nil {
-			return err
-		}
+	if err := s.checkSimpleTypeGraph(ownedSimpleType(t.base)); err != nil {
+		return err
 	}
 	switch d := t.derivation.(type) {
 	case ListDerivation:
-		if err := s.checkSimpleTypeGraph(d.Item); err != nil {
+		if err := s.checkSimpleTypeGraph(ownedSimpleType(d.Item)); err != nil {
 			return err
 		}
 	case UnionDerivation:
 		for _, m := range d.Members {
-			if err := s.checkSimpleTypeGraph(m); err != nil {
+			if err := s.checkSimpleTypeGraph(ownedSimpleType(m)); err != nil {
 				return err
 			}
 		}

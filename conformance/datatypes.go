@@ -1108,13 +1108,13 @@ func execListCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, c ca
 			return Fail()
 		}
 		constructed, err := synthSimpleType(xsd.QName{},
-			xsd.ListDerivation{Item: item}, xsd.AnySimpleType(), constructedListFacets())
+			xsd.ListDerivation{Item: xsd.OwnedSimpleType{Definition: item}}, xsd.AnySimpleType(), constructedListFacets())
 		if err != nil {
 			return Fail()
 		}
 		leaf, err := synthSimpleType(
 			xsd.QName{Space: synthNS, Local: "myList-" + lt.itemType},
-			xsd.ListDerivation{Item: item}, constructed, ownFacets)
+			xsd.ListDerivation{Item: xsd.OwnedSimpleType{Definition: item}}, constructed, ownFacets)
 		if err != nil {
 			return Fail()
 		}
@@ -1549,14 +1549,14 @@ func buildD34Type(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, decl
 		if !ok {
 			return nil, false
 		}
-		return newD34SimpleType(name, xsd.ListDerivation{Item: item}, xsd.AnySimpleType(), constructedListFacets())
+		return newD34SimpleType(name, xsd.ListDerivation{Item: xsd.OwnedSimpleType{Definition: item}}, xsd.AnySimpleType(), constructedListFacets())
 	}
 	if decl.Union != nil {
 		members, ok := d34UnionMembers(backend, sym, decls, built, key, *decl.Union)
 		if !ok {
 			return nil, false
 		}
-		return newD34SimpleType(name, xsd.UnionDerivation{Members: members}, xsd.AnySimpleType(), nil)
+		return newD34SimpleType(name, xsd.UnionDerivation{Members: ownedMembers(members)}, xsd.AnySimpleType(), nil)
 	}
 	if decl.Restriction == nil {
 		return nil, false
@@ -1622,6 +1622,21 @@ func synthSimpleType(name xsd.QName, derivation xsd.SimpleTypeDerivation, base *
 		return nil, err
 	}
 	return st, nil
+}
+
+// ownedMembers maps a built membership into the {member type definitions} slots
+// it belongs in — the OWNED arm for every entry, which is what this lane's
+// noSchema resolver requires and what its own doc below states about every slot
+// it writes.
+func ownedMembers(members []*xsd.SimpleType) []xsd.SimpleTypeOrRef {
+	if len(members) == 0 {
+		return nil
+	}
+	out := make([]xsd.SimpleTypeOrRef, 0, len(members))
+	for _, m := range members {
+		out = append(out, xsd.OwnedSimpleType{Definition: m})
+	}
+	return out
 }
 
 // noSchema is the [xsd.TypeResolver] this Schema-less lane hands every xsd and

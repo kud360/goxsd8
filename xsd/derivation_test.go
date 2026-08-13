@@ -57,10 +57,10 @@ func TestSTGraphChecks(t *testing.T) {
 	int2 := mustST(t, "int2", RestrictionDerivation{}, intT, nil, nil)
 
 	// Constructed lists/unions (base xs:anySimpleType).
-	listOverDec := mustST(t, "decList", ListDerivation{Item: dec}, anySimpleType, constructedListFacets(), nil)
-	unionDecStr := mustST(t, "decStr", UnionDerivation{Members: []*SimpleType{dec, str}}, anySimpleType, nil, nil)
-	unionAllAtomic := mustST(t, "uAtomic", UnionDerivation{Members: []*SimpleType{dec, str}}, anySimpleType, nil, nil)
-	unionWithList := mustST(t, "uList", UnionDerivation{Members: []*SimpleType{dec, listOverDec}}, anySimpleType, nil, nil)
+	listOverDec := mustST(t, "decList", listOf(dec), anySimpleType, constructedListFacets(), nil)
+	unionDecStr := mustST(t, "decStr", unionOf(dec, str), anySimpleType, nil, nil)
+	unionAllAtomic := mustST(t, "uAtomic", unionOf(dec, str), anySimpleType, nil, nil)
+	unionWithList := mustST(t, "uList", unionOf(dec, listOverDec), anySimpleType, nil, nil)
 
 	// Atomic items whose own {final} blocks a use, and a base whose {final}
 	// blocks restriction (clause 3 / 1.2 / 2.2.2.2 / 3.2.2.2 shared site).
@@ -145,92 +145,92 @@ func TestSTGraphChecks(t *testing.T) {
 
 		// --- list (cos-st-restricts case 2) ---
 		{"list ok constructed atomic item", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType, constructedListFacets(), nil)
+			_, e := newCheckedSimpleType(loc, qn, listOf(dec), anySimpleType, constructedListFacets(), nil)
 			return e
 		}, "", ""},
 		{"list ok constructed atomic-union item", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: unionAllAtomic}, anySimpleType, constructedListFacets(), nil)
+			_, e := newCheckedSimpleType(loc, qn, listOf(unionAllAtomic), anySimpleType, constructedListFacets(), nil)
 			return e
 		}, "", ""},
 		{"list special item (2.1)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: anyAtomicType}, anySimpleType, constructedListFacets(), nil)
+			_, e := newCheckedSimpleType(loc, qn, listOf(anyAtomicType), anySimpleType, constructedListFacets(), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.1"},
 		{"list nested-list item (2.1)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: listOverDec}, anySimpleType, constructedListFacets(), nil)
+			_, e := newCheckedSimpleType(loc, qn, listOf(listOverDec), anySimpleType, constructedListFacets(), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.1"},
 		{"list union-with-list item (2.1)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: unionWithList}, anySimpleType, constructedListFacets(), nil)
+			_, e := newCheckedSimpleType(loc, qn, listOf(unionWithList), anySimpleType, constructedListFacets(), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.1"},
 		{"list constructed item {final} has list (2.2.1.1)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: itemFinalList}, anySimpleType, constructedListFacets(), nil)
+			_, e := newCheckedSimpleType(loc, qn, listOf(itemFinalList), anySimpleType, constructedListFacets(), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.1.1"},
 		{"list constructed extra facet (2.2.1.2)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType,
+			_, e := newCheckedSimpleType(loc, qn, listOf(dec), anySimpleType,
 				append(constructedListFacets(), NewFacet(FacetMinLength, []string{"1"}, false)), nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.1.2"},
 		{"list constructed no facets (2.2.1.2)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, listOf(dec), anySimpleType, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.1.2"},
 		{"list constructed whiteSpace not collapse (2.2.1.2)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType,
+			_, e := newCheckedSimpleType(loc, qn, listOf(dec), anySimpleType,
 				[]Facet{NewFacet(FacetWhiteSpace, []string{"preserve"}, true)}, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.1.2"},
 		{"list constructed whiteSpace unfixed (2.2.1.2)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, anySimpleType,
+			_, e := newCheckedSimpleType(loc, qn, listOf(dec), anySimpleType,
 				[]Facet{NewFacet(FacetWhiteSpace, []string{"collapse"}, false)}, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.1.2"},
 		{"list ok restricted same item", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, listOverDec, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, listOf(dec), listOverDec, nil, nil)
 			return e
 		}, "", ""},
 		{"list ok restricted derived item (2.2.2.3 chain)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: int2}, listOverDec, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, listOf(int2), listOverDec, nil, nil)
 			return e
 		}, "", ""},
 		{"list restricted non-list base (2.2.2.1)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: dec}, dec, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, listOf(dec), dec, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.2.1"},
 		{"list restricted item not derived (2.2.2.3)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, ListDerivation{Item: str}, listOverDec, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, listOf(str), listOverDec, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 2.2.2.3"},
 
 		// --- union (cos-st-restricts case 3) ---
 		{"union ok constructed", func() error {
-			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec, str}}, anySimpleType, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, unionOf(dec, str), anySimpleType, nil, nil)
 			return e
 		}, "", ""},
 		{"union special member (3.1)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec, anyAtomicType}}, anySimpleType, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, unionOf(dec, anyAtomicType), anySimpleType, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.1"},
 		{"union constructed member {final} has union (3.2.1.1)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{memberFinalUnion}}, anySimpleType, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, unionOf(memberFinalUnion), anySimpleType, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.2.1.1"},
 		{"union ok restricted corresponding members", func() error {
-			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec, str}}, unionDecStr, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, unionOf(dec, str), unionDecStr, nil, nil)
 			return e
 		}, "", ""},
 		{"union restricted non-union base (3.2.2.1)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec, str}}, dec, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, unionOf(dec, str), dec, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.2.2.1"},
 		{"union restricted member count mismatch (3.2.2.3)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{dec}}, unionDecStr, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, unionOf(dec), unionDecStr, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.2.2.3"},
 		{"union restricted member not derived (3.2.2.3)", func() error {
-			_, e := newCheckedSimpleType(loc, qn, UnionDerivation{Members: []*SimpleType{str, dec}}, unionDecStr, nil, nil)
+			_, e := newCheckedSimpleType(loc, qn, unionOf(str, dec), unionDecStr, nil, nil)
 			return e
 		}, ruleCosSTRestricts, "clause 3.2.2.3"},
 	}
@@ -430,8 +430,8 @@ func TestDerivedOKSimple(t *testing.T) {
 	str := mustPrim(t, "string")
 	intT := mustST(t, "int", RestrictionDerivation{}, dec, nil, nil)
 	int2 := mustST(t, "int2", RestrictionDerivation{}, intT, nil, nil)
-	listOverDec := mustST(t, "decList", ListDerivation{Item: dec}, anySimpleType, constructedListFacets(), nil)
-	unionDecStr := mustST(t, "decStr", UnionDerivation{Members: []*SimpleType{dec, str}}, anySimpleType, nil, nil)
+	listOverDec := mustST(t, "decList", listOf(dec), anySimpleType, constructedListFacets(), nil)
+	unionDecStr := mustST(t, "decStr", unionOf(dec, str), anySimpleType, nil, nil)
 
 	tests := []struct {
 		name string

@@ -436,10 +436,159 @@ func TestProduceRestrictionNeitherBaseNorInlineRejected(t *testing.T) {
 	assertRule(t, err, "src-simple-type")
 }
 
-func TestProduceSimpleTypeListRejected(t *testing.T) {
-	body := `<xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`
+// TestProduceListItemTypeIsARef pins §3.16.2.3 map.std.list case 1a on the
+// itemType= form: the produced type's {variety} is list, its {base type
+// definition} is xs:anySimpleType directly (map.std.common case 2 — ONE
+// component, no anonymous intermediate), and its {item type definition} is the
+// DEFERRED by-name arm, resolved against the schema and not at mapping time.
+func TestProduceListItemTypeIsARef(t *testing.T) {
+	body := `<xs:simpleType name="L"><xs:list itemType="tns:It"/></xs:simpleType>` +
+		`<xs:simpleType name="It"><xs:restriction base="xs:string"/></xs:simpleType>`
+	s, err := produce(t, wrap("urn:x", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, ok := s.Type(xsd.QName{Space: "urn:x", Local: "L"})
+	if !ok {
+		t.Fatal("type L not found")
+	}
+	list := td.(*xsd.SimpleType)
+	if _, isList := mustVariety(t, s, list).(xsd.List); !isList {
+		t.Errorf("L {variety} = %#v, want xsd.List", mustVariety(t, s, list))
+	}
+	if base := mustBase(t, s, list); base != xsd.AnySimpleType() {
+		t.Errorf("L {base type definition} = %v, want xs:anySimpleType", base.Name())
+	}
+	// The by-name arm cannot be followed without the schema — which is what makes
+	// a forward-referenced itemType= legal (the item is declared AFTER the list
+	// here, and Produce still succeeded).
+	if _, err := list.Item(noResolver{}); err == nil {
+		t.Fatal("L's itemType= resolved without a schema, so it is stored as an OwnedSimpleType; every by-name item must be an xsd.SimpleTypeRef")
+	}
+	if item := mustItem(t, s, list); item.Name() != (xsd.QName{Space: "urn:x", Local: "It"}) {
+		t.Errorf("L {item type definition} = %v, want urn:x It", item.Name())
+	}
+}
+
+// TestProduceListMintsWhiteSpaceFacet pins §3.16.2.1 map.std.common {facets}
+// case 3: a produced list carries exactly one whiteSpace facet, collapse and
+// fixed. Without it xsd's checkConstructedListFacets refuses the type at
+// finalize under cos-st-restricts clause 2.2.1.2, so this asserts on the facet
+// itself and not merely on Produce succeeding.
+func TestProduceListMintsWhiteSpaceFacet(t *testing.T) {
+	list, s := simpleTypeOf(t, "L", `<xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`)
+	eff := mustEffectiveFacets(t, s, list)
+	if len(eff) != 1 {
+		t.Fatalf("L {facets} has %d members, want exactly the minted whiteSpace (%v)", len(eff), eff)
+	}
+	f := eff[0].Facet()
+	if f.Kind() != xsd.FacetWhiteSpace {
+		t.Fatalf("L {facets}[0] is %s, want whiteSpace", f.Kind())
+	}
+	if got := f.Values(); len(got) != 1 || got[0] != "collapse" {
+		t.Errorf("minted whiteSpace {value} = %v, want [collapse]", got)
+	}
+	if fixed, ok := f.Fixed(); !ok || !fixed {
+		t.Errorf("minted whiteSpace {fixed} = %v (present %v), want true", fixed, ok)
+	}
+}
+
+// TestProduceListInlineItem pins map.std.list case 1b: the inline <simpleType>
+// child of a <list> is the {item type definition}, built here and owned by the
+// slot, so it resolves with no schema at all.
+func TestProduceListInlineItem(t *testing.T) {
+	body := `<xs:simpleType name="L"><xs:list><xs:simpleType>` +
+		`<xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction>` +
+		`</xs:simpleType></xs:list></xs:simpleType>`
+	list, s := simpleTypeOf(t, "L", body)
+	item := mustItem(t, s, list)
+	if item.Name() != (xsd.QName{}) {
+		t.Errorf("inline item {name} = %v, want absent", item.Name())
+	}
+	if _, err := list.Item(noResolver{}); err != nil {
+		t.Errorf("inline item is not the owned arm: %v", err)
+	}
+	// The inline type's own body reached the component: its maxLength is in force
+	// alongside whatever xs:string contributes up the chain.
+	var maxLength []string
+	for _, f := range mustEffectiveFacets(t, s, item) {
+		if f.Facet().Kind() == xsd.FacetMaxLength {
+			maxLength = f.Facet().Values()
+		}
+	}
+	if len(maxLength) != 1 || maxLength[0] != "4" {
+		t.Errorf("inline item maxLength {value} = %v, want [4]", maxLength)
+	}
+}
+
+// TestProduceListItemTypeAndInlineRejected pins src-simple-type clause 3: the
+// two item sources are mutually exclusive.
+func TestProduceListItemTypeAndInlineRejected(t *testing.T) {
+	body := `<xs:simpleType name="L"><xs:list itemType="xs:string"><xs:simpleType>` +
+		`<xs:restriction base="xs:string"/></xs:simpleType></xs:list></xs:simpleType>`
 	_, err := produce(t, wrap("", body))
 	assertRule(t, err, "src-simple-type")
+}
+
+// TestProduceListNeitherItemTypeNorInlineRejected pins the other half of
+// src-simple-type clause 3: one of the two sources must be present.
+func TestProduceListNeitherItemTypeNorInlineRejected(t *testing.T) {
+	body := `<xs:simpleType name="L"><xs:list/></xs:simpleType>`
+	_, err := produce(t, wrap("", body))
+	assertRule(t, err, "src-simple-type")
+}
+
+// TestProduceSimpleTypeTwoAlternativesRejected pins that a <simpleType> naming
+// two of the three §3.16.2.1 alternatives is rejected rather than silently
+// mapped from whichever the dispatch reaches first, which would drop the other's
+// whole mapping.
+func TestProduceSimpleTypeTwoAlternativesRejected(t *testing.T) {
+	body := `<xs:simpleType name="B"><xs:restriction base="xs:string"/><xs:list itemType="xs:string"/></xs:simpleType>`
+	_, err := produce(t, wrap("", body))
+	assertRule(t, err, "src-simple-type")
+}
+
+// TestProduceListUnresolvableItemTypeRejected pins that a by-name item joins the
+// same graph layer a by-name base does: an itemType= with nothing behind it is
+// charged src-resolve clause 1.1 at finalize, never silently accepted.
+func TestProduceListUnresolvableItemTypeRejected(t *testing.T) {
+	body := `<xs:simpleType name="L"><xs:list itemType="tns:Missing"/></xs:simpleType>`
+	_, err := produce(t, wrap("urn:x", body))
+	assertRule(t, err, "src-resolve")
+}
+
+// TestProduceListOfListRejected pins cos-st-restricts clause 2.1 end to end over
+// a by-name item, which is also this landing's termination argument for the
+// unguarded item walks: an itemType= naming a list type is refused, so no
+// itemType= cycle survives finalize.
+func TestProduceListOfListRejected(t *testing.T) {
+	for _, tc := range []struct{ name, body string }{
+		{"a list of a named list", `<xs:simpleType name="Inner"><xs:list itemType="xs:string"/></xs:simpleType>` +
+			`<xs:simpleType name="Outer"><xs:list itemType="tns:Inner"/></xs:simpleType>`},
+		// The self-referencing item is the cycle the unguarded item walks would
+		// otherwise run forever on: it is refused by the same clause, after one
+		// O(1) {variety} read and no descent.
+		{"a list whose itemType names itself", `<xs:simpleType name="L"><xs:list itemType="tns:L"/></xs:simpleType>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:x", tc.body))
+			assertRule(t, err, "cos-st-restricts")
+		})
+	}
+}
+
+// TestProduceSimpleTypeUnionDeclined pins the <union> carve: it is a plain
+// limitation error, never a fabricated rule verdict (STYLE E2), because the
+// schema is legal and only this producer is incomplete.
+func TestProduceSimpleTypeUnionDeclined(t *testing.T) {
+	body := `<xs:simpleType name="U"><xs:union memberTypes="xs:string xs:int"/></xs:simpleType>`
+	_, err := produce(t, wrap("", body))
+	if err == nil {
+		t.Fatal("expected a decline error for <union>, got nil")
+	}
+	if _, ok := xsderr.RuleOf(err); ok {
+		t.Fatalf("union decline should be a plain limitation error, not an xsderr rule: %v", err)
+	}
 }
 
 func TestProduceEnumerationFacetRejected(t *testing.T) {

@@ -211,7 +211,7 @@ func indexOfType(seen []*SimpleType, want *SimpleType) int {
 // constructed directly from xs:anySimpleType (§4.3.6.1).
 func dList(t *testing.T, name QName, item *SimpleType) *SimpleType {
 	t.Helper()
-	st, err := newCheckedSimpleType(xsderr.Loc{}, name, ListDerivation{Item: item}, anySimpleType,
+	st, err := newCheckedSimpleType(xsderr.Loc{}, name, listOf(item), anySimpleType,
 		[]Facet{NewFacet(FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("newCheckedSimpleType(list %s): %v", name, err)
@@ -223,7 +223,7 @@ func dList(t *testing.T, name QName, item *SimpleType) *SimpleType {
 // cos-st-restricts clause 3.2.1 gives a <union>.
 func dUnion(t *testing.T, name QName, members ...*SimpleType) *SimpleType {
 	t.Helper()
-	st, err := newCheckedSimpleType(xsderr.Loc{}, name, UnionDerivation{Members: members}, anySimpleType, nil, nil)
+	st, err := newCheckedSimpleType(xsderr.Loc{}, name, unionOf(members...), anySimpleType, nil, nil)
 	if err != nil {
 		t.Fatalf("newCheckedSimpleType(union %s): %v", name, err)
 	}

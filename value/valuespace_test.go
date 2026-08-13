@@ -116,13 +116,13 @@ func TestValueSpaceRefusesUngovernedAndNonAtomic(t *testing.T) {
 
 	unmapped := vsPrim(t, "unmapped")
 	lst, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "lst"},
-		xsd.ListDerivation{Item: prim}, xsd.AnySimpleType(),
+		listOf(prim), xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list): %v", err)
 	}
 	uni, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: "uni"},
-		xsd.UnionDerivation{Members: []*xsd.SimpleType{prim}}, xsd.AnySimpleType(), nil, nil)
+		unionOf(prim), xsd.AnySimpleType(), nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union): %v", err)
 	}
@@ -403,7 +403,7 @@ func (b looseBackend) Mapping(typ xsd.QName) (Mapping, bool) {
 func vsList(t *testing.T, local string, item *xsd.SimpleType) *xsd.SimpleType {
 	t.Helper()
 	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
-		xsd.ListDerivation{Item: item}, xsd.AnySimpleType(),
+		listOf(item), xsd.AnySimpleType(),
 		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(list %s): %v", local, err)
@@ -416,7 +416,7 @@ func vsList(t *testing.T, local string, item *xsd.SimpleType) *xsd.SimpleType {
 func vsUnion(t *testing.T, local string, members ...*xsd.SimpleType) *xsd.SimpleType {
 	t.Helper()
 	st, err := newCheckedSimpleType(xsderr.Loc{}, xsd.QName{Space: "urn:test", Local: local},
-		xsd.UnionDerivation{Members: members}, xsd.AnySimpleType(), nil, nil)
+		unionOf(members...), xsd.AnySimpleType(), nil, nil)
 	if err != nil {
 		t.Fatalf("NewSimpleType(union %s): %v", local, err)
 	}

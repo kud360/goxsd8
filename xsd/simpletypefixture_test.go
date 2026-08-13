@@ -65,6 +65,27 @@ func ownedBase(base *SimpleType) SimpleTypeOrRef {
 	return OwnedSimpleType{Definition: base}
 }
 
+// listOf and unionOf are the same mapping for the {item type definition} and
+// {member type definitions} slots, which take no nil: a fixture names live item
+// and member pointers and gets the owned arm for each. A fixture whose subject
+// IS the slot encoding — a by-name item, an absent one — writes the arm out
+// instead of calling these.
+
+func listOf(item *SimpleType) ListDerivation {
+	return ListDerivation{Item: OwnedSimpleType{Definition: item}}
+}
+
+func unionOf(members ...*SimpleType) UnionDerivation {
+	if len(members) == 0 {
+		return UnionDerivation{}
+	}
+	slots := make([]SimpleTypeOrRef, 0, len(members))
+	for _, m := range members {
+		slots = append(slots, OwnedSimpleType{Definition: m})
+	}
+	return UnionDerivation{Members: slots}
+}
+
 // The six readers below are the resolver-threaded accessors applied to an
 // owned-arm chain, where they cannot fail. Each PANICS on an error rather than
 // taking a *testing.T, so a fixture reads as an expression exactly where the

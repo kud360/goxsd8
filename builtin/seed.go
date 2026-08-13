@@ -292,7 +292,7 @@ func buildDerivation(spec TypeSpec, build func(string) (*xsd.SimpleType, error))
 		if err != nil {
 			return nil, err
 		}
-		return xsd.ListDerivation{Item: item}, nil
+		return xsd.ListDerivation{Item: xsd.OwnedSimpleType{Definition: item}}, nil
 	default:
 		return nil, fmt.Errorf("builtin: type %q has no variety", spec.Name)
 	}

@@ -36,3 +36,23 @@ func newCheckedSimpleType(loc xsderr.Loc, name xsd.QName, derivation xsd.SimpleT
 	}
 	return st, nil
 }
+
+// listOf and unionOf map live item and member pointers into the
+// {item type definition} and {member type definitions} slots, which take no nil:
+// every fixture here names components it has already built, so each slot is the
+// owned arm — the same mapping newCheckedSimpleType makes for the base.
+
+func listOf(item *xsd.SimpleType) xsd.ListDerivation {
+	return xsd.ListDerivation{Item: xsd.OwnedSimpleType{Definition: item}}
+}
+
+func unionOf(members ...*xsd.SimpleType) xsd.UnionDerivation {
+	if len(members) == 0 {
+		return xsd.UnionDerivation{}
+	}
+	slots := make([]xsd.SimpleTypeOrRef, 0, len(members))
+	for _, m := range members {
+		slots = append(slots, xsd.OwnedSimpleType{Definition: m})
+	}
+	return xsd.UnionDerivation{Members: slots}
+}

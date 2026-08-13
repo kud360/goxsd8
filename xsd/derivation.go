@@ -199,14 +199,21 @@ const (
 // runs BEFORE the Phase D pass that calls this one (resolve.go, PRINCIPLES 9).
 // A Schema-less caller running this method owes the same guarantee, and gets it
 // for free on an OwnedSimpleType-only chain, where a base must pre-exist the
-// type holding it. cos-st-restricts clause 3.3 (no-self-membership,
-// checkUnionGraph) remains a documented no-op on the ORIGINAL argument, which
-// the deferral does not touch: a union's members are live *SimpleType pointers
-// that must pre-exist the union, so the union cannot be in its own transitive
-// membership. NewSimpleType copies a UnionDerivation's membership in
-// (copyDerivation) while SimpleType.Members copies it out, so no external caller
-// can splice a cycle in through the exported Members field after construction
-// either.
+// type holding it.
+//
+// cos-st-restricts clause 3.3 (no-self-membership) is NOT charged, and the
+// argument for that is now a bounded one rather than a structural impossibility.
+// UnionDerivation.Members is a SimpleTypeOrRef sequence, so a by-name member CAN
+// name a union that reaches back — the exact repeal SimpleTypeRef bases performed
+// on the base chain — and the unguarded membership walks below
+// (unionMembershipHasList, derivedOKSimple) would not terminate on one. What
+// keeps that unconstructible is that no producer emits a UnionDerivation at all:
+// parser/produce.go declines <union>, so every union a parsed schema reaches has
+// an owned-only membership that must pre-exist it. #738 lands the <union>
+// producer arm and a Phase B checkUnionMembershipAcyclic charging clause 3.3 in
+// the SAME commit, and these walks come to rest on that guard the way the
+// base-chain walks rest on checkSimpleBaseAcyclic. A programmatic caller building
+// a by-name membership by hand today owes the acyclicity itself.
 //
 // Still deferred here, and why:
 //
@@ -382,14 +389,16 @@ func checkAtomicGraph(r TypeResolver, t, base *SimpleType) error {
 //     clause-3 site; clause 2.2.2.4 (facet applicability) by
 //     checkVarietyApplicableFacets and clause 2.2.2.5 in part by
 //     checkFacetRestrictions, both from CheckDerivation.
+//
+// The item is never absent and this function makes no absence check: t's
+// {variety} is list only because a ListDerivation is on its base chain, and that
+// arm's Item slot rejects every encoding of absence at construction (STYLE T1 —
+// the type says it; SimpleTypeOrRef's arm × slot table). An unresolvable by-name
+// itemType= is an error out of t.Item, not a nil.
 func checkListGraph(r TypeResolver, t, base *SimpleType) error {
 	item, err := t.Item(r)
 	if err != nil {
 		return err
-	}
-	if item == nil {
-		return xsderr.New(ruleSTPropsCorrect, t.loc,
-			"list simple type has an absent {item type definition} (st-props-correct clause 1)")
 	}
 	if isSpecialType(item) {
 		return xsderr.New(ruleCosSTRestricts, t.loc,
@@ -465,7 +474,8 @@ func checkListGraph(r TypeResolver, t, base *SimpleType) error {
 // A conforming mapping always satisfies this, because Structures §3.16.2.1
 // map.std.common case 3 manufactures exactly that one-member set for every
 // <list> alternative — which is also why the clause bites only on a
-// programmatically built component, never on one parsed from a schema document.
+// programmatically built component, never on one parsed from a schema document:
+// parser/produce.go's constructListType mints exactly that facet and no other.
 func checkConstructedListFacets(t *SimpleType) error {
 	for _, f := range t.ownFacets {
 		if f.kind == FacetWhiteSpace {
@@ -509,17 +519,18 @@ func checkConstructedListFacets(t *SimpleType) error {
 //     clause 3.2.2.4 (facet applicability) by checkVarietyApplicableFacets and
 //     clause 3.2.2.5 in part by checkFacetRestrictions, both from CheckDerivation.
 //
-// Clause 3.3 (no-self-membership) is a documented no-op — see CheckDerivation.
+// No member is ever absent and this function makes no absence check, for the
+// reason checkListGraph states about its item: the UnionDerivation arm rejects
+// every encoding of absence per ENTRY at construction (an empty membership is
+// legal, an absent member is not).
+//
+// Clause 3.3 (no-self-membership) is not charged here — see CheckDerivation.
 func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 	members, err := t.Members(r)
 	if err != nil {
 		return err
 	}
 	for _, m := range members {
-		if m == nil {
-			return xsderr.New(ruleSTPropsCorrect, t.loc,
-				"union {member type definitions} contains an absent member (st-props-correct clause 1)")
-		}
 		if isSpecialType(m) {
 			return xsderr.New(ruleCosSTRestricts, t.loc,
 				"union {member type definitions} contains special type definition %s (cos-st-restricts clause 3.1)", m.name)
@@ -589,10 +600,12 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 // intervening union's {facets} emptiness at its own level, clause 2.2.4.3).
 //
 // It walks d's {base} chain and b's members with no visited set (STYLE D4). The
-// membership side is finite and acyclic by construction (a member must pre-exist
-// the union naming it); the base-chain side rests on the acyclicity proof
-// CheckDerivation's doc states — Phase B's checkSimpleBaseAcyclic for a
-// finalized Schema, owned-only chains for a Schema-less caller.
+// base-chain side rests on the acyclicity proof CheckDerivation's doc states —
+// Phase B's checkSimpleBaseAcyclic for a finalized Schema, owned-only chains for
+// a Schema-less caller. The membership side rests on nothing constructing a
+// by-name union-membership cycle, which is true only because no producer emits a
+// UnionDerivation at all: see CheckDerivation's clause 3.3 paragraph for the
+// full statement and for the guard #738 replaces it with.
 //
 // r resolves each {base type definition} hop, so an unresolvable one is an
 // ERROR rather than a false "not derived": answering false for a base that
@@ -1442,12 +1455,12 @@ func scaleValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (int, error) {
 // (Datatypes id="dt-transitivemembership") has {variety} = list; it is the
 // negative form of clause 2.1's "no types whose {variety} is list among the
 // union's transitive membership". u is expected to be a union; a non-union u
-// yields false. It recurses through member unions with no visited set: a union's
-// members pre-exist the union, so the transitive membership is finite and
-// acyclic and the recursion terminates — and because NewSimpleType copies a
-// UnionDerivation's membership in (copyDerivation) and SimpleType.Members copies
-// it out, a mutation-induced cycle is structurally unrepresentable, not merely
-// unconstructed.
+// yields false. It recurses through member unions with no visited set (STYLE
+// D4), which rests on nothing constructing a by-name union-membership cycle —
+// true only because no producer emits a UnionDerivation at all, since
+// UnionDerivation.Members itself now admits a forward by-name member. See
+// CheckDerivation's cos-st-restricts clause 3.3 paragraph for the full statement
+// and for the guard #738 replaces it with.
 func unionMembershipHasList(r TypeResolver, u *SimpleType) (bool, error) {
 	uVariety, err := u.Variety(r)
 	if err != nil {
@@ -1461,9 +1474,6 @@ func unionMembershipHasList(r TypeResolver, u *SimpleType) (bool, error) {
 		return false, err
 	}
 	for _, m := range members {
-		if m == nil {
-			continue
-		}
 		mVariety, err := m.Variety(r)
 		if err != nil {
 			return false, err

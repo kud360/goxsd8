@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -122,18 +123,34 @@ type RestrictionDerivation struct{}
 // the component mints the {item type definition} carried here. Item is exported
 // on the TermOrRef precedent (term.go); NewSimpleType stores the arm by value,
 // and SimpleType.Item is the read path.
-type ListDerivation struct{ Item *SimpleType }
+//
+// Item is a SimpleTypeOrRef because a <list itemType="…"> may name a type
+// declared later in the document (§3.16.2.3 map.std.list case 1a), so the
+// producer emits SimpleTypeRef and finalize resolves it — the same deferral the
+// base slot takes. It is never absent: a list HAS an item, so NewSimpleType
+// rejects a nil Item and the two forgeable near-misses (SimpleTypeOrRef's arm ×
+// slot table), which is what lets checkListGraph read one without an absence
+// case.
+type ListDerivation struct{ Item SimpleTypeOrRef }
 
 // UnionDerivation is the ·union· alternative (§3.16.2.1): {variety} is union
 // and the component mints the {member type definitions} carried here, in
 // document order. The sequence is preserved verbatim — not sorted, not
-// deduplicated, not filtered of nils — because position is load-bearing
-// (cos-st-restricts clause 3.2.2.3 pairs a restriction's members with the
-// base's POSITIONALLY, PRINCIPLES 11). Members is exported on the TermOrRef
-// precedent (term.go); NewSimpleType COPIES it in and SimpleType.Members copies
-// it out, so the stored membership cannot be mutated through a slice the caller
-// still holds.
-type UnionDerivation struct{ Members []*SimpleType }
+// deduplicated — because position is load-bearing (cos-st-restricts clause
+// 3.2.2.3 pairs a restriction's members with the base's POSITIONALLY,
+// PRINCIPLES 11). Members is exported on the TermOrRef precedent (term.go);
+// NewSimpleType COPIES it in and SimpleType.Members copies it out, so the stored
+// membership cannot be mutated through a slice the caller still holds.
+//
+// Each entry is a SimpleTypeOrRef for the reason ListDerivation.Item is, over
+// map.std.union case 1a's memberTypes= names, and no entry is ever absent —
+// NewSimpleType rejects a nil one. The SEQUENCE, in contrast, may be EMPTY:
+// §3.16.1 types {member type definitions} as "must be present (but may be
+// empty)", and src-simple-type clause 4's "a non-empty memberTypes attribute or
+// at least one simpleType child" is a constraint on the <union> ELEMENT charged
+// by the producer, not a component invariant. A nil slice is that empty
+// membership; there is no second encoding of it (STYLE D1).
+type UnionDerivation struct{ Members []SimpleTypeOrRef }
 
 // primitiveDerivation is the primitive-datatype arm (Datatypes §2.4.2,
 // dt-primitive): {variety} is atomic and the {primitive type definition} is the
@@ -619,9 +636,11 @@ type SimpleType struct {
 //   - two ownFacets of the same FacetKind (clause 4: "not more than one member
 //     of {facets} of the same kind").
 //
-// and, charging xsderr.RuleComponentInvariant, the two illegal encodings of the
-// base slot itself — a SimpleTypeRef naming nothing and an OwnedSimpleType
-// holding nothing (checkSimpleTypeOrRef).
+// and, charging xsderr.RuleComponentInvariant, every illegal encoding of the
+// three type-valued slots themselves — a SimpleTypeRef naming nothing and an
+// OwnedSimpleType holding nothing anywhere (checkSimpleTypeOrRef), plus an
+// ABSENT item or member, which only the base slot may be
+// (checkSimpleTypeDerivationSlots over SimpleTypeOrRef's arm × slot table).
 //
 // Everything the CROSS-REFERENCE constraints decide — every cos-st-restricts
 // sub-clause and st-props-correct clauses 1, 2, 3 and 5 — is charged at
@@ -647,6 +666,9 @@ func NewSimpleType(loc xsderr.Loc, name QName, derivation SimpleTypeDerivation, 
 	if err := checkSimpleTypeOrRef(loc, base); err != nil {
 		return nil, err
 	}
+	if err := checkSimpleTypeDerivationSlots(loc, derivation); err != nil {
+		return nil, err
+	}
 	if err := checkSTProps(loc, ownFacets, final); err != nil {
 		return nil, err
 	}
@@ -658,21 +680,44 @@ func NewSimpleType(loc xsderr.Loc, name QName, derivation SimpleTypeDerivation, 
 // copyDerivation returns derivation with any caller-owned backing array copied,
 // so the stored arm cannot be mutated through a slice the caller still holds.
 // UnionDerivation.Members is the only such array — every other arm is empty or
-// carries a single pointer — and a mutable membership is what would otherwise
-// let a caller splice a cycle into a union's transitive membership after
-// construction, which the recursive membership walks in derivation.go rely on
-// being impossible for termination.
+// carries a single slot — and without the copy a caller could rewrite a
+// membership this constructor has already checked, so the arm's every-entry-
+// present guarantee would hold only at the instant it was charged.
 //
-// The sequence is copied verbatim: not sorted, not deduplicated, not filtered
-// of nils (cos-st-restricts clause 3.2.2.3 pairs members POSITIONALLY,
-// PRINCIPLES 11). An empty membership is returned unchanged; there is nothing
-// to alias, and SimpleType.Members reports it as nil either way.
+// The sequence is copied verbatim: not sorted, not deduplicated (cos-st-restricts
+// clause 3.2.2.3 pairs members POSITIONALLY, PRINCIPLES 11). An empty membership
+// is returned unchanged; there is nothing to alias, and SimpleType.Members
+// reports it as nil either way.
 func copyDerivation(derivation SimpleTypeDerivation) SimpleTypeDerivation {
 	u, ok := derivation.(UnionDerivation)
 	if !ok || len(u.Members) == 0 {
 		return derivation
 	}
-	return UnionDerivation{Members: append([]*SimpleType(nil), u.Members...)}
+	return UnionDerivation{Members: append([]SimpleTypeOrRef(nil), u.Members...)}
+}
+
+// checkSimpleTypeDerivationSlots charges checkSimpleTypeOrRefPresent over the
+// type-valued slots the declared derivation carries: ListDerivation.Item and
+// every UnionDerivation.Members entry, the two slots SimpleTypeOrRef's arm ×
+// slot table makes nil-illegal. The other three arms carry no slot at all.
+//
+// An EMPTY membership is accepted: §3.16.1 admits it and only the <union>
+// element's own representation constraint (src-simple-type clause 4) forbids the
+// XML that would produce one, so rejecting it here would false-reject the
+// programmatically built components builtin and the conformance datatypes lane
+// assemble.
+func checkSimpleTypeDerivationSlots(loc xsderr.Loc, derivation SimpleTypeDerivation) error {
+	switch d := derivation.(type) {
+	case ListDerivation:
+		return checkSimpleTypeOrRefPresent(loc, d.Item, "{item type definition}")
+	case UnionDerivation:
+		for i, m := range d.Members {
+			if err := checkSimpleTypeOrRefPresent(loc, m, fmt.Sprintf("{member type definitions}[%d]", i)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // NewPrimitiveType builds a primitive datatype (Datatypes §2.4.2): one of the
@@ -823,24 +868,25 @@ func (t *SimpleType) Primitive(r TypeResolver) (*SimpleType, error) {
 }
 
 // Item returns the {item type definition} property (§3.16.1). It is nil when
-// that property is ·absent·, which is every {variety} but list — a state
-// checkListGraph rejects for a list, so a list that passed CheckDerivation
+// that property is ·absent·, which is every {variety} but list: a list's own
+// slot can hold no absence (SimpleTypeOrRef's arm × slot table), so a list
 // always reports a non-nil item.
 //
 // It is DERIVED, never stored (STYLE D3): the ·list· alternative mints it and a
 // ·restriction· takes its base's (§3.16.2.1), so a restriction of xs:NMTOKENS
 // reports xs:NMTOKEN without any producer copying the pointer down.
 //
-// It takes a resolver NOT for symmetry with Variety/Primitive but because that
-// inheritance hop IS the {base type definition} slot: the ListDerivation.Item
-// SLOT stays a plain *SimpleType (see SimpleTypeOrRef), yet a ·restriction· of a
-// named list reaches its item only THROUGH a base that may be a SimpleTypeRef.
-// Answering nil there would report an absent {item type definition} for a list
-// that has one, which checkListGraph turns into a false reject.
+// It takes a resolver for TWO by-name hops, not for symmetry with
+// Variety/Primitive: the ListDerivation.Item slot is itself a SimpleTypeOrRef
+// whose by-name arm is an itemType= naming a possibly forward-declared type, and
+// a ·restriction· of a named list reaches its item only THROUGH a base that may
+// be a SimpleTypeRef too. Either hop failing is an ERROR, never a nil answer:
+// that would report an absent {item type definition} for a list that has one,
+// which checkListGraph turns into a false reject.
 func (t *SimpleType) Item(r TypeResolver) (*SimpleType, error) {
 	switch d := t.derivation.(type) {
 	case ListDerivation:
-		return d.Item, nil
+		return simpleTypeOfRef(r, d.Item, t.loc, simpleTypeLabel(t)+" {item type definition}")
 	case RestrictionDerivation:
 		base, err := t.Base(r)
 		if err != nil || base == nil {
@@ -857,14 +903,24 @@ func (t *SimpleType) Item(r TypeResolver) (*SimpleType, error) {
 //
 // It is DERIVED, never stored (STYLE D3): the ·union· alternative mints it and
 // a ·restriction· takes its base's (§3.16.2.1). It takes a resolver for exactly
-// the reason Item does, and not for symmetry — see there.
+// the reason Item does, and not for symmetry — see there. No entry it returns is
+// ever nil: the slot admits no absent member.
 func (t *SimpleType) Members(r TypeResolver) ([]*SimpleType, error) {
 	switch d := t.derivation.(type) {
 	case UnionDerivation:
 		if len(d.Members) == 0 {
 			return nil, nil
 		}
-		return append([]*SimpleType(nil), d.Members...), nil
+		out := make([]*SimpleType, 0, len(d.Members))
+		for i, m := range d.Members {
+			st, err := simpleTypeOfRef(r, m, t.loc,
+				fmt.Sprintf("%s {member type definitions}[%d]", simpleTypeLabel(t), i))
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, st)
+		}
+		return out, nil
 	case RestrictionDerivation:
 		base, err := t.Base(r)
 		if err != nil || base == nil {
