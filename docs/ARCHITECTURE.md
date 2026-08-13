@@ -200,9 +200,10 @@ represents it**:
   `ListDerivation.Item` and `UnionDerivation.Members` are `SimpleTypeOrRef`
   slots too as of #447, so an `itemType=` or `memberTypes=` naming a
   forward-declared type defers exactly as a `base=` does, and all three are
-  resolved by one helper in one phase. `<union>` is the one arm the producer
-  still declines; #738 owns it, together with the `cos-st-restricts` cl. 3.3
-  acyclicity guard a by-name membership makes reachable.
+  resolved by one helper in one phase. The producer maps all three
+  §3.16.2.1 alternatives as of #738, and a by-name membership is kept
+  acyclic by `cos-st-restricts` cl. 3.3 in the same finalize phase as the
+  base chains.
 - All child collections are slices in document order. Maps exist only as
   internal indexes and never determine any order.
 - Nothing derivable is stored (STYLE D3): no effective-facet caches —

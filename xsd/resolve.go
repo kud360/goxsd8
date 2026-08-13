@@ -44,10 +44,13 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //   - Phase B (circularity): reject the spec-forbidden named circularities that
 //     become representable only across the assembled set — the complex-type base
 //     chain (ct-props-correct clause 3), the SIMPLE-type base chain
-//     (st-props-correct clause 2), the <group ref> graph (mg-props-correct
-//     clause 2), and the substitution-group affiliation graph (e-props-correct
-//     clause 5). Every unguarded chain walk in derivation.go presupposes its
-//     simple-type half; see the paragraph below.
+//     (st-props-correct clause 2), union membership (cos-st-restricts clause
+//     3.3), the <group ref> graph (mg-props-correct clause 2), and the
+//     substitution-group affiliation graph (e-props-correct clause 5). Every
+//     unguarded chain walk in derivation.go presupposes its two simple-type
+//     halves; see the paragraph below. The membership check runs after the
+//     base-chain one, whose verdict it uses: a ·restriction· reports its base's
+//     membership, so walking a membership walks base chains too.
 //   - Phase C (content-model validity): reject the three §3.8.6 Model Group
 //     constraints that read a whole content model with its <group ref>s expanded
 //     and its <element ref>s and substitution groups followed — All Group Limited
@@ -113,13 +116,17 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     once, not once per referencing use.
 //
 // EVERY UNGUARDED CHAIN WALK IN derivation.go PRESUPPOSES PHASE B'S SIMPLE-TYPE
-// PROOF, and the dependency is stated here rather than left implicit.
+// PROOFS, and the dependency is stated here rather than left implicit.
 // SimpleType.Variety, .Primitive, .Item, .Members and .EffectiveFacets, and the
 // derivedOKSimple relation over them, follow {base type definition} with no
 // visited set (STYLE D4). That was discharged BY CONSTRUCTION while the slot
 // held a live pointer which had to pre-exist the type naming it (PRINCIPLES 9);
 // with the slot deferred to a name it is discharged by checkSimpleBaseAcyclic
-// running in Phase B, before any later phase walks such a chain.
+// running in Phase B, before any later phase walks such a chain. The MEMBERSHIP
+// walks — derivedOKSimple's descent through a union's members, and
+// unionMembershipHasList — are unguarded on the same footing, and rest on
+// checkUnionMembershipAcyclic in the same phase; value's needsContext follows
+// the same edges and rests on the same proof.
 //
 // Phase C runs strictly after Phase B, and that ordering is load-bearing rather
 // than cosmetic: both checks expand <group ref>s and walk {substitution group
@@ -200,6 +207,9 @@ func (s *Schema) resolve() error {
 		return err
 	}
 	if err := s.checkSimpleBaseAcyclic(); err != nil {
+		return err
+	}
+	if err := s.checkUnionMembershipAcyclic(); err != nil {
 		return err
 	}
 	if err := s.checkModelGroupsAcyclic(); err != nil {
@@ -1149,6 +1159,153 @@ func (s *Schema) checkSimpleBaseAcyclic() error {
 			}
 			cur = next
 		}
+	}
+	return nil
+}
+
+// checkUnionMembershipAcyclic is Phase B for union-membership circularity
+// (cos-st-restricts §3.16.6.2 clause 3.3, no-self-membership): "Neither D nor
+// any type ·derived· from it is a member of its own transitive membership." Both
+// conjuncts are read against the SAME set — D's ·transitive membership·
+// (Datatypes dt-transitivemembership: D's own {member type definitions}, and
+// theirs, recursively) — and "derived from D" is base-chain reachability alone,
+// never the membership or item-type relation, which other clauses govern
+// (src-simple-type clause 4, cos-st-restricts clause 2.1).
+//
+// So the two conjuncts collapse into ONE test, which is what this pass runs: for
+// every member M in D's transitive membership, M's {base type definition} chain
+// — M ITSELF first — must not reach D. M = D at step zero is conjunct 1 (D is
+// its own member), a later step is conjunct 2 (a type derived from D is), and no
+// third reading is admitted: "derived or constructed from", the broader wording
+// dt-transitivemembership's companion sentence uses, would reject the
+// list-of-union and union-member-of-union shapes clause 2.1 and clause 3.1
+// already judge on their own terms.
+//
+// IT IS NOT checkSimpleBaseAcyclic's CHAIN WALK generalized. Membership has
+// out-degree > 1, so a cycle is not a repeated node on a single walk and a path
+// map keyed by the walk's own chain cannot see one; this is a recursive DFS over
+// the membership graph, like checkModelGroupsAcyclic's, with
+// checkSimpleBaseAcyclic's POINTER identity for nodes — an anonymous inline
+// member has no {name} to be keyed by.
+//
+// Its map is a plain PER-ROOT visited set rather than that DFS's shared
+// onStack/done colouring, and both halves of that are load-bearing. A colouring
+// answers "does this graph contain a cycle", which is conjunct 1 alone; the test
+// run here is per D and answers both conjuncts together, so what it needs
+// recorded is "already tested under THIS D". And it cannot be shared across
+// roots for the same reason: conjunct 2's verdict on M depends on which D the
+// walk reached M from, so a node marked finished under one root would carry that
+// root's answer to every later one — an M first reached from a root whose chain
+// it does not touch would never be re-tested against the D that it does. Each
+// map is created and discarded inside this pass, threaded into no later
+// traversal (PRINCIPLES 9).
+//
+// ROOTS ARE THE NAMED TOP-LEVEL TYPES, in document order (STYLE D2), and no
+// violation escapes that. A cycle needs an edge INTO an already-visited node; an
+// anonymous type is held by exactly one owning slot, and only a by-name
+// SimpleTypeRef — which resolves through the type index — can name a second
+// referrer, so every membership cycle runs through a type this loop roots at. A
+// conjunct-2 violation whose D is an ANONYMOUS union is charged against the type
+// that OWNS D as its {base type definition}: a ·restriction· reports its base's
+// membership, so that type's transitive membership is D's, and the offending
+// member's chain passes through it on the way to D. Every map here is read only
+// by key and never ranged, so the first reported rejection is deterministic
+// (STYLE D1).
+//
+// THIS PASS IS WHAT MAKES THE UNGUARDED MEMBERSHIP WALKS TERMINATE —
+// unionMembershipHasList and derivedOKSimple (derivation.go) and needsContext
+// (value/valuespace.go) all follow {member type definitions} with no visited set
+// — exactly as checkSimpleBaseAcyclic licenses the unguarded base-chain walks.
+// It runs after checkSimpleBaseAcyclic, whose verdict it presupposes in turn:
+// SimpleType.Members reports a ·restriction·'s membership by following its base,
+// and the conjunct-2 test walks that chain outright.
+func (s *Schema) checkUnionMembershipAcyclic() error {
+	for _, t := range s.types {
+		st, ok := t.(*SimpleType)
+		if !ok {
+			continue // only a simple type has a membership
+		}
+		if err := s.checkOwnTransitiveMembership(st); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkOwnTransitiveMembership charges cos-st-restricts clause 3.3 against one
+// D: it walks D's ·transitive membership· depth-first in declared member order
+// and rejects the first member whose {base type definition} chain reaches D. A
+// type with no membership — every {variety} but union — walks nothing, so no
+// {variety} test gates the call (STYLE D3).
+//
+// A resolution failure ends that branch of the walk rather than being charged
+// again (membersOrNone): Phase A already charged src-resolve clause 1.1 against
+// the very slot, and re-charging it would report one fault twice under a second
+// rule (STYLE E2). The base-chain walk needs no guard of its own —
+// checkSimpleBaseAcyclic has already rejected a circular chain.
+func (s *Schema) checkOwnTransitiveMembership(d *SimpleType) error {
+	visited := map[*SimpleType]bool{}
+	var walk func(t *SimpleType) error
+	walk = func(t *SimpleType) error {
+		for _, m := range membersOrNone(s, t) {
+			if visited[m] {
+				continue
+			}
+			visited[m] = true
+			if err := checkMemberNotDerivedFrom(s, m, d); err != nil {
+				return err
+			}
+			if err := walk(m); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return walk(d)
+}
+
+// membersOrNone returns t's {member type definitions}, or none when one of them
+// cannot be resolved; baseOrNone is its {base type definition} twin. Neither
+// swallows a verdict: Phase A rejects an unresolvable member or base before this
+// phase runs, so a Schema reaching either has none, and the branch exists so the
+// walk ENDS rather than charging a second rule against a slot src-resolve clause
+// 1.1 already answered for (STYLE E2).
+func membersOrNone(r TypeResolver, t *SimpleType) []*SimpleType {
+	members, err := t.Members(r)
+	if err != nil {
+		return nil
+	}
+	return members
+}
+
+// baseOrNone returns t's resolved {base type definition}, or nil when it is
+// absent or unresolvable — the end of the chain either way. See membersOrNone.
+func baseOrNone(r TypeResolver, t *SimpleType) *SimpleType {
+	base, err := t.Base(r)
+	if err != nil {
+		return nil
+	}
+	return base
+}
+
+// checkMemberNotDerivedFrom rejects m — a member of d's ·transitive membership· —
+// when m IS d or is ·derived· from d, which is the whole of cos-st-restricts
+// clause 3.3 once the transitive membership is in hand (see
+// checkUnionMembershipAcyclic). The two are told apart in the message but not in
+// the verdict: one clause, one rule ID (STYLE E2). The rejection is charged to
+// the position of the member that closes the loop, which is the node in hand and
+// on the loop by construction.
+func checkMemberNotDerivedFrom(r TypeResolver, m, d *SimpleType) error {
+	for cur := m; cur != nil; cur = baseOrNone(r, cur) {
+		if cur != d {
+			continue
+		}
+		if m == d {
+			return xsderr.New(ruleCosSTRestricts, m.Loc(),
+				"%s is a member of its own transitive membership, but cos-st-restricts clause 3.3 forbids a union to be a member of it", simpleTypeLabel(d))
+		}
+		return xsderr.New(ruleCosSTRestricts, m.Loc(),
+			"%s is a member of the transitive membership of %s, which it is derived from, but cos-st-restricts clause 3.3 forbids a type derived from a union to be a member of that union's transitive membership", simpleTypeLabel(m), simpleTypeLabel(d))
 	}
 	return nil
 }
