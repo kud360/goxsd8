@@ -372,7 +372,7 @@ func contextDependent(r xsd.TypeResolver, t *xsd.SimpleType) (bool, error) {
 // before a schema finalizes. The MEMBER edge rests on nothing constructing a
 // by-name union-membership cycle, which holds only because no producer emits a
 // union at all — see xsd/derivation.go's CheckDerivation clause 3.3 paragraph
-// and the guard the union-widening follow-up to #447 replaces it with.
+// and the guard #738 replaces it with.
 func needsContext(r xsd.TypeResolver, t *xsd.SimpleType) (bool, error) {
 	variety, err := t.Variety(r)
 	if err != nil {

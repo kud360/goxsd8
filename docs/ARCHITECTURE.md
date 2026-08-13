@@ -201,9 +201,8 @@ represents it**:
   slots too as of #447, so an `itemType=` or `memberTypes=` naming a
   forward-declared type defers exactly as a `base=` does, and all three are
   resolved by one helper in one phase. `<union>` is the one arm the producer
-  still declines; the union-widening follow-up to #447 owns it, together
-  with the `cos-st-restricts` cl. 3.3 acyclicity guard a by-name membership
-  makes reachable.
+  still declines; #738 owns it, together with the `cos-st-restricts` cl. 3.3
+  acyclicity guard a by-name membership makes reachable.
 - All child collections are slices in document order. Maps exist only as
   internal indexes and never determine any order.
 - Nothing derivable is stored (STYLE D3): no effective-facet caches —

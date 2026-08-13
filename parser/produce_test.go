@@ -436,7 +436,7 @@ func TestProduceRestrictionNeitherBaseNorInlineRejected(t *testing.T) {
 	assertRule(t, err, "src-simple-type")
 }
 
-// TestProduceListItemTypeIsARef pins §3.16.2.1 map.std.list case 1a on the
+// TestProduceListItemTypeIsARef pins §3.16.2.3 map.std.list case 1a on the
 // itemType= form: the produced type's {variety} is list, its {base type
 // definition} is xs:anySimpleType directly (map.std.common case 2 — ONE
 // component, no anonymous intermediate), and its {item type definition} is the

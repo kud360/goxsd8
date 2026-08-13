@@ -125,7 +125,7 @@ type RestrictionDerivation struct{}
 // and SimpleType.Item is the read path.
 //
 // Item is a SimpleTypeOrRef because a <list itemType="…"> may name a type
-// declared later in the document (§3.16.2.1 map.std.list case 1a), so the
+// declared later in the document (§3.16.2.3 map.std.list case 1a), so the
 // producer emits SimpleTypeRef and finalize resolves it — the same deferral the
 // base slot takes. It is never absent: a list HAS an item, so NewSimpleType
 // rejects a nil Item and the two forgeable near-misses (SimpleTypeOrRef's arm ×

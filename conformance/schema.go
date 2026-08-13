@@ -1138,8 +1138,8 @@ func localAttributeDecidable(el *parser.Element) bool {
 //     child (§3.16.3 clause 2) is recursed into.
 //
 // <union> is DECLINED: the producer maps no union at all, so a case in that
-// shape would be scored against a schema it never built. It is the union-widening
-// follow-up to #447 that admits it.
+// shape would be scored against a schema it never built. It is #738 that admits
+// it.
 //
 // A <simpleType> naming TWO alternatives is admitted through whichever branch is
 // tested first, and correctly: the producer rejects that document outright

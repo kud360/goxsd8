@@ -1389,12 +1389,11 @@ func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.Simp
 		// GAP(parser): a <simpleType> whose body is <union> is not produced. The
 		// component model holds the shape — xsd.UnionDerivation's {member type
 		// definitions} are xsd.SimpleTypeOrRef slots, deferred by name exactly as
-		// itemType= is — so what remains is this mapping (§3.16.2.1 map.std.union:
+		// itemType= is — so what remains is this mapping (§3.16.2.4 map.std.union:
 		// memberTypes= in attribute order, then the inline <simpleType> children in
 		// document order) and the cos-st-restricts clause 3.3 acyclicity guard a
 		// by-name membership makes reachable, which must land in the same commit.
-		// The union-widening follow-up to #447 owns both; patch its number in here
-		// once it is filed.
+		// #738 owns both.
 		//
 		// It is a plain error and not a rule verdict: the schema is legal and this
 		// producer is incomplete, so charging src-simple-type would fabricate an

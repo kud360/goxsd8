@@ -209,12 +209,11 @@ const (
 // (unionMembershipHasList, derivedOKSimple) would not terminate on one. What
 // keeps that unconstructible is that no producer emits a UnionDerivation at all:
 // parser/produce.go declines <union>, so every union a parsed schema reaches has
-// an owned-only membership that must pre-exist it. The union-widening follow-up
-// to #447 lands the <union> producer arm and a Phase B checkUnionMembershipAcyclic
-// charging clause 3.3 in the SAME commit, and these walks come to rest on that
-// guard the way the base-chain walks rest on checkSimpleBaseAcyclic. A
-// programmatic caller building a by-name membership by hand today owes the
-// acyclicity itself.
+// an owned-only membership that must pre-exist it. #738 lands the <union>
+// producer arm and a Phase B checkUnionMembershipAcyclic charging clause 3.3 in
+// the SAME commit, and these walks come to rest on that guard the way the
+// base-chain walks rest on checkSimpleBaseAcyclic. A programmatic caller building
+// a by-name membership by hand today owes the acyclicity itself.
 //
 // Still deferred here, and why:
 //
@@ -606,8 +605,7 @@ func checkUnionGraph(r TypeResolver, t, base *SimpleType) error {
 // a Schema-less caller. The membership side rests on nothing constructing a
 // by-name union-membership cycle, which is true only because no producer emits a
 // UnionDerivation at all: see CheckDerivation's clause 3.3 paragraph for the
-// full statement and for the guard the union-widening follow-up to #447 replaces
-// it with.
+// full statement and for the guard #738 replaces it with.
 //
 // r resolves each {base type definition} hop, so an unresolvable one is an
 // ERROR rather than a false "not derived": answering false for a base that
@@ -1462,7 +1460,7 @@ func scaleValue(f Facet, loc xsderr.Loc, rule xsderr.Rule) (int, error) {
 // true only because no producer emits a UnionDerivation at all, since
 // UnionDerivation.Members itself now admits a forward by-name member. See
 // CheckDerivation's cos-st-restricts clause 3.3 paragraph for the full statement
-// and for the guard the union-widening follow-up to #447 replaces it with.
+// and for the guard #738 replaces it with.
 func unionMembershipHasList(r TypeResolver, u *SimpleType) (bool, error) {
 	uVariety, err := u.Variety(r)
 	if err != nil {
