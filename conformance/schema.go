@@ -637,32 +637,31 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 // schema's type definitions and so produce no verdict for it (GAP(xsd),
 // xsd/complexderivation.go). That is an under-rejection on a component the
 // redefinition's own verdict already covers structurally, the same safe direction
-// as the two fail-open clauses below.
+// as the residue below.
 //
 // A child with no name= declines rather than being waved through: the pairing is
 // keyed on (element type, name), and src-expredef requires a top-level definition
 // item of that name and kind in the redefined document, so a nameless child is
 // reported as a grammar fault rather than decided.
 //
-// Two fail-open clauses remain inside an admitted case, both in the SAFE
-// direction: src-redefine clause 6.2.2 (the redefining group must accept a subset
-// of the original's element sequences) and clause 7.2.2 (the redefining attribute
-// group must satisfy derivation-ok-restriction clause 3 against the original) are
-// not decided, so a case turning on either observes "valid" where the suite says
-// "invalid" — a recorded gap, never a pass. The document the <redefine> POINTS AT
-// is gated by closureDecidable, exactly as an <include>'s target is.
+// No fail-open src-redefine clause remains inside an admitted case: clause 7.2.2
+// is charged at finalize as of #503 and clause 6.2.2 as of #504, each over the
+// pairing the producer records between the redefinition and the original in S2.
+// The document the <redefine> POINTS AT is gated by closureDecidable, exactly as
+// an <include>'s target is.
 //
-// ONE fail-CLOSED residue sits alongside them, kept deliberately: a CHAINED
-// <redefine> of a <group>/<attributeGroup> — the redefined document redefining a
-// document of its own for the same name — is refused under src-expredef's closing
-// requirement, so such a case observes "invalid" whatever the suite says. The
-// producer carries the marker (parser/redefine.go's chainedOriginal, #585) and
-// #504/#503 own its retirement. The two suite cases in that shape,
-// MS-Schema2006-07-15/schL10 and /schM5, are declared invalid and turn on nothing
-// but the two fail-open clauses above, so the residue is the whole reason they
-// agree with the suite; retiring it moves them from right-for-the-wrong-reason to
-// a recorded gap, and closing #504/#503 to right. A chained <simpleType> or
-// <complexType> composes and is decided genuinely (MS-Additional2006-07-15/addB007).
+// ONE fail-CLOSED residue is kept deliberately: a CHAINED <redefine> of a
+// <group>/<attributeGroup> — the redefined document redefining a document of its
+// own for the same name — is refused under src-expredef's closing requirement, so
+// such a case observes "invalid" whatever the suite says. The producer carries the
+// marker (parser/redefine.go's chainedOriginal) and #744 owns its retirement,
+// which needs an xsd entry point for a redefinition that contributes no component:
+// charging both clauses now is NOT enough, because the two suite cases in that
+// shape, MS-Schema2006-07-15/schL10 and /schM5, are each invalid at the MIDDLE
+// level of their chain, which is the level clause 4.1.2 withholds. So the residue
+// is still the whole reason those two agree with the suite. A chained <simpleType>
+// or <complexType> composes and is decided genuinely
+// (MS-Additional2006-07-15/addB007).
 func redefineDecidable(el *parser.Element) bool {
 	for _, child := range el.Children() {
 		c, ok := child.(*parser.Element)

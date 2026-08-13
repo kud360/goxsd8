@@ -392,12 +392,19 @@ func declarationKey(el *Element) (componentKey, bool) {
 //
 // GAP(xsd): only the two kinds src-expredef clause 1 PAIRS compose — <simpleType>
 // and <complexType>. A chained <group>/<attributeGroup>, whose clause 2 is a
-// single-component substitution, is still refused on a schema §4.2.4 makes valid,
-// and is retired in the landing that closes #504 — the issue owning src-redefine
-// clause 6.2.2, now the only clause of the two such a chain turns on that is
-// still fail-open (7.2.2 is charged at finalize as of #503). Composing it while
-// 6.2.2 stays fail-open would trade a rejection for a "valid" verdict on the one
-// suite case in that shape whose invalidity turns on 6.2.2 alone.
+// single-component substitution, is still refused on a schema §4.2.4 makes valid.
+// What withholds it is no longer that src-redefine clauses 6.2.2 and 7.2.2 are
+// fail-open — both are charged at finalize now (#503, #504) — but that a chained
+// redefining declaration contributes NO component, while both clauses are charged
+// over a pairing that adds one (xsd.SchemaBuilder.AddRedefiningModelGroup and its
+// attributeGroup twin fuse the component and the obligation into one call). So on
+// a middle level of a chain there is nothing to fuse the obligation to, and
+// composing the chain today would ACCEPT the two suite cases in that shape —
+// MS-Schema2006-07-15/schL10 and /schM5 are each invalid at the MIDDLE level, on
+// 6.2.2 and 7.2.2 respectively, and satisfy their own clause at the outer level.
+// Measured by collapsing this function and running the fixture, not predicted.
+// #744 owns the retirement, and needs an xsd entry point for both kinds.
+//
 // The direction is fail-CLOSED, and the value withheld for those two kinds — the
 // rs.originals entry — has exactly three readers, all of which see the miss:
 // produceRedefinition REJECTS on it, charging src-expredef's closing requirement;
@@ -733,7 +740,15 @@ func (p *producer) produceRedefinition(rs *redefineSet, e redefineEntry) error {
 		if err != nil {
 			return err
 		}
-		p.builder.AddModelGroup(mgd)
+		original, restricts, err := p.redefinedGroupRestricted(decl, qn)
+		if err != nil {
+			return err
+		}
+		if !restricts {
+			p.builder.AddModelGroup(mgd) // clause 6.1: a self-reference, no containment obligation
+			return nil
+		}
+		p.builder.AddRedefiningModelGroup(mgd, original)
 		return nil
 	case "attributeGroup":
 		ag, err := p.buildAttributeGroup(qn, decl)
@@ -858,21 +873,18 @@ func (p *producer) namesSelf(derivation *Element, qn xsd.QName) (bool, error) {
 // exist, 6.1.1 requires exactly one and 6.1.2 requires its minOccurs and
 // maxOccurs both to be 1 (or ·absent·).
 //
-// GAP(xsd): clause 6.2 — the NO-self-reference branch — is fail-open (#504).
-// 6.2.1 is charged (it is src-expredef's closing requirement, already enforced
-// by produceRedefinition), but 6.2.2 requires the redefining group's {model
-// group} to accept "a subset of the element sequences accepted by that model
-// group definition in S2", a language-containment question needing the same
-// content-model engine cos-content-act-restrict (#263) needs and which this
-// package does not have. It UNDER-rejects: a redefinition that widens the group
-// it replaces is accepted here, never wrongly refused.
+// It charges NOTHING on clause 6.2's no-self-reference branch, and nothing is
+// missing there. 6.2.1 is src-expredef's closing requirement, already charged by
+// produceRedefinition; 6.2.2 compares the element sequences two assembled model
+// groups accept and is charged at finalize, over the pairing produceRedefinition
+// hands xsd.SchemaBuilder.AddRedefiningModelGroup (redefinedGroupRestricted).
 func (p *producer) checkRedefinedGroup(decl *Element, qn xsd.QName) error {
 	refs, err := p.selfReferences(decl, qn, "group", true)
 	if err != nil {
 		return err
 	}
 	if len(refs) == 0 {
-		return nil // clause 6.2, fail-open above
+		return nil // clause 6.2, charged at finalize
 	}
 	if len(refs) > 1 {
 		return xsderr.New(ruleSrcRedefine, refs[1].Loc(),
@@ -939,6 +951,77 @@ func (p *producer) redefinedAttributeGroupRestricted(decl *Element, qn xsd.QName
 		return xsd.AttributeGroupDefinition{}, false, err
 	}
 	return original, true, nil
+}
+
+// redefinedGroupRestricted returns the model group definition of S2 — the
+// redefined schema document — a subset of whose element sequences a redefining
+// <group> must accept under src-redefine clause 6.2.2, built through the producer
+// of the document that declares it.
+//
+// ok is false on clause 6.1's branch, where decl carries a self-reference: that
+// branch states no containment obligation at all, so the redefinition is added as
+// an ordinary model group definition. Which branch applies is clause 6's own
+// dispatch, decided here the way checkRedefinedGroup decides it — by counting
+// self-references under the same <element>-ancestor exclusion, the same walk
+// rather than a stored count (STYLE D3).
+//
+// A miss on originals is likewise reported as "no obligation", not as a fault:
+// produceRedefinition has already charged src-expredef's closing requirement for
+// exactly that miss, so this call is reached only when the entry is recorded.
+//
+// It differs from its attributeGroup twin (redefinedAttributeGroupRestricted) in
+// two ways, each of which would otherwise be silent:
+//
+//   - it calls produceModelGroupDefinition, never buildModelGroupDefinition.
+//     That memo is keyed by name in the ASSEMBLY-SHARED symbol table
+//     (symbols.builtGroups), and produceRedefinition has already filled it under
+//     this very expanded name with the REDEFINITION, so the memoised builder
+//     would hand back R as B and 6.2.2 would decide V(R) ⊆ V(R) — true always,
+//     fail-open permanently, with a green suite. It is the unmemoised layer #505
+//     drops to for its own clause-1.1 original, and it writes no memo entry.
+//   - it produces the original through discardingComponents, so the body's
+//     registrations reach a throwaway builder.
+func (p *producer) redefinedGroupRestricted(decl *Element, qn xsd.QName) (xsd.ModelGroupDefinition, bool, error) {
+	refs, err := p.selfReferences(decl, qn, "group", true)
+	if err != nil {
+		return xsd.ModelGroupDefinition{}, false, err
+	}
+	if len(refs) > 0 {
+		return xsd.ModelGroupDefinition{}, false, nil // clause 6.1
+	}
+	src, ok := p.originalFor(decl, qn, "group")
+	if !ok {
+		return xsd.ModelGroupDefinition{}, false, nil
+	}
+	original, err := src.owner.discardingComponents().produceModelGroupDefinition(qn, src.elem)
+	if err != nil {
+		return xsd.ModelGroupDefinition{}, false, err
+	}
+	return original, true, nil
+}
+
+// discardingComponents returns a shallow copy of p whose builder is a throwaway,
+// for producing a declaration §4.2.4 clause 4.1.2 excepts from the components its
+// document contributes: the component VALUE is wanted and every registration it
+// performs on the way is not.
+//
+// The one registration reachable from a <group> body is AddIdentityConstraint —
+// produceIdentityConstraint's name= arm, for a named <unique>/<key>/<keyref> on a
+// local <element>; every other builder.Add* call site is run's top-level dispatch
+// or produceRedefinition's own — and it is exactly the one that must not run. The
+// original is in no property, so this would be the FIRST registration of that
+// constraint, out of document order (STYLE D2) and colliding sch-props-correct
+// (§3.17.6.1) clause 2 against the redefinition's own copy of the same named key,
+// which is the commonest redefine shape: a false reject.
+//
+// Everything else the copy shares, symbols above all. An on-demand build reached
+// from the body runs through the DECLARING document's own producer (typeSource's
+// owner — resolveModelGroup and resolveBaseType alike), which this copy does not
+// touch, so it registers with the real builder exactly as it would have.
+func (p *producer) discardingComponents() *producer {
+	discarding := *p
+	discarding.builder = xsd.NewSchemaBuilder()
+	return &discarding
 }
 
 // selfReferences collects, in document order, every descendant of decl of

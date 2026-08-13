@@ -192,6 +192,32 @@ func TestParseOverrideRedefinedAttributeGroupClause722(t *testing.T) {
 	mustRule(t, err, "src-redefine", "7.2.2", "c")
 }
 
+// TestParseOverrideRedefinedGroupClause622 is the clause 6.2 twin of the test
+// above: the SUBSTITUTE carries no self-reference, so src-redefine clause 6.2.2
+// obliges its {model group} to accept a subset of lib.xsd's original's element
+// sequences, and it does not — it adds an element the original never admits.
+// Reaching the original by walking the <redefine>'s own children would miss it
+// entirely (the substitute is parented under the <override>), and the miss would
+// read as "no obligation" and accept.
+func TestParseOverrideRedefinedGroupClause622(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:override schemaLocation="mid.xsd">`+
+			`<xs:group name="g"><xs:sequence>`+
+			`<xs:element name="a" type="xs:string"/>`+
+			`<xs:element name="c" type="xs:string"/>`+
+			`</xs:sequence></xs:group>`+
+			`</xs:override>`),
+		"mid.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+			`<xs:group name="g"><xs:sequence>`+
+			`<xs:element name="a" type="xs:string"/>`+
+			`</xs:sequence></xs:group>`+
+			`</xs:redefine>`),
+		"lib.xsd": wrap("urn:a", `<xs:group name="g"><xs:sequence>`+
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`),
+	})
+	mustRule(t, err, "src-redefine", "6.2.2")
+}
+
 // TestParseNestedOverrideRedefinedGroupResolvesToOriginal is the same resolution
 // two <override> levels down, where the substitute reaching the <redefine> child
 // is the one §F.2 clause 4.1 kept when the inner override was composed under the

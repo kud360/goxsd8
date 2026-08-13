@@ -677,9 +677,13 @@ func mustComplexTypeContext(t *testing.T, c xsd.ComplexType) xsd.ComplexTypeDefi
 // TestParseRedefineChainedGroupStillRefused pins the deliberate fail-CLOSED half
 // of the chain (the GAP( at chainedOriginal, parser/redefine.go): a chained
 // <group> — src-expredef clause 2's single-component kind — is refused under the
-// closing requirement even though §4.2.4 makes the schema valid, because the only
-// clauses it turns on are the fail-open 6.2.2 (#504) and 7.2.2 (#503). Retire this
-// test with the marker.
+// closing requirement even though §4.2.4 makes the schema valid.
+//
+// The reason is no longer that clause 6.2.2 is fail-open — this test's own file
+// pins the clause being charged. It is that a chained redefining declaration
+// contributes NO component (§4.2.4 clause 4.1.2, the outer redefinition owns the
+// name), while 6.2.2 is charged over a pairing that adds one, so a MIDDLE level's
+// obligation has nothing to attach to. Retire this test with the marker (#744).
 func TestParseRedefineChainedGroupStillRefused(t *testing.T) {
 	_, err := parseMap(t, "d1.xsd", chainedDocs(
 		`<xs:group name="g"><xs:sequence><xs:group ref="tns:g"/>`+
@@ -689,6 +693,26 @@ func TestParseRedefineChainedGroupStillRefused(t *testing.T) {
 		`<xs:group name="g"><xs:sequence>`+
 			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`))
 	mustRule(t, err, "src-expredef")
+}
+
+// modelGroupElementNames lists, in document order, the local names of every
+// element declaration reachable through g's resolved particle tree — the leaves a
+// redefining <group> ends up with once its self-reference has been inlined.
+func modelGroupElementNames(g xsd.ModelGroup) []string {
+	var names []string
+	for _, p := range g.Particles() {
+		resolved, ok := p.Term().(xsd.ResolvedTerm)
+		if !ok {
+			continue
+		}
+		switch inner := resolved.Term.(type) {
+		case xsd.ElementDeclaration:
+			names = append(names, inner.Name().Local)
+		case xsd.ModelGroup:
+			names = append(names, modelGroupElementNames(inner)...)
+		}
+	}
+	return names
 }
 
 // ctNamed is a plain top-level <complexType name="ct"> declaring one element
@@ -949,6 +973,143 @@ func TestParseRedefineAttributeGroupClause722Accepts(t *testing.T) {
 	ag := mustAttributeGroup(t, s, xsd.QName{Space: "urn:a", Local: "ag"})
 	if got := len(ag.AttributeUses()); got != 1 {
 		t.Fatalf("redefined {urn:a}ag has %d attribute uses, want 1: clause 7.2 inherits nothing from the original", got)
+	}
+}
+
+// TestParseRedefineGroupClause622 covers src-redefine clause 6.2.2 over the
+// producer: a redefining <group> with NO self-reference must accept a subset of
+// the element sequences the original in S2 accepts, charged to src-redefine at
+// finalize over the pairing produceRedefinition records.
+//
+// The widening cases are also the regression test for the pairing's own hazard:
+// the original is built through the UNMEMOISED produceModelGroupDefinition,
+// because produceRedefinition has already filled symbols.builtGroups[{urn:a}g]
+// with the redefinition. Fetched through the memo instead, B would BE R, every
+// case below would decide V(R) ⊆ V(R), and the widening rows would pass as
+// "valid" with nothing else in the suite noticing.
+func TestParseRedefineGroupClause622(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		redefining string
+		original   string
+		wantSubset bool
+	}{
+		{"an added element the original never admits",
+			`<xs:element name="a" type="xs:string"/><xs:element name="c" type="xs:string"/>`,
+			`<xs:element name="a" type="xs:string"/>`, false},
+		{"an occurrence range widened",
+			`<xs:element name="a" type="xs:string" maxOccurs="5"/>`,
+			`<xs:element name="a" type="xs:string" maxOccurs="3"/>`, false},
+		{"an optional member dropped",
+			`<xs:element name="a" type="xs:string"/>`,
+			`<xs:element name="a" type="xs:string"/><xs:element name="b" type="xs:string" minOccurs="0"/>`, true},
+		{"an occurrence range narrowed inside a wide one",
+			`<xs:element name="a" type="xs:string" minOccurs="3" maxOccurs="6"/>`,
+			`<xs:element name="a" type="xs:string" minOccurs="0" maxOccurs="100"/>`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := parseMap(t, "main.xsd", map[string]string{
+				"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+					`<xs:group name="g"><xs:sequence>`+tc.redefining+`</xs:sequence></xs:group>`+
+					`</xs:redefine>`),
+				"lib.xsd": wrap("urn:a", `<xs:group name="g"><xs:sequence>`+
+					tc.original+`</xs:sequence></xs:group>`),
+			})
+			if !tc.wantSubset {
+				mustRule(t, err, "src-redefine", "6.2.2", "{urn:a}g")
+				return
+			}
+			if err != nil {
+				t.Fatalf("Parse: %v — the redefinition accepts a subset of the original's sequences", err)
+			}
+			// Clause 6.2 inherits nothing: the redefinition's {model group} is its own
+			// <sequence> and the original contributes no component (clause 4.1.2).
+			mgd := mustModelGroup(t, s, xsd.QName{Space: "urn:a", Local: "g"})
+			if got := modelGroupElementNames(mgd.ModelGroup()); !slices.Equal(got, []string{"a"}) {
+				t.Fatalf("the redefinition's {model group} declares %v, want its own [a]", got)
+			}
+		})
+	}
+}
+
+// TestParseRedefineGroupClause622OriginalRefResolved pins the src-resolve
+// coverage the pairing's B side would otherwise have none of. The ORIGINAL is in
+// no property and no index (§4.2.4 clause 4.1.2), so nothing but the pairing
+// reaches it, and addTerm answers an unresolvable ref inside it with an EMPTY
+// fragment: the dangling name would silently shrink B instead of being reported —
+// accepting the schema in the <element ref> case below, and in the <group ref>
+// one manufacturing a clause-6.2.2 rejection of a redefinition that violates
+// nothing. Both are charged src-resolve against the name that does not resolve.
+func TestParseRedefineGroupClause622OriginalRefResolved(t *testing.T) {
+	for _, tc := range []struct{ name, original string }{
+		// The miss swallowed: B still accepts (a), so the schema would be accepted
+		// with a name that resolves to nothing.
+		{"element ref", `<xs:element name="a" type="xs:string"/><xs:element ref="tns:nope"/>`},
+		// The miss turned into a verdict: B would accept the empty sequence ALONE,
+		// so the redefinition's own (a) would fail clause 6.2.2.
+		{"group ref", `<xs:group ref="tns:nope"/>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseMap(t, "main.xsd", map[string]string{
+				"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+					`<xs:group name="g"><xs:sequence>`+
+					`<xs:element name="a" type="xs:string"/>`+
+					`</xs:sequence></xs:group>`+
+					`</xs:redefine>`),
+				"lib.xsd": wrap("urn:a", `<xs:group name="g"><xs:sequence>`+
+					tc.original+`</xs:sequence></xs:group>`),
+			})
+			mustRule(t, err, "src-resolve", "{urn:a}nope")
+		})
+	}
+}
+
+// TestParseRedefineGroupClause622OriginalRegistersNothing pins the other half of
+// how the original is built (discardingComponents): producing it must register
+// NO component. §4.2.4 clause 4.1.2 excepts the original from what D1's schema
+// includes, so a named <key> on a local element of its body would be registered
+// for the FIRST time by the 6.2.2 pairing and collide sch-props-correct clause 2
+// against the redefinition's own copy of that key — the commonest redefine shape,
+// a redefinition that keeps the body it narrows.
+func TestParseRedefineGroupClause622OriginalRegistersNothing(t *testing.T) {
+	keyed := `<xs:element name="e"><xs:key name="k">` +
+		`<xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key></xs:element>`
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+			`<xs:group name="g"><xs:sequence>`+keyed+`</xs:sequence></xs:group>`+
+			`</xs:redefine>`),
+		"lib.xsd": wrap("urn:a", `<xs:group name="g"><xs:sequence>`+keyed+
+			`<xs:element name="opt" type="xs:string" minOccurs="0"/>`+
+			`</xs:sequence></xs:group>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := len(s.IdentityConstraints()); got != 1 {
+		t.Fatalf("{identity-constraint definitions} has %d members, want 1: only the redefinition's <key> is registered", got)
+	}
+}
+
+// TestParseRedefineGroupClause622NotChargedOnSelfReference is clause 6's
+// dispatch: with a counted self-reference the redefinition is on clause 6.1's
+// branch, which states NO containment obligation, so a body that widens what it
+// redefines — the original's particles plus one more — is accepted. Charging
+// 6.2.2 there would reject every canonical extension-by-redefinition.
+func TestParseRedefineGroupClause622NotChargedOnSelfReference(t *testing.T) {
+	s, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+			`<xs:group name="g"><xs:sequence><xs:group ref="tns:g"/>`+
+			`<xs:element name="b" type="xs:string"/></xs:sequence></xs:group>`+
+			`</xs:redefine>`),
+		"lib.xsd": wrap("urn:a", `<xs:group name="g"><xs:sequence>`+
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`),
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v — clause 6.1's branch states no containment obligation", err)
+	}
+	mgd := mustModelGroup(t, s, xsd.QName{Space: "urn:a", Local: "g"})
+	if got := modelGroupElementNames(mgd.ModelGroup()); !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("the redefinition's {model group} declares %v, want [a b]", got)
 	}
 }
 

@@ -168,18 +168,6 @@
 //
 // # Composition gaps
 //
-//   - GAP(xsd): src-redefine clause 6.2.2 — the <group>
-//     no-self-reference branch — is fail-open. It asks whether the
-//     redefining group's {model group} accepts a SUBSET of the element
-//     sequences the original accepts, a language-containment question
-//     needing the content-model engine cos-content-act-restrict (#263)
-//     needs. Its 6.2.1 half IS charged, as src-expredef's closing
-//     requirement. It UNDER-rejects: a redefinition that widens rather
-//     than restricts is accepted, never wrongly refused. Owned by #504.
-//     The <attributeGroup> twin, clause 7.2.2, is no longer a gap: the
-//     producer pairs the redefinition with the original it must restrict
-//     and xsd charges clause 3 of derivation-ok-restriction (§3.4.6.3)
-//     over the pair at finalize.
 //   - GAP(xsd): a CHAINED <xs:redefine> of a <group> or an
 //     <attributeGroup> — one whose redefined document redefines a
 //     document of its own for the same name — is REFUSED under
@@ -187,9 +175,9 @@
 //     4.1.1 makes valid. The two kinds src-expredef clause 1 pairs,
 //     simpleType and complexType, do compose. Fail-CLOSED, with one
 //     consumer: produceRedefinition's closing-requirement check
-//     (parser/redefine.go's chainedOriginal, where the marker sits).
-//     Retire it with #504 and #503, which own the only clauses such a
-//     chain turns on.
+//     (parser/redefine.go's chainedOriginal, where the marker sits and
+//     records why the two clauses being charged is not enough). Owned
+//     by #744.
 //   - GAP(xsd): §5.3 (Missing Sub-components) is never reported as such.
 //     A namespace an <xs:import> declares but no document of the
 //     assembly supplies — a bare import, or one whose schemaLocation
