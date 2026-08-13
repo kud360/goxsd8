@@ -1389,8 +1389,8 @@ func execPDecimalCase(backend value.Backend, sym map[xsd.QName]*xsd.SimpleType, 
 	// One component per restriction step, base-first, so xsd.NewSimpleType performs
 	// the pairwise facet overlay (st-restrict-facets §3.16.6.4) at every step. The
 	// applicable-facet check is against precisionDecimal at every step because
-	// {primitive type definition} is invariant along an atomic chain (cos-st-restricts
-	// clause 1.1 §3.16.6.2, cos-applicable-facets §4.1.5) — a restriction never widens
+	// {primitive type definition} is invariant along an atomic chain (st-restrict-facets
+	// clause 2 §3.16.6.4, cos-applicable-facets §4.1.5) — a restriction never widens
 	// what applies. A chain of zero steps is the attribute typed xs:precisionDecimal
 	// directly, whose tested type IS the seeded builtin.
 	leaf := builtinType
