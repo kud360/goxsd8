@@ -132,30 +132,56 @@ horizontal completeness.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #447 | `xs:simpleType` with a `union`/`list` body unproduced — `datatypes`, pdecimal019/020 the measured cost |
-| 2 | #504 | `src-redefine` clause 6.2.2, fail-open. **Startable now — #503 has landed**, and this landing carries the decidability widening. Read the coupling note below |
-| 3 | #626 | README's CLI section is false about exit codes today; one sentence, and it precedes #472 |
-| 4 | #669 | README's Library snippet does not compile, and the example pointer omits `parser`, `xsd`, and `xsd/example_test.go` |
-| 5 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
-| 6 | #672 + #687 | the open CLI-contract decisions (`-version`; scoped help, the bareword `help`, and the help-spelling variants a third persona pass just added) |
-| 7 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 1 | #504 | `src-redefine` clause 6.2.2, fail-open. **Startable now — #503 has landed**, and this landing carries the decidability widening. Read the coupling note below |
+| 2 | #626 | README's CLI section is false about exit codes today; one sentence, and it precedes #472 |
+| 3 | #669 | README's Library snippet does not compile, and the example pointer omits `parser`, `xsd`, and `xsd/example_test.go` |
+| 4 | #514 | a typo'd subcommand and an unbuilt one are indistinguishable — fix before #472 makes it misleading |
+| 5 | #672 + #687 | the open CLI-contract decisions (`-version`; scoped help, the bareword `help`, and the help-spelling variants a third persona pass just added) |
+| 6 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
 
-**#590 held row 2 and has landed** (PR #737, `520ed9f`, `datatypes` 1156 →
-1161, all five `PDecimal/pdecimal016/instance/*`). Its row is dropped rather
-than replaced, and it **sharpens row 1 rather than competing with it**:
-#447's *"pdecimal019/020 the measured cost"* is now EXACT, not approximate —
-after this landing those four cases are the only PDecimal declines left in the
-census, which fell 13 candidates → 8. The landing **unblocked nothing** (all 26
-`blocked` bodies scanned; none names #590 in any section) and **owed no
-`kind/gap` filing**: it retired and added no `GAP(` marker — it widened a
-decline path, not a marked fail-open — `gapaudit`'s group 1 is empty, and no
-OPEN issue names `pdecimal016`.
+**#447 held row 1 and has landed** (PR #739, `92a2768`, `schema` 9833 →
+11405, **+1572**). Its row is dropped rather than replaced, because the row
+had become half-true in **both** halves and no edit could rescue it. Its
+lane was wrong: it read *"— `datatypes`, pdecimal019/020 the measured
+cost"*, and the landing moved `schema` by +1572 while `datatypes` did not
+move at all. Its scope was half-discharged: the `<list>` producer landed and
+`pdecimal019` flipped, but `<union>` and `pdecimal020` were carved out
+mid-implementation into **#738**, which is `ready` and unbanded. **This is
+the third consecutive landing whose band row's own text was wrong about its
+own issue** — #442's named the wrong element, #590's row was fine but #447's
+was wrong in the lane it claimed. A row that survives one landing untouched
+is the failure mode; the rows are the deliverable and they go stale in
+place.
+
+The +1572 is not the named cohort: `simpleTypeDecidable` required a
+`<restriction>` child, so every schema using `<xs:list>` anywhere was
+declined wholesale regardless of what it tested. The arbiter attributed all
+1572 case by case (1570 `<list>` in closure, 2 the two-alternative
+rejection), so the figure is explained rather than banked on trust.
+
+**The landing unblocked exactly one issue**: #738, whose `## Depends on`
+named #447 alone — `blocked` → `ready`. Its premise is verified on `main`,
+not assumed: both widened slots are in `xsd/simpletype.go` and `pdecimal020`
+is still `fail`. No other `blocked` body names #447.
+
+**Three follow-ups filed, none banded** — ranking them is a re-derivation
+this pass does not do. **#740**: the `<enumeration>` E2 fault in
+`restrictionFacets` — a fabricated `src-simple-type` verdict on a legal
+schema plus the matching gate decline, `pdecimal006` the named cost, and the
+same two-refusal shape #447 just worked through. **#741**: `go tool surface`
+reports `unchanged` for this landing even though it changed two exported
+struct field **types**, because the surface model is identifier names only —
+a T5 check whose green is not evidence. **#742**: two `simpleTypeBody`
+rejection strings cite §3.16.2.1 for the content model, which is §3.16.2.
+`gapaudit`'s marker side is clean for this landing: the `<list>` decline site
+is gone rather than repointed, the one surviving `GAP(parser)` names the open
+#738, and no marker anywhere names the now-closed #447.
 
 **#442's landing still stands one row back**: its three follow-ups — #731,
 #732 and #733, the `xs:attribute` analogue its band row's wrong text had
 concealed — are filed, `ready` and unbanded.
 
-**Rows 3–6 sit ahead of row 7 on cost, not importance.** Each is a sentence
+**Rows 2–5 sit ahead of row 6 on cost, not importance.** Each is a sentence
 or a dispatch branch while the CLI surface is still empty; taken after #472
 every one of them is a change to shipped behaviour. #472's own Acceptance carries the `-version` decision, so if it is
 taken first it must discharge #672 rather than leave it contradicting the
@@ -201,7 +227,7 @@ charge in `recordOriginal`; #699 added `rejectProhibitedAttrs` to
 `newRedefineSet`; #506 inserted ~45 lines and moved every marker line number
 the #585 and #505 threads cite; #503 added the clause-7.1-vs-7.2 branch,
 repointed the `chainedOriginal` marker to #504 alone and deleted the clause-7.2
-gap. Row 4 (#504), #706 and #726 all open that file next.
+gap. Row 1 (#504), #706 and #726 all open that file next.
 
 **Next planning action: the queue-wide reconciliation this pass bought its
 carve by skipping.** Step 3 has not run in full since 2026-08-10, and this
