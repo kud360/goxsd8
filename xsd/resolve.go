@@ -230,6 +230,9 @@ func (s *Schema) resolve() error {
 	if err := s.checkAttributeGroupRedefinitions(); err != nil {
 		return err
 	}
+	if err := s.checkModelGroupRedefinitions(); err != nil {
+		return err
+	}
 	if err := s.checkSubstitutionGroupTypes(); err != nil {
 		return err
 	}
@@ -285,6 +288,19 @@ func (s *Schema) resolveReferences() error {
 	}
 	for _, mgd := range s.modelGroups {
 		if err := s.resolveModelGroup(mgd.ModelGroup(), mgd.Loc()); err != nil {
+			return err
+		}
+	}
+	// The S2 originals of the <group> redefinitions, in pairing order. They are in
+	// no property and no index (§4.2.4 clause 4.1.2), so the loop above reaches
+	// none of them — yet checkModelGroupRedefinitions walks each as the B side of
+	// src-redefine clause 6.2.2, and addTerm (particleattribution.go) answers an
+	// unresolved <element ref>/<group ref> with an empty fragment. On B that
+	// SHRINKS the language the redefinition must be a subset of and manufactures a
+	// rejection, so a dangling name here is charged src-resolve as its own error
+	// rather than silently deciding someone else's clause.
+	for _, r := range s.modelGroupRedefinitions {
+		if err := s.resolveModelGroup(r.original.ModelGroup(), r.original.Loc()); err != nil {
 			return err
 		}
 	}

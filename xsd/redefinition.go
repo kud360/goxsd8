@@ -3,14 +3,17 @@ package xsd
 import "github.com/kud360/goxsd8/xsderr"
 
 // ruleSrcRedefine is Schema Representation Constraint: Redefinition Constraints
-// and Semantics (Structures §4.2.4, id="src-redefine"). This package charges ONE
+// and Semantics (Structures §4.2.4, id="src-redefine"). This package charges TWO
 // of its clauses — 7.2.2, the obligation that a redefining <attributeGroup> with
-// no self-reference RESTRICT the definition it replaces — because that clause
-// invokes derivation-ok-restriction (§3.4.6.3) clause 3 over two components, and
-// a constraint over assembled components is decided at finalize whatever
-// document-level rule states it. Every other src-redefine clause is a fact about
-// a schema DOCUMENT's element tree and is charged by the producer, which holds
-// that tree and declares the same rule ID for it.
+// no self-reference RESTRICT the definition it replaces, and 6.2.2, the
+// obligation that a redefining <group> with no self-reference accept a SUBSET of
+// the element sequences the definition it replaces accepts — because each states
+// a relation over two assembled components (derivation-ok-restriction §3.4.6.3
+// clause 3 for the one, language containment for the other), and a constraint
+// over assembled components is decided at finalize whatever document-level rule
+// states it. Every other src-redefine clause is a fact about a schema DOCUMENT's
+// element tree and is charged by the producer, which holds that tree and declares
+// the same rule ID for it.
 //
 // Charging a §4.2.4 constraint from here is the footing ruleSrcResolve
 // (resolve.go) already stands on: §3.17.6.2 is a Schema Representation
@@ -163,4 +166,145 @@ func attributeGroupRedefinitionRestriction(g, original AttributeGroupDefinition)
 		derived: attributeGroupAttributeSide(g, "the redefining attribute group "+g.Name().String()),
 		base:    attributeGroupAttributeSide(original, "the original attribute group "+original.Name().String()),
 	}
+}
+
+// modelGroupRedefinition pairs a redefining model group definition with the
+// definition of the same expanded name in S2, the redefined schema document, so
+// finalize can charge src-redefine clause 6.2.2 against the pair.
+//
+// name is the handle: the redefinition itself is in {model group definitions}
+// like any other top-level definition, so it is looked up rather than stored
+// twice (STYLE D3). original is stored, because it is in no property and no
+// index — §4.2.4 clause 4.1.2 excepts an explicitly redefined definition from the
+// components D1's schema includes, so this field is the only thing that holds it.
+type modelGroupRedefinition struct {
+	name     QName                // the redefinition's {name}: the handle into modelGroupIndex
+	original ModelGroupDefinition // S2's definition; in no index, in no property
+}
+
+// AddRedefiningModelGroup appends d — a top-level model group definition that is
+// a ·redefinition· (§4.2.4) of original — in document order, exactly as
+// [SchemaBuilder.AddModelGroup] does, and records the pairing src-redefine clause
+// 6.2.2 decides at Finalize: d's {model group} must accept a subset of the
+// element sequences accepted by original's (§3.7.2).
+//
+// original is the definition of the same expanded name in S2, the redefined
+// schema document. It contributes NO component: §4.2.4 clause 4.1.2 excepts an
+// explicitly redefined definition from the components D1's schema includes, so
+// original enters neither {model group definitions} nor the by-name index, and is
+// reachable through no accessor. Passing it to AddModelGroup instead would
+// fabricate a sch-props-correct (§3.17.6.1) clause 2 duplicate against the very
+// definition it replaces.
+//
+// Call this only on clause 6.2's branch — the redefining <group> with NO
+// self-reference. Clause 6.1's branch states no containment obligation and takes
+// plain AddModelGroup; which branch applies is the producer's verdict
+// (src-redefine clause 6's own dispatch, under 6.1's <element>-ancestor
+// exclusion), and this package does not infer it.
+//
+// It panics if either definition has an absent {name}, which is the zero
+// ModelGroupDefinition and no other value: NewModelGroupDefinition rejects the
+// other route (mgd-props-correct). A zero original would present an empty {model
+// group} as B and reject every redefinition against it, so the guard is on the
+// fail-closed direction and not decorative.
+func (b *SchemaBuilder) AddRedefiningModelGroup(d, original ModelGroupDefinition) {
+	if d.Name().Local == "" {
+		panic("xsd: SchemaBuilder.AddRedefiningModelGroup: redefinition with an absent {name}")
+	}
+	if original.Name().Local == "" {
+		panic("xsd: SchemaBuilder.AddRedefiningModelGroup: redefined original with an absent {name}")
+	}
+	b.modelGroups = append(b.modelGroups, d)
+	b.modelGroupRedefinitions = append(b.modelGroupRedefinitions, modelGroupRedefinition{name: d.Name(), original: original})
+}
+
+// checkModelGroupRedefinitions is src-redefine clause 6.2.2, charged over every
+// pairing AddRedefiningModelGroup recorded, in the order they were added (STYLE
+// D2 — never over modelGroupIndex, so the first reported failure is
+// deterministic).
+//
+// The clause is LANGUAGE CONTAINMENT and nothing else: the redefinition's {model
+// group} "accepts a subset of the element sequences accepted by that model group
+// definition in S2". §3.8.4's key-lvip fixes what "accepts" means — V(P), the
+// sequences ·locally valid· with respect to a particle — so the question is
+// V(R.{model group}) ⊆ V(B.{model group}), which is cos-content-act-restrict
+// (§3.4.6.4) clause 1 asked of two Model Groups instead of two Content Types. It
+// is decided by that constraint's own engine (contentrestricts.go), never by a
+// second traversal of the same automaton (STYLE T4).
+//
+// WRAPPING each Model Group in a synthetic Content Type is the reduction
+// cvc-complex-content (§3.4.4.3) clause 1 licenses: with {open content} absent, a
+// Content Type's ·locally valid· sequences are exactly its {particle}'s, so an
+// element-only ElementContent whose {particle} is the group at 1..1 accepts
+// exactly V(g). Both sides are wrapped IDENTICALLY, because the wrapper is a
+// reduction device and any asymmetry in it becomes an asymmetry in the verdict.
+//
+// The scope is restrictsLanguage. 6.2.2 states clause 1's question and invokes
+// cos-content-act-restrict for nothing, so clause 2's ·default binding·
+// subsumption — which derivation-ok-restriction clause 2.4.2 does invoke — is not
+// charged here: a redefining group that retypes an element while accepting the
+// same sequences satisfies 6.2.2 and clause 2 would reject it.
+//
+// PHASE ORDER: it runs immediately after checkAttributeGroupRedefinitions, its
+// clause-7.2.2 twin, and needs both Phase A (every <element ref>/<group ref> on
+// EITHER side resolves — resolveReferences walks the originals for exactly this
+// reason) and Phase B's checkModelGroupsAcyclic, since the automaton construction
+// follows <group ref> edges with no visited set (PRINCIPLES 9). It follows no
+// chain of its own: the pairing is a single edge from a named definition to an
+// off-index component.
+//
+// GAP(xsd): contentTypeRestricts provisionally accepts whenever an ·all· group is
+// reachable in R's content model, on a licence §3.4.6.3 grants
+// derivation-ok-restriction clause 2.4.2 BY NAME. §4.2.4 grants clause 6.2.2 no
+// such licence, so the leniency is an implementation incompleteness at this call
+// site rather than a spec-licensed one: a redefining <group> reaching an <all> is
+// accepted undecided. The direction is fail-open — a missed rejection, never a
+// fabricated one, since the star addAll models an ·all· with over-approximates
+// its language — and #743 owns the retirement. The same function's open-content
+// arm is inert here: the wrapper below never sets OpenContent.
+func (s *Schema) checkModelGroupRedefinitions() error {
+	for _, r := range s.modelGroupRedefinitions {
+		d, ok := s.modelGroupIndex[r.name]
+		if !ok {
+			panic("xsd: checkModelGroupRedefinitions: no model group definition named " + r.name.String() +
+				": AddRedefiningModelGroup records the pairing and the component together")
+		}
+		redefining, err := modelGroupContent(d.ModelGroup(), d.Loc())
+		if err != nil {
+			return err
+		}
+		original, err := modelGroupContent(r.original.ModelGroup(), r.original.Loc())
+		if err != nil {
+			return err
+		}
+		if s.contentTypeRestricts(redefining, original, restrictsLanguage) {
+			continue
+		}
+		return xsderr.New(ruleSrcRedefine, d.Loc(),
+			"the redefining <group> %s accepts element sequences the original model group definition it replaces (at %s) does not, but src-redefine clause 6.2.2 requires its {model group} to accept a SUBSET of the sequences that definition in S2 accepts (§3.7.2)", r.name, r.original.Loc())
+	}
+	return nil
+}
+
+// modelGroupContent is the synthetic Content Type checkModelGroupRedefinitions
+// compares through: element-only, {open content} ·absent·, {particle} the Model
+// Group at exactly 1..1. Its ·locally valid· sequences are V(g) and nothing else
+// (cvc-complex-content clause 1), so the containment the engine decides over it
+// is the containment src-redefine clause 6.2.2 states over g.
+//
+// loc positions the two constructor rejections, neither of which a Model Group
+// already inside a ModelGroupDefinition can produce — NewOccurs rejects only an
+// out-of-range pair and NewParticle only an absent {term} — so the errors decide
+// this verdict rather than being dropped (STYLE S3), charged to the definition
+// the group was read from.
+func modelGroupContent(g ModelGroup, loc xsderr.Loc) (ElementContent, error) {
+	once, err := NewOccurs(loc, 1, 1)
+	if err != nil {
+		return ElementContent{}, err
+	}
+	p, err := NewParticle(loc, once, ResolvedTerm{Term: g}, nil)
+	if err != nil {
+		return ElementContent{}, err
+	}
+	return ElementContent{Particle: p}, nil
 }

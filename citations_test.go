@@ -76,8 +76,11 @@ var allowedCollisionCitations = []citationAllowance{
 	// #503: the src-redefine clause 7.2.2 pass walks a single edge from a named
 	// attribute group definition to the off-index original it redefines, and
 	// records that no `seen` set belongs there — item 9's first half, the
-	// phased-construction licence, not PRINCIPLES 5.
-	{file: "xsd/redefinition.go", number: 9, count: 1},
+	// phased-construction licence, not PRINCIPLES 5. #504's clause-6.2.2 twin
+	// carries the second citation, for the automaton construction it hands its
+	// two model groups to, which follows <group ref> edges unguarded on Phase B's
+	// acyclicity proof — item 9's first half again.
+	{file: "xsd/redefinition.go", number: 9, count: 2},
 	// Reviewed against the topic each argues, and every one is item 9's FIRST
 	// half — "Parse raw, resolve names, finalize in dependency order — then no
 	// traversal ever needs a `seen` set" — not PRINCIPLES 5. Two are #629's

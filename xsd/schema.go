@@ -51,6 +51,10 @@ type SchemaBuilder struct {
 	// not a §3.17.1 property: the redefinition itself is in attributeGroups like
 	// any other top-level definition, and the original is in no property at all.
 	attributeGroupRedefinitions []attributeGroupRedefinition
+
+	// modelGroupRedefinitions is the same for AddRedefiningModelGroup's pairings,
+	// which finalize charges src-redefine clause 6.2.2 over (redefinition.go).
+	modelGroupRedefinitions []modelGroupRedefinition
 }
 
 // NewSchemaBuilder returns an empty accumulating builder.
@@ -178,6 +182,12 @@ type Schema struct {
 	// attributeGroupRedefinitions carries the builder's pairings across finalize;
 	// checkAttributeGroupRedefinitions (redefinition.go) is its one reader.
 	attributeGroupRedefinitions []attributeGroupRedefinition
+
+	// modelGroupRedefinitions carries the builder's <group> pairings across
+	// finalize; checkModelGroupRedefinitions (redefinition.go) charges clause
+	// 6.2.2 over them and resolveReferences (resolve.go) walks each original's
+	// {model group} for src-resolve.
+	modelGroupRedefinitions []modelGroupRedefinition
 
 	typeIndex           map[QName]TypeDefinition
 	elementIndex        map[QName]ElementDeclaration
@@ -351,6 +361,7 @@ func (b *SchemaBuilder) finalize(vs ValueSpace, rc SimpleTypeRestrictionChecker)
 		annotations:         cloneSlice(b.annotations),
 
 		attributeGroupRedefinitions: cloneSlice(b.attributeGroupRedefinitions),
+		modelGroupRedefinitions:     cloneSlice(b.modelGroupRedefinitions),
 
 		typeIndex:           typeIndex,
 		elementIndex:        elementIndex,

@@ -109,6 +109,136 @@ func TestSrcRedefineClause722NoInheritance(t *testing.T) {
 	}
 }
 
+// dMGD builds a top-level model group definition over the given {model group}.
+func dMGD(t *testing.T, name QName, g ModelGroup) ModelGroupDefinition {
+	t.Helper()
+	d, err := NewModelGroupDefinition(xsderr.Loc{}, name, g, nil)
+	if err != nil {
+		t.Fatalf("NewModelGroupDefinition(%s): %v", name, err)
+	}
+	return d
+}
+
+// mgdRedefines finalizes a schema holding one redefining model group definition
+// paired with original, and reports the verdict src-redefine clause 6.2.2
+// reaches. The two model groups are the only difference between runs.
+func mgdRedefines(t *testing.T, original, redefining ModelGroup) error {
+	t.Helper()
+	return dFinalize(t, func(b *SchemaBuilder) {
+		b.AddRedefiningModelGroup(dMGD(t, uq("g"), redefining), dMGD(t, uq("g"), original))
+	})
+}
+
+// TestSrcRedefineClause622 pins the clause over the shapes a <group>
+// redefinition takes: it accepts a redefinition whose {model group} accepts a
+// SUBSET of the element sequences the original accepts, and rejects one that
+// accepts a sequence the original does not.
+func TestSrcRedefineClause622(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		original   ModelGroup
+		redefining ModelGroup
+		wantSubset bool
+	}{
+		{"identical",
+			uGroup(t, CompositorSequence, cElem(t, "a", 1, 1)),
+			uGroup(t, CompositorSequence, cElem(t, "a", 1, 1)), true},
+		{"an optional member dropped",
+			uGroup(t, CompositorSequence, cElem(t, "a", 1, 1), cElem(t, "b", 0, 1)),
+			uGroup(t, CompositorSequence, cElem(t, "a", 1, 1)), true},
+		{"one branch of a choice",
+			uGroup(t, CompositorChoice, cElem(t, "a", 1, 1), cElem(t, "b", 1, 1)),
+			uGroup(t, CompositorSequence, cElem(t, "b", 1, 1)), true},
+		{"an occurrence range narrowed inside a wide one",
+			uGroup(t, CompositorSequence, cElem(t, "a", 0, 100)),
+			uGroup(t, CompositorSequence, cElem(t, "a", 3, 6)), true},
+		{"a member the original never admits",
+			uGroup(t, CompositorSequence, cElem(t, "a", 1, 1)),
+			uGroup(t, CompositorSequence, cElem(t, "a", 1, 1), cElem(t, "c", 1, 1)), false},
+		{"an occurrence range widened",
+			uGroup(t, CompositorSequence, cElem(t, "a", 1, 3)),
+			uGroup(t, CompositorSequence, cElem(t, "a", 1, 5)), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := mgdRedefines(t, tc.original, tc.redefining)
+			if tc.wantSubset {
+				if err != nil {
+					t.Fatalf("a redefinition accepting a subset was rejected: %v", err)
+				}
+				return
+			}
+			expectRule(t, err, ruleSrcRedefine)
+			if !strings.Contains(err.Error(), "6.2.2") {
+				t.Fatalf("message %q does not name src-redefine clause 6.2.2", err)
+			}
+		})
+	}
+}
+
+// TestSrcRedefineClause622ContributesOneComponent pins §4.2.4 clause 4.1.2 at the
+// builder boundary: the original is in no property and no index, so a pairing
+// adds exactly one model group definition and the schema's only {model group
+// definitions} member is the REDEFINITION's.
+func TestSrcRedefineClause622ContributesOneComponent(t *testing.T) {
+	b := NewSchemaBuilder()
+	b.AddType(dAnyType(t))
+	b.AddType(uNamedType(t, uq("T")))
+	b.AddRedefiningModelGroup(
+		dMGD(t, uq("g"), uGroup(t, CompositorSequence, cElem(t, "a", 1, 1))),
+		dMGD(t, uq("g"), uGroup(t, CompositorSequence, cElem(t, "a", 1, 1), cElem(t, "b", 0, 1))))
+	s, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("a restrictive redefinition was rejected: %v", err)
+	}
+	if got := len(s.ModelGroups()); got != 1 {
+		t.Fatalf("{model group definitions} has %d members, want 1: the original contributes no component", got)
+	}
+	if got := len(s.ModelGroups()[0].ModelGroup().Particles()); got != 1 {
+		t.Fatalf("the schema's {urn:x}g has %d particles, want the redefinition's 1", got)
+	}
+}
+
+// TestSrcRedefineClause622ChargesLanguageContainmentAlone pins the scope
+// decision (contentRestrictionScope). A redefinition that retypes an element to
+// a type NOT derived from the original's accepts exactly the same element
+// sequences, so clause 6.2.2 — which states containment and invokes
+// cos-content-act-restrict for nothing — accepts it, while clause 2 of that
+// constraint (ctr-child-type-subsumption) rejects it. The same pair under
+// derivation-ok-restriction clause 2.4.2 must still be rejected, or the
+// narrowing has leaked into the caller that does charge clause 2.
+func TestSrcRedefineClause622ChargesLanguageContainmentAlone(t *testing.T) {
+	original := uGroup(t, CompositorSequence, uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("str"))}))
+	retyped := uGroup(t, CompositorSequence, uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("other"))}))
+	if err := mgdRedefines(t, original, retyped); err != nil {
+		t.Fatalf("clause 6.2.2 rejected a redefinition accepting the same sequences: %v", err)
+	}
+	expectRule(t, cRestricts(t, original, retyped), ruleDerivationOKRestriction)
+}
+
+// TestAddRedefiningModelGroupPanicsOnAbsentName pins both guards: a redefinition
+// pairs two TOP-LEVEL definitions, so an absent {name} on either side is a
+// producer bug rather than a schema-validity condition.
+func TestAddRedefiningModelGroupPanicsOnAbsentName(t *testing.T) {
+	named := dMGD(t, uq("g"), uGroup(t, CompositorSequence, cElem(t, "a", 1, 1)))
+	for _, tc := range []struct {
+		name string
+		d    ModelGroupDefinition
+		orig ModelGroupDefinition
+	}{
+		{"the redefinition", ModelGroupDefinition{}, named},
+		{"the original", named, ModelGroupDefinition{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatalf("AddRedefiningModelGroup accepted an absent {name} on %s", tc.name)
+				}
+			}()
+			NewSchemaBuilder().AddRedefiningModelGroup(tc.d, tc.orig)
+		})
+	}
+}
+
 // TestAddRedefiningAttributeGroupPanicsOnAbsentName pins both guards: a
 // redefinition pairs two TOP-LEVEL definitions, so an absent {name} on either
 // side is a producer bug rather than a schema-validity condition.
