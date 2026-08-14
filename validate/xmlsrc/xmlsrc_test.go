@@ -25,11 +25,28 @@ const fixture = `<?xml version="1.0"?>
 </r>
 `
 
-func emptyValidator(t *testing.T) *validate.Validator {
+// fixtureRoot is the fixture's document element, the ·expanded name· the
+// root dispatch resolves against the schema.
+var fixtureRoot = xsd.QName{Space: "urn:d", Local: "r"}
+
+// validatorFor is a validator over a schema declaring exactly roots, as
+// top-level element declarations. A document whose root is among them is
+// walked; one whose root is not is charged cvc-assess-elt before the walk
+// begins, so a test that needs the walk to run must name its root here.
+func validatorFor(t *testing.T, roots ...xsd.QName) *validate.Validator {
 	t.Helper()
-	schema, err := xsd.NewSchemaBuilder().Finalize()
+	b := xsd.NewSchemaBuilder()
+	for _, name := range roots {
+		e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, nil, nil, xsd.NewGlobalScope(),
+			nil, false, nil, nil, nil, false, nil, nil)
+		if err != nil {
+			t.Fatalf("building the %s element declaration: %v", name, err)
+		}
+		b.AddElement(e)
+	}
+	schema, err := b.Finalize()
 	if err != nil {
-		t.Fatalf("finalizing an empty schema: %v", err)
+		t.Fatalf("finalizing the schema: %v", err)
 	}
 	v, err := validate.New(schema)
 	if err != nil {
@@ -312,7 +329,7 @@ func TestChildrenAfterTheWalkLeftTheElementPanics(t *testing.T) {
 }
 
 func TestValidateAssessesTheDocument(t *testing.T) {
-	res, err := Validate(emptyValidator(t), strings.NewReader(fixture), WithURI(fixtureURI))
+	res, err := Validate(validatorFor(t, fixtureRoot), strings.NewReader(fixture), WithURI(fixtureURI))
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
@@ -320,14 +337,14 @@ func TestValidateAssessesTheDocument(t *testing.T) {
 		t.Errorf("Err() = %v, want nil for a document read to its end", res.Err())
 	}
 	if v := res.Violations(); v != nil {
-		t.Errorf("Violations() = %v, want none while no cvc- rule is decided", v)
+		t.Errorf("Violations() = %v, want none for a declared root", v)
 	}
 }
 
 // TestValidateWithoutURI covers the default: an unnamed document still
 // assesses, and its locations render as xsderr.Loc's unknown-URI form.
 func TestValidateWithoutURI(t *testing.T) {
-	if _, err := Validate(emptyValidator(t), strings.NewReader(fixture)); err != nil {
+	if _, err := Validate(validatorFor(t, fixtureRoot), strings.NewReader(fixture)); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	root := func() *element {
@@ -350,7 +367,7 @@ func TestValidateRejectsNilArguments(t *testing.T) {
 		r    io.Reader
 	}{
 		{name: "nil validator", r: strings.NewReader(fixture)},
-		{name: "nil reader", v: emptyValidator(t)},
+		{name: "nil reader", v: validatorFor(t)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := Validate(tc.v, tc.r)
@@ -379,7 +396,7 @@ func TestValidateRejectsDocumentsWithNoRoot(t *testing.T) {
 		{name: "unbound prefix on the root", doc: `<p:r/>`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := Validate(emptyValidator(t), strings.NewReader(tc.doc), WithURI(fixtureURI))
+			res, err := Validate(validatorFor(t), strings.NewReader(tc.doc), WithURI(fixtureURI))
 			if err == nil {
 				t.Fatal("Validate = nil error, want one")
 			}
@@ -401,7 +418,7 @@ func TestValidateRejectsDocumentsWithNoRoot(t *testing.T) {
 // split: the walk began, so the source fault is the Result's incompleteness
 // and not Validate's error.
 func TestValidateReportsMidWalkFaultsInTheResult(t *testing.T) {
-	res, err := Validate(emptyValidator(t), strings.NewReader("<r><a>text"), WithURI(fixtureURI))
+	res, err := Validate(validatorFor(t, xsd.QName{Local: "r"}), strings.NewReader("<r><a>text"), WithURI(fixtureURI))
 	if err != nil {
 		t.Fatalf("Validate = %v, want the fault in the Result alone", err)
 	}
