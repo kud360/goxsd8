@@ -299,17 +299,19 @@ Two access styles over the compiled model, one shared core:
   only `ElementByName` receives only that.
 - **Walk**: traversal of a type's effective content model. The algebra
   ships (type-derivation validity, substitution-group acceptance, wildcard
-  admission, attribute-use lookup, all unexported in `xsd`); **the two
-  drivers do not exist yet** and `xsd/doc.go` says so by name:
+  admission, attribute-use lookup, all unexported in `xsd`), and of the two
+  drivers over it one ships and one does not:
+  - a **pull** driver — `Matcher`, the instance-guided advance of the
+    content model one child at a time (the validation consumer) —
+    **ships**, as `Schema.ContentMatcher`/`Matcher`/`Attribution`; it
+    counts occurrences rather than unfolding them and never backtracks,
+    which `cos-nonambig` licenses.
   - a **push** driver — `Walker`, the exhaustive, schema-only visitor of
     every particle reachable through sequences/choices/all-groups and
-    named-group references (the codegen consumer) — **M9**, and
-  - a **pull** driver — `Matcher`, the instance-guided advance of the
-    content model one child at a time (the validation consumer) — **M5**.
-  When they land, substitution groups will not be expanded at walk time
-  (instance-time concern), and both drivers will reuse the same algebra
-  rather than reimplement it. This paragraph is a destination; `go doc
-  ./xsd` is the contract.
+    named-group references (the codegen consumer) — **M9**, not yet.
+  Substitution groups are not expanded at walk time (instance-time
+  concern), and the Walker will reuse the same algebra rather than
+  reimplement it. `go doc ./xsd` is the contract.
 
 ## Parsing & loading
 
