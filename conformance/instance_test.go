@@ -142,9 +142,10 @@ func TestInstanceExecutorDeclinesCaseWithNoGroupSchema(t *testing.T) {
 
 // abstractRootValidator is a validator over a schema whose one top-level element
 // declaration has {abstract} true. It is built PROGRAMMATICALLY because the
-// producer hardcodes {abstract} false for a top-level <element> (produceGlobalElement
-// in parser/produce.go), so no schema this lane assembles from a document can
-// reach the cvc-elt branch — see instance.go's file comment.
+// producer hardcodes {abstract} false for a top-level <element>
+// (producer.produceElement in parser/produce.go, #761), so no schema this lane
+// assembles from a document can reach the cvc-elt branch — see instance.go's file
+// comment.
 func abstractRootValidator(t *testing.T, name xsd.QName) *validate.Validator {
 	t.Helper()
 	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, nil, nil, xsd.NewGlobalScope(),

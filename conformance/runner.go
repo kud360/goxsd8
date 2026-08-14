@@ -724,11 +724,13 @@ func caseDocs(kind string, t validityTest, setDir string) (doc string, extra []s
 // groupSchemaDocs resolves the schema documents an instanceTest is assessed
 // against: the <schemaDocument> list of its test group's sibling schemaTest.
 //
-// Every instance-bearing group of the pinned suite declares EXACTLY ONE
-// schemaTest. Any other count is a catalog shape this harness has no grounded
-// reading of, so it yields NO schema reference and execInstanceCase declines the
-// case, rather than picking a sibling or inventing a document — the same refusal
-// extraDocsInClosure makes for a schemaTest's undecidable document set.
+// Any count other than EXACTLY ONE schemaTest yields NO schema reference, so
+// execInstanceCase declines the case rather than picking a sibling or inventing a
+// document — the same refusal extraDocsInClosure makes for a schemaTest's
+// undecidable document set. Of the 9952 groups the pinned suite yields instance
+// cases from, 55 declare NO schemaTest (MS-Additional2006-07-15/addA006 and 54
+// siblings) and so decline here, one case each; none declares more than one, so
+// that arm is defensive against a re-pin rather than exercised today.
 //
 // It yields nothing for a schemaTest either: that case's own doc and extraDocs
 // are its schema documents already (STYLE D3).

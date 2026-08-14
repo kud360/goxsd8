@@ -477,11 +477,12 @@ func TestMakeCaseSplitsSchemaDocuments(t *testing.T) {
 // case.
 //
 // The three rows are the whole rule. Exactly one sibling schemaTest yields the
-// reference; a group with none and a group with two yield NOTHING, because every
-// instance-bearing group of the pinned suite declares exactly one and any other
-// count is a shape with no grounded reading — declining beats picking a sibling.
-// A schemaTest's own case carries no schema reference at all, its doc and
-// extraDocs being its schema documents already (STYLE D3).
+// reference; a group with none and a group with two yield NOTHING, because
+// declining beats picking a sibling or inventing a document. The none row is the
+// live one — 55 groups of the pinned suite declare no schemaTest, one instance
+// case each — while the two row pins an arm no group exercises today. A
+// schemaTest's own case carries no schema reference at all, its doc and extraDocs
+// being its schema documents already (STYLE D3).
 func TestMakeCaseCarriesTheGroupSchemaToInstanceCases(t *testing.T) {
 	setDir := filepath.Join("sets", "ibmMeta")
 	inst := validityTest{

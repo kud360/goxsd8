@@ -26,9 +26,10 @@ import (
 // its test group? The catalog names only the instance document, so discovery
 // carries the group's schema documents alongside it (caseSpec.schemaDoc and
 // schemaExtraDocs, groupSchemaDocs in conformance/runner.go) — the
-// <schemaDocument> list of the group's sibling schemaTest, which every
-// instance-bearing group of the pinned suite declares exactly one of. A group
-// declaring any other number yields no schema reference at all and DECLINES.
+// <schemaDocument> list of the group's sibling schemaTest. A group declaring any
+// number of schemaTests other than exactly one yields no schema reference at all
+// and DECLINES, which is not a hypothetical shape: 55 groups of the pinned suite
+// declare NONE, so 55 instance cases decline for that reason alone.
 //
 // The schema is assembled by assembleCase, the very gate the schema lane
 // decides its own cases with, and this lane declines wherever that gate does —
@@ -62,13 +63,13 @@ import (
 // rest of the document, which is what makes them decidable while the engine
 // assesses no attribute, no child and no type.
 //
-// Case 2 cannot fire through an ASSEMBLED schema today: produceGlobalElement
-// (parser/produce.go) passes {abstract} false for a top-level <element>
-// whatever the attribute says, so no schema this lane builds from a document
-// carries an abstract declaration, and every case the lane decides is case 1.
-// decidedNotValid enumerates the rule regardless — Assess charges it, and a
-// gate that dropped it would silently start declining real verdicts the day the
-// producer reads the attribute.
+// Case 2 cannot fire through an ASSEMBLED schema today: producer.produceElement
+// (parser/produce.go) passes {abstract} false at both of its construction calls
+// for a top-level <element>, whatever the attribute says (#761), so no schema
+// this lane builds from a document carries an abstract declaration, and every
+// case the lane decides is case 1. decidedNotValid enumerates the rule
+// regardless — Assess charges it, and a gate that dropped it would silently
+// start declining real verdicts the day the producer reads the attribute.
 //
 // # Why an EMPTY Result is not evidence of validity
 //
@@ -102,6 +103,13 @@ import (
 // still-failing gap for a suite-invalid case it cannot see the defect in, and
 // for a suite-valid case whose root is undeclared or abstract, but it cannot
 // score a pass on a document it did not really reject.
+//
+// The cvc-assess-elt charge does carry one hazard of its own: a root is equally
+// undeclared when an <import>/<include> the assembly did not follow took the
+// declaring components with it, which is not the defect the suite meant to test.
+// assembleCase's `Unfollowed() && perr != nil` conjunction bounds that for the
+// SCHEMA lane, where the fabricated verdict shows up as a failed parse, and does
+// not transfer here, where the parse succeeds and the charge lands anyway.
 //
 // Three further declines close the ways a NON-verdict could reach that
 // comparison. An instance document that will not resolve or read is a recorded
