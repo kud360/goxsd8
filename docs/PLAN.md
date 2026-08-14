@@ -157,63 +157,71 @@ horizontal completeness.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #740 | the `enumeration` facet is declined by the gate and, past it, refused with a **fabricated** `src-simple-type` verdict on a legal schema (STYLE E2). `pdecimal006` is the named cost, and it is the same two-refusal shape #447 already worked through |
-| 2 | #659 + #527 | the environment tax, one sentence of prose each, banded after **eleven** and **ten** sightings. Both bodies were corrected on 2026-08-13 and neither was actionable as filed |
-| 3 | #733 | a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and #442 moved `schema` **+82** |
-| 4 | #747 + #748 | the two findings the 2026-08-13 pass filed. #747's second fact is a divergence **#626 introduced**; #748's snippet will not compile against the signature `xmlsrc/doc.go` already commits |
-| 5 | #625 → #669 → #492 | the rest of README's Library block, in that order — #625's fix names the file #669 must add to the example list, and #492's belongs in the sentence at `README.md:115-116` rather than a new paragraph |
-| 6 | #514 + #687 + #672 | the open CLI-contract decisions: typo-vs-unbuilt, scoped help (now with a third case — `-h` after an unknown subcommand exits 0 and flags nothing), and `-version` |
-| 7 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 1 | #715 | the greedy non-backtracking content matcher — by its own Acceptance *"the largest single move in the milestone"*, and the only band row that unblocks five others (#716, #717, #718, #719, #720). `## Surface` expects none, so nothing gates the start |
+| 2 | #766 | the `value.Backend` seam and the datatype-valid half #714 split out — an `instance` mover, and the named consumer of an export that currently has none. **Its `## Surface` is undecided by design: run the warden pre-flight first (#692)** |
+| 3 | #740 | the `enumeration` facet is declined by the gate and, past it, refused with a **fabricated** `src-simple-type` verdict on a legal schema (STYLE E2). `pdecimal006` is the named cost, and it is the same two-refusal shape #447 already worked through |
+| 4 | #659 + #527 | the environment tax, one sentence of prose each, banded after **eleven** and **ten** sightings. Both bodies were corrected on 2026-08-13 and neither was actionable as filed |
+| 5 | #733 | a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and #442 moved `schema` **+82** |
+| 6 | #747 + #748 | the two findings the 2026-08-13 pass filed. #747's second fact is a divergence **#626 introduced**; #748's snippet will not compile against the signature `xmlsrc/doc.go` already commits |
+| 7 | #625 → #669 → #492 | the rest of README's Library block, in that order — #625's fix names the file #669 must add to the example list, and #492's belongs in the sentence at `README.md:115-116` rather than a new paragraph |
+| 8 | #514 + #687 + #672 | the open CLI-contract decisions: typo-vs-unbuilt, scoped help (now with a third case — `-h` after an unknown subcommand exits 0 and flags nothing), and `-version` |
+| 9 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
 
-**#714 is absent by decision, not by oversight** — it is `ready`, it was row 2,
-and it is in flight with an accepted verdict. Three paragraphs down.
+**#714 has landed** (PR #770, `42c94ed`), and it is the block this section
+carries — the previous landing's is replaced by it rather than joined to it.
+**`instance` moved 19 → 29 pass**, 26342 → 26332 fail of 26361; `schema` and
+`datatypes` unchanged, no lane regressed. It decided `cvc-complex-type`
+(§3.4.4.2) clauses **2 and 3** at the validation root — attribute matching
+against `{attribute uses}` and required-use presence — and exported three
+`xsd` identifiers to do it (`ResolvedType`, `ResolvedAttributeDeclaration`,
+`DeclarationName`), all warden-pre-approved.
 
-**#761 held row 1 and has landed** (PR #767, `f19c860`). Its row is dropped
-rather than replaced, and the previous landing's block is replaced by this one
-rather than joined to it. **`instance` moved 18 → 19 pass**, 26343 → 26342
-fail, banked as `12780d0`; `schema` and `datatypes` unchanged, no lane
-regressed. The one flip is `ElemDecl/abstract00201m1/instance/Negative` — a
-top-level `abstract="true"` element with an instance rooted at it, charged
-`cvc-elt` clause 2 through an assembled schema for the first time.
+**It had no row to drop, and that is the one thing this landing changes about
+how the band is read.** #714 was held out of the previous band *because it was
+in flight with an accepted verdict* — the band exists so a session can take a
+**startable** issue, and banding one with a live branch invites a second
+session onto it. That reasoning was right and is now spent. The precedent it
+sets is worth keeping: an issue with an accepted verdict and an unlanded branch
+is not a band row, and re-banding it is a decision to make **after reading its
+thread**, per #722, never off a `wipsurvey` verdict alone.
 
-**The prediction it was banded on was right in direction and wrong in
-magnitude, and that is recorded rather than smoothed over.** The band flagged
-the issue's own *"expect the ratchet to move"* as a prediction nobody had
-measured, and asked for an honest figure. The figure is **one case**: most
-suite fixtures rooting
-at an abstract element carry other undecidable content, and the lane at
-`f19c860` decides only at a violation count of exactly one. What the landing
-actually bought is not the flip — it is four reader sites that were inert
-against every assembled schema and are now live (`validate/assess.go:80`,
-`xsd/complexextension.go:940`, `xsd/defaultbinding.go:312`, and the
-`abstract`-driven half of substitution-group correctness), plus the STYLE P3
-debt at both construction calls. The schema-lane regression the band warned
-about did not materialize: 2108 declined before and after.
+**Of the ten flips, the arithmetic was the thing that could have been missed.**
+The verdict measured 18 → 28 on base `1835218`; #761 landed +1 on the same
+lane from the same base in parallel; the expectations merge was textually
+clean, so nothing in the tooling forced anyone to notice that the ten flips read
+19 → 29. The merge-forward round re-ran the full gate and the ratchet on the
+merged tree and confirmed **29**, exactly the naive sum with no interaction in
+either direction. Two concurrent landings on one lane is the shape to watch,
+not this instance of it.
 
-**Row 1 is #740, and it got there by elimination rather than by promotion.**
-The last two passes each overrode the mechanical answer because a *new* issue
-entered the band as row 1 dropped; neither of this landing's follow-ups does
-that. **#768** is one attribute in one test fixture and **#456** was filed
-eleven days ago and is `blocked` behind #455 — nothing here made either of them
-startable, let alone a lane mover. What actually moved row 1 past the
-mechanical answer is that the mechanical answer, **#714**, is unavailable.
+**Rows 1 and 2 are new, and they are the reason the mechanical answer moved.**
+#715 and #766 were both `blocked` on #714 alone and both became startable with
+it; all 25 open `blocked` bodies were read for a `## Depends on` naming #714 and
+exactly those two do. This is the condition the last two passes named as the
+one that overrides the mechanical promotion — *a new issue entering the band
+as row 1 drops* — and it applies twice over. Both move `instance`, which the
+Status section above already calls the lane to read, and the band's ordering
+prefers a vertical slice that moves a lane over horizontal completeness.
 
-**#714 is in flight, which is why it is not row 1 and not a row at all.** It
-was row 2 and was the mechanical promotion. `origin/wip/issue-714` carries
-three commits on base `1835218` — the implementation, the round-1 repair, and
-the arbiter's own bank `ec94a24` — and the thread holds an **accept** verdict
-at round 2 (`instance` 18 → 28 pass as measured on that base). What is owed is
-a landing, not a session: a `docs/LOG` entry, a merge forward onto `f19c860`,
-a full gate re-run on the merged tree, and a restated figure — the ten flips
-read **19 → 29** against a lane that now banks 19, and the expectations merge
-is textually clean, so nothing forces the arithmetic to be noticed. All of
-that is recorded on the thread. The band exists so a session can take a
-**startable** issue; banding an issue with a live branch and an accepted
-verdict invites a second session onto it. **If that branch expires with no
-RESUME comment, the next pass re-bands #714 — after reading the thread, per
-#722, never off a `wipsurvey` verdict alone.**
+**#715 leads #766 on dependency, not on size.** #715 unblocks five issues
+(#716, #717, #718, #719, #720) and #766 unblocks none, and #715's `## Surface`
+expects nothing while #766's is undecided by design — it asks how a
+`value.Backend` reaches `(*Validator)` and offers three candidate shapes. That
+is the same condition holding **#744** and **#721** out of the band entirely,
+and #766 is banded anyway only because #714 has just demonstrated the
+pre-flight running inside a `/develop` session and splitting the issue
+correctly. **#692 is the live hazard**: an issue body saying "expect a warden
+pre-flight" does not bind the session to run one, and #585 paid two repair
+rounds for exactly that. A session taking #766 runs the pre-flight before
+implementing or it is not following this row.
 
-**Row 2 is the change of judgment, and it is overdue rather than new.** #659
+**#740 was row 1 by elimination and is now row 3 by promotion of others**, with
+its own justification unchanged — nothing about this landing touched it. The
+two follow-ups this landing filed are **#771** and **#772**, and neither is a
+band row: #771 is a fabricated-verdict fix worth no ratchet movement, #772 is a
+two-site diagnostic correction. Both are `ready` and startable as filed.
+
+**Row 4 is the change of judgment, and it is overdue rather than new.** #659
 (suite submodule unpopulated) and #527 (`gh` 403 on both routes) have both been
 `ready` and unbanded since 08-10 and 08-06 while being paid, respectively,
 across **eleven sightings in ten landings** and **nine consecutive sessions plus
@@ -313,7 +321,7 @@ wants a cheap high-value row — it is still the only unbanded issue whose
 absence can cause a future pass to actively damage the queue. The remaining
 `blocked` M5 slices cannot be banded at all.
 
-**Rows 4–6 sit ahead of row 7 on cost, not importance.** Each is a sentence or
+**Rows 6–8 sit ahead of row 9 on cost, not importance.** Each is a sentence or
 a dispatch branch while the CLI surface is still empty; taken after #472 every
 one of them is a change to shipped behaviour. #472's own Acceptance carries
 the `-version` decision, so if it is taken first it must discharge #672 rather
@@ -323,7 +331,7 @@ than leave it contradicting the landing. **#720** (`goxsd8 validate`) is
 **The Status text above is now FALSE where it matters, and it is deliberately
 left standing.** It says `instance` is *"still at zero"* and that *"the first
 `instance` figure that exists arrives with #713, which needs #712 first"*.
-Both are discharged: the lane reads **19 / 26342 / 26361** and #713 is closed.
+Both are discharged: the lane reads **29 / 26332 / 26361** and #713 is closed.
 Nothing above this table was patched, because the Status section is REPLACED
 wholesale by `/backlog` from `go tool lanestatus` and GitHub, and it carries
 ONE date stamp (**2026-08-13**) precisely so a reader can tell staleness from
@@ -332,9 +340,9 @@ inside a section stamped with an older date makes it *harder* to read, not
 easier — the reader then cannot tell which figures were re-derived and which
 were not. **The next `/backlog` must re-derive the section whole, and the lane
 paragraph is where it starts.** The milestone and queue tables are stale by
-#712's, #713's and **#761's** landings (all M5-adjacent, all closed), by #714's
-`ready` flip, and by #753, #755, #756, #759, #761, #763, #764 and **#768**
-having been filed since.
+#712's, #713's, #761's and **#714's** landings (all M5-adjacent, all closed), by
+#715's and #766's `ready` flips, and by #753, #755, #756, #759, #761, #763,
+#764, #768, **#771** and **#772** having been filed since.
 
 **`parser/redefine.go` has been rewritten five times in six days, so read it
 rather than an issue body that describes it.** #686 put its duplicate-key charge
@@ -353,9 +361,8 @@ proof that a "handed to the post-land pass" hand-off tracks nothing. This pass
 retired one such hand-off (#753's decline-census trigger, four entries old) by
 showing it could never fire, which is the shape the sweep is for and is not a
 substitute for running it. Everything else this queue needs is a develop
-iteration, not a planning one — **starting with #714's landing**, whose own
-post-land pass inherits three named non-blocking observations from its round-2
-verdict.
+iteration, not a planning one — **starting with #715**, the band's row 1 and
+the largest single `instance` move M5 has left.
 
 ## Milestones
 
@@ -407,24 +414,33 @@ the whole of it.
 identity constraints, `xsi:type`/`xsi:nil`, wildcards, default and fixed
 values. **`instance` lane.**
 
-Carved 2026-08-12 into ten slices, #710–#719, dependency-ordered so that a
-slice becomes `ready` as the one before it lands: the infoset seam and
-engine skeleton (**#710, landed**), the `xmlsrc` adapter (**#711,
-landed** — it decides no `cvc-` rule, so the lane did not move), root
-dispatch (**#712, landed** — `Assess` charges `cvc-assess-elt` and `cvc-elt`
-clause 2, and the lane still did not move because nothing ran the cases) and
-**the lane driver (#713, landed), which took `instance` off zero — 0 → 18
-pass** — the #175 analogue, placed fourth so every slice after it reports a real
-number. The fan-out is #714–#719, of which **#714 is `ready`**; the rest stay
-`blocked`, each on the one before it. The CLI's own `validate` subcommand is
+Carved 2026-08-12 into ten slices, #710–#719, and now **eleven** — #766 was
+split out of #714 by a warden pre-flight during its grounding. Five have
+landed: the infoset seam and engine skeleton (**#710**), the `xmlsrc` adapter
+(**#711** — it decides no `cvc-` rule, so the lane did not move), root
+dispatch (**#712** — `Assess` charges `cvc-assess-elt` and `cvc-elt` clause 2,
+and the lane still did not move because nothing ran the cases), **the lane
+driver (#713), which took `instance` off zero — 0 → 18 pass** (the #175
+analogue, placed fourth so every slice after it reports a real number), and
+`cvc-complex-type` clauses 2–3 (**#714**, 19 → 29).
+
+**The carve is no longer a chain, and reading it as one loses work.** The
+original ordering assumed a slice becomes `ready` as the one before it lands.
+That held until #714, which now has **two** successors directly behind it —
+**#715** and **#766**, both `ready` — while #716, #717, #718 and #719 all wait
+on #715 rather than on each other. Relabel from the `## Depends on` lines, never
+from the milestone or from the issue numbers' order; #712's post-land pass
+missed exactly this flip once already. The CLI's own `validate` subcommand is
 #720, `blocked` behind #472 and #715.
 
-**19 is a floor built for soundness, not a measure of the engine.** The lane
-emits only "not valid" observations, from two unconditional root-level charges
-(#761 made the second of them reachable through an assembled schema);
+**29 is a floor built for soundness, not a measure of the engine.** The lane
+emits only "not valid" observations, from three root-level charges (#761 made
+the second reachable through an assembled schema, #714 added the third);
 a violation-free `Result` DECLINES rather than passing, because `Assess`
 evaluates none of `e-validity`'s other conjuncts. The milestone's remaining
-slices are what turn declines into decisions.
+slices are what turn declines into decisions — 26328 of the lane's 26361 cases
+are harvest-candidate declines and 3 more are indeterminate, leaving exactly
+one that is decided and decided WRONG (**#771**).
 
 The design constraints are fixed by `validate/doc.go` and PRINCIPLES 8, 11,
 13, 14 and 15, and the carve does not reopen them.
