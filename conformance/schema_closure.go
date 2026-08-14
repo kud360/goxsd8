@@ -4,9 +4,9 @@ import (
 	"github.com/kud360/goxsd8/parser"
 )
 
-// This file holds the schema lane's closure gate: the two questions
-// execSchemaCase asks about the set of schema documents an assembly actually
-// consumed (issues #242, #182, #183, #276, #272).
+// This file holds the closure gate: the two questions assembleCase asks about
+// the set of schema documents an assembly actually consumed (issues #242, #182,
+// #183, #276, #272).
 //
 // # Why the closure, not the root
 //

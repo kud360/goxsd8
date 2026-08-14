@@ -18,6 +18,11 @@ import (
 // reason never flips to pass. It is package-internal conformance support: it
 // exports nothing and no library code imports it.
 //
+// The gate this file documents is assembleCase, and it is SHARED: the instance
+// lane (conformance/instance.go, #713) needs the very same assurance before it
+// may assess anything against the schema an assembly built, so it asks the same
+// question of the same closure and declines on the same answers.
+//
 // # What a schemaTest asserts
 //
 // A schemaTest asks: is THIS schema document itself schema-valid? The lane
@@ -90,9 +95,9 @@ import (
 //
 // # The decidable shape (the strict top-level allowlist)
 //
-// execSchemaCase therefore decides a case only after confirming the whole shape
+// assembleCase therefore admits a case only after confirming the whole shape
 // of every document in its closure is confined to what the producer checks, and
-// DECLINES (Fail) anything else:
+// the lane DECLINES (Fail) anything else:
 //
 //  1. Readability. parser.ReadDocument is run on the root before anything else,
 //     and the assembly reads every composed document through it. ANY error
@@ -137,7 +142,7 @@ import (
 //       decides genuinely. An <include> whose schemaLocation does not resolve
 //       yields no document to gate: the assembly reports that
 //       (parser.UnfollowedLocationUnresolved) exactly as it does for an <import>
-//       that yields no D2, and execSchemaCase declines only if the parse then
+//       that yields no D2, and assembleCase declines only if the parse then
 //       fails (#276).
 //     - override: admitted (#183) when every child of it is a decidable source
 //       declaration in its own right (overrideDecidable), because §F.2 clause 1
@@ -380,38 +385,62 @@ func newSchemaExec() executor {
 	}
 }
 
-// execSchemaCase decides one schemaTest case, or honestly declines it (Fail). It
-// reads the root document to check the two preconditions parser.ParseReport
-// answers with a plain Go error rather than a validity verdict, runs
-// parser.ParseReport, gates the WHOLE <xs:include>/<xs:override>/<xs:import>
-// closure it reports on the decidable top-level shape (closureDecidable, which
-// runs schemaShapeDecidable on every document the assembly consumed), and agrees
-// or disagrees with the suite's declared validity. A root it cannot resolve OR
-// cannot read (any ReadDocument error, including a parser encoding limitation
-// such as unsupported UTF-16), whose root element is not <schema>, or any
-// document of whose closure falls outside the producer's decidable subset is
-// DECLINED (Fail) as a recorded gap, never guessed. So is a case that both
-// carries a directive naming no document and fails to parse — see the
-// Unfollowed check below (#276).
+// execSchemaCase decides one schemaTest case, or honestly declines it (Fail).
+// The whole decidability gate is assembleCase, over the case's own declared
+// document set; what is left here is the one comparison of the assembly's
+// outcome with the suite's declared validity.
+func execSchemaCase(backend value.Backend, c caseSpec) Status {
+	_, decidable, perr := assembleCase(backend, c.doc, c.extraDocs)
+	if !decidable {
+		return Fail()
+	}
+	return decideAgreement(perr == nil, c.expect.wantsValid())
+}
+
+// assembleCase assembles the schema rooted at doc, together with any FURTHER
+// documents extraDocs declares, and reports whether the outcome may be read as a
+// verdict at all. It is the schema lane's decidability gate and the instance
+// lane's precondition alike (conformance/instance.go).
 //
-// The resolver is a loader.Dir rooted at the case document's own directory and the
-// root is named by its BASE name, because parser.ParseReport reads the root under
+// It reads the root document to check the two preconditions parser.ParseReport
+// answers with a plain Go error rather than a validity verdict, runs
+// parser.ParseReport, and gates the WHOLE <xs:include>/<xs:override>/<xs:import>
+// closure it reports on the decidable top-level shape (closureDecidable, which
+// runs schemaShapeDecidable on every document the assembly consumed). The second
+// result, decidable, is false — and the caller DECLINES — under any of five
+// conditions: a root it cannot resolve; a root it cannot read (any ReadDocument
+// error, including a parser encoding limitation such as unsupported UTF-16); a
+// root element that is not <schema>; a closure holding one document outside the
+// producer's decidable subset, or missing one the case further declared; and a
+// case that both carries a directive naming no document and fails to parse
+// (#276). The other two results say nothing then.
+//
+// Where decidable is true, the third result is the assembly's OWN error: nil is
+// genuine evidence of validity — no document of the assembly has any of the
+// violations the allowlist confines it to, so a real one would surface — and
+// non-nil is a REAL implemented rejection. The first result is what the assembly
+// built. The schema lane reads the error alone; the instance lane needs the
+// schema, and takes it only where the error is nil, a schema the assembly
+// rejected being not the schema the suite declared.
+//
+// The resolver is a loader.Dir rooted at doc's own directory and the root is
+// named by its BASE name, because parser.ParseReport reads the root under
 // exactly the location string it is handed (readRootDocument in parser/parse.go):
 // passing the full path would give the root document a base URI of
 // "…/sunData/SType/x" instead of "x", and every <include> in it would then resolve
 // one directory tree away from where the resolver serves. The harness's own
 // precondition read below therefore uses the SAME resolver and the SAME location
 // string, so it reads byte-identically the document the assembly roots at.
-func execSchemaCase(backend value.Backend, c caseSpec) Status {
-	resolver := loader.Dir(filepath.Dir(c.doc))
-	location := filepath.Base(c.doc)
+func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.Schema, bool, error) {
+	resolver := loader.Dir(filepath.Dir(doc))
+	location := filepath.Base(doc)
 	rc, _, err := resolver.Resolve("", location)
 	if err != nil {
 		// Unreadable document: an honest recorded gap, not a validity verdict.
-		return Fail()
+		return nil, false, nil
 	}
 	defer func() { _ = rc.Close() }() // read-only handle: close error cannot affect the verdict
-	doc, err := parser.ReadDocument(location, rc)
+	root, err := parser.ReadDocument(location, rc)
 	if err != nil {
 		// A ReadDocument error is DECLINED, never treated as an observed-invalid
 		// verdict. The error does not distinguish a genuine XML well-formedness
@@ -421,26 +450,26 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 		// fabricated for a well-formed document — a wrong-reason pass that would
 		// silently flip pass→fail once UTF-16 decoding lands (a separate change).
 		// Declining on ANY ReadDocument error keeps the lane's verdicts honest.
-		return Fail()
+		return nil, false, nil
 	}
 	// §3.17.2 does not require <schema> to be the document root, so a non-schema
 	// root is a Parse precondition fault (a plain Go error, not a
 	// sch-props-correct rejection), not decidable for this lane — decline.
-	if !doc.IsSchema() {
-		return Fail()
+	if !root.IsSchema() {
+		return nil, false, nil
 	}
 	// ParseReport, not Parse: the verdict needs the DOCUMENT SET the assembly
 	// consumed, not only its components (#272).
-	_, report, perr := parser.ParseReport(location, parser.WithResolver(resolver), parser.WithBackend(backend))
+	schema, report, perr := parser.ParseReport(location, parser.WithResolver(resolver), parser.WithBackend(backend))
 	// Only decide when EVERY document of the <include>/<override>/<import> closure
 	// is confined to what the producer processes; otherwise a silently-skipped
 	// invalid representation, in the root or in any composed document, could
 	// false-accept.
 	if !closureDecidable(report) {
-		return Fail()
+		return nil, false, nil
 	}
-	if !extraDocsInClosure(report, resolver, c) {
-		return Fail()
+	if !extraDocsInClosure(report, resolver, doc, extraDocs) {
+		return nil, false, nil
 	}
 	// A directive that named no document is only half the fabricated-rejection
 	// hazard (#276): the missing components matter solely when something referred
@@ -451,13 +480,13 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 	// exactly that outcome — so the case is still decided. Only the conjunction
 	// declines.
 	if len(report.Unfollowed()) > 0 && perr != nil {
-		return Fail()
+		return nil, false, nil
 	}
-	return decideSchema(perr == nil, c.expect.wantsValid())
+	return schema, true, perr
 }
 
 // extraDocsInClosure reports whether every FURTHER document the case declares
-// beyond c.doc was consumed by the assembly rooted at c.doc — the only condition
+// beyond doc was consumed by the assembly rooted at doc — the only condition
 // under which parser.ParseReport, which is handed one root, nonetheless
 // assembles the whole declared set.
 //
@@ -481,9 +510,9 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 // compared against the report is in the report's own format (closureReached). A
 // path that will not resolve at all declines for the same reason as an
 // unresolvable root: an unreadable document is a gap, never a validity verdict.
-func extraDocsInClosure(report *parser.AssemblyReport, resolver loader.Resolver, c caseSpec) bool {
-	root := filepath.Dir(c.doc)
-	for _, extra := range c.extraDocs {
+func extraDocsInClosure(report *parser.AssemblyReport, resolver loader.Resolver, doc string, extraDocs []string) bool {
+	root := filepath.Dir(doc)
+	for _, extra := range extraDocs {
 		location, err := filepath.Rel(root, extra)
 		if err != nil {
 			return false
@@ -502,9 +531,11 @@ func extraDocsInClosure(report *parser.AssemblyReport, resolver loader.Resolver,
 	return true
 }
 
-// decideSchema Passes iff the observed validity agrees with the suite's declared
-// XSD 1.1 expectation.
-func decideSchema(observed, expected bool) Status {
+// decideAgreement Passes iff the observed validity agrees with the suite's
+// declared XSD 1.1 expectation. It is the ONE closing comparison every deciding
+// executor of the schema and instance lanes reaches, and every decline returns
+// before it — which is exactly what the decline census probes (declines.go).
+func decideAgreement(observed, expected bool) Status {
 	if observed == expected {
 		return Pass()
 	}
@@ -554,7 +585,7 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 			// <import> with no schemaLocation, or either directive with one that does
 			// not resolve — is reported as unfollowed, not judged here, and declines
 			// the case only alongside a failed parse: see
-			// parser.AssemblyReport.Unfollowed and execSchemaCase.
+			// parser.AssemblyReport.Unfollowed and assembleCase.
 		case "element":
 			if !elementDecidable(el) {
 				return false

@@ -111,15 +111,25 @@ func checkSuitePresent(index string) error {
 // schemaTest declaring several <schemaDocument> children, which xsts.xsd (the
 // suite's own catalog schema) defines as "run as if the schema documents given
 // were loaded one by one, in order" — so the whole list, in document order, is
-// the case, not any one member of it. execSchemaCase decides such a case only
-// when every extra document is provably part of the closure the parser itself
-// walks from doc; see conformance/schema.go.
+// the case, not any one member of it. assembleCase admits such a case only when
+// every extra document is provably part of the closure the parser itself walks
+// from doc; see conformance/schema.go.
+//
+// schemaDoc and schemaExtraDocs name the schema documents an INSTANCE case is
+// assessed against: the <schemaDocument> list of its test group's sibling
+// schemaTest, resolved exactly as doc and extraDocs are. Both are empty for a
+// schemaTest, whose own doc and extraDocs ARE its schema documents already
+// (STYLE D3: the list is stored once, in the pair holding the documents under
+// test), and empty for an instanceTest whose group does not declare exactly one
+// schemaTest — see groupSchemaDocs.
 type caseSpec struct {
-	id        string
-	kind      string
-	doc       string
-	extraDocs []string
-	expect    expectation
+	id              string
+	kind            string
+	doc             string
+	extraDocs       []string
+	schemaDoc       string
+	schemaExtraDocs []string
+	expect          expectation
 }
 
 // expectation is the suite's declared XSD 1.1 outcome for one case, as a closed
@@ -212,7 +222,7 @@ func defaultLanes() []lane {
 	return []lane{
 		{name: "datatypes", selects: selectsDatatypes, exec: newDatatypesExec()},
 		{name: "schema", selects: selectsKind(kindSchema), exec: newSchemaExec()},
-		{name: "instance", selects: selectsKind(kindInstance), exec: stubFail},
+		{name: "instance", selects: selectsKind(kindInstance), exec: newInstanceExec()},
 		{name: "xpath", selects: selectsNone, exec: stubFail},
 		{name: "json", selects: selectsNone, exec: stubFail},
 		{name: "ber", selects: selectsNone, exec: stubFail},
@@ -630,7 +640,7 @@ func casesFromSet(set testSet, setDir string, seen map[string]struct{}) (discove
 				d.withholdTest(set.Name, g.Name, kindSchema, st.Name)
 				continue
 			}
-			c, err := makeCase(set.Name, g.Name, kindSchema, st, setDir, seen)
+			c, err := makeCase(set.Name, kindSchema, st, g, setDir, seen)
 			if err != nil {
 				return discovery{}, err
 			}
@@ -641,7 +651,7 @@ func casesFromSet(set testSet, setDir string, seen map[string]struct{}) (discove
 				d.withholdTest(set.Name, g.Name, kindInstance, it.Name)
 				continue
 			}
-			c, err := makeCase(set.Name, g.Name, kindInstance, it, setDir, seen)
+			c, err := makeCase(set.Name, kindInstance, it, g, setDir, seen)
 			if err != nil {
 				return discovery{}, err
 			}
@@ -654,9 +664,14 @@ func casesFromSet(set testSet, setDir string, seen map[string]struct{}) (discove
 // makeCase builds one caseSpec, resolving its document path(s) relative to the
 // set directory and its XSD 1.1 expected validity. A schemaTest's FIRST
 // <schemaDocument> is the case's doc and the rest, in document order, are its
-// extraDocs; an instanceTest has its one <instanceDocument> and no extras.
-func makeCase(setName, groupName, kind string, t validityTest, setDir string, seen map[string]struct{}) (caseSpec, error) {
-	id := caseID(setName, groupName, kind, t.Name)
+// extraDocs; an instanceTest has its one <instanceDocument> and no extras, plus
+// the schema documents groupSchemaDocs reads from its sibling schemaTest.
+//
+// The enclosing group is passed whole rather than beside its own name (STYLE
+// D3): g.Name IS the group name, and an instance case needs the group's
+// schemaTests anyway.
+func makeCase(setName, kind string, t validityTest, g testGroup, setDir string, seen map[string]struct{}) (caseSpec, error) {
+	id := caseID(setName, g.Name, kind, t.Name)
 	if _, dup := seen[id]; dup {
 		return caseSpec{}, fmt.Errorf("duplicate case id %q", id)
 	}
@@ -664,17 +679,20 @@ func makeCase(setName, groupName, kind string, t validityTest, setDir string, se
 	if !ok {
 		return caseSpec{}, fmt.Errorf("case %q has no declared expected validity", id)
 	}
-	href, extra, err := caseDocs(kind, t, setDir)
+	doc, extra, err := caseDocs(kind, t, setDir)
 	if err != nil {
 		return caseSpec{}, fmt.Errorf("case %q: %w", id, err)
 	}
+	schemaDoc, schemaExtra := groupSchemaDocs(kind, g, setDir)
 	seen[id] = struct{}{}
 	return caseSpec{
-		id:        id,
-		kind:      kind,
-		doc:       filepath.Join(setDir, filepath.FromSlash(href)),
-		extraDocs: extra,
-		expect:    want,
+		id:              id,
+		kind:            kind,
+		doc:             doc,
+		extraDocs:       extra,
+		schemaDoc:       schemaDoc,
+		schemaExtraDocs: schemaExtra,
+		expect:          want,
 	}, nil
 }
 
@@ -687,22 +705,67 @@ func caseID(setName, groupName, kind, testName string) string {
 	return setName + "/" + groupName + "/" + kind + "/" + testName
 }
 
-// caseDocs returns the href of the document under test and the set-relative
-// resolved paths of any further declared documents, in document order (STYLE
-// D1: no map iteration, the catalog's own order is the fact). A schemaTest with
-// no <schemaDocument> at all names nothing to test, which is a malformed catalog
-// entry rather than a case this harness may silently invent a document for.
-func caseDocs(kind string, t validityTest, setDir string) (href string, extra []string, err error) {
+// caseDocs returns the resolved path of the document under test and those of any
+// further declared documents, in document order (STYLE D1: no map iteration, the
+// catalog's own order is the fact). A schemaTest with no <schemaDocument> at all
+// names nothing to test, which is a malformed catalog entry rather than a case
+// this harness may silently invent a document for.
+func caseDocs(kind string, t validityTest, setDir string) (doc string, extra []string, err error) {
 	if kind == kindInstance {
-		return t.InstanceDoc.Href, nil, nil
+		return resolveDoc(setDir, t.InstanceDoc.Href), nil, nil
 	}
-	if len(t.SchemaDocs) == 0 {
+	doc, extra, ok := resolveDocs(t.SchemaDocs, setDir)
+	if !ok {
 		return "", nil, fmt.Errorf("schemaTest declares no schemaDocument")
 	}
-	for _, d := range t.SchemaDocs[1:] {
-		extra = append(extra, filepath.Join(setDir, filepath.FromSlash(d.Href)))
+	return doc, extra, nil
+}
+
+// groupSchemaDocs resolves the schema documents an instanceTest is assessed
+// against: the <schemaDocument> list of its test group's sibling schemaTest.
+//
+// Every instance-bearing group of the pinned suite declares EXACTLY ONE
+// schemaTest. Any other count is a catalog shape this harness has no grounded
+// reading of, so it yields NO schema reference and execInstanceCase declines the
+// case, rather than picking a sibling or inventing a document — the same refusal
+// extraDocsInClosure makes for a schemaTest's undecidable document set.
+//
+// It yields nothing for a schemaTest either: that case's own doc and extraDocs
+// are its schema documents already (STYLE D3).
+func groupSchemaDocs(kind string, g testGroup, setDir string) (doc string, extra []string) {
+	if kind != kindInstance || len(g.SchemaTests) != 1 {
+		return "", nil
 	}
-	return t.SchemaDocs[0].Href, extra, nil
+	doc, extra, ok := resolveDocs(g.SchemaTests[0].SchemaDocs, setDir)
+	if !ok {
+		return "", nil
+	}
+	return doc, extra
+}
+
+// resolveDocs resolves an ordered <schemaDocument> list against the test set's
+// directory: the FIRST declared document, which the harness roots its assembly
+// at, and the rest in document order. ok is false for an empty list — a catalog
+// entry naming no document at all.
+//
+// It is the ONE reading of that list (STYLE T4): a schemaTest's own documents and
+// the sibling schemaTest documents an instanceTest is assessed against are the
+// same catalog list reached from two directions.
+func resolveDocs(refs []docRef, setDir string) (doc string, extra []string, ok bool) {
+	if len(refs) == 0 {
+		return "", nil, false
+	}
+	for _, d := range refs[1:] {
+		extra = append(extra, resolveDoc(setDir, d.Href))
+	}
+	return resolveDoc(setDir, refs[0].Href), extra, true
+}
+
+// resolveDoc resolves one catalog xlink:href against the test set's directory. An
+// href is a URI reference, so its separators are slashes whatever the host
+// filesystem uses.
+func resolveDoc(setDir, href string) string {
+	return filepath.Join(setDir, filepath.FromSlash(href))
 }
 
 // resolveExpected picks the declaration that applies to an XSD 1.1 processor and
