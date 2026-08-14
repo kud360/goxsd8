@@ -33,28 +33,27 @@ hand-count:
 
 An em dash is a lane with no cases yet, which is a different claim from a lane
 scoring zero. `datatypes` is M3 and **complete**; `schema` is M4 and active;
-`instance` is M5, active, and **no longer at zero**; `xpath`, `json` and `ber`
-wait on M6/M7, M8 and M11.
+`instance` is M5, active, and no longer at zero; `xpath`, `json` and `ber` wait
+on M6/M7, M8 and M11.
 
-**`instance` is the lane that moved, and it moved by 193 in four landings**,
-each figure copied from its commit's `Ratchet:` line rather than recomputed:
-**#713** 0 → 18 (the lane driver), **#761** +1, **#714** 19 → 29
-(`cvc-complex-type` clauses 2–3, the attribute-existence half), and **#766**
-29 → 193 (**+164**, the `value.Backend` seam and the datatype-valid charges).
-`schema` (11635) and `datatypes` (1161) have not moved since the previous stamp
-and were not meant to.
+**No lane moved, because nothing landed.** `main` is still `dd4f1d8`, the
+post-land pass for #766 — the four `instance` landings that took the lane 0 → 193
+are described in the previous stamp and are not re-narrated here. This is a full
+backlog run, not a post-land pass: the queue was audited body-by-body where it
+was cheap to do so, the branch namespace was re-surveyed, and two persona reports
+were folded in.
 
-**What moved the lane is not what #766 was named for.** 149 of its 164 flips are
-`MS-Regex2006-07-15` — single-attribute negative documents against an anonymous
-`xs:string` restriction carrying one `<xs:pattern>` — so the largest `instance`
-movement to date is the `regex` package arriving in `validate`'s import closure
-behind `value`, through cvc-attribute clause 3's pattern stage. The fixed-value
-comparisons the issue is titled for account for a handful, and the ·defaulted
-attribute· charge for none, by construction. Expect the next charging slice's
-figure to be dominated by whichever facet stage it newly reaches rather than by
-its headline rule.
+**`schema`'s number is stale on `main` and correct in this table**, which is a
+distinction worth holding. `origin/wip/issue-740` carries an accepted
+**`schema` +1197 (11635 → 12832 pass, 3763 → 2566 fail)** — the arbiter's own
+`GOXSD_RATCHET=1` bank, machine-written, 1197 cases all flipping fail → pass with
+no other lane moving. It is the largest single `schema` movement this project has
+recorded and **it is not on `main`**, so `lanestatus` cannot see it and neither
+can this table. See the branch namespace section.
 
-Milestones, from GitHub:
+Milestones, from GitHub at the previous stamp and **unchanged by this pass** —
+no issue closed, no milestone was reassigned, and the one issue filed here
+(#779) deliberately carries none:
 
 | Milestone | Closed | Open | State |
 |---|---:|---:|---|
@@ -64,102 +63,144 @@ Milestones, from GitHub:
 | M5 — Instance validation (XML) | 6 | 13 | **active** — six slices landed |
 | M6–M12 | 0 | 0 | not filed |
 
-M5's row moved by four without a landing behind the move: **#766, #773, #774 and
-#775 carried no milestone at all**, and all four are M5 work filed by #766's own
-session. M0–M2's row is the one figure here not re-read from GitHub — all three
-are closed with no open issue and nothing has been filed against them since M2
-finished.
+These four rows are the one part of this section not re-read from GitHub today,
+and the reason is stated rather than hidden: the MCP issue tools expose no
+milestone filter and `gh` is 403 (#527), so the counts are the 07:14 stamp's
+GitHub reads carried forward across a provably empty delta. Every other figure
+below was re-read.
 
-Queue: **186 open issues — 163 `ready`, 23 `blocked`, 0 `needs-replan`, 2 `epic`**
-(both `blocked`). **55 of the 186 carry a milestone; 131 carry none** — every
-milestone-carrying open issue is M4 (42) or M5 (13), and the process, doc and
+Queue: **187 open issues — 164 `ready`, 23 `blocked`, 0 `needs-replan`, 2 `epic`**
+(both `blocked`), against 281 closed. **Every open issue carries a queue label**
+— the #773/#774 defect the last pass found is not present today, checked across
+all 187 rather than assumed. Read the milestone table as feature progress, not as
+the queue: 132 of the 187 carry no milestone at all, and the process, doc and
 comment-accuracy issues that post-land passes file are deliberately outside them.
-Read the milestone table as feature progress, not as the queue.
 
 ### What this pass did
 
-A post-land pass for **#766** (PR #776, `43b421a`), not a full backlog run: this
-section is re-derived whole, but no body-by-body audit of the 163 `ready` issues
-was run, no issue was closed and no duplicate merged.
+**The unblock sweep found nothing to unblock, and that is a verified result
+rather than a consequence of nothing having landed.** All 23 `blocked` bodies
+were read and their `## Depends on` lines checked against live issue state. Every
+one names either an open issue (#414 for #438, #455 for #456, #591 for #593,
+#407 for #415, #250 for #248/#267/#345, #715 for #716–#719, #472 and #715 for
+#720, #472 for #16) or a **trigger** — six bodies (#548, #555, #622, #681, #692,
+#696) name the next `/retro` process audit and say in their own words not to
+re-scan them. Two epics (#79, #250) are dependency targets. Nothing is startable
+that is not already labelled so.
 
-- **Two issues were flipped to `ready`, and neither was `blocked`.** #773 and
-  #774 were filed mid-session by #766's landing carrying **no queue label at
-  all** — not `ready`, not `blocked` — so they were invisible to both queues
-  while the only dependency they name closed under them. **This is a different
-  failure from the one the last three passes checked for**: the unblock sweep
-  reads `blocked` bodies, and an issue in neither queue is not in that sweep's
-  input. Both also carried no milestone, as did #766 and #775; all four are now
-  M5.
-- **Nothing was unblocked in the ordinary sense, and that is checked rather than
-  assumed.** All 23 open `blocked` bodies were read for a `## Depends on` naming
-  #766; **none does**. #716 mentions #714 in its Acceptance but depends on #715,
-  and #716–#719 all wait on #715 rather than on each other.
-- **One follow-up was filed: #777.** The warden's #766 diff review noted, under
-  *"NOT held against the landing"*, that `TestNonDefaultedAttributesEscapeClauseFour`'s
-  comment claims four ·defaulted attribute· conjuncts and exercises three —
-  key-dflt-att clause 4 (`isInstanceAttribute`) is uncovered. The repair round
-  `a2f3099` took the three FINDINGS only and the landing shipped with it. Filed
-  rather than carried, per #330.
-- **`gapaudit` reports no real leak**, over 44 markers in 5 areas. All three new
-  `GAP(validate)` markers in `validate/cvcattribute.go` pair with #773 and #774.
-  Group 1's two entries — `validate/assess.go:129` and `:318` — cite **#56** and
-  **#717**, both open and both simply not labelled `kind/gap`, so the tool never
-  had them in its input. That is a heuristic miss in a matcher whose own doc says
-  it is one, not untracked debt. Group 2's eight entries are the permanent kind:
-  conformance-lane and test-coverage gaps that never carry a marker (#398, #404,
-  #569, #591, #592, #593, #740) plus #719, whose marker lands with its M6 seam.
-- **#714's post-land export debt is discharged and needs no filing.**
-  `(*Schema).ResolvedAttributeDeclaration` landed with no consumer outside `xsd`
-  (STYLE T5); `matchedAttribute` and `defaultedAttributes` now both call it. The
-  obligation lived in a comment on #766's thread which said outright that no
-  tracking issue was filed and that the landing discharges it. It did.
-- **#462's carried note was corrected in the landing, not by this pass.** The
-  union residue's comment said closing it needs a change to `dispatchUnion`'s
-  error model; `value.IsDatatypeVerdict` **is** that change, and what is left is
-  ratchet attribution alone. Whoever takes #462 should expect verdict movement in
-  `datatypes` as well as `instance` (PRINCIPLES 22).
-- **#753's band carry-forward is retired here and is not carried again.** Four
-  LOG entries carried its decline-census trigger and the 2026-08-13 pass showed
-  that trigger could never fire; the residue — *"still queue-eligible and unfiled
-  against the band"* — is a band decision, and the band is this file's. The
-  decision: **#753 stays `ready` and unbanded.** It is a fail-open that can never
-  falsely reject, so it costs no lane today, and it is startable exactly as
-  filed. Nothing further is owed.
+- **#584 is `blocked` and names no dependency at all** — its body ends at
+  `## Notes` with no `## Depends on` section. `blocked` means waiting on a named
+  dependency in that section, so an issue carrying the label and no payload is
+  **structurally unreachable by every future unblock sweep**: the sweep reads
+  those lines and correctly concludes there is nothing to check. Its real gate is
+  **#414**, recoverable only from its Notes prose (#438's fold-ordering argument,
+  which #584 inherits). Recorded in a comment on the thread; the body was not
+  edited, because the MCP write path strips angle-bracket tokens (#515, #764) and
+  would delete every element name in it.
+- **#779 was filed for the class.** Three consecutive passes have now found a
+  queue-invisible issue by hand — #773/#774 with no queue label, #584 with no
+  dependency, and #715/#766 found only by reading all 25 `blocked` bodies. The
+  classes are cheap to check and expensive to miss, which is PRINCIPLES 27's
+  exact shape, and `wipsurvey` and `gapaudit` are the precedent. #779 reports and
+  never relabels: #722 is the standing proof that a mechanical verdict acted on
+  without reading the thread damages the queue.
+- **Two persona reports were folded in, and each finding was reproduced against
+  the tree before it was acted on.** Ten findings — five from libuser, five from
+  cliuser. **Two** produced a correcting comment (#748), **three** produced
+  confirmations or an added acceptance probe (#409 twice, #625), **three** were
+  declined because they reproduce exactly as already filed with nothing to
+  correct (#514, #687, #672), **one** was declined as a persona misreading
+  (#747), and **one** as a duplicate of an existing Acceptance clause (#472).
+  **No finding produced a new issue**, which is the expected shape for a surface
+  four passes have already audited — the two that survived scrutiny were both
+  corrections to issues that already existed.
+- **The `#747` re-scope was refused.** cliuser reported it "PARTIALLY fixed, but
+  in the WRONG artifact" — `go doc ./cmd/goxsd8` carries an "Implemented today"
+  paragraph that `-help` does not. Nothing was fixed: **#251 added that paragraph
+  on 2026-08-02**, ten days before #747 was filed, and #747's Acceptance already
+  quotes it as the text to port into the `usage` const. The persona read a
+  pre-existing asymmetry as a partial repair because it has no commit history,
+  which is correct persona discipline and exactly why findings are reproduced
+  before filing. The proposed narrowing would also have dropped fact 2 —
+  `README.md:74-76`, the divergence **#626 introduced** — leaving a false README
+  sentence with no owner.
+- **The exit-2 overload was declined as a duplicate of #472's own Acceptance.**
+  cliuser proposed a forward-looking issue, `blocked` behind #472, for exit 2
+  meaning both "usage error" and "this binary is a stub". #472 already says it,
+  in stronger terms, under *"The exit-2 overload must be resolved here, not
+  deferred"*, and already credits cliuser for it. Re-verified at `dd4f1d8`:
+  `run` has exactly two exits, and since there is no flag parsing at all, today's
+  bucket is not merely coarse but **singular** — which makes the clause cheaper
+  than it reads, because there is no usage-error behaviour to preserve.
+- **#748 gained the correction that matters most**: its own Acceptance quotes
+  `func New(schema *xsd.Schema, opts ...Option)`, and **#766 added the required
+  second positional `backend value.Backend`**. Its prescribed replacement text is
+  stale too — it says "no source adapter exists", and **#711 landed `xmlsrc` the
+  same day #748 was filed**. A third snippet defect it never named: the README
+  line `validate.New(schema)` is missing the backend argument, so the snippet
+  will not compile even after both filed facts are repaired.
+- **#409 gained a third independent libuser sighting and one addition.**
+  `go doc ./codegen Generate` still answers "no symbol"; the root `doc.go` says
+  codegen is *"(eventually)"* while `codegen/doc.go` says it *"emits"*. The root
+  doc is the correct one, so the contradiction dissolves when #409 lands — filed
+  as an acceptance **probe**, not a new issue.
+- **#625 and #514/#687/#672 reproduce exactly as filed** and needed no
+  correction. #625 got a one-paragraph second-sighting note (a defect two
+  isolated consumers find five days apart is not a matter of taste); the three
+  CLI-contract issues got nothing, because three comments saying "still true" is
+  noise.
+
+**`gapaudit` was not re-run, and the reason is that its answer is provably
+unchanged**: the tree is byte-identical to the head the 07:14 pass audited, so
+its 44 markers in 5 areas and its "no real leak" verdict stand. Worth one line
+for whoever reaches for a grep instead — the naive `grep -rn "GAP("` returns
+**77** lines, six of them `GAP(real)` and `GAP(oops)` inside `gapaudit`'s own
+test fixtures. That is the tool's whole reason for existing (PRINCIPLES 27).
 
 `gh` returned 403 on **both** REST and GraphQL in this container again, so every
-GitHub read and write here went through the MCP server and both survey tools were
-fed hand-built JSON rather than the pipelines CLAUDE.md prints. That is #527,
-with #668 and #682 owning the downstream consequence.
+GitHub read and write here went through the MCP server and `wipsurvey` was fed
+hand-built JSON. That is **#527**, now at eleven-plus consecutive sessions, with
+#668 and #682 owning the downstream consequence.
 
 ### Branch namespace, `origin` — report-only; a session never deletes a ref
 
 | Branch | Verdict | Disposition |
 |---|---|---|
-| `wip/issue-715` | EXPIRED (2h TTL) — **do not act on it** | **Zero commits ahead of `main`**: a lease, not work. The thread carries an oracle grounding and a warden surface pre-flight, both 2026-08-14 07:56, and the ref was pushed minutes later. #722's exact shape — read the thread, never the verdict. |
-| `wip/issue-740` | EXPIRED (2h TTL) — mid-landing | Three commits: the implementation, the **arbiter's own ratchet bank** (`c415bf9`, `schema` lane) and a merge-forward of this landing. An accepted verdict with an unlanded branch, so #740 is **not** a band row, on #714's precedent. |
+| `wip/issue-740` | EXPIRED (6h28m) — **mid-landing, and the one to read first** | Three commits: the implementation `68c7a7f`, the arbiter's own ratchet bank `c415bf9` (**`schema` +1197**), and a merge-forward. Age is genuine — the branch has commits of its own, so #722 does not apply. An accepted verdict on an unlanded branch, so #740 is **not** a band row, on #714's precedent. Recovery is a resume, not a re-implementation. |
+| `wip/issue-715` | EXPIRED (6h49m) — **claim dead, grounding alive** | **Zero commits ahead of `main`**: a lease. The `wipsurvey` age is the figure #722 says not to trust; the thread's own clock is what settles it — last comment 07:56 UTC, six and a half hours, no RESUME. **Not retired**: hours, not days, and this is the queue's highest-value M5 slice. |
 | `wip/issue-256` | RETIRED | Issue closed `needs-replan`, superseded by #470. |
 | `wip/issue-271` | RETIRED | Issue closed `needs-replan`, superseded by #478/#479/#480. |
 | `wip/issue-287` | RETIRED | Issue closed, answered in the opposite direction by PR #511. Not a park — it carries no `needs-replan`. |
 | `claude/eloquent-cerf-7ckw7b` | merged | 0 commits ahead of `main`. Deletable. |
 | `claude/eloquent-cerf-8f1mrv` | merged | 0 commits ahead of `main`. Deletable. |
-| `claude/eloquent-cerf-patxs3` | superseded | **253** commits ahead by SHA, none by content — tip `2196c3f`, unmoved since 2026-08-07, and its content reached `main` as squash commits. Deletable. |
+| `claude/eloquent-cerf-patxs3` | superseded | 253 commits ahead by SHA, none by content — tip `2196c3f`, unmoved since 2026-08-07, content reached `main` as squash commits. Deletable. |
 
-`origin/wip/issue-766` is gone, deleted at merge, which is what a landed branch
-is supposed to do. No `parked/*` branches.
+No `parked/*` branches. `origin/wip/issue-766` is gone, deleted at merge, which
+is what a landed branch is supposed to do.
 
-**The previous section recorded `claude/eloquent-cerf-patxs3` as 53 commits
-ahead; it is 253.** The tip has not moved since 2026-08-07 and `main` advancing
-can only lower that count, so the old figure was wrong when it was written. The
-verdict it supported is unchanged — the count is by SHA and means nothing against
-a squash-merged history — which is exactly why nobody caught it.
+**The two EXPIRED branches fail in opposite directions and want opposite
+responses.** #740's expiry hides *finished, judged, banked* work — the risk is
+that it is silently redone. #715's expiry hides *nothing*, because the branch is
+empty — the risk is that its issue is retired and its grounding lost. A single
+EXPIRED verdict cannot distinguish them; only the commit count and the thread
+can. This is the sharpest instance of #722's hazard yet recorded, and both halves
+of it appeared in one `wipsurvey` run.
+
+**#715's pre-flight survives its claim, and a session must not re-run it.** The
+expired session produced no code but did produce an oracle grounding across
+§3.4.4.2, §3.4.4.3, §3.9.4.2, §3.9.4.3 and §3.8.4.3 with the load-bearing
+cvc-accept Note quoted in full, plus a **warden verdict that rejected #715's own
+`## Notes` section** and approved a different named shape:
+`xsd/contentmatcher.go`, five exported identifiers, a counting walk rather than
+automaton unfolding, `(*Schema).ContentMatcher` as a method so a
+pre-`cos-nonambig` matcher is unrepresentable. Whoever takes #715 implements the
+grounding comment, not the body.
 
 **Read a zero-commit `wip/issue-N` against its issue thread before believing an
 EXPIRED verdict.** This is **#722**: `wipsurvey` dates a lease-only branch from
-the *previous* landing's committer date, so a claim made minutes ago reports
-EXPIRED, and the prescribed response to EXPIRED is to label the issue
-`needs-replan`. A pass following it blindly retires a live session's issue in the
-hour its design is approved. `wip/issue-715` is that case today. The caution
-stands until #722 lands.
+the *previous* landing's committer date, and the prescribed response to EXPIRED
+is `needs-replan`. A pass following it blindly retires a live session's issue.
+The caution stands until #722 lands.
 
 ### Working band
 
@@ -169,47 +210,52 @@ horizontal completeness.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #715 | the greedy non-backtracking content matcher — the only band row that unblocks five others (#716, #717, #718, #719, #720), and by its own Acceptance the largest single move M5 has left. **CLAIMED**: grounding and warden pre-flight on the thread, lease-only branch. Read it before taking it (#722) |
-| 2 | #775 | `cvc-complex-type` clause 1.2, the simple-content charge #766 split off — an `instance` mover whose whole seam is already on `main`, and **the top unclaimed row** |
-| 3 | #659 + #527 | the environment tax, one sentence of prose each. Both bodies were corrected on 2026-08-13 and neither was actionable as filed; #527 was paid again by this pass |
+| 1 | #715 | the greedy non-backtracking content matcher — the only band row that unblocks five others (#716, #717, #718, #719, #720), and by its own Acceptance the largest single move M5 has left. **The claim on it expired with zero commits and the pre-flight banked**, so it is now the queue's cheapest high-value row rather than a contended one |
+| 2 | #775 | `cvc-complex-type` clause 1.2, the simple-content charge #766 split off — an `instance` mover whose whole seam is already on `main` |
+| 3 | #659 + #527 | the environment tax, one sentence of prose each. Both bodies were corrected on 2026-08-13; #527 was paid again by this pass, as it has been by every pass for eleven sessions |
 | 4 | #733 | a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and #442 moved `schema` **+82** |
-| 5 | #747 + #748 | the two persona findings the 2026-08-13 pass filed. #747's second fact is a divergence **#626 introduced**; #748's snippet will not compile against the signature `xmlsrc/doc.go` already commits |
+| 5 | #748 + #747 | the two persona findings, both re-verified and both corrected on their threads today. #748 is now four facts, three of them one-line edits; #747 is two facts and its re-scope was refused |
 | 6 | #625 → #669 → #492 | the rest of README's Library block, in that order — #625's fix names the file #669 must add to the example list, and #492's belongs in the sentence at `README.md:115-116` rather than a new paragraph |
-| 7 | #514 + #687 + #672 | the open CLI-contract decisions: typo-vs-unbuilt, scoped help, and `-version` |
-| 8 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 7 | #514 + #687 + #672 | the open CLI-contract decisions: typo-vs-unbuilt, scoped help, and `-version`. All three re-reproduced today against the built binary. Take them **before** #472 — each is a sentence or a dispatch branch while the CLI surface is still empty, and a change to shipped behaviour afterwards |
+| 8 | #472 | implement `goxsd8 parse`, the first non-stub subcommand — and the issue that owns the exit-2 split |
 
-**Two rows left the band and only one of them landed.** #766 was row 2 and is
-closed. **#740 was row 3 and is mid-landing** — its branch carries the arbiter's
-own ratchet bank, so it has an accepted verdict and an unlanded branch, which
+**#715 moves from "CLAIMED, read it before taking it" to the top row outright.**
+The previous band marked it contended and told a session unwilling to read a
+thread to take row 2 instead; that advice is withdrawn. The claim is dead, the
+branch is empty, and the grounding plus warden verdict are banked on the thread —
+which makes #715 *less* expensive than any other row of comparable value, not
+more.
+
+**#740 is deliberately not banded** despite being the largest pending lane
+movement in the project. It has an accepted verdict and an unlanded branch, which
 #714's post-land pass established is not a band row: the band exists so a session
-can take a **startable** issue, and banding one with a live claim invites a second
-session onto it. **#715 is the case that precedent does not cover** — a claim
-with no verdict — and it is banded anyway, marked, because a lease-only branch is
-the one thing #722 says may be nothing at all. A session that will not read a
-thread should take row 2.
+can take a **startable** issue, and banding judged work invites a second session
+onto it. Row 5 swapped #748 ahead of #747 because #748 now carries a correction
+its body does not, and reading the thread first is cheaper there.
 
-Rows 3–8 are the previous band's rows 4–9, promoted by two, with their
-justifications unchanged: nothing this landing touched any of them.
+**Rows 3, 4, 6, 7 and 8 are unchanged in substance from the previous band**, with
+their justifications intact: nothing landed to touch any of them.
 
-**#773 and #774 are `ready` and deliberately unbanded**, though this pass flipped
-both. #773 needs a **new optional capability interface** for `[unparsedEntities]`
-and so its own warden surface pass before it is workable — the same condition
-holding #744 and #721 out. #774 is three fail-open declines to close or rule
-permanent; it can move a lane, but which way and by how much is unknown until the
-first is decided, so it is not ordered against slices whose movement is
-predictable. **#777** is a one-line comment correction and is not a band row.
+**#773 and #774 stay `ready` and unbanded.** #773 needs a new optional capability
+interface for `[unparsedEntities]` and so its own warden surface pass before it
+is workable — the same condition holding #744 and #721 out. #774 is three
+fail-open declines to close or rule permanent; it can move a lane, but which way
+and by how much is unknown until the first is decided, so it is not ordered
+against slices whose movement is predictable.
 
 **Deliberately unbanded, and why.** **#744** — the chained-redefine successor —
 is the highest-value M4 gap in the queue and is held out only because its
 `## Surface` requires a warden pre-flight on an `xsd` entry point that does not
 exist. **#722** is the one to promote if a later pass wants a cheap high-value
 row: it is still the only unbanded issue whose absence can cause a future pass to
-actively damage the queue, and this pass met its hazard twice in one `wipsurvey`
-run. **#753** is settled above. **#743**, **#742**, **#741**, **#731**, **#732**,
-**#726**, **#725**, **#702**, **#703**, **#706**, **#755**, **#756**, **#759**,
-**#763**, **#764**, **#768**, **#771**, **#772** and **#777** are this month's
-post-land follow-ups: real, filed, and none of them moves a lane. The remaining
-`blocked` M5 slices cannot be banded at all.
+actively damage the queue, and this pass met **both halves** of its hazard in one
+`wipsurvey` run. **#753** was settled by the previous pass — `ready`, unbanded,
+nothing further owed — and is not re-litigated here. **#779** is this pass's own
+filing and is not banded on its first appearance. **#743**, **#742**, **#741**,
+**#731**, **#732**, **#726**, **#725**, **#702**, **#703**, **#706**, **#755**,
+**#756**, **#759**, **#763**, **#764**, **#768**, **#771**, **#772** and **#777**
+are this month's post-land follow-ups: real, filed, and none of them moves a
+lane. The remaining `blocked` M5 slices cannot be banded at all.
 
 **#759 is the one unbanded follow-up with an owner by default.** Violation
 messages have two forms for naming a sub-clause and STYLE picks neither;
@@ -225,14 +271,18 @@ each moved it; #744, #706 and #726 all open it next.
 ### Next planning action
 
 **Sweep the carried follow-up ledger (#489)** — file or dismiss each unfiled
-advisory, one comment per item — before the next carve. It has now gone seven
+advisory, one comment per item — before the next carve. It has now gone eight
 consecutive passes undone, it grows with every landing, and #330 is the standing
-proof that a hand-off tracks nothing. This pass filed one such advisory (#777)
-and retired one carried band note (#753), which is the shape the sweep is for and
-is not a substitute for running it. Everything else this queue needs is a develop
-iteration, not a planning one — **starting with #775**, the band's top unclaimed
-row.
+proof that a hand-off tracks nothing. This pass disposed of nine persona findings
+and filed one issue, which is the shape the sweep is for and is not a substitute
+for running it.
 
+Everything else this queue needs is a develop iteration, not a planning one.
+**Start with #740** — not because it is a band row, which it deliberately is not,
+but because a judged, banked `schema` +1197 sitting off `main` is the largest
+recoverable value in the repository and it decays: the branch is two commits
+behind already, and every landing widens the merge it will need. If it is
+unclaimed, resume it; **#715 is the top row for anyone starting fresh.**
 ## Milestones
 
 ### M0 — Scaffold — done
