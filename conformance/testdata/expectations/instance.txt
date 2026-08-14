@@ -453,7 +453,7 @@ EDCWildcard/s3_8_6ii01/instance/s3_8_6ii01i fail
 EDCWildcard/s3_8_6v01/instance/s3_8_6v01i fail
 ElemDecl/abstract00101m/instance/abstract00101m1_n fail
 ElemDecl/abstract00101m/instance/abstract00101m1_p fail
-ElemDecl/abstract00201m1/instance/Negative fail
+ElemDecl/abstract00201m1/instance/Negative pass
 ElemDecl/abstract00201m2/instance/Positive fail
 ElemDecl/abstract00201m3/instance/Positive fail
 ElemDecl/annotation00101m1/instance/Positive fail
