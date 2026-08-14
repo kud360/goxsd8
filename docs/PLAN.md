@@ -157,61 +157,63 @@ horizontal completeness.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #761 | `produceElement` hardcodes `{abstract}` and `{nillable}` false on every top-level `xs:element`, so `cvc-elt` clause 2 is unreachable through any assembled schema and all 18 of the `instance` lane's first passes are the other rule. The cheapest change that gives a just-started lane a second live charge |
-| 2 | #714 | the M5 fan-out head, `ready` on this pass. `cvc-attribute`, `cvc-au` and `cvc-simple-type` — the first slice whose Acceptance can name an `instance` figure and be checked against one |
-| 3 | #740 | the `enumeration` facet is declined by the gate and, past it, refused with a **fabricated** `src-simple-type` verdict on a legal schema (STYLE E2). `pdecimal006` is the named cost, and it is the same two-refusal shape #447 already worked through |
-| 4 | #659 + #527 | the environment tax, one sentence of prose each, banded after **eleven** and **ten** sightings. Both bodies were corrected on 2026-08-13 and neither was actionable as filed |
-| 5 | #733 | a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and #442 moved `schema` **+82** |
-| 6 | #747 + #748 | the two findings the 2026-08-13 pass filed. #747's second fact is a divergence **#626 introduced**; #748's snippet will not compile against the signature `xmlsrc/doc.go` already commits |
-| 7 | #625 → #669 → #492 | the rest of README's Library block, in that order — #625's fix names the file #669 must add to the example list, and #492's belongs in the sentence at `README.md:115-116` rather than a new paragraph |
-| 8 | #514 + #687 + #672 | the open CLI-contract decisions: typo-vs-unbuilt, scoped help (now with a third case — `-h` after an unknown subcommand exits 0 and flags nothing), and `-version` |
-| 9 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 1 | #740 | the `enumeration` facet is declined by the gate and, past it, refused with a **fabricated** `src-simple-type` verdict on a legal schema (STYLE E2). `pdecimal006` is the named cost, and it is the same two-refusal shape #447 already worked through |
+| 2 | #659 + #527 | the environment tax, one sentence of prose each, banded after **eleven** and **ten** sightings. Both bodies were corrected on 2026-08-13 and neither was actionable as filed |
+| 3 | #733 | a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and #442 moved `schema` **+82** |
+| 4 | #747 + #748 | the two findings the 2026-08-13 pass filed. #747's second fact is a divergence **#626 introduced**; #748's snippet will not compile against the signature `xmlsrc/doc.go` already commits |
+| 5 | #625 → #669 → #492 | the rest of README's Library block, in that order — #625's fix names the file #669 must add to the example list, and #492's belongs in the sentence at `README.md:115-116` rather than a new paragraph |
+| 6 | #514 + #687 + #672 | the open CLI-contract decisions: typo-vs-unbuilt, scoped help (now with a third case — `-h` after an unknown subcommand exits 0 and flags nothing), and `-version` |
+| 7 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
 
-**#713 held row 1 and has landed** (PR #762, `2e47a73`). Its row is dropped
+**#714 is absent by decision, not by oversight** — it is `ready`, it was row 2,
+and it is in flight with an accepted verdict. Three paragraphs down.
+
+**#761 held row 1 and has landed** (PR #767, `f19c860`). Its row is dropped
 rather than replaced, and the previous landing's block is replaced by this one
-rather than joined to it. **`instance` moved 0 → 18 pass**, 26361 → 26343
-fail, banked as `dbf948c` — **the first time that lane has ever moved.** The
-figure is small on purpose. The lane decides a case at exactly two shapes and
-DECLINES everything else, **a zero-violation `Result` above all**: §3.3.5.1's
-`e-validity` is a conjunction over recursively assessed attributes and
-children, `Assess` charges nothing below the root, so the spec's own category
-for what this engine knows is `notKnown`, which licenses neither "valid" nor
-"invalid". Reading an empty `Result` as validity would have banked thousands
-of passes for the wrong reason; 18 is what soundness costs, and no false pass
-is reachable by construction rather than by census.
+rather than joined to it. **`instance` moved 18 → 19 pass**, 26343 → 26342
+fail, banked as `12780d0`; `schema` and `datatypes` unchanged, no lane
+regressed. The one flip is `ElemDecl/abstract00201m1/instance/Negative` — a
+top-level `abstract="true"` element with an instance rooted at it, charged
+`cvc-elt` clause 2 through an assembled schema for the first time.
 
-**Row 1 is #761, not the row that sat below #713.** The mechanical answer was
-to promote #740, and it is wrong for the second pass running for the same
-reason: a *new* issue entered the band at the same moment. The arbiter filed
-**#761** while judging #713 — `producer.produceElement` passes literal `false`
-for `{abstract}` and `{nillable}` at both of its construction calls for a
-top-level `xs:element`, whatever the attribute says, so
-`conformance/instance.go`'s `cvc-elt` arm cannot fire through any schema the
-lane assembles and **all 18 of the lane's first passes are the other rule**.
-Closing it is the cheapest way a just-started lane gets a second live charge,
-it retires four inert reader sites and a STYLE P3 debt (no `GAP(` marker
-exists at either site), and if it lands before #714 it removes a confound from
-that slice's figure. The reverse is not true, which is what settles the order
-between them.
+**The prediction it was banded on was right in direction and wrong in
+magnitude, and that is recorded rather than smoothed over.** The band flagged
+the issue's own *"expect the ratchet to move"* as a prediction nobody had
+measured, and asked for an honest figure. The figure is **one case**: most
+suite fixtures rooting
+at an abstract element carry other undecidable content, and the lane at
+`f19c860` decides only at a violation count of exactly one. What the landing
+actually bought is not the flip — it is four reader sites that were inert
+against every assembled schema and are now live (`validate/assess.go:80`,
+`xsd/complexextension.go:940`, `xsd/defaultbinding.go:312`, and the
+`abstract`-driven half of substitution-group correctness), plus the STYLE P3
+debt at both construction calls. The schema-lane regression the band warned
+about did not materialize: 2108 declined before and after.
 
-**#761's ratchet claim is a prediction and is banded as one.** Its `## Scope`
-says *"Expect the ratchet to move"*; nobody has counted the suite's instance
-cases that root at an abstract element, or the `e-props-correct` rejections on
-the `schema` side. The session that takes it predicts, measures, attributes, and
-reports a zero honestly if that is the answer — and watches for a schema-lane
-**regression**, because turning two universally-false inputs into real ones can
-start rejecting schemas the parser accepts today.
+**Row 1 is #740, and it got there by elimination rather than by promotion.**
+The last two passes each overrode the mechanical answer because a *new* issue
+entered the band as row 1 dropped; neither of this landing's follow-ups does
+that. **#768** is one attribute in one test fixture and **#456** was filed
+eleven days ago and is `blocked` behind #455 — nothing here made either of them
+startable, let alone a lane mover. What actually moved row 1 past the
+mechanical answer is that the mechanical answer, **#714**, is unavailable.
 
-**Row 2 is #714, and its relabel was owed by #712's pass rather than this one.**
-Its `## Depends on` names **#712 and nothing else**; #712 landed as `09ccfa4`,
-so it has been unblocked since that landing and stayed `blocked` because that
-pass named only #713 and did not re-scan the rest of the fan-out. Flipped here,
-with the miss recorded on the thread — the same shape (two siblings behind one
-dependency, one of them relabelled) recurs across #715–#719. Both readings agree
-in any case: its Acceptance is *"moves `instance`. Report the figure"*, and
-there was no figure to report until #713 landed.
+**#714 is in flight, which is why it is not row 1 and not a row at all.** It
+was row 2 and was the mechanical promotion. `origin/wip/issue-714` carries
+three commits on base `1835218` — the implementation, the round-1 repair, and
+the arbiter's own bank `ec94a24` — and the thread holds an **accept** verdict
+at round 2 (`instance` 18 → 28 pass as measured on that base). What is owed is
+a landing, not a session: a `docs/LOG` entry, a merge forward onto `f19c860`,
+a full gate re-run on the merged tree, and a restated figure — the ten flips
+read **19 → 29** against a lane that now banks 19, and the expectations merge
+is textually clean, so nothing forces the arithmetic to be noticed. All of
+that is recorded on the thread. The band exists so a session can take a
+**startable** issue; banding an issue with a live branch and an accepted
+verdict invites a second session onto it. **If that branch expires with no
+RESUME comment, the next pass re-bands #714 — after reading the thread, per
+#722, never off a `wipsurvey` verdict alone.**
 
-**Row 4 is the change of judgment, and it is overdue rather than new.** #659
+**Row 2 is the change of judgment, and it is overdue rather than new.** #659
 (suite submodule unpopulated) and #527 (`gh` 403 on both routes) have both been
 `ready` and unbanded since 08-10 and 08-06 while being paid, respectively,
 across **eleven sightings in ten landings** and **nine consecutive sessions plus
@@ -247,53 +249,71 @@ next M5 charging slice carries it, provided that slice lands the STYLE sentence
 instead of silently picking a form. The arbiter recorded it on #712 as
 non-blocking and not a finding, and `09ccfa4` is not in question.
 
-**Two issues were filed from this landing, and neither is banded.** **#763**
-(`ready`/`kind/bug`/`area/conformance`) is the test-design defect the arbiter
-judged non-blocking on #713:
-`TestInstanceExecutorDeclinesCaseWithNoGroupSchema` is **green with the guard it
-names deleted**, because `assembleCase` declines the same case independently —
-`filepath.Base("")` is `"."`, `Resolve` opens the directory, and `ReadDocument`
-fails `[xml-wf] read .: is a directory`. Confirmed here by running the mutation
-rather than by reading the log entry that reported it. **#764**
-(`ready`/`kind/process`) is this pass's own finding: the MCP `issue_read` path
-**strips angle-bracketed tokens from an issue body**, so a session that reads a
-body and writes it back deletes every `<xs:element>` in it and reports success.
-`WebFetch` confirms the stored bodies are intact and the write path faithful, so
-the fix is one sentence in `docs/WORKFLOW.md` — but with `gh` 403 on both routes
-(#527) that read path is the only one a session has, and the discipline that
-tells sessions to correct stale premises **in the body** walks straight into it.
+**This landing owed three dispositions and got three; exactly one is a new
+issue.**
 
-**One item on #713's owed list needed no filing.** The lane's decidable set
-keeps `cvc-elt` although #761 makes it unreachable, on the reasoning that a
-gate which dropped the rule would silently start declining real verdicts the
-day the producer reads the attribute. That is a decision the landing already
-carries in `conformance/instance.go`'s file comment, not a follow-up; #761 is
-the thing that closes it. Everything else on that list was discharged before
-landing.
+- **#768** (`ready`/`kind/bug`/`area/parser`, unbanded) is the arbiter's
+  `[tests-that-cannot-fail]` finding: `TestProduceLocalElementNillableMapped`'s
+  `{abstract}` assertion stays green against a `produceLocalElement` that reads
+  the attribute, because the fixture carries none. **Verified here by running
+  the four-cell mutation matrix, not by reading the verdict** — and the
+  verification sharpened the claim: the assertion *does* catch a producer that
+  hardcodes `true`, and what it cannot distinguish is "never reads it" from
+  "reads it correctly", which is the whole of what its comment asserts. Filed
+  rather than absorbed because the arbiter's own landing obligation 3 asked the
+  merge-forward round to fold it in, the round happened (`409fda3`), and it did
+  not ride along; a second hand-off would track nothing (#330).
+- **The `boolAttr` whitespace defect was already filed** — it is **#456**, open
+  since 08-03 and `blocked` behind #455, which mason and the arbiter both
+  missed while flagging it. No duplicate was filed. #456's body was **corrected
+  on its thread rather than in place**: it says "eleven call sites … all in
+  `parser/produce_complex.go`" and there are now **thirteen**, two of them the
+  `parser/produce.go` sites this landing added. The body itself was left alone
+  deliberately, because #764 (the MCP `issue_read` path strips angle-bracketed
+  tokens from a body) makes a read-modify-write of that body a silent deletion
+  of the three `<…>` tokens it carries — `WebFetch` confirmed them present.
+  **That is the discipline "correct the body, not a comment" colliding with the
+  only read path a session has, and it is why #764 is worth its own session.**
+  The landing also changed the defect's direction: with `{abstract}` now real
+  on globals, a padded `abstract=" true "` is a false accept with a live
+  `cvc-elt` reader behind it, where before the property was universally false
+  anyway.
+- **#753's decline-census trigger is RETIRED, after four consecutive entries
+  carrying it forward.** It is not deferred and it is not fired: it is
+  unfireable, on two independent grounds recorded on the thread. `declines.go`
+  detects a decline by re-running the case with its expectation flipped, which
+  is an exact test for "nobody decided this" and structurally cannot carry a
+  *reason*; and even a per-reason breakdown would not name this gap, because an
+  ill-formed-but-accepted document charges nothing and lands in the decline
+  bucket for the engine's ordinary reason. The instrument that would measure it
+  is a census of the suite's *fixtures*, which is different work nobody has
+  asked for. #753 stays `ready`, unbanded and startable exactly as filed — its
+  own Acceptance's decline path needs no census at all.
+
+**Nothing was unblocked by this landing, and that is a checked fact rather than
+an omission.** All 25 open `blocked` issues were read for a `## Depends on`
+naming #761; none does. #761 was filed by the arbiter mid-verdict and nothing
+was ever queued behind it.
 
 **Deliberately unbanded, and why.** **#744** — the chained-redefine
 successor — is the highest-value M4 gap in the queue and is held out only
 because its `## Surface` requires a warden pre-flight on an `xsd` entry point
 that does not exist, in three candidate shapes; it is a band row the moment
-that call is made. **#753** stays unbanded for a third pass, and this is a decision rather
-than a deferral: it is a fail-open (character data and a second root outside
-the document element, silently admitted in `xmlsrc` and `parser/document.go`)
-which can never falsely reject, so it costs no lane today. **Its stated
-trigger was #713's first decline census, and that census does not exist** —
-the suite reports the lane's decline COUNT (26339 harvest candidates plus 3
-indeterminate) and not the per-reason breakdown #753 needs, so the trigger has
-not fired and cannot be evaluated. `GOXSD_DECLINES=1` lists them; whichever of
-#714 or #761 lands next owes that reading, or #753 stays untriggerable
-indefinitely on a condition nothing produces. **#743**, **#742**, **#741**,
-**#731**, **#732**, **#726**, **#725**, **#702**, **#703**, **#706**, **#755**,
-**#756**, **#759**, **#763**, **#764** are this month's post-land follow-ups:
+that call is made. **#753** stays unbanded, now with no trigger attached and no
+carried-forward note owing: it is a fail-open (character data and a second root
+outside the document element, silently admitted in `xmlsrc` and
+`parser/document.go`) which can never falsely reject, so it costs no lane
+today, and it is startable as filed whenever someone wants it. **#743**,
+**#742**, **#741**, **#731**, **#732**, **#726**, **#725**, **#702**, **#703**,
+**#706**, **#755**, **#756**, **#759**, **#763**, **#764**, **#768** are this
+month's post-land follow-ups:
 real, filed, and none of them moves a lane. **#721** wants a warden call on two
 shapes before it is workable. **#722** is the one to promote if a later pass
 wants a cheap high-value row — it is still the only unbanded issue whose
 absence can cause a future pass to actively damage the queue. The remaining
 `blocked` M5 slices cannot be banded at all.
 
-**Rows 6–8 sit ahead of row 9 on cost, not importance.** Each is a sentence or
+**Rows 4–6 sit ahead of row 7 on cost, not importance.** Each is a sentence or
 a dispatch branch while the CLI surface is still empty; taken after #472 every
 one of them is a change to shipped behaviour. #472's own Acceptance carries
 the `-version` decision, so if it is taken first it must discharge #672 rather
@@ -303,7 +323,7 @@ than leave it contradicting the landing. **#720** (`goxsd8 validate`) is
 **The Status text above is now FALSE where it matters, and it is deliberately
 left standing.** It says `instance` is *"still at zero"* and that *"the first
 `instance` figure that exists arrives with #713, which needs #712 first"*.
-Both are discharged: the lane reads **18 / 26343 / 26361** and #713 is closed.
+Both are discharged: the lane reads **19 / 26342 / 26361** and #713 is closed.
 Nothing above this table was patched, because the Status section is REPLACED
 wholesale by `/backlog` from `go tool lanestatus` and GitHub, and it carries
 ONE date stamp (**2026-08-13**) precisely so a reader can tell staleness from
@@ -312,9 +332,9 @@ inside a section stamped with an older date makes it *harder* to read, not
 easier — the reader then cannot tell which figures were re-derived and which
 were not. **The next `/backlog` must re-derive the section whole, and the lane
 paragraph is where it starts.** The milestone and queue tables are stale by
-#712's and #713's landings (both M5, both closed), by #714's and #761's
-`ready` flips, and by #753, #755, #756, #759, #761, #763 and #764 having been
-filed since.
+#712's, #713's and **#761's** landings (all M5-adjacent, all closed), by #714's
+`ready` flip, and by #753, #755, #756, #759, #761, #763, #764 and **#768**
+having been filed since.
 
 **`parser/redefine.go` has been rewritten five times in six days, so read it
 rather than an issue body that describes it.** #686 put its duplicate-key charge
@@ -327,10 +347,15 @@ composition-gaps bullet. #744, #706 and #726 all open that file next.
 ### Next planning action
 
 **Sweep the carried follow-up ledger (#489)** — file or dismiss each unfiled
-advisory, one comment per item — before the next carve. It has now gone five
+advisory, one comment per item — before the next carve. It has now gone six
 consecutive passes undone, it grows with every landing, and #330 is the standing
-proof that a "handed to the post-land pass" hand-off tracks nothing. Everything
-else this queue needs is a develop iteration, not a planning one.
+proof that a "handed to the post-land pass" hand-off tracks nothing. This pass
+retired one such hand-off (#753's decline-census trigger, four entries old) by
+showing it could never fire, which is the shape the sweep is for and is not a
+substitute for running it. Everything else this queue needs is a develop
+iteration, not a planning one — **starting with #714's landing**, whose own
+post-land pass inherits three named non-blocking observations from its round-2
+verdict.
 
 ## Milestones
 
@@ -394,8 +419,9 @@ number. The fan-out is #714–#719, of which **#714 is `ready`**; the rest stay
 `blocked`, each on the one before it. The CLI's own `validate` subcommand is
 #720, `blocked` behind #472 and #715.
 
-**18 is a floor built for soundness, not a measure of the engine.** The lane
-emits only "not valid" observations, from two unconditional root-level charges;
+**19 is a floor built for soundness, not a measure of the engine.** The lane
+emits only "not valid" observations, from two unconditional root-level charges
+(#761 made the second of them reachable through an assembled schema);
 a violation-free `Result` DECLINES rather than passing, because `Assess`
 evaluates none of `e-validity`'s other conjuncts. The milestone's remaining
 slices are what turn declines into decisions.
