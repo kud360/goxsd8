@@ -361,9 +361,15 @@ func TestSimpleTypedRootIsUndecided(t *testing.T) {
 
 // Only the ROOT's attributes are assessed. A descendant's governing type
 // comes from the particle it is ·attributed to· in its parent's {content
-// type}, which nothing computes yet, so its attributes are assessed against
-// nothing and the same stray attribute that is charged on the root is silent
-// one level down.
+// type}, which this package computes for the root's own [[children]] but does
+// not thread into the descent, so a descendant's attributes are assessed
+// against nothing and the same stray attribute that is charged on the root is
+// silent one level down.
+//
+// The child itself is charged: governedSchema's type has an empty {content
+// type}, which admits no element information item [[children]] at all (clause
+// 1.1). That charge is the root's, at the child's position, and it names no
+// attribute.
 func TestDescendantAttributesAreNotAssessed(t *testing.T) {
 	child := &testElement{
 		name:  xsd.QName{Local: "child"},
@@ -374,7 +380,13 @@ func TestDescendantAttributesAreNotAssessed(t *testing.T) {
 	root.kids = []Child{ElementChild(child)}
 
 	got := assessRoot(t, root, []xsd.AttributeUse{aUse(t, "id", false, nil)}, nil)
-	wantSilence(t, got, "a descendant element has no ·governing type definition· here")
+
+	if len(got) != 1 || got[0].Loc != loc(2, 1) {
+		t.Fatalf("Violations() = %v, want the one clause 1.1 charge at the child's own location", got)
+	}
+	if strings.Contains(got[0].Msg, "stray") {
+		t.Errorf("Msg = %q, want no charge about a descendant's attribute", got[0].Msg)
+	}
 }
 
 // The two clauses charge independently and in the order they are found:

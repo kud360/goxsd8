@@ -59,22 +59,29 @@ const ruleCvcComplexType xsderr.Rule = "cvc-complex-type"
 // name — and so is never charged.
 //
 // Where the root's ·governing type definition· is determinable and complex
-// (see rootComplexType), the root's own [[attributes]] are additionally
-// assessed against that type's {attribute uses}: cvc-complex-type (§3.4.4.2)
-// clauses 2, 3 and 4, and through clause 2.1 the cvc-attribute (§3.2.4.1) and
-// cvc-au (§3.5.4) charges the value space decides (see [walk.attributes] and
-// cvcattribute.go). Nothing below the root is: a DESCENDANT's governing type
-// definition comes from matching it against a content model
-// (cvc-complex-content, §3.4.4.3), which this package does not do, so its
-// attributes are assessed against no type at all.
+// (see rootComplexType), the root itself is additionally assessed against it,
+// in both directions cvc-complex-type (§3.4.4.2) quantifies in. Its
+// [[attributes]] go to clauses 2, 3 and 4, and through clause 2.1 to the
+// cvc-attribute (§3.2.4.1) and cvc-au (§3.5.4) charges the value space
+// decides (see [walk.attributes] and cvcattribute.go). Its [[children]] go to
+// clause 1, and through clause 1.4 to cvc-complex-content (§3.4.4.3) over
+// [xsd.Matcher] (see cvccomplexcontent.go).
+//
+// Nothing below the root is assessed against anything. A DESCENDANT's
+// ·governing type definition· comes from the particle its parent's content
+// model ·attributes· it to (§3.3.4.6 over §3.4.4.4) — which the root's own
+// match now computes and this package does not yet thread into the descent —
+// so a descendant's attributes and [[children]] alike are assessed against no
+// type at all.
 //
 // Nothing else is decided: the remaining cvc-elt clauses, the rest of
-// cvc-type (§3.3.4.4) and cvc-complex-type's own clauses 1, 5 and 6 are not
+// cvc-type (§3.3.4.4) and cvc-complex-type's own clauses 5 and 6 are not
 // evaluated, so a [Result] carrying no violation says the root is declared,
 // not abstract, and — where its type was determinable — carries no attribute
-// clause 2 rejects, no required attribute clause 3 misses, and no attribute
-// whose value this backend could read and found invalid, and says nothing
-// else about the document.
+// clause 2 rejects, no required attribute clause 3 misses, no attribute whose
+// value this backend could read and found invalid, and no clause 1 content
+// reject its {content type}.{variety} and particle could settle, and says
+// nothing else about the document.
 //
 // It panics if root is nil, on the same grounds as [ElementChild].
 func (v *Validator) Assess(root Element) *Result {
@@ -114,13 +121,11 @@ func (v *Validator) Assess(root Element) *Result {
 // Determinable here means the whole of key-governing-type-elem's clause 4
 // case: no processor-stipulated type (this package stipulates none), no
 // ·instance-specified type definition· overriding it, and a ·selected type
-// definition· (§3.3.4.1) that is D.{type definition} outright. The first
-// three declines below withhold a type that could differ from the
-// declaration's, and charging the root's attributes against the WRONG type
-// is a false reject in both directions — an attribute the real governing
-// type declares looks unmatched, one it forbids looks fine. The fourth
-// withholds a type that is the right one but whose two attribute PROPERTIES
-// are not the spec's yet.
+// definition· (§3.3.4.1) that is D.{type definition} outright. Each decline
+// below withholds a type that could differ from the declaration's, and
+// assessing the root against the WRONG type is a false reject in both
+// directions — an attribute the real governing type declares looks unmatched,
+// a child its real {content type} admits looks unattributable.
 //
 //   - GAP(xsd): an xsi:type makes the ·instance-specified type definition·
 //     the governing one (clause 3) when it ·overrides· the selected type,
@@ -134,8 +139,13 @@ func (v *Validator) Assess(root Element) *Result {
 //     cvc-complex-type only for a complex T, and a simple-typed element's own
 //     attributes are governed by cvc-type clause 3.1.1 instead, which this
 //     package does not decide either.
-//   - A type whose {attribute uses} and {attribute wildcard} folds have not
-//     run: see attributePropertiesFolded.
+//
+// The type this returns is the governing one for BOTH halves of
+// cvc-complex-type, and the halves decline separately from here on: the
+// attribute half narrows it once more through attributePropertiesFolded, which
+// the content half does not, because no finalize pass folds a {content type}
+// the way §3.4.2.4 clause 3 folds {attribute uses} — a complex type's
+// {content type} is whatever its producer built for it, named or anonymous.
 func (v *Validator) rootComplexType(root Element, d xsd.ElementDeclaration, found bool) *xsd.ComplexType {
 	if !found || hasInstanceType(root) {
 		return nil
@@ -149,9 +159,6 @@ func (v *Validator) rootComplexType(root Element, d xsd.ElementDeclaration, foun
 	}
 	ct, isComplex := t.(xsd.ComplexType)
 	if !isComplex {
-		return nil
-	}
-	if !attributePropertiesFolded(ct) {
 		return nil
 	}
 	return &ct
@@ -241,16 +248,19 @@ type walk struct {
 // [[attributes]], then its [[children]].
 //
 // governing is e's ·governing type definition· narrowed to a complex type,
-// or nil where none was determined. It is NOT propagated to [walk.children]:
+// or nil where none was determined. It decides e's own [[attributes]]
+// (cvc-complex-type clauses 2 to 4) and e's own [[children]] (clause 1,
+// cvccomplexcontent.go), and it is NOT propagated to the children themselves:
 // a child's governing type follows from the particle it is ·attributed to·
-// in its parent's {content type} (§3.4.4.4), which nothing here computes, so
-// every element below the validation root is assessed against nil.
+// in its parent's {content type} (§3.4.4.4), which this package computes but
+// does not yet thread into the recursive descent, so every element below the
+// validation root is assessed against nil.
 func (w *walk) element(e Element, governing *xsd.ComplexType) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
 	}
 	w.attributes(e, governing)
-	w.children(e)
+	w.children(e, w.contentCheck(e, governing))
 }
 
 // attributes assesses E.[[attributes]] against governing, in the three
@@ -261,17 +271,25 @@ func (w *walk) element(e Element, governing *xsd.ComplexType) {
 // the order they were found in.
 //
 // A nil governing decides nothing at all: every attribute is walked (the
-// log records the visit) and none is charged or passed.
+// log records the visit) and none is charged or passed. A type whose two
+// attribute PROPERTIES are not the spec's yet is narrowed to that same
+// nothing here, and here only — its {content type} still decides its
+// element's [[children]] (see attributePropertiesFolded and
+// [Validator.rootComplexType]).
 func (w *walk) attributes(e Element, governing *xsd.ComplexType) {
+	folded := governing
+	if folded != nil && !attributePropertiesFolded(*folded) {
+		folded = nil
+	}
 	attrs := e.Attributes()
 	for _, a := range attrs {
-		w.attribute(a, e, governing)
+		w.attribute(a, e, folded)
 	}
-	if governing == nil {
+	if folded == nil {
 		return
 	}
-	w.requiredAttributeUses(e, attrs, *governing)
-	w.defaultedAttributes(e, attrs, *governing)
+	w.requiredAttributeUses(e, attrs, *folded)
+	w.defaultedAttributes(e, attrs, *folded)
 }
 
 // attribute assesses one attribute information item against clause 2, whose
@@ -439,34 +457,44 @@ func (w *walk) text(t Text) {
 	w.log.Debug("assessing text", slog.Int("chars", len(t.Data())), slog.Any("loc", t.Loc()))
 }
 
-// children pulls e's [[children]] in document order and assesses each. It
-// stops at the first fault — one the cursor reports, or one raised deeper in
-// the subtree — and keeps it: a later child assessed after a fault would be
+// children pulls e's [[children]] in document order and assesses each against
+// content, the check e's own ·governing type definition· licenses. It stops at
+// the first fault — one the cursor reports, or one raised deeper in the
+// subtree — and keeps it: a later child assessed after a fault would be
 // assessed out of a context the source never finished delivering.
-func (w *walk) children(e Element) {
+//
+// A walk that stopped early never reaches [contentCheck.end], so a truncated
+// [[children]] cursor cannot be charged for ending short of a particle it
+// would have satisfied.
+func (w *walk) children(e Element, content *contentCheck) {
 	kids := e.Children()
 	for {
 		c, ok := kids.Next()
 		if !ok {
 			break
 		}
-		w.child(c)
+		w.child(c, content)
 		if w.res.err != nil {
 			return
 		}
 	}
 	if err := kids.Err(); err != nil {
 		w.res.err = fmt.Errorf("reading the children of %s at %s: %w", e.Name(), e.Loc(), err)
+		return
 	}
+	content.end(w)
 }
 
-// child assesses one child, whichever arm it holds. A Child holding neither
-// is an adapter bug, not a fault in the source, so it panics rather than
-// reaching [Result.Err] — that field means the walk stopped on a source
-// fault, and a CLI would otherwise report a bug in an adapter to a user as
-// a broken document.
-func (w *walk) child(c Child) {
+// child assesses one child, whichever arm it holds: against content first —
+// where the item sits in its parent's {content type} is a fact about the
+// PARENT — and then, for an element, as a subtree of its own. A Child holding
+// neither arm is an adapter bug, not a fault in the source, so it panics
+// rather than reaching [Result.Err] — that field means the walk stopped on a
+// source fault, and a CLI would otherwise report a bug in an adapter to a user
+// as a broken document.
+func (w *walk) child(c Child, content *contentCheck) {
 	if e, ok := c.Element(); ok {
+		content.element(w, e)
 		w.element(e, nil)
 		return
 	}
@@ -474,5 +502,6 @@ func (w *walk) child(c Child) {
 	if !ok {
 		panic("validate: walk.child: Child holds neither arm; build one with ElementChild or TextChild")
 	}
+	content.text(w, t)
 	w.text(t)
 }

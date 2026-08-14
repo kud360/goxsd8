@@ -58,7 +58,7 @@
 // # Contract (M5, landing rule by rule)
 //
 // [Result] carries every violation charged so far as an *xsderr.Error
-// (cvc-* rule + instance and/or schema Loc), in document order. Five rules
+// (cvc-* rule + instance and/or schema Loc), in document order. Six rules
 // are charged today, all at the ·validation root· and nothing below it.
 //
 // Two come from [Validator.Assess]'s dispatch on the root's ·governing
@@ -66,7 +66,7 @@
 // determines no declaration, and cvc-elt (§3.3.4.3) clause 2 for one whose
 // declaration is abstract.
 //
-// The other three are the root's attribute half, against its ·governing
+// Three more are the root's attribute half, against its ·governing
 // type definition·'s {attribute uses}. cvc-complex-type (§3.4.4.2) clauses
 // 2 and 3 decide EXISTENCE and need no value space. Clause 4 and the two
 // rules clause 2.1 dispatches to — cvc-attribute (§3.2.4.1) clauses 3 and 4
@@ -77,15 +77,26 @@
 // use (two independent rules over two properties, both charged), and a
 // ·defaulted attribute·'s own {lexical form} against its type.
 //
+// The sixth is the root's content half, against the same type's {content
+// type}. cvc-complex-type clause 1 decides what its {variety} admits —
+// no [[children]] at all for empty, no element ones for simple, no
+// non-white-space character ones for element-only — and clause 1.4 sends
+// the sequence of element information items to cvc-complex-content
+// (§3.4.4.3) over xsd.Schema.ContentMatcher, which charges an item no
+// particle admits at its position against that item's own Loc, and a
+// sequence ending short of a {min occurs} against the root's.
+//
 // Everything not decidable is left undecided rather than guessed at: an
 // {attribute wildcard} to evaluate, a ·governing type definition· that is
 // not determinable or whose {attribute uses}/{attribute wildcard} are not
-// yet the spec's, a declaration whose {type definition} is not a simple
-// type, and — the decline that matters most — a value.ValidateLexical error
-// that is a fault of the type or of the backend rather than a verdict about
-// the lexical (value.IsDatatypeVerdict), which is what keeps a typeless
-// attribute (xs:anySimpleType, §3.2.2.2) from being rejected by every
-// document that carries one.
+// yet the spec's (the attribute half alone: a {content type} needs no such
+// fold), an element that may be ·nilled·, a {content type} whose shape
+// xsd.Schema.ContentMatcher declines, a declaration whose {type
+// definition} is not a simple type, and — the decline that matters most — a
+// value.ValidateLexical error that is a fault of the type or of the backend
+// rather than a verdict about the lexical (value.IsDatatypeVerdict), which
+// is what keeps a typeless attribute (xs:anySimpleType, §3.2.2.2) from
+// being rejected by every document that carries one.
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day
