@@ -22,7 +22,7 @@ package conformance
 //
 // Every executor in this package ends at ONE comparison of its observation with
 // the case's declared outcome — `observedValid == c.expect.wantsValid()` in
-// datatypes.go, decideSchema(observed, expected) in schema.go — and every
+// datatypes.go, decideAgreement(observed, expected) in schema.go — and every
 // decline returns Fail() BEFORE reaching it. That yields an exact test rather
 // than a heuristic: re-run the case with its declared outcome FLIPPED. An
 // executor that decided the case compares the same observation against the

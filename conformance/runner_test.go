@@ -306,7 +306,7 @@ func TestMakeCaseCarriesIndeterminateThrough(t *testing.T) {
 		SchemaDocs: []docRef{{Href: "a.xsd"}},
 		Expected:   []expected{{Validity: "indeterminate"}},
 	}
-	c, err := makeCase("set", "g", kindSchema, vt, "sets/msMeta", map[string]struct{}{})
+	c, err := makeCase("set", kindSchema, vt, testGroup{Name: "g"}, "sets/msMeta", map[string]struct{}{})
 	if err != nil {
 		t.Fatalf("makeCase: %v", err)
 	}
@@ -432,7 +432,7 @@ func TestMakeCaseSplitsSchemaDocuments(t *testing.T) {
 		Expected: []expected{{Validity: "valid"}},
 	}
 
-	c, err := makeCase("set", "g", kindSchema, multi, setDir, map[string]struct{}{})
+	c, err := makeCase("set", kindSchema, multi, testGroup{Name: "g"}, setDir, map[string]struct{}{})
 	if err != nil {
 		t.Fatalf("makeCase: %v", err)
 	}
@@ -452,7 +452,7 @@ func TestMakeCaseSplitsSchemaDocuments(t *testing.T) {
 		InstanceDoc: docRef{Href: "../ibmData/i.xml"},
 		Expected:    []expected{{Validity: "valid"}},
 	}
-	ic, err := makeCase("set", "g", kindInstance, inst, setDir, map[string]struct{}{})
+	ic, err := makeCase("set", kindInstance, inst, testGroup{Name: "g"}, setDir, map[string]struct{}{})
 	if err != nil {
 		t.Fatalf("makeCase (instance): %v", err)
 	}
@@ -464,8 +464,75 @@ func TestMakeCaseSplitsSchemaDocuments(t *testing.T) {
 	}
 
 	empty := validityTest{Name: "none", Expected: []expected{{Validity: "valid"}}}
-	if _, err := makeCase("set", "g", kindSchema, empty, setDir, map[string]struct{}{}); err == nil {
+	if _, err := makeCase("set", kindSchema, empty, testGroup{Name: "g"}, setDir, map[string]struct{}{}); err == nil {
 		t.Error("a schemaTest declaring no schemaDocument must error, not yield a case with an empty document path")
+	}
+}
+
+// TestMakeCaseCarriesTheGroupSchemaToInstanceCases pins the discovery half of the
+// instance lane (issue #713): the catalog names only the instance document, so an
+// instanceTest's caseSpec must carry the <schemaDocument> list of its group's
+// sibling schemaTest, resolved exactly as a schemaTest's own documents are —
+// without it execInstanceCase has no schema to assess against and declines every
+// case.
+//
+// The three rows are the whole rule. Exactly one sibling schemaTest yields the
+// reference; a group with none and a group with two yield NOTHING, because
+// declining beats picking a sibling or inventing a document. The none row is the
+// live one — 55 groups of the pinned suite declare no schemaTest, one instance
+// case each — while the two row pins an arm no group exercises today. A
+// schemaTest's own case carries no schema reference at all, its doc and extraDocs
+// being its schema documents already (STYLE D3).
+func TestMakeCaseCarriesTheGroupSchemaToInstanceCases(t *testing.T) {
+	setDir := filepath.Join("sets", "ibmMeta")
+	inst := validityTest{
+		Name:        "inst",
+		InstanceDoc: docRef{Href: "i.xml"},
+		Expected:    []expected{{Validity: "valid"}},
+	}
+	schemaTest := func(hrefs ...string) validityTest {
+		var docs []docRef
+		for _, h := range hrefs {
+			docs = append(docs, docRef{Href: h})
+		}
+		return validityTest{Name: "s", SchemaDocs: docs, Expected: []expected{{Validity: "valid"}}}
+	}
+
+	one := testGroup{Name: "g", SchemaTests: []validityTest{schemaTest("a.xsd", "b.xsd")}}
+	c, err := makeCase("set", kindInstance, inst, one, setDir, map[string]struct{}{})
+	if err != nil {
+		t.Fatalf("makeCase: %v", err)
+	}
+	if want := filepath.Join(setDir, "a.xsd"); c.schemaDoc != want {
+		t.Errorf("schemaDoc = %q, want the group schemaTest's FIRST document %q", c.schemaDoc, want)
+	}
+	if want := []string{filepath.Join(setDir, "b.xsd")}; !slices.Equal(c.schemaExtraDocs, want) {
+		t.Errorf("schemaExtraDocs = %v, want %v", c.schemaExtraDocs, want)
+	}
+
+	for _, tc := range []struct {
+		why string
+		g   testGroup
+	}{
+		{"a group declaring no schemaTest", testGroup{Name: "g"}},
+		{"a group declaring two schemaTests", testGroup{Name: "g", SchemaTests: []validityTest{schemaTest("a.xsd"), schemaTest("b.xsd")}}},
+		{"a group whose schemaTest names no document", testGroup{Name: "g", SchemaTests: []validityTest{schemaTest()}}},
+	} {
+		c, err := makeCase("set", kindInstance, inst, tc.g, setDir, map[string]struct{}{})
+		if err != nil {
+			t.Fatalf("%s: makeCase: %v", tc.why, err)
+		}
+		if c.schemaDoc != "" || len(c.schemaExtraDocs) != 0 {
+			t.Errorf("%s: must carry NO schema reference, got %q %v", tc.why, c.schemaDoc, c.schemaExtraDocs)
+		}
+	}
+
+	sc, err := makeCase("set", kindSchema, schemaTest("a.xsd"), one, setDir, map[string]struct{}{})
+	if err != nil {
+		t.Fatalf("makeCase (schema): %v", err)
+	}
+	if sc.schemaDoc != "" || len(sc.schemaExtraDocs) != 0 {
+		t.Errorf("a schemaTest case must carry no separate schema reference, got %q %v", sc.schemaDoc, sc.schemaExtraDocs)
 	}
 }
 
