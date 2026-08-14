@@ -55,10 +55,15 @@
 //   - Assertions run at every variety level, fail-open per xpath's
 //     contract.
 //
-// # Planned contract (M5 — not yet implemented)
+// # Contract (M5, landing rule by rule)
 //
-// [Result] will carry every violation as an *xsderr.Error (cvc-* rule +
-// instance and/or schema Loc), in document order, once the cvc-
-// decisions land on the walk [Validator.Assess] already makes. Non-fatal
-// warnings get an accessor of their own the day something produces one.
+// [Result] carries every violation charged so far as an *xsderr.Error
+// (cvc-* rule + instance and/or schema Loc), in document order. Two are
+// charged today, both at the ·validation root· and both from
+// [Validator.Assess]'s dispatch on the root's ·governing element
+// declaration·: cvc-assess-elt (§3.3.4.6) for a root that determines no
+// declaration, and cvc-elt (§3.3.4.3) clause 2 for one whose declaration
+// is abstract. The rest of the cvc- decisions land on the walk
+// [Validator.Assess] already makes. Non-fatal warnings get an accessor of
+// their own the day something produces one.
 package validate

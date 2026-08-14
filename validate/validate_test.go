@@ -59,6 +59,35 @@ func emptySchema(t *testing.T) *xsd.Schema {
 	return schema
 }
 
+// topLevelElement is a global element declaration of the given name, with no
+// {type definition}: the root dispatch reads {abstract} and nothing else, so
+// the type slot is left in the absent state a programmatically built
+// declaration starts in.
+func topLevelElement(t *testing.T, local string, abstract bool) xsd.ElementDeclaration {
+	t.Helper()
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: local}, nil, nil,
+		xsd.NewGlobalScope(), nil, false, nil, nil, nil, abstract, nil, nil)
+	if err != nil {
+		t.Fatalf("building the %s element declaration: %v", local, err)
+	}
+	return e
+}
+
+// rootSchema declares the two top-level elements the walk tests drive:
+// "root", which sampleTree's root resolves to, and "abstractRoot", which is
+// the same declaration with {abstract} = true.
+func rootSchema(t *testing.T) *xsd.Schema {
+	t.Helper()
+	b := xsd.NewSchemaBuilder()
+	b.AddElement(topLevelElement(t, "root", false))
+	b.AddElement(topLevelElement(t, "abstractRoot", true))
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the root schema: %v", err)
+	}
+	return schema
+}
+
 func loc(line, col int) xsderr.Loc {
 	return xsderr.Loc{URI: "instance.xml", Line: line, Col: col}
 }
@@ -118,7 +147,7 @@ var wantVisits = []string{
 
 func TestAssessWalksEveryNodeOnceInDocumentOrder(t *testing.T) {
 	log, visits := recordingLogger()
-	v, err := New(emptySchema(t), WithLogger(log))
+	v, err := New(rootSchema(t), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -137,11 +166,123 @@ func TestAssessWalksEveryNodeOnceInDocumentOrder(t *testing.T) {
 	}
 }
 
+// onlyViolation returns the single violation res carries, failing when it
+// carries any other number: every assertion below is about one charge, and a
+// second one is a finding of its own rather than an index out of range.
+func onlyViolation(t *testing.T, res *Result) *xsderr.Error {
+	t.Helper()
+	got := res.Violations()
+	if len(got) != 1 {
+		t.Fatalf("Violations() = %v, want exactly one", got)
+	}
+	return got[0]
+}
+
+// A validation root whose ·expanded name· resolves to no top-level element
+// declaration determines neither a ·governing element declaration· nor a
+// ·governing type definition·, so cvc-assess-elt clause 1 cannot apply and
+// §5.2 strict wildcard validation reports it. The subtree is not walked:
+// there is nothing to assess it against.
+func TestAssessChargesAnUndeclaredRoot(t *testing.T) {
+	tree := sampleTree()
+	tree.name = xsd.QName{Space: "urn:p", Local: "undeclared"}
+
+	log, visits := recordingLogger()
+	v, err := New(rootSchema(t), WithLogger(log))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	res := v.Assess(tree)
+
+	got := onlyViolation(t, res)
+	if got.Rule != "cvc-assess-elt" {
+		t.Errorf("Rule = %q, want cvc-assess-elt", got.Rule)
+	}
+	if got.Loc != loc(1, 1) {
+		t.Errorf("Loc = %s, want the root's %s", got.Loc, loc(1, 1))
+	}
+	if !strings.Contains(got.Msg, "{urn:p}undeclared") {
+		t.Errorf("Msg = %q, want it to name the expanded name", got.Msg)
+	}
+	if len(*visits) != 0 {
+		t.Errorf("walk visited\n\t%s\nwant nothing", strings.Join(*visits, "\n\t"))
+	}
+	if err := res.Err(); err != nil {
+		t.Errorf("Err() = %v, want nil: an undeclared root is a violation, not a source fault", err)
+	}
+}
+
+// An xsi:type on an undeclared root can determine a ·governing type
+// definition· (§5.2 names it as one of the three determinants), so the
+// charge above is withheld and the walk runs — the fail-open half of the
+// GAP(xsd) marker in Assess.
+func TestAssessWithholdsTheChargeForAnXSITypedRoot(t *testing.T) {
+	tree := sampleTree()
+	tree.name = xsd.QName{Local: "undeclared"}
+	tree.attrs = append(tree.attrs, &testAttribute{
+		name:  xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"},
+		value: "p:T",
+		loc:   loc(1, 40),
+	})
+
+	log, visits := recordingLogger()
+	v, err := New(rootSchema(t), WithLogger(log))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	res := v.Assess(tree)
+
+	if got := res.Violations(); len(got) != 0 {
+		t.Errorf("Violations() = %v, want none for a root carrying xsi:type", got)
+	}
+	if len(*visits) == 0 {
+		t.Error("the walk did not run for a root carrying xsi:type")
+	}
+}
+
+// cvc-elt clause 2 requires D.{abstract} = false. The walk still runs after
+// the charge: ·strictly assessed· clauses 2 and 3 assess [[attributes]] and
+// [[children]] whatever clause 1.1.2's evaluation returned.
+func TestAssessChargesAnAbstractRoot(t *testing.T) {
+	tree := sampleTree()
+	tree.name = xsd.QName{Local: "abstractRoot"}
+
+	log, visits := recordingLogger()
+	v, err := New(rootSchema(t), WithLogger(log))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	res := v.Assess(tree)
+
+	got := onlyViolation(t, res)
+	if got.Rule != "cvc-elt" {
+		t.Errorf("Rule = %q, want cvc-elt", got.Rule)
+	}
+	if !strings.Contains(got.Msg, "clause 2") {
+		t.Errorf("Msg = %q, want it to name the clause the catalog cannot carry", got.Msg)
+	}
+	if got.Loc != loc(1, 1) {
+		t.Errorf("Loc = %s, want the root's %s", got.Loc, loc(1, 1))
+	}
+	if !strings.Contains(got.Msg, "abstractRoot") {
+		t.Errorf("Msg = %q, want it to name the expanded name", got.Msg)
+	}
+	want := slices.Clone(wantVisits)
+	want[0] = "assessing element validate.name=abstractRoot validate.loc=instance.xml:1:1"
+	if !slices.Equal(*visits, want) {
+		t.Errorf("walk visited\n\t%s\nwant\n\t%s",
+			strings.Join(*visits, "\n\t"), strings.Join(want, "\n\t"))
+	}
+}
+
 // A Validator holds no walk state, so assessing twice must not carry the
 // first walk into the second.
 func TestValidatorIsReusable(t *testing.T) {
 	log, visits := recordingLogger()
-	v, err := New(emptySchema(t), WithLogger(log))
+	v, err := New(rootSchema(t), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -176,7 +317,7 @@ func TestAssessStopsAtASourceFault(t *testing.T) {
 	}
 
 	log, visits := recordingLogger()
-	v, err := New(emptySchema(t), WithLogger(log))
+	v, err := New(rootSchema(t), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -208,7 +349,7 @@ func TestAssessPanicsOnZeroChild(t *testing.T) {
 	}
 
 	log, visits := recordingLogger()
-	v, err := New(emptySchema(t), WithLogger(log))
+	v, err := New(rootSchema(t), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -269,7 +410,7 @@ func TestNewDefaultsAndNilLogger(t *testing.T) {
 	// The zero option set and an explicit nil logger are both usable: a
 	// walk under either runs to completion and logs nothing (STYLE L1).
 	for _, opts := range [][]Option{nil, {WithLogger(nil)}} {
-		v, err := New(emptySchema(t), opts...)
+		v, err := New(rootSchema(t), opts...)
 		if err != nil {
 			t.Fatalf("New: %v", err)
 		}
