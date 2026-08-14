@@ -220,9 +220,15 @@ func IsFacetPrecondition(err error) bool {
 // not tell the two apart, because an ungoverned type is reported under
 // cvc-datatype-valid exactly as a genuine rejection is.
 //
-// The classification is by EXCLUSION, which is the fail-open direction: a stage
-// this package grows later reports a verdict only if it is left unmarked, so a
-// forgotten mark costs a decline and never a false reject.
+// The classification is by EXCLUSION, and that direction is FAIL-CLOSED: an
+// error is a verdict unless it explicitly wraps the type-fault sentinel, so a
+// stage this package grows later whose fault goes unmarked is charged as a
+// verdict — the false reject this predicate exists to prevent. The exclusion is
+// not a safety net, it is what makes the predicate total over the open set of
+// backend Parse errors, which cannot be enumerated. What bounds the risk is that
+// marking has exactly two sites, typeFault and facetPrecondition; a new
+// non-verdict error must pass through one of them, and `grep typeFault(` plus
+// `grep facetPrecondition(` enumerates the whole class.
 func IsDatatypeVerdict(err error) bool {
 	return err != nil && !errors.Is(err, errTypeFault)
 }

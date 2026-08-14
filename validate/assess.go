@@ -81,7 +81,7 @@ func (v *Validator) Assess(root Element) *Result {
 	if root == nil {
 		panic("validate: Assess: nil root Element")
 	}
-	w := walk{log: v.log, schema: v.schema, backend: v.backend}
+	w := walk{log: v.log, schema: v.schema, backend: v.backend, values: value.NewValueSpace(v.backend)}
 	// GAP(xsd): an xsi:type here is DETECTED, never ·resolved·, so the
 	// charge below is withheld for a root carrying one that a full
 	// cvc-resolve-instance (§3.17.6.3) would find unresolvable and charge
@@ -221,10 +221,19 @@ func hasInstanceType(e Element) bool {
 // the Validator's, reachable from the walk methods that need them — the one
 // resolves component slots, the other reads instance lexicals — and neither is
 // written here.
+//
+// values is [value.NewValueSpace] over that same backend, built once per
+// assessment for the one charge that asks a value-constraint question of the
+// SCHEMA rather than of the instance (cvc-complex-type clause 4,
+// [walk.defaultedAttribute]). It is not derived state to be re-derived per call:
+// the constructor is total on a non-nil backend and the result is immutable, so
+// building it per ·defaulted attribute· would allocate once per use per element
+// to reach the same object.
 type walk struct {
 	log     *slog.Logger
 	schema  *xsd.Schema
 	backend value.Backend
+	values  xsd.ValueSpace
 	res     Result
 }
 

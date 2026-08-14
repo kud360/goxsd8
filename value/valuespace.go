@@ -109,12 +109,19 @@ func (vs valueSpace) EqualOrIdentical(r xsd.TypeResolver, ta *xsd.SimpleType, a 
 // facet compilation. dispatchUnion folds every member's rejection into one
 // cvc-datatype-valid error of its own, so a construction-stage failure in a
 // MEMBER's facets loses its marking on the way out and still reaches the caller
-// as a decided reject. Closing it needs dispatchUnion to tell a member's fault
-// from a member's rejection, which is a change to the dispatch's own error model
-// with its own ratchet attribution (#462). The LIST half of that residue is
-// closed: listMapping's Parse recurses through validateLexical, which marks an
-// item type's fault, and the marking survives the item error's propagation out
-// of Parse.
+// as a decided reject. The LIST half of that residue is already closed:
+// listMapping's Parse recurses through validateLexical, which marks an item
+// type's fault, and the marking survives the item error's propagation out of
+// Parse.
+//
+// The error model no longer stands in the way of closing the union half: the
+// marking now exists, and dispatchUnion already aborts its member scan on one
+// class of fault ([IsFacetPrecondition]) — widening that test to the whole class
+// is the change. What is left is not difficulty but ATTRIBUTION. Widening it
+// turns member faults from decided rejects into declines, which moves verdicts
+// and so may move a lane, and that movement belongs to the issue that owns the
+// residue (#462) rather than being absorbed here where it would be credited to
+// an unrelated landing (PRINCIPLES 22).
 //
 // nil is passed as the [Context] because gate 1 has already excluded every
 // context-dependent literal — unlike values, which parses each side under the

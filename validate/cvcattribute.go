@@ -244,10 +244,11 @@ func (w *walk) defaultedAttributes(e Element, attrs []Attribute, governing xsd.C
 // The question is Datatype Valid over one {lexical form} against one type,
 // which is what [xsd.ValueSpace]'s ValidDefault decides — the same decision
 // a-props-correct clause 2 and au-props-correct clause 2 charge at assembly, and
-// reached here through the same seam rather than re-derived. Its undecided
-// answer carries the whole fail-open gate: an ungoverned type, a
-// context-dependent one, a construction-stage facet failure and a
-// facet-pipeline precondition fault each charge nothing.
+// reached here through the same seam rather than re-derived, over the one value
+// space [Validator.Assess] built for this walk. Its undecided answer carries the
+// whole fail-open gate: an ungoverned type, a context-dependent one, a
+// construction-stage facet failure and a facet-pipeline precondition fault each
+// charge nothing.
 func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueConstraint) {
 	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 	if !resolved {
@@ -257,7 +258,7 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 	if !simple {
 		return
 	}
-	valid, decided := value.NewValueSpace(w.backend).ValidDefault(w.schema, st, vc)
+	valid, decided := w.values.ValidDefault(w.schema, st, vc)
 	if !decided || valid {
 		return
 	}
