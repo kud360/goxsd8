@@ -1917,7 +1917,7 @@ func (p *producer) substitutionGroupAffiliations(elem *Element) ([]xsd.QName, er
 //     references the OWNER instead — see that type, and §3.4.6.5's no-identity
 //     Note for why identity rather than a copy is what the spec asks for. The
 //     arm is INDIFFERENT to which of the two the head spells, and every reader
-//     of it is too: xsd's typeOf takes one hop to the head's own slot and reads
+//     of it is too: xsd's ResolvedType takes one hop to the head's own slot and reads
 //     whatever component sits there.
 //
 // Three cases yield case 4's xs:anyType instead, each of them the honest answer

@@ -109,45 +109,38 @@ func (s *Schema) attributeDefaultBinding(side attributeRestrictionSide, n QName)
 	return wildcardKeywordBinding{keyword: side.wildcard.ProcessContents()}, true // cases 4/5/6
 }
 
-// attributeUseName is the expanded name of an attribute use's {attribute
-// declaration}: the sibling local declaration's {name} for the Local variant,
-// the deferred reference's QName for the Ref variant. The two agree by
-// construction — a ref names the declaration it resolves to — so no lookup is
-// needed and no name is stored twice (STYLE D3).
-func attributeUseName(u AttributeUse) QName {
-	switch d := u.attributeDeclaration.(type) {
-	case LocalAttributeDeclaration:
-		return d.Declaration.Name()
-	case AttributeDeclarationRef:
-		return d.Name
-	default:
-		panic("xsd: attributeUseName: non-exhaustive AttributeDeclarationOrRef switch")
-	}
-}
-
-// attributeUseDeclaration resolves the Attribute Declaration behind an attribute
-// use for both variants. ok is false only for a dangling Ref, which Phase A
-// already rejected (src-resolve clause 1.2), so it is unreachable on a *Schema
-// that exists.
-func (s *Schema) attributeUseDeclaration(u AttributeUse) (AttributeDeclaration, bool) {
+// ResolvedAttributeDeclaration resolves the Attribute Declaration behind an
+// attribute use for both variants of the AttributeDeclarationOrRef sum: the
+// sibling declaration a LocalAttributeDeclaration owns by value, or the
+// top-level declaration an AttributeDeclarationRef names. ok is false only for
+// a dangling Ref, which Phase A already rejected (src-resolve clause 1.2), so
+// it is unreachable on a *Schema that exists.
+//
+// It is exported for the instance validator, which needs the declaration behind
+// a use it matched an attribute information item to — its {type definition} for
+// cvc-attribute (§3.2.4.1), its {value constraint} for cvc-au (§3.5.4) (#714).
+// A consumer wanting only the use's expanded name reads
+// AttributeUse.DeclarationName instead, which needs no resolution and so cannot
+// fail.
+func (s *Schema) ResolvedAttributeDeclaration(u AttributeUse) (AttributeDeclaration, bool) {
 	switch d := u.attributeDeclaration.(type) {
 	case LocalAttributeDeclaration:
 		return d.Declaration, true
 	case AttributeDeclarationRef:
 		return s.Attribute(d.Name)
 	default:
-		panic("xsd: attributeUseDeclaration: non-exhaustive AttributeDeclarationOrRef switch")
+		panic("xsd: ResolvedAttributeDeclaration: non-exhaustive AttributeDeclarationOrRef switch")
 	}
 }
 
-// ownedAttributeDeclaration is attributeUseDeclaration narrowed to the
+// ownedAttributeDeclaration is ResolvedAttributeDeclaration narrowed to the
 // declaration a use OWNS: ok is true only for the Local variant, whose sibling
 // declaration belongs to no §3.17.1 symbol table and so has no other site that
 // could charge it. The Ref variant names a GLOBAL declaration the schema's
 // {attribute declarations} holds and charges in its own right, so it reports
 // false rather than that declaration — a use is not its owner.
 //
-// It is a sibling of attributeUseDeclaration rather than a type assertion at the
+// It is a sibling of ResolvedAttributeDeclaration rather than a type assertion at the
 // call site so that the switch over the sealed AttributeDeclarationOrRef sum is
 // written once per concern and a new variant is a compile-or-panic here, not a
 // silently wrong answer there (STYLE T4).
@@ -177,7 +170,7 @@ func (s *Schema) effectiveValueConstraint(u AttributeUse) (ValueConstraint, bool
 	if vc, ok := u.ValueConstraint(); ok {
 		return vc, true
 	}
-	d, ok := s.attributeUseDeclaration(u)
+	d, ok := s.ResolvedAttributeDeclaration(u)
 	if !ok {
 		return ValueConstraint{}, false
 	}
@@ -421,7 +414,7 @@ func disallowedSubstitutionsSuperset(specific, general ElementDeclaration) bool 
 // than rejected, exactly as checkLocallyDeclaredElementTypes skips it: there is
 // no component to compare, so the clause is not competent to charge a failure.
 // Skipping is fail-open, never a false reject. An ANONYMOUS type is no longer
-// among the skipped cases: typeOf hands back the inline component itself, so the
+// among the skipped cases: ResolvedType hands back the inline component itself, so the
 // comparison is made rather than waved through.
 //
 // An unresolvable simple-type {base type definition} reached INSIDE the
@@ -435,11 +428,11 @@ func disallowedSubstitutionsSuperset(specific, general ElementDeclaration) bool 
 // here has survived Phase A, which charges src-resolve for every unresolvable
 // base a Schema reaches, so the case is unreachable rather than merely benign.
 func (s *Schema) declaredTypeRestricts(specific, general ElementDeclaration) bool {
-	sub, ok := s.typeOf(specific.TypeDefinition())
+	sub, ok := s.ResolvedType(specific.TypeDefinition())
 	if !ok {
 		return true
 	}
-	super, ok := s.typeOf(general.TypeDefinition())
+	super, ok := s.ResolvedType(general.TypeDefinition())
 	if !ok {
 		return true
 	}
@@ -596,19 +589,19 @@ func (s *Schema) attributeValueConstraintsAgree(general, specific AttributeUse, 
 // complex — the cases the value-constraint clauses treat as "not decidable",
 // never as a violation.
 func (s *Schema) attributeUseType(u AttributeUse) (*SimpleType, bool) {
-	d, ok := s.attributeUseDeclaration(u)
+	d, ok := s.ResolvedAttributeDeclaration(u)
 	if !ok {
 		return nil, false
 	}
 	return s.simpleTypeOf(d.TypeDefinition())
 }
 
-// simpleTypeOf narrows typeOf to a Simple Type Definition. ok is false for an
+// simpleTypeOf narrows ResolvedType to a Simple Type Definition. ok is false for an
 // absent slot, an unresolvable name, and a {type definition} that is a complex
 // type — the three cases every caller here treats as "not decidable by this
 // clause", never as a violation.
 func (s *Schema) simpleTypeOf(ref TypeDefinitionOrRef) (*SimpleType, bool) {
-	t, ok := s.typeOf(ref)
+	t, ok := s.ResolvedType(ref)
 	if !ok {
 		return nil, false
 	}

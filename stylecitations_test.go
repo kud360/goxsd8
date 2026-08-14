@@ -72,9 +72,6 @@ var allowedBadStyleCitations = []styleCitationAllowance{
 	{file: "loader/resolver.go", token: "L6", count: 1},
 	{file: "parser/report.go", token: "T7", count: 2},
 	{file: "xsd/attributedeclaration.go", token: "T7", count: 1},
-	// The "8" is STYLE T5/8's second half: a real ID (T5) slash-joined with a
-	// bare CLAUDE.md headline position, not a second ID.
-	{file: "xsd/attributegroupdefinition.go", token: "8", count: 1},
 	{file: "xsd/attributeuse.go", token: "T7", count: 1},
 	{file: "xsd/closedsets.go", token: "T7", count: 1},
 	{file: "xsd/complextype.go", token: "T7", count: 3},

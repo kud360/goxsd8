@@ -163,7 +163,7 @@ func (s *Schema) applyExtensionStep(loc xsderr.Loc, acc collapsedProperties, c C
 func collapsedAttributeUses(own, acc []AttributeUse) []AttributeUse {
 	kept := make([]AttributeUse, 0, len(own))
 	for _, u := range own {
-		if hasAttributeUseNamed(acc, attributeUseName(u)) {
+		if hasAttributeUseNamed(acc, u.DeclarationName()) {
 			continue
 		}
 		kept = append(kept, u)

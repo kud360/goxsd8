@@ -118,6 +118,17 @@
 // derived from it. They are methods on *Schema and nothing more; no
 // capability view bundles them until a second consumer needs one (T5).
 //
+// Two SLOT resolvers sit beside the by-QName lookups, for a consumer
+// holding a component rather than a name: Schema.ResolvedType turns a
+// TypeDefinitionOrRef — an element or attribute declaration's {type
+// definition}, a complex type's {base type definition} — into the
+// component it denotes, and Schema.ResolvedAttributeDeclaration does the
+// same for an attribute use's {attribute declaration}. Both report (T,
+// false) for a slot that is absent or names nothing, which is "not
+// decidable here" and never a violation. AttributeUse.DeclarationName
+// answers the expanded-name half of the second one without resolving
+// anything, so a consumer comparing names alone cannot fail.
+//
 // This section is shipped surface — see the package Examples for the
 // construct → Finalize → query sequence.
 //

@@ -189,6 +189,28 @@ func (u AttributeUse) Required() bool {
 	return u.required
 }
 
+// DeclarationName is the ·expanded name· of the use's {attribute declaration}:
+// the sibling local declaration's {name} for the Local variant, the deferred
+// reference's QName for the Ref variant. The two agree by construction — a ref
+// names the declaration it resolves to — so no lookup is needed and no name is
+// stored twice (STYLE D3).
+//
+// It is exported for the instance validator's cvc-complex-type (§3.4.4.2)
+// clauses 2.1 and 3, which quantify over {attribute uses} comparing expanded
+// names alone (#714). Reading the name off the use rather than off a resolved
+// declaration is what makes clause 3 decidable for a use whose Ref does not
+// resolve: an attribute is required or not whatever became of its declaration.
+func (u AttributeUse) DeclarationName() QName {
+	switch d := u.attributeDeclaration.(type) {
+	case LocalAttributeDeclaration:
+		return d.Declaration.Name()
+	case AttributeDeclarationRef:
+		return d.Name
+	default:
+		panic("xsd: AttributeUse.DeclarationName: non-exhaustive AttributeDeclarationOrRef switch")
+	}
+}
+
 // AttributeDeclaration returns the {attribute declaration} property (Required):
 // the sealed sum identifying either a sibling local declaration
 // (LocalAttributeDeclaration) or a pre-resolution reference to a top-level one

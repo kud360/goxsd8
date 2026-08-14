@@ -101,7 +101,7 @@ func attributeGroupAttributeSide(g AttributeGroupDefinition, label string) attri
 // first reported failure is deterministic (STYLE D2).
 func (s *Schema) checkAttributeRestriction(r attributeRestriction) error {
 	for _, u := range r.derived.uses {
-		name := attributeUseName(u)
+		name := u.DeclarationName()
 		general, ok := s.attributeDefaultBinding(r.base, name)
 		if !ok {
 			return xsderr.New(r.rule, r.loc,
@@ -207,7 +207,7 @@ func checkAttributeRestrictionWildcard(r attributeRestriction) error {
 func sharedAttributeUseNames(r attributeRestriction) []QName {
 	var names []QName
 	for _, u := range r.derived.uses {
-		name := attributeUseName(u)
+		name := u.DeclarationName()
 		if !hasAttributeUseNamed(r.base.uses, name) {
 			continue
 		}
@@ -235,7 +235,7 @@ func checkAttributeRestrictionRequired(r attributeRestriction) error {
 		if !bu.Required() {
 			continue
 		}
-		name := attributeUseName(bu)
+		name := bu.DeclarationName()
 		tu, ok := findAttributeUse(r.derived.uses, name)
 		if !ok {
 			return xsderr.New(r.rule, r.loc,

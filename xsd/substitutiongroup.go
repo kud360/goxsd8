@@ -163,7 +163,7 @@ func (s *Schema) affiliationChainReaches(m ElementDeclaration, head QName) bool 
 // carrying an affiliation edge whose member type does not ·derive· from its
 // head's reaches this predicate at all (#395).
 //
-// EVERY step is reached through typeOf, the package's one type-slot reader
+// EVERY step is reached through ResolvedType, the package's one type-slot reader
 // (STYLE T4) — the starting {type definition} and each {base type definition}
 // after it — so an ANONYMOUS type participates in the walk rather than ending
 // it. That matters in both directions: an anonymous inline type is M's own first
@@ -174,11 +174,11 @@ func (s *Schema) affiliationChainReaches(m ElementDeclaration, head QName) bool 
 // M.{type definition} itself, since sameTypeDefinition reports two anonymous
 // types as distinct on the licence §3.4.6.5's no-identity Note grants.
 func (s *Schema) derivationAdmitsSubstitution(m, h ElementDeclaration) bool {
-	headType, ok := s.typeOf(h.TypeDefinition())
+	headType, ok := s.ResolvedType(h.TypeDefinition())
 	if !ok {
 		return true
 	}
-	memberType, ok := s.typeOf(m.TypeDefinition())
+	memberType, ok := s.ResolvedType(m.TypeDefinition())
 	if !ok {
 		return true
 	}
@@ -208,11 +208,11 @@ walk:
 			if c.Name() == anyTypeName {
 				return true // §3.4.7: xs:anyType is its own base, so the chain ends here
 			}
-			// The slot is followed through typeOf, BOTH arms: an anonymous
+			// The slot is followed through ResolvedType, BOTH arms: an anonymous
 			// src-expredef clause 1.1 base is a real step of the ·derivation·,
 			// and stopping on it would answer true — a fail-OPEN accept, not a
 			// conservative refusal (#505).
-			next, ok := s.typeOf(c.Base())
+			next, ok := s.ResolvedType(c.Base())
 			if !ok {
 				// An absent base ends the chain short of H.{type definition}; a
 				// dangling one was already charged src-resolve by Phase A.
