@@ -111,11 +111,13 @@ func (v *Validator) Assess(root Element) *Result {
 // Determinable here means the whole of key-governing-type-elem's clause 4
 // case: no processor-stipulated type (this package stipulates none), no
 // ·instance-specified type definition· overriding it, and a ·selected type
-// definition· (§3.3.4.1) that is D.{type definition} outright. Each of the
-// three declines below withholds a type that could differ from the
+// definition· (§3.3.4.1) that is D.{type definition} outright. The first
+// three declines below withhold a type that could differ from the
 // declaration's, and charging the root's attributes against the WRONG type
 // is a false reject in both directions — an attribute the real governing
-// type declares looks unmatched, one it forbids looks fine.
+// type declares looks unmatched, one it forbids looks fine. The fourth
+// withholds a type that is the right one but whose two attribute PROPERTIES
+// are not the spec's yet.
 //
 //   - GAP(xsd): an xsi:type makes the ·instance-specified type definition·
 //     the governing one (clause 3) when it ·overrides· the selected type,
@@ -129,6 +131,8 @@ func (v *Validator) Assess(root Element) *Result {
 //     cvc-complex-type only for a complex T, and a simple-typed element's own
 //     attributes are governed by cvc-type clause 3.1.1 instead, which this
 //     package does not decide either.
+//   - A type whose {attribute uses} and {attribute wildcard} folds have not
+//     run: see attributePropertiesFolded.
 func (v *Validator) rootComplexType(root Element, d xsd.ElementDeclaration, found bool) *xsd.ComplexType {
 	if !found || hasInstanceType(root) {
 		return nil
@@ -144,7 +148,54 @@ func (v *Validator) rootComplexType(root Element, d xsd.ElementDeclaration, foun
 	if !isComplex {
 		return nil
 	}
+	if !attributePropertiesFolded(ct) {
+		return nil
+	}
 	return &ct
+}
+
+// attributePropertiesFolded reports whether ct's {attribute uses} and
+// {attribute wildcard} are the §3.4.2.4 clause 3 and §3.4.2.5 clause 2
+// properties cvc-complex-type clause 2 quantifies over, rather than the
+// producer's pre-fold approximation of them.
+//
+// GAP(xsd): both folds walk a finalized schema's {type definitions} alone
+// (#414), and every member of that property is NAMED — §3.17.2 scopes it to
+// the <simpleType>/<complexType> children of <schema> — so a complex type
+// whose {name} is ·absent· is folded for neither property and reports its own
+// <attribute> children and its own ·complete wildcard· alone. Under-report the
+// uses and an inherited attribute looks unmatched; under-report the wildcard
+// and [walk.unmatchedAttribute]'s clause 2.2 decline does not fire. Together
+// they charge clause 2 against an attribute the base admits, so an anonymous
+// governing type is declined here rather than assessed.
+//
+// The one anonymous shape admitted is a RESTRICTION of xs:anyType, where both
+// folds are provably the identity: §3.4.7 gives xs:anyType an empty {attribute
+// uses}, so clause 3 inherits nothing, and clause 2 unions the base's wildcard
+// for an EXTENSION only, so clause 2.1 keeps the ·complete wildcard· the
+// producer already stored. §3.4.2.3.2 maps the implicit-content
+// <complexType> — no <simpleContent>, no <complexContent> — to exactly that
+// shape.
+//
+// Anonymity is read off the component's {name} and not off the arm of the
+// {type definition} slot it was reached through, because
+// [xsd.SubstitutionGroupHeadTypeRef] reaches an unfolded anonymous type the
+// head declaration owns just as [xsd.InlineTypeDefinition] reaches its own.
+// Neither arm is exotic: parser.Parse maps an inline
+// <complexContent>/<simpleContent> derivation under an <element> exactly as it
+// maps a top-level one (parser/produce_complex.go's produceComplexType
+// dispatches on those children before it considers the type's name), so a
+// document a caller parses reaches this decline without [xsd.SchemaBuilder]
+// being involved at all.
+func attributePropertiesFolded(ct xsd.ComplexType) bool {
+	if ct.Name() != (xsd.QName{}) {
+		return true
+	}
+	if ct.DerivationMethod() != xsd.DerivationRestriction {
+		return false
+	}
+	base, byName := ct.Base().(xsd.TypeDefinitionRef)
+	return byName && base.Name == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"})
 }
 
 // hasInstanceType reports whether e carries an xsi:type attribute (§2.7.1).
@@ -247,21 +298,13 @@ func (w *walk) attribute(a Attribute, governing *xsd.ComplexType) {
 // unmatchedAttribute settles clause 2 for an attribute matching no attribute
 // use, where only clause 2.2 is left to satisfy.
 //
-// GAP(xsd): this is the one charge in the package that a property REPORTED
-// TOO SMALL could fabricate, so it is the one that has to name the exposure.
-// [xsd.ComplexType.AttributeUses] and [xsd.ComplexType.AttributeWildcard]
-// both run their §3.4.2.4/§3.4.2.5 fold over a finalized schema's TYPE
-// DEFINITIONS only, so an ANONYMOUS type owned by an element declaration
-// reports its own uses and its own <anyAttribute> alone (#414). Under-report
-// the uses and an inherited attribute looks unmatched; under-report the
-// wildcard and the decline above does not fire — together they would charge
-// an attribute the base admits. It does not happen for a schema this module
-// parses: the producer's inline form is the IMPLICIT-CONTENT one, a
-// restriction of xs:anyType, whose {attribute uses} §3.4.7 makes empty and
-// whose {attribute wildcard} clause 2.1 takes from the type itself, so the
-// unrun fold is the identity there. A caller who assembles an inline
-// EXTENSION through [xsd.SchemaBuilder] is outside that bound until #414
-// widens the fold.
+// This is the one charge in the package that a property REPORTED TOO SMALL
+// could fabricate: [xsd.ComplexType.AttributeUses] and
+// [xsd.ComplexType.AttributeWildcard] are folded for a NAMED type definition
+// alone (#414). Nothing is asserted about that here — the unfolded types are
+// kept away from this charge at the source instead, by
+// attributePropertiesFolded, which is where the bound and its spec grounds
+// are stated. An anonymous governing type never reaches this function.
 func (w *walk) unmatchedAttribute(a Attribute, governing xsd.ComplexType) {
 	if _, wild := governing.AttributeWildcard(); wild {
 		// GAP(validate): clause 2.2.1 holds, but clause 2.2 is a conjunction

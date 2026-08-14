@@ -426,3 +426,101 @@ func TestAttributeLogNamesTheRuleAndClause(t *testing.T) {
 			strings.Join(*visits, "\n\t"), strings.Join(want, "\n\t"))
 	}
 }
+
+// anonymousRootSchema declares "root" governed by the ANONYMOUS complex type
+// it owns (§3.3.2.1 dcl.elt.common clause 1), derived from base by derivation
+// and carrying uses. Base is a named type carrying one attribute use and an
+// ##any wildcard, so a fold that HAD run would give the anonymous type both.
+// It is the component shape parser.Parse builds for an inline <complexType>
+// child of an <element>, reached here through the constructors because this
+// package imports no parser.
+func anonymousRootSchema(t *testing.T, base xsd.QName, derivation xsd.DerivationMethod, uses []xsd.AttributeUse) *xsd.Schema {
+	t.Helper()
+	id := xsd.NewComponentID()
+	ct, err := xsd.NewAnonymousComplexType(xsderr.Loc{}, xsd.ElementDeclarationContext{Component: id},
+		base, nil, derivation, false, uses, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("building the anonymous root type: %v", err)
+	}
+	e, err := xsd.NewElementDeclarationOwningType(xsderr.Loc{}, id, xsd.QName{Local: "root"}, ct, nil,
+		xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+	baseType, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "Base"}, xsd.QName{}, nil,
+		xsd.DerivationRestriction, false, []xsd.AttributeUse{aUse(t, "fromBase", false, nil)}, nil,
+		anyWildcard(t), xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("building Base: %v", err)
+	}
+	// xs:anyType is the one complex type permitted to be its own base (§3.4.7)
+	// and carries the ##any wildcard that section gives it — which a
+	// RESTRICTION of it does not inherit (§3.4.2.5 clause 2.1), so its presence
+	// here cannot be what makes the assessed case below silent.
+	anyType, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"},
+		xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}, nil, xsd.DerivationRestriction, false,
+		nil, nil, anyWildcard(t), xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("building xs:anyType: %v", err)
+	}
+	b := xsd.NewSchemaBuilder()
+	b.AddElement(e)
+	b.AddType(baseType)
+	b.AddType(anyType)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the anonymous-root schema: %v", err)
+	}
+	return schema
+}
+
+// assessAgainst assesses root against schema and returns what was charged.
+func assessAgainst(t *testing.T, schema *xsd.Schema, root Element) []*xsderr.Error {
+	t.Helper()
+	v, err := New(schema)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	res := v.Assess(root)
+	if res.Err() != nil {
+		t.Fatalf("Err() = %v, want nil", res.Err())
+	}
+	return res.Violations()
+}
+
+// An ANONYMOUS governing type derived from a named base withholds the whole
+// attribute assessment: §3.4.2.4 clause 3's {attribute uses} and §3.4.2.5
+// clause 2's {attribute wildcard} are folded over the schema's NAMED type
+// definitions alone (#414), so Base's attribute use and its <anyAttribute>
+// are both missing from the component the walk would read. Under-report the
+// uses and @fromBase looks unmatched; under-report the wildcard and clause
+// 2.2 does not decline it — together they charge a document Base admits.
+func TestAnonymousDerivedRootDeclinesTheAttributeHalf(t *testing.T) {
+	for _, derivation := range []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction} {
+		schema := anonymousRootSchema(t, xsd.QName{Local: "Base"}, derivation,
+			[]xsd.AttributeUse{aUse(t, "own", true, nil)})
+		wantSilence(t, assessAgainst(t, schema, attributedRoot(local("fromBase"), local("own"))),
+			"an unfolded anonymous type reports neither Base's uses nor its wildcard ("+derivation.String()+")")
+		// The control: clause 3 is withheld on the same type too. The
+		// unfolded type's own {required} use is present in it, so a walk that
+		// assessed this type at all would charge the missing @own here.
+		wantSilence(t, assessAgainst(t, schema, attributedRoot()),
+			"the decline covers clause 3, not clause 2 alone ("+derivation.String()+")")
+	}
+}
+
+// The one anonymous shape that IS assessed: a restriction of xs:anyType, the
+// §3.4.2.3.2 implicit-content form, where both folds are provably the
+// identity — §3.4.7 makes xs:anyType's {attribute uses} empty so clause 3
+// inherits nothing, and §3.4.2.5 clause 2 unions the base's wildcard for an
+// EXTENSION only. Declining it as well would withdraw every inline
+// <complexType> with no <complexContent>/<simpleContent> child from the
+// assessment, which is the shape the conformance suite's decidable subset is
+// made of.
+func TestAnonymousRestrictionOfAnyTypeIsAssessed(t *testing.T) {
+	schema := anonymousRootSchema(t, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"},
+		xsd.DerivationRestriction, []xsd.AttributeUse{aUse(t, "id", true, nil)})
+	wantCharge(t, assessAgainst(t, schema, attributedRoot(local("id"), local("stray"))),
+		"clause 2", loc(1, 11), "stray")
+	wantCharge(t, assessAgainst(t, schema, attributedRoot()), "clause 3", loc(1, 1), "id")
+}

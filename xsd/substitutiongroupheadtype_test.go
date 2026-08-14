@@ -6,11 +6,11 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// These tests are package-internal for two reasons: ResolvedType is unexported, and
-// the owner-of-owner chain they pin is a state Finalize REJECTS, so reading
-// ResolvedType's answer on one requires assembling a *Schema by hand rather than
-// through the builder — which is also the shape the depth-1 rule exists for, a
-// read-time accessor reached on a graph no resolution pass has vetted.
+// These tests are package-internal because the owner-of-owner chain they pin is
+// a state Finalize REJECTS, so reading ResolvedType's answer on one requires
+// assembling a *Schema by hand rather than through the builder — which is also
+// the shape the depth-1 rule exists for, a read-time accessor reached on a
+// graph no resolution pass has vetted.
 //
 // They share substitutiongroup_test.go's builders (sq, sgElement, sgRef, sgType)
 // and add only the one shape those cannot express: a declaration that OWNS an

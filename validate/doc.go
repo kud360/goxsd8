@@ -68,7 +68,10 @@
 // definition·'s {attribute uses} — attribute EXISTENCE, which needs no
 // datatype backend; an attribute whose verdict would need one (a use with a
 // fixed {value constraint}, an {attribute wildcard} to evaluate) is left
-// undecided rather than guessed at. The rest of the cvc- decisions land on
-// the walk [Validator.Assess] already makes. Non-fatal warnings get an
-// accessor of their own the day something produces one.
+// undecided rather than guessed at, and so is the root's whole attribute
+// half wherever the ·governing type definition· is not determinable or its
+// {attribute uses}/{attribute wildcard} are not yet the spec's. The rest of
+// the cvc- decisions land on the walk [Validator.Assess] already makes.
+// Non-fatal warnings get an accessor of their own the day something
+// produces one.
 package validate

@@ -114,12 +114,21 @@ import (
 //
 // # Why no false pass is possible
 //
-// Every "not valid" observation this lane emits comes from one of the two
+// Every "not valid" observation this lane emits comes from one of the three
 // charges above, each of which is unconditional. It never emits a "valid"
 // observation at all: an empty Result declines. So the lane can record a
 // still-failing gap for a suite-invalid case it cannot see the defect in, and
 // for a suite-valid case whose root is undeclared or abstract, but it cannot
 // score a pass on a document it did not really reject.
+//
+// Case 3 is the one whose unconditionality depends on a schema COMPONENT
+// being complete rather than on the instance alone: an under-reported
+// {attribute uses} or {attribute wildcard} would make a valid attribute look
+// unmatched (#414). validate declines a governing type whose two folds have
+// not run (assess.go's attributePropertiesFolded), so the charge cannot reach
+// this lane from such a type — and it is validate that must decline it,
+// because assembleCase's decidability gate bounds what THIS lane assembles and
+// says nothing about the library's other callers.
 //
 // The cvc-assess-elt charge does carry one hazard of its own: a root is equally
 // undeclared when an <import>/<include> the assembly did not follow took the
@@ -135,9 +144,11 @@ import (
 // that STOPPED on a source fault mid-document, so what it did or did not charge
 // records how far the walk got and not what the document holds: the abstract-root
 // branch keeps walking after charging, so a Result can carry BOTH a decidable
-// violation and a truncated walk. And a violation count other than one, or a rule
-// outside the two enumerated, declines rather than being read as a verdict a
-// later slice's wider Assess might charge under an approximation.
+// violation and a truncated walk. And a violation set that is EMPTY, or that
+// holds any rule outside the three enumerated, declines rather than being read
+// as a verdict a later slice's wider Assess might charge under an
+// approximation; the COUNT is not a condition, since one root can honestly
+// carry several charges (see decidedNotValid).
 
 // newInstanceExec builds the instance lane's executor. The strict backend is
 // built once here, exactly as newSchemaExec does it: it maps all 20 primitives,
