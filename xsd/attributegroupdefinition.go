@@ -110,7 +110,7 @@ func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []Att
 	}
 	seen := make(map[QName]struct{}, len(attributeUses))
 	for i, use := range attributeUses {
-		expanded := attributeUseDeclarationName(use)
+		expanded := use.DeclarationName()
 		if _, dup := seen[expanded]; dup {
 			return AttributeGroupDefinition{}, xsderr.New(ruleAgPropsCorrect, loc,
 				"attribute group definition {attribute uses}[%d] repeats the expanded name %s, but ag-props-correct clause 2 forbids two attribute uses whose {attribute declaration}s share an expanded name", i, expanded)
@@ -131,27 +131,6 @@ func NewAttributeGroupDefinition(loc xsderr.Loc, name QName, attributeUses []Att
 		g.annotations = append([]Annotation(nil), annotations...)
 	}
 	return g, nil
-}
-
-// attributeUseDeclarationName returns the expanded name of a use's {attribute
-// declaration} without resolution: a LocalAttributeDeclaration's own
-// Declaration.Name(), or an AttributeDeclarationRef's Name directly (both are
-// available at shape time). It exists only for the in-package ag-props-correct
-// clause 2 scan; the sum is deliberately NOT given an exported ExpandedName
-// method (STYLE T5/8 — keep the surface minimal, no consumer needs it yet).
-func attributeUseDeclarationName(use AttributeUse) QName {
-	switch d := use.AttributeDeclaration().(type) {
-	case LocalAttributeDeclaration:
-		return d.Declaration.Name()
-	case AttributeDeclarationRef:
-		return d.Name
-	default:
-		// Unreachable: the sum is sealed to exactly these two variants, and
-		// NewAttributeUse rejects a nil {attribute declaration}. Return the zero
-		// QName rather than panic so a future variant fails visibly in the scan
-		// instead of crashing.
-		return QName{}
-	}
 }
 
 // Name returns the {name} property, bundled with {target namespace} as a QName.

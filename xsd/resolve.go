@@ -367,14 +367,14 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 // carries the full argument). Charging src-resolve clause 1.3 HERE, on the
 // {type definition} the same absent name induced, would reject exactly the
 // schema Phase A just decided to allow, so the miss returns nil and clause 3
-// simply contributes no type — which is also what typeOf answers, and what
+// simply contributes no type — which is also what ResolvedType answers, and what
 // checkElementSubstitutableForHeads skips on.
 //
 // The ONE rejection this arm does carry is a representation invariant, not a
 // spec clause: an OWNER-OF-OWNER chain, where the named head's own {type
 // definition} is itself a SubstitutionGroupHeadTypeRef. The producer walks to
-// the TERMINAL head precisely so that never happens, and typeOf's read is
-// DEPTH-1 on the strength of it; rejecting the chain here is what makes typeOf's
+// the TERMINAL head precisely so that never happens, and ResolvedType's read is
+// DEPTH-1 on the strength of it; rejecting the chain here is what makes ResolvedType's
 // not-ok branch unreachable for any schema that survived finalize, rather than a
 // silent fail-open (STYLE P3).
 func (s *Schema) resolveTypeDefinition(ref TypeDefinitionOrRef, loc xsderr.Loc, ctx string) error {
@@ -1080,7 +1080,7 @@ func (s *Schema) checkComplexBaseAcyclic() error {
 			if name != (QName{}) {
 				path[name] = true
 			}
-			next, ok := s.typeOf(cur.Base())
+			next, ok := s.ResolvedType(cur.Base())
 			if !ok {
 				break // absent base ends the chain; a dangling one Phase A reported
 			}

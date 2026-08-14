@@ -28,7 +28,7 @@ import "github.com/kud360/goxsd8/xsderr"
 // PHASE PLACEMENT. The check reads RESOLVED type definitions on both sides and
 // walks their {base type definition} chains through validlySubstitutable, so it
 // needs Phase A's resolvability (a dangling type name is charged src-resolve
-// there, and the typeOf lookups here are hits rather than silent skips) and
+// there, and the ResolvedType lookups here are hits rather than silent skips) and
 // Phase B's checkComplexBaseAcyclic (the walk inside derivedOKComplex carries NO
 // visited set — PRINCIPLES 9 — and terminates only because a circular base chain
 // was already rejected). Those are the same two dependencies checkComplexDerivations
@@ -159,7 +159,7 @@ func (s *Schema) checkElementSubstitutableForHeads(e ElementDeclaration) error {
 	if len(e.substitutionGroupAffiliations) == 0 {
 		return nil
 	}
-	memberType, ok := s.typeOf(e.TypeDefinition())
+	memberType, ok := s.ResolvedType(e.TypeDefinition())
 	if !ok {
 		return nil
 	}
@@ -168,7 +168,7 @@ func (s *Schema) checkElementSubstitutableForHeads(e ElementDeclaration) error {
 		if !ok {
 			continue // an ·absent· member (§5.3): no component to be substitutable for
 		}
-		headType, ok := s.typeOf(head.TypeDefinition())
+		headType, ok := s.ResolvedType(head.TypeDefinition())
 		if !ok {
 			continue
 		}

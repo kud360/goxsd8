@@ -6,11 +6,11 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// These tests are package-internal for two reasons: typeOf is unexported, and
-// the owner-of-owner chain they pin is a state Finalize REJECTS, so reading
-// typeOf's answer on one requires assembling a *Schema by hand rather than
-// through the builder — which is also the shape the depth-1 rule exists for, a
-// read-time accessor reached on a graph no resolution pass has vetted.
+// These tests are package-internal because the owner-of-owner chain they pin is
+// a state Finalize REJECTS, so reading ResolvedType's answer on one requires
+// assembling a *Schema by hand rather than through the builder — which is also
+// the shape the depth-1 rule exists for, a read-time accessor reached on a
+// graph no resolution pass has vetted.
 //
 // They share substitutiongroup_test.go's builders (sq, sgElement, sgRef, sgType)
 // and add only the one shape those cannot express: a declaration that OWNS an
@@ -56,13 +56,13 @@ func TestTypeOfFollowsSubstitutionGroupHeadOneHop(t *testing.T) {
 	member := sgElement(t, sq("member"), SubstitutionGroupHeadTypeRef{Head: sq("head")}, nil, sq("head"))
 	s := sghSchema(owner, member)
 
-	got, ok := s.typeOf(member.TypeDefinition())
+	got, ok := s.ResolvedType(member.TypeDefinition())
 	if !ok {
-		t.Fatalf("typeOf declined the head-inherited arm, want the head's own anonymous type")
+		t.Fatalf("ResolvedType declined the head-inherited arm, want the head's own anonymous type")
 	}
 	ct, isComplex := got.(ComplexType)
 	if !isComplex {
-		t.Fatalf("typeOf = %T, want the head's anonymous ComplexType", got)
+		t.Fatalf("ResolvedType = %T, want the head's anonymous ComplexType", got)
 	}
 	context, present := ct.Context()
 	if !present {
@@ -76,7 +76,7 @@ func TestTypeOfFollowsSubstitutionGroupHeadOneHop(t *testing.T) {
 // TestTypeOfDeclinesOwnerOfOwnerChain pins that the depth-1 claim is ENFORCED
 // rather than assumed: a head whose own {type definition} is itself inherited
 // answers not-ok instead of recursing. The producer's terminal-head walk never
-// mints such a chain and Phase A rejects one outright, but typeOf is reachable
+// mints such a chain and Phase A rejects one outright, but ResolvedType is reachable
 // on a programmatically built schema that has seen neither.
 func TestTypeOfDeclinesOwnerOfOwnerChain(t *testing.T) {
 	owner, _ := sghOwner(t, sq("owner"))
@@ -84,12 +84,12 @@ func TestTypeOfDeclinesOwnerOfOwnerChain(t *testing.T) {
 	member := sgElement(t, sq("member"), SubstitutionGroupHeadTypeRef{Head: sq("middle")}, nil, sq("middle"))
 	s := sghSchema(owner, middle, member)
 
-	if _, ok := s.typeOf(member.TypeDefinition()); ok {
-		t.Fatalf("typeOf followed an owner-of-owner chain, want not-ok")
+	if _, ok := s.ResolvedType(member.TypeDefinition()); ok {
+		t.Fatalf("ResolvedType followed an owner-of-owner chain, want not-ok")
 	}
 	// The control: the same schema's middle link, one legal hop, still resolves.
-	if _, ok := s.typeOf(middle.TypeDefinition()); !ok {
-		t.Fatalf("typeOf declined a single legal hop, so the case above proves nothing")
+	if _, ok := s.ResolvedType(middle.TypeDefinition()); !ok {
+		t.Fatalf("ResolvedType declined a single legal hop, so the case above proves nothing")
 	}
 }
 
@@ -99,13 +99,13 @@ func TestTypeOfDeclinesOwnerOfOwnerChain(t *testing.T) {
 // never a fabricated component.
 func TestTypeOfDeclinesAbsentSubstitutionGroupHead(t *testing.T) {
 	member := sgElement(t, sq("member"), SubstitutionGroupHeadTypeRef{Head: sq("nosuchhead")}, nil, sq("nosuchhead"))
-	if _, ok := sghSchema(member).typeOf(member.TypeDefinition()); ok {
-		t.Fatalf("typeOf resolved an ·absent· head, want not-ok")
+	if _, ok := sghSchema(member).ResolvedType(member.TypeDefinition()); ok {
+		t.Fatalf("ResolvedType resolved an ·absent· head, want not-ok")
 	}
 }
 
 // TestResolveRejectsOwnerOfOwnerHeadTypeChain is the Phase A invariant that
-// makes typeOf's not-ok branch unreachable for any schema that survived
+// makes ResolvedType's not-ok branch unreachable for any schema that survived
 // finalize (STYLE P3): the arm must name the OWNER, and a head that inherits its
 // own type is not one. It is a representation invariant, so it is charged to
 // xsderr.RuleComponentInvariant and not to a spec rule.

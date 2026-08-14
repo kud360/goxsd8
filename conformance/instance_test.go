@@ -3,10 +3,14 @@ package conformance
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/loader"
+	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/validate"
+	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -211,8 +215,8 @@ func TestAssessInstanceDeclinesFaultedWalk(t *testing.T) {
 	}
 }
 
-// TestDecidedNotValidEnumeratesTheDecidableCharges pins the gate itself: exactly
-// one violation carrying one of the two rules Assess charges is evidence the
+// TestDecidedNotValidEnumeratesTheDecidableCharges pins the gate itself: a
+// non-empty violation set whose every rule is one Assess charges is evidence the
 // document is not valid, and every other shape declines rather than being read as
 // a verdict a later, wider Assess might charge under an approximation.
 func TestDecidedNotValidEnumeratesTheDecidableCharges(t *testing.T) {
@@ -227,13 +231,79 @@ func TestDecidedNotValidEnumeratesTheDecidableCharges(t *testing.T) {
 		{"no violation at all", nil, false},
 		{"cvc-assess-elt alone", []*xsderr.Error{charge(ruleCvcAssessElt)}, true},
 		{"cvc-elt alone", []*xsderr.Error{charge(ruleCvcElt)}, true},
-		{"a rule outside the enumeration", []*xsderr.Error{charge("cvc-complex-type")}, false},
-		{"two charges, both enumerated", []*xsderr.Error{charge(ruleCvcAssessElt), charge(ruleCvcElt)}, false},
+		{"cvc-complex-type alone", []*xsderr.Error{charge(ruleCvcComplexType)}, true},
+		{"a rule outside the enumeration", []*xsderr.Error{charge("cvc-attribute")}, false},
+		{"two charges, both enumerated", []*xsderr.Error{charge(ruleCvcComplexType), charge(ruleCvcComplexType)}, true},
+		{"one enumerated, one not", []*xsderr.Error{charge(ruleCvcElt), charge("cvc-attribute")}, false},
 	}
 	for _, tc := range cases {
 		if got := decidedNotValid(tc.violations); got != tc.want {
 			t.Errorf("%s: decidedNotValid = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+// TestParsedAnonymousExtensionIsNotFalselyRejected proves the decline
+// validate's attributePropertiesFolded makes is reachable from a PARSED
+// document and not only from a hand-assembled xsd.Schema: produceComplexType
+// dispatches on the <complexContent>/<simpleContent> children before it
+// considers whether the type is named, so an inline <complexContent>
+// <extension> under an <element> is produced exactly as a top-level one is,
+// and neither attribute fold reaches it (#414).
+//
+// The document below is VALID — @fromBase is the base's own attribute use and
+// @own the extension's — and every property the walk would read is
+// under-reported, so an assessment against that type charges cvc-complex-type
+// clause 2 for an attribute the base declares. This test lives here rather
+// than in validate because it needs the parser, which validate's import
+// closure excludes (validate/imports_test.go); it goes through parser.Parse
+// and xmlsrc.Validate directly rather than through the lane executor, since
+// assembleCase's decidability gate declines this schema before validate ever
+// sees it — which is why no suite case can expose the defect and why the lane
+// cannot pin it.
+func TestParsedAnonymousExtensionIsNotFalselyRejected(t *testing.T) {
+	dir := t.TempDir()
+	writeFixture(t, filepath.Join(dir, "s.xsd"), `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+	  <xs:complexType name="B">
+	    <xs:attribute name="fromBase" type="xs:string"/>
+	    <xs:anyAttribute namespace="##any"/>
+	  </xs:complexType>
+	  <xs:element name="root"><xs:complexType><xs:complexContent>
+	    <xs:extension base="B"><xs:attribute name="own" type="xs:string"/></xs:extension>
+	  </xs:complexContent></xs:complexType></xs:element>
+	  <xs:element name="plain"><xs:complexType>
+	    <xs:attribute name="a" type="xs:string" use="required"/>
+	  </xs:complexType></xs:element>
+	</xs:schema>`)
+	schema, err := parser.Parse("s.xsd", parser.WithResolver(loader.Dir(dir)), parser.WithBackend(strict.New()))
+	if err != nil {
+		t.Fatalf("parsing the schema: %v", err)
+	}
+	v, err := validate.New(schema)
+	if err != nil {
+		t.Fatalf("validate.New: %v", err)
+	}
+	assess := func(instance string) []*xsderr.Error {
+		t.Helper()
+		result, err := xmlsrc.Validate(v, strings.NewReader(instance))
+		if err != nil {
+			t.Fatalf("xmlsrc.Validate(%s): %v", instance, err)
+		}
+		if result.Err() != nil {
+			t.Fatalf("Err() = %v, want nil", result.Err())
+		}
+		return result.Violations()
+	}
+	if got := assess(`<root fromBase="x" own="y"/>`); len(got) != 0 {
+		t.Errorf("Violations() = %v, want none: the anonymous extension's {attribute uses} and {attribute wildcard} are unfolded, so neither clause of cvc-complex-type may be charged against it", got)
+	}
+	// The control, and the reason the decline is bounded to the unfolded
+	// shape: the sibling implicit-content anonymous type IS a restriction of
+	// xs:anyType, both folds are the identity on it, and it still charges —
+	// this is the shape the instance lane's decidable subset is made of
+	// (conformance/schema.go's anonymousComplexTypeDecidable).
+	if got := assess(`<plain/>`); len(got) != 1 {
+		t.Fatalf("Violations() = %v, want exactly one: an implicit-content anonymous type is still assessed", got)
 	}
 }
 

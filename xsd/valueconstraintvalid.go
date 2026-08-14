@@ -124,7 +124,7 @@ import "github.com/kud360/goxsd8/xsderr"
 // constrains all the same, and a folded use is simply re-tested with the same
 // verdict. The price of going where Phase A did not is that a group's <attribute
 // ref> was never vetted for resolvability: an unresolvable one is SKIPPED here
-// (attributeUseDeclaration reports no declaration), not charged src-resolve,
+// (ResolvedAttributeDeclaration reports no declaration), not charged src-resolve,
 // which is fail-open and never a false reject.
 func (s *Schema) checkComponentValueConstraints() error {
 	for _, t := range s.types {
@@ -305,7 +305,7 @@ func (s *Schema) checkModelGroupValueConstraints(g ModelGroup) error {
 // paths Phase A walks), a {type definition} that is absent, unresolvable, or
 // complex, and an undecided ValueSpace verdict all accept.
 func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc, owner string) error {
-	d, ok := s.attributeUseDeclaration(u)
+	d, ok := s.ResolvedAttributeDeclaration(u)
 	if !ok {
 		return nil
 	}
@@ -325,7 +325,7 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 		// itself has a {value constraint}" — so neither is reached.
 		return nil
 	}
-	n := attributeUseName(u)
+	n := u.DeclarationName()
 	t, hasType := s.simpleTypeOf(d.TypeDefinition())
 	if hasType {
 		if err := s.checkSimpleDefault(ruleAuPropsCorrect, loc, owner+" attribute "+n.String(), t, uvc); err != nil {

@@ -58,12 +58,20 @@
 // # Contract (M5, landing rule by rule)
 //
 // [Result] carries every violation charged so far as an *xsderr.Error
-// (cvc-* rule + instance and/or schema Loc), in document order. Two are
-// charged today, both at the ·validation root· and both from
-// [Validator.Assess]'s dispatch on the root's ·governing element
+// (cvc-* rule + instance and/or schema Loc), in document order. Three are
+// charged today, all at the ·validation root· and nothing below it. Two
+// come from [Validator.Assess]'s dispatch on the root's ·governing element
 // declaration·: cvc-assess-elt (§3.3.4.6) for a root that determines no
 // declaration, and cvc-elt (§3.3.4.3) clause 2 for one whose declaration
-// is abstract. The rest of the cvc- decisions land on the walk
-// [Validator.Assess] already makes. Non-fatal warnings get an accessor of
-// their own the day something produces one.
+// is abstract. The third is cvc-complex-type (§3.4.4.2) clauses 2 and 3,
+// the root's [[attributes]] matched against its ·governing type
+// definition·'s {attribute uses} — attribute EXISTENCE, which needs no
+// datatype backend; an attribute whose verdict would need one (a use with a
+// fixed {value constraint}, an {attribute wildcard} to evaluate) is left
+// undecided rather than guessed at, and so is the root's whole attribute
+// half wherever the ·governing type definition· is not determinable or its
+// {attribute uses}/{attribute wildcard} are not yet the spec's. The rest of
+// the cvc- decisions land on the walk [Validator.Assess] already makes.
+// Non-fatal warnings get an accessor of their own the day something
+// produces one.
 package validate
