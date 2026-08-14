@@ -63,13 +63,10 @@ import (
 // rest of the document, which is what makes them decidable while the engine
 // assesses no attribute, no child and no type.
 //
-// Case 2 cannot fire through an ASSEMBLED schema today: producer.produceElement
-// (parser/produce.go) passes {abstract} false at both of its construction calls
-// for a top-level <element>, whatever the attribute says (#761), so no schema
-// this lane builds from a document carries an abstract declaration, and every
-// case the lane decides is case 1. decidedNotValid enumerates the rule
-// regardless — Assess charges it, and a gate that dropped it would silently
-// start declining real verdicts the day the producer reads the attribute.
+// Case 2 fires through an ASSEMBLED schema: producer.produceElement maps
+// {abstract} from the top-level <element>'s abstract attribute (§3.3.2.1
+// dcl.elt.common, #761), so a document declaring an abstract root reaches the
+// cvc-elt charge here.
 //
 // # Why an EMPTY Result is not evidence of validity
 //

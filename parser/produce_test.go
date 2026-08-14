@@ -2439,6 +2439,79 @@ func TestProduceElementFinalBlocksSubstitution(t *testing.T) {
 	assertRule(t, err, "e-props-correct")
 }
 
+// TestProduceElementNillableAndAbstractMapped pins §3.3.2.1 dcl.elt.common's
+// {nillable} and {abstract} rows — "the ·actual value· of the [attribute], if
+// present, otherwise false" — on the TOP-LEVEL form, whose two construction
+// calls (the plain one and the inline-<complexType> one) both used to pass a
+// hardcoded false and so violated e-props-correct clause 1 (#761). cvc-elt
+// clause 2 reads {abstract} and clause 3 reads {nillable}.
+func TestProduceElementNillableAndAbstractMapped(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		attrs        string
+		wantNillable bool
+		wantAbstract bool
+	}{
+		{name: "absent is false"},
+		{name: "nillable true", attrs: ` nillable="true"`, wantNillable: true},
+		{name: "abstract true", attrs: ` abstract="true"`, wantAbstract: true},
+		{name: "both true", attrs: ` nillable="true" abstract="true"`, wantNillable: true, wantAbstract: true},
+		// xs:boolean's other lexical spelling of each value, which boolAttr must
+		// read as the ·actual value· and not as the literal string.
+		{name: "the 1/0 spelling", attrs: ` nillable="1" abstract="0"`, wantNillable: true},
+		{name: "explicit false", attrs: ` nillable="false" abstract="false"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Both arms in one schema: "byName" takes the plain construction call,
+			// "inline" the one that also owns its anonymous complex type.
+			s, err := produce(t, wrap("", `<xs:element name="byName" type="xs:string"`+tc.attrs+`/>`+
+				`<xs:element name="inline"`+tc.attrs+`><xs:complexType/></xs:element>`))
+			if err != nil {
+				t.Fatalf("Produce: %v", err)
+			}
+			for _, name := range []string{"byName", "inline"} {
+				ed, ok := s.Element(xsd.QName{Local: name})
+				if !ok {
+					t.Fatalf("element %s not found", name)
+				}
+				if got := ed.Nillable(); got != tc.wantNillable {
+					t.Errorf("%s {nillable} = %t, want %t", name, got, tc.wantNillable)
+				}
+				if got := ed.Abstract(); got != tc.wantAbstract {
+					t.Errorf("%s {abstract} = %t, want %t", name, got, tc.wantAbstract)
+				}
+			}
+		})
+	}
+}
+
+// TestProduceLocalElementNillableMapped pins the local half of the same
+// {nillable} row — nillable is legal on xs:localElement, unlike abstract, which
+// the schema for schema documents gives use="prohibited" there (§A) so no local
+// declaration can carry it.
+func TestProduceLocalElementNillableMapped(t *testing.T) {
+	s, err := produce(t, wrap("", `<xs:complexType name="CT"><xs:sequence>`+
+		`<xs:element name="e" type="xs:string" nillable="true"/>`+
+		`</xs:sequence></xs:complexType>`))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, ok := s.Type(xsd.QName{Local: "CT"})
+	if !ok {
+		t.Fatalf("complexType CT not found")
+	}
+	local, ok := topGroup(t, td.(xsd.ComplexType)).Particles()[0].Term().(xsd.ResolvedTerm).Term.(xsd.ElementDeclaration)
+	if !ok {
+		t.Fatalf("first particle {term} is not a local element declaration")
+	}
+	if !local.Nillable() {
+		t.Errorf("local {nillable} = false, want true")
+	}
+	if local.Abstract() {
+		t.Errorf("local {abstract} = true, want false — the attribute is prohibited on xs:localElement")
+	}
+}
+
 // TestProduceElementLocalFinalNotMapped pins the deliberate confinement of the
 // mapping to the TOP-LEVEL form: a local <element> carries no final attribute
 // (§3.3.2 gives it to the top-level form alone), so only finalDefault could
