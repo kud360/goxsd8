@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/validate"
-	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -72,6 +72,25 @@ func TestInstanceExecutorDecidesUndeclaredRoot(t *testing.T) {
 	if exec(instanceCase(t, knownRoot, `<unknown/>`, true)).IsPass() {
 		t.Error("the executor must Fail under a flipped expectation (it decides for real)")
 	}
+}
+
+// TestInstanceExecutorDecidesAbstractRoot proves the slice's SECOND verdict is
+// reachable from a schema DOCUMENT: a root whose declaration has {abstract} true
+// is locally invalid by cvc-elt clause 2 (§3.3.4.3), so e-validity clause 1.1.1.1
+// fails and the document is NOT VALID whatever else it holds. It decides nothing
+// unless producer.produceElement maps {abstract} off the attribute (#761).
+func TestInstanceExecutorDecidesAbstractRoot(t *testing.T) {
+	exec := newInstanceExec()
+	const abstractRoot = `<xs:element name="known" type="xs:string" abstract="true"/>`
+	if !exec(instanceCase(t, abstractRoot, `<known/>`, false)).IsPass() {
+		t.Error("an abstract root is not valid: the executor must agree with a suite-invalid case")
+	}
+	if exec(instanceCase(t, abstractRoot, `<known/>`, true)).IsPass() {
+		t.Error("the executor must Fail under a flipped expectation (it decides for real)")
+	}
+	// The control that the verdict turns on {abstract} and not on the shape of the
+	// instance is TestInstanceExecutorDeclinesUndecidableShapes' first row: the
+	// same document under a non-abstract declaration charges nothing and declines.
 }
 
 // TestInstanceExecutorDeclinesUndecidableShapes proves every shape this slice
@@ -141,23 +160,19 @@ func TestInstanceExecutorDeclinesCaseWithNoGroupSchema(t *testing.T) {
 }
 
 // abstractRootValidator is a validator over a schema whose one top-level element
-// declaration has {abstract} true. It is built PROGRAMMATICALLY because the
-// producer hardcodes {abstract} false for a top-level <element>
-// (producer.produceElement in parser/produce.go, #761), so no schema this lane
-// assembles from a document can reach the cvc-elt branch — see instance.go's file
-// comment.
-func abstractRootValidator(t *testing.T, name xsd.QName) *validate.Validator {
+// declaration has {abstract} true. It assembles that schema from a DOCUMENT,
+// through the same gate the lane itself uses, because the producer maps
+// {abstract} from the attribute (§3.3.2.1 dcl.elt.common, #761) — so the cvc-elt
+// branch this exercises is the one a real case reaches, not a hand-built
+// declaration's.
+func abstractRootValidator(t *testing.T) *validate.Validator {
 	t.Helper()
-	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, nil, nil, xsd.NewGlobalScope(),
-		nil, false, nil, nil, nil, true, nil, nil)
+	schemaPath := filepath.Join(t.TempDir(), "s.xsd")
+	writeFixture(t, schemaPath, `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">`+
+		`<xs:element name="e" type="xs:string" abstract="true"/></xs:schema>`)
+	schema, _, err := assembleCase(strict.New(), schemaPath, nil)
 	if err != nil {
-		t.Fatalf("building the %s element declaration: %v", name, err)
-	}
-	b := xsd.NewSchemaBuilder()
-	b.AddElement(e)
-	schema, err := b.Finalize()
-	if err != nil {
-		t.Fatalf("finalizing the schema: %v", err)
+		t.Fatalf("assembling the schema: %v", err)
 	}
 	v, err := validate.New(schema)
 	if err != nil {
@@ -176,7 +191,7 @@ func abstractRootValidator(t *testing.T, name xsd.QName) *validate.Validator {
 // the walk reaching the end, is accepted and IS decidable — so the faulted row
 // fails for the fault and not for the shape.
 func TestAssessInstanceDeclinesFaultedWalk(t *testing.T) {
-	v := abstractRootValidator(t, xsd.QName{Local: "e"})
+	v := abstractRootValidator(t)
 	dir := t.TempDir()
 
 	whole := filepath.Join(dir, "whole.xml")

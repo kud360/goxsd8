@@ -1786,6 +1786,14 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 		return xsd.ElementDeclaration{}, err
 	}
 
+	// §3.3.2.1 dcl.elt.common: {nillable} and {abstract} are the ·actual values· of
+	// the nillable and abstract attributes, otherwise false — boolAttr's absent
+	// case. abstract is read on this path ALONE: the schema for schema documents
+	// declares it use="prohibited" on xs:localElement (§A), so produceLocalElement
+	// has no attribute to read.
+	nillable, _ := boolAttr(elem, "nillable")
+	abstract, _ := boolAttr(elem, "abstract")
+
 	constraints, err := p.identityConstraintsOf(elem)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
@@ -1821,10 +1829,10 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 			return xsd.ElementDeclaration{}, err
 		}
 		return xsd.NewElementDeclarationOwningType(elem.Loc(), edID, qname, ct, nil, xsd.NewGlobalScope(), vc,
-			false, constraints, affiliations, p.substitutionGroupExclusions(elem), false, p.disallowedSubstitutions(elem), nil)
+			nillable, constraints, affiliations, p.substitutionGroupExclusions(elem), abstract, p.disallowedSubstitutions(elem), nil)
 	}
 	return xsd.NewElementDeclaration(elem.Loc(), qname, typeDef, nil, xsd.NewGlobalScope(), vc,
-		false, constraints, affiliations, p.substitutionGroupExclusions(elem), false, p.disallowedSubstitutions(elem), nil)
+		nillable, constraints, affiliations, p.substitutionGroupExclusions(elem), abstract, p.disallowedSubstitutions(elem), nil)
 }
 
 // substitutionGroupAffiliations maps the substitutionGroup attribute of a
