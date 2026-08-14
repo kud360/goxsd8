@@ -331,7 +331,7 @@ CType/abstract00101m1/instance/Positive fail
 CType/abstract00101m2/instance/Negative fail
 CType/annotation00101m1/instance/Positive fail
 CType/annotation00101m2/instance/Positive fail
-CType/attributeuses00101m1/instance/Negative fail
+CType/attributeuses00101m1/instance/Negative pass
 CType/attributeuses00101m1/instance/Positive fail
 CType/attrwildcard00101m1/instance/Positive fail
 CType/basetd00101m1/instance/Negative fail
@@ -1118,7 +1118,7 @@ MS-Attribute2006-07-15/attD003/instance/attD003.v fail
 MS-Attribute2006-07-15/attD004/instance/attD004.v fail
 MS-Attribute2006-07-15/attD007/instance/attD007.v fail
 MS-Attribute2006-07-15/attE001/instance/attE001.v fail
-MS-Attribute2006-07-15/attF001/instance/attF001.i fail
+MS-Attribute2006-07-15/attF001/instance/attF001.i pass
 MS-Attribute2006-07-15/attF002/instance/attF002.v fail
 MS-Attribute2006-07-15/attF003/instance/attF003.v fail
 MS-Attribute2006-07-15/attI003/instance/attI003.v fail
@@ -1130,8 +1130,8 @@ MS-Attribute2006-07-15/attJ005/instance/attJ005.v fail
 MS-Attribute2006-07-15/attJ006/instance/attJ006.v fail
 MS-Attribute2006-07-15/attJ007/instance/attJ007.v fail
 MS-Attribute2006-07-15/attJ008/instance/attJ008.i fail
-MS-Attribute2006-07-15/attJ009/instance/attJ009.i fail
-MS-Attribute2006-07-15/attJ010/instance/attJ010.i fail
+MS-Attribute2006-07-15/attJ009/instance/attJ009.i pass
+MS-Attribute2006-07-15/attJ010/instance/attJ010.i pass
 MS-Attribute2006-07-15/attJ018/instance/attJ018.v fail
 MS-Attribute2006-07-15/attLa001/instance/attLa001.v fail
 MS-Attribute2006-07-15/attLa002/instance/attLa002.v fail
@@ -1241,7 +1241,7 @@ MS-Attribute2006-07-15/attZ015/instance/attZ015.v fail
 MS-AttributeGroup2006-07-15/attgC006/instance/attgC006.i fail
 MS-AttributeGroup2006-07-15/attgC007/instance/attgC007.v fail
 MS-AttributeGroup2006-07-15/attgC010/instance/attgC010a fail
-MS-AttributeGroup2006-07-15/attgC010/instance/attgC010b fail
+MS-AttributeGroup2006-07-15/attgC010/instance/attgC010b pass
 MS-AttributeGroup2006-07-15/attgC024/instance/attgC024.v fail
 MS-AttributeGroup2006-07-15/attgC025/instance/attgC025.i fail
 MS-AttributeGroup2006-07-15/attgC026/instance/attgC026.v fail
@@ -25022,10 +25022,10 @@ Override/over004/instance/over004.n01.xml fail
 Override/over004/instance/over004.n02.xml fail
 Override/over004/instance/over004.v01.xml fail
 Override/over005/instance/over005.n01.xml fail
-Override/over005/instance/over005.n02.xml fail
+Override/over005/instance/over005.n02.xml pass
 Override/over005/instance/over005.v01.xml fail
-Override/over006/instance/over006.n01.xml fail
-Override/over006/instance/over006.n02.xml fail
+Override/over006/instance/over006.n01.xml pass
+Override/over006/instance/over006.n02.xml pass
 Override/over006/instance/over006.v01.xml fail
 Override/over007/instance/over007.n01.xml fail
 Override/over007/instance/over007.n02.xml fail
@@ -25419,8 +25419,8 @@ Subsgroup/subsgroup002/instance/subsgroup002.v1.xml fail
 Subsgroup/subsgroup003/instance/subsgroup003.v1.xml fail
 TargetNS/target001/instance/target001.n1.xml fail
 TargetNS/target001/instance/target001.v1.xml fail
-TargetNS/target003/instance/target003.n1.xml fail
-TargetNS/target003/instance/target003.n2.xml fail
+TargetNS/target003/instance/target003.n1.xml pass
+TargetNS/target003/instance/target003.n2.xml pass
 TargetNS/target003/instance/target003.v1.xml fail
 TargetNS/targetNamespace_004/instance/targetNamespace_004_2 fail
 TargetNS/targetNamespace_005/instance/targetNamespace_005_2 fail
