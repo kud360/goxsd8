@@ -21,9 +21,10 @@ import (
 const ruleCvcAssessElt xsderr.Rule = "cvc-assess-elt"
 
 // ruleCvcElt is Element Locally Valid (Element) (Structures §3.3.4.3,
-// cvc-elt). The clause charged goes in the message, not the rule ID: the
-// generated catalog is keyed on base rule IDs and admits no dotted
-// spelling (see [xsderr.IsValidRule]).
+// cvc-elt). The clause charged goes in the message, not the rule ID: unlike
+// some rules whose dotted sub-ID the spec itself anchors (cos-ct-extends.1.2,
+// src-simple-type.1), cvc-elt's catalog entry is the bare name only, so
+// "cvc-elt.2" is not a valid [xsderr.Rule] (see [xsderr.IsValidRule]).
 const ruleCvcElt xsderr.Rule = "cvc-elt"
 
 // Assess walks root's subtree once — the element, then its [[attributes]],
