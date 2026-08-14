@@ -26,8 +26,10 @@ import (
 // carry: [Element], [Attribute] and [Text] are element-level views with no
 // document above them, and the property arrives as a capability interface of
 // its own rather than as a method added to any of the three (PRINCIPLES 3,
-// doc.go). Not checking it is fail-open — it can only accept, never reject
-// (#773).
+// doc.go). The withheld value's whole consumer set is Result.violations and
+// its one reader Result.Violations, both of which decidedNotValid reads as
+// violations PRESENT, so withholding one can only cost a rejection and never
+// manufacture one (#773).
 
 // ruleCvcAttribute is Attribute Locally Valid (Structures §3.2.4.1,
 // cvc-attribute). The clause charged goes in the message on ruleCvcElt's
