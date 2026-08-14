@@ -56,19 +56,19 @@ import (
 func validateUnion(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context) (Value, whiteSpace, error) {
 	members, err := st.Members(r)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, typeFault(err)
 	}
 	governed, err := unionGoverned(b, r, members)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, typeFault(err)
 	}
 	if !governed {
-		return nil, 0, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-			"value: no backend mapping governs type %s", st.Name())
+		return nil, 0, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
+			"value: no backend mapping governs type %s", st.Name()))
 	}
 	lexFacets, valFacets, err := compile(b, r, st)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, typeFault(err)
 	}
 	v, ws, err := dispatchUnion(b, r, members, rawLexical, ctx)
 	if err != nil {

@@ -61,19 +61,25 @@
 // rejected.
 //
 // Not every error the pipeline returns is a VERDICT, though, and the difference is
-// load-bearing. A type may reach [ValidateLexical] carrying a facet that is not
+// load-bearing. [IsDatatypeVerdict] is the test, and every caller deciding validity
+// — inside this package and out — applies it before charging: an error it reports
+// false for is a fault of the TYPE or of the BACKEND, and charging one as "this
+// literal is invalid" turns a backend gap or a construction bug into a false
+// reject. The rule ID does not tell them apart; an ungoverned type is reported
+// under cvc-datatype-valid exactly as a genuine rejection is, which is how a
+// typeless attribute (xs:anySimpleType, Structures §3.2.2.2) would otherwise be
+// rejected by every processor that trusted the ID.
+//
+// One member of that class has a predicate of its own, because two sites need to
+// know WHICH fault: a type may reach [ValidateLexical] carrying a facet that is not
 // applicable to it at all (cos-applicable-facets §4.1.5) — a bound facet on an
 // unordered value space, a length facet on an unmeasurable one — or with no usable
-// whiteSpace mode where §3.16.7.4 guarantees one. Those are faults in the type, not
-// in the literal, so they are reported as their own error class, distinguished by
+// whiteSpace mode where §3.16.7.4 guarantees one. Those are distinguished by
 // [IsFacetPrecondition] and charged to cos-applicable-facets or
-// [xsderr.RuleComponentInvariant] rather than to any cvc-* rule. A caller that reads
-// one as "this literal is invalid" turns a construction bug into a false reject, so
-// every caller in this package that decides validity discriminates it explicitly and
-// an external caller is expected to do the same. Applicability itself is the
-// xsd.SimpleTypeRestrictionChecker capability's to enforce — builtin.NewRestrictionChecker
-// is the implementation, and a Schema finalized with it installed has the whole
-// class discharged for every simple type it reaches.
+// [xsderr.RuleComponentInvariant] rather than to any cvc-* rule. Applicability
+// itself is the xsd.SimpleTypeRestrictionChecker capability's to enforce —
+// builtin.NewRestrictionChecker is the implementation, and a Schema finalized with
+// it installed has the whole class discharged for every simple type it reaches.
 //
 // The list and union varieties recurse rather than adding stages. A list runs
 // this whole pipeline against the ITEM TYPE per whitespace-delimited item — the
@@ -127,13 +133,23 @@
 // there because such a graph holds no by-name reference to look up.
 //
 // An UNRESOLVABLE reference surfaces as the src-resolve error xsd.SimpleType.Base
-// and its siblings produce, propagated unchanged. It is neither a validity verdict about the
-// literal nor a facet-pipeline precondition fault: it says the TYPE could not be
-// read at all.
+// and its siblings produce. It is not a validity verdict about the literal — it says
+// the TYPE could not be read at all — so [ValidateLexical] returns it marked, and
+// [IsDatatypeVerdict] reports false for it.
 //
 // # Value-constraint validity and comparison (the xsd.ValueSpace seam)
 //
 //	func NewValueSpace(b Backend) xsd.ValueSpace
+//	func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool)
+//
+// [ConstraintMatches] is the INSTANCE-time half, and is not part of the
+// xsd.ValueSpace interface: an instance literal is not a Value Constraint, and the
+// rule reading the answer (cvc-attribute §3.2.4.1 clause 4, cvc-au §3.5.4) belongs
+// to the validator, not to schema assembly. It maps both an instance literal and a
+// fixed constraint's {lexical form} through one type's pipeline — each under its
+// own namespace context, the instance's and the schema document's — and compares
+// the ·actual values· under the same equal-or-identical union, answering undecided
+// on the same fail-open terms as everything below.
 //
 // [NewValueSpace] is what lets package xsd — a pure leaf that cannot import this
 // one — decide the Structures constraints that reach into a value space. Two
@@ -156,12 +172,12 @@
 // comparisons resolve them, under the bindings each value constraint captured,
 // and answer undecided only for a prefix that resolves to nothing), a
 // construction-stage failure in the type's own facets, a facet-pipeline
-// precondition fault ([IsFacetPrecondition]), the list and union varieties on the
-// comparisons, and any pair whose two types resolve to DIFFERENT governing mappings
-// (the widest-space rule above is what makes a general/specific pair on one base
-// chain comparable at all, and what makes anything else incommensurable). Undecided
-// always accepts on the xsd side, so this seam can only narrow what a schema set
-// admits.
+// precondition fault (the one-sided check reads the whole class through
+// [IsDatatypeVerdict]), the list and union varieties on the comparisons, and any
+// pair whose two types resolve to DIFFERENT governing mappings (the widest-space
+// rule above is what makes a general/specific pair on one base chain comparable at
+// all, and what makes anything else incommensurable). Undecided always accepts on
+// the xsd side, so this seam can only narrow what a schema set admits.
 //
 // # Codegen seam
 //

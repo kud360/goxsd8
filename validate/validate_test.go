@@ -8,9 +8,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
+
+// testBackend is the value.Backend every test here passes to New. It is the
+// real strict backend and not a stub: the charges under test are decided by a
+// value space, and a stub mapping would pin this package's plumbing while
+// leaving the spec question (which lexicals are datatype-valid for xs:integer)
+// unasked. Importing it in a TEST does not put it in this package's import
+// closure, which imports_test.go pins.
+func testBackend() value.Backend { return strict.New() }
 
 // recorder is a slog.Handler that appends one line per record, so a test can
 // compare the walk's visits against an expected sequence. It qualifies each
@@ -147,7 +157,7 @@ var wantVisits = []string{
 
 func TestAssessWalksEveryNodeOnceInDocumentOrder(t *testing.T) {
 	log, visits := recordingLogger()
-	v, err := New(rootSchema(t), WithLogger(log))
+	v, err := New(rootSchema(t), testBackend(), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -188,7 +198,7 @@ func TestAssessChargesAnUndeclaredRoot(t *testing.T) {
 	tree.name = xsd.QName{Space: "urn:p", Local: "undeclared"}
 
 	log, visits := recordingLogger()
-	v, err := New(rootSchema(t), WithLogger(log))
+	v, err := New(rootSchema(t), testBackend(), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -227,7 +237,7 @@ func TestAssessWithholdsTheChargeForAnXSITypedRoot(t *testing.T) {
 	})
 
 	log, visits := recordingLogger()
-	v, err := New(rootSchema(t), WithLogger(log))
+	v, err := New(rootSchema(t), testBackend(), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -250,7 +260,7 @@ func TestAssessChargesAnAbstractRoot(t *testing.T) {
 	tree.name = xsd.QName{Local: "abstractRoot"}
 
 	log, visits := recordingLogger()
-	v, err := New(rootSchema(t), WithLogger(log))
+	v, err := New(rootSchema(t), testBackend(), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -282,7 +292,7 @@ func TestAssessChargesAnAbstractRoot(t *testing.T) {
 // first walk into the second.
 func TestValidatorIsReusable(t *testing.T) {
 	log, visits := recordingLogger()
-	v, err := New(rootSchema(t), WithLogger(log))
+	v, err := New(rootSchema(t), testBackend(), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -317,7 +327,7 @@ func TestAssessStopsAtASourceFault(t *testing.T) {
 	}
 
 	log, visits := recordingLogger()
-	v, err := New(rootSchema(t), WithLogger(log))
+	v, err := New(rootSchema(t), testBackend(), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -349,7 +359,7 @@ func TestAssessPanicsOnZeroChild(t *testing.T) {
 	}
 
 	log, visits := recordingLogger()
-	v, err := New(rootSchema(t), WithLogger(log))
+	v, err := New(rootSchema(t), testBackend(), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -392,8 +402,21 @@ func TestNamespaceDeclarationsAreNotAttributes(t *testing.T) {
 	}
 }
 
+// A nil backend is a caller bug and not a validity verdict, so it panics
+// rather than joining New's one error condition — and it panics BEFORE the nil
+// schema is reported, so a caller passing neither learns about the one a
+// default could never have supplied.
+func TestNewPanicsOnANilBackend(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("New(schema, nil) did not panic")
+		}
+	}()
+	_, _ = New(nil, nil)
+}
+
 func TestNewRejectsNilSchema(t *testing.T) {
-	v, err := New(nil)
+	v, err := New(nil, testBackend())
 	if err == nil {
 		t.Fatal("New(nil) = nil error, want one")
 	}
@@ -410,7 +433,7 @@ func TestNewDefaultsAndNilLogger(t *testing.T) {
 	// The zero option set and an explicit nil logger are both usable: a
 	// walk under either runs to completion and logs nothing (STYLE L1).
 	for _, opts := range [][]Option{nil, {WithLogger(nil)}} {
-		v, err := New(rootSchema(t), opts...)
+		v, err := New(rootSchema(t), testBackend(), opts...)
 		if err != nil {
 			t.Fatalf("New: %v", err)
 		}
@@ -422,7 +445,7 @@ func TestNewDefaultsAndNilLogger(t *testing.T) {
 
 func TestSchemaViewResolvesElements(t *testing.T) {
 	schema := emptySchema(t)
-	v, err := New(schema)
+	v, err := New(schema, testBackend())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -447,7 +470,7 @@ func TestResultViolationsAreCopied(t *testing.T) {
 }
 
 func TestAssessRejectsNilRoot(t *testing.T) {
-	v, err := New(emptySchema(t))
+	v, err := New(emptySchema(t), testBackend())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

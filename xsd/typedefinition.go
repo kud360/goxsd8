@@ -272,7 +272,7 @@ func (SubstitutionGroupHeadTypeRef) typeDefinitionOrRef() {}
 // it can never become arm-meaning-dependent on where the caller came from. Every
 // consumer goes through this helper, through its complex-only narrowing
 // baseComplexType (complexderivation.go), or through its narrowed sibling
-// simpleTypeOf; none re-derives a bare-name lookup of its own (STYLE T4).
+// ResolvedSimpleType; none re-derives a bare-name lookup of its own (STYLE T4).
 func (s *Schema) ResolvedType(ref TypeDefinitionOrRef) (TypeDefinition, bool) {
 	switch r := ref.(type) {
 	case nil:

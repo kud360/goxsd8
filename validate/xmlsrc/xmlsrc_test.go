@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/validate"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -48,7 +49,7 @@ func validatorFor(t *testing.T, roots ...xsd.QName) *validate.Validator {
 	if err != nil {
 		t.Fatalf("finalizing the schema: %v", err)
 	}
-	v, err := validate.New(schema)
+	v, err := validate.New(schema, strict.New())
 	if err != nil {
 		t.Fatalf("validate.New: %v", err)
 	}

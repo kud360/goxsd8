@@ -118,14 +118,40 @@ const (
 	ruleCosApplicableFacets xsderr.Rule = "cos-applicable-facets"
 )
 
+// errTypeFault is the sentinel every [ValidateLexical] error that is NOT a
+// verdict about the literal wraps: a fault of the *[xsd.SimpleType] it was
+// handed, or of the [Backend] behind it. [IsDatatypeVerdict] is the one way to
+// test it, and typeFault the one way to mark an error with it.
+var errTypeFault = errors.New("value: a fault of the type or the backend, not a verdict about the lexical")
+
 // errFacetPrecondition is the sentinel every facet-pipeline PRECONDITION fault
 // wraps. The call sites that must tell such a fault apart from a validity verdict
-// (valueSpace.ValidDefault's gate 4, dispatchUnion, checkEnumerationRestriction)
-// then test ONE fact instead of matching a message or enumerating the two rule IDs
-// the cohort spans — cos-applicable-facets and xsderr.RuleComponentInvariant. It
-// stays unexported, reachable only through IsFacetPrecondition, so no consumer can
-// reassign the sentinel out from under those decisions.
-var errFacetPrecondition = errors.New("facet-pipeline precondition violated")
+// (dispatchUnion, checkEnumerationRestriction) then test ONE fact instead of
+// matching a message or enumerating the two rule IDs the cohort spans —
+// cos-applicable-facets and xsderr.RuleComponentInvariant. It stays unexported,
+// reachable only through IsFacetPrecondition, so no consumer can reassign the
+// sentinel out from under those decisions.
+//
+// It WRAPS errTypeFault rather than sitting beside it: a precondition fault is one
+// kind of type fault, so the narrow predicate and the wide one read one chain and
+// the classification has a single encoding (STYLE T4/D4).
+var errFacetPrecondition = fmt.Errorf("%w: facet-pipeline precondition violated", errTypeFault)
+
+// typeFault marks err as a fault of the type or the backend rather than a verdict
+// about the literal, so [IsDatatypeVerdict] answers false for it. It is the ONE
+// marking site besides facetPrecondition, which marks its own cohort through
+// errFacetPrecondition, and it is idempotent: an error already marked — an item
+// type's fault surfacing through listMapping.Parse, say — passes through
+// unchanged rather than accumulating prefixes.
+//
+// It wraps rather than rebuilds, so xsderr.RuleOf and xsderr.LocOf still reach the
+// *xsderr.Error underneath where there is one.
+func typeFault(err error) error {
+	if err == nil || errors.Is(err, errTypeFault) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", errTypeFault, err)
+}
 
 // facetPrecondition builds the *xsderr.Error for a facet-pipeline PRECONDITION
 // fault: rule attributes it (ruleCosApplicableFacets for a facet paired with an
@@ -166,13 +192,50 @@ func IsFacetPrecondition(err error) bool {
 	return errors.Is(err, errFacetPrecondition)
 }
 
+// IsDatatypeVerdict reports whether err — an error [ValidateLexical] returned —
+// is a VERDICT about the literal it was handed: the literal is not Datatype Valid
+// (Datatypes §4.1.4) with respect to that type. It is false for a nil error and
+// false for every error that is instead a fault of the *[xsd.SimpleType] or of the
+// [Backend]:
+//
+//   - no [Backend] mapping governs the type, its list's item type, or one of its
+//     union's members. This is how xs:anySimpleType and xs:anyAtomicType arrive:
+//     no backend maps the ·special· datatypes (§4.1), for which Datatype Valid is
+//     unconditionally TRUE, and Structures §3.2.2.2's third tier types every
+//     attribute declaration with no @type as xs:anySimpleType — so reading that
+//     error as a verdict rejects every typeless attribute in existence.
+//   - a construction-stage failure in the type's OWN facets: a pattern
+//     [regex.Translate] cannot express (src-pattern-value), an enumeration or
+//     bound facet whose DECLARING type the backend does not map
+//     (src-enumeration-value). Neither says anything about the literal.
+//   - a facet-pipeline precondition fault ([IsFacetPrecondition], the narrower
+//     question "which fault"), which would report the same error for EVERY
+//     literal.
+//   - an unresolvable {base type definition}, {item type definition} or member
+//     anywhere the pipeline had to read: the TYPE could not be read at all.
+//
+// Test it before charging any [ValidateLexical] error as a validity violation. A
+// caller that charges a type fault as "this literal is invalid" turns a backend
+// gap or its own construction bug into a false rejection — and the rule ID does
+// not tell the two apart, because an ungoverned type is reported under
+// cvc-datatype-valid exactly as a genuine rejection is.
+//
+// The classification is by EXCLUSION, which is the fail-open direction: a stage
+// this package grows later reports a verdict only if it is left unmarked, so a
+// forgotten mark costs a decline and never a false reject.
+func IsDatatypeVerdict(err error) bool {
+	return err != nil && !errors.Is(err, errTypeFault)
+}
+
 // ValidateLexical validates the lexical string rawLexical against st's effective
 // facets through the full facet pipeline (whiteSpace → pattern → lexical mapping
-// → value facets), returning the parsed value on success or the first
-// *xsderr.Error a stage produces (stop-on-first-failure; this does not collect
-// all facet violations). ctx is the VALIDATED INSTANCE's context, threaded to
-// the governing mapping's Parse for the candidate value; a context-free cohort
-// (decimal/boolean/string) passes nil here.
+// → value facets), returning the parsed value on success or the first error a
+// stage produces (stop-on-first-failure; this does not collect all facet
+// violations). A rejection carries the stage's *xsderr.Error, reachable through
+// [xsderr.RuleOf] whether or not the error is wrapped; call [IsDatatypeVerdict]
+// before reading any of them as a verdict. ctx is the VALIDATED INSTANCE's
+// context, threaded to the governing mapping's Parse for the candidate value; a
+// context-free cohort (decimal/boolean/string) passes nil here.
 //
 // PRECONDITION (caller-guarded, not PRE-checked here — but a violation is
 // reported, see below): every facet on st is applicable to st per
@@ -223,11 +286,17 @@ func IsFacetPrecondition(err error) bool {
 //
 // Neither says anything about rawLexical, so a caller that charges one as a
 // validity verdict converts its own construction bug into a FALSE REJECT of a valid
-// schema or instance. Inside this package the three deciders discriminate it:
-// valueSpace.ValidDefault reports undecided (its gate 4), dispatchUnion aborts the
-// member scan instead of folding the fault into its rejection list, and
-// checkEnumerationRestriction skips the member instead of re-charging it under
-// §4.3.5.5. An external caller does the same through [IsFacetPrecondition].
+// schema or instance. Inside this package the two deciders that need to know WHICH
+// fault discriminate it: dispatchUnion aborts the member scan instead of folding
+// the fault into its rejection list, and checkEnumerationRestriction skips the
+// member instead of re-charging it under §4.3.5.5.
+//
+// A precondition fault is one member of a WIDER class — every error this function
+// returns that is a fault of st or of b rather than a verdict about rawLexical.
+// [IsDatatypeVerdict] enumerates that class and is what a caller deciding validity
+// tests; valueSpace.ValidDefault reads it and so does the instance validator.
+// [IsFacetPrecondition] answers the narrower "which fault", which only the two
+// sites above ask.
 //
 // The three §4.1.5 states in which NO facet is applicable at all are not faults and
 // not errors: an absent {variety} (xs:anySimpleType), an atomic {variety} with an
@@ -278,7 +347,7 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 	// Atomic (cl.2.1) and list (cl.2.2) share the path below.
 	variety, err := st.Variety(r)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, typeFault(err)
 	}
 	if _, ok := variety.(xsd.Union); ok {
 		return validateUnion(b, r, st, rawLexical, ctx)
@@ -286,7 +355,7 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 
 	lexFacets, valFacets, err := compile(b, r, st)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, typeFault(err)
 	}
 
 	// whiteSpace stage (§4.3.6): normalize using st's effective whiteSpace facet,
@@ -298,7 +367,7 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 	// facetValue applies to a facet's own {value}.
 	ws, err := effectiveWhiteSpace(r, st)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, typeFault(err)
 	}
 	lexical := rawLexical
 	if ws != 0 {
@@ -318,11 +387,11 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 	// governs facet {value}s, not the application-facing candidate).
 	m, ok, err := governingMapping(b, r, st)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, typeFault(err)
 	}
 	if !ok {
-		return nil, 0, xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
-			"value: no backend mapping governs type %s", st.Name())
+		return nil, 0, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
+			"value: no backend mapping governs type %s", st.Name()))
 	}
 	v, err := m.Parse(lexical, ctx)
 	if err != nil {

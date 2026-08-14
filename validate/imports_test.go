@@ -3,6 +3,7 @@ package validate
 import (
 	"errors"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -13,6 +14,10 @@ import (
 // which is the only place it can break — this package's own import block is
 // one grep and needs no test, while a decoder reaching the engine four
 // packages down is invisible to that grep.
+//
+// The closure is an ALLOWED-TO-GROW set, not an allowlist: nothing here says
+// which packages may join it, only which may not. docs/ARCHITECTURE.md note [2]
+// is where the closure of the day is stated.
 //
 // The two bans below differ because encoding/json is unavoidable and the
 // others are not: log/slog imports it for its JSONHandler, so it sits in the
@@ -54,14 +59,14 @@ func TestImportClosureExcludesDecoders(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	seen := 0
+	var observed []string
 	for _, line := range lines {
 		fields := strings.Fields(line)
 		if len(fields) == 0 {
 			continue
 		}
-		seen++
 		pkg, imports := fields[0], fields[1:]
+		observed = append(observed, pkg)
 		for _, banned := range bannedInClosure {
 			if matchesPackage(pkg, banned) {
 				t.Errorf("validate's closure reaches %s (banned: %s)", pkg, banned)
@@ -79,11 +84,16 @@ func TestImportClosureExcludesDecoders(t *testing.T) {
 		}
 	}
 
-	// A scan that walks nothing passes every assertion it makes: the
-	// closure holds at least validate itself and the two packages it is
-	// allowed to reach in this module.
-	if seen < 3 {
-		t.Errorf("go list -deps reported %d packages, want validate plus at least xsd and xsderr", seen)
+	// A scan that walks nothing passes every assertion it makes. The
+	// anti-vacuity claim is that three packages the closure cannot lose were
+	// each SEEN — validate itself, and the xsd and xsderr it is written
+	// against — rather than a count, which changes every time the closure
+	// legitimately grows and says nothing about what was walked.
+	for _, want := range []string{modulePath + "/validate", modulePath + "/xsd", modulePath + "/xsderr"} {
+		if !slices.Contains(observed, want) {
+			t.Errorf("go list -deps did not report %s among validate's closure of %d packages; the scan is not walking it",
+				want, len(observed))
+		}
 	}
 }
 
