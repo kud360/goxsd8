@@ -326,7 +326,7 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 		return nil
 	}
 	n := u.DeclarationName()
-	t, hasType := s.simpleTypeOf(d.TypeDefinition())
+	t, hasType := s.ResolvedSimpleType(d.TypeDefinition())
 	if hasType {
 		if err := s.checkSimpleDefault(ruleAuPropsCorrect, loc, owner+" attribute "+n.String(), t, uvc); err != nil {
 			return err
@@ -380,14 +380,14 @@ func (s *Schema) checkAttributeDeclarationDefaults() error {
 //
 // Both gates accept rather than reject: no {value constraint} means the clause is
 // not reached at all (never reached-and-satisfied), and a {type definition} that
-// is absent, unresolvable, or complex is simpleTypeOf's documented "not decidable
+// is absent, unresolvable, or complex is ResolvedSimpleType's documented "not decidable
 // by this clause".
 func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration) error {
 	dvc, present := d.ValueConstraint()
 	if !present {
 		return nil // "if there is a {value constraint}" fails: clause 2 is not reached
 	}
-	t, ok := s.simpleTypeOf(d.TypeDefinition())
+	t, ok := s.ResolvedSimpleType(d.TypeDefinition())
 	if !ok {
 		return nil
 	}

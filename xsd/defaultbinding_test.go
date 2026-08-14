@@ -242,7 +242,7 @@ func TestEffectiveValueConstraintFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
-	if vc, ok := s.effectiveValueConstraint(own); !ok || vc.Kind() != ValueDefault || vc.LexicalForm() != "9" {
+	if vc, ok := s.EffectiveValueConstraint(own); !ok || vc.Kind() != ValueDefault || vc.LexicalForm() != "9" {
 		t.Fatalf("the use's OWN {value constraint} must win: got %+v ok=%t", vc, ok)
 	}
 
@@ -250,12 +250,12 @@ func TestEffectiveValueConstraintFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAttributeUse: %v", err)
 	}
-	if vc, ok := s.effectiveValueConstraint(inherited); !ok || vc.Kind() != ValueFixed || vc.LexicalForm() != "7" {
+	if vc, ok := s.EffectiveValueConstraint(inherited); !ok || vc.Kind() != ValueFixed || vc.LexicalForm() != "7" {
 		t.Fatalf("a use with no own constraint must fall back to the resolved declaration's: got %+v ok=%t", vc, ok)
 	}
 
 	bare := dAttr(t, uq("a"), uq("str"))
-	if _, ok := s.effectiveValueConstraint(bare); ok {
+	if _, ok := s.EffectiveValueConstraint(bare); ok {
 		t.Fatalf("a use whose declaration has no {value constraint} must be ·absent·")
 	}
 }

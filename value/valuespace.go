@@ -77,13 +77,12 @@ func (vs valueSpace) EqualOrIdentical(r xsd.TypeResolver, ta *xsd.SimpleType, a 
 // which a-props-correct clause 2 and au-props-correct clause 2 both charge: is
 // vc.{lexical form} Datatype Valid (§4.1.4) with respect to t? [ValidateLexical]
 // decides exactly that rule — all three of its clauses, over all three varieties
-// — so the whole of this method is the four gates that separate the errors it
+// — so the whole of this method is the two gates that separate the errors it
 // returns which ARE that verdict from the ones that are not. Every gate answers
 // undecided, never invalid, per the [xsd.ValueSpace] fail-open contract.
 //
-// The first three gates run BEFORE the pipeline, in this order; the fourth reads
-// the pipeline's own error, because the fault it catches is only detectable once a
-// facet meets a value:
+// The first gate runs BEFORE the pipeline; the second reads the pipeline's own
+// error through the ONE classification this package publishes:
 //
 //  1. GAP(value): needsContext. A QName- or NOTATION-governed value space
 //     anywhere in t's variety closure needs the namespace bindings in scope at
@@ -97,80 +96,85 @@ func (vs valueSpace) EqualOrIdentical(r xsd.TypeResolver, ta *xsd.SimpleType, a 
 //     that lands the whole closure stays undecided, because a nil [Context]
 //     makes a backend reject EVERY QName lexical and every QName default would
 //     be a false reject.
-//  2. GAP(value): governingMapping. An ungoverned type — no backend Mapping on
-//     it or any ancestor, an ungoverned item type, an ungoverned union member —
-//     makes validateLexical return a cvc-datatype-valid "no backend mapping
-//     governs type" error that is a BACKEND gap, not instance data. It is also
-//     how xs:anySimpleType and xs:anyAtomicType arrive here: no backend maps the
-//     ·special· datatypes (Datatypes §4.1), for which Datatype Valid is
-//     unconditionally TRUE, and §3.2.2.2's third tier types every attribute
-//     declaration with no @type as xs:anySimpleType — so reading that error as a
-//     verdict would reject every typeless attribute default in existence. The
-//     union branch of this gate (unionGoverned) is the same test validateUnion
-//     applies before dispatching, so this pre-check and the pipeline agree on
-//     exactly which unions are governed.
-//  3. GAP(value): compile. A construction-stage failure in t's OWN facets — a
-//     pattern regex.Translate cannot express (src-pattern-value), an enumeration
-//     or bound facet whose DECLARING type the backend does not map
-//     (src-enumeration-value) — says nothing about vc.{lexical form}. Charging
-//     it as clause 2 would reject a schema for an unrelated facet, under the
-//     wrong rule ID and against the wrong component.
-//  4. [IsFacetPrecondition]. A facet paired with a value lacking the capability it
-//     needs (cos-applicable-facets §4.1.5), or a type with no usable whiteSpace mode
-//     where §3.16.7.4 guarantees one, is a fault in T ITSELF — the first half
-//     discharged wherever an xsd.SimpleTypeRestrictionChecker is installed, as the
-//     parser installs one, and the caller's own where none is. Unlike
-//     gates 1–3 it cannot be pre-checked here: the pairing is only observable once a
-//     facet meets a parsed value inside the pipeline. Reading it as clause 2 would
-//     reject the schema for a fault of the component rather than of the value
-//     constraint — under a rule that has nothing to say about it, and, since
-//     [ValidateLexical] would report the same fault for EVERY literal, for a default
-//     that no lexical could have satisfied.
+//  2. [IsDatatypeVerdict]. An ungoverned type, a construction-stage failure in
+//     t's facets, a facet-pipeline precondition fault and an unresolvable base
+//     are each a fault of T or of the backend, and each would be reported for
+//     EVERY literal — so reading one as clause 2 would reject the schema under a
+//     rule with nothing to say about it, for a default no lexical could have
+//     satisfied. That predicate names the whole class and why each member
+//     belongs to it; this method does not re-derive the list, which is what the
+//     three separate pre-check gates it replaced amounted to.
 //
-// One residue is recorded rather than papered over. GAP(value): item/member
-// facet compilation. The compile gate covers T's OWN effective facets only: a
-// list's ITEM type and a union's MEMBER types compile inside the dispatch
-// (listMapping's Parse recurses through validateLexical; dispatchUnion folds
-// every member's rejection into one cvc-datatype-valid error), so a
-// construction-stage failure down there still reaches the caller as a decided
-// reject. Closing that needs the pipeline itself to separate its construction
-// and verdict stages per member, which is a change to package value's own error
-// model, not to this adapter. Gate 4 is NOT part of that residue: a precondition
-// fault propagates out of the item/member dispatch unchanged (list.go, union.go),
-// so it is caught here wherever in T's closure it arose.
+// One residue is recorded rather than papered over. GAP(value): union member
+// facet compilation. dispatchUnion folds every member's rejection into one
+// cvc-datatype-valid error of its own, so a construction-stage failure in a
+// MEMBER's facets loses its marking on the way out and still reaches the caller
+// as a decided reject. The LIST half of that residue is already closed:
+// listMapping's Parse recurses through validateLexical, which marks an item
+// type's fault, and the marking survives the item error's propagation out of
+// Parse.
+//
+// The error model no longer stands in the way of closing the union half: the
+// marking now exists, and dispatchUnion already aborts its member scan on one
+// class of fault ([IsFacetPrecondition]) — widening that test to the whole class
+// is the change. What is left is not difficulty but ATTRIBUTION. Widening it
+// turns member faults from decided rejects into declines, which moves verdicts
+// and so may move a lane, and that movement belongs to the issue that owns the
+// residue (#462) rather than being absorbed here where it would be credited to
+// an unrelated landing (PRINCIPLES 22).
 //
 // nil is passed as the [Context] because gate 1 has already excluded every
 // context-dependent literal — unlike values, which parses each side under the
 // context its own value constraint captured.
-//
-// An UNRESOLVABLE {base type definition} in t's own chain — the src-resolve
-// error r's readers produce — is undecided, not a verdict: gates 1-3 each walk
-// that chain and each answers undecided on the error, which is the right
-// polarity, since the fault says t could not be READ and says nothing about
-// vc.{lexical form}. The residue is a break deeper inside a list's item or a
-// union's member closure than gates 1-3 reach, which would surface from
-// [ValidateLexical] and be read as decided-invalid. It is unreachable for the
-// caller this interface exists for: an xsd.Schema charges src-resolve for
-// every such break in Phase A and again in Phase D's first step, both of which
-// run before Phase E asks this question at all.
 func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.ValueConstraint) (bool, bool) {
 	needs, err := needsContext(r, t)
 	if err != nil || needs {
 		return false, false
 	}
-	if _, ok, err := governingMapping(vs.b, r, t); err != nil || !ok {
-		return false, false
-	}
-	if _, _, err := compile(vs.b, r, t); err != nil {
-		return false, false
-	}
 	if _, err := ValidateLexical(vs.b, r, t, vc.LexicalForm(), nil); err != nil {
-		if IsFacetPrecondition(err) {
-			return false, false // gate 4
-		}
-		return false, true
+		return false, IsDatatypeVerdict(err)
 	}
 	return true, true
+}
+
+// ConstraintMatches reports whether lexical — an instance literal — and
+// vc.{lexical form} denote the SAME ·actual value· of t: the "equal or identical"
+// agreement cvc-attribute (§3.2.4.1) clause 4 and cvc-au (§3.5.4) both test
+// against a fixed Value Constraint. decided is false wherever the question cannot
+// be answered, on the same fail-open terms [ValidDefault] states, so a caller can
+// never charge a violation off a fault of the type or of the backend.
+//
+// Both sides are validated against t itself, so no shared-mapping search is needed
+// (contrast values, which compares two DIFFERENT types' constraints): one type
+// fixes one governing mapping and one whiteSpace mode, and running each side
+// through the whole pipeline is what makes the comparison a VALUE-space one —
+// String Valid (§3.16.4) clause 1 normalizes, clause 2 maps, and only then is
+// there an ·actual value· to compare. A lexical comparison in its place would
+// report "1" and "01" as different xs:integers.
+//
+// The two sides are parsed under DIFFERENT contexts, and that asymmetry is the
+// point: ctx is the instance's, resolving a QName lexical against the namespace
+// bindings in scope where the attribute was written, while vc carries the bindings
+// in scope where its own {lexical form} was written in the schema document
+// (§3.3.18, constraintContext). One shared context would decide a QName agreement
+// wrongly in both directions.
+//
+// A side that fails to validate is undecided, never a mismatch. For the instance
+// side that is not a lost verdict: a literal outside t's lexical space already
+// fails cvc-attribute clause 3, which the caller charges in its own right, and
+// reporting "not the same value" for what is really "not a value at all" would
+// charge clause 4 as well for one defect. For vc's side it is the schema's own
+// cos-valid-simple-default obligation (§3.2.6.2), already charged at finalize.
+func ConstraintMatches(b Backend, r xsd.TypeResolver, t *xsd.SimpleType, lexical string, ctx Context, vc xsd.ValueConstraint) (same, decided bool) {
+	av, err := ValidateLexical(b, r, t, lexical, ctx)
+	if err != nil {
+		return false, false
+	}
+	cv, err := ValidateLexical(b, r, t, vc.LexicalForm(), constraintContext(vc))
+	if err != nil {
+		return false, false
+	}
+	return equalOrIdentical(av, cv)
 }
 
 // values maps both {lexical form}s to ·actual values· IN ONE VALUE SPACE, or
@@ -445,9 +449,11 @@ func identical(a, b Value) (same, decided bool) {
 // same" from "not comparable" can.
 //
 // It is the ONE encoding of that union in this package (STYLE T4): enumeration
-// matching (cvc-enumeration-valid §4.3.5.4, enumMatch) and the Structures
+// matching (cvc-enumeration-valid §4.3.5.4, enumMatch), the Structures
 // value-constraint clauses (loc-testSubP 4.2/5.2.2, via
-// valueSpace.EqualOrIdentical) both read it, and neither re-derives it.
+// valueSpace.EqualOrIdentical) and the instance-time fixed-value agreement
+// (cvc-attribute cl.4 / cvc-au, via [ConstraintMatches]) all read it, and none
+// re-derives it.
 func equalOrIdentical(a, b Value) (same, decided bool) {
 	id, hasIdentical := a.(Identical)
 	if hasIdentical && id.Identical(b) {

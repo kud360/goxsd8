@@ -155,18 +155,28 @@ func (s *Schema) ownedAttributeDeclaration(u AttributeUse) (AttributeDeclaration
 	}
 }
 
-// effectiveValueConstraint is the ·effective value constraint· of an attribute
+// EffectiveValueConstraint is the ·effective value constraint· of an attribute
 // use (Structures §3.5.4, key-evc): U.{value constraint} if present, otherwise
 // U.{attribute declaration}.{value constraint} if present, otherwise ·absent·.
 //
-// It is a finalize-phase helper on *Schema rather than a method on AttributeUse
-// because the Ref variant's declaration is reachable only through the schema's
-// {attribute declarations}. Its one caller today is
-// checkAttributeValueConstraintSubsumes, which is where loc-testSubP clause 5.2
-// invokes ·effective value constraint· by name. It stays unexported: the eventual
-// consumer is the instance validator's cvc-au, and that issue is the one that
-// justifies exporting it (STYLE T5/T8).
-func (s *Schema) effectiveValueConstraint(u AttributeUse) (ValueConstraint, bool) {
+// It is on *Schema rather than on AttributeUse because the Ref variant's
+// declaration is reachable only through the schema's {attribute declarations}; a
+// method on the use would need a schema back-pointer, or would silently answer for
+// the Local variant alone. The receiver matches its sibling
+// [Schema.ResolvedAttributeDeclaration].
+//
+// Two callers read it, and BOTH read the term by that name: finalize's
+// checkAttributeValueConstraintSubsumes, where loc-testSubP (§3.4.6.4) clause 5.2
+// invokes it, and the instance validator's cvc-complex-type (§3.4.4.2) clause 4,
+// which validates the {lexical form} of a ·defaulted attribute·'s effective value
+// constraint — a use qualifying as one by the ·defaulted attribute· definition's
+// own clause 3, "U's ·effective value constraint· is not ·absent·" (#766).
+//
+// It is NOT what cvc-au (§3.5.4) or cvc-attribute (§3.2.4.1) clause 4 read. cvc-au
+// tests U.{value constraint} and clause 4 tests D.{value constraint}; routing
+// either through here would apply the declaration's fixed value where the use
+// carries none, and charge a violation the spec does not.
+func (s *Schema) EffectiveValueConstraint(u AttributeUse) (ValueConstraint, bool) {
 	if vc, ok := u.ValueConstraint(); ok {
 		return vc, true
 	}
@@ -340,7 +350,7 @@ func (s *Schema) elementDeclarationSubsumes(general, specific ElementDeclaration
 // value's own GAP(value) marker; a resolvable one IS compared). A {type
 // definition} that is absent, unresolvable, or COMPLEX (a simple-content complex
 // type still bearing a value constraint) is skipped here for the same reason
-// simpleTypeOf's other callers skip it: there is no simple type to name the
+// ResolvedSimpleType's other callers skip it: there is no simple type to name the
 // value space. Every one of those accepts, so none is ever a false reject
 // (#265).
 func (s *Schema) fixedValueConstraintSubsumes(general, specific ElementDeclaration) bool {
@@ -352,11 +362,11 @@ func (s *Schema) fixedValueConstraintSubsumes(general, specific ElementDeclarati
 	if !present || svc.Kind() != ValueFixed {
 		return false
 	}
-	gt, ok := s.simpleTypeOf(general.TypeDefinition())
+	gt, ok := s.ResolvedSimpleType(general.TypeDefinition())
 	if !ok {
 		return true
 	}
-	st, ok := s.simpleTypeOf(specific.TypeDefinition())
+	st, ok := s.ResolvedSimpleType(specific.TypeDefinition())
 	if !ok {
 		return true
 	}
@@ -544,14 +554,14 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, r attributeRestriction, ge
 // or NOTATION lexical whose prefix has no binding in the context its
 // ValueConstraint captured (see package value's own GAP(value) marker; a
 // resolvable one IS compared) — plus a {type definition} that is absent,
-// unresolvable, or complex, skipped exactly as simpleTypeOf's other callers skip
+// unresolvable, or complex, skipped exactly as ResolvedSimpleType's other callers skip
 // it. Every one of those accepts, so none is ever a false reject (#265).
 func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, r attributeRestriction, general, specific AttributeUse) error {
-	gvc, present := s.effectiveValueConstraint(general)
+	gvc, present := s.EffectiveValueConstraint(general)
 	if !present || gvc.Kind() != ValueFixed {
 		return nil // clause 5.2.1
 	}
-	svc, present := s.effectiveValueConstraint(specific)
+	svc, present := s.EffectiveValueConstraint(specific)
 	if !present || svc.Kind() != ValueFixed {
 		return xsderr.New(r.rule, r.loc,
 			"%s %s %s, but the base fixes attribute %s to %q while the restriction leaves it unfixed, and loc-testSubP clause 5.2 requires a fixed ·effective value constraint· with the same value (%s)", r.derived.label, r.verb, r.base.label, n, gvc.LexicalForm(), r.clause)
@@ -593,14 +603,22 @@ func (s *Schema) attributeUseType(u AttributeUse) (*SimpleType, bool) {
 	if !ok {
 		return nil, false
 	}
-	return s.simpleTypeOf(d.TypeDefinition())
+	return s.ResolvedSimpleType(d.TypeDefinition())
 }
 
-// simpleTypeOf narrows ResolvedType to a Simple Type Definition. ok is false for an
-// absent slot, an unresolvable name, and a {type definition} that is a complex
-// type — the three cases every caller here treats as "not decidable by this
-// clause", never as a violation.
-func (s *Schema) simpleTypeOf(ref TypeDefinitionOrRef) (*SimpleType, bool) {
+// ResolvedSimpleType narrows [Schema.ResolvedType] to a Simple Type Definition. ok
+// is false for an absent slot, an unresolvable name, and a {type definition} that
+// is a complex type — the three cases every caller treats as "not decidable by
+// this clause", never as a violation.
+//
+// It is exported for the instance validator, which reaches a Simple Type
+// Definition through two different slots and must not write the *SimpleType
+// assertion at either: an attribute declaration's {type definition} for
+// cvc-attribute (§3.2.4.1) clause 3, and the same slot again for
+// cvc-complex-type (§3.4.4.2) clause 4's ·defaulted attribute· (#766). Both hand
+// the result to value.ValidateLexical, which takes a *SimpleType and nothing
+// wider.
+func (s *Schema) ResolvedSimpleType(ref TypeDefinitionOrRef) (*SimpleType, bool) {
 	t, ok := s.ResolvedType(ref)
 	if !ok {
 		return nil, false

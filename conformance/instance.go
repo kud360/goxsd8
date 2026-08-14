@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"path/filepath"
+	"slices"
 
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/loader"
@@ -43,7 +44,7 @@ import (
 //
 // # The only outcomes this slice can DECIDE
 //
-// validate.Validator.Assess charges exactly three rules, all about the
+// validate.Validator.Assess charges exactly five rules, all about the
 // ·validation root· and nothing below it:
 //
 //  1. cvc-assess-elt (§3.3.4.6), when the root has no top-level element
@@ -58,26 +59,43 @@ import (
 //     {abstract} is true. The root is ·strictly assessed· and locally INVALID,
 //     so e-validity clause 1.1.1.1 fails and its [validity] is invalid. The
 //     document is NOT VALID, whatever else it holds.
-//  3. cvc-complex-type (§3.4.4.2) clause 2 or clause 3, when the root's
-//     ·governing type definition· was determinable and complex and one of its
-//     [[attributes]] matches neither an attribute use nor an {attribute
-//     wildcard}, or a {required} use has no attribute at all (#714). The root
-//     is then not locally ·valid· with respect to that type, so cvc-type clause
-//     3.2 fails, so cvc-elt clause 5 fails, and e-validity clause 1.1.1.1 gives
-//     the root [validity] invalid exactly as case 2 does.
+//  3. cvc-complex-type (§3.4.4.2) clause 2, clause 3 or clause 4, when the
+//     root's ·governing type definition· was determinable and complex and one of
+//     its [[attributes]] matches neither an attribute use nor an {attribute
+//     wildcard} (#714), a {required} use has no attribute at all (#714), or a
+//     ·defaulted attribute·'s own {lexical form} is not datatype-valid (#766).
+//     The root is then not locally ·valid· with respect to that type, so
+//     cvc-type clause 3.2 fails, so cvc-elt clause 5 fails, and e-validity clause
+//     1.1.1.1 gives the root [validity] invalid exactly as case 2 does.
+//  4. cvc-attribute (§3.2.4.1) clause 3 or clause 4, when one of the root's
+//     [[attributes]] matched an attribute use and its lexical is not ·valid· per
+//     String Valid (§3.16.4) against the declaration's {type definition}, or its
+//     ·actual value· disagrees with a fixed {value constraint} on that
+//     declaration (#766). Such an attribute's [validity] is invalid, and
+//     e-validity's conjunction (§3.3.5.1 clause 1.1.1.2) fails for the root on
+//     an invalid attribute of its own whatever else holds.
+//  5. cvc-au (§3.5.4), when a matched attribute's ·actual value· disagrees with
+//     a fixed {value constraint} on the attribute USE — a different property
+//     from case 4's, which is why both can be charged for one attribute (#766).
+//     cvc-complex-type clause 2.1 reads it, so the root is not locally ·valid·
+//     and case 3's chain applies unchanged.
 //
-// All three are unconditional: no verdict here can be overturned by anything in
+// All five are unconditional: no verdict here can be overturned by anything in
 // the rest of the document, which is what makes them decidable while the engine
-// assesses no child, no content model and no value.
+// assesses no child, no content model and no element's own value.
 //
-// Case 3's own conditions are where its unconditionality comes from, and every
-// one of them is checked by validate rather than assumed here: the attribute
-// half of cvc-complex-type is charged only where the governing type is the
-// declaration's own {type definition} (no xsi:type, no {type table}), only for
-// attributes clause 2 quantifies over (the four xsi: names are excepted), and
-// never where an {attribute wildcard} or a fixed {value constraint} leaves an
-// arm of the rule unevaluated. Each of those is a DECLINE inside validate, and
-// a declined attribute charges nothing at all, so it cannot arrive here.
+// Cases 3 to 5 rest on conditions validate checks rather than this file
+// assuming them: the attribute half of cvc-complex-type is reached only where
+// the governing type is the declaration's own {type definition} (no xsi:type,
+// no {type table}), only for attributes clause 2 quantifies over (the four
+// xsi: names are excepted), and never where an {attribute wildcard} leaves an
+// arm of the rule unevaluated. The value charges add their own: a declaration
+// whose {type definition} does not resolve to a simple type, and — the one that
+// would otherwise reject every typeless attribute — a value.ValidateLexical
+// error that is a fault of the type or of the backend rather than a verdict
+// about the lexical (value.IsDatatypeVerdict). Each of those is a DECLINE
+// inside validate, and a declined attribute charges nothing at all, so it
+// cannot arrive here.
 //
 // Case 2 fires through an ASSEMBLED schema: producer.produceElement maps
 // {abstract} from the top-level <element>'s abstract attribute (§3.3.2.1
@@ -96,14 +114,14 @@ import (
 // and left notKnown. Being ·strictly assessed· at all (key-sva, §3.3.4.6) is
 // itself a three-clause definition whose clauses 2 and 3 dispatch assessment
 // recursively into every attribute and child — which Assess does not do: it
-// decides the ROOT's attribute EXISTENCE questions (case 3 above) and nothing
-// else, no child, no content model, and no attribute's VALUE against its type.
-// The spec has no category for "this processor did not implement that check"
-// stronger than notKnown, so an empty Result licenses no "valid" claim; equally
-// it licenses no "invalid" one, so an expected-invalid case in this shape
-// declines exactly as an expected-valid one does. There is no narrower reading
-// available: the capabilities a content-shape heuristic would need — content-model
-// matching, a value backend reaching the walk — exist nowhere in validate.
+// decides the ROOT's own attributes (cases 3 to 5 above) and nothing else, no
+// child, no content model, and no element's own value against its {content
+// type}. The spec has no category for "this processor did not implement that
+// check" stronger than notKnown, so an empty Result licenses no "valid" claim;
+// equally it licenses no "invalid" one, so an expected-invalid case in this
+// shape declines exactly as an expected-valid one does. There is no narrower
+// reading available: the capability a content-shape heuristic would need —
+// content-model matching — exists nowhere in validate.
 //
 // The one shape that looks like case 1 and is not: a root with an xsi:type
 // attribute but no top-level declaration. Assess DETECTS that attribute and
@@ -175,7 +193,7 @@ func execInstanceCase(backend value.Backend, c caseSpec) Status {
 	if !decidable || perr != nil {
 		return Fail()
 	}
-	v, err := validate.New(schema)
+	v, err := validate.New(schema, backend)
 	if err != nil {
 		// Only a nil schema reaches here, which a nil perr should have excluded;
 		// declining rather than trusting it keeps the lane's verdicts honest.
@@ -222,18 +240,26 @@ func assessInstance(v *validate.Validator, doc string) (*validate.Result, bool) 
 	return result, true
 }
 
-// ruleCvcAssessElt, ruleCvcElt and ruleCvcComplexType are the three rules
-// validate.Validator.Assess charges, and the whole of what this lane may read as
-// a verdict. All three are catalog IDs in their BARE form: the charged clause
-// lives in the message text, not in a dotted rule ID, so matching the rule alone
-// is the only stable match — and it is the right one, since a root failing ANY
-// clause of any of the three is not locally valid and so not valid (§3.3.5.1
-// e-validity clause 1.1.1.1).
+// These are the five rules validate.Validator.Assess charges, and the whole of
+// what this lane may read as a verdict. All five are catalog IDs in their BARE
+// form: the charged clause lives in the message text, not in a dotted rule ID,
+// so matching the rule alone is the only stable match — and it is the right
+// one, since a root failing ANY clause of any of the five is not locally valid
+// and so not valid (§3.3.5.1 e-validity clause 1.1.1.1).
 const (
 	ruleCvcAssessElt   xsderr.Rule = "cvc-assess-elt"
 	ruleCvcElt         xsderr.Rule = "cvc-elt"
 	ruleCvcComplexType xsderr.Rule = "cvc-complex-type"
+	ruleCvcAttribute   xsderr.Rule = "cvc-attribute"
+	ruleCvcAu          xsderr.Rule = "cvc-au"
 )
+
+// decidableRules collects them for the membership test below, so growing the
+// set is one edit and the test reads the same however long it gets — a chain of
+// != comparisons silently admits a rule someone forgot to add to it.
+var decidableRules = []xsderr.Rule{
+	ruleCvcAssessElt, ruleCvcElt, ruleCvcComplexType, ruleCvcAttribute, ruleCvcAu,
+}
 
 // decidedNotValid reports whether the violations one assessment charged
 // establish that the document is not valid, unconditionally and whatever the
@@ -248,15 +274,17 @@ const (
 // fail-open approximation, which reading as a verdict would be trusting it sight
 // unseen.
 //
-// The count is not pinned at one because clause 2 and clause 3 of
-// cvc-complex-type quantify over the attributes present and the uses required
-// independently, so one root can carry several charges honestly.
+// The count is not pinned at one because the clauses quantify independently —
+// cvc-complex-type over the attributes present, the uses required and the
+// ·defaulted attributes·; cvc-attribute and cvc-au over one attribute from two
+// different {value constraint} sources — so one root can carry several charges
+// honestly.
 func decidedNotValid(violations []*xsderr.Error) bool {
 	if len(violations) == 0 {
 		return false
 	}
 	for _, v := range violations {
-		if v.Rule != ruleCvcAssessElt && v.Rule != ruleCvcElt && v.Rule != ruleCvcComplexType {
+		if !slices.Contains(decidableRules, v.Rule) {
 			return false
 		}
 	}
