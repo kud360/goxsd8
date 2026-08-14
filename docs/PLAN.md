@@ -216,7 +216,11 @@ rounds for exactly that. A session taking #766 runs the pre-flight before
 implementing or it is not following this row.
 
 **#740 was row 1 by elimination and is now row 3 by promotion of others**, with
-its own justification unchanged — nothing about this landing touched it. The
+its own justification unchanged — nothing about this landing touched it.
+**`origin/wip/issue-740` carried an implementation commit minutes after this
+pass ran**, so a session is on it; rows 1 and 2 are unclaimed and a session
+taking from the top will not collide. Read the thread before taking row 3, per
+#722 — never off a `wipsurvey` verdict alone. The
 two follow-ups this landing filed are **#771** and **#772**, and neither is a
 band row: #771 is a fabricated-verdict fix worth no ratchet movement, #772 is a
 two-site diagnostic correction. Both are `ready` and startable as filed.
