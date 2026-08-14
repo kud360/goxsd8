@@ -146,11 +146,11 @@ func (s *Schema) checkCTPropsCorrectResolved(c ComplexType) error {
 // checkSimpleBaseIsExtension is ct-props-correct clause 2. An absent or
 // unresolvable base is skipped: the reference was already charged src-resolve by
 // Phase A, and an absent one has no variety to read. The base is reached through
-// typeOf, so an anonymous inline base is decided rather than skipped — skipping
+// ResolvedType, so an anonymous inline base is decided rather than skipped — skipping
 // it would wave the clause through unchecked for every redefining complex type
 // (STYLE T4, #505).
 func (s *Schema) checkSimpleBaseIsExtension(c ComplexType) error {
-	base, ok := s.typeOf(c.Base())
+	base, ok := s.ResolvedType(c.Base())
 	if !ok {
 		return nil
 	}
@@ -204,7 +204,7 @@ func checkAttributeUseNamesUnique(c ComplexType) error {
 func duplicateAttributeUseName(uses []AttributeUse) (QName, bool) {
 	seen := map[QName]bool{}
 	for _, u := range uses {
-		name := attributeUseName(u)
+		name := u.DeclarationName()
 		if seen[name] {
 			return name, true
 		}
@@ -229,7 +229,7 @@ func (s *Schema) checkComplexTypeRestriction(t ComplexType) error {
 	if t.DerivationMethod() != DerivationRestriction {
 		return nil
 	}
-	base, ok := s.typeOf(t.Base())
+	base, ok := s.ResolvedType(t.Base())
 	if !ok {
 		return nil // an absent base, or a dangling one Phase A already charged src-resolve
 	}
@@ -437,7 +437,7 @@ func complexTypeAttributeRestriction(t, b ComplexType) attributeRestriction {
 // (STYLE T4).
 func findAttributeUse(uses []AttributeUse, name QName) (AttributeUse, bool) {
 	for _, u := range uses {
-		if attributeUseName(u) == name {
+		if u.DeclarationName() == name {
 			return u, true
 		}
 	}
@@ -499,7 +499,7 @@ func (s *Schema) checkLocallyDeclaredTypes(t, b ComplexType, k locallyDeclaredTy
 // checkLocallyDeclaredAttributeTypes is the attribute half (key-ldt-att).
 func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType, k locallyDeclaredTypeCheck) error {
 	for _, u := range t.attributeUses {
-		name := attributeUseName(u)
+		name := u.DeclarationName()
 		within, ok := s.locallyDeclaredAttributeType(t, name)
 		if !ok {
 			continue
@@ -527,7 +527,7 @@ func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType, k locallyD
 func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType, k locallyDeclaredTypeCheck) error {
 	for _, e := range s.contentModelDeclarations(t) {
 		name := e.decl.Name()
-		within, ok := s.typeOf(e.decl.TypeDefinition())
+		within, ok := s.ResolvedType(e.decl.TypeDefinition())
 		if !ok {
 			continue // absent or unresolvable: not decidable by this clause
 		}
@@ -562,11 +562,11 @@ func (s *Schema) locallyDeclaredAttributeType(c ComplexType, name QName) (TypeDe
 			return nil, false // case 1
 		}
 		if u, ok := findAttributeUse(c.attributeUses, name); ok {
-			d, ok := s.attributeUseDeclaration(u)
+			d, ok := s.ResolvedAttributeDeclaration(u)
 			if !ok {
 				return nil, false
 			}
-			return s.typeOf(d.TypeDefinition()) // case 2
+			return s.ResolvedType(d.TypeDefinition()) // case 2
 		}
 		next, ok := s.baseComplexType(c) // case 3
 		if !ok {
@@ -591,7 +591,7 @@ func (s *Schema) locallyDeclaredElementType(c ComplexType, name QName) (TypeDefi
 		}
 		for _, e := range s.contentModelDeclarations(c) {
 			if e.decl.Name() == name {
-				return s.typeOf(e.decl.TypeDefinition()) // case 2
+				return s.ResolvedType(e.decl.TypeDefinition()) // case 2
 			}
 		}
 		next, ok := s.baseComplexType(c) // case 3
@@ -617,14 +617,14 @@ func (s *Schema) contentModelDeclarations(c ComplexType) []containedElement {
 	return contents.elements
 }
 
-// baseComplexType is typeOf (typedefinition.go) narrowed to a COMPLEX base: it
+// baseComplexType is ResolvedType (typedefinition.go) narrowed to a COMPLEX base: it
 // resolves c's {base type definition} when it is another Complex Type
 // Definition, and is false for an absent, unresolvable or simple base — the
 // three ways key-ldtype's case-3 recursion terminates without an answer. It
 // re-derives no lookup of its own, so an anonymous inline base (src-expredef
 // clause 1.1) is followed here exactly as a named one is (STYLE T4).
 func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
-	base, ok := s.typeOf(c.Base())
+	base, ok := s.ResolvedType(c.Base())
 	if !ok {
 		return ComplexType{}, false
 	}
@@ -722,7 +722,7 @@ func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationM
 // identical, exactly the licence §3.4.6.5's no-identity Note grants — the same
 // call typeAlternativesEquivalent already makes for key-equiv-ta clause 5.
 //
-// The walk follows the {base type definition} SLOT through typeOf, both arms.
+// The walk follows the {base type definition} SLOT through ResolvedType, both arms.
 // Terminating at an InlineTypeDefinition instead would answer FALSE for every
 // type derived through a redefining complex type — an over-REJECT, not a
 // conservative answer, because a false here is what makes an instance
@@ -737,7 +737,7 @@ func (s *Schema) derivedOKComplex(d ComplexType, b TypeDefinition, blocked []Der
 		if containsDerivationMethod(subset, d.DerivationMethod()) {
 			return false, nil // clause 1
 		}
-		base, ok := s.typeOf(d.Base())
+		base, ok := s.ResolvedType(d.Base())
 		if !ok {
 			return false, nil // an absent base, or a dangling one Phase A already charged
 		}

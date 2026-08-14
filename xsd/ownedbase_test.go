@@ -306,7 +306,7 @@ func TestOwnedBaseFoldIsStoredBack(t *testing.T) {
 	}
 	var got []string
 	for _, u := range original.AttributeUses() {
-		got = append(got, attributeUseName(u).Local)
+		got = append(got, u.DeclarationName().Local)
 	}
 	// The original's OWN <attribute> child (clause 1), then what it inherits
 	// from the named type it restricts (clause 3.2) — its own folded set, which

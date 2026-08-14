@@ -45,7 +45,7 @@ import "github.com/kud360/goxsd8/xsderr"
 // That construction-time discharge is what keeps this sum's contract narrower
 // than its sibling TypeDefinitionOrRef's, whose doc must instead make "the
 // meaning of nil is a property of the SUM, not of the slot the caller reached it
-// through" a doctrine, because typeOf and resolveTypeDefinition answer for four
+// through" a doctrine, because ResolvedType and resolveTypeDefinition answer for four
 // slots at once at READ time (STYLE T6, so the two do not drift silently).
 type SimpleTypeOrRef interface{ simpleTypeOrRef() }
 
@@ -156,9 +156,9 @@ func checkSimpleTypeOrRefPresent(loc xsderr.Loc, ref SimpleTypeOrRef, slot strin
 
 // simpleTypeOfRef is the ONE way this package turns a SimpleTypeOrRef slot into
 // a component, exhaustively over the sum's two arms — the narrowed sibling of
-// typeOf (typedefinition.go), and the single site charging src-resolve clause
+// ResolvedType (typedefinition.go), and the single site charging src-resolve clause
 // 1.1 for a simple type's base, item and members. It is NOT (*Schema).simpleTypeOf
-// (defaultbinding.go), which narrows typeOf over the OTHER sum,
+// (defaultbinding.go), which narrows ResolvedType over the OTHER sum,
 // TypeDefinitionOrRef, for the {type definition} slots; the names are kept apart
 // deliberately so a reader grepping either finds one thing.
 //
@@ -180,7 +180,7 @@ func checkSimpleTypeOrRefPresent(loc xsderr.Loc, ref SimpleTypeOrRef, slot strin
 // exactly the silently short chain a resolver-threaded reader must never
 // produce: a caller that read a missing base as "the chain ended" would compute
 // {variety}, {primitive type definition} or {facets} off a truncated chain and
-// ACCEPT what the full chain forbids. The complex-type precedent (typeOf's
+// ACCEPT what the full chain forbids. The complex-type precedent (ResolvedType's
 // comma-ok) discharges that with "Phase A already rejected a dangling one", an
 // argument that does not transfer here because these readers are also called
 // from outside finalize, where no phase has run.

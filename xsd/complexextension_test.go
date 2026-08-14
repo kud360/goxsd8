@@ -711,7 +711,7 @@ func TestCosCTExtendsClause15CollapsedIntermediate(t *testing.T) {
 	}
 	var names []string
 	for _, u := range m.AttributeUses() {
-		names = append(names, attributeUseName(u).Local)
+		names = append(names, u.DeclarationName().Local)
 	}
 	// cT's own @c, then E1's own @b, then A's @a: the restriction step's
 	// prohibition of @a is NOT replayed, which is the whole of the re-ordering.
@@ -754,7 +754,7 @@ func TestOwnAttributeUsesMixedChain(t *testing.T) {
 		}
 		var names []string
 		for _, u := range uses {
-			names = append(names, attributeUseName(u).Local)
+			names = append(names, u.DeclarationName().Local)
 		}
 		return names
 	}
@@ -905,7 +905,7 @@ func TestCosCTExtendsClause15CollapsedOverAnonymousAncestor(t *testing.T) {
 	}
 	var names []string
 	for _, u := range m.AttributeUses() {
-		names = append(names, attributeUseName(u).Local)
+		names = append(names, u.DeclarationName().Local)
 	}
 	// The ancestor's @x alone: the redefinition's prohibition is not replayed, and
 	// derived's own re-declaration is dropped rather than duplicated, because no

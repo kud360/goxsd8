@@ -55,7 +55,7 @@ import "github.com/kud360/goxsd8/xsderr"
 //     {value constraint}") fails, so cos-valid-default is not reached at all —
 //     never reached-and-vacuously-satisfied, which is why the value space must not
 //     be consulted either;
-//   - a {type definition} that is absent or unresolvable: typeOf's documented "not
+//   - a {type definition} that is absent or unresolvable: ResolvedType's documented "not
 //     decidable by this clause". A dangling name was already charged src-resolve
 //     by Phase A, so reaching here with one means a genuinely absent slot, and
 //     cos-valid-default predicates over a T that must be there to be read.
@@ -66,7 +66,7 @@ func (s *Schema) checkElementDefaultValid(e ElementDeclaration) error {
 	if !present {
 		return nil
 	}
-	t, ok := s.typeOf(e.TypeDefinition())
+	t, ok := s.ResolvedType(e.TypeDefinition())
 	if !ok {
 		return nil
 	}

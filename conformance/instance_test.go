@@ -196,8 +196,8 @@ func TestAssessInstanceDeclinesFaultedWalk(t *testing.T) {
 	}
 }
 
-// TestDecidedNotValidEnumeratesTheDecidableCharges pins the gate itself: exactly
-// one violation carrying one of the two rules Assess charges is evidence the
+// TestDecidedNotValidEnumeratesTheDecidableCharges pins the gate itself: a
+// non-empty violation set whose every rule is one Assess charges is evidence the
 // document is not valid, and every other shape declines rather than being read as
 // a verdict a later, wider Assess might charge under an approximation.
 func TestDecidedNotValidEnumeratesTheDecidableCharges(t *testing.T) {
@@ -212,8 +212,10 @@ func TestDecidedNotValidEnumeratesTheDecidableCharges(t *testing.T) {
 		{"no violation at all", nil, false},
 		{"cvc-assess-elt alone", []*xsderr.Error{charge(ruleCvcAssessElt)}, true},
 		{"cvc-elt alone", []*xsderr.Error{charge(ruleCvcElt)}, true},
-		{"a rule outside the enumeration", []*xsderr.Error{charge("cvc-complex-type")}, false},
-		{"two charges, both enumerated", []*xsderr.Error{charge(ruleCvcAssessElt), charge(ruleCvcElt)}, false},
+		{"cvc-complex-type alone", []*xsderr.Error{charge(ruleCvcComplexType)}, true},
+		{"a rule outside the enumeration", []*xsderr.Error{charge("cvc-attribute")}, false},
+		{"two charges, both enumerated", []*xsderr.Error{charge(ruleCvcComplexType), charge(ruleCvcComplexType)}, true},
+		{"one enumerated, one not", []*xsderr.Error{charge(ruleCvcElt), charge("cvc-attribute")}, false},
 	}
 	for _, tc := range cases {
 		if got := decidedNotValid(tc.violations); got != tc.want {

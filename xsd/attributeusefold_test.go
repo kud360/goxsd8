@@ -28,7 +28,7 @@ func fUses(t *testing.T, s *Schema, name QName) []string {
 	}
 	var names []string
 	for _, u := range c.AttributeUses() {
-		names = append(names, attributeUseName(u).Local)
+		names = append(names, u.DeclarationName().Local)
 	}
 	return names
 }

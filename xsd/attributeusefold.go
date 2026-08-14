@@ -229,7 +229,7 @@ func (s *Schema) baseAttributeUses(f *attributeUseFold, c ComplexType, i int) ([
 func inheritAttributeUses(own, base []AttributeUse, method DerivationMethod, prohibited []QName) []AttributeUse {
 	folded := append(make([]AttributeUse, 0, len(own)+len(base)), own...)
 	for _, u := range base {
-		name := attributeUseName(u)
+		name := u.DeclarationName()
 		if method == DerivationRestriction && (hasAttributeUseNamed(own, name) || slices.Contains(prohibited, name)) {
 			continue // clause 3.2.1, clause 3.2.2
 		}
@@ -270,7 +270,7 @@ func ownAttributeUses(c, b ComplexType) ([]AttributeUse, bool) {
 	}
 	ownCount := len(c.attributeUses) - len(b.attributeUses)
 	for i, u := range b.attributeUses {
-		if attributeUseName(c.attributeUses[ownCount+i]) != attributeUseName(u) {
+		if c.attributeUses[ownCount+i].DeclarationName() != u.DeclarationName() {
 			return nil, false
 		}
 	}
@@ -295,7 +295,7 @@ func hasAttributeUseNamed(uses []AttributeUse, name QName) bool {
 // type owns — is in neither place, and is reached only through the owning type's
 // {base type definition} slot. It needs no store of its own here because
 // baseAttributeUses already re-seated that slot with the folded base, so storing
-// the owner stores the base with it: a reader that follows Base() (typeOf) sees
+// the owner stores the base with it: a reader that follows Base() (ResolvedType) sees
 // the original's OWN clause-3 {attribute uses}, not the producer's partial value.
 func (s *Schema) storeFoldedAttributeUses(f *attributeUseFold) {
 	for i, c := range f.types {

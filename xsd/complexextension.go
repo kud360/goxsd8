@@ -83,7 +83,7 @@ func (s *Schema) checkComplexTypeExtension(t ComplexType) error {
 	if t.DerivationMethod() != DerivationExtension {
 		return nil
 	}
-	base, ok := s.typeOf(t.Base())
+	base, ok := s.ResolvedType(t.Base())
 	if !ok {
 		return nil // an absent base, or a dangling one Phase A already charged src-resolve
 	}
@@ -185,7 +185,7 @@ func checkExtensionBaseFinal(t, b ComplexType) error {
 // with #401.
 func (s *Schema) checkExtensionAttributeUses(t, b ComplexType) error {
 	for _, u := range b.attributeUses {
-		name := attributeUseName(u)
+		name := u.DeclarationName()
 		tu, ok := findAttributeUse(t.attributeUses, name)
 		if !ok {
 			return xsderr.New(ruleCosCTExtends, xsderr.Loc{},
@@ -847,8 +847,8 @@ func (s *Schema) localAttributeDeclarationsIdentical(a, b AttributeDeclaration) 
 //     attribute type would then make a type identical to itself report as
 //     different, false-rejecting an entirely ordinary schema.
 func (s *Schema) typeDefinitionSlotsIdentical(a, b TypeDefinitionOrRef) bool {
-	ta, aOK := s.typeOf(a)
-	tb, bOK := s.typeOf(b)
+	ta, aOK := s.ResolvedType(a)
+	tb, bOK := s.ResolvedType(b)
 	if !aOK || !bOK {
 		return true
 	}

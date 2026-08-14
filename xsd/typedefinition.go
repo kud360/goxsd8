@@ -82,7 +82,7 @@ func (*SimpleType) typeDefinition() {}
 // declaration's {type definition}, since neither §3.2.2.2 nor §3.4.2 has a
 // clause-3 analog to produce one. Making that unrepresentable at COMPILE time
 // would take a second sealed interface for the element slot alone, which forks
-// typeOf and checkTypeDefinitionOrRef (STYLE T4) and changes
+// ResolvedType and checkTypeDefinitionOrRef (STYLE T4) and changes
 // ElementDeclaration.TypeDefinition()'s return type; it is deliberately not
 // done. A runtime rejection charged to xsderr.RuleComponentInvariant is the
 // established precedent here — NewElementDeclaration rejects an
@@ -94,7 +94,7 @@ func (*SimpleType) typeDefinition() {}
 // ComplexType built with no base name is in. The meaning of nil is a property of
 // the SUM, not of the slot the caller reached it through: a consumer that
 // followed a slot must never read nil as "the ur-type" or as any other present
-// component, because typeOf and resolveTypeDefinition answer for all slots at
+// component, because ResolvedType and resolveTypeDefinition answer for all slots at
 // once and cannot be made arm-meaning-dependent on the caller's origin. It
 // replaces the zero QName that used to carry that meaning, which was ambiguous:
 // the same QName{} also had to stand for "anonymous type" (STYLE D3, one fact
@@ -215,7 +215,7 @@ type InlineTypeDefinition struct{ Definition TypeDefinition }
 // TypeDefinitionRef.Name: it is followed through Schema.Element, never
 // Schema.Type. It is the TERMINAL head — the declaration that actually carries
 // the anonymous type — which for a chain of affiliations may differ from this
-// declaration's own substitutionGroup[0]. That is what makes typeOf's read
+// declaration's own substitutionGroup[0]. That is what makes ResolvedType's read
 // DEPTH-1 by definition rather than by producer convention: the owner is the
 // only component whose own {type definition} slot can hold the type, so
 // following Head once always lands on it.
@@ -239,8 +239,8 @@ func (InlineTypeDefinition) typeDefinitionOrRef() {}
 // TypeDefinitionOrRef; see the TypeDefinitionOrRef doc.
 func (SubstitutionGroupHeadTypeRef) typeDefinitionOrRef() {}
 
-// typeOf is the one way this package turns a TypeDefinitionOrRef slot into a
-// component, exhaustively over the sum's three arms: an InlineTypeDefinition IS
+// ResolvedType is the one way a TypeDefinitionOrRef slot becomes a component,
+// exhaustively over the sum's three arms: an InlineTypeDefinition IS
 // the component (it is in no by-name symbol table, so a lookup would miss it),
 // a TypeDefinitionRef is the by-name Schema.Type lookup, and a
 // SubstitutionGroupHeadTypeRef is a Schema.ELEMENT lookup followed by a single
@@ -248,6 +248,13 @@ func (SubstitutionGroupHeadTypeRef) typeDefinitionOrRef() {}
 // (nil) slot and for an unresolvable name — the cases every caller treats as
 // "not decidable by this clause", never as a violation (a dangling name was
 // already charged src-resolve by resolve.go's Phase A).
+//
+// It is exported for the instance validator, which reads an element
+// declaration's {type definition} slot to reach the ·selected type definition·
+// §3.3.4.6 makes the ·governing type definition· of a validation root (#714).
+// A consumer outside this package must not re-derive the lookup: the three arms
+// do not agree on where the component lives, and the head arm is not a name
+// lookup at all.
 //
 // The head read is DEPTH-1 and carries no recursion and no visited set (STYLE
 // D4): SubstitutionGroupHeadTypeRef.Head names the OWNER of the anonymous type,
@@ -266,7 +273,7 @@ func (SubstitutionGroupHeadTypeRef) typeDefinitionOrRef() {}
 // consumer goes through this helper, through its complex-only narrowing
 // baseComplexType (complexderivation.go), or through its narrowed sibling
 // simpleTypeOf; none re-derives a bare-name lookup of its own (STYLE T4).
-func (s *Schema) typeOf(ref TypeDefinitionOrRef) (TypeDefinition, bool) {
+func (s *Schema) ResolvedType(ref TypeDefinitionOrRef) (TypeDefinition, bool) {
 	switch r := ref.(type) {
 	case nil:
 		return nil, false
@@ -284,9 +291,9 @@ func (s *Schema) typeOf(ref TypeDefinitionOrRef) (TypeDefinition, bool) {
 		}
 		// The guard above leaves only the nil, by-name and inline arms, so this
 		// re-entry cannot reach this case again: one hop, then the ordinary read.
-		return s.typeOf(head.TypeDefinition())
+		return s.ResolvedType(head.TypeDefinition())
 	default:
-		panic("xsd: typeOf: non-exhaustive TypeDefinitionOrRef switch")
+		panic("xsd: ResolvedType: non-exhaustive TypeDefinitionOrRef switch")
 	}
 }
 

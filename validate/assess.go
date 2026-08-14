@@ -27,6 +27,11 @@ const ruleCvcAssessElt xsderr.Rule = "cvc-assess-elt"
 // "cvc-elt.2" is not a valid [xsderr.Rule] (see [xsderr.IsValidRule]).
 const ruleCvcElt xsderr.Rule = "cvc-elt"
 
+// ruleCvcComplexType is Element Locally Valid (Complex Type) (Structures
+// §3.4.4.2, cvc-complex-type). Clauses 2 and 3 — the attribute half — are
+// charged here; the clause number goes in the message on ruleCvcElt's terms.
+const ruleCvcComplexType xsderr.Rule = "cvc-complex-type"
+
 // Assess walks root's subtree once — the element, then its [[attributes]],
 // then its [[children]] in document order, recursively — and reports what
 // the walk found. The walk topology is cvc-assess-elt's (§3.3.4.6, ·strictly
@@ -52,10 +57,21 @@ const ruleCvcElt xsderr.Rule = "cvc-elt"
 // satisfied by construction — D is the declaration found BY that expanded
 // name — and so is never charged.
 //
-// Nothing else is decided: the remaining cvc-elt clauses and cvc-type
-// (§3.3.4.4) are not evaluated, so a [Result] carrying no violation says
-// the root is declared and not abstract, and says nothing else about the
-// document.
+// Where the root's ·governing type definition· is determinable and complex
+// (see rootComplexType), the root's own [[attributes]] are additionally
+// assessed against that type's {attribute uses}: cvc-complex-type (§3.4.4.2)
+// clauses 2 and 3, the half of that rule no datatype backend is needed for
+// (see [walk.attributes]). Nothing below the root is: a DESCENDANT's
+// governing type definition comes from matching it against a content model
+// (cvc-complex-content, §3.4.4.3), which this package does not do, so its
+// attributes are assessed against no type at all.
+//
+// Nothing else is decided: the remaining cvc-elt clauses, the rest of
+// cvc-type (§3.3.4.4) and cvc-complex-type's own clauses 1 and 4-6 are not
+// evaluated, so a [Result] carrying no violation says the root is declared,
+// not abstract, and — where its type was determinable — carries no attribute
+// clause 2 rejects and no required attribute clause 3 misses, and says
+// nothing else about the document.
 //
 // It panics if root is nil, on the same grounds as [ElementChild].
 func (v *Validator) Assess(root Element) *Result {
@@ -82,15 +98,53 @@ func (v *Validator) Assess(root Element) *Result {
 			"clause 2: the validation root %s is governed by an element declaration whose {abstract} is true, and an abstract declaration validates no element information item",
 			root.Name()))
 	}
-	// GAP(xpath): where a declaration was found, its ·selected type
-	// definition· (§3.3.4.1/.2) is never computed, because selecting among
-	// a {type table}'s <alternative>s means evaluating each one's test as
-	// an XPath expression. The ·governing type definition· it feeds is
-	// left undetermined, so cvc-elt clause 5 and cvc-type (§3.3.4.4) are
-	// not reached and no verdict about the root's type is withheld or
-	// claimed here (#56).
-	w.element(root)
+	w.element(root, v.rootComplexType(root, d, found))
 	return &w.res
+}
+
+// rootComplexType is the ·governing type definition· (§3.3.4.6) of the
+// validation root, narrowed to the Complex Type Definition cvc-type clause
+// 3.2 dispatches to cvc-complex-type for; it is nil wherever this package
+// cannot determine that type, and the root's attributes are then assessed
+// against nothing.
+//
+// Determinable here means the whole of key-governing-type-elem's clause 4
+// case: no processor-stipulated type (this package stipulates none), no
+// ·instance-specified type definition· overriding it, and a ·selected type
+// definition· (§3.3.4.1) that is D.{type definition} outright. Each of the
+// three declines below withholds a type that could differ from the
+// declaration's, and charging the root's attributes against the WRONG type
+// is a false reject in both directions — an attribute the real governing
+// type declares looks unmatched, one it forbids looks fine.
+//
+//   - GAP(xsd): an xsi:type makes the ·instance-specified type definition·
+//     the governing one (clause 3) when it ·overrides· the selected type,
+//     and ·resolving· it is cvc-resolve-instance (§3.17.6.3), unimplemented.
+//     Presence alone is the decline (#716).
+//   - GAP(xpath): a {type table} makes the selected type the one its
+//     <alternative>s ·conditionally select· (§3.3.4.2), which means
+//     evaluating each {test} as an XPath expression (#56).
+//   - A {type definition} slot that resolves to nothing, or to a Simple Type
+//     Definition. The simple case is not an omission: cvc-type dispatches to
+//     cvc-complex-type only for a complex T, and a simple-typed element's own
+//     attributes are governed by cvc-type clause 3.1.1 instead, which this
+//     package does not decide either.
+func (v *Validator) rootComplexType(root Element, d xsd.ElementDeclaration, found bool) *xsd.ComplexType {
+	if !found || hasInstanceType(root) {
+		return nil
+	}
+	if _, tabled := d.TypeTable(); tabled {
+		return nil
+	}
+	t, ok := v.schema.ResolvedType(d.TypeDefinition())
+	if !ok {
+		return nil
+	}
+	ct, isComplex := t.(xsd.ComplexType)
+	if !isComplex {
+		return nil
+	}
+	return &ct
 }
 
 // hasInstanceType reports whether e carries an xsi:type attribute (§2.7.1).
@@ -117,25 +171,202 @@ type walk struct {
 
 // element assesses one element information item: the item itself, then its
 // [[attributes]], then its [[children]].
-func (w *walk) element(e Element) {
+//
+// governing is e's ·governing type definition· narrowed to a complex type,
+// or nil where none was determined. It is NOT propagated to [walk.children]:
+// a child's governing type follows from the particle it is ·attributed to·
+// in its parent's {content type} (§3.4.4.4), which nothing here computes, so
+// every element below the validation root is assessed against nil.
+func (w *walk) element(e Element, governing *xsd.ComplexType) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
 	}
-	for _, a := range e.Attributes() {
-		w.attribute(a)
-	}
+	w.attributes(e, governing)
 	w.children(e)
 }
 
-// attribute assesses one attribute information item. Under the silent
-// default the guard leaves it with no body, which is what a walk that
-// decides no cvc- rule yet amounts to at an attribute — the cvc-attribute
-// (§3.2.4.1) decisions land here, so do not inline it away.
-func (w *walk) attribute(a Attribute) {
+// attributes assesses E.[[attributes]] against governing, in the two
+// directions cvc-complex-type (§3.4.4.2) quantifies in: clause 2 over the
+// attribute information items PRESENT, in source order, then clause 3 over
+// the {attribute uses} that must be present. Violations reach [Result] in
+// that order, which is the order they were found in.
+//
+// A nil governing decides nothing at all: every attribute is walked (the
+// log records the visit) and none is charged or passed.
+func (w *walk) attributes(e Element, governing *xsd.ComplexType) {
+	attrs := e.Attributes()
+	for _, a := range attrs {
+		w.attribute(a, governing)
+	}
+	if governing == nil {
+		return
+	}
+	w.requiredAttributeUses(e, attrs, *governing)
+}
+
+// attribute assesses one attribute information item against clause 2, whose
+// two arms are the whole rule: an attribute matching an attribute use is
+// judged by cvc-au (clause 2.1), one matching none needs an {attribute
+// wildcard} that admits it (clause 2.2). There is no third arm, so an
+// attribute that matches neither violates clause 2 outright — and that is
+// decidable with no datatype backend wherever no {attribute wildcard} is
+// present at all.
+func (w *walk) attribute(a Attribute, governing *xsd.ComplexType) {
+	if governing == nil {
+		w.logAttribute(a, "", "", "")
+		return
+	}
+	if isInstanceAttribute(a.Name()) {
+		// Clause 2 excepts xsi:type, xsi:nil, xsi:schemaLocation and
+		// xsi:noNamespaceSchemaLocation (§3.2.7) from its quantifier by name,
+		// so no arm of it applies to one: it is neither charged nor passed.
+		w.logAttribute(a, ruleCvcComplexType, "2", "exempt")
+		return
+	}
+	u, matched := attributeUseNamed(governing.AttributeUses(), a.Name())
+	if !matched {
+		w.unmatchedAttribute(a, *governing)
+		return
+	}
+	if vc, has := u.ValueConstraint(); has && vc.Kind() == xsd.ValueFixed {
+		// GAP(validate): clause 2.1 sends a matched attribute to cvc-au
+		// (§3.5.4), which for a use carrying a fixed {value constraint}
+		// compares ·actual values· — the value space, where "1" and "01" are
+		// one xs:integer. That needs the attribute's ·normalized value· mapped
+		// through its {type definition}, which this package cannot do, and a
+		// lexical comparison in its place would reject documents the spec
+		// accepts. The attribute is left undecided (#766).
+		w.logAttribute(a, ruleCvcComplexType, "2.1", "declined")
+		return
+	}
+	// cvc-au is vacuously true for a use with no fixed {value constraint} —
+	// it constrains nothing else — so clause 2.1 is satisfied outright.
+	w.logAttribute(a, ruleCvcComplexType, "2.1", "satisfied")
+}
+
+// unmatchedAttribute settles clause 2 for an attribute matching no attribute
+// use, where only clause 2.2 is left to satisfy.
+//
+// GAP(xsd): this is the one charge in the package that a property REPORTED
+// TOO SMALL could fabricate, so it is the one that has to name the exposure.
+// [xsd.ComplexType.AttributeUses] and [xsd.ComplexType.AttributeWildcard]
+// both run their §3.4.2.4/§3.4.2.5 fold over a finalized schema's TYPE
+// DEFINITIONS only, so an ANONYMOUS type owned by an element declaration
+// reports its own uses and its own <anyAttribute> alone (#414). Under-report
+// the uses and an inherited attribute looks unmatched; under-report the
+// wildcard and the decline above does not fire — together they would charge
+// an attribute the base admits. It does not happen for a schema this module
+// parses: the producer's inline form is the IMPLICIT-CONTENT one, a
+// restriction of xs:anyType, whose {attribute uses} §3.4.7 makes empty and
+// whose {attribute wildcard} clause 2.1 takes from the type itself, so the
+// unrun fold is the identity there. A caller who assembles an inline
+// EXTENSION through [xsd.SchemaBuilder] is outside that bound until #414
+// widens the fold.
+func (w *walk) unmatchedAttribute(a Attribute, governing xsd.ComplexType) {
+	if _, wild := governing.AttributeWildcard(); wild {
+		// GAP(validate): clause 2.2.1 holds, but clause 2.2 is a conjunction
+		// and 2.2.2 sends the attribute to cvc-wildcard (§3.10.4.1), which
+		// this package does not evaluate. Charging on 2.2.1 alone would reject
+		// every attribute a wildcard admits, so clause 2 is left undecided for
+		// an element whose type carries one (#717).
+		w.logAttribute(a, ruleCvcComplexType, "2.2", "declined")
+		return
+	}
+	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
+		"clause 2: the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition· (clause 2.1), which has no {attribute wildcard} for it to be ·valid· with respect to either (clause 2.2.1)",
+		a.Name()))
+	w.logAttribute(a, ruleCvcComplexType, "2", "charged")
+}
+
+// requiredAttributeUses charges clause 3 for each {required} attribute use
+// of governing that no attribute information item of e carries the
+// ·expanded name· of. It is an existence test over names and nothing more:
+// whether a matching item is itself ·valid· is clause 2's question, and an
+// OPTIONAL use with no matching item is silent here whatever its ·effective
+// value constraint· says.
+//
+// attrs is e.[[attributes]] as [walk.attributes] read it, so the two clauses
+// quantify over one reading of the source. The scan is NOT filtered by
+// isInstanceAttribute: clause 2's exception is clause 2's alone, and its own
+// Note keeps a use of xsi:type satisfying clause 3 while being ·attributed
+// to· nothing.
+func (w *walk) requiredAttributeUses(e Element, attrs []Attribute, governing xsd.ComplexType) {
+	for _, u := range governing.AttributeUses() {
+		if !u.Required() {
+			continue
+		}
+		name := u.DeclarationName()
+		if hasAttributeNamed(attrs, name) {
+			continue
+		}
+		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, e.Loc(),
+			"clause 3: the element %s carries no attribute information item named %s, but its ·governing type definition· has an attribute use for that name whose {required} is true",
+			e.Name(), name))
+		if w.log.Enabled(context.Background(), slog.LevelDebug) {
+			w.log.Debug("assessing attribute use", slog.Any("name", name), slog.Any("loc", e.Loc()),
+				slog.String("rule", string(ruleCvcComplexType)), slog.String("clause", "3"),
+				slog.String("outcome", "charged"))
+		}
+	}
+}
+
+// logAttribute records one attribute information item's assessment: its
+// ·expanded name· and location always, and the rule and clause that settled
+// it wherever clause 2 settled anything (STYLE L1). An attribute assessed
+// against no ·governing type definition· has no rule to name and its line
+// carries none — the walk visited it and decided nothing.
+func (w *walk) logAttribute(a Attribute, rule xsderr.Rule, clause, outcome string) {
 	if !w.log.Enabled(context.Background(), slog.LevelDebug) {
 		return
 	}
-	w.log.Debug("assessing attribute", slog.Any("name", a.Name()), slog.Any("loc", a.Loc()))
+	attrs := []slog.Attr{slog.Any("name", a.Name()), slog.Any("loc", a.Loc())}
+	if rule != "" {
+		attrs = append(attrs, slog.String("rule", string(rule)),
+			slog.String("clause", clause), slog.String("outcome", outcome))
+	}
+	w.log.LogAttrs(context.Background(), slog.LevelDebug, "assessing attribute", attrs...)
+}
+
+// attributeUseNamed reports the attribute use among uses whose {attribute
+// declaration} has the ·expanded name· n, as clause 2.1 matches. The name is
+// read off the use itself ([xsd.AttributeUse.DeclarationName]) and never off
+// a resolved declaration: the match is by name, and a resolution that failed
+// for some unrelated reason must not turn a declared attribute into an
+// unmatched one.
+func attributeUseNamed(uses []xsd.AttributeUse, n xsd.QName) (xsd.AttributeUse, bool) {
+	for _, u := range uses {
+		if u.DeclarationName() == n {
+			return u, true
+		}
+	}
+	return xsd.AttributeUse{}, false
+}
+
+// hasAttributeNamed reports whether attrs holds an attribute information
+// item whose ·expanded name· is n, as clause 3 asks.
+func hasAttributeNamed(attrs []Attribute, n xsd.QName) bool {
+	for _, a := range attrs {
+		if a.Name() == n {
+			return true
+		}
+	}
+	return false
+}
+
+// isInstanceAttribute reports whether n is one of the four attributes
+// cvc-complex-type clause 2 excepts by name — xsi:type, xsi:nil,
+// xsi:schemaLocation, xsi:noNamespaceSchemaLocation, the Built-in Attribute
+// Declarations of §3.2.7, which §3.2.6 a-props-correct forbids a schema to
+// redeclare.
+func isInstanceAttribute(n xsd.QName) bool {
+	if n.Space != xsd.XMLSchemaInstanceNS {
+		return false
+	}
+	switch n.Local {
+	case "type", "nil", "schemaLocation", "noNamespaceSchemaLocation":
+		return true
+	}
+	return false
 }
 
 // text assesses one run of character information items. It reports the run's
@@ -178,7 +409,7 @@ func (w *walk) children(e Element) {
 // a broken document.
 func (w *walk) child(c Child) {
 	if e, ok := c.Element(); ok {
-		w.element(e)
+		w.element(e, nil)
 		return
 	}
 	t, ok := c.Text()

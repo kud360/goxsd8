@@ -120,10 +120,10 @@ func (b *SchemaBuilder) AddRedefiningAttributeGroup(g, original AttributeGroupDe
 // {attribute declaration} or {type definition} behind a use on either side
 // (STYLE P3a):
 //
-//   - attributeUseName and findAttributeUse read the use's own QName with NO
-//     resolution, so the side still REPORTS the use. That is what matters
-//     most: under-reporting either side's {attribute uses} is what would make
-//     this check fail-CLOSED, and it does not happen.
+//   - AttributeUse.DeclarationName and findAttributeUse read the use's own
+//     QName with NO resolution, so the side still REPORTS the use. That is
+//     what matters most: under-reporting either side's {attribute uses} is
+//     what would make this check fail-CLOSED, and it does not happen.
 //   - checkAttributeTypeDerivedOK (defaultbinding.go) gets not-ok from
 //     attributeUseType and returns nil, leaving loc-testSubP clause 5.1
 //     undecided: FAIL-OPEN.

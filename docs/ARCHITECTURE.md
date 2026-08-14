@@ -409,10 +409,12 @@ use `regex`'s F&O flavor, never the pattern-facet flavor.
 
 ## Validation (`validate`)
 
-**Status: the engine ships the seam and decides nothing; the XML adapter
-ships over it.** `validate` exports the infoset views (`Element`,
-`Attribute`, `Text`, `Children`, `Child`) plus `New`/`Validator`/`Result`,
-and `Assess` walks a source once and charges no `cvc-` rule.
+**Status: the engine ships the seam and decides the validation root's
+dispatch and attribute existence; the XML adapter ships over it.**
+`validate` exports the infoset views (`Element`, `Attribute`, `Text`,
+`Children`, `Child`) plus `New`/`Validator`/`Result`, and `Assess` walks a
+source once, charging `cvc-assess-elt`, `cvc-elt` clause 2 and
+`cvc-complex-type` clauses 2-3 against the root and nothing below it.
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and drives that walk
 over an XML instance decoded by `parser/xmltree`; `validate/jsonsrc` and
 `validate/bersrc` are `doc.go`-only (M8/M11). Everything below not covered
