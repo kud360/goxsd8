@@ -107,6 +107,12 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"complexType with assert", `<xs:complexType name="T"><xs:sequence/><xs:assert test="true()"/></xs:complexType>`},
 		{"complexContent restriction with assert", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:restriction base="B"><xs:sequence/><xs:assert test="true()"/></xs:restriction></xs:complexContent></xs:complexType>`},
 		{"restriction with assertion facet", `<xs:simpleType name="A"><xs:restriction base="xs:int"><xs:assertion test="$value > 0"/></xs:restriction></xs:simpleType>`},
+		// #740 folds the <enumeration> children of one <restriction> into a single
+		// facet (§4.3.5.2 xr-enumeration), so the shape is admitted wherever a
+		// simple type can sit, one child or several.
+		{"restriction with one enumeration facet", `<xs:simpleType name="E"><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType>`},
+		{"restriction with several enumeration facets", `<xs:simpleType name="E"><xs:restriction base="xs:string"><xs:enumeration value="a"/><xs:enumeration value="b"/></xs:restriction></xs:simpleType>`},
+		{"local element with an inline enumeration-bearing simpleType", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType></xs:element></xs:sequence></xs:complexType>`},
 		// #447 produces the <list> alternative in both its forms, so both are
 		// admitted, at every position an anonymous simple type can sit in — and an
 		// inline item child is recursed into, so an undecidable one still declines
@@ -181,7 +187,7 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		body string
 	}{
 		{"top-level group without name (reference form is malformed)", `<xs:group ref="g"/>`},
-		{"top-level attributeGroup with an inline attribute type outside the produced simple-type subset", `<xs:attributeGroup name="ag"><xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType></xs:attribute></xs:attributeGroup>`},
+		{"top-level attributeGroup with an inline attribute type outside the produced simple-type subset", `<xs:attributeGroup name="ag"><xs:attribute name="a"><xs:simpleType/></xs:attribute></xs:attributeGroup>`},
 		{"complexType with bare nested group (no ref)", `<xs:complexType name="T"><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:complexType>`},
 		{"complexType with simpleContent restriction (synthesizes an anonymous simple type)", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleContent></xs:complexType>`},
 		{"complexType with a complexContent carrying neither alternant", `<xs:complexType name="T"><xs:complexContent/></xs:complexType>`},
@@ -197,10 +203,13 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		// The deliberate asymmetry that survives #229, #340 and #442: the GLOBAL
 		// <attribute>'s inline <simpleType> mapping (§3.2.2.1 dcl.att.global) is
 		// still unproduced, and on every path an inline simple type outside the
-		// produced subset moves the decline inward.
-		{"top-level element with an inline simpleType outside the produced subset", `<xs:element name="e"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType></xs:element>`},
-		{"local element with an inline simpleType outside the produced subset", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType></xs:element></xs:sequence></xs:complexType>`},
-		{"local attribute with an inline simpleType carrying an enumeration facet", `<xs:complexType name="T"><xs:sequence/><xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType>`},
+		// produced subset moves the decline inward. Since #740 admitted the last
+		// unproduced facet, the out-of-subset simple type is the one naming NONE of
+		// §3.16.2.1's three alternatives, and it is the specimen every recursion
+		// below carries.
+		{"top-level element with an inline simpleType outside the produced subset", `<xs:element name="e"><xs:simpleType/></xs:element>`},
+		{"local element with an inline simpleType outside the produced subset", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:simpleType/></xs:element></xs:sequence></xs:complexType>`},
+		{"local attribute with an inline simpleType outside the produced subset", `<xs:complexType name="T"><xs:sequence/><xs:attribute name="a"><xs:simpleType/></xs:attribute></xs:complexType>`},
 		// anonymousComplexTypeDecidable is NARROWER than complexTypeDecidable on
 		// purpose: an anonymous type is in no {type definitions} set, so the three
 		// read-only finalize passes and the two attribute folds never visit it
@@ -211,28 +220,27 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"element with an inline complexType using complexContent", `<xs:element name="e"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
 		{"element with an inline complexType using simpleContent", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element>`},
 		{"local element with an inline complexType using complexContent", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType></xs:element></xs:sequence></xs:complexType>`},
-		{"inline complexType whose own content is undecidable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType></xs:element></xs:sequence></xs:complexType></xs:element>`},
+		{"inline complexType whose own content is undecidable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:simpleType/></xs:element></xs:sequence></xs:complexType></xs:element>`},
 		{"inline complexType nesting an explicit-content inline complexType", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`},
-		{"list-variety simpleType whose inline item is itself undecidable", `<xs:simpleType name="L"><xs:list><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType></xs:list></xs:simpleType>`},
-		{"union-variety simpleType whose inline member is itself undecidable", `<xs:simpleType name="U"><xs:union memberTypes="xs:string"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType></xs:union></xs:simpleType>`},
-		{"restriction with enumeration facet", `<xs:simpleType name="E"><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType>`},
-		{"anonymous inline base with enumeration (recursed decline)", `<xs:simpleType name="N"><xs:restriction><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType></xs:restriction></xs:simpleType>`},
-		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:simpleType name="U"><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType>`},
+		{"list-variety simpleType whose inline item is itself undecidable", `<xs:simpleType name="L"><xs:list><xs:simpleType/></xs:list></xs:simpleType>`},
+		{"union-variety simpleType whose inline member is itself undecidable", `<xs:simpleType name="U"><xs:union memberTypes="xs:string"><xs:simpleType/></xs:union></xs:simpleType>`},
+		{"anonymous inline base outside the produced subset (recursed decline)", `<xs:simpleType name="N"><xs:restriction><xs:simpleType/></xs:restriction></xs:simpleType>`},
+		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:simpleType name="U"/>`},
 		// A redefining <complexType> is gated by complexTypeDecidable like any
 		// other, so a shape THAT predicate declines declines the whole case; the
 		// self-deriving shape itself is admitted — see the decidable cases.
 		{"redefine child that is a complexType the gate declines", `<xs:redefine schemaLocation="b.xsd"><xs:complexType name="T"><xs:simpleContent><xs:restriction base="tns:T"/></xs:simpleContent></xs:complexType></xs:redefine>`},
 		{"redefine child with no name (no pairing possible)", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:redefine>`},
-		{"redefine child that is a simpleType the gate declines", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType name="U"><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType></xs:redefine>`},
+		{"redefine child that is a simpleType the gate declines", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType name="U"/></xs:redefine>`},
 		{"redefine child of an out-of-model kind", `<xs:redefine schemaLocation="b.xsd"><xs:element name="e" type="xs:string"/></xs:redefine>`},
 		// An <override> child the parser can only ignore, or one whose own shape is
 		// outside the decidable subset, declines the whole case: after substitution
 		// it would be an unmapped or undecidable TOP-LEVEL declaration.
 		{"override child with no name (matches nothing, silently ignored)", `<xs:override schemaLocation="b.xsd"><xs:element type="xs:string"/></xs:override>`},
 		{"override child with an undecidable inline anonymous type", `<xs:override schemaLocation="b.xsd"><xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element></xs:override>`},
-		{"override child that is a simpleType the gate declines", `<xs:override schemaLocation="b.xsd"><xs:simpleType name="U"><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType></xs:override>`},
+		{"override child that is a simpleType the gate declines", `<xs:override schemaLocation="b.xsd"><xs:simpleType name="U"/></xs:override>`},
 		{"override child of an out-of-model kind", `<xs:override schemaLocation="b.xsd"><xs:include schemaLocation="c.xsd"/></xs:override>`},
-		{"include beside an undecidable kind still declines", `<xs:include schemaLocation="lib.xsd"/><xs:simpleType name="U"><xs:restriction base="xs:string"><xs:enumeration value="x"/></xs:restriction></xs:simpleType>`},
+		{"include beside an undecidable kind still declines", `<xs:include schemaLocation="lib.xsd"/><xs:simpleType name="U"/>`},
 	}
 	for _, tc := range cases {
 		if schemaShapeDecidable(schemaDoc(t, tc.body)) {

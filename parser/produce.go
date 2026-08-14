@@ -1654,7 +1654,7 @@ func (p *producer) resolveBase(restriction *Element) (xsd.SimpleTypeOrRef, error
 }
 
 // restrictionFacets maps the constraining-facet children of a <restriction> in
-// document order. The plain-lexical facets map one-to-one, with two folding
+// document order. The plain-lexical facets map one-to-one, with three folding
 // exceptions, each landing at the position of its kind's FIRST child element so
 // the returned slice stays in document order (STYLE D2):
 //
@@ -1662,18 +1662,24 @@ func (p *producer) resolveBase(restriction *Element) (xsd.SimpleTypeOrRef, error
 //     assertions facet the §4.3.13 {value} rule describes — "a sequence of
 //     Assertion components";
 //   - every <pattern> child folds into the SINGLE pattern facet xr-pattern
-//     (§4.3.4.2) describes, one {value} member per sibling, in document order.
+//     (§4.3.4.2) describes, one {value} member per sibling, in document order;
+//   - every <enumeration> child folds into the SINGLE enumeration facet
+//     xr-enumeration (§4.3.5.2) describes — "a set of the actual values of all
+//     the <enumeration> [children]'s value [attributes]" — one member per
+//     sibling, in document order.
 //
-// enumeration needs a richer sub-shape and is not yet produced: rather than
-// silently dropping a constraint (a false-accept), an actual <enumeration> child
-// is rejected. The non-facet children <annotation> and the inline base
-// <simpleType> are skipped.
+// The non-facet children <annotation> and the inline base <simpleType> are
+// skipped. src-simple-type clause 1 excepts xs:enumeration, xs:pattern and
+// xs:assertion from its no-two-children-with-one-name rule, which is what makes
+// all three folds reachable on a legal schema.
 func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) {
 	var facets []xsd.Facet
 	var assertions []xsd.Assertion
 	assertionsAt := 0
 	var patterns []string
 	patternAt := 0
+	var members []xsd.EnumerationMember
+	enumerationAt := 0
 	for _, child := range restriction.Children() {
 		el, ok := child.(*Element)
 		if !ok {
@@ -1687,8 +1693,31 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 			continue
 		}
 		if local == "enumeration" {
-			return nil, xsderr.New(ruleSrcSimpleType, el.Loc(),
-				"restriction has an <enumeration> facet, which this producer does not yet support; refusing to silently drop it")
+			// xr-enumeration (§4.3.5.2): the <enumeration> children of ONE
+			// <restriction> are members of a single facet's {value} SET, not a facet
+			// each — two same-kind ownFacets is what st-props-correct clause 4
+			// rejects. Unlike xr-pattern this fold takes no union with the base
+			// type's own enumeration facet: §4.3.5.2 has no such clause, so the
+			// generic same-kind overlay (st-restrict-facets §3.16.6.4,
+			// key-facets-overlay) governs and a restriction's enumeration REPLACES
+			// the base's outright — which is what xsd's EffectiveFacets does with
+			// every kind but pattern and assertions.
+			//
+			// The context is captured per <enumeration> element, not once per
+			// <restriction>: §3.3.18 fixes a QName/NOTATION member's prefix scope to
+			// the element the literal was written on, and siblings can carry
+			// different bindings.
+			val, _ := el.Attr("value")
+			bindings, defaultNS := namespaceContextOf(el)
+			members = append(members, xsd.NewEnumerationMember(val, bindings, defaultNS))
+			folded := xsd.NewEnumerationFacet(members)
+			if len(members) == 1 {
+				enumerationAt = len(facets)
+				facets = append(facets, folded)
+				continue
+			}
+			facets[enumerationAt] = folded
+			continue
 		}
 		if local == "assertion" {
 			if len(assertions) == 0 {
@@ -2277,7 +2306,10 @@ func valueConstraintOf(elem *Element, rule xsderr.Rule) (*xsd.ValueConstraint, e
 
 // namespaceContextOf materializes elem's in-scope namespace context for a QName
 // lexical written on it (§3.3.18): one Namespace Binding per PREFIXED in-scope
-// namespace, plus the default namespace an unprefixed name binds to.
+// namespace, plus the default namespace an unprefixed name binds to. It serves
+// every property record carrying such a lexical — a Value Constraint's
+// default=/fixed=, an enumeration facet member's value= — each capturing it at
+// the element the literal was written on.
 //
 // The default namespace is the plain in-scope xmlns default, NOT the
 // xpathDefaultNamespace chain (§3.13.2) — that one is XPath's alone, and reading
@@ -2548,11 +2580,12 @@ func (p *producer) declares(elem *Element) bool {
 // The two non-lexical kinds are excluded: enumeration's and assertions' {value}
 // is not a lexical string (§4.3.5/§4.3.13), so xsd.NewFacet panics on both, and
 // restrictionFacets handles them separately (assertion through
-// xsd.NewAssertionsFacet, enumeration by rejection) in checks that run strictly
-// above this lookup. Excluding them HERE too is belt-and-suspenders, not
-// redundant: the bridge table spells the assertions facet in the plural, so the
-// singular <assertion> element those upstream checks intercept would not shield
-// a schema's literal <assertions> child from reaching NewFacet.
+// xsd.NewAssertionsFacet, enumeration through xsd.NewEnumerationFacet) in folds
+// that run strictly above this lookup. Excluding them HERE too is
+// belt-and-suspenders, not redundant: the bridge table spells the assertions
+// facet in the plural, so the singular <assertion> element those upstream checks
+// intercept would not shield a schema's literal <assertions> child from reaching
+// NewFacet.
 func facetKindOf(local string) (xsd.FacetKind, bool) {
 	kind, ok := builtin.FacetKindByName(builtin.FacetName(local))
 	if !ok || kind == xsd.FacetEnumeration || kind == xsd.FacetAssertions {

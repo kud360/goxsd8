@@ -2,6 +2,7 @@ package parser_test
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
@@ -791,11 +792,51 @@ func TestProduceSimpleTypeAssertionFacet(t *testing.T) {
 	}
 }
 
-func TestProduceEnumerationFacetStillDeclined(t *testing.T) {
-	_, err := produce(t, wrap("", `<xs:simpleType name="st">
-	  <xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction>
-	</xs:simpleType>`))
-	assertRule(t, err, "src-simple-type")
+// TestProduceEnumerationMemberCapturesNamespaceContext pins the capture a
+// QName or NOTATION enumeration member needs to denote a {value} at all
+// (§3.3.18, adopted by §3.3.19): each member carries the bindings in scope at
+// ITS OWN <enumeration> element, not the <restriction>'s, so a prefix declared
+// on one sibling reaches that member alone.
+func TestProduceEnumerationMemberCapturesNamespaceContext(t *testing.T) {
+	doc := `<xs:schema xmlns:xs="` + xsdNS + `" xmlns:outer="urn:outer" xmlns="urn:default">` +
+		`<xs:simpleType name="st"><xs:restriction base="xs:QName">` +
+		`<xs:enumeration value="outer:a"/>` +
+		`<xs:enumeration value="inner:b" xmlns:inner="urn:inner"/>` +
+		`</xs:restriction></xs:simpleType></xs:schema>`
+	s, err := produce(t, doc)
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, ok := s.Type(xsd.QName{Local: "st"})
+	if !ok {
+		t.Fatal("type st not found")
+	}
+	st, ok := td.(*xsd.SimpleType)
+	if !ok {
+		t.Fatalf("type st = %T, want *xsd.SimpleType", td)
+	}
+	facets := st.OwnFacets()
+	if len(facets) != 1 || facets[0].Kind() != xsd.FacetEnumeration {
+		t.Fatalf("own facets = %v, want one enumeration facet", facets)
+	}
+	members, _ := facets[0].EnumerationMembers()
+	if len(members) != 2 {
+		t.Fatalf("enumeration members = %d, want 2", len(members))
+	}
+	wantFirst := []string{"outer=urn:outer", "xml=" + xmlNS, "xs=" + xsdNS}
+	if got := bindingStrings(members[0].NamespaceBindings()); !slices.Equal(got, wantFirst) {
+		t.Errorf("member outer:a captured bindings = %v, want %v", got, wantFirst)
+	}
+	wantSecond := []string{"inner=urn:inner", "outer=urn:outer", "xml=" + xmlNS, "xs=" + xsdNS}
+	if got := bindingStrings(members[1].NamespaceBindings()); !slices.Equal(got, wantSecond) {
+		t.Errorf("member inner:b captured bindings = %v, want %v", got, wantSecond)
+	}
+	for i, m := range members {
+		ns, ok := m.DefaultNamespace()
+		if !ok || ns != "urn:default" {
+			t.Errorf("member %d captured {default namespace} = (%q, %t), want (\"urn:default\", true)", i, ns, ok)
+		}
+	}
 }
 
 func TestProduceNotation(t *testing.T) {
