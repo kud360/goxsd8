@@ -336,7 +336,7 @@ CType/attributeuses00101m1/instance/Positive fail
 CType/attrwildcard00101m1/instance/Positive fail
 CType/basetd00101m1/instance/Negative fail
 CType/basetd00101m1/instance/Positive fail
-CType/basetd00101m2/instance/Negative fail
+CType/basetd00101m2/instance/Negative pass
 CType/basetd00101m2/instance/Positive fail
 CType/basetd00101m3/instance/Negative pass
 CType/basetd00101m3/instance/Positive fail
@@ -344,7 +344,7 @@ CType/basetd00101m4/instance/Negative pass
 CType/basetd00101m4/instance/Positive fail
 CType/contenttype00101m/instance/contentType00101m1_n pass
 CType/contenttype00101m/instance/contentType00101m1_p fail
-CType/contenttype00201m/instance/contentType00201m1_n fail
+CType/contenttype00201m/instance/contentType00201m1_n pass
 CType/contenttype00201m/instance/contentType00201m1_p fail
 CType/contenttype00301m/instance/contentType00301m1_n pass
 CType/contenttype00301m/instance/contentType00301m1_p fail
@@ -354,7 +354,7 @@ CType/derivationmethod00101m1/instance/Negative pass
 CType/derivationmethod00101m1/instance/Positive fail
 CType/derivationmethod00101m2/instance/Negative pass
 CType/derivationmethod00101m2/instance/Positive fail
-CType/derivationmethod00102m1/instance/Negative fail
+CType/derivationmethod00102m1/instance/Negative pass
 CType/derivationmethod00102m1/instance/Positive fail
 CType/derivationmethod00102m2/instance/Negative pass
 CType/derivationmethod00102m2/instance/Positive fail

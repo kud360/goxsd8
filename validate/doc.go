@@ -84,19 +84,26 @@
 // the sequence of element information items to cvc-complex-content
 // (§3.4.4.3) over xsd.Schema.ContentMatcher, which charges an item no
 // particle admits at its position against that item's own Loc, and a
-// sequence ending short of a {min occurs} against the root's.
+// sequence ending short of a {min occurs} against the root's. Clause 1.2
+// additionally reads a VALUE, through the same backend the attribute charges
+// use: a simple {content type} has the root's ·initial value· — every
+// character information item [[child]] concatenated in order — validated
+// against its {simple type definition} per String Valid, charged against the
+// root's own Loc.
 //
 // Everything not decidable is left undecided rather than guessed at: an
 // {attribute wildcard} to evaluate, a ·governing type definition· that is
 // not determinable or whose {attribute uses}/{attribute wildcard} are not
 // yet the spec's (the attribute half alone: a {content type} needs no such
 // fold), an element that may be ·nilled·, a {content type} whose shape
-// xsd.Schema.ContentMatcher declines, a declaration whose {type
-// definition} is not a simple type, and — the decline that matters most — a
-// value.ValidateLexical error that is a fault of the type or of the backend
-// rather than a verdict about the lexical (value.IsDatatypeVerdict), which
-// is what keeps a typeless attribute (xs:anySimpleType, §3.2.2.2) from
-// being rejected by every document that carries one.
+// xsd.Schema.ContentMatcher declines, an element with no character content for
+// cvc-elt clause 5.1 to have supplied a default in place of, a declaration
+// whose {type definition} is not a simple type, and — the decline that matters
+// most — a value.ValidateLexical error that is a fault of the type or of the
+// backend rather than a verdict about the lexical (value.IsDatatypeVerdict),
+// which is what keeps a typeless attribute (xs:anySimpleType, §3.2.2.2), or
+// simple content of a type this backend does not map, from being rejected by
+// every document that carries one.
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day
