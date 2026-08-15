@@ -17,7 +17,7 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-08-15 (full `/backlog`)
+## Status — 2026-08-15 (post-land, #722)
 
 Conformance lanes — **paste `go tool lanestatus` verbatim**, never a
 hand-count:
@@ -35,17 +35,22 @@ An em dash is a lane with no cases yet, which is a different claim from a lane
 scoring zero. `datatypes` is M3 and **complete**; `schema` is M4 and active;
 `instance` is M5 and active; `xpath`, `json` and `ber` wait on M6/M7, M8 and M11.
 
-**No lane moved since the previous stamp** — this pass landed no code. `instance`
-535 → 1017 (+482) with #790 is the movement the band below is re-derived
-against; the mechanism is in that landing's LOG entry, not restated here.
+**No lane moved.** #722 (`fdbdd55`, PR #804) changed `tools/wipsurvey` and three
+process documents and touches no validator; the arbiter ran the ratchet on the
+merged tree and the three non-empty lane files came back byte-identical. The
+standing `instance` figure of 1017 is #790's, carried through the merge.
 
-Milestones — **read from GitHub this pass, not carried.** The previous stamp
-said the MCP tools "expose no milestone filter" and carried its rows forward;
-that is false and the correction is worth more than the rows. `search_issues`
-returns the full milestone object on every hit, so one query per milestone reads
-`closed_issues` and `open_issues` directly. **M4 and M5 are read that way and
-are current.** M0–M2 and M3 are carried from the previous stamp: both are
-complete at zero open, and this pass filed into neither.
+**This is a post-land pass, not a full backlog run.** The lane table, the queue
+counts, the branch namespace and all 21 `blocked` bodies were re-read from their
+sources. **The working band below is NOT re-derived and did not need to be** —
+a full `/backlog` re-derived it three hours before this landing (`2d6ec5c`) and
+had already unbanded #722 as in-flight; the only change is that the paragraph
+explaining its absence is now false and has been removed. No issue body was
+audited that this landing did not touch.
+
+Milestones — carried from the `2d6ec5c` stamp, which read them from GitHub this
+morning. **#722 carries no milestone**, so no row can have moved; this is a
+carry with a reason, not a carry for want of a read.
 
 | Milestone | Closed | Open | State |
 |---|---:|---:|---|
@@ -55,181 +60,158 @@ complete at zero open, and this pass filed into neither.
 | M5 — Instance validation (XML) | 10 | 12 | **active** |
 | M6–M12 | 0 | 0 | not filed |
 
-Queue: **195 open issues — 174 `ready`, 21 `blocked`, 0 `needs-replan`, 2 `epic`**
-(both `blocked`), against **288 closed**. 174 + 21 = 195 exactly, so the
-arithmetic proves the label sweep rather than a sweep asserting it. Read the
-milestone table as feature progress, not as the queue: **142** of the 195 carry
-no milestone (195 − 41 − 12; the previous stamp's 141 was off by one), and the
-process, doc and comment-accuracy issues post-land passes file are deliberately
-outside them.
+Queue, read fresh across both pages: **193 open issues — 172 `ready`, 21
+`blocked`, 0 `needs-replan`, 2 `epic`** (both `blocked`), against **289 closed**.
+172 + 21 = 193 exactly, so the arithmetic proves the label sweep rather than a
+sweep asserting it. Two of the 193 are this pass's own filings. Read the
+milestone table as feature progress, not as the queue: **140** of the 193 carry
+no milestone (193 − 41 − 12), and the process, doc and comment-accuracy issues
+post-land passes file are deliberately outside them.
+
+**One issue of the previous stamp's 195 is unaccounted for, and is flagged
+rather than absorbed.** That stamp published 195 open / 288 closed; the live read
+is 193 / 289. #722 closing explains one of the two departures from `ready` and
+the one arrival in `closed`. The second is not explained by any closure this pass
+can see, and the same stamp records an off-by-one it had to correct in its own
+no-milestone count. Treat 193 as the measurement and 195 as suspect; the next
+full `/backlog` should reconcile rather than re-derive from either.
 
 ### What this pass did
 
-**The follow-up ledger (#489) is CLOSED, and it was closed by reading one
-thread.** Eleven consecutive stamps carried it as owed. Its standing sweep had
-already run at the 2026-08-09 `/retro`; what kept it open was one claim in its
-own title — *"#324's post-land pass never ran at all"* — which no pass had
-checked. **That pass ran in full**, twelve minutes after #324 landed, at
-<https://github.com/kud360/goxsd8/issues/324#issuecomment-5161052507>: two
-advisories filed (**#455**, **#456** — both open today) and five dismissed with
-reasons. The 2026-08-04 comment on #489 had already said the advisories reached
-the queue; every later comment kept the alarming half of that sentence and
-dropped the hedge, which is **#550**'s shape on #489's own thread. Closed
-`not_planned` — nothing landed, a premise dissolved.
+**Unblock sweep: nothing to unblock, verified rather than assumed.** All 21
+`blocked` bodies were read and their `## Depends on` lines checked: **no open
+issue names #722**. #718 was already unblocked by #790's post-land pass earlier
+today and is `ready`; that relabel is not re-done here.
 
-**#584's structural defect is FIXED, and the constraint that blocked three
-passes did not exist.** It carried `blocked` with no `## Depends on`, invisible
-to every unblock sweep since 2026-08-08. Three passes deferred the body edit to
-"a session with working `gh`", because the MCP read path strips `<...>` tokens
-(#764) and a round-trip would delete them. **The strip is on the READ path
-only** — #505's post-land pass said so on that very thread and no pass acted —
-and `WebFetch` against the rendered issue page returns the true text to author
-from. Body rewritten from fresh text: `## Spec`, `## Surface` and
-`## Depends on: #414` added, its `## Direction` section corrected (it claimed
-under-rejection in every case; #505's arbiter ruled the base-side half
-fail-CLOSED), its done-since-#505 Acceptance bullet narrowed, and #585's chained
-shape folded in. Element names verified intact afterwards. **It stays `blocked`
-on #414** and is now reachable by a sweep.
+**#722's follow-up ledger is fully dispositioned** — two filed, one declined,
+one routed, with no hand-offs. The reasoning is on that issue's thread
+(comment 5302972381); the outcomes are:
 
-**#515 closed as a duplicate of #764**, the same body-stripping defect found
-nine days apart; #764 survives because it reproduces the loss and names the
-lossless read. Three facts folded forward, including that `list_issues` strips
-too and that `<https://…>` returns as an empty `()` — the harder symptom, since
-it reads as ordinary punctuation.
+- **#805** — `TestGitAncestryWithoutMain` passes with the `mainSHA == ""` guard
+  it names deleted, because `merge-base --is-ancestor <sha> ""` exits 128 and
+  maps to the same unresolved result. Found by the arbiter's mutation pass, which
+  killed every other test by reverting its own arm. The test pins a real outcome
+  contract, so the choice is between asserting the un-spawned subprocess and
+  correcting the comment — #805 asks the implementer to weigh that, not to guess.
+- **#806** — an unresolved ancestry falls back to the borrowed tip age with
+  nothing in the report saying so. Accepted design at #722, filed as the marker
+  the arbiter suggested — but its body carries an **unreproduced hypothesis**
+  worth more than the marker: `remoteRefs` reads main's SHA live from `ls-remote`
+  while the ancestry test resolves it against the local object store, so a
+  checkout that last fetched before the newest landing may resolve no ancestry at
+  all and fall every lease back onto the borrowed age. Measure before coding; if
+  the hypothesis fails, closing #806 as cosmetic is the right outcome.
+- **The borrowed-age repetition is DECLINED as a standalone issue**, per the
+  arbiter's own disposition (*"a reason to resist the next paragraph"*). It is
+  prose redundancy in one 500-line file, not two encodings of state that can
+  drift, and an issue whose acceptance is "delete four comments" invites a
+  session to strip the prose four incidents argued for. The count is corrected on
+  the record: **eight sites, not six** — six in `tools/wipsurvey/main.go` plus
+  `docs/WORKFLOW.md:65` and `.claude/commands/develop.md:31`, which are separate
+  audiences and the two least worth collapsing. The `STYLE P2` citation both
+  records carry is logged as a **candidate fourth sighting on #548**: `P2` is
+  "Comment only constraints" and says nothing about stating a constraint twice;
+  the text that governs is CLAUDE.md's *"state it once"*, which has no letter ID.
+- **"CLAIMED has no automated release path" is `/retro`'s, not a new issue.** It
+  is in this landing's `docs/LOG/2026-08.md` entry twice — Friction item 1 and
+  `Next:` item 3 — and a second tracker for it is the duplicate this queue does
+  not need.
 
-**#797 re-scoped: its incident is retired, its mechanism is not.** Its whole
-Acceptance had gone false — `chore/log-20260815-develop` is gone from `origin`
-and its 154 lines are on `main` at `docs/LOG/2026-08.md:30454` (`8e8b45b`,
-PR #792), verified by content. Title and body now name the shape (a code-less
-iteration has no PR for its LOG entry to ride) instead of the instance.
-
-**One issue filed: #802** — every session runs in a **shallow clone**, and the
-branch-namespace sweep's `N ahead / M behind` figures are arithmetic on a
-truncated history. See below; it is this pass's own finding about its own
-method.
-
-**Personas folded (step 5), reports gathered by the orchestrating session — this
-pass role-played neither (#416).** libuser's finding is a genuine defect and it
-is **#748**, whose body had itself expired: it asserted `validate.New`'s
-signature without the `value.Backend` parameter #766 added, and claimed
-`validate/xmlsrc` "exports nothing" after #711 landed it. Body and title
-rewritten; the persona **built and ran** code against both packages, which is
-the strongest form this finding has taken. The `go doc ./...` failure folded
-into **#669**; the `builtin/strict` coverage wording dismissed on the thread
-(the persona itself calls it "not a contradiction"). cliuser found the CLI
-**100% consistent** with what README discloses and filed nothing: its help-text
-gap is **#747** reached independently, its exit-2 forward-compat sentence folded
-into **#472** (which owns the split), its `-version` finding is **#672**
-re-confirmed, and its "skim-reader could miss the caveat" note is dismissed —
-`README.md:48`'s heading already reads *"CLI (contract; no subcommand is
-implemented yet)"*.
-
-**Unblock sweep: no movement, and none was owed.** The only issues to close
-since the last stamp are #489 and #515, both closed by this pass and neither
-named in any `## Depends on`. #456 remains `blocked` on #455, which is open.
+**The `CLAIMED` hole has a live instance at the top of the queue, and it is
+handled on the thread.** `wip/issue-718` is a stood-down zero-commit lease on the
+band's row 1, so `wipsurvey` now says `CLAIMED` — off-limits, with no age that
+releases it — while this roadmap says start there. Nothing is wrong with the
+landing: `CLAIMED` is deliberately conservative and its documented release path
+is the issue thread, so that thread now carries the note
+(<https://github.com/kud360/goxsd8/issues/718#issuecomment-5302974476>) telling a
+session to take #718 and branch fresh from `origin/main`. **#718 is not
+`needs-replan` and must not be relabelled** — the claim was stood down by
+falsification, not retired.
 
 ### Branch namespace, `origin` — report-only; a session never deletes a ref
 
 **`go tool wipsurvey`, verbatim** (issue JSON supplied from MCP, since `gh` is
-403 on both routes — #527, #682):
+403 on both routes — #527, #682). **This is the first snapshot taken with #722's
+fix in place**, and the `CLAIMED` row is the defect that produced four incidents
+in twelve days, now reading honestly:
 
 ```
 ISSUE  BRANCH         TIP AGE    VERDICT  REASON
-256    wip/issue-256  301h42m0s  RETIRED  wip/issue-256: issue #256 is closed
-271    wip/issue-271  281h26m0s  RETIRED  wip/issue-271: issue #271 is closed
-287    wip/issue-287  249h48m0s  RETIRED  wip/issue-287: issue #287 is closed
-718    wip/issue-718  12h56m0s   EXPIRED  wip/issue-718: tip pushed 12h56m0s ago, past the 2h0m0s claim TTL
-722    wip/issue-722  6m0s       LIVE     wip/issue-722: tip pushed 6m0s ago, within the 2h0m0s claim TTL
+256    wip/issue-256  303h7m0s   RETIRED  wip/issue-256: issue #256 is closed
+271    wip/issue-271  282h51m0s  RETIRED  wip/issue-271: issue #271 is closed
+287    wip/issue-287  251h13m0s  RETIRED  wip/issue-287: issue #287 is closed
+718    wip/issue-718  main's     CLAIMED  wip/issue-718: no commits of its own; tip age is main's, not the claim's -- do not retire on age, settle it from the issue thread
 ```
 
 | Branch | Verdict | Disposition |
 |---|---|---|
-| `wip/issue-722` | **LIVE** | tip `cde728c`, pushed six minutes before this survey. A session is working #722 now. **Do not take #722.** |
-| `wip/issue-718` | dead lease | 0 ahead; its tip `e3ed308` is a `main` commit, so it holds no work. #718 is `ready` and row 1 — the next attempt branches fresh from `origin/main` and must not resume this ref. Deletable. |
+| `wip/issue-718` | **CLAIMED** | 0 commits; tip `e3ed308` is a `main` commit, so it holds no work. The claim is **stood down** on the issue thread, which is what `CLAIMED` defers to. #718 is `ready` and band row 1 — branch fresh from `origin/main`, never resume this ref. Deletable. |
 | `wip/issue-256` | RETIRED | issue closed `needs-replan`, superseded by #470 |
 | `wip/issue-271` | RETIRED | issue closed `needs-replan`, superseded by #478/#479/#480 |
 | `wip/issue-287` | RETIRED | issue closed, answered in the opposite direction by PR #511. Not a park — it carries no `needs-replan` |
-| `claude/eloquent-cerf-15r30e` | merged | tip is `origin/main` exactly (`9ca50fc`). Deletable. |
+| `claude/eloquent-cerf-15r30e` | merged | tip `9ca50fc`, an ancestor of `main` — verified this pass, not carried. Deletable. |
 | `claude/eloquent-cerf-8f1mrv` | merged | 0 ahead; tip `77dd47a` is a commit on `main`. Deletable. |
 | `claude/eloquent-cerf-patxs3` | superseded | tip `2196c3f`, unmoved since 2026-08-07. Deletable. |
-| `claude/eloquent-cerf-7ckw7b` | **merged — VERIFIED BY CONTENT** | all seven commits are on `main`. Deletable. The human-look flag is retired. |
+| `claude/eloquent-cerf-7ckw7b` | **merged — VERIFIED BY CONTENT** | all seven commits are on `main` (per-file check at `2d6ec5c`; the four-stamp "needs a human look" flag stays retired). Deletable. |
 
-No `parked/*` branches. One `wip/*` holds a live claim (`wip/issue-722`).
-
-**`claude/eloquent-cerf-7ckw7b` carried the "needs a human look" flag across four
-stamps and it is now discharged.** Per-file content check against `main`, not
-commit subjects and not ahead/behind:
-
-| commit | names | on `main` |
-|---|---|---|
-| `dc71407` | #636 | `SimpleTypeOrRef` across `xsd/simpletyperef.go` and nine more files |
-| `9a41167` | #643 | `tools/{gapaudit,lanestatus,surface,wipsurvey}`, `stylecitations_test.go` |
-| `07196b0` | #426 | `tools/lint/main.go`; `CLAUDE.md:47` gate part 2 reads `go tool lint` |
-| `5e0cc49` | #358 | all three `TestProduceAttributeUse*` tests |
-| `d9cea81` | #649 | both WORKFLOW passages, verbatim |
-| `fa92a0b` | #359 | **refactored** — the Loc now rides `attributeRestriction.loc`, *"always the derived side's"* |
-| `5b35716` | #662 | **refactored** — zero `xsderr.Loc{}` remain in `complexderivation.go` |
-
-The last two are why a naive diff reads as unlanded: `main` moved the charge onto
-a carrier struct, so the branch's `t.Loc()` arguments do not appear literally.
+`wip/issue-722` was auto-deleted by GitHub at merge — the single deletion in the
+system, working as documented. No `parked/*` branches, and **no `wip/*` branch
+holds a live claim**: every open issue with a branch is either retired or stood
+down, so the next develop session claims from `ready` rather than resuming.
 
 **The checkout is SHALLOW, and every ahead/behind figure this table has ever
 published was arithmetic on a truncated history (#802).**
-`git rev-parse --is-shallow-repository` is `true`, `.git/shallow` holds two
-boundary commits, and `git rev-list --count origin/main` returns **50** — all of
-`main` this container can see. Five of the nine branches have **no merge base
-with `main` at all**, and `git rev-list --left-right --count` does not fail on
-that: it counts every commit on each side and returns a plausible pair. The
-"7 ahead, 51 behind" carried for `7ckw7b` across four stamps was never a
-divergence measurement. **Under squash-merge, ahead/behind was never the right
-question anyway** — a squashed branch is always "N ahead" of the `main` that
-already contains it. The table above answers by content instead. `wipsurvey` is
-unaffected: it keys on `ls-remote` and tip timestamps, never on counts.
+`git rev-parse --is-shallow-repository` is `true` and `.git/shallow` holds two
+boundary commits, so five of the eight branches have no merge base with `main`
+at all and `git rev-list --left-right --count` does not fail on that — it counts
+every commit on each side and returns a plausible pair. **Under squash-merge,
+ahead/behind was never the right question anyway**: a squashed branch is always
+"N ahead" of the `main` that already contains it. The table answers by content
+and by ancestry instead. `wipsurvey` is unaffected — it keys on `ls-remote`, tip
+timestamps and `merge-base --is-ancestor`, never on counts.
 
-**`go tool gapaudit`: no P3 leak.** 53 markers across 5 areas. Its two group-1
-entries are heuristic misses, not untracked sites — both `validate/cvccomplexcontent.go`
-markers name open issues (#716, #774) in their own text, and the matcher failed
-only because the marker prose is long. Its seven group-2 entries are all
-expected: #404, #591, #592 and #593 are conformance-lane gaps, which carry no
-marker by construction; #398 exists precisely because the `cmd` stub has none;
-and #719 and #787 are the issues whose markers land with them.
+**`go tool gapaudit`: no P3 leak** — 53 markers across 5 areas, from the
+`2d6ec5c` full run; this landing added no `GAP(` site, so the census stands. Its
+two group-1 entries are heuristic misses, not untracked sites — both
+`validate/cvccomplexcontent.go` markers name open issues (#716, #774) in their
+own text and the matcher failed only because the marker prose is long. Its seven
+group-2 entries are all expected: #404, #591, #592 and #593 are conformance-lane
+gaps, which carry no marker by construction; #398 exists precisely because the
+`cmd` stub has none; and #719 and #787 are the issues whose markers land with
+them.
 
 ### Working band
 
-Dependency-ordered top of the `ready` queue, so a session need not scan 174 of
-them. Take from the top. **Fully re-derived this pass** — the previous band's
-rows 5–10 had been carried on their original justifications across four stamps
-while `instance` nearly doubled, and that is the debt this pass was called to
-pay.
+Dependency-ordered top of the `ready` queue, so a session need not scan 172 of
+them. Take from the top. **Carried unchanged from the `2d6ec5c` full re-derivation
+three hours before this landing** — every row's justification survives a tooling
+change that moved no lane.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #718 | **M5's head.** `cvc-identity-constraint` and `cvc-id`. Largest remaining `instance` mover in the queue; its enabler (#790) is on `main`, its grounding (comment 5300735646) is durable and scoped to the rule text, and its XPath subset is §3.11.6.2/§3.11.6.3's restricted path grammar — it **does not wait on M6**, and a fail-open to the M6 evaluator here would be wrong rather than conservative |
+| 1 | #718 | **M5's head.** `cvc-identity-constraint` and `cvc-id`. Largest remaining `instance` mover in the queue; its enabler (#790) is on `main`, its grounding (comment 5300735646) is durable and scoped to the rule text, and its XPath subset is §3.11.6.2/§3.11.6.3's restricted path grammar — it **does not wait on M6**, and a fail-open to the M6 evaluator here would be wrong rather than conservative. Its stale lease branch reads `CLAIMED`; see the note above before acting on that |
 | 2 | #716 | `xsi:type` and `xsi:nil`. #790 **raised** its value: an `xsi:type` decline used to cost one element and now costs a subtree, since everything below an unassessed node inherits that. Also the residual #718 would otherwise GAP-mark. Dependency-free |
 | 3 | #800 | the `<xs:alternative>` producer gap. It **cannot move `instance`** — it converts three false rejects into declines, which the lane scores identically — but it is the only queue item that retires a decided-and-WRONG case, may move `schema` through four readers it makes live, and a `schema` regression is the real risk. Needs a warden pre-flight on `xsd.TypeAlternative` |
 | 4 | #733 | **promoted four places.** A top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and **#442 moved `schema` +82**. It was banded below five rows that move no lane at all, which is precisely what four passes of carrying produced |
 | 5 | #786 | `simpleTypeDecidable`'s last decline is conservative, not forced. Its premise — that a `simpleType` naming none of §3.16.2.1's three alternatives needs a conservative decline — is a candidate for expiry now that #447 and #738 landed `<list>` and `<union>`; converting it turns declines into decisions in `schema` |
-| 6 | #719 | `cvc-assertion` wired fail-open at every variety level — the M6 seam, marked and measured. Below #733/#786 because it converts silent wrongness into honest declines, which the lane scores the same. It also decides the encoding **#56** needs one milestone later (STYLE D4) |
-| 7 | #625 → #669 → #748 → #492 | **README's Library block, now ONE row in file order.** Splitting it across two band rows is why it sat four passes. #625 fixes the `SchemaBuilder` pointer at closed #203 (:123-124); #669 the "works TODAY" snippet, the example list and `go doc ./...`; #748 the M5 block that denies a shipped API (:126-133); #492 `ParseReport`, which belongs in the sentence at `README.md:116` rather than a new paragraph. All four verified against the file this pass |
+| 6 | #719 | `cvc-assertion` wired fail-open at every variety level — the M6 seam, marked and measured. Below #733/#786 because it converts silent wrongness into honest declines, which the lane scores the same. It also decides the encoding **#56** needs one milestone later |
+| 7 | #625 → #669 → #748 → #492 | **README's Library block, now ONE row in file order.** Splitting it across two band rows is why it sat four passes. #625 fixes the `SchemaBuilder` pointer at closed #203 (:123-124); #669 the "works TODAY" snippet, the example list and `go doc ./...`; #748 the M5 block that denies a shipped API (:126-133); #492 `ParseReport`, which belongs in the sentence at `README.md:116` rather than a new paragraph |
 | 8 | #747 + #514 + #687 + #672 | the CLI contract, all four decided **before** #472 — the missing "Implemented today" paragraph, typo-vs-unbuilt, scoped help, `-version`. Each is a sentence or a dispatch branch while the CLI surface is still empty, and a change to shipped behaviour afterwards |
-| 9 | #472 | implement `goxsd8 parse`, the first non-stub subcommand — and the issue that owns the exit-2 split, plus the forward-compat sentence folded onto it this pass |
-| 10 | #682 + #668 + #802 | **the container tax, actionable half.** #682 and #668: `wipsurvey` and `gapaudit` both have a working no-`gh` mode documented only in their own package docs, so the three places a session reads show a dead `gh issue list \|` pipeline. #802: the clone is shallow and nothing says so. This pass paid all three by hand. **#659** and **#527** are the prose half of the same paragraph and land with it |
+| 9 | #472 | implement `goxsd8 parse`, the first non-stub subcommand — and the issue that owns the exit-2 split, plus the forward-compat sentence folded onto it |
+| 10 | #682 + #668 + #802 | **the container tax, actionable half.** #682 and #668: `wipsurvey` and `gapaudit` both have a working no-`gh` mode documented only in their own package docs, so the three places a session reads show a dead `gh issue list \|` pipeline. #802: the clone is shallow and nothing says so. Both of the last two full passes paid all three by hand. **#659** and **#527** are the prose half of the same paragraph and land with it |
 
-**#722 is not banded because it is being worked** (`wip/issue-722`, LIVE). If
-that branch goes stale without landing, #722 returns near the top — it is the
-tool defect that nearly retired a live session's branch.
-
-**Deliberately unbanded, and why.** **#744** (chained-redefine successor,
-highest-value M4 gap), **#773** and **#721** are held out on one shared
-condition: each needs a warden pre-flight on an entry point that does not exist.
-**That condition has an owner — #484** — which is why a process issue is worth
-more than its label suggests here: it unblocks three band-grade issues at once.
-**#774** is three fail-open declines to close or rule permanent; which way it
-moves a lane is unknown until the first is decided, and **#795** pins the
-element-side one either way. **#771** is the last decided-and-disagreeing
-`instance` case once #800 lands. **#782**, **#783**, **#785**, **#787**, **#788**,
-**#793**, **#794**, **#796** are earlier landings' follow-ups; **#794** grew a
-third site with #790.
+**Deliberately unbanded, and why.** **#744** (chained-redefine successor, highest-
+value M4 gap), **#773** and **#721** are held out on one shared condition: each
+needs a warden pre-flight on an entry point that does not exist. **That condition
+has an owner — #484** — which is why a process issue is worth more than its label
+suggests here: it unblocks three band-grade issues at once. **#774** is three
+fail-open declines to close or rule permanent; which way it moves a lane is
+unknown until the first is decided, and **#795** pins the element-side one either
+way. **#771** is the last decided-and-disagreeing `instance` case once #800 lands.
+**#782**, **#783**, **#785**, **#787**, **#788**, **#793**, **#794**, **#796** are
+earlier landings' follow-ups. **#805** and **#806** are this landing's and join
+them: both are `tools/wipsurvey` hygiene on a tool that now works, and #806 wants
+a measurement before it wants code.
 
 **`parser/redefine.go` has been rewritten five times in a week, so read it rather
 than an issue body that describes it.** #686, #699, #506, #503 and #504 each
@@ -245,6 +227,10 @@ measurement, and that is as far as judgment can carry the ordering. **#570** is
 the issue that makes it cheap and permanent: bank a per-lane decline baseline so
 every landing announces the cases it just made decidable, instead of each pass
 re-running a standing count. **#571** is its soundness half.
+
+**Reconcile the queue count, do not re-derive it.** The 195 → 193 gap above is
+one unexplained issue, and a fresh count that happens to agree with neither
+figure will not settle it.
 
 The follow-up-ledger debt this section carried for eleven stamps is **discharged
 and closed** (#489); do not re-file it. WORKFLOW step 7(b)'s *a hand-off is not
