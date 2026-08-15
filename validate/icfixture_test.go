@@ -8,9 +8,9 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// The fixtures below build ONE schema shape that cvcidentityconstraint_test.go
-// and cvcid_test.go both drive, with the identity constraints of <root> and of
-// <box> as their only parameters:
+// The fixtures below build the two schema shapes cvcidentityconstraint_test.go
+// and cvcid_test.go both drive. icSchema is the main one, with the identity
+// constraints of <root> and of <box> as its only parameters:
 //
 //	root  RootType  sequence( item*, box*, ref* )
 //	box   BoxType   sequence( item*, ref* )            — a subtree of its own
@@ -27,6 +27,10 @@ import (
 // are declared in it or not per the ns argument, and @p:id is in it always, so
 // one shape can pin the element-step/attribute-step asymmetry of
 // xpathDefaultNamespace.
+//
+// icUnfoldedSchema is the second shape, built precisely because the first one
+// names every type: it holds an UNFOLDED governing type, over top-level
+// attribute declarations colliding with that type's own uses.
 
 const icNS = "urn:p"
 
@@ -221,6 +225,94 @@ func icSchema(t *testing.T, ns string, nillable bool, rootICs, boxICs []xsd.Iden
 		t.Fatalf("finalizing the identity-constraint schema: %v", err)
 	}
 	return schema
+}
+
+// icTopAttribute builds a TOP-LEVEL attribute declaration of the named
+// builtin type, which is what an ·expanded name· ·resolves· to under §3.10.4.1.
+func icTopAttribute(t *testing.T, local, typ string) xsd.AttributeDeclaration {
+	t.Helper()
+	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: local},
+		xsd.TypeDefinitionRef{Name: icBuiltin(typ)}, xsd.NewAttributeGlobalScope(), nil, false, nil)
+	if err != nil {
+		t.Fatalf("building the top-level %s attribute declaration: %v", local, err)
+	}
+	return d
+}
+
+// icUnfoldedSchema builds the shape icSchema's every-type-named convention
+// cannot reach: <kid> OWNS an ANONYMOUS complex type restricting a named base,
+// so no finalize pass folds its {attribute uses} (#414,
+// attributePropertiesFolded), and the schema ALSO declares top-level attributes
+// of the same ·expanded names· carrying OTHER types.
+//
+//	root  RootType (named)              sequence( kid* )
+//	kid   (anonymous, restricts Base)   empty, @aid <kidAid>, @ref xs:IDREF
+//	Base  (named)                       empty
+//	top-level                           @aid <topAid>, @ref xs:IDREF
+//
+// kidAid is <kid>'s own governing type for @aid and topAid is the colliding
+// top-level one, so a fixture spells both halves of the misreading a top-level
+// lookup would be: the two differ in exactly what the rule under test reads.
+func icUnfoldedSchema(t *testing.T, kidAid, topAid string, rootICs []xsd.IdentityConstraint) *xsd.Schema {
+	t.Helper()
+	seeded := icSeeded(t)
+
+	kidID := xsd.NewComponentID()
+	kidType, err := xsd.NewAnonymousComplexType(xsderr.Loc{},
+		xsd.ElementDeclarationContext{Component: kidID}, xsd.QName{Local: "Base"}, nil,
+		xsd.DerivationRestriction, false, []xsd.AttributeUse{
+			icUse(t, xsd.QName{Local: "aid"}, kidAid),
+			icUse(t, xsd.QName{Local: "ref"}, "IDREF"),
+		}, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("building the anonymous kid type: %v", err)
+	}
+	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: xsd.QName{Local: "RootType"}})
+	if err != nil {
+		t.Fatalf("NewLocalScope: %v", err)
+	}
+	kid, err := xsd.NewElementDeclarationOwningType(xsderr.Loc{}, kidID, xsd.QName{Local: "kid"}, kidType,
+		nil, scope, nil, false, nil, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("building the kid element declaration: %v", err)
+	}
+	rootType := icComplex(t, "RootType", nil, icContent(t, icRepeated(t, kid)))
+	root, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
+		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
+		nil, false, rootICs, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+
+	b := xsd.NewSchemaBuilder()
+	for _, st := range seeded {
+		b.AddType(st)
+	}
+	b.AddType(icComplex(t, "Base", nil, xsd.EmptyContent{}))
+	b.AddType(rootType)
+	b.AddElement(root)
+	b.AddAttribute(icTopAttribute(t, "aid", topAid))
+	b.AddAttribute(icTopAttribute(t, "ref", "IDREF"))
+	for _, ic := range rootICs {
+		b.AddIdentityConstraint(ic)
+	}
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the unfolded-type schema: %v", err)
+	}
+	return schema
+}
+
+// icKid is <kid> at line, carrying the named no-namespace attributes, in
+// icItem's own curried shape: names first, values applied.
+func icKid(line int, names ...string) func(...string) *testElement {
+	return func(values ...string) *testElement {
+		attrs := make([]Attribute, 0, len(names))
+		for i, n := range names {
+			attrs = append(attrs, icAttr(xsd.QName{Local: n}, values[i], line))
+		}
+		return icElem(xsd.QName{Local: "kid"}, line, attrs)
+	}
 }
 
 // icAssess assesses root against schema and returns the violations charged.

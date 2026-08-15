@@ -311,7 +311,7 @@ func assessInstance(v *validate.Validator, doc string) (*validate.Result, bool) 
 }
 
 // These are the eight rules validate.Validator.Assess charges, and the whole of
-// what this lane may read as a verdict. All six are catalog IDs in their BARE
+// what this lane may read as a verdict. All eight are catalog IDs in their BARE
 // form: the charged clause lives in the message text, not in a dotted rule ID,
 // so matching the rule alone is the only stable match — and it is the right
 // one, since a root failing ANY clause of any of the eight is not locally valid

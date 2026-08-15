@@ -303,6 +303,11 @@ func (c *icCheck) pendElement(t *icTarget, i int) {
 // branches of a union both select is offered once. An XPath union is a sequence
 // of distinct NODES, so offering it twice would charge clause 3 for a field
 // like `@id|@*` that selects exactly one.
+//
+// An attribute whose ·governing type definition· [walk.attributeType] could not
+// name declines the slot rather than being skipped: the [schema actual value]
+// clause 3 reads is that type's, and comparing the member under the wrong
+// simple type decides clause 4.1 by the wrong ·value space·.
 func (c *icCheck) fieldAttributes(w *walk, t *icTarget, i int, tests []icNameTest) {
 	for _, a := range c.e.Attributes() {
 		if !icMatchesAny(tests, a.Name()) {
@@ -364,7 +369,7 @@ func (w *walk) identityExit(c *icCheck) {
 // fill records c's element as the field node it was selected as, from its own
 // ·governing type definition· and its own ·initial value·.
 //
-// Two shapes decline rather than contribute a value, each because the
+// Three shapes decline rather than contribute a value, each because the
 // [schema actual value] §3.11.4 clause 3 reads does not exist for them:
 //
 //   - a ·governing type definition· that is not a simple type definition and

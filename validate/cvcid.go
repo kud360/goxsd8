@@ -399,8 +399,20 @@ var (
 // [walk.unmatchedAttribute] charges in its own right, and the type this reads
 // off a top-level declaration is the type that attribute would have been
 // assessed against wherever it is admitted at all.
+//
+// GAP(xsd): a governing type whose {attribute uses} are NOT folded (assess.go's
+// attributePropertiesFolded, #414) reports false for EVERY attribute, whether
+// or not a top-level declaration of the name exists. The wildcard arm is no
+// fallback for a use arm that cannot be decided: that declaration is a
+// DIFFERENT component from the unseen use's, so a lookup succeeding there
+// governs the attribute by whichever type the schema happens to ALSO declare at
+// the top level. Both callers turn the false into their own decline
+// ([walk.idAttributes], [icCheck.fieldAttributes]).
 func (w *walk) attributeType(e Element, g governance, a Attribute) (*xsd.SimpleType, bool) {
-	if ct := g.complexType(); ct != nil && attributePropertiesFolded(*ct) {
+	if ct := g.complexType(); ct != nil {
+		if !attributePropertiesFolded(*ct) {
+			return nil, false
+		}
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
 			d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 			if !resolved {

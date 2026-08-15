@@ -127,6 +127,37 @@ func TestAnUntypedItemDeclinesClauseOneAndNotClauseTwo(t *testing.T) {
 		icChargeAttr(ruleCvcID, 4))
 }
 
+// An attribute of an UNFOLDED governing type declines even where a top-level
+// declaration of its ·expanded name· exists: that declaration is a different
+// component from the {attribute declaration} of the use this package cannot
+// see, so its type is not the ·governing type definition· (walk.attributeType).
+// Reading it would classify @aid by whichever type the schema happens to also
+// declare at the top level, and charge clause 1 against a document whose own
+// type declares the id.
+func TestUnfoldedAttributeDeclinesOverACollidingTopLevelType(t *testing.T) {
+	// @aid is xs:ID where <kid>'s own type governs it and xs:string at the
+	// top level, so the top-level reading declares no id at all.
+	schema := icUnfoldedSchema(t, "ID", "string", nil)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(icKid(2, "aid", "ref")("x1", "x1"))))
+	// The decline holds in the other direction too: a reference this package
+	// cannot type is not charged for the declaration it never read.
+	icWantCharges(t, icAssess(t, schema, icRoot(icKid(2, "ref")("ghost"))))
+}
+
+// The same decline keeps clause 2 from charging a duplicate the document does
+// not have: an item read under the WRONG type is not the unread item
+// [idTable.charge]'s asymmetry reasons about, since it adds a binding member
+// off a type that governs nothing here.
+func TestUnfoldedAttributeDeclinesRatherThanManufacturingADuplicate(t *testing.T) {
+	// @aid is xs:string where <kid>'s own type governs it and xs:ID at the
+	// top level, so the top-level reading declares one id twice.
+	schema := icUnfoldedSchema(t, "string", "ID", nil)
+
+	icWantCharges(t, icAssess(t, schema,
+		icRoot(icKid(2, "aid")("x1"), icKid(3, "aid")("x1"))))
+}
+
 // The rule ID is the BARE catalog name, with the clause in the message text.
 func TestCvcIDRuleIsTheBareCatalogName(t *testing.T) {
 	if !xsderr.IsValidRule(ruleCvcID) {
