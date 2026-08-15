@@ -20,8 +20,9 @@ func TestClassify(t *testing.T) {
 	}
 
 	// A case that omits anc gets ancestryUnresolved — git declined to
-	// answer — which is the state in which classify must behave exactly as
-	// it did before it could ask about ancestry at all.
+	// answer — which reaches the same verdict it did before this tool could
+	// ask about ancestry at all, with a reason that says the ancestry was
+	// undecided (#806).
 	cases := []struct {
 		name        string
 		branch      string
@@ -204,6 +205,33 @@ func TestClassify(t *testing.T) {
 			wantReason:  "past",
 		},
 		{
+			name:        "unresolved ancestry says so on an expired row",
+			branch:      "wip/issue-22",
+			tip:         tip(600),
+			anc:         ancestryUnresolved,
+			issue:       &issueState{number: 22, closed: false, needsReplan: false},
+			wantVerdict: expired,
+			wantReason:  "ancestry against main undecided",
+		},
+		{
+			name:        "unresolved ancestry says so on a live row too",
+			branch:      "wip/issue-23",
+			tip:         tip(5),
+			anc:         ancestryUnresolved,
+			issue:       &issueState{number: 23, closed: false, needsReplan: false},
+			wantVerdict: live,
+			wantReason:  "ancestry against main undecided",
+		},
+		{
+			name:        "unresolved ancestry names the fetch that would decide it",
+			branch:      "wip/issue-24",
+			tip:         tip(600),
+			anc:         ancestryUnresolved,
+			issue:       nil,
+			wantVerdict: expired,
+			wantReason:  "run `git fetch origin`",
+		},
+		{
 			name:        "zero-commit branch with no issue data still says lease-only",
 			branch:      "wip/issue-21",
 			tip:         tip(600),
@@ -251,6 +279,42 @@ func TestClassifyNeverExpiresABorrowedTip(t *testing.T) {
 		got, reason := classify("wip/issue-98", &tip, ancestryNoCommits, fixedNow, nil)
 		if got != claimed {
 			t.Errorf("classify with a %dm-old borrowed tip = %s, want CLAIMED (reason: %s)", agoMinutes, got, reason)
+		}
+	}
+}
+
+// TestClassifyMarksOnlyUndecidedAncestry pins the marker to the rows it
+// belongs on. An age-based verdict earns it when git could not place the
+// branch against main, because the age it rests on may then be the
+// borrowed one #722 is about; a verdict whose ancestry git did decide must
+// NOT carry it, or the marker stops distinguishing anything (#806).
+func TestClassifyMarksOnlyUndecidedAncestry(t *testing.T) {
+	const marker = "ancestry against main undecided"
+	tips := []struct {
+		name string
+		tip  time.Time
+	}{
+		{"fresh", fixedNow.Add(-5 * time.Minute)},
+		{"stale", fixedNow.Add(-10 * time.Hour)},
+	}
+	decided := []struct {
+		name string
+		anc  ancestry
+	}{
+		{"ownCommits", ancestryOwnCommits},
+		{"noCommits", ancestryNoCommits},
+	}
+
+	for _, tc := range tips {
+		got, reason := classify("wip/issue-1", &tc.tip, ancestryUnresolved, fixedNow, nil)
+		if !strings.Contains(reason, marker) {
+			t.Errorf("classify(%s tip, unresolved) = %s, reason %q lacks %q", tc.name, got, reason, marker)
+		}
+		for _, d := range decided {
+			got, reason := classify("wip/issue-1", &tc.tip, d.anc, fixedNow, nil)
+			if strings.Contains(reason, marker) {
+				t.Errorf("classify(%s tip, %s) = %s, reason %q calls an ancestry git decided undecided", tc.name, d.name, got, reason)
+			}
 		}
 	}
 }

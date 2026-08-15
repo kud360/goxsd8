@@ -45,6 +45,13 @@
 // and is not resumable on age evidence alone. What settles a CLAIMED
 // branch is the issue thread's own clock, which this tool does not read.
 //
+// That ancestry test needs main's commit object in this checkout, while
+// the SHA it tests against comes live from ls-remote, so a checkout that
+// last fetched before the most recent landing cannot decide it. Such a row
+// falls back to its tip age and its reason says the ancestry was
+// undecided, which is what makes a LIVE or EXPIRED there provisional
+// rather than settled (#806).
+//
 // Usage:
 //
 //	git fetch origin
@@ -266,7 +273,8 @@ type ancestry int
 const (
 	// ancestryUnresolved means git could not decide — the objects are not
 	// in this checkout, or the remote reported no main. Callers fall back
-	// to the tip age rather than inventing a second unknown verdict.
+	// to the tip age rather than inventing a second unknown verdict, and
+	// say in the reason that they did.
 	ancestryUnresolved ancestry = iota
 	// ancestryOwnCommits means the branch is not an ancestor of main: its
 	// tip is a commit the branch itself authored, so the tip age is the
@@ -406,7 +414,9 @@ const (
 //     it at all.
 //   - Only then the tip age, against the claim TTL. ancestryUnresolved
 //     lands here too — the age is the best evidence left, and it is the
-//     evidence this tool reported before it could ask about ancestry.
+//     evidence this tool reported before it could ask about ancestry — but
+//     its reason says the ancestry was undecided, so the verdict reads as
+//     provisional rather than settled (#806).
 func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue *issueState) (verdict, string) {
 	if issue != nil && issue.closed {
 		return retired, fmt.Sprintf("%s: issue #%d is closed", branch, issue.number)
@@ -425,11 +435,15 @@ func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue 
 	if anc == ancestryNoCommits {
 		return claimed, fmt.Sprintf("%s: no commits of its own; tip age is main's, not the claim's -- do not retire on age, settle it from the issue thread%s", branch, leaseNote)
 	}
+	ancestryNote := ""
+	if anc == ancestryUnresolved {
+		ancestryNote = "; ancestry against main undecided, so this age may be main's rather than the claim's -- run `git fetch origin`"
+	}
 	age := now.Sub(*tip)
 	if age <= claimTTL {
-		return live, fmt.Sprintf("%s: tip pushed %s ago, within the %s claim TTL%s", branch, formatAge(age), formatAge(claimTTL), leaseNote)
+		return live, fmt.Sprintf("%s: tip pushed %s ago, within the %s claim TTL%s%s", branch, formatAge(age), formatAge(claimTTL), ancestryNote, leaseNote)
 	}
-	return expired, fmt.Sprintf("%s: tip pushed %s ago, past the %s claim TTL%s", branch, formatAge(age), formatAge(claimTTL), leaseNote)
+	return expired, fmt.Sprintf("%s: tip pushed %s ago, past the %s claim TTL%s%s", branch, formatAge(age), formatAge(claimTTL), ancestryNote, leaseNote)
 }
 
 // formatAge renders a duration the way the report shows one: rounded to
