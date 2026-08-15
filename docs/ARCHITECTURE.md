@@ -415,15 +415,18 @@ use `regex`'s F&O flavor, never the pattern-facet flavor.
 
 ## Validation (`validate`)
 
-**Status: the engine ships the seam and decides the validation root's
-dispatch and its whole attribute half; the XML adapter ships over it.**
+**Status: the engine ships the seam, decides the validation root's dispatch
+and both halves of its type, and descends into the children that dispatch
+attributes to a declaration; the XML adapter ships over it.**
 `validate` exports the infoset views (`Element`, `Attribute`, `Text`,
 `Children`, `Child`) plus `New`/`Validator`/`Result`, and `Assess` walks a
 source once, charging `cvc-assess-elt`, `cvc-elt` clause 2,
-`cvc-complex-type` clauses 2-4, `cvc-attribute` clauses 3-4 and `cvc-au`
-against the root and nothing below it. The value-space charges reach a
-`value.Backend` through `New`'s required second parameter, which must be the
-backend the schema was compiled with.
+`cvc-complex-type` clauses 1-4, `cvc-complex-content` clause 1,
+`cvc-attribute` clauses 3-4 and `cvc-au` against the root and against every
+descendant whose ·governing element declaration· the descent determines
+(§3.3.4.6 clause 3.1). The value-space charges reach a `value.Backend`
+through `New`'s required second parameter, which must be the backend the
+schema was compiled with.
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and drives that walk
 over an XML instance decoded by `parser/xmltree`; `validate/jsonsrc` and
 `validate/bersrc` are `doc.go`-only (M8/M11). Everything below not covered

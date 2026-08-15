@@ -44,8 +44,9 @@ import (
 //
 // # The only outcomes this slice can DECIDE
 //
-// validate.Validator.Assess charges exactly six rules, all about the
-// ·validation root· and nothing below it:
+// validate.Validator.Assess charges exactly six rules, about the ·validation
+// root· and about any descendant the descent reaches (see "Charges at depth"
+// below):
 //
 //  1. cvc-assess-elt (§3.3.4.6), when the root has no top-level element
 //     declaration AND carries no xsi:type attribute. It then determines neither
@@ -94,7 +95,23 @@ import (
 //
 // All six are unconditional: no verdict here can be overturned by anything in
 // the rest of the document, which is what makes them decidable while the engine
-// assesses no child of the root and no value below it.
+// leaves most of the document undecided.
+//
+// # Charges at depth
+//
+// Cases 2 to 6 are charged against a DESCENDANT on the same terms as against
+// the root (#790), and stay unconditional there. §3.3.4.6 clause 3.1 has a
+// child assessed with respect to the ·governing element declaration· the
+// parent's content model ·attributed· it to, so a child validate charges is one
+// it was ·strictly assessed· against a declaration it really has, and its
+// [validity] is invalid (§3.3.5.1 clause 1.1.1). Every ancestor up to the root
+// is strictly assessed too — validate types a child only from a parent whose
+// own governing type it determined — and clause 1.1.2 makes an ancestor with an
+// invalid [[child]] invalid in turn, so the root's [validity] is invalid and the
+// document is not valid, whatever the unassessed rest of it holds. A charge
+// under a ·laxly assessed· ancestor, which clause 1.1.2 would NOT propagate,
+// cannot arise: validate charges nothing at all below an element whose
+// governing type it did not determine.
 //
 // Cases 3 to 6 rest on conditions validate checks rather than this file
 // assuming them: the attribute half of cvc-complex-type is reached only where
@@ -132,18 +149,19 @@ import (
 // [validity] is invalid, AND none attributed to a strict ·wildcard particle·
 // and left notKnown. Being ·strictly assessed· at all (key-sva, §3.3.4.6) is
 // itself a three-clause definition whose clauses 2 and 3 dispatch assessment
-// recursively into every attribute and child — which Assess does not do: it
-// decides the ROOT's own attributes and the ROOT's own [[children]] against its
-// {content type} (cases 3 to 6 above) and nothing else. No child of the root is
-// assessed against anything: the ·context-determined declaration· the matcher
-// ·attributes· each child to is not threaded into the descent, so no
-// descendant's attributes, [[children]] or value are decided. The spec has no
+// recursively into every attribute and child, which Assess now follows only as
+// far as it can type: a descendant is decided against the declaration its
+// parent's content model ·attributed· it to, and where that declaration or its
+// type is not determinable — an xsi:type, a {type table}, a simple or
+// unresolvable {type definition}, a name no top-level declaration matches under
+// a wildcard, a ·skipped· subtree — the element and everything below it is
+// decided against nothing. Every clause of every rule this engine does not
+// evaluate at all (cvc-type's simple half, identity constraints, assertions,
+// cvc-elt clauses 3 to 7) is undecided at every depth besides. The spec has no
 // category for "this processor did not implement that check" stronger than
 // notKnown, so an empty Result licenses no "valid" claim; equally it licenses
 // no "invalid" one, so an expected-invalid case in this shape declines exactly
-// as an expected-valid one does. Content-model matching now exists (case 6),
-// but it decides the ROOT's sequence alone: a document whose defect is one
-// level down still lands here.
+// as an expected-valid one does.
 //
 // The one shape that looks like case 1 and is not: a root with an xsi:type
 // attribute but no top-level declaration. Assess DETECTS that attribute and
@@ -159,7 +177,8 @@ import (
 // observation at all: an empty Result declines. So the lane can record a
 // still-failing gap for a suite-invalid case it cannot see the defect in, and
 // for a suite-valid case whose root is undeclared or abstract, but it cannot
-// score a pass on a document it did not really reject.
+// score a pass on a document it did not really reject — at the root or at any
+// depth, the charges being the same six either way.
 //
 // Case 3's ATTRIBUTE clauses are the ones whose unconditionality depends on a
 // schema COMPONENT being complete rather than on the instance alone: an
@@ -173,7 +192,7 @@ import (
 // Case 3's clause 1 and case 6 do not share that dependency, and are not
 // declined with it: no finalize pass folds a {content type}, so a complex
 // type's particle is whatever its producer built for it whether the type is
-// named or anonymous (validate's rootComplexType records the split).
+// named or anonymous (validate's governingComplexType records the split).
 //
 // The cvc-assess-elt charge does carry one hazard of its own: a root is equally
 // undeclared when an <import>/<include> the assembly did not follow took the

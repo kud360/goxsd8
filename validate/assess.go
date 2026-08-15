@@ -59,20 +59,24 @@ const ruleCvcComplexType xsderr.Rule = "cvc-complex-type"
 // name — and so is never charged.
 //
 // Where the root's ·governing type definition· is determinable and complex
-// (see rootComplexType), the root itself is additionally assessed against it,
-// in both directions cvc-complex-type (§3.4.4.2) quantifies in. Its
+// (see governingComplexType), the root itself is additionally assessed against
+// it, in both directions cvc-complex-type (§3.4.4.2) quantifies in. Its
 // [[attributes]] go to clauses 2, 3 and 4, and through clause 2.1 to the
 // cvc-attribute (§3.2.4.1) and cvc-au (§3.5.4) charges the value space
 // decides (see [walk.attributes] and cvcattribute.go). Its [[children]] go to
 // clause 1, and through clause 1.4 to cvc-complex-content (§3.4.4.3) over
 // [xsd.Matcher] (see cvccomplexcontent.go).
 //
-// Nothing below the root is assessed against anything. A DESCENDANT's
-// ·governing type definition· comes from the particle its parent's content
-// model ·attributes· it to (§3.3.4.6 over §3.4.4.4) — which the root's own
-// match now computes and this package does not yet thread into the descent —
-// so a descendant's attributes and [[children]] alike are assessed against no
-// type at all.
+// A DESCENDANT is assessed the same way, against the ·governing element
+// declaration· the particle its parent's content model ·attributes· it to
+// supplies (§3.3.4.6 clause 3.1 over §3.4.4.4, [walk.childGoverning]): its own
+// [[attributes]], its own [[children]] and its own ·initial value· reach the
+// same charges the root's do. Two shapes below the root are not: a child
+// ·attributed to· a skip Wildcard, which is ·skipped· along with every element
+// beneath it (clause 3.2), and a child whose declaration this package cannot
+// determine, which is walked against no type at all — clause 3.3's ·lax
+// assessment· against xs:anyType, whose {content type} and {attribute uses}
+// constrain nothing any of these charges reads.
 //
 // Nothing else is decided: the remaining cvc-elt clauses, the rest of
 // cvc-type (§3.3.4.4) and cvc-complex-type's own clauses 5 and 6 are not
@@ -108,29 +112,38 @@ func (v *Validator) Assess(root Element) *Result {
 			"the validation root %s is governed by an element declaration whose {abstract} is true, but cvc-elt clause 2 requires it to be false: an abstract declaration validates no element information item",
 			root.Name()))
 	}
-	w.element(root, v.rootComplexType(root, d, found))
+	var governing *xsd.ComplexType
+	if found {
+		governing = w.governingComplexType(root, d)
+	}
+	w.element(root, governing)
 	return &w.res
 }
 
-// rootComplexType is the ·governing type definition· (§3.3.4.6) of the
-// validation root, narrowed to the Complex Type Definition cvc-type clause
-// 3.2 dispatches to cvc-complex-type for; it is nil wherever this package
-// cannot determine that type, and the root's attributes are then assessed
-// against nothing.
+// governingComplexType is the ·governing type definition· (§3.3.4.6) of an
+// element information item whose ·governing element declaration· is d, narrowed
+// to the Complex Type Definition cvc-type clause 3.2 dispatches to
+// cvc-complex-type for; it is nil wherever this package cannot determine that
+// type, and the element's attributes are then assessed against nothing.
 //
 // Determinable here means the whole of key-governing-type-elem's clause 4
 // case: no processor-stipulated type (this package stipulates none), no
 // ·instance-specified type definition· overriding it, and a ·selected type
 // definition· (§3.3.4.1) that is D.{type definition} outright. Each decline
 // below withholds a type that could differ from the declaration's, and
-// assessing the root against the WRONG type is a false reject in both
+// assessing the element against the WRONG type is a false reject in both
 // directions — an attribute the real governing type declares looks unmatched,
 // a child its real {content type} admits looks unattributable.
 //
 //   - GAP(xsd): an xsi:type makes the ·instance-specified type definition·
 //     the governing one (clause 3) when it ·overrides· the selected type,
 //     and ·resolving· it is cvc-resolve-instance (§3.17.6.3), unimplemented.
-//     Presence alone is the decline (#716).
+//     Presence alone is the decline, at the ·validation root· and at every
+//     descendant the descent reaches alike: a descendant carrying xsi:type is
+//     assessed against no type rather than against the one its
+//     ·context-determined declaration· names, which the attribute may have
+//     ·overridden· with a derived type admitting content the declared one
+//     rejects (#716).
 //   - GAP(xpath): a {type table} makes the selected type the one its
 //     <alternative>s ·conditionally select· (§3.3.4.2), which means
 //     evaluating each {test} as an XPath expression (#56).
@@ -146,14 +159,14 @@ func (v *Validator) Assess(root Element) *Result {
 // the content half does not, because no finalize pass folds a {content type}
 // the way §3.4.2.4 clause 3 folds {attribute uses} — a complex type's
 // {content type} is whatever its producer built for it, named or anonymous.
-func (v *Validator) rootComplexType(root Element, d xsd.ElementDeclaration, found bool) *xsd.ComplexType {
-	if !found || hasInstanceType(root) {
+func (w *walk) governingComplexType(e Element, d xsd.ElementDeclaration) *xsd.ComplexType {
+	if hasInstanceType(e) {
 		return nil
 	}
 	if _, tabled := d.TypeTable(); tabled {
 		return nil
 	}
-	t, ok := v.schema.ResolvedType(d.TypeDefinition())
+	t, ok := w.schema.ResolvedType(d.TypeDefinition())
 	if !ok {
 		return nil
 	}
@@ -162,6 +175,78 @@ func (v *Validator) rootComplexType(root Element, d xsd.ElementDeclaration, foun
 		return nil
 	}
 	return &ct
+}
+
+// childGoverning is cvc-assess-elt (§3.3.4.6) clause 3 for one child element
+// information item, read off the ·attribution· its parent's content model just
+// gave it (§3.4.4.4): the ·governing type definition· to assess it against,
+// narrowed exactly as the ·validation root·'s is (governingComplexType), and
+// whether it is assessed at all.
+//
+// assess is false for one shape alone, clause 3.2's: a child ·attributed to· a
+// skip Wildcard is not ·assessed·, and neither is any element below it —
+// ·skipped· (§3.10.4.1, key-skipped) holds for an item "attributed to a skip
+// wildcard or if one of its ancestor elements is". cvc-wildcard makes that a
+// hard stop and not a permissive pass: a skip wildcard leaves the item with no
+// ·governing element declaration· at all and runs no ·QName resolution· to look
+// for one, so skip and clause 3.3 are different outcomes and not two spellings
+// of one.
+//
+// The declaration the type is read off is key-governing-ed's, one case per
+// [xsd.Attribution] variant (STYLE T2's closed-sum exception):
+//
+//   - clause 2, the ·context-determined declaration·: an ElementDeclaration
+//     attribution whose ·expanded name· is the child's own is the {term} of the
+//     element particle the child was ·attributed to·.
+//   - clause 2 through the ·substituting declaration·: an ElementDeclaration
+//     attribution with ANOTHER name is the particle's own D, which cvc-accept
+//     clause 2.3.2 admitted the child under as a member of D's ·substitution
+//     group·. The ·context-determined declaration· is then that member and
+//     never D ([xsd.Attribution]), and a member is top-level by construction
+//     (§3.3.6.4, cos-equiv-class), so it is the resolution below.
+//   - clause 3, for a strict or a lax Wildcard: the declaration the child's
+//     ·expanded name· ·resolves· to among the schema's top-level element
+//     declarations, which is the resolution [Validator.Assess] makes for the
+//     root. The two {process contents} share it exactly — §3.10.4.1 draws no
+//     distinction in the resolution step itself — and what they differ in is
+//     what an UNRESOLVED name under a strict wildcard costs the PARENT's
+//     [validity] (§3.3.5.1 clause 1.1.3), a property this package computes for
+//     no item at all.
+//
+// A nil attribution is a parent that attributed the child to nothing: no
+// ·governing type definition· of its own, an element already charged, or a
+// child clause 1.4 declined or rejected. It leaves the child assessed against
+// nothing, which is where every descendant was before the descent existed.
+func (w *walk) childGoverning(e Element, a xsd.Attribution) (*xsd.ComplexType, bool) {
+	switch t := a.(type) {
+	case xsd.ElementDeclaration:
+		if t.Name() != e.Name() {
+			return w.resolvedComplexType(e), true
+		}
+		return w.governingComplexType(e, t), true
+	case xsd.Wildcard:
+		if t.ProcessContents() == xsd.ProcessSkip {
+			return nil, false
+		}
+		return w.resolvedComplexType(e), true
+	default:
+		return nil, true
+	}
+}
+
+// resolvedComplexType is the ·governing type definition· of an element whose
+// ·governing element declaration· is the one its ·expanded name· ·resolves· to
+// among the schema's top-level element declarations (cvc-resolve-instance,
+// §3.17.6.3). A name that resolves to nothing leaves the element with no
+// declaration to read a type off, which is cvc-assess-elt clause 3.3 and no
+// charge of its own: an unresolved name is the PARENT's business where it is
+// anyone's (§3.3.5.1 clause 1.1.3) and never the child's.
+func (w *walk) resolvedComplexType(e Element) *xsd.ComplexType {
+	d, found := w.schema.Element(e.Name())
+	if !found {
+		return nil
+	}
+	return w.governingComplexType(e, d)
 }
 
 // attributePropertiesFolded reports whether ct's {attribute uses} and
@@ -266,11 +351,13 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // governing is e's ·governing type definition· narrowed to a complex type,
 // or nil where none was determined. It decides e's own [[attributes]]
 // (cvc-complex-type clauses 2 to 4) and e's own [[children]] (clause 1,
-// cvccomplexcontent.go), and it is NOT propagated to the children themselves:
-// a child's governing type follows from the particle it is ·attributed to·
-// in its parent's {content type} (§3.4.4.4), which this package computes but
-// does not yet thread into the recursive descent, so every element below the
-// validation root is assessed against nil.
+// cvccomplexcontent.go), and it is not propagated to the children as it
+// stands: each of them gets its OWN, off the particle e's {content type}
+// ·attributes· it to (§3.4.4.4, [walk.childGoverning]), which is
+// cvc-assess-elt clause 3.1's "the one identified in the course of checking
+// the local validity of the parent". A nil governing therefore ends the typed
+// descent at e — a check with no type attributes nothing — and e's subtree is
+// walked against nil throughout.
 func (w *walk) element(e Element, governing *xsd.ComplexType) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
@@ -291,7 +378,7 @@ func (w *walk) element(e Element, governing *xsd.ComplexType) {
 // attribute PROPERTIES are not the spec's yet is narrowed to that same
 // nothing here, and here only — its {content type} still decides its
 // element's [[children]] (see attributePropertiesFolded and
-// [Validator.rootComplexType]).
+// governingComplexType).
 func (w *walk) attributes(e Element, governing *xsd.ComplexType) {
 	folded := governing
 	if folded != nil && !attributePropertiesFolded(*folded) {
@@ -419,6 +506,22 @@ func (w *walk) logAttribute(a Attribute, rule xsderr.Rule, clause, outcome strin
 	w.log.LogAttrs(context.Background(), slog.LevelDebug, "assessing attribute", attrs...)
 }
 
+// logSkipped records the one child the walk does not assess at all: cvc-assess-elt
+// clause 3.2's, ·attributed to· a skip Wildcard. It is written here because
+// [walk.element] is never reached for it, so its "assessing element" line —
+// which every other element gets, whatever was or was not decided about it
+// (STYLE L1) — has nowhere else to come from, and it carries the outcome that
+// says the subtree below is unvisited rather than merely undecided.
+func (w *walk) logSkipped(e Element) {
+	if !w.log.Enabled(context.Background(), slog.LevelDebug) {
+		return
+	}
+	w.log.LogAttrs(context.Background(), slog.LevelDebug, "assessing element",
+		slog.Any("name", e.Name()), slog.Any("loc", e.Loc()),
+		slog.String("rule", string(ruleCvcAssessElt)), slog.String("clause", "3.2"),
+		slog.String("outcome", "skipped"))
+}
+
 // attributeUseNamed reports the attribute use among uses whose {attribute
 // declaration} has the ·expanded name· n, as clause 2.1 matches. The name is
 // read off the use itself ([xsd.AttributeUse.DeclarationName]) and never off
@@ -503,15 +606,27 @@ func (w *walk) children(e Element, content *contentCheck) {
 
 // child assesses one child, whichever arm it holds: against content first —
 // where the item sits in its parent's {content type} is a fact about the
-// PARENT — and then, for an element, as a subtree of its own. A Child holding
+// PARENT — and then, for an element, as a subtree of its own, against the
+// ·governing type definition· that same content check just ·attributed· it
+// (cvc-assess-elt clause 3.1, [walk.childGoverning]). A Child holding
 // neither arm is an adapter bug, not a fault in the source, so it panics
 // rather than reaching [Result.Err] — that field means the walk stopped on a
 // source fault, and a CLI would otherwise report a bug in an adapter to a user
 // as a broken document.
+//
+// A ·skipped· child stops here and not one level down, which is what makes it
+// the whole SUBTREE that is not ·assessed· (clause 3.2): [walk.element] is the
+// only path to a child's own [[children]], so declining to call it leaves every
+// element below the skipped one unvisited, whatever its own attribution would
+// have been.
 func (w *walk) child(c Child, content *contentCheck) {
 	if e, ok := c.Element(); ok {
-		content.element(w, e)
-		w.element(e, nil)
+		governing, assess := w.childGoverning(e, content.element(w, e))
+		if !assess {
+			w.logSkipped(e)
+			return
+		}
+		w.element(e, governing)
 		return
 	}
 	t, ok := c.Text()
