@@ -800,10 +800,94 @@ func TestProduceUnionMembershipDiamondAccepted(t *testing.T) {
 	}
 }
 
-func TestProduceEnumerationFacetRejected(t *testing.T) {
-	body := `<xs:simpleType name="E"><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType>`
-	_, err := produce(t, wrap("", body))
-	assertRule(t, err, "src-simple-type")
+// TestProduceEnumerationFacetFolded pins xr-enumeration (§4.3.5.2): every
+// <enumeration> child of ONE <restriction> contributes a member to a SINGLE
+// enumeration facet, whose {value} lists them in document order and which lands
+// at the FIRST <enumeration> child's position among the sibling facets (STYLE
+// D2). One facet per child would be two same-kind own facets, which
+// st-props-correct clause 4 rejects; src-simple-type clause 1 excepts
+// xs:enumeration from its no-two-same-named-children rule, so the several-child
+// schema is legal and charging that rule on it was fabricated (#740).
+func TestProduceEnumerationFacetFolded(t *testing.T) {
+	body := `<xs:simpleType name="E"><xs:restriction base="xs:string">` +
+		`<xs:minLength value="1"/>` +
+		`<xs:enumeration value="b"/>` +
+		`<xs:enumeration value="a"/>` +
+		`<xs:maxLength value="9"/>` +
+		`<xs:enumeration value="c"/>` +
+		`</xs:restriction></xs:simpleType>`
+	s, err := produce(t, wrap("", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	td, ok := s.Type(xsd.QName{Local: "E"})
+	if !ok {
+		t.Fatal("type E not found")
+	}
+	st, ok := td.(*xsd.SimpleType)
+	if !ok {
+		t.Fatalf("type E = %T, want *xsd.SimpleType", td)
+	}
+	facets := st.OwnFacets()
+	kinds := make([]xsd.FacetKind, 0, len(facets))
+	for _, f := range facets {
+		kinds = append(kinds, f.Kind())
+	}
+	wantKinds := []xsd.FacetKind{xsd.FacetMinLength, xsd.FacetEnumeration, xsd.FacetMaxLength}
+	if !slices.Equal(kinds, wantKinds) {
+		t.Fatalf("facet kinds = %v, want %v", kinds, wantKinds)
+	}
+	members, ok := facets[1].EnumerationMembers()
+	if !ok {
+		t.Fatal("facets[1] carries no enumeration members")
+	}
+	lexicals := make([]string, 0, len(members))
+	for _, m := range members {
+		lexicals = append(lexicals, m.Lexical())
+	}
+	if want := []string{"b", "a", "c"}; !slices.Equal(lexicals, want) {
+		t.Fatalf("enumeration {value} = %v, want %v in document order", lexicals, want)
+	}
+	if got := facets[1].Values(); !slices.Equal(got, lexicals) {
+		t.Fatalf("Values() = %v, want the members' lexical forms %v", got, lexicals)
+	}
+}
+
+// TestProduceCrossStepEnumerationReplaces guards the half of xr-enumeration that
+// is NOT xr-pattern's: §4.3.5.2 carries no union-with-the-base-facet clause, so a
+// derived restriction's enumeration is composed by the generic same-kind overlay
+// (st-restrict-facets §3.16.6.4, key-facets-overlay) and REPLACES the base's
+// outright. Under a union the base's other members would stay valid.
+func TestProduceCrossStepEnumerationReplaces(t *testing.T) {
+	st, sch := simpleTypeOf(t, "derived", `<xs:simpleType name="base">
+	  <xs:restriction base="xs:string">
+	    <xs:enumeration value="a"/>
+	    <xs:enumeration value="b"/>
+	    <xs:enumeration value="c"/>
+	  </xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="derived">
+	  <xs:restriction base="base"><xs:enumeration value="a"/></xs:restriction>
+	</xs:simpleType>`)
+
+	var enums []xsd.Facet
+	for _, ef := range mustEffectiveFacets(t, sch, st) {
+		if ef.Facet().Kind() == xsd.FacetEnumeration {
+			enums = append(enums, ef.Facet())
+		}
+	}
+	if len(enums) != 1 {
+		t.Fatalf("effective enumeration facets = %d, want 1 (the derived step replaces the base's)", len(enums))
+	}
+	if got := enums[0].Values(); !slices.Equal(got, []string{"a"}) {
+		t.Fatalf("effective enumeration {value} = %v, want [a] — a union with the base's would carry b and c", got)
+	}
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "a", nil); err != nil {
+		t.Errorf(`ValidateLexical("a") = %v, want accept`, err)
+	}
+	if _, err := value.ValidateLexical(strict.New(), sch, st, "b", nil); err == nil {
+		t.Error(`ValidateLexical("b") = nil, want a cvc-enumeration-valid rejection: the base's member is not the derived's`)
+	}
 }
 
 func TestProduceElementTypeAndInlineRejected(t *testing.T) {

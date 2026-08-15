@@ -202,14 +202,14 @@ import (
 //       three §3.16.2.1 alternatives are admitted. <list> is produced in both its
 //       forms (#447) and <union> in all three of its (#738), and every inline
 //       <simpleType> item or member child is recursed into. <restriction> is
-//       admitted unless its children include an <enumeration> (still a
-//       not-yet-produced facet rejected by src-simple-type §3.16.3; DECLINED); an
-//       <assertion> facet IS produced (#178, one assertions facet per
-//       restriction, Datatypes §4.3.13) and is admitted, and an inline
-//       <simpleType> base child (§3.16.3 clause 2) is recursed into. No
-//       alternative's member-source arrangement is pre-checked: those ARE the
-//       genuine src-simple-type clauses 2, 3 and 4 Produce correctly enforces, so
-//       a violation flows through as a real decidable rejection.
+//       admitted outright: every constraining facet it can carry is produced,
+//       the two folded ones included — one assertions facet per restriction
+//       (#178, Datatypes §4.3.13) and one enumeration facet per restriction
+//       (#740, §4.3.5.2 xr-enumeration) — and an inline <simpleType> base child
+//       (§3.16.3 clause 2) is recursed into. No alternative's member-source
+//       arrangement is pre-checked: those ARE the genuine src-simple-type clauses
+//       2, 3 and 4 Produce correctly enforces, so a violation flows through as a
+//       real decidable rejection.
 //     - annotation: always allowed, no further check.
 //  4. Decide. When every document of the closure passes, observed =
 //     (parser.ParseReport's err == nil): a nil error is genuine evidence of
@@ -270,8 +270,8 @@ import (
 // assembly (by definition) has none of the checked violations, so Parse
 // correctly finds none. An "invalid" verdict coincides only with truly-invalid
 // ground truth via a REAL implemented violation — never a fabricated one, since
-// the shape allowlist excludes every form (inline element/attribute types,
-// list/union/enumeration simpleTypes, ref= identity constraints, the
+// the shape allowlist excludes every form (a global attribute's inline type, a
+// simpleType naming none of §3.16.2.1's three alternatives, the
 // not-yet-produced complexType forms — <simpleContent> <restriction>, inline
 // anonymous local types — and the produced-but-unjudged extension
 // forms) where the producer's rejection would be a limitation rather than a spec
@@ -349,15 +349,15 @@ import (
 //
 // # Still deferred
 //
-// Inline anonymous types on element/attribute, list/union/enumeration
-// simpleTypes, ref= identity constraints and the not-yet-produced complexType
-// forms named above widen in with later slices (exactly as the datatypes lane
-// grew across #15/#57/#80); they stay DECLINED (Fail) recorded gaps here, never
-// guessed. UPA and EDC landed with #180, derivation-ok-restriction with #262
-// and cos-ct-extends with #264, so the admitted complexType cases those rules
-// reject — restriction and extension alike, the latter admitted by #336 — are
-// now decided; the cases still turning on cos-content-act-restrict (#263) stay
-// failing gaps rather than wins until that lands.
+// A global attribute's inline anonymous type and the not-yet-produced
+// complexType forms named above widen in with later slices (exactly as the
+// datatypes lane grew across #15/#57/#80); they stay DECLINED (Fail) recorded
+// gaps here, never guessed. UPA and EDC landed with #180,
+// derivation-ok-restriction with #262 and cos-ct-extends with #264, so the
+// admitted complexType cases those rules reject — restriction and extension
+// alike, the latter admitted by #336 — are now decided; the cases still turning
+// on cos-content-act-restrict (#263) stay failing gaps rather than wins until
+// that lands.
 //
 // A schemaTest with MORE THAN ONE <ts:schemaDocument> child declares a SET of
 // documents to be loaded "one by one, in order" (xsts.xsd, the suite's own
@@ -1169,14 +1169,21 @@ func localAttributeDecidable(el *parser.Element) bool {
 //     verdict a by-name member makes reachable is xsd's, charged at finalize
 //     under cos-st-restricts clause 3.3, so a cyclic membership is a genuine
 //     rejection here and not a decline.
-//   - <restriction>: admitted unless a child is <enumeration>, the one facet
-//     still not produced. An <assertion> facet IS produced (#178, one assertions
-//     facet per restriction, Datatypes §4.3.13). An inline <simpleType> base
+//   - <restriction>: admitted outright. Every constraining facet it can carry is
+//     produced, including the two folded ones — one assertions facet per
+//     restriction (#178, Datatypes §4.3.13) and one enumeration facet per
+//     restriction (#740, §4.3.5.2 xr-enumeration). An inline <simpleType> base
 //     child (§3.16.3 clause 2) is recursed into.
 //
 // A <simpleType> naming TWO alternatives is admitted through whichever branch is
 // tested first, and correctly: the producer rejects that document outright
 // (simpleTypeBody), so the verdict is genuine whichever branch let it through.
+//
+// A <simpleType> naming NONE of the three is the one shape left declining, and
+// the decline is now conservative rather than forced: simpleTypeBody rejects that
+// document under src-simple-type §3.16.3 just as genuinely, so admitting it would
+// not fabricate a verdict. Widening it is a measurable ratchet movement of its
+// own and stays out of the change that produced the enumeration facet (#740).
 func simpleTypeDecidable(el *parser.Element) bool {
 	if list := childXSD(el, "list"); list != nil {
 		inline := childXSD(list, "simpleType")
@@ -1202,13 +1209,8 @@ func simpleTypeDecidable(el *parser.Element) bool {
 		if r.Name().Space() != xsd.XMLSchemaNS {
 			continue
 		}
-		switch r.Name().Local() {
-		case "enumeration":
+		if r.Name().Local() == "simpleType" && !simpleTypeDecidable(r) {
 			return false
-		case "simpleType":
-			if !simpleTypeDecidable(r) {
-				return false
-			}
 		}
 	}
 	return true
