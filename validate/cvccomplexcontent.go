@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -25,9 +26,16 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 //     white space included. Empty is STRICTER than element-only (PRINCIPLES
 //     13), and clause 1.3's white-space allowance is the whole of the
 //     difference — 1.1 states no exception of any kind.
-//   - 1.2, simple: no element information item [[children]]. Its other half,
-//     the ·initial value· against the {simple type definition}, is not decided
-//     here (cvc-simple-type, §3.16.4, over an assembled ·initial value·).
+//   - 1.2, simple: no element information item [[children]], AND the ·initial
+//     value· — the [[character code]] of each character information item
+//     [[child]], concatenated in order (Glossary) — ·valid· with respect to the
+//     {simple type definition} per String Valid (§3.16.4). The first half is
+//     settled per child, the second only once the [[children]] are exhausted.
+//
+//     GAP(validate): String Valid clause 3, "every ·ENTITY value· in V is a
+//     ·declared entity name·", is not checked for an ·initial value· any more
+//     than it is for an attribute's; cvcattribute.go's file comment states the
+//     withheld property and the direction of the fail-open for both (#773).
 //   - 1.3, element-only: no character information item [[children]] other than
 //     XML 1.1 white space.
 //   - 1.4, element-only or mixed: the sequence of element information items,
@@ -55,10 +63,16 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // state: it is clause 1.4 alone declining — an {open content} or a shape
 // [xsd.Schema.ContentMatcher] does not decide — while clauses 1.1 to 1.3 still
 // hold, since they read the {variety} and not the particle.
+//
+// initial gathers the ·initial value· clause 1.2 tests, and is written for a
+// simple {content type} alone: no other clause reads a character information
+// item [[child]] beyond the one it is charging, so gathering under any other
+// {variety} would hold the whole of an element's text for nothing.
 type contentCheck struct {
 	e         Element
 	governing *xsd.ComplexType
 	matcher   *xsd.Matcher
+	initial   strings.Builder
 	charged   bool
 }
 
@@ -84,12 +98,14 @@ func (w *walk) contentCheck(e Element, governing *xsd.ComplexType) *contentCheck
 	return c
 }
 
-// text settles clauses 1.1 and 1.3 for one run of character information items.
+// text settles clauses 1.1 and 1.3 for one run of character information items,
+// and gathers the run into the ·initial value· clause 1.2 tests at the end.
 //
 // A run of NO characters is no character information item at all, so it
 // reaches neither clause: both quantify over the items in [[children]], and an
 // adapter that reports an empty run for <e></e> has reported a run, not an
-// item.
+// item. It contributes nothing to the ·initial value· either, that being a
+// concatenation.
 func (c *contentCheck) text(w *walk, t Text) {
 	if c.governing == nil || c.charged || t.Data() == "" {
 		return
@@ -97,19 +113,22 @@ func (c *contentCheck) text(w *walk, t Text) {
 	switch c.governing.ContentType().Variety() {
 	case xsd.ContentEmpty:
 		c.charge(w, ruleCvcComplexType, "1.1", t.Loc(),
-			"clause 1.1: the element %s has a character information item [[child]], but the {content type}.{variety} of its ·governing type definition· is empty, which admits no character or element information item [[children]] at all — white space included, which clause 1.3 allows for element-only and clause 1.1 allows for nothing",
+			"the element %s has a character information item [[child]], but cvc-complex-type clause 1.1 admits no character or element information item [[children]] at all where the {content type}.{variety} of the ·governing type definition· is empty — white space included, which clause 1.3 allows for element-only and clause 1.1 allows for nothing",
 			c.e.Name())
 	case xsd.ContentElementOnly:
 		if isXMLWhitespace(t.Data()) {
 			return
 		}
 		c.charge(w, ruleCvcComplexType, "1.3", t.Loc(),
-			"clause 1.3: the element %s has a character information item [[child]] that is not white space, but the {content type}.{variety} of its ·governing type definition· is element-only",
+			"the element %s has a character information item [[child]] that is not white space, but cvc-complex-type clause 1.3 admits white space alone where the {content type}.{variety} of the ·governing type definition· is element-only",
 			c.e.Name())
-	case xsd.ContentSimple, xsd.ContentMixed:
+	case xsd.ContentSimple:
+		// Clause 1.2 tests the runs CONCATENATED, so no run decides anything on
+		// its own and none is charged here.
+		c.initial.WriteString(t.Data())
+	case xsd.ContentMixed:
 		// A mixed {content type} restricts character content in no clause at
-		// all, and clause 1.2's character half is the ·initial value· test,
-		// which this package does not assemble.
+		// all.
 	}
 }
 
@@ -122,11 +141,11 @@ func (c *contentCheck) element(w *walk, child Element) {
 	switch c.governing.ContentType().Variety() {
 	case xsd.ContentEmpty:
 		c.charge(w, ruleCvcComplexType, "1.1", child.Loc(),
-			"clause 1.1: the element %s has the element information item %s among its [[children]], but the {content type}.{variety} of its ·governing type definition· is empty, which admits no character or element information item [[children]]",
+			"the element %s has the element information item %s among its [[children]], but cvc-complex-type clause 1.1 admits no character or element information item [[children]] where the {content type}.{variety} of the ·governing type definition· is empty",
 			c.e.Name(), child.Name())
 	case xsd.ContentSimple:
 		c.charge(w, ruleCvcComplexType, "1.2", child.Loc(),
-			"clause 1.2: the element %s has the element information item %s among its [[children]], but the {content type}.{variety} of its ·governing type definition· is simple, which admits no element information item [[children]]",
+			"the element %s has the element information item %s among its [[children]], but cvc-complex-type clause 1.2 admits no element information item [[children]] where the {content type}.{variety} of the ·governing type definition· is simple",
 			c.e.Name(), child.Name())
 	case xsd.ContentElementOnly, xsd.ContentMixed:
 		c.match(w, child)
@@ -148,16 +167,87 @@ func (c *contentCheck) match(w *walk, child Element) {
 		return
 	}
 	c.charge(w, ruleCvcComplexContent, "1", child.Loc(),
-		"clause 1: the element information item %s is ·attributed to· no particle of the {content type} of %s at its position in the [[children]], so the sequence is not ·valid· with respect to that {content type} (Element Sequence Accepted (Particle), §3.9.4.3)",
+		"the element information item %s is ·attributed to· no particle of the {content type} of %s at its position in the [[children]], so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 1 requires (Element Sequence Accepted (Particle), §3.9.4.3)",
 		child.Name(), c.e.Name())
 }
 
-// end settles clause 1.4 for a sequence that ran out: every item was
+// end settles the two clauses that only exhausted [[children]] can settle,
+// dispatching on the {content type} itself rather than on its {variety} (STYLE
+// T2's closed-sum exception) because one of them reads a property inside it:
+//
+//   - simple: clause 1.2's ·initial value· half, over the runs text gathered.
+//   - element-only and mixed: clause 1.4, for a sequence that ran out with a
+//     particle its {min occurs} left open.
+//
+// An empty {content type} settles nothing here. Clause 1.1 quantifies over the
+// [[children]] PRESENT, every one of which was already decided as it arrived.
+func (c *contentCheck) end(w *walk) {
+	if c.governing == nil || c.charged {
+		return
+	}
+	switch ct := c.governing.ContentType().(type) {
+	case xsd.SimpleContent:
+		c.initialValue(w, ct.SimpleType)
+	case xsd.ElementContent:
+		c.sequenceEnd(w)
+	case xsd.EmptyContent:
+		// Settled child by child; see above.
+	}
+}
+
+// initialValue settles the ·initial value· half of clause 1.2: the string
+// composed, in order, of the [[character code]] of each character information
+// item in E.[[children]] (Glossary, ·initial value·) is ·valid· with respect to
+// T.{content type}.{simple type definition} as String Valid (§3.16.4) defines
+// it. The charge carries the CONTAINING element's location: the value is
+// assembled from every run and belongs to none of them.
+//
+// st needs no resolution, unlike the {type definition} the attribute charges
+// reach through — [xsd.SimpleContent] carries the component itself and
+// [xsd.NewComplexType] rejects a nil one (ct-props-correct clause 1) — so the
+// two declines below are the whole of what this charge withholds.
+//
+// GAP(validate): an element with NO character information item [[child]] is
+// declined, because cvc-elt clause 5 dispatches BEFORE cvc-type reaches this
+// rule and its clause 5.1 may replace the item validated. Where the
+// ·governing element declaration· has a {value constraint} and the element is
+// not ·nilled·, what is assessed is "the element information item with
+// D.{value constraint}.{lexical form} used as its ·normalized value·", whose
+// ·initial value· is that lexical and never the empty string; only clause 5.2
+// assesses the element itself. The declaration is not among what a content
+// check is given, so charging the empty ·initial value· here would reject every
+// empty element its declaration supplies a default for (#716).
+//
+// GAP(validate): a ValidateLexical error that is not a VERDICT is the same
+// fail-open cvcattribute.go's matchedAttribute states in full, over the same
+// [value.IsDatatypeVerdict] classification: an ungoverned {simple type
+// definition} reports under cvc-datatype-valid exactly as a genuine rejection
+// does, and charging it would reject every element whose simple content this
+// backend cannot read (#774).
+func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
+	if c.initial.Len() == 0 {
+		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcComplexType, "1.2", "declined")
+		return
+	}
+	if _, err := value.ValidateLexical(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}); err != nil {
+		if !value.IsDatatypeVerdict(err) {
+			c.log(w, c.e.Name(), c.e.Loc(), ruleCvcComplexType, "1.2", "declined")
+			return
+		}
+		c.charge(w, ruleCvcComplexType, "1.2", c.e.Loc(),
+			"the ·initial value· of the element %s is not ·valid· with respect to the {simple type definition} %s of its ·governing type definition·'s {content type}, which cvc-complex-type clause 1.2 requires as per String Valid (§3.16.4): %v",
+			c.e.Name(), st.Name(), err)
+		return
+	}
+	c.log(w, c.e.Name(), c.e.Loc(), ruleCvcComplexType, "1.2", "satisfied")
+}
+
+// sequenceEnd settles clause 1.4 for a sequence that ran out: every item was
 // ·attributed to· a particle, but the particles left open cannot all be closed.
 // The charge carries the CONTAINING element's location, there being no child at
 // the offending position to carry one.
-func (c *contentCheck) end(w *walk) {
-	if c.governing == nil || c.charged || c.matcher == nil {
+func (c *contentCheck) sequenceEnd(w *walk) {
+	if c.matcher == nil {
 		return
 	}
 	if c.matcher.Accepting() {
@@ -165,7 +255,7 @@ func (c *contentCheck) end(w *walk) {
 		return
 	}
 	c.charge(w, ruleCvcComplexContent, "1", c.e.Loc(),
-		"clause 1: the [[children]] of %s end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, so the sequence is not ·valid· with respect to that {content type} (Element Sequence Accepted (Particle), §3.9.4.3)",
+		"the [[children]] of %s end before every particle of the {content type} of its ·governing type definition· has taken the occurrences its {min occurs} requires, so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 1 requires (Element Sequence Accepted (Particle), §3.9.4.3)",
 		c.e.Name())
 }
 

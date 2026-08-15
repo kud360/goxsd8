@@ -146,8 +146,8 @@ func wantContentCharge(t *testing.T, got []*xsderr.Error, rule xsderr.Rule, clau
 	if got[0].Loc != at {
 		t.Errorf("Loc = %s, want the offending position %s", got[0].Loc, at)
 	}
-	if !strings.HasPrefix(got[0].Msg, "clause "+clause+":") {
-		t.Errorf("Msg = %q, want it to charge clause %s", got[0].Msg, clause)
+	if !strings.Contains(got[0].Msg, string(rule)+" clause "+clause) {
+		t.Errorf("Msg = %q, want it to name %s clause %s inline (STYLE E4)", got[0].Msg, rule, clause)
 	}
 }
 
@@ -233,30 +233,109 @@ func TestEmptyContentChargesAnElementChild(t *testing.T) {
 	wantContentCharge(t, got, "cvc-complex-type", "1.1", loc(2, 1))
 }
 
-// A simple {content type} admits character data but no element information
-// item [[children]] (clause 1.2).
-func TestSimpleContentChargesAnElementChild(t *testing.T) {
+// simpleContentSchema declares "root" over a NAMED complex type whose {content
+// type} is simple, with the builtin named typ as its {simple type definition}.
+// The builtins are SEEDED so the component the {content type} carries is the
+// real one and its facets are the spec's.
+func simpleContentSchema(t *testing.T, typ xsd.QName) *xsd.Schema {
+	t.Helper()
 	seeded, err := builtin.Seed(testBackend())
 	if err != nil {
 		t.Fatalf("seeding the builtin types: %v", err)
 	}
-	name := xsd.QName{Local: "RootType"}
-	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{}, nil,
+	var st *xsd.SimpleType
+	for _, s := range seeded {
+		if s.Name() == typ {
+			st = s
+			break
+		}
+	}
+	if st == nil {
+		t.Fatalf("builtin.Seed produced no %s", typ)
+	}
+	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, xsd.QName{}, nil,
 		xsd.DerivationRestriction, false, nil, nil, nil,
-		xsd.SimpleContent{SimpleType: seeded[0]}, nil, nil, nil)
+		xsd.SimpleContent{SimpleType: st}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("building the governing type: %v", err)
 	}
-	schema := cSchemaFrom(t, ct, func(b *xsd.SchemaBuilder) {
-		for _, st := range seeded {
-			b.AddType(st)
+	return cSchemaFrom(t, ct, func(b *xsd.SchemaBuilder) {
+		for _, s := range seeded {
+			b.AddType(s)
 		}
 	})
+}
+
+// A simple {content type} admits character data but no element information
+// item [[children]] (clause 1.2). An element child is charged at its own
+// position and the ·initial value· half is NOT charged behind it, whatever the
+// character data holds: one element carries at most one content charge.
+func TestSimpleContentChargesAnElementChild(t *testing.T) {
+	schema := simpleContentSchema(t, integerType())
 
 	wantSilence(t, cAssess(t, schema, cRoot("#42")), "clause 1.2 restricts element children, not character data")
 
-	got := cAssess(t, schema, cRoot("a"))
-	wantContentCharge(t, got, "cvc-complex-type", "1.2", loc(2, 1))
+	wantContentCharge(t, cAssess(t, schema, cRoot("a")), "cvc-complex-type", "1.2", loc(2, 1))
+	wantContentCharge(t, cAssess(t, schema, cRoot("#abc", "a")), "cvc-complex-type", "1.2", loc(3, 1))
+}
+
+// The other half of clause 1.2: the ·initial value· is ·valid· with respect to
+// the {content type}.{simple type definition} as String Valid (§3.16.4) defines
+// it. The charge sits on the CONTAINING element, the value belonging to no one
+// of its runs.
+func TestSimpleContentValidatesTheInitialValue(t *testing.T) {
+	schema := simpleContentSchema(t, integerType())
+
+	wantSilence(t, cAssess(t, schema, cRoot("#42")), "42 is an xs:integer")
+	// String Valid clause 1 normalizes before Datatype Valid runs, so xs:integer's
+	// collapsing whiteSpace facet takes the padding off first.
+	wantSilence(t, cAssess(t, schema, cRoot("#  42 ")),
+		"whiteSpace normalization precedes datatype validation (String Valid clause 1)")
+
+	got := cAssess(t, schema, cRoot("#abc"))
+	wantContentCharge(t, got, "cvc-complex-type", "1.2", loc(1, 1))
+	if !strings.Contains(got[0].Msg, "String Valid") {
+		t.Errorf("Msg = %q, want the String Valid delegation named", got[0].Msg)
+	}
+}
+
+// An element with NO character information item [[child]] DECLINES rather than
+// being charged for the empty string: cvc-elt clause 5.1 has a declaration's
+// {value constraint} supply the ·initial value· of an empty element, so the
+// charge needs a dispatch this check cannot make (#716).
+func TestSimpleContentDeclinesAnEmptyElement(t *testing.T) {
+	schema := simpleContentSchema(t, integerType())
+
+	wantSilence(t, cAssess(t, schema, cRoot()),
+		"cvc-elt clause 5.1 may validate a default in place of the empty ·initial value·")
+	// White space IS a character information item [[child]], so an element
+	// carrying only white space is decided — and xs:integer's collapsing
+	// whiteSpace facet leaves nothing an xs:integer admits.
+	wantContentCharge(t, cAssess(t, schema, cRoot("#  ")), "cvc-complex-type", "1.2", loc(1, 1))
+}
+
+// The ·initial value· is the [[character code]] of EVERY character information
+// item [[child]], concatenated in order — never the first run alone. An adapter
+// splits the runs wherever a comment or processing instruction sits between
+// them, neither of which is a [[child]] this engine sees.
+func TestSimpleContentConcatenatesEveryTextRun(t *testing.T) {
+	schema := simpleContentSchema(t, integerType())
+
+	// Neither run is an xs:integer by itself; their concatenation is.
+	wantSilence(t, cAssess(t, schema, cRoot("#-", "#42")), "the ·initial value· is -42")
+
+	// The mirror: each run is an xs:integer by itself and the concatenation is not.
+	wantContentCharge(t, cAssess(t, schema, cRoot("#4", "#-2")), "cvc-complex-type", "1.2", loc(1, 1))
+}
+
+// An ungoverned {simple type definition} DECLINES rather than charging: no
+// backend maps xs:anySimpleType, and value.ValidateLexical reports that under
+// cvc-datatype-valid exactly as it reports a real rejection (#774).
+func TestSimpleContentDeclinesAnUngovernedType(t *testing.T) {
+	schema := simpleContentSchema(t, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"})
+
+	wantSilence(t, cAssess(t, schema, cRoot("#anything at all")),
+		"an ungoverned type is a backend gap, not a verdict about the ·initial value·")
 }
 
 // One element carries at most one content charge: the first, at the offending
