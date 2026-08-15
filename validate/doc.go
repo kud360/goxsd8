@@ -59,7 +59,8 @@
 //
 // [Result] carries every violation charged so far as an *xsderr.Error
 // (cvc-* rule + instance and/or schema Loc), in document order. Six rules
-// are charged today, all at the ·validation root· and nothing below it.
+// are charged today, at the ·validation root· and at every descendant whose
+// ·governing element declaration· the descent determines.
 //
 // Two come from [Validator.Assess]'s dispatch on the root's ·governing
 // element declaration·: cvc-assess-elt (§3.3.4.6) for a root that
@@ -104,6 +105,16 @@
 // which is what keeps a typeless attribute (xs:anySimpleType, §3.2.2.2), or
 // simple content of a type this backend does not map, from being rejected by
 // every document that carries one.
+//
+// Every one of those charges reaches a DESCENDANT on the same terms, against
+// the ·governing type definition· the particle its parent's {content type}
+// ·attributes· it to supplies (§3.3.4.6 clause 3.1): an element particle's
+// {term}, or — for a strict or lax wildcard particle, and for an item admitted
+// as a member of a ·substitution group· — the top-level declaration its
+// ·expanded name· ·resolves· to. Two shapes stop it: a child ·attributed to· a
+// skip wildcard, which is ·skipped· along with every element beneath it (clause
+// 3.2), and a child whose declaration is not determinable, whose own subtree is
+// then assessed against nothing in its turn.
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day

@@ -57,9 +57,9 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // exhausted.
 //
 // A nil governing decides NOTHING: every child is walked and none is charged or
-// passed, which is the state every element below the validation root is in
-// (§3.3.4.6 threads a ·context-determined declaration· into the descent and
-// this package does not). A nil matcher beside a non-nil governing is not that
+// passed, and none is ·attributed to· anything either, so the whole subtree
+// below such an element is walked against no type in its turn
+// ([walk.childGoverning]). A nil matcher beside a non-nil governing is not that
 // state: it is clause 1.4 alone declining — an {open content} or a shape
 // [xsd.Schema.ContentMatcher] does not decide — while clauses 1.1 to 1.3 still
 // hold, since they read the {variety} and not the particle.
@@ -133,10 +133,17 @@ func (c *contentCheck) text(w *walk, t Text) {
 }
 
 // element settles clauses 1.1, 1.2 and 1.4 for one element information item of
-// the sequence.
-func (c *contentCheck) element(w *walk, child Element) {
+// the sequence, and reports what clause 1.4 ·attributed· the item to (§3.4.4.4)
+// for the walk's own descent into it (cvc-assess-elt clause 3.1,
+// [walk.childGoverning]).
+//
+// The attribution is nil wherever nothing attributed the item: a check with no
+// ·governing type definition·, an element already charged, a {variety} that
+// admits no element information item [[child]] at all, and a clause 1.4 that
+// declined or charged.
+func (c *contentCheck) element(w *walk, child Element) xsd.Attribution {
 	if c.governing == nil || c.charged {
-		return
+		return nil
 	}
 	switch c.governing.ContentType().Variety() {
 	case xsd.ContentEmpty:
@@ -148,27 +155,30 @@ func (c *contentCheck) element(w *walk, child Element) {
 			"the element %s has the element information item %s among its [[children]], but cvc-complex-type clause 1.2 admits no element information item [[children]] where the {content type}.{variety} of the ·governing type definition· is simple",
 			c.e.Name(), child.Name())
 	case xsd.ContentElementOnly, xsd.ContentMixed:
-		c.match(w, child)
+		return c.match(w, child)
 	}
+	return nil
 }
 
 // match advances the content model over one element information item (clause
-// 1.4), charging cvc-complex-content against the item's OWN location where no
-// particle live at that position admits it.
-func (c *contentCheck) match(w *walk, child Element) {
+// 1.4), reporting what the item is ·attributed to· and charging
+// cvc-complex-content against the item's OWN location where no particle live at
+// that position admits it.
+func (c *contentCheck) match(w *walk, child Element) xsd.Attribution {
 	if c.matcher == nil {
 		c.log(w, child.Name(), child.Loc(), ruleCvcComplexContent, "1", "declined")
-		return
+		return nil
 	}
 	if a, ok := c.matcher.Next(child.Name()); ok {
 		if w.log.Enabled(context.Background(), slog.LevelDebug) {
 			c.log(w, child.Name(), child.Loc(), ruleCvcComplexContent, "1", "attributed to "+attributedTo(a))
 		}
-		return
+		return a
 	}
 	c.charge(w, ruleCvcComplexContent, "1", child.Loc(),
 		"the element information item %s is ·attributed to· no particle of the {content type} of %s at its position in the [[children]], so the sequence is not ·valid· with respect to that {content type} as cvc-complex-content clause 1 requires (Element Sequence Accepted (Particle), §3.9.4.3)",
 		child.Name(), c.e.Name())
+	return nil
 }
 
 // end settles the two clauses that only exhausted [[children]] can settle,
@@ -282,10 +292,12 @@ func (c *contentCheck) log(w *walk, name xsd.QName, loc xsderr.Loc, rule xsderr.
 
 // attributedTo names the particle {term} an item was ·attributed to·
 // (§3.4.4.4) for the log, switching over the two variants [xsd.Attribution]
-// seals (STYLE T2's closed-sum exception). It is the whole of what this
-// package reads off an Attribution today; the ·context-determined declaration·
-// a substituting item carries is §3.3.4.6's, and arrives with the descent that
-// threads it (#716).
+// seals (STYLE T2's closed-sum exception). What the descent reads off the same
+// Attribution — the child's ·governing element declaration·, including the
+// ·substituting declaration· a substituting item carries rather than the
+// particle's own — is [walk.childGoverning]'s, and the two are deliberately
+// separate: a log line names the particle that consumed the item, which is a
+// fact about the PARENT's content model.
 func attributedTo(a xsd.Attribution) string {
 	switch t := a.(type) {
 	case xsd.ElementDeclaration:

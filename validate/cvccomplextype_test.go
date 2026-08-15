@@ -359,18 +359,16 @@ func TestSimpleTypedRootIsUndecided(t *testing.T) {
 	wantSilence(t, res.Violations(), "a simple ·governing type definition· reaches cvc-complex-type through no clause")
 }
 
-// Only the ROOT's attributes are assessed. A descendant's governing type
-// comes from the particle it is ·attributed to· in its parent's {content
-// type}, which this package computes for the root's own [[children]] but does
-// not thread into the descent, so a descendant's attributes are assessed
-// against nothing and the same stray attribute that is charged on the root is
-// silent one level down.
+// A descendant's governing type comes from the particle it is ·attributed to·
+// in its parent's {content type} (§3.3.4.6 clause 3.1), and a child its parent
+// attributed to NOTHING is assessed against nothing: the same stray attribute
+// that is charged on the root is silent below one.
 //
-// The child itself is charged: governedSchema's type has an empty {content
-// type}, which admits no element information item [[children]] at all (clause
-// 1.1). That charge is the root's, at the child's position, and it names no
-// attribute.
-func TestDescendantAttributesAreNotAssessed(t *testing.T) {
+// The child here is that shape because it is charged: governedSchema's type has
+// an empty {content type}, which admits no element information item
+// [[children]] at all (clause 1.1). That charge is the root's, at the child's
+// position, and it names no attribute.
+func TestDescendantAttributesOfAnUnattributedChildAreNotAssessed(t *testing.T) {
 	child := &testElement{
 		name:  xsd.QName{Local: "child"},
 		attrs: []Attribute{&testAttribute{name: local("stray"), value: "v", loc: loc(2, 3)}},
