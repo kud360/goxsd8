@@ -71,7 +71,7 @@ Surveys, in place of the greps they replace (PRINCIPLES 27):
 ```sh
 go tool lanestatus                               # committed lane scores, as PLAN.md's table
 go tool surface -base origin/main                # what this branch added/removed from the exported surface (T5)
-gh issue list --state all --json number,state,labels | go tool wipsurvey       # LIVE/EXPIRED/RETIRED branches
+gh issue list --state all --json number,state,labels | go tool wipsurvey       # LIVE/CLAIMED/EXPIRED/RETIRED/UNKNOWN branches
 gh issue list --label kind/gap --state all --json number,title,state,body | go tool gapaudit  # GAP( markers vs trackers
 ```
 
