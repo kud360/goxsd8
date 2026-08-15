@@ -62,7 +62,10 @@ Invariants:
   TTL**: newer is LIVE — off-limits, and so is its issue; older is
   EXPIRED — resumable. Checkpoint pushes are therefore the lease
   heartbeat; a long step pushes intermediate commits rather than letting
-  its lease lapse.
+  its lease lapse. A branch that has pushed **no commits of its own** has
+  no tip time of its own — its tip is the landing it branched from, and
+  only its issue thread dates the claim, so it is never EXPIRED and never
+  resumable on age (#722).
 - **Races are settled by git's atomic ref updates, never by force.** A
   rejected push to `wip/*` means you lost the race: fetch, abandon the
   local attempt, pick something else. Force-pushing `wip/*` or `parked/*`

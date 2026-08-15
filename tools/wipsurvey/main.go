@@ -1,10 +1,10 @@
 // Command wipsurvey classifies every wip/issue-<N> branch on the origin
-// remote as LIVE, EXPIRED, RETIRED, or UNKNOWN, so a /develop session does
-// not have to re-derive by hand which branches are contended and which are
-// dead. Issue #399 measured seven consecutive develop passes each
-// re-deriving the same three unchanged facts about the same dead branches;
-// PRINCIPLES 27 turns exactly that shape of repetitive, deterministic work
-// into a tool.
+// remote as LIVE, CLAIMED, EXPIRED, RETIRED, or UNKNOWN, so a /develop
+// session does not have to re-derive by hand which branches are contended
+// and which are dead. Issue #399 measured seven consecutive develop
+// passes each re-deriving the same three unchanged facts about the same
+// dead branches; PRINCIPLES 27 turns exactly that shape of repetitive,
+// deterministic work into a tool.
 //
 // Classification needs two sources that neither shows on its own:
 //   - the branch namespace, for how recently a branch's tip was pushed
@@ -31,6 +31,19 @@
 // read as EXPIRED (resumable), the dangerous direction for a lease it has
 // no data behind. It reports the branch UNKNOWN instead and says to
 // fetch.
+//
+// A tip age is only evidence about the branch that authored it. A
+// wip/issue-<N> branch pushed as a bare claim, with no commits yet, points
+// at whatever main pointed at when the session started, so its tip age
+// measures the PREVIOUS LANDING and not the claim: a claim made minutes
+// ago reports as hours old, EXPIRED, and therefore resumable, and the
+// session that acts on it races a live holder (#722). Such a branch is an
+// ancestor of main, which `git merge-base --is-ancestor` decides against
+// the main SHA the same ls-remote round trip already fetched. Those
+// branches are reported CLAIMED: the branch name establishes a claim,
+// nothing establishes its age, so the branch is off-limits for retirement
+// and is not resumable on age evidence alone. What settles a CLAIMED
+// branch is the issue thread's own clock, which this tool does not read.
 //
 // Usage:
 //
@@ -77,7 +90,7 @@ func main() {
 // aborting the whole report — an unexpected refs/heads/wip/* branch is
 // evidence worth a warning, not a reason to withhold every other row.
 func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
-	refs, err := remoteWipBranches()
+	refs, mainSHA, err := remoteRefs()
 	if err != nil {
 		return err
 	}
@@ -107,11 +120,15 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 		if err != nil {
 			return fmt.Errorf("resolving tip for %s: %w", br.branch, err)
 		}
+		anc, err := gitAncestry(br.sha, mainSHA)
+		if err != nil {
+			return fmt.Errorf("resolving ancestry for %s: %w", br.branch, err)
+		}
 		var issue *issueState
 		if state, ok := issues[br.issue]; ok {
 			issue = &state
 		}
-		got, reason := classify(br.branch, tip, now, issue)
+		got, reason := classify(br.branch, tip, anc, now, issue)
 		rows = append(rows, row{issue: br.issue, branch: br.branch, tip: tip, verdict: got, reason: reason})
 	}
 	sortRows(rows)
@@ -126,20 +143,41 @@ type refSHA struct {
 	ref string
 }
 
-// remoteWipBranches asks the origin remote directly for every wip/*
-// branch's head SHA. See the package doc comment for why this — not the
-// local refs/remotes/origin/wip/* cache — is the authoritative branch
-// set.
-func remoteWipBranches() ([]refSHA, error) {
-	out, err := exec.Command("git", "ls-remote", "--heads", "origin", "refs/heads/wip/*").Output()
+// remoteRefs asks the origin remote directly for every wip/* branch's head
+// SHA and, in the same round trip, main's — one network call for both, so
+// the ancestry test costs no extra remote access. See the package doc
+// comment for why this — not the local refs/remotes/origin/wip/* cache —
+// is the authoritative branch set. The main SHA is empty when the remote
+// reports no refs/heads/main, which leaves every ancestry unresolved and
+// the report dated from tip ages alone.
+func remoteRefs() ([]refSHA, string, error) {
+	out, err := exec.Command("git", "ls-remote", "--heads", "origin", "refs/heads/wip/*", "refs/heads/main").Output()
 	if err != nil {
-		return nil, fmt.Errorf("running git ls-remote --heads origin: %w", err)
+		return nil, "", fmt.Errorf("running git ls-remote --heads origin: %w", err)
 	}
 	refs, errs := parseLsRemote(string(out))
 	if len(errs) > 0 {
-		return nil, fmt.Errorf("parsing git ls-remote output: %w", errors.Join(errs...))
+		return nil, "", fmt.Errorf("parsing git ls-remote output: %w", errors.Join(errs...))
 	}
-	return refs, nil
+	wips, mainSHA := partitionRefs(refs)
+	return wips, mainSHA, nil
+}
+
+// partitionRefs splits ls-remote's refs into the wip/* branches to survey
+// and main's SHA, which is the ancestry test's right-hand side rather than
+// a surveyed branch. It is pure — no git or process calls — so tests
+// exercise it directly.
+func partitionRefs(refs []refSHA) ([]refSHA, string) {
+	var wips []refSHA
+	mainSHA := ""
+	for _, ref := range refs {
+		if ref.ref == "refs/heads/main" {
+			mainSHA = ref.sha
+			continue
+		}
+		wips = append(wips, ref)
+	}
+	return wips, mainSHA
 }
 
 // parseLsRemote parses `git ls-remote --heads` output, one "<sha>\t<ref>"
@@ -219,6 +257,64 @@ func gitTip(sha string) (*time.Time, error) {
 	return &tip, nil
 }
 
+// ancestry is what this checkout could establish about a branch tip's
+// position relative to main: whether the branch carries commits of its
+// own. Its zero value is ancestryUnresolved, so a caller with no answer
+// carries none.
+type ancestry int
+
+const (
+	// ancestryUnresolved means git could not decide — the objects are not
+	// in this checkout, or the remote reported no main. Callers fall back
+	// to the tip age rather than inventing a second unknown verdict.
+	ancestryUnresolved ancestry = iota
+	// ancestryOwnCommits means the branch is not an ancestor of main: its
+	// tip is a commit the branch itself authored, so the tip age is the
+	// claim's age.
+	ancestryOwnCommits
+	// ancestryNoCommits means the branch is an ancestor of main: it has
+	// pushed no commits, its tip is a landing's, and its tip age says
+	// nothing about the claim.
+	ancestryNoCommits
+)
+
+// gitAncestry asks whether sha is an ancestor of mainSHA — whether the
+// branch at sha has any commits of its own. It returns ancestryUnresolved,
+// with no error, when the question cannot be answered here: mainSHA is
+// empty, or git cannot resolve one of the two objects (an unfetched tip,
+// which exits 128). That mirrors gitTip's posture on an unfetched SHA —
+// report what is not known rather than guess, since guessing "has its own
+// commits" restores exactly the borrowed-age EXPIRED this distinction
+// exists to prevent.
+func gitAncestry(sha, mainSHA string) (ancestry, error) {
+	if mainSHA == "" {
+		return ancestryUnresolved, nil
+	}
+	err := exec.Command("git", "merge-base", "--is-ancestor", sha, mainSHA).Run()
+	if err == nil {
+		return ancestryFromExit(0), nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return ancestryFromExit(exitErr.ExitCode()), nil
+	}
+	return ancestryUnresolved, fmt.Errorf("running git merge-base --is-ancestor %s %s: %w", sha, mainSHA, err)
+}
+
+// ancestryFromExit maps `git merge-base --is-ancestor`'s exit status: 0 is
+// "is an ancestor", 1 is "is not", and every other status (128 for an
+// object this checkout does not have) is git declining to answer. It is
+// pure — no git or process calls — so tests exercise each status directly.
+func ancestryFromExit(code int) ancestry {
+	switch code {
+	case 0:
+		return ancestryNoCommits
+	case 1:
+		return ancestryOwnCommits
+	}
+	return ancestryUnresolved
+}
+
 // ghLabel is one label object in `gh issue list --json labels`'s shape.
 type ghLabel struct {
 	Name string `json:"name"`
@@ -279,15 +375,16 @@ type verdict string
 
 const (
 	live    verdict = "LIVE"
+	claimed verdict = "CLAIMED"
 	expired verdict = "EXPIRED"
 	retired verdict = "RETIRED"
 	unknown verdict = "UNKNOWN"
 )
 
 // classify decides one branch's verdict and a short reason from its
-// remote tip time and, optionally, the GitHub issue it implements. It is
-// pure — no git or process calls — so tests exercise it directly without
-// a repository or network access.
+// remote tip time, its ancestry against main, and, optionally, the GitHub
+// issue it implements. It is pure — no git or process calls — so tests
+// exercise it directly without a repository or network access.
 //
 // tip is nil when the branch's SHA has never been fetched into this
 // checkout's object store; classify then reports unknown rather than
@@ -297,11 +394,20 @@ const (
 // the branch's issue number was not present in it; the reason then notes
 // the verdict is lease-only.
 //
-// Retirement is checked before the tip: a closed or needs-replan issue
-// retires its branch outright, with or without a fetched tip, per
-// WORKFLOW.md's "abandoned attempts are retired in place ... never
-// resumed."
-func classify(branch string, tip *time.Time, now time.Time, issue *issueState) (verdict, string) {
+// The order of the four questions is itself the contract:
+//
+//   - Retirement first: a closed or needs-replan issue retires its branch
+//     outright, with or without a fetched tip and with or without commits
+//     of its own, per WORKFLOW.md's "abandoned attempts are retired in
+//     place ... never resumed."
+//   - Then an unfetched tip, which is unknown.
+//   - Then anc == ancestryNoCommits, which is claimed: the tip belongs to
+//     a landing, not to this branch, so no age question may be asked of
+//     it at all.
+//   - Only then the tip age, against the claim TTL. ancestryUnresolved
+//     lands here too — the age is the best evidence left, and it is the
+//     evidence this tool reported before it could ask about ancestry.
+func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue *issueState) (verdict, string) {
 	if issue != nil && issue.closed {
 		return retired, fmt.Sprintf("%s: issue #%d is closed", branch, issue.number)
 	}
@@ -315,6 +421,9 @@ func classify(branch string, tip *time.Time, now time.Time, issue *issueState) (
 	leaseNote := ""
 	if issue == nil {
 		leaseNote = "; no issue data for this branch, lease-only"
+	}
+	if anc == ancestryNoCommits {
+		return claimed, fmt.Sprintf("%s: no commits of its own; tip age is main's, not the claim's -- do not retire on age, settle it from the issue thread%s", branch, leaseNote)
 	}
 	age := now.Sub(*tip)
 	if age <= claimTTL {
@@ -355,6 +464,11 @@ func sortRows(rows []row) {
 // renderTable writes rows as an aligned table: ISSUE, BRANCH, TIP AGE,
 // VERDICT, REASON. It does not sort — callers order rows first (run calls
 // sortRows) — so the same rows always render the same text (STYLE D1).
+//
+// A claimed row's TIP AGE reads "main's" rather than a duration: the
+// number would be a real duration attached to the wrong branch, and a
+// column scanned faster than it is read is the whole reason that age got
+// acted on (#722).
 func renderTable(w io.Writer, rows []row, now time.Time) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	if _, err := fmt.Fprintln(tw, "ISSUE\tBRANCH\tTIP AGE\tVERDICT\tREASON"); err != nil {
@@ -362,7 +476,10 @@ func renderTable(w io.Writer, rows []row, now time.Time) error {
 	}
 	for _, r := range rows {
 		age := "unknown"
-		if r.tip != nil {
+		switch {
+		case r.verdict == claimed:
+			age = "main's"
+		case r.tip != nil:
 			age = formatAge(now.Sub(*r.tip))
 		}
 		if _, err := fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\n", r.issue, r.branch, age, r.verdict, r.reason); err != nil {
