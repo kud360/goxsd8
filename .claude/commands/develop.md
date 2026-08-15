@@ -25,8 +25,12 @@ heartbeat.
    gh issue list --state all --json number,state,labels | go tool wipsurvey
    ```
 
-   It reports each `wip/issue-<N>` as LIVE, EXPIRED or RETIRED. LIVE
-   branches and their issues are off-limits; RETIRED ones are not work.
+   It reports each `wip/issue-<N>` as LIVE, CLAIMED, EXPIRED, RETIRED or
+   UNKNOWN. LIVE and CLAIMED branches and their issues are off-limits;
+   RETIRED ones are not work; UNKNOWN wants `git fetch origin` and a
+   re-run. A CLAIMED branch has pushed no commits of its own, so git dates
+   nothing about it — only its issue thread's own clock settles whether
+   the holder is still working, and no age reading may retire it (#722).
    - **Resuming beats starting.** Take the oldest EXPIRED `wip/issue-<N>`
      whose issue is open and not `needs-replan`; merge `origin/main` in if
      main moved (never rebase; if the conflicts are not tractable, park it
