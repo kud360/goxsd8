@@ -40,7 +40,11 @@ present-tense sentence in their sections below as "will", not "does".
 
 **[2] The infoset seam, the assessment skeleton and the XML adapter ship;
 the other two adapters do not.** `validate` exports the infoset views and
-`New`/`Validator`/`Result` and imports `xsd` and `xsderr` (see its section);
+`New`/`Validator`/`Result` and imports `xsd`, `xsderr` and `value` (and
+`regex` behind it, for the pattern facets `value` compiles) — but never a
+backend: `New` takes the `value.Backend` as a required parameter, so
+`builtin/strict` stays outside the closure exactly as it does for `parser`'s
+`Produce` (see its section);
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and imports
 `parser/xmltree`, `validate`, `xsd` and `xsderr` — and neither `loader` nor
 `parser`, which an imports test pins; `validate/jsonsrc` and
@@ -295,17 +299,19 @@ Two access styles over the compiled model, one shared core:
   only `ElementByName` receives only that.
 - **Walk**: traversal of a type's effective content model. The algebra
   ships (type-derivation validity, substitution-group acceptance, wildcard
-  admission, attribute-use lookup, all unexported in `xsd`); **the two
-  drivers do not exist yet** and `xsd/doc.go` says so by name:
+  admission, attribute-use lookup, all unexported in `xsd`), and of the two
+  drivers over it one ships and one does not:
+  - a **pull** driver — `Matcher`, the instance-guided advance of the
+    content model one child at a time (the validation consumer) —
+    **ships**, as `Schema.ContentMatcher`/`Matcher`/`Attribution`; it
+    counts occurrences rather than unfolding them and never backtracks,
+    which `cos-nonambig` licenses.
   - a **push** driver — `Walker`, the exhaustive, schema-only visitor of
     every particle reachable through sequences/choices/all-groups and
-    named-group references (the codegen consumer) — **M9**, and
-  - a **pull** driver — `Matcher`, the instance-guided advance of the
-    content model one child at a time (the validation consumer) — **M5**.
-  When they land, substitution groups will not be expanded at walk time
-  (instance-time concern), and both drivers will reuse the same algebra
-  rather than reimplement it. This paragraph is a destination; `go doc
-  ./xsd` is the contract.
+    named-group references (the codegen consumer) — **M9**, not yet.
+  Substitution groups are not expanded at walk time (instance-time
+  concern), and the Walker will reuse the same algebra rather than
+  reimplement it. `go doc ./xsd` is the contract.
 
 ## Parsing & loading
 
@@ -410,11 +416,14 @@ use `regex`'s F&O flavor, never the pattern-facet flavor.
 ## Validation (`validate`)
 
 **Status: the engine ships the seam and decides the validation root's
-dispatch and attribute existence; the XML adapter ships over it.**
+dispatch and its whole attribute half; the XML adapter ships over it.**
 `validate` exports the infoset views (`Element`, `Attribute`, `Text`,
 `Children`, `Child`) plus `New`/`Validator`/`Result`, and `Assess` walks a
-source once, charging `cvc-assess-elt`, `cvc-elt` clause 2 and
-`cvc-complex-type` clauses 2-3 against the root and nothing below it.
+source once, charging `cvc-assess-elt`, `cvc-elt` clause 2,
+`cvc-complex-type` clauses 2-4, `cvc-attribute` clauses 3-4 and `cvc-au`
+against the root and nothing below it. The value-space charges reach a
+`value.Backend` through `New`'s required second parameter, which must be the
+backend the schema was compiled with.
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and drives that walk
 over an XML instance decoded by `parser/xmltree`; `validate/jsonsrc` and
 `validate/bersrc` are `doc.go`-only (M8/M11). Everything below not covered

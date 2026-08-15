@@ -58,20 +58,47 @@
 // # Contract (M5, landing rule by rule)
 //
 // [Result] carries every violation charged so far as an *xsderr.Error
-// (cvc-* rule + instance and/or schema Loc), in document order. Three are
-// charged today, all at the ·validation root· and nothing below it. Two
-// come from [Validator.Assess]'s dispatch on the root's ·governing element
-// declaration·: cvc-assess-elt (§3.3.4.6) for a root that determines no
-// declaration, and cvc-elt (§3.3.4.3) clause 2 for one whose declaration
-// is abstract. The third is cvc-complex-type (§3.4.4.2) clauses 2 and 3,
-// the root's [[attributes]] matched against its ·governing type
-// definition·'s {attribute uses} — attribute EXISTENCE, which needs no
-// datatype backend; an attribute whose verdict would need one (a use with a
-// fixed {value constraint}, an {attribute wildcard} to evaluate) is left
-// undecided rather than guessed at, and so is the root's whole attribute
-// half wherever the ·governing type definition· is not determinable or its
-// {attribute uses}/{attribute wildcard} are not yet the spec's. The rest of
-// the cvc- decisions land on the walk [Validator.Assess] already makes.
-// Non-fatal warnings get an accessor of their own the day something
-// produces one.
+// (cvc-* rule + instance and/or schema Loc), in document order. Six rules
+// are charged today, all at the ·validation root· and nothing below it.
+//
+// Two come from [Validator.Assess]'s dispatch on the root's ·governing
+// element declaration·: cvc-assess-elt (§3.3.4.6) for a root that
+// determines no declaration, and cvc-elt (§3.3.4.3) clause 2 for one whose
+// declaration is abstract.
+//
+// Three more are the root's attribute half, against its ·governing
+// type definition·'s {attribute uses}. cvc-complex-type (§3.4.4.2) clauses
+// 2 and 3 decide EXISTENCE and need no value space. Clause 4 and the two
+// rules clause 2.1 dispatches to — cvc-attribute (§3.2.4.1) clauses 3 and 4
+// and cvc-au (§3.5.4) — decide VALUES, and read them through the
+// value.Backend [New] takes: an attribute's lexical against its
+// declaration's {type definition} per String Valid (§3.16.4), its ·actual
+// value· against a fixed {value constraint} on the declaration and on the
+// use (two independent rules over two properties, both charged), and a
+// ·defaulted attribute·'s own {lexical form} against its type.
+//
+// The sixth is the root's content half, against the same type's {content
+// type}. cvc-complex-type clause 1 decides what its {variety} admits —
+// no [[children]] at all for empty, no element ones for simple, no
+// non-white-space character ones for element-only — and clause 1.4 sends
+// the sequence of element information items to cvc-complex-content
+// (§3.4.4.3) over xsd.Schema.ContentMatcher, which charges an item no
+// particle admits at its position against that item's own Loc, and a
+// sequence ending short of a {min occurs} against the root's.
+//
+// Everything not decidable is left undecided rather than guessed at: an
+// {attribute wildcard} to evaluate, a ·governing type definition· that is
+// not determinable or whose {attribute uses}/{attribute wildcard} are not
+// yet the spec's (the attribute half alone: a {content type} needs no such
+// fold), an element that may be ·nilled·, a {content type} whose shape
+// xsd.Schema.ContentMatcher declines, a declaration whose {type
+// definition} is not a simple type, and — the decline that matters most — a
+// value.ValidateLexical error that is a fault of the type or of the backend
+// rather than a verdict about the lexical (value.IsDatatypeVerdict), which
+// is what keeps a typeless attribute (xs:anySimpleType, §3.2.2.2) from
+// being rejected by every document that carries one.
+//
+// The rest of the cvc- decisions land on the walk [Validator.Assess]
+// already makes. Non-fatal warnings get an accessor of their own the day
+// something produces one.
 package validate

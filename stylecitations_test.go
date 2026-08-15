@@ -76,7 +76,10 @@ var allowedBadStyleCitations = []styleCitationAllowance{
 	{file: "xsd/closedsets.go", token: "T7", count: 1},
 	{file: "xsd/complextype.go", token: "T7", count: 3},
 	{file: "xsd/defaultbinding.go", token: "T7", count: 1},
-	{file: "xsd/defaultbinding.go", token: "T8", count: 1},
+	// The T8 entry that sat here is gone: it decorated
+	// effectiveValueConstraint's "unexported until a consumer justifies
+	// exporting it", and #766 is that consumer, so the sentence and its
+	// citation went with the export.
 	{file: "xsd/elementdeclaration.go", token: "T7", count: 1},
 	{file: "xsd/namespaceconstraint.go", token: "T7", count: 1},
 	{file: "xsd/namespaceconstraint.go", token: "T8", count: 1},

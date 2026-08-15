@@ -9,16 +9,20 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// The fixtures below drive cvc-complex-type (§3.4.4.2) clauses 2 and 3 over
+// The fixtures below drive the ATTRIBUTE-EXISTENCE half of cvc-complex-type
+// (§3.4.4.2) — clauses 2 and 3, which need no value space — over
 // the validation root, which is the only element whose ·governing type
 // definition· this package determines. Every schema is built through the
 // exported constructors: the producer is not involved, so a shape it cannot
-// yet emit (an attribute wildcard, a fixed {value constraint}) is still
-// reachable here.
+// yet emit (an attribute wildcard) is still reachable here. No declaration
+// here names a {type definition}, which is what keeps the value charges out —
+// they live in cvcattribute_test.go, over schemas that seed the builtins.
 
 // aUse builds an attribute use over a sibling local declaration named local
 // in no namespace, with the given {required} and the use's own {value
-// constraint} — the one cvc-au (§3.5.4) reads, not the declaration's.
+// constraint} — the one cvc-au (§3.5.4) reads, not the declaration's. The
+// declaration carries NO {type definition}, so every value charge declines on
+// it; typedUse (cvcattribute_test.go) is the one that names a type.
 func aUse(t *testing.T, local string, required bool, vc *xsd.ValueConstraint) xsd.AttributeUse {
 	t.Helper()
 	decl, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: local}, nil,
@@ -92,7 +96,7 @@ func local(name string) xsd.QName { return xsd.QName{Local: name} }
 // wildcard, and returns the violations charged.
 func assessRoot(t *testing.T, root Element, uses []xsd.AttributeUse, wildcard *xsd.Wildcard) []*xsderr.Error {
 	t.Helper()
-	v, err := New(governedSchema(t, uses, wildcard))
+	v, err := New(governedSchema(t, uses, wildcard), testBackend())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -122,7 +126,7 @@ func wantSilence(t *testing.T, got []*xsderr.Error, why string) {
 func assessOutcomes(t *testing.T, root Element, uses []xsd.AttributeUse, wildcard *xsd.Wildcard) []string {
 	t.Helper()
 	log, visits := recordingLogger()
-	v, err := New(governedSchema(t, uses, wildcard), WithLogger(log))
+	v, err := New(governedSchema(t, uses, wildcard), testBackend(), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -233,27 +237,22 @@ func TestWildcardDoesNotSilenceClauseThree(t *testing.T) {
 	wantCharge(t, got, "clause 3", loc(1, 1), "id")
 }
 
-// A matched use carrying a FIXED {value constraint} is declined: cvc-au
-// compares ·actual values·, which needs the attribute's ·normalized value·
-// mapped through its {type definition} (#766). Clause 2.1 itself matched, so
-// nothing is charged for the attribute either way — the two are the same
-// silence, and the row below with a DEFAULT constraint is the control that
-// the fixed variety is what withholds the verdict.
-func TestMatchedAttributeWithFixedConstraintIsDeclined(t *testing.T) {
+// aUse's declaration carries no {type definition} at all, so every attribute
+// matched to one declines at cvc-attribute clause 3 — before cvc-au is
+// reached, whatever {value constraint} the use carries. The fixed and default
+// rows are the same silence for that one reason, which is what makes this the
+// control for the typed charges in cvcattribute_test.go: those fire only
+// because their declaration names a type this backend governs.
+func TestMatchedAttributeWithoutATypeIsDeclined(t *testing.T) {
 	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "1", nil, nil)
-	uses := []xsd.AttributeUse{aUse(t, "id", true, &fixed)}
-	got := assessRoot(t, attributedRoot(local("id")), uses, nil)
-	wantSilence(t, got, "cvc-au on a fixed {value constraint} is #766's, not a violation")
-	if outcomes := assessOutcomes(t, attributedRoot(local("id")), uses, nil); !slices.Equal(outcomes, []string{"2.1/declined"}) {
-		t.Errorf("assessed %v, want the fixed {value constraint} DECLINED under clause 2.1", outcomes)
-	}
-
 	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "1", nil, nil)
-	other := []xsd.AttributeUse{aUse(t, "id", true, &dflt)}
-	wantSilence(t, assessRoot(t, attributedRoot(local("id")), other, nil),
-		"cvc-au constrains nothing on a default {value constraint}")
-	if outcomes := assessOutcomes(t, attributedRoot(local("id")), other, nil); !slices.Equal(outcomes, []string{"2.1/satisfied"}) {
-		t.Errorf("assessed %v, want a default {value constraint} SATISFIED under clause 2.1: only the fixed variety withholds cvc-au", outcomes)
+	for _, vc := range []*xsd.ValueConstraint{nil, &fixed, &dflt} {
+		uses := []xsd.AttributeUse{aUse(t, "id", true, vc)}
+		wantSilence(t, assessRoot(t, attributedRoot(local("id")), uses, nil),
+			"a declaration with no {type definition} yields no ·actual value· to judge")
+		if outcomes := assessOutcomes(t, attributedRoot(local("id")), uses, nil); !slices.Equal(outcomes, []string{"3/declined"}) {
+			t.Errorf("assessed %v, want cvc-attribute clause 3 DECLINED", outcomes)
+		}
 	}
 }
 
@@ -319,7 +318,7 @@ func TestTypeTabledRootDeclinesTheAttributeHalf(t *testing.T) {
 	if err != nil {
 		t.Fatalf("finalizing the tabled schema: %v", err)
 	}
-	v, err := New(schema)
+	v, err := New(schema, testBackend())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -352,7 +351,7 @@ func TestSimpleTypedRootIsUndecided(t *testing.T) {
 	if err != nil {
 		t.Fatalf("finalizing the simple-typed schema: %v", err)
 	}
-	v, err := New(schema)
+	v, err := New(schema, testBackend())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -362,9 +361,15 @@ func TestSimpleTypedRootIsUndecided(t *testing.T) {
 
 // Only the ROOT's attributes are assessed. A descendant's governing type
 // comes from the particle it is ·attributed to· in its parent's {content
-// type}, which nothing computes yet, so its attributes are assessed against
-// nothing and the same stray attribute that is charged on the root is silent
-// one level down.
+// type}, which this package computes for the root's own [[children]] but does
+// not thread into the descent, so a descendant's attributes are assessed
+// against nothing and the same stray attribute that is charged on the root is
+// silent one level down.
+//
+// The child itself is charged: governedSchema's type has an empty {content
+// type}, which admits no element information item [[children]] at all (clause
+// 1.1). That charge is the root's, at the child's position, and it names no
+// attribute.
 func TestDescendantAttributesAreNotAssessed(t *testing.T) {
 	child := &testElement{
 		name:  xsd.QName{Local: "child"},
@@ -375,7 +380,13 @@ func TestDescendantAttributesAreNotAssessed(t *testing.T) {
 	root.kids = []Child{ElementChild(child)}
 
 	got := assessRoot(t, root, []xsd.AttributeUse{aUse(t, "id", false, nil)}, nil)
-	wantSilence(t, got, "a descendant element has no ·governing type definition· here")
+
+	if len(got) != 1 || got[0].Loc != loc(2, 1) {
+		t.Fatalf("Violations() = %v, want the one clause 1.1 charge at the child's own location", got)
+	}
+	if strings.Contains(got[0].Msg, "stray") {
+		t.Errorf("Msg = %q, want no charge about a descendant's attribute", got[0].Msg)
+	}
 }
 
 // The two clauses charge independently and in the order they are found:
@@ -409,7 +420,7 @@ func TestClauseTwoAndThreeChargeInDiscoveryOrder(t *testing.T) {
 // L1), and says nothing about a rule where nothing was settled.
 func TestAttributeLogNamesTheRuleAndClause(t *testing.T) {
 	log, visits := recordingLogger()
-	v, err := New(governedSchema(t, []xsd.AttributeUse{aUse(t, "id", false, nil)}, nil), WithLogger(log))
+	v, err := New(governedSchema(t, []xsd.AttributeUse{aUse(t, "id", false, nil)}, nil), testBackend(), WithLogger(log))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -418,7 +429,7 @@ func TestAttributeLogNamesTheRuleAndClause(t *testing.T) {
 
 	want := []string{
 		"assessing element validate.name=root validate.loc=instance.xml:1:1",
-		"assessing attribute validate.name=id validate.loc=instance.xml:1:10 validate.rule=cvc-complex-type validate.clause=2.1 validate.outcome=satisfied",
+		"assessing attribute validate.name=id validate.loc=instance.xml:1:10 validate.rule=cvc-attribute validate.clause=3 validate.outcome=declined",
 		"assessing attribute validate.name=stray validate.loc=instance.xml:1:11 validate.rule=cvc-complex-type validate.clause=2 validate.outcome=charged",
 	}
 	if !slices.Equal(*visits, want) {
@@ -477,7 +488,7 @@ func anonymousRootSchema(t *testing.T, base xsd.QName, derivation xsd.Derivation
 // assessAgainst assesses root against schema and returns what was charged.
 func assessAgainst(t *testing.T, schema *xsd.Schema, root Element) []*xsderr.Error {
 	t.Helper()
-	v, err := New(schema)
+	v, err := New(schema, testBackend())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

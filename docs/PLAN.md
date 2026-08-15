@@ -17,7 +17,7 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-08-13
+## Status — 2026-08-14
 
 Conformance lanes — **paste `go tool lanestatus` verbatim**, never a
 hand-count:
@@ -26,348 +26,263 @@ hand-count:
 |---|---:|---:|---:|
 | `ber` | — | — | 0 |
 | `datatypes` | 1161 | 12 | 1173 |
-| `instance` | 0 | 26361 | 26361 |
+| `instance` | 193 | 26168 | 26361 |
 | `json` | — | — | 0 |
 | `schema` | 11635 | 3763 | 15398 |
 | `xpath` | — | — | 0 |
 
 An em dash is a lane with no cases yet, which is a different claim from a lane
-scoring zero. `datatypes` is M3 and **complete** — its last open issue closed
-this week; `schema` is M4 and active; `instance` is M5, carved, and **still at
-zero**; `xpath`, `json` and `ber` wait on M6/M7, M8 and M11.
+scoring zero. `datatypes` is M3 and **complete**; `schema` is M4 and active;
+`instance` is M5, active, and no longer at zero; `xpath`, `json` and `ber` wait
+on M6/M7, M8 and M11.
 
-`schema` moved **9745 → 11635, +1890**, across nine landings since the last
-pass, each figure copied from its commit's `Ratchet:` line rather than
-recomputed: #503 (+6), #442 (+82), **#447 (+1572)**, #504 (+6), **#738
-(+224)**, with #710, #711 and #626 unchanged and not meant to move.
-`datatypes` moved **1156 → 1161, +5**, all of it #590. #447 alone is 83% of
-the schema total, and the figure is not the cohort its issue named:
-`simpleTypeDecidable` required a `restriction` child, so every schema using
-`xs:list` anywhere was declined wholesale regardless of what it tested. The
-arbiter attributed all 1572 case by case.
+**No lane moved, because nothing landed.** `main` is still `dd4f1d8`, the
+post-land pass for #766 — the four `instance` landings that took the lane 0 → 193
+are described in the previous stamp and are not re-narrated here. This is a full
+backlog run, not a post-land pass: the queue was audited body-by-body where it
+was cheap to do so, the branch namespace was re-surveyed, and two persona reports
+were folded in.
 
-**`instance` is the lane to read.** M5's engine seam landed (#710) and its XML
-source adapter landed (#711), and the lane did not move on either, correctly:
-neither decides a `cvc-` rule, and no driver runs the cases. 26361 cases, none
-of them ever run, is the largest single block of unclaimed conformance in the
-project, and the band below is ordered accordingly. The first `instance`
-figure that exists arrives with **#713**, which needs #712 first.
+**`schema`'s number is stale on `main` and correct in this table**, which is a
+distinction worth holding. `origin/wip/issue-740` carries an accepted
+**`schema` +1197 (11635 → 12832 pass, 3763 → 2566 fail)** — the arbiter's own
+`GOXSD_RATCHET=1` bank, machine-written, 1197 cases all flipping fail → pass with
+no other lane moving. It is the largest single `schema` movement this project has
+recorded and **it is not on `main`**, so `lanestatus` cannot see it and neither
+can this table. See the branch namespace section.
 
-Milestones, from GitHub:
+Milestones, from GitHub at the previous stamp and **unchanged by this pass** —
+no issue closed, no milestone was reassigned, and the one issue filed here
+(#779) deliberately carries none:
 
 | Milestone | Closed | Open | State |
 |---|---:|---:|---|
 | M0–M2 | 8 | 0 | done |
 | M3 — Datatypes vertical slice | 12 | 0 | **complete** |
-| M4 — Schema parsing | 81 | 43 | **active** |
-| M5 — Instance validation (XML) | 1 | 13 | **active** — first slice landed |
+| M4 — Schema parsing | 82 | 42 | **active** |
+| M5 — Instance validation (XML) | 6 | 13 | **active** — six slices landed |
 | M6–M12 | 0 | 0 | not filed |
 
-Queue: 177 open issues — 151 `ready`, 26 `blocked`, 0 `needs-replan`, 2 `epic`
-(both `blocked`). **56 of the 177 carry a milestone; 121 carry none** — the
-milestones track feature scope, and the process, doc and comment-accuracy issues
-that post-land passes file are deliberately outside them. Read the milestone
-table as feature progress, not as the queue.
+These four rows are the one part of this section not re-read from GitHub today,
+and the reason is stated rather than hidden: the MCP issue tools expose no
+milestone filter and `gh` is 403 (#527), so the counts are the 07:14 stamp's
+GitHub reads carried forward across a provably empty delta. Every other figure
+below was re-read.
 
-**This pass filed two issues, closed none, and commented on six.** Both filings
-are persona findings with no existing owner: **#747** (the CLI's own `-help`
-never says the subcommands are stubs, and README:75 claims `go doc` renders the
-same text) and **#748** (README's M5 block is wrong in both directions). The six
-comments are confirmations on **#688**, **#625**, **#669**, **#492**, **#514**
-and **#687**.
+Queue: **187 open issues — 164 `ready`, 23 `blocked`, 0 `needs-replan`, 2 `epic`**
+(both `blocked`), against 281 closed. **Every open issue carries a queue label**
+— the #773/#774 defect the last pass found is not present today, checked across
+all 187 rather than assumed. Read the milestone table as feature progress, not as
+the queue: 132 of the 187 carry no milestone at all, and the process, doc and
+comment-accuracy issues that post-land passes file are deliberately outside them.
 
-### What this pass did, and what it deliberately did not
+### What this pass did
 
-The standing "carve M5 and nothing else" instruction that governed the last pass
-is **spent**: M5 is carved, its first slice has landed, and the band below is a
-full re-derivation of the head rather than an edit of it.
+**The unblock sweep found nothing to unblock, and that is a verified result
+rather than a consequence of nothing having landed.** All 23 `blocked` bodies
+were read and their `## Depends on` lines checked against live issue state. Every
+one names either an open issue (#414 for #438, #455 for #456, #591 for #593,
+#407 for #415, #250 for #248/#267/#345, #715 for #716–#719, #472 and #715 for
+#720, #472 for #16) or a **trigger** — six bodies (#548, #555, #622, #681, #692,
+#696) name the next `/retro` process audit and say in their own words not to
+re-scan them. Two epics (#79, #250) are dependency targets. Nothing is startable
+that is not already labelled so.
 
-- **Both persona reports were folded** (step 5), produced today by libuser and
-  cliuser against README and `go doc` only. Eight findings: two had no owner and
-  were filed (#747, #748); six duplicated open threads and were confirmed there
-  rather than re-filed. Two of the confirmations carry more than agreement —
-  **#688** is widened beyond `area/xsd` (`parser.AssembledDocument` and
-  `*validate.Validator` degrade the same way, and worse), and **#669**'s
-  "does-not-compile" premise is contradicted by the persona running the snippet
-  successfully, so that half is flagged for re-verification before it is worked.
-- **`gapaudit`'s group 1 is empty.** No `GAP(` marker in the tree lacks an open
-  tracking issue, over 37 markers in 4 areas. Group 2's six entries are the
-  permanent kind — five conformance-lane gaps that never carry a marker (#404,
-  #591, #592, #593, plus #398, which says in its own title that it has no
-  marker) and #719, whose marker lands with its M6 seam. No `kind/gap` issue was
-  owed.
-- **`docs/PLAN.md`'s #503/#504 coupling record was wrong and is deleted, not
-  edited.** The previous section stated that #504's landing would carry a
-  decidability widening in `conformance/schema.go`. It did not: `groupDecidable`
-  and `attributeGroupDecidable` carry no redefine-specific decline, so there was
-  nothing to widen. What keeps `MS-Schema2006-07-15/schL10` and `/schM5` banked
-  `pass` is `parser/redefine.go`'s `chainedOriginal` guard, and **#744** owns
-  collapsing it. #504's post-land pass had already corrected #726's body the same
-  way; this section was the last carrier.
-- **#493 was left alone deliberately.** Its acceptance owns correcting #256's and
-  #271's `state_reason` and explicitly asks the implementing session to decide
-  between a reopen-and-reclose and a comment. Doing either here would have
-  spent that decision without recording it. #287 is **not** a third instance —
-  it carries no `needs-replan` label.
+- **#584 is `blocked` and names no dependency at all** — its body ends at
+  `## Notes` with no `## Depends on` section. `blocked` means waiting on a named
+  dependency in that section, so an issue carrying the label and no payload is
+  **structurally unreachable by every future unblock sweep**: the sweep reads
+  those lines and correctly concludes there is nothing to check. Its real gate is
+  **#414**, recoverable only from its Notes prose (#438's fold-ordering argument,
+  which #584 inherits). Recorded in a comment on the thread; the body was not
+  edited, because the MCP write path strips angle-bracket tokens (#515, #764) and
+  would delete every element name in it.
+- **#779 was filed for the class.** Three consecutive passes have now found a
+  queue-invisible issue by hand — #773/#774 with no queue label, #584 with no
+  dependency, and #715/#766 found only by reading all 25 `blocked` bodies. The
+  classes are cheap to check and expensive to miss, which is PRINCIPLES 27's
+  exact shape, and `wipsurvey` and `gapaudit` are the precedent. #779 reports and
+  never relabels: #722 is the standing proof that a mechanical verdict acted on
+  without reading the thread damages the queue.
+- **Two persona reports were folded in, and each finding was reproduced against
+  the tree before it was acted on.** Ten findings — five from libuser, five from
+  cliuser. **Two** produced a correcting comment (#748), **three** produced
+  confirmations or an added acceptance probe (#409 twice, #625), **three** were
+  declined because they reproduce exactly as already filed with nothing to
+  correct (#514, #687, #672), **one** was declined as a persona misreading
+  (#747), and **one** as a duplicate of an existing Acceptance clause (#472).
+  **No finding produced a new issue**, which is the expected shape for a surface
+  four passes have already audited — the two that survived scrutiny were both
+  corrections to issues that already existed.
+- **The `#747` re-scope was refused.** cliuser reported it "PARTIALLY fixed, but
+  in the WRONG artifact" — `go doc ./cmd/goxsd8` carries an "Implemented today"
+  paragraph that `-help` does not. Nothing was fixed: **#251 added that paragraph
+  on 2026-08-02**, ten days before #747 was filed, and #747's Acceptance already
+  quotes it as the text to port into the `usage` const. The persona read a
+  pre-existing asymmetry as a partial repair because it has no commit history,
+  which is correct persona discipline and exactly why findings are reproduced
+  before filing. The proposed narrowing would also have dropped fact 2 —
+  `README.md:74-76`, the divergence **#626 introduced** — leaving a false README
+  sentence with no owner.
+- **The exit-2 overload was declined as a duplicate of #472's own Acceptance.**
+  cliuser proposed a forward-looking issue, `blocked` behind #472, for exit 2
+  meaning both "usage error" and "this binary is a stub". #472 already says it,
+  in stronger terms, under *"The exit-2 overload must be resolved here, not
+  deferred"*, and already credits cliuser for it. Re-verified at `dd4f1d8`:
+  `run` has exactly two exits, and since there is no flag parsing at all, today's
+  bucket is not merely coarse but **singular** — which makes the clause cheaper
+  than it reads, because there is no usage-error behaviour to preserve.
+- **#748 gained the correction that matters most**: its own Acceptance quotes
+  `func New(schema *xsd.Schema, opts ...Option)`, and **#766 added the required
+  second positional `backend value.Backend`**. Its prescribed replacement text is
+  stale too — it says "no source adapter exists", and **#711 landed `xmlsrc` the
+  same day #748 was filed**. A third snippet defect it never named: the README
+  line `validate.New(schema)` is missing the backend argument, so the snippet
+  will not compile even after both filed facts are repaired.
+- **#409 gained a third independent libuser sighting and one addition.**
+  `go doc ./codegen Generate` still answers "no symbol"; the root `doc.go` says
+  codegen is *"(eventually)"* while `codegen/doc.go` says it *"emits"*. The root
+  doc is the correct one, so the contradiction dissolves when #409 lands — filed
+  as an acceptance **probe**, not a new issue.
+- **#625 and #514/#687/#672 reproduce exactly as filed** and needed no
+  correction. #625 got a one-paragraph second-sighting note (a defect two
+  isolated consumers find five days apart is not a matter of taste); the three
+  CLI-contract issues got nothing, because three comments saying "still true" is
+  noise.
 
-**What was not done: a body-by-body audit of all 151 `ready` issues.** No stale
-issue was closed and no duplicate merged, because none was found in the bounded
-sweep this pass ran — the seven landings' follow-ups, the M5 family, the
-README/CLI cluster the personas touched, and the three retired branches. Four
-clusters were checked for merge candidates and each is genuinely distinct rather
-than duplicated: the STYLE-citation family (#382, #540, #543, #548) differ in
-defect shape, not subject; the README family (#492, #625, #669, #748) are four
-separate paragraphs of one section. **#489**'s carried-follow-up ledger sweep is
-again undone, and is named as the next planning action rather than left implicit.
+**`gapaudit` was not re-run, and the reason is that its answer is provably
+unchanged**: the tree is byte-identical to the head the 07:14 pass audited, so
+its 44 markers in 5 areas and its "no real leak" verdict stand. Worth one line
+for whoever reaches for a grep instead — the naive `grep -rn "GAP("` returns
+**77** lines, six of them `GAP(real)` and `GAP(oops)` inside `gapaudit`'s own
+test fixtures. That is the tool's whole reason for existing (PRINCIPLES 27).
+
+`gh` returned 403 on **both** REST and GraphQL in this container again, so every
+GitHub read and write here went through the MCP server and `wipsurvey` was fed
+hand-built JSON. That is **#527**, now at eleven-plus consecutive sessions, with
+#668 and #682 owning the downstream consequence.
 
 ### Branch namespace, `origin` — report-only; a session never deletes a ref
 
 | Branch | Verdict | Disposition |
 |---|---|---|
-| `wip/issue-256` | EXPIRED | Retired in place; issue closed `needs-replan`, superseded by #470. |
-| `wip/issue-271` | EXPIRED | Retired in place; issue closed `needs-replan`, superseded by #478/#479/#480. |
-| `wip/issue-287` | EXPIRED | Retired in place; issue closed, answered in the opposite direction by PR #511. Not a park — it carries no `needs-replan`. |
+| `wip/issue-740` | EXPIRED (6h28m) — **mid-landing, and the one to read first** | Three commits: the implementation `68c7a7f`, the arbiter's own ratchet bank `c415bf9` (**`schema` +1197**), and a merge-forward. Age is genuine — the branch has commits of its own, so #722 does not apply. An accepted verdict on an unlanded branch, so #740 is **not** a band row, on #714's precedent. Recovery is a resume, not a re-implementation. |
+| `wip/issue-715` | EXPIRED (6h49m) — **claim dead, grounding alive** | **Zero commits ahead of `main`**: a lease. The `wipsurvey` age is the figure #722 says not to trust; the thread's own clock is what settles it — last comment 07:56 UTC, six and a half hours, no RESUME. **Not retired**: hours, not days, and this is the queue's highest-value M5 slice. |
+| `wip/issue-256` | RETIRED | Issue closed `needs-replan`, superseded by #470. |
+| `wip/issue-271` | RETIRED | Issue closed `needs-replan`, superseded by #478/#479/#480. |
+| `wip/issue-287` | RETIRED | Issue closed, answered in the opposite direction by PR #511. Not a park — it carries no `needs-replan`. |
 | `claude/eloquent-cerf-7ckw7b` | merged | 0 commits ahead of `main`. Deletable. |
 | `claude/eloquent-cerf-8f1mrv` | merged | 0 commits ahead of `main`. Deletable. |
-| `claude/eloquent-cerf-patxs3` | superseded | 53 commits ahead by SHA, none by content — its tip twelve are landed issues (#307, #336, #306, #304, #303, #299, #305, #449, #296, #295) that reached `main` as squash commits. Deletable. |
+| `claude/eloquent-cerf-patxs3` | superseded | 253 commits ahead by SHA, none by content — tip `2196c3f`, unmoved since 2026-08-07, content reached `main` as squash commits. Deletable. |
 
-No `parked/*` branches. All six refs are listed for human triage and the three
-`wip/*` have been for several passes.
+No `parked/*` branches. `origin/wip/issue-766` is gone, deleted at merge, which
+is what a landed branch is supposed to do.
 
-**None of the three `wip/*` refs shares an ancestor with today's `main`** —
-`git merge-base origin/main origin/wip/issue-N` returns empty for all three, so
-`git log main..branch` counts are meaningless for them and "verify its content is
-in `main`" has to be done by reading files, not by revision arithmetic. That is
-why #493's finding (`wip/issue-271` carries zero commits not in `main`) and a
-naive 28-commit count disagree: the count is right and the inference from it is
-not.
+**The two EXPIRED branches fail in opposite directions and want opposite
+responses.** #740's expiry hides *finished, judged, banked* work — the risk is
+that it is silently redone. #715's expiry hides *nothing*, because the branch is
+empty — the risk is that its issue is retired and its grounding lost. A single
+EXPIRED verdict cannot distinguish them; only the commit count and the thread
+can. This is the sharpest instance of #722's hazard yet recorded, and both halves
+of it appeared in one `wipsurvey` run.
+
+**#715's pre-flight survives its claim, and a session must not re-run it.** The
+expired session produced no code but did produce an oracle grounding across
+§3.4.4.2, §3.4.4.3, §3.9.4.2, §3.9.4.3 and §3.8.4.3 with the load-bearing
+cvc-accept Note quoted in full, plus a **warden verdict that rejected #715's own
+`## Notes` section** and approved a different named shape:
+`xsd/contentmatcher.go`, five exported identifiers, a counting walk rather than
+automaton unfolding, `(*Schema).ContentMatcher` as a method so a
+pre-`cos-nonambig` matcher is unrepresentable. Whoever takes #715 implements the
+grounding comment, not the body.
 
 **Read a zero-commit `wip/issue-N` against its issue thread before believing an
 EXPIRED verdict.** This is **#722**: `wipsurvey` dates a lease-only branch from
-the *previous* landing's committer date, so a claim made minutes ago reports
-EXPIRED, and the prescribed response to EXPIRED is to label the issue
-`needs-replan`. A pass following it blindly retires a live session's issue in the
-hour its design is approved. The caution stands until #722 lands.
+the *previous* landing's committer date, and the prescribed response to EXPIRED
+is `needs-replan`. A pass following it blindly retires a live session's issue.
+The caution stands until #722 lands.
 
 ### Working band
 
-Dependency-ordered top of the `ready` queue, so a session need not scan the
-whole list. Take from the top; the ordering prefers slices that move a lane over
+Dependency-ordered top of the `ready` queue, so a session need not scan the whole
+list. Take from the top; the ordering prefers slices that move a lane over
 horizontal completeness.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #715 | the greedy non-backtracking content matcher — by its own Acceptance *"the largest single move in the milestone"*, and the only band row that unblocks five others (#716, #717, #718, #719, #720). `## Surface` expects none, so nothing gates the start |
-| 2 | #766 | the `value.Backend` seam and the datatype-valid half #714 split out — an `instance` mover, and the named consumer of an export that currently has none. **Its `## Surface` is undecided by design: run the warden pre-flight first (#692)** |
-| 3 | #740 | the `enumeration` facet is declined by the gate and, past it, refused with a **fabricated** `src-simple-type` verdict on a legal schema (STYLE E2). `pdecimal006` is the named cost, and it is the same two-refusal shape #447 already worked through |
-| 4 | #659 + #527 | the environment tax, one sentence of prose each, banded after **eleven** and **ten** sightings. Both bodies were corrected on 2026-08-13 and neither was actionable as filed |
-| 5 | #733 | a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and #442 moved `schema` **+82** |
-| 6 | #747 + #748 | the two findings the 2026-08-13 pass filed. #747's second fact is a divergence **#626 introduced**; #748's snippet will not compile against the signature `xmlsrc/doc.go` already commits |
-| 7 | #625 → #669 → #492 | the rest of README's Library block, in that order — #625's fix names the file #669 must add to the example list, and #492's belongs in the sentence at `README.md:115-116` rather than a new paragraph |
-| 8 | #514 + #687 + #672 | the open CLI-contract decisions: typo-vs-unbuilt, scoped help (now with a third case — `-h` after an unknown subcommand exits 0 and flags nothing), and `-version` |
-| 9 | #472 | implement `goxsd8 parse`, the first non-stub subcommand |
+| 1 | #715 | the greedy non-backtracking content matcher — the only band row that unblocks five others (#716, #717, #718, #719, #720), and by its own Acceptance the largest single move M5 has left. **The claim on it expired with zero commits and the pre-flight banked**, so it is now the queue's cheapest high-value row rather than a contended one |
+| 2 | #775 | `cvc-complex-type` clause 1.2, the simple-content charge #766 split off — an `instance` mover whose whole seam is already on `main` |
+| 3 | #659 + #527 | the environment tax, one sentence of prose each. Both bodies were corrected on 2026-08-13; #527 was paid again by this pass, as it has been by every pass for eleven sessions |
+| 4 | #733 | a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and #442 moved `schema` **+82** |
+| 5 | #748 + #747 | the two persona findings, both re-verified and both corrected on their threads today. #748 is now four facts, three of them one-line edits; #747 is two facts and its re-scope was refused |
+| 6 | #625 → #669 → #492 | the rest of README's Library block, in that order — #625's fix names the file #669 must add to the example list, and #492's belongs in the sentence at `README.md:115-116` rather than a new paragraph |
+| 7 | #514 + #687 + #672 | the open CLI-contract decisions: typo-vs-unbuilt, scoped help, and `-version`. All three re-reproduced today against the built binary. Take them **before** #472 — each is a sentence or a dispatch branch while the CLI surface is still empty, and a change to shipped behaviour afterwards |
+| 8 | #472 | implement `goxsd8 parse`, the first non-stub subcommand — and the issue that owns the exit-2 split |
 
-**#714 has landed** (PR #770, `42c94ed`), and it is the block this section
-carries — the previous landing's is replaced by it rather than joined to it.
-**`instance` moved 19 → 29 pass**, 26342 → 26332 fail of 26361; `schema` and
-`datatypes` unchanged, no lane regressed. It decided `cvc-complex-type`
-(§3.4.4.2) clauses **2 and 3** at the validation root — attribute matching
-against `{attribute uses}` and required-use presence — and exported three
-`xsd` identifiers to do it (`ResolvedType`, `ResolvedAttributeDeclaration`,
-`DeclarationName`), all warden-pre-approved.
+**#715 moves from "CLAIMED, read it before taking it" to the top row outright.**
+The previous band marked it contended and told a session unwilling to read a
+thread to take row 2 instead; that advice is withdrawn. The claim is dead, the
+branch is empty, and the grounding plus warden verdict are banked on the thread —
+which makes #715 *less* expensive than any other row of comparable value, not
+more.
 
-**It had no row to drop, and that is the one thing this landing changes about
-how the band is read.** #714 was held out of the previous band *because it was
-in flight with an accepted verdict* — the band exists so a session can take a
-**startable** issue, and banding one with a live branch invites a second
-session onto it. That reasoning was right and is now spent. The precedent it
-sets is worth keeping: an issue with an accepted verdict and an unlanded branch
-is not a band row, and re-banding it is a decision to make **after reading its
-thread**, per #722, never off a `wipsurvey` verdict alone.
+**#740 is deliberately not banded** despite being the largest pending lane
+movement in the project. It has an accepted verdict and an unlanded branch, which
+#714's post-land pass established is not a band row: the band exists so a session
+can take a **startable** issue, and banding judged work invites a second session
+onto it. Row 5 swapped #748 ahead of #747 because #748 now carries a correction
+its body does not, and reading the thread first is cheaper there.
 
-**Of the ten flips, the arithmetic was the thing that could have been missed.**
-The verdict measured 18 → 28 on base `1835218`; #761 landed +1 on the same
-lane from the same base in parallel; the expectations merge was textually
-clean, so nothing in the tooling forced anyone to notice that the ten flips read
-19 → 29. The merge-forward round re-ran the full gate and the ratchet on the
-merged tree and confirmed **29**, exactly the naive sum with no interaction in
-either direction. Two concurrent landings on one lane is the shape to watch,
-not this instance of it.
+**Rows 3, 4, 6, 7 and 8 are unchanged in substance from the previous band**, with
+their justifications intact: nothing landed to touch any of them.
 
-**Rows 1 and 2 are new, and they are the reason the mechanical answer moved.**
-#715 and #766 were both `blocked` on #714 alone and both became startable with
-it; all 25 open `blocked` bodies were read for a `## Depends on` naming #714 and
-exactly those two do. This is the condition the last two passes named as the
-one that overrides the mechanical promotion — *a new issue entering the band
-as row 1 drops* — and it applies twice over. Both move `instance`, which the
-Status section above already calls the lane to read, and the band's ordering
-prefers a vertical slice that moves a lane over horizontal completeness.
+**#773 and #774 stay `ready` and unbanded.** #773 needs a new optional capability
+interface for `[unparsedEntities]` and so its own warden surface pass before it
+is workable — the same condition holding #744 and #721 out. #774 is three
+fail-open declines to close or rule permanent; it can move a lane, but which way
+and by how much is unknown until the first is decided, so it is not ordered
+against slices whose movement is predictable.
 
-**#715 leads #766 on dependency, not on size.** #715 unblocks five issues
-(#716, #717, #718, #719, #720) and #766 unblocks none, and #715's `## Surface`
-expects nothing while #766's is undecided by design — it asks how a
-`value.Backend` reaches `(*Validator)` and offers three candidate shapes. That
-is the same condition holding **#744** and **#721** out of the band entirely,
-and #766 is banded anyway only because #714 has just demonstrated the
-pre-flight running inside a `/develop` session and splitting the issue
-correctly. **#692 is the live hazard**: an issue body saying "expect a warden
-pre-flight" does not bind the session to run one, and #585 paid two repair
-rounds for exactly that. A session taking #766 runs the pre-flight before
-implementing or it is not following this row.
+**Deliberately unbanded, and why.** **#744** — the chained-redefine successor —
+is the highest-value M4 gap in the queue and is held out only because its
+`## Surface` requires a warden pre-flight on an `xsd` entry point that does not
+exist. **#722** is the one to promote if a later pass wants a cheap high-value
+row: it is still the only unbanded issue whose absence can cause a future pass to
+actively damage the queue, and this pass met **both halves** of its hazard in one
+`wipsurvey` run. **#753** was settled by the previous pass — `ready`, unbanded,
+nothing further owed — and is not re-litigated here. **#779** is this pass's own
+filing and is not banded on its first appearance. **#743**, **#742**, **#741**,
+**#731**, **#732**, **#726**, **#725**, **#702**, **#703**, **#706**, **#755**,
+**#756**, **#759**, **#763**, **#764**, **#768**, **#771**, **#772** and **#777**
+are this month's post-land follow-ups: real, filed, and none of them moves a
+lane. The remaining `blocked` M5 slices cannot be banded at all.
 
-**#740 was row 1 by elimination and is now row 3 by promotion of others**, with
-its own justification unchanged — nothing about this landing touched it.
-**`origin/wip/issue-740` carried an implementation commit minutes after this
-pass ran**, so a session is on it; rows 1 and 2 are unclaimed and a session
-taking from the top will not collide. Read the thread before taking row 3, per
-#722 — never off a `wipsurvey` verdict alone. The
-two follow-ups this landing filed are **#771** and **#772**, and neither is a
-band row: #771 is a fabricated-verdict fix worth no ratchet movement, #772 is a
-two-site diagnostic correction. Both are `ready` and startable as filed.
-
-**Row 4 is the change of judgment, and it is overdue rather than new.** #659
-(suite submodule unpopulated) and #527 (`gh` 403 on both routes) have both been
-`ready` and unbanded since 08-10 and 08-06 while being paid, respectively,
-across **eleven sightings in ten landings** and **nine consecutive sessions plus
-this pass**. Neither is a lane mover and both are one sentence of prose. What
-banded them is that **both were wrong in a way that would have wasted the
-session that took them**, and both bodies were rewritten on 2026-08-13:
-
-- **#659's Acceptance nominated the wrong documents.** It offered a choice
-  between `docs/WORKFLOW.md`'s worktree bullet and `.claude/agents/mason.md`.
-  The recount says the **arbiter's ephemeral container** pays this 8 times in
-  11 and the mason worktree once — and `.claude/agents/arbiter.md` carries no
-  submodule step at all, the only arbiter-facing statement being in
-  `.claude/commands/ratchet.md`, which a `/develop` verdict round does not read.
-- **#527 was filed on a premise the evidence has since falsified.** It asked the
-  implementing session to write the fallback rule hedged as *"session-scoped
-  variance … may reverse"*. It has not reversed in nine consecutive sessions,
-  and the REST text names an org-admin action rather than a per-session
-  condition. The instruction — fall through, never abort — was never in doubt;
-  the hedge was.
-
-#668 and #682 are the same cluster and are **not** banded: they own the
-downstream consequence (CLAUDE.md's `wipsurvey`/`gapaudit` pipelines are spelled
-`gh issue list | go tool …` and are dead in every one of these containers,
-though both tools have a no-`gh` mode). They are cross-referenced from #527 so a
-`/backlog` pass that hits all three at once knows which owns what.
-
-**#759** was filed from #712's landing — `ready`/`kind/process`, M5 —
-violation messages have two forms for naming a sub-clause and STYLE picks
-neither. `validate/assess.go:82` is the only non-test site using the leading
-`"clause 2: "` label; every other clause-naming message subordinates the clause
-to the fact. It is **not** banded because it needs no session of its own: the
-next M5 charging slice carries it, provided that slice lands the STYLE sentence
-instead of silently picking a form. The arbiter recorded it on #712 as
-non-blocking and not a finding, and `09ccfa4` is not in question.
-
-**This landing owed three dispositions and got three; exactly one is a new
-issue.**
-
-- **#768** (`ready`/`kind/bug`/`area/parser`, unbanded) is the arbiter's
-  `[tests-that-cannot-fail]` finding: `TestProduceLocalElementNillableMapped`'s
-  `{abstract}` assertion stays green against a `produceLocalElement` that reads
-  the attribute, because the fixture carries none. **Verified here by running
-  the four-cell mutation matrix, not by reading the verdict** — and the
-  verification sharpened the claim: the assertion *does* catch a producer that
-  hardcodes `true`, and what it cannot distinguish is "never reads it" from
-  "reads it correctly", which is the whole of what its comment asserts. Filed
-  rather than absorbed because the arbiter's own landing obligation 3 asked the
-  merge-forward round to fold it in, the round happened (`409fda3`), and it did
-  not ride along; a second hand-off would track nothing (#330).
-- **The `boolAttr` whitespace defect was already filed** — it is **#456**, open
-  since 08-03 and `blocked` behind #455, which mason and the arbiter both
-  missed while flagging it. No duplicate was filed. #456's body was **corrected
-  on its thread rather than in place**: it says "eleven call sites … all in
-  `parser/produce_complex.go`" and there are now **thirteen**, two of them the
-  `parser/produce.go` sites this landing added. The body itself was left alone
-  deliberately, because #764 (the MCP `issue_read` path strips angle-bracketed
-  tokens from a body) makes a read-modify-write of that body a silent deletion
-  of the three `<…>` tokens it carries — `WebFetch` confirmed them present.
-  **That is the discipline "correct the body, not a comment" colliding with the
-  only read path a session has, and it is why #764 is worth its own session.**
-  The landing also changed the defect's direction: with `{abstract}` now real
-  on globals, a padded `abstract=" true "` is a false accept with a live
-  `cvc-elt` reader behind it, where before the property was universally false
-  anyway.
-- **#753's decline-census trigger is RETIRED, after four consecutive entries
-  carrying it forward.** It is not deferred and it is not fired: it is
-  unfireable, on two independent grounds recorded on the thread. `declines.go`
-  detects a decline by re-running the case with its expectation flipped, which
-  is an exact test for "nobody decided this" and structurally cannot carry a
-  *reason*; and even a per-reason breakdown would not name this gap, because an
-  ill-formed-but-accepted document charges nothing and lands in the decline
-  bucket for the engine's ordinary reason. The instrument that would measure it
-  is a census of the suite's *fixtures*, which is different work nobody has
-  asked for. #753 stays `ready`, unbanded and startable exactly as filed — its
-  own Acceptance's decline path needs no census at all.
-
-**Nothing was unblocked by this landing, and that is a checked fact rather than
-an omission.** All 25 open `blocked` issues were read for a `## Depends on`
-naming #761; none does. #761 was filed by the arbiter mid-verdict and nothing
-was ever queued behind it.
-
-**Deliberately unbanded, and why.** **#744** — the chained-redefine
-successor — is the highest-value M4 gap in the queue and is held out only
-because its `## Surface` requires a warden pre-flight on an `xsd` entry point
-that does not exist, in three candidate shapes; it is a band row the moment
-that call is made. **#753** stays unbanded, now with no trigger attached and no
-carried-forward note owing: it is a fail-open (character data and a second root
-outside the document element, silently admitted in `xmlsrc` and
-`parser/document.go`) which can never falsely reject, so it costs no lane
-today, and it is startable as filed whenever someone wants it. **#743**,
-**#742**, **#741**, **#731**, **#732**, **#726**, **#725**, **#702**, **#703**,
-**#706**, **#755**, **#756**, **#759**, **#763**, **#764**, **#768** are this
-month's post-land follow-ups:
-real, filed, and none of them moves a lane. **#721** wants a warden call on two
-shapes before it is workable. **#722** is the one to promote if a later pass
-wants a cheap high-value row — it is still the only unbanded issue whose
-absence can cause a future pass to actively damage the queue. The remaining
-`blocked` M5 slices cannot be banded at all.
-
-**Rows 6–8 sit ahead of row 9 on cost, not importance.** Each is a sentence or
-a dispatch branch while the CLI surface is still empty; taken after #472 every
-one of them is a change to shipped behaviour. #472's own Acceptance carries
-the `-version` decision, so if it is taken first it must discharge #672 rather
-than leave it contradicting the landing. **#720** (`goxsd8 validate`) is
-`blocked` behind #472 and #715 and is not a band row.
-
-**The Status text above is now FALSE where it matters, and it is deliberately
-left standing.** It says `instance` is *"still at zero"* and that *"the first
-`instance` figure that exists arrives with #713, which needs #712 first"*.
-Both are discharged: the lane reads **29 / 26332 / 26361** and #713 is closed.
-Nothing above this table was patched, because the Status section is REPLACED
-wholesale by `/backlog` from `go tool lanestatus` and GitHub, and it carries
-ONE date stamp (**2026-08-13**) precisely so a reader can tell staleness from
-wrongness without trusting any individual number. Correcting one sentence
-inside a section stamped with an older date makes it *harder* to read, not
-easier — the reader then cannot tell which figures were re-derived and which
-were not. **The next `/backlog` must re-derive the section whole, and the lane
-paragraph is where it starts.** The milestone and queue tables are stale by
-#712's, #713's, #761's and **#714's** landings (all M5-adjacent, all closed), by
-#715's and #766's `ready` flips, and by #753, #755, #756, #759, #761, #763,
-#764, #768, **#771** and **#772** having been filed since.
+**#759 is the one unbanded follow-up with an owner by default.** Violation
+messages have two forms for naming a sub-clause and STYLE picks neither;
+`validate/assess.go:82` is the only non-test site using the leading
+`"clause 2: "` label. It needs no session of its own — **the next M5 charging
+slice carries it**, which is #715 or #775, whichever lands first, and both
+threads say so.
 
 **`parser/redefine.go` has been rewritten five times in six days, so read it
-rather than an issue body that describes it.** #686 put its duplicate-key charge
-in `recordOriginal`; #699 added `rejectProhibitedAttrs` to `newRedefineSet`;
-#506 inserted ~45 lines and moved every marker line number the #585 and #505
-threads cite; #503 added the clause-7.1-vs-7.2 branch; #504 charged clause 6.2.2
-and deleted the `checkRedefinedGroup` marker along with `parser/doc.go`'s
-composition-gaps bullet. #744, #706 and #726 all open that file next.
+rather than an issue body that describes it.** #686, #699, #506, #503 and #504
+each moved it; #744, #706 and #726 all open it next.
 
 ### Next planning action
 
 **Sweep the carried follow-up ledger (#489)** — file or dismiss each unfiled
-advisory, one comment per item — before the next carve. It has now gone six
+advisory, one comment per item — before the next carve. It has now gone eight
 consecutive passes undone, it grows with every landing, and #330 is the standing
-proof that a "handed to the post-land pass" hand-off tracks nothing. This pass
-retired one such hand-off (#753's decline-census trigger, four entries old) by
-showing it could never fire, which is the shape the sweep is for and is not a
-substitute for running it. Everything else this queue needs is a develop
-iteration, not a planning one — **starting with #715**, the band's row 1 and
-the largest single `instance` move M5 has left.
+proof that a hand-off tracks nothing. This pass disposed of nine persona findings
+and filed one issue, which is the shape the sweep is for and is not a substitute
+for running it.
 
+Everything else this queue needs is a develop iteration, not a planning one.
+**Start with #740** — not because it is a band row, which it deliberately is not,
+but because a judged, banked `schema` +1197 sitting off `main` is the largest
+recoverable value in the repository and it decays: the branch is two commits
+behind already, and every landing widens the merge it will need. If it is
+unclaimed, resume it; **#715 is the top row for anyone starting fresh.**
 ## Milestones
 
 ### M0 — Scaffold — done
@@ -418,33 +333,33 @@ the whole of it.
 identity constraints, `xsi:type`/`xsi:nil`, wildcards, default and fixed
 values. **`instance` lane.**
 
-Carved 2026-08-12 into ten slices, #710–#719, and now **eleven** — #766 was
-split out of #714 by a warden pre-flight during its grounding. Five have
-landed: the infoset seam and engine skeleton (**#710**), the `xmlsrc` adapter
-(**#711** — it decides no `cvc-` rule, so the lane did not move), root
-dispatch (**#712** — `Assess` charges `cvc-assess-elt` and `cvc-elt` clause 2,
-and the lane still did not move because nothing ran the cases), **the lane
-driver (#713), which took `instance` off zero — 0 → 18 pass** (the #175
-analogue, placed fourth so every slice after it reports a real number), and
-`cvc-complex-type` clauses 2–3 (**#714**, 19 → 29).
+Carved 2026-08-12 into ten slices, #710–#719, and now **fourteen** — #766 was
+split out of #714 by a warden pre-flight, and #773, #774 and #775 out of #766 by
+another. Six have landed: the infoset seam and engine skeleton (**#710**), the
+`xmlsrc` adapter (**#711**) and root dispatch (**#712**), none of which moved the
+lane and correctly so — the first two decide no `cvc-` rule and nothing yet ran
+the cases; **the lane driver (#713), which took `instance` off zero — 0 → 18
+pass** (the #175 analogue, placed fourth so every slice after it reports a real
+number); `cvc-complex-type` clauses 2–3 (**#714**, 19 → 29); and the
+`value.Backend` seam with the four datatype-valid attribute charges (**#766**,
+29 → 193).
 
 **The carve is no longer a chain, and reading it as one loses work.** The
 original ordering assumed a slice becomes `ready` as the one before it lands.
-That held until #714, which now has **two** successors directly behind it —
-**#715** and **#766**, both `ready` — while #716, #717, #718 and #719 all wait
-on #715 rather than on each other. Relabel from the `## Depends on` lines, never
-from the milestone or from the issue numbers' order; #712's post-land pass
-missed exactly this flip once already. The CLI's own `validate` subcommand is
-#720, `blocked` behind #472 and #715.
+That held until #714, which had **two** successors directly behind it, and #766
+has **three**; #716, #717, #718 and #719 all wait on **#715** rather than on each
+other. Relabel from the `## Depends on` lines, never from the milestone or from
+the issue numbers' order — and sweep for issues carrying **no queue label at
+all**, which is how #773 and #774 sat outside both queues for a day. The CLI's
+own `validate` subcommand is #720, `blocked` behind #472 and #715.
 
-**29 is a floor built for soundness, not a measure of the engine.** The lane
-emits only "not valid" observations, from three root-level charges (#761 made
-the second reachable through an assembled schema, #714 added the third);
-a violation-free `Result` DECLINES rather than passing, because `Assess`
-evaluates none of `e-validity`'s other conjuncts. The milestone's remaining
-slices are what turn declines into decisions — 26328 of the lane's 26361 cases
-are harvest-candidate declines and 3 more are indeterminate, leaving exactly
-one that is decided and decided WRONG (**#771**).
+**193 is still a floor built for soundness, not a measure of the engine.** The
+lane emits only "not valid" observations; a violation-free `Result` DECLINES
+rather than passing, because `Assess` evaluates none of `e-validity`'s other
+conjuncts. The milestone's remaining slices are what turn declines into
+decisions. Exactly one case is decided and decided WRONG (**#771**); the decline
+census that separated harvest candidates from indeterminates was taken before
+#766 moved 164 cases and is not re-derived here.
 
 The design constraints are fixed by `validate/doc.go` and PRINCIPLES 8, 11,
 13, 14 and 15, and the carve does not reopen them.

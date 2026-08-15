@@ -178,7 +178,7 @@ func abstractRootValidator(t *testing.T) *validate.Validator {
 	if err != nil {
 		t.Fatalf("assembling the schema: %v", err)
 	}
-	v, err := validate.New(schema)
+	v, err := validate.New(schema, strict.New())
 	if err != nil {
 		t.Fatalf("validate.New: %v", err)
 	}
@@ -232,9 +232,11 @@ func TestDecidedNotValidEnumeratesTheDecidableCharges(t *testing.T) {
 		{"cvc-assess-elt alone", []*xsderr.Error{charge(ruleCvcAssessElt)}, true},
 		{"cvc-elt alone", []*xsderr.Error{charge(ruleCvcElt)}, true},
 		{"cvc-complex-type alone", []*xsderr.Error{charge(ruleCvcComplexType)}, true},
-		{"a rule outside the enumeration", []*xsderr.Error{charge("cvc-attribute")}, false},
-		{"two charges, both enumerated", []*xsderr.Error{charge(ruleCvcComplexType), charge(ruleCvcComplexType)}, true},
-		{"one enumerated, one not", []*xsderr.Error{charge(ruleCvcElt), charge("cvc-attribute")}, false},
+		{"cvc-attribute alone", []*xsderr.Error{charge(ruleCvcAttribute)}, true},
+		{"cvc-au alone", []*xsderr.Error{charge(ruleCvcAu)}, true},
+		{"a rule outside the enumeration", []*xsderr.Error{charge("cvc-type")}, false},
+		{"two charges, both enumerated", []*xsderr.Error{charge(ruleCvcAttribute), charge(ruleCvcAu)}, true},
+		{"one enumerated, one not", []*xsderr.Error{charge(ruleCvcElt), charge("cvc-type")}, false},
 	}
 	for _, tc := range cases {
 		if got := decidedNotValid(tc.violations); got != tc.want {
@@ -279,7 +281,7 @@ func TestParsedAnonymousExtensionIsNotFalselyRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parsing the schema: %v", err)
 	}
-	v, err := validate.New(schema)
+	v, err := validate.New(schema, strict.New())
 	if err != nil {
 		t.Fatalf("validate.New: %v", err)
 	}

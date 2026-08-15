@@ -157,7 +157,7 @@ func checkSimpleTypeOrRefPresent(loc xsderr.Loc, ref SimpleTypeOrRef, slot strin
 // simpleTypeOfRef is the ONE way this package turns a SimpleTypeOrRef slot into
 // a component, exhaustively over the sum's two arms — the narrowed sibling of
 // ResolvedType (typedefinition.go), and the single site charging src-resolve clause
-// 1.1 for a simple type's base, item and members. It is NOT (*Schema).simpleTypeOf
+// 1.1 for a simple type's base, item and members. It is NOT (*Schema).ResolvedSimpleType
 // (defaultbinding.go), which narrows ResolvedType over the OTHER sum,
 // TypeDefinitionOrRef, for the {type definition} slots; the names are kept apart
 // deliberately so a reader grepping either finds one thing.

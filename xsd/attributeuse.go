@@ -29,9 +29,8 @@ import "github.com/kud360/goxsd8/xsderr"
 // (valueconstraintvalid.go, #371), through the one shared checkSimpleDefault that
 // a-props-correct clause 2 also calls. The §3.5.4 key-evc effective value constraint
 // needs the resolved declaration for the Ref variant, so it is NOT modeled on
-// this component: it lives at finalize as (*Schema).effectiveValueConstraint
-// (defaultbinding.go, #262), unexported until an external consumer justifies
-// exporting it (STYLE T5).
+// this component: it lives on the schema as (*Schema).EffectiveValueConstraint
+// (defaultbinding.go, #262).
 const ruleAuPropsCorrect xsderr.Rule = "au-props-correct"
 
 // AttributeDeclarationOrRef is the {attribute declaration} slot of an Attribute
@@ -227,8 +226,8 @@ func (u AttributeUse) AttributeDeclaration() AttributeDeclarationOrRef {
 //
 // This is the Use's OWN {value constraint}, not the §3.5.4 ·effective value
 // constraint· (key-evc), which falls back to the {attribute declaration}'s and
-// needs the resolved declaration for the Ref variant; that one is computed at
-// finalize by (*Schema).effectiveValueConstraint (defaultbinding.go).
+// needs the resolved declaration for the Ref variant; that one is computed by
+// (*Schema).EffectiveValueConstraint (defaultbinding.go).
 func (u AttributeUse) ValueConstraint() (ValueConstraint, bool) {
 	return u.valueConstraint, u.hasValueConstraint
 }

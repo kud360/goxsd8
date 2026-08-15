@@ -199,24 +199,34 @@
 // are exported beneath it as the {namespace constraint} property's own
 // lower-level accessors. The rest is in-package machinery finalize drives.
 //
-// Until a driver ships, a consumer traverses a content model by hand,
-// switching Particle.Term over the TermOrRef sealed sum and then, for the
-// ResolvedTerm branch, over the Term sealed sum; the package Examples walk
-// one end to end.
+// One of the two drivers designed on that algebra ships: Matcher,
+// validation's pull driver. Schema.ContentMatcher returns one over a
+// complex type's {content type} particle, and Matcher.Next advances it one
+// child at a time, reporting what that child is ·attributed to· as an
+// Attribution — the sealed sum of ElementDeclaration and Wildcard, the two
+// kinds of particle §3.4.4.4 attributes an item to. Matcher.Accepting asks
+// whether the sequence so far can end there. The walk is greedy and never
+// backtracks, which cos-nonambig licenses (see contentmatcher.go), and it
+// COUNTS occurrences rather than unfolding them. It decides once, at
+// construction, whether it decides at all: ContentMatcher reports false for
+// a {content type} holding no particle and for the shapes contentmatcher.go
+// declines, and a Matcher that exists never declines a name mid-sequence.
+// Substitution groups are not expanded at construction — Next resolves
+// membership per name, as cvc-accept clause 2.3.2 states it.
 //
-// # Planned contract (M5/M9 — not yet implemented)
+// A consumer that wants the whole model rather than one sequence still
+// traverses it by hand, switching Particle.Term over the TermOrRef sealed
+// sum and then, for the ResolvedTerm branch, over the Term sealed sum; the
+// package Examples walk one end to end.
 //
-// Two drivers are designed on the algebra above. Neither exists: the
-// package declares no Walker and no Matcher.
+// # Planned contract (M9 — not yet implemented)
+//
+// The second driver does not exist: the package declares no Walker.
 //
 //	type Walker   // M9, codegen's push driver
 //	    Exhaustive and schema-only: visits every particle reachable
 //	    through sequences, choices, all-groups, and named group
 //	    references, in document order.
-//
-//	type Matcher  // M5, validation's pull driver
-//	    Instance-guided: advances the content model one child at a time,
-//	    greedily and deterministically.
 //
 // Substitution groups will not be expanded at walk time — instance-time
 // concern. Recursive named-group references terminate by construction in
