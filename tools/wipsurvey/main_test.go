@@ -19,10 +19,14 @@ func TestClassify(t *testing.T) {
 		return &t
 	}
 
+	// A case that omits anc gets ancestryUnresolved — git declined to
+	// answer — which is the state in which classify must behave exactly as
+	// it did before it could ask about ancestry at all.
 	cases := []struct {
 		name        string
 		branch      string
 		tip         *time.Time
+		anc         ancestry
 		issue       *issueState
 		wantVerdict verdict
 		wantReason  string // substring the reason must contain
@@ -123,11 +127,96 @@ func TestClassify(t *testing.T) {
 			wantVerdict: unknown,
 			wantReason:  "not fetched",
 		},
+		{
+			// The #722 shape: a lease pushed minutes ago at main's tip,
+			// where the tip's own age is hours past the TTL.
+			name:        "zero-commit branch with a stale borrowed tip is claimed, not expired",
+			branch:      "wip/issue-13",
+			tip:         tip(600),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 13, closed: false, needsReplan: false},
+			wantVerdict: claimed,
+			wantReason:  "no commits of its own",
+		},
+		{
+			name:        "zero-commit branch with a fresh borrowed tip is claimed, not live",
+			branch:      "wip/issue-14",
+			tip:         tip(1),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 14, closed: false, needsReplan: false},
+			wantVerdict: claimed,
+			wantReason:  "tip age is main's",
+		},
+		{
+			name:        "closed issue retires a zero-commit branch",
+			branch:      "wip/issue-15",
+			tip:         tip(600),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 15, closed: true},
+			wantVerdict: retired,
+			wantReason:  "closed",
+		},
+		{
+			name:        "needs-replan retires a zero-commit branch",
+			branch:      "wip/issue-16",
+			tip:         tip(600),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 16, needsReplan: true},
+			wantVerdict: retired,
+			wantReason:  "needs-replan",
+		},
+		{
+			name:        "unfetched tip beats the ancestry answer",
+			branch:      "wip/issue-17",
+			tip:         nil,
+			anc:         ancestryNoCommits,
+			issue:       nil,
+			wantVerdict: unknown,
+			wantReason:  "not fetched",
+		},
+		{
+			name:        "branch with commits of its own is still dated from its tip",
+			branch:      "wip/issue-18",
+			tip:         tip(600),
+			anc:         ancestryOwnCommits,
+			issue:       &issueState{number: 18, closed: false, needsReplan: false},
+			wantVerdict: expired,
+			wantReason:  "past",
+		},
+		{
+			name:        "branch with commits of its own and a fresh tip is live",
+			branch:      "wip/issue-19",
+			tip:         tip(5),
+			anc:         ancestryOwnCommits,
+			issue:       &issueState{number: 19, closed: false, needsReplan: false},
+			wantVerdict: live,
+			wantReason:  "within",
+		},
+		{
+			// git could not decide (exit 128, or no main on the remote):
+			// fall back to the tip age rather than invent a second unknown.
+			name:        "unresolved ancestry falls back to the tip age",
+			branch:      "wip/issue-20",
+			tip:         tip(600),
+			anc:         ancestryUnresolved,
+			issue:       &issueState{number: 20, closed: false, needsReplan: false},
+			wantVerdict: expired,
+			wantReason:  "past",
+		},
+		{
+			name:        "zero-commit branch with no issue data still says lease-only",
+			branch:      "wip/issue-21",
+			tip:         tip(600),
+			anc:         ancestryNoCommits,
+			issue:       nil,
+			wantVerdict: claimed,
+			wantReason:  "lease-only",
+		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			gotVerdict, gotReason := classify(c.branch, c.tip, fixedNow, c.issue)
+			gotVerdict, gotReason := classify(c.branch, c.tip, c.anc, fixedNow, c.issue)
 			if gotVerdict != c.wantVerdict {
 				t.Errorf("classify(%q) verdict = %s, want %s (reason: %s)", c.branch, gotVerdict, c.wantVerdict, gotReason)
 			}
@@ -143,13 +232,88 @@ func TestClassify(t *testing.T) {
 // silently read as EXPIRED, because EXPIRED means resumable and that is
 // the dangerous direction for a branch this tool has no age data for.
 func TestClassifyNeverFallsThroughToExpired(t *testing.T) {
-	got, _ := classify("wip/issue-99", nil, fixedNow, nil)
+	got, _ := classify("wip/issue-99", nil, ancestryUnresolved, fixedNow, nil)
 	if got == expired {
 		t.Fatalf("classify with a nil tip returned EXPIRED; an absent tip must never be treated as an old one")
 	}
 	if got != unknown {
 		t.Fatalf("classify with a nil tip and no issue data = %s, want UNKNOWN", got)
 	}
+}
+
+// TestClassifyNeverExpiresABorrowedTip guards the #722 hazard at every tip
+// age: a branch with no commits of its own has no age of its own, so no
+// arrangement of the clock may make it EXPIRED — the verdict /develop
+// reads as "resumable" and /backlog reads as grounds for needs-replan.
+func TestClassifyNeverExpiresABorrowedTip(t *testing.T) {
+	for _, agoMinutes := range []int{0, 1, 119, 120, 121, 600, 100000} {
+		tip := fixedNow.Add(-time.Duration(agoMinutes) * time.Minute)
+		got, reason := classify("wip/issue-98", &tip, ancestryNoCommits, fixedNow, nil)
+		if got != claimed {
+			t.Errorf("classify with a %dm-old borrowed tip = %s, want CLAIMED (reason: %s)", agoMinutes, got, reason)
+		}
+	}
+}
+
+// TestAncestryFromExit pins the exit-status mapping `git merge-base
+// --is-ancestor` defines, including the 128 that means git declined to
+// answer: mapping that to "has its own commits" would silently restore the
+// borrowed-age EXPIRED (#722), so it must land on unresolved instead.
+func TestAncestryFromExit(t *testing.T) {
+	cases := []struct {
+		code int
+		want ancestry
+	}{
+		{0, ancestryNoCommits},
+		{1, ancestryOwnCommits},
+		{128, ancestryUnresolved},
+		{129, ancestryUnresolved},
+	}
+	for _, c := range cases {
+		if got := ancestryFromExit(c.code); got != c.want {
+			t.Errorf("ancestryFromExit(%d) = %v, want %v", c.code, got, c.want)
+		}
+	}
+}
+
+// TestGitAncestryWithoutMain checks the no-main-on-the-remote path
+// resolves to unresolved without running git at all — the survey still
+// reports, dated from tip ages.
+func TestGitAncestryWithoutMain(t *testing.T) {
+	got, err := gitAncestry("aaaa111", "")
+	if err != nil {
+		t.Fatalf("gitAncestry with no main SHA: unexpected error: %v", err)
+	}
+	if got != ancestryUnresolved {
+		t.Fatalf("gitAncestry with no main SHA = %v, want ancestryUnresolved", got)
+	}
+}
+
+// TestPartitionRefs checks main is taken out of the surveyed branch set:
+// it is the ancestry test's right-hand side, never a row.
+func TestPartitionRefs(t *testing.T) {
+	refs := []refSHA{
+		{sha: "aaaa111", ref: "refs/heads/wip/issue-1"},
+		{sha: "mmmm999", ref: "refs/heads/main"},
+		{sha: "bbbb222", ref: "refs/heads/wip/issue-2"},
+	}
+	wips, mainSHA := partitionRefs(refs)
+	if mainSHA != "mmmm999" {
+		t.Errorf("mainSHA = %q, want %q", mainSHA, "mmmm999")
+	}
+	if len(wips) != 2 || wips[0].ref != "refs/heads/wip/issue-1" || wips[1].ref != "refs/heads/wip/issue-2" {
+		t.Errorf("wips = %+v, want the two wip refs in ls-remote order", wips)
+	}
+
+	t.Run("no main on the remote yields an empty SHA", func(t *testing.T) {
+		wips, mainSHA := partitionRefs([]refSHA{{sha: "aaaa111", ref: "refs/heads/wip/issue-1"}})
+		if mainSHA != "" {
+			t.Errorf("mainSHA = %q, want empty", mainSHA)
+		}
+		if len(wips) != 1 {
+			t.Errorf("wips = %+v, want the one wip ref", wips)
+		}
+	})
 }
 
 // TestParseWipRef exercises the pure branch-name parser, including the
@@ -322,6 +486,30 @@ func TestSortRowsAndRenderTable(t *testing.T) {
 	}
 	if !strings.Contains(lines[3], "wip/issue-10") || !strings.Contains(lines[3], "LIVE") {
 		t.Errorf("row 3 = %q, want issue 10 (LIVE)", lines[3])
+	}
+}
+
+// TestRenderTableClaimedAge checks a CLAIMED row does not print a
+// duration in TIP AGE. The duration would be real and would belong to
+// main, and printing it there is what got acted on (#722).
+func TestRenderTableClaimedAge(t *testing.T) {
+	borrowed := fixedNow.Add(-10 * time.Hour)
+	rows := []row{
+		{issue: 1, branch: "wip/issue-1", tip: &borrowed, verdict: claimed, reason: "wip/issue-1: no commits of its own"},
+	}
+	var buf bytes.Buffer
+	if err := renderTable(&buf, rows, fixedNow); err != nil {
+		t.Fatalf("renderTable: %v", err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "main's") {
+		t.Errorf("CLAIMED row does not name whose tip age it is:\n%s", got)
+	}
+	if strings.Contains(got, "10h0m0s") {
+		t.Errorf("CLAIMED row prints main's age as the branch's:\n%s", got)
+	}
+	if !strings.Contains(got, "CLAIMED") {
+		t.Errorf("CLAIMED row does not carry the verdict:\n%s", got)
 	}
 }
 
