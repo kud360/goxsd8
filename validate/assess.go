@@ -59,7 +59,7 @@ const ruleCvcComplexType xsderr.Rule = "cvc-complex-type"
 // name — and so is never charged.
 //
 // Where the root's ·governing type definition· is determinable and complex
-// (see governingComplexType), the root itself is additionally assessed against
+// (see governingType), the root itself is additionally assessed against
 // it, in both directions cvc-complex-type (§3.4.4.2) quantifies in. Its
 // [[attributes]] go to clauses 2, 3 and 4, and through clause 2.1 to the
 // cvc-attribute (§3.2.4.1) and cvc-au (§3.5.4) charges the value space
@@ -112,19 +112,82 @@ func (v *Validator) Assess(root Element) *Result {
 			"the validation root %s is governed by an element declaration whose {abstract} is true, but cvc-elt clause 2 requires it to be false: an abstract declaration validates no element information item",
 			root.Name()))
 	}
-	var governing *xsd.ComplexType
+	var g governance
 	if found {
-		governing = w.governingComplexType(root, d)
+		g = w.declaredGovernance(root, d)
 	}
-	w.element(root, governing)
+	if !found {
+		// Reached only for a root carrying an xsi:type, the branch above having
+		// returned for every other undeclared root: its ·instance-specified type
+		// definition· is the governing one and this package does not ·resolve·
+		// it, so the whole subtree is typed against nothing and cvc-id clause 1
+		// declines with it (cvcid.go) (#716).
+		w.ids.declined = true
+	}
+	w.element(root, g, nil)
+	w.ids.charge(&w, root)
 	return &w.res
 }
 
-// governingComplexType is the ·governing type definition· (§3.3.4.6) of an
-// element information item whose ·governing element declaration· is d, narrowed
-// to the Complex Type Definition cvc-type clause 3.2 dispatches to
-// cvc-complex-type for; it is nil wherever this package cannot determine that
-// type, and the element's attributes are then assessed against nothing.
+// governance is what cvc-assess-elt (§3.3.4.6) settles about one element
+// information item before any rule reads it: the ·governing element
+// declaration· the descent determined for it, and the ·governing type
+// definition· that declaration supplies. It travels as one value because every
+// consumer past the first needs both — the type decides cvc-complex-type's two
+// halves, and the DECLARATION carries the {identity-constraint definitions}
+// §3.11.4 quantifies over and the {nillable} its clause 4.2.3 reads.
+//
+// The zero value is an element assessed against nothing: no declaration, no
+// type. hasDecl false with a nil typ is cvc-assess-elt clause 3.3's ·lax
+// assessment· against xs:anyType, and hasDecl TRUE with a nil typ is this
+// package declining a type it could not determine — a distinction cvcid.go
+// needs, since only the second could have hidden an ID.
+type governance struct {
+	decl    xsd.ElementDeclaration
+	hasDecl bool
+	typ     xsd.TypeDefinition
+}
+
+// complexType narrows the ·governing type definition· to the Complex Type
+// Definition cvc-type clause 3.2 dispatches to cvc-complex-type for, or nil for
+// anything else — including a SIMPLE governing type, whose element's own
+// attributes are governed by cvc-type clause 3.1.1 instead, which this package
+// does not decide either.
+func (g governance) complexType() *xsd.ComplexType {
+	ct, isComplex := g.typ.(xsd.ComplexType)
+	if !isComplex {
+		return nil
+	}
+	return &ct
+}
+
+// simpleType narrows the ·governing type definition· to the simple type an
+// element's ·initial value· is read under — the two shapes §3.11.4 clause 3
+// admits as a field node, "a simple type definition or a complex type
+// definition with {variety} simple" — and nil for every other, which carries no
+// [schema actual value] to be a ·key-sequence· member or an ·ID value·.
+func (g governance) simpleType() *xsd.SimpleType {
+	switch t := g.typ.(type) {
+	case *xsd.SimpleType:
+		return t
+	case xsd.ComplexType:
+		if sc, isSimple := t.ContentType().(xsd.SimpleContent); isSimple {
+			return sc.SimpleType
+		}
+	}
+	return nil
+}
+
+// declaredGovernance pairs a ·governing element declaration· with the
+// ·governing type definition· it supplies for e (governingType).
+func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration) governance {
+	return governance{decl: d, hasDecl: true, typ: w.governingType(e, d)}
+}
+
+// governingType is the ·governing type definition· (§3.3.4.6) of an
+// element information item whose ·governing element declaration· is d; it is nil
+// wherever this package cannot determine that type, and the element's attributes
+// are then assessed against nothing.
 //
 // Determinable here means the whole of key-governing-type-elem's clause 4
 // case: no processor-stipulated type (this package stipulates none), no
@@ -147,19 +210,17 @@ func (v *Validator) Assess(root Element) *Result {
 //   - GAP(xpath): a {type table} makes the selected type the one its
 //     <alternative>s ·conditionally select· (§3.3.4.2), which means
 //     evaluating each {test} as an XPath expression (#56).
-//   - A {type definition} slot that resolves to nothing, or to a Simple Type
-//     Definition. The simple case is not an omission: cvc-type dispatches to
-//     cvc-complex-type only for a complex T, and a simple-typed element's own
-//     attributes are governed by cvc-type clause 3.1.1 instead, which this
-//     package does not decide either.
+//   - A {type definition} slot that resolves to nothing.
 //
-// The type this returns is the governing one for BOTH halves of
-// cvc-complex-type, and the halves decline separately from here on: the
-// attribute half narrows it once more through attributePropertiesFolded, which
-// the content half does not, because no finalize pass folds a {content type}
-// the way §3.4.2.4 clause 3 folds {attribute uses} — a complex type's
-// {content type} is whatever its producer built for it, named or anonymous.
-func (w *walk) governingComplexType(e Element, d xsd.ElementDeclaration) *xsd.ComplexType {
+// The type this returns is the governing one for EVERY reader, and they narrow
+// it separately from here on: governance.complexType for cvc-complex-type's two
+// halves, governance.simpleType for the ·initial value· §3.11.4 clause 3 and
+// §3.17.5.2 read. The attribute half narrows once more through
+// attributePropertiesFolded, which the content half does not, because no
+// finalize pass folds a {content type} the way §3.4.2.4 clause 3 folds
+// {attribute uses} — a complex type's {content type} is whatever its producer
+// built for it, named or anonymous.
+func (w *walk) governingType(e Element, d xsd.ElementDeclaration) xsd.TypeDefinition {
 	if hasInstanceType(e) {
 		return nil
 	}
@@ -170,18 +231,14 @@ func (w *walk) governingComplexType(e Element, d xsd.ElementDeclaration) *xsd.Co
 	if !ok {
 		return nil
 	}
-	ct, isComplex := t.(xsd.ComplexType)
-	if !isComplex {
-		return nil
-	}
-	return &ct
+	return t
 }
 
 // childGoverning is cvc-assess-elt (§3.3.4.6) clause 3 for one child element
 // information item, read off the ·attribution· its parent's content model just
-// gave it (§3.4.4.4): the ·governing type definition· to assess it against,
-// narrowed exactly as the ·validation root·'s is (governingComplexType), and
-// whether it is assessed at all.
+// gave it (§3.4.4.4): the ·governing element declaration· and ·governing type
+// definition· to assess it against, determined exactly as the ·validation
+// root·'s are (declaredGovernance), and whether it is assessed at all.
 //
 // assess is false for one shape alone, clause 3.2's: a child ·attributed to· a
 // skip Wildcard is not ·assessed·, and neither is any element below it —
@@ -217,36 +274,36 @@ func (w *walk) governingComplexType(e Element, d xsd.ElementDeclaration) *xsd.Co
 // ·governing type definition· of its own, an element already charged, or a
 // child clause 1.4 declined or rejected. It leaves the child assessed against
 // nothing, which is where every descendant was before the descent existed.
-func (w *walk) childGoverning(e Element, a xsd.Attribution) (*xsd.ComplexType, bool) {
+func (w *walk) childGoverning(e Element, a xsd.Attribution) (governance, bool) {
 	switch t := a.(type) {
 	case xsd.ElementDeclaration:
 		if t.Name() != e.Name() {
-			return w.resolvedComplexType(e), true
+			return w.resolvedGovernance(e), true
 		}
-		return w.governingComplexType(e, t), true
+		return w.declaredGovernance(e, t), true
 	case xsd.Wildcard:
 		if t.ProcessContents() == xsd.ProcessSkip {
-			return nil, false
+			return governance{}, false
 		}
-		return w.resolvedComplexType(e), true
+		return w.resolvedGovernance(e), true
 	default:
-		return nil, true
+		return governance{}, true
 	}
 }
 
-// resolvedComplexType is the ·governing type definition· of an element whose
-// ·governing element declaration· is the one its ·expanded name· ·resolves· to
-// among the schema's top-level element declarations (cvc-resolve-instance,
-// §3.17.6.3). A name that resolves to nothing leaves the element with no
-// declaration to read a type off, which is cvc-assess-elt clause 3.3 and no
-// charge of its own: an unresolved name is the PARENT's business where it is
-// anyone's (§3.3.5.1 clause 1.1.3) and never the child's.
-func (w *walk) resolvedComplexType(e Element) *xsd.ComplexType {
+// resolvedGovernance is the ·governing element declaration· of an element that
+// is the one its ·expanded name· ·resolves· to among the schema's top-level
+// element declarations (cvc-resolve-instance, §3.17.6.3), together with the
+// type that declaration supplies. A name that resolves to nothing leaves the
+// element with no declaration to read a type off, which is cvc-assess-elt
+// clause 3.3 and no charge of its own: an unresolved name is the PARENT's
+// business where it is anyone's (§3.3.5.1 clause 1.1.3) and never the child's.
+func (w *walk) resolvedGovernance(e Element) governance {
 	d, found := w.schema.Element(e.Name())
 	if !found {
-		return nil
+		return governance{}
 	}
-	return w.governingComplexType(e, d)
+	return w.declaredGovernance(e, d)
 }
 
 // attributePropertiesFolded reports whether ct's {attribute uses} and
@@ -320,12 +377,20 @@ func hasInstanceType(e Element) bool {
 // [walk.defaultedAttribute]). It is not derived state to be re-derived per call:
 // the constructor is total on a non-nil backend and the result is immutable, so
 // building it per ·defaulted attribute· would allocate once per use per element
-// to reach the same object.
+// to reach the same object. nodes counts the element information items the walk
+// has entered, and the count doubles as each one's IDENTITY: §3.11.5's conflict
+// resolution turns on "the same key-sequence but distinct nodes" and §3.17.5.2's
+// [binding] is a SET of elements, and an [Element] is an interface whose ==
+// compares whatever an adapter's dynamic type compares. ids is the [ID/IDREF
+// table] those ordinals bind into, assembled across the whole walk and read
+// once, at the ·validation root· (cvcid.go).
 type walk struct {
 	log     *slog.Logger
 	schema  *xsd.Schema
 	backend value.Backend
 	values  xsd.ValueSpace
+	nodes   int
+	ids     idTable
 	res     Result
 }
 
@@ -355,15 +420,36 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // stands: each of them gets its OWN, off the particle e's {content type}
 // ·attributes· it to (§3.4.4.4, [walk.childGoverning]), which is
 // cvc-assess-elt clause 3.1's "the one identified in the course of checking
-// the local validity of the parent". A nil governing therefore ends the typed
-// descent at e — a check with no type attributes nothing — and e's subtree is
-// walked against nil throughout.
-func (w *walk) element(e Element, governing *xsd.ComplexType) {
+// the local validity of the parent". A nil governing type therefore ends the
+// typed descent at e — a check with no type attributes nothing — and e's
+// subtree is walked against nil throughout.
+//
+// parent is the enclosing element's identity-constraint state, nil at the
+// ·validation root·. It is what carries the {selector} and {fields} evaluations
+// downward and the node tables back up (cvcidentityconstraint.go), so the
+// bracketing here is load-bearing: identityCheck opens e's state before its
+// [[attributes]] are read, because a field path may name one of them, and
+// identityExit settles §3.11.4 and §3.11.5 only once e's [[children]] are
+// exhausted, because a ·key-sequence· and a node table are complete only then.
+func (w *walk) element(e Element, g governance, parent *icCheck) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
 	}
+	governing := g.complexType()
+	id := w.identityCheck(e, g, parent)
+	w.idAttributes(id)
 	w.attributes(e, governing)
-	w.children(e, w.contentCheck(e, governing))
+	w.children(e, w.contentCheck(e, governing), id)
+	if w.res.err != nil {
+		// A walk that stopped on a source fault never settles §3.11.4 or
+		// §3.17.5.2 for this element, on [contentCheck.end]'s grounds: the
+		// [[children]] the source never finished delivering are ·target nodes·,
+		// field values and ID declarations the rules would otherwise be charged
+		// for the absence of.
+		return
+	}
+	w.idElement(id)
+	w.identityExit(id)
 }
 
 // attributes assesses E.[[attributes]] against governing, in the three
@@ -378,7 +464,7 @@ func (w *walk) element(e Element, governing *xsd.ComplexType) {
 // attribute PROPERTIES are not the spec's yet is narrowed to that same
 // nothing here, and here only — its {content type} still decides its
 // element's [[children]] (see attributePropertiesFolded and
-// governingComplexType).
+// governingType).
 func (w *walk) attributes(e Element, governing *xsd.ComplexType) {
 	folded := governing
 	if folded != nil && !attributePropertiesFolded(*folded) {
@@ -585,14 +671,14 @@ func (w *walk) text(t Text) {
 // A walk that stopped early never reaches [contentCheck.end], so a truncated
 // [[children]] cursor cannot be charged for ending short of a particle it
 // would have satisfied.
-func (w *walk) children(e Element, content *contentCheck) {
+func (w *walk) children(e Element, content *contentCheck, id *icCheck) {
 	kids := e.Children()
 	for {
 		c, ok := kids.Next()
 		if !ok {
 			break
 		}
-		w.child(c, content)
+		w.child(c, content, id)
 		if w.res.err != nil {
 			return
 		}
@@ -619,14 +705,25 @@ func (w *walk) children(e Element, content *contentCheck) {
 // only path to a child's own [[children]], so declining to call it leaves every
 // element below the skipped one unvisited, whatever its own attribution would
 // have been.
-func (w *walk) child(c Child, content *contentCheck) {
+func (w *walk) child(c Child, content *contentCheck, id *icCheck) {
 	if e, ok := c.Element(); ok {
-		governing, assess := w.childGoverning(e, content.element(w, e))
+		a := content.element(w, e)
+		g, assess := w.childGoverning(e, a)
 		if !assess {
 			w.logSkipped(e)
 			return
 		}
-		w.element(e, governing)
+		if a == nil {
+			// GAP(validate): a child its parent ·attributed to· nothing is one
+			// this package gave up typing and not one §3.3.4.6 leaves untyped,
+			// so an ID anywhere beneath it is a declaration cvc-id never saw.
+			// The whole consumer set of that decline is idTable.charge's clause
+			// 1 arm, which stops charging an empty binding; clause 2 keeps
+			// charging, because an unseen item can only ADD members to a
+			// binding and never take one away (cvcid.go) (#716).
+			w.ids.declined = true
+		}
+		w.element(e, g, id)
 		return
 	}
 	t, ok := c.Text()
@@ -634,5 +731,6 @@ func (w *walk) child(c Child, content *contentCheck) {
 		panic("validate: walk.child: Child holds neither arm; build one with ElementChild or TextChild")
 	}
 	content.text(w, t)
+	id.text(t)
 	w.text(t)
 }

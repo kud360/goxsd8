@@ -48,7 +48,7 @@
 //   - Identity constraints: node tables propagate UPWARD — a keyref on
 //     element E resolves only against key sequences sourced within E's
 //     own subtree; selector/field paths honor xpathDefaultNamespace for
-//     element steps (PRINCIPLES 15).
+//     element steps and never for attribute steps (PRINCIPLES 15).
 //   - Union values validate against DirectMembers in order, with the
 //     validating member's whiteSpace driving pattern normalization
 //     (PRINCIPLES 11).
@@ -58,7 +58,7 @@
 // # Contract (M5, landing rule by rule)
 //
 // [Result] carries every violation charged so far as an *xsderr.Error
-// (cvc-* rule + instance and/or schema Loc), in document order. Six rules
+// (cvc-* rule + instance and/or schema Loc), in document order. Eight rules
 // are charged today, at the ·validation root· and at every descendant whose
 // ·governing element declaration· the descent determines.
 //
@@ -115,6 +115,32 @@
 // skip wildcard, which is ·skipped· along with every element beneath it (clause
 // 3.2), and a child whose declaration is not determinable, whose own subtree is
 // then assessed against nothing in its turn.
+//
+// The seventh is cvc-identity-constraint (§3.11.4), over the {identity-constraint
+// definitions} of the ·governing element declaration· of every element the
+// descent types. Its {selector} and {fields} are evaluated as the restricted
+// path subset §3.11.6.2 and §3.11.6.3 define, directly and never through the
+// XPath engine, and its clause 4 charges a duplicate ·key-sequence· (clauses
+// 4.1 and 4.2.2), a key whose ·target node set· is wider than its ·qualified
+// node set· (4.2.1), an element member from a {nillable} declaration (4.2.3),
+// and a keyref matching no entry of its {referenced key}'s node table (4.3),
+// with clause 3 charging a field that selects more than one valued node. The
+// node tables clause 4.3 reads are §3.11.5's, assembled bottom-up as the walk
+// leaves each element and conflict-resolved on the way.
+//
+// The eighth is cvc-id (§3.3.4.5), charged at the ·validation root· alone
+// (cvc-elt clause 7): the [ID/IDREF table] of §3.17.5.2 is assembled across the
+// whole subtree from every ID-, IDREF- and IDREFS-governed attribute and
+// element, and a binding with more than one member is charged clause 2, an
+// empty one clause 1.
+//
+// Both of the last two decline rather than charge wherever this package could
+// not read what the rule quantifies over — a path outside the subset, a field
+// node or an ID-bearing item with no determinable ·governing type definition·,
+// a ·key-sequence· member pair governed by two different simple types — and
+// cvc-id clause 1 additionally declines for the whole document once any item of
+// the subtree did, since an unread declaration is exactly what an empty binding
+// would misreport.
 //
 // The rest of the cvc- decisions land on the walk [Validator.Assess]
 // already makes. Non-fatal warnings get an accessor of their own the day
