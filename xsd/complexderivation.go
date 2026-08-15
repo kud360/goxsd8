@@ -508,7 +508,7 @@ func (s *Schema) checkLocallyDeclaredAttributeTypes(t, b ComplexType, k locallyD
 		if !ok {
 			continue // no ·locally declared type· in B: the clause's precondition fails
 		}
-		substitutable, err := s.validlySubstitutable(within, base, k.blocked)
+		substitutable, err := s.ValidlySubstitutable(within, base, k.blocked)
 		if err != nil {
 			return err
 		}
@@ -535,7 +535,7 @@ func (s *Schema) checkLocallyDeclaredElementTypes(t, b ComplexType, k locallyDec
 		if !ok {
 			continue // no ·locally declared type· in B: the clause's precondition fails
 		}
-		substitutable, err := s.validlySubstitutable(within, base, k.blocked)
+		substitutable, err := s.ValidlySubstitutable(within, base, k.blocked)
 		if err != nil {
 			return err
 		}
@@ -632,9 +632,9 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 	return b, ok
 }
 
-// validlySubstitutable is ·validly substitutable· (§3.4.6.4, key-val-sub-type):
-// a type definition sub is validly substitutable for super subject to a set of
-// blocking keywords, by one of three cases —
+// ValidlySubstitutable reports whether sub is ·validly substitutable· for super
+// (§3.4.6.4, key-val-sub-type) subject to the blocking keywords in blocked, by
+// one of three cases —
 //
 //   - both complex: sub is validly ·derived· from super subject to the UNION of
 //     blocked and super.{prohibited substitutions}, per cos-ct-derived-ok;
@@ -647,7 +647,36 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 // the whole of the first case: super's own {prohibited substitutions} joins the
 // caller's blocking keywords, so a type that blocks restriction admits no
 // restriction of itself however empty the caller's set was.
-func (s *Schema) validlySubstitutable(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
+//
+// It is EXPORTED for the same reason SimpleType.CheckDerivation is
+// (derivation.go): the relation has two real consumers and one implementation
+// serving both is what keeps the rule single (STYLE T4/T5). The second is the
+// instance side — cvc-elt clause 4 asks whether an element's
+// ·instance-specified type definition· ·overrides· its ·selected type
+// definition· (§3.3.4.2, key-overrides), which is this predicate under the
+// ·governing element declaration·'s {disallowed substitutions}, and package
+// validate cannot re-derive it without a second copy of cos-ct-derived-ok and
+// cos-st-derived-ok.
+//
+// blocked is read and never retained or mutated: unionDerivationMethods and
+// complexBlockingSubset both build fresh slices, so a caller may pass a slice it
+// goes on to reuse.
+//
+// The error is the src-resolve clause 1.1 rejection an unresolvable simple-type
+// {base type definition} produces (see validlyDerived) and never a verdict about
+// sub and super: a caller that cannot propagate it must not fold it into either
+// answer.
+//
+// GAP(xsd): where BOTH sides are simple, blocked is not read — derivedOKSimple
+// runs cos-st-derived-ok under the empty blocking set, so its clause 2.1 is
+// vacuous and a keyword in blocked does not turn a derivation away. The
+// direction is toward accepting more, so the one caller that reads the answer as
+// a rejection ([validate] charging cvc-elt clause 4) withholds a charge rather
+// than manufacturing one, and the three in-package callers that read it as an
+// admission (declaredTypeRestricts, checkLocallyDeclaredAttributeTypes,
+// checkLocallyDeclaredElementTypes) each charge on a FALSE answer and so
+// withhold a charge too.
+func (s *Schema) ValidlySubstitutable(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
 	if sup, ok := super.(ComplexType); ok {
 		blocked = unionDerivationMethods(blocked, sup.prohibitedSubstitutions)
 	}

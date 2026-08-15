@@ -44,7 +44,9 @@
 //     even whitespace (PRINCIPLES 13).
 //   - Parent element context is threaded through the whole chain: ID
 //     harvesting under value constraints, EDC's post-xsi:type governing
-//     type, and namespace context for identity constraints all need it.
+//     type, and namespace context for identity constraints all need it. An
+//     xsi:type displaces the ·governing type definition· at every depth, not
+//     only at the ·validation root·.
 //   - Identity constraints: node tables propagate UPWARD — a keyref on
 //     element E resolves only against key sequences sourced within E's
 //     own subtree; selector/field paths honor xpathDefaultNamespace for
@@ -63,9 +65,28 @@
 // ·governing element declaration· the descent determines.
 //
 // Two come from [Validator.Assess]'s dispatch on the root's ·governing
-// element declaration·: cvc-assess-elt (§3.3.4.6) for a root that
-// determines no declaration, and cvc-elt (§3.3.4.3) clause 2 for one whose
-// declaration is abstract.
+// element declaration·: cvc-assess-elt (§3.3.4.6) for a root that determines
+// neither a declaration nor a ·governing type definition·, and cvc-elt
+// (§3.3.4.3) clause 2 for one whose declaration is abstract.
+//
+// cvc-elt carries three more clauses, at the root and at every descendant the
+// descent types. Clause 3 decides xsi:nil: an xsi:nil attribute on a
+// declaration whose {nillable} is false (3.1), one whose lexical is outside
+// xs:boolean's lexical space (3.2), and a ·nilled· element carrying character or
+// element [[children]] (3.2.3.1) or a fixed {value constraint} (3.2.3.2).
+// Clause 4 decides xsi:type: an ·instance-specified type definition· that
+// ·resolves· but is not ·validly substitutable· for the ·selected type
+// definition· subject to the declaration's {disallowed substitutions}
+// ([xsd.Schema.ValidlySubstitutable]). One that resolves AND overrides becomes
+// the ·governing type definition· the rest of the assessment reads, and one that
+// does not resolve at all charges nothing and leaves the selected type governing
+// — the Note under cvc-elt is explicit that the two failures share that
+// fallback and differ only in the charge. Clause 5.2.2 decides a fixed {value
+// constraint} on an element that HAS [[children]]: no element ones (5.2.2.1),
+// and an ·initial value· matching the {lexical form} under a mixed {content
+// type} (5.2.2.2.1) or an ·actual value· equal or identical to the {value} under
+// a simple one (5.2.2.2.2). Clause 5.1's arm — an EMPTY element whose
+// declaration supplies a default — is not evaluated.
 //
 // Three more are the root's attribute half, against its ·governing
 // type definition·'s {attribute uses}. cvc-complex-type (§3.4.4.2) clauses
@@ -96,15 +117,15 @@
 // {attribute wildcard} to evaluate, a ·governing type definition· that is
 // not determinable or whose {attribute uses}/{attribute wildcard} are not
 // yet the spec's (the attribute half alone: a {content type} needs no such
-// fold), an element that may be ·nilled·, a {content type} whose shape
-// xsd.Schema.ContentMatcher declines, an element with no character content for
-// cvc-elt clause 5.1 to have supplied a default in place of, a declaration
-// whose {type definition} is not a simple type, and — the decline that matters
-// most — a value.ValidateLexical error that is a fault of the type or of the
-// backend rather than a verdict about the lexical (value.IsDatatypeVerdict),
-// which is what keeps a typeless attribute (xs:anySimpleType, §3.2.2.2), or
-// simple content of a type this backend does not map, from being rejected by
-// every document that carries one.
+// fold), a {content type} whose shape xsd.Schema.ContentMatcher declines, an
+// element with no character content for cvc-elt clause 5.1 to have supplied a
+// default in place of, a declaration whose {type definition} is not a simple
+// type, and — the decline that matters most — a value.ValidateLexical error
+// that is a fault of the type or of the backend rather than a verdict about
+// the lexical (value.IsDatatypeVerdict), which is what keeps a typeless
+// attribute (xs:anySimpleType, §3.2.2.2), or simple content of a type this
+// backend does not map, from being rejected by every document that carries
+// one.
 //
 // Every one of those charges reaches a DESCENDANT on the same terms, against
 // the ·governing type definition· the particle its parent's {content type}

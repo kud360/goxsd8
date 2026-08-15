@@ -263,12 +263,20 @@ func TestInstanceAttributesAreExemptFromClauseTwo(t *testing.T) {
 	xsi := func(name string) xsd.QName {
 		return xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: name}
 	}
-	for _, n := range []string{"nil", "schemaLocation", "noNamespaceSchemaLocation"} {
+	// All FOUR are excepted, xsi:type and xsi:nil included: each is ·attributed
+	// to· nothing at all, whatever it goes on to decide elsewhere.
+	for _, n := range []string{"type", "nil", "schemaLocation", "noNamespaceSchemaLocation"} {
 		uses := []xsd.AttributeUse{aUse(t, "id", false, nil)}
-		wantSilence(t, assessRoot(t, attributedRoot(xsi(n)), uses, nil), "xsi:"+n+" is excepted from clause 2")
 		if outcomes := assessOutcomes(t, attributedRoot(xsi(n)), uses, nil); !slices.Equal(outcomes, []string{"2/exempt"}) {
 			t.Errorf("assessed xsi:%s as %v, want it EXEMPT from clause 2 rather than matched", n, outcomes)
 		}
+	}
+	// Three of them charge nothing anywhere. xsi:nil is the exception, and not
+	// through clause 2: this root's declaration is not {nillable}, so cvc-elt
+	// clause 3.1 charges its mere presence (cvcelt_test.go).
+	for _, n := range []string{"type", "schemaLocation", "noNamespaceSchemaLocation"} {
+		uses := []xsd.AttributeUse{aUse(t, "id", false, nil)}
+		wantSilence(t, assessRoot(t, attributedRoot(xsi(n)), uses, nil), "xsi:"+n+" is excepted from clause 2")
 	}
 	// An xsi:-namespaced attribute that is NOT one of the four is inside the
 	// quantifier and charged like any other, so the exemption is by name and
@@ -277,14 +285,14 @@ func TestInstanceAttributesAreExemptFromClauseTwo(t *testing.T) {
 	wantCharge(t, got, "clause 2", loc(1, 10), "invented")
 }
 
-// An xsi:type withholds the whole assessment: it can make the
-// ·instance-specified type definition· the ·governing type definition·
-// (§3.3.4.6 clause 3), which this package cannot ·resolve· (#716), so the
-// declaration's own type is not the one to charge against.
-func TestXSITypedRootDeclinesTheAttributeHalf(t *testing.T) {
+// An xsi:type naming a type nothing declares ·resolves· to no
+// ·instance-specified type definition· at all, so the ·selected type definition·
+// stays the ·governing· one (key-governing-type-elem clause 4) and the attribute
+// half runs against it unchanged — the fallback the Note under cvc-elt states.
+func TestUnresolvableXSITypeStillAssessesAgainstTheDeclaredType(t *testing.T) {
 	root := attributedRoot(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}, local("stray"))
-	got := assessRoot(t, root, []xsd.AttributeUse{aUse(t, "id", true, nil)}, nil)
-	wantSilence(t, got, "an unresolved xsi:type leaves the ·governing type definition· undetermined")
+	got := assessRoot(t, root, []xsd.AttributeUse{aUse(t, "id", false, nil)}, nil)
+	wantCharge(t, got, "clause 2", loc(1, 11), "stray")
 }
 
 // A declaration carrying a {type table} withholds the assessment too: the

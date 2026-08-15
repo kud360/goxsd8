@@ -155,22 +155,19 @@ func TestSelectorAndFieldTreatTheDefaultNamespaceAsymmetrically(t *testing.T) {
 // that collide with a determinable type charge nothing with an xsi:type on the
 // field node.
 func TestFieldWithNoGoverningTypeDeclines(t *testing.T) {
-	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "name")
-	schema := icSchema(t, "", false, []xsd.IdentityConstraint{key}, nil)
-
-	named := func(line int, text string, typed bool) *testElement {
-		var attrs []Attribute
-		if typed {
-			attrs = []Attribute{icAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}, "xs:string", line)}
-		}
-		name := icElem(xsd.QName{Local: "name"}, line+1, attrs,
+	field := func(local string) *xsd.Schema {
+		key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", local)
+		return icSchema(t, "", false, []xsd.IdentityConstraint{key}, nil)
+	}
+	named := func(line int, local, text string) *testElement {
+		node := icElem(xsd.QName{Local: local}, line+1, nil,
 			TextChild(&testText{data: text, loc: loc(line+1, 8)}))
-		return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(name))
+		return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(node))
 	}
 
-	icWantCharges(t, icAssess(t, schema, icRoot(named(2, "a", false), named(4, "a", false))),
+	icWantCharges(t, icAssess(t, field("name"), icRoot(named(2, "name", "a"), named(4, "name", "a"))),
 		icCharge(ruleCvcIdentityConstraint, 4))
-	icWantCharges(t, icAssess(t, schema, icRoot(named(2, "a", true), named(4, "a", true))))
+	icWantCharges(t, icAssess(t, field("tabled"), icRoot(named(2, "tabled", "a"), named(4, "tabled", "a"))))
 }
 
 // Clause 4.2.3 forbids a key's ·key-sequence· to take an ELEMENT member from a

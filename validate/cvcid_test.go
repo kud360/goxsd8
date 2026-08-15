@@ -114,16 +114,18 @@ func TestCvcIDReadsOnlyTheValidationRootsOwnSubtree(t *testing.T) {
 // a binding, never take one away.
 func TestAnUntypedItemDeclinesClauseOneAndNotClauseTwo(t *testing.T) {
 	schema := idSchema(t)
-	untyped := icElem(xsd.QName{Local: "item"}, 2,
-		[]Attribute{icAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}, "xs:anyType", 2)})
+	// <tabled> carries a {type table}, so its ·governing type definition· is not
+	// determinable and anything beneath it is unread. It comes LAST, the
+	// {content type} being a sequence.
+	untyped := icElem(xsd.QName{Local: "tabled"}, 5, nil)
 
 	// Without the untyped item, the dangling reference is charged.
 	icWantCharges(t, icAssess(t, schema, icRoot(idItem(3, "ref", "ghost"))),
 		icChargeAttr(ruleCvcID, 3))
-	icWantCharges(t, icAssess(t, schema, icRoot(untyped, idItem(3, "ref", "ghost"))))
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(3, "ref", "ghost"), untyped)))
 
 	// The duplicate is charged either way.
-	icWantCharges(t, icAssess(t, schema, icRoot(untyped, idItem(3, "xid", "a"), idItem(4, "xid", "a"))),
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(3, "xid", "a"), idItem(4, "xid", "a"), untyped)),
 		icChargeAttr(ruleCvcID, 4))
 }
 

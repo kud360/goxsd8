@@ -415,7 +415,7 @@ func disallowedSubstitutionsSuperset(specific, general ElementDeclaration) bool 
 }
 
 // declaredTypeRestricts is loc-testSubP clause 4.5 (c-vs-ct), delegating to
-// validlySubstitutable (key-val-sub-type) under the {extension, list, union}
+// ValidlySubstitutable (key-val-sub-type) under the {extension, list, union}
 // blocking keywords that ·validly substitutable as a restriction·
 // (key-val-sub-type-restricts) names — the same set derivation-ok-restriction
 // clause 4 works under, and the same slice, so the two clauses cannot drift.
@@ -427,16 +427,15 @@ func disallowedSubstitutionsSuperset(specific, general ElementDeclaration) bool 
 // among the skipped cases: ResolvedType hands back the inline component itself, so the
 // comparison is made rather than waved through.
 //
-// An unresolvable simple-type {base type definition} reached INSIDE the
-// derivation walk joins that same skipped class, for the same reason and with
-// the same polarity. This is the ONE consumer of validlySubstitutable that
-// cannot propagate the error — it sits inside loc-testSubP's bool chain, which
-// runs all the way down into contentrestricts.go's automaton because
-// cos-content-act-restrict clause 2 is one conjunct of a DISJUNCTION and so has
-// no error to return until the single site that charges the rule — and it
-// already folds exactly this class of fault into "accept". A schema reaching
-// here has survived Phase A, which charges src-resolve for every unresolvable
-// base a Schema reaches, so the case is unreachable rather than merely benign.
+// An unresolvable simple-type {base type definition} reached INSIDE the derivation walk
+// joins that same skipped class, for the same reason and with the same polarity. This is
+// the ONE consumer of ValidlySubstitutable in this package that cannot propagate the error
+// — it sits inside loc-testSubP's bool chain, which runs all the way down into
+// contentrestricts.go's automaton because cos-content-act-restrict clause 2 is one conjunct
+// of a DISJUNCTION and so has no error to return until the single site that charges the
+// rule — and it already folds exactly this class of fault into "accept". A schema reaching
+// here has survived Phase A, which charges src-resolve for every unresolvable base a Schema
+// reaches, so the case is unreachable rather than merely benign.
 func (s *Schema) declaredTypeRestricts(specific, general ElementDeclaration) bool {
 	sub, ok := s.ResolvedType(specific.TypeDefinition())
 	if !ok {
@@ -446,7 +445,7 @@ func (s *Schema) declaredTypeRestricts(specific, general ElementDeclaration) boo
 	if !ok {
 		return true
 	}
-	substitutable, err := s.validlySubstitutable(sub, super, restrictionBlockingKeywords)
+	substitutable, err := s.ValidlySubstitutable(sub, super, restrictionBlockingKeywords)
 	return err != nil || substitutable
 }
 

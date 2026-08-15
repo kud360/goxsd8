@@ -94,9 +94,9 @@ func New(schema *xsd.Schema, backend value.Backend, opts ...Option) (*Validator,
 
 // Schema returns the read-only view of the compiled schema an adapter needs
 // to resolve a root element declaration by expanded name, and nothing else
-// (STYLE T3). Widening it is the job of the slice that needs the wider
-// capability: [xsd.AttributeResolver] and [xsd.TypeResolver] are there when
-// xsi:type resolution arrives.
+// (STYLE T3). The walk reads the *xsd.Schema itself and not this narrowing, so
+// widening the accessor is the job of a CALLER that needs more, never of a rule
+// inside the package.
 func (v *Validator) Schema() xsd.ElementResolver { return v.schema }
 
 // Result is the outcome of one [Validator.Assess] call.
