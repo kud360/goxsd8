@@ -395,10 +395,10 @@ func TestAnonymousGoverningTypeStillDecidesContent(t *testing.T) {
 	wantContentCharge(t, got, "cvc-complex-content", "1", loc(2, 1))
 }
 
-// A DESCENDANT's [[children]] are assessed against nothing: its governing type
-// would come from the particle it is ·attributed to·, which this package does
-// not thread into the descent.
-func TestDescendantContentIsNotAssessed(t *testing.T) {
+// A child the content model REJECTED is ·attributed to· no particle, so its own
+// [[children]] are assessed against nothing: the one charge is the parent's, at
+// the child's position, and the subtree below it draws none.
+func TestRejectedChildAttributesItsSubtreeToNothing(t *testing.T) {
 	schema := cSchema(t, cSequence(t, false, cParticle(t, "a", 1, 1)))
 	root := cRoot("a")
 	child := &testElement{

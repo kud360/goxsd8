@@ -17,7 +17,7 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-08-15 (post-land, #775)
+## Status — 2026-08-15 (full `/backlog`)
 
 Conformance lanes — **paste `go tool lanestatus` verbatim**, never a
 hand-count:
@@ -26,7 +26,7 @@ hand-count:
 |---|---:|---:|---:|
 | `ber` | — | — | 0 |
 | `datatypes` | 1161 | 12 | 1173 |
-| `instance` | 535 | 25826 | 26361 |
+| `instance` | 1017 | 25344 | 26361 |
 | `json` | — | — | 0 |
 | `schema` | 12832 | 2566 | 15398 |
 | `xpath` | — | — | 0 |
@@ -35,153 +35,201 @@ An em dash is a lane with no cases yet, which is a different claim from a lane
 scoring zero. `datatypes` is M3 and **complete**; `schema` is M4 and active;
 `instance` is M5 and active; `xpath`, `json` and `ber` wait on M6/M7, M8 and M11.
 
-**`instance` moved 532 → 535 (+3)** with #775 (`cbc0253`), which charges
-`cvc-complex-type` clause 1.2's String Valid half — a simple `{content type}`
-element's ·initial value·. Three expected-invalid `CType` cases, each a
-lexically invalid ·initial value·, no expectations line edited downward. #759
-closed in the same commit, landing `docs/STYLE.md` **E4** and converting twelve
-`validate` messages. **Cite 532 → 535 and never 193 → 196**: `eaa9dc6`'s own
-trailer carries a correct +3 pinned to a two-landings-stale baseline, and a
-pushed ref cannot be amended (#796).
+**No lane moved since the previous stamp** — this pass landed no code. `instance`
+535 → 1017 (+482) with #790 is the movement the band below is re-derived
+against; the mechanism is in that landing's LOG entry, not restated here.
 
-**This is a post-land pass, not a full backlog run.** The lane table, the queue
-counts, the branch namespace and the whole `blocked` set were re-read from their
-sources today. The working band **was re-derived** — it had to be, since its
-row 1 landed and its row 2 broke — but no issue body was audited that this
-landing did not touch.
-
-Milestones — only M5 moved. The rows are the previous stamp's GitHub reads plus
-that named delta, because the MCP issue tools expose no milestone filter and
-`gh` is 403 for both GraphQL and REST (#527); every other figure in this section
-was re-read:
+Milestones — **read from GitHub this pass, not carried.** The previous stamp
+said the MCP tools "expose no milestone filter" and carried its rows forward;
+that is false and the correction is worth more than the rows. `search_issues`
+returns the full milestone object on every hit, so one query per milestone reads
+`closed_issues` and `open_issues` directly. **M4 and M5 are read that way and
+are current.** M0–M2 and M3 are carried from the previous stamp: both are
+complete at zero open, and this pass filed into neither.
 
 | Milestone | Closed | Open | State |
 |---|---:|---:|---|
 | M0–M2 | 8 | 0 | done |
 | M3 — Datatypes vertical slice | 12 | 0 | **complete** |
 | M4 — Schema parsing | 83 | 41 | **active** |
-| M5 — Instance validation (XML) | 9 | 13 | **active** — #775 and #759 closed, #790 filed |
+| M5 — Instance validation (XML) | 10 | 12 | **active** |
 | M6–M12 | 0 | 0 | not filed |
 
-Queue: **194 open issues — 172 `ready`, 22 `blocked`, 0 `needs-replan`, 2 `epic`**
-(both `blocked`), against **285 closed**. Five of the 194 are this pass's own
-filings. Every open issue carries a queue label — verified across both pages, not
-assumed. Read the milestone table as feature progress, not as the queue: 140 of
-the 194 carry no milestone at all, and the process, doc and comment-accuracy
-issues that post-land passes file are deliberately outside them.
+Queue: **195 open issues — 174 `ready`, 21 `blocked`, 0 `needs-replan`, 2 `epic`**
+(both `blocked`), against **288 closed**. 174 + 21 = 195 exactly, so the
+arithmetic proves the label sweep rather than a sweep asserting it. Read the
+milestone table as feature progress, not as the queue: **142** of the 195 carry
+no milestone (195 − 41 − 12; the previous stamp's 141 was off by one), and the
+process, doc and comment-accuracy issues post-land passes file are deliberately
+outside them.
 
 ### What this pass did
 
-**The unblock sweep found nothing to unblock, and that is a verified result.**
-All 21 `blocked` bodies as of the landing were read and their `## Depends on`
-lines checked against live issue state: **no open issue names #775 or #759 as a
-dependency.** #718 moved the other way on the same day — `ready` → `blocked`
-behind the newly filed #790 — after its own grounding falsified its premise, and
-that relabel was the grounding session's, not this pass's.
+**The follow-up ledger (#489) is CLOSED, and it was closed by reading one
+thread.** Eleven consecutive stamps carried it as owed. Its standing sweep had
+already run at the 2026-08-09 `/retro`; what kept it open was one claim in its
+own title — *"#324's post-land pass never ran at all"* — which no pass had
+checked. **That pass ran in full**, twelve minutes after #324 landed, at
+<https://github.com/kud360/goxsd8/issues/324#issuecomment-5161052507>: two
+advisories filed (**#455**, **#456** — both open today) and five dismissed with
+reasons. The 2026-08-04 comment on #489 had already said the advisories reached
+the queue; every later comment kept the alarming half of that sentence and
+dropped the hedge, which is **#550**'s shape on #489's own thread. Closed
+`not_planned` — nothing landed, a premise dissolved.
 
-**Every follow-up #775 raised is now filed or dismissed on the record.** Five
-issues and one dismissal, none of them a hand-off:
+**#584's structural defect is FIXED, and the constraint that blocked three
+passes did not exist.** It carried `blocked` with no `## Depends on`, invisible
+to every unblock sweep since 2026-08-08. Three passes deferred the body edit to
+"a session with working `gh`", because the MCP read path strips `<...>` tokens
+(#764) and a round-trip would delete them. **The strip is on the READ path
+only** — #505's post-land pass said so on that very thread and no pass acted —
+and `WebFetch` against the rendered issue page returns the true text to author
+from. Body rewritten from fresh text: `## Spec`, `## Surface` and
+`## Depends on: #414` added, its `## Direction` section corrected (it claimed
+under-rejection in every case; #505's arbiter ruled the base-side half
+fail-CLOSED), its done-since-#505 Acceptance bullet narrowed, and #585's chained
+shape folded in. Element names verified intact afterwards. **It stays `blocked`
+on #414** and is now reachable by a sweep.
 
-- **#793** — the arbiter's non-blocking `[P3a]` finding. `initialValue`'s `#774`
-  `GAP(validate)` asserts a fail-open direction and delegates its consumer
-  enumeration to `cvcattribute.go`, which names no identifiers for it. The claim
-  was verified TRUE end to end, so this is where the identifiers are written,
-  not what they would say.
-- **#794** — `contentCheck.end`'s `ContentType` type switch has no `default`,
-  where `xsd/complexextension.go` panics on the same sum and `validate`'s own
-  `attributedTo` falls back gracefully. The package has ruled neither. Latent on
-  a fourth variant, not a live bug.
-- **#795** — `TestSimpleContentDeclinesAnUngovernedType` and the first arm of
-  `TestSimpleContentDeclinesAnEmptyElement` assert SILENCE, which a decided-VALID
-  outcome also produces. The `"declined"` log record already exists and the
-  attribute side already asserts on it; what is missing is the content-side
-  reader.
-- **#796** — a `Ratchet:` trailer can carry a correct delta pinned to stale
-  endpoints, and nothing reads a trailer until after the ref is unamendable.
-  `blocked` on the next `/retro`, on #354's own precedent: first instance of
-  this mechanism, filed rather than fixed.
-- **#797** — the race-losing session's 154-line LOG entry is stranded on
-  `chore/log-20260815-develop` and is not on `main`. A code-less develop
-  iteration has no PR for its entry to ride. #112 is the closed precedent and
-  covers retro branches only.
-- **DISMISSED, in a comment on #759** — the arbiter's Note 2, that E4's bold
-  lead-in is a fragment where the other entries are complete headline sentences.
-  Checked against the file: E4's bold span is a complete clause, `D1` and `D3`
-  are not sentences at all, and `L1` already runs its headline into the body on a
-  comma. What survives is one entry in 23 ending its bold span with an em dash
-  instead of a period, which is below this queue's filing threshold.
+**#515 closed as a duplicate of #764**, the same body-stripping defect found
+nine days apart; #764 survives because it reproduces the loss and names the
+lossless read. Three facts folded forward, including that `list_issues` strips
+too and that `<https://…>` returns as an empty `()` — the harder symptom, since
+it reads as ordinary punctuation.
 
-**#722's second incident was acted on rather than re-recorded.** The grounding
-session had already written the full second-incident report on that thread at
-05:35Z; this pass added the disposition it asked for — band promotion to row 1 —
-and the live fourth sighting (`wip/issue-718`, below). Whether the recurrence
-also warrants a process ruling beyond the tooling fix is the next `/retro`'s.
+**#797 re-scoped: its incident is retired, its mechanism is not.** Its whole
+Acceptance had gone false — `chore/log-20260815-develop` is gone from `origin`
+and its 154 lines are on `main` at `docs/LOG/2026-08.md:30454` (`8e8b45b`,
+PR #792), verified by content. Title and body now name the shape (a code-less
+iteration has no PR for its LOG entry to ride) instead of the instance.
 
-**Two LOG items needed no filing.** Friction 3 (`testdata/xsdtests` uninitialized
-in the arbiter's container) is already documented as an environment requirement in
-`docs/ROUTINES.md` and is #659/#527's territory. Surprise 3 (whitespace-only
-simple content is DECIDED, not declined) is a verification result absorbed into
-the landing, and the test that pins it is in the commit.
+**One issue filed: #802** — every session runs in a **shallow clone**, and the
+branch-namespace sweep's `N ahead / M behind` figures are arithmetic on a
+truncated history. See below; it is this pass's own finding about its own
+method.
 
-**#584's structural defect is unchanged**: it carries `blocked` with no
-`## Depends on` section at all, so every future unblock sweep reads past it. Its
-real gate is #414, recorded only on its thread; #779 owns the class. Not
-re-litigated here.
+**Personas folded (step 5), reports gathered by the orchestrating session — this
+pass role-played neither (#416).** libuser's finding is a genuine defect and it
+is **#748**, whose body had itself expired: it asserted `validate.New`'s
+signature without the `value.Backend` parameter #766 added, and claimed
+`validate/xmlsrc` "exports nothing" after #711 landed it. Body and title
+rewritten; the persona **built and ran** code against both packages, which is
+the strongest form this finding has taken. The `go doc ./...` failure folded
+into **#669**; the `builtin/strict` coverage wording dismissed on the thread
+(the persona itself calls it "not a contradiction"). cliuser found the CLI
+**100% consistent** with what README discloses and filed nothing: its help-text
+gap is **#747** reached independently, its exit-2 forward-compat sentence folded
+into **#472** (which owns the split), its `-version` finding is **#672**
+re-confirmed, and its "skim-reader could miss the caveat" note is dismissed —
+`README.md:48`'s heading already reads *"CLI (contract; no subcommand is
+implemented yet)"*.
+
+**Unblock sweep: no movement, and none was owed.** The only issues to close
+since the last stamp are #489 and #515, both closed by this pass and neither
+named in any `## Depends on`. #456 remains `blocked` on #455, which is open.
 
 ### Branch namespace, `origin` — report-only; a session never deletes a ref
 
-**`origin/wip/issue-775` survived its own merge** and should not have. PR #791
-squash-merged as `cbc0253` and `git diff origin/wip/issue-775 origin/main` is
-**empty** — the content is on `main` in full, the issue is closed, and the ref is
-a stale duplicate. Deletable.
+**`go tool wipsurvey`, verbatim** (issue JSON supplied from MCP, since `gh` is
+403 on both routes — #527, #682):
+
+```
+ISSUE  BRANCH         TIP AGE    VERDICT  REASON
+256    wip/issue-256  301h42m0s  RETIRED  wip/issue-256: issue #256 is closed
+271    wip/issue-271  281h26m0s  RETIRED  wip/issue-271: issue #271 is closed
+287    wip/issue-287  249h48m0s  RETIRED  wip/issue-287: issue #287 is closed
+718    wip/issue-718  12h56m0s   EXPIRED  wip/issue-718: tip pushed 12h56m0s ago, past the 2h0m0s claim TTL
+722    wip/issue-722  6m0s       LIVE     wip/issue-722: tip pushed 6m0s ago, within the 2h0m0s claim TTL
+```
 
 | Branch | Verdict | Disposition |
 |---|---|---|
-| `wip/issue-718` | **LIVE-shaped, actually finished** | **Zero commits ahead** of `e3ed308`, a claim-only lease. `wipsurvey` says `EXPIRED` on `e3ed308`'s committer date — the #722 defect, fourth sighting. The verdict is right by accident: the holder grounded #718, had its premise falsified, filed #790 and relabelled #718 `blocked`. Deletable, but **not on `wipsurvey`'s say-so**. |
-| `wip/issue-775` | merged | Content identical to `main`. Deletable. |
-| `chore/log-20260815-develop` | **strands real history** | 1 ahead, 1 behind. Its one commit `c9f1616` is a 154-line `docs/LOG` entry that is on no other ref. **#797 owns it.** |
-| `wip/issue-256` | RETIRED | Issue closed `needs-replan`, superseded by #470. |
-| `wip/issue-271` | RETIRED | Issue closed `needs-replan`, superseded by #478/#479/#480. |
-| `wip/issue-287` | RETIRED | Issue closed, answered in the opposite direction by PR #511. Not a park — it carries no `needs-replan`. |
-| `claude/eloquent-cerf-8f1mrv` | merged | 0 ahead of `main`. Deletable. |
-| `claude/eloquent-cerf-patxs3` | superseded | Ahead by SHA, none by content — tip `2196c3f`, unmoved since 2026-08-07. Deletable. |
-| `claude/eloquent-cerf-7ckw7b` | **needs a human look** | 7 ahead, carried forward from the previous stamp and not re-measured today. The seven commits name #662, #359, #649, #426, #358, #643 and #636, whose work is believed to be on `main` as squashes, but no commit on `main` carries those trailers and no pass has verified the content diff. |
+| `wip/issue-722` | **LIVE** | tip `cde728c`, pushed six minutes before this survey. A session is working #722 now. **Do not take #722.** |
+| `wip/issue-718` | dead lease | 0 ahead; its tip `e3ed308` is a `main` commit, so it holds no work. #718 is `ready` and row 1 — the next attempt branches fresh from `origin/main` and must not resume this ref. Deletable. |
+| `wip/issue-256` | RETIRED | issue closed `needs-replan`, superseded by #470 |
+| `wip/issue-271` | RETIRED | issue closed `needs-replan`, superseded by #478/#479/#480 |
+| `wip/issue-287` | RETIRED | issue closed, answered in the opposite direction by PR #511. Not a park — it carries no `needs-replan` |
+| `claude/eloquent-cerf-15r30e` | merged | tip is `origin/main` exactly (`9ca50fc`). Deletable. |
+| `claude/eloquent-cerf-8f1mrv` | merged | 0 ahead; tip `77dd47a` is a commit on `main`. Deletable. |
+| `claude/eloquent-cerf-patxs3` | superseded | tip `2196c3f`, unmoved since 2026-08-07. Deletable. |
+| `claude/eloquent-cerf-7ckw7b` | **merged — VERIFIED BY CONTENT** | all seven commits are on `main`. Deletable. The human-look flag is retired. |
 
-No `parked/*` branches. **No `wip/*` branch holds a live claim.**
+No `parked/*` branches. One `wip/*` holds a live claim (`wip/issue-722`).
+
+**`claude/eloquent-cerf-7ckw7b` carried the "needs a human look" flag across four
+stamps and it is now discharged.** Per-file content check against `main`, not
+commit subjects and not ahead/behind:
+
+| commit | names | on `main` |
+|---|---|---|
+| `dc71407` | #636 | `SimpleTypeOrRef` across `xsd/simpletyperef.go` and nine more files |
+| `9a41167` | #643 | `tools/{gapaudit,lanestatus,surface,wipsurvey}`, `stylecitations_test.go` |
+| `07196b0` | #426 | `tools/lint/main.go`; `CLAUDE.md:47` gate part 2 reads `go tool lint` |
+| `5e0cc49` | #358 | all three `TestProduceAttributeUse*` tests |
+| `d9cea81` | #649 | both WORKFLOW passages, verbatim |
+| `fa92a0b` | #359 | **refactored** — the Loc now rides `attributeRestriction.loc`, *"always the derived side's"* |
+| `5b35716` | #662 | **refactored** — zero `xsderr.Loc{}` remain in `complexderivation.go` |
+
+The last two are why a naive diff reads as unlanded: `main` moved the charge onto
+a carrier struct, so the branch's `t.Loc()` arguments do not appear literally.
+
+**The checkout is SHALLOW, and every ahead/behind figure this table has ever
+published was arithmetic on a truncated history (#802).**
+`git rev-parse --is-shallow-repository` is `true`, `.git/shallow` holds two
+boundary commits, and `git rev-list --count origin/main` returns **50** — all of
+`main` this container can see. Five of the nine branches have **no merge base
+with `main` at all**, and `git rev-list --left-right --count` does not fail on
+that: it counts every commit on each side and returns a plausible pair. The
+"7 ahead, 51 behind" carried for `7ckw7b` across four stamps was never a
+divergence measurement. **Under squash-merge, ahead/behind was never the right
+question anyway** — a squashed branch is always "N ahead" of the `main` that
+already contains it. The table above answers by content instead. `wipsurvey` is
+unaffected: it keys on `ls-remote` and tip timestamps, never on counts.
+
+**`go tool gapaudit`: no P3 leak.** 53 markers across 5 areas. Its two group-1
+entries are heuristic misses, not untracked sites — both `validate/cvccomplexcontent.go`
+markers name open issues (#716, #774) in their own text, and the matcher failed
+only because the marker prose is long. Its seven group-2 entries are all
+expected: #404, #591, #592 and #593 are conformance-lane gaps, which carry no
+marker by construction; #398 exists precisely because the `cmd` stub has none;
+and #719 and #787 are the issues whose markers land with them.
 
 ### Working band
 
-Dependency-ordered top of the `ready` queue, so a session need not scan the whole
-list. Take from the top. **Re-derived this pass**, not pruned: row 1 landed and
-row 2 broke apart when #718 went `blocked`.
+Dependency-ordered top of the `ready` queue, so a session need not scan 174 of
+them. Take from the top. **Fully re-derived this pass** — the previous band's
+rows 5–10 had been carried on their original justifications across four stamps
+while `instance` nearly doubled, and that is the debt this pass was called to
+pay.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #722 | **the lease-clock trap, and the only queue item whose absence actively destroys throughput** — it has now done so twice in twelve days, the second time costing a full discarded mason round. Four lease-only claims have been misclassified (#503, #715, #775, and `wip/issue-718` today); the written workaround failed on the branch it was written for. One tooling change, no lane movement, and it protects every session after it |
-| 2 | #790 | **M5's head** — thread the ·context-determined declaration· into descendant assessment (§3.3.4.6 clause 3.1). `ready`, dependency-free, and the enabler #718 now waits on. It re-opens every decline `rootComplexType` makes today, which is what turns the lane's declines into decisions; its grounding is already written across #715's warden pre-flight and #718's oracle answer, and neither needs re-running |
-| 3 | #716 + #719 | the M5 slices #715 unblocked that are still startable, **unordered against each other**. #718 has left this row — it is `blocked` behind #790. **#716 interacts with #790 and neither blocks the other**: they meet where `xsi:type` changes a descendant's ·governing type definition·, and whichever lands second owns making them meet (#790's Notes say how, in both orders) |
-| 4 | #659 + #527 | the environment tax, one sentence of prose each. #527 has now been paid by every pass for thirteen consecutive sessions, and this one paid it twice — GraphQL *and* REST are both 403 |
-| 5 | #733 | a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and #442 moved `schema` **+82** |
-| 6 | #748 + #747 | the two persona findings, both re-verified and corrected on their threads on 2026-08-14. #748 is four facts, three of them one-line edits; #747 is two, and its proposed re-scope was refused |
-| 7 | #625 → #669 → #492 | the rest of README's Library block, in that order — #625's fix names the file #669 must add to the example list, and #492's belongs in the sentence at `README.md:115-116` rather than a new paragraph |
-| 8 | #514 + #687 + #672 | the open CLI-contract decisions: typo-vs-unbuilt, scoped help, and `-version`. Take them **before** #472 — each is a sentence or a dispatch branch while the CLI surface is still empty, and a change to shipped behaviour afterwards |
-| 9 | #472 | implement `goxsd8 parse`, the first non-stub subcommand — and the issue that owns the exit-2 split |
+| 1 | #718 | **M5's head.** `cvc-identity-constraint` and `cvc-id`. Largest remaining `instance` mover in the queue; its enabler (#790) is on `main`, its grounding (comment 5300735646) is durable and scoped to the rule text, and its XPath subset is §3.11.6.2/§3.11.6.3's restricted path grammar — it **does not wait on M6**, and a fail-open to the M6 evaluator here would be wrong rather than conservative |
+| 2 | #716 | `xsi:type` and `xsi:nil`. #790 **raised** its value: an `xsi:type` decline used to cost one element and now costs a subtree, since everything below an unassessed node inherits that. Also the residual #718 would otherwise GAP-mark. Dependency-free |
+| 3 | #800 | the `<xs:alternative>` producer gap. It **cannot move `instance`** — it converts three false rejects into declines, which the lane scores identically — but it is the only queue item that retires a decided-and-WRONG case, may move `schema` through four readers it makes live, and a `schema` regression is the real risk. Needs a warden pre-flight on `xsd.TypeAlternative` |
+| 4 | #733 | **promoted four places.** A top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and **#442 moved `schema` +82**. It was banded below five rows that move no lane at all, which is precisely what four passes of carrying produced |
+| 5 | #786 | `simpleTypeDecidable`'s last decline is conservative, not forced. Its premise — that a `simpleType` naming none of §3.16.2.1's three alternatives needs a conservative decline — is a candidate for expiry now that #447 and #738 landed `<list>` and `<union>`; converting it turns declines into decisions in `schema` |
+| 6 | #719 | `cvc-assertion` wired fail-open at every variety level — the M6 seam, marked and measured. Below #733/#786 because it converts silent wrongness into honest declines, which the lane scores the same. It also decides the encoding **#56** needs one milestone later (STYLE D4) |
+| 7 | #625 → #669 → #748 → #492 | **README's Library block, now ONE row in file order.** Splitting it across two band rows is why it sat four passes. #625 fixes the `SchemaBuilder` pointer at closed #203 (:123-124); #669 the "works TODAY" snippet, the example list and `go doc ./...`; #748 the M5 block that denies a shipped API (:126-133); #492 `ParseReport`, which belongs in the sentence at `README.md:116` rather than a new paragraph. All four verified against the file this pass |
+| 8 | #747 + #514 + #687 + #672 | the CLI contract, all four decided **before** #472 — the missing "Implemented today" paragraph, typo-vs-unbuilt, scoped help, `-version`. Each is a sentence or a dispatch branch while the CLI surface is still empty, and a change to shipped behaviour afterwards |
+| 9 | #472 | implement `goxsd8 parse`, the first non-stub subcommand — and the issue that owns the exit-2 split, plus the forward-compat sentence folded onto it this pass |
+| 10 | #682 + #668 + #802 | **the container tax, actionable half.** #682 and #668: `wipsurvey` and `gapaudit` both have a working no-`gh` mode documented only in their own package docs, so the three places a session reads show a dead `gh issue list \|` pipeline. #802: the clone is shallow and nothing says so. This pass paid all three by hand. **#659** and **#527** are the prose half of the same paragraph and land with it |
 
-**Rows 4 through 9 are the previous band's rows 3 through 8, unchanged in
-substance**, with their justifications intact: nothing landed that touches any of
-them.
+**#722 is not banded because it is being worked** (`wip/issue-722`, LIVE). If
+that branch goes stale without landing, #722 returns near the top — it is the
+tool defect that nearly retired a live session's branch.
 
-**Deliberately unbanded, and why.** **#744** — the chained-redefine successor — is
-the highest-value M4 gap in the queue and is held out only because its
-`## Surface` requires a warden pre-flight on an `xsd` entry point that does not
-exist; **#773** and **#721** are held out on the same condition. **#774** is
-three fail-open declines to close or rule permanent — it can move a lane, but
-which way is unknown until the first is decided, and #795 is what would pin the
-element-side one either way. **#782**, **#783**, **#785**, **#786**, **#787** and
-**#788** are earlier landings' post-land follow-ups; **#786** is the one of them
-that can move a lane, and a later pass should weigh it against row 5.
-**#793**, **#794**, **#795**, **#796** and **#797** are this pass's own filings
-and are not banded on first appearance.
+**Deliberately unbanded, and why.** **#744** (chained-redefine successor,
+highest-value M4 gap), **#773** and **#721** are held out on one shared
+condition: each needs a warden pre-flight on an entry point that does not exist.
+**That condition has an owner — #484** — which is why a process issue is worth
+more than its label suggests here: it unblocks three band-grade issues at once.
+**#774** is three fail-open declines to close or rule permanent; which way it
+moves a lane is unknown until the first is decided, and **#795** pins the
+element-side one either way. **#771** is the last decided-and-disagreeing
+`instance` case once #800 lands. **#782**, **#783**, **#785**, **#787**, **#788**,
+**#793**, **#794**, **#796** are earlier landings' follow-ups; **#794** grew a
+third site with #790.
 
 **`parser/redefine.go` has been rewritten five times in a week, so read it rather
 than an issue body that describes it.** #686, #699, #506, #503 and #504 each
@@ -189,20 +237,24 @@ moved it; #744, #706 and #726 all open it next.
 
 ### Next planning action
 
-**Sweep the carried follow-up ledger (#489)** — file or dismiss each unfiled
-advisory, one comment per item — before the next carve. It has now gone ten
-consecutive passes undone and grows with every landing; #330 is the standing
-proof that a hand-off tracks nothing. This pass filed five issues and dismissed
-one against a single landing, which is the shape the sweep is for and is not a
-substitute for running it.
+**Re-derive the decline census before the next carve.** It predates #766, #715,
+#740 and #790 — four landings that moved 985 cases between them — and it is now
+the oldest measurement this roadmap argues from. Rows 4, 5 and 6 of the band
+above are ordered on *reasoning* about which declines are convertible, not on a
+measurement, and that is as far as judgment can carry the ordering. **#570** is
+the issue that makes it cheap and permanent: bank a per-lane decline baseline so
+every landing announces the cases it just made decidable, instead of each pass
+re-running a standing count. **#571** is its soundness half.
 
-The band's ordering debt from the previous stamp is **discharged**: rows 1–3 are
-now ordered against each other rather than listed together. What a full
-`/backlog` still owes is the other end — rows 4 through 9 have been carried
-forward on their original justifications across three passes and have not been
-re-derived against anything that has landed since.
+The follow-up-ledger debt this section carried for eleven stamps is **discharged
+and closed** (#489); do not re-file it. WORKFLOW step 7(b)'s *a hand-off is not
+a disposition* rule is what closed the inflow, and **#400** — a pass that files
+no docs commit leaves no signal on `main` — is the mechanism that let #489's
+false premise stand that long. It is still open and it is still the reason a
+skipped pass and a clean one look alike.
 
-Everything else this queue needs is a develop iteration. **Start with #722.**
+Everything else this queue needs is a develop iteration. **Start with #718.**
+
 
 ## Milestones
 
@@ -258,40 +310,70 @@ Carved 2026-08-12 into ten slices, #710–#719, and now **seventeen** — #766 w
 split out of #714 by a warden pre-flight, #773, #774 and #775 out of #766 by
 another, #782 and #783 out of #715 by its own, and **#790** filed from #715's
 warden verdict, which had named the seam and been read by nobody who filed it.
-Eight have landed: the infoset
+Nine have landed: the infoset
 seam and engine skeleton (**#710**), the `xmlsrc` adapter (**#711**) and root
 dispatch (**#712**), none of which moved the lane and correctly so — the first
 two decide no `cvc-` rule and nothing yet ran the cases; **the lane driver
 (#713), which took `instance` off zero — 0 → 18 pass** (the #175 analogue, placed
 fourth so every slice after it reports a real number); `cvc-complex-type`
 clauses 2–3 (**#714**, 19 → 29); the `value.Backend` seam with the four
-datatype-valid attribute charges (**#766**, 29 → 193); and the greedy
-non-backtracking content matcher (**#715**, 193 → 520), the largest single move
-the milestone has recorded; and `cvc-complex-type` clause 1.2's ·initial value·
-against String Valid (**#775**, 532 → 535), which also closed #759 and landed
-`docs/STYLE.md` **E4**. `instance` stands at **535** — #740, an M4 landing, took
-it 520 → 532 on a merged tree neither parent could measure.
+datatype-valid attribute charges (**#766**, 29 → 193); the greedy
+non-backtracking content matcher (**#715**, 193 → 520); `cvc-complex-type`
+clause 1.2's ·initial value· against String Valid (**#775**, 532 → 535), which
+also closed #759 and landed `docs/STYLE.md` **E4**; and **the descent (#790,
+535 → 1017)**, which threads each descendant's ·context-determined declaration·
+into the recursive walk (§3.3.4.6 clause 3.1) — the largest single move any lane
+has recorded. `instance` stands at **1017** — #740, an M4 landing, took it
+520 → 532 on a merged tree neither parent could measure.
+
+**The milestone's shape changed with #790, not just its number.** The first eight
+slices decided the ·validation root· and nothing else, so each one bought tens of
+cases; #790 bought 482 by making the same rules reach the other 99% of every
+document. **The remaining slices inherit that multiplier**, which is why #718 and
+#716 are the queue's top two: they no longer buy a rule at one node, they buy it
+at every node.
 
 **The carve is no longer a chain, and reading it as one loses work.** The
 original ordering assumed a slice becomes `ready` as the one before it lands.
 That held until #714, which had **two** successors directly behind it, and #766
 has **three**; #715 had four, of which #716, #718 and #719 became `ready` when it
-landed while #717 waits on #248 as well. **A slice can also travel backwards**:
-#718 went `ready` → `blocked` when its own grounding falsified its premise and
-filed #790 as the enabler it needs. Relabel from the `## Depends on` lines,
+landed while #717 waits on #248 as well. **A slice can also travel backwards, and
+then forwards again**: #718 went `ready` → `blocked` when its own grounding
+falsified its premise and filed #790 as the enabler it needs, and returned to
+`ready` when #790 landed. Both moves were made by reading the *code* against the
+falsifying claim, not by reading the dependency's closed state — the round trip
+is the worked example of what a `## Depends on` line is for. Relabel from those
+lines,
 never from the milestone or from the issue numbers' order — and sweep for issues
 carrying **no queue label at all**, which is how #773 and #774 sat outside both
 queues for a day. The CLI's own `validate` subcommand is #720, `blocked` behind
 #472 alone now that #715 has landed.
 
-**535 is still a floor built for soundness, not a measure of the engine.** The
-lane emits only "not valid" observations; a violation-free `Result` DECLINES
-rather than passing, because `Assess` evaluates none of `e-validity`'s other
-conjuncts. The milestone's remaining slices are what turn declines into
-decisions. Exactly one case is decided and decided WRONG (**#771**); the decline
-census that separated harvest candidates from indeterminates predates #766, #715
-and #740 — three landings that moved 503 cases between them — and is not
-re-derived here.
+**1017 is still a floor built for soundness, and the jump to it did not change
+what the number means.** The lane emits only "not valid" observations; a
+violation-free `Result` DECLINES rather than passing, because `Assess` evaluates
+none of `e-validity`'s other conjuncts. **Every one of the 482 is an
+expected-INVALID case**, and the ~25,300 that still fail are overwhelmingly
+declines rather than disagreements. The milestone's remaining slices are what
+turn declines into decisions.
+
+**Do not read 1017 as 4% of the suite passing.** It is the count of documents
+this engine can honestly call not-valid, and it grew because the same six rules
+now reach every node instead of one. A slice that decides a *new* rule will move
+the number far less than #790 did and be worth more.
+
+**Four cases are decided and decided WRONG**, not one: **#771** (a root whose
+declaring schema is reachable only through the instance's own
+`xsi:schemaLocation`) plus the three `<xs:alternative>` false rejects **#800**
+owns — `Assert/assert_019_2`, `CTA/cta0008.v01`, `CTA/typeAlternatives_001_2`.
+The three were already banked `fail` before #790 and are not its regression; the
+descent is what made them visible. #800 returns them to honest declines, which
+the lane cannot register as movement.
+
+The decline census that separated harvest candidates from indeterminates
+predates #766, #715, #740 and #790 — four landings that moved 985 cases between
+them — and is not re-derived here. **It is now the oldest measurement this
+milestone still argues from**, and #786 is the nearest issue to it.
 
 The design constraints are fixed by `validate/doc.go` and PRINCIPLES 8, 11,
 13, 14 and 15, and the carve does not reopen them.

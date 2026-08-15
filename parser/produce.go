@@ -1850,6 +1850,22 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 		}
 		typeDef = inherited
 	}
+	// GAP(xsd): an <alternative> child is IGNORED, so the declaration's {type
+	// table} (§3.3.2.1 dcl.elt.common clause 5 over §3.12.2) is ·absent· where the
+	// schema document states one — on this path and on produceLocalElement's
+	// alike. This one is fail-CLOSED, and its three readers say so severally:
+	// validate's governingComplexType declines a declaration that HAS a table and
+	// assesses one that has none against D.{type definition}, so an element whose
+	// <alternative> ·conditionally selects· another type is assessed against the
+	// wrong one, which false-rejects content the selected type admits, at the
+	// ·validation root· and at every descendant; xsd's checkTypeTablesAgree
+	// (cos-element-consistent) and defaultbinding's declaredTypeRestricts read two
+	// ·absent· tables as agreeing, which is an unmade schema rejection; and
+	// resolveTypeTable has nothing to resolve. Unowned: no issue tracks the
+	// mapping yet — #56 is the EVALUATOR's forward tracker, not this producer
+	// hole, and STYLE P3 asks for an issue reference only where one owns the
+	// retirement.
+	//
 	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
 	if inlineComplex != nil {
 		edID := xsd.NewComponentID()
