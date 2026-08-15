@@ -64,11 +64,14 @@ import (
 //     one of its [[attributes]] matches neither an attribute use nor an
 //     {attribute wildcard} (#714), a {required} use has no attribute at all
 //     (#714), a ·defaulted attribute·'s own {lexical form} is not datatype-valid
-//     (#766), or its [[children]] hold a character or element information item
-//     the {content type}.{variety} admits none of — clauses 1.1, 1.2 and 1.3
-//     (#715). The root is then not locally ·valid· with respect to that type, so
-//     cvc-type clause 3.2 fails, so cvc-elt clause 5 fails, and e-validity clause
-//     1.1.1.1 gives the root [validity] invalid exactly as case 2 does.
+//     (#766), its [[children]] hold a character or element information item the
+//     {content type}.{variety} admits none of — clauses 1.1, 1.2 and 1.3
+//     (#715) — or its ·initial value· under a simple {content type} is not
+//     ·valid· per String Valid against that {content type}'s {simple type
+//     definition}, the other half of clause 1.2 (#775). The root is then not
+//     locally ·valid· with respect to that type, so cvc-type clause 3.2 fails, so
+//     cvc-elt clause 5 fails, and e-validity clause 1.1.1.1 gives the root
+//     [validity] invalid exactly as case 2 does.
 //  4. cvc-attribute (§3.2.4.1) clause 3 or clause 4, when one of the root's
 //     [[attributes]] matched an attribute use and its lexical is not ·valid· per
 //     String Valid (§3.16.4) against the declaration's {type definition}, or its
@@ -91,7 +94,7 @@ import (
 //
 // All six are unconditional: no verdict here can be overturned by anything in
 // the rest of the document, which is what makes them decidable while the engine
-// assesses no child of the root and no element's own value.
+// assesses no child of the root and no value below it.
 //
 // Cases 3 to 6 rest on conditions validate checks rather than this file
 // assuming them: the attribute half of cvc-complex-type is reached only where
@@ -103,7 +106,9 @@ import (
 // whose shape xsd.Schema.ContentMatcher declines — {open content}, the nested
 // repetition cvc-accept's own Note leaves non-deterministic, an all group
 // holding an all group — each of which withholds clause 1.4 entirely rather
-// than matching part of a sequence. The value charges add their own: a declaration
+// than matching part of a sequence, and a root with no character information
+// item [[child]] at all, whose ·initial value· cvc-elt clause 5.1 may take from
+// a {value constraint} instead. The value charges add their own: a declaration
 // whose {type definition} does not resolve to a simple type, and — the one that
 // would otherwise reject every typeless attribute — a value.ValidateLexical
 // error that is a fault of the type or of the backend rather than a verdict

@@ -59,6 +59,12 @@ error; if you can't name the rule, you haven't read the spec section yet.
 line + column (from `parser/xmltree` positions). Instance errors carry the
 instance location. `xsderr.Loc` is threaded, not reconstructed.
 
+**E4. A message names its clause inline, spelling the rule ID out with it** —
+`"…, but src-simple-type clause 3 allows only one"` — and never as a leading
+`"clause 3: …"` label, so the citation survives being read apart from
+`Error()`'s rendered `[rule]` prefix and a grep for the full rule-and-clause
+finds the site (#759).
+
 ## Data & determinism
 
 **D1. Deterministic output, always.** Identical inputs produce byte-identical

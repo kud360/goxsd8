@@ -105,7 +105,7 @@ func (v *Validator) Assess(root Element) *Result {
 	}
 	if found && d.Abstract() {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, root.Loc(),
-			"clause 2: the validation root %s is governed by an element declaration whose {abstract} is true, and an abstract declaration validates no element information item",
+			"the validation root %s is governed by an element declaration whose {abstract} is true, but cvc-elt clause 2 requires it to be false: an abstract declaration validates no element information item",
 			root.Name()))
 	}
 	w.element(root, v.rootComplexType(root, d, found))
@@ -244,6 +244,22 @@ type walk struct {
 	res     Result
 }
 
+// elementContext is the [value.Context] an instance lexical is mapped under:
+// the namespace bindings in scope at the element that OWNS it, which is where a
+// QName- or NOTATION-valued lexical resolves its prefix (Datatypes §3.3.18,
+// §3.3.19, PRINCIPLES 19). The owner is the attribute's element for an
+// attribute's lexical (cvc-attribute clause 3) and the element itself for its
+// ·initial value· (cvc-complex-type clause 1.2).
+//
+// It exists so no site passes a nil Context. A nil one makes a backend reject
+// every prefixed QName lexical for want of bindings, which is a false reject of
+// every xsi-free QName value in existence.
+type elementContext struct{ owner Element }
+
+func (c elementContext) LookupNamespace(prefix string) (string, bool) {
+	return c.owner.LookupPrefix(prefix)
+}
+
 // element assesses one element information item: the item itself, then its
 // [[attributes]], then its [[children]].
 //
@@ -300,7 +316,7 @@ func (w *walk) attributes(e Element, governing *xsd.ComplexType) {
 // 2 outright.
 //
 // e is the attribute's owner, carried for the namespace bindings a QName- or
-// NOTATION-valued lexical resolves against (attributeContext).
+// NOTATION-valued lexical resolves against (elementContext).
 func (w *walk) attribute(a Attribute, e Element, governing *xsd.ComplexType) {
 	if governing == nil {
 		w.logAttribute(a, "", "", "")
@@ -342,7 +358,7 @@ func (w *walk) unmatchedAttribute(a Attribute, governing xsd.ComplexType) {
 		return
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, a.Loc(),
-		"clause 2: the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition· (clause 2.1), which has no {attribute wildcard} for it to be ·valid· with respect to either (clause 2.2.1)",
+		"the attribute %s matches no attribute use among the {attribute uses} of its element's ·governing type definition· (cvc-complex-type clause 2.1), which has no {attribute wildcard} for it to be ·valid· with respect to either (clause 2.2.1), and clause 2 has no third arm",
 		a.Name()))
 	w.logAttribute(a, ruleCvcComplexType, "2", "charged")
 }
@@ -369,7 +385,7 @@ func (w *walk) requiredAttributeUses(e Element, attrs []Attribute, governing xsd
 			continue
 		}
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, e.Loc(),
-			"clause 3: the element %s carries no attribute information item named %s, but its ·governing type definition· has an attribute use for that name whose {required} is true",
+			"the element %s carries no attribute information item named %s, but its ·governing type definition· has an attribute use for that name whose {required} is true, and cvc-complex-type clause 3 requires one to be present",
 			e.Name(), name))
 		if w.log.Enabled(context.Background(), slog.LevelDebug) {
 			w.log.Debug("assessing attribute use", slog.Any("name", name), slog.Any("loc", e.Loc()),

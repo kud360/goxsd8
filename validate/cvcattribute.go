@@ -6,12 +6,14 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// This file holds the charges that need a value space: an attribute
+// This file holds the ATTRIBUTE charges that need a value space: an attribute
 // information item's lexical read through its declaration's {type definition}
 // (cvc-attribute clause 3), the two independent fixed-value agreements
 // (cvc-attribute clause 4 and cvc-au), and a ·defaulted attribute·'s own
 // {lexical form} (cvc-complex-type clause 4). All four are reached from
-// [walk.attributes]; the walk topology itself is assess.go's.
+// [walk.attributes]; the walk topology itself is assess.go's, and the content
+// half's own value charge — an element's ·initial value· under cvc-complex-type
+// clause 1.2 — is cvccomplexcontent.go's.
 //
 // Every one of them delegates to String Valid (§3.16.4, cvc-simple-type) and
 // so inherits its three clauses: whiteSpace normalization (cl.1) and Datatype
@@ -19,17 +21,18 @@ import (
 // order, and clause 3 is the residue below.
 //
 // GAP(validate): String Valid clause 3 — "every ·ENTITY value· in V is a
-// ·declared entity name·" — is not checked, so an xs:ENTITY-valued attribute
-// naming an entity the document never declared is accepted. A ·declared entity
-// name· is the [name] of an unparsed entity information item in the DOCUMENT's
-// [unparsedEntities] property (key-vde), which the abstract infoset does not
-// carry: [Element], [Attribute] and [Text] are element-level views with no
-// document above them, and the property arrives as a capability interface of
-// its own rather than as a method added to any of the three (PRINCIPLES 3,
-// doc.go). The withheld value's whole consumer set is Result.violations and
-// its one reader Result.Violations, both of which decidedNotValid reads as
-// violations PRESENT, so withholding one can only cost a rejection and never
-// manufacture one (#773).
+// ·declared entity name·" — is not checked, so an xs:ENTITY-valued attribute,
+// or an element ·initial value· of that type, naming an entity the document
+// never declared is accepted. A ·declared entity name· is the [name] of an
+// unparsed entity information item in the DOCUMENT's [unparsedEntities]
+// property (key-vde), which the abstract infoset does not carry: [Element],
+// [Attribute] and [Text] are element-level views with no document above them,
+// and the property arrives as a capability interface of its own rather than as
+// a method added to any of the three (PRINCIPLES 3, doc.go). The withheld
+// value's whole consumer set is Result.violations and its one reader
+// Result.Violations, both of which decidedNotValid reads as violations
+// PRESENT, so withholding one can only cost a rejection and never manufacture
+// one (#773).
 
 // ruleCvcAttribute is Attribute Locally Valid (Structures §3.2.4.1,
 // cvc-attribute). The clause charged goes in the message on ruleCvcElt's
@@ -43,21 +46,6 @@ const ruleCvcAttribute xsderr.Rule = "cvc-attribute"
 // DECLARATION's, and au-props-correct clause 3 reconciles the two at schema
 // assembly rather than making either instance check redundant.
 const ruleCvcAu xsderr.Rule = "cvc-au"
-
-// attributeContext is the [value.Context] an attribute's lexical is mapped
-// under: the namespace bindings in scope at its OWNING ELEMENT, which is where
-// a QName- or NOTATION-valued lexical resolves its prefix (Datatypes §3.3.18,
-// §3.3.19, PRINCIPLES 19).
-//
-// It exists so no site here passes a nil Context. A nil one makes a backend
-// reject every prefixed QName lexical for want of bindings, which under
-// cvc-attribute clause 3 is a false reject of every xsi-free QName attribute
-// in existence.
-type attributeContext struct{ owner Element }
-
-func (c attributeContext) LookupNamespace(prefix string) (string, bool) {
-	return c.owner.LookupPrefix(prefix)
-}
 
 // matchedAttribute settles clause 2.1 for an attribute information item that
 // matched an attribute use, which is where cvc-complex-type sends it: to
@@ -95,13 +83,13 @@ func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
 		w.logAttribute(a, ruleCvcAttribute, "3", "declined")
 		return
 	}
-	if _, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), attributeContext{owner: e}); err != nil {
+	if _, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e}); err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			w.logAttribute(a, ruleCvcAttribute, "3", "declined")
 			return
 		}
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAttribute, a.Loc(),
-			"clause 3: the ·initial value· of the attribute %s is not ·valid· with respect to its declaration's {type definition} %s as per String Valid (§3.16.4): %v",
+			"the ·initial value· of the attribute %s is not ·valid· with respect to its declaration's {type definition} %s, which cvc-attribute clause 3 requires as per String Valid (§3.16.4): %v",
 			a.Name(), st.Name(), err))
 		w.logAttribute(a, ruleCvcAttribute, "3", "charged")
 		return
@@ -145,7 +133,7 @@ type fixedConstraint struct {
 // instance's). Charging on undecided would reject a document for a gap in the
 // processor (#774).
 func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixedConstraint) {
-	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), attributeContext{owner: e}, f.vc)
+	same, decided := value.ConstraintMatches(w.backend, w.schema, st, a.Value(), elementContext{owner: e}, f.vc)
 	if !decided {
 		w.logAttribute(a, f.rule, f.clause, "declined")
 		return
@@ -155,8 +143,8 @@ func (w *walk) fixedAgreement(a Attribute, e Element, st *xsd.SimpleType, f fixe
 		return
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(f.rule, a.Loc(),
-		"%sthe ·actual value· of the attribute %s is neither equal nor identical to the {value} of the fixed {value constraint} %q on its %s",
-		clausePrefix(f.clause), a.Name(), f.vc.LexicalForm(), f.owner))
+		"the ·actual value· of the attribute %s is neither equal nor identical to the {value} of the fixed {value constraint} %q on its %s, which %s requires",
+		a.Name(), f.vc.LexicalForm(), f.owner, citation(f.rule, f.clause)))
 	w.logAttribute(a, f.rule, f.clause, "charged")
 }
 
@@ -183,14 +171,13 @@ func useFixed(u xsd.AttributeUse) (fixedConstraint, bool) {
 	return fixedConstraint{vc: vc, rule: ruleCvcAu, owner: "attribute use"}, true
 }
 
-// clausePrefix renders the "clause N: " message opening for a rule whose
-// charged clause is named in the message, and nothing for a rule that has no
-// numbered clauses at all.
-func clausePrefix(clause string) string {
+// citation renders the rule and clause a message names inline (STYLE E4), and
+// the bare rule for one that has no numbered clauses at all.
+func citation(rule xsderr.Rule, clause string) string {
 	if clause == "" {
-		return ""
+		return string(rule)
 	}
-	return "clause " + clause + ": "
+	return string(rule) + " clause " + clause
 }
 
 // defaultedAttributes charges cvc-complex-type (§3.4.4.2) clause 4: for each
@@ -265,6 +252,6 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 		return
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, e.Loc(),
-		"clause 4: the element %s carries no attribute information item named %s, and the {lexical form} %q of the ·effective value constraint· of the ·defaulted attribute· it would supply is not ·valid· with respect to that declaration's {type definition} %s as per String Valid (§3.16.4)",
+		"the element %s carries no attribute information item named %s, and the {lexical form} %q of the ·effective value constraint· of the ·defaulted attribute· it would supply is not ·valid· with respect to that declaration's {type definition} %s, which cvc-complex-type clause 4 requires as per String Valid (§3.16.4)",
 		e.Name(), u.DeclarationName(), vc.LexicalForm(), st.Name()))
 }
