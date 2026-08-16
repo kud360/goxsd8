@@ -144,7 +144,7 @@ import (
 // on the inline arm, an anonymous declared type behind a synthesized default, or
 // a reference to ·xs:error· — and it shrinks as those shapes are mapped: a
 // declaration whose table IS built makes validate decline instead of guess
-// (#800).
+// (#822, #821).
 //
 // Cases 3 to 6 rest on conditions validate checks rather than this file
 // assuming them: the attribute half of cvc-complex-type is reached only where

@@ -166,8 +166,10 @@ func (p *producer) alternativeTypeNames(alternatives []*Element) ([]xsd.QName, e
 // already carry, which first needs §3.4.2.1's ownership invariant settled for an
 // <element> that has both a type attribute and an inline alternative: the
 // anonymous type's {context} is the enclosing element declaration, a shape
-// NewElementDeclarationOwningType's identity check does not cover. Closing the
-// third means seeding ·xs:error· as a component. #800.
+// NewElementDeclarationOwningType's identity check does not cover (#822).
+// Closing the third means seeding ·xs:error· as a component (#821). This
+// marker survives both landings and narrows by bullet, not by disappearing
+// after either one alone.
 func typeTableRepresentable(names []xsd.QName, declaredType xsd.TypeDefinitionOrRef, lastTested bool) bool {
 	if slices.Contains(names, xsd.QName{}) || slices.Contains(names, errorTypeName) {
 		return false

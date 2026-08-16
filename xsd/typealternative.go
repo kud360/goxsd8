@@ -31,7 +31,8 @@ type TypeAlternative struct {
 // NewTypeAlternative builds a TypeAlternative. test == nil means {test} is
 // absent (the default/"otherwise" alternative — legal only as the last
 // element of the containing element declaration's ordered alternatives list;
-// enforced by src-element clause 5 (§3.3.3), not by this component). A pointer
+// src-element clause 5 (§3.3.3) is not charged anywhere in this processor yet
+// — parser/produce_typetable.go's typeTableOf documents the gap). A pointer
 // to a (possibly empty) XPathExpression means {test} is present, because an
 // empty {expression} is a legal present value (see NewXPathExpression's doc) —
 // so absence cannot collapse into a zero record and needs its own flag,
@@ -53,8 +54,9 @@ func NewTypeAlternative(test *XPathExpression, typeDefinitionName QName, annotat
 // record (Structures §3.12.2, delegating to §3.13.2's mapping — the same
 // shape Assertion.Test() uses). The second result is false when {test} is
 // absent: this is the default/"otherwise" alternative, legal only as the last
-// element of the containing ordered list (enforced upstream at src-element,
-// not here), in which case the first result is not meaningful.
+// element of the containing ordered list (src-element clause 5 is unenforced,
+// not enforced elsewhere — see NewTypeAlternative's doc), in which case the
+// first result is not meaningful.
 func (t TypeAlternative) Test() (XPathExpression, bool) {
 	return t.test, t.hasTest
 }

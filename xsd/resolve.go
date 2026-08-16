@@ -753,7 +753,8 @@ func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 //
 // Nothing in this package consults clause 7, so the withholding has no reader
 // to charge in either direction: it is an UNMADE rejection, and a schema this
-// processor otherwise accepts stays accepted. #800.
+// processor otherwise accepts stays accepted (#823, blocked on #821 seeding
+// ·xs:error· as a component).
 func (s *Schema) resolveTypeTable(tt TypeTable, loc xsderr.Loc) error {
 	for _, alt := range tt.Alternatives() {
 		if _, err := resolveTypeName(s, alt.TypeDefinitionName(), loc, "type alternative {type definition}"); err != nil {
