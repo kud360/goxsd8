@@ -1559,17 +1559,22 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 		if err != nil {
 			return xsd.ElementDeclaration{}, err
 		}
-		return xsd.NewElementDeclarationOwningType(el.Loc(), edID, qname, ct, nil, scope, vc,
+		typeTable, err := p.typeTableOf(el, xsd.InlineTypeDefinition{Definition: ct})
+		if err != nil {
+			return xsd.ElementDeclaration{}, err
+		}
+		return xsd.NewElementDeclarationOwningType(el.Loc(), edID, qname, ct, typeTable, scope, vc,
 			nillable, constraints, nil, nil, false, p.disallowedSubstitutions(el), nil)
 	}
 	typeDef, err := p.declaredType(el, anyTypeName)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	// GAP(xsd): an <alternative> child is IGNORED here as on the global path, so
-	// the {type table} is ·absent· where the schema document states one; the
-	// readers and the fail-CLOSED direction are stated once, at produceElement.
-	return xsd.NewElementDeclaration(el.Loc(), qname, typeDef, nil, scope, vc,
+	typeTable, err := p.typeTableOf(el, typeDef)
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
+	return xsd.NewElementDeclaration(el.Loc(), qname, typeDef, typeTable, scope, vc,
 		nillable, constraints, nil, nil, false, p.disallowedSubstitutions(el), nil)
 }
 

@@ -20,7 +20,8 @@ import "github.com/kud360/goxsd8/xsderr"
 //
 // Clause 7 (type-table alternatives validly substitutable) is a cross-component
 // finalize-phase constraint needing resolved type and element components; it is
-// NOT enforced here and is not enforced anywhere yet. Clauses 2, 4 and 5 are
+// NOT enforced here and is not enforced anywhere yet, which resolve.go's
+// resolveTypeTable marks as its own gap. Clauses 2, 4 and 5 are
 // likewise finalize-phase, and all three ARE enforced there rather than in this
 // constructor, each needing more than the declaration in hand: clause 2 (Element
 // Default Valid, §3.3.6.2 cos-valid-default) needs the resolved {type

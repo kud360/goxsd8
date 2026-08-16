@@ -1850,22 +1850,6 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 		}
 		typeDef = inherited
 	}
-	// GAP(xsd): an <alternative> child is IGNORED, so the declaration's {type
-	// table} (§3.3.2.1 dcl.elt.common clause 5 over §3.12.2) is ·absent· where the
-	// schema document states one — on this path and on produceLocalElement's
-	// alike. This one is fail-CLOSED, and its three readers say so severally:
-	// validate's governingType declines a declaration that HAS a table and
-	// assesses one that has none against D.{type definition}, so an element whose
-	// <alternative> ·conditionally selects· another type is assessed against the
-	// wrong one, which false-rejects content the selected type admits, at the
-	// ·validation root· and at every descendant; xsd's checkTypeTablesAgree
-	// (cos-element-consistent) and defaultbinding's declaredTypeRestricts read two
-	// ·absent· tables as agreeing, which is an unmade schema rejection; and
-	// resolveTypeTable has nothing to resolve. Unowned: no issue tracks the
-	// mapping yet — #56 is the EVALUATOR's forward tracker, not this producer
-	// hole, and STYLE P3 asks for an issue reference only where one owns the
-	// retirement.
-	//
 	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
 	if inlineComplex != nil {
 		edID := xsd.NewComponentID()
@@ -1873,10 +1857,18 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 		if err != nil {
 			return xsd.ElementDeclaration{}, err
 		}
-		return xsd.NewElementDeclarationOwningType(elem.Loc(), edID, qname, ct, nil, xsd.NewGlobalScope(), vc,
+		typeTable, err := p.typeTableOf(elem, xsd.InlineTypeDefinition{Definition: ct})
+		if err != nil {
+			return xsd.ElementDeclaration{}, err
+		}
+		return xsd.NewElementDeclarationOwningType(elem.Loc(), edID, qname, ct, typeTable, xsd.NewGlobalScope(), vc,
 			nillable, constraints, affiliations, p.substitutionGroupExclusions(elem), abstract, p.disallowedSubstitutions(elem), nil)
 	}
-	return xsd.NewElementDeclaration(elem.Loc(), qname, typeDef, nil, xsd.NewGlobalScope(), vc,
+	typeTable, err := p.typeTableOf(elem, typeDef)
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
+	return xsd.NewElementDeclaration(elem.Loc(), qname, typeDef, typeTable, xsd.NewGlobalScope(), vc,
 		nillable, constraints, affiliations, p.substitutionGroupExclusions(elem), abstract, p.disallowedSubstitutions(elem), nil)
 }
 
@@ -2632,8 +2624,9 @@ func childElement(el *Element, space, local string) *Element {
 
 // childElements returns every child element of el with the expanded name
 // {space}local, in document order (STYLE D2). It is childElement's repeatable
-// twin, for the one content model that admits several — <union>'s inline
-// <simpleType> children (§3.16.2.4 map.std.union case 1b).
+// twin, for the content models that admit several — <union>'s inline
+// <simpleType> children (§3.16.2.4 map.std.union case 1b) and <element>'s
+// <alternative> children (§3.3.2.1 dcl.elt.common).
 func childElements(el *Element, space, local string) []*Element {
 	var found []*Element
 	for _, child := range el.Children() {
