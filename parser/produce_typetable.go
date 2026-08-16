@@ -22,10 +22,6 @@ import (
 // clause.
 const ruleSrcTA xsderr.Rule = "src-ta"
 
-// errorTypeName is ·xs:error· (§3.16.7.3), the union type with no member types
-// and so an empty value space, present in every schema by definition.
-var errorTypeName = xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}
-
 // typeTableOf maps the <alternative> children of el into the {type table} of
 // the element declaration el produces (§3.3.2.1 dcl.elt.common), returning nil
 // for the ·absent· property. declaredType is that declaration's own {type
@@ -124,7 +120,7 @@ func (p *producer) alternativeTypeNames(alternatives []*Element) ([]xsd.QName, e
 // <alternative> carries a test attribute and so leaves the {default type
 // definition} to be synthesized from declaredType.
 //
-// GAP(xsd): three shapes are not mapped, and each withholds the WHOLE {type
+// GAP(xsd): two shapes are not mapped, and each withholds the WHOLE {type
 // table} of the declaration rather than one entry of it, because
 // xsd.TypeAlternative carries its {type definition} as a QName REFERENCE
 // (typealternative.go) and a table short of an entry is worse than none:
@@ -136,12 +132,9 @@ func (p *producer) alternativeTypeNames(alternatives []*Element) ([]xsd.QName, e
 //     <complexType> child in place of a type attribute: an anonymous type has no
 //     name to carry;
 //   - a synthesized {default type definition} whose declaring <element> has an
-//     inline type of its own, for the same reason;
-//   - an <alternative> naming ·xs:error· (§3.16.7.3), which this processor
-//     models as no component at all, so the reference would be charged
-//     src-resolve clause 1.1 at finalize and reject a conforming schema.
+//     inline type of its own, for the same reason.
 //
-// The withholding is fail-CLOSED over its four readers, which do not all charge
+// Both shapes are fail-CLOSED over their four readers, which do not all charge
 // in the same direction:
 //
 //   - validate/assess.go walk.governingType returns nil for a declaration that
@@ -161,17 +154,14 @@ func (p *producer) alternativeTypeNames(alternatives []*Element) ([]xsd.QName, e
 //     table, so a dangling alternative type name goes uncharged (src-resolve
 //     clause 1.1): an unmade rejection.
 //
-// Closing the first two means growing xsd.TypeAlternative the
-// xsd.TypeDefinitionOrRef sum AttributeDeclaration and ElementDeclaration
-// already carry, which first needs §3.4.2.1's ownership invariant settled for an
-// <element> that has both a type attribute and an inline alternative: the
-// anonymous type's {context} is the enclosing element declaration, a shape
-// NewElementDeclarationOwningType's identity check does not cover (#822).
-// Closing the third means seeding ·xs:error· as a component (#821). This
-// marker survives both landings and narrows by bullet, not by disappearing
-// after either one alone.
+// Closing both means growing xsd.TypeAlternative the xsd.TypeDefinitionOrRef
+// sum AttributeDeclaration and ElementDeclaration already carry, which first
+// needs §3.4.2.1's ownership invariant settled for an <element> that has both a
+// type attribute and an inline alternative: the anonymous type's {context} is
+// the enclosing element declaration, a shape NewElementDeclarationOwningType's
+// identity check does not cover (#822).
 func typeTableRepresentable(names []xsd.QName, declaredType xsd.TypeDefinitionOrRef, lastTested bool) bool {
-	if slices.Contains(names, xsd.QName{}) || slices.Contains(names, errorTypeName) {
+	if slices.Contains(names, xsd.QName{}) {
 		return false
 	}
 	if !lastTested {

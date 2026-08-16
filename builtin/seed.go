@@ -41,18 +41,20 @@ func (e *MissingPrimitivesError) Error() string {
 //
 // # Returned slice
 //
-// The result is deterministic and holds exactly len(Types)+1 elements in this
-// fixed order (STYLE D2): xs:anySimpleType first, then one component per row of
-// Types in Types order — one element per row and nothing else, so the anonymous
-// intermediate lists described below are NOT in it. xs:anySimpleType has no row
-// in Types (it has no facets and cannot be a restriction base, §3.2.1.3), so
-// Seed prepends it. Its xs:anySimpleType and xs:anyAtomicType nodes are the
-// canonical shared singletons from package xsd
-// ([xsd.AnySimpleType]/[xsd.AnyAtomicType]), so every primitive's {base type
-// definition} is the one xs:anyAtomicType identity and pointer identity (see
-// [xsd.SimpleType]) holds across the whole graph. xs:anyType is a Complex Type
-// Definition, outside [xsd.SimpleType]'s scope, and is NEVER in the returned
-// slice; it remains a parser-level structural concern (M4).
+// The result is deterministic and holds exactly len(Types)+2 elements in this
+// fixed order (STYLE D2): xs:anySimpleType, then xs:error, then one component
+// per row of Types in Types order — one element per row and nothing else, so
+// the anonymous intermediate lists described below are NOT in it. Neither
+// xs:anySimpleType nor xs:error has a row in Types: xs:anySimpleType has no
+// facets and cannot be a restriction base (§3.2.1.3), and xs:error's tableau is
+// Structures §3.16.7.3 rather than a Datatypes row, so Seed prepends both.
+// Its xs:anySimpleType and xs:anyAtomicType nodes are the canonical shared
+// singletons from package xsd ([xsd.AnySimpleType]/[xsd.AnyAtomicType]), so
+// every primitive's {base type definition} is the one xs:anyAtomicType identity
+// and pointer identity (see [xsd.SimpleType]) holds across the whole graph.
+// xs:anyType is a Complex Type Definition, outside [xsd.SimpleType]'s scope,
+// and is NEVER in the returned slice; it remains a parser-level structural
+// concern (M4).
 //
 // Each component carries its {name}, its {base type definition} as a fully
 // linked pointer chain up to the shared xs:anySimpleType node, its declared
@@ -71,6 +73,20 @@ func (e *MissingPrimitivesError) Error() string {
 // definition} resolves to its primitive ancestor; a primitive datatype is built
 // through [xsd.NewPrimitiveType] and is its own. Only xs:anyAtomicType has an
 // absent {primitive type definition}.
+//
+// # ·xs:error·
+//
+// xs:error (§3.16.7.3) is seeded from that section's tableau, which is the only
+// place it is written down: it has no Types row, so it is not a hand-typed
+// datatype table (PRINCIPLES 26). {variety} is union with an EMPTY {member type
+// definitions} — the shape §3.16.1 admits when it makes the property "present
+// (but may be empty) if {variety} is union" — {base type definition} is
+// xs:anySimpleType, {facets} is empty, and {final} carries all four of
+// restriction, extension, list and union. That {final} is what makes xs:error
+// underivable-from, through the ordinary st-props-correct clause 3 /
+// cos-st-restricts / cos-ct-extends machinery; xs:error is not a ·special·
+// datatype (Datatypes §2.4 names exactly two) and no code branches on its
+// identity.
 //
 // # The list datatypes' anonymous intermediate step
 //
@@ -200,8 +216,12 @@ func Seed(b value.Backend) ([]*xsd.SimpleType, error) {
 		return node, nil
 	}
 
-	out := make([]*xsd.SimpleType, 0, len(Types)+1)
-	out = append(out, xsd.AnySimpleType())
+	errorType, err := buildErrorType()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*xsd.SimpleType, 0, len(Types)+2)
+	out = append(out, xsd.AnySimpleType(), errorType)
 	for i := range Types {
 		node, err := build(Types[i].Name)
 		if err != nil {
@@ -210,6 +230,30 @@ func Seed(b value.Backend) ([]*xsd.SimpleType, error) {
 		out = append(out, node)
 	}
 	return out, nil
+}
+
+// buildErrorType builds ·xs:error· (§3.16.7.3) from that section's tableau: a
+// UNION over an EMPTY {member type definitions} whose {base type definition} is
+// the canonical xs:anySimpleType anchor, with no facets and a {final} of all
+// four derivation keywords. The empty membership is the whole point — a value
+// belongs to a union only if some member accepts it, so xs:error's value and
+// lexical spaces are empty — and it is constructed, never derived: the
+// derivation constraints apply to types deriving FROM xs:error, which its
+// {final} blocks at st-props-correct clause 3 and cos-ct-extends clause 2.2.
+//
+// It is built fresh per call like every other named component, and its base is
+// the shared anchor, so the graph's pointer identity is unaffected.
+func buildErrorType() (*xsd.SimpleType, error) {
+	final := []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction, xsd.DerivationList, xsd.DerivationUnion}
+	node, err := xsd.NewSimpleType(xsderr.Loc{}, qname("error"), xsd.UnionDerivation{},
+		xsd.OwnedSimpleType{Definition: xsd.AnySimpleType()}, nil, final)
+	if err != nil {
+		return nil, fmt.Errorf("builtin: constructing xs:error: %w", err)
+	}
+	if err := node.CheckDerivation(noSchema{}); err != nil {
+		return nil, fmt.Errorf("builtin: constructing xs:error: %w", err)
+	}
+	return node, nil
 }
 
 // interposeListBase returns the {base type definition} and the declared

@@ -131,16 +131,21 @@ func TestProduceTypeTableAnonymousDeclaredType(t *testing.T) {
 	}
 }
 
-// ·xs:error· (§3.16.7.3) is no component here, so an <alternative> naming it
-// withholds the table rather than letting finalize charge src-resolve for a
-// name the spec says every schema has.
-func TestProduceTypeTableDeclinedForXSError(t *testing.T) {
-	if _, present := typeTableOf(t, wrap("", typeTableTypes+`
+// ·xs:error· (§3.16.7.3) is present in every schema by definition (builtin.Seed
+// prepends it), so an <alternative> naming it maps like any other named type and
+// finalize resolves the reference instead of charging src-resolve clause 1.1.
+func TestProduceTypeTableForXSError(t *testing.T) {
+	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
 	<xs:element name="e" type="B">
 	  <xs:alternative test="@k='t'" type="T"/>
 	  <xs:alternative type="xs:error"/>
-	</xs:element>`), xsd.QName{Local: "e"}); present {
-		t.Error("{type table} is present, want ·absent· where an <alternative> names xs:error")
+	</xs:element>`), xsd.QName{Local: "e"})
+	if !present {
+		t.Fatal("{type table} is ·absent·, want present where an <alternative> names xs:error")
+	}
+	dflt := tt.DefaultTypeDefinition().TypeDefinitionName()
+	if want := (xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}); dflt != want {
+		t.Errorf("{default type definition}.{type definition} = %v, want %v", dflt, want)
 	}
 }
 
