@@ -120,6 +120,7 @@ func TestCompileDeclines(t *testing.T) {
 		{"p:not(@kind = 'x')", "an unbound prefix on the function name too"},
 		{"@* = 'x'", "a wildcard NameTest"},
 		{"@p:* = 'x'", "a prefixed wildcard NameTest"},
+		{"@*:kind = 'x'", "a local-name wildcard NameTest"},
 		{"@kind = 'x' extra", "trailing tokens are not part of a Test"},
 		{"@kind = ", "a Comparator with no right operand"},
 		{"(@kind = 'x'", "an unclosed parenthesis"},

@@ -11,11 +11,15 @@ import (
 // This file is the lexer and the recursive-descent parser for the §3.12.6
 // required subset, one of each (STYLE T4, xpath/doc.go's "There is never a
 // second, lenient parser"). Every method below is named for the production it
-// parses, and the whole grammar is reached: the constructs this engine does
-// not yet EVALUATE are consumed by their own production and then declined
-// there, so a decline is attributable to the construct rather than falling out
-// of a generic syntax failure, and retiring one is a change to that production
-// alone.
+// parses, and the whole grammar is reached: [15] ta-CastExpr's `cast as` tail
+// and [18] ta-ConstructorFunction, which this engine does not yet EVALUATE,
+// are consumed by their own production and then declined there, so each
+// decline is attributable to its construct rather than falling out of a
+// generic syntax failure, and retiring either is a change to that production
+// alone. The third declined construct, a wildcard NameTest, is NOT
+// production-level: `*` is no token kind, so no wildcard spelling survives
+// ctaTokenize to reach [17] ta-AttrName, and its marker sits on the tokenizer
+// arm that declines it.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -170,6 +174,17 @@ func ctaTokenize(s string) ([]ctaToken, bool) {
 			toks = append(toks, ctaToken{kind: ctaNumberTok, text: s[i:j]})
 			i = j
 		default:
+			// GAP(xpath): a WILDCARD NameTest — `@*`, `@p:*`, `@*:n` — is
+			// declined LEXICALLY, here: `*` is no token kind of this subset, so
+			// `@*` and `@*:n` die on this arm and `@p:*` one token later on the
+			// ':' arm. [17]'s NameTest is xpath20.md's [37], which does admit the
+			// wildcards, but a wildcard selects a SEQUENCE of attributes and
+			// [AttributeValue] answers one ·expanded name· at a time, so
+			// evaluating one would need a wider read of E.[[attributes]] than the
+			// surface exposes. Retiring it takes a token kind here AND a NameTest
+			// production, not a change to attrName alone (#859). The decline
+			// withholds the element's ·governing type definition· on the terms
+			// validate/cta.go argues.
 			j := ctaScanQName(s, i)
 			if j == i {
 				return nil, false
@@ -588,13 +603,9 @@ func ctaNumericSpace(text string) ctaSpace {
 // clause 2.2's "XPath expression involving the attribute axis whose
 // abbreviated form is as given above", i.e. `attribute::NameTest`.
 //
-// GAP(xpath): a WILDCARD NameTest — `@*`, `@p:*`, `@*:n` — is not admitted.
-// [17]'s NameTest is xpath20.md's [37], which includes the wildcards, but a
-// wildcard selects a SEQUENCE of attributes and [AttributeValue] answers one
-// expanded name at a time, so evaluating one would need a wider read of
-// E.[[attributes]] than the surface exposes. It declines, which withholds the
-// element's ·governing type definition· on the terms validate/cta.go argues.
-// No issue owns its retirement yet.
+// The NameTest admitted here is a QName and nothing else. A wildcard one never
+// arrives to be declined: ctaTokenize has no token kind for `*` and rejects
+// every wildcard spelling lexically, which is where that gap is marked.
 func (p *ctaParser) attrName() (ctaValue, bool) {
 	switch {
 	case p.at(ctaAtTok):

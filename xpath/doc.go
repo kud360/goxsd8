@@ -10,9 +10,10 @@
 //     §3.12.6's productions [8] ta-Test through [18]
 //     ta-ConstructorFunction and CTATest.Evaluate decides one against
 //     an element's attributes. Three shapes inside that grammar
-//     compile-time-DECLINE rather than evaluate — [15] ta-CastExpr's
-//     `cast as` tail, [18] ta-ConstructorFunction (#858) and a
-//     wildcard NameTest — each at its own marker.
+//     compile-time-DECLINE rather than evaluate: [15] ta-CastExpr's
+//     `cast as` tail and [18] ta-ConstructorFunction (#858), each
+//     declined at its own production, and a wildcard NameTest (#859),
+//     declined lexically before any production sees it.
 //  2. Assertion essentials: axes, predicates, quantified expressions,
 //     typed comparisons, the F&O function core — M6. PLANNED; nothing
 //     of it is exported.
