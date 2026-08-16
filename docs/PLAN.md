@@ -72,22 +72,24 @@ from either figure.
 
 ### Branch namespace, `origin` — report-only; a session never deletes a ref
 
-**`go tool wipsurvey`, verbatim.** `gh` is 403 on both GraphQL and REST in this
-container (#527, #682), so this is the lease-only report the tool's own usage
-block documents — `go tool wipsurvey < /dev/null`:
+**`go tool wipsurvey`, verbatim** (`gh` is 403 on both GraphQL and REST in this
+container — #527, #682 — so the issue JSON was supplied from MCP):
 
 ```
-ISSUE  BRANCH  TIP AGE  VERDICT  REASON
+ISSUE  BRANCH         TIP AGE  VERDICT  REASON
+733    wip/issue-733  main's   CLAIMED  wip/issue-733: no commits of its own; tip age is main's, not the claim's -- do not retire on age, settle it from the issue thread
 ```
 
-**The namespace holds `main` and nothing else** — `git ls-remote --heads
-origin` returns one ref. Every branch the previous stamp listed as deletable is
-gone, and `wip/issue-718`, `wip/issue-716`, `wip/issue-813` and `wip/issue-800`
-were auto-deleted by GitHub at merge, as the setting intends. Nothing is
-`CLAIMED`, nothing is `EXPIRED`, there are no `parked/*` refs, and no branch
-needs a human look: **the next develop session claims from `ready` and resumes
-nothing.** The shallow-clone finding (#802) still binds whatever the next
-non-empty namespace reports.
+**The namespace was empty when this pass began and holds ONE live lease by the
+time it lands.** Every branch the previous stamp listed as deletable is gone,
+and `wip/issue-718`, `wip/issue-716`, `wip/issue-813` and `wip/issue-800` were
+auto-deleted by GitHub at merge as the setting intends — leaving `main` alone,
+with nothing `EXPIRED`, no `parked/*` ref and nothing needing a human look. Then
+`wip/issue-733` was pushed mid-pass at `5bfcb58`, `main`'s own tip: a **bare
+claim minutes old**, which is why it reads `CLAIMED` and not `EXPIRED`. It is
+**#722's fix working on a genuinely live lease** rather than a stale one — band
+row 3 is being worked right now, so take another row and do not resume this ref.
+The shallow-clone finding (#802) still binds any ahead/behind arithmetic here.
 
 **`go tool gapaudit` could not run, for the same 403** — a third consecutive
 session, recorded in `docs/LOG/2026-08.md` at #813 and again at #800, which is
@@ -109,7 +111,7 @@ re-derivation with its justifications intact; no landing since falsifies one.
 |---:|---|---|
 | 1 | #821 | **·xs:error· is seeded as no component at all**, so `type="xs:error"` is FALSE-REJECTED at `src-resolve` clause 1.1 — reproduced through `parser.Parse` on a schema whose whole body is one element declaration. 22 suite schema documents name it on an `<xs:alternative>`, **18 of them un-withheld by this issue alone**, and one more names it on an `<xs:attribute>`. Measured `schema` headroom, no dependency, and it is the only thing #823 waits on |
 | 2 | #822 | the other half of #800's withheld set: `TypeAlternative` carries `{type definition}` as a QName ONLY, so §3.12.2's inline arm — and a synthesized `{default type definition}` over an anonymous declared type — withholds the WHOLE `{type table}` of the declaration. **46 inline-arm alternatives across 20 schema documents.** Its §3.4.2.1 ownership grounding is a first step inside its own scope, not an external dependency |
-| 3 | #733 | **promoted four places.** A top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and **#442 moved `schema` +82**. It was banded below five rows that move no lane at all, which is precisely what four passes of carrying produced |
+| 3 | #733 | **CLAIMED as this stamp lands — `wip/issue-733`, a bare lease pushed mid-pass; take another row.** **Promoted four places** at the last full pass: a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and **#442 moved `schema` +82**. It was banded below five rows that move no lane at all, which is precisely what four passes of carrying produced |
 | 4 | #786 | `simpleTypeDecidable`'s last decline is conservative, not forced. Its premise — that a `simpleType` naming none of §3.16.2.1's three alternatives needs a conservative decline — is a candidate for expiry now that #447 and #738 landed `<list>` and `<union>`; converting it turns declines into decisions in `schema` |
 | 5 | #719 | `cvc-assertion` wired fail-open at every variety level — the M6 seam, marked and measured. Below #733/#786 because it converts silent wrongness into honest declines, which the lane scores the same. It also decides the encoding **#56** needs one milestone later |
 | 6 | #625 → #669 → #748 → #492 | **README's Library block, now ONE row in file order.** Splitting it across two band rows is why it sat four passes. #625 fixes the `SchemaBuilder` pointer at closed #203 (:123-124); #669 the "works TODAY" snippet, the example list and `go doc ./...`; #748 the M5 block that denies a shipped API (:126-133); #492 `ParseReport`, which belongs in the sentence at `README.md:116` rather than a new paragraph |
@@ -167,7 +169,8 @@ The follow-up-ledger debt this section carried for eleven stamps is **discharged
 and closed** (#489); do not re-file it. WORKFLOW step 7(b)'s *a hand-off is not
 a disposition* rule is what closed the inflow.
 
-Everything else this queue needs is a develop iteration. **Start with #821.**
+Everything else this queue needs is a develop iteration. **Start with #821** —
+and not with row 3, which is claimed.
 
 
 ## Milestones
