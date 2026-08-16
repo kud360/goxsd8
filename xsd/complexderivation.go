@@ -669,24 +669,26 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 //
 // GAP(xsd): where BOTH sides are simple, blocked is not read — derivedOKSimple
 // runs cos-st-derived-ok under the empty blocking set, so its clause 2.1 is
-// vacuous and a keyword in blocked does not turn a derivation away. The three
+// vacuous and a keyword in blocked does not turn a derivation away. The four
 // in-package callers (declaredTypeRestricts, checkLocallyDeclaredAttributeTypes,
-// checkLocallyDeclaredElementTypes) each read the answer as an admission and
-// charge on a FALSE, so a spurious TRUE only withholds a charge there. The
-// fourth caller, [validate]'s instanceOverride, reads the answer two ways at
-// once — as the cvc-elt clause 4 verdict AND as which type governs every rule
-// assessed below it — so a spurious TRUE does not merely withhold the clause-4
-// charge, it can also make the instance type GOVERNING and manufacture a
-// downstream charge a correctly-blocked answer would not have. The
+// checkLocallyDeclaredElementTypes, checkTypeAlternativeSubstitutable) each read
+// the answer as an admission and charge on a FALSE, so a spurious TRUE only
+// withholds a charge there — for the last of them, an e-props-correct clause 7
+// rejection of a {type table} entry the declaration's {disallowed substitutions}
+// should have blocked. The fifth caller, [validate]'s instanceOverride, reads
+// the answer two ways at once — as the cvc-elt clause 4 verdict AND as which
+// type governs every rule assessed below it — so a spurious TRUE does not merely
+// withhold the clause-4 charge, it can also make the instance type GOVERNING and
+// manufacture a downstream charge a correctly-blocked answer would not have. The
 // document-level argument still closes it: a spurious TRUE is possible only
-// where a real blocking keyword would have turned the answer FALSE, and clause
-// 4 is a validity REQUIREMENT (§3.3.4.3) — a document whose instance-specified
+// where a real blocking keyword would have turned the answer FALSE, and clause 4
+// is a validity REQUIREMENT (§3.3.4.3) — a document whose instance-specified
 // type is not genuinely ·validly substitutable· is already not spec-valid
 // regardless of what this gap answers, so the two readings never diverge on a
 // document the spec calls valid. What the gap costs is diagnostic precision on
 // an already-invalid document, never a false accept of a valid one.
 //
-// A FIFTH reader reaches the same defect without calling this method:
+// A SIXTH reader reaches the same defect without calling this method:
 // checkSubstitutionGroupTypes (substitutiongrouptypes.go) goes to validlyDerived
 // directly, over a head's {substitution group exclusions}. Its direction is the
 // in-package one — it charges e-props-correct clause 4 on a FALSE answer, so a
