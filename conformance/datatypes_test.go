@@ -22,7 +22,7 @@ func TestDatatypesBackendSeeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Seed(strict) must succeed, got %v", err)
 	}
-	if got, want := len(types), len(builtin.Types)+1; got != want {
+	if got, want := len(types), len(builtin.Types)+2; got != want {
 		t.Fatalf("Seed returned %d components, want %d", got, want)
 	}
 }

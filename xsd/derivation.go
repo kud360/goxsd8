@@ -508,8 +508,11 @@ func checkConstructedListFacets(t *SimpleType) error {
 //     freshly-constructed union has nothing to inherit (xs:anySimpleType carries
 //     no facets, §3.16.1), so its {facets} IS its own facet set and the clause
 //     reads directly off t.ownFacets — the same argument its list sibling
-//     2.2.1.2 makes in checkConstructedListFacets. The generated builtin table
-//     defines no union at all, so no seeded component can trip this one.
+//     2.2.1.2 makes in checkConstructedListFacets. ·xs:error· (§3.16.7.3) is the
+//     one seeded component that reaches this branch — the generated builtin
+//     table defines no union, and xs:error's tableau is Structures', not a
+//     table row — and it passes: its base IS xs:anySimpleType, its membership is
+//     empty so 3.2.1.1 is vacuous, and it carries no facets.
 //   - restricted (B is a real union): clause 3.2.2.1 — B.{variety} is union;
 //     clause 3.2.2.3 — each member is validly derived from the CORRESPONDING
 //     (positional, PRINCIPLES 11) base member (cos-st-derived-ok, §3.16.6.3).

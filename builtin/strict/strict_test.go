@@ -81,8 +81,8 @@ func TestSeedCoversAllPrimitives(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Seed(strict.New()) error = %v, want nil", err)
 	}
-	if len(components) != len(builtin.Types)+1 {
-		t.Errorf("Seed returned %d components, want %d (len(Types)+1 for anySimpleType)", len(components), len(builtin.Types)+1)
+	if len(components) != len(builtin.Types)+2 {
+		t.Errorf("Seed returned %d components, want %d (len(Types)+2 for anySimpleType and error)", len(components), len(builtin.Types)+2)
 	}
 }
 

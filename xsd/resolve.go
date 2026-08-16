@@ -742,19 +742,17 @@ func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 // declaration's own {type definition}, subject to its {disallowed
 // substitutions}, is accepted. This IS the pass that could charge it — both
 // sides are resolved by the time it runs and Schema.ValidlySubstitutable is the
-// relation — and it is deferred for two reasons that each need their own
-// grounding. Clause 7.2 exempts a T that is ·xs:error·, a component this
-// processor does not model at all; the parser withholds any table naming it
-// (parser's typeTableRepresentable), so the exemption has nothing to fire on
-// today and becomes load-bearing the moment xs:error is seeded. And the shape
-// conditional type assignment normally takes — an alternative naming a MEMBER
-// of a union {type definition} — turns on how cos-st-derived-ok (§3.16.6.3)
-// reads a union base, which nothing has established here.
+// relation — and it is deferred because the shape conditional type assignment
+// normally takes — an alternative naming a MEMBER of a union {type definition} —
+// turns on how cos-st-derived-ok (§3.16.6.3) reads a union base, which nothing
+// has established here. Clause 7.2's ·xs:error· exemption is load-bearing the
+// moment clause 7 is charged: builtin.Seed models xs:error (§3.16.7.3) and the
+// parser builds tables naming it, so a charge that skipped the exemption would
+// reject the shape the type is FOR.
 //
 // Nothing in this package consults clause 7, so the withholding has no reader
 // to charge in either direction: it is an UNMADE rejection, and a schema this
-// processor otherwise accepts stays accepted (#823, blocked on #821 seeding
-// ·xs:error· as a component).
+// processor otherwise accepts stays accepted (#823).
 func (s *Schema) resolveTypeTable(tt TypeTable, loc xsderr.Loc) error {
 	for _, alt := range tt.Alternatives() {
 		if _, err := resolveTypeName(s, alt.TypeDefinitionName(), loc, "type alternative {type definition}"); err != nil {
