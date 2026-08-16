@@ -98,6 +98,10 @@ func instanceNil(e Element) (instanceBoolean, bool) {
 //
 // An element with no ·governing element declaration· reaches no arm: cvc-elt is
 // a rule ABOUT a declaration, and one that is ·absent· charges nothing.
+//
+// Whether E is ·nilled· is [nilled]'s to decide and is not re-derived from the
+// arms above (STYLE T4): the arms charge, and the one fact they all report is
+// read from key-nilled's single encoding.
 func (w *walk) nilCheck(e Element, g governance) bool {
 	if !g.hasDecl {
 		return false
@@ -117,15 +121,13 @@ func (w *walk) nilCheck(e Element, g governance) bool {
 			e.Name()))
 		return false
 	}
-	if v != instanceBooleanTrue {
-		return false
-	}
-	if f, fixed := elementFixed(g); fixed {
+	isNilled := nilled(e, g)
+	if f, fixed := elementFixed(g); fixed && isNilled {
 		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
 			"the element %s has xsi:nil = true, so it is ·nilled·, but its ·governing element declaration· carries the fixed {value constraint} %q, and cvc-elt clause 3.2.3.2 admits no {value constraint} with {variety} = fixed on a ·nilled· element",
 			e.Name(), f.LexicalForm()))
 	}
-	return true
+	return isNilled
 }
 
 // elementFixed reports D.{value constraint} where its {variety} is fixed — the

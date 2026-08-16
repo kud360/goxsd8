@@ -367,10 +367,12 @@ func (w *walk) resolvedGovernance(e Element) governance {
 //
 // cvc-elt clause 4 cannot be violated here and is not charged: ·overriding· is a
 // relation to a ·selected type definition·, and an element with no declaration
-// has none, so the clause has nothing to compare against. The declaration's
-// {disallowed substitutions} are equally out of reach, which is what
-// key-overrides means by the blocking set being unlimited where no governing
-// declaration is known.
+// has none, so the clause has nothing to compare against. No {disallowed
+// substitutions} are read either, and none are missing: key-overrides clause 2
+// asks for ·validly substitutable without limitation· where no ·governing
+// element declaration· is known, and key-val-sub-type-absolute defines that as
+// the EMPTY set of blocking keywords — nothing blocked, which is the most
+// permissive set and not the least.
 func (w *walk) instanceGovernance(e Element) (governance, bool) {
 	t, specified := w.instanceTypeDefinition(e)
 	if !specified {

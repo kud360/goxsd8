@@ -685,6 +685,14 @@ func (s *Schema) baseComplexType(c ComplexType) (ComplexType, bool) {
 // regardless of what this gap answers, so the two readings never diverge on a
 // document the spec calls valid. What the gap costs is diagnostic precision on
 // an already-invalid document, never a false accept of a valid one.
+//
+// A FIFTH reader reaches the same defect without calling this method:
+// checkSubstitutionGroupTypes (substitutiongrouptypes.go) goes to validlyDerived
+// directly, over a head's {substitution group exclusions}. Its direction is the
+// in-package one — it charges e-props-correct clause 4 on a FALSE answer, so a
+// spurious TRUE withholds that charge and admits a member declaration those
+// exclusions should have turned away — and it reads the answer ONLY as a
+// verdict, nothing downstream being typed off it.
 func (s *Schema) ValidlySubstitutable(sub, super TypeDefinition, blocked []DerivationMethod) (bool, error) {
 	if sup, ok := super.(ComplexType); ok {
 		blocked = unionDerivationMethods(blocked, sup.prohibitedSubstitutions)

@@ -80,10 +80,10 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // hold, since they read the {variety} and not the particle.
 //
 // nilled is whether E is ·nilled· (§3.3.4.3, key-nilled), decided before any
-// child arrives ([walk.nilCheck]). It turns clause 1 off wholesale and clause
-// 3.2.3.1 on, and it is the state that makes governing nil-or-not insufficient
-// on its own: a nilled element with a determinable governing type still runs no
-// clause 1.
+// child arrives ([walk.nilCheck]). It turns clause 1 off wholesale, which
+// governing is the one reading of, and clause 3.2.3.1 on — the half a nil
+// governing cannot tell apart, an element with no determinable ·governing type
+// definition· charging neither clause.
 //
 // initial gathers the ·initial value· clauses 1.2 and 5.2.2.2 test, and is
 // written only where one of them reads it (gathers): no other clause reads a
@@ -98,7 +98,6 @@ type contentCheck struct {
 	e          Element
 	g          governance
 	nilled     bool
-	governing  *xsd.ComplexType
 	matcher    *xsd.Matcher
 	initial    strings.Builder
 	sawElement bool
@@ -106,24 +105,29 @@ type contentCheck struct {
 	charged    bool
 }
 
-// contentCheck builds the check for one element's [[children]]. governing is
-// non-nil only where cvc-complex-type clause 1 is live: a determinable complex
-// ·governing type definition· AND an element that is not ·nilled·, clause 1
-// applying only "if E is not ·nilled·".
+// contentCheck builds the check for one element's [[children]].
 func (w *walk) contentCheck(e Element, g governance, nilled bool) *contentCheck {
 	c := &contentCheck{e: e, g: g, nilled: nilled}
-	if nilled {
-		return c
-	}
-	governing := g.complexType()
+	governing := c.governing()
 	if governing == nil {
 		return c
 	}
-	c.governing = governing
 	if m, ok := w.schema.ContentMatcher(*governing); ok {
 		c.matcher = m
 	}
 	return c
+}
+
+// governing is the ·governing type definition· narrowed to the complex type
+// cvc-complex-type clause 1 reads, and nil wherever that clause is not live: a
+// ·governing type definition· this package could not determine or that is not
+// complex, and a ·nilled· element, clause 1 applying only "if E is not
+// ·nilled·".
+func (c *contentCheck) governing() *xsd.ComplexType {
+	if c.nilled {
+		return nil
+	}
+	return c.g.complexType()
 }
 
 // gathers reports whether any charge reads this element's ·initial value·:
@@ -138,7 +142,8 @@ func (c *contentCheck) gathers() bool {
 	if _, fixed := elementFixed(c.g); fixed {
 		return true
 	}
-	return c.governing != nil && c.governing.ContentType().Variety() == xsd.ContentSimple
+	ct := c.governing()
+	return ct != nil && ct.ContentType().Variety() == xsd.ContentSimple
 }
 
 // text settles clauses 1.1 and 1.3 for one run of character information items —
@@ -166,10 +171,10 @@ func (c *contentCheck) text(w *walk, t Text) {
 	if c.gathers() {
 		c.initial.WriteString(t.Data())
 	}
-	if c.governing == nil {
+	if c.governing() == nil {
 		return
 	}
-	switch c.governing.ContentType().Variety() {
+	switch c.governing().ContentType().Variety() {
 	case xsd.ContentEmpty:
 		c.charge(w, ruleCvcComplexType, "1.1", t.Loc(),
 			"the element %s has a character information item [[child]], but cvc-complex-type clause 1.1 admits no character or element information item [[children]] at all where the {content type}.{variety} of the ·governing type definition· is empty — white space included, which clause 1.3 allows for element-only and clause 1.1 allows for nothing",
@@ -212,10 +217,10 @@ func (c *contentCheck) element(w *walk, child Element) xsd.Attribution {
 		return nil
 	}
 	c.sawElement = true
-	if c.governing == nil {
+	if c.governing() == nil {
 		return nil
 	}
-	switch c.governing.ContentType().Variety() {
+	switch c.governing().ContentType().Variety() {
 	case xsd.ContentEmpty:
 		c.charge(w, ruleCvcComplexType, "1.1", child.Loc(),
 			"the element %s has the element information item %s among its [[children]], but cvc-complex-type clause 1.1 admits no character or element information item [[children]] where the {content type}.{variety} of the ·governing type definition· is empty",
@@ -270,8 +275,8 @@ func (c *contentCheck) end(w *walk) {
 	if c.charged {
 		return
 	}
-	if c.governing != nil {
-		switch ct := c.governing.ContentType().(type) {
+	if c.governing() != nil {
+		switch ct := c.governing().ContentType().(type) {
 		case xsd.SimpleContent:
 			c.initialValue(w, ct.SimpleType)
 		case xsd.ElementContent:
@@ -324,7 +329,7 @@ func (c *contentCheck) fixedValue(w *walk) {
 			c.e.Name(), f.LexicalForm())
 		return
 	}
-	if ct := c.governing; ct != nil && ct.ContentType().Variety() == xsd.ContentMixed {
+	if ct := c.governing(); ct != nil && ct.ContentType().Variety() == xsd.ContentMixed {
 		c.fixedLexical(w, f)
 		return
 	}

@@ -160,6 +160,39 @@ func TestUnfoldedAttributeDeclinesRatherThanManufacturingADuplicate(t *testing.T
 		icRoot(icKid(2, "aid")("x1"), icKid(3, "aid")("x1"))))
 }
 
+// idNilled is <item><name xsi:nil="..."/></item>, the shape whose <name> is
+// ·nilled· or not according to the declaration icSchema's nillable argument
+// builds and the ·actual value· given here.
+func idNilled(line int, nil_ string) *testElement {
+	name := icElem(xsd.QName{Local: "name"}, line+1,
+		[]Attribute{icAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, nil_, line+1)})
+	return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(name))
+}
+
+// Only a ·nilled· element declines the ID/IDREF table, and ·nilled· is
+// key-nilled's conjunction — D.{nillable} = true AND an ·actual value· of true
+// ([nilled]) — not the PRESENCE of an xsi:nil attribute. Both conjuncts are
+// pinned here by the dangling reference clause 1 charges, which any decline
+// suppresses: reading presence alone would swallow the charge in the first and
+// third documents, where the element is not ·nilled· at all.
+func TestOnlyANilledElementDeclinesTheIDTable(t *testing.T) {
+	ghost := icRoot(idItem(2, "ref", "ghost"), idNilled(3, "false"))
+	icWantCharges(t, icAssess(t, icSchema(t, "", true, nil, nil), ghost),
+		icChargeAttr(ruleCvcID, 2))
+
+	// The same document with a nilled <name>: the decline is real and the
+	// reference goes unread, since a ·nilled· element could have been the
+	// declaration the reference names.
+	nilled := icRoot(idItem(2, "ref", "ghost"), idNilled(3, "true"))
+	icWantCharges(t, icAssess(t, icSchema(t, "", true, nil, nil), nilled))
+
+	// xsi:nil = true on a declaration whose {nillable} is false makes no
+	// ·nilled· element either: cvc-elt clause 3.1 charges the attribute, and
+	// clause 1 keeps reading the table.
+	icWantCharges(t, icAssess(t, icSchema(t, "", false, nil, nil), nilled),
+		icCharge(ruleCvcElt, 4), icChargeAttr(ruleCvcID, 2))
+}
+
 // The rule ID is the BARE catalog name, with the clause in the message text.
 func TestCvcIDRuleIsTheBareCatalogName(t *testing.T) {
 	if !xsderr.IsValidRule(ruleCvcID) {
