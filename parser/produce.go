@@ -2230,8 +2230,12 @@ func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 }
 
 // produceAttribute maps a top-level <attribute> into a global Attribute
-// Declaration (§3.2.2.1 dcl.att.global). type= form only. qname reaches it from
-// topLevelName through run, for the reason produceElement's doc gives.
+// Declaration (§3.2.2.1 dcl.att.global). Its {type definition} is mapped by
+// declaredType over §3.2.2.1's three tiers — the inline <simpleType> child
+// (#733), the type= reference, or xs:anySimpleType — which is the same chain
+// §3.2.2.2 dcl.att.local states word for word and produceLocalAttribute maps
+// through the same function. qname reaches it from topLevelName through run, for
+// the reason produceElement's doc gives.
 //
 // It charges the two src-attribute clauses (§3.2.3) this form can reach: 4
 // (type= and an inline <simpleType> mutually exclusive) and 1 (default and fixed
@@ -2249,31 +2253,21 @@ func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 // single encoding in useValueConstraintOK, which produceAttributeUse charges
 // over the local and ref= forms; this function no longer calls it.
 func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.AttributeDeclaration, error) {
-	typeLex, hasType := elem.Attr("type")
-	inline := childElement(elem, xsd.XMLSchemaNS, "simpleType") != nil
-
-	if hasType && inline {
+	_, hasType := elem.Attr("type")
+	if hasType && childElement(elem, xsd.XMLSchemaNS, "simpleType") != nil {
 		return xsd.AttributeDeclaration{}, xsderr.New(ruleSrcAttribute, elem.Loc(),
 			"attribute has both a type attribute and an inline <simpleType> child, but src-attribute clause 4 forbids both")
-	}
-	if inline {
-		return xsd.AttributeDeclaration{}, xsderr.New(ruleSrcAttribute, elem.Loc(),
-			"attribute has an inline <simpleType> child, which this producer does not yet support (only the type attribute form); src-attribute clause 4")
 	}
 
 	vc, err := valueConstraintOf(elem, ruleSrcAttribute)
 	if err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
-
-	typeName := xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"} // §3.2.2.1
-	if hasType {
-		typeName, err = p.resolveQName(elem, typeLex, "type")
-		if err != nil {
-			return xsd.AttributeDeclaration{}, err
-		}
+	typeDef, err := p.declaredType(elem, anySimpleTypeName)
+	if err != nil {
+		return xsd.AttributeDeclaration{}, err
 	}
-	return xsd.NewAttributeDeclaration(elem.Loc(), qname, xsd.TypeDefinitionRef{Name: typeName}, xsd.NewAttributeGlobalScope(), vc, false, nil)
+	return xsd.NewAttributeDeclaration(elem.Loc(), qname, typeDef, xsd.NewAttributeGlobalScope(), vc, false, nil)
 }
 
 // valueConstraintOf maps the default/fixed attributes of an <element>/<attribute>

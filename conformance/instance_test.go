@@ -129,8 +129,8 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 			knownRoot, `<unknown`,
 		},
 		{
-			"a schema document outside the producer's decidable subset (inline global attribute type)",
-			knownRoot + `<xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`,
+			"a schema document outside the producer's decidable subset (a simpleType naming no §3.16.2.1 alternative)",
+			knownRoot + `<xs:simpleType name="undec"/>`,
 			`<unknown/>`,
 		},
 		{

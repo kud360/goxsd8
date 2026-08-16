@@ -1598,20 +1598,23 @@ func rejectBothInlineTypes(el *Element, inlineSimple, inlineComplex *Element) er
 
 // declaredType maps the {type definition} of an <element> or <attribute> whose
 // both-present and inline-<complexType> cases the caller has already excluded.
-// It is the ONE implementation of the two parallel mapping chains — §3.3.2.1
-// dcl.elt.common for an element, §3.2.2.2 dcl.att.local for an attribute — which
-// agree on every tier this producer implements (STYLE T4):
+// It is the ONE implementation of the parallel mapping chains — §3.3.2.1
+// dcl.elt.common for an element, §3.2.2.1 dcl.att.global and §3.2.2.2
+// dcl.att.local for an attribute — which agree on every tier this producer
+// implements (STYLE T4):
 //
 //	tier 1  the anonymous type corresponding to the inline <simpleType> child;
 //	tier 2  the type definition the type= attribute ·resolves· to;
 //	last    dflt, the caller's fallback — xs:anyType for an element (§3.3.2.1
-//	        clause 4), xs:anySimpleType for an attribute (§3.2.2.2).
+//	        clause 4), xs:anySimpleType for an attribute (§3.2.2.1/§3.2.2.2).
 //
-// It serves the GLOBAL <element> path as well as the two local ones (#442): the
-// tier chain is COMMON to both element forms — §3.3.2.2 dcl.elt.global
-// supplements {target namespace} and {scope} alone, never {type definition} — so
-// a top-level <element> has nothing to map differently here, and produceElement
-// calls this for tiers 1 and 2 rather than restating either.
+// It serves both GLOBAL paths as well as the local ones (#442, #733): the tier
+// chain is COMMON to both element forms — §3.3.2.2 dcl.elt.global supplements
+// {target namespace} and {scope} alone, never {type definition} — and the two
+// attribute forms state one chain each in identical words, so neither a
+// top-level <element> nor a top-level <attribute> has anything to map
+// differently here, and produceElement and produceAttribute call this rather
+// than restating it.
 //
 // The anonymous type is built once, here, and handed to the declaration as an
 // xsd.InlineTypeDefinition: it goes into no symbol table, so the declaration is
