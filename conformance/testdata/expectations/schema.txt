@@ -248,7 +248,7 @@ CTA/cta0015/schema/cta0015 pass
 CTA/cta0040/schema/cta0040 pass
 CTA/cta0041/schema/cta0041 pass
 CTA/cta0042/schema/cta0042 fail
-CTA/cta0043/schema/cta0043 fail
+CTA/cta0043/schema/cta0043 pass
 CTA/cta0044/schema/cta0044 pass
 CTA/cta0045/schema/cta0042 pass
 CTA/cta9001err/schema/cta9001err fail
@@ -14970,10 +14970,10 @@ Wild/wild074/schema/wild074.xsd pass
 Wild/wild075/schema/wild075.xsd pass
 Wild/wild076/schema/wild076.xsd pass
 Wild/wild077/schema/wild077.xsd pass
-Wild/wild078/schema/wild078.bad.xsd fail
-Wild/wild079/schema/wild079.bad.xsd fail
+Wild/wild078/schema/wild078.bad.xsd pass
+Wild/wild079/schema/wild079.bad.xsd pass
 Wild/wild080/schema/wild080.xsd pass
-Wild/wild081/schema/wild081.bad.xsd fail
+Wild/wild081/schema/wild081.bad.xsd pass
 Wild/wild082/schema/wild082.xsd fail
 Wild/wild083/schema/wild083.xsd pass
 Wild/wild084/schema/wild083.xsd pass
