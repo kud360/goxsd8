@@ -49,16 +49,22 @@ import (
 // below):
 //
 //  1. cvc-assess-elt (§3.3.4.6), when the root has no top-level element
-//     declaration AND carries no xsi:type attribute. It then determines neither
-//     a ·governing element declaration· nor a ·governing type definition·, so
-//     key-sva clause 1 fails and §3.3.5.1's e-validity gives it notKnown rather
-//     than valid — which under §5.2 ·strict wildcard validation·, the mode this
-//     processor committed to in #712, is what "the invoking process ... will
-//     otherwise report an error to its environment" names. The document is NOT
-//     VALID, whatever else it holds.
+//     declaration AND no xsi:type ·resolving· to a top-level type definition
+//     (#716). It then determines neither a ·governing element declaration· nor
+//     a ·governing type definition·, so key-sva clause 1 fails and §3.3.5.1's
+//     e-validity gives it notKnown rather than valid — which under §5.2 ·strict
+//     wildcard validation·, the mode this processor committed to in #712, is
+//     what "the invoking process ... will otherwise report an error to its
+//     environment" names. The document is NOT VALID, whatever else it holds.
 //  2. cvc-elt (§3.3.4.3) clause 2, when the root's declaration was found and its
-//     {abstract} is true. The root is ·strictly assessed· and locally INVALID,
-//     so e-validity clause 1.1.1.1 fails and its [validity] is invalid. The
+//     {abstract} is true; clause 3, when it carries an xsi:nil its {nillable}
+//     forbids (3.1), an xsi:nil with no ·actual value· (3.2), or is ·nilled· and
+//     carries [[children]] (3.2.3.1) or a fixed {value constraint} (3.2.3.2);
+//     clause 4, when its xsi:type ·resolves· to a type definition that does not
+//     ·override· the ·selected type definition·; and clause 5.2.2, when its
+//     declaration's fixed {value constraint} disagrees with the [[children]] it
+//     has (#716). The root is ·strictly assessed· and locally INVALID, so
+//     e-validity clause 1.1.1.1 fails and its [validity] is invalid. The
 //     document is NOT VALID, whatever else it holds.
 //  3. cvc-complex-type (§3.4.4.2) clause 1, clause 2, clause 3 or clause 4, when
 //     the root's ·governing type definition· was determinable and complex and
@@ -131,23 +137,25 @@ import (
 //
 // Cases 3 to 6 rest on conditions validate checks rather than this file
 // assuming them: the attribute half of cvc-complex-type is reached only where
-// the governing type is the declaration's own {type definition} (no xsi:type,
-// no {type table}), only for attributes clause 2 quantifies over (the four
-// xsi: names are excepted), and never where an {attribute wildcard} leaves an
-// arm of the rule unevaluated. The content half adds its own: an element that
-// may be ·nilled· (clause 1 applies only where it is not), and a {content type}
-// whose shape xsd.Schema.ContentMatcher declines — {open content}, the nested
-// repetition cvc-accept's own Note leaves non-deterministic, an all group
-// holding an all group — each of which withholds clause 1.4 entirely rather
-// than matching part of a sequence, and a root with no character information
-// item [[child]] at all, whose ·initial value· cvc-elt clause 5.1 may take from
-// a {value constraint} instead. The value charges add their own: a declaration
-// whose {type definition} does not resolve to a simple type, and — the one that
-// would otherwise reject every typeless attribute — a value.ValidateLexical
-// error that is a fault of the type or of the backend rather than a verdict
-// about the lexical (value.IsDatatypeVerdict). Each of those is a DECLINE
-// inside validate, and a declined attribute charges nothing at all, so it
-// cannot arrive here.
+// the governing type was determinable — the ·selected type definition·, or the
+// ·instance-specified· one that ·overrides· it, and never a {type table}'s —
+// only for attributes clause 2 quantifies over (the four xsi: names are
+// excepted), and never where an {attribute wildcard} leaves an arm of the rule
+// unevaluated. The content half adds its own: an element that is ·nilled·
+// (clause 1 applies only where it is not, and cvc-elt clause 3.2.3.1 decides
+// its [[children]] instead), and a {content type} whose shape
+// xsd.Schema.ContentMatcher declines — {open content}, the nested repetition
+// cvc-accept's own Note leaves non-deterministic, an all group holding an all
+// group — each of which withholds clause 1.4 entirely rather than matching part
+// of a sequence, and a root with no character information item [[child]] at
+// all, whose ·initial value· cvc-elt clause 5.1 may take from a {value
+// constraint} instead. The value charges add their own: a declaration whose
+// {type definition} does not resolve to a simple type, and — the one that would
+// otherwise reject every typeless attribute — a value.ValidateLexical error
+// that is a fault of the type or of the backend rather than a verdict about the
+// lexical (value.IsDatatypeVerdict). Each of those is a DECLINE inside
+// validate, and a declined attribute charges nothing at all, so it cannot
+// arrive here.
 //
 // Case 2 fires through an ASSEMBLED schema: producer.produceElement maps
 // {abstract} from the top-level <element>'s abstract attribute (§3.3.2.1
@@ -168,23 +176,23 @@ import (
 // recursively into every attribute and child, which Assess now follows only as
 // far as it can type: a descendant is decided against the declaration its
 // parent's content model ·attributed· it to, and where that declaration or its
-// type is not determinable — an xsi:type, a {type table}, a simple or
-// unresolvable {type definition}, a name no top-level declaration matches under
-// a wildcard, a ·skipped· subtree — the element and everything below it is
-// decided against nothing. Every clause of every rule this engine does not
-// evaluate at all (cvc-type's simple half, assertions, cvc-elt clauses 3 to 5)
-// is undecided at every depth besides. The spec has no category for "this
+// type is not determinable — a {type table}, a simple or unresolvable {type
+// definition}, a name no top-level declaration matches under a wildcard and no
+// xsi:type types either, a ·skipped· subtree — the element and everything below
+// it is decided against nothing. Every clause of every rule this engine does not
+// evaluate at all (cvc-type's simple half, assertions, cvc-elt clause 5.1) is
+// undecided at every depth besides. The spec has no category for "this
 // processor did not implement that check" stronger than notKnown, so an empty
 // Result licenses no "valid" claim; equally it licenses no "invalid" one, so an
 // expected-invalid case in this shape declines exactly as an expected-valid one
 // does.
 //
-// The one shape that looks like case 1 and is not: a root with an xsi:type
-// attribute but no top-level declaration. Assess DETECTS that attribute and
-// never ·resolves· it (cvc-resolve-instance, §3.17.6.3, is unimplemented), so
-// it withholds the cvc-assess-elt charge and returns no violation — landing the
-// case in the undecidable bucket above, which is where it belongs until #716
-// resolves the type for real.
+// The one shape that looks like case 1 and is not: a root with no top-level
+// declaration whose xsi:type ·resolves·. Its ·instance-specified type
+// definition· is its ·governing type definition· (key-governing-type-elem clause
+// 8), so it is ·strictly assessed· against that type, cvc-assess-elt is not
+// charged, and it lands in the undecidable bucket above on the same terms as any
+// other root that charges nothing.
 //
 // # Why no false pass is possible
 //

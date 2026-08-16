@@ -85,10 +85,18 @@ func topLevelElement(t *testing.T, local string, abstract bool) xsd.ElementDecla
 
 // rootSchema declares the two top-level elements the walk tests drive:
 // "root", which sampleTree's root resolves to, and "abstractRoot", which is
-// the same declaration with {abstract} = true.
+// the same declaration with {abstract} = true. It also carries one top-level
+// type named "T", in no namespace, so an xsi:type has something to ·resolve· to
+// and a prefixed "p:T" has not.
 func rootSchema(t *testing.T) *xsd.Schema {
 	t.Helper()
 	b := xsd.NewSchemaBuilder()
+	ct, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "T"}, xsd.QName{}, nil,
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("building the T complex type: %v", err)
+	}
+	b.AddType(ct)
 	b.AddElement(topLevelElement(t, "root", false))
 	b.AddElement(topLevelElement(t, "abstractRoot", true))
 	schema, err := b.Finalize()
@@ -223,32 +231,46 @@ func TestAssessChargesAnUndeclaredRoot(t *testing.T) {
 	}
 }
 
-// An xsi:type on an undeclared root can determine a ·governing type
-// definition· (§5.2 names it as one of the three determinants), so the
-// charge above is withheld and the walk runs — the fail-open half of the
-// GAP(xsd) marker in Assess.
-func TestAssessWithholdsTheChargeForAnXSITypedRoot(t *testing.T) {
-	tree := sampleTree()
-	tree.name = xsd.QName{Local: "undeclared"}
-	tree.attrs = append(tree.attrs, &testAttribute{
-		name:  xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"},
-		value: "p:T",
-		loc:   loc(1, 40),
-	})
-
-	log, visits := recordingLogger()
-	v, err := New(rootSchema(t), testBackend(), WithLogger(log))
-	if err != nil {
-		t.Fatalf("New: %v", err)
+// An xsi:type on an undeclared root determines a ·governing type definition·
+// where it ·resolves· (key-governing-type-elem clause 8, §5.2 naming it as one
+// of the three determinants), so the charge above is withheld and the walk runs
+// against that type alone. An xsi:type that does NOT resolve determines nothing
+// and is charged exactly as a bare undeclared root is.
+func TestAssessTypesAnUndeclaredRootFromAResolvedXSIType(t *testing.T) {
+	typed := func(lexical string) *testElement {
+		return &testElement{
+			name: xsd.QName{Local: "undeclared"},
+			attrs: []Attribute{&testAttribute{
+				name:  xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"},
+				value: lexical,
+				loc:   loc(1, 40),
+			}},
+			bindings: map[string]string{"p": "urn:p"},
+			loc:      loc(1, 1),
+		}
+	}
+	assess := func(tree *testElement) (*Result, *[]string) {
+		log, visits := recordingLogger()
+		v, err := New(rootSchema(t), testBackend(), WithLogger(log))
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		return v.Assess(tree), visits
 	}
 
-	res := v.Assess(tree)
-
+	// "T" is a top-level type of rootSchema; "p:T" names one in urn:p and
+	// resolves to nothing.
+	res, visits := assess(typed("T"))
 	if got := res.Violations(); len(got) != 0 {
-		t.Errorf("Violations() = %v, want none for a root carrying xsi:type", got)
+		t.Errorf("Violations() = %v, want none for a root whose xsi:type resolved", got)
 	}
 	if len(*visits) == 0 {
-		t.Error("the walk did not run for a root carrying xsi:type")
+		t.Error("the walk did not run for a root typed by xsi:type")
+	}
+
+	res, _ = assess(typed("p:T"))
+	if got := onlyViolation(t, res); got.Rule != "cvc-assess-elt" {
+		t.Errorf("Rule = %q, want cvc-assess-elt for a root whose xsi:type resolved to nothing", got.Rule)
 	}
 }
 

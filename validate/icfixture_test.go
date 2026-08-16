@@ -12,15 +12,17 @@ import (
 // and cvcid_test.go both drive. icSchema is the main one, with the identity
 // constraints of <root> and of <box> as its only parameters:
 //
-//	root  RootType  sequence( item*, box*, ref* )
-//	box   BoxType   sequence( item*, ref* )            — a subtree of its own
-//	item  ItemType  sequence( name?, tag?, utag? ),
-//	                @id @k @p:id @xid @ref @refs,
-//	                @uid @usi @uref @upl @unest @lur  — icUnionTypes
-//	ref   RefType   empty,                             @r
-//	name  xs:string (or a nillable declaration of it)
-//	tag   xs:ID     an ID-governed ELEMENT
-//	utag  UID       a union-governed one
+//	root    RootType  sequence( item*, box*, ref*, tabled* )
+//	box     BoxType   sequence( item*, ref* )          — a subtree of its own
+//	item    ItemType  sequence( name?, tag?, utag?, tabled? ),
+//	                  @id @k @p:id @xid @ref @refs,
+//	                  @uid @usi @uref @upl @unest @lur  — icUnionTypes
+//	ref     RefType   empty,                           @r
+//	name    xs:string (or a nillable declaration of it)
+//	tag     xs:ID     an ID-governed ELEMENT
+//	utag    UID       a union-governed one
+//	tabled  a declaration carrying a {type table}, so its ·governing type
+//	        definition· is the one shape this package cannot determine at all
 //
 // Every complex type is NAMED, so its {attribute uses} are folded and an
 // attribute is matched rather than declined (assess.go's
@@ -125,6 +127,33 @@ func icLocal(t *testing.T, parent string, name xsd.QName, typ xsd.QName, nillabl
 	}
 	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: typ}, nil, scope,
 		nil, nillable, ics, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("building the %s element declaration: %v", name, err)
+	}
+	return d
+}
+
+// icTabled builds a local element declaration carrying a {type table}, whose
+// ·selected type definition· is whichever <alternative> ·conditionally selects·
+// one for the instance (§3.3.4.2). Evaluating a {test} means XPath (#56), so
+// this package determines no ·governing type definition· for such an element at
+// all — the one shape left that types an element against nothing.
+func icTabled(t *testing.T, parent string, name xsd.QName) xsd.ElementDeclaration {
+	t.Helper()
+	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: xsd.QName{Local: parent}})
+	if err != nil {
+		t.Fatalf("NewLocalScope: %v", err)
+	}
+	test := xsd.NewXPathExpression("@k", nil, nil, nil)
+	alt := xsd.NewTypeAlternative(&test, icBuiltin("string"), nil)
+	table, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{alt},
+		xsd.NewTypeAlternative(nil, icBuiltin("string"), nil))
+	if err != nil {
+		t.Fatalf("building the type table: %v", err)
+	}
+	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, name,
+		xsd.TypeDefinitionRef{Name: icBuiltin("string")}, &table, scope,
+		nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("building the %s element declaration: %v", name, err)
 	}
@@ -265,7 +294,8 @@ func icSchema(t *testing.T, ns string, nillable bool, rootICs, boxICs []xsd.Iden
 		icUseOf(t, named("upl"), named("UPlain")),
 		icUseOf(t, named("unest"), named("UNest")),
 		icUseOf(t, named("lur"), named("LURef")),
-	}, icContent(t, icOptional(t, nameDecl), icOptional(t, tagDecl), icOptional(t, utagDecl)))
+	}, icContent(t, icOptional(t, nameDecl), icOptional(t, tagDecl), icOptional(t, utagDecl),
+		icOptional(t, icTabled(t, "ItemType", in("tabled")))))
 	refType := icComplex(t, "RefType", []xsd.AttributeUse{
 		icUse(t, xsd.QName{Local: "r"}, "string"),
 	}, xsd.EmptyContent{})
@@ -278,7 +308,8 @@ func icSchema(t *testing.T, ns string, nillable bool, rootICs, boxICs []xsd.Iden
 	rootBox := icLocal(t, "RootType", in("box"), xsd.QName{Local: "BoxType"}, false, boxICs)
 	rootRef := icLocal(t, "RootType", in("ref"), xsd.QName{Local: "RefType"}, false, nil)
 	rootType := icComplex(t, "RootType", nil,
-		icContent(t, icRepeated(t, rootItem), icRepeated(t, rootBox), icRepeated(t, rootRef)))
+		icContent(t, icRepeated(t, rootItem), icRepeated(t, rootBox), icRepeated(t, rootRef),
+			icRepeated(t, icTabled(t, "RootType", in("tabled")))))
 
 	root, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
 		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),

@@ -378,20 +378,21 @@ func (w *walk) identityExit(c *icCheck) {
 //   - a ·governing type definition· that is not a simple type definition and
 //     not a complex type with {content type}.{variety} simple, which is
 //     governance.simpleType's nil — including the case where no type was
-//     determinable at all (an xsi:type, a {type table}, an unresolvable slot).
-//   - GAP(validate): an element that may be ·nilled·. A ·nilled· node is one
-//     §3.11.4's own Note names as leaving the ·key-sequence· short, and
-//     ·nilled· (§3.3.4.3 cvc-elt clause 3.2) needs the {nillable} of the
-//     declaration and the ·actual value· of xsi:nil, which this package does
-//     not evaluate; presence of the attribute is the upper bound on it, as
-//     hasInstanceNil is for the content half (#716).
+//     determinable at all (a {type table}, an unresolvable slot, an xsi:type
+//     whose ·override· could not be decided).
+//   - GAP(validate): an element that is ·nilled· (§3.3.4.3, key-nilled).
+//     §3.3.5.4 gives it an absent [schema normalized value] and so an absent
+//     [schema actual value], and §3.11.4's own Note names a nilled node as
+//     leaving the ·key-sequence· short — which for a key is a clause 4.2.1
+//     charge. Recording that absence rather than declining would widen clause
+//     4.2.1 on the strength of this reading, so the slot declines instead.
 //   - GAP(validate): an element with NO character information item [[child]]
 //     whose declaration carries a {value constraint}. cvc-elt clause 5.1
 //     replaces the item assessed with one whose ·normalized value· is that
 //     constraint's {lexical form}, and §3.11.4's Note is explicit that "default
 //     or fixed value constraints may play a part in ·key-sequences·"; reading
 //     the empty ·initial value· instead would compare a value the document does
-//     not have (#716).
+//     not have.
 func (c *icCheck) fill(w *walk) {
 	if len(c.pending) == 0 {
 		return
@@ -406,7 +407,7 @@ func (c *icCheck) fill(w *walk) {
 // field node, on fill's terms.
 func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 	st := c.g.simpleType()
-	if st == nil || hasInstanceNil(c.e) {
+	if st == nil || nilled(c.e, c.g) {
 		return icKeyMember{}, false, false
 	}
 	if c.initial.Len() == 0 && c.g.hasDecl {

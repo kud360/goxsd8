@@ -26,7 +26,7 @@ import "github.com/kud360/goxsd8/xsderr"
 // affiliations}.
 //
 // PHASE PLACEMENT. The check reads RESOLVED type definitions on both sides and
-// walks their {base type definition} chains through validlySubstitutable, so it
+// walks their {base type definition} chains through validlyDerived, so it
 // needs Phase A's resolvability (a dangling type name is charged src-resolve
 // there, and the ResolvedType lookups here are hits rather than silent skips) and
 // Phase B's checkComplexBaseAcyclic (the walk inside derivedOKComplex carries NO
@@ -117,7 +117,7 @@ func (s *Schema) checkSubstitutionGroupTypes() error {
 //
 // The set is read off the unexported field rather than through
 // SubstitutionGroupExclusions(), whose defensive copy would be allocated only to
-// be discarded: validlySubstitutable never retains or mutates the slice
+// be discarded: validlyDerived never retains or mutates the slice
 // (unionDerivationMethods and complexBlockingSubset both build fresh ones). Same
 // reason resolveKeyref reads ic.fields directly.
 //
