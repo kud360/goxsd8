@@ -1359,6 +1359,55 @@ func (p *producer) resolveModelGroup(name xsd.QName) (xsd.ModelGroup, bool, erro
 	return mgd.ModelGroup(), true, nil
 }
 
+// rejectLocalSimpleTypeAttrs rejects a NESTED <simpleType> — one written
+// anywhere but as a child of <schema>, <redefine> or <override> — that carries a
+// name or a final attribute, both of which xs:localSimpleType restricts to
+// use="prohibited" (xmlschema11-2.md:3901, :3908), name's own documentation
+// reading "Forbidden when nested". Each is legal on the top-level form alone,
+// where xs:topLevelSimpleType makes name REQUIRED (:3883) and leaves final the
+// optional attribute the abstract xs:simpleType declares (:3865).
+//
+// POSITION decides the form, never the name the caller passes: <redefine>'s and
+// <override>'s content models reach, through xs:redefinable
+// (xmlschema11-1.md:4465), the SAME global xs:simpleType element declaration
+// (xmlschema11-2.md:3913) the top level does, typed xs:topLevelSimpleType, so a
+// redefining or overriding <simpleType> keeps its name — and resolveBase passes
+// the ZERO QName for the src-expredef ORIGINAL such a redefinition is paired
+// with, a top-level element whose name §4.2.4 makes ·absent· rather than
+// prohibited. Every other position admitting a <simpleType> child types it
+// xs:localSimpleType: <list>, <union> and <restriction> (xmlschema11-2.md:3931,
+// :3969, :3989), <element> and <attribute> at either level
+// (xmlschema11-1.md:4681, :4708, :5057, :5092, :5116) and <alternative> (:5146),
+// whose inline arm typeTableRepresentable withholds and so does not reach here
+// at all yet.
+//
+// The fault carries NO numbered rule ID: src-simple-type's clauses (§3.16.3) say
+// nothing about either attribute, and no s4s-* identifier exists in the spec at
+// all. It stands on §5.1 (xmlschema11-1.md:4289, :4296) directly, the footing
+// rejectProhibitedAttrs's doc derives in full for the four top-level kinds;
+// charging src-simple-type or st-props-correct instead would be a fabricated
+// verdict (STYLE E2).
+//
+// It is checked ONCE here rather than at each call site that constructs a
+// <simpleType> with the zero QName (STYLE D3/T4), and BEFORE the body is
+// walked, so the prohibited attribute is reported ahead of any content fault the
+// same element also has. The two attributes are checked in the grammar's own
+// declaration order, so a document writing both is always reported at name
+// (STYLE D2).
+func rejectLocalSimpleTypeAttrs(elem *Element) error {
+	parent := elem.Parent()
+	if parent == nil || isXSD(parent, "schema") || isXSD(parent, "redefine") || isXSD(parent, "override") {
+		return nil
+	}
+	for _, attr := range []string{"name", "final"} {
+		if _, ok := elem.Attr(attr); !ok {
+			continue
+		}
+		return fmt.Errorf("parser: nested <simpleType> at %s carries a %s attribute, which the schema for schema documents prohibits on the local form: xs:localSimpleType restricts %s to use=\"prohibited\", and it is legal on the top-level form alone", elem.Loc(), attr, attr)
+	}
+	return nil
+}
+
 // constructSimpleType maps one <simpleType> element (named or anonymous) into a
 // component. It dispatches on which of the three §3.16.2.1 alternatives the
 // element's body chooses — <list> to constructListType, <union> to
@@ -1379,6 +1428,9 @@ func (p *producer) resolveModelGroup(name xsd.QName) (xsd.ModelGroup, bool, erro
 // THIS function builds, and would have to be repeated at every future
 // construction site.
 func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleType, error) {
+	if err := rejectLocalSimpleTypeAttrs(elem); err != nil {
+		return nil, err
+	}
 	body, err := simpleTypeBody(elem)
 	if err != nil {
 		return nil, err
