@@ -249,9 +249,9 @@ AttrDecl/ad_type00101m/instance/AD_type00101m1_n pass
 AttrDecl/ad_type00101m/instance/AD_type00101m1_p fail
 AttrDecl/ad_type00101m/instance/AD_type00101m2_n pass
 AttrDecl/ad_type00101m/instance/AD_type00101m2_p fail
-AttrDecl/ad_type00102m/instance/AD_type00102m1_n fail
+AttrDecl/ad_type00102m/instance/AD_type00102m1_n pass
 AttrDecl/ad_type00102m/instance/AD_type00102m1_p fail
-AttrDecl/ad_type00102m/instance/AD_type00102m2_n fail
+AttrDecl/ad_type00102m/instance/AD_type00102m2_n pass
 AttrDecl/ad_type00102m/instance/AD_type00102m2_p fail
 AttrDecl/ad_valconstr00101m/instance/AD_valConstr00101m1_n pass
 AttrDecl/ad_valconstr00101m/instance/AD_valConstr00101m1_p fail
@@ -1017,7 +1017,7 @@ MS-Additional2006-07-15/addB176/instance/addB176.v fail
 MS-Additional2006-07-15/addB181/instance/addB181.i fail
 MS-Additional2006-07-15/addB182/instance/addB182.v fail
 MS-Additional2006-07-15/addB187/instance/addB187.v fail
-MS-Additional2006-07-15/addB188/instance/addB188.i fail
+MS-Additional2006-07-15/addB188/instance/addB188.i pass
 MS-Additional2006-07-15/addB191/instance/addB191.v fail
 MS-Additional2006-07-15/addB196a/instance/addB196a.v fail
 MS-Additional2006-07-15/addB196b/instance/addB196b.i pass
@@ -1123,8 +1123,8 @@ MS-Attribute2006-07-15/attF002/instance/attF002.v fail
 MS-Attribute2006-07-15/attF003/instance/attF003.v fail
 MS-Attribute2006-07-15/attI003/instance/attI003.v fail
 MS-Attribute2006-07-15/attJ001/instance/attJ001.v fail
-MS-Attribute2006-07-15/attJ002/instance/attJ002.i fail
-MS-Attribute2006-07-15/attJ003/instance/attJ003.i fail
+MS-Attribute2006-07-15/attJ002/instance/attJ002.i pass
+MS-Attribute2006-07-15/attJ003/instance/attJ003.i pass
 MS-Attribute2006-07-15/attJ004/instance/attJ004.v fail
 MS-Attribute2006-07-15/attJ005/instance/attJ005.v fail
 MS-Attribute2006-07-15/attJ006/instance/attJ006.v fail
