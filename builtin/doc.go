@@ -63,17 +63,18 @@
 //	func Seed(b value.Backend) ([]*xsd.SimpleType, error)
 //
 // Seed builds one Simple Type Definition per row of Types and returns them
-// with xs:anySimpleType prepended — len(Types)+1 components in a fixed,
-// deterministic order. It errors with a typed *MissingPrimitivesError if b
-// lacks a mapping for any primitive (compose with value.Override to fill gaps
+// with xs:anySimpleType and xs:error prepended — len(Types)+2 components in a
+// fixed, deterministic order. It errors with a typed *MissingPrimitivesError if
+// b lacks a mapping for any primitive (compose with value.Override to fill gaps
 // from another backend). A consumer seeds its symbol table from the result and
 // resolves each type's governing mapping (its nearest mapped ancestor, per the
 // resolution above) from b at parse time; the mapping is not stored in the
 // component. xs:anySimpleType is present because Seed prepends the canonical
-// xsd.AnySimpleType anchor to the returned slice; only xs:anyType, a Complex
-// Type Definition outside xsd.SimpleType's scope, is a separate parser-level
-// structural concern (M4) and never appears in Seed's result. See Seed's own
-// godoc for the full contract.
+// xsd.AnySimpleType anchor to the returned slice, and xs:error because
+// Structures §3.16.7.3 makes it present in every schema by definition; only
+// xs:anyType, a Complex Type Definition outside xsd.SimpleType's scope, is a
+// separate parser-level structural concern (M4) and never appears in Seed's
+// result. See Seed's own godoc for the full contract.
 //
 // precisionDecimal is registered always-on: its applicable facet set
 // (totalDigits, maxScale, minScale — NOT fractionDigits or the length

@@ -52,7 +52,7 @@ func ExampleSeed() {
 	}
 
 	decimal := sym[xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}]
-	fmt.Println("components:", len(types) == len(builtin.Types)+1)
+	fmt.Println("components:", len(types) == len(builtin.Types)+2)
 	fmt.Println("first:", types[0].Name().Local)
 	fmt.Println("decimal base:", mustBase(decimal).Name().Local)
 	// Output:

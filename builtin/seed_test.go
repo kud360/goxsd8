@@ -2,6 +2,7 @@ package builtin_test
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -53,8 +54,8 @@ func TestSeedSuccessShapeAndOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Seed with all primitives mapped: unexpected error: %v", err)
 	}
-	if got, want := len(types), len(builtin.Types)+1; got != want {
-		t.Fatalf("len(types) = %d, want len(Types)+1 = %d", got, want)
+	if got, want := len(types), len(builtin.Types)+2; got != want {
+		t.Fatalf("len(types) = %d, want len(Types)+2 = %d", got, want)
 	}
 	if types[0].Name() != (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anySimpleType"}) {
 		t.Fatalf("types[0] = %v, want xs:anySimpleType prepended", types[0].Name())
@@ -62,13 +63,67 @@ func TestSeedSuccessShapeAndOrder(t *testing.T) {
 	if !types[0].IsAnySimpleType() {
 		t.Errorf("prepended node must report IsAnySimpleType")
 	}
+	if types[1].Name() != (xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}) {
+		t.Fatalf("types[1] = %v, want xs:error prepended", types[1].Name())
+	}
 	// The remaining len(Types) elements are Types in order.
 	for i := range builtin.Types {
-		if got, want := types[i+1].Name().Local, builtin.Types[i].Name; got != want {
-			t.Fatalf("types[%d] = %q, want %q (Types order)", i+1, got, want)
+		if got, want := types[i+2].Name().Local, builtin.Types[i].Name; got != want {
+			t.Fatalf("types[%d] = %q, want %q (Types order)", i+2, got, want)
 		}
 	}
 }
+
+// TestSeedErrorTableau pins ·xs:error· (§3.16.7.3) property by property: the
+// union variety with an EMPTY membership, the xs:anySimpleType base, no facets,
+// and a {final} of all four derivation keywords — the property that makes it
+// underivable-from without any identity check anywhere.
+func TestSeedErrorTableau(t *testing.T) {
+	types, err := builtin.Seed(allPrimitives())
+	if err != nil {
+		t.Fatalf("Seed: %v", err)
+	}
+	e := byName(types)["error"]
+	if e == nil {
+		t.Fatal("Seed result has no xs:error component")
+	}
+	variety, err := e.Variety(noResolver{})
+	if err != nil {
+		t.Fatalf("xs:error Variety: %v", err)
+	}
+	if _, ok := variety.(xsd.Union); !ok {
+		t.Errorf("xs:error {variety} = %T, want xsd.Union", variety)
+	}
+	members, err := e.Members(noResolver{})
+	if err != nil {
+		t.Fatalf("xs:error Members: %v", err)
+	}
+	if len(members) != 0 {
+		t.Errorf("xs:error {member type definitions} = %v, want the empty sequence", members)
+	}
+	base, err := e.Base(noResolver{})
+	if err != nil {
+		t.Fatalf("xs:error Base: %v", err)
+	}
+	if base != xsd.AnySimpleType() {
+		t.Errorf("xs:error {base type definition} = %v, want the xs:anySimpleType anchor", base.Name())
+	}
+	if got := e.OwnFacets(); len(got) != 0 {
+		t.Errorf("xs:error {facets} = %v, want the empty set", got)
+	}
+	final := e.Final()
+	for _, m := range []xsd.DerivationMethod{xsd.DerivationRestriction, xsd.DerivationExtension, xsd.DerivationList, xsd.DerivationUnion} {
+		if !slices.Contains(final, m) {
+			t.Errorf("xs:error {final} = %v, does not contain %v; want all four keywords", final, m)
+		}
+	}
+}
+
+// noResolver resolves nothing: every slot the seeded graph writes is an owned
+// pointer, so no by-name arm is reachable from a Seed result.
+type noResolver struct{}
+
+func (noResolver) Type(xsd.QName) (xsd.TypeDefinition, bool) { return nil, false }
 
 func TestSeedNoAnyType(t *testing.T) {
 	types, err := builtin.Seed(allPrimitives())
@@ -306,14 +361,14 @@ func TestSeedListTwoStepDerivation(t *testing.T) {
 // TestSeedExcludesAnonymousIntermediates pins the returned slice's contract
 // against the graph change: the anonymous intermediate lists are components of
 // the seeded graph but NOT members of the result, which stays exactly
-// len(Types)+1 with every member named.
+// len(Types)+2 with every member named.
 func TestSeedExcludesAnonymousIntermediates(t *testing.T) {
 	types, err := builtin.Seed(allPrimitives())
 	if err != nil {
 		t.Fatalf("Seed: %v", err)
 	}
-	if len(types) != len(builtin.Types)+1 {
-		t.Fatalf("Seed returned %d components, want len(Types)+1 = %d", len(types), len(builtin.Types)+1)
+	if len(types) != len(builtin.Types)+2 {
+		t.Fatalf("Seed returned %d components, want len(Types)+2 = %d", len(types), len(builtin.Types)+2)
 	}
 	for i, st := range types {
 		if st.Name() == (xsd.QName{}) {
