@@ -48,9 +48,9 @@ translate the local times above and mind DST drift. Keep develop slots
   than concluding the thread is unreadable or filing it again (#527).
 
   Falling through does not recover everything: the MCP channel strips
-  angle-bracketed tokens from issue bodies it reads and writes, so nothing
-  quoted through it is verbatim and anything bracketed is re-derived from
-  the repo (#515).
+  angle-bracketed tokens from the issue bodies it reads, so nothing quoted
+  through it is verbatim and anything bracketed is re-derived from the
+  repo (#764).
 - **The checkout is shallow.** History before the graft is absent, so
   `git merge-base` can come up empty — and
   `git rev-list --left-right --count A...B` does not fail when it does; it
