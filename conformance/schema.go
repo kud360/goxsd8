@@ -849,18 +849,19 @@ func elementDecidable(el *parser.Element) bool {
 //
 // The <complexType> child goes through complexTypeDecidable, the PRODUCER-
 // coverage gate, and NOT through the narrower anonymousComplexTypeDecidable
-// beside it. That narrowing exists for the readers of a GOVERNING type: an
-// element-owned anonymous type with a <complexContent> base has {attribute uses}
-// the §3.4.2.4 clause 3 fold never materialised, and validate reads exactly that
-// property when the type governs an instance element. An ALTERNATIVE-owned type
-// has no such reader in either lane — validate's walk.governingType declines any
-// declaration carrying a {type table} BEFORE it selects a type (assess.go), and a
-// {type table} is the only path to this type — so what is left unenforced on it
-// is what is unenforced on every anonymous type: the finalize passes that
-// quantify over the Schema's {type definitions} (cos-nonambig,
+// beside it. Both gates are consumed only from schemaShapeDecidable — this is a
+// SCHEMA-lane decision, and validate is not a reader either gate controls, so an
+// argument from validate's own behaviour (e.g. walk.governingType) does not
+// settle which gate belongs here. What settles it is already recorded in
+// xsd/complexderivation.go's GAP marker: the schema-lane finalize passes that
+// would read an anonymous type's unfolded {attribute uses} — cos-nonambig,
 // cos-element-consistent, ct-props-correct clause 4, the Phase D derivation
-// verdicts). All are UNDER-rejections, the safe direction for a ratchet, and
-// xsd/complexderivation.go's GAP marker owns them.
+// verdicts — all quantify over the Schema's {type definitions}, i.e. s.types,
+// which by construction EXCLUDES anonymous types. None of them reaches an
+// ALTERNATIVE-owned anonymous type's unfolded attribute uses regardless of which
+// gate admits it, so the narrower gate's extra protection has nothing to protect
+// here; what stays unenforced is an UNDER-rejection, the safe direction for a
+// ratchet, and that GAP marker owns it.
 //
 // What complexTypeDecidable still declines is the producer's own limitation set —
 // a <simpleContent> <restriction>, a <complexContent> with neither alternant, a
