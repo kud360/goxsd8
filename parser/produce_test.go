@@ -942,6 +942,40 @@ func TestProduceAttributeTypeAndInlineRejected(t *testing.T) {
 	assertRule(t, err, "src-attribute")
 }
 
+// TestProduceAttributeInlineSimpleType pins tier 1 of §3.2.2.1 dcl.att.global
+// (#733): a top-level <attribute> with an inline <simpleType> child takes that
+// anonymous type as its {type definition}, through the xsd.InlineTypeDefinition
+// arm §3.2.2.2 dcl.att.local's identically-worded chain already used, carrying
+// the restriction's own base and facets rather than a defaulted xs:anySimpleType.
+// Its {scope} stays global.
+func TestProduceAttributeInlineSimpleType(t *testing.T) {
+	body := `<xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:int">` +
+		`<xs:minInclusive value="1"/></xs:restriction></xs:simpleType></xs:attribute>`
+	s, err := produce(t, wrap("", body))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	ad, ok := s.Attribute(xsd.QName{Local: "a"})
+	if !ok {
+		t.Fatal("attribute a not found")
+	}
+	if ad.ScopeVariety() != xsd.ScopeGlobal {
+		t.Fatalf("{scope}.{variety} = %v, want global", ad.ScopeVariety())
+	}
+	st := inlineSimpleType(t, ad.TypeDefinition())
+	if base := mustBase(t, s, st); base == nil || base.Name() != (xsd.QName{Space: xsdNS, Local: "int"}) {
+		t.Fatalf("inline type base = %v, want {xs}int", base)
+	}
+	if got := st.OwnFacets(); len(got) != 1 || got[0].Kind() != xsd.FacetMinInclusive {
+		t.Fatalf("inline type own facets = %v, want one minInclusive", got)
+	}
+	// The anonymous type is registered in no symbol table: it has no name to be
+	// resolved by.
+	if _, ok := s.Type(xsd.QName{}); ok {
+		t.Fatal("the anonymous inline type was registered in {type definitions}")
+	}
+}
+
 func TestProduceBadPrefixRejected(t *testing.T) {
 	body := `<xs:element name="e" type="nope:string"/>`
 	_, err := produce(t, wrap("", body))

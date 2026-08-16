@@ -194,9 +194,12 @@ import (
 //     - group (top-level named definition, §3.7.2): must carry a name and a single
 //       all/choice/sequence body whose particles are decidable; the body maps to
 //       {model group} genuinely (mgd-props-correct rejects a missing body).
-//     - attribute: must have no inline <simpleType> child (src-attribute clause 4,
-//       §3.2.3). A bare attribute is FINE: it defaults to xs:anySimpleType
-//       (§3.2.2.1), which builtin.Seed always seeds, so type= is NOT required.
+//     - attribute: an inline <simpleType> child is admitted when its own shape is
+//       produced (#733 maps §3.2.2.1 dcl.att.global's tier 1, which dcl.att.local
+//       states in the same words), so a type= beside it is a genuine src-attribute
+//       clause 4 (§3.2.3) verdict. A bare attribute is FINE too: it defaults to
+//       xs:anySimpleType (§3.2.2.1), which builtin.Seed always seeds, so type= is
+//       NOT required.
 //     - simpleType (top-level or any anonymous inline one reached transitively
 //       through a restriction, list, union, element or attribute chain): all
 //       three §3.16.2.1 alternatives are admitted. <list> is produced in both its
@@ -270,23 +273,23 @@ import (
 // assembly (by definition) has none of the checked violations, so Parse
 // correctly finds none. An "invalid" verdict coincides only with truly-invalid
 // ground truth via a REAL implemented violation — never a fabricated one, since
-// the shape allowlist excludes every form (a global attribute's inline type, a
-// simpleType naming none of §3.16.2.1's three alternatives, the
-// not-yet-produced complexType forms — <simpleContent> <restriction>, inline
-// anonymous local types — and the produced-but-unjudged extension
-// forms) where the producer's rejection would be a limitation rather than a spec
-// violation, or its silence a missing rejection. A suite-invalid case whose only
-// defect is a rule finalize does NOT yet check (cos-content-act-restrict —
-// derivation-ok-restriction clause 2.4.2, #263 — cos-ns-subset, #265, or the Open
-// Content half of derivation-ok-restriction clause 2.4, which xsd.Schema's
-// content-model automaton fails open on: xsd/contentrestricts.go's GAP(xsd), live
-// for a produced {open content} since #230) is produced cleanly, so the lane
-// observes "valid", disagrees with the suite, and records a still-failing gap —
-// never a wrong "invalid" pass. The remaining risk the allowlist closes is the
-// VACUOUS pass — a document of entirely skipped top-level content that would
-// otherwise always "pass" through a producer doing nothing — which is why step 3
-// confines the whole top level of EVERY document in the closure to the processed
-// kinds and the decidable complexType subset.
+// the shape allowlist excludes every form (a simpleType naming none of
+// §3.16.2.1's three alternatives, the not-yet-produced complexType forms —
+// <simpleContent> <restriction>, inline anonymous local types — and the
+// produced-but-unjudged extension forms) where the producer's rejection would be
+// a limitation rather than a spec violation, or its silence a missing rejection.
+// A suite-invalid case whose only defect is a rule finalize does NOT yet check
+// (cos-content-act-restrict — derivation-ok-restriction clause 2.4.2, #263 —
+// cos-ns-subset, #265, or the Open Content half of derivation-ok-restriction
+// clause 2.4, which xsd.Schema's content-model automaton fails open on:
+// xsd/contentrestricts.go's GAP(xsd), live for a produced {open content} since
+// #230) is produced cleanly, so the lane observes "valid", disagrees with the
+// suite, and records a still-failing gap — never a wrong "invalid" pass. The
+// remaining risk the allowlist closes is the VACUOUS pass — a document of
+// entirely skipped top-level content that would otherwise always "pass" through a
+// producer doing nothing — which is why step 3 confines the whole top level of
+// EVERY document in the closure to the processed kinds and the decidable
+// complexType subset.
 //
 // # Composition: <include>, <import> and <override> decided, redefine deferred
 //
@@ -349,10 +352,10 @@ import (
 //
 // # Still deferred
 //
-// A global attribute's inline anonymous type and the not-yet-produced
-// complexType forms named above widen in with later slices (exactly as the
-// datatypes lane grew across #15/#57/#80); they stay DECLINED (Fail) recorded
-// gaps here, never guessed. UPA and EDC landed with #180,
+// The not-yet-produced complexType forms named above widen in with later slices
+// (exactly as the datatypes lane grew across #15/#57/#80, and as a global
+// attribute's inline anonymous type did with #733); they stay DECLINED (Fail)
+// recorded gaps here, never guessed. UPA and EDC landed with #180,
 // derivation-ok-restriction with #262 and cos-ct-extends with #264, so the
 // admitted complexType cases those rules reject — restriction and extension
 // alike, the latter admitted by #336 — are now decided; the cases still turning
@@ -1159,18 +1162,21 @@ func attributeGroupDecidable(el *parser.Element) bool {
 	return true
 }
 
-// attributeDecidable reports whether a TOP-LEVEL <attribute> is decidable: it
-// must have no inline <simpleType> child. type= is NOT required — a bare
-// attribute defaults to xs:anySimpleType (§3.2.2.1), which builtin.Seed always
-// seeds, so it resolves and is decided genuinely.
+// attributeDecidable reports whether a TOP-LEVEL <attribute> is decidable.
+// type= is NOT required — a bare attribute defaults to xs:anySimpleType
+// (§3.2.2.1), which builtin.Seed always seeds, so it resolves and is decided
+// genuinely.
 //
-// The inline decline is deliberately ASYMMETRIC with localAttributeDecidable,
-// which admits one: #229 widened the producer's §3.2.2.2 dcl.att.local mapping
-// only. The global mapping dcl.att.global (§3.2.2.1) still declines an inline
-// <simpleType> with a limitation-shaped src-attribute error, so admitting a
-// global one here would report a fabricated "invalid".
+// An inline anonymous <simpleType> is admitted on the same terms as
+// localAttributeDecidable admits one, and declined on the same terms too when
+// the inline type's own shape is outside the produced subset. The two are no
+// longer asymmetric: §3.2.2.1 dcl.att.global states the same three-tier {type
+// definition} chain as §3.2.2.2 dcl.att.local word for word, and the producer
+// maps both through declaredType (#733), so a difference here would be the
+// fabrication.
 func attributeDecidable(el *parser.Element) bool {
-	return childXSD(el, "simpleType") == nil
+	inline := childXSD(el, "simpleType")
+	return inline == nil || simpleTypeDecidable(inline)
 }
 
 // localElementDecidable reports whether a LOCAL <element> (a model group's
@@ -1201,9 +1207,9 @@ func localElementDecidable(el *parser.Element) bool {
 // localAttributeDecidable reports whether a LOCAL <attribute> — a child of a
 // <complexType>/<restriction> or of an <attributeGroup> definition, both of
 // which map through §3.2.2.2 dcl.att.local — is within the producer's decidable
-// subset. Like localElementDecidable it admits an inline anonymous <simpleType>
-// whose own shape is produced (#229), and for the same reason declines one that
-// is not.
+// subset. Like localElementDecidable, and like attributeDecidable since #733, it
+// admits an inline anonymous <simpleType> whose own shape is produced (#229),
+// and for the same reason declines one that is not.
 func localAttributeDecidable(el *parser.Element) bool {
 	inline := childXSD(el, "simpleType")
 	return inline == nil || simpleTypeDecidable(inline)

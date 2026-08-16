@@ -71,11 +71,15 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		// produced (§3.3.2.1 dcl.elt.common clause 1, §3.2.2.2 dcl.att.local), so the
 		// gates admit it — provided the inline type's own shape is produced too.
 		// #442 produced the same tier 1 on the GLOBAL element path, which
-		// §3.3.2.2 dcl.elt.global leaves untouched, so the top-level form is
-		// admitted on the same proviso and its both-present-with-type= case becomes
-		// a genuine src-element clause 3 verdict.
+		// §3.3.2.2 dcl.elt.global leaves untouched, and #733 the tier-1 §3.2.2.1
+		// dcl.att.global states in dcl.att.local's own words, so both top-level
+		// forms are admitted on the same proviso and their both-present-with-type=
+		// cases become genuine src-element clause 3 / src-attribute clause 4
+		// verdicts.
 		{"top-level element with inline anonymous simpleType", `<xs:element name="e"><xs:simpleType><xs:restriction base="xs:string"><xs:maxLength value="3"/></xs:restriction></xs:simpleType></xs:element>`},
 		{"element with both type= and an inline simpleType (src-element clause 3)", `<xs:element name="e" type="xs:string"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:element>`},
+		{"top-level attribute with inline anonymous simpleType", `<xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:int"><xs:minInclusive value="1"/></xs:restriction></xs:simpleType></xs:attribute>`},
+		{"attribute with both type= and an inline simpleType (src-attribute clause 4)", `<xs:attribute name="a" type="xs:string"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`},
 		{"substitution group member whose head is typed by an inline simpleType", `<xs:element name="head"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:element><xs:element name="member" substitutionGroup="head"/>`},
 		{"local element with inline anonymous simpleType", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:simpleType><xs:restriction base="xs:string"><xs:maxLength value="3"/></xs:restriction></xs:simpleType></xs:element></xs:sequence></xs:complexType>`},
 		{"local attribute with inline anonymous simpleType", `<xs:complexType name="T"><xs:sequence/><xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType></xs:attribute></xs:complexType>`},
@@ -209,15 +213,12 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"simpleContent extension carrying a particle the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType>`},
 		{"simpleContent extension carrying a group ref the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:group ref="g"/></xs:extension></xs:simpleContent></xs:complexType>`},
 		{"complexContent extension with a bare nested group (no ref)", `<xs:complexType name="T"><xs:complexContent><xs:extension base="xs:anyType"><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:extension></xs:complexContent></xs:complexType>`},
-		{"attribute with inline simpleType", `<xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`},
-		// The deliberate asymmetry that survives #229, #340 and #442: the GLOBAL
-		// <attribute>'s inline <simpleType> mapping (§3.2.2.1 dcl.att.global) is
-		// still unproduced, and on every path an inline simple type outside the
-		// produced subset moves the decline inward. Since #740 admitted the last
-		// unproduced facet, the out-of-subset simple type is the one naming NONE of
-		// §3.16.2.1's three alternatives, and it is the specimen every recursion
-		// below carries.
+		// On every path an inline simple type outside the produced subset moves the
+		// decline inward. Since #740 admitted the last unproduced facet, the
+		// out-of-subset simple type is the one naming NONE of §3.16.2.1's three
+		// alternatives, and it is the specimen every recursion below carries.
 		{"top-level element with an inline simpleType outside the produced subset", `<xs:element name="e"><xs:simpleType/></xs:element>`},
+		{"top-level attribute with an inline simpleType outside the produced subset", `<xs:attribute name="a"><xs:simpleType/></xs:attribute>`},
 		{"local element with an inline simpleType outside the produced subset", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:simpleType/></xs:element></xs:sequence></xs:complexType>`},
 		{"local attribute with an inline simpleType outside the produced subset", `<xs:complexType name="T"><xs:sequence/><xs:attribute name="a"><xs:simpleType/></xs:attribute></xs:complexType>`},
 		// anonymousComplexTypeDecidable is NARROWER than complexTypeDecidable on
@@ -360,21 +361,47 @@ func TestSchemaExecutorDecidesInlineSimpleTypeSuiteCase(t *testing.T) {
 	}
 }
 
-// TestSchemaExecutorDeclinesUndecidableSuiteCase proves the false-accept guard on a
-// real fixture: AD_type00102m.xsd is suite-VALID but its top-level <attribute
-// name="number"> carries an inline anonymous <simpleType>, the tier-1 form the
-// GLOBAL ATTRIBUTE path still does not build (#229 widened §3.2.2.2 dcl.att.local
-// and #442 the global element chain; §3.2.2.1 dcl.att.global is neither), so the
-// executor must DECLINE (Fail) rather than vacuously pass — a valid-declared case
-// the executor refuses to claim, recording an honest gap. Skips when the
-// submodule is absent.
-func TestSchemaExecutorDeclinesUndecidableSuiteCase(t *testing.T) {
+// TestSchemaExecutorDecidesGlobalAttributeInlineSimpleTypeSuiteCase drives the real
+// executor over AD_type00102m.xsd, whose top-level <attribute name="number">
+// carries an inline anonymous <simpleType> — §3.2.2.1 dcl.att.global's tier 1,
+// produced as of #733. The suite declares it VALID, so the executor must decide it
+// and agree, and must Fail under the flipped expectation rather than passing
+// either way. Skips when the submodule is absent.
+func TestSchemaExecutorDecidesGlobalAttributeInlineSimpleTypeSuiteCase(t *testing.T) {
 	if _, err := os.Stat(suitePath()); err != nil {
 		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
 	}
 	exec := newSchemaExec()
 	doc := filepath.Join(suiteRoot, "sunData", "AttrDecl", "AD_type", "AD_type00102m", "AD_type00102m.xsd")
+	if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
+		t.Error("a suite-valid top-level <attribute> with an inline <simpleType> must now be decided and agreed with")
+	}
+	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectInvalid()}).IsPass() {
+		t.Error("executor must Fail under a flipped expectation (decides for real)")
+	}
+}
+
+// TestSchemaExecutorDeclinesUndecidableSuiteCase proves the false-accept guard on a
+// real fixture: baseTD00101m1.xsd is suite-VALID but its <complexType name="Test">
+// derives by <simpleContent> <restriction>, whose §3.4.2.2 cases 1-2 synthesize an
+// anonymous simple type the producer does not build, so complexTypeDecidable
+// declines it. The executor must therefore DECLINE (Fail) rather than vacuously
+// pass — a valid-declared case the executor refuses to claim, recording an honest
+// gap. Skips when the submodule is absent.
+//
+// Whatever fixture stands here must be one the producer still cannot build. When a
+// later slice produces this shape, REPOINT this test at another undecidable
+// fixture; deleting it retires the guard.
+func TestSchemaExecutorDeclinesUndecidableSuiteCase(t *testing.T) {
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
+	}
+	exec := newSchemaExec()
+	doc := filepath.Join(suiteRoot, "sunData", "CType", "baseTD", "baseTD00101m", "baseTD00101m1.xsd")
 	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
-		t.Error("a suite-valid case with a skipped top-level attribute simpleType must be DECLINED (Fail), never vacuously passed")
+		t.Error("a suite-valid case with a skipped <simpleContent> <restriction> must be DECLINED (Fail), never vacuously passed")
+	}
+	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectInvalid()}).IsPass() {
+		t.Error("the fixture must be DECLINED under both polarities; passing under the flipped one means it is decided, not declined")
 	}
 }
