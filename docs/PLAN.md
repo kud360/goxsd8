@@ -213,7 +213,7 @@ single command each time. **#570** is the issue that makes it permanent — bank
 per-lane decline baseline so every landing announces the cases it just made
 decidable — and **#571** is its soundness half.
 
-**The queue is 215 and the ready band is ten rows, and that gap is not a
+**The queue is 216 and the ready band is ten rows, and that gap is not a
 backlog problem.** `ready` means filed and unblocked; its size is an output and
 never a target (#347). What the size does argue for is #779: this pass spent a
 full read of 23 `blocked` bodies to conclude that nothing could be unblocked,
@@ -230,7 +230,7 @@ rule that a stale premise is fixed by editing the body — not by commenting onl
 evidence. **#851 and #853 were written to survive the defect**: both spell
 element names as `xs:alternative` rather than in angle brackets, so a future
 round-trip cannot silently empty them. That is a workaround at filing time and
-not a fix, and it does nothing for the 213 bodies already written.
+not a fix, and it does nothing for the 212 bodies already written.
 
 Everything else this queue needs is a develop iteration. **Start with #764**, or
 with **#842** if the session wants lane movement and can accept that its own
