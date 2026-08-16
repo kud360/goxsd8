@@ -47,6 +47,12 @@
 //     type, and namespace context for identity constraints all need it. An
 //     xsi:type displaces the ·governing type definition· at every depth, not
 //     only at the ·validation root·.
+//   - Conditional type assignment: a declaration's {type table}
+//     ·conditionally selects· the ·selected type definition· an xsi:type
+//     then ·overrides· or does not, through xpath's §3.12.6
+//     required-subset evaluator (cta.go). A {test} that evaluator
+//     declines withholds the element's ·governing type definition·
+//     instead of falling back to the declared type.
 //   - Identity constraints: node tables propagate UPWARD — a keyref on
 //     element E resolves only against key sequences sourced within E's
 //     own subtree; selector/field paths honor xpathDefaultNamespace for

@@ -230,11 +230,12 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 // where it has none.
 //
 // GAP(validate): three shapes decline instead — a declaration whose type was
-// not determinable (a {type table}, an unresolvable {type definition}, an
-// xsi:type whose ·override· could not be decided), an element that is ·nilled·,
-// and an element with no character information item [[child]] whose declaration
-// carries a {value constraint}, whose ·initial value· cvc-elt clause 5.1 takes
-// from that constraint and not from the empty content.
+// not determinable (a {type table} carrying a {test} the §3.12.6 evaluator
+// declines, an unresolvable {type definition}, an xsi:type whose ·override·
+// could not be decided), an element that is ·nilled·, and an element with no
+// character information item [[child]] whose declaration carries a {value
+// constraint}, whose ·initial value· cvc-elt clause 5.1 takes from that
+// constraint and not from the empty content.
 //
 // The middle one is a value the spec says IS ·absent· — §3.3.5.4 gives a
 // ·nilled· element an absent [schema normalized value] and so an absent [schema

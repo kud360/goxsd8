@@ -378,8 +378,9 @@ func (w *walk) identityExit(c *icCheck) {
 //   - a ·governing type definition· that is not a simple type definition and
 //     not a complex type with {content type}.{variety} simple, which is
 //     governance.simpleType's nil — including the case where no type was
-//     determinable at all (a {type table}, an unresolvable slot, an xsi:type
-//     whose ·override· could not be decided).
+//     determinable at all (a {type table} carrying a {test} the §3.12.6
+//     evaluator declines, an unresolvable slot, an xsi:type whose ·override·
+//     could not be decided).
 //   - GAP(validate): an element that is ·nilled· (§3.3.4.3, key-nilled).
 //     §3.3.5.4 gives it an absent [schema normalized value] and so an absent
 //     [schema actual value], and §3.11.4's own Note names a nilled node as
