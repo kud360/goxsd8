@@ -27,10 +27,11 @@ func sghOwner(t *testing.T, name QName, affiliations ...QName) (ElementDeclarati
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType(%s): %v", name, err)
 	}
-	e, err := NewElementDeclarationOwningType(xsderr.Loc{}, id, name, ct, nil, NewGlobalScope(), nil,
+	e, err := NewElementDeclarationOwningTypes(xsderr.Loc{}, id, name,
+		InlineTypeDefinition{Definition: ct}, nil, NewGlobalScope(), nil,
 		false, nil, affiliations, nil, false, nil, nil)
 	if err != nil {
-		t.Fatalf("NewElementDeclarationOwningType(%s): %v", name, err)
+		t.Fatalf("NewElementDeclarationOwningTypes(%s): %v", name, err)
 	}
 	return e, id
 }

@@ -16,9 +16,24 @@ import (
 func eTypeTable(t *testing.T, expression string, altType, defaultType QName) *TypeTable {
 	t.Helper()
 	test := NewXPathExpression(expression, nil, nil, nil)
-	tt, err := NewTypeTable(xsderr.Loc{},
-		[]TypeAlternative{NewTypeAlternative(&test, altType, nil)},
-		NewTypeAlternative(nil, defaultType, nil))
+	return eTypeTableOf(t, eAlternative(t, &test, TypeDefinitionRef{Name: altType}),
+		eAlternative(t, nil, TypeDefinitionRef{Name: defaultType}))
+}
+
+// eAlternative builds one Type Alternative over the {type definition} slot.
+func eAlternative(t *testing.T, test *XPathExpression, typeDefinition TypeDefinitionOrRef) TypeAlternative {
+	t.Helper()
+	ta, err := NewTypeAlternative(xsderr.Loc{}, test, typeDefinition, nil)
+	if err != nil {
+		t.Fatalf("NewTypeAlternative: %v", err)
+	}
+	return ta
+}
+
+// eTypeTableOf builds a {type table} from one alternative and a default.
+func eTypeTableOf(t *testing.T, alt, dflt TypeAlternative) *TypeTable {
+	t.Helper()
+	tt, err := NewTypeTable(xsderr.Loc{}, []TypeAlternative{alt}, dflt)
 	if err != nil {
 		t.Fatalf("NewTypeTable: %v", err)
 	}
@@ -183,6 +198,50 @@ func TestEDCEquivalentTypeTablesPass(t *testing.T) {
 	)
 	if err := uSchemaWithModel(t, g, nil); err != nil {
 		t.Fatalf("two equivalent {type table}s were rejected: %v", err)
+	}
+}
+
+// TestEDCInlineArmedTypeTablesDisagree pins clause 5 over §3.12.2 declare-ta's
+// INLINE arm: two same-named declarations whose alternatives each own an
+// anonymous type are NOT ·equivalent·, whatever the two types look like.
+// §3.4.6.5's no-identity Note does not make two independently written anonymous
+// types the same component, and key-equiv-ta's "a processor may treat two type
+// alternatives as non-equivalent" licenses the answer outright.
+func TestEDCInlineArmedTypeTablesDisagree(t *testing.T) {
+	inlineTable := func(t *testing.T) *TypeTable {
+		t.Helper()
+		test := NewXPathExpression("@kind eq 'x'", nil, nil, nil)
+		st, err := newCheckedSimpleType(xsderr.Loc{}, QName{}, nil, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("NewSimpleType: %v", err)
+		}
+		return eTypeTableOf(t, eAlternative(t, &test, InlineTypeDefinition{Definition: st}),
+			eAlternative(t, nil, TypeDefinitionRef{Name: uq("U")}))
+	}
+	g := uGroup(t, CompositorSequence,
+		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), inlineTable(t))}),
+		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), inlineTable(t))}),
+	)
+	expectRule(t, uSchemaWithModel(t, g, nil), ruleCosElementConsistent)
+}
+
+// TestEDCHeadInheritedTypeTablesAgree pins the one arm clause 5 finds genuinely
+// EQUIVALENT rather than licensed-false: two {default type definition}s that
+// inherit from the same substitution-group head name the SAME component, which
+// §3.4.6.5's Note lists among the cases where identity IS determined.
+func TestEDCHeadInheritedTypeTablesAgree(t *testing.T) {
+	headTable := func(t *testing.T) *TypeTable {
+		t.Helper()
+		test := NewXPathExpression("@kind eq 'x'", nil, nil, nil)
+		return eTypeTableOf(t, eAlternative(t, &test, TypeDefinitionRef{Name: uq("T")}),
+			eAlternative(t, nil, SubstitutionGroupHeadTypeRef{Head: uq("head")}))
+	}
+	g := uGroup(t, CompositorSequence,
+		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), headTable(t))}),
+		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), headTable(t))}),
+	)
+	if err := uSchemaWithModel(t, g, nil); err != nil {
+		t.Fatalf("two tables inheriting from one substitution-group head were rejected: %v", err)
 	}
 }
 

@@ -18,30 +18,43 @@ func edLocalScope(t *testing.T) xsd.Scope {
 	return s
 }
 
-// typeAlt is a small helper: a Type Alternative with the given test expression
-// (empty string means the test-absent "otherwise" alternative).
-func typeAlt(test string, typeName xsd.QName) xsd.TypeAlternative {
+// typeAlt is a small helper: a Type Alternative naming a top-level type, with
+// the given test expression (empty string means the test-absent "otherwise"
+// alternative).
+func typeAlt(t *testing.T, test string, typeName xsd.QName) xsd.TypeAlternative {
+	t.Helper()
 	if test == "" {
-		return xsd.NewTypeAlternative(nil, typeName, nil)
+		return newTypeAlt(t, nil, xsd.TypeDefinitionRef{Name: typeName})
 	}
 	x := xp(test)
-	return xsd.NewTypeAlternative(&x, typeName, nil)
+	return newTypeAlt(t, &x, xsd.TypeDefinitionRef{Name: typeName})
+}
+
+// newTypeAlt builds a Type Alternative over the {type definition} SLOT, for the
+// cases typeAlt's by-name shorthand cannot express.
+func newTypeAlt(t *testing.T, test *xsd.XPathExpression, typeDefinition xsd.TypeDefinitionOrRef) xsd.TypeAlternative {
+	t.Helper()
+	ta, err := xsd.NewTypeAlternative(xsderr.Loc{}, test, typeDefinition, nil)
+	if err != nil {
+		t.Fatalf("NewTypeAlternative: %v", err)
+	}
+	return ta
 }
 
 func TestNewTypeTableValid(t *testing.T) {
 	even := xsd.QName{Space: "urn:t", Local: "Even"}
 	dflt := xsd.QName{Space: "urn:t", Local: "Default"}
-	alts := []xsd.TypeAlternative{typeAlt("@a > 0", even)}
-	tt, err := xsd.NewTypeTable(xsderr.Loc{}, alts, typeAlt("", dflt))
+	alts := []xsd.TypeAlternative{typeAlt(t, "@a > 0", even)}
+	tt, err := xsd.NewTypeTable(xsderr.Loc{}, alts, typeAlt(t, "", dflt))
 	if err != nil {
 		t.Fatalf("NewTypeTable unexpected error: %v", err)
 	}
 	got := tt.Alternatives()
-	if len(got) != 1 || got[0].TypeDefinitionName() != even {
+	if len(got) != 1 || got[0].TypeDefinition() != (xsd.TypeDefinitionRef{Name: even}) {
 		t.Errorf("Alternatives() = %+v, want one alternative for %v", got, even)
 	}
-	if def := tt.DefaultTypeDefinition(); def.TypeDefinitionName() != dflt {
-		t.Errorf("DefaultTypeDefinition() type = %v, want %v", def.TypeDefinitionName(), dflt)
+	if def := tt.DefaultTypeDefinition(); def.TypeDefinition() != (xsd.TypeDefinitionRef{Name: dflt}) {
+		t.Errorf("DefaultTypeDefinition() type = %v, want %v", def.TypeDefinition(), dflt)
 	}
 	if _, ok := tt.DefaultTypeDefinition().Test(); ok {
 		t.Error("DefaultTypeDefinition().Test() ok = true, want false for the otherwise alternative")
@@ -50,8 +63,8 @@ func TestNewTypeTableValid(t *testing.T) {
 
 func TestNewTypeTableRejectsAlternativeWithoutTest(t *testing.T) {
 	// An {alternatives} member with an absent {test} violates clause 6.
-	alts := []xsd.TypeAlternative{typeAlt("", xsd.QName{Local: "T"})}
-	_, err := xsd.NewTypeTable(xsderr.Loc{}, alts, typeAlt("", xsd.QName{Local: "D"}))
+	alts := []xsd.TypeAlternative{typeAlt(t, "", xsd.QName{Local: "T"})}
+	_, err := xsd.NewTypeTable(xsderr.Loc{}, alts, typeAlt(t, "", xsd.QName{Local: "D"}))
 	if err == nil {
 		t.Fatal("NewTypeTable(alternative without test) succeeded, want e-props-correct error")
 	}
@@ -60,8 +73,8 @@ func TestNewTypeTableRejectsAlternativeWithoutTest(t *testing.T) {
 
 func TestNewTypeTableRejectsDefaultWithTest(t *testing.T) {
 	// The {default type definition} must be the test-absent alternative.
-	alts := []xsd.TypeAlternative{typeAlt("@a", xsd.QName{Local: "T"})}
-	_, err := xsd.NewTypeTable(xsderr.Loc{}, alts, typeAlt("@fallback", xsd.QName{Local: "D"}))
+	alts := []xsd.TypeAlternative{typeAlt(t, "@a", xsd.QName{Local: "T"})}
+	_, err := xsd.NewTypeTable(xsderr.Loc{}, alts, typeAlt(t, "@fallback", xsd.QName{Local: "D"}))
 	if err == nil {
 		t.Fatal("NewTypeTable(default with test) succeeded, want e-props-correct error")
 	}
@@ -69,27 +82,27 @@ func TestNewTypeTableRejectsDefaultWithTest(t *testing.T) {
 }
 
 func TestTypeTableAlternativesAccessorDoesNotAlias(t *testing.T) {
-	alts := []xsd.TypeAlternative{typeAlt("@a", xsd.QName{Local: "T"})}
-	tt, err := xsd.NewTypeTable(xsderr.Loc{}, alts, typeAlt("", xsd.QName{Local: "D"}))
+	alts := []xsd.TypeAlternative{typeAlt(t, "@a", xsd.QName{Local: "T"})}
+	tt, err := xsd.NewTypeTable(xsderr.Loc{}, alts, typeAlt(t, "", xsd.QName{Local: "D"}))
 	if err != nil {
 		t.Fatalf("NewTypeTable: %v", err)
 	}
 	first := tt.Alternatives()
-	first[0] = typeAlt("@z", xsd.QName{Local: "Tampered"})
-	if second := tt.Alternatives(); second[0].TypeDefinitionName() != (xsd.QName{Local: "T"}) {
-		t.Errorf("Alternatives() returned an aliased slice: got %v", second[0].TypeDefinitionName())
+	first[0] = typeAlt(t, "@z", xsd.QName{Local: "Tampered"})
+	if second := tt.Alternatives(); second[0].TypeDefinition() != (xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}) {
+		t.Errorf("Alternatives() returned an aliased slice: got %v", second[0].TypeDefinition())
 	}
 }
 
 func TestTypeTableDoesNotAliasConstructorAlternatives(t *testing.T) {
-	alts := []xsd.TypeAlternative{typeAlt("@a", xsd.QName{Local: "T"})}
-	tt, err := xsd.NewTypeTable(xsderr.Loc{}, alts, typeAlt("", xsd.QName{Local: "D"}))
+	alts := []xsd.TypeAlternative{typeAlt(t, "@a", xsd.QName{Local: "T"})}
+	tt, err := xsd.NewTypeTable(xsderr.Loc{}, alts, typeAlt(t, "", xsd.QName{Local: "D"}))
 	if err != nil {
 		t.Fatalf("NewTypeTable: %v", err)
 	}
-	alts[0] = typeAlt("@z", xsd.QName{Local: "Tampered"})
-	if got := tt.Alternatives(); got[0].TypeDefinitionName() != (xsd.QName{Local: "T"}) {
-		t.Errorf("TypeTable aliased the constructor slice: got %v", got[0].TypeDefinitionName())
+	alts[0] = typeAlt(t, "@z", xsd.QName{Local: "Tampered"})
+	if got := tt.Alternatives(); got[0].TypeDefinition() != (xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}) {
+		t.Errorf("TypeTable aliased the constructor slice: got %v", got[0].TypeDefinition())
 	}
 }
 
@@ -150,7 +163,7 @@ func TestNewElementDeclarationValidWithAffiliations(t *testing.T) {
 }
 
 func TestNewElementDeclarationTypeTableAndValueConstraintPresent(t *testing.T) {
-	tt, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{typeAlt("@a", xsd.QName{Local: "T"})}, typeAlt("", xsd.QName{Local: "D"}))
+	tt, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{typeAlt(t, "@a", xsd.QName{Local: "T"})}, typeAlt(t, "", xsd.QName{Local: "D"}))
 	if err != nil {
 		t.Fatalf("NewTypeTable: %v", err)
 	}
@@ -163,8 +176,8 @@ func TestNewElementDeclarationTypeTableAndValueConstraintPresent(t *testing.T) {
 	if !ok {
 		t.Fatal("TypeTable() ok = false, want true")
 	}
-	if gotTT.DefaultTypeDefinition().TypeDefinitionName() != (xsd.QName{Local: "D"}) {
-		t.Errorf("TypeTable default = %v, want D", gotTT.DefaultTypeDefinition().TypeDefinitionName())
+	if gotTT.DefaultTypeDefinition().TypeDefinition() != (xsd.TypeDefinitionRef{Name: xsd.QName{Local: "D"}}) {
+		t.Errorf("TypeTable default = %v, want D", gotTT.DefaultTypeDefinition().TypeDefinition())
 	}
 	gotVC, ok := e.ValueConstraint()
 	if !ok {
@@ -467,18 +480,18 @@ func edAnonType(t *testing.T, context xsd.ComplexTypeContext) xsd.ComplexType {
 	return ct
 }
 
-// TestNewElementDeclarationOwningTypeMatchingIdentity pins the accepting case of
+// TestNewElementDeclarationOwningTypesMatchingIdentity pins the accepting case of
 // the §3.4.2.1 dcl.ctd.common round trip: one identity minted for the inline
 // construct, threaded into the type's {context} and into the declaration that
 // owns it, so the two compare == and the slot reads back as the InlineTypeDefinition
 // arm holding that very type.
-func TestNewElementDeclarationOwningTypeMatchingIdentity(t *testing.T) {
+func TestNewElementDeclarationOwningTypesMatchingIdentity(t *testing.T) {
 	id := xsd.NewComponentID()
 	ct := edAnonType(t, xsd.ElementDeclarationContext{Component: id})
-	e, err := xsd.NewElementDeclarationOwningType(xsderr.Loc{}, id, xsd.QName{Local: "doc"}, ct,
+	e, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, id, xsd.QName{Local: "doc"}, xsd.InlineTypeDefinition{Definition: ct},
 		nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
-		t.Fatalf("NewElementDeclarationOwningType: %v", err)
+		t.Fatalf("NewElementDeclarationOwningTypes: %v", err)
 	}
 	inline, ok := e.TypeDefinition().(xsd.InlineTypeDefinition)
 	if !ok {
@@ -499,12 +512,12 @@ func TestNewElementDeclarationOwningTypeMatchingIdentity(t *testing.T) {
 	}
 }
 
-// TestNewElementDeclarationOwningTypeRejectsBadIdentity pins the three states the
+// TestNewElementDeclarationOwningTypesRejectBadIdentity pins the three states the
 // owning constructor makes unrepresentable, all charged component-invariant: an
 // unminted owner identity, a {context} naming a DIFFERENT element declaration,
 // and a ComplexTypeDefinitionContext in a slot §3.4.2.1 gives exactly one case
 // for, which yields an Element Declaration.
-func TestNewElementDeclarationOwningTypeRejectsBadIdentity(t *testing.T) {
+func TestNewElementDeclarationOwningTypesRejectBadIdentity(t *testing.T) {
 	id := xsd.NewComponentID()
 	for _, tc := range []struct {
 		name string
@@ -516,30 +529,30 @@ func TestNewElementDeclarationOwningTypeRejectsBadIdentity(t *testing.T) {
 		{"context is a complex type definition", id, edAnonType(t, xsd.ComplexTypeDefinitionContext{Component: id})},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := xsd.NewElementDeclarationOwningType(xsderr.Loc{}, tc.id, xsd.QName{Local: "doc"}, tc.ct,
+			_, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, tc.id, xsd.QName{Local: "doc"}, xsd.InlineTypeDefinition{Definition: tc.ct},
 				nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 			if err == nil {
-				t.Fatal("NewElementDeclarationOwningType succeeded, want a component-invariant rejection")
+				t.Fatal("NewElementDeclarationOwningTypes succeeded, want a component-invariant rejection")
 			}
 			assertRule(t, err, xsderr.RuleComponentInvariant)
 		})
 	}
 }
 
-// TestNewElementDeclarationOwningTypeRejectsNamedType pins that the owning
+// TestNewElementDeclarationOwningTypesRejectNamedType pins that the owning
 // constructor is for ANONYMOUS types only: a NAMED complex type is reachable by
 // name and so is always the TypeDefinitionRef arm. The verdict comes from the
 // shared core's InlineTypeDefinition shape check, not from a duplicate of it.
-func TestNewElementDeclarationOwningTypeRejectsNamedType(t *testing.T) {
+func TestNewElementDeclarationOwningTypesRejectNamedType(t *testing.T) {
 	named, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "T"}, xsd.QName{Local: "anyType"}, nil,
 		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewComplexType: %v", err)
 	}
-	_, err = xsd.NewElementDeclarationOwningType(xsderr.Loc{}, xsd.NewComponentID(), xsd.QName{Local: "doc"}, named,
+	_, err = xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, xsd.NewComponentID(), xsd.QName{Local: "doc"}, xsd.InlineTypeDefinition{Definition: named},
 		nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 	if err == nil {
-		t.Fatal("NewElementDeclarationOwningType accepted a NAMED complex type")
+		t.Fatal("NewElementDeclarationOwningTypes accepted a NAMED complex type")
 	}
 	assertRule(t, err, xsderr.RuleComponentInvariant)
 }
@@ -554,6 +567,77 @@ func TestNewElementDeclarationRejectsOwnedComplexType(t *testing.T) {
 		xsd.InlineTypeDefinition{Definition: ct}, nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 	if err == nil {
 		t.Fatal("NewElementDeclaration accepted an InlineTypeDefinition wrapping a ComplexType")
+	}
+	assertRule(t, err, xsderr.RuleComponentInvariant)
+}
+
+// TestNewElementDeclarationRejectsOwnedComplexTypeInTypeTable pins that the
+// partition covers the {type table}'s slots too. A Type Alternative on §3.12.2
+// declare-ta's inline arm owns an anonymous complex type exactly as the
+// declaration's own slot does, so admitting one here would leave the hole the
+// identity-taking constructor exists to close.
+func TestNewElementDeclarationRejectsOwnedComplexTypeInTypeTable(t *testing.T) {
+	ct := edAnonType(t, xsd.ElementDeclarationContext{Component: xsd.NewComponentID()})
+	inline := xsd.InlineTypeDefinition{Definition: ct}
+	x := xp("@k")
+	for _, tc := range []struct {
+		name string
+		tt   func(t *testing.T) xsd.TypeTable
+	}{
+		{"an {alternatives} member", func(t *testing.T) xsd.TypeTable {
+			tt, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{newTypeAlt(t, &x, inline)}, typeAlt(t, "", xsd.QName{Local: "D"}))
+			if err != nil {
+				t.Fatalf("NewTypeTable: %v", err)
+			}
+			return tt
+		}},
+		{"the {default type definition}", func(t *testing.T) xsd.TypeTable {
+			tt, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{typeAlt(t, "@k", xsd.QName{Local: "T"})}, newTypeAlt(t, nil, inline))
+			if err != nil {
+				t.Fatalf("NewTypeTable: %v", err)
+			}
+			return tt
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tt := tc.tt(t)
+			_, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "doc"},
+				xsd.TypeDefinitionRef{Name: xsd.QName{Local: "T"}}, &tt, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+			if err == nil {
+				t.Fatal("NewElementDeclaration accepted a {type table} owning an anonymous complex type")
+			}
+			assertRule(t, err, xsderr.RuleComponentInvariant)
+		})
+	}
+}
+
+// TestNewElementDeclarationOwningTypesChecksTableContexts pins that the
+// identity-taking constructor checks the {type table}'s owned types against the
+// SAME identity as the declaration's own slot — §3.4.2.1 dcl.ctd.common climbs to
+// the nearest ancestor <element> whatever the child position, so one declaration
+// is the {context} of all of them.
+func TestNewElementDeclarationOwningTypesChecksTableContexts(t *testing.T) {
+	id := xsd.NewComponentID()
+	x := xp("@k")
+	table := func(t *testing.T, context xsd.ComplexTypeContext) *xsd.TypeTable {
+		t.Helper()
+		alt := newTypeAlt(t, &x, xsd.InlineTypeDefinition{Definition: edAnonType(t, context)})
+		tt, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{alt}, typeAlt(t, "", xsd.QName{Local: "D"}))
+		if err != nil {
+			t.Fatalf("NewTypeTable: %v", err)
+		}
+		return &tt
+	}
+	own := xsd.InlineTypeDefinition{Definition: edAnonType(t, xsd.ElementDeclarationContext{Component: id})}
+
+	if _, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, id, xsd.QName{Local: "doc"}, own,
+		table(t, xsd.ElementDeclarationContext{Component: id}), xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil); err != nil {
+		t.Fatalf("NewElementDeclarationOwningTypes rejected a table whose alternative shares the declaration's identity: %v", err)
+	}
+	_, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, id, xsd.QName{Local: "doc"}, own,
+		table(t, xsd.ElementDeclarationContext{Component: xsd.NewComponentID()}), xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+	if err == nil {
+		t.Fatal("NewElementDeclarationOwningTypes accepted an alternative whose anonymous type is contexted in ANOTHER declaration")
 	}
 	assertRule(t, err, xsderr.RuleComponentInvariant)
 }

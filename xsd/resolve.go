@@ -727,15 +727,20 @@ func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 	return nil
 }
 
-// resolveTypeTable resolves each Type Alternative's {type definition} reference
-// (src-resolve clause 1.1; §3.12.3 maps the type/@type of a <alternative> via
-// [·resolved·]). Both the {alternatives} members and the {default type
-// definition} carry the same QName reference slot.
+// resolveTypeTable resolves each Type Alternative's {type definition} slot
+// (src-resolve clause 1.1; §3.12.2 declare-ta maps the type attribute of an
+// <alternative> via [·resolved·]). Both the {alternatives} members and the
+// {default type definition} carry the same TypeDefinitionOrRef slot an element
+// declaration's own {type definition} does, so both go through
+// resolveTypeDefinition (STYLE T4) — which is already total over the sum: it
+// charges src-resolve for the by-name arm, DESCENDS an inline arm's own internal
+// references without charging the slot itself, and leaves an ·absent· §5.3 head
+// uncharged.
 //
 // loc is the owning element declaration's position: neither TypeTable nor
-// TypeAlternative retains one (TypeAlternative's constructor does not even take a
-// loc — typealternative.go), and both live inside the <element> the position
-// names.
+// TypeAlternative retains one (TypeAlternative does not store the loc its
+// constructor takes — typealternative.go), and both live inside the <element> the
+// position names.
 //
 // GAP(xsd): e-props-correct clause 7 (§3.3.6.1) is NOT charged here, so a {type
 // table} whose alternative type T is not ·validly substitutable· for the
@@ -755,14 +760,11 @@ func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 // processor otherwise accepts stays accepted (#823).
 func (s *Schema) resolveTypeTable(tt TypeTable, loc xsderr.Loc) error {
 	for _, alt := range tt.Alternatives() {
-		if _, err := resolveTypeName(s, alt.TypeDefinitionName(), loc, "type alternative {type definition}"); err != nil {
+		if err := s.resolveTypeDefinition(alt.TypeDefinition(), loc, "type alternative {type definition}"); err != nil {
 			return err
 		}
 	}
-	if _, err := resolveTypeName(s, tt.DefaultTypeDefinition().TypeDefinitionName(), loc, "type table {default type definition}"); err != nil {
-		return err
-	}
-	return nil
+	return s.resolveTypeDefinition(tt.DefaultTypeDefinition().TypeDefinition(), loc, "type table {default type definition}")
 }
 
 // resolveAttributeDecl resolves an attribute declaration's {type definition}

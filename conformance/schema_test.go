@@ -96,6 +96,16 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"local element with an inline complexType", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType/></xs:element></xs:sequence></xs:complexType>`},
 		{"inline complexType nested inside an inline complexType", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType><xs:sequence/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`},
 		{"element with both type= and an inline complexType (src-element clause 3)", `<xs:element name="e" type="xs:string"><xs:complexType/></xs:element>`},
+		// #822 produced §3.12.2 declare-ta's INLINE arm, so an <alternative>'s type
+		// child is gated rather than ignored — through complexTypeDecidable, not the
+		// narrower anonymousComplexTypeDecidable, because no reader ever governs an
+		// instance with an alternative-owned type (alternativeTypesDecidable).
+		{"element whose alternative names a type", `<xs:element name="e" type="xs:string"><xs:alternative test="@k" type="xs:int"/></xs:element>`},
+		{"element whose alternative owns an implicit-content complexType", `<xs:element name="e" type="xs:string"><xs:alternative test="@k"><xs:complexType><xs:sequence/></xs:complexType></xs:alternative></xs:element>`},
+		{"element whose alternative owns a complexContent extension", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:element name="e" type="B"><xs:alternative test="@k"><xs:complexType><xs:complexContent><xs:extension base="B"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType></xs:alternative></xs:element>`},
+		{"element whose alternative owns a simpleContent extension", `<xs:element name="e" type="xs:string"><xs:alternative test="@k"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:alternative></xs:element>`},
+		{"element whose alternative owns a simpleType", `<xs:element name="e" type="xs:string"><xs:alternative test="@k"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:alternative></xs:element>`},
+		{"local element whose alternative owns a complexType", `<xs:complexType name="T"><xs:sequence><xs:element name="a" type="xs:string"><xs:alternative test="@k"><xs:complexType><xs:sequence/></xs:complexType></xs:alternative></xs:element></xs:sequence></xs:complexType>`},
 		{"local element with both type= and an inline complexType (src-element clause 3)", `<xs:complexType name="T"><xs:sequence><xs:element name="a" type="xs:string"><xs:complexType/></xs:element></xs:sequence></xs:complexType>`},
 		{"override child with an inline complexType", `<xs:override schemaLocation="b.xsd"><xs:element name="e"><xs:complexType/></xs:element></xs:override>`},
 		{"local element with name= identity constraint", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:unique name="u"><xs:selector xpath="b"/><xs:field xpath="@x"/></xs:unique></xs:element></xs:sequence></xs:complexType>`},
@@ -221,6 +231,11 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"element with an inline complexType using simpleContent", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element>`},
 		{"local element with an inline complexType using complexContent", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType></xs:element></xs:sequence></xs:complexType>`},
 		{"inline complexType whose own content is undecidable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:simpleType/></xs:element></xs:sequence></xs:complexType></xs:element>`},
+		// An <alternative>'s type child is gated by what the PRODUCER covers, so
+		// the shapes it declines with a limitation error decline here too (#822).
+		{"element whose alternative owns a simpleContent restriction", `<xs:element name="e" type="xs:string"><xs:alternative test="@k"><xs:complexType><xs:simpleContent><xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleContent></xs:complexType></xs:alternative></xs:element>`},
+		{"element whose alternative owns a simpleType outside the produced subset", `<xs:element name="e" type="xs:string"><xs:alternative test="@k"><xs:simpleType/></xs:alternative></xs:element>`},
+		{"local element whose alternative owns a bare nested group", `<xs:complexType name="T"><xs:sequence><xs:element name="a" type="xs:string"><xs:alternative test="@k"><xs:complexType><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:complexType></xs:alternative></xs:element></xs:sequence></xs:complexType>`},
 		{"inline complexType nesting an explicit-content inline complexType", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`},
 		{"list-variety simpleType whose inline item is itself undecidable", `<xs:simpleType name="L"><xs:list><xs:simpleType/></xs:list></xs:simpleType>`},
 		{"union-variety simpleType whose inline member is itself undecidable", `<xs:simpleType name="U"><xs:union memberTypes="xs:string"><xs:simpleType/></xs:union></xs:simpleType>`},

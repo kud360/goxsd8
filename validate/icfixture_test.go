@@ -133,6 +133,17 @@ func icLocal(t *testing.T, parent string, name xsd.QName, typ xsd.QName, nillabl
 	return d
 }
 
+// vTypeAlt builds one Type Alternative over the {type definition} slot, for the
+// two fixtures in this package that carry a {type table}.
+func vTypeAlt(t *testing.T, test *xsd.XPathExpression, typeDefinition xsd.TypeDefinitionOrRef) xsd.TypeAlternative {
+	t.Helper()
+	ta, err := xsd.NewTypeAlternative(xsderr.Loc{}, test, typeDefinition, nil)
+	if err != nil {
+		t.Fatalf("NewTypeAlternative: %v", err)
+	}
+	return ta
+}
+
 // icTabled builds a local element declaration carrying a {type table}, whose
 // ·selected type definition· is whichever <alternative> ·conditionally selects·
 // one for the instance (§3.3.4.2). Evaluating a {test} means XPath (#56), so
@@ -145,9 +156,9 @@ func icTabled(t *testing.T, parent string, name xsd.QName) xsd.ElementDeclaratio
 		t.Fatalf("NewLocalScope: %v", err)
 	}
 	test := xsd.NewXPathExpression("@k", nil, nil, nil)
-	alt := xsd.NewTypeAlternative(&test, icBuiltin("string"), nil)
+	alt := vTypeAlt(t, &test, xsd.TypeDefinitionRef{Name: icBuiltin("string")})
 	table, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{alt},
-		xsd.NewTypeAlternative(nil, icBuiltin("string"), nil))
+		vTypeAlt(t, nil, xsd.TypeDefinitionRef{Name: icBuiltin("string")}))
 	if err != nil {
 		t.Fatalf("building the type table: %v", err)
 	}
@@ -387,7 +398,7 @@ func icUnfoldedSchema(t *testing.T, kidAid, topAid string, rootICs []xsd.Identit
 	if err != nil {
 		t.Fatalf("NewLocalScope: %v", err)
 	}
-	kid, err := xsd.NewElementDeclarationOwningType(xsderr.Loc{}, kidID, xsd.QName{Local: "kid"}, kidType,
+	kid, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, kidID, xsd.QName{Local: "kid"}, xsd.InlineTypeDefinition{Definition: kidType},
 		nil, scope, nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("building the kid element declaration: %v", err)

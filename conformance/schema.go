@@ -821,6 +821,11 @@ func overrideDecidable(el *parser.Element) bool {
 // error (#442; before it, the head's own decline here is what kept the shape out
 // of reach).
 //
+// Its <alternative> children impose the SAME condition as its own type children,
+// through alternativeTypesDecidable: since #822 the producer maps §3.12.2
+// declare-ta's inline arm, so an <alternative>'s type child is built by the very
+// producers these two gates judge.
+//
 // Its <unique>/<key>/<keyref> children impose no condition of their own: #178
 // produced the name= form and #240 the ref= form, so BOTH are mapped and both
 // src-identity-constraint (§3.11.3) and c-props-correct (§3.11.6.1) rejections on
@@ -829,8 +834,53 @@ func elementDecidable(el *parser.Element) bool {
 	if st := childXSD(el, "simpleType"); st != nil && !simpleTypeDecidable(st) {
 		return false
 	}
-	inline := childXSD(el, "complexType")
-	return inline == nil || anonymousComplexTypeDecidable(inline)
+	if inline := childXSD(el, "complexType"); inline != nil && !anonymousComplexTypeDecidable(inline) {
+		return false
+	}
+	return alternativeTypesDecidable(el)
+}
+
+// alternativeTypesDecidable reports whether every inline type child of every
+// <alternative> of an <element> is decidable (§3.12.2 declare-ta's inline arm,
+// produced since #822). It must gate SOMETHING: before that landing the producer
+// never visited those children at all, so admitting them silently would let a
+// shape the producer declines with a limitation error be reported as a fabricated
+// "invalid".
+//
+// The <complexType> child goes through complexTypeDecidable, the PRODUCER-
+// coverage gate, and NOT through the narrower anonymousComplexTypeDecidable
+// beside it. That narrowing exists for the readers of a GOVERNING type: an
+// element-owned anonymous type with a <complexContent> base has {attribute uses}
+// the §3.4.2.4 clause 3 fold never materialised, and validate reads exactly that
+// property when the type governs an instance element. An ALTERNATIVE-owned type
+// has no such reader in either lane — validate's walk.governingType declines any
+// declaration carrying a {type table} BEFORE it selects a type (assess.go), and a
+// {type table} is the only path to this type — so what is left unenforced on it
+// is what is unenforced on every anonymous type: the finalize passes that
+// quantify over the Schema's {type definitions} (cos-nonambig,
+// cos-element-consistent, ct-props-correct clause 4, the Phase D derivation
+// verdicts). All are UNDER-rejections, the safe direction for a ratchet, and
+// xsd/complexderivation.go's GAP marker owns them.
+//
+// What complexTypeDecidable still declines is the producer's own limitation set —
+// a <simpleContent> <restriction>, a <complexContent> with neither alternant, a
+// bare <group>/<attributeGroup> — each of which would surface as a
+// limitation-shaped error rather than a verdict.
+//
+// An <alternative> on the type= arm has no type child and imposes no condition;
+// its name is a deferred reference whose src-resolve failure is genuine. One
+// carrying neither form, or both, is admitted here and rejected by the producer
+// under src-ta (§3.12.3), which is the genuine verdict for it.
+func alternativeTypesDecidable(el *parser.Element) bool {
+	for _, alt := range childrenXSD(el, "alternative") {
+		if ct := childXSD(alt, "complexType"); ct != nil && !complexTypeDecidable(ct) {
+			return false
+		}
+		if st := childXSD(alt, "simpleType"); st != nil && !simpleTypeDecidable(st) {
+			return false
+		}
+	}
+	return true
 }
 
 // anonymousComplexTypeDecidable reports whether the ANONYMOUS complex type of an
@@ -1134,13 +1184,17 @@ func attributeDecidable(el *parser.Element) bool {
 // An inline <complexType> is produced too as of #340, on this path and on the
 // global one alike (§3.3.2.1's tier 1 is a COMMON rule), and is admitted under
 // the same proviso — see anonymousComplexTypeDecidable for why that gate is
-// narrower than complexTypeDecidable.
+// narrower than complexTypeDecidable. Its <alternative> children are gated
+// exactly as the global form's are (alternativeTypesDecidable): §3.3.2.1's {type
+// table} row is a COMMON mapping rule too.
 func localElementDecidable(el *parser.Element) bool {
 	if ct := childXSD(el, "complexType"); ct != nil && !anonymousComplexTypeDecidable(ct) {
 		return false
 	}
-	inline := childXSD(el, "simpleType")
-	return inline == nil || simpleTypeDecidable(inline)
+	if inline := childXSD(el, "simpleType"); inline != nil && !simpleTypeDecidable(inline) {
+		return false
+	}
+	return alternativeTypesDecidable(el)
 }
 
 // localAttributeDecidable reports whether a LOCAL <attribute> — a child of a

@@ -328,25 +328,20 @@ func typeTablesEquivalent(a, b TypeTable) bool {
 // and takes that license for everything else — a legal implementation choice, not
 // an unimplemented gap.
 //
-// Clause 5 ("the same type definition") is answered by comparing the
-// pre-resolution {type definition} QNames. Two ANONYMOUS type definitions both
-// present as the zero QName and are indistinguishable, so a zero name is reported
-// as NOT the same type definition, which is precisely the license above. That
-// never rejects a schema for reaching one declaration twice: a declaration
-// reached twice is one component, de-duplicated by key before these clauses run,
-// which is how the "Any Type Alternative is equivalent to itself" case is
-// discharged (TypeAlternative holds slices and so is not ==-comparable, leaving
-// component identity as the only sound reading of "itself").
+// Clause 5 ("the same type definition") is answered by typeDefinitionsEquivalent
+// over the {type definition} SLOT. That never rejects a schema for reaching one
+// declaration twice: a declaration reached twice is one component, de-duplicated
+// by key before these clauses run, which is how the "Any Type Alternative is
+// equivalent to itself" case is discharged (TypeAlternative holds slices and so
+// is not ==-comparable, leaving component identity as the only sound reading of
+// "itself").
 //
 // Clauses 1-4 read {test}. They presuppose a present {test}: the {default type
 // definition} has none by construction (e-props-correct clause 6), and two absent
 // {test}s leave clause 5 as the whole test.
 func typeAlternativesEquivalent(a, b TypeAlternative) bool {
-	if a.typeDefinitionName != b.typeDefinitionName {
+	if !typeDefinitionsEquivalent(a.typeDefinition, b.typeDefinition) {
 		return false // clause 5
-	}
-	if a.typeDefinitionName == (QName{}) {
-		return false // clause 5, undecidable for anonymous types: spec-licensed
 	}
 	ta, aPresent := a.Test()
 	tb, bPresent := b.Test()
@@ -370,6 +365,46 @@ func typeAlternativesEquivalent(a, b TypeAlternative) bool {
 		return false // clause 3
 	}
 	return ta.Expression() == tb.Expression() // clause 4
+}
+
+// typeDefinitionsEquivalent is key-equiv-ta clause 5, "the same type definition",
+// over the {type definition} SLOT rather than over resolved components. It
+// switches on the arms rather than comparing the interfaces: an
+// InlineTypeDefinition may wrap a ComplexType, which holds slices, so == on the
+// slot PANICS at runtime, and the *SimpleType it may wrap instead would compare
+// by pointer identity — two silent wrongs from one operator.
+//
+//   - TypeDefinitionRef: the same expanded name is the same top-level component,
+//     the pre-resolution reading resolveTypeName makes exact.
+//   - SubstitutionGroupHeadTypeRef: the same head is the SAME component, not a
+//     copy. §3.4.6.5's no-identity Note lists "when an element's type definition
+//     defaults to being the same type definition as that of its
+//     substitution-group head" among the cases where component identity IS
+//     determined by the specification, and this arm is how that identity is
+//     encoded.
+//   - InlineTypeDefinition: never equivalent, spec-licensed. §3.4.6.5's Note
+//     enumerates the cases where identity IS determined, and two independently
+//     written anonymous types under two same-named declarations are not among
+//     them, so the spec does not make them "the same type definition";
+//     key-equiv-ta's own "a processor may treat two type alternatives as
+//     non-equivalent if they do not satisfy the conditions just given" then
+//     licenses the answer outright.
+//   - nil: an absent slot names no type definition, so it is the same as nothing.
+func typeDefinitionsEquivalent(a, b TypeDefinitionOrRef) bool {
+	switch x := a.(type) {
+	case TypeDefinitionRef:
+		y, ok := b.(TypeDefinitionRef)
+		return ok && x.Name == y.Name
+	case SubstitutionGroupHeadTypeRef:
+		y, ok := b.(SubstitutionGroupHeadTypeRef)
+		return ok && x.Head == y.Head
+	case InlineTypeDefinition:
+		return false
+	case nil:
+		return false
+	default:
+		panic("xsd: typeDefinitionsEquivalent: non-exhaustive TypeDefinitionOrRef switch")
+	}
 }
 
 // optionalStringsEqual compares two Optional anyURI properties: they agree when

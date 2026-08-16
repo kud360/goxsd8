@@ -21,12 +21,20 @@ package xsd
 //
 //	edID := xsd.NewComponentID()
 //	ct, err := xsd.NewAnonymousComplexType(ctLoc, xsd.ElementDeclarationContext{Component: edID}, …)
-//	ed, err := xsd.NewElementDeclarationOwningType(edLoc, edID, name, ct, …)
+//	ed, err := xsd.NewElementDeclarationOwningTypes(edLoc, edID, name, xsd.InlineTypeDefinition{Definition: ct}, …)
 //
 // The same edID is what every local element declaration nested in ct's own
 // content model reports as its {scope}.{parent}, through
-// xsd.AnonymousComplexTypeScopeParent{Owner: edID}: one mint per inline
-// construct identifies the construct from both directions.
+// xsd.AnonymousComplexTypeScopeParent{Owner: edID}: one mint per OWNERSHIP EDGE
+// identifies the edge from both directions.
+//
+// An owner may stand at the head of SEVERAL edges, and then only the edge tokens
+// tell its containers apart. §3.4.2.1 dcl.ctd.common gives the anonymous type of
+// an <xs:alternative> the enclosing element declaration as its {context}, the
+// same value that declaration's own inline type gets, so the parser mints a
+// second token for that edge and threads it into the nested scopes alone
+// (parser/produce_complex.go's typeAlternativeOwnedComplexType). Reusing edID
+// there would make two structurally distinct containers indistinguishable.
 //
 // The zero ComponentID is the UNMINTED identity: it identifies no component and
 // is the absent value. Callers test presence by comparing against it

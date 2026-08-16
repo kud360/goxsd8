@@ -32,7 +32,7 @@ func dAnyType(t *testing.T) ComplexType {
 
 // dOwnInline builds the element declaration that OWNS ct, an ANONYMOUS complex
 // type a helper here already minted the {context} identity for. It reads that
-// identity back off the type and hands it to NewElementDeclarationOwningType,
+// identity back off the type and hands it to NewElementDeclarationOwningTypes,
 // the only entry point for this shape, so the two halves of §3.4.2.1
 // dcl.ctd.common agree by construction. A caller that mints the identity itself
 // calls the constructor directly instead — this helper exists for the tests
@@ -43,10 +43,11 @@ func dOwnInline(t *testing.T, name QName, ct ComplexType, scope Scope, affiliati
 	if !ok {
 		t.Fatalf("dOwnInline(%s): the complex type is NAMED (%s), so it is not owned by a declaration", name, ct.Name())
 	}
-	e, err := NewElementDeclarationOwningType(xsderr.Loc{}, context.ID(), name, ct, nil, scope,
+	e, err := NewElementDeclarationOwningTypes(xsderr.Loc{}, context.ID(), name,
+		InlineTypeDefinition{Definition: ct}, nil, scope,
 		nil, false, nil, affiliations, nil, false, nil, nil)
 	if err != nil {
-		t.Fatalf("NewElementDeclarationOwningType(%s): %v", name, err)
+		t.Fatalf("NewElementDeclarationOwningTypes(%s): %v", name, err)
 	}
 	return e
 }

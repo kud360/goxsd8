@@ -1780,10 +1780,13 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 // COMMON mapping rule — §3.3.2.2 supplements only {scope} and {target
 // namespace}, never {type definition} — so no tier of it is mapped differently
 // here than on the local path. Tier 1's inline <complexType> child is mapped in
-// this function, and only because that arm alone needs an identity minted before
-// either component exists: one xsd.ComponentID serves as both the anonymous
-// type's {context} (§3.4.2.1 dcl.ctd.common) and the {scope}.{parent} of its own
-// nested local elements (#340). Tier 1's inline <simpleType> child and tier 2's
+// this function, and only because that arm needs an identity minted before either
+// component exists: one xsd.ComponentID serves as both the anonymous type's
+// {context} (§3.4.2.1 dcl.ctd.common) and the {scope}.{parent} of its own nested
+// local elements (#340). The declaration's identity is minted on EVERY path, not
+// just that one, because §3.4.2.1 gives the same {context} to the anonymous type
+// of any <xs:alternative> child too, whatever arm the declaration's own {type
+// definition} took (typeTableOf, #822). Tier 1's inline <simpleType> child and tier 2's
 // type= go through declaredType, the one implementation both element forms and
 // the local attribute form share (STYLE T4, #442). The anonymous simple type it
 // builds carries no {context} of its own: §3.16.1 std-context is a separate
@@ -1831,12 +1834,15 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
+	edID := xsd.NewComponentID()
 	var typeDef xsd.TypeDefinitionOrRef = xsd.TypeDefinitionRef{Name: anyTypeName} // §3.3.2.1 case 4
 	switch {
 	case inlineComplex != nil:
-		// Clause 1 wins outright and typeDef is never read on this path — the
-		// inline branch below builds the type itself, from an identity minted
-		// there — so the lower clauses must not run at all.
+		ct, cerr := p.produceComplexType(elementOwnedComplexType{owner: edID}, inlineComplex) // case 1
+		if cerr != nil {
+			return xsd.ElementDeclaration{}, cerr
+		}
+		typeDef = xsd.InlineTypeDefinition{Definition: ct}
 	case inlineSimple != nil, hasType:
 		declared, derr := p.declaredType(elem, anyTypeName) // cases 1 and 2
 		if derr != nil {
@@ -1850,25 +1856,12 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 		}
 		typeDef = inherited
 	}
-	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
-	if inlineComplex != nil {
-		edID := xsd.NewComponentID()
-		ct, err := p.produceComplexType(elementOwnedComplexType{owner: edID}, inlineComplex)
-		if err != nil {
-			return xsd.ElementDeclaration{}, err
-		}
-		typeTable, err := p.typeTableOf(elem, xsd.InlineTypeDefinition{Definition: ct})
-		if err != nil {
-			return xsd.ElementDeclaration{}, err
-		}
-		return xsd.NewElementDeclarationOwningType(elem.Loc(), edID, qname, ct, typeTable, xsd.NewGlobalScope(), vc,
-			nillable, constraints, affiliations, p.substitutionGroupExclusions(elem), abstract, p.disallowedSubstitutions(elem), nil)
-	}
-	typeTable, err := p.typeTableOf(elem, typeDef)
+	typeTable, err := p.typeTableOf(elem, edID, typeDef)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	return xsd.NewElementDeclaration(elem.Loc(), qname, typeDef, typeTable, xsd.NewGlobalScope(), vc,
+	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
+	return xsd.NewElementDeclarationOwningTypes(elem.Loc(), edID, qname, typeDef, typeTable, xsd.NewGlobalScope(), vc,
 		nillable, constraints, affiliations, p.substitutionGroupExclusions(elem), abstract, p.disallowedSubstitutions(elem), nil)
 }
 

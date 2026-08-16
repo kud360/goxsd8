@@ -105,16 +105,12 @@ type AttributeComplexTypeScopeParent struct{ Name QName }
 // {context} a strict XOR, so an anonymous complex type carries a {context}
 // instead).
 //
-// Owner is the identity carried by the anonymous container's OWN {context}
-// (§3.4.1 ctd-context), whichever arm that is — an ElementDeclarationContext for
-// an inline <complexType> child (§3.4.2.1 dcl.ctd.common), or a
-// ComplexTypeDefinitionContext for the {name}-·absent· original of a redefinition
-// (§4.2.4 src-expredef clause 1.1), where no element declaration is involved at
-// all. It is not a second identity for the type itself. The invariant that holds
-// in both cases is the 1:1 pairing: the container's {context} identity and this
-// field hold the SAME ComponentID, one mint per pairing, one fact with one
-// encoding (STYLE D3), exactly as AnonymousComplexTypeScopeParent carries it on
-// the element side.
+// Owner is the token of the OWNERSHIP EDGE that reaches the anonymous container,
+// one mint per edge, exactly as AnonymousComplexTypeScopeParent carries it on the
+// element side — see that type for the three edges and for why the token
+// coincides with the container's {context} identity (§3.4.1 ctd-context) on two
+// of them but not on the <xs:alternative>-owned one. It is not a second identity
+// for the type itself.
 //
 // Owner is a PRESENT identity, never the zero (unminted) ComponentID —
 // NewAttributeLocalScope rejects an unminted one, and the parser cannot produce

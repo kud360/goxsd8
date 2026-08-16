@@ -47,14 +47,17 @@ func (ComplexType) typeDefinition() {}
 func (*SimpleType) typeDefinition() {}
 
 // TypeDefinitionOrRef is a slot holding a reference to a type definition. It
-// serves TWO §3 properties, which is why its doc is written in terms of the slot
-// rather than of one property:
+// serves THREE §3 properties, which is why its doc is written in terms of the
+// slot rather than of one property:
 //
 //   - the {type definition} of an Element Declaration (§3.3.1) or an Attribute
 //     Declaration (§3.2.1);
 //   - the {base type definition} of a Complex Type Definition (§3.4.1), which
 //     src-expredef clause 1.1 (§4.2.4) makes able to hold an anonymous
-//     already-resolved component (see ComplexType.Base).
+//     already-resolved component (see ComplexType.Base);
+//   - the {type definition} of a Type Alternative (§3.12.1), whose §3.12.2
+//     declare-ta arms are the element declaration's own two (see
+//     TypeAlternative).
 //
 // It is a sealed sum (STYLE T2/T7): TypeDefinitionRef, InlineTypeDefinition and
 // SubstitutionGroupHeadTypeRef are its only implementations, sealed by the
@@ -66,9 +69,9 @@ func (*SimpleType) typeDefinition() {}
 //
 //   - TypeDefinitionRef covers §3.3.2.1 dcl.elt.common clauses 2 and 4, clause
 //     3's NAMED-head case, §3.2.2.2 dcl.att.local's type= and xs:anySimpleType
-//     tiers, and every ordinary base= of §3.4.2: the type is a top-level
-//     component reachable BY NAME, possibly forward-referenced, so only a
-//     deferred QName is available at parse time.
+//     tiers, §3.12.2 declare-ta's type= arm, and every ordinary base= of §3.4.2:
+//     the type is a top-level component reachable BY NAME, possibly
+//     forward-referenced, so only a deferred QName is available at parse time.
 //   - InlineTypeDefinition covers the three mapping rules that OWN the type
 //     they yield outright; see that type.
 //   - SubstitutionGroupHeadTypeRef covers §3.3.2.1 clause 3's ANONYMOUS-head
@@ -79,14 +82,16 @@ func (*SimpleType) typeDefinition() {}
 // NOT EVERY ARM IS LEGAL IN EVERY SLOT, and the whole arm × slot legality table
 // lives in exactly one place, checkTypeDefinitionOrRef's typeDefinitionSlot
 // switch: SubstitutionGroupHeadTypeRef is admitted only by an ELEMENT
-// declaration's {type definition}, since neither §3.2.2.2 nor §3.4.2 has a
-// clause-3 analog to produce one. Making that unrepresentable at COMPILE time
+// declaration's {type definition} and by a Type Alternative's, which §3.3.2.1
+// fills by copying that same element slot into a synthesized {default type
+// definition}, since neither §3.2.2.2 nor §3.4.2 has a clause-3 analog to
+// produce one (see admitsHeadInherited). Making that unrepresentable at COMPILE time
 // would take a second sealed interface for the element slot alone, which forks
 // ResolvedType and checkTypeDefinitionOrRef (STYLE T4) and changes
 // ElementDeclaration.TypeDefinition()'s return type; it is deliberately not
 // done. A runtime rejection charged to xsderr.RuleComponentInvariant is the
-// established precedent here — NewElementDeclaration rejects an
-// InlineTypeDefinition wrapping a ComplexType the same way.
+// established precedent here — NewElementDeclaration rejects an InlineTypeDefinition
+// wrapping a ComplexType the same way.
 //
 // A nil TypeDefinitionOrRef is the single encoding of an ABSENT slot, in EVERY
 // property this sum serves — the state a programmatically built declaration is
@@ -126,20 +131,24 @@ type TypeDefinitionRef struct{ Name QName }
 // wraps, carried by value because the slot holding it is its sole owner.
 //
 // Ownership, not XML provenance, is this arm's invariant, and all four
-// properties below are stated in those terms. THREE mapping rules produce it,
-// and a fourth would be admitted on the same footing — but only a fourth that
+// properties below are stated in those terms. FOUR mapping rules produce it,
+// and a fifth would be admitted on the same footing — but only a fifth that
 // OWNS what it yields. §3.3.2.1 clause 3's anonymous-head case is the mapping
 // that does not: the head's inline <complexType> already has an owner (the head
 // declaration, named by its {context}), so a member inheriting it gets the
 // non-owning SubstitutionGroupHeadTypeRef instead of a second owner here. The
 // copy that would let it be this arm is literally unconstructible —
-// NewElementDeclarationOwningType rejects a type whose {context} names another
+// NewElementDeclarationOwningTypes rejects a type whose {context} names another
 // declaration.
 //
-// The three rules that do own what they yield:
+// The four rules that do own what they yield:
 //
 //   - §3.3.2.1 dcl.elt.common clause 1 — the anonymous type of an inline
 //     <simpleType>/<complexType> child of an <element>;
+//   - §3.12.2 declare-ta's second arm — the same for an <xs:alternative>, whose
+//     anonymous <complexType> is contexted in the enclosing element declaration
+//     just as that element's own inline type is (§3.4.2.1 dcl.ctd.common), so ONE
+//     declaration may own several of these;
 //   - §3.2.2.2 dcl.att.local's first tier — the same for an <attribute>;
 //   - §4.2.4 src-expredef clause 1.1 — the {name}-·absent· ORIGINAL a redefining
 //     <simpleType>/<complexType> is paired with, which is not an XML child of
@@ -174,8 +183,9 @@ type TypeDefinitionRef struct{ Name QName }
 // either component exists and threads it into both — into the wrapped type
 // through NewAnonymousComplexType's context argument, and into the owner through
 // the one entry point that accepts a wrapped COMPLEX type and checks the two
-// agree: NewElementDeclarationOwningType for a declaration (#340),
-// NewComplexTypeOwningBase for a redefining complex type (#505). That property
+// agree: NewElementDeclarationOwningTypes for a declaration (#340), which checks
+// EVERY slot such a declaration owns one through, its {type table}'s included,
+// and NewComplexTypeOwningBase for a redefining complex type (#505). That property
 // is §3.4.1 ctd-context; see ComplexTypeContext. A wrapped SIMPLE type's own
 // {context} (§3.16.1 std-context) is a separate property and is still unmodeled
 // here.
@@ -199,7 +209,7 @@ type InlineTypeDefinition struct{ Definition TypeDefinition }
 // own the head's, and the owning copy is not merely undesirable but literally
 // unconstructible — an anonymous complex type's {context} names exactly one
 // Element Declaration (§3.4.2.1 dcl.ctd.common), and
-// NewElementDeclarationOwningType rejects a definition whose {context} names
+// NewElementDeclarationOwningTypes rejects a definition whose {context} names
 // another declaration. TypeDefinitionRef is unavailable for the opposite reason:
 // an anonymous type has no {name} for a by-name lookup to find, which is exactly
 // what {context} exists to substitute for (§3.4.1, Appendix G.1.11).
@@ -321,13 +331,16 @@ const (
 	// baseTypeSlot is a Complex Type Definition's {base type definition}
 	// (§3.4.1).
 	baseTypeSlot
+	// typeAlternativeTypeSlot is a Type Alternative's {type definition}
+	// (§3.12.1).
+	typeAlternativeTypeSlot
 )
 
 // property is the §3 property name this slot fills, as it appears in a
 // rejection message.
 func (s typeDefinitionSlot) property() string {
 	switch s {
-	case elementTypeSlot, attributeTypeSlot:
+	case elementTypeSlot, attributeTypeSlot, typeAlternativeTypeSlot:
 		return "{type definition}"
 	case baseTypeSlot:
 		return "{base type definition}"
@@ -337,11 +350,17 @@ func (s typeDefinitionSlot) property() string {
 }
 
 // admitsHeadInherited reports whether this slot may hold a
-// SubstitutionGroupHeadTypeRef. Only the element slot may: §3.3.2.1
-// dcl.elt.common clause 3 is the sole mapping rule that yields one, and neither
-// §3.2.2.2 dcl.att.local (three tiers, no clause-3 analog) nor §3.4.2's base=
-// has anything like it.
-func (s typeDefinitionSlot) admitsHeadInherited() bool { return s == elementTypeSlot }
+// SubstitutionGroupHeadTypeRef. Two slots may, and §3.3.2.1 dcl.elt.common
+// clause 3 is the sole mapping rule behind both: it fills an ELEMENT
+// declaration's {type definition} directly, and §3.3.2.1's SYNTHESIZED {default
+// type definition} then copies that same slot verbatim into a TYPE ALTERNATIVE's
+// {type definition}, so a substitutionGroup=-typed element carrying a tested
+// final <alternative> puts the arm there too. §3.12.2 declare-ta on its own
+// yields only the type= and inline arms; neither §3.2.2.2 dcl.att.local (three
+// tiers, no clause-3 analog) nor §3.4.2's base= has anything like it.
+func (s typeDefinitionSlot) admitsHeadInherited() bool {
+	return s == elementTypeSlot || s == typeAlternativeTypeSlot
+}
 
 // checkTypeDefinitionOrRef rejects the encodings of a TypeDefinitionOrRef slot
 // that the sum's doc declares illegal, charged to xsderr.RuleComponentInvariant:

@@ -415,7 +415,7 @@ func TestAnonymousGoverningTypeStillDecidesContent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("building the anonymous governing type: %v", err)
 		}
-		e, err := xsd.NewElementDeclarationOwningType(xsderr.Loc{}, id, xsd.QName{Local: "root"}, ct,
+		e, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, id, xsd.QName{Local: "root"}, xsd.InlineTypeDefinition{Definition: ct},
 			nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 		if err != nil {
 			t.Fatalf("building the owning root element declaration: %v", err)

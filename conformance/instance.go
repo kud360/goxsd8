@@ -135,16 +135,6 @@ import (
 // cannot arise: validate charges nothing at all below an element whose
 // governing type it did not determine.
 //
-// The unconditionality has ONE exception, and it is the parser's, not
-// validate's: a declaration whose {type table} parser's typeTableRepresentable
-// WITHHELD looks tableless to validate, which then assesses the element against
-// its DECLARED type where an <alternative> would ·conditionally select·
-// another. A charge at or below such an element can be a false one. The
-// exception is enumerable exactly because the withholding is — an <alternative>
-// on the inline arm, or an anonymous declared type behind a synthesized default
-// — and it shrinks as those shapes are mapped: a declaration whose table IS
-// built makes validate decline instead of guess (#822).
-//
 // Cases 3 to 6 rest on conditions validate checks rather than this file
 // assuming them: the attribute half of cvc-complex-type is reached only where
 // the governing type was determinable — the ·selected type definition·, or the

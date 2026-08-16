@@ -4,11 +4,27 @@ import (
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
+
+// taRef is the by-name {type definition} slot most of these tests carry.
+func taRef(local string) xsd.TypeDefinitionOrRef {
+	return xsd.TypeDefinitionRef{Name: xsd.QName{Local: local}}
+}
+
+// taOf builds a Type Alternative, failing the test on a rejection.
+func taOf(t *testing.T, test *xsd.XPathExpression, typeDefinition xsd.TypeDefinitionOrRef, annotations []xsd.Annotation) xsd.TypeAlternative {
+	t.Helper()
+	ta, err := xsd.NewTypeAlternative(xsderr.Loc{}, test, typeDefinition, annotations)
+	if err != nil {
+		t.Fatalf("NewTypeAlternative: %v", err)
+	}
+	return ta
+}
 
 func TestNewTypeAlternativeTestPresent(t *testing.T) {
 	test := xsd.NewXPathExpression("@a > 0", []xsd.NamespaceBinding{xsd.NewNamespaceBinding("p", "urn:ns")}, strptr("urn:dflt"), nil)
-	ta := xsd.NewTypeAlternative(&test, xsd.QName{Space: "urn:t", Local: "Even"}, nil)
+	ta := taOf(t, &test, xsd.TypeDefinitionRef{Name: xsd.QName{Space: "urn:t", Local: "Even"}}, nil)
 
 	got, ok := ta.Test()
 	if !ok {
@@ -27,19 +43,65 @@ func TestNewTypeAlternativeTestPresent(t *testing.T) {
 }
 
 func TestNewTypeAlternativeTestAbsent(t *testing.T) {
-	ta := xsd.NewTypeAlternative(nil, xsd.QName{Space: "urn:t", Local: "Default"}, nil)
+	ta := taOf(t, nil, taRef("Default"), nil)
 
 	if got, ok := ta.Test(); ok {
 		t.Errorf("Test() = (%+v, true), want (_, false) for the absent \"otherwise\" alternative", got)
 	}
 }
 
-func TestTypeAlternativeTypeDefinitionNameRoundTrip(t *testing.T) {
-	name := xsd.QName{Space: "urn:t", Local: "Even"}
-	ta := xsd.NewTypeAlternative(nil, name, nil)
+// TestTypeAlternativeTypeDefinitionRoundTrip pins that the {type definition}
+// slot reads back as the very arm it was built with — §3.12.2 declare-ta's two
+// arms, plus the SubstitutionGroupHeadTypeRef a synthesized {default type
+// definition} copies out of the declaring element's own slot (§3.3.2.1).
+func TestTypeAlternativeTypeDefinitionRoundTrip(t *testing.T) {
+	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{}, nil, xsd.SimpleTypeRef{Name: xsd.QName{Local: "string"}}, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSimpleType: %v", err)
+	}
+	for _, tc := range []struct {
+		name string
+		slot xsd.TypeDefinitionOrRef
+	}{
+		{"by name", xsd.TypeDefinitionRef{Name: xsd.QName{Space: "urn:t", Local: "Even"}}},
+		{"inline anonymous simple type", xsd.InlineTypeDefinition{Definition: st}},
+		{"substitution group head", xsd.SubstitutionGroupHeadTypeRef{Head: xsd.QName{Local: "head"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := taOf(t, nil, tc.slot, nil).TypeDefinition(); got != tc.slot {
+				t.Errorf("TypeDefinition() = %#v, want %#v", got, tc.slot)
+			}
+		})
+	}
+}
 
-	if got := ta.TypeDefinitionName(); got != name {
-		t.Errorf("TypeDefinitionName() = %+v, want %+v", got, name)
+// TestNewTypeAlternativeRejectsIllegalSlots pins the states §3.12.1's Required
+// {type definition} and TypeDefinitionOrRef's own invariants forbid. The nil
+// case is this constructor's own rejection; the rest are
+// checkTypeDefinitionOrRef's, reached through the type-alternative slot.
+func TestNewTypeAlternativeRejectsIllegalSlots(t *testing.T) {
+	named, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "T"}, xsd.QName{Local: "anyType"}, nil,
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewComplexType: %v", err)
+	}
+	for _, tc := range []struct {
+		name string
+		slot xsd.TypeDefinitionOrRef
+	}{
+		{"absent slot", nil},
+		{"zero-named reference", xsd.TypeDefinitionRef{}},
+		{"empty inline definition", xsd.InlineTypeDefinition{}},
+		{"inline NAMED definition", xsd.InlineTypeDefinition{Definition: named}},
+		{"zero-named head", xsd.SubstitutionGroupHeadTypeRef{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := xsd.NewTypeAlternative(xsderr.Loc{}, nil, tc.slot, nil)
+			if err == nil {
+				t.Fatal("NewTypeAlternative succeeded, want a component-invariant rejection")
+			}
+			assertRule(t, err, xsderr.RuleComponentInvariant)
+		})
 	}
 }
 
@@ -48,7 +110,7 @@ func TestNewTypeAlternativeAnnotationsRoundTrip(t *testing.T) {
 		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "first")}, nil),
 		xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "second")}, nil),
 	}
-	ta := xsd.NewTypeAlternative(nil, xsd.QName{Local: "T"}, anns)
+	ta := taOf(t, nil, taRef("T"), anns)
 
 	got := ta.Annotations()
 	if len(got) != 2 {
@@ -60,17 +122,17 @@ func TestNewTypeAlternativeAnnotationsRoundTrip(t *testing.T) {
 }
 
 func TestTypeAlternativeAnnotationsNilWhenEmpty(t *testing.T) {
-	if got := xsd.NewTypeAlternative(nil, xsd.QName{Local: "T"}, nil).Annotations(); got != nil {
+	if got := taOf(t, nil, taRef("T"), nil).Annotations(); got != nil {
 		t.Errorf("Annotations() = %v, want nil for nil input", got)
 	}
-	if got := xsd.NewTypeAlternative(nil, xsd.QName{Local: "T"}, []xsd.Annotation{}).Annotations(); got != nil {
+	if got := taOf(t, nil, taRef("T"), []xsd.Annotation{}).Annotations(); got != nil {
 		t.Errorf("Annotations() = %v, want nil for empty-slice input", got)
 	}
 }
 
 func TestTypeAlternativeDoesNotAliasConstructorAnnotations(t *testing.T) {
 	anns := []xsd.Annotation{xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "keep")}, nil)}
-	ta := xsd.NewTypeAlternative(nil, xsd.QName{Local: "T"}, anns)
+	ta := taOf(t, nil, taRef("T"), anns)
 
 	// Mutate the ORIGINAL backing array.
 	anns[0] = xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "tampered")}, nil)
@@ -81,11 +143,8 @@ func TestTypeAlternativeDoesNotAliasConstructorAnnotations(t *testing.T) {
 }
 
 func TestTypeAlternativeAnnotationsAccessorDoesNotAlias(t *testing.T) {
-	ta := xsd.NewTypeAlternative(
-		nil,
-		xsd.QName{Local: "T"},
-		[]xsd.Annotation{xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "keep")}, nil)},
-	)
+	ta := taOf(t, nil, taRef("T"),
+		[]xsd.Annotation{xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "keep")}, nil)})
 
 	// Mutate the RETURNED slice; a second call must be unaffected.
 	ta.Annotations()[0] = xsd.NewAnnotation(nil, []xsd.Documentation{xsd.NewDocumentation(nil, nil, "tampered")}, nil)

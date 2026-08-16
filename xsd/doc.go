@@ -57,11 +57,14 @@
 // slot to use it, and the reciprocal second is the anonymous-container arm
 // of each scope-parent sum — ElementScopeParent's
 // AnonymousComplexTypeScopeParent (§3.3.1 sc_e) and AttributeScopeParent's
-// AttributeAnonymousComplexTypeScopeParent (§3.2.1 sc_a). All three hold
-// the SAME token: one mint per OWNERSHIP EDGE serves the back-pointers
-// and the forward reference alike. A chained §4.2.4 <redefine>, whose
-// anonymous originals nest, stacks two such edges and mints one token
-// for each, so the containers stay distinguishable.
+// AttributeAnonymousComplexTypeScopeParent (§3.2.1 sc_a). One mint per
+// OWNERSHIP EDGE: the two scope-parent arms always hold that edge's token,
+// and the {context} holds it too wherever the owner reaches at most one
+// anonymous type through it. A chained §4.2.4 <redefine>, whose anonymous
+// originals nest, stacks two such edges and mints one token for each, so
+// the containers stay distinguishable — as does an <xs:element> owning both
+// its own inline type and an <xs:alternative>'s, which §3.4.2.1 gives ONE
+// shared {context} and two edge tokens.
 //
 // The eight component kinds a schema's §3.17.1 properties hold — element
 // and attribute declarations, complex and simple type definitions, model

@@ -76,6 +76,10 @@ func seedAnyType() (xsd.ComplexType, error) {
 //     identity of the owning <element>'s declaration (§3.4.2.1 dcl.ctd.common,
 //     "the Element Declaration corresponding to the nearest <element>
 //     information item among the ancestor element information items");
+//   - typeAlternativeOwnedComplexType — the anonymous <complexType> of an
+//     <xs:alternative> (§3.12.2 declare-ta), whose {context} is the SAME
+//     declaration by the same rule, and which therefore needs a second token to
+//     be told apart from the element's own inline type;
 //   - redefiningComplexType — a <complexType> child of a <redefine>, which is
 //     NAMED and ALSO carries a minted identity, because src-expredef clause 1.1
 //     makes it the {context} of the anonymous original it is paired with;
@@ -111,8 +115,35 @@ type namedComplexType struct{ name xsd.QName }
 // elementOwnedComplexType identifies an inline anonymous <complexType> by the
 // minted identity of the element declaration that owns it — the same
 // xsd.ComponentID that declaration is built with and that the type's own
-// {context} carries (§3.4.2.1 dcl.ctd.common). One mint per inline construct.
+// {context} carries (§3.4.2.1 dcl.ctd.common). A declaration reaches at most ONE
+// type through this edge, so the one token serves as both the {context} and the
+// container token its nested local declarations report.
 type elementOwnedComplexType struct{ owner xsd.ComponentID }
+
+// typeAlternativeOwnedComplexType identifies the inline anonymous <complexType>
+// of an <xs:alternative> (§3.12.2 declare-ta's second arm).
+//
+// It carries TWO identities. owner is the enclosing element declaration's
+// identity, which §3.4.2.1 dcl.ctd.common makes this type's {context} exactly as
+// for the element's own inline type: the rule climbs to the nearest ancestor
+// <element> unconditionally on child position, so N alternatives and the
+// element's own type all share one {context}. container is this type's OWN edge
+// token, minted per <alternative>, because a shared {context} identifies no
+// single container and reusing owner would give structurally distinct containers
+// the same {scope}.{parent} token — the split redefineOriginalComplexType already
+// makes for the same reason (#822). Build it through newTypeAlternativeOwned,
+// never as a literal, so container is never the zero token.
+type typeAlternativeOwnedComplexType struct {
+	owner     xsd.ComponentID
+	container xsd.ComponentID
+}
+
+// newTypeAlternativeOwned mints the container token of one <xs:alternative>'s
+// anonymous complex type; owner is the enclosing element declaration's identity
+// (see typeAlternativeOwnedComplexType).
+func newTypeAlternativeOwned(owner xsd.ComponentID) typeAlternativeOwnedComplexType {
+	return typeAlternativeOwnedComplexType{owner: owner, container: xsd.NewComponentID()}
+}
 
 // redefiningComplexType identifies a <complexType> child of a <redefine>:
 // src-expredef clause 1.2's "component which corresponds to the information item
@@ -166,7 +197,7 @@ func newRedefineOriginal(owner xsd.ComponentID) redefineOriginalComplexType {
 }
 
 // redefineOriginalContext returns the identity a src-expredef clause 1.1 ORIGINAL
-// built under this type takes as its {context}, and false for the two arms that
+// built under this type takes as its {context}, and false for the three arms that
 // can own no original. It is the one place the two directions of the "owner"
 // field are told apart: for a redefining type it is the mint clause 1.1's
 // original is paired with, and for an original that is ITSELF built from a
@@ -180,20 +211,21 @@ func redefineOriginalContext(id complexTypeIdentity) (xsd.ComponentID, bool) {
 		return i.owner, true
 	case redefineOriginalComplexType:
 		return i.ownedOriginal, true
-	case namedComplexType, elementOwnedComplexType:
+	case namedComplexType, elementOwnedComplexType, typeAlternativeOwnedComplexType:
 		return xsd.ComponentID{}, false
 	default:
 		panic("parser: redefineOriginalContext: non-exhaustive complexTypeIdentity switch")
 	}
 }
 
-func (namedComplexType) complexTypeIdentity()            {}
-func (elementOwnedComplexType) complexTypeIdentity()     {}
-func (redefiningComplexType) complexTypeIdentity()       {}
-func (redefineOriginalComplexType) complexTypeIdentity() {}
+func (namedComplexType) complexTypeIdentity()                {}
+func (elementOwnedComplexType) complexTypeIdentity()         {}
+func (typeAlternativeOwnedComplexType) complexTypeIdentity() {}
+func (redefiningComplexType) complexTypeIdentity()           {}
+func (redefineOriginalComplexType) complexTypeIdentity()     {}
 
 // topLevelComplexTypeName returns the expanded {name} an identity gives the type
-// it builds, and false for the two arms that give none. The two NAMED arms are
+// it builds, and false for the three arms that give none. The two NAMED arms are
 // the two that can carry an unusable (empty-local-part) name, so this is what
 // produceComplexType's grammar-fault guard reads.
 //
@@ -206,7 +238,7 @@ func topLevelComplexTypeName(id complexTypeIdentity) (xsd.QName, bool) {
 		return i.name, true
 	case redefiningComplexType:
 		return i.name, true
-	case elementOwnedComplexType, redefineOriginalComplexType:
+	case elementOwnedComplexType, typeAlternativeOwnedComplexType, redefineOriginalComplexType:
 		return xsd.QName{}, false
 	default:
 		panic("parser: topLevelComplexTypeName: non-exhaustive complexTypeIdentity switch")
@@ -218,14 +250,15 @@ func topLevelComplexTypeName(id complexTypeIdentity) (xsd.QName, bool) {
 // Complex Type Definition corresponding to that item"), in the variant the
 // container's own identity admits.
 //
-// The two anonymous arms both yield AnonymousComplexTypeScopeParent carrying
-// their OWN owner token, which is that field's invariant: Owner is the identity
-// the anonymous container's {context} carries, whichever arm the {context} is
-// (see xsd.AnonymousComplexTypeScopeParent). For a redefine original that token
-// names the REDEFINING complex type — not because the original's locals are
-// scoped to the redefinition (they are scoped to the original, which is what the
-// token identifies), but because the original has no name and this token is what
-// it is identified by.
+// The three anonymous arms all yield AnonymousComplexTypeScopeParent carrying the
+// token of the OWNERSHIP EDGE that reaches the container, which is that field's
+// invariant (see xsd.AnonymousComplexTypeScopeParent). For a redefine original
+// that token names the REDEFINING complex type — not because the original's
+// locals are scoped to the redefinition (they are scoped to the original, which
+// is what the token identifies), but because the original has no name and this
+// token is what it is identified by. For a type alternative's type it is the
+// arm's own container mint and NOT its owner, which the element's own inline type
+// may already be identified by.
 //
 // The switch is exhaustive over the sealed sum; see topLevelComplexTypeName for
 // why the default arm is unreachable.
@@ -237,6 +270,8 @@ func scopeParentOf(id complexTypeIdentity) xsd.ElementScopeParent {
 		return xsd.ComplexTypeScopeParent{Name: i.name}
 	case elementOwnedComplexType:
 		return xsd.AnonymousComplexTypeScopeParent{Owner: i.owner}
+	case typeAlternativeOwnedComplexType:
+		return xsd.AnonymousComplexTypeScopeParent{Owner: i.container}
 	case redefineOriginalComplexType:
 		return xsd.AnonymousComplexTypeScopeParent{Owner: i.owner}
 	default:
@@ -252,6 +287,10 @@ func scopeParentOf(id complexTypeIdentity) xsd.ElementScopeParent {
 // the two sums are distinct types and this function cannot be folded into that
 // one.
 //
+// It reads the same per-arm token scopeParentOf does, for the same reason; see
+// there for why the type-alternative arm reports its container rather than its
+// owner.
+//
 // It is NOT what an attribute reached through an <attributeGroup ref> reports:
 // such an attribute's own ancestor axis has no <complexType> in it, so
 // collectReferencedGroup rebinds the parent to the group at the hop.
@@ -266,6 +305,8 @@ func attributeScopeParentOf(id complexTypeIdentity) xsd.AttributeScopeParent {
 		return xsd.AttributeComplexTypeScopeParent{Name: i.name}
 	case elementOwnedComplexType:
 		return xsd.AttributeAnonymousComplexTypeScopeParent{Owner: i.owner}
+	case typeAlternativeOwnedComplexType:
+		return xsd.AttributeAnonymousComplexTypeScopeParent{Owner: i.container}
 	case redefineOriginalComplexType:
 		return xsd.AttributeAnonymousComplexTypeScopeParent{Owner: i.owner}
 	default:
@@ -276,10 +317,17 @@ func attributeScopeParentOf(id complexTypeIdentity) xsd.AttributeScopeParent {
 // newComplexType builds the Complex Type Definition this identity names, through
 // the xsd entry point its arm admits: xsd.NewComplexType for a plain top-level
 // type, xsd.NewComplexTypeOwningBase for a redefining one (which owns its base),
-// and xsd.NewAnonymousComplexType for the two anonymous arms, whose §3.4.1
+// and xsd.NewAnonymousComplexType for the three anonymous arms, whose §3.4.1
 // tableau makes {context} Required and which differ only in which
-// ComplexTypeContext arm that is. Every other argument is common to all four,
+// ComplexTypeContext arm that is. Every other argument is common to all five,
 // which is why the entry points differ only in this one dispatch.
+//
+// The element-owned and type-alternative-owned arms build the SAME {context} from
+// different fields and are deliberately not folded into one case: they agree on
+// the {context} because §3.4.2.1 dcl.ctd.common climbs to the nearest ancestor
+// <element> either way, and they disagree on every other reader of the identity
+// (scopeParentOf, attributeScopeParentOf), so one case would have to re-derive
+// which arm it was looking at.
 //
 // base is the {base type definition} SLOT as resolveBaseType built it, so the
 // redefining arm receives the InlineTypeDefinition holding src-expredef clause
@@ -312,6 +360,9 @@ func (p *producer) newComplexType(id complexTypeIdentity, loc xsderr.Loc, base x
 		return xsd.NewComplexTypeOwningBase(loc, i.owner, i.name, original, final,
 			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
 	case elementOwnedComplexType:
+		return xsd.NewAnonymousComplexType(loc, xsd.ElementDeclarationContext{Component: i.owner}, baseTypeName(base), final,
+			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
+	case typeAlternativeOwnedComplexType:
 		return xsd.NewAnonymousComplexType(loc, xsd.ElementDeclarationContext{Component: i.owner}, baseTypeName(base), final,
 			derivationMethod, abstract, attributeUses, prohibitedAttributeNames, attributeWildcard, contentType, prohibitedSubstitutions, assertions, annotations)
 	case redefineOriginalComplexType:
@@ -1471,16 +1522,18 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 // builder is the caller's job (produceElementParticle).
 //
 // Its {type definition} is §3.3.2.1 dcl.elt.common's tier chain. Tier 1's inline
-// <complexType> child is mapped HERE, because that arm alone needs an identity
-// minted before either component exists: the anonymous complex type it maps to
-// is the {scope}.{parent} of its OWN nested local element declarations, and
-// having no name it is identified by the owning declaration's xsd.ComponentID
-// instead (xsd.AnonymousComplexTypeScopeParent, #340). One mint per inline
-// construct serves both directions — the type's {context} (§3.4.2.1
+// <complexType> child is mapped HERE (localElementType), because that arm needs
+// an identity minted before either component exists: the anonymous complex type
+// it maps to is the {scope}.{parent} of its OWN nested local element
+// declarations, and having no name it is identified by the owning declaration's
+// xsd.ComponentID instead (xsd.AnonymousComplexTypeScopeParent, #340). That one
+// mint serves both directions for this arm — the type's {context} (§3.4.2.1
 // dcl.ctd.common) and those nested scopes — and
-// xsd.NewElementDeclarationOwningType checks the two agree. The remaining tiers
-// (the inline <simpleType> form, the type= form, the xs:anyType default) are
-// mapped by declaredType, shared with the local-attribute chain.
+// xsd.NewElementDeclarationOwningTypes checks the two agree. The declaration's
+// identity is minted whichever tier wins, because the same {context} governs the
+// anonymous type of any <xs:alternative> child as well (typeTableOf, #822). The
+// remaining tiers (the inline <simpleType> form, the type= form, the xs:anyType
+// default) are mapped by declaredType, shared with the local-attribute chain.
 //
 // src-element clause 3 (§3.3.3) is charged here for the both-present case, on the
 // same footing produceElement charges it for a global <element>: without it,
@@ -1553,29 +1606,33 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	if inlineComplex != nil {
-		edID := xsd.NewComponentID()
-		ct, err := p.produceComplexType(elementOwnedComplexType{owner: edID}, inlineComplex)
-		if err != nil {
-			return xsd.ElementDeclaration{}, err
-		}
-		typeTable, err := p.typeTableOf(el, xsd.InlineTypeDefinition{Definition: ct})
-		if err != nil {
-			return xsd.ElementDeclaration{}, err
-		}
-		return xsd.NewElementDeclarationOwningType(el.Loc(), edID, qname, ct, typeTable, scope, vc,
-			nillable, constraints, nil, nil, false, p.disallowedSubstitutions(el), nil)
-	}
-	typeDef, err := p.declaredType(el, anyTypeName)
+	edID := xsd.NewComponentID()
+	typeDef, err := p.localElementType(el, edID, inlineComplex)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	typeTable, err := p.typeTableOf(el, typeDef)
+	typeTable, err := p.typeTableOf(el, edID, typeDef)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	return xsd.NewElementDeclaration(el.Loc(), qname, typeDef, typeTable, scope, vc,
+	return xsd.NewElementDeclarationOwningTypes(el.Loc(), edID, qname, typeDef, typeTable, scope, vc,
 		nillable, constraints, nil, nil, false, p.disallowedSubstitutions(el), nil)
+}
+
+// localElementType maps a local <element>'s {type definition} over §3.3.2.1
+// dcl.elt.common's tier chain, splitting off tier 1's inline <complexType> arm —
+// the one tier that must be built HERE, from the declaration's own minted
+// identity edID, rather than by declaredType (see produceLocalElement).
+// inlineComplex is that child, or nil when the element has none.
+func (p *producer) localElementType(el *Element, edID xsd.ComponentID, inlineComplex *Element) (xsd.TypeDefinitionOrRef, error) {
+	if inlineComplex == nil {
+		return p.declaredType(el, anyTypeName)
+	}
+	ct, err := p.produceComplexType(elementOwnedComplexType{owner: edID}, inlineComplex)
+	if err != nil {
+		return nil, err
+	}
+	return xsd.InlineTypeDefinition{Definition: ct}, nil
 }
 
 // rejectBothInlineTypes rejects an <element> carrying BOTH an inline

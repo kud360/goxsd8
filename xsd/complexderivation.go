@@ -81,11 +81,13 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // GAP(xsd): this walk quantifies over s.types, so an ANONYMOUS complex type —
 // one reachable only through a slot that owns it — gets NO verdict from any
 // constraint above. That covers the inline <complexType> of an element or
-// attribute declaration (#438/#414) and, since #505, the src-expredef clause 1.1
-// ORIGINAL a redefining complex type owns, which the spec makes a full component
-// "as defined in Schema Component Details (§3)" and therefore subject to these
-// same rules. Closing it means a declaration-descending walk over the owning
-// slots, which is one change for all three; #584 owns it.
+// attribute declaration (#438/#414), since #822 the inline <complexType> of an
+// <xs:alternative>, which a Type Alternative's {type definition} owns (§3.12.2
+// declare-ta), and, since #505, the src-expredef clause 1.1 ORIGINAL a redefining
+// complex type owns, which the spec makes a full component "as defined in Schema
+// Component Details (§3)" and therefore subject to these same rules. Closing it
+// means a declaration-descending walk over the owning slots, which is one change
+// for all four; #584 owns it.
 //
 // DIRECTION, per reader rather than in general (STYLE P3a). What is withheld is
 // a VERDICT, never a property value: the two folds now materialise §3.4.2.4
@@ -100,9 +102,10 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // than deferred (#505).
 //
 // The two properties are still unfolded on an anonymous type owned by an ELEMENT
-// or ATTRIBUTE declaration, which no {base type definition} slot can reach (an
-// anonymous type is unnameable, so only a redefinition can hold one as its base).
-// Its readers are checkComplexTypeValueConstraints (valueconstraintvalid.go) and
+// or ATTRIBUTE declaration or by a TYPE ALTERNATIVE, none of which any {base type
+// definition} slot can reach (an anonymous type is unnameable, so only a
+// redefinition can hold one as its base). Its readers are
+// checkComplexTypeValueConstraints (valueconstraintvalid.go) and
 // resolveComplexType (resolve.go), which quantify over the set to charge each
 // MEMBER: a smaller set means fewer charges, so both under-reject. No reader
 // charges on a member being absent from that set. Adding the missing Phase-D
@@ -766,7 +769,8 @@ func (s *Schema) validlyDerived(sub, super TypeDefinition, blocked []DerivationM
 // Clause 2.1's component identity is decided by expanded name for named types.
 // Two ANONYMOUS types both present as the zero QName and are reported as NOT
 // identical, exactly the licence §3.4.6.5's no-identity Note grants — the same
-// call typeAlternativesEquivalent already makes for key-equiv-ta clause 5.
+// call typeDefinitionsEquivalent makes on its InlineTypeDefinition arm for
+// key-equiv-ta clause 5.
 //
 // The walk follows the {base type definition} SLOT through ResolvedType, both arms.
 // Terminating at an InlineTypeDefinition instead would answer FALSE for every
