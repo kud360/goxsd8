@@ -110,24 +110,31 @@ func TestProduceTypeTableDeclinedForInlineAlternative(t *testing.T) {
 // A synthesized default needs a NAMED declared type, so an <element> owning an
 // anonymous type withholds the table too — and gets one when the trailing
 // <alternative> supplies the default by name instead.
+//
+// Both alternatives name ·xs:error·, and that is forced rather than incidental:
+// e-props-correct clause 7 requires every entry to be ·validly substitutable·
+// for the declaration's own {type definition}, and NOTHING is substitutable for
+// an ANONYMOUS one — no top-level type can name it as a base. Clause 7.2 is the
+// only entry such a declaration admits, so a named-type fixture here would be an
+// invalid schema whose rejection has nothing to do with the mapping under test.
 func TestProduceTypeTableAnonymousDeclaredType(t *testing.T) {
 	const inline = `<xs:complexType><xs:sequence/></xs:complexType>`
 	if _, present := typeTableOf(t, wrap("", typeTableTypes+`
 	<xs:element name="e">`+inline+`
-	  <xs:alternative test="@k='t'" type="T"/>
+	  <xs:alternative test="@k='t'" type="xs:error"/>
 	</xs:element>`), xsd.QName{Local: "e"}); present {
 		t.Error("{type table} is present, want ·absent· where the synthesized default would name an anonymous type")
 	}
 	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
 	<xs:element name="e">`+inline+`
-	  <xs:alternative test="@k='t'" type="T"/>
-	  <xs:alternative type="V"/>
+	  <xs:alternative test="@k='t'" type="xs:error"/>
+	  <xs:alternative type="xs:error"/>
 	</xs:element>`), xsd.QName{Local: "e"})
 	if !present {
 		t.Fatal("{type table} is ·absent·, want present when the trailing <alternative> names the default")
 	}
-	if got := tt.DefaultTypeDefinition().TypeDefinitionName().Local; got != "V" {
-		t.Errorf("{default type definition}.{type definition} = %s, want V", got)
+	if got := tt.DefaultTypeDefinition().TypeDefinitionName().Local; got != "error" {
+		t.Errorf("{default type definition}.{type definition} = %s, want error", got)
 	}
 }
 

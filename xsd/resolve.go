@@ -95,7 +95,14 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     affiliations}, subject to that member's {substitution group exclusions}
 //     (substitutiongrouptypes.go). It shares the phase because it is the same
 //     cos-ct-derived-ok/cos-st-derived-ok engine pair under a different
-//     quantifier; see checkSubstitutionGroupTypes for the ordering argument.
+//     quantifier; see checkSubstitutionGroupTypes for the ordering argument. It
+//     CLOSES on that engine's third quantifier — e-props-correct clause 7, which
+//     requires each Type Alternative's {type definition} in a declaration's
+//     {type table}, and the {default type definition}'s, to be ·validly
+//     substitutable· for the declaration's own {type definition} subject to its
+//     {disallowed substitutions}, unless it is ·xs:error·
+//     (typetablesubstitutable.go). Clause 7 runs after clause 4 so a declaration
+//     failing both reports the failure that does not depend on its type table.
 //   - Phase E (value-constraint validity), in two walks over the same file
 //     (valueconstraintvalid.go). The DESCENDING walk rejects an Attribute Use whose
 //     own {value constraint} contradicts its resolved {attribute declaration}'s
@@ -244,6 +251,9 @@ func (s *Schema) resolve() error {
 		return err
 	}
 	if err := s.checkSubstitutionGroupTypes(); err != nil {
+		return err
+	}
+	if err := s.checkTypeTableSubstitutability(); err != nil {
 		return err
 	}
 	if err := s.checkComponentValueConstraints(); err != nil {
@@ -737,22 +747,14 @@ func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 // loc — typealternative.go), and both live inside the <element> the position
 // names.
 //
-// GAP(xsd): e-props-correct clause 7 (§3.3.6.1) is NOT charged here, so a {type
-// table} whose alternative type T is not ·validly substitutable· for the
-// declaration's own {type definition}, subject to its {disallowed
-// substitutions}, is accepted. This IS the pass that could charge it — both
-// sides are resolved by the time it runs and Schema.ValidlySubstitutable is the
-// relation — and it is deferred because the shape conditional type assignment
-// normally takes — an alternative naming a MEMBER of a union {type definition} —
-// turns on how cos-st-derived-ok (§3.16.6.3) reads a union base, which nothing
-// has established here. Clause 7.2's ·xs:error· exemption is load-bearing the
-// moment clause 7 is charged: builtin.Seed models xs:error (§3.16.7.3) and the
-// parser builds tables naming it, so a charge that skipped the exemption would
-// reject the shape the type is FOR.
-//
-// Nothing in this package consults clause 7, so the withholding has no reader
-// to charge in either direction: it is an UNMADE rejection, and a schema this
-// processor otherwise accepts stays accepted (#823).
+// EXISTENCE ONLY. e-props-correct clause 7 (§3.3.6.1) predicates over the very
+// alternatives this resolves — each must be ·validly substitutable· for the
+// declaration's own {type definition}, or be ·xs:error· — and is charged in
+// Phase D instead (checkTypeTableSubstitutability, typetablesubstitutable.go).
+// It cannot be charged here: ValidlySubstitutable walks {base type definition}
+// chains and union membership with no visited set, which is licensed only after
+// Phase B's acyclicity checks, and a circular chain is still representable while
+// this phase runs.
 func (s *Schema) resolveTypeTable(tt TypeTable, loc xsderr.Loc) error {
 	for _, alt := range tt.Alternatives() {
 		if _, err := resolveTypeName(s, alt.TypeDefinitionName(), loc, "type alternative {type definition}"); err != nil {
