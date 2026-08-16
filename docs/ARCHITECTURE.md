@@ -10,9 +10,13 @@ Value implementations, parsing, validation, and generation live above them.
 ```
                  xsderr          (leaf: errors, rule IDs, locations)
                  xsd             (leaf: component model + query/walk APIs; imports xsderr only)
-                 internal/...    (leaves: stdlib-only helpers two packages must agree on
-                                  byte for byte, unexportable because they are nobody's API —
-                                  internal/schemaloc, the schemaLocation resolver)
+                 internal/...    (leaves: stdlib-only helpers, unexportable because they are
+                                  nobody's API — internal/schemaloc, the schemaLocation
+                                  resolver. Its "two packages must agree byte for byte"
+                                  justification EXPIRED when #272 deleted the conformance
+                                  closure walk: parser is the sole consumer today, and
+                                  internal/schemaloc/doc.go still names the deleted one.
+                                  Filed for a fold-back (#845), not fixed here)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
    builtin/strict  builtin/native  <user backends>   (implement value contracts)
@@ -22,8 +26,8 @@ Value implementations, parsing, validation, and generation live above them.
                                   schema pipeline, not of the error currency)
                  loader          (schema resolution interfaces)
                  parser          (schema docs -> xsd components; imports xmltree, loader,
-                                  xsd, value, builtin — and builtin/strict, as the DEFAULT
-                                  backend Parse seeds when the caller supplies none)
+                                  xsd, value, builtin, regex — and builtin/strict, as the
+                                  DEFAULT backend Parse seeds when the caller supplies none)
                  xpath           (XPath 2.0 engine; imports value)          [1]
                  validate        (instance validation; adapters xmlsrc, jsonsrc, bersrc) [2]
                  codegen  codec  (generation; dataset ser/de)               [1]
@@ -233,10 +237,10 @@ represents it**:
   growing set". **The set grew** — that tripwire has fired once, and the two
   folds are now near-identical parallel machinery (identical `position`
   index, identical three-arm `Base()` switch, byte-identical `store…`
-  functions), which is a STYLE T4 finding filed rather than fixed here. The
-  standing limit is restated deliberately: a THIRD finalize-time write site
-  is a design change, not an increment, and belongs in a reviewed issue
-  before it is written.
+  functions), which is a STYLE T4 finding filed as **#414** rather than
+  fixed here. The standing limit is restated deliberately: a THIRD
+  finalize-time write site is a design change, not an increment, and
+  belongs in a reviewed issue before it is written.
 
 ### Value spaces without a dependency (`xsd.ValueSpace`)
 
@@ -266,19 +270,24 @@ compared with `==`, never rendered (its underlying value is an address, so any
 textual or sorted form would be nondeterministic, D1/D2) and never derived
 from position. `Loc` is provenance, not identity.
 
-### Why the finalize machinery lives in `xsd` (a steward ruling, 2026-08-02)
+### Why the finalize machinery lives in `xsd` (a steward ruling, 2026-08-02; re-confirmed 2026-08-16)
 
-`xsd` is by far the largest package, and roughly 9,750 of its non-test lines
-export **nothing at all** — 20 files as of 2026-08-09, up from 13 and ~6,700
-lines at the 2026-08-02 audit: `assertionprefix.go`, `attributeusefold.go`,
-`attributewildcardfold.go`, `collapsedintermediate.go`, `complexderivation.go`,
-`complexextension.go`, `contentrestricts.go`, `defaultbinding.go`,
-`derivation.go`, `effectivetotalrange.go`, `elementconsistent.go`,
-`elementdefaultvalid.go`, `namespaceconstraint_sets.go`,
-`namespaceconstraint_subset.go`, `particleattribution.go`, `resolve.go`,
-`substitutiongroup.go`, `substitutiongrouptypes.go`,
-`valueconstraintvalid.go`, `wildcardadmit.go`. That looks like a candidate for
-an `xsd/finalize` sub-package. **It is not; do not propose the split.**
+`xsd` is by far the largest package, and **8,303** of its non-test lines
+export **nothing at all** — 20 files as of 2026-08-16 (13 files / ~6,700
+lines at the 2026-08-02 audit): `allgrouplimited.go`, `assertionprefix.go`,
+`attributerestriction.go`, `attributeusefold.go`, `attributewildcardfold.go`,
+`collapsedintermediate.go`, `complexextension.go`, `contentrestricts.go`,
+`effectivetotalrange.go`, `elementconsistent.go`, `elementdefaultvalid.go`,
+`namespaceconstraint_sets.go`, `namespaceconstraint_subset.go`,
+`particleattribution.go`, `resolve.go`, `substitutiongroup.go`,
+`substitutiongrouptypes.go`, `typetablesubstitutable.go`,
+`valueconstraintvalid.go`, `wildcardadmit.go`. Three of the 2026-08-09
+twenty have since grown an export and left the list
+(`complexderivation.go`'s `ValidlySubstitutable`, `defaultbinding.go`'s three
+`Resolved*`/`EffectiveValueConstraint`, `derivation.go`'s `CheckDerivation` —
+all with real M5 consumers), and three joined it. That looks like a
+candidate for an `xsd/finalize` sub-package. **It is not; do not propose the
+split.**
 
 The constraint machinery reads and writes the components' *unexported*
 fields — `attributeusefold.go` reads `ComplexType.prohibitedAttributeNames`
@@ -299,8 +308,13 @@ Two access styles over the compiled model, one shared core:
   only `ElementByName` receives only that.
 - **Walk**: traversal of a type's effective content model. The algebra
   ships (type-derivation validity, substitution-group acceptance, wildcard
-  admission, attribute-use lookup, all unexported in `xsd`), and of the two
-  drivers over it one ships and one does not:
+  admission, attribute-use lookup) — **mostly unexported, with three
+  deliberate entry points M5 needed**: `Schema.ValidlySubstitutable` (the
+  derivation half, for `cvc-elt` clause 4), `Wildcard.AllowsName` (the one
+  canonical admission entry point) and `NamespaceConstraint.AllowsName`/
+  `AllowsNamespace` beneath it. `xsd/doc.go`'s "Walk API" section is
+  authoritative on which. Of the two drivers over it one ships and one does
+  not:
   - a **pull** driver — `Matcher`, the instance-guided advance of the
     content model one child at a time (the validation consumer) —
     **ships**, as `Schema.ContentMatcher`/`Matcher`/`Attribution`; it
@@ -415,18 +429,24 @@ use `regex`'s F&O flavor, never the pattern-facet flavor.
 
 ## Validation (`validate`)
 
-**Status: the engine ships the seam, decides the validation root's dispatch
-and both halves of its type, and descends into the children that dispatch
-attributes to a declaration; the XML adapter ships over it.**
+**Status: the engine ships the seam and charges eight rules, at the
+·validation root· and at every descendant the descent types; the XML
+adapter ships over it.**
 `validate` exports the infoset views (`Element`, `Attribute`, `Text`,
-`Children`, `Child`) plus `New`/`Validator`/`Result`, and `Assess` walks a
-source once, charging `cvc-assess-elt`, `cvc-elt` clause 2,
-`cvc-complex-type` clauses 1-4, `cvc-complex-content` clause 1,
-`cvc-attribute` clauses 3-4 and `cvc-au` against the root and against every
-descendant whose ·governing element declaration· the descent determines
-(§3.3.4.6 clause 3.1). The value-space charges reach a `value.Backend`
-through `New`'s required second parameter, which must be the backend the
-schema was compiled with.
+`Children`, `Child`, with `ElementChild`/`TextChild` constructing the sum)
+plus `New`/`Validator`/`Result`/`Option`/`WithLogger`, and `Assess` walks a
+source once, charging `cvc-assess-elt`, `cvc-elt` clauses 2, 3, 4 and 5.2.2
+(`xsi:nil` and `xsi:type`, #716), `cvc-complex-type` clauses 1-4,
+`cvc-complex-content` clause 1, `cvc-attribute` clauses 3-4, `cvc-au`,
+`cvc-identity-constraint` (#718) and `cvc-id` at the root alone (§3.3.4.5
+via `cvc-elt` clause 7). A union-governed value is classified by its
+·validating type· (#813). Identity-constraint `{selector}`/`{fields}` are
+evaluated directly as the restricted path subsets of §3.11.6.2/§3.11.6.3
+(`validate/icpath.go`) and deliberately NOT through the future XPath
+engine. **`validate/doc.go` is the authoritative per-rule statement and is
+current; do not restate it here beyond this list.** The value-space
+charges reach a `value.Backend` through `New`'s required second parameter,
+which must be the backend the schema was compiled with.
 `validate/xmlsrc` exports `Validate`/`Option`/`WithURI` and drives that walk
 over an XML instance decoded by `parser/xmltree`; `validate/jsonsrc` and
 `validate/bersrc` are `doc.go`-only (M8/M11). Everything below not covered
@@ -554,12 +574,28 @@ compiles, is documented, and has **zero** callers module-wide.
   assembling function (`compile`) is unexported, and no exported API takes
   or returns a stage, so no consumer can exist. Either grow the composition
   seam the docs promise, or unexport the interfaces.
-- **`regex.FlavorFO`** and **`loader.FS`/`HTTP`/`Chain`** — no consumer, but
-  both are **justified and not to be filed**: the F&O flavor is fully
-  implemented against its M6/M7 consumer (`xpath`), and the resolver
-  helpers are declared library surface in `loader/doc.go` for external
-  users, which is the "documented contract it fulfills" half of T5.
-  Re-check, do not re-file.
+- **`regex.FlavorFO`** and **`loader.FS`/`HTTP`/`Chain`/`ResolverFunc`** —
+  no consumer, but both are **justified and not to be filed**: the F&O
+  flavor is fully implemented against its M6/M7 consumer (`xpath`), and the
+  resolver helpers are declared library surface in `loader/doc.go` for
+  external users, which is the "documented contract it fulfills" half of
+  T5. Re-check, do not re-file.
+- **`validate.Validator.Schema()`** — exported for "the read-only view of
+  the compiled schema an adapter needs" (`validate/validate.go:95`), but no
+  adapter uses it and, per `validate/doc.go`, none can: adapters build
+  infoset values and never resolve declarations. Its two call sites are
+  both inside `validate`, and its own doc's second sentence ("The walk
+  reads the `*xsd.Schema` itself and not this narrowing") is falsified by
+  `validate/assess.go:100`, which reads the narrowing. Filed as **#848**:
+  unexport, or name the real consumer.
+- **`parser.Element` / `Node` / `Text` and the raw-tree accessors** —
+  library surface whose only module consumer is `conformance/schema.go`'s
+  decidability model (30 `parser.Element` references there and nowhere
+  else; `parser.Node` and `Text.Data` have zero). Not a tier violation —
+  infrastructure may import the library — but the surface exists because
+  `parser` reports no unmapped-construct list. Filed together with that gap
+  as **#846**; `Text`'s own justification (`<xs:documentation>` round-trip)
+  belongs to the annotation decision (#407).
 - **`xsderr.IsValidRule`** — **resolved (#273); re-check, do not re-file.**
   It still has zero non-test consumers, but the module-wide test
   `xsderr/doc.go` claims now exists and passes:
@@ -585,7 +621,7 @@ compiles, is documented, and has **zero** callers module-wide.
   and only against the arbiter's asserted per-lane count (issue #576;
   rules in `conformance/testdata/expectations/README.md`).
 
-### Cohort isolation is deliberate (a steward ruling, 2026-07-19)
+### Cohort isolation is deliberate (a steward ruling, 2026-07-19; re-confirmed 2026-08-16)
 
 `conformance/datatypes.go` claims its cases as separate **cohorts** —
 lexical, `<item>`, QName/NOTATION-context, Facets, NOTATION-Facets,
