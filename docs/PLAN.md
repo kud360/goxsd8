@@ -55,7 +55,7 @@ wrong in — which is the counterpart to #821's rule that a headroom figure coun
 documents a change TOUCHES while a lane counts decisions it REVERSES.
 
 Milestones, read from GitHub this pass. **The table is unchanged, and that is a
-measurement rather than a carry-over**: both landings and all four issues filed
+measurement rather than a carry-over**: both landings and all five issues filed
 this pass are unmilestoned, matching the practice around them, so no cell could
 move. M4's milestone `updated_at` is 2026-08-15T21:46Z and M5's is
 2026-08-16T02:08Z — both predate this pass, confirming it.
@@ -68,19 +68,19 @@ move. M4's milestone `updated_at` is 2026-08-15T21:46Z and M5's is
 | M5 — Instance validation (XML) | 13 | 12 | **active** |
 | M6–M12 | 0 | 0 | not filed |
 
-Queue: **215 open issues — 192 `ready`, 23 `blocked`, 0 `needs-replan`, 2 `epic`**
+Queue: **216 open issues — 193 `ready`, 23 `blocked`, 0 `needs-replan`, 2 `epic`**
 (both `blocked`, so both counted inside the 23), against **299 closed**.
-192 + 23 = 215 exactly, and every one of the 215 carries a queue label —
+193 + 23 = 216 exactly, and every one of the 216 carries a queue label —
 **the arithmetic proves the sweep rather than a sweep asserting it, and the
 previous stamp's one unexplained issue is gone**, resolved by this pass reading
-all 215 rather than carrying a delta. Read the milestone table as feature
-progress and not as the queue: **161** of the 215 carry no milestone
-(215 − 42 − 12).
+all 216 rather than carrying a delta. Read the milestone table as feature
+progress and not as the queue: **162** of the 216 carry no milestone
+(216 − 42 − 12).
 
 **Both halves of the move are stated.** #830 and #823 closed `ready`;
 **#822 closed `not_planned` as superseded**, the first `needs-replan` this
 roadmap has been able to report at zero; and this pass filed **#851**
-(`blocked`), **#852** and **#853** (both `ready`). **No open issue changed queue
+(`blocked`), **#852**, **#853** and **#854** (all three `ready`). **No open issue changed queue
 label.** All 23 `blocked` bodies were read for `## Depends on`: eight name an
 open issue, seven open with *"A trigger, not an issue"*, two are the epics, and
 none names a dependency that has closed. **That is the fourth consecutive pass
@@ -140,7 +140,7 @@ its own title.
 
 ### Working band
 
-Dependency-ordered top of the `ready` queue, so a session need not scan 192 of
+Dependency-ordered top of the `ready` queue, so a session need not scan 193 of
 them. Take from the top. **Re-derived in full this pass, not carried**: the
 previous band's row 1 (#822) is closed, its row 2 (#830) and row 3 (#823) have
 landed, and rows 4–9 had been carried through four stamps without re-argument.
@@ -177,7 +177,10 @@ are earlier landings' follow-ups; **#805**, **#806**, **#809** and **#810** are
 **#819** are #718's and #716's; **#825** is #800's own and **closes as moot if
 #851 lands first**, since #851 deletes the marker whose wording #825 corrects.
 **#815** is the standing marker-repoint seam, now four issues over five sites
-with its census re-derived above. **#843–#849** are the 2026-08-16 architecture
+with its census re-derived above. **#854** is the 2026-08-16 libuser
+consultation's one new filing — `xsd`'s package doc has six sections and no
+index, with the Query API second of six — and it lands **beside** band row 9
+rather than inside it, being the godoc half of that row's README question. **#843–#849** are the 2026-08-16 architecture
 audit's seven findings, ranked by the steward's own cost-of-delay read; **#843**
 (four hand-copied component descents, already diverged on the redefine-original
 edge, probed live) is the one whose cost is stated as increasing steeply and is
