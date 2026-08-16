@@ -25,9 +25,12 @@ one of them:
 A transcript is not durable. Neither is a local path: never point at one
 in a comment.
 
-For issue operations use whichever GitHub channel the session has
-(docs/ROUTINES.md ranks them): the platform's built-in GitHub tools, the
-GitHub MCP server, or the `gh` CLI.
+For issue operations use whichever GitHub channel works — docs/ROUTINES.md
+ranks them and states the fall-through rule. **A subagent's sandbox
+carries its own channel, and it is regularly not the orchestrator's**: an
+agent that cannot post returns the text it would have posted, and the
+orchestrator posts it saying whose it is. A verdict, grounding or RESUME
+note that reaches no thread is lost, whoever's fault the channel was.
 
 ## The branch scheme (the WIP discovery index)
 
@@ -185,24 +188,27 @@ the PR is opened — neither is anyone else's to volunteer:
    invoked". The entry rides the session commit or the session does not
    land (PRINCIPLES 29).
 2. **`origin/main` has not moved past the verdict's base** —
-   `git log HEAD..origin/main` is empty. If it is not, the branch owes, in
-   order: **merge `origin/main` forward** (never rebase — force-push is
-   forbidden, so a merge is the only mechanism), naming absorbed SHAs in
-   the log entry and PR body; **re-run the full gate on the committed
-   merged tree**, auto-merges included, because a clean merge is not
-   evidence of a compatible one (#392); then re-judge per **After the
-   verdict**. Re-verify afterwards: main can drift again while the PR is
-   open.
-
-If an absorbed commit changed the gate itself, re-read CLAUDE.md's gate
-block and run what it names now, not what you remember.
+   `git log HEAD..origin/main` is empty. If it is not, merge forward and
+   re-judge per **After the verdict**, then re-verify: main can drift
+   again while the PR is open.
 
 ### After the verdict
 
 A verdict measures a tree, and the tree that lands must be that tree.
-Anything that moves it — a merge forward, a late finding, a fix turned up
-while writing the log — is judged by one question: can this change what
-the verdict measured?
+
+**Merge `origin/main` forward before delegating the judgment.** Main
+drifts under most branches, and a moved base costs nothing before a
+verdict exists and a round after — so the only drift worth pricing is what
+lands inside the verdict's own window. A merge forward is never a rebase
+(force-push is forbidden, so a merge is the only mechanism); it names the
+absorbed SHAs in the log entry and the PR body, re-runs the FULL gate on
+the committed merged tree — a conflict-free auto-merge included, because a
+clean merge is not evidence of a compatible one (#392) — and re-reads
+CLAUDE.md's gate block if an absorbed commit changed the gate itself.
+
+Anything that moves the tree after the verdict — a merge forward, a late
+finding, a fix turned up while writing the log — is judged by one
+question: can this change what the verdict measured?
 
 - **The diff changed** → a full new round.
 - **Only the base moved** → a gate-only round, and only when the verdict

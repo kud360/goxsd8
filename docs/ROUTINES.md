@@ -27,17 +27,35 @@ translate the local times above and mind DST drift. Keep develop slots
   suite) — conformance runs skip without it.
 - Non-interactive `git push`: a push that prompts hangs a headless session
   forever.
-- **A GitHub channel for issue operations**, in order of preference:
+- **A GitHub channel for issue operations.** Try them in this order, and
+  **fall through on any error**: a channel that fails at call time means
+  try the next one, never that the operation is impossible.
   1. *Cloud sessions*: the platform's built-in GitHub tools — zero setup
      via the Claude GitHub app, and the token never enters the container.
-     Prefer these in routines.
   2. *GitHub MCP server* (`.mcp.json`): OAuth interactively; headless
      containers have no browser, so set `GITHUB_PAT` in the routine's
      environment config and the committed config expands it into the
-     Authorization header. Without it the server simply fails to connect
-     and the other channels still work.
+     Authorization header. Without it the server fails to connect.
   3. *`gh` CLI*: authenticated locally; cloud containers need it installed
      plus a `GH_TOKEN`.
+
+  **In this environment `gh` is a standing 403 and the MCP server serves
+  both reads and writes.** REST answers *"GitHub access is not enabled for
+  this session. An org admin must connect the Claude GitHub App for this
+  organization"*; the `gh` GraphQL path answers that only a pinned set of
+  PR-review operations is served. Both name a configuration state rather
+  than a transient one — recognize either text and fall through, rather
+  than concluding the thread is unreadable or filing it again (#527).
+
+  Falling through does not recover everything: the MCP channel strips
+  angle-bracketed tokens from issue bodies it reads and writes, so nothing
+  quoted through it is verbatim and anything bracketed is re-derived from
+  the repo (#515).
+- **The checkout is shallow.** History before the graft is absent, so
+  `git merge-base` can come up empty — and
+  `git rev-list --left-right --count A...B` does not fail when it does; it
+  counts each side's whole visible history instead. An ahead/behind pair
+  taken here is not a divergence measurement (#802).
 - Cloud containers cannot delete or force-push remote refs — the git proxy
   rejects both. The workflow never needs to: landing cleanup is GitHub's
   auto-delete on merge, and abandoned branches are retired in place.
