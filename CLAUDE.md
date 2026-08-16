@@ -69,11 +69,25 @@ git config core.hooksPath .githooks              # activate the repo's hooks —
 Surveys, in place of the greps they replace (PRINCIPLES 27):
 
 ```sh
-go tool lanestatus                               # committed lane scores, as PLAN.md's table
-go tool surface -base origin/main                # what this branch added/removed from the exported surface (T5)
-gh issue list --state all --json number,state,labels | go tool wipsurvey       # LIVE/CLAIMED/EXPIRED/RETIRED/UNKNOWN branches
-gh issue list --label kind/gap --state all --json number,title,state,body | go tool gapaudit  # GAP( markers vs trackers
+go tool lanestatus                    # committed lane scores, as PLAN.md's table
+go tool surface -base origin/main     # what this branch added/removed from the exported surface (T5)
+go tool wipsurvey < issues.json       # LIVE/CLAIMED/EXPIRED/RETIRED/UNKNOWN branches
+go tool gapaudit  < gapissues.json    # GAP( markers vs trackers
 ```
+
+Both surveys read their issue list from **stdin**, so any GitHub channel
+feeds them (docs/ROUTINES.md ranks the channels and states what to do when
+one errors) — with `gh`:
+
+```sh
+gh issue list --state all --json number,state,labels > issues.json
+gh issue list --label kind/gap --state all --json number,title,state,body > gapissues.json
+```
+
+Empty stdin is a supported mode, not a failure. `wipsurvey` then reports
+leases only and can never report RETIRED; `gapaudit` reports the marker
+census only and reconciles nothing against trackers. Each says so in its
+own output; neither exits non-zero.
 
 ## Style headlines
 

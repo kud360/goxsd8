@@ -24,6 +24,12 @@ rewrite or reorder existing entries.
 - Next — discharged before landing / owed to the post-land pass
 ```
 
+Cite the session's thread comments by `issuecomment-<id>` — grounding,
+each verdict, the parking notice — so a later session reaches the
+reasoning without re-reading the thread. When no channel in the container
+served them (docs/ROUTINES.md), name the thread and say the IDs are
+unrecovered; a pointer is never dropped silently.
+
 The log is where evidence lives. A rule in a process document should be
 able to point here with a bare `(#N)` instead of carrying its own case
 history — that only works if what happened is written down here first.
@@ -60,6 +66,12 @@ would read it, that is the finding, and rewriting it is the fix.
 Respect the ownership boundaries in CLAUDE.md's ground-truth table: each
 document owns its subject and none restates another. A fix you find
 yourself stating in two places belongs in neither — find the owner.
+
+**Apply the fixes already filed against your own subject.** A `ready`,
+doc-only process issue about the process documents is discharged HERE, not
+routed to a develop iteration that has not picked it in the weeks its
+friction kept recurring. Route back only what needs verification a retro
+cannot honestly perform, and name what that verification is (#527).
 
 Repeated manual toil is a `kind/tooling` issue, not a rule (PRINCIPLES
 27). Land the result as a `meta: retro <date>` commit, and log the metric

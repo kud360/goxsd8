@@ -33,18 +33,14 @@ body says so.
 
 1. **Survey reality**: `git log` since the last plan, recent docs/LOG
    entries, and the issue list. Three surveys are mechanical and have
-   tools — run them instead of grepping:
-
-   ```sh
-   gh issue list --state all --json number,state,labels | go tool wipsurvey
-   gh issue list --label kind/gap --state all --json number,title,state,body | go tool gapaudit
-   go tool lanestatus
-   ```
-
-   `wipsurvey` classifies the branch namespace, `gapaudit` reconciles
-   `GAP(` markers against their tracking issues, and `lanestatus` reads
-   the committed lane scores. Their output is input to your judgment, not
-   a substitute for it — `gapaudit`'s matching is heuristic and says so.
+   tools — run `wipsurvey`, `gapaudit` and `lanestatus` instead of
+   grepping; CLAUDE.md spells them and how to feed them. `wipsurvey`
+   classifies the branch namespace, `gapaudit` reconciles `GAP(` markers
+   against their tracking issues, and `lanestatus` reads the committed
+   lane scores. Their output is input to your judgment, not a substitute
+   for it — `gapaudit`'s matching is heuristic and says so, and fed no
+   issue list it reconciles nothing, which is a census rather than an
+   audit.
 2. **Reconcile the branch namespace** — report-only; sessions never delete
    or rename refs. A `wip/issue-<N>` whose issue is CLOSED should have
    vanished at merge: verify its content is in main and supersede the
@@ -57,11 +53,18 @@ body says so.
    editing that body, not by commenting only.
 4. **Order the ready queue by dependency** and publish the top band in
    docs/PLAN.md's Status section, so a session can pick the
-   highest-value startable issue instead of scanning 130 of them. There
-   is no numeric cap on `ready` itself — it means filed and unblocked,
-   and its size is an output, not a target (#347). **The ordering is the
-   deliverable**: prefer vertical slices that move a conformance lane
-   over horizontal completeness.
+   highest-value startable issue instead of scanning the whole queue.
+   There is no numeric cap on `ready` itself — it means filed and
+   unblocked, and its size is an output, not a target (#347). **The
+   ordering is the deliverable**: prefer vertical slices that move a
+   conformance lane over horizontal completeness.
+
+   **Band `kind/process` and `kind/tooling` work on the sessions it costs,
+   never on the lane it does not move.** An issue whose friction the log
+   records in consecutive sessions outranks a lane slice: the tax
+   compounds, the fix is usually one session, and ranking on lane movement
+   alone starves that queue until a retro re-diagnoses friction that was
+   already filed and specified (#527, #565).
 5. **Fold in the persona stories the orchestrating session hands you.**
    You never role-play a persona yourself — you have read the source, so
    your verdict would launder an insider's opinion as an outsider's, which

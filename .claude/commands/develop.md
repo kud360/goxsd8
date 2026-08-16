@@ -18,19 +18,16 @@ heartbeat.
    gets pushed to `parked/untriaged-<YYYYMMDD-HHMMSS>` and logged — never
    cleaned.
 
-2. **Pick.** Classify the branches rather than re-deriving them by hand
-   (#399):
-
-   ```sh
-   gh issue list --state all --json number,state,labels | go tool wipsurvey
-   ```
-
-   It reports each `wip/issue-<N>` as LIVE, CLAIMED, EXPIRED, RETIRED or
-   UNKNOWN. LIVE and CLAIMED branches and their issues are off-limits;
-   RETIRED ones are not work; UNKNOWN wants `git fetch origin` and a
-   re-run. A CLAIMED branch has pushed no commits of its own, so git dates
-   nothing about it — only its issue thread's own clock settles whether
-   the holder is still working, and no age reading may retire it (#722).
+2. **Pick.** Run `go tool wipsurvey` — CLAUDE.md spells its input — rather
+   than re-deriving the branch namespace by hand (#399). It reports each
+   `wip/issue-<N>` as LIVE, CLAIMED, EXPIRED, RETIRED or UNKNOWN. LIVE and
+   CLAIMED branches and their issues are off-limits; RETIRED ones are not
+   work; UNKNOWN wants `git fetch origin` and a re-run. A CLAIMED branch
+   has pushed no commits of its own, so git dates nothing about it — only
+   its issue thread's own clock settles whether the holder is still
+   working, and no age reading may retire it (#722). If no channel yields
+   an issue list, run it on empty stdin: the lease-only report classifies
+   everything but RETIRED, which is not a reason to survey by hand.
    - **Resuming beats starting.** Take the oldest EXPIRED `wip/issue-<N>`
      whose issue is open and not `needs-replan`; merge `origin/main` in if
      main moved (never rebase; if the conflicts are not tractable, park it
@@ -61,10 +58,13 @@ heartbeat.
    Mason may absorb adjacent work under docs/WORKFLOW.md's scope rule.
    Absorbed items belong in the commit body, not in a new issue.
 
-5. **Judge.** Delegate to **arbiter**. On reject: one repair round by
-   mason, then re-judge. On a second reject: park per WORKFLOW, then go to
-   step 6's log entry and stop. On accept, dispose of the verdict's
-   remaining findings per WORKFLOW's **After the verdict** before step 6.
+5. **Judge.** `git fetch origin main` first and merge it forward if it
+   moved — before the arbiter, per WORKFLOW's **After the verdict**, where
+   it costs no round instead of one. Then delegate to **arbiter**. On
+   reject: one repair round by mason, then re-judge. On a second reject:
+   park per WORKFLOW, then go to step 6's log entry and stop. On accept,
+   dispose of the verdict's remaining findings per WORKFLOW's **After the
+   verdict** before step 6.
 
 6. **Land.** Delegate the log entry to **chronicler** first, so it rides
    the session commit. Verify WORKFLOW's two landing preconditions
