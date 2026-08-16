@@ -17,7 +17,7 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-08-16 (post-land, #800)
+## Status — 2026-08-16 (post-land, #821)
 
 Conformance lanes — **paste `go tool lanestatus` verbatim**, never a
 hand-count:
@@ -26,26 +26,34 @@ hand-count:
 |---|---:|---:|---:|
 | `ber` | — | — | 0 |
 | `datatypes` | 1161 | 12 | 1173 |
-| `instance` | 1324 | 25037 | 26361 |
+| `instance` | 1325 | 25036 | 26361 |
 | `json` | — | — | 0 |
-| `schema` | 12836 | 2562 | 15398 |
+| `schema` | 12837 | 2561 | 15398 |
 | `xpath` | — | — | 0 |
 
 An em dash is a lane with no cases yet, which is a different claim from a lane
 scoring zero. `datatypes` is M3 and **complete**; `schema` is M4 and active;
 `instance` is M5 and active; `xpath`, `json` and `ber` wait on M6/M7, M8 and M11.
 
-**This stamp absorbs FOUR landings, not one.** The previous stamp was #722's,
-which moved no lane, and the three landings after it filed no docs commit here
-(#400). `instance` 1017 → **1324** across **#718** (+116, banked `ecc6e11`),
-**#716** (+183) and **#813** (+9, unioned onto #716's at `2d0a38d`); `schema`
-12832 → **12836** across **#800** (+4, banked `04f2c55` — `CTA/cta0043` and
-`Wild/wild078|079|081`, the four dead `{type table}` readers waking);
-`datatypes` 1161 untouched since M3 closed. The per-landing narrative is
-`docs/LOG/2026-08.md`, not here.
+**This stamp absorbs ONE landing on a baseline hours old**, which is the
+difference between it and the four-landing repair the previous stamp had to be.
+**#821** seeded ·xs:error· (§3.16.7.3) and moved `schema` 12836 → **12837** and
+`instance` 1324 → **1325**, landed at `2bb7133`; `datatypes` is untouched since
+M3 closed. **Both moves are the same case pair** — `saxonData/VC/vc014.xsd` and
+`vc014.n1.xml` — so the two lanes are one fix and not two pieces of evidence.
+The per-landing narrative is `docs/LOG/2026-08.md`, not here.
+
+**A headroom estimate counts documents a change TOUCHES; a lane counts decisions
+a change REVERSES**, and #821 is this roadmap's worked example of the gap: its
+body promised 22 suite documents naming the type and 18 un-withheld by that
+landing alone, and the lane moved by **one**, because withholding a `{type
+table}` is an *unmade* rejection rather than a false one and all 18 were already
+passing. Read every corpus figure in the band below on those terms.
 
 Milestones, read from GitHub this pass. **M0–M2 and M3 are carried**: both are
-complete, and no issue filed since the last stamp carries either.
+complete, and no issue filed since the last stamp carries either. **The table is
+unchanged, and that is a measurement rather than a carry-over** — #821 carried no
+milestone, so closing it moved no cell.
 
 | Milestone | Closed | Open | State |
 |---|---:|---:|---|
@@ -55,69 +63,79 @@ complete, and no issue filed since the last stamp carries either.
 | M5 — Instance validation (XML) | 13 | 12 | **active** |
 | M6–M12 | 0 | 0 | not filed |
 
-Queue, read fresh across all three pages: **202 open issues — 180 `ready`, 22
-`blocked`, 0 `needs-replan`, 2 `epic`** (both `blocked`), against **294
-closed**. 180 + 22 = 202 exactly, so the arithmetic proves the label sweep
-rather than a sweep asserting it, and no open issue carries neither queue label.
-Read the milestone table as feature progress, not as the queue: **148** of the
-202 carry no milestone (202 − 42 − 12).
+Queue: **201 open issues — 180 `ready`, 21 `blocked`, 0 `needs-replan`, 2 `epic`**
+(both `blocked`), against **295 closed**. 180 + 21 = 201 exactly, so the
+arithmetic proves the label sweep rather than a sweep asserting it, and no open
+issue carries neither queue label. Read the milestone table as feature progress,
+not as the queue: **147** of the 201 carry no milestone (201 − 42 − 12).
 
-**The previous stamp's one unexplained issue is still exactly one, and has not
-grown.** That stamp published 193 open / 289 closed; eleven issues were filed
-since (#809–#823 less the PR numbers) and three of its 193 have closed (#718,
-#716, #800), which predicts 201 against the 202 measured. #813 was filed and
-closed between the two stamps and never entered either open count. Treat 202 as
-the measurement; the next full `/backlog` reconciles, and does not re-derive
-from either figure.
+**The split moved inside this pass and both halves are stated post-move.** #821
+closed `ready`; **#823 was relabelled `blocked` → `ready`** by this pass, its sole
+dependency discharged. Pre-move the queue read 179 `ready` / 22 `blocked`, which
+is the same 201.
+
+**GitHub's `totalCount` aggregate is stale by exactly one and the enumeration is
+what these figures come from.** It still answers 202 open and 180 `ready` while
+`#821` appears in neither list — closed at 05:17 UTC, and the newest open issue
+by creation is `#825`, filed before the previous stamp. Where the aggregate and
+the enumeration disagree, this section publishes the enumeration. The previous
+stamp's one unexplained issue is not re-derived here and is still owed to the
+next full `/backlog`.
 
 ### Branch namespace, `origin` — report-only; a session never deletes a ref
 
-**`go tool wipsurvey`, verbatim** (`gh` is 403 on both GraphQL and REST in this
-container — #527, #682 — so the issue JSON was supplied from MCP):
+**`go tool wipsurvey`, verbatim** (run in its no-`gh` mode — #682 — since `gh` is
+403 on both GraphQL and REST in this container, so no issue JSON reached it and
+every row reads `lease-only`):
 
 ```
 ISSUE  BRANCH         TIP AGE  VERDICT  REASON
-733    wip/issue-733  main's   CLAIMED  wip/issue-733: no commits of its own; tip age is main's, not the claim's -- do not retire on age, settle it from the issue thread
+733    wip/issue-733  29m0s    LIVE     wip/issue-733: tip pushed 29m0s ago, within the 2h0m0s claim TTL; no issue data for this branch, lease-only
 ```
 
-**The namespace was empty when this pass began and holds ONE live lease by the
-time it lands.** Every branch the previous stamp listed as deletable is gone,
-and `wip/issue-718`, `wip/issue-716`, `wip/issue-813` and `wip/issue-800` were
-auto-deleted by GitHub at merge as the setting intends — leaving `main` alone,
-with nothing `EXPIRED`, no `parked/*` ref and nothing needing a human look. Then
-`wip/issue-733` was pushed mid-pass at `5bfcb58`, `main`'s own tip: a **bare
-claim minutes old**, which is why it reads `CLAIMED` and not `EXPIRED`. It is
-**#722's fix working on a genuinely live lease** rather than a stale one — band
-row 3 is being worked right now, so take another row and do not resume this ref.
-The shallow-clone finding (#802) still binds any ahead/behind arithmetic here.
+**The namespace holds `main` and one live lease.** `wip/issue-821` was
+auto-deleted by GitHub at merge as the setting intends; nothing is `EXPIRED`,
+there is no `parked/*` ref and nothing needs a human look.
 
-**`go tool gapaudit` could not run, for the same 403** — a third consecutive
-session, recorded in `docs/LOG/2026-08.md` at #813 and again at #800, which is
-the argument #682 makes. The one check this pass could make by hand is the one
-#800 owed: `grep -rn '#800' --include=*.go` is **empty**, so the three
-`GAP(xsd)` markers that landing added name #822, #821 and #823, and no marker in
-the tree cites a closed issue through it. The census itself is owed wherever
+**`wip/issue-733` stopped being a bare lease during this pass, which is why its
+verdict changed without anyone touching the branch table's rules.** The previous
+stamp read it `CLAIMED` — no commits of its own, its tip borrowed from `5bfcb58`,
+#800's squash. It has since pushed **`1549702`** (`parser: map a top-level
+<attribute>'s inline <simpleType> to {type definition} (#733)`), so it now has one
+commit of its own and dates itself: `LIVE`, 29 minutes old, well inside the 2h
+TTL. **Off-limits either way, and now for the stronger reason** — a session is
+working it right now, not holding it. The shallow-clone finding (#802) still binds
+any ahead/behind arithmetic here.
+
+**`go tool gapaudit` could not run, for the same 403** — a fourth consecutive
+session, which is the argument #682 makes. The check this pass could make by hand
+is #821's own: no `GAP(` marker in the tree cites this landing's closed issue, and
+the two it rewrote cite **#822** (`parser/produce_typetable.go:123`) and **#823**
+(`xsd/resolve.go:740`), both open, so STYLE P3 holds. The one surviving `#821` in
+Go is `parser/xserror_test.go:13`, a **provenance** citation in a test doc
+comment — the issue that fixed the defect the test pins — which P3 does not
+govern and which is correct where it stands. The census itself is owed wherever
 `gh` is authenticated.
 
 ### Working band
 
 Dependency-ordered top of the `ready` queue, so a session need not scan 180 of
-them. Take from the top. **Rows 1–3 of the previous band have all landed** —
-#718, #716 and #800 — and rows 1 and 2 below are #800's own children, filed
-with measured corpus figures. The rest is carried from the `2d6ec5c` full
-re-derivation with its justifications intact; no landing since falsifies one.
+them. Take from the top. **Row 1 of the previous band has landed** — #821 — and
+rows 1–2 below are #800's remaining children, with #823 entering on the strength
+of that landing. The rest is carried from the `2d6ec5c` full re-derivation with
+its justifications intact; no landing since falsifies one.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #821 | **·xs:error· is seeded as no component at all**, so `type="xs:error"` is FALSE-REJECTED at `src-resolve` clause 1.1 — reproduced through `parser.Parse` on a schema whose whole body is one element declaration. 22 suite schema documents name it on an `<xs:alternative>`, **18 of them un-withheld by this issue alone**, and one more names it on an `<xs:attribute>`. Measured `schema` headroom, no dependency, and it is the only thing #823 waits on |
-| 2 | #822 | the other half of #800's withheld set: `TypeAlternative` carries `{type definition}` as a QName ONLY, so §3.12.2's inline arm — and a synthesized `{default type definition}` over an anonymous declared type — withholds the WHOLE `{type table}` of the declaration. **46 inline-arm alternatives across 20 schema documents.** Its §3.4.2.1 ownership grounding is a first step inside its own scope, not an external dependency |
-| 3 | #733 | **CLAIMED as this stamp lands — `wip/issue-733`, a bare lease pushed mid-pass; take another row.** **Promoted four places** at the last full pass: a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and **#442 moved `schema` +82**. It was banded below five rows that move no lane at all, which is precisely what four passes of carrying produced |
+| 1 | #822 | the other half of #800's withheld set: `TypeAlternative` carries `{type definition}` as a QName ONLY, so §3.12.2's inline arm — and a synthesized `{default type definition}` over an anonymous declared type — withholds the WHOLE `{type table}` of the declaration. **46 inline-arm alternatives across 20 schema documents**, a TOUCH count and not a reversal count — #821 is why that distinction is written above the table. Its §3.4.2.1 ownership grounding is a first step inside its own scope, not an external dependency |
+| 2 | #823 | **unblocked by #821 and banded on this pass.** `e-props-correct` clause 7 is fail-open at `resolveTypeTable`: an alternative type not ·validly substitutable· for the declaration's own `{type definition}` is accepted. Clause 7.2's ·xs:error· exemption now has a component to fire on, which is the whole reason it waited. An **unmade** rejection, so `schema` can only gain — and its own first step is the oracle question its body names, how `cos-st-derived-ok` reads a UNION base. Below #822 because #822 widens this charge's reach without changing its shape |
+| 3 | #733 | **LIVE as this stamp lands — `wip/issue-733` pushed `1549702` at 04:52 UTC; take another row.** **Promoted four places** two passes ago: a top-level `xs:attribute` with an inline `xs:simpleType` is unproduced — #442's attribute analogue, and **#442 moved `schema` +82** |
 | 4 | #786 | `simpleTypeDecidable`'s last decline is conservative, not forced. Its premise — that a `simpleType` naming none of §3.16.2.1's three alternatives needs a conservative decline — is a candidate for expiry now that #447 and #738 landed `<list>` and `<union>`; converting it turns declines into decisions in `schema` |
 | 5 | #719 | `cvc-assertion` wired fail-open at every variety level — the M6 seam, marked and measured. Below #733/#786 because it converts silent wrongness into honest declines, which the lane scores the same. It also decides the encoding **#56** needs one milestone later |
 | 6 | #625 → #669 → #748 → #492 | **README's Library block, now ONE row in file order.** Splitting it across two band rows is why it sat four passes. #625 fixes the `SchemaBuilder` pointer at closed #203 (:123-124); #669 the "works TODAY" snippet, the example list and `go doc ./...`; #748 the M5 block that denies a shipped API (:126-133); #492 `ParseReport`, which belongs in the sentence at `README.md:116` rather than a new paragraph |
 | 7 | #747 + #514 + #687 + #672 | the CLI contract, all four decided **before** #472 — the missing "Implemented today" paragraph, typo-vs-unbuilt, scoped help, `-version`. Each is a sentence or a dispatch branch while the CLI surface is still empty, and a change to shipped behaviour afterwards |
 | 8 | #472 | implement `goxsd8 parse`, the first non-stub subcommand — and the issue that owns the exit-2 split, plus the forward-compat sentence folded onto it |
-| 9 | #682 + #668 + #802 | **the container tax, actionable half.** #682 and #668: `wipsurvey` and `gapaudit` both have a working no-`gh` mode documented only in their own package docs, so the three places a session reads show a dead `gh issue list \|` pipeline. #802: the clone is shallow and nothing says so. **This pass paid all three by hand for the third stamp running.** **#659** and **#527** are the prose half of the same paragraph and land with it |
+| 9 | #682 + #668 + #802 | **the container tax, actionable half.** #682 and #668: `wipsurvey` and `gapaudit` both have a working no-`gh` mode documented only in their own package docs, so the three places a session reads show a dead `gh issue list \|` pipeline. **This pass ran `wipsurvey` in that mode and could not run `gapaudit` at all — the fourth stamp running.** #802: the clone is shallow and nothing says so. **#659** and **#527** are the prose half of the same paragraph and land with it |
 
 **Deliberately unbanded, and why.** **#744** (chained-redefine successor, highest-
 value M4 gap), **#773** and **#721** are held out on one shared condition: each
@@ -126,21 +144,24 @@ has an owner — #484** — which is why a process issue is worth more than its 
 suggests here: it unblocks three band-grade issues at once. **#774** is three
 fail-open declines to close or rule permanent; which way it moves a lane is
 unknown until the first is decided, and **#795** pins the element-side one either
-way. **#771** is now — not "once #800 lands" — the `instance` lane's LAST
-decided-and-disagreeing case. **#823** is the one `blocked` issue this landing
-created and it joins the band the moment #821 closes; do not start it early,
-because a clause-7.1-only charge is sound today and wrong the instant #821
-lands. **#782**, **#783**, **#785**, **#787**, **#788**, **#793**, **#794**,
-**#796** are earlier landings' follow-ups; **#805**, **#806**, **#809** and
-**#810** are `tools/wipsurvey` hygiene on a tool that now works; **#812**,
-**#814**, **#817**, **#819** and **#820** are #718's, #716's and #813's, filed
-by passes that left no PLAN commit; **#825** is this pass's own, the two
-sub-threshold nits #800's ACCEPT flagged and its landing did not absorb.
-**#815** is the standing marker-repoint
-seam, and **#800 is its first worked example** — that landing discharged its own
-repoint inside the PR rather than leaving it to a post-land pass, which is the
-shape #815 is asking for; its thread carries the note, and one row of its
-Acceptance table is now retired.
+way. **#771** is the `instance` lane's LAST decided-and-disagreeing case.
+**#782**, **#783**, **#785**, **#787**, **#788**, **#793**, **#794**, **#796**
+are earlier landings' follow-ups; **#805**, **#806**, **#809** and **#810** are
+`tools/wipsurvey` hygiene on a tool that now works; **#812**, **#814**, **#817**,
+**#819** and **#820** are #718's, #716's and #813's, filed by passes that left no
+PLAN commit; **#825** is #800's own, the two sub-threshold nits its ACCEPT
+flagged and its landing did not absorb. **#815** is the standing marker-repoint
+seam, and it holds the one `GAP(` census item nothing else owns —
+`parser/produce_complex.go`'s silently-accepted `element ref=... substitutionGroup=...`
+— for the next full pass.
+
+**#821 filed no unbanded follow-up.** Its arbiter's single non-blocking finding —
+`parser/xserror_test.go`'s `{final}` table asserting the rule ID without the
+clause number — was **declined rather than filed**, because `xsd/derivation_test.go`
+already pins `cos-st-restricts` **2.2.1.1** and **3.2.1.1** by clause substring
+over the same `{final}` mechanism, and a `parser`-level copy would be a second
+encoding of a fact `xsd` owns. The reasoning is on the #821 thread; do not
+re-raise it from the test file.
 
 **`parser/redefine.go` has been rewritten five times in a week, so read it rather
 than an issue body that describes it.** #686, #699, #506, #503 and #504 each
@@ -148,29 +169,30 @@ moved it; #744, #706 and #726 all open it next.
 
 ### Next planning action
 
-**A full `/backlog` is owed, and this stamp is its own evidence.** Three
-landings ran between #722's stamp and this one without touching this file, so
-the working band spent a day pointing a develop session at three closed issues
-and the lane table understated `instance` by 307. **#400** is the mechanism — a
-pass that files no docs commit leaves no signal on `main` — and it is still
-open. The band above is a post-land repair of that drift, not a re-derivation:
-its rows 3–9 have now been carried through two stamps.
+**A full `/backlog` is owed**, and it is now the second stamp in a row saying so.
+The two post-land passes since — #800's and this one — are repairs of the drift
+**#400** describes and not re-derivations: rows 3–9 of the band above have been
+carried through three stamps, and the queue arithmetic still has the previous
+stamp's one unexplained issue in it, deliberately not re-derived here.
 
 **Re-derive the decline census before the next carve.** It predates #766, #715,
-#740, #790, #718, #716 and #813 — and is now, by a wide margin, the oldest
-measurement this roadmap argues from. Rows 4 and 5 of the band above are ordered
-on *reasoning* about which declines are convertible, not on a measurement, and
-that is as far as judgment can carry the ordering. **#570** is the issue that
-makes it cheap and permanent: bank a per-lane decline baseline so every landing
-announces the cases it just made decidable, instead of each pass re-running a
-standing count. **#571** is its soundness half.
+#740, #790, #718, #716, #813, #800 and #821 — and is, by a wide margin, the
+oldest measurement this roadmap argues from. Rows 4 and 5 of the band above are
+ordered on *reasoning* about which declines are convertible, not on a
+measurement, and that is as far as judgment can carry the ordering. **#570** is
+the issue that makes it cheap and permanent: bank a per-lane decline baseline so
+every landing announces the cases it just made decidable, instead of each pass
+re-running a standing count. **#571** is its soundness half. **#821's
+headroom-versus-lane gap is the sharpest argument yet for banking it** — a
+decline baseline is exactly the instrument that would have predicted +1 instead
+of ~18.
 
 The follow-up-ledger debt this section carried for eleven stamps is **discharged
 and closed** (#489); do not re-file it. WORKFLOW step 7(b)'s *a hand-off is not
 a disposition* rule is what closed the inflow.
 
-Everything else this queue needs is a develop iteration. **Start with #821** —
-and not with row 3, which is claimed.
+Everything else this queue needs is a develop iteration. **Start with #822** —
+and not with row 3, which is live.
 
 
 ## Milestones
