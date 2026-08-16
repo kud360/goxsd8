@@ -50,67 +50,131 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // position, which is what a reader needs. Continuing to match after a rejected
 // child would report the rest of the sequence against a position the document
 // never reached.
+//
+// Two cvc-elt (§3.3.4.3) clauses read the same [[children]] and are settled
+// here rather than in cvcelt.go, because arriving children are what decide
+// them:
+//
+//   - 3.2.3.1, for a ·nilled· element: no character or element information item
+//     [[children]] at all. It REPLACES clause 1 rather than joining it — clause
+//     1 applies "if E is not ·nilled·" — so the two are never both live, and it
+//     shares the one-charge rule above for the same reason.
+//   - 5.2.2, for an element whose ·governing element declaration· carries a
+//     fixed {value constraint}: no element information item [[children]]
+//     (5.2.2.1) and an ·initial value· agreeing with the constraint (5.2.2.2).
+//     It joins clause 1 rather than replacing it, and is settled once the
+//     [[children]] are exhausted (fixedValue).
 
 // contentCheck is the state of one element's [[children]] assessment against
 // its ·governing type definition·'s {content type}. It is built per element by
 // [walk.contentCheck] and dropped when that element's [[children]] are
 // exhausted.
 //
-// A nil governing decides NOTHING: every child is walked and none is charged or
-// passed, and none is ·attributed to· anything either, so the whole subtree
-// below such an element is walked against no type in its turn
-// ([walk.childGoverning]). A nil matcher beside a non-nil governing is not that
-// state: it is clause 1.4 alone declining — an {open content} or a shape
+// A nil governing decides no clause 1 at all: every child is walked and none is
+// charged or passed by it, and none is ·attributed to· anything either, so the
+// whole subtree below such an element is walked against no type in its turn
+// ([walk.childGoverning]). The two cvc-elt clauses below still apply — they read
+// the DECLARATION and not the type. A nil matcher beside a non-nil governing is
+// neither state: it is clause 1.4 alone declining — an {open content} or a shape
 // [xsd.Schema.ContentMatcher] does not decide — while clauses 1.1 to 1.3 still
 // hold, since they read the {variety} and not the particle.
 //
-// initial gathers the ·initial value· clause 1.2 tests, and is written for a
-// simple {content type} alone: no other clause reads a character information
-// item [[child]] beyond the one it is charging, so gathering under any other
-// {variety} would hold the whole of an element's text for nothing.
+// nilled is whether E is ·nilled· (§3.3.4.3, key-nilled), decided before any
+// child arrives ([walk.nilCheck]). It turns clause 1 off wholesale, which
+// governing is the one reading of, and clause 3.2.3.1 on — the half a nil
+// governing cannot tell apart, an element with no determinable ·governing type
+// definition· charging neither clause.
+//
+// initial gathers the ·initial value· clauses 1.2 and 5.2.2.2 test, and is
+// written only where one of them reads it (gathers): no other clause reads a
+// character information item [[child]] beyond the one it is charging, so
+// gathering elsewhere would hold the whole of an element's text for nothing.
+//
+// sawElement and sawText record which kinds of [[children]] arrived, which is
+// what cvc-elt clause 5's case split and clause 5.2.2.1 quantify over. They are
+// not derivable from initial, which is gathered conditionally and holds nothing
+// for the elements whose text no clause reads.
 type contentCheck struct {
-	e         Element
-	governing *xsd.ComplexType
-	matcher   *xsd.Matcher
-	initial   strings.Builder
-	charged   bool
+	e          Element
+	g          governance
+	nilled     bool
+	matcher    *xsd.Matcher
+	initial    strings.Builder
+	sawElement bool
+	sawText    bool
+	charged    bool
 }
 
 // contentCheck builds the check for one element's [[children]].
-//
-// GAP(xsd): an element carrying xsi:nil decides nothing at all. cvc-complex-type
-// clause 1 applies only where E is not ·nilled·, and ·nilled· (§3.3.4.3
-// cvc-elt clause 3.2) needs the {nillable} of the ·governing element
-// declaration· and the ·actual value· of the attribute, neither of which this
-// dispatch has; presence of the attribute is the upper bound on it, exactly as
-// hasInstanceType is for xsi:type. The withheld value's consumer set is
-// Result.violations and its one reader Result.Violations, both of which carry
-// violations PRESENT, so withholding costs a rejection and manufactures none
-// (#716).
-func (w *walk) contentCheck(e Element, governing *xsd.ComplexType) *contentCheck {
-	if governing == nil || hasInstanceNil(e) {
-		return &contentCheck{e: e}
+func (w *walk) contentCheck(e Element, g governance, nilled bool) *contentCheck {
+	c := &contentCheck{e: e, g: g, nilled: nilled}
+	governing := c.governing()
+	if governing == nil {
+		return c
 	}
-	c := &contentCheck{e: e, governing: governing}
 	if m, ok := w.schema.ContentMatcher(*governing); ok {
 		c.matcher = m
 	}
 	return c
 }
 
-// text settles clauses 1.1 and 1.3 for one run of character information items,
-// and gathers the run into the ·initial value· clause 1.2 tests at the end.
+// governing is the ·governing type definition· narrowed to the complex type
+// cvc-complex-type clause 1 reads, and nil wherever that clause is not live: a
+// ·governing type definition· this package could not determine or that is not
+// complex, and a ·nilled· element, clause 1 applying only "if E is not
+// ·nilled·".
+func (c *contentCheck) governing() *xsd.ComplexType {
+	if c.nilled {
+		return nil
+	}
+	return c.g.complexType()
+}
+
+// gathers reports whether any charge reads this element's ·initial value·:
+// cvc-complex-type clause 1.2's String Valid, over a simple {content type}, or
+// cvc-elt clause 5.2.2.2's agreement with a fixed {value constraint}. A ·nilled·
+// element gathers nothing — clause 1 is off and clause 5.2.2 is gated on "E is
+// not ·nilled·" — and neither does one whose text no clause would read.
+func (c *contentCheck) gathers() bool {
+	if c.nilled {
+		return false
+	}
+	if _, fixed := elementFixed(c.g); fixed {
+		return true
+	}
+	ct := c.governing()
+	return ct != nil && ct.ContentType().Variety() == xsd.ContentSimple
+}
+
+// text settles clauses 1.1 and 1.3 for one run of character information items —
+// or cvc-elt clause 3.2.3.1, for a ·nilled· element, which admits no character
+// [[child]] at all — and gathers the run into the ·initial value· clauses 1.2
+// and 5.2.2.2 test at the end.
 //
 // A run of NO characters is no character information item at all, so it
 // reaches neither clause: both quantify over the items in [[children]], and an
 // adapter that reports an empty run for <e></e> has reported a run, not an
 // item. It contributes nothing to the ·initial value· either, that being a
-// concatenation.
+// concatenation, and it is not the character [[child]] clause 5's case split
+// turns on.
 func (c *contentCheck) text(w *walk, t Text) {
-	if c.governing == nil || c.charged || t.Data() == "" {
+	if c.charged || t.Data() == "" {
 		return
 	}
-	switch c.governing.ContentType().Variety() {
+	if c.nilled {
+		c.charge(w, ruleCvcElt, "3.2.3.1", t.Loc(),
+			"the element %s has xsi:nil = true, so it is ·nilled·, but it has a character information item [[child]], and cvc-elt clause 3.2.3.1 admits no character or element information item [[children]] on a ·nilled· element",
+			c.e.Name())
+		return
+	}
+	c.sawText = true
+	if c.gathers() {
+		c.initial.WriteString(t.Data())
+	}
+	if c.governing() == nil {
+		return
+	}
+	switch c.governing().ContentType().Variety() {
 	case xsd.ContentEmpty:
 		c.charge(w, ruleCvcComplexType, "1.1", t.Loc(),
 			"the element %s has a character information item [[child]], but cvc-complex-type clause 1.1 admits no character or element information item [[children]] at all where the {content type}.{variety} of the ·governing type definition· is empty — white space included, which clause 1.3 allows for element-only and clause 1.1 allows for nothing",
@@ -124,8 +188,7 @@ func (c *contentCheck) text(w *walk, t Text) {
 			c.e.Name())
 	case xsd.ContentSimple:
 		// Clause 1.2 tests the runs CONCATENATED, so no run decides anything on
-		// its own and none is charged here.
-		c.initial.WriteString(t.Data())
+		// its own and none is charged here; gathers has already retained it.
 	case xsd.ContentMixed:
 		// A mixed {content type} restricts character content in no clause at
 		// all.
@@ -133,19 +196,31 @@ func (c *contentCheck) text(w *walk, t Text) {
 }
 
 // element settles clauses 1.1, 1.2 and 1.4 for one element information item of
-// the sequence, and reports what clause 1.4 ·attributed· the item to (§3.4.4.4)
-// for the walk's own descent into it (cvc-assess-elt clause 3.1,
-// [walk.childGoverning]).
+// the sequence — or cvc-elt clause 3.2.3.1, for a ·nilled· element — and reports
+// what clause 1.4 ·attributed· the item to (§3.4.4.4) for the walk's own descent
+// into it (cvc-assess-elt clause 3.1, [walk.childGoverning]).
 //
 // The attribution is nil wherever nothing attributed the item: a check with no
-// ·governing type definition·, an element already charged, a {variety} that
-// admits no element information item [[child]] at all, and a clause 1.4 that
-// declined or charged.
+// ·governing type definition·, a ·nilled· element, an element already charged, a
+// {variety} that admits no element information item [[child]] at all, and a
+// clause 1.4 that declined or charged. A nilled element's child is still WALKED
+// — the charge is against the parent, not the child, and the child's own
+// subtree is assessed against nothing rather than skipped.
 func (c *contentCheck) element(w *walk, child Element) xsd.Attribution {
-	if c.governing == nil || c.charged {
+	if c.charged {
 		return nil
 	}
-	switch c.governing.ContentType().Variety() {
+	if c.nilled {
+		c.charge(w, ruleCvcElt, "3.2.3.1", child.Loc(),
+			"the element %s has xsi:nil = true, so it is ·nilled·, but it has the element information item %s among its [[children]], and cvc-elt clause 3.2.3.1 admits no character or element information item [[children]] on a ·nilled· element",
+			c.e.Name(), child.Name())
+		return nil
+	}
+	c.sawElement = true
+	if c.governing() == nil {
+		return nil
+	}
+	switch c.governing().ContentType().Variety() {
 	case xsd.ContentEmpty:
 		c.charge(w, ruleCvcComplexType, "1.1", child.Loc(),
 			"the element %s has the element information item %s among its [[children]], but cvc-complex-type clause 1.1 admits no character or element information item [[children]] where the {content type}.{variety} of the ·governing type definition· is empty",
@@ -191,18 +266,117 @@ func (c *contentCheck) match(w *walk, child Element) xsd.Attribution {
 //
 // An empty {content type} settles nothing here. Clause 1.1 quantifies over the
 // [[children]] PRESENT, every one of which was already decided as it arrived.
+//
+// cvc-elt clause 5.2.2 is settled after them, over the same exhausted
+// [[children]], and for an element with no ·governing type definition· too — it
+// reads the DECLARATION's {value constraint}, which a type this package could
+// not determine does not withhold.
 func (c *contentCheck) end(w *walk) {
-	if c.governing == nil || c.charged {
+	if c.charged {
 		return
 	}
-	switch ct := c.governing.ContentType().(type) {
-	case xsd.SimpleContent:
-		c.initialValue(w, ct.SimpleType)
-	case xsd.ElementContent:
-		c.sequenceEnd(w)
-	case xsd.EmptyContent:
-		// Settled child by child; see above.
+	if c.governing() != nil {
+		switch ct := c.governing().ContentType().(type) {
+		case xsd.SimpleContent:
+			c.initialValue(w, ct.SimpleType)
+		case xsd.ElementContent:
+			c.sequenceEnd(w)
+		case xsd.EmptyContent:
+			// Settled child by child; see above.
+		}
 	}
+	c.fixedValue(w)
+}
+
+// fixedValue settles cvc-elt clause 5.2.2: where D.{value constraint}.{variety}
+// is fixed and E is not ·nilled·, E has no element information item [[children]]
+// (5.2.2.1) and its ·initial value· agrees with the constraint (5.2.2.2).
+//
+// The rule is only reached through clause 5's case split, and this function
+// applies that split rather than clause 5.2.2 alone: clause 5.2 holds when D has
+// no {value constraint}, or E has element or character [[children]], or E is
+// ·nilled·. With a fixed constraint present and E not nilled, the first and
+// third disjuncts are false, so clause 5.2 — and with it 5.2.2 — is live for
+// exactly the elements that HAVE [[children]]. An empty element with a fixed
+// constraint takes clause 5.1's arm instead, which is the decline initialValue
+// states.
+//
+// Clause 5.2.2.2's two cases are read off the ·governing type definition·: a
+// mixed complex type compares LEXICALS (5.2.2.2.1, "matches"), and a simple type
+// or simple {content type} compares ·actual values· (5.2.2.2.2, "equal or
+// identical"), which is value.ConstraintMatches over the same pipeline the
+// attribute charges use. A governing type of any other shape — element-only,
+// empty, or none determined — matches no case and clause 5.2.2.2 is vacuous.
+//
+// A content charge already made silences this one: clause 5.2.2 asks whether the
+// ·initial value· AGREES with the fixed value, and an ·initial value· cvc-type
+// has just rejected has no agreement to report that its own charge does not
+// already say.
+func (c *contentCheck) fixedValue(w *walk) {
+	if c.charged {
+		return
+	}
+	f, fixed := elementFixed(c.g)
+	if !fixed || c.nilled {
+		return
+	}
+	if !c.sawElement && !c.sawText {
+		return // clause 5.1's arm; see initialValue
+	}
+	if c.sawElement {
+		c.charge(w, ruleCvcElt, "5.2.2.1", c.e.Loc(),
+			"the element %s has element information item [[children]], but its ·governing element declaration· carries the fixed {value constraint} %q, and cvc-elt clause 5.2.2.1 admits no element information item [[children]] on an element so constrained",
+			c.e.Name(), f.LexicalForm())
+		return
+	}
+	if ct := c.governing(); ct != nil && ct.ContentType().Variety() == xsd.ContentMixed {
+		c.fixedLexical(w, f)
+		return
+	}
+	c.fixedActualValue(w, f)
+}
+
+// fixedLexical settles clause 5.2.2.2.1: for a mixed {content type}, the
+// ·initial value· of E matches D.{value constraint}.{lexical form}. The match is
+// over LEXICALS and not values — a mixed type has no {simple type definition} to
+// map either side through — so it is string equality and nothing else.
+func (c *contentCheck) fixedLexical(w *walk, f xsd.ValueConstraint) {
+	if c.initial.String() == f.LexicalForm() {
+		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.2.2.2.1", "satisfied")
+		return
+	}
+	c.charge(w, ruleCvcElt, "5.2.2.2.1", c.e.Loc(),
+		"the ·initial value· of the element %s does not match the {lexical form} %q of the fixed {value constraint} of its ·governing element declaration·, which cvc-elt clause 5.2.2.2.1 requires of an element whose ·governing type definition· has {content type}.{variety} = mixed",
+		c.e.Name(), f.LexicalForm())
+}
+
+// fixedActualValue settles clause 5.2.2.2.2: for a simple ·governing type
+// definition· — a Simple Type Definition, or a complex one with a simple
+// {content type} — the ·actual value· of E is equal or identical to
+// D.{value constraint}.{value}.
+//
+// A governing type that is neither leaves clause 5.2.2.2 with no applicable case
+// and charges nothing. An undecided comparison charges nothing either, on
+// [walk.fixedAgreement]'s terms and for the same reasons: an ungoverned type or a
+// {lexical form} outside its own type's lexical space is a gap in this processor
+// or a schema fault cos-valid-default charges at assembly, not the instance's.
+func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
+	st := c.g.simpleType()
+	if st == nil {
+		return
+	}
+	same, decided := value.ConstraintMatches(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e}, f)
+	if !decided {
+		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.2.2.2.2", "declined")
+		return
+	}
+	if same {
+		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.2.2.2.2", "satisfied")
+		return
+	}
+	c.charge(w, ruleCvcElt, "5.2.2.2.2", c.e.Loc(),
+		"the ·actual value· of the element %s is neither equal nor identical to the {value} of the fixed {value constraint} %q of its ·governing element declaration·, which cvc-elt clause 5.2.2.2.2 requires",
+		c.e.Name(), f.LexicalForm())
 }
 
 // initialValue settles the ·initial value· half of clause 1.2: the string
@@ -224,9 +398,13 @@ func (c *contentCheck) end(w *walk) {
 // not ·nilled·, what is assessed is "the element information item with
 // D.{value constraint}.{lexical form} used as its ·normalized value·", whose
 // ·initial value· is that lexical and never the empty string; only clause 5.2
-// assesses the element itself. The declaration is not among what a content
-// check is given, so charging the empty ·initial value· here would reject every
-// empty element its declaration supplies a default for (#716).
+// assesses the element itself. Clause 5.1's own two conjuncts are unimplemented
+// — 5.1.1 is Element Default Valid (Immediate) (§3.3.6.2) over an
+// ·instance-specified· governing type, and 5.1.2 re-enters cvc-type with a
+// substituted ·normalized value· — so charging the empty ·initial value· here
+// would reject every empty element its declaration supplies a default for.
+// fixedValue below declines the same shape for clause 5.2.2, which clause 5.1
+// takes the arm of.
 //
 // GAP(validate): a ValidateLexical error that is not a VERDICT is the same
 // fail-open cvcattribute.go's matchedAttribute states in full, over the same
@@ -278,9 +456,8 @@ func (c *contentCheck) charge(w *walk, rule xsderr.Rule, clause string, loc xsde
 }
 
 // log records one content decision: which rule and clause settled it, and how
-// (STYLE L1). A check with no ·governing type definition· settles nothing and
-// logs nothing — the walk's own "assessing element"/"assessing text" lines
-// already record the visit.
+// (STYLE L1). A check that settles nothing logs nothing — the walk's own
+// "assessing element"/"assessing text" lines already record the visit.
 func (c *contentCheck) log(w *walk, name xsd.QName, loc xsderr.Loc, rule xsderr.Rule, clause, outcome string) {
 	if !w.log.Enabled(context.Background(), slog.LevelDebug) {
 		return
@@ -309,22 +486,13 @@ func attributedTo(a xsd.Attribution) string {
 	}
 }
 
-// hasInstanceNil reports whether e carries an xsi:nil attribute (§2.7.1). Like
-// hasInstanceType it is a presence test and not an evaluation: ·nilled·
-// (§3.3.4.3) additionally needs the declaration's {nillable} and the
-// attribute's ·actual value·.
-func hasInstanceNil(e Element) bool {
-	for _, a := range e.Attributes() {
-		if a.Name() == (xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}) {
-			return true
-		}
-	}
-	return false
-}
+// xmlWhitespace is white space as XML 1.1 defines it (S ::= (#x20 | #x9 | #xD
+// | #xA)+), the set clause 1.3 allows an element-only {content type} to carry
+// and the one whiteSpace = collapse removes (collapseXMLWhitespace,
+// cvcelt.go). One encoding serves both (STYLE T4).
+const xmlWhitespace = " \t\r\n"
 
-// isXMLWhitespace reports whether every character of s is white space as XML
-// 1.1 defines it (S ::= (#x20 | #x9 | #xD | #xA)+), which is the set clause 1.3
-// allows an element-only {content type} to carry.
+// isXMLWhitespace reports whether every character of s is xmlWhitespace.
 func isXMLWhitespace(s string) bool {
-	return strings.TrimLeft(s, " \t\r\n") == ""
+	return strings.TrimLeft(s, xmlWhitespace) == ""
 }

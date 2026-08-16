@@ -197,7 +197,10 @@
 // point, and the only one a caller admitting a name should reach for;
 // NamespaceConstraint.AllowsName and NamespaceConstraint.AllowsNamespace
 // are exported beneath it as the {namespace constraint} property's own
-// lower-level accessors. The rest is in-package machinery finalize drives.
+// lower-level accessors. Schema.ValidlySubstitutable is the derivation
+// half's one exported entry point, for the instance-side reader of
+// key-val-sub-type that cvc-elt clause 4 needs. The rest is in-package
+// machinery finalize drives.
 //
 // One of the two drivers designed on that algebra ships: Matcher,
 // validation's pull driver. Schema.ContentMatcher returns one over a

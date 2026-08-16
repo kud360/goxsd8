@@ -115,11 +115,14 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 			knownRoot, `<known>x</known>`,
 		},
 		{
-			// #716: the attribute is DETECTED, never ·resolved· (cvc-resolve-instance,
-			// §3.17.6.3), so Assess withholds the cvc-assess-elt charge — this is NOT
-			// the undeclared-root case above and must not be scored as one.
-			"an undeclared root carrying an unresolvable xsi:type withholds the charge",
-			knownRoot, `<unknown xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xs:string"/>`,
+			// An undeclared root whose xsi:type ·resolves· determines a ·governing
+			// type definition· of its own (key-governing-type-elem clause 8), so it
+			// is ·strictly assessed· against that type and is NOT the
+			// undeclared-root case above. It charges nothing here, and no charge is
+			// not a verdict.
+			"an undeclared root typed by a resolved xsi:type charges nothing",
+			knownRoot + `<xs:complexType name="T"/>`,
+			`<unknown xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="T"/>`,
 		},
 		{
 			"an instance document the reader rejects is a gap, not a well-formedness verdict",

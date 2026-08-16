@@ -155,22 +155,19 @@ func TestSelectorAndFieldTreatTheDefaultNamespaceAsymmetrically(t *testing.T) {
 // that collide with a determinable type charge nothing with an xsi:type on the
 // field node.
 func TestFieldWithNoGoverningTypeDeclines(t *testing.T) {
-	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "name")
-	schema := icSchema(t, "", false, []xsd.IdentityConstraint{key}, nil)
-
-	named := func(line int, text string, typed bool) *testElement {
-		var attrs []Attribute
-		if typed {
-			attrs = []Attribute{icAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}, "xs:string", line)}
-		}
-		name := icElem(xsd.QName{Local: "name"}, line+1, attrs,
+	field := func(local string) *xsd.Schema {
+		key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", local)
+		return icSchema(t, "", false, []xsd.IdentityConstraint{key}, nil)
+	}
+	named := func(line int, local, text string) *testElement {
+		node := icElem(xsd.QName{Local: local}, line+1, nil,
 			TextChild(&testText{data: text, loc: loc(line+1, 8)}))
-		return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(name))
+		return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(node))
 	}
 
-	icWantCharges(t, icAssess(t, schema, icRoot(named(2, "a", false), named(4, "a", false))),
+	icWantCharges(t, icAssess(t, field("name"), icRoot(named(2, "name", "a"), named(4, "name", "a"))),
 		icCharge(ruleCvcIdentityConstraint, 4))
-	icWantCharges(t, icAssess(t, schema, icRoot(named(2, "a", true), named(4, "a", true))))
+	icWantCharges(t, icAssess(t, field("tabled"), icRoot(named(2, "tabled", "a"), named(4, "tabled", "a"))))
 }
 
 // Clause 4.2.3 forbids a key's ·key-sequence· to take an ELEMENT member from a
@@ -186,6 +183,43 @@ func TestKeyChargesANillableElementMember(t *testing.T) {
 	icWantCharges(t, icAssess(t, icSchema(t, "", false, []xsd.IdentityConstraint{key}, nil), doc))
 	icWantCharges(t, icAssess(t, icSchema(t, "", true, []xsd.IdentityConstraint{key}, nil), doc),
 		icCharge(ruleCvcIdentityConstraint, 3))
+}
+
+// Only a ·nilled· field node withholds its ·key-sequence· member
+// (elementKeyMember), and ·nilled· is key-nilled's conjunction — D.{nillable} =
+// true AND an ·actual value· of true ([nilled]) — not the PRESENCE of an xsi:nil
+// attribute. Both conjuncts are pinned by the duplicate a unique charges only
+// where both <name> nodes supplied their member: reading presence alone would
+// decline every slot below and charge nothing at all.
+func TestOnlyANilledFieldNodeWithholdsItsKeySequenceMember(t *testing.T) {
+	unique := icDef(t, "U", xsd.IdentityConstraintUnique, ".//item", nil, "", "name")
+	doc := func(nil_ string) *testElement {
+		named := func(line int) *testElement {
+			name := icElem(xsd.QName{Local: "name"}, line+1,
+				[]Attribute{icAttr(xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"}, nil_, line+1)},
+				TextChild(&testText{data: "a", loc: loc(line+1, 8)}))
+			return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(name))
+		}
+		return icRoot(named(2), named(4))
+	}
+	ics := []xsd.IdentityConstraint{unique}
+
+	icWantCharges(t, icAssess(t, icSchema(t, "", true, ics, nil), doc("false")),
+		icCharge(ruleCvcIdentityConstraint, 4))
+
+	// Both nodes ·nilled·: §3.3.5.4 gives each an absent [schema actual value],
+	// so neither ·key-sequence· has a member and clause 4.1 compares nothing.
+	// Their character [[children]] are cvc-elt clause 3.2.3.1's to charge, at
+	// the offending [[child]]'s own position.
+	icWantCharges(t, icAssess(t, icSchema(t, "", true, ics, nil), doc("true")),
+		icChargeAt(ruleCvcElt, loc(3, 8)), icChargeAt(ruleCvcElt, loc(5, 8)))
+
+	// xsi:nil = true on a declaration whose {nillable} is false makes no
+	// ·nilled· node either: cvc-elt clause 3.1 charges the attribute, and the
+	// members are supplied and compared as before.
+	icWantCharges(t, icAssess(t, icSchema(t, "", false, ics, nil), doc("true")),
+		icCharge(ruleCvcElt, 3), icCharge(ruleCvcElt, 5),
+		icCharge(ruleCvcIdentityConstraint, 4))
 }
 
 // An identity constraint whose {selector} or {fields} fall outside the

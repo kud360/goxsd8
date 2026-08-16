@@ -219,17 +219,21 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 // declaring node is the element's PARENT, per §3.17.5.2's [binding], and -1
 // where it has none.
 //
-// GAP(validate): three shapes decline instead, each a value this package
-// withheld rather than one the spec says is absent — a declaration whose type
-// was not determinable (an xsi:type, a {type table}, an unresolvable {type
-// definition}), an element that may be ·nilled·, whose [schema actual value]
-// clause 2 of the ·eligible item set· needs, and an element with no character
-// information item [[child]] whose declaration carries a {value constraint},
-// whose ·initial value· cvc-elt clause 5.1 takes from that constraint and not
-// from the empty content (#716). An element with NO ·governing element
-// declaration· is not one of them: it is ·laxly assessed· against xs:anyType,
-// whose complex {content type} is not derived from ID and so contributes
-// nothing under clause 3.
+// GAP(validate): three shapes decline instead — a declaration whose type was
+// not determinable (a {type table}, an unresolvable {type definition}, an
+// xsi:type whose ·override· could not be decided), an element that is ·nilled·,
+// and an element with no character information item [[child]] whose declaration
+// carries a {value constraint}, whose ·initial value· cvc-elt clause 5.1 takes
+// from that constraint and not from the empty content.
+//
+// The middle one is a value the spec says IS ·absent· — §3.3.5.4 gives a
+// ·nilled· element an absent [schema normalized value] and so an absent [schema
+// actual value] — and it declines rather than recording that absence because
+// recording it would let cvc-id clause 1 charge an empty binding on the
+// strength of it, which is a widening of that clause and not a reading of this
+// one. An element with NO ·governing element declaration· is not among the
+// three: it is ·laxly assessed· against xs:anyType, whose complex {content
+// type} is not derived from ID and so contributes nothing under clause 3.
 func (w *walk) idElement(c *icCheck) {
 	if c.g.hasDecl && c.g.typ == nil {
 		w.ids.declined = true
@@ -239,7 +243,7 @@ func (w *walk) idElement(c *icCheck) {
 	if st == nil {
 		return
 	}
-	if hasInstanceNil(c.e) {
+	if nilled(c.e, c.g) {
 		w.ids.declined = true
 		return
 	}

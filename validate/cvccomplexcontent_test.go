@@ -349,17 +349,57 @@ func TestContentChargesOneElementOnce(t *testing.T) {
 	wantContentCharge(t, got, "cvc-complex-content", "1", loc(2, 1))
 }
 
-// cvc-complex-type clause 1 applies only to an element that is not ·nilled·,
-// which needs the declaration's {nillable} and the attribute's ·actual value·.
-// The presence of xsi:nil is the decline.
-func TestContentDeclinesANilledElement(t *testing.T) {
-	schema := cSchema(t, cSequence(t, false, cParticle(t, "a", 1, 1)))
-	root := cRoot("c")
-	root.attrs = []Attribute{&testAttribute{
-		name:  xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"},
-		value: "true", loc: loc(1, 10)}}
+// cvc-complex-type clause 1 applies only to an element that is not ·nilled·, so
+// a ·nilled· element runs no clause 1 at all — its EMPTY [[children]] are not
+// matched against the {content type} that would otherwise require an <a>.
+func TestNilledElementRunsNoContentCheck(t *testing.T) {
+	wantSilence(t, cAssess(t, nillableSchema(t, cSequence(t, false, cParticle(t, "a", 1, 1)), nil),
+		nilledRoot(t, "true")), "a ·nilled· element is exempt from cvc-complex-type clause 1")
+}
 
-	wantSilence(t, cAssess(t, schema, root), "an element carrying xsi:nil may be ·nilled·")
+// An element carrying xsi:nil = FALSE is not ·nilled·, so clause 1 applies to it
+// exactly as it does to an element carrying no xsi:nil at all: the presence of
+// the attribute is not the decision, its ·actual value· is.
+func TestNonNilledElementStillRunsTheContentCheck(t *testing.T) {
+	got := cAssess(t, nillableSchema(t, cSequence(t, false, cParticle(t, "a", 1, 1)), nil),
+		nilledRoot(t, "false"))
+
+	wantContentCharge(t, got, "cvc-complex-content", "1", loc(1, 1))
+}
+
+// nillableSchema declares "root" over content with {nillable} true, and with the
+// given {value constraint}.
+func nillableSchema(t *testing.T, content xsd.ContentType, vc *xsd.ValueConstraint) *xsd.Schema {
+	t.Helper()
+	name := xsd.QName{Local: "RootType"}
+	ct, err := xsd.NewComplexType(xsderr.Loc{}, name, xsd.QName{}, nil,
+		xsd.DerivationRestriction, false, nil, nil, nil, content, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("building the governing type: %v", err)
+	}
+	e, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
+		xsd.TypeDefinitionRef{Name: name}, nil, xsd.NewGlobalScope(), vc, true, nil, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+	b := xsd.NewSchemaBuilder()
+	b.AddType(ct)
+	b.AddElement(e)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the nillable schema: %v", err)
+	}
+	return schema
+}
+
+// nilledRoot is an empty <root xsi:nil="..."/>.
+func nilledRoot(t *testing.T, lexical string, kids ...string) *testElement {
+	t.Helper()
+	e := cRoot(kids...)
+	e.attrs = []Attribute{&testAttribute{
+		name:  xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "nil"},
+		value: lexical, loc: loc(1, 10)}}
+	return e
 }
 
 // An ANONYMOUS governing type decides its element's [[children]]: no finalize

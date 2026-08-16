@@ -43,12 +43,15 @@ const ruleCvcComplexType xsderr.Rule = "cvc-complex-type"
 // schema's top-level element declarations (§3.3.4.6, ·governing element
 // declaration· clause 4), and charges two rules over that dispatch:
 //
-//   - No such declaration and no xsi:type, so no ·governing type
-//     definition· can exist either and cvc-assess-elt clause 1 cannot
-//     apply: cvc-assess-elt is charged and the subtree is not walked.
-//     Clause 3 would have the root ·laxly assessed· against xs:anyType,
-//     which this package does not implement; charging instead is §5.2
-//     strict wildcard validation.
+//   - No such declaration and no xsi:type ·resolving· to a type definition, so
+//     no ·governing type definition· can exist either (key-governing-type-elem
+//     clause 8) and cvc-assess-elt clause 1 cannot apply: cvc-assess-elt is
+//     charged and the subtree is not walked. Clause 3 would have the root
+//     ·laxly assessed· against xs:anyType, which this package does not
+//     implement; charging instead is §5.2 strict wildcard validation. An
+//     undeclared root whose xsi:type DOES resolve is ·strictly assessed·
+//     against that type alone (clause 1.2), with no declaration to read
+//     cvc-elt against.
 //   - A declaration whose {abstract} is true: cvc-elt clause 2 is charged
 //     and the walk still runs. ·Strictly assessed· clauses 2 and 3 assess
 //     [[attributes]] and [[children]] whatever clause 1.1.2's evaluation
@@ -93,36 +96,25 @@ func (v *Validator) Assess(root Element) *Result {
 		panic("validate: Assess: nil root Element")
 	}
 	w := walk{log: v.log, schema: v.schema, backend: v.backend, values: value.NewValueSpace(v.backend)}
-	// GAP(xsd): an xsi:type here is DETECTED, never ·resolved·, so the
-	// charge below is withheld for a root carrying one that a full
-	// cvc-resolve-instance (§3.17.6.3) would find unresolvable and charge
-	// anyway. The direction is fail-open across the whole consumer set of
-	// the withheld value, which is Result.violations and its one reader
-	// Result.Violations: both carry violations PRESENT, so withholding one
-	// can only cost a rejection and never manufacture one (#716).
-	d, found := v.Schema().Element(root.Name())
-	if !found && !hasInstanceType(root) {
-		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, root.Loc(),
-			"the validation root %s has no top-level element declaration and no xsi:type, so it determines neither a ·governing element declaration· nor a ·governing type definition· and cannot be ·strictly assessed· (§5.2 strict wildcard validation)",
-			root.Name()))
-		return &w.res
-	}
-	if found && d.Abstract() {
-		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, root.Loc(),
-			"the validation root %s is governed by an element declaration whose {abstract} is true, but cvc-elt clause 2 requires it to be false: an abstract declaration validates no element information item",
-			root.Name()))
-	}
 	var g governance
+	d, found := v.Schema().Element(root.Name())
 	if found {
+		if d.Abstract() {
+			w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, root.Loc(),
+				"the validation root %s is governed by an element declaration whose {abstract} is true, but cvc-elt clause 2 requires it to be false: an abstract declaration validates no element information item",
+				root.Name()))
+		}
 		g = w.declaredGovernance(root, d)
 	}
 	if !found {
-		// Reached only for a root carrying an xsi:type, the branch above having
-		// returned for every other undeclared root: its ·instance-specified type
-		// definition· is the governing one and this package does not ·resolve·
-		// it, so the whole subtree is typed against nothing and cvc-id clause 1
-		// declines with it (cvcid.go) (#716).
-		w.ids.declined = true
+		typed, assessable := w.instanceGovernance(root)
+		if !assessable {
+			w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAssessElt, root.Loc(),
+				"the validation root %s has no top-level element declaration, and no xsi:type ·resolving· to a type definition either, so it determines neither a ·governing element declaration· nor a ·governing type definition· and cannot be ·strictly assessed· (§5.2 strict wildcard validation)",
+				root.Name()))
+			return &w.res
+		}
+		g = typed
 	}
 	w.element(root, g, nil)
 	w.ids.charge(&w, root)
@@ -132,7 +124,9 @@ func (v *Validator) Assess(root Element) *Result {
 // governance is what cvc-assess-elt (§3.3.4.6) settles about one element
 // information item before any rule reads it: the ·governing element
 // declaration· the descent determined for it, and the ·governing type
-// definition· that declaration supplies. It travels as one value because every
+// definition· in force — the declaration's ·selected type definition·, or the
+// ·instance-specified· one an xsi:type ·overrode· it with, or an instance one
+// with no declaration behind it at all. It travels as one value because every
 // consumer past the first needs both — the type decides cvc-complex-type's two
 // halves, and the DECLARATION carries the {identity-constraint definitions}
 // §3.11.4 quantifies over and the {nillable} its clause 4.2.3 reads.
@@ -141,7 +135,12 @@ func (v *Validator) Assess(root Element) *Result {
 // type. hasDecl false with a nil typ is cvc-assess-elt clause 3.3's ·lax
 // assessment· against xs:anyType, and hasDecl TRUE with a nil typ is this
 // package declining a type it could not determine — a distinction cvcid.go
-// needs, since only the second could have hidden an ID.
+// needs, since only the second could have hidden an ID. hasDecl false with a
+// NON-nil typ is the third shape, clause 1.2's: an element with no ·governing
+// element declaration· whose xsi:type ·resolved·, ·strictly assessed· against
+// that type alone (key-governing-type-elem clause 8). Every rule that reads the
+// DECLARATION — cvc-elt, §3.11.4's {identity-constraint definitions} — is
+// vacuous for it, and every rule that reads the type applies in full.
 type governance struct {
 	decl    xsd.ElementDeclaration
 	hasDecl bool
@@ -189,27 +188,28 @@ func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration) governanc
 // wherever this package cannot determine that type, and the element's attributes
 // are then assessed against nothing.
 //
-// Determinable here means the whole of key-governing-type-elem's clause 4
-// case: no processor-stipulated type (this package stipulates none), no
-// ·instance-specified type definition· overriding it, and a ·selected type
-// definition· (§3.3.4.1) that is D.{type definition} outright. Each decline
-// below withholds a type that could differ from the declaration's, and
-// assessing the element against the WRONG type is a false reject in both
-// directions — an attribute the real governing type declares looks unmatched,
-// a child its real {content type} admits looks unattributable.
+// It walks key-governing-type-elem's cases in their own order, this package
+// stipulating no type of its own: clause 3, an ·instance-specified type
+// definition· that ·overrides· the ·selected type definition·, then clause 4,
+// the ·selected type definition· itself. The selected one (§3.3.4.1) is
+// D.{type definition} outright — clause 1's {type table} is the decline below —
+// and it is also the fallback the Note under cvc-elt names for BOTH ways an
+// xsi:type can fail to supply clause 3's case: an attribute that does not
+// ·resolve· at all, and one that resolves to a type that does not ·override·.
+// The two differ only in the charge, not in the type: the first leaves E with no
+// ·instance-specified type definition· and cvc-elt clause 4 vacuously satisfied,
+// the second violates clause 4 and is charged here (instanceOverride).
 //
-//   - GAP(xsd): an xsi:type makes the ·instance-specified type definition·
-//     the governing one (clause 3) when it ·overrides· the selected type,
-//     and ·resolving· it is cvc-resolve-instance (§3.17.6.3), unimplemented.
-//     Presence alone is the decline, at the ·validation root· and at every
-//     descendant the descent reaches alike: a descendant carrying xsi:type is
-//     assessed against no type rather than against the one its
-//     ·context-determined declaration· names, which the attribute may have
-//     ·overridden· with a derived type admitting content the declared one
-//     rejects (#716).
+// Each decline below withholds a type that could differ from the declaration's,
+// and assessing the element against the WRONG type is a false reject in both
+// directions — an attribute the real governing type declares looks unmatched, a
+// child its real {content type} admits looks unattributable.
+//
 //   - GAP(xpath): a {type table} makes the selected type the one its
 //     <alternative>s ·conditionally select· (§3.3.4.2), which means
-//     evaluating each {test} as an XPath expression (#56).
+//     evaluating each {test} as an XPath expression (#56). It is declined
+//     BEFORE any xsi:type is read, because ·overriding· is a relation to the
+//     selected type and an undetermined selected type decides nothing about it.
 //   - A {type definition} slot that resolves to nothing.
 //
 // The type this returns is the governing one for EVERY reader, and they narrow
@@ -219,19 +219,67 @@ func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration) governanc
 // attributePropertiesFolded, which the content half does not, because no
 // finalize pass folds a {content type} the way §3.4.2.4 clause 3 folds
 // {attribute uses} — a complex type's {content type} is whatever its producer
-// built for it, named or anonymous.
+// built for it, named or anonymous. That narrowing is re-asked of whatever this
+// returns, so an xsi:type naming an anonymous type is folded-checked on its own
+// terms and not on the declaration's.
 func (w *walk) governingType(e Element, d xsd.ElementDeclaration) xsd.TypeDefinition {
-	if hasInstanceType(e) {
-		return nil
-	}
 	if _, tabled := d.TypeTable(); tabled {
 		return nil
 	}
-	t, ok := w.schema.ResolvedType(d.TypeDefinition())
+	selected, ok := w.schema.ResolvedType(d.TypeDefinition())
 	if !ok {
 		return nil
 	}
-	return t
+	instance, specified := w.instanceTypeDefinition(e)
+	if !specified {
+		return selected
+	}
+	return w.instanceOverride(e, d, instance, selected)
+}
+
+// instanceOverride settles cvc-elt clause 4 for an element carrying an
+// ·instance-specified type definition·, and reports the ·governing type
+// definition· that leaves: the instance's where it ·overrides· the selected
+// type, the selected one where it does not.
+//
+// ·overrides· (§3.3.4.2, key-overrides) is ·validly substitutable· subject to
+// the blocking keywords of E's ·governing element declaration· — its
+// {disallowed substitutions}, and nothing else. The target type's own
+// {prohibited substitutions} joins the set INSIDE key-val-sub-type, for the
+// complex/complex case alone, which is [xsd.Schema.ValidlySubstitutable]'s to
+// apply and deliberately not re-applied here.
+//
+// An error from that predicate is the src-resolve clause 1.1 rejection an
+// unresolvable simple-type {base type definition} produces, and is neither
+// charged nor folded into an answer: it leaves the override undecided, so no
+// clause 4 charge is made and NO type is returned, which is governingType's own
+// decline and carries its consequences unchanged. Returning the selected type on
+// an undecided override would assess an element that may carry a derived type's
+// content against the base, which is the reject governingType's own doc rules
+// out; charging clause 4 would reject a document for a fault in the schema's own
+// base chain.
+func (w *walk) instanceOverride(e Element, d xsd.ElementDeclaration, instance, selected xsd.TypeDefinition) xsd.TypeDefinition {
+	overrides, err := w.schema.ValidlySubstitutable(instance, selected, d.DisallowedSubstitutions())
+	if err != nil {
+		return nil
+	}
+	if overrides {
+		return instance
+	}
+	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
+		"the xsi:type attribute of the element %s names the type definition %s, which is not ·validly substitutable· for the ·selected type definition· %s of its ·governing element declaration· subject to that declaration's {disallowed substitutions}, so it does not ·override· it as cvc-elt clause 4 requires (§3.3.4.2, key-overrides)",
+		e.Name(), typeName(instance), typeName(selected)))
+	return selected
+}
+
+// typeName names a type definition for a message: its ·expanded name·, or a
+// description of the slot for an anonymous one, which has no name to cite.
+func typeName(t xsd.TypeDefinition) string {
+	name := t.Name()
+	if name == (xsd.QName{}) {
+		return "an anonymous type definition"
+	}
+	return name.String()
 }
 
 // childGoverning is cvc-assess-elt (§3.3.4.6) clause 3 for one child element
@@ -297,13 +345,40 @@ func (w *walk) childGoverning(e Element, a xsd.Attribution) (governance, bool) {
 // type that declaration supplies. A name that resolves to nothing leaves the
 // element with no declaration to read a type off, which is cvc-assess-elt
 // clause 3.3 and no charge of its own: an unresolved name is the PARENT's
-// business where it is anyone's (§3.3.5.1 clause 1.1.3) and never the child's.
+// business where it is anyone's (§3.3.5.1 clause 1.1.3) and never the child's —
+// unless the element's own xsi:type supplies a ·governing type definition·
+// (instanceGovernance), which makes it clause 1.2's ·strictly assessed· rather
+// than clause 3.3's ·laxly assessed·.
 func (w *walk) resolvedGovernance(e Element) governance {
 	d, found := w.schema.Element(e.Name())
 	if !found {
-		return governance{}
+		g, _ := w.instanceGovernance(e)
+		return g
 	}
 	return w.declaredGovernance(e, d)
+}
+
+// instanceGovernance is the governance of an element with no ·governing element
+// declaration· at all: key-governing-type-elem clause 8, where the
+// ·instance-specified type definition· is the ·governing type definition· with
+// no ·selected type definition· to ·override·. The second result is false where
+// the element determines no type either, which leaves it assessed against
+// nothing.
+//
+// cvc-elt clause 4 cannot be violated here and is not charged: ·overriding· is a
+// relation to a ·selected type definition·, and an element with no declaration
+// has none, so the clause has nothing to compare against. No {disallowed
+// substitutions} are read either, and none are missing: key-overrides clause 2
+// asks for ·validly substitutable without limitation· where no ·governing
+// element declaration· is known, and key-val-sub-type-absolute defines that as
+// the EMPTY set of blocking keywords — nothing blocked, which is the most
+// permissive set and not the least.
+func (w *walk) instanceGovernance(e Element) (governance, bool) {
+	t, specified := w.instanceTypeDefinition(e)
+	if !specified {
+		return governance{}, false
+	}
+	return governance{typ: t}, true
 }
 
 // attributePropertiesFolded reports whether ct's {attribute uses} and
@@ -348,21 +423,6 @@ func attributePropertiesFolded(ct xsd.ComplexType) bool {
 	}
 	base, byName := ct.Base().(xsd.TypeDefinitionRef)
 	return byName && base.Name == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"})
-}
-
-// hasInstanceType reports whether e carries an xsi:type attribute (§2.7.1).
-// It is a presence test and not a ·resolution·: establishing the
-// ·instance-specified type definition· that §5.2 counts as one of the
-// ·validation root·'s three determinants needs cvc-resolve-instance
-// (§3.17.6.3), and presence is the upper bound on it available short of
-// that.
-func hasInstanceType(e Element) bool {
-	for _, a := range e.Attributes() {
-		if a.Name() == (xsd.QName{Space: xsd.XMLSchemaInstanceNS, Local: "type"}) {
-			return true
-		}
-	}
-	return false
 }
 
 // walk is the state of one [Validator.Assess] call, held here and not on the
@@ -413,6 +473,12 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // element assesses one element information item: the item itself, then its
 // [[attributes]], then its [[children]].
 //
+// cvc-elt clause 3 is settled first, before anything reads the [[children]],
+// because whether e is ·nilled· decides WHICH rules read them: a ·nilled·
+// element's [[children]] are cvc-elt clause 3.2.3.1's business and not
+// cvc-complex-type clause 1's, which applies "if E is not ·nilled·"
+// (cvccomplexcontent.go).
+//
 // governing is e's ·governing type definition· narrowed to a complex type,
 // or nil where none was determined. It decides e's own [[attributes]]
 // (cvc-complex-type clauses 2 to 4) and e's own [[children]] (clause 1,
@@ -436,10 +502,11 @@ func (w *walk) element(e Element, g governance, parent *icCheck) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
 	}
 	governing := g.complexType()
+	isNilled := w.nilCheck(e, g)
 	id := w.identityCheck(e, g, parent)
 	w.idAttributes(id)
 	w.attributes(e, governing)
-	w.children(e, w.contentCheck(e, governing), id)
+	w.children(e, w.contentCheck(e, g, isNilled), id)
 	if w.res.err != nil {
 		// A walk that stopped on a source fault never settles §3.11.4 or
 		// §3.17.5.2 for this element, on [contentCheck.end]'s grounds: the
@@ -720,7 +787,7 @@ func (w *walk) child(c Child, content *contentCheck, id *icCheck) {
 			// The whole consumer set of that decline is idTable.charge's clause
 			// 1 arm, which stops charging an empty binding; clause 2 keeps
 			// charging, because an unseen item can only ADD members to a
-			// binding and never take one away (cvcid.go) (#716).
+			// binding and never take one away (cvcid.go).
 			w.ids.declined = true
 		}
 		w.element(e, g, id)
