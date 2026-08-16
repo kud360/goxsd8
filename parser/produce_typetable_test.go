@@ -113,10 +113,16 @@ func TestProduceTypeTableDeclinedForInlineAlternative(t *testing.T) {
 //
 // Both alternatives name ·xs:error·, and that is forced rather than incidental:
 // e-props-correct clause 7 requires every entry to be ·validly substitutable·
-// for the declaration's own {type definition}, and NOTHING is substitutable for
-// an ANONYMOUS one — no top-level type can name it as a base. Clause 7.2 is the
-// only entry such a declaration admits, so a named-type fixture here would be an
-// invalid schema whose rejection has nothing to do with the mapping under test.
+// for the declaration's own {type definition}, and nothing an <alternative> can
+// NAME is substitutable for the anonymous COMPLEX type declared here:
+// key-val-sub-type reaches a target only as cos-ct-derived-ok /
+// cos-st-derived-ok clause 1's identity or through the candidate's {base type
+// definition} chain, and an anonymous type has no name for either to reach it
+// by. Anonymity alone would not close clause 7.1 — cos-st-derived-ok clause
+// 2.2.4 decomposes an anonymous UNION target member-wise, so ITS own members
+// stay valid entries. Clause 7.2 is the only entry THIS declaration admits, so a
+// named-type fixture here would be an invalid schema whose rejection has nothing
+// to do with the mapping under test.
 func TestProduceTypeTableAnonymousDeclaredType(t *testing.T) {
 	const inline = `<xs:complexType><xs:sequence/></xs:complexType>`
 	if _, present := typeTableOf(t, wrap("", typeTableTypes+`

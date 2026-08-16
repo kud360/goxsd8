@@ -6,7 +6,7 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// This file is the fourth step of Phase D of the finalize resolution pass
+// This file is the fifth step of Phase D of the finalize resolution pass
 // (resolve.go): Element Declaration Properties Correct (§3.3.6.1,
 // e-props-correct) clause 7 — "If E.{type table} exists, then for each {type
 // definition} T in E.{type table}.{alternatives}, and also for E.{type
@@ -37,7 +37,7 @@ import (
 // union TARGET member-wise rather than treating it as opaque: 2.2.4.1 requires
 // B.{variety} = union, 2.2.4.2 requires T to be validly derived from some member
 // M of B's TRANSITIVE membership by this same constraint, and 2.2.4.3 requires
-// the {facets} of B and of any intervening union to be empty. §3.16.6.2's Note
+// the {facets} of B and of any intervening union to be empty. §3.16.6.3's Note
 // states the consequence outright — the relation "can hold between a Simple Type
 // Definition in the transitive membership of a union type, and the union type,
 // even though neither is actually ·derived· from the other". derivedOKSimple
@@ -65,7 +65,7 @@ import (
 // singleton nothing else roots on (STYLE T5).
 var errorTypeName = QName{Space: XMLSchemaNS, Local: "error"}
 
-// checkTypeTableSubstitutability is Phase D's fourth step: e-props-correct
+// checkTypeTableSubstitutability is Phase D's fifth step: e-props-correct
 // clause 7 over every element declaration the compiled schema holds that carries
 // a {type table}.
 //

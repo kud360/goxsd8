@@ -58,7 +58,7 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     (cos-nonambig, particleattribution.go) and Element Declarations Consistent
 //     (cos-element-consistent, elementconsistent.go). cos-all-limited runs first
 //     within the phase, for the reason checkAllGroupsLimited records.
-//   - Phase D (derivation validity), in four steps. It OPENS on the simple-type
+//   - Phase D (derivation validity), in five steps. It OPENS on the simple-type
 //     side: checkSimpleTypeDerivations puts every Simple Type Definition the
 //     finalized schema reaches — anonymous inline ones included, which no index
 //     holds — to SimpleType.CheckDerivation and then to the installed
@@ -68,7 +68,7 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 //     needs Phase A's resolvability and Phase B's simple-type acyclicity, and
 //     nothing else; it runs first within the phase so a schema whose simple
 //     types are themselves invalid says so before any complex-type derivation
-//     verdict computed over them, and so that the three steps after it may treat
+//     verdict computed over them, and so that the four steps after it may treat
 //     every simple-type base chain as already resolved. Its walk carries no
 //     visited set, for the reason its own doc records. It then MATERIALISES the
 //     two attribute-side properties whose mapping rules a producer cannot
