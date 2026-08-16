@@ -142,18 +142,21 @@ import (
 // another. A charge at or below such an element can be a false one. The
 // exception is enumerable exactly because the withholding is — an <alternative>
 // on the inline arm, or an anonymous declared type behind a synthesized default
-// — and it shrinks as those shapes are mapped: a declaration whose table IS
-// built makes validate decline instead of guess (#822).
+// — and it shrinks as those shapes are mapped (#822). A declaration whose table
+// IS built never guesses: validate ·conditionally selects· through it, and
+// withholds the element's ·governing type definition· only where the §3.12.6
+// required-subset evaluator declines one of the {test}s it had to try
+// (validate/cta.go).
 //
 // Cases 3 to 6 rest on conditions validate checks rather than this file
 // assuming them: the attribute half of cvc-complex-type is reached only where
-// the governing type was determinable — the ·selected type definition·, or the
-// ·instance-specified· one that ·overrides· it, and never a {type table}'s —
-// only for attributes clause 2 quantifies over (the four xsi: names are
-// excepted), and never where an {attribute wildcard} leaves an arm of the rule
-// unevaluated. The content half adds its own: an element that is ·nilled·
-// (clause 1 applies only where it is not, and cvc-elt clause 3.2.3.1 decides
-// its [[children]] instead), and a {content type} whose shape
+// the governing type was determinable — the ·selected type definition·, which
+// a {type table} may have ·conditionally selected·, or the ·instance-specified·
+// one that ·overrides· it — only for attributes clause 2 quantifies over (the
+// four xsi: names are excepted), and never where an {attribute wildcard} leaves
+// an arm of the rule unevaluated. The content half adds its own: an element
+// that is ·nilled· (clause 1 applies only where it is not, and cvc-elt clause
+// 3.2.3.1 decides its [[children]] instead), and a {content type} whose shape
 // xsd.Schema.ContentMatcher declines — {open content}, the nested repetition
 // cvc-accept's own Note leaves non-deterministic, an all group holding an all
 // group — each of which withholds clause 1.4 entirely rather than matching part

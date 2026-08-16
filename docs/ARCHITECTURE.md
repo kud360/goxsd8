@@ -28,24 +28,27 @@ Value implementations, parsing, validation, and generation live above them.
                  parser          (schema docs -> xsd components; imports xmltree, loader,
                                   xsd, value, builtin, regex — and builtin/strict, as the
                                   DEFAULT backend Parse seeds when the caller supplies none)
-                 xpath           (XPath 2.0 engine; imports value)          [1]
+                 xpath           (XPath 2.0 engine; imports xsd, value)
                  validate        (instance validation; adapters xmlsrc, jsonsrc, bersrc) [2]
                  codegen  codec  (generation; dataset ser/de)               [1]
                  conformance     (harness + ratchet; test-only)
                  cmd/goxsd8      (the CLI; help/usage only today)
 ```
 
-**[1] These boxes are DESTINATIONS, not shipped layers.** `xpath`,
+**[1] These boxes are DESTINATIONS, not shipped layers.**
 `validate/jsonsrc`, `validate/bersrc`, `codegen`, `codec` and
 `builtin/native` are `doc.go`-only today: `go doc` renders no exported
 identifier for any of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
+`xpath` has left this note: it exports the CTA compile and evaluate entry
+points and imports `xsd` and `value` for real (its section says which tiers
+are shipped).
 
 **[2] The infoset seam, the assessment skeleton and the XML adapter ship;
 the other two adapters do not.** `validate` exports the infoset views and
-`New`/`Validator`/`Result` and imports `xsd`, `xsderr` and `value` (and
-`regex` behind it, for the pattern facets `value` compiles) — but never a
+`New`/`Validator`/`Result` and imports `xsd`, `xsderr`, `value` and `xpath`
+(and `regex` behind it, for the pattern facets `value` compiles) — but never a
 backend: `New` takes the `value.Backend` as a required parameter, so
 `builtin/strict` stays outside the closure exactly as it does for `parser`'s
 `Produce` (see its section);
@@ -56,7 +59,7 @@ backend: `New` takes the `value.Backend` as a required parameter, so
 
 Only `xsderr`, `xsd`, `internal/schemaloc`, `value`,
 `value/backendtest`, `regex`, `builtin`, `builtin/strict`, `loader`, `parser`,
-`parser/xmltree`, `validate`, `validate/xmlsrc`, `conformance` and
+`parser/xmltree`, `xpath`, `validate`, `validate/xmlsrc`, `conformance` and
 `cmd/goxsd8` carry code today.
 
 **The module has two tiers, and the dependency rules govern the first.**
@@ -405,15 +408,18 @@ per STYLE T2), otherwise stdlib.
 
 ## XPath (`xpath`)
 
-**Status: the package ships nothing.** `xpath` is `doc.go`-only — `go doc`
-renders no exported identifier and it imports nothing from this module, the
-`imports value` edge in the DAG above included. Everything below is the
-destination; read it as "will", not "does".
+**Status: the CTA required subset ships; the rest is the destination.**
+`go doc` renders three identifiers — `CompileCTATest`, `CTATest` and
+`AttributeValue` — which compile and evaluate §3.12.6's `ta-Test` grammar
+for a Type Alternative's `{test}`, `validate` being their one consumer.
+Read the tiers below as "does" for tier 1 and "will" for tiers 2 and 3.
 
 Full XPath 2.0 is the destination; the engine grows outward from the
 XSD-required subset:
 
-1. the CTA restricted subset (the `test` attribute of `xs:alternative`),
+1. the CTA restricted subset (the `test` attribute of `xs:alternative`) —
+   shipped, less `ta-CastExpr`'s `cast as` tail and
+   `ta-ConstructorFunction`, which compile-time-decline (#858),
 2. assertion essentials — axes, predicates, quantified expressions, typed
    comparisons, the F&O function core,
 3. the full grammar and function library, tracked by its own conformance
@@ -422,10 +428,14 @@ XSD-required subset:
 One lexer, one parser, one AST — the evaluator walks the same tree the
 static analyzer sees. **Fail-open**: an unsupported construct can never
 cause a false rejection; every fallback site is a greppable
-`// GAP(xpath): …`. Dynamic errors (type mismatch, bad pattern) make an
-assertion definitively unsatisfied — they are NOT fail-open (PRINCIPLES
-20). `$value` binds a typed atom `{Lexical, Kind}`. F&O regex functions
-use `regex`'s F&O flavor, never the pattern-facet flavor.
+`// GAP(xpath): …`. A CTA `{test}` outside the implemented subset is
+declined at COMPILE time, and its caller withholds the element's
+·governing type definition· rather than reading the test as unmatched.
+Dynamic errors (type mismatch, bad pattern) make an assertion definitively
+unsatisfied and a CTA `{test}` definitively false (`key-cta-ta-select`
+clause 2) — they are NOT fail-open (PRINCIPLES 20). `$value` binds a typed
+atom `{Lexical, Kind}`. F&O regex functions use `regex`'s F&O flavor,
+never the pattern-facet flavor.
 
 ## Validation (`validate`)
 

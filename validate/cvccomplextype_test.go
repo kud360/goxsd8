@@ -295,12 +295,14 @@ func TestUnresolvableXSITypeStillAssessesAgainstTheDeclaredType(t *testing.T) {
 	wantCharge(t, got, "clause 2", loc(1, 11), "stray")
 }
 
-// A declaration carrying a {type table} withholds the assessment too: the
-// ·selected type definition· is then whichever <alternative> ·conditionally
-// selects· one for this instance (§3.3.4.2), which means evaluating XPath
-// (#56), and D.{type definition} is only the table's fallback.
-func TestTypeTabledRootDeclinesTheAttributeHalf(t *testing.T) {
-	test := xsd.NewXPathExpression("@id", nil, nil, nil)
+// A declaration carrying a {type table} whose {test} falls outside the
+// §3.12.6 required subset withholds the assessment: the ·selected type
+// definition· is whichever <alternative> ·conditionally selects· one for this
+// instance (§3.3.4.2), that one cannot be decided, and D.{type definition} is
+// only the table's fallback and not its answer. A {test} the engine CAN
+// evaluate selects a type instead (validate/cta_test.go).
+func TestUnevaluableTypeTableDeclinesTheAttributeHalf(t *testing.T) {
+	test := xsd.NewXPathExpression("count(@id) > 0", nil, nil, nil)
 	alt := xsd.NewTypeAlternative(&test, xsd.QName{Local: "RootType"}, nil)
 	table, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{alt},
 		xsd.NewTypeAlternative(nil, xsd.QName{Local: "RootType"}, nil))
@@ -333,7 +335,7 @@ func TestTypeTabledRootDeclinesTheAttributeHalf(t *testing.T) {
 	// The same root against the same type WITHOUT the table is charged clause
 	// 3 for the missing @id, so the silence here is the table's doing.
 	wantSilence(t, v.Assess(attributedRoot()).Violations(),
-		"a {type table} leaves the ·selected type definition· undetermined")
+		"an unevaluable {test} leaves the ·selected type definition· undetermined")
 	wantCharge(t, assessRoot(t, attributedRoot(), []xsd.AttributeUse{aUse(t, "id", true, nil)}, nil),
 		"clause 3", loc(1, 1), "id")
 }

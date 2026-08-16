@@ -133,18 +133,19 @@ func icLocal(t *testing.T, parent string, name xsd.QName, typ xsd.QName, nillabl
 	return d
 }
 
-// icTabled builds a local element declaration carrying a {type table}, whose
-// ·selected type definition· is whichever <alternative> ·conditionally selects·
-// one for the instance (§3.3.4.2). Evaluating a {test} means XPath (#56), so
-// this package determines no ·governing type definition· for such an element at
-// all — the one shape left that types an element against nothing.
+// icTabled builds a local element declaration carrying a {type table} whose
+// one <alternative> has a {test} OUTSIDE the §3.12.6 required subset, so the
+// engine cannot decide which type the table ·conditionally selects· and
+// determines no ·governing type definition· for such an element at all — the
+// one shape left that types an element against nothing. A {test} the engine
+// CAN evaluate would type it, which is what validate/cta_test.go drives.
 func icTabled(t *testing.T, parent string, name xsd.QName) xsd.ElementDeclaration {
 	t.Helper()
 	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: xsd.QName{Local: parent}})
 	if err != nil {
 		t.Fatalf("NewLocalScope: %v", err)
 	}
-	test := xsd.NewXPathExpression("@k", nil, nil, nil)
+	test := xsd.NewXPathExpression("count(@k) > 0", nil, nil, nil)
 	alt := xsd.NewTypeAlternative(&test, icBuiltin("string"), nil)
 	table, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{alt},
 		xsd.NewTypeAlternative(nil, icBuiltin("string"), nil))

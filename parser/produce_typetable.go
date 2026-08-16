@@ -137,12 +137,12 @@ func (p *producer) alternativeTypeNames(alternatives []*Element) ([]xsd.QName, e
 // Both shapes are fail-CLOSED over their four readers, which do not all charge
 // in the same direction:
 //
-//   - validate/assess.go walk.governingType returns nil for a declaration that
-//     HAS a table and D.{type definition} for one that has none, so a withheld
-//     table assesses the element against its DECLARED type where an
-//     <alternative> would ·conditionally select· another — a FALSE REJECT of
-//     content the selected type admits, at the ·validation root· and at every
-//     descendant. This reader alone makes the whole set fail-CLOSED.
+//   - validate/cta.go walk.selectedType ·conditionally selects· through a
+//     declaration that HAS a table and takes D.{type definition} for one that
+//     has none, so a withheld table assesses the element against its DECLARED
+//     type where an <alternative> would have selected another — a FALSE REJECT
+//     of content the selected type admits, at the ·validation root· and at
+//     every descendant. This reader alone makes the whole set fail-CLOSED.
 //   - xsd/elementconsistent.go checkTypeTablesAgree and xsd/defaultbinding.go
 //     typeTablesAgree both read "all ·absent· or all present and ·equivalent·".
 //     Two withheld tables read as agreeing, which is an UNMADE

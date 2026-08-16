@@ -192,24 +192,26 @@ func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration) governanc
 // stipulating no type of its own: clause 3, an ·instance-specified type
 // definition· that ·overrides· the ·selected type definition·, then clause 4,
 // the ·selected type definition· itself. The selected one (§3.3.4.1) is
-// D.{type definition} outright — clause 1's {type table} is the decline below —
-// and it is also the fallback the Note under cvc-elt names for BOTH ways an
+// selectedType's, both of its cases — a {type table} that ·conditionally
+// selects· (clause 1, cta.go) and a bare D.{type definition} (clause 2) — and
+// it is also the fallback the Note under cvc-elt names for BOTH ways an
 // xsi:type can fail to supply clause 3's case: an attribute that does not
 // ·resolve· at all, and one that resolves to a type that does not ·override·.
 // The two differ only in the charge, not in the type: the first leaves E with no
 // ·instance-specified type definition· and cvc-elt clause 4 vacuously satisfied,
 // the second violates clause 4 and is charged here (instanceOverride).
 //
+// The ·selected type definition· is settled BEFORE any xsi:type is read, in
+// both cases: ·overriding· is a relation TO the selected type, so an
+// undetermined selected type decides nothing about it.
+//
 // Each decline below withholds a type that could differ from the declaration's,
 // and assessing the element against the WRONG type is a false reject in both
 // directions — an attribute the real governing type declares looks unmatched, a
 // child its real {content type} admits looks unattributable.
 //
-//   - GAP(xpath): a {type table} makes the selected type the one its
-//     <alternative>s ·conditionally select· (§3.3.4.2), which means
-//     evaluating each {test} as an XPath expression (#56). It is declined
-//     BEFORE any xsi:type is read, because ·overriding· is a relation to the
-//     selected type and an undetermined selected type decides nothing about it.
+//   - A {test} in a {type table} that the §3.12.6 required-subset evaluator
+//     cannot evaluate (selectedType, cta.go).
 //   - A {type definition} slot that resolves to nothing.
 //
 // The type this returns is the governing one for EVERY reader, and they narrow
@@ -223,10 +225,7 @@ func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration) governanc
 // returns, so an xsi:type naming an anonymous type is folded-checked on its own
 // terms and not on the declaration's.
 func (w *walk) governingType(e Element, d xsd.ElementDeclaration) xsd.TypeDefinition {
-	if _, tabled := d.TypeTable(); tabled {
-		return nil
-	}
-	selected, ok := w.schema.ResolvedType(d.TypeDefinition())
+	selected, ok := w.selectedType(e, d)
 	if !ok {
 		return nil
 	}
