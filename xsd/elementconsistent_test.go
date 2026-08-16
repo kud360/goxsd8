@@ -168,7 +168,7 @@ func TestEDCSameInlineDeclarationViaTwoGroupRefsPasses(t *testing.T) {
 func TestEDCTypeTableDisagreement(t *testing.T) {
 	g := uGroup(t, CompositorSequence,
 		uOne(t, ResolvedTerm{Term: uLocal(t, uq("a"), uq("T"))}),
-		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("U")))}),
+		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("TSub")))}),
 	)
 	expectRule(t, uSchemaWithModel(t, g, nil), ruleCosElementConsistent)
 }
@@ -178,8 +178,8 @@ func TestEDCTypeTableDisagreement(t *testing.T) {
 // ·equivalent·, so the declarations agree.
 func TestEDCEquivalentTypeTablesPass(t *testing.T) {
 	g := uGroup(t, CompositorSequence,
-		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("U")))}),
-		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("U")))}),
+		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("TSub")))}),
+		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("TSub")))}),
 	)
 	if err := uSchemaWithModel(t, g, nil); err != nil {
 		t.Fatalf("two equivalent {type table}s were rejected: %v", err)
@@ -190,8 +190,8 @@ func TestEDCEquivalentTypeTablesPass(t *testing.T) {
 // {expression}s must have the same value.
 func TestEDCDifferentTypeTableExpressions(t *testing.T) {
 	g := uGroup(t, CompositorSequence,
-		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("U")))}),
-		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), eTypeTable(t, "@kind eq 'y'", uq("T"), uq("U")))}),
+		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("TSub")))}),
+		uOne(t, ResolvedTerm{Term: eLocalWithTable(t, uq("a"), uq("T"), eTypeTable(t, "@kind eq 'y'", uq("T"), uq("TSub")))}),
 	)
 	expectRule(t, uSchemaWithModel(t, g, nil), ruleCosElementConsistent)
 }
@@ -205,7 +205,7 @@ func TestEDCWildcardAndTopLevelDeclaration(t *testing.T) {
 		uOne(t, ResolvedTerm{Term: uWildcard(t, NamespaceConstraintAny, nil, ProcessStrict)}),
 	)
 	err := uSchemaWithModel(t, g, func(b *SchemaBuilder) {
-		b.AddElement(eGlobalWithTable(t, uq("q"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("U"))))
+		b.AddElement(eGlobalWithTable(t, uq("q"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("TSub"))))
 	})
 	expectRule(t, err, ruleCosElementConsistent)
 }
@@ -218,7 +218,7 @@ func TestEDCSkipWildcardExcluded(t *testing.T) {
 		uOne(t, ResolvedTerm{Term: uWildcard(t, NamespaceConstraintAny, nil, ProcessSkip)}),
 	)
 	err := uSchemaWithModel(t, g, func(b *SchemaBuilder) {
-		b.AddElement(eGlobalWithTable(t, uq("q"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("U"))))
+		b.AddElement(eGlobalWithTable(t, uq("q"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("TSub"))))
 	})
 	if err != nil {
 		t.Fatalf("a skip wildcard triggered cos-element-consistent clause 2.1: %v", err)
@@ -243,7 +243,8 @@ func TestEDCOpenContentWildcard(t *testing.T) {
 	b := NewSchemaBuilder()
 	b.AddType(uNamedType(t, uq("T")))
 	b.AddType(uNamedType(t, uq("U")))
-	b.AddElement(eGlobalWithTable(t, uq("q"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("U"))))
+	b.AddType(uSubOfT(t))
+	b.AddElement(eGlobalWithTable(t, uq("q"), uq("T"), eTypeTable(t, "@kind eq 'x'", uq("T"), uq("TSub"))))
 	b.AddType(ct)
 	_, err = b.Finalize()
 	expectRule(t, err, ruleCosElementConsistent)

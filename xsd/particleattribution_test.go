@@ -147,6 +147,22 @@ func uNamedType(t *testing.T, name QName) ComplexType {
 	return ct
 }
 
+// uSubOfT builds uq("TSub"), a RESTRICTION of uq("T"). It is what a {type
+// table} fixture names: e-props-correct clause 7 (typetablesubstitutable.go)
+// requires every entry of a table to be ·validly substitutable· for the
+// declaration's own {type definition}, so a table on a uq("T")-typed
+// declaration naming the unrelated uq("U") is rejected before the EQUIVALENCE
+// those fixtures are about is ever reached.
+func uSubOfT(t *testing.T) ComplexType {
+	t.Helper()
+	ct, err := NewComplexType(xsderr.Loc{}, uq("TSub"), uq("T"), nil, DerivationRestriction, false,
+		nil, nil, nil, EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewComplexType(TSub): %v", err)
+	}
+	return ct
+}
+
 // uSchemaWithModel finalizes a schema whose only content model is the given
 // model group, plus the named types the declarations in it refer to.
 func uSchemaWithModel(t *testing.T, g ModelGroup, extra func(*SchemaBuilder)) error {
@@ -154,6 +170,7 @@ func uSchemaWithModel(t *testing.T, g ModelGroup, extra func(*SchemaBuilder)) er
 	b := NewSchemaBuilder()
 	b.AddType(uNamedType(t, uq("T")))
 	b.AddType(uNamedType(t, uq("U")))
+	b.AddType(uSubOfT(t))
 	if extra != nil {
 		extra(b)
 	}

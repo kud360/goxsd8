@@ -2,7 +2,7 @@ package xsd
 
 import "github.com/kud360/goxsd8/xsderr"
 
-// This file is the third step of Phase D of the finalize resolution pass
+// This file is the fourth step of Phase D of the finalize resolution pass
 // (resolve.go): Element Declaration Properties Correct (§3.3.6.1,
 // e-props-correct) clause 4, anchor c-vs-sg — "For each member M of
 // E.{substitution group affiliations}, E.{type definition} is ·validly
@@ -21,7 +21,7 @@ import "github.com/kud360/goxsd8/xsderr"
 // about it. Clause 4 is the separate rule that supplies the requirement, at
 // schema-construction time rather than inside the membership predicate.
 
-// checkSubstitutionGroupTypes is Phase D's third step: e-props-correct clause 4
+// checkSubstitutionGroupTypes is Phase D's fourth step: e-props-correct clause 4
 // over every element declaration that carries a {substitution group
 // affiliations}.
 //
