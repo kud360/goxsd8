@@ -280,7 +280,7 @@ CTA/cta0001/instance/cta0001.n02 fail
 CTA/cta0001/instance/cta0001.v01 fail
 CTA/cta0001/instance/cta0001.v02 fail
 CTA/cta0001/instance/cta0001.v03 fail
-CTA/cta0002/instance/cta0002.n01 fail
+CTA/cta0002/instance/cta0002.n01 pass
 CTA/cta0002/instance/cta0002.v01 fail
 CTA/cta0008/instance/cta0008.n01 pass
 CTA/cta0008/instance/cta0008.v01 fail
@@ -315,7 +315,7 @@ CTA/cta0040/instance/cta0040.v01 fail
 CTA/cta0041/instance/cta0041.n01 fail
 CTA/cta0041/instance/cta0041.v01 fail
 CTA/cta0042/instance/cta0042.v01 fail
-CTA/cta0044/instance/cta0044.n01 fail
+CTA/cta0044/instance/cta0044.n01 pass
 CTA/cta0044/instance/cta0044.v01 fail
 CTA/typeAlternatives_001/instance/typeAlternatives_001_2 fail
 CTA/typeAlternatives_002/instance/typeAlternatives_002_2 fail
@@ -25425,9 +25425,9 @@ TargetNS/target003/instance/target003.v1.xml fail
 TargetNS/targetNamespace_004/instance/targetNamespace_004_2 fail
 TargetNS/targetNamespace_005/instance/targetNamespace_005_2 fail
 TypeAlternativeTests/s3_12ii01/instance/s3_12ii01i fail
-TypeAlternativeTests/s3_12ii02/instance/s3_12ii02i fail
+TypeAlternativeTests/s3_12ii02/instance/s3_12ii02i pass
 TypeAlternativeTests/s3_12ii03/instance/s3_12ii03i fail
-TypeAlternativeTests/s3_12ii04/instance/s3_12ii04i fail
+TypeAlternativeTests/s3_12ii04/instance/s3_12ii04i pass
 TypeAlternativeTests/s3_12ii05/instance/s3_12ii05i fail
 TypeAlternativeTests/s3_12v01/instance/s3_12v01i fail
 TypeAlternativeTests/s3_12v02/instance/s3_12v02i fail
