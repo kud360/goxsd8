@@ -298,10 +298,11 @@ func (s AttributeScope) Parent() (AttributeScopeParent, bool) {
 // Like the other §3 component shapes in this package, AttributeDeclaration is a
 // STRUCTURAL holder built before resolution. Its {type definition} is carried as
 // a TypeDefinitionOrRef: a pre-resolution QName REFERENCE for the type/@type and
-// xs:anySimpleType tiers of §3.2.2.2 dcl.att.local, or the owned anonymous
-// component itself for the inline <simpleType> tier. Note that §3.2.2.2's chain
-// has three tiers, not the four of an element's §3.3.2.1 dcl.elt.common: an
-// attribute has no substitution-group analog. A resolved-component accessor for
+// xs:anySimpleType tiers of §3.2.2.1 dcl.att.global and §3.2.2.2 dcl.att.local,
+// or the owned anonymous component itself for the inline <simpleType> tier. Note
+// that either chain — the two are worded identically — has three tiers, not the
+// four of an element's §3.3.2.1 dcl.elt.common: an attribute has no
+// substitution-group analog. A resolved-component accessor for
 // the by-name arm is still deferred; a-props-correct clause 2 (Simple Default
 // Valid) is decided at FINALIZE, over the resolved {type definition} and the
 // installed ValueSpace (valueconstraintvalid.go, #371), not on this component.
@@ -326,9 +327,9 @@ func (s AttributeScope) Parent() (AttributeScopeParent, bool) {
 // representable on the declaration independently of the use.
 //
 // Ratchet impact: the schema lane widens whenever the producer starts mapping a
-// {type definition} shape it used to decline — most recently the inline
-// anonymous <simpleType> of a local declaration (#229), which the
-// InlineTypeDefinition arm of the slot exists to hold.
+// {type definition} shape it used to decline — the inline anonymous <simpleType>
+// of a local declaration (#229) and then of a global one (#733), both of which
+// the InlineTypeDefinition arm of the slot exists to hold.
 //
 // Construct only through NewAttributeDeclaration, which rejects the states
 // a-props-correct (§3.2.6.1) clause 1 forbids so they are unrepresentable

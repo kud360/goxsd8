@@ -53,11 +53,10 @@ func closureGateIn(t *testing.T, root string, docs map[string]string) (declined,
 	return !closureDecidable(report) || (unfollowed && perr != nil), unfollowed
 }
 
-// undecidable is a top-level <attribute> with an inline <simpleType>: a shape
-// schemaShapeDecidable refuses, because the producer maps no §3.2.2.1
-// dcl.att.global inline type, so a verdict on it would be scored against a
-// schema that was never built.
-const undecidable = `<xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`
+// undecidable is a top-level <simpleType> naming NONE of §3.16.2.1's three
+// alternatives: the shape schemaShapeDecidable still refuses, so a verdict on it
+// would be scored against a schema that was never built.
+const undecidable = `<xs:simpleType name="undec"/>`
 
 // decidableType is a top-level restriction-only simpleType — squarely inside the
 // producer's decidable subset.
