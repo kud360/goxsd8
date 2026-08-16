@@ -38,8 +38,8 @@ const ruleCvcID xsderr.Rule = "cvc-id"
 // element contribute one member between them, not two, so clause 2 does not
 // fire for them.
 
-// idRole is what the ·governing type definition· of an item makes its ·actual
-// value·: an id its element declares, a reference to one, or neither.
+// idRole is what the ·validating type· of a value makes it: an id its element
+// declares, a reference to one, or neither.
 type idRole int
 
 const (
@@ -47,6 +47,16 @@ const (
 	idRoleDeclare
 	idRoleReference
 )
+
+// idBinding is one ·ID value· or ·IDREF value· of an item's ·actual value·,
+// carrying the role its OWN ·validating type· gives it. The role travels per
+// value and not per item because a list whose {item type definition} is a union
+// decides it per item (§3.16.4 key-vtype clause 2), so one attribute's value can
+// hold an ·ID value· and a string that is neither.
+type idBinding struct {
+	value string
+	role  idRole
+}
 
 // idTable is the ·validation root·'s [ID/IDREF table]: one entry per distinct
 // id string, in the order the strings were first met, so several charges arrive
@@ -207,8 +217,8 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 			w.ids.declined = true
 			continue
 		}
-		role, _, decided := w.idRole(st)
-		if !decided || role != idRoleNone {
+		candidate, decided := w.idCandidate(st)
+		if !decided || candidate {
 			w.ids.declined = true
 		}
 	}
@@ -266,18 +276,25 @@ func (w *walk) idElement(c *icCheck) {
 // be an ·ID value·, and its own invalidity is cvc-attribute's or
 // cvc-complex-type's to charge.
 //
+// The item is admitted by its ·governing type definition· (idCandidate) before
+// the lexical is read at all, and classified by its ·validating type·
+// afterwards (idBindings): clause 3 of the ·eligible item set· is what decides
+// whether the value is worth mapping, so a type outside the ID/IDREF closure
+// runs no pipeline here.
+//
 // GAP(validate): a value.ValidateLexical error that is not a VERDICT
 // (value.IsDatatypeVerdict) declines, on cvcattribute.go's terms — an ungoverned
 // type reports under cvc-datatype-valid exactly as a genuine rejection does, and
 // reading one as "no id here" would hide a declaration clause 1 charges for the
-// absence of (#774).
+// absence of (#774). validatingType's member scan declines on the same class for
+// the same reason.
 func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, node int, loc xsderr.Loc) {
-	role, list, decided := w.idRole(st)
+	candidate, decided := w.idCandidate(st)
 	if !decided {
 		w.ids.declined = true
 		return
 	}
-	if role == idRoleNone {
+	if !candidate {
 		return
 	}
 	if _, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: owner}); err != nil {
@@ -286,24 +303,31 @@ func (w *walk) idRecord(st *xsd.SimpleType, lexical string, owner Element, node 
 		}
 		return
 	}
-	for _, v := range idValues(lexical, list) {
-		if role == idRoleDeclare {
-			w.ids.declare(v, node, loc)
+	bindings, decided := w.idBindings(st, lexical, owner)
+	if !decided {
+		w.ids.declined = true
+		return
+	}
+	for _, b := range bindings {
+		if b.role == idRoleDeclare {
+			w.ids.declare(b.value, node, loc)
 			continue
 		}
-		w.ids.reference(v, loc)
+		w.ids.reference(b.value, loc)
 	}
 }
 
-// idValues is the ·ID values· or ·IDREF values· in one item's ·actual value·:
-// every item of a list, or the one value of an atomic type.
+// idValues splits one item's ·actual value· into the strings a ·validating type·
+// is read against: every item of a list value, or the single value of an atomic
+// one. WHICH of them are ·ID values· or ·IDREF values· is idBindings's to say.
 //
 // The values are read off the COLLAPSED lexical rather than out of the parsed
-// value, which is exact for these three types and for every type derived from
-// them: ID, IDREF and the item type of IDREFS all derive from xs:NCName, whose
-// ·value space· is its ·lexical space· (Datatypes §3.4.7) under the collapse
-// whiteSpace its ancestor xs:token fixes. idRecord has already run String Valid
-// over the lexical, so a value reaching here is one that mapping accepted.
+// value, which is exact for the three types clause 3 names and for every type
+// derived from them: ID, IDREF and the item type of IDREFS all derive from
+// xs:NCName, whose ·value space· is its ·lexical space· (Datatypes §3.4.7)
+// under the collapse whiteSpace its ancestor xs:token fixes. idRecord has
+// already run String Valid over the lexical, so a value reaching here is one
+// that mapping accepted.
 func idValues(lexical string, list bool) []string {
 	fields := strings.Fields(lexical)
 	if list || len(fields) < 2 {
@@ -312,28 +336,69 @@ func idValues(lexical string, list bool) []string {
 	return fields[:1]
 }
 
-// idRole classifies one ·governing type definition· under clause 3 of the
-// ·eligible item set·: the built-in ID, IDREF or IDREFS, "or a type definition
+// idCandidate settles clause 3 of the ·eligible item set· over one ·governing
+// type definition·: the built-in ID, IDREF or IDREFS, "or a type definition
 // ·derived· or ·constructed· directly or indirectly from any of these". The
-// derivation walk is up {base type definition}s; the construction one is into a
-// list's {item type definition}, which is how a user-defined list of IDREF —
-// and IDREFS itself, were it not named — reaches the set.
+// derivation walk is namedRole's, up {base type definition}s; the construction
+// ones are into a list's {item type definition} and into a union's {member type
+// definitions} — ·constructed· is the Datatypes term covering all three of
+// restriction, list and union (dt-constructed), so a union holding an ID member
+// is admitted here exactly as a list of ID is.
 //
-// list distinguishes the two readings of the ·actual value·: a list's holds one
-// ·IDREF value· per item, an atomic type's exactly one.
-//
-// GAP(validate): a UNION anywhere in the closure is undecided rather than
-// classified none. Which member governs the value is decided by String Valid's
-// own member scan, which this classification does not run, and reading a union
-// with an IDREF member as "no id here" would drop an id the document really
-// declares. The undecided answer's consumers are idRecord's two callers,
-// idAttributes and idElement, both of which route it to idTable.declined, whose
-// one reader is idTable.charge's clause 1 arm — so it suppresses a rejection and
-// manufactures none. No issue owns its retirement yet.
-func (w *walk) idRole(st *xsd.SimpleType) (role idRole, list, decided bool) {
+// It is a CANDIDACY test and never the classification: whether a value in that
+// type's closure really is an ·ID value· is its ·validating type·'s to say
+// (idBindings). A union of ID and string admits every item it governs and
+// contributes a binding for only those the ID member validated.
+func (w *walk) idCandidate(st *xsd.SimpleType) (candidate, decided bool) {
 	if st == nil {
-		return idRoleNone, false, true
+		return false, true
 	}
+	role, _, decided := w.namedRole(st)
+	if !decided {
+		return false, false
+	}
+	if role != idRoleNone {
+		return true, true
+	}
+	variety, err := st.Variety(w.schema)
+	if err != nil {
+		return false, false
+	}
+	switch variety.(type) {
+	case xsd.List:
+		item, err := st.Item(w.schema)
+		if err != nil || item == nil {
+			return false, false
+		}
+		return w.idCandidate(item)
+	case xsd.Union:
+		members, err := st.Members(w.schema)
+		if err != nil {
+			return false, false
+		}
+		for _, m := range members {
+			candidate, decided := w.idCandidate(m)
+			if !decided {
+				return false, false
+			}
+			if candidate {
+				return true, true
+			}
+		}
+	}
+	return false, true
+}
+
+// namedRole reads clause 3's ·derived· half off st's {base type definition}
+// chain: ID, IDREF and IDREFS by name, and every type reaching one of them by
+// restriction.
+//
+// list distinguishes the two readings of the ·actual value·: IDREFS holds one
+// ·IDREF value· per list item, an atomic type exactly one. It answers for the
+// chain alone and walks into no {item type definition} or {member type
+// definitions} — those are idCandidate's and idBindings's, which need them for
+// different questions.
+func (w *walk) namedRole(st *xsd.SimpleType) (role idRole, list, decided bool) {
 	for t := st; t != nil; {
 		switch t.Name() {
 		case idName:
@@ -355,22 +420,131 @@ func (w *walk) idRole(st *xsd.SimpleType) (role idRole, list, decided bool) {
 		}
 		t = base
 	}
+	return idRoleNone, false, true
+}
+
+// idBindings is what one item's ·actual value· contributes to the [ID/IDREF
+// table]: every ·ID value· and ·IDREF value· in it, each classified by its own
+// ·validating type· (§3.16.4, key-vtype) and not by the ·governing type
+// definition· idCandidate admitted the item on. §3.17.5.2's ·ID value· is
+// "one whose ·validating type· is or is ·derived· from ID" (key-TYPE-value), so
+// a union of ID and string contributes nothing for a value the string member
+// validated.
+//
+// The two arms are key-vtype's two clauses. Clause 1 fixes the type of the whole
+// value, which for a union is the ·active basic member· (validatingType); where
+// that type is ID, IDREF or IDREFS the value is read straight off the lexical.
+// Clause 2 is the list case, "the validating type of an (atomic) item value A
+// occurring in V", decided PER ITEM — so a list of a union of ID and string
+// contributes a binding for the tokens the ID member validated and nothing for
+// the rest, within one value.
+//
+// The caller has already run String Valid over the whole lexical, which is what
+// makes each member scan below find a member at all: the same dispatch accepted
+// it (§4.1.4 cl.2.3). A scan that finds none is a decline, on validatingType's
+// terms.
+func (w *walk) idBindings(st *xsd.SimpleType, lexical string, owner Element) ([]idBinding, bool) {
+	t, decided := w.validatingType(st, lexical, owner)
+	if !decided {
+		return nil, false
+	}
+	role, list, decided := w.namedRole(t)
+	if !decided {
+		return nil, false
+	}
+	if role != idRoleNone {
+		values := idValues(lexical, list)
+		bindings := make([]idBinding, 0, len(values))
+		for _, v := range values {
+			bindings = append(bindings, idBinding{value: v, role: role})
+		}
+		return bindings, true
+	}
+	variety, err := t.Variety(w.schema)
+	if err != nil {
+		return nil, false
+	}
+	if _, listed := variety.(xsd.List); !listed {
+		return nil, true
+	}
+	item, err := t.Item(w.schema)
+	if err != nil || item == nil {
+		return nil, false
+	}
+	return w.idItemBindings(item, lexical, owner)
+}
+
+// idItemBindings is key-vtype clause 2 over one list value: each item of it gets
+// its own ·validating type·, "the basic member of I's transitive membership
+// which actually validated the substring in N that corresponds to A" where the
+// {item type definition} I is a union, and an item whose type is neither ID nor
+// IDREF simply contributes nothing beside the items that are.
+//
+// The item type is where the descent ends: cos-st-restricts clause 2.1
+// (§3.16.6.2) admits an {item type definition} whose {variety} is atomic, or
+// union with "no types whose {variety} is list among the union's transitive
+// membership", so no item of a list is itself a list and there is no second
+// split to make.
+func (w *walk) idItemBindings(item *xsd.SimpleType, lexical string, owner Element) ([]idBinding, bool) {
+	var bindings []idBinding
+	for _, f := range idValues(lexical, true) {
+		t, decided := w.validatingType(item, f, owner)
+		if !decided {
+			return nil, false
+		}
+		role, _, decided := w.namedRole(t)
+		if !decided {
+			return nil, false
+		}
+		if role == idRoleNone {
+			continue
+		}
+		bindings = append(bindings, idBinding{value: f, role: role})
+	}
+	return bindings, true
+}
+
+// validatingType is key-vtype clause 1: the ·validating type· of a value is the
+// type itself unless that type is a union, in which case it is "the basic member
+// of T's transitive membership which actually ·validated· N" — the FIRST member
+// of {member type definitions} the lexical is Datatype Valid against, in
+// declared order (dt-active-member), descended through a member that is itself a
+// union until a non-union one is reached (dt-active-basic-member).
+//
+// The scan runs value.ValidateLexical per member, which is dv_union's own
+// dispatch (§4.1.4 cl.2.3) a second time: the exported entry point reports the
+// verdict and not the member that reached it, so the member the caller's own
+// String Valid already found cannot be read back off it.
+//
+// Two answers are declines rather than classifications. A member whose error is
+// not a VERDICT (value.IsDatatypeVerdict) is a fault of the TYPE or of the
+// backend, and reading it as "this member rejected" would hand the value to a
+// LATER member — idRecord's own GAP, on the same terms. A membership no member
+// accepts contradicts the String Valid the caller already ran, so it is a
+// disagreement between two readings of one dispatch and not a fact about the
+// document.
+func (w *walk) validatingType(st *xsd.SimpleType, lexical string, owner Element) (*xsd.SimpleType, bool) {
 	variety, err := st.Variety(w.schema)
 	if err != nil {
-		return idRoleNone, false, false
+		return nil, false
 	}
-	switch variety.(type) {
-	case xsd.List:
-		item, err := st.Item(w.schema)
-		if err != nil || item == nil {
-			return idRoleNone, false, false
+	if _, union := variety.(xsd.Union); !union {
+		return st, true
+	}
+	members, err := st.Members(w.schema)
+	if err != nil {
+		return nil, false
+	}
+	for _, m := range members {
+		if _, err := value.ValidateLexical(w.backend, w.schema, m, lexical, elementContext{owner: owner}); err != nil {
+			if !value.IsDatatypeVerdict(err) {
+				return nil, false
+			}
+			continue
 		}
-		role, _, decided = w.idRole(item)
-		return role, true, decided
-	case xsd.Union:
-		return idRoleNone, false, false
+		return w.validatingType(m, lexical, owner)
 	}
-	return idRoleNone, false, true
+	return nil, false
 }
 
 // The three built-in types §3.17.5.2 clause 3 names by hand.

@@ -14,9 +14,13 @@ import (
 //
 //	root  RootType  sequence( item*, box*, ref* )
 //	box   BoxType   sequence( item*, ref* )            — a subtree of its own
-//	item  ItemType  sequence( name? ), @id @k @p:id @ref @refs
+//	item  ItemType  sequence( name?, tag?, utag? ),
+//	                @id @k @p:id @xid @ref @refs,
+//	                @uid @usi @uref @upl @unest @lur  — icUnionTypes
 //	ref   RefType   empty,                             @r
 //	name  xs:string (or a nillable declaration of it)
+//	tag   xs:ID     an ID-governed ELEMENT
+//	utag  UID       a union-governed one
 //
 // Every complex type is NAMED, so its {attribute uses} are folded and an
 // attribute is matched rather than declined (assess.go's
@@ -57,8 +61,15 @@ func icBuiltin(local string) xsd.QName {
 // builtin type.
 func icUse(t *testing.T, name xsd.QName, typ string) xsd.AttributeUse {
 	t.Helper()
+	return icUseOf(t, name, icBuiltin(typ))
+}
+
+// icUseOf is icUse over any type name, which is what a use of one of the
+// fixture's own union and list types needs.
+func icUseOf(t *testing.T, name, typ xsd.QName) xsd.AttributeUse {
+	t.Helper()
 	d, err := xsd.NewAttributeDeclaration(xsderr.Loc{}, name,
-		xsd.TypeDefinitionRef{Name: icBuiltin(typ)}, xsd.NewAttributeGlobalScope(), nil, false, nil)
+		xsd.TypeDefinitionRef{Name: typ}, xsd.NewAttributeGlobalScope(), nil, false, nil)
 	if err != nil {
 		t.Fatalf("building the %s attribute declaration: %v", name, err)
 	}
@@ -67,6 +78,41 @@ func icUse(t *testing.T, name xsd.QName, typ string) xsd.AttributeUse {
 		t.Fatalf("building the %s attribute use: %v", name, err)
 	}
 	return u
+}
+
+// icUnion builds a NAMED union simple type over by-name members, in declared
+// order — the order dt-active-member selects in. Its {base type definition} is
+// xs:anySimpleType, which is what §3.16.2.1 map.std.common case 2 gives a
+// <union>.
+func icUnion(t *testing.T, local string, members ...xsd.QName) *xsd.SimpleType {
+	t.Helper()
+	slots := make([]xsd.SimpleTypeOrRef, 0, len(members))
+	for _, m := range members {
+		slots = append(slots, xsd.SimpleTypeRef{Name: m})
+	}
+	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Local: local},
+		xsd.UnionDerivation{Members: slots},
+		xsd.SimpleTypeRef{Name: icBuiltin("anySimpleType")}, nil, nil)
+	if err != nil {
+		t.Fatalf("building the %s union: %v", local, err)
+	}
+	return st
+}
+
+// icList builds a NAMED list simple type over a by-name {item type definition},
+// on icUnion's terms. The fixed collapse whiteSpace is the {facets} set
+// §3.16.2.1 manufactures for every <list>, and the only one cos-st-restricts
+// clause 2.2.1.2 admits on a list whose base is xs:anySimpleType.
+func icList(t *testing.T, local string, item xsd.QName) *xsd.SimpleType {
+	t.Helper()
+	st, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Local: local},
+		xsd.ListDerivation{Item: xsd.SimpleTypeRef{Name: item}},
+		xsd.SimpleTypeRef{Name: icBuiltin("anySimpleType")},
+		[]xsd.Facet{xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true)}, nil)
+	if err != nil {
+		t.Fatalf("building the %s list: %v", local, err)
+	}
+	return st
 }
 
 // icLocal builds a local element declaration of the named type, carrying ics
@@ -166,6 +212,32 @@ func icDef(t *testing.T, name string, cat xsd.IdentityConstraintCategory, select
 	return ic
 }
 
+// icUnionTypes builds the ·constructed· types <item> carries, the shapes
+// key-vtype has to resolve per value rather than per declaration:
+//
+//	UID     union( ID,      string )   an ID member, reached first
+//	USI     union( string,  ID     )   the same members in the other order
+//	URef    union( IDREF,   string )   an IDREF member
+//	UPlain  union( integer, string )   neither, so nothing to record
+//	UNest   union( integer, UID    )   a union member of a union
+//	LURef   list of URef              key-vtype clause 2, per item
+//
+// The pairing with xs:string is what makes the member scan observable: every
+// literal is valid against the union whichever member takes it, so a difference
+// in the [ID/IDREF table] can only come from WHICH member did.
+func icUnionTypes(t *testing.T) []*xsd.SimpleType {
+	t.Helper()
+	named := func(local string) xsd.QName { return xsd.QName{Local: local} }
+	return []*xsd.SimpleType{
+		icUnion(t, "UID", icBuiltin("ID"), icBuiltin("string")),
+		icUnion(t, "USI", icBuiltin("string"), icBuiltin("ID")),
+		icUnion(t, "URef", icBuiltin("IDREF"), icBuiltin("string")),
+		icUnion(t, "UPlain", icBuiltin("integer"), icBuiltin("string")),
+		icUnion(t, "UNest", icBuiltin("integer"), named("UID")),
+		icList(t, "LURef", named("URef")),
+	}
+}
+
 // icSchema assembles the fixture schema. ns is the namespace item, box and ref
 // are declared in — "" for the absent one — and nillable makes <name>'s
 // declaration {nillable} true, which is the only property clause 4.2.3 reads.
@@ -174,8 +246,12 @@ func icSchema(t *testing.T, ns string, nillable bool, rootICs, boxICs []xsd.Iden
 	seeded := icSeeded(t)
 	in := func(local string) xsd.QName { return xsd.QName{Space: ns, Local: local} }
 
+	unions := icUnionTypes(t)
+	named := func(local string) xsd.QName { return xsd.QName{Local: local} }
+
 	nameDecl := icLocal(t, "ItemType", in("name"), icBuiltin("string"), nillable, nil)
 	tagDecl := icLocal(t, "ItemType", in("tag"), icBuiltin("ID"), false, nil)
+	utagDecl := icLocal(t, "ItemType", in("utag"), named("UID"), false, nil)
 	itemType := icComplex(t, "ItemType", []xsd.AttributeUse{
 		icUse(t, xsd.QName{Local: "id"}, "string"),
 		icUse(t, xsd.QName{Local: "k"}, "integer"),
@@ -183,7 +259,13 @@ func icSchema(t *testing.T, ns string, nillable bool, rootICs, boxICs []xsd.Iden
 		icUse(t, xsd.QName{Local: "xid"}, "ID"),
 		icUse(t, xsd.QName{Local: "ref"}, "IDREF"),
 		icUse(t, xsd.QName{Local: "refs"}, "IDREFS"),
-	}, icContent(t, icOptional(t, nameDecl), icOptional(t, tagDecl)))
+		icUseOf(t, named("uid"), named("UID")),
+		icUseOf(t, named("usi"), named("USI")),
+		icUseOf(t, named("uref"), named("URef")),
+		icUseOf(t, named("upl"), named("UPlain")),
+		icUseOf(t, named("unest"), named("UNest")),
+		icUseOf(t, named("lur"), named("LURef")),
+	}, icContent(t, icOptional(t, nameDecl), icOptional(t, tagDecl), icOptional(t, utagDecl)))
 	refType := icComplex(t, "RefType", []xsd.AttributeUse{
 		icUse(t, xsd.QName{Local: "r"}, "string"),
 	}, xsd.EmptyContent{})
@@ -207,6 +289,9 @@ func icSchema(t *testing.T, ns string, nillable bool, rootICs, boxICs []xsd.Iden
 
 	b := xsd.NewSchemaBuilder()
 	for _, st := range seeded {
+		b.AddType(st)
+	}
+	for _, st := range unions {
 		b.AddType(st)
 	}
 	b.AddType(itemType)

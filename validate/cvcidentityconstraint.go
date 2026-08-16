@@ -191,10 +191,13 @@ func (w *walk) identityCheck(e Element, g governance, parent *icCheck) *icCheck 
 		c.inherit(w, parent)
 	}
 	c.open(w, g)
-	if role, _, _ := w.idRole(g.simpleType()); role != idRoleNone {
-		// The ·initial value· of an ID- or IDREF-governed element is read on
-		// the way out (cvcid.go's idElement), so its character content has to
-		// be gathered on the way through.
+	if candidate, decided := w.idCandidate(g.simpleType()); !decided || candidate {
+		// The ·initial value· of an element clause 3 of the ·eligible item set·
+		// admits is read on the way out (cvcid.go's idElement), so its character
+		// content has to be gathered on the way through. The gate is the
+		// CANDIDACY one and never the classification, which needs that value to
+		// run at all, and it gathers for an undecided answer too so that it is
+		// never narrower than idRecord's own.
 		c.gather = true
 	}
 	return c

@@ -33,6 +33,14 @@ func idTagged(line int, value string) *testElement {
 	return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(tag))
 }
 
+// idUTagged is <item><utag>value</utag></item>, whose UNION-governed element
+// content binds the ITEM.
+func idUTagged(line int, value string) *testElement {
+	utag := icElem(xsd.QName{Local: "utag"}, line+1, nil,
+		TextChild(&testText{data: value, loc: loc(line+1, 8)}))
+	return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(utag))
+}
+
 // An id two elements both claim gives its ID/IDREF binding two members, which
 // cvc-id clause 2 forbids. The charge cites the SECOND claim.
 func TestDuplicateIDIsChargedAtTheValidationRoot(t *testing.T) {
@@ -156,6 +164,97 @@ func TestUnfoldedAttributeDeclinesRatherThanManufacturingADuplicate(t *testing.T
 
 	icWantCharges(t, icAssess(t, schema,
 		icRoot(icKid(2, "aid")("x1"), icKid(3, "aid")("x1"))))
+}
+
+// A union is ·constructed· from its members, so clause 3 of the ·eligible item
+// set· admits an item it governs; WHICH of ID, IDREF or neither the value is
+// then read as is its ·validating type·'s to say (§3.16.4 key-vtype clause 1),
+// and @uid's first member takes "a".
+func TestAUnionMemberValidatingAsIDDeclaresTheID(t *testing.T) {
+	schema := idSchema(t)
+
+	// The id is declared through the union member, so the reference resolves.
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "uid", "a"), idItem(3, "ref", "a"))))
+	// @upl is a union of integer and string: nothing it validates is an ·ID
+	// value·, so the same reference has an empty binding (clause 1).
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "upl", "a"), idItem(3, "ref", "a"))),
+		icChargeAttr(ruleCvcID, 3))
+}
+
+// The IDREF half: a value the union's IDREF member validated is an ·IDREF
+// value·, so it puts its string in the table whether or not anything declares
+// it.
+func TestAUnionMemberValidatingAsIDREFReferences(t *testing.T) {
+	schema := idSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "uref", "ghost"))),
+		icChargeAttr(ruleCvcID, 2))
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "xid", "a"), idItem(3, "uref", "a"))))
+}
+
+// A union whose ·validating type· is neither ID nor IDREF contributes NOTHING —
+// not an entry whose binding is empty, which clause 1 would charge.
+func TestAUnionValidatingAsNeitherRecordsNothing(t *testing.T) {
+	schema := idSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "upl", "7"))))
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "upl", "ghost"))))
+}
+
+// An id declared through a union member is a member of the SAME binding an
+// xs:ID-governed attribute declares, so the two together are the duplicate
+// clause 2 forbids.
+func TestADuplicateThroughAUnionMemberIsChargedClauseTwo(t *testing.T) {
+	schema := idSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "uid", "a"), idItem(3, "xid", "a"))),
+		icChargeAttr(ruleCvcID, 3))
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "uid", "a"), idItem(3, "uid", "a"))),
+		icChargeAttr(ruleCvcID, 3))
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "uid", "a"), idItem(3, "uid", "b"))))
+}
+
+// The ·active member type· is "the first of its members in order which accepts
+// the instance as valid" (dt-active-member), so @usi — the same two members as
+// @uid in the other order — reads "a" as an xs:string and declares no id at all.
+func TestTheFirstMemberInOrderDecidesTheValidatingType(t *testing.T) {
+	schema := idSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "usi", "a"), idItem(3, "ref", "a"))),
+		icChargeAttr(ruleCvcID, 3))
+}
+
+// The descent to the ·active basic member· does not stop at a member that is
+// itself a union (dt-active-basic-member): @unest's second member is @uid's
+// union, whose own first member is ID.
+func TestANestedUnionDescendsToTheBasicMember(t *testing.T) {
+	schema := idSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "unest", "a"), idItem(3, "ref", "a"))))
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "unest", "a"), idItem(3, "xid", "a"))),
+		icChargeAttr(ruleCvcID, 3))
+}
+
+// key-vtype clause 2 decides a list whose {item type definition} is a union PER
+// ITEM: @lur is a list of union(IDREF, string), so "a" is an ·IDREF value· and
+// "1" — no NCName, so no IDREF — is not one at all.
+func TestAListOfUnionIsDecidedPerItem(t *testing.T) {
+	schema := idSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "xid", "a"), idItem(3, "lur", "a 1"))))
+	// One charge and not two: "1" contributes no entry to charge for.
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "lur", "a 1"))),
+		icChargeAttr(ruleCvcID, 2))
+}
+
+// The element half of the ·eligible item set· reads a union-governed ELEMENT
+// the same way, whose ·initial value· binds its PARENT.
+func TestAUnionGovernedElementDeclaresTheIDOfItsParent(t *testing.T) {
+	schema := idSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idUTagged(2, "a"), idItem(4, "ref", "a"))))
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "xid", "a"), idUTagged(3, "a"))),
+		icChargeAt(ruleCvcID, loc(4, 1)))
 }
 
 // The rule ID is the BARE catalog name, with the clause in the message text.

@@ -130,8 +130,11 @@
 //
 // The eighth is cvc-id (§3.3.4.5), charged at the ·validation root· alone
 // (cvc-elt clause 7): the [ID/IDREF table] of §3.17.5.2 is assembled across the
-// whole subtree from every ID-, IDREF- and IDREFS-governed attribute and
-// element, and a binding with more than one member is charged clause 2, an
+// whole subtree from every attribute and element whose ·governing type
+// definition· is ID, IDREF or IDREFS or is ·derived· or ·constructed· from one
+// of them, each value classified by its own ·validating type· (§3.16.4) so that
+// a union contributes what the member that validated it makes it and nothing
+// for the rest; a binding with more than one member is charged clause 2, an
 // empty one clause 1.
 //
 // Both of the last two decline rather than charge wherever this package could
