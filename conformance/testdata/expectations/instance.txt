@@ -296,7 +296,7 @@ CTA/cta0011/instance/cta0011.n01 fail
 CTA/cta0011/instance/cta0011.n02 fail
 CTA/cta0011/instance/cta0011.v01 fail
 CTA/cta0011/instance/cta0011.v02 fail
-CTA/cta0012/instance/cta0012.n01 fail
+CTA/cta0012/instance/cta0012.n01 pass
 CTA/cta0012/instance/cta0012.v01 fail
 CTA/cta0013/instance/cta0013.n01 fail
 CTA/cta0013/instance/cta0013.n02 fail
@@ -310,9 +310,9 @@ CTA/cta0015/instance/cta0015.n01 fail
 CTA/cta0015/instance/cta0015.n02 fail
 CTA/cta0015/instance/cta0015.v01 fail
 CTA/cta0015/instance/cta0015.v02 fail
-CTA/cta0040/instance/cta0040.n01 fail
+CTA/cta0040/instance/cta0040.n01 pass
 CTA/cta0040/instance/cta0040.v01 fail
-CTA/cta0041/instance/cta0041.n01 fail
+CTA/cta0041/instance/cta0041.n01 pass
 CTA/cta0041/instance/cta0041.v01 fail
 CTA/cta0042/instance/cta0042.v01 fail
 CTA/cta0044/instance/cta0044.n01 pass
