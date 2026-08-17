@@ -991,14 +991,15 @@ func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 // admits, and say nothing about the top-level form that may not write one at
 // all.
 //
-// BOTH callers run it BEFORE the name is read, and the order is the whole
+// EVERY caller runs it BEFORE the name is read, and the order is the whole
 // point: a document that writes ref writes no name either — on any of the four
 // kinds — so the name check would answer first and report the absent name, the
 // consequence of writing ref, never the mistake itself. run's dispatch runs it
 // before topLevelName; newRedefineSet (redefine.go) runs it before the name
-// attribute it pairs a <redefine> child by, and so before produceRedefinition
-// charges src-expredef's pairing miss over the same child. Running before
-// produceElement, produceAttribute, buildModelGroupDefinition and
+// attribute it pairs a <redefine> child by, and prescanRedefine runs it over the
+// declaration §F.2 clause 1 substitutes for such a child — both of them before
+// produceRedefinition charges src-expredef's pairing miss over the same entry.
+// Running before produceElement, produceAttribute, buildModelGroupDefinition and
 // buildAttributeGroup also keeps the verdict content-independent, the discipline
 // topLevelName's doc records, and puts this fault ahead of the src-attribute
 // clauses produceAttribute charges over the same element item: a top-level use=

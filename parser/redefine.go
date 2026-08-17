@@ -203,6 +203,11 @@ type redefineSet struct {
 // writes no name — is reported for the ref it may not carry rather than for the
 // name that ref displaced, and before produceRedefinition can charge
 // src-expredef over the same child for naming no original.
+//
+// The child it charges is the one written in the <redefine> itself. A declaration
+// §F.2 clause 1 SUBSTITUTES for that child is charged the same guard at
+// producer.prescanRedefine, the only place the substitution is known: assembly.redefine
+// is deliberately not passed the override set (parse.go).
 func newRedefineSet(el *Element) (*redefineSet, error) {
 	var entries []redefineEntry
 	for _, child := range el.Children() {
@@ -596,6 +601,26 @@ func redefinedContainer(at *Element, kind string) *Element {
 // child exactly as it does for a <schema> child. A substitute is recorded as a
 // redefining declaration of the set in its own right (recordSubstitute), which is
 // what keeps its self-reference resolving into S2.
+//
+// A SUBSTITUTE is charged rejectProhibitedAttrs here, and only a substitute. §F.2
+// clause 1 puts "a copy of E1" — the <override> child, attributes and all — in
+// the redefining child's place, and §4.2.5 src-override clause 3's closing Note
+// binds the schema for schema documents to the transformed document: "It is Dold′
+// and not Dold, which is required to correspond to a conforming schema"
+// (xmlschema11-1.md:4171). So it is the substitute's own attributes that
+// xs:namedGroup and xs:namedAttributeGroup prohibit ref, minOccurs and maxOccurs
+// among. newRedefineSet charges the child written in the <redefine> and cannot
+// reach this element, which is parented under the <override>. The two charges are
+// ADDITIVE, not alternates: newRedefineSet runs over every <redefine> child
+// unconditionally and before any prescan, so a substituted position is charged
+// twice, the original child there and the substitute here, and an original
+// carrying a prohibited attribute is rejected for it even though clause 1 keeps
+// that original out of Dold′.
+//
+// Charging it at PRE-SCAN is what keeps the ordering the guard exists for: EVERY
+// document's prescan runs before ANY document's run (produce.go), so the
+// prohibited attribute is reported ahead of the src-expredef pairing miss
+// produceRedefinition would otherwise charge first over the same entry.
 func (p *producer) prescanRedefine(el *Element) error {
 	rs := p.redefineSetOf(el)
 	if rs == nil {
@@ -604,6 +629,9 @@ func (p *producer) prescanRedefine(el *Element) error {
 	for _, e := range rs.entries {
 		decl := p.ov.replacement(e.elem)
 		if decl != e.elem {
+			if err := rejectProhibitedAttrs(decl, formRedefining); err != nil {
+				return err
+			}
 			rs.recordSubstitute(e.key, decl)
 		}
 		p.prescanIdentityConstraints(decl)
