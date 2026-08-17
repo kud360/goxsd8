@@ -305,6 +305,77 @@ func TestEvaluateConnectives(t *testing.T) {
 	}
 }
 
+// TestEvaluateRaisedErrorFalsifiesTheWholeTest pins key-cta-ta-select clause 2
+// (§3.12.4) at the granularity its subject fixes: "the {test} is treated as if
+// it had evaluated (without error) to false" — the {test}, not the node that
+// raised. fn:not is a function, and xpath20.md §3.6 makes it raise its
+// operand's error rather than absorb it, so no number of fn:not calls turns a
+// raised error into a true {test}.
+//
+// The two error sources are separate: @n's failed cast to xs:double is
+// err:FORG0001 (a dynamic error), and a string literal against a numeric one
+// has no xpath20.md B.2 row at all, which is err:XPTY0004 (a type error).
+// Clause 2 names both.
+func TestEvaluateRaisedErrorFalsifiesTheWholeTest(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{uq("n"): "abc", uq("k"): "x"})
+	for _, tc := range []struct {
+		expr string
+		want bool
+		why  string
+	}{
+		{"@n = 5", false, "err:FORG0001: a PRESENT @n that does not cast to xs:double"},
+		{"not(@n = 5)", false, "fn:not raises the same error; it does not invert it"},
+		{"not(not(@n = 5))", false, "two fn:not calls propagate it twice"},
+		{"not(@n != 5)", false, "every comparator reaches the same failed cast"},
+		{"not(@n < 5)", false, "including the ordering ones"},
+		{"'a' = 5", false, "err:XPTY0004: no B.2 row for a string against a numeric"},
+		{"not('a' = 5)", false, "the type error propagates through fn:not too"},
+		{"not(not('a' = 5))", false, "and stays raised however deep the nesting"},
+		// The discriminating rows: fn:not still inverts an answer that was
+		// DECIDED, so the fix cannot be "not(...) is always false".
+		{"not(@missing = 5)", true, "an absent attribute forms no pair — false, not an error"},
+		{"not(@k = 'no')", true, "a decided false inverts"},
+		{"not(@k = 'x')", false, "a decided true inverts"},
+	} {
+		if got := compile(t, tc.expr).Evaluate(backend(), attrs); got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateRaisedErrorUnderConnectives pins xpath20.md §3.6's truth tables
+// over an operand that RAISES, read with XPath 1.0 compatibility mode false
+// (xpath-valid clause 2.2.1). Every bare row is the answer this evaluator
+// already gave before the error became a state of its own, so a landing that
+// moves one has changed something it should not have; the fn:not rows are
+// where the tables become observable, because only there does the difference
+// between "false" and "raised" survive to the {test}.
+func TestEvaluateRaisedErrorUnderConnectives(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{uq("n"): "abc", uq("k"): "x"})
+	for _, tc := range []struct {
+		expr string
+		want bool
+		cell string
+	}{
+		{"@n = 5 or @k = 'x'", true, "error or true: the cell permits either, and true is the standing answer"},
+		{"@k = 'x' or @n = 5", true, "true or error: same cell, other order"},
+		{"@n = 5 or @k = 'no'", false, "error or false: the error, which clause 2 makes false"},
+		{"@n = 5 and @k = 'x'", false, "error and true: the error"},
+		{"@k = 'no' and @n = 5", false, "false and error: the false decides, and the raising operand is never evaluated"},
+		{"@n = 5 and @k = 'no'", false, "error and false: the cell permits either, and this evaluator takes the false"},
+		{"@k = 'x' and @n = 5", false, "true and error: the error"},
+		{"not(@n = 5 or @k = 'no')", false, "the or raised, so fn:not raises: NOT true"},
+		{"not(@k = 'x' and @n = 5)", false, "the and raised, so fn:not raises: NOT true"},
+		{"not(@n = 5 or @k = 'x')", false, "the or is a decided true, which inverts"},
+		{"not(@k = 'no' and @n = 5)", true, "the and is a decided false, which inverts"},
+		{"not(@n = 5 and @k = 'no')", true, "error and false: this evaluator takes the cell's false, so it inverts"},
+	} {
+		if got := compile(t, tc.expr).Evaluate(backend(), attrs); got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.cell)
+		}
+	}
+}
+
 // TestEvaluateEffectiveBooleanValue pins [11]'s third arm with its Comparator
 // ABSENT: a bare ValueExpr in a boolean position takes its ·effective boolean
 // value· (xpath20.md §2.4.3), which for an AttrName is presence and for a
