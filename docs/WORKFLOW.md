@@ -296,13 +296,13 @@ filed:
   an element name was (or an empty `()` where an autolink was), and
   HTML-entity-escapes the punctuation that survives (`'` as `&#39;`, `"`
   as `&#34;`, `>` as `&gt;`) even in a body holding no brackets at all.
-  Repair it before writing: undo the escaping, re-derive the stripped
-  tokens from the tree, author the section you came to change, and leave
+  Re-read the body with `WebFetch` on the issue URL, which returns those
+  tokens intact, and edit that copy. If the fetch fails, repair the
+  `issue_read` copy instead: undo the escaping, re-derive the stripped
+  tokens from the tree, author the section you came to change and leave
   every other section as it stands. A token that will not re-derive
   blocks the write, not the correction — comment it on the thread and
-  name the section the body still gets wrong. `WebFetch` on the issue URL
-  is not the way around this here: issue pages 404 while the repo root
-  fetches (#764).
+  name the section the body still gets wrong (#764).
 - **State whether a runtime-mechanism claim was reproduced** against the
   tree, or write it as a hypothesis. Memory of prior discussion is not
   reproduction.
