@@ -123,9 +123,15 @@ func CompileCTATest(expr xsd.XPathExpression) (CTATest, bool) {
 //
 // It always decides. Every way an evaluation can go wrong inside the compiled
 // subset — a cast that fails (err:FORG0001), operand types the operator does
-// not accept (err:XPTY0004), values that no order relates — is a dynamic or
-// type error, which clause 2 makes a false rather than an error or a decline.
-// The declines all happened at [CompileCTATest].
+// not accept (err:XPTY0004) — is a dynamic or type error, which clause 2 makes
+// a false rather than an error or a decline. The declines all happened at
+// [CompileCTATest].
+//
+// Clause 2's subject is "the {test}", not the sub-expression that raised, so
+// this is the ONE place the substitution happens: a raised error travels up
+// the expression tree under XPath's own rules for each operator and becomes
+// false here, at the root. An error under an fn:not is therefore a false
+// {test} and never the inversion of one.
 //
 // b supplies the value spaces the numeric comparisons run in and must be
 // non-nil; it is asked only for the primitives xs:decimal and xs:double, which
@@ -135,7 +141,7 @@ func CompileCTATest(expr xsd.XPathExpression) (CTATest, bool) {
 // clause 2.2.10 fixes as the Unicode codepoint collation — a static-context
 // property no backend owns.
 func (t CTATest) Evaluate(b value.Backend, attr AttributeValue) bool {
-	return ctaBool(t.root, ctaEnv{backend: b, attr: attr})
+	return ctaEval(t.root, ctaEnv{backend: b, attr: attr}) == ctaTrue
 }
 
 // ctaEnv is the dynamic context of one [CTATest.Evaluate] call. cvc-xpath
@@ -185,9 +191,9 @@ type ctaEffectiveBoolean struct{ operand ctaValue }
 // ctaTypeError is a comparison whose operand types are not a valid combination
 // for its operator under xpath20.md B.2 — a string operand against a numeric
 // one, the only such pair this grammar can build once the untypedAtomic
-// casting rules have run. XPath raises err:XPTY0004 for it and
-// key-cta-ta-select clause 2 makes that a false, so the node carries the
-// decided answer rather than a decline.
+// casting rules have run. XPath raises err:XPTY0004 for it, so the node
+// evaluates to ctaError: a raised error the enclosing operators carry, not a
+// decline and not a node-local false.
 type ctaTypeError struct{}
 
 func (ctaOr) ctaExpr()               {}
@@ -323,57 +329,133 @@ const (
 	ctaGreaterEqual
 )
 
-// ctaBool evaluates one boolean-valued node.
+// ctaAnswer is what one node of a compiled {test} evaluates to: an XPath
+// boolean, or ctaError — the state key-cta-ta-select clause 2 (§3.12.4)
+// describes as "a dynamic error or a type error is raised during evaluation".
+//
+// The third state exists because clause 2's subject is "the {test}" and not
+// the node that raised. A node that raises therefore reports it rather than
+// deciding for the whole expression: fn:not propagates it and xpath20.md
+// §3.6's truth tables say what and/or do with it, and only
+// [CTATest.Evaluate] substitutes false for it.
+//
+// ctaFalse is the zero value, which is what the nil root of a zero CTATest
+// answers.
+type ctaAnswer byte
+
+const (
+	ctaFalse ctaAnswer = iota
+	ctaTrue
+	ctaError
+)
+
+// ctaAnswerOf lifts a decided boolean into a ctaAnswer.
+func ctaAnswerOf(b bool) ctaAnswer {
+	if b {
+		return ctaTrue
+	}
+	return ctaFalse
+}
+
+// negated is fn:not (xpath20.md §3.6): it inverts a boolean and propagates a
+// raised error unchanged — "If an error is encountered in finding the
+// effective boolean value of its operand, fn:not raises the same error."
+// fn:not is a function and not a logical operator, so no truth table lets it
+// absorb its operand's error into a boolean; only the {test} as a whole
+// absorbs it, at [CTATest.Evaluate].
+func (a ctaAnswer) negated() ctaAnswer {
+	if a == ctaError {
+		return ctaError
+	}
+	return ctaAnswerOf(a == ctaFalse)
+}
+
+// ctaEval evaluates one boolean-valued node.
 //
 // The default arm covers exactly one shape: the nil root of a zero CTATest,
 // which no successful [CompileCTATest] produces. Every branch of the sum above
 // is named.
-func ctaBool(x ctaExpr, env ctaEnv) bool {
+func ctaEval(x ctaExpr, env ctaEnv) ctaAnswer {
 	switch n := x.(type) {
 	case ctaOr:
-		for _, o := range n.operands {
-			if ctaBool(o, env) {
-				return true
-			}
-		}
-		return false
+		return n.eval(env)
 	case ctaAnd:
-		for _, o := range n.operands {
-			if !ctaBool(o, env) {
-				return false
-			}
-		}
-		return true
+		return n.eval(env)
 	case ctaNot:
-		return !ctaBool(n.operand, env)
+		return ctaEval(n.operand, env).negated()
 	case ctaCompare:
 		return n.eval(env)
 	case ctaEffectiveBoolean:
 		return n.eval(env)
 	case ctaTypeError:
-		return false
+		return ctaError
 	default:
-		return false
+		return ctaFalse
 	}
+}
+
+// eval decides an or-expression against xpath20.md §3.6's or-table, read with
+// XPath 1.0 compatibility mode false (xpath-valid clause 2.2.1).
+//
+// A true operand determines the whole expression and stops the walk, whether
+// or not an earlier operand raised: the table's two cells pairing an error
+// with a true permit either true or the error, and true is the answer an
+// or-expression whose determining operand succeeded has always had. Every
+// other cell holding an error is the error, so an error survives to the end of
+// the loop when nothing decides.
+func (n ctaOr) eval(env ctaEnv) ctaAnswer {
+	answer := ctaFalse
+	for _, o := range n.operands {
+		got := ctaEval(o, env)
+		if got == ctaTrue {
+			return ctaTrue
+		}
+		if got == ctaError {
+			answer = ctaError
+		}
+	}
+	return answer
+}
+
+// eval decides an and-expression on ctaOr.eval's terms, against §3.6's
+// and-table: a false operand determines the expression and stops the walk, and
+// an error otherwise survives to the end.
+func (n ctaAnd) eval(env ctaEnv) ctaAnswer {
+	answer := ctaTrue
+	for _, o := range n.operands {
+		got := ctaEval(o, env)
+		if got == ctaFalse {
+			return ctaFalse
+		}
+		if got == ctaError {
+			answer = ctaError
+		}
+	}
+	return answer
 }
 
 // eval decides one general comparison (xpath20.md §3.5.2). Both operands are
 // singletons or empty here — an attribute is at most one node and a literal is
 // exactly one value — so the existential over pairs reduces to: no pair at all
 // where either operand is absent, and one pair otherwise.
-func (c ctaCompare) eval(env ctaEnv) bool {
+//
+// An ABSENT operand is a decided false and not an error: forming no pair is
+// what §3.5.2 asks of the empty sequence, and nothing is raised. A failed cast
+// of a PRESENT operand is err:FORG0001, so it is ctaError and the enclosing
+// operators decide what becomes of it.
+func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
 	left, leftPresent := ctaLexical(c.left, env)
 	right, rightPresent := ctaLexical(c.right, env)
 	if !leftPresent || !rightPresent {
-		return false
+		return ctaFalse
 	}
 	if c.space == ctaSpaceString {
-		return c.op.holdsSign(strings.Compare(left, right))
+		return ctaAnswerOf(c.op.holdsSign(strings.Compare(left, right)))
 	}
 	lv, lok := ctaParseIn(env.backend, c.space, left)
 	rv, rok := ctaParseIn(env.backend, c.space, right)
 	if !lok || !rok {
-		return false
+		return ctaError
 	}
 	return c.op.holdsBetween(lv, rv)
 }
@@ -387,18 +469,18 @@ func (c ctaCompare) eval(env ctaEnv) bool {
 // singleton atomic value: rule 4 for xs:string (false iff zero length), rule 5
 // for the numeric types (false iff numerically equal to zero — NaN, rule 5's
 // other false, has no literal in XPath's grammar to reach this by).
-func (e ctaEffectiveBoolean) eval(env ctaEnv) bool {
+func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	switch v := e.operand.(type) {
 	case ctaAttr:
 		_, present := env.attr(v.name)
-		return present
+		return ctaAnswerOf(present)
 	case ctaLiteral:
 		if v.space == ctaSpaceString {
-			return v.text != ""
+			return ctaAnswerOf(v.text != "")
 		}
 		return ctaNonZero(env.backend, v)
 	default:
-		return false
+		return ctaFalse
 	}
 }
 
@@ -406,14 +488,19 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) bool {
 // which is its ·effective boolean value·. It asks the backend rather than
 // reading the lexical, so "0.0", "0" and "0E0" are one answer decided in the
 // value space and not three lexical special cases.
-func ctaNonZero(b value.Backend, lit ctaLiteral) bool {
+//
+// A cast that fails is err:FORG0001 like any other, hence ctaError. It is
+// unreachable for a backend meeting [value.Backend]'s contract: the lexical is
+// one the tokenizer already admitted as an XPath numeric literal, and every
+// such literal is in the lexical space of the ctaSpace its kind fixes.
+func ctaNonZero(b value.Backend, lit ctaLiteral) ctaAnswer {
 	v, ok := ctaParseIn(b, lit.space, lit.text)
 	if !ok {
-		return false
+		return ctaError
 	}
 	zero, ok := ctaParseIn(b, lit.space, "0")
 	if !ok {
-		return false
+		return ctaError
 	}
 	return ctaNotEqual.holdsBetween(v, zero)
 }
@@ -490,24 +577,24 @@ func (op ctaComparator) holdsSign(sign int) bool {
 // space, through the capability interfaces the values themselves carry (STYLE
 // T2) and never a type switch over a backend's concrete types.
 //
-// A value carrying neither capability cannot be compared at all, which is a
-// type error and so clause 2's false. It is unreachable for a backend meeting
+// A value carrying neither capability cannot be compared at all, which is
+// err:XPTY0004 and so ctaError. It is unreachable for a backend meeting
 // [value.Backend]'s contract, which value/backendtest checks mechanically:
 // xs:decimal and xs:double are bounded, so their values are [value.Ordered]
 // and therefore [value.Eq] too.
-func (op ctaComparator) holdsBetween(l, r value.Value) bool {
+func (op ctaComparator) holdsBetween(l, r value.Value) ctaAnswer {
 	if op == ctaEqual || op == ctaNotEqual {
 		eq, comparable := l.(value.Eq)
 		if !comparable {
-			return false
+			return ctaError
 		}
-		return eq.Eq(r) == (op == ctaEqual)
+		return ctaAnswerOf(eq.Eq(r) == (op == ctaEqual))
 	}
 	ord, ordered := l.(value.Ordered)
 	if !ordered {
-		return false
+		return ctaError
 	}
-	return op.holdsOrdering(ord.Cmp(r))
+	return ctaAnswerOf(op.holdsOrdering(ord.Cmp(r)))
 }
 
 // holdsOrdering reports whether op holds for two values that compared as o.
