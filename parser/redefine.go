@@ -610,9 +610,12 @@ func redefinedContainer(at *Element, kind string) *Element {
 // (xmlschema11-1.md:4171). So it is the substitute's own attributes that
 // xs:namedGroup and xs:namedAttributeGroup prohibit ref, minOccurs and maxOccurs
 // among. newRedefineSet charges the child written in the <redefine> and cannot
-// reach this element, which is parented under the <override>, so the guard runs
-// exactly once per redefining position: here when clause 1 substituted, there
-// when it did not.
+// reach this element, which is parented under the <override>. The two charges are
+// ADDITIVE, not alternates: newRedefineSet runs over every <redefine> child
+// unconditionally and before any prescan, so a substituted position is charged
+// twice, the original child there and the substitute here, and an original
+// carrying a prohibited attribute is rejected for it even though clause 1 keeps
+// that original out of Dold′.
 //
 // Charging it at PRE-SCAN is what keeps the ordering the guard exists for: EVERY
 // document's prescan runs before ANY document's run (produce.go), so the

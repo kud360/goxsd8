@@ -679,8 +679,8 @@ func TestParseSubstitutedRedefiningProhibitedAttrsRejected(t *testing.T) {
 //
 // The mid.xsd row pins that a redefining child NOTHING substitutes for is still
 // charged where it always was, at its own position in the document that writes
-// it: the guard runs once per redefining position, at prescan when clause 1
-// substituted and in newRedefineSet when it did not.
+// it: newRedefineSet charges every <redefine> child unconditionally, and the
+// prescan charge on a substitute is an addition to that rather than an alternate.
 //
 // The last row pins what the guard must NOT CLAIM: xs:attributeGroup's grammar
 // never pulls in xs:occurs, so minOccurs= on a substituted <attributeGroup> is
