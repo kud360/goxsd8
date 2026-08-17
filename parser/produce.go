@@ -472,6 +472,54 @@ func (p *producer) chameleon() bool {
 	return !own
 }
 
+// rejectRepeatedAnnotations rejects, anywhere in el's subtree, an element
+// carrying a second <annotation> child. The cardinality is the shape of
+// xs:annotated itself — <xs:element ref="xs:annotation" minOccurs="0"/> inside a
+// <xs:sequence> (xmlschema11-1.md:4436), maxOccurs defaulting to 1 — and that
+// type "is extended by all types which allow annotation other than <schema>
+// itself" (:4429), so one check over the child list covers every annotatable
+// element rather than twenty call sites (STYLE D3/T4).
+//
+// TWO elements depart from it, both by declaring their own content model instead
+// of extending xs:annotated, and both admit <annotation> unboundedly and
+// interspersed: <schema> (:4558, :4563, plus the composition group it repeats
+// unboundedly at :4555, whose own branch at :4448 is <annotation>) and
+// <redefine> (:5556-5559). <override> is NOT among them: it bypasses
+// xs:annotated too, but its own particle (:5576) is a plain <xs:element
+// ref="xs:annotation" minOccurs="0"/>, so the default cardinality binds it like
+// the rest.
+//
+// The fault carries NO numbered rule ID: §3.15.3, §3.15.4 and §3.15.5 each
+// answer "None as such" for annotations (xmlschema11-1.md:3499, :3503, :3507),
+// and no s4s-* identifier exists in the spec. It stands on §5.1 (:4296)
+// directly, the footing rejectProhibitedAttrs's doc derives in full, so charging
+// a src-* or cos-* verdict would be a fabricated rule ID (STYLE E2).
+//
+// It descends through XSD-namespace elements only, and never into an
+// <annotation>: <appinfo> and <documentation> hold <xs:any
+// processContents="lax"> content (:5727, :5740), where an element that happens
+// to be named {XMLSchemaNS}annotation is content this cardinality never governs.
+func rejectRepeatedAnnotations(el *Element) error {
+	if el.Name().Space() != xsd.XMLSchemaNS || isXSD(el, "annotation") {
+		return nil
+	}
+	if !isXSD(el, "schema") && !isXSD(el, "redefine") {
+		if found := childElements(el, xsd.XMLSchemaNS, "annotation"); len(found) > 1 {
+			return fmt.Errorf("parser: repeated <annotation> at %s, which the schema for schema documents prohibits: its parent <%s> at %s admits at most one, the maxOccurs=\"1\" xs:annotated defaults to, and only <schema> and <redefine> depart from that type", found[1].Loc(), el.Name().Local(), el.Loc())
+		}
+	}
+	for _, child := range el.Children() {
+		c, ok := child.(*Element)
+		if !ok {
+			continue
+		}
+		if err := rejectRepeatedAnnotations(c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // prescan registers this document's top-level named <simpleType>s and
 // <complexType>s (forward base= references, §3.1.3/§3.4.2), named
 // <attributeGroup>s (forward <attributeGroup ref> inlining, §3.6.2.1), named
@@ -502,7 +550,13 @@ func (p *producer) chameleon() bool {
 // It also registers this document's named <unique>/<key>/<keyref>s for forward
 // <key ref="…"> resolution, but from the WHOLE subtree of each top-level
 // declaration rather than from its top level: see prescanIdentityConstraints.
+//
+// It runs rejectRepeatedAnnotations over the whole document first, before any
+// name is registered and before any body is walked.
 func (p *producer) prescan() error {
+	if err := rejectRepeatedAnnotations(p.schemaElem); err != nil {
+		return err
+	}
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
 		if !ok {
