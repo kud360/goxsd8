@@ -328,25 +328,20 @@ func typeTablesEquivalent(a, b TypeTable) bool {
 // and takes that license for everything else — a legal implementation choice, not
 // an unimplemented gap.
 //
-// Clause 5 ("the same type definition") is answered by comparing the
-// pre-resolution {type definition} QNames. Two ANONYMOUS type definitions both
-// present as the zero QName and are indistinguishable, so a zero name is reported
-// as NOT the same type definition, which is precisely the license above. That
-// never rejects a schema for reaching one declaration twice: a declaration
-// reached twice is one component, de-duplicated by key before these clauses run,
-// which is how the "Any Type Alternative is equivalent to itself" case is
-// discharged (TypeAlternative holds slices and so is not ==-comparable, leaving
-// component identity as the only sound reading of "itself").
+// Clause 5 ("the same type definition") is typeDefinitionsEquivalent, which
+// answers it per ARM of the {type definition} slot. That never rejects a schema
+// for reaching one declaration twice: a declaration reached twice is one
+// component, de-duplicated by key before these clauses run, which is how the
+// "Any Type Alternative is equivalent to itself" case is discharged
+// (TypeAlternative holds slices and so is not ==-comparable, leaving component
+// identity as the only sound reading of "itself").
 //
 // Clauses 1-4 read {test}. They presuppose a present {test}: the {default type
 // definition} has none by construction (e-props-correct clause 6), and two absent
 // {test}s leave clause 5 as the whole test.
 func typeAlternativesEquivalent(a, b TypeAlternative) bool {
-	if a.typeDefinitionName != b.typeDefinitionName {
+	if !typeDefinitionsEquivalent(a.typeDefinition, b.typeDefinition) {
 		return false // clause 5
-	}
-	if a.typeDefinitionName == (QName{}) {
-		return false // clause 5, undecidable for anonymous types: spec-licensed
 	}
 	ta, aPresent := a.Test()
 	tb, bPresent := b.Test()
@@ -370,6 +365,47 @@ func typeAlternativesEquivalent(a, b TypeAlternative) bool {
 		return false // clause 3
 	}
 	return ta.Expression() == tb.Expression() // clause 4
+}
+
+// typeDefinitionsEquivalent decides key-equiv-ta clause 5 — "T1.{type
+// definition} and T2.{type definition} are the same type definition" — over the
+// TypeDefinitionOrRef sum, per arm. It is a COMPONENT-IDENTITY test, not a
+// structural one, so the arms do not all answer the same way:
+//
+//   - two TypeDefinitionRefs are the same component exactly when they name it,
+//     since a name resolves in one {type definitions} bucket (§3.17.6.2 clause
+//     1.1);
+//   - two SubstitutionGroupHeadTypeRefs likewise, through the OWNER they name:
+//     §3.4.6.5's no-identity Note settles that a member and its head share one
+//     component, so two members of one head hold one type definition;
+//   - an InlineTypeDefinition on EITHER side is never equivalent to anything,
+//     itself included. Anonymous-type identity is what the spec's own change log
+//     records as underspecified, and key-equiv-ta's preamble licenses exactly
+//     this fallback: "A processor may treat two type alternatives as
+//     non-equivalent if they do not satisfy the conditions just given and the
+//     processor does not detect that they are nonetheless equivalent." Two
+//     independently produced anonymous types are two components; one component
+//     read through two slots is one Type Alternative reached twice, which the
+//     de-duplication above has already collapsed.
+//   - a nil slot names no component, so it is the same as nothing.
+//
+// The default arm asserts the sealed sum (STYLE T2) and is unreachable:
+// typeDefinitionOrRef is unexported, so no fourth variant exists.
+func typeDefinitionsEquivalent(a, b TypeDefinitionOrRef) bool {
+	switch ra := a.(type) {
+	case nil:
+		return false
+	case TypeDefinitionRef:
+		rb, same := b.(TypeDefinitionRef)
+		return same && ra.Name == rb.Name
+	case InlineTypeDefinition:
+		return false
+	case SubstitutionGroupHeadTypeRef:
+		rb, same := b.(SubstitutionGroupHeadTypeRef)
+		return same && ra.Head == rb.Head
+	default:
+		panic("xsd: typeDefinitionsEquivalent: non-exhaustive TypeDefinitionOrRef switch")
+	}
 }
 
 // optionalStringsEqual compares two Optional anyURI properties: they agree when

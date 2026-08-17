@@ -72,10 +72,10 @@ func ctaSchema(t *testing.T, alts ...ctaAlt) *xsd.Schema {
 	var tas []xsd.TypeAlternative
 	for _, a := range alts {
 		test := xsd.NewXPathExpression(a.test, nil, nil, nil)
-		tas = append(tas, xsd.NewTypeAlternative(&test, local(a.typ), nil))
+		tas = append(tas, namedTypeAlternative(t, &test, local(a.typ)))
 	}
 	table, err := xsd.NewTypeTable(xsderr.Loc{}, tas,
-		xsd.NewTypeAlternative(nil, local("Fallback"), nil))
+		namedTypeAlternative(t, nil, local("Fallback")))
 	if err != nil {
 		t.Fatalf("building the type table: %v", err)
 	}
@@ -220,4 +220,17 @@ func TestXSITypeOverridesTheConditionallySelectedType(t *testing.T) {
 	if got[0].Rule != "cvc-elt" {
 		t.Errorf("Rule = %q, want cvc-elt", got[0].Rule)
 	}
+}
+
+// namedTypeAlternative builds a Type Alternative whose {type definition} is the
+// by-name reference §3.12.2 declare-ta's type= arm yields, failing the test on
+// any rejection. Every fixture in package validate builds that arm; the inline
+// arm is the parser's to construct and is exercised there.
+func namedTypeAlternative(t *testing.T, test *xsd.XPathExpression, typeName xsd.QName) xsd.TypeAlternative {
+	t.Helper()
+	ta, err := xsd.NewTypeAlternative(xsderr.Loc{}, test, xsd.TypeDefinitionRef{Name: typeName}, nil)
+	if err != nil {
+		t.Fatalf("NewTypeAlternative(%v): %v", typeName, err)
+	}
+	return ta
 }

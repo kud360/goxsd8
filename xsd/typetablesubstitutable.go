@@ -216,7 +216,57 @@ func (s *Schema) checkTypeTableAlternatives(e ElementDeclaration, tt TypeTable) 
 			return err
 		}
 	}
+	if isDeclaredTypeItself(e.TypeDefinition(), tt.defaultTypeDefinition.TypeDefinition()) {
+		return nil
+	}
 	return s.checkTypeAlternativeSubstitutable(e, declared, tt.defaultTypeDefinition, "{default type definition}")
+}
+
+// isDeclaredTypeItself reports whether a {default type definition}'s {type
+// definition} slot holds the declaring element's OWN {type definition} — the
+// component §3.3.2.1 dcl.elt.common's case 2 copies into it verbatim, "the {type
+// definition} property of the parent Element Declaration". Clause 7.1 is then
+// satisfied with no derivation walk at all: cos-ct-derived-ok clause 2.1 (B = D)
+// holds outright, and §3.4.6.5's no-identity Note names "the same by
+// construction" among the cases where component identity IS determined by this
+// specification — the same footing SubstitutionGroupHeadTypeRef stands on.
+//
+// It answers by ARM, because the arm is where that construction is visible:
+//
+//   - two TypeDefinitionRefs naming one type, and two SubstitutionGroupHeadTypeRefs
+//     naming one owner, each denote one component;
+//   - two OWNED anonymous types are read as one component. That is the case-2
+//     copy, and it is also the only reading this component model can give: a
+//     ComplexType is a value, and the {context} both carry is the owning
+//     declaration itself (§3.4.2.1 dcl.ctd.common), so nothing distinguishes
+//     them. The one other slot that can put an owned type here — a TRAILING
+//     untested <alternative> on the inline arm, under a declaration whose own
+//     type is anonymous too — is therefore read as the declared type as well and
+//     charges nothing. That withholds a rejection rather than inventing one, and
+//     clause 7.1 has no verdict to give on that shape in any case: the declared
+//     type is unnameable, so sameTypeDefinition (complexderivation.go) answers
+//     "not the same" for every candidate and the walk can only end at xs:anyType.
+//
+// The {alternatives} members are deliberately NOT routed through this. §3.12.2
+// declare-ta mints each of their owned types from its own <alternative> element,
+// so no member is the declaration's own type by construction, and each is charged
+// clause 7 in full.
+func isDeclaredTypeItself(declared, dflt TypeDefinitionOrRef) bool {
+	switch d := declared.(type) {
+	case nil:
+		return false
+	case TypeDefinitionRef:
+		ref, sameArm := dflt.(TypeDefinitionRef)
+		return sameArm && ref.Name == d.Name
+	case InlineTypeDefinition:
+		_, sameArm := dflt.(InlineTypeDefinition)
+		return sameArm
+	case SubstitutionGroupHeadTypeRef:
+		head, sameArm := dflt.(SubstitutionGroupHeadTypeRef)
+		return sameArm && head.Head == d.Head
+	default:
+		panic("xsd: isDeclaredTypeItself: non-exhaustive TypeDefinitionOrRef switch")
+	}
 }
 
 // checkTypeAlternativeSubstitutable decides clause 7 for ONE Type Alternative,
@@ -224,14 +274,20 @@ func (s *Schema) checkTypeTableAlternatives(e ElementDeclaration, tt TypeTable) 
 // outright and never reaches the substitutability call, which its zero-member
 // union would fail. slot names the entry for the message.
 //
-// An alternative whose {type definition} names no component in the schema is
-// SKIPPED. A present name that resolves to nothing was already charged
-// src-resolve by Phase A's resolveTypeTable; an ABSENT one — the zero QName a
-// SchemaBuilder caller may leave, which the parser's typeTableRepresentable
-// withholds the whole table rather than emit — has no T for the clause to
-// quantify over. Both are fail-open.
+// The alternative's {type definition} is followed through ResolvedType, so the
+// clause charges the COMPONENT the slot holds and not merely a name it carries.
+// An alternative on §3.12.2's INLINE arm is therefore charged exactly as a
+// by-name one is: clause 7 quantifies over T1.{type definition}, which every arm
+// of the slot supplies. The one entry that reaches this without being charged is
+// the {default type definition} that IS the declaration's own type, which
+// isDeclaredTypeItself discharges before the call.
+//
+// An alternative whose {type definition} reaches no component is SKIPPED. A
+// present name that resolves to nothing was already charged src-resolve by Phase
+// A's resolveTypeTable; an ABSENT slot — nil, which a SchemaBuilder caller may
+// leave — has no T for the clause to quantify over. Both are fail-open.
 func (s *Schema) checkTypeAlternativeSubstitutable(e ElementDeclaration, declared TypeDefinition, alt TypeAlternative, slot string) error {
-	t, ok := s.Type(alt.typeDefinitionName)
+	t, ok := s.ResolvedType(alt.TypeDefinition())
 	if !ok {
 		return nil
 	}

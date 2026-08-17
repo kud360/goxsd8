@@ -189,10 +189,10 @@ func TestResolveAnonymousComplexTypeDanglingBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAnonymousComplexType: %v", err)
 	}
-	e, err := xsd.NewElementDeclarationOwningType(xsderr.Loc{}, id, qn("doc"), ct,
+	e, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, id, qn("doc"), xsd.InlineTypeDefinition{Definition: ct},
 		nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
-		t.Fatalf("NewElementDeclarationOwningType: %v", err)
+		t.Fatalf("NewElementDeclarationOwningTypes: %v", err)
 	}
 	b := xsd.NewSchemaBuilder()
 	b.AddElement(e)

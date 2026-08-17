@@ -303,9 +303,9 @@ func TestUnresolvableXSITypeStillAssessesAgainstTheDeclaredType(t *testing.T) {
 // evaluate selects a type instead (validate/cta_test.go).
 func TestUnevaluableTypeTableDeclinesTheAttributeHalf(t *testing.T) {
 	test := xsd.NewXPathExpression("count(@id) > 0", nil, nil, nil)
-	alt := xsd.NewTypeAlternative(&test, xsd.QName{Local: "RootType"}, nil)
+	alt := namedTypeAlternative(t, &test, xsd.QName{Local: "RootType"})
 	table, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{alt},
-		xsd.NewTypeAlternative(nil, xsd.QName{Local: "RootType"}, nil))
+		namedTypeAlternative(t, nil, xsd.QName{Local: "RootType"}))
 	if err != nil {
 		t.Fatalf("building the type table: %v", err)
 	}
@@ -461,7 +461,7 @@ func anonymousRootSchema(t *testing.T, base xsd.QName, derivation xsd.Derivation
 	if err != nil {
 		t.Fatalf("building the anonymous root type: %v", err)
 	}
-	e, err := xsd.NewElementDeclarationOwningType(xsderr.Loc{}, id, xsd.QName{Local: "root"}, ct, nil,
+	e, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, id, xsd.QName{Local: "root"}, xsd.InlineTypeDefinition{Definition: ct}, nil,
 		xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("building the root element declaration: %v", err)

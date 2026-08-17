@@ -135,17 +135,10 @@ import (
 // cannot arise: validate charges nothing at all below an element whose
 // governing type it did not determine.
 //
-// The unconditionality has ONE exception, and it is the parser's, not
-// validate's: a declaration whose {type table} parser's typeTableRepresentable
-// WITHHELD looks tableless to validate, which then assesses the element against
-// its DECLARED type where an <alternative> would ·conditionally select·
-// another. A charge at or below such an element can be a false one. The
-// exception is enumerable exactly because the withholding is — an <alternative>
-// on the inline arm, or an anonymous declared type behind a synthesized default
-// — and it shrinks as those shapes are mapped (#822). A declaration whose table
-// IS built never guesses: validate ·conditionally selects· through it, and
-// withholds the element's ·governing type definition· only where the §3.12.6
-// required-subset evaluator declines one of the {test}s it had to try
+// Every {type table} a declaration carries IS built (#851), so validate never
+// guesses a tableless declaration's type: it ·conditionally selects· through the
+// table, and withholds the element's ·governing type definition· only where the
+// §3.12.6 required-subset evaluator declines one of the {test}s it had to try
 // (validate/cta.go).
 //
 // Cases 3 to 6 rest on conditions validate checks rather than this file

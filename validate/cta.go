@@ -63,9 +63,9 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable) (xsd.TypeDe
 		if !compiled.Evaluate(w.backend, attr) {
 			continue
 		}
-		return w.schema.ResolvedType(xsd.TypeDefinitionRef{Name: alt.TypeDefinitionName()})
+		return w.schema.ResolvedType(alt.TypeDefinition())
 	}
-	return w.schema.ResolvedType(xsd.TypeDefinitionRef{Name: table.DefaultTypeDefinition().TypeDefinitionName()})
+	return w.schema.ResolvedType(table.DefaultTypeDefinition().TypeDefinition())
 }
 
 // ctaAttributes is the attribute read a {test} evaluates against: the

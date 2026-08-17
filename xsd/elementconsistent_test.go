@@ -17,12 +17,25 @@ func eTypeTable(t *testing.T, expression string, altType, defaultType QName) *Ty
 	t.Helper()
 	test := NewXPathExpression(expression, nil, nil, nil)
 	tt, err := NewTypeTable(xsderr.Loc{},
-		[]TypeAlternative{NewTypeAlternative(&test, altType, nil)},
-		NewTypeAlternative(nil, defaultType, nil))
+		[]TypeAlternative{iTypeAlternative(t, &test, TypeDefinitionRef{Name: altType})},
+		iTypeAlternative(t, nil, TypeDefinitionRef{Name: defaultType}))
 	if err != nil {
 		t.Fatalf("NewTypeTable: %v", err)
 	}
 	return &tt
+}
+
+// iTypeAlternative builds a TypeAlternative over the given {type definition}
+// slot, failing the test on any rejection. It is the package-internal twin of
+// typealternative_test.go's mustTypeAlternative, which the external package
+// cannot see.
+func iTypeAlternative(t *testing.T, test *XPathExpression, typeDefinition TypeDefinitionOrRef) TypeAlternative {
+	t.Helper()
+	ta, err := NewTypeAlternative(xsderr.Loc{}, test, typeDefinition, nil)
+	if err != nil {
+		t.Fatalf("NewTypeAlternative(%+v): %v", typeDefinition, err)
+	}
+	return ta
 }
 
 // eLocalWithTable builds a LOCAL element declaration carrying a {type table}.
@@ -298,4 +311,39 @@ func TestEDCNestedGroupScope(t *testing.T) {
 		)}),
 	)
 	expectRule(t, uSchemaWithModel(t, g, nil), ruleCosElementConsistent)
+}
+
+// TestTypeDefinitionsEquivalentArms pins key-equiv-ta clause 5 per ARM of the
+// {type definition} slot. The load-bearing rows are the INLINE ones: an owned
+// anonymous type is never the same type definition as anything, itself included,
+// because component identity for one is what §3.4.6.5's no-identity Note leaves
+// undetermined — and a positive answer there would let two declarations the
+// schema document keeps distinct read as agreeing under key-equiv-tt.
+func TestTypeDefinitionsEquivalentArms(t *testing.T) {
+	anon, err := NewAnonymousComplexType(xsderr.Loc{}, ElementDeclarationContext{Component: NewComponentID()},
+		QName{}, nil, DerivationRestriction, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAnonymousComplexType: %v", err)
+	}
+	inline := InlineTypeDefinition{Definition: anon}
+	for _, tc := range []struct {
+		what string
+		a, b TypeDefinitionOrRef
+		want bool
+	}{
+		{"same name", TypeDefinitionRef{Name: uq("T")}, TypeDefinitionRef{Name: uq("T")}, true},
+		{"different name", TypeDefinitionRef{Name: uq("T")}, TypeDefinitionRef{Name: uq("U")}, false},
+		{"same head", SubstitutionGroupHeadTypeRef{Head: uq("h")}, SubstitutionGroupHeadTypeRef{Head: uq("h")}, true},
+		{"different head", SubstitutionGroupHeadTypeRef{Head: uq("h")}, SubstitutionGroupHeadTypeRef{Head: uq("g")}, false},
+		{"mismatched arms", TypeDefinitionRef{Name: uq("T")}, SubstitutionGroupHeadTypeRef{Head: uq("T")}, false},
+		{"inline against itself", inline, inline, false},
+		{"inline against a name", inline, TypeDefinitionRef{Name: uq("T")}, false},
+		{"a name against inline", TypeDefinitionRef{Name: uq("T")}, inline, false},
+		{"absent against a name", nil, TypeDefinitionRef{Name: uq("T")}, false},
+		{"a name against absent", TypeDefinitionRef{Name: uq("T")}, nil, false},
+	} {
+		if got := typeDefinitionsEquivalent(tc.a, tc.b); got != tc.want {
+			t.Errorf("%s: typeDefinitionsEquivalent = %v, want %v", tc.what, got, tc.want)
+		}
+	}
 }

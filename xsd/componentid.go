@@ -21,12 +21,16 @@ package xsd
 //
 //	edID := xsd.NewComponentID()
 //	ct, err := xsd.NewAnonymousComplexType(ctLoc, xsd.ElementDeclarationContext{Component: edID}, …)
-//	ed, err := xsd.NewElementDeclarationOwningType(edLoc, edID, name, ct, …)
+//	ed, err := xsd.NewElementDeclarationOwningTypes(edLoc, edID, name, xsd.InlineTypeDefinition{Definition: ct}, …)
 //
-// The same edID is what every local element declaration nested in ct's own
-// content model reports as its {scope}.{parent}, through
-// xsd.AnonymousComplexTypeScopeParent{Owner: edID}: one mint per inline
-// construct identifies the construct from both directions.
+// The token every local element declaration nested in ct's own content model
+// reports as its {scope}.{parent}, through
+// xsd.AnonymousComplexTypeScopeParent{Owner: …}, is one mint per OWNERSHIP EDGE:
+// it is edID above, where the declaration owns this one type, and a separate
+// mint for each further type the same declaration owns through an
+// <alternative> — all of which still carry edID as their {context}, since
+// §3.4.2.1 dcl.ctd.common gives them the enclosing declaration and not the
+// <alternative>. See AnonymousComplexTypeScopeParent.
 //
 // The zero ComponentID is the UNMINTED identity: it identifies no component and
 // is the absent value. Callers test presence by comparing against it
