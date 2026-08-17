@@ -241,11 +241,13 @@ func (s *Schema) checkTypeTableAlternatives(e ElementDeclaration, tt TypeTable) 
 //     declaration itself (§3.4.2.1 dcl.ctd.common), so nothing distinguishes
 //     them. The one other slot that can put an owned type here — a TRAILING
 //     untested <alternative> on the inline arm, under a declaration whose own
-//     type is anonymous too — is therefore read as the declared type as well and
-//     charges nothing. That withholds a rejection rather than inventing one, and
-//     clause 7.1 has no verdict to give on that shape in any case: the declared
-//     type is unnameable, so sameTypeDefinition (complexderivation.go) answers
-//     "not the same" for every candidate and the walk can only end at xs:anyType.
+//     type is anonymous too — is therefore read as the declared type as well.
+//     That shape is a narrow FALSE ACCEPT, not an absent verdict: an anonymous
+//     type is unnameable, so it can never appear in another anonymous type's
+//     {base type definition} chain, and sameTypeDefinition (complexderivation.go)
+//     would have rejected it correctly on that ground. checkTypeAlternativeSubstitutable,
+//     the one caller, is the sole consumer this costs a clause-7 charge it should
+//     have made; nothing else reads this function.
 //
 // The {alternatives} members are deliberately NOT routed through this. §3.12.2
 // declare-ta mints each of their owned types from its own <alternative> element,

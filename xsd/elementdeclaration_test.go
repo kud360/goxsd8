@@ -520,7 +520,7 @@ func TestNewElementDeclarationOwningTypeRejectsBadIdentity(t *testing.T) {
 			_, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, tc.id, xsd.QName{Local: "doc"}, xsd.InlineTypeDefinition{Definition: tc.ct},
 				nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 			if err == nil {
-				t.Fatal("NewElementDeclarationOwningType succeeded, want a component-invariant rejection")
+				t.Fatal("NewElementDeclarationOwningTypes succeeded, want a component-invariant rejection")
 			}
 			assertRule(t, err, xsderr.RuleComponentInvariant)
 		})
@@ -540,7 +540,7 @@ func TestNewElementDeclarationOwningTypeRejectsNamedType(t *testing.T) {
 	_, err = xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, xsd.NewComponentID(), xsd.QName{Local: "doc"}, xsd.InlineTypeDefinition{Definition: named},
 		nil, xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
 	if err == nil {
-		t.Fatal("NewElementDeclarationOwningType accepted a NAMED complex type")
+		t.Fatal("NewElementDeclarationOwningTypes accepted a NAMED complex type")
 	}
 	assertRule(t, err, xsderr.RuleComponentInvariant)
 }
