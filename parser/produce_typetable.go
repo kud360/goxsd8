@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"slices"
+	"fmt"
 
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -24,9 +24,11 @@ const ruleSrcTA xsderr.Rule = "src-ta"
 
 // typeTableOf maps the <alternative> children of el into the {type table} of
 // the element declaration el produces (§3.3.2.1 dcl.elt.common), returning nil
-// for the ·absent· property. declaredType is that declaration's own {type
-// definition}, which §3.3.2.1 makes the {default type definition}'s {type
-// definition} whenever the final <alternative> carries a test.
+// for the ·absent· property. edID is that declaration's minted identity, the
+// {context} every anonymous type an <alternative> owns points back at, and
+// declaredType is its own {type definition}, which §3.3.2.1 makes the {default
+// type definition}'s {type definition} whenever the final <alternative> carries
+// a test.
 //
 // The mapping, once src-ta has passed over every <alternative>:
 //
@@ -41,12 +43,16 @@ const ruleSrcTA xsderr.Rule = "src-ta"
 //   - {default type definition} is the final <alternative> through declare-ta
 //     when it has no test attribute, and otherwise a Type Alternative
 //     SYNTHESIZED with an ·absent· {test}, declaredType as its {type
-//     definition}, and an empty {annotations}.
+//     definition}, and an empty {annotations}. §3.3.2.1 makes that synthesized
+//     slot "the {type definition} property of the parent Element Declaration",
+//     so declaredType is passed through WHOLE — the same component, not a copy,
+//     and whichever arm it holds, including the SubstitutionGroupHeadTypeRef a
+//     substitutionGroup=-typed element carries.
 //
 // {annotations} is the empty sequence on every Type Alternative built here,
 // matching every other component this producer emits: no <annotation> is mapped
 // anywhere in this package yet.
-func (p *producer) typeTableOf(el *Element, declaredType xsd.TypeDefinitionOrRef) (*xsd.TypeTable, error) {
+func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType xsd.TypeDefinitionOrRef) (*xsd.TypeTable, error) {
 	alternatives := childElements(el, xsd.XMLSchemaNS, "alternative")
 	if len(alternatives) == 0 {
 		return nil, nil // §3.3.2.1: "otherwise ·absent·"
@@ -56,19 +62,18 @@ func (p *producer) typeTableOf(el *Element, declaredType xsd.TypeDefinitionOrRef
 			return nil, err
 		}
 	}
-	names, err := p.alternativeTypeNames(alternatives)
+	types, err := p.alternativeTypes(alternatives, edID)
 	if err != nil {
 		return nil, err
 	}
 	last := len(alternatives) - 1
-	_, lastTested := alternatives[last].Attr("test")
-	if !typeTableRepresentable(names, declaredType, lastTested) {
-		return nil, nil
+	defaultType := types[last] // §3.3.2.1 case 1
+	if _, lastTested := alternatives[last].Attr("test"); lastTested {
+		defaultType = declaredType // §3.3.2.1 case 2
 	}
-	dflt := xsd.NewTypeAlternative(nil, names[last], nil) // §3.3.2.1 case 1
-	if lastTested {
-		declaredName, _ := typeDefinitionRefName(declaredType) // named: typeTableRepresentable said so
-		dflt = xsd.NewTypeAlternative(nil, declaredName, nil)  // §3.3.2.1 case 2
+	dflt, err := xsd.NewTypeAlternative(el.Loc(), nil, defaultType, nil)
+	if err != nil {
+		return nil, err
 	}
 	var alts []xsd.TypeAlternative
 	for i, alt := range alternatives {
@@ -83,7 +88,11 @@ func (p *producer) typeTableOf(el *Element, declaredType xsd.TypeDefinitionOrRef
 		// same record and the same xpathDefaultNamespace chain an <assert> gets,
 		// which is why this reuses buildXPathExpression rather than restating it.
 		test := p.buildXPathExpression(alt, "test")
-		alts = append(alts, xsd.NewTypeAlternative(&test, names[i], nil))
+		ta, terr := xsd.NewTypeAlternative(alt.Loc(), &test, types[i], nil)
+		if terr != nil {
+			return nil, terr
+		}
+		alts = append(alts, ta)
 	}
 	tt, err := xsd.NewTypeTable(el.Loc(), alts, dflt)
 	if err != nil {
@@ -92,106 +101,71 @@ func (p *producer) typeTableOf(el *Element, declaredType xsd.TypeDefinitionOrRef
 	return &tt, nil
 }
 
-// alternativeTypeNames resolves the type attribute of each <alternative> in
-// document order (declare-ta, §3.12.2: "the type definition ·resolved· to by
-// the ·actual value· of the type attribute"). An <alternative> taking the
-// inline arm has no such attribute and gets the zero QName, which
-// typeTableRepresentable reads as the withheld arm.
-func (p *producer) alternativeTypeNames(alternatives []*Element) ([]xsd.QName, error) {
-	names := make([]xsd.QName, len(alternatives))
+// alternativeTypes maps the {type definition} of each <alternative> in document
+// order, over both arms §3.12.2 declare-ta states: "the type definition
+// ·resolved· to by the ·actual value· of the type attribute, if one is present,
+// otherwise the type definition corresponding to the complexType or simpleType
+// among the children of the <alternative> element". checkSrcTA has already passed
+// over every child, so exactly one of the three forms is present; the last arm
+// reports the mismatch as a plain producer fault rather than a fabricated rule
+// verdict, on the same footing newComplexType's redefining arm does.
+//
+// The inline arm OWNS the anonymous type it yields, so it is an
+// xsd.InlineTypeDefinition, and the anonymous COMPLEX type carries two identities
+// (typeAlternativeOwnedComplexType): edID, the enclosing element declaration
+// §3.4.2.1 dcl.ctd.common makes its {context} — the <alternative> is not an
+// <element>, so the ancestor walk passes straight over it — and a container token
+// minted per <alternative>, which its own nested local declarations report as
+// {scope}.{parent}. An anonymous SIMPLE type goes through constructSimpleType,
+// the same entry point an inline <simpleType> child of an <element> or
+// <attribute> takes, and its {context} (§3.16.1 std-context) is unmodeled here as
+// it is everywhere else in this producer (#206).
+//
+// The anonymous complex type this builds is the FOURTH owning slot that receives
+// no Phase D verdict and neither §3.4.2.4 nor §3.4.2.5 attribute fold; the
+// direction argument and the trackers are stated once, at the GAP marker in
+// xsd/complexderivation.go's checkComplexDerivations.
+func (p *producer) alternativeTypes(alternatives []*Element, edID xsd.ComponentID) ([]xsd.TypeDefinitionOrRef, error) {
+	types := make([]xsd.TypeDefinitionOrRef, len(alternatives))
 	for i, alt := range alternatives {
 		typeLex, hasType := alt.Attr("type")
-		if !hasType {
+		if hasType {
+			qn, err := p.resolveQName(alt, typeLex, "type")
+			if err != nil {
+				return nil, err
+			}
+			types[i] = xsd.TypeDefinitionRef{Name: qn}
 			continue
 		}
-		qn, err := p.resolveQName(alt, typeLex, "type")
+		if inlineComplex := childElement(alt, xsd.XMLSchemaNS, "complexType"); inlineComplex != nil {
+			ct, err := p.produceComplexType(newTypeAlternativeOwned(edID), inlineComplex)
+			if err != nil {
+				return nil, err
+			}
+			types[i] = xsd.InlineTypeDefinition{Definition: ct}
+			continue
+		}
+		inlineSimple := childElement(alt, xsd.XMLSchemaNS, "simpleType")
+		if inlineSimple == nil {
+			return nil, fmt.Errorf("parser: the <alternative> at %s carries none of a type attribute, a <complexType> child and a <simpleType> child, but src-ta requires exactly one and checkSrcTA charges it before this mapping runs", alt.Loc())
+		}
+		st, err := p.constructSimpleType(xsd.QName{}, inlineSimple)
 		if err != nil {
 			return nil, err
 		}
-		names[i] = qn
+		types[i] = xsd.InlineTypeDefinition{Definition: st}
 	}
-	return names, nil
-}
-
-// typeTableRepresentable reports whether every Type Alternative the table needs
-// can be expressed by the xsd.TypeAlternative this producer has to hand. names
-// are the resolved alternative type names in document order, zero where the
-// <alternative> took the inline arm; lastTested says whether the final
-// <alternative> carries a test attribute and so leaves the {default type
-// definition} to be synthesized from declaredType.
-//
-// GAP(xsd): two shapes are not mapped, and each withholds the WHOLE {type
-// table} of the declaration rather than one entry of it, because
-// xsd.TypeAlternative carries its {type definition} as a QName REFERENCE
-// (typealternative.go) and a table short of an entry is worse than none:
-// §3.8.6.3 key-equiv-tt pairs {alternatives} by POSITION
-// (xsd/elementconsistent.go typeTablesEquivalent), so a short list mis-pairs two
-// declarations the schema document makes agree.
-//
-//   - an <alternative> taking §3.12.2's INLINE arm, a <simpleType> or
-//     <complexType> child in place of a type attribute: an anonymous type has no
-//     name to carry;
-//   - a synthesized {default type definition} whose declaring <element> has an
-//     inline type of its own, for the same reason.
-//
-// Both shapes are fail-CLOSED over their four readers, which do not all charge
-// in the same direction:
-//
-//   - validate/cta.go walk.selectedType ·conditionally selects· through a
-//     declaration that HAS a table and takes D.{type definition} for one that
-//     has none, so a withheld table assesses the element against its DECLARED
-//     type where an <alternative> would have selected another — a FALSE REJECT
-//     of content the selected type admits, at the ·validation root· and at
-//     every descendant. This reader alone makes the whole set fail-CLOSED.
-//   - xsd/elementconsistent.go checkTypeTablesAgree and xsd/defaultbinding.go
-//     typeTablesAgree both read "all ·absent· or all present and ·equivalent·".
-//     Two withheld tables read as agreeing, which is an UNMADE
-//     cos-element-consistent / loc-testSubP clause 4.6 rejection; but a withheld
-//     table beside a mapped one reads as DISAGREEING, which is a FALSE REJECT of
-//     two declarations that agree in the schema document — reachable only where
-//     one of a same-named pair takes a withheld shape and the other does not.
-//   - xsd/resolve.go resolveTypeTable has nothing to resolve for a withheld
-//     table, so a dangling alternative type name goes uncharged (src-resolve
-//     clause 1.1): an unmade rejection.
-//
-// Closing both means growing xsd.TypeAlternative the xsd.TypeDefinitionOrRef
-// sum AttributeDeclaration and ElementDeclaration already carry, which first
-// needs §3.4.2.1's ownership invariant settled for an <element> that has both a
-// type attribute and an inline alternative: the anonymous type's {context} is
-// the enclosing element declaration, a shape NewElementDeclarationOwningType's
-// identity check does not cover (#822).
-func typeTableRepresentable(names []xsd.QName, declaredType xsd.TypeDefinitionOrRef, lastTested bool) bool {
-	if slices.Contains(names, xsd.QName{}) {
-		return false
-	}
-	if !lastTested {
-		return true
-	}
-	_, named := typeDefinitionRefName(declaredType)
-	return named
-}
-
-// typeDefinitionRefName reports the QName an element declaration's {type
-// definition} references, and false when the declaration owns an ANONYMOUS type
-// instead — an inline <simpleType> or <complexType> child, which has no name a
-// Type Alternative could carry.
-func typeDefinitionRefName(declaredType xsd.TypeDefinitionOrRef) (xsd.QName, bool) {
-	ref, named := declaredType.(xsd.TypeDefinitionRef)
-	if !named {
-		return xsd.QName{}, false
-	}
-	return ref.Name, true
+	return types, nil
 }
 
 // checkSrcTA charges Type Alternative Representation OK (§3.12.3) for an
 // <alternative> carrying none, or more than one, of a type attribute, a
 // <complexType> child and a <simpleType> child.
 //
-// It counts the two INLINE forms as present even though typeTableRepresentable
-// declines to map them: src-ta is a constraint on the XML representation, not on
-// what this producer builds from it, so an <alternative> holding exactly one
-// inline type child satisfies it outright. Reading "no type attribute" as "no
-// form present" would reject every conforming inline-arm schema document.
+// It runs BEFORE alternativeTypes maps any child, so the "exactly one form" it
+// establishes is what that mapping's arm order relies on: src-ta is a constraint
+// on the XML representation, and an <alternative> holding exactly one inline type
+// child satisfies it outright.
 func checkSrcTA(alt *Element) error {
 	forms := 0
 	if _, hasType := alt.Attr("type"); hasType {

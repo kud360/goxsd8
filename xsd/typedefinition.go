@@ -47,14 +47,18 @@ func (ComplexType) typeDefinition() {}
 func (*SimpleType) typeDefinition() {}
 
 // TypeDefinitionOrRef is a slot holding a reference to a type definition. It
-// serves TWO §3 properties, which is why its doc is written in terms of the slot
-// rather than of one property:
+// serves THREE §3 properties, which is why its doc is written in terms of the
+// slot rather than of one property:
 //
 //   - the {type definition} of an Element Declaration (§3.3.1) or an Attribute
 //     Declaration (§3.2.1);
 //   - the {base type definition} of a Complex Type Definition (§3.4.1), which
 //     src-expredef clause 1.1 (§4.2.4) makes able to hold an anonymous
-//     already-resolved component (see ComplexType.Base).
+//     already-resolved component (see ComplexType.Base);
+//   - the {type definition} of a Type Alternative (§3.12.1), which §3.12.2
+//     declare-ta fills from a type attribute or from an owned <complexType>/
+//     <simpleType> child, and which §3.3.2.1's synthesized {default type
+//     definition} fills by copying the declaring element's own slot.
 //
 // It is a sealed sum (STYLE T2/T7): TypeDefinitionRef, InlineTypeDefinition and
 // SubstitutionGroupHeadTypeRef are its only implementations, sealed by the
@@ -78,11 +82,12 @@ func (*SimpleType) typeDefinition() {}
 //
 // NOT EVERY ARM IS LEGAL IN EVERY SLOT, and the whole arm × slot legality table
 // lives in exactly one place, checkTypeDefinitionOrRef's typeDefinitionSlot
-// switch: SubstitutionGroupHeadTypeRef is admitted only by an ELEMENT
-// declaration's {type definition}, since neither §3.2.2.2 nor §3.4.2 has a
-// clause-3 analog to produce one. Making that unrepresentable at COMPILE time
-// would take a second sealed interface for the element slot alone, which forks
-// ResolvedType and checkTypeDefinitionOrRef (STYLE T4) and changes
+// switch: SubstitutionGroupHeadTypeRef is admitted by an ELEMENT declaration's
+// {type definition} and by a Type Alternative's, which §3.3.2.1 fills by copying
+// that same slot, since neither §3.2.2.2 nor §3.4.2 has a clause-3 analog to
+// produce one. Making that unrepresentable at COMPILE time would take a second
+// sealed interface for the element slot alone, which forks ResolvedType and
+// checkTypeDefinitionOrRef (STYLE T4) and changes
 // ElementDeclaration.TypeDefinition()'s return type; it is deliberately not
 // done. A runtime rejection charged to xsderr.RuleComponentInvariant is the
 // established precedent here — NewElementDeclaration rejects an
@@ -133,7 +138,7 @@ type TypeDefinitionRef struct{ Name QName }
 // declaration, named by its {context}), so a member inheriting it gets the
 // non-owning SubstitutionGroupHeadTypeRef instead of a second owner here. The
 // copy that would let it be this arm is literally unconstructible —
-// NewElementDeclarationOwningType rejects a type whose {context} names another
+// NewElementDeclarationOwningTypes rejects a type whose {context} names another
 // declaration.
 //
 // The three rules that do own what they yield:
@@ -174,7 +179,7 @@ type TypeDefinitionRef struct{ Name QName }
 // either component exists and threads it into both — into the wrapped type
 // through NewAnonymousComplexType's context argument, and into the owner through
 // the one entry point that accepts a wrapped COMPLEX type and checks the two
-// agree: NewElementDeclarationOwningType for a declaration (#340),
+// agree: NewElementDeclarationOwningTypes for a declaration (#340),
 // NewComplexTypeOwningBase for a redefining complex type (#505). That property
 // is §3.4.1 ctd-context; see ComplexTypeContext. A wrapped SIMPLE type's own
 // {context} (§3.16.1 std-context) is a separate property and is still unmodeled
@@ -199,7 +204,7 @@ type InlineTypeDefinition struct{ Definition TypeDefinition }
 // own the head's, and the owning copy is not merely undesirable but literally
 // unconstructible — an anonymous complex type's {context} names exactly one
 // Element Declaration (§3.4.2.1 dcl.ctd.common), and
-// NewElementDeclarationOwningType rejects a definition whose {context} names
+// NewElementDeclarationOwningTypes rejects a definition whose {context} names
 // another declaration. TypeDefinitionRef is unavailable for the opposite reason:
 // an anonymous type has no {name} for a by-name lookup to find, which is exactly
 // what {context} exists to substitute for (§3.4.1, Appendix G.1.11).
@@ -321,13 +326,16 @@ const (
 	// baseTypeSlot is a Complex Type Definition's {base type definition}
 	// (§3.4.1).
 	baseTypeSlot
+	// typeAlternativeTypeSlot is a Type Alternative's {type definition}
+	// (§3.12.1).
+	typeAlternativeTypeSlot
 )
 
 // property is the §3 property name this slot fills, as it appears in a
 // rejection message.
 func (s typeDefinitionSlot) property() string {
 	switch s {
-	case elementTypeSlot, attributeTypeSlot:
+	case elementTypeSlot, attributeTypeSlot, typeAlternativeTypeSlot:
 		return "{type definition}"
 	case baseTypeSlot:
 		return "{base type definition}"
@@ -337,11 +345,17 @@ func (s typeDefinitionSlot) property() string {
 }
 
 // admitsHeadInherited reports whether this slot may hold a
-// SubstitutionGroupHeadTypeRef. Only the element slot may: §3.3.2.1
-// dcl.elt.common clause 3 is the sole mapping rule that yields one, and neither
+// SubstitutionGroupHeadTypeRef. TWO slots may, and both trace to §3.3.2.1
+// dcl.elt.common clause 3, the sole mapping rule that yields one: the element
+// declaration's own {type definition}, which clause 3 fills, and a Type
+// Alternative's, because the {default type definition} §3.3.2.1 SYNTHESIZES for
+// a tested final <alternative> takes "the {type definition} property of the
+// parent Element Declaration" verbatim, whatever arm that slot holds. Neither
 // §3.2.2.2 dcl.att.local (three tiers, no clause-3 analog) nor §3.4.2's base=
 // has anything like it.
-func (s typeDefinitionSlot) admitsHeadInherited() bool { return s == elementTypeSlot }
+func (s typeDefinitionSlot) admitsHeadInherited() bool {
+	return s == elementTypeSlot || s == typeAlternativeTypeSlot
+}
 
 // checkTypeDefinitionOrRef rejects the encodings of a TypeDefinitionOrRef slot
 // that the sum's doc declares illegal, charged to xsderr.RuleComponentInvariant:

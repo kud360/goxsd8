@@ -824,6 +824,9 @@ func overrideDecidable(el *parser.Element) bool {
 // error (#442; before it, the head's own decline here is what kept the shape out
 // of reach).
 //
+// Its <alternative> children are gated by alternativeTypesDecidable, on the same
+// terms and through the same two functions.
+//
 // Its <unique>/<key>/<keyref> children impose no condition of their own: #178
 // produced the name= form and #240 the ref= form, so BOTH are mapped and both
 // src-identity-constraint (§3.11.3) and c-props-correct (§3.11.6.1) rejections on
@@ -832,8 +835,56 @@ func elementDecidable(el *parser.Element) bool {
 	if st := childXSD(el, "simpleType"); st != nil && !simpleTypeDecidable(st) {
 		return false
 	}
-	inline := childXSD(el, "complexType")
-	return inline == nil || anonymousComplexTypeDecidable(inline)
+	if inline := childXSD(el, "complexType"); inline != nil && !anonymousComplexTypeDecidable(inline) {
+		return false
+	}
+	return alternativeTypesDecidable(el)
+}
+
+// alternativeTypesDecidable reports whether every type an <element>'s
+// <alternative> children own is decidable. §3.12.2 declare-ta's inline arm maps
+// a <complexType> or <simpleType> child of an <alternative> to a type definition
+// the element declaration OWNS (#851); an <alternative> on the type= arm imposes
+// no condition, its reference being resolved at finalize like any other with a
+// genuine src-resolve clause 1.1 failure.
+//
+// The <simpleType> child goes through simpleTypeDecidable, the same gate an
+// element's own inline one takes.
+//
+// The <complexType> child goes through complexTypeDecidable and NOT through
+// anonymousComplexTypeDecidable, which is the deliberate half of this gate. Both
+// would decline the shapes the producer answers with a limitation error, which
+// is what this gate is for. What only the narrower one adds is the
+// IMPLICIT-CONTENT restriction, and that restriction is about the two attribute
+// folds no owning slot reaches (xsd/complexderivation.go's GAP marker, #414/#438
+// under #584) — a property-value gap this lane ALREADY scores on this shape,
+// because an <alternative>'s children were never inspected here before and the
+// producer's silence about them was itself ungated. Applying it now would decline
+// six schema cases and one instance case the lane decides today, so the narrowing
+// belongs to the landing that closes the fold, not to the one that first builds
+// the component.
+//
+// The residual, per reader (STYLE P3a): the SCHEMA lane cannot over-reject on
+// it, because checkComplexDerivations quantifies over Schema.types and an owned
+// anonymous type is in no such set, so no Phase D verdict is reached at all and
+// the unfolded {attribute uses}/{attribute wildcard} are read by nothing. The
+// INSTANCE lane can: validate's cvc-complex-type clause 3 reads the selected
+// type's {attribute uses} to decide an attribute, so an unfolded EXTENSION
+// under an <alternative> can reject an attribute its base declares.
+//
+// It serves both element paths (STYLE T4): §3.3.2.1's {type table} row is a
+// COMMON mapping rule, so a top-level and a local <element> carry the same
+// children through the same producer.
+func alternativeTypesDecidable(el *parser.Element) bool {
+	for _, alt := range childrenXSD(el, "alternative") {
+		if ct := childXSD(alt, "complexType"); ct != nil && !complexTypeDecidable(ct) {
+			return false
+		}
+		if st := childXSD(alt, "simpleType"); st != nil && !simpleTypeDecidable(st) {
+			return false
+		}
+	}
+	return true
 }
 
 // anonymousComplexTypeDecidable reports whether the ANONYMOUS complex type of an
@@ -1140,13 +1191,16 @@ func attributeDecidable(el *parser.Element) bool {
 // An inline <complexType> is produced too as of #340, on this path and on the
 // global one alike (§3.3.2.1's tier 1 is a COMMON rule), and is admitted under
 // the same proviso — see anonymousComplexTypeDecidable for why that gate is
-// narrower than complexTypeDecidable.
+// narrower than complexTypeDecidable. Its <alternative> children are gated by
+// alternativeTypesDecidable, shared with elementDecidable.
 func localElementDecidable(el *parser.Element) bool {
 	if ct := childXSD(el, "complexType"); ct != nil && !anonymousComplexTypeDecidable(ct) {
 		return false
 	}
-	inline := childXSD(el, "simpleType")
-	return inline == nil || simpleTypeDecidable(inline)
+	if inline := childXSD(el, "simpleType"); inline != nil && !simpleTypeDecidable(inline) {
+		return false
+	}
+	return alternativeTypesDecidable(el)
 }
 
 // localAttributeDecidable reports whether a LOCAL <attribute> — a child of a

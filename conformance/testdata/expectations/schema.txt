@@ -256,7 +256,7 @@ CTA/cta9004err/schema/cta9004err pass
 CTA/cta9005err/schema/cta9005err pass
 CTA/cta9006err/schema/cta9006err fail
 CTA/cta9007err/schema/cta9007err fail
-CTA/cta9008err/schema/cta9008err fail
+CTA/cta9008err/schema/cta9008err pass
 CTA/cta9009err/schema/cta9009err fail
 CTA/cta9010err/schema/cta9010err fail
 CTA/typeAlternatives_001/schema/typeAlternatives_001_1 pass

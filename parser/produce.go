@@ -1378,8 +1378,7 @@ func (p *producer) resolveModelGroup(name xsd.QName) (xsd.ModelGroup, bool, erro
 // xs:localSimpleType: <list>, <union> and <restriction> (xmlschema11-2.md:3931,
 // :3969, :3989), <element> and <attribute> at either level
 // (xmlschema11-1.md:4681, :4708, :5057, :5092, :5116) and <alternative> (:5146),
-// whose inline arm typeTableRepresentable withholds and so does not reach here
-// at all yet.
+// whose inline arm reaches here through alternativeTypes (#851).
 //
 // The fault carries NO numbered rule ID: src-simple-type's clauses (§3.16.3) say
 // nothing about either attribute, and no s4s-* identifier exists in the spec at
@@ -1832,15 +1831,18 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 // COMMON mapping rule — §3.3.2.2 supplements only {scope} and {target
 // namespace}, never {type definition} — so no tier of it is mapped differently
 // here than on the local path. Tier 1's inline <complexType> child is mapped in
-// this function, and only because that arm alone needs an identity minted before
-// either component exists: one xsd.ComponentID serves as both the anonymous
-// type's {context} (§3.4.2.1 dcl.ctd.common) and the {scope}.{parent} of its own
-// nested local elements (#340). Tier 1's inline <simpleType> child and tier 2's
-// type= go through declaredType, the one implementation both element forms and
-// the local attribute form share (STYLE T4, #442). The anonymous simple type it
-// builds carries no {context} of its own: §3.16.1 std-context is a separate
-// property from {type definition} and is unmodeled here exactly as on the local
-// path. The two element paths differ only in the {scope} the declaration gets.
+// this function, because that arm needs an identity minted before either
+// component exists: one xsd.ComponentID serves as both the anonymous type's
+// {context} (§3.4.2.1 dcl.ctd.common) and the {scope}.{parent} of its own nested
+// local elements (#340). That identity is minted for EVERY declaration this
+// function builds, whichever tier wins, because an <alternative> child owns
+// anonymous types under the same {context} (#851) — see typeTableOf. Tier 1's
+// inline <simpleType> child and tier 2's type= go through declaredType, the one
+// implementation both element forms and the local attribute form share (STYLE
+// T4, #442). The anonymous simple type it builds carries no {context} of its
+// own: §3.16.1 std-context is a separate property from {type definition} and is
+// unmodeled here exactly as on the local path. The two element paths differ only
+// in the {scope} the declaration gets.
 //
 // This is the ONLY path that can reach the chain's clause 3, the head's declared
 // type: substitutionGroup= is legal on a top-level <element> alone (§3.3.2), so
@@ -1883,12 +1885,19 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
+	// The identity is minted UNCONDITIONALLY, before any clause is chosen: since
+	// #851 an <alternative> child may own an anonymous complex type whose
+	// {context} is this declaration (§3.4.2.1 dcl.ctd.common), so an <element>
+	// with a plain type= owns types too and no path is ownership-free.
+	edID := xsd.NewComponentID()
 	var typeDef xsd.TypeDefinitionOrRef = xsd.TypeDefinitionRef{Name: anyTypeName} // §3.3.2.1 case 4
 	switch {
 	case inlineComplex != nil:
-		// Clause 1 wins outright and typeDef is never read on this path — the
-		// inline branch below builds the type itself, from an identity minted
-		// there — so the lower clauses must not run at all.
+		ct, cerr := p.produceComplexType(elementOwnedComplexType{owner: edID}, inlineComplex) // case 1
+		if cerr != nil {
+			return xsd.ElementDeclaration{}, cerr
+		}
+		typeDef = xsd.InlineTypeDefinition{Definition: ct}
 	case inlineSimple != nil, hasType:
 		declared, derr := p.declaredType(elem, anyTypeName) // cases 1 and 2
 		if derr != nil {
@@ -1902,25 +1911,12 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 		}
 		typeDef = inherited
 	}
-	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
-	if inlineComplex != nil {
-		edID := xsd.NewComponentID()
-		ct, err := p.produceComplexType(elementOwnedComplexType{owner: edID}, inlineComplex)
-		if err != nil {
-			return xsd.ElementDeclaration{}, err
-		}
-		typeTable, err := p.typeTableOf(elem, xsd.InlineTypeDefinition{Definition: ct})
-		if err != nil {
-			return xsd.ElementDeclaration{}, err
-		}
-		return xsd.NewElementDeclarationOwningType(elem.Loc(), edID, qname, ct, typeTable, xsd.NewGlobalScope(), vc,
-			nillable, constraints, affiliations, p.substitutionGroupExclusions(elem), abstract, p.disallowedSubstitutions(elem), nil)
-	}
-	typeTable, err := p.typeTableOf(elem, typeDef)
+	typeTable, err := p.typeTableOf(elem, edID, typeDef)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	return xsd.NewElementDeclaration(elem.Loc(), qname, typeDef, typeTable, xsd.NewGlobalScope(), vc,
+	// §3.3.2.2 dcl.elt.global: {scope} is {variety} global, {parent} ·absent·.
+	return xsd.NewElementDeclarationOwningTypes(elem.Loc(), edID, qname, typeDef, typeTable, xsd.NewGlobalScope(), vc,
 		nillable, constraints, affiliations, p.substitutionGroupExclusions(elem), abstract, p.disallowedSubstitutions(elem), nil)
 }
 

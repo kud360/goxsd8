@@ -21,14 +21,31 @@ func typeTableOf(t *testing.T, doc string, name xsd.QName) (xsd.TypeTable, bool)
 	return ed.TypeTable()
 }
 
-// altTypeNames returns the {type definition} name of every {alternatives}
-// member, in order, so a document-order assertion reads as one comparison.
-func altTypeNames(alts []xsd.TypeAlternative) []string {
+// altTypeNames returns the local part of the {type definition} REFERENCE of
+// every {alternatives} member, in order, so a document-order assertion reads as
+// one comparison. An entry on §3.12.2's inline arm has no name and reports
+// "<inline>", which no schema-document type name can collide with.
+func altTypeNames(t *testing.T, alts []xsd.TypeAlternative) []string {
+	t.Helper()
 	names := make([]string, 0, len(alts))
 	for _, a := range alts {
-		names = append(names, a.TypeDefinitionName().Local)
+		names = append(names, altTypeName(t, a))
 	}
 	return names
+}
+
+// altTypeName is altTypeNames for one alternative.
+func altTypeName(t *testing.T, alt xsd.TypeAlternative) string {
+	t.Helper()
+	switch ref := alt.TypeDefinition().(type) {
+	case xsd.TypeDefinitionRef:
+		return ref.Name.Local
+	case xsd.InlineTypeDefinition:
+		return "<inline>"
+	default:
+		t.Fatalf("{type definition} = %T, want a reference or an inline definition", ref)
+		return ""
+	}
 }
 
 const typeTableTypes = `<xs:complexType name="B"><xs:sequence/></xs:complexType>
@@ -49,7 +66,7 @@ func TestProduceTypeTableTrailingUntestedAlternativeIsTheDefault(t *testing.T) {
 		t.Fatal("{type table} is ·absent·, want present")
 	}
 	alts := tt.Alternatives()
-	if got := altTypeNames(alts); len(got) != 2 || got[0] != "T" || got[1] != "U" {
+	if got := altTypeNames(t, alts); len(got) != 2 || got[0] != "T" || got[1] != "U" {
 		t.Fatalf("{alternatives} = %v, want [T U] in document order", got)
 	}
 	test, hasTest := alts[0].Test()
@@ -60,7 +77,7 @@ func TestProduceTypeTableTrailingUntestedAlternativeIsTheDefault(t *testing.T) {
 	if _, hasTest := dflt.Test(); hasTest {
 		t.Error("{default type definition}.{test} is present, want ·absent·")
 	}
-	if got := dflt.TypeDefinitionName().Local; got != "V" {
+	if got := altTypeName(t, dflt); got != "V" {
 		t.Errorf("{default type definition}.{type definition} = %s, want V", got)
 	}
 }
@@ -75,14 +92,14 @@ func TestProduceTypeTableSynthesizesDefaultFromDeclaredType(t *testing.T) {
 	if !present {
 		t.Fatal("{type table} is ·absent·, want present")
 	}
-	if got := altTypeNames(tt.Alternatives()); len(got) != 1 || got[0] != "T" {
+	if got := altTypeNames(t, tt.Alternatives()); len(got) != 1 || got[0] != "T" {
 		t.Fatalf("{alternatives} = %v, want [T]", got)
 	}
 	dflt := tt.DefaultTypeDefinition()
 	if _, hasTest := dflt.Test(); hasTest {
 		t.Error("{default type definition}.{test} is present, want ·absent·")
 	}
-	if got := dflt.TypeDefinitionName().Local; got != "B" {
+	if got := altTypeName(t, dflt); got != "B" {
 		t.Errorf("{default type definition}.{type definition} = %s, want the declaration's own B", got)
 	}
 }
@@ -95,43 +112,96 @@ func TestProduceTypeTableAbsentWithoutAlternatives(t *testing.T) {
 	}
 }
 
-// The whole {type table} is withheld when ANY <alternative> takes the inline
-// arm — per-DECLARATION, not per-alternative (typeTableRepresentable's GAP).
-func TestProduceTypeTableDeclinedForInlineAlternative(t *testing.T) {
-	if _, present := typeTableOf(t, wrap("", typeTableTypes+`
+// §3.12.2 declare-ta's INLINE arm — a <complexType> child in place of a type
+// attribute — maps to a {type definition} the alternative OWNS, and the table
+// carries it beside a by-name entry rather than being withheld (#851).
+func TestProduceTypeTableInlineComplexAlternative(t *testing.T) {
+	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
 	<xs:element name="e" type="B">
 	  <xs:alternative test="@k='t'" type="T"/>
-	  <xs:alternative test="@k='i'"><xs:complexType><xs:sequence/></xs:complexType></xs:alternative>
-	</xs:element>`), xsd.QName{Local: "e"}); present {
-		t.Error("{type table} is present, want ·absent· where one <alternative> takes the inline arm")
+	  <xs:alternative test="@k='i'">`+inlineExtensionOfB+`</xs:alternative>
+	</xs:element>`), xsd.QName{Local: "e"})
+	if !present {
+		t.Fatal("{type table} is ·absent·, want present for an <alternative> on the inline arm")
+	}
+	if got := altTypeNames(t, tt.Alternatives()); len(got) != 2 || got[0] != "T" || got[1] != "<inline>" {
+		t.Fatalf("{alternatives} = %v, want [T <inline>]", got)
+	}
+	inline, ok := tt.Alternatives()[1].TypeDefinition().(xsd.InlineTypeDefinition)
+	if !ok {
+		t.Fatalf("{alternatives}[1].{type definition} = %T, want an InlineTypeDefinition", tt.Alternatives()[1].TypeDefinition())
+	}
+	ct, ok := inline.Definition.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("the owned definition is %T, want a ComplexType", inline.Definition)
+	}
+	if ct.Name() != (xsd.QName{}) {
+		t.Errorf("the owned definition is NAMED %v, want anonymous", ct.Name())
+	}
+	if _, hasContext := ct.Context(); !hasContext {
+		t.Error("the owned definition has an ·absent· {context}, want the enclosing element declaration (§3.4.2.1 dcl.ctd.common)")
 	}
 }
 
-// A synthesized default needs a NAMED declared type, so an <element> owning an
-// anonymous type withholds the table too — and gets one when the trailing
-// <alternative> supplies the default by name instead.
+// inlineExtensionOfB is the inline <complexType> the alternative fixtures own.
+// It EXTENDS B rather than deriving from xs:anyType so that e-props-correct
+// clause 7 — every entry ·validly substitutable· for the declaration's own
+// {type definition} — is satisfied by the fixture and does not reject a document
+// whose subject is the mapping.
+const inlineExtensionOfB = `<xs:complexType><xs:complexContent><xs:extension base="B"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`
+
+// The inline arm also serves the SIMPLE type child, through the same
+// constructSimpleType entry point an inline <simpleType> child of an <element>
+// takes.
+func TestProduceTypeTableInlineSimpleAlternative(t *testing.T) {
+	tt, present := typeTableOf(t, wrap("", `
+	<xs:element name="e" type="xs:string">
+	  <xs:alternative test="@k='i'"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:alternative>
+	</xs:element>`), xsd.QName{Local: "e"})
+	if !present {
+		t.Fatal("{type table} is ·absent·, want present for an <alternative> on the inline simple-type arm")
+	}
+	inline, ok := tt.Alternatives()[0].TypeDefinition().(xsd.InlineTypeDefinition)
+	if !ok {
+		t.Fatalf("{alternatives}[0].{type definition} = %T, want an InlineTypeDefinition", tt.Alternatives()[0].TypeDefinition())
+	}
+	st, ok := inline.Definition.(*xsd.SimpleType)
+	if !ok {
+		t.Fatalf("the owned definition is %T, want a *SimpleType", inline.Definition)
+	}
+	if st.Name() != (xsd.QName{}) {
+		t.Errorf("the owned definition is NAMED %v, want anonymous", st.Name())
+	}
+}
+
+// A synthesized {default type definition} takes the declaring element's own
+// {type definition} WHOLE (§3.3.2.1 case 2), so an <element> owning an anonymous
+// type gets a table whose default owns that same type — where the whole table
+// used to be withheld for want of a name.
 //
-// Both alternatives name ·xs:error·, and that is forced rather than incidental:
-// e-props-correct clause 7 requires every entry to be ·validly substitutable·
-// for the declaration's own {type definition}, and nothing an <alternative> can
-// NAME is substitutable for the anonymous COMPLEX type declared here:
-// key-val-sub-type reaches a target only as cos-ct-derived-ok /
+// The tested alternative names ·xs:error·, and that is forced rather than
+// incidental: e-props-correct clause 7 requires every entry to be ·validly
+// substitutable· for the declaration's own {type definition}, and nothing an
+// <alternative> can NAME is substitutable for the anonymous COMPLEX type
+// declared here — key-val-sub-type reaches a target only as cos-ct-derived-ok /
 // cos-st-derived-ok clause 1's identity or through the candidate's {base type
 // definition} chain, and an anonymous type has no name for either to reach it
-// by. Anonymity alone would not close clause 7.1 — cos-st-derived-ok clause
-// 2.2.4 decomposes an anonymous UNION target member-wise, so ITS own members
-// stay valid entries. Clause 7.2 is the only entry THIS declaration admits, so a
-// named-type fixture here would be an invalid schema whose rejection has nothing
-// to do with the mapping under test.
+// by. Clause 7.2 is the only entry THIS declaration admits, so a named-type
+// fixture here would be an invalid schema whose rejection has nothing to do with
+// the mapping under test.
 func TestProduceTypeTableAnonymousDeclaredType(t *testing.T) {
 	const inline = `<xs:complexType><xs:sequence/></xs:complexType>`
-	if _, present := typeTableOf(t, wrap("", typeTableTypes+`
+	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
 	<xs:element name="e">`+inline+`
 	  <xs:alternative test="@k='t'" type="xs:error"/>
-	</xs:element>`), xsd.QName{Local: "e"}); present {
-		t.Error("{type table} is present, want ·absent· where the synthesized default would name an anonymous type")
+	</xs:element>`), xsd.QName{Local: "e"})
+	if !present {
+		t.Fatal("{type table} is ·absent·, want present for a synthesized default over an anonymous declared type")
 	}
-	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
+	if got := altTypeName(t, tt.DefaultTypeDefinition()); got != "<inline>" {
+		t.Errorf("{default type definition}.{type definition} = %s, want the declaration's own anonymous type", got)
+	}
+	tt, present = typeTableOf(t, wrap("", typeTableTypes+`
 	<xs:element name="e">`+inline+`
 	  <xs:alternative test="@k='t'" type="xs:error"/>
 	  <xs:alternative type="xs:error"/>
@@ -139,9 +209,110 @@ func TestProduceTypeTableAnonymousDeclaredType(t *testing.T) {
 	if !present {
 		t.Fatal("{type table} is ·absent·, want present when the trailing <alternative> names the default")
 	}
-	if got := tt.DefaultTypeDefinition().TypeDefinitionName().Local; got != "error" {
+	if got := altTypeName(t, tt.DefaultTypeDefinition()); got != "error" {
 		t.Errorf("{default type definition}.{type definition} = %s, want error", got)
 	}
+}
+
+// An <element> whose own {type definition} is INHERITED from its substitution
+// group head (§3.3.2.1 dcl.elt.common clause 3) passes that arm WHOLE into the
+// synthesized {default type definition}, which is what makes the shape
+// representable at all.
+func TestProduceTypeTableSynthesizedDefaultInheritsHeadType(t *testing.T) {
+	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
+	<xs:element name="head"><xs:complexType><xs:sequence/></xs:complexType></xs:element>
+	<xs:element name="e" substitutionGroup="head">
+	  <xs:alternative test="@k='t'" type="xs:error"/>
+	</xs:element>`), xsd.QName{Local: "e"})
+	if !present {
+		t.Fatal("{type table} is ·absent·, want present for a substitutionGroup=-typed declaration")
+	}
+	dflt, ok := tt.DefaultTypeDefinition().TypeDefinition().(xsd.SubstitutionGroupHeadTypeRef)
+	if !ok {
+		t.Fatalf("{default type definition}.{type definition} = %T, want a SubstitutionGroupHeadTypeRef", tt.DefaultTypeDefinition().TypeDefinition())
+	}
+	if dflt.Head != (xsd.QName{Local: "head"}) {
+		t.Errorf("{default type definition} inherits from %v, want head", dflt.Head)
+	}
+}
+
+// Two <alternative> children each owning an inline <complexType> get DISTINCT
+// container tokens, so the local declarations nested in one do not report the
+// other as their {scope}.{parent} — the two-mint split
+// typeAlternativeOwnedComplexType exists for. Their {context} is the SAME
+// element declaration, which is §3.4.2.1 dcl.ctd.common's answer for both.
+func TestProduceTypeTableInlineAlternativesGetDistinctContainers(t *testing.T) {
+	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
+	<xs:element name="e" type="B">
+	  <xs:alternative test="@k='1'"><xs:complexType><xs:complexContent><xs:extension base="B"><xs:sequence><xs:element name="kid" type="xs:string"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType></xs:alternative>
+	  <xs:alternative test="@k='2'"><xs:complexType><xs:complexContent><xs:extension base="B"><xs:sequence><xs:element name="kid" type="xs:string"/></xs:sequence></xs:extension></xs:complexContent></xs:complexType></xs:alternative>
+	</xs:element>`), xsd.QName{Local: "e"})
+	if !present {
+		t.Fatal("{type table} is ·absent·, want present")
+	}
+	alts := tt.Alternatives()
+	if len(alts) != 2 {
+		t.Fatalf("{alternatives} len = %d, want 2", len(alts))
+	}
+	firstCtx, firstParent := ownedContextAndKidParent(t, alts[0])
+	secondCtx, secondParent := ownedContextAndKidParent(t, alts[1])
+	if firstCtx != secondCtx {
+		t.Error("the two owned types carry DIFFERENT {context}s, but §3.4.2.1 dcl.ctd.common gives both the enclosing element declaration")
+	}
+	if firstParent == secondParent {
+		t.Error("the two owned types share one container token, so their nested local declarations are indistinguishable by {scope}.{parent}")
+	}
+	if firstParent == firstCtx {
+		t.Error("the container token equals the {context}, but one element declaration owns several containers here and each needs its own mint")
+	}
+}
+
+// ownedContextAndKidParent reports the {context} identity of the anonymous
+// complex type an alternative owns, and the {scope}.{parent} identity its nested
+// local element declaration reports.
+func ownedContextAndKidParent(t *testing.T, alt xsd.TypeAlternative) (xsd.ComponentID, xsd.ComponentID) {
+	t.Helper()
+	inline, ok := alt.TypeDefinition().(xsd.InlineTypeDefinition)
+	if !ok {
+		t.Fatalf("{type definition} = %T, want an InlineTypeDefinition", alt.TypeDefinition())
+	}
+	ct, ok := inline.Definition.(xsd.ComplexType)
+	if !ok {
+		t.Fatalf("the owned definition is %T, want a ComplexType", inline.Definition)
+	}
+	context, present := ct.Context()
+	if !present {
+		t.Fatal("the owned definition has an ·absent· {context}")
+	}
+	content, ok := ct.ContentType().(xsd.ElementContent)
+	if !ok {
+		t.Fatalf("the owned definition's {content type} is %T, want element-only content", ct.ContentType())
+	}
+	group, ok := content.Particle.Term().(xsd.ResolvedTerm).Term.(xsd.ModelGroup)
+	if !ok {
+		t.Fatal("the owned definition's particle is not a model group")
+	}
+	for _, part := range group.Particles() {
+		term, ok := part.Term().(xsd.ResolvedTerm)
+		if !ok {
+			continue
+		}
+		decl, ok := term.Term.(xsd.ElementDeclaration)
+		if !ok {
+			continue
+		}
+		parent, ok := decl.Scope().Parent()
+		if !ok {
+			t.Fatalf("the nested declaration %s has a global {scope}", decl.Name())
+		}
+		anon, ok := parent.(xsd.AnonymousComplexTypeScopeParent)
+		if !ok {
+			t.Fatalf("the nested declaration's {scope}.{parent} is %T, want an AnonymousComplexTypeScopeParent", parent)
+		}
+		return context.ID(), anon.Owner
+	}
+	t.Fatal("the owned definition declares no local element")
+	return xsd.ComponentID{}, xsd.ComponentID{}
 }
 
 // ·xs:error· (§3.16.7.3) is present in every schema by definition (builtin.Seed
@@ -156,8 +327,8 @@ func TestProduceTypeTableForXSError(t *testing.T) {
 	if !present {
 		t.Fatal("{type table} is ·absent·, want present where an <alternative> names xs:error")
 	}
-	dflt := tt.DefaultTypeDefinition().TypeDefinitionName()
-	if want := (xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}); dflt != want {
+	dflt := tt.DefaultTypeDefinition().TypeDefinition()
+	if want := (xsd.TypeDefinitionRef{Name: xsd.QName{Space: xsd.XMLSchemaNS, Local: "error"}}); dflt != want {
 		t.Errorf("{default type definition}.{type definition} = %v, want %v", dflt, want)
 	}
 }
@@ -179,10 +350,10 @@ func TestProduceTypeTableOnLocalElement(t *testing.T) {
 	if !present {
 		t.Fatal("local declaration's {type table} is ·absent·, want present")
 	}
-	if got := altTypeNames(tt.Alternatives()); len(got) != 1 || got[0] != "T" {
+	if got := altTypeNames(t, tt.Alternatives()); len(got) != 1 || got[0] != "T" {
 		t.Fatalf("{alternatives} = %v, want [T]", got)
 	}
-	if got := tt.DefaultTypeDefinition().TypeDefinitionName().Local; got != "B" {
+	if got := altTypeName(t, tt.DefaultTypeDefinition()); got != "B" {
 		t.Errorf("{default type definition}.{type definition} = %s, want B", got)
 	}
 }
@@ -258,22 +429,26 @@ func TestProduceTypeTableTestIsAnXPathExpressionRecord(t *testing.T) {
 // with exactly one type child is fine and only zero or two-or-more is charged.
 func TestProduceSrcTA(t *testing.T) {
 	cases := []struct {
-		name       string
+		name string
+		// declared is the <element>'s own type=, chosen so that the accepted
+		// fixtures also satisfy e-props-correct clause 7 (every entry ·validly
+		// substitutable· for it) and are rejected, if at all, by src-ta alone.
+		declared   string
 		alternates string
 		wantRule   bool
 	}{
-		{name: "type attribute alone", alternates: `<xs:alternative test="@k='t'" type="T"/>`},
-		{name: "complexType child alone", alternates: `<xs:alternative test="@k='t'"><xs:complexType><xs:sequence/></xs:complexType></xs:alternative>`},
-		{name: "simpleType child alone", alternates: `<xs:alternative test="@k='t'"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:alternative>`},
-		{name: "no form at all", alternates: `<xs:alternative test="@k='t'"/>`, wantRule: true},
-		{name: "type attribute and complexType child", alternates: `<xs:alternative test="@k='t'" type="T"><xs:complexType><xs:sequence/></xs:complexType></xs:alternative>`, wantRule: true},
-		{name: "type attribute and simpleType child", alternates: `<xs:alternative test="@k='t'" type="T"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:alternative>`, wantRule: true},
-		{name: "both inline children", alternates: `<xs:alternative test="@k='t'"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType><xs:complexType><xs:sequence/></xs:complexType></xs:alternative>`, wantRule: true},
+		{name: "type attribute alone", declared: "B", alternates: `<xs:alternative test="@k='t'" type="T"/>`},
+		{name: "complexType child alone", declared: "B", alternates: `<xs:alternative test="@k='t'">` + inlineExtensionOfB + `</xs:alternative>`},
+		{name: "simpleType child alone", declared: "xs:string", alternates: `<xs:alternative test="@k='t'"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:alternative>`},
+		{name: "no form at all", declared: "B", alternates: `<xs:alternative test="@k='t'"/>`, wantRule: true},
+		{name: "type attribute and complexType child", declared: "B", alternates: `<xs:alternative test="@k='t'" type="T"><xs:complexType><xs:sequence/></xs:complexType></xs:alternative>`, wantRule: true},
+		{name: "type attribute and simpleType child", declared: "B", alternates: `<xs:alternative test="@k='t'" type="T"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:alternative>`, wantRule: true},
+		{name: "both inline children", declared: "B", alternates: `<xs:alternative test="@k='t'"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType><xs:complexType><xs:sequence/></xs:complexType></xs:alternative>`, wantRule: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := produce(t, wrap("", typeTableTypes+`
-			<xs:element name="e" type="B">`+tc.alternates+`</xs:element>`))
+			<xs:element name="e" type="`+tc.declared+`">`+tc.alternates+`</xs:element>`))
 			if !tc.wantRule {
 				if err != nil {
 					t.Fatalf("Produce: %v, want no src-ta charge", err)
@@ -299,4 +474,34 @@ func TestProduceTypeTableAlternativeTypeResolves(t *testing.T) {
 		t.Fatal("Produce succeeded, want src-resolve for an alternative naming no type")
 	}
 	assertRule(t, err, "src-resolve")
+}
+
+// An <alternative> on the INLINE arm has no QName of its own for src-resolve
+// clause 1.1 to charge, but the anonymous type it owns has its own references and
+// they are resolved like any other — resolveTypeTable reaches them by routing the
+// slot through resolveTypeDefinition rather than through a name lookup.
+func TestProduceTypeTableInlineAlternativeBaseResolves(t *testing.T) {
+	_, err := produce(t, wrap("", typeTableTypes+`
+	<xs:element name="e" type="B">
+	  <xs:alternative test="@k='i'"><xs:complexType><xs:complexContent><xs:extension base="Missing"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType></xs:alternative>
+	</xs:element>`))
+	if err == nil {
+		t.Fatal("Produce succeeded, want src-resolve for a dangling base= inside an <alternative>'s inline type")
+	}
+	assertRule(t, err, "src-resolve")
+}
+
+// e-props-correct clause 7 charges an INLINE-armed alternative like any other:
+// the constraint quantifies over the {type definition} COMPONENT, which every arm
+// of the slot supplies, so an owned type that does not derive from the
+// declaration's own type is rejected rather than skipped.
+func TestProduceTypeTableInlineAlternativeChargedClause7(t *testing.T) {
+	_, err := produce(t, wrap("", typeTableTypes+`
+	<xs:element name="e" type="B">
+	  <xs:alternative test="@k='i'"><xs:complexType><xs:sequence/></xs:complexType></xs:alternative>
+	</xs:element>`))
+	if err == nil {
+		t.Fatal("Produce succeeded, want e-props-correct clause 7 for an inline alternative type that does not derive from B")
+	}
+	assertRule(t, err, "e-props-correct")
 }

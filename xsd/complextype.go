@@ -250,7 +250,7 @@ type ComplexTypeContext interface {
 //
 // A mis-pointing {context} — an InlineTypeDefinition wrapping an anonymous
 // ComplexType whose {context} names some OTHER component — is unrepresentable as
-// of #340: NewElementDeclarationOwningType is the only construction path for a
+// of #340: NewElementDeclarationOwningTypes is the only construction path for a
 // declaration that owns an anonymous complex type, and it rejects a Component
 // that differs from the identity the caller minted for the declaration itself.
 //
@@ -556,7 +556,7 @@ func baseTypeDefinitionRef(name QName) TypeDefinitionOrRef {
 // id is NOT stored on the built type. Its whole role is this construction-time
 // comparison, and a field written but never read is dead state (STYLE D3); the
 // landing that adds an ID→component resolver adds the field together with its
-// reader (see ComponentID), exactly as NewElementDeclarationOwningType's doc
+// reader (see ComponentID), exactly as NewElementDeclarationOwningTypes's doc
 // already commits this repo to. That makes the back-pointer's target
 // unobservable, which is admissible only BECAUSE the token is never stored: for
 // a NAMED, top-level component like this one, identity normally IS its expanded

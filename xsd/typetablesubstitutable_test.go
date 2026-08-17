@@ -29,9 +29,9 @@ func ttTable(t *testing.T, defaultType QName, altTypes ...QName) *TypeTable {
 	alts := make([]TypeAlternative, 0, len(altTypes))
 	for _, at := range altTypes {
 		test := NewXPathExpression("@kind = 'x'", nil, nil, nil)
-		alts = append(alts, NewTypeAlternative(&test, at, nil))
+		alts = append(alts, iTypeAlternative(t, &test, TypeDefinitionRef{Name: at}))
 	}
-	tt, err := NewTypeTable(xsderr.Loc{}, alts, NewTypeAlternative(nil, defaultType, nil))
+	tt, err := NewTypeTable(xsderr.Loc{}, alts, iTypeAlternative(t, nil, TypeDefinitionRef{Name: defaultType}))
 	if err != nil {
 		t.Fatalf("NewTypeTable: %v", err)
 	}

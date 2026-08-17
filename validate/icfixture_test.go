@@ -146,9 +146,9 @@ func icTabled(t *testing.T, parent string, name xsd.QName) xsd.ElementDeclaratio
 		t.Fatalf("NewLocalScope: %v", err)
 	}
 	test := xsd.NewXPathExpression("count(@k) > 0", nil, nil, nil)
-	alt := xsd.NewTypeAlternative(&test, icBuiltin("string"), nil)
+	alt := namedTypeAlternative(t, &test, icBuiltin("string"))
 	table, err := xsd.NewTypeTable(xsderr.Loc{}, []xsd.TypeAlternative{alt},
-		xsd.NewTypeAlternative(nil, icBuiltin("string"), nil))
+		namedTypeAlternative(t, nil, icBuiltin("string")))
 	if err != nil {
 		t.Fatalf("building the type table: %v", err)
 	}
@@ -388,7 +388,7 @@ func icUnfoldedSchema(t *testing.T, kidAid, topAid string, rootICs []xsd.Identit
 	if err != nil {
 		t.Fatalf("NewLocalScope: %v", err)
 	}
-	kid, err := xsd.NewElementDeclarationOwningType(xsderr.Loc{}, kidID, xsd.QName{Local: "kid"}, kidType,
+	kid, err := xsd.NewElementDeclarationOwningTypes(xsderr.Loc{}, kidID, xsd.QName{Local: "kid"}, xsd.InlineTypeDefinition{Definition: kidType},
 		nil, scope, nil, false, nil, nil, nil, false, nil, nil)
 	if err != nil {
 		t.Fatalf("building the kid element declaration: %v", err)

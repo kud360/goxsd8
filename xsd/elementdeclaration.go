@@ -1,6 +1,10 @@
 package xsd
 
-import "github.com/kud360/goxsd8/xsderr"
+import (
+	"strconv"
+
+	"github.com/kud360/goxsd8/xsderr"
+)
 
 // ruleEPropsCorrect is Element Declaration Properties Correct (Structures
 // §3.3.6.1, id="e-props-correct"): an element declaration's properties must
@@ -20,9 +24,9 @@ import "github.com/kud360/goxsd8/xsderr"
 //
 // Clause 7 (type-table alternatives validly substitutable) is a cross-component
 // finalize-phase constraint needing resolved type and element components; it is
-// NOT enforced here and is not enforced anywhere yet, which resolve.go's
-// resolveTypeTable marks as its own gap. Clauses 2, 4 and 5 are
-// likewise finalize-phase, and all three ARE enforced there rather than in this
+// NOT enforced here but in Phase D (typetablesubstitutable.go's
+// checkTypeTableSubstitutability). Clauses 2, 4 and 5 are likewise
+// finalize-phase, and all three ARE enforced there rather than in this
 // constructor, each needing more than the declaration in hand: clause 2 (Element
 // Default Valid, §3.3.6.2 cos-valid-default) needs the resolved {type
 // definition}'s {content type} and, for its clause 2.2, an ·emptiable· verdict
@@ -182,14 +186,20 @@ type ComplexTypeScopeParent struct{ Name QName }
 //     the REDEFINING COMPLEX TYPE's minted identity, and no element declaration
 //     is involved at all.
 //
-// What holds in both cases, and is the invariant to rely on, is the 1:1 pairing:
-// the container's {context} identity and this field hold the SAME ComponentID,
-// one mint per OWNERSHIP EDGE, one fact with one encoding (STYLE D3). Comparing
-// them with == is how NewElementDeclarationOwningType, NewComplexTypeOwningBase
-// and NewAnonymousComplexTypeOwningBase each check that the anonymous type points
-// back at its own owner. A chained <redefine> stacks two such edges — a
-// redefining type owns an original which owns another — and mints a token for
-// each, so the two containers stay distinguishable (#585).
+// What holds in every case, and is the invariant to rely on, is that this field
+// is the token of the OWNERSHIP EDGE reaching the container — one mint per edge,
+// so two containers are never confused for one. It COINCIDES with the
+// container's own {context} identity exactly where the owner reaches at most one
+// anonymous type through that context, which is the ordinary case and the one
+// NewElementDeclarationOwningTypes, NewComplexTypeOwningBase and
+// NewAnonymousComplexTypeOwningBase check with ==. It does NOT coincide for a
+// type owned by a Type Alternative (§3.12.2 declare-ta's inline arm): §3.4.2.1
+// dcl.ctd.common walks past the <alternative> and makes the {context} the
+// enclosing ELEMENT DECLARATION, shared with that element's own inline type and
+// with every other alternative's, so each such edge carries its own mint here
+// while all of them report one {context}. A chained <redefine> stacks two edges
+// the same way — a redefining type owns an original which owns another — and
+// mints a token for each (#585).
 //
 // Owner is a PRESENT identity, never the zero (unminted) ComponentID —
 // NewLocalScope rejects an unminted one. The field is read-only by convention;
@@ -387,10 +397,11 @@ func (s Scope) Parent() (ElementScopeParent, bool) {
 // slot exists to hold.
 //
 // Construct only through NewElementDeclaration, or through
-// NewElementDeclarationOwningType when the declaration owns the anonymous
-// complex type of an inline <complexType> child; both reject the states
-// e-props-correct (§3.3.6.1) clauses 1 and 3 forbid so they are unrepresentable
-// (STYLE T1). ElementDeclaration is immutable after construction.
+// NewElementDeclarationOwningTypes when the declaration owns the anonymous
+// complex type of an inline <complexType> child, its own or an <alternative>'s;
+// both reject the states e-props-correct (§3.3.6.1) clauses 1 and 3 forbid so
+// they are unrepresentable (STYLE T1). ElementDeclaration is immutable after
+// construction.
 type ElementDeclaration struct {
 	loc                           xsderr.Loc // source position; provenance, not a §3.3.1 property
 	name                          QName
@@ -437,11 +448,13 @@ type ElementDeclaration struct {
 // declaration is in before the §3.3.2.1 defaulting tiers are applied.
 //
 // An InlineTypeDefinition wrapping a ComplexType is rejected here too, on the
-// same footing: that shape is §3.3.2.1 dcl.elt.common clause 1's inline
-// <complexType> child, whose anonymous type carries a {context} naming THIS
-// declaration (§3.4.2.1 dcl.ctd.common), and this entry point takes no identity
-// to check that back-pointer against. Build it through
-// NewElementDeclarationOwningType, which does.
+// same footing, and in EVERY slot ownedTypeSlots enumerates — the {type
+// definition} itself and the {type table}'s alternatives alike. That shape is
+// §3.3.2.1 dcl.elt.common clause 1's inline <complexType> child or §3.12.2
+// declare-ta's, whose anonymous type carries a {context} naming THIS declaration
+// (§3.4.2.1 dcl.ctd.common), and this entry point takes no identity to check
+// that back-pointer against. Build it through NewElementDeclarationOwningTypes,
+// which does.
 //
 // The rest of clause 1's {scope} shape is not checked here because it is
 // unrepresentable: scope is a Scope, obtainable only from NewGlobalScope or
@@ -462,37 +475,38 @@ type ElementDeclaration struct {
 // A caller with no real parser position — a synthesized or programmatically
 // built declaration — passes the zero xsderr.Loc{}, which reads as "unknown".
 func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
-	if inline, ok := typeDefinition.(InlineTypeDefinition); ok {
-		if _, isComplex := inline.Definition.(ComplexType); isComplex {
+	for _, slot := range ownedTypeSlots(typeDefinition, typeTable) {
+		if _, isComplex := ownedComplexType(slot.ref); isComplex {
 			return ElementDeclaration{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"element declaration %s {type definition} is an InlineTypeDefinition wrapping a ComplexType, but a declaration that OWNS an anonymous complex type must be built through NewElementDeclarationOwningType, the only entry point that can check the type's {context} back-pointer (§3.4.2.1 dcl.ctd.common) against the declaration's own identity", name)
+				"element declaration %s %s is an InlineTypeDefinition wrapping a ComplexType, but a declaration that OWNS an anonymous complex type must be built through NewElementDeclarationOwningTypes, the only entry point that can check the type's {context} back-pointer (§3.4.2.1 dcl.ctd.common) against the declaration's own identity", name, slot.property)
 		}
 	}
 	return newElementDeclaration(loc, name, typeDefinition, typeTable, scope, valueConstraint, nillable, identityConstraints, substitutionGroupAffiliations, substitutionGroupExclusions, abstract, disallowedSubstitutions, annotations)
 }
 
-// NewElementDeclarationOwningType builds an ElementDeclaration whose {type
-// definition} is the ANONYMOUS Complex Type Definition of an inline
-// <complexType> child (§3.3.2.1 dcl.elt.common clause 1). It is
-// NewElementDeclaration's parameter list with the TypeDefinitionOrRef slot
-// replaced, in place, by the owned definition and preceded by the declaration's
-// own minted identity; every other parameter, check, copy, and rejection is
-// identical, because both entry points run one shared core. definition is
-// wrapped in an InlineTypeDefinition here, so a caller never spells that arm.
+// NewElementDeclarationOwningTypes builds an ElementDeclaration that OWNS one or
+// more ANONYMOUS Complex Type Definitions: its own inline <complexType> child
+// (§3.3.2.1 dcl.elt.common clause 1), the inline <complexType> child of any
+// <alternative> in its {type table} (§3.12.2 declare-ta's second arm), or both.
+// It is NewElementDeclaration's parameter list preceded by the declaration's own
+// minted identity; every other parameter, check, copy, and rejection is
+// identical, because both entry points run one shared core.
 //
 // It is the ONLY construction path for a declaration owning an anonymous complex
-// type — NewElementDeclaration rejects that shape outright — and it exists to
-// make ONE state unrepresentable that no shape check could reach: an inline
-// anonymous complex type whose {context} names some OTHER component. §3.4.2.1
-// dcl.ctd.common makes that {context} "the Element Declaration corresponding to
-// the nearest <element> information item among the ancestor element information
-// items", which for an inline child is this very declaration, so the identity
-// the caller minted for it and the identity the type's own {context} carries
-// must be the SAME ComponentID (compared with ==; see ComponentID for why
-// reflect.DeepEqual cannot see it). It adds three rejections, all charged to
-// xsderr.RuleComponentInvariant because a ComponentID is this package's
-// representation rather than a spec-visible name — the footing
-// checkComplexTypeContext already stands on:
+// type — NewElementDeclaration rejects that shape in every slot ownedTypeSlots
+// enumerates — and it exists to make ONE state unrepresentable that no shape
+// check could reach: an inline anonymous complex type whose {context} names some
+// OTHER component. §3.4.2.1 dcl.ctd.common makes that {context} "the Element
+// Declaration corresponding to the nearest <element> information item among the
+// ancestor element information items", which for an inline child of this
+// <element> OR of one of its <alternative> children is this very declaration
+// (§3.16.2.1 map.std.common case 2.4 says the same of a simple type, naming
+// <alternative> explicitly), so the identity the caller minted for it and the
+// identity each type's own {context} carries must be the SAME ComponentID
+// (compared with ==; see ComponentID for why reflect.DeepEqual cannot see it).
+// It adds three rejections, all charged to xsderr.RuleComponentInvariant because
+// a ComponentID is this package's representation rather than a spec-visible name
+// — the footing checkComplexTypeContext already stands on:
 //
 //   - an unminted (zero) id: there would be nothing to compare the {context}
 //     against, and the anonymous type's {scope}.{parent} references
@@ -500,8 +514,13 @@ func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefini
 //   - a {context} that is an ElementDeclarationContext naming a DIFFERENT
 //     identity;
 //   - a {context} that is a ComplexTypeDefinitionContext: §3.4.2.1 has exactly
-//     one case and it yields an Element Declaration, so a <complexType> that is
-//     a direct child of <element> is never contexted in a complex type.
+//     one case and it yields an Element Declaration, so a <complexType> reached
+//     from an <element> is never contexted in a complex type.
+//
+// One id serves EVERY owned type, because all of them share one {context}: the
+// owning declaration. What is NOT shared is the token their nested local
+// declarations report as {scope}.{parent}, which is one mint per ownership EDGE
+// — see AnonymousComplexTypeScopeParent.
 //
 // A definition that is NAMED (its {context} therefore ·absent· per §3.4.1's XOR)
 // is rejected by the shared core's checkTypeDefinitionOrRef, which admits only
@@ -511,27 +530,100 @@ func NewElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefini
 // construction-time comparison, and a field written but never read is dead state
 // (STYLE D3); the landing that adds an ID→component resolver adds the field
 // together with its reader (see ComponentID).
-func NewElementDeclarationOwningType(loc xsderr.Loc, id ComponentID, name QName, definition ComplexType, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
+func NewElementDeclarationOwningTypes(loc xsderr.Loc, id ComponentID, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {
 	if id == (ComponentID{}) {
 		return ElementDeclaration{}, xsderr.New(xsderr.RuleComponentInvariant, loc,
-			"element declaration %s owns an anonymous complex type but carries an unminted identity, which its {type definition}'s {context} back-pointer could not name; mint one with NewComponentID", name)
+			"element declaration %s owns an anonymous complex type but carries an unminted identity, which that type's {context} back-pointer could not name; mint one with NewComponentID", name)
 	}
-	if err := checkOwnedTypeContext(loc, id, name, definition); err != nil {
+	if err := checkOwnedTypeContexts(loc, id, name, typeDefinition, typeTable); err != nil {
 		return ElementDeclaration{}, err
 	}
-	return newElementDeclaration(loc, name, InlineTypeDefinition{Definition: definition}, typeTable, scope, valueConstraint, nillable, identityConstraints, substitutionGroupAffiliations, substitutionGroupExclusions, abstract, disallowedSubstitutions, annotations)
+	return newElementDeclaration(loc, name, typeDefinition, typeTable, scope, valueConstraint, nillable, identityConstraints, substitutionGroupAffiliations, substitutionGroupExclusions, abstract, disallowedSubstitutions, annotations)
+}
+
+// ownedTypeSlot is one TypeDefinitionOrRef slot an element declaration may own
+// an anonymous type through, paired with the §3 property label that names it in
+// a rejection message.
+type ownedTypeSlot struct {
+	property string
+	ref      TypeDefinitionOrRef
+}
+
+// ownedTypeSlots enumerates every slot of an element declaration that can hold
+// an anonymous type the declaration OWNS, in a fixed order: its own {type
+// definition}, then each {type table}.{alternatives} member's, then the {type
+// table}.{default type definition}'s. It has TWO readers that must agree
+// exactly — checkOwnedTypeContexts, which checks each owned type's {context}
+// back-pointer, and NewElementDeclaration's symmetry rejection, which refuses an
+// owned type reached through any of them — so it is one producer rather than two
+// hand-written enumerations that would drift apart (STYLE T4).
+//
+// The {default type definition} slot is enumerated UNCONDITIONALLY, and where
+// §3.3.2.1's case 2 synthesized it from the declaring element's own {type
+// definition} that means the same component is visited twice. Both readers are
+// idempotent over one component — a {context} check and a shape rejection each
+// answer the same way for the second visit as for the first — and the two
+// visits are indistinguishable anyway: a ComplexType is a value holding slices,
+// so two slots holding one component cannot be told from two slots holding
+// structurally equal copies. Skipping the slot is not an option either: a
+// TRAILING untested <alternative> feeds this slot and NO other, so its owned
+// type appears here alone.
+func ownedTypeSlots(typeDefinition TypeDefinitionOrRef, typeTable *TypeTable) []ownedTypeSlot {
+	slots := []ownedTypeSlot{{property: "{type definition}", ref: typeDefinition}}
+	if typeTable == nil {
+		return slots
+	}
+	for i, alt := range typeTable.alternatives {
+		slots = append(slots, ownedTypeSlot{
+			property: "{type table}.{alternatives}[" + strconv.Itoa(i) + "].{type definition}",
+			ref:      alt.TypeDefinition(),
+		})
+	}
+	return append(slots, ownedTypeSlot{
+		property: "{type table}.{default type definition}.{type definition}",
+		ref:      typeTable.defaultTypeDefinition.TypeDefinition(),
+	})
+}
+
+// ownedComplexType reports the ANONYMOUS complex type a slot owns, and false for
+// every other shape of slot — a by-name reference, a head-inherited reference, an
+// absent slot, and an owned SIMPLE type, whose own {context} (§3.16.1
+// std-context) this package does not model.
+func ownedComplexType(ref TypeDefinitionOrRef) (ComplexType, bool) {
+	inline, owns := ref.(InlineTypeDefinition)
+	if !owns {
+		return ComplexType{}, false
+	}
+	ct, isComplex := inline.Definition.(ComplexType)
+	return ct, isComplex
+}
+
+// checkOwnedTypeContexts charges checkOwnedTypeContext over every slot
+// ownedTypeSlots enumerates, reporting the first offender in that order.
+func checkOwnedTypeContexts(loc xsderr.Loc, id ComponentID, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable) error {
+	for _, slot := range ownedTypeSlots(typeDefinition, typeTable) {
+		if err := checkOwnedTypeContext(loc, id, name, slot.property, slot.ref); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // checkOwnedTypeContext rejects an owned anonymous complex type whose {context}
-// (§3.4.1 ctd-context) does not name the owning declaration's identity id. An
-// ABSENT {context} means definition is NAMED, which the shared core's
-// checkTypeDefinitionOrRef rejects with the message that fits it; this checker
-// passes it through rather than duplicating that verdict (STYLE T4).
+// (§3.4.1 ctd-context) does not name the owning declaration's identity id. A slot
+// owning no complex type passes, and so does an ABSENT {context}: that means the
+// definition is NAMED, which the shared core's checkTypeDefinitionOrRef rejects
+// with the message that fits it rather than this one (STYLE T4). property names
+// the offending slot for the message.
 //
 // The switch is exhaustive over ComplexTypeContext's sealed sum; the default arm
 // asserts the invariant and is unreachable for any value an outside package can
 // produce, since complexTypeContext is unexported.
-func checkOwnedTypeContext(loc xsderr.Loc, id ComponentID, name QName, definition ComplexType) error {
+func checkOwnedTypeContext(loc xsderr.Loc, id ComponentID, name QName, property string, ref TypeDefinitionOrRef) error {
+	definition, owns := ownedComplexType(ref)
+	if !owns {
+		return nil
+	}
 	context, present := definition.Context()
 	if !present {
 		return nil
@@ -540,24 +632,25 @@ func checkOwnedTypeContext(loc xsderr.Loc, id ComponentID, name QName, definitio
 	case ElementDeclarationContext:
 		if c.ID() != id {
 			return xsderr.New(xsderr.RuleComponentInvariant, loc,
-				"element declaration %s owns an anonymous complex type whose {context} names a DIFFERENT element declaration, but §3.4.2.1 dcl.ctd.common makes an inline <complexType>'s {context} the declaration it is a child of; mint one identity per inline construct and pass it to both", name)
+				"element declaration %s owns through its %s an anonymous complex type whose {context} names a DIFFERENT element declaration, but §3.4.2.1 dcl.ctd.common makes an inline <complexType>'s {context} the nearest enclosing declaration; mint one identity per owning declaration and pass it to every type it owns", name, property)
 		}
 		return nil
 	case ComplexTypeDefinitionContext:
 		return xsderr.New(xsderr.RuleComponentInvariant, loc,
-			"element declaration %s owns an anonymous complex type whose {context} is a ComplexTypeDefinitionContext, but §3.4.2.1 dcl.ctd.common has exactly one case and it yields an Element Declaration, so a <complexType> that is a direct child of <element> is never contexted in a complex type definition", name)
+			"element declaration %s owns through its %s an anonymous complex type whose {context} is a ComplexTypeDefinitionContext, but §3.4.2.1 dcl.ctd.common has exactly one case and it yields an Element Declaration, so a <complexType> reached from an <element> is never contexted in a complex type definition", name, property)
 	default:
 		panic("xsd: checkOwnedTypeContext: non-exhaustive ComplexTypeContext switch")
 	}
 }
 
 // newElementDeclaration is the shared core of NewElementDeclaration and
-// NewElementDeclarationOwningType: every check and copy that does not concern
+// NewElementDeclarationOwningTypes: every check and copy that does not concern
 // the ownership of an anonymous complex type lives here exactly once (STYLE T4).
 //
-// PRECONDITION, enforced by its TWO CALLERS and not by itself: a typeDefinition
-// holding an InlineTypeDefinition that wraps a ComplexType arrived through
-// NewElementDeclarationOwningType, so its {context} has been checked against the
+// PRECONDITION, enforced by its TWO CALLERS and not by itself: an
+// InlineTypeDefinition wrapping a ComplexType, in the typeDefinition slot or in
+// any {type table} slot ownedTypeSlots enumerates, arrived through
+// NewElementDeclarationOwningTypes, so its {context} has been checked against the
 // owner's identity. This layer cannot express that check — it takes no identity
 // — and does not attempt one. Any third caller added here must re-establish it.
 func newElementDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefinitionOrRef, typeTable *TypeTable, scope Scope, valueConstraint *ValueConstraint, nillable bool, identityConstraints []IdentityConstraint, substitutionGroupAffiliations []QName, substitutionGroupExclusions []DerivationMethod, abstract bool, disallowedSubstitutions []DerivationMethod, annotations []Annotation) (ElementDeclaration, error) {

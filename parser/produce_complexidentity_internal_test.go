@@ -9,8 +9,8 @@ import (
 
 // complexTypeIdentity is unexported and never escapes the producer, so these
 // tests are package-internal. What they pin is the partition itself: which
-// xsd.ElementScopeParent / xsd.AttributeScopeParent variant each of the four arms
-// emits, and which xsd constructor each drives — five constructors over four
+// xsd.ElementScopeParent / xsd.AttributeScopeParent variant each of the five arms
+// emits, and which xsd constructor each drives — six constructor calls over five
 // arms, because the redefine-original arm drives one of two depending on whether
 // the slot it is handed owns its base (#585). The zero-value tests the struct
 // shape needed are gone with the zero value: the sum has no arm that carries
@@ -20,6 +20,7 @@ import (
 func TestComplexTypeIdentityScopeParentArms(t *testing.T) {
 	name := xsd.QName{Space: "urn:po", Local: "T"}
 	owner := xsd.NewComponentID()
+	altOwned := newTypeAlternativeOwned(owner)
 	for _, tc := range []struct {
 		what string
 		id   complexTypeIdentity
@@ -32,6 +33,11 @@ func TestComplexTypeIdentityScopeParentArms(t *testing.T) {
 		// here and mis-scope every local element a redefinition declares.
 		{"redefining", redefiningComplexType{name: name, owner: owner}, xsd.ComplexTypeScopeParent{Name: name}},
 		{"redefine original", newRedefineOriginal(owner), xsd.AnonymousComplexTypeScopeParent{Owner: owner}},
+		// The Type-Alternative-owned arm reports its per-edge CONTAINER token and
+		// never the owner it shares with the element's own inline type; reporting
+		// the owner would leave several containers under one declaration
+		// indistinguishable.
+		{"type-alternative-owned", altOwned, xsd.AnonymousComplexTypeScopeParent{Owner: altOwned.container}},
 	} {
 		if got := scopeParentOf(tc.id); got != tc.want {
 			t.Errorf("%s identity scopeParentOf() = %#v, want %#v", tc.what, got, tc.want)
@@ -48,6 +54,7 @@ func TestComplexTypeIdentityScopeParentArms(t *testing.T) {
 func TestComplexTypeIdentityAttributeScopeParentArms(t *testing.T) {
 	name := xsd.QName{Space: "urn:po", Local: "T"}
 	owner := xsd.NewComponentID()
+	altOwned := newTypeAlternativeOwned(owner)
 	for _, tc := range []struct {
 		what string
 		id   complexTypeIdentity
@@ -57,6 +64,7 @@ func TestComplexTypeIdentityAttributeScopeParentArms(t *testing.T) {
 		{"element-owned", elementOwnedComplexType{owner: owner}, xsd.AttributeAnonymousComplexTypeScopeParent{Owner: owner}},
 		{"redefining", redefiningComplexType{name: name, owner: owner}, xsd.AttributeComplexTypeScopeParent{Name: name}},
 		{"redefine original", newRedefineOriginal(owner), xsd.AttributeAnonymousComplexTypeScopeParent{Owner: owner}},
+		{"type-alternative-owned", altOwned, xsd.AttributeAnonymousComplexTypeScopeParent{Owner: altOwned.container}},
 	} {
 		if got := attributeScopeParentOf(tc.id); got != tc.want {
 			t.Errorf("%s identity attributeScopeParentOf() = %#v, want %#v", tc.what, got, tc.want)
@@ -100,6 +108,62 @@ func TestComplexTypeIdentityNewComplexTypeArms(t *testing.T) {
 	// == and never reflect.DeepEqual, which is identity-blind on a ComponentID.
 	if context.ID() != owner {
 		t.Error("element-owned arm's {context} is not the owner identity it was built with")
+	}
+}
+
+// TestComplexTypeIdentityTypeAlternativeOwnedArm pins the arm §3.12.2
+// declare-ta's inline complex-type case reaches: the built component's {context}
+// is the OWNER — §3.4.2.1 dcl.ctd.common walks past the <alternative> to the
+// enclosing element declaration — and never the per-edge container token, which
+// only the two scope-parent readers see. Reading the wrong field here would give
+// the type a {context} its owning declaration's constructor then rejects.
+func TestComplexTypeIdentityTypeAlternativeOwnedArm(t *testing.T) {
+	p := &producer{}
+	owner := xsd.NewComponentID()
+	id := newTypeAlternativeOwned(owner)
+
+	ct, err := p.newComplexType(id, xsderr.Loc{}, xsd.TypeDefinitionRef{Name: anyTypeName}, nil,
+		xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("type-alternative-owned newComplexType: %v", err)
+	}
+	if ct.Name() != (xsd.QName{}) {
+		t.Errorf("the arm built {name} = %s, want the absent QName", ct.Name())
+	}
+	context, ok := ct.Context()
+	if !ok {
+		t.Fatal("the arm built no {context}, which §3.4.1 makes Required when {name} is absent")
+	}
+	if _, isED := context.(xsd.ElementDeclarationContext); !isED {
+		t.Fatalf("{context} = %T, want an ElementDeclarationContext (§3.4.2.1 dcl.ctd.common)", context)
+	}
+	// == and never reflect.DeepEqual, which is identity-blind on a ComponentID.
+	if context.ID() != owner {
+		t.Error("the arm's {context} is not the OWNER identity it was built with")
+	}
+	if context.ID() == id.container {
+		t.Error("the arm's {context} is the CONTAINER token, but that token identifies the ownership edge and is minted per <alternative>")
+	}
+}
+
+// TestNewTypeAlternativeOwnedMintsPerEdge pins that two <alternative> children of
+// ONE element get distinct container tokens while sharing the owner: the whole
+// point of the two-field arm.
+func TestNewTypeAlternativeOwnedMintsPerEdge(t *testing.T) {
+	owner := xsd.NewComponentID()
+	first, second := newTypeAlternativeOwned(owner), newTypeAlternativeOwned(owner)
+
+	if first.owner != owner || second.owner != owner {
+		t.Error("newTypeAlternativeOwned did not carry the owner through")
+	}
+	if first.container == (xsd.ComponentID{}) {
+		t.Error("newTypeAlternativeOwned left the container token unminted")
+	}
+	if first.container == second.container {
+		t.Error("two <alternative> edges under one element share a container token")
+	}
+	if first.container == owner {
+		t.Error("the container token is the owner, so the element's own inline type and this one would be indistinguishable as containers")
 	}
 }
 
