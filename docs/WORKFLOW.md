@@ -291,14 +291,23 @@ filed:
 
 - **Correct a stale or wrong premise in the body**, not only in a comment;
   the next reader starts from the body. The comment stays as provenance.
-- **Never write back a body obtained from `issue_read`** — that read path
-  strips angle-bracketed tokens, leaving an empty inline-code span where
-  an element name was (or an empty `()` where an autolink was), and
+- **Never write back a body *as* `issue_read` returned it** — that read
+  path strips angle-bracketed tokens, leaving an empty inline-code span
+  where an element name was (or an empty `()` where an autolink was), and
   HTML-entity-escapes the punctuation that survives (`'` as `&#39;`, `"`
   as `&#34;`, `>` as `&gt;`) even in a body holding no brackets at all.
-  Re-read the body with `WebFetch` on the issue URL before editing it, or
-  reconstruct only the section being changed and leave the rest untouched
-  (#764).
+  Repair that copy: undo the escaping, author the section you came to
+  change, leave every other section as it stands, and write that back.
+  The escaping is mechanically reversible; the stripping is not — an
+  empty span carries no residue, no length and no first letter, so
+  nothing in the body or the tree says which token it held. Where a
+  stripped token will not re-derive, the write is blocked and the
+  correction is not: comment on the thread and name the section the body
+  still gets wrong. **A body known to be wrong is never landed
+  silently.** `WebFetch` on the issue URL answers a prompt over the
+  rendered page through a small model, so it returns a summary of that
+  page rather than the stored body — read what an issue says with it,
+  never the body you intend to write back (#764).
 - **State whether a runtime-mechanism claim was reproduced** against the
   tree, or write it as a hypothesis. Memory of prior discussion is not
   reproduction.
