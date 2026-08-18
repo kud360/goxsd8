@@ -7,6 +7,7 @@ import (
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // ctaExpr builds an XPath Expression property record over expr, binding the
@@ -137,18 +138,22 @@ func TestCompileResolvesUnprefixedFunctionInDefaultFunctionNamespace(t *testing.
 
 // TestCompileDeclines pins the withhold direction over its whole membership:
 // text that is no Test production at all (which is what legal full XPath 2.0
-// looks like here), the three §3.12.6 constructs this engine recognizes but
-// does not evaluate, an unbound prefix, and a wildcard NameTest.
+// looks like here), an unbound prefix, and a wildcard NameTest. The cast
+// TARGETS that decline have their own test below, because they decline for a
+// reason the grammar cannot see.
 func TestCompileDeclines(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
 		{"", "an empty {expression} is no Test production"},
 		{"1 idiv string-length(@type) gt 0", "full XPath 2.0, outside the subset"},
 		{"self::message", "an axis step the grammar has no production for"},
-		{"@kind cast as xs:string", "ta-CastExpr's cast tail (#858)"},
-		{"@kind cast as xs:string = 'x'", "ta-CastExpr's cast tail inside a comparison"},
-		{"@n cast as xs:integer ?", "ta-CastExpr's optional occurrence indicator"},
-		{"xs:int(@length) > xs:int(@width)", "ta-ConstructorFunction (#858)"},
-		{"a:b('123')", "a QName '(' … ')' whose name is not fn:not is a constructor call"},
+		{"a:b('123')", "a constructor call naming a type the {type definitions} do not declare"},
+		{"(@type cast as xs:float)='float'", "[11]'s parenthesised arm is a BooleanExpr, which no Comparator may follow"},
+		{"double('3' cast as float > 2)", "a constructor argument is a SimpleValue, never a comparison"},
+		{"3 cast as 3", "a cast target is a QName, not a Literal"},
+		{"cast as decimal 3", "'cast' where a SimpleValue must open [15]"},
+		{"3 cast 'as' decimal", "the 'as' keyword is a name token, not a string literal"},
+		{"6 > cast as decimal", "a Comparator's right operand is a ValueExpr"},
+		{"3 cast as @a:kind > 1", "a cast target is a QName, not an AttrName"},
 		{"@p:kind = 'x'", "a prefix with no binding is err:XPST0081"},
 		{"p:not(@kind = 'x')", "an unbound prefix on the function name too"},
 		{"@* = 'x'", "a wildcard NameTest"},
@@ -165,6 +170,298 @@ func TestCompileDeclines(t *testing.T) {
 		bindings := []string{"a", "http://example.com/a", "xs", xsd.XMLSchemaNS}
 		if _, ok := CompileCTATest(ctaExprRecord(tc.expr, "", bindings...), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined (%s)", tc.expr, tc.why)
+		}
+	}
+}
+
+// TestCompileAdmitsCasts pins the three cast-shaped constructs of the required
+// subset, which are the whole of what this issue's landing added to the
+// admitted set: [15] ta-CastExpr's `cast as QName` tail, its `?` occurrence
+// indicator, and [18] ta-ConstructorFunction — the last being §3.12.6 clause
+// 3's reading of any QName '(' SimpleValue ')' whose name is not fn:not.
+func TestCompileAdmitsCasts(t *testing.T) {
+	for _, expr := range []string{
+		"@kind cast as xs:string",
+		"@kind cast as xs:string = 'x'",
+		"@n cast as xs:integer ?",
+		"@n cast as xs:integer? = 3",
+		"xs:int(@length) > xs:int(@width)",
+		"@length cast as xs:int > @width cast as xs:int",
+		"xs:int(@length) = @width cast as xs:int",
+		"xs:date('2026-01-01') = @d cast as xs:date",
+		"not(@n cast as xs:integer > 3)",
+	} {
+		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); !ok {
+			t.Errorf("CompileCTATest(%q): declined, want compiled", expr)
+		}
+	}
+}
+
+// ctaUserNS is the namespace of the two NON-builtin type definitions the cast
+// target classification has to tell apart from a builtin.
+const ctaUserNS = "http://example.com/a"
+
+// ctaFixtureTypes is the seeded builtins plus a user-defined ATOMIC simple type
+// and a COMPLEX type, both in ctaUserNS. Neither is a legal cast target, and
+// the two are illegal for different reasons the classification keeps apart:
+// a:Kind is valid XPath outside §3.12.6's required subset, a:Box is
+// err:XPST0051.
+func ctaFixtureTypes(t *testing.T) ctaTestTypes {
+	t.Helper()
+	types := make(ctaTestTypes, len(seededTypes)+2)
+	for name, td := range seededTypes {
+		types[name] = td
+	}
+	str, declared := seededTypes.Type(ctaBuiltin("string"))
+	if !declared {
+		t.Fatal("the seeded builtins hold no xs:string")
+	}
+	kind, err := xsd.NewSimpleType(xsderr.Loc{}, xsd.QName{Space: ctaUserNS, Local: "Kind"},
+		xsd.RestrictionDerivation{}, xsd.OwnedSimpleType{Definition: str.(*xsd.SimpleType)}, nil, nil)
+	if err != nil {
+		t.Fatalf("building the user-defined atomic type: %v", err)
+	}
+	types[kind.Name()] = kind
+	box, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: ctaUserNS, Local: "Box"},
+		xsd.QName{}, nil, xsd.DerivationRestriction, false, nil, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("building the complex type: %v", err)
+	}
+	types[box.Name()] = box
+	return types
+}
+
+// TestCompileClassifiesCastTargets pins the THREE-way split §3.12.6 clause 4
+// and xpath20.md §3.10.2 make of a cast target, over both spellings:
+//
+//   - (a) a builtin atomic datatype is the required subset's own case and
+//     compiles;
+//   - (b) another in-scope atomic type is valid XPath outside the required
+//     subset, which §3.12.6's Note licenses declining;
+//   - (c) an unresolvable, complex, non-atomic or excluded target is
+//     err:XPST0051/err:XPST0080, a STATIC error, which shares (b)'s decline
+//     because it shares its consequence at the caller.
+//
+// The two declines are one encoding on purpose; what this test pins is that
+// every member of both lands in it and that (a) does not.
+func TestCompileClassifiesCastTargets(t *testing.T) {
+	types := ctaFixtureTypes(t)
+	bindings := []string{"a", ctaUserNS, "xs", xsd.XMLSchemaNS}
+	for _, expr := range []string{
+		"@k cast as xs:string",
+		"@k cast as xs:integer",
+		"xs:int(@k)",
+		"@k cast as xs:date",
+	} {
+		if _, ok := CompileCTATest(ctaExprRecord(expr, "", bindings...), types); !ok {
+			t.Errorf("CompileCTATest(%q): declined, want compiled — (a) is a builtin atomic datatype", expr)
+		}
+	}
+	for _, tc := range []struct{ expr, why string }{
+		{"@k cast as a:Kind", "(b) a user-defined atomic type is outside the required subset"},
+		{"a:Kind(@k)", "(b) in the constructor spelling too"},
+		{"@k cast as a:Box", "(c) a complex type is no atomic type: err:XPST0051"},
+		{"@k cast as xs:nosuchtype", "(c) an unresolvable target: err:XPST0051"},
+		{"@k cast as xs:anySimpleType", "(c) an ·absent· {variety}: err:XPST0051"},
+		{"@k cast as xs:IDREFS", "(c) a list builtin is no atomic type: err:XPST0051"},
+		{"@k cast as xs:anyAtomicType", "(c) excluded by name: err:XPST0080"},
+		{"@k cast as xs:NOTATION", "(c) excluded by name: err:XPST0080"},
+		{"@k cast as xs:QName", "context-dependent, declined under its own marker"},
+		{"@k cast as Kind", "an unprefixed target is in the {default namespace}, which declares none"},
+	} {
+		if _, ok := CompileCTATest(ctaExprRecord(tc.expr, "", bindings...), types); ok {
+			t.Errorf("CompileCTATest(%q): compiled, want declined (%s)", tc.expr, tc.why)
+		}
+	}
+}
+
+// TestCompileResolvesCastTargetInDefaultNamespace pins xpath20.md §3.10.2's
+// one use of the {default namespace} in this grammar: "if the target type has
+// no namespace prefix, it is considered to be in the default element/type
+// namespace". The same unprefixed name declines against a record carrying no
+// {default namespace}, so the test would notice a compiler that ignored the
+// property.
+func TestCompileResolvesCastTargetInDefaultNamespace(t *testing.T) {
+	if _, ok := CompileCTATest(ctaExprRecord("@k cast as string", xsd.XMLSchemaNS), seededTypes); !ok {
+		t.Error("an unprefixed cast target did not resolve in the {default namespace}")
+	}
+	if _, ok := CompileCTATest(ctaExprRecord("@k cast as string", ""), seededTypes); ok {
+		t.Error("an unprefixed cast target resolved with no {default namespace} to take")
+	}
+}
+
+// TestEvaluateCastToBuiltin pins that a cast DECIDES: the operand is validated
+// against the target datatype and the comparison then runs in that type's
+// value space rather than over lexicals.
+func TestEvaluateCastToBuiltin(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{
+		uq("n"):      "4",
+		uq("frac"):   "3.5",
+		uq("length"): "10",
+		uq("width"):  "9",
+		uq("d"):      "2026-03-01",
+		uq("k"):      "book",
+	})
+	for _, tc := range []struct {
+		expr string
+		want bool
+		why  string
+	}{
+		{"@n cast as xs:integer > 3", true, "the Goal's own example"},
+		{"@n cast as xs:integer > 4", false, "a decided false"},
+		{"@n cast as xs:integer = 4", true, "and equality in the numeric space"},
+		{"xs:int(@length) > xs:int(@width)", true, "10 > 9 numerically, though \"10\" sorts before \"9\""},
+		{"@length cast as xs:int > @width cast as xs:int", true, "the same pair in the cast spelling"},
+		{"xs:int(@length) = @width cast as xs:int", false, "the two spellings mix in one comparison"},
+		{"@d cast as xs:date = xs:date('2026-03-01')", true, "a constructor over a StringLiteral"},
+		{"@d cast as xs:date > xs:date('2026-01-01')", true, "B.2 gives xs:date all six operators"},
+		{"@d cast as xs:date < xs:date('2026-01-01')", false, "and orders them the right way round"},
+		{"@k cast as xs:string = 'book'", true, "a cast to xs:string is the identity"},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateFailedCastIsFalseNotDecline pins §3.12.4 clause 2 for the cast
+// productions: a cast whose operand is not in the target type's ·lexical
+// space· raises err:FORG0001, which makes the {test} false — not a decline,
+// and not a node-local false that fn:not could invert.
+func TestEvaluateFailedCastIsFalseNotDecline(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{uq("frac"): "3.5", uq("k"): "book", uq("n"): "4"})
+	for _, tc := range []struct {
+		expr string
+		want bool
+		why  string
+	}{
+		{"@frac cast as xs:integer > 3", false, "3.5 is not in xs:integer's lexical space"},
+		{"not(@frac cast as xs:integer > 3)", false, "raised, so fn:not raises the same error"},
+		{"@k cast as xs:integer = 1", false, "nor is a word"},
+		{"xs:int(@k) = 1", false, "the constructor spelling raises identically"},
+		{"not(xs:int(@k) = 1)", false, "and propagates identically"},
+		{"@frac cast as xs:decimal > 3", true, "the discriminating row: a cast that SUCCEEDS still decides"},
+		{"not(@n cast as xs:integer > 3)", false, "and a decided true still inverts"},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateCastOfAbsentAttribute pins xpath20.md §3.10.2 rule 3, which the
+// `?` occurrence indicator splits in two: with `?` the cast of an absent
+// attribute IS the empty sequence, which forms no pair and is a DECIDED false;
+// without `?` it is err:XPTY0004, which is a RAISED false. fn:not is what
+// tells the two apart, and §3.10.4's T($arg) ≡ (($arg) cast as T?) is why the
+// constructor spelling always takes the first.
+func TestEvaluateCastOfAbsentAttribute(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{uq("other"): "x"})
+	for _, tc := range []struct {
+		expr string
+		want bool
+		why  string
+	}{
+		{"@n cast as xs:integer = 3", false, "err:XPTY0004: an empty operand with no `?`"},
+		{"not(@n cast as xs:integer = 3)", false, "which is RAISED, so fn:not raises it too"},
+		{"@n cast as xs:integer? = 3", false, "with `?` the cast is the empty sequence"},
+		{"not(@n cast as xs:integer? = 3)", true, "which forms no pair: a decided false, and it inverts"},
+		{"xs:integer(@n) = 3", false, "a constructor call over an absent attribute"},
+		{"not(xs:integer(@n) = 3)", true, "carries the `?` of §3.10.4's equivalence"},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateCastAgainstStringLiteral pins the grounding's worked case: a
+// cast operand compared against a plain StringLiteral has no xpath20.md B.2
+// row, because a literal is xs:string and shares no primitive with xs:float,
+// and §3.5.2's untypedAtomic casting rules never fire for it. That is
+// err:XPTY0004 and so a RAISED false, which is not the same answer as a
+// comparison that ran.
+func TestEvaluateCastAgainstStringLiteral(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{uq("f"): "1.5", uq("type"): "float"})
+	for _, tc := range []struct {
+		expr string
+		want bool
+		why  string
+	}{
+		{"@f cast as xs:float = 'float'", false, "err:XPTY0004, though the cast itself succeeds"},
+		{"not(@f cast as xs:float = 'float')", false, "raised, so fn:not raises it"},
+		{"@type cast as xs:string = 'float'", true, "the discriminating row: xs:string against xs:string compares"},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateCastNormalizesWhiteSpace pins xpath-functions.md §17.1.1's
+// "whitespace normalization is applied as indicated by the whiteSpace facet
+// for the datatype": a cast is the whole datatype validation, so casting to
+// xs:token collapses the lexical before the comparison sees it, and the same
+// operand uncast does not.
+func TestEvaluateCastNormalizesWhiteSpace(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{uq("k"): "a  b", uq("pad"): "  padded  "})
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		{"@k cast as xs:token = 'a b'", true},
+		{"@k = 'a b'", false},
+		{"@pad cast as xs:token = 'padded'", true},
+		{"@pad = 'padded'", false},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}
+
+// TestEvaluateEffectiveBooleanValueOfACast pins fn:boolean's rules over a bare
+// cast in a boolean position (xpath20.md §2.4.3): rule 1 for the empty
+// sequence, rule 3 for xs:boolean, rule 4 for the string family, rule 5 for
+// the numeric one — NaN included, which is false and not an error — and rule
+// 6's err:FORG0006 for every other type.
+func TestEvaluateEffectiveBooleanValueOfACast(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{
+		uq("zero"):  "0",
+		uq("five"):  "5",
+		uq("nan"):   "NaN",
+		uq("empty"): "",
+		uq("word"):  "book",
+		uq("yes"):   "true",
+		uq("no"):    "0",
+		uq("d"):     "2026-03-01",
+	})
+	for _, tc := range []struct {
+		expr string
+		want bool
+		why  string
+	}{
+		{"@zero cast as xs:integer", false, "rule 5: numerically zero"},
+		{"@five cast as xs:integer", true, "rule 5: anything else"},
+		{"@nan cast as xs:double", false, "rule 5 names NaN outright"},
+		{"not(@nan cast as xs:double)", true, "and it is a DECIDED false, so it inverts"},
+		{"@empty cast as xs:string", false, "rule 4: zero length"},
+		{"@word cast as xs:string", true, "rule 4: anything else"},
+		{"@yes cast as xs:boolean", true, "rule 3: the value unchanged"},
+		{"@no cast as xs:boolean", false, "including the lexical 0"},
+		{"@d cast as xs:date", false, "rule 6: err:FORG0006 on every other type"},
+		{"not(@d cast as xs:date)", false, "which is RAISED, so fn:not raises it"},
+		{"xs:integer(@missing)", false, "rule 1: the empty sequence"},
+		{"not(xs:integer(@missing))", true, "a decided false, and it inverts"},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
 		}
 	}
 }
@@ -512,6 +809,17 @@ func TestNumericLiteralType(t *testing.T) {
 	}
 }
 
+// castNode is a compiled `@a cast as xs:<local>` node, which is the only way a
+// TYPED operand other than a Literal reaches a comparison.
+func castNode(t *testing.T, known ctaTypes, local string) ctaValue {
+	t.Helper()
+	target, admitted := known.castTarget(ctaBuiltin(local))
+	if !admitted {
+		t.Fatalf("castTarget(xs:%s): declined, want admitted", local)
+	}
+	return ctaCast{operand: ctaAttr{name: uq("a")}, target: target}
+}
+
 // compileTypes is the compile-time type knowledge over the seeded builtins.
 func compileTypes(t *testing.T) ctaTypes {
 	t.Helper()
@@ -548,6 +856,17 @@ func TestComparisonType(t *testing.T) {
 		{"decimal vs double literal promotes", dec, dbl, "double", true},
 		{"two string literals stay xs:string", str, str, "string", true},
 		{"string vs numeric literal has no B.2 row", str, dec, "", false},
+		{"a cast vs a literal of its own primitive", castNode(t, known, "int"), dec, "decimal", true},
+		{"an attribute vs a numeric cast is clause 2.1", attr, castNode(t, known, "int"), "double", true},
+		{"an attribute vs a date cast is clause 2.4", attr, castNode(t, known, "date"), "date", true},
+		{"an attribute vs a dayTimeDuration cast is clause 2.2", attr, castNode(t, known, "dayTimeDuration"), "dayTimeDuration", true},
+		{"an attribute vs a yearMonthDuration cast is clause 2.3", attr, castNode(t, known, "yearMonthDuration"), "yearMonthDuration", true},
+		{"two date casts share their primitive", castNode(t, known, "date"), castNode(t, known, "date"), "date", true},
+		{"a date cast vs a string literal shares nothing", castNode(t, known, "date"), str, "", false},
+		{"xs:boolean pairs are admitted for every comparator", castNode(t, known, "boolean"), castNode(t, known, "boolean"), "boolean", true},
+		{"a token cast vs a string literal is xs:string", castNode(t, known, "token"), str, "string", true},
+		{"an anyURI cast vs a string literal is B.1's URI promotion", castNode(t, known, "anyURI"), str, "string", true},
+		{"a float cast vs a decimal literal promotes to the wider", castNode(t, known, "float"), dec, "float", true},
 	} {
 		got, admitted := known.comparison(tc.left, tc.right)
 		if admitted != tc.admitted {

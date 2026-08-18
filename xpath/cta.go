@@ -46,7 +46,9 @@ import (
 // (key-cta-ta-select clause 1's Note), so an UNCAST attribute operand
 // atomizes to xs:untypedAtomic and xpath20.md §3.5.2's untypedAtomic casting
 // rules are the normal path of every comparison here rather than an edge
-// case.
+// case. The Note also names the remedy the grammar gives a test that needs
+// type information — "explicit casts will sometimes be necessary" — which is
+// [15]'s cast tail and [18]'s constructor function, both evaluated here.
 //
 // EVERY CAST IS A DATATYPE VALIDATION. xpath-functions.md §17.1.1 fixes that
 // outright for an xs:string or xs:untypedAtomic operand: "Whitespace
@@ -62,12 +64,13 @@ import (
 // E.[[attributes]] member whose ·expanded name· is name, and whether E carries
 // such an attribute at all.
 //
-// An ABSENT attribute — present false — atomizes to the empty sequence, and
+// An ABSENT attribute — present false — atomizes to the empty sequence.
 // xpath20.md §3.5.2 makes a general comparison true only when "there is a pair
 // of atomic values, one in the first operand sequence and the other in the
-// second". No pair can be formed against an empty sequence, so every
-// comparison naming an attribute E does not carry is false. That is neither an
-// error nor a decline, and an implementation must not report it as one.
+// second", so a comparison naming an attribute E does not carry is false;
+// §3.10.2 rule 3 makes the same absence a type error (err:XPTY0004) under a
+// `cast as T` written without the `?` occurrence indicator. That is neither a
+// decline nor an error to the caller in either case.
 //
 // The lexical is the attribute's [[normalized value]]: XML 1.0 §3.3.3
 // attribute-value normalization applied, whiteSpace-facet normalization NOT —
@@ -84,11 +87,12 @@ type CTATest struct{ root ctaExpr }
 // [xsd.XPathExpression] property record) into an evaluable [CTATest],
 // reporting ok false for an {expression} this engine cannot evaluate.
 //
-// types resolves every QName the expression names a datatype with — the
-// builtin types a Literal carries and §3.5.2's casting rules answer with — and
-// is read here and stored nowhere: the compiled tree holds the resolved
-// *[xsd.SimpleType] components themselves, which is why [CTATest.Evaluate]
-// takes a resolver again rather than reading one off the tree.
+// types resolves every QName the expression names a datatype with — [15]
+// ta-CastExpr's target, [18] ta-ConstructorFunction's function name, and the
+// builtin types §3.5.2's casting rules answer with — and is read here and
+// stored nowhere: the compiled tree holds the resolved *[xsd.SimpleType]
+// components themselves, which is why [CTATest.Evaluate] takes a resolver
+// again rather than reading one off the tree.
 //
 // ok false is the WITHHOLD direction and covers every such {expression} under
 // one encoding, because they all have one consequence at the caller:
@@ -104,18 +108,34 @@ type CTATest struct{ root ctaExpr }
 //     (err:XPST0081), which is a STATIC error and so not clause 2's false;
 //   - a construct inside the required subset that this engine does not yet
 //     evaluate, each carrying its own marker at the production in
-//     ctaparser.go that recognizes it.
+//     ctaparser.go that recognizes it;
+//   - a cast target this engine does not cast to, which is TWO conditions
+//     sharing one encoding deliberately. A target naming an in-scope atomic
+//     type outside the XSD namespace is valid XPath outside §3.12.6's
+//     required subset, which that section's own Note licenses a processor to
+//     decline ("Conforming processors may but are not required to support
+//     XPath expressions not belonging to the required subset of XPath"); a
+//     target that resolves to nothing, to a complex type, to a non-atomic
+//     type or to xs:anyAtomicType/xs:NOTATION is err:XPST0051/err:XPST0080, a
+//     STATIC error and so an xpath-valid clause 2 failure. The encoding
+//     tracks the CONSEQUENCE, and both consequences are the one withhold
+//     validate/cta.go's conditionallySelected argues: the element's
+//     ·governing type definition· is not determined, and no type is assessed
+//     against in its place.
 //
 // It never returns an error: a decline is not a verdict about the schema.
 //
 // The static context is xpath-valid clause 2.2's: XPath 1.0 compatibility mode
 // false (2.2.1), statically known namespaces from expr.NamespaceBindings()
-// (2.2.2) and the default function namespace http://www.w3.org/2005/xpath-functions
-// (2.2.4). expr.DefaultNamespace() — the default element/type namespace
-// (2.2.3) — is deliberately NOT consulted: [17] ta-AttrName makes every
-// NameTest in this grammar an attribute-axis one, whose principal node kind is
-// never element, so an unprefixed NameTest here is always in no namespace
-// (xpath20.md §3.2.1.2, PRINCIPLES 15).
+// (2.2.2), the default element/type namespace from expr.DefaultNamespace()
+// (2.2.3) and the default function namespace
+// http://www.w3.org/2005/xpath-functions (2.2.4). The default element/type
+// namespace is consulted for an unprefixed cast TARGET and for nothing else
+// (xpath20.md §3.10.2: "If the target type has no namespace prefix, it is
+// considered to be in the default element/type namespace"): [17] ta-AttrName
+// makes every NameTest in this grammar an attribute-axis one, whose principal
+// node kind is never element, so an unprefixed NameTest is always in no
+// namespace (xpath20.md §3.2.1.2, PRINCIPLES 15).
 func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, bool) {
 	toks, ok := ctaTokenize(expr.Expression())
 	if !ok {
@@ -129,6 +149,7 @@ func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, 
 	for _, b := range expr.NamespaceBindings() {
 		names.prefixes[b.Prefix()] = b.Namespace()
 	}
+	names.defaultNamespace, _ = expr.DefaultNamespace()
 	p := ctaParser{toks: toks, names: names, types: known}
 	root, ok := p.test()
 	if !ok {
@@ -142,9 +163,10 @@ func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, 
 // key-cta-ta-select (§3.12.4) asks of a {test}: "A.{test} evaluates to true".
 //
 // It always decides. Every way an evaluation can go wrong inside the compiled
-// subset — a cast that fails (err:FORG0001), operand types the operator does
-// not accept (err:XPTY0004) — is a dynamic or type error, which clause 2 makes
-// a false rather than an error or a decline. The declines all happened at
+// subset — a cast that fails (err:FORG0001), an absent operand under a cast
+// written without `?` or operand types the operator does not accept
+// (err:XPTY0004) — is a dynamic or type error, which clause 2 makes a false
+// rather than an error or a decline. The declines all happened at
 // [CompileCTATest].
 //
 // Clause 2's subject is "the {test}", not the sub-expression that raised, so
@@ -224,9 +246,8 @@ func (ctaEffectiveBoolean) ctaExpr() {}
 func (ctaTypeError) ctaExpr()        {}
 
 // ctaValue is the sealed sum of the ITEM-valued nodes: the two arms of [16]
-// ta-SimpleValue that survive compilation. [15] ta-CastExpr's cast tail and
-// [18] ta-ConstructorFunction have no arm here because [CompileCTATest]
-// declines them (see the GAP markers in ctaparser.go).
+// ta-SimpleValue, and the cast that [15] ta-CastExpr's tail and [18]
+// ta-ConstructorFunction both build over one of them.
 type ctaValue interface{ ctaValue() }
 
 // ctaAttr is [17] ta-AttrName, with its NameTest ALREADY resolved to an
@@ -247,8 +268,32 @@ type ctaLiteral struct {
 	st   *xsd.SimpleType
 }
 
+// ctaCast is [15] ta-CastExpr's `cast as QName '?'?` tail and, equivalently,
+// [18] ta-ConstructorFunction: xpath20.md §3.10.4 DEFINES the constructor
+// function call T($arg) as (($arg) cast as T?), so one node serves both and a
+// second implementation would be STYLE T4 duplication.
+//
+// target is a builtin datatype, which §3.12.6 clause 4 fixes for the cast
+// spelling ("Any explicit casts ... are casts to built-in datatypes") and
+// clause 3 for the constructor spelling ("Any strings matching the
+// ConstructorFunction production are function calls to constructor functions
+// for the built-in datatypes").
+//
+// allowsEmpty is the `?` occurrence indicator, and it is load-bearing rather
+// than cosmetic: xpath20.md §3.10.2 rule 3 makes an empty operand the result
+// of the cast when `?` is present and err:XPTY0004 when it is not. §3.10.4's
+// equivalence carries the `?` — "This example is equivalent to ("2000-01-01"
+// cast as xs:date?)" — so the constructor spelling always allows it, whatever
+// [18]'s own production says.
+type ctaCast struct {
+	operand     ctaValue
+	target      *xsd.SimpleType
+	allowsEmpty bool
+}
+
 func (ctaAttr) ctaValue()    {}
 func (ctaLiteral) ctaValue() {}
+func (ctaCast) ctaValue()    {}
 
 // ctaStatic is one operand's static type, which is what xpath20.md §3.5.2's
 // casting rules dispatch on. It is a sealed sum of the two states this grammar
@@ -277,6 +322,8 @@ func ctaStaticOf(v ctaValue) ctaStatic {
 	switch n := v.(type) {
 	case ctaLiteral:
 		return ctaTyped{st: n.st}
+	case ctaCast:
+		return ctaTyped{st: n.target}
 	default:
 		return ctaUntypedAtomic{}
 	}
@@ -448,6 +495,8 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 		return ctaAnswerOf(present)
 	case ctaLiteral:
 		return ctaBoolean(e.operand, n.st, env)
+	case ctaCast:
+		return ctaBoolean(e.operand, n.target, env)
 	default:
 		return ctaFalse
 	}
@@ -537,24 +586,23 @@ func ctaEqualsLexical(eq value.Eq, p *xsd.SimpleType, lexical string, env ctaEnv
 }
 
 // ctaItem is what one [14] ta-ValueExpr contributes to the operator above it,
-// and it has THREE states rather than a value and a presence flag: an operand
-// can be absent WITHOUT raising (the empty sequence, which forms no pair) and
-// can raise WITHOUT being absent (§3.5.2 clause 2's "if a cast operation
-// called for by these rules is not successful, a dynamic error is raised
-// [err:FORG0001]"), and those two are the opposite of each other under fn:not.
-// It is a sealed sum (STYLE T1/T2) so no fourth state and no illegal pairing of
-// the three is representable.
+// and it has THREE states rather than a value and a presence flag: xpath20.md
+// §3.10.2 rule 3 splits an absent operand into the empty SEQUENCE (with `?`)
+// and a raised err:XPTY0004 (without it), and those two are the opposite of
+// each other under fn:not. It is a sealed sum (STYLE T1/T2) so no fourth state
+// and no illegal pairing of the three is representable.
 type ctaItem interface{ ctaItem() }
 
-// ctaAbsent is the empty sequence, which in this grammar is an attribute the
-// element does not carry.
+// ctaAbsent is the empty sequence: an attribute the element does not carry, or
+// a cast of one written with the `?` occurrence indicator.
 type ctaAbsent struct{}
 
 // ctaRaised is a dynamic or type error raised while producing the item —
-// err:FORG0001 from a lexical or facet mismatch, err:XPTY0004 from a cast this
-// processor does not support. Which of the two it was is not carried:
-// key-cta-ta-select clause 2 (§3.12.4) gives both the same consequence, and the
-// {test} is where that consequence is applied.
+// err:FORG0001 from a lexical or facet mismatch, err:XPTY0004 from an absent
+// operand under a cast written without `?` or from a cast this processor does
+// not support. Which of the two it was is not carried: key-cta-ta-select
+// clause 2 (§3.12.4) gives both the same consequence, and the {test} is where
+// that consequence is applied.
 type ctaRaised struct{}
 
 // ctaAtom is one atomic value, already in the type the enclosing operator
@@ -576,13 +624,18 @@ func ctaRaisedItem(i ctaItem) bool {
 // converted into type c — the type the enclosing operator compares or reads it
 // in.
 //
-// The arms are the ways an item acquires a type:
+// The three arms are the three ways an item acquires a type:
 //
 //   - an ATTRIBUTE is xs:untypedAtomic, which §3.5.2's casting rules cast
 //     STRAIGHT to c (clause 1's xs:string, or clause 2's type chosen from the
 //     other operand). No intermediate type exists to cast through.
 //   - a LITERAL carries its own type and is converted to c, which is a no-op
 //     wherever the two coincide.
+//   - a CAST evaluates its operand IN THE TARGET TYPE first, because that cast
+//     is the expression the author wrote and its failure is the author's
+//     err:FORG0001, and only then converts the result to c. Evaluating it
+//     straight into c instead would let `@n cast as xs:integer` accept "3.5"
+//     whenever the comparison happened to run in xs:double.
 //
 // The default arm is unreachable: every branch of the ctaValue sum is named.
 func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
@@ -595,8 +648,30 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 		return ctaValidate(lexical, c, env)
 	case ctaLiteral:
 		return ctaConvert(n.text, n.st, c, env)
+	case ctaCast:
+		return ctaCastItem(n, c, env)
 	default:
 		return ctaAbsent{}
+	}
+}
+
+// ctaCastItem evaluates one cast and converts its result into c.
+//
+// The empty-sequence rules are xpath20.md §3.10.2's rule 3, both halves: with
+// the `?` occurrence indicator the cast of an empty operand IS the empty
+// sequence, and without it the cast raises err:XPTY0004. That difference is
+// the whole reason the `?` is carried on the node.
+func ctaCastItem(n ctaCast, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	switch inner := ctaItemOf(n.operand, n.target, env).(type) {
+	case ctaAbsent:
+		if n.allowsEmpty {
+			return ctaAbsent{}
+		}
+		return ctaRaised{}
+	case ctaAtom:
+		return ctaPromote(inner, n.target, c, env)
+	default:
+		return ctaRaised{}
 	}
 }
 

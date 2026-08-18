@@ -418,8 +418,7 @@ Full XPath 2.0 is the destination; the engine grows outward from the
 XSD-required subset:
 
 1. the CTA restricted subset (the `test` attribute of `xs:alternative`) —
-   shipped, less `ta-CastExpr`'s `cast as` tail and
-   `ta-ConstructorFunction`, which compile-time-decline (#858),
+   shipped, less a wildcard NameTest, which compile-time-declines (#859),
 2. assertion essentials — axes, predicates, quantified expressions, typed
    comparisons, the F&O function core,
 3. the full grammar and function library, tracked by its own conformance

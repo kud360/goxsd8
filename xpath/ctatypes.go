@@ -122,6 +122,66 @@ func (t ctaTypes) ancestor(st *xsd.SimpleType, name xsd.QName) (*xsd.SimpleType,
 	return nil, nil
 }
 
+// castTarget is the datatype [15] ta-CastExpr's tail and [18]
+// ta-ConstructorFunction cast to, or false where this engine declines the
+// whole expression rather than casting to it.
+//
+// The three conditions §3.12.6 and xpath20.md §3.10.2 separate are separated
+// here, and two of them share the false because they share their consequence
+// at the caller ([CompileCTATest]):
+//
+//   - a BUILTIN atomic datatype is the required subset's own case, which
+//     §3.12.6 clause 4 fixes for the cast spelling and clause 3 for the
+//     constructor spelling, and it is admitted.
+//   - any OTHER in-scope atomic type — a user-defined one — is valid XPath
+//     that does not belong to the required subset, and §3.12.6's Note licenses
+//     declining exactly that: "Conforming processors may but are not required
+//     to support XPath expressions not belonging to the required subset of
+//     XPath."
+//   - a name resolving to nothing, to a complex type, to a non-atomic type
+//     (xs:anySimpleType, and the list builtins xs:IDREFS, xs:NMTOKENS,
+//     xs:ENTITIES), or to xs:anyAtomicType or xs:NOTATION is a STATIC error:
+//     err:XPST0051 for "the target type must be an atomic type that is in the
+//     in-scope schema types", and err:XPST0080 for the two named exclusions.
+//
+// GAP(xpath): a cast target that is XPST0051/XPST0080 is folded into the
+// compile-time withhold; xpath-valid cl. 2 is charged by its owner (#886).
+//
+// GAP(xpath): a target whose {primitive type definition} is xs:QName is
+// declined too, though §3.10.2 excludes only xs:NOTATION and xs:anyAtomicType
+// by name. Casting to xs:QName is context-dependent — the lexical's prefix
+// resolves against the static context's namespaces (xpath-functions.md §5.3),
+// which is the [value.Context] this engine has no value for (PRINCIPLES 19) —
+// and F&O's casting table supports no dynamically-supplied operand for it at
+// all, so only the string-LITERAL spelling is being withheld here. It takes
+// [CompileCTATest]'s own withhold direction, argued there, rather than
+// deciding. (TODO(orchestrator): issue number)
+func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
+	st, declared := t.simple(name)
+	if !declared {
+		return nil, false
+	}
+	if name.Space != xsd.XMLSchemaNS {
+		return nil, false
+	}
+	if name == ctaBuiltin("anyAtomicType") || name == ctaBuiltin("NOTATION") {
+		return nil, false
+	}
+	// §3.10.2's "the target type must be an atomic type" is decided on the
+	// {primitive type definition} and not on the {variety}, because the
+	// property is ·absent· for EXACTLY the targets that rule excludes: the
+	// list and union varieties, xs:anySimpleType's ·absent· {variety}, and
+	// xs:anyAtomicType, which the line above already excluded by name.
+	p, resolved := t.primitive(st)
+	if !resolved {
+		return nil, false
+	}
+	if p.Name() == ctaBuiltin("QName") {
+		return nil, false
+	}
+	return st, true
+}
+
 // comparison settles the type a general comparison of l against r converts
 // BOTH its operands into, per xpath20.md §3.5.2 clause 2's
 // magnitude-relationship rules and B.1's type promotions. ok is false where no
