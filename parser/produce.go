@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -243,10 +244,20 @@ type symbols struct {
 	// local <element>.
 	identityConstraints map[xsd.QName]identityConstraintSource
 
+	// builtins is the FIXED set of Built-in Simple Type Definitions (§3.16.7),
+	// exactly what [builtin.Seed] yields, keyed by ·expanded name·. newSymbols
+	// fills it once and nothing writes it again, so it answers the same for a
+	// given backend whatever any schema document declares — which is what
+	// ctaStaticTypes needs, and what built cannot supply because a schema
+	// TARGETING the XSD namespace writes its own top-level types into that memo.
+	builtins map[xsd.QName]*xsd.SimpleType
+
 	// built is the build-once MEMO for simple-type construction: an ABSENT key is
-	// unbuilt, a PRESENT one is done, and there is no third state. The
-	// pre-seeded builtins start out done, which is also what gives a base=
-	// naming a builtin the canonical component by pointer identity.
+	// unbuilt, a PRESENT one is done, and there is no third state. It starts as a
+	// copy of builtins, so a builtin starts out done, which is also what gives a
+	// base= naming one the canonical component by pointer identity. The two maps
+	// diverge from there and neither is derivable from the other: this one grows
+	// with every named simple type the assembly builds.
 	//
 	// It is deliberately NOT a cycle guard, unlike its complex-type sibling
 	// builtComplex: a simple type's base= is deferred to a name at mapping time
@@ -374,14 +385,14 @@ type identityConstraintSource struct {
 // finalize. It is added to {type definitions} exactly like a produced complex
 // type, so a type= reference to it resolves.
 func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, error) {
-	builtins, err := builtin.Seed(backend)
+	seeded, err := builtin.Seed(backend)
 	if err != nil {
 		return nil, err
 	}
-	built := make(map[xsd.QName]*xsd.SimpleType, len(builtins))
-	for _, b := range builtins {
+	builtins := make(map[xsd.QName]*xsd.SimpleType, len(seeded))
+	for _, b := range seeded {
 		builder.AddType(b)
-		built[b.Name()] = b
+		builtins[b.Name()] = b
 	}
 	anyType, err := seedAnyType()
 	if err != nil {
@@ -395,7 +406,8 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 		modelGroups:         make(map[xsd.QName]typeSource),
 		elements:            make(map[xsd.QName]typeSource),
 		identityConstraints: make(map[xsd.QName]identityConstraintSource),
-		built:               built,
+		builtins:            builtins,
+		built:               maps.Clone(builtins),
 		builtGroups:         make(map[xsd.QName]*xsd.ModelGroupDefinition),
 		builtIC:             make(map[xsd.QName]xsd.IdentityConstraint),
 		// xs:anyType is seeded DONE so a derivation naming it resolves to the very

@@ -466,8 +466,12 @@ type TypeResolver interface {
 	Type(name QName) (TypeDefinition, bool)
 }
 
-// *Schema is the sole implementation of each Query capability view; these
-// assertions keep that promise checked at compile time.
+// *Schema implements every Query capability view; these assertions keep that
+// promise checked at compile time. It is not the only TypeResolver in the
+// module: the parser answers one over the built-in datatypes ALONE, at
+// construction time, for the ·in-scope schema definitions· §3.13.6.2 xpath-valid
+// clause 2.2.5 fixes for a Type Alternative {test} — no finalized Schema exists
+// at that point, and clause 2.2.5 would not put its types in scope anyway.
 var (
 	_ ElementResolver   = (*Schema)(nil)
 	_ AttributeResolver = (*Schema)(nil)

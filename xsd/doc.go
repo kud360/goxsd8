@@ -107,7 +107,9 @@
 //
 // The views are ElementResolver, AttributeResolver, and TypeResolver;
 // *Schema satisfies all three, and SchemaBuilder.Finalize (or its sibling
-// SchemaBuilder.FinalizeWith) is the only way to obtain one.
+// SchemaBuilder.FinalizeWith) is the only way to obtain a *Schema. A view
+// itself may have other implementations: parser answers a TypeResolver
+// over the built-in datatypes alone, before any *Schema exists.
 //
 // Alongside them *Schema enumerates each of the eight §3.17.1 properties
 // in document order — Types, Elements, Attributes, AttributeGroups,

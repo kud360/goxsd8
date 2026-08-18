@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -31,10 +32,11 @@ const ctaFunctionNS = "http://www.w3.org/2005/xpath-functions"
 // function calls to fn:not".
 var ctaNotFunction = xsd.QName{Space: ctaFunctionNS, Local: "not"}
 
-// ctaNames resolves the QNames of one XPath Expression property record against
-// its {namespace bindings} and its {default namespace}. The map is internal
-// and never iterated into output (STYLE D2) — it is read by prefix and nothing
-// else.
+// ctaNames holds the {namespace bindings} and the {default namespace} of one
+// XPath Expression property record, the bindings indexed by prefix. The map is
+// internal and never iterated into output (STYLE D2) — it is read by prefix and
+// nothing else, and the diagnostic an unbound prefix produces names the prefix
+// the parse walk reached, never one this map yielded.
 //
 // The record's {default namespace} is the default ELEMENT/TYPE namespace, so
 // it answers for exactly one production here: [15] ta-CastExpr's target QName,
@@ -48,54 +50,90 @@ type ctaNames struct {
 	defaultNamespace string
 }
 
-// attribute resolves a NameTest of [17] ta-AttrName to an ·expanded name·. An
-// unprefixed one is in NO namespace: the attribute axis's principal node kind
-// is attribute, never element, so xpath20.md §3.2.1.2's "otherwise, it has no
-// namespace URI" applies and the {default namespace} is not consulted
-// (PRINCIPLES 15). An unbound prefix is err:XPST0081 and declines the whole
-// expression.
-func (n ctaNames) attribute(text string) (xsd.QName, bool) {
+// ctaUnresolvedName is the ·expanded name· an UNBOUND prefix resolves to, so
+// that the parse continues far enough to decide whether the rest of the
+// expression is a complete [8] ta-Test — which is the whole of what tells a
+// static error apart from an unsupported construct.
+//
+// It never escapes into an evaluable tree: recording the defect and building
+// this name are one step, compileCTATest reports that defect, and
+// [CompileCTATest] withholds on any defect at all. No QName the grammar can
+// write equals it either, since ctaScanQName admits no empty local part.
+var ctaUnresolvedName = xsd.QName{}
+
+// attributeName resolves a NameTest of [17] ta-AttrName to an ·expanded name·.
+// An unprefixed one is in NO namespace: the attribute axis's principal node
+// kind is attribute, never element, so xpath20.md §3.2.1.2's "otherwise, it has
+// no namespace URI" applies and the {default namespace} is not consulted
+// (PRINCIPLES 15).
+func (p *ctaParser) attributeName(text string) xsd.QName {
 	prefix, local, prefixed := strings.Cut(text, ":")
 	if !prefixed {
-		return xsd.QName{Local: text}, true
+		return xsd.QName{Local: text}
 	}
-	space, bound := n.prefixes[prefix]
-	if !bound {
-		return xsd.QName{}, false
-	}
-	return xsd.QName{Space: space, Local: local}, true
+	return p.prefixedName(prefix, local)
 }
 
-// typeName resolves the QName naming a datatype, whose unprefixed form takes
-// the default ELEMENT/TYPE namespace (xpath20.md §3.10.2) rather than the
-// no-namespace answer an attribute NameTest gets or the function-namespace one
-// a function name gets. An unbound prefix is err:XPST0081 and declines the
-// whole expression.
-func (n ctaNames) typeName(text string) (xsd.QName, bool) {
+// typeName resolves the QName naming a datatype on attributeName's terms,
+// except that its unprefixed form takes the default ELEMENT/TYPE namespace
+// (xpath20.md §3.10.2) rather than the no-namespace answer an attribute
+// NameTest gets or the function-namespace one a function name gets.
+//
+// The err:XPST0081 an unbound prefix records here is always DISCARDED, because
+// ctaTypes.castTarget resolves no type under ctaUnresolvedName and so declines
+// the whole expression before the parse can reach the end of a [8] ta-Test.
+// That is one more cast-target static condition this engine does not charge,
+// under the marker ctaTypes.castTarget carries.
+func (p *ctaParser) typeName(text string) xsd.QName {
 	prefix, local, prefixed := strings.Cut(text, ":")
 	if !prefixed {
-		return xsd.QName{Space: n.defaultNamespace, Local: text}, true
+		return xsd.QName{Space: p.names.defaultNamespace, Local: text}
 	}
-	space, bound := n.prefixes[prefix]
-	if !bound {
-		return xsd.QName{}, false
-	}
-	return xsd.QName{Space: space, Local: local}, true
+	return p.prefixedName(prefix, local)
 }
 
-// function resolves a function QName, whose unprefixed form takes the default
-// FUNCTION namespace (xpath-valid clause 2.2.4) rather than the no-namespace
-// answer an attribute NameTest gets.
-func (n ctaNames) function(text string) (xsd.QName, bool) {
+// functionName resolves a function QName on attributeName's terms, except that
+// its unprefixed form takes the default FUNCTION namespace (xpath-valid clause
+// 2.2.4) rather than the no-namespace answer an attribute NameTest gets.
+func (p *ctaParser) functionName(text string) xsd.QName {
 	prefix, local, prefixed := strings.Cut(text, ":")
 	if !prefixed {
-		return xsd.QName{Space: ctaFunctionNS, Local: text}, true
+		return xsd.QName{Space: ctaFunctionNS, Local: text}
 	}
-	space, bound := n.prefixes[prefix]
+	return p.prefixedName(prefix, local)
+}
+
+// prefixedName resolves a PREFIXED QName against the {namespace bindings},
+// recording err:XPST0081 for a prefix with no binding among them and yielding
+// ctaUnresolvedName in its place.
+func (p *ctaParser) prefixedName(prefix, local string) xsd.QName {
+	space, bound := p.names.prefixes[prefix]
 	if !bound {
-		return xsd.QName{}, false
+		p.recordUnbound(prefix)
+		return ctaUnresolvedName
 	}
-	return xsd.QName{Space: space, Local: local}, true
+	return xsd.QName{Space: space, Local: local}
+}
+
+// recordUnbound records the err:XPST0081 an unbound prefix is (xpath20.md
+// Appendix G: "a static error if a QName used in an expression contains a
+// namespace prefix that cannot be expanded into a namespace URI") and lets the
+// parse go on.
+//
+// The FIRST unbound prefix decides the message, so the answer is the one the
+// walk reaches first in expression order and not a map's (STYLE D2).
+//
+// The record is PROVISIONAL: compileCTATest keeps it only where the parse then
+// reached the end of a complete [8] ta-Test, because an expression outside the
+// required subset is declined rather than charged, however its names resolve.
+func (p *ctaParser) recordUnbound(prefix string) {
+	if p.defect.kind != ctaNoDefect {
+		return
+	}
+	p.defect = ctaDefect{
+		kind:   ctaStaticError,
+		detail: fmt.Sprintf("err:XPST0081: no in-scope namespace binding for prefix %q", prefix),
+	}
 }
 
 // ctaKind identifies one token of the subset's lexical structure.
@@ -363,6 +401,11 @@ type ctaParser struct {
 	pos   int
 	names ctaNames
 	types ctaTypes
+	// defect is what name resolution found wrong, which is the one defect kind
+	// the walk itself has to carry: every other one is the false a production
+	// returns. It lives here rather than on ctaNames because a value receiver
+	// cannot keep it.
+	defect ctaDefect
 }
 
 // peek reports the token at offset ahead of the cursor, or the EOF sentinel.
@@ -463,14 +506,8 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 		p.advance()
 		return x, true
 	}
-	if p.at(ctaNameTok) && p.peek(1).kind == ctaLParen {
-		name, resolved := p.names.function(p.peek(0).text)
-		if !resolved {
-			return nil, false
-		}
-		if name == ctaNotFunction {
-			return p.booleanFunction()
-		}
+	if p.at(ctaNameTok) && p.peek(1).kind == ctaLParen && p.functionName(p.peek(0).text) == ctaNotFunction {
+		return p.booleanFunction()
 	}
 	left, ok := p.valueExpr()
 	if !ok {
@@ -575,11 +612,7 @@ func (p *ctaParser) castExpr() (ctaValue, bool) {
 		p.advance()
 		allowsEmpty = true
 	}
-	name, resolved := p.names.typeName(text)
-	if !resolved {
-		return nil, false
-	}
-	target, admitted := p.types.castTarget(name)
+	target, admitted := p.types.castTarget(p.typeName(text))
 	if !admitted {
 		return nil, false
 	}
@@ -602,10 +635,7 @@ func (p *ctaParser) castExpr() (ctaValue, bool) {
 // over an absent attribute is the empty sequence where the same cast written
 // without `?` would be err:XPTY0004.
 func (p *ctaParser) constructorFunction() (ctaValue, bool) {
-	name, resolved := p.names.function(p.peek(0).text)
-	if !resolved {
-		return nil, false
-	}
+	name := p.functionName(p.peek(0).text)
 	p.advance() // the function name
 	p.advance() // '('
 	arg, ok := p.simpleValue()
@@ -664,9 +694,5 @@ func (p *ctaParser) attrName() (ctaValue, bool) {
 	}
 	text := p.peek(0).text
 	p.advance()
-	name, resolved := p.names.attribute(text)
-	if !resolved {
-		return nil, false
-	}
-	return ctaAttr{name: name}, true
+	return ctaAttr{name: p.attributeName(text)}, true
 }

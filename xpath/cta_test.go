@@ -186,6 +186,43 @@ func TestCompileDeclines(t *testing.T) {
 	}
 }
 
+// TestCTATestStaticErrorReportsUnboundPrefix pins the static direction of
+// ta-props-correct clause 2: an unbound prefix inside a COMPLETE ta-Test is
+// err:XPST0081, reported as a fact about the schema — and CompileCTATest goes on
+// withholding the same expression, because the tree it built holds a name that
+// resolved to nothing.
+func TestCTATestStaticErrorReportsUnboundPrefix(t *testing.T) {
+	for _, tc := range []struct{ expr, prefix string }{
+		{"@p:kind = 'x'", "p"},
+		{"attribute::p:kind = 'x'", "p"},
+		{"@p:kind", "p"},
+		{"not(@p:kind = 'x')", "p"},
+		{"@a:kind = 'x' or @p:kind = 'y'", "p"},
+		{"@q:kind = @p:kind", "q"},
+		{"(@p:kind = 'x') and @a:kind = 'y'", "p"},
+		// A cast tail no longer declines the expression that carries it (#858),
+		// so the ta-Test around an unbound prefix COMPLETES here where it once
+		// died at the tail, and the same defect is reported rather than dropped.
+		{"@p:kind cast as xs:string", "p"},
+		{"@p:kind cast as xs:string = 'x'", "p"},
+		{"xs:string(@p:kind) = 'x'", "p"},
+	} {
+		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a", "xs", xsd.XMLSchemaNS)
+		err := CTATestStaticError(record, seededTypes)
+		if err == nil {
+			t.Errorf("CTATestStaticError(%q) = nil, want err:XPST0081", tc.expr)
+			continue
+		}
+		want := `err:XPST0081: no in-scope namespace binding for prefix "` + tc.prefix + `"`
+		if err.Error() != want {
+			t.Errorf("CTATestStaticError(%q) = %q, want %q", tc.expr, err, want)
+		}
+		if _, ok := CompileCTATest(record, seededTypes); ok {
+			t.Errorf("CompileCTATest(%q) compiled; a tree holding an unresolved name must never reach Evaluate", tc.expr)
+		}
+	}
+}
+
 // TestCompileAdmitsCasts pins the three cast-shaped constructs of the required
 // subset, which are the whole of what this issue's landing added to the
 // admitted set: [15] ta-CastExpr's `cast as QName` tail, its `?` occurrence
@@ -205,6 +242,36 @@ func TestCompileAdmitsCasts(t *testing.T) {
 	} {
 		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "xs", xsd.XMLSchemaNS), seededTypes); !ok {
 			t.Errorf("CompileCTATest(%q): declined, want compiled", expr)
+		}
+	}
+}
+
+// TestCTATestStaticErrorIsSilentForUnsupported pins UNSUPPORTED DOMINATES
+// STATIC. Every expression here declines, and none of them is a schema fault:
+// charging one would reject a schema §3.12.6 clause 2's Note says a processor
+// may decline but must not refuse.
+func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
+	for _, tc := range []struct{ expr, why string }{
+		{"@p:a = 'x' and count(@b) > 1", "a complete-looking prefix inside an expression a later constructor call declines"},
+		{"p:not(@kind = 'x')", "a constructor call whose argument is no SimpleValue — a prefixed name is never fn:not"},
+		{"@p:* = 'x'", "a wildcard NameTest (#859), declined lexically"},
+		{"@p:kind = 'x' extra", "trailing tokens are not part of a Test"},
+		{"@p:kind = ", "a Comparator with no right operand"},
+		{"count(//p:a) > 1", "full XPath 2.0, outside the subset"},
+		{"", "an empty {expression} is no Test production"},
+		{"self::message", "an axis step the grammar has no production for"},
+		{"@kind = 'book'", "a complete Test whose every name resolved"},
+		{"@a:kind = 'book'", "a complete Test whose prefix is bound"},
+		// The cast-target static conditions the engine does not prove: the
+		// target declines, the parse dies at the tail, and the defect the
+		// unbound prefix recorded on the way in dies with it.
+		{"@p:kind cast as q:Missing", "an unbound prefix on the cast target itself"},
+		{"@p:kind cast as xs:Missing", "err:XPST0051, folded into the withhold"},
+		{"@p:kind cast as xs:anyAtomicType", "err:XPST0080, folded into the withhold"},
+	} {
+		bindings := []string{"a", "http://example.com/a", "xs", xsd.XMLSchemaNS}
+		if err := CTATestStaticError(ctaExprRecord(tc.expr, "", bindings...), seededTypes); err != nil {
+			t.Errorf("CTATestStaticError(%q) = %v, want nil (%s)", tc.expr, err, tc.why)
 		}
 	}
 }
