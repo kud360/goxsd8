@@ -1009,6 +1009,10 @@ func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 // The attributes are checked in the grammar's own declaration order, so a
 // document writing more than one of them is always reported at the same one
 // (STYLE D2).
+//
+// The REFERENCE forms of the two definition kinds are the mirror of this guard
+// and belong to rejectProhibitedRefAttrs, which is charged where those positions
+// are mapped rather than here.
 func rejectProhibitedAttrs(decl *Element, form declForm) error {
 	var grammar string
 	var prohibited []string
@@ -1031,6 +1035,54 @@ func rejectProhibitedAttrs(decl *Element, form declForm) error {
 		return fmt.Errorf("parser: %s <%s> at %s carries a %s attribute, which the schema for schema documents prohibits on the %s form: %s restricts %s to use=\"prohibited\", and it is legal on the local form alone", form, decl.Name().Local(), decl.Loc(), attr, form, grammar, attr)
 	}
 	return nil
+}
+
+// rejectProhibitedRefAttrs rejects a <group> in a content model or a nested
+// <attributeGroup> in an attribute-group member list — the two REFERENCE forms —
+// carrying a name attribute, which the schema for schema documents prohibits on
+// them: xs:groupRef restricts name to use="prohibited" beside the required ref
+// (xmlschema11-1.md:5223-:5224), and xs:attributeGroupRef does the same
+// (:5522-:5523). name is the whole list because ref is the only other attribute
+// either grammar type declares, which makes this the exact mirror of
+// rejectProhibitedAttrs: each form prohibits what the other requires.
+//
+// The fault carries NO numbered rule ID, on the footing rejectProhibitedAttrs's
+// doc establishes for the same two kinds: §3.7.3 (xmlschema11-1.md:2286) and
+// src-attribute_group (§3.6.3, :2196) each read "None as such." in full, there is
+// no src-mgd, and mgd-props-correct/ag-props-correct are component constraints
+// over the property tableau that never see the XML attribute. What binds is §5.1
+// (:4296) directly — a schema document must be fully valid with respect to the
+// Schema for Schema Documents — so charging src-resolve, mgd-props-correct or
+// ag-props-correct here would be fabricated (STYLE E2).
+//
+// EVERY caller runs it before it reads ref, which is rejectProhibitedAttrs's
+// ordering point from the other side: a document that writes name in a reference
+// position generally writes no ref, so the missing-ref fault would answer first
+// and report the consequence of the mistake rather than the mistake.
+//
+// The <group> position is charged TWICE by design, and the second charge is not
+// dead: produceGroupRefParticle covers every caller that dispatches straight to
+// it, while explicitContent charges the same element ahead of §3.4.2.3.3 clause
+// 2.1.4, whose maxOccurs="0" elision returns before that function is entered at
+// all. One fact, one encoding — the rule lives here alone, so the two call sites
+// cannot drift (STYLE D3).
+func rejectProhibitedRefAttrs(el *Element) error {
+	local := el.Name().Local()
+	var grammar string
+	switch local {
+	case "group":
+		grammar = "xs:groupRef"
+	case "attributeGroup":
+		grammar = "xs:attributeGroupRef"
+	default:
+		// Both call sites dispatch on the local name, so no other element reaches
+		// here; naming one is a caller fault rather than a document fault.
+		return fmt.Errorf("parser: <%s> is not a reference-form <group> or <attributeGroup>", local)
+	}
+	if _, ok := el.Attr("name"); !ok {
+		return nil
+	}
+	return fmt.Errorf("parser: <%s> at %s carries a name attribute, which the schema for schema documents prohibits on the reference form: %s restricts name to use=\"prohibited\", and it is legal on the definition form alone", local, el.Loc(), grammar)
 }
 
 // declForm names the position a named declaration is written in, and is read by

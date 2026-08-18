@@ -1032,3 +1032,242 @@ func TestProduceQNameOutsideLexicalSpaceRejected(t *testing.T) {
 		})
 	}
 }
+
+// TestProduceRefFormNameProhibited is the REFERENCE half of the family the
+// definition tables above cover, and the two grammar types are the mirror image
+// of theirs: xs:groupRef makes ref required and restricts name to
+// use="prohibited" (xmlschema11-1.md:5223-:5224), and xs:attributeGroupRef does
+// the same (:5522-:5523). Each row asserts the grammar type BY NAME, so a guard
+// that rejected both positions under one label would fail.
+//
+// The fault is plain, never a rule verdict: §3.7.3 and src-attribute_group
+// (§3.6.3) both read "None as such." in full, so the only footing is §5.1's
+// requirement that a schema document be fully valid against the Schema for Schema
+// Documents (xmlschema11-1.md:4296), which carries no numbered ID — charging
+// src-resolve, mgd-props-correct or ag-props-correct here would be fabricated
+// (STYLE E2).
+//
+// Two row shapes, and each carries its own failure mode:
+//
+//   - ref AND name TOGETHER — documents that PRODUCE cleanly without the guard,
+//     since nothing else in the producer reads name at these positions, so the row
+//     fails on the verdict rather than on the wording;
+//   - name ALONE, a definition form written where a reference belongs — rejected
+//     either way, so its assertion is the ordering one: the diagnostic must name
+//     name and must NOT be the sibling missing-ref fault, which is what answers if
+//     the guard runs after the ref lookup instead of before it.
+//
+// The maxOccurs="0" rows carry a third failure mode, and it is an ORDERING one
+// against a different function: §3.4.2.3.3 clause 2.1.4 elides a model-group child
+// whose maxOccurs is 0, returning from explicitContent before
+// produceGroupRefParticle is ever entered, so a guard charged only there leaves
+// every one of these documents silently ACCEPTED. They pass only while the charge
+// runs ahead of that elision.
+//
+// Every ref row DECLARES the definition its ref names, so no row can pass as a
+// dangling reference, and the position assertion pins the offending element's own
+// line (STYLE E3, carried in the message text since a plain error holds no
+// xsderr.Loc).
+func TestProduceRefFormNameProhibited(t *testing.T) {
+	const (
+		targetGroup = `<xs:group name="G"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`
+		targetAG    = `<xs:attributeGroup name="AG"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`
+	)
+	// A slice, not a map: subtest order is output (STYLE D2). Every body starts on
+	// line 2 of the wrapped document.
+	cases := []struct {
+		name        string
+		body        string
+		wantGrammar string
+		wantLine    int
+	}{
+		{
+			name: `local <group ref= name=> in a content model`,
+			body: "\n" + targetGroup + "\n" + `<xs:complexType name="CT"><xs:sequence>` + "\n" +
+				`<xs:group ref="tns:G" name="X"/>` + "\n" +
+				`</xs:sequence></xs:complexType>`,
+			wantGrammar: "xs:groupRef",
+			wantLine:    4,
+		},
+		{
+			// The definition form written where a reference belongs: without the guard
+			// this is the missing-ref fault, the consequence rather than the mistake.
+			name: `local <group name=> with no ref`,
+			body: "\n" + `<xs:complexType name="CT"><xs:sequence>` + "\n" +
+				`<xs:group name="X"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>` + "\n" +
+				`</xs:sequence></xs:complexType>`,
+			wantGrammar: "xs:groupRef",
+			wantLine:    3,
+		},
+		{
+			// The clause-2.1.4 shape: the <group> is the <complexType>'s own
+			// model-group child, so explicitContent elides it on maxOccurs="0" and
+			// returns before produceGroupRefParticle can charge anything.
+			name: `local <group ref= name= maxOccurs="0"> under <complexType>`,
+			body: "\n" + targetGroup + "\n" + `<xs:complexType name="CT">` + "\n" +
+				`<xs:group ref="tns:G" name="X" maxOccurs="0"/>` + "\n" +
+				`</xs:complexType>`,
+			wantGrammar: "xs:groupRef",
+			wantLine:    4,
+		},
+		{
+			// The same elision reached through the OTHER branch that reads its
+			// ·effective content· from effectiveContent.
+			name: `local <group ref= name= maxOccurs="0"> under <extension>`,
+			body: "\n" + targetGroup + "\n" + `<xs:complexType name="B"><xs:sequence/></xs:complexType>` + "\n" +
+				`<xs:complexType name="CT"><xs:complexContent><xs:extension base="tns:B">` + "\n" +
+				`<xs:group ref="tns:G" name="X" maxOccurs="0"/>` + "\n" +
+				`</xs:extension></xs:complexContent></xs:complexType>`,
+			wantGrammar: "xs:groupRef",
+			wantLine:    5,
+		},
+		{
+			// The elision over a definition form written where a reference belongs:
+			// elided, so not even the missing-ref fault answers without the hoist.
+			name: `local <group name= maxOccurs="0"> with no ref`,
+			body: "\n" + `<xs:complexType name="CT">` + "\n" +
+				`<xs:group name="X" maxOccurs="0"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>` + "\n" +
+				`</xs:complexType>`,
+			wantGrammar: "xs:groupRef",
+			wantLine:    3,
+		},
+		{
+			// The reference nested inside a DEFINITION of the same kind, whose own name
+			// attribute is required and must not be confused for this one.
+			name: `local <group ref= name=> inside a <group> definition`,
+			body: "\n" + targetGroup + "\n" + `<xs:group name="G2"><xs:sequence>` + "\n" +
+				`<xs:group ref="tns:G" name="X"/>` + "\n" +
+				`</xs:sequence></xs:group>`,
+			wantGrammar: "xs:groupRef",
+			wantLine:    4,
+		},
+		{
+			name: `nested <attributeGroup ref= name=> on a complex type`,
+			body: "\n" + targetAG + "\n" + `<xs:complexType name="CT"><xs:sequence/>` + "\n" +
+				`<xs:attributeGroup ref="tns:AG" name="X"/>` + "\n" +
+				`</xs:complexType>`,
+			wantGrammar: "xs:attributeGroupRef",
+			wantLine:    4,
+		},
+		{
+			name: `nested <attributeGroup name=> with no ref`,
+			body: "\n" + `<xs:complexType name="CT"><xs:sequence/>` + "\n" +
+				`<xs:attributeGroup name="X"><xs:attribute name="b" type="xs:string"/></xs:attributeGroup>` + "\n" +
+				`</xs:complexType>`,
+			wantGrammar: "xs:attributeGroupRef",
+			wantLine:    3,
+		},
+		{
+			// The member-list position: a nested reference inside a top-level
+			// <attributeGroup>, whose own name is required.
+			name: `nested <attributeGroup ref= name=> in a member list`,
+			body: "\n" + targetAG + "\n" + `<xs:attributeGroup name="AG2">` + "\n" +
+				`<xs:attributeGroup ref="tns:AG" name="X"/>` + "\n" +
+				`</xs:attributeGroup>`,
+			wantGrammar: "xs:attributeGroupRef",
+			wantLine:    4,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:po", tc.body))
+			if err == nil {
+				t.Fatal("Produce succeeded, want a grammar fault for the prohibited name")
+			}
+			var xe *xsderr.Error
+			if errors.As(err, &xe) {
+				t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+			}
+			if !strings.Contains(err.Error(), "carries a name attribute") {
+				t.Fatalf("error = %v, want it to name name as the prohibited attribute", err)
+			}
+			if !strings.Contains(err.Error(), "prohibits on the reference form") {
+				t.Fatalf("error = %v, want it to name the form it judged, which here is the reference one", err)
+			}
+			if want := tc.wantGrammar + " restricts name"; !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want it to cite the grammar type %s", err, tc.wantGrammar)
+			}
+			if strings.Contains(err.Error(), "must be a reference") {
+				t.Fatalf("error = %v, want the prohibited-name fault rather than the missing-ref one it causes", err)
+			}
+			if at := fmt.Sprintf("%s:%d:", produceURI, tc.wantLine); !strings.Contains(err.Error(), at) {
+				t.Fatalf("error = %v, want it positioned at %s (E3)", err, at)
+			}
+		})
+	}
+}
+
+// TestProduceRefFormNameLegalElsewhere is the reverse hazard of the table above:
+// name is REQUIRED on the definition forms of both kinds (xs:namedGroup :5209,
+// xs:namedAttributeGroup :5510) and on the local <element>/<attribute> siblings a
+// content model or member list holds, so a guard reading name wherever it saw one
+// would reject legal schemas wholesale.
+//
+// The redefining rows put a nameless reference form and a required-name
+// definition form of the SAME element name in one pair — §4.2.4's licensed
+// self-reference, which is what breaks under a guard keyed on the element's local
+// name rather than on the position it is mapped in.
+func TestProduceRefFormNameLegalElsewhere(t *testing.T) {
+	const (
+		targetGroup = `<xs:group name="G"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`
+		targetAG    = `<xs:attributeGroup name="AG"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`
+	)
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{
+			name: `local <group ref=> beside a named local <element>`,
+			body: targetGroup + `<xs:complexType name="CT"><xs:sequence>` +
+				`<xs:group ref="tns:G"/><xs:element name="b" type="xs:string"/>` +
+				`</xs:sequence></xs:complexType>`,
+		},
+		{
+			name: `nested <attributeGroup ref=> beside a named local <attribute>`,
+			body: targetAG + `<xs:complexType name="CT"><xs:sequence/>` +
+				`<xs:attributeGroup ref="tns:AG"/><xs:attribute name="b" type="xs:string"/>` +
+				`</xs:complexType>`,
+		},
+		{
+			// The clause-2.1.4 elision itself, which the pre-elision charge sits in
+			// front of: a nameless reference at maxOccurs="0" still maps to no
+			// component and must produce cleanly.
+			name: `local <group ref= maxOccurs="0"> elided under clause 2.1.4`,
+			body: targetGroup + `<xs:complexType name="CT"><xs:group ref="tns:G" maxOccurs="0"/></xs:complexType>`,
+		},
+		{
+			name: `<group ref=> inside a named <group> definition`,
+			body: targetGroup + `<xs:group name="G2"><xs:sequence><xs:group ref="tns:G"/></xs:sequence></xs:group>`,
+		},
+		{
+			name: `<attributeGroup ref=> inside a named <attributeGroup> definition`,
+			body: targetAG + `<xs:attributeGroup name="AG2"><xs:attributeGroup ref="tns:AG"/></xs:attributeGroup>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := produce(t, wrap("urn:po", tc.body)); err != nil {
+				t.Fatalf("Produce rejected a reference the grammar admits: %v", err)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		name  string
+		child string
+	}{
+		{
+			name:  `redefining <group name=> holding its own nameless self-reference`,
+			child: `<xs:group name="G"><xs:sequence><xs:group ref="tns:G"/><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>`,
+		},
+		{
+			name:  `redefining <attributeGroup name=> holding its own nameless self-reference`,
+			child: `<xs:attributeGroup name="AG"><xs:attributeGroup ref="tns:AG"/><xs:attribute name="b" type="xs:string"/></xs:attributeGroup>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := parseMap(t, "main.xsd", redefining(tc.child)); err != nil {
+				t.Fatalf("Parse rejected a redefinition the grammar admits: %v", err)
+			}
+		})
+	}
+}
