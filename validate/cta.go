@@ -73,13 +73,15 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable) (xsd.TypeDe
 	return w.schema.ResolvedType(table.DefaultTypeDefinition().TypeDefinition())
 }
 
-// ctaAttributes is the attribute read a {test} evaluates against: the
-// [[attributes]] of e itself, by ·expanded name·, which is what §3.12.4 clause
+// ctaAttributes is the attribute sequence a {test} evaluates against: the
+// [[attributes]] of e itself, in SOURCE order, which is what §3.12.4 clause
 // 1.1.2 copies into the XDM instance the test runs over. The xsi: attributes
 // are among them, because clause 1.1.2 copies E's [[attributes]] whole and
-// names no exception.
+// names no exception; the namespace declarations are not, because [Element]'s
+// Attributes excludes them — which is what keeps a wildcard NameTest from
+// ranging over xmlns bindings as if they were attribute nodes.
 //
-// The slice is read once, not per lookup: [Element]'s Attributes may build it,
+// The slice is read once, not per walk: [Element]'s Attributes may build it,
 // and a {test} naming three attributes would otherwise build it three times.
 //
 // GAP(xpath): E's {inherited attributes} (§3.12.4 clause 1.1.3 — those whose
@@ -99,14 +101,13 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable) (xsd.TypeDe
 // against whichever one arrived. Charging an element against a type the rule
 // did not select rejects a valid document as readily as it accepts an invalid
 // one, so no direction is claimed here.
-func ctaAttributes(e Element) xpath.AttributeValue {
+func ctaAttributes(e Element) xpath.Attributes {
 	attrs := e.Attributes()
-	return func(name xsd.QName) (string, bool) {
+	return func(yield func(xsd.QName, string) bool) {
 		for _, a := range attrs {
-			if a.Name() == name {
-				return a.Value(), true
+			if !yield(a.Name(), a.Value()) {
+				return
 			}
 		}
-		return "", false
 	}
 }

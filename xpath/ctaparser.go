@@ -240,10 +240,8 @@ func ctaTokenize(s string) ([]ctaToken, bool) {
 			// declined LEXICALLY, here: `*` is no token kind of this subset, so
 			// `@*` and `@*:n` die on this arm and `@p:*` one token later on the
 			// ':' arm. [17]'s NameTest is xpath20.md's [37], which does admit the
-			// wildcards, but a wildcard selects a SEQUENCE of attributes and
-			// [AttributeValue] answers one ·expanded name· at a time, so
-			// evaluating one would need a wider read of E.[[attributes]] than the
-			// surface exposes. Retiring it takes a token kind here AND a NameTest
+			// wildcards, and [Attributes] already yields the SEQUENCE one selects.
+			// Retiring it takes a token kind here AND a NameTest
 			// production, not a change to attrName alone (#859). The decline
 			// withholds the element's ·governing type definition· on the terms
 			// validate/cta.go argues.
@@ -694,5 +692,5 @@ func (p *ctaParser) attrName() (ctaValue, bool) {
 	}
 	text := p.peek(0).text
 	p.advance()
-	return ctaAttr{name: p.attributeName(text)}, true
+	return ctaAttr{test: ctaExactName{name: p.attributeName(text)}}, true
 }

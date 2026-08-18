@@ -33,12 +33,36 @@ func ctaExprRecord(expr, defaultNS string, bindings ...string) xsd.XPathExpressi
 // attribute NameTest resolves to.
 func uq(local string) xsd.QName { return xsd.QName{Local: local} }
 
-// ctaAttrs is the [AttributeValue] over a fixed attribute set.
-func ctaAttrs(m map[xsd.QName]string) AttributeValue {
-	return func(name xsd.QName) (string, bool) {
-		v, present := m[name]
-		return v, present
+// ctaAttribute is one attribute of the element a {test} is evaluated against.
+type ctaAttribute struct {
+	name    xsd.QName
+	lexical string
+}
+
+// ctaAttrs is the [Attributes] over a fixed attribute list, yielding it in the
+// order WRITTEN, which stands in for the source order a real element's
+// attributes arrive in. A map would yield them in a different order per run
+// (STYLE D2), which a wildcard NameTest matching several of them makes
+// observable in the answer.
+func ctaAttrs(attrs ...ctaAttribute) Attributes {
+	return func(yield func(xsd.QName, string) bool) {
+		for _, a := range attrs {
+			if !yield(a.name, a.lexical) {
+				return
+			}
+		}
 	}
+}
+
+// at is one attribute in no namespace, which is what an unprefixed NameTest
+// matches.
+func at(local, lexical string) ctaAttribute {
+	return ctaAttribute{name: uq(local), lexical: lexical}
+}
+
+// atNS is one attribute in the namespace space.
+func atNS(space, local, lexical string) ctaAttribute {
+	return ctaAttribute{name: xsd.QName{Space: space, Local: local}, lexical: lexical}
 }
 
 // seededTypes and seededBackend are the type knowledge and the value spaces
@@ -373,14 +397,7 @@ func TestCompileResolvesCastTargetInDefaultNamespace(t *testing.T) {
 // against the target datatype and the comparison then runs in that type's
 // value space rather than over lexicals.
 func TestEvaluateCastToBuiltin(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("n"):      "4",
-		uq("frac"):   "3.5",
-		uq("length"): "10",
-		uq("width"):  "9",
-		uq("d"):      "2026-03-01",
-		uq("k"):      "book",
-	})
+	attrs := ctaAttrs(at("n", "4"), at("frac", "3.5"), at("length", "10"), at("width", "9"), at("d", "2026-03-01"), at("k", "book"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -409,7 +426,7 @@ func TestEvaluateCastToBuiltin(t *testing.T) {
 // space· raises err:FORG0001, which makes the {test} false — not a decline,
 // and not a node-local false that fn:not could invert.
 func TestEvaluateFailedCastIsFalseNotDecline(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("frac"): "3.5", uq("k"): "book", uq("n"): "4"})
+	attrs := ctaAttrs(at("frac", "3.5"), at("k", "book"), at("n", "4"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -437,7 +454,7 @@ func TestEvaluateFailedCastIsFalseNotDecline(t *testing.T) {
 // tells the two apart, and §3.10.4's T($arg) ≡ (($arg) cast as T?) is why the
 // constructor spelling always takes the first.
 func TestEvaluateCastOfAbsentAttribute(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("other"): "x"})
+	attrs := ctaAttrs(at("other", "x"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -464,7 +481,7 @@ func TestEvaluateCastOfAbsentAttribute(t *testing.T) {
 // err:XPTY0004 and so a RAISED false, which is not the same answer as a
 // comparison that ran.
 func TestEvaluateCastAgainstStringLiteral(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("f"): "1.5", uq("type"): "float"})
+	attrs := ctaAttrs(at("f", "1.5"), at("type", "float"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -487,7 +504,7 @@ func TestEvaluateCastAgainstStringLiteral(t *testing.T) {
 // xs:token collapses the lexical before the comparison sees it, and the same
 // operand uncast does not.
 func TestEvaluateCastNormalizesWhiteSpace(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("k"): "a  b", uq("pad"): "  padded  "})
+	attrs := ctaAttrs(at("k", "a  b"), at("pad", "  padded  "))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -510,16 +527,7 @@ func TestEvaluateCastNormalizesWhiteSpace(t *testing.T) {
 // the numeric one — NaN included, which is false and not an error — and rule
 // 6's err:FORG0006 for every other type.
 func TestEvaluateEffectiveBooleanValueOfACast(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("zero"):  "0",
-		uq("five"):  "5",
-		uq("nan"):   "NaN",
-		uq("empty"): "",
-		uq("word"):  "book",
-		uq("yes"):   "true",
-		uq("no"):    "0",
-		uq("d"):     "2026-03-01",
-	})
+	attrs := ctaAttrs(at("zero", "0"), at("five", "5"), at("nan", "NaN"), at("empty", ""), at("word", "book"), at("yes", "true"), at("no", "0"), at("d", "2026-03-01"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -549,7 +557,7 @@ func TestEvaluateEffectiveBooleanValueOfACast(t *testing.T) {
 // attribute against a string literal, which §3.5.2 rule 2.4 compares as
 // xs:string and B.2 decides through the default (codepoint) collation.
 func TestEvaluateStringComparators(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("k"): "book"})
+	attrs := ctaAttrs(at("k", "book"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -576,13 +584,7 @@ func TestEvaluateStringComparators(t *testing.T) {
 // own numeric type, and compared in that space — so "3" and "3.0" and "03" are
 // one answer and not three lexical ones.
 func TestEvaluateNumericComparators(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("n"):    "3",
-		uq("wide"): "03.0",
-		uq("bad"):  "three",
-		uq("pad"):  "  3  ",
-		uq("big"):  "10",
-	})
+	attrs := ctaAttrs(at("n", "3"), at("wide", "03.0"), at("bad", "three"), at("pad", "  3  "), at("big", "10"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -618,7 +620,7 @@ func TestEvaluateNumericComparators(t *testing.T) {
 // than an error, and `!=` is false too — no pair of atomic values was formed,
 // so nothing is unequal either.
 func TestEvaluateBadCastIsFalseNotDecline(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("n"): "not a number"})
+	attrs := ctaAttrs(at("n", "not a number"))
 	for _, expr := range []string{"@n = 1", "@n != 1", "@n < 1", "@n >= 1"} {
 		if compile(t, expr).Evaluate(backend(), seededTypes, attrs) {
 			t.Errorf("Evaluate(%q) = true, want false", expr)
@@ -630,7 +632,7 @@ func TestEvaluateBadCastIsFalseNotDecline(t *testing.T) {
 // no pair can be formed against an absent attribute, so EVERY comparator is
 // false — including `!=`, which a naive reading would make true.
 func TestEvaluateAbsentAttributeIsFalse(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("other"): "x"})
+	attrs := ctaAttrs(at("other", "x"))
 	for _, expr := range []string{
 		"@k = 'book'", "@k != 'book'", "@k < 'book'", "@k <= 'book'",
 		"@k > 'book'", "@k >= 'book'", "@k = 1", "@k != 1",
@@ -651,10 +653,10 @@ func TestEvaluateUnprefixedNameTestIsInNoNamespace(t *testing.T) {
 	if !ok {
 		t.Fatal("CompileCTATest: declined")
 	}
-	if !c.Evaluate(backend(), seededTypes, ctaAttrs(map[xsd.QName]string{uq("k"): "book"})) {
+	if !c.Evaluate(backend(), seededTypes, ctaAttrs(at("k", "book"))) {
 		t.Error("an unprefixed NameTest did not match the no-namespace attribute")
 	}
-	inDefault := ctaAttrs(map[xsd.QName]string{{Space: ns, Local: "k"}: "book"})
+	inDefault := ctaAttrs(atNS(ns, "k", "book"))
 	if c.Evaluate(backend(), seededTypes, inDefault) {
 		t.Error("an unprefixed NameTest matched an attribute in the {default namespace}")
 	}
@@ -665,10 +667,10 @@ func TestEvaluateUnprefixedNameTestIsInNoNamespace(t *testing.T) {
 func TestEvaluatePrefixedNameTest(t *testing.T) {
 	const ns = "http://example.com/c2"
 	c := compile(t, "@c2:min = 1", "c2", ns)
-	if !c.Evaluate(backend(), seededTypes, ctaAttrs(map[xsd.QName]string{{Space: ns, Local: "min"}: "1"})) {
+	if !c.Evaluate(backend(), seededTypes, ctaAttrs(atNS(ns, "min", "1"))) {
 		t.Error("a prefixed NameTest did not match its expanded name")
 	}
-	if c.Evaluate(backend(), seededTypes, ctaAttrs(map[xsd.QName]string{uq("min"): "1"})) {
+	if c.Evaluate(backend(), seededTypes, ctaAttrs(at("min", "1"))) {
 		t.Error("a prefixed NameTest matched a no-namespace attribute")
 	}
 }
@@ -677,7 +679,7 @@ func TestEvaluatePrefixedNameTest(t *testing.T) {
 // unabbreviated attribute-axis spelling is the same AttrName as clause 2.1's
 // abbreviation, and decides the same way.
 func TestEvaluateAttributeAxisForm(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("k"): "book"})
+	attrs := ctaAttrs(at("k", "book"))
 	for _, expr := range []string{"attribute::k = 'book'", "attribute :: k = 'book'"} {
 		if !compile(t, expr).Evaluate(backend(), seededTypes, attrs) {
 			t.Errorf("Evaluate(%q) = false, want true", expr)
@@ -692,7 +694,7 @@ func TestEvaluateAttributeAxisForm(t *testing.T) {
 // fn:not the [12] production is fixed to, including that grouping changes the
 // answer (so the test would notice an evaluator that ignored the parens).
 func TestEvaluateConnectives(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("a"): "x", uq("b"): "y", uq("c"): "z"})
+	attrs := ctaAttrs(at("a", "x"), at("b", "y"), at("c", "z"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -726,7 +728,7 @@ func TestEvaluateConnectives(t *testing.T) {
 // has no xpath20.md B.2 row at all, which is err:XPTY0004 (a type error).
 // Clause 2 names both.
 func TestEvaluateRaisedErrorFalsifiesTheWholeTest(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("n"): "abc", uq("k"): "x"})
+	attrs := ctaAttrs(at("n", "abc"), at("k", "x"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -760,7 +762,7 @@ func TestEvaluateRaisedErrorFalsifiesTheWholeTest(t *testing.T) {
 // where the tables become observable, because only there does the difference
 // between "false" and "raised" survive to the {test}.
 func TestEvaluateRaisedErrorUnderConnectives(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("n"): "abc", uq("k"): "x"})
+	attrs := ctaAttrs(at("n", "abc"), at("k", "x"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -790,7 +792,7 @@ func TestEvaluateRaisedErrorUnderConnectives(t *testing.T) {
 // value· (xpath20.md §2.4.3), which for an AttrName is presence and for a
 // Literal is fn:boolean's rules 4 and 5.
 func TestEvaluateEffectiveBooleanValue(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("a"): "x", uq("empty"): ""})
+	attrs := ctaAttrs(at("a", "x"), at("empty", ""))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -821,7 +823,7 @@ func TestEvaluateEffectiveBooleanValue(t *testing.T) {
 // err:XPTY0004 — which §3.12.4 clause 2 decides as false rather than
 // declining.
 func TestEvaluateLiteralOnlyComparisons(t *testing.T) {
-	attrs := ctaAttrs(nil)
+	attrs := ctaAttrs()
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -847,7 +849,7 @@ func TestEvaluateLiteralOnlyComparisons(t *testing.T) {
 // TestEvaluateStringLiteralEscapes pins xpath20.md [74]: the quote character
 // appears inside a literal only doubled, and denotes one such character.
 func TestEvaluateStringLiteralEscapes(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("k"): "it's"})
+	attrs := ctaAttrs(at("k", "it's"))
 	for _, expr := range []string{"@k = 'it''s'", "@k = \"it's\""} {
 		if !compile(t, expr).Evaluate(backend(), seededTypes, attrs) {
 			t.Errorf("Evaluate(%q) = false, want true", expr)
@@ -862,7 +864,7 @@ func TestEvaluateStringLiteralEscapes(t *testing.T) {
 // CompileCTATest produces — still decides rather than panicking.
 func TestEvaluateZeroTestDecides(t *testing.T) {
 	var zero CTATest
-	if zero.Evaluate(backend(), seededTypes, ctaAttrs(nil)) {
+	if zero.Evaluate(backend(), seededTypes, ctaAttrs()) {
 		t.Error("the zero CTATest evaluated true")
 	}
 }
@@ -896,7 +898,7 @@ func castNode(t *testing.T, known ctaTypes, local string) ctaValue {
 	if !admitted {
 		t.Fatalf("castTarget(xs:%s): declined, want admitted", local)
 	}
-	return ctaCast{operand: ctaAttr{name: uq("a")}, target: target}
+	return ctaCast{operand: ctaAttr{test: ctaExactName{name: uq("a")}}, target: target}
 }
 
 // compileTypes is the compile-time type knowledge over the seeded builtins.
@@ -924,7 +926,7 @@ func compileTypes(t *testing.T) ctaTypes {
 // TestComparisonOperatorLegality's subject.
 func TestComparisonType(t *testing.T) {
 	known := compileTypes(t)
-	attr := ctaAttr{name: uq("a")}
+	attr := ctaAttr{test: ctaExactName{name: uq("a")}}
 	str := ctaLiteral{text: "x", st: known.str}
 	dec := ctaLiteral{text: "1", st: known.decimal}
 	dbl := ctaLiteral{text: "1e0", st: known.double}
@@ -1072,14 +1074,7 @@ func TestComparisonOperatorLegality(t *testing.T) {
 // value.Ordered under the strict backend, so a comparator reading the value
 // space would answer true for every ordering row here.
 func TestEvaluateOrderingWithoutB2Row(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("a"): "P2D",
-		uq("b"): "P1D",
-		uq("y"): "2001",
-		uq("z"): "2000",
-		uq("h"): "0F",
-		uq("i"): "0A",
-	})
+	attrs := ctaAttrs(at("a", "P2D"), at("b", "P1D"), at("y", "2001"), at("z", "2000"), at("h", "0F"), at("i", "0A"))
 	for _, expr := range []string{
 		"@a cast as xs:duration > @b cast as xs:duration",
 		"@a cast as xs:duration >= @b cast as xs:duration",
@@ -1104,13 +1099,7 @@ func TestEvaluateOrderingWithoutB2Row(t *testing.T) {
 // the types B.2 denies an ordering row still compare for equality, so the fix
 // narrowed the operators and not the operand set.
 func TestEvaluateEqualityWithoutOrdering(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("a"): "P2D",
-		uq("b"): "P1D",
-		uq("y"): "2001",
-		uq("z"): "2000",
-		uq("h"): "0F",
-	})
+	attrs := ctaAttrs(at("a", "P2D"), at("b", "P1D"), at("y", "2001"), at("z", "2000"), at("h", "0F"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -1138,10 +1127,7 @@ func TestEvaluateEqualityWithoutOrdering(t *testing.T) {
 // The fn:not rows are what separate a decided false from a raised error: they
 // invert, which an error would not.
 func TestEvaluateBooleanComparisons(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("t"): "true",
-		uq("f"): "0",
-	})
+	attrs := ctaAttrs(at("t", "true"), at("f", "0"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -1175,12 +1161,7 @@ func TestEvaluateBooleanComparisons(t *testing.T) {
 // operand of each subtype shares only xs:duration, which has eq and ne and no
 // ordering row.
 func TestEvaluateDurationSubtypeOrdering(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("a"): "P2D",
-		uq("b"): "PT1H",
-		uq("y"): "P1Y",
-		uq("m"): "P1M",
-	})
+	attrs := ctaAttrs(at("a", "P2D"), at("b", "PT1H"), at("y", "P1Y"), at("m", "P1M"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -1218,11 +1199,7 @@ func TestEvaluateDurationSubtypeOrdering(t *testing.T) {
 // comparison type of xs:anyURI reaching holdsBetween raises err:XPTY0004 and
 // the {test} is false whichever way the two URIs sort.
 func TestEvaluateAnyURIComparisons(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("u"): " http://a ",
-		uq("v"): "http://a",
-		uq("w"): "http://b",
-	})
+	attrs := ctaAttrs(at("u", " http://a "), at("v", "http://a"), at("w", "http://b"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -1248,10 +1225,7 @@ func TestEvaluateAnyURIComparisons(t *testing.T) {
 // operand still compares against an xs:decimal literal and against another
 // xs:float operand, and both decide.
 func TestEvaluateFloatComparisons(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("f"): "0.5",
-		uq("g"): "0.25",
-	})
+	attrs := ctaAttrs(at("f", "0.5"), at("g", "0.25"))
 	for _, tc := range []struct {
 		expr string
 		want bool
