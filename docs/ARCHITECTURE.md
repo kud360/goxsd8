@@ -42,9 +42,9 @@ Value implementations, parsing, validation, and generation live above them.
 identifier for any of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
-`xpath` has left this note: it exports the CTA compile and evaluate entry
-points and imports `xsd` and `value` for real (its section says which tiers
-are shipped).
+`xpath` has left this note: it exports the CTA compile, evaluate and
+statically-check entry points and imports `xsd` and `value` for real (its
+section says which tiers are shipped).
 
 **[2] The infoset seam, the assessment skeleton and the XML adapter ship;
 the other two adapters do not.** `validate` exports the infoset views and
