@@ -37,9 +37,14 @@ const ruleTAPropsCorrect xsderr.Rule = "ta-props-correct"
 // ctaStaticTypes is the ·in-scope schema definitions· of the static context
 // xpath-valid clause 2.2.5 (§3.13.6.2) fixes for the {test} whose static errors
 // this file charges: "those components that are present in every schema by
-// definition", the Built-in Simple Type Definitions of §3.16.7 — and NOT this
-// schema's own {type definitions}, which clause 2.2.5 does not put in scope.
-// No schema is finalized at production time to hold those anyway.
+// definition", clause 2.2.5's own three sources (Built-in Attribute
+// Declarations §3.2.7, the Built-in Complex Type Definition §3.4.7, and the
+// Built-in Simple Type Definitions §3.16.7) — and NOT this schema's own {type
+// definitions}, which clause 2.2.5 does not put in scope. No schema is
+// finalized at production time to hold those anyway. A CTA cast target is
+// always a simple type (§3.12.6 clause 4), so only §3.16.7's Simple Type
+// Definitions are ever read here — §3.2.7 and §3.4.7 name no site this
+// package resolves against.
 //
 // It answers from symbols.builtins, the fixed [builtin.Seed] set newSymbols
 // indexes once — NOT from the build-once memo symbols.built, which starts as a

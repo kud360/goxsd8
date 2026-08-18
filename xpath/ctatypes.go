@@ -10,9 +10,14 @@ import "github.com/kud360/goxsd8/xsd"
 // (ARCHITECTURE), so [CTATest.Evaluate] takes one again.
 
 // ctaBuiltin is the ·expanded name· of a builtin datatype, which is the key an
-// [xsd.TypeResolver] holds it under. The XSD namespace is closed to user
-// declarations, so a type resolvable in it is one of the 49 builtins by
-// construction and no separate builtin table is needed here (STYLE T4).
+// [xsd.TypeResolver] holds it under. Every call site names a literal builtin
+// local (STYLE T4's parallel-table concern does not arise: there is no second
+// table, only QName construction for an identity comparison the caller
+// already knows the answer to) — this is not a general classifier for an
+// arbitrary resolved name, and a schema is free to declare its OWN types with
+// `targetNamespace` set to the XSD namespace (produce_typetable.go's
+// ctaStaticTypes resolves against the fixed builtin set for exactly that
+// reason, not against whatever a schema document declares).
 func ctaBuiltin(local string) xsd.QName {
 	return xsd.QName{Space: xsd.XMLSchemaNS, Local: local}
 }
