@@ -1280,6 +1280,9 @@ func (p *producer) produceGroupParticle(group *Element, scopeParent xsd.ElementS
 // callback this producer passes it — a read, which leaves this particle untouched
 // and charges nothing.
 func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
+	if err := rejectProhibitedRefAttrs(el); err != nil {
+		return nil, err
+	}
 	occ, elided, err := occursOf(el)
 	if err != nil {
 		return nil, err
@@ -1290,9 +1293,10 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 	ref, ok := el.Attr("ref")
 	if !ok {
 		// A <group> in a content model is always a reference (§3.8.2: the named
-		// definition form appears only as a top-level <schema> child). ref/name
-		// mutual exclusion has no dedicated SCC (§3.7.3 "None as such", Q6), so a
-		// missing ref is a plain well-formedness fault, not an xsderr rule.
+		// definition form appears only as a top-level <schema> child). The absence
+		// has no dedicated SCC (§3.7.3 "None as such", Q6), so it is a plain
+		// well-formedness fault, not an xsderr rule — the same footing as the
+		// prohibited name rejectProhibitedRefAttrs charges just above.
 		return nil, fmt.Errorf("parser: a <group> in a content model must be a reference (carry a ref attribute), but none is present")
 	}
 	qn, err := p.resolveQName(el, ref, "ref")
@@ -1940,9 +1944,10 @@ func (p *producer) collectAttributeContent(container *Element, scopeParent xsd.A
 // into the referenced top-level definition, splicing in its uses and wildcards
 // (§3.6.2.1). A ref whose name resolves to no top-level <attributeGroup> is a
 // dangling reference charged src-resolve clause 1.4 (§3.17.6.2); a nested
-// <attributeGroup> with no ref is a well-formedness fault with no dedicated SCC
-// (§3.6.3 "None as such", grounding Q6), reported as a plain error. An
-// already-visited target is skipped, tolerating the spec-legal cycle (Q3).
+// <attributeGroup> with no ref, or one carrying the name xs:attributeGroupRef
+// prohibits (rejectProhibitedRefAttrs), is a well-formedness fault with no
+// dedicated SCC (§3.6.3 "None as such", grounding Q6), reported as a plain error.
+// An already-visited target is skipped, tolerating the spec-legal cycle (Q3).
 //
 // The two halves of this hop belong to DIFFERENT documents, and each is resolved
 // by its own producer. The ref= attribute is held by el, a child of the ASKING
@@ -1977,6 +1982,9 @@ func (p *producer) collectAttributeContent(container *Element, scopeParent xsd.A
 // this function's doc claims are equal differ in {scope}.{parent}
 // (TestAttributeGroupComponentAndInlineFoldAgree pins that they do not).
 func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
+	if err := rejectProhibitedRefAttrs(el); err != nil {
+		return err
+	}
 	ref, ok := el.Attr("ref")
 	if !ok {
 		return fmt.Errorf("parser: a nested <attributeGroup> must be a reference (carry a ref attribute), but none is present")
