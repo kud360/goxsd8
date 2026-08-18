@@ -75,14 +75,10 @@ go tool wipsurvey < issues.json       # LIVE/CLAIMED/EXPIRED/RETIRED/UNKNOWN bra
 go tool gapaudit  < gapissues.json    # GAP( markers vs trackers
 ```
 
-Both surveys read their issue list from **stdin**, so any GitHub channel
-feeds them (docs/ROUTINES.md ranks the channels and states what to do when
-one errors) — with `gh`:
-
-```sh
-gh issue list --state all --json number,state,labels > issues.json
-gh issue list --label kind/gap --state all --json number,title,state,body > gapissues.json
-```
+Both surveys read their issue list from **stdin** in `gh issue list
+--json`-shaped JSON, so any GitHub channel that can write that JSON to a
+file feeds them. docs/ROUTINES.md ranks the channels, states what to do when
+one errors, and spells the paginate-and-reshape recipe under "Survey input".
 
 Empty stdin is a supported mode, not a failure. `wipsurvey` then reports
 leases only and can never report RETIRED; `gapaudit` reports the marker
