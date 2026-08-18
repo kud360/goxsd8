@@ -12,8 +12,11 @@ import (
 
 // ctaExpr builds an XPath Expression property record over expr, binding the
 // prefix/namespace pairs as its {namespace bindings}. defaultNS, when
-// non-empty, is its {default namespace} — which no test in this file expects
-// to change an answer, because the CTA grammar never consults it.
+// non-empty, is its {default namespace} — the ABSENT property otherwise, which
+// is what every test passing "" here gets. It answers for one production only,
+// [15] ta-CastExpr's unprefixed target QName, which is why
+// TestCompileResolvesCastTargetInDefaultNamespace is the one test in this file
+// that passes it a value.
 func ctaExprRecord(expr, defaultNS string, bindings ...string) xsd.XPathExpression {
 	var nb []xsd.NamespaceBinding
 	for i := 0; i+1 < len(bindings); i += 2 {
@@ -166,6 +169,15 @@ func TestCompileDeclines(t *testing.T) {
 		{"(: unclosed", "an unclosed comment"},
 		{"@n = -1", "no unary minus production reaches a Literal"},
 		{"@a = 'x' or", "an 'or' with no right operand"},
+		// B.1 rule 1.1's xs:float to xs:double promotion, which this engine
+		// withholds rather than answering through a canonical round-trip that
+		// lands on a different xs:double (ctaWider, #889). Both sites: the
+		// typed pair, and clause 2.1's untypedAtomic-against-numeric arm.
+		{"@f cast as xs:float = 1e-1", "an xs:float operand against an xs:double one needs B.1 rule 1.1"},
+		{"@f cast as xs:float > 1e-1", "the same pair under an ordering comparator"},
+		{"1e-1 = @f cast as xs:float", "the same pair with the operands the other way round"},
+		{"@a = @f cast as xs:float", "clause 2.1 answers xs:double, so the xs:float operand needs rule 1.1"},
+		{"@a < @f cast as xs:float", "the same clause 2.1 pair under an ordering comparator"},
 	} {
 		bindings := []string{"a", "http://example.com/a", "xs", xsd.XMLSchemaNS}
 		if _, ok := CompileCTATest(ctaExprRecord(tc.expr, "", bindings...), seededTypes); ok {
@@ -835,6 +847,10 @@ func compileTypes(t *testing.T) ctaTypes {
 // through an evaluation that could agree by accident. It re-derives the table
 // the deleted ctaComparisonSpace pinned, over datatypes rather than over the
 // three-valued space that function could name.
+//
+// All three ctaTyping outcomes are in the table, because they are three
+// different directions: a settled type, err:XPTY0004 (a decided false), and
+// the withhold #889 owns.
 func TestComparisonType(t *testing.T) {
 	known := compileTypes(t)
 	attr := ctaAttr{name: uq("a")}
@@ -844,37 +860,121 @@ func TestComparisonType(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		left, right ctaValue
-		want        string
-		admitted    bool
+		// want is the comparison type's local name, and is empty for the two
+		// outcomes that settle none.
+		want   string
+		typing ctaTyping
 	}{
-		{"two attributes are clause 1's xs:string", attr, attr, "string", true},
-		{"attribute vs string literal is clause 2.4", attr, str, "string", true},
-		{"attribute vs decimal literal is clause 2.1", attr, dec, "double", true},
-		{"decimal literal vs attribute is clause 2.1", dec, attr, "double", true},
-		{"attribute vs double literal is clause 2.1", attr, dbl, "double", true},
-		{"two decimal literals stay xs:decimal", dec, dec, "decimal", true},
-		{"decimal vs double literal promotes", dec, dbl, "double", true},
-		{"two string literals stay xs:string", str, str, "string", true},
-		{"string vs numeric literal has no B.2 row", str, dec, "", false},
-		{"a cast vs a literal of its own primitive", castNode(t, known, "int"), dec, "decimal", true},
-		{"an attribute vs a numeric cast is clause 2.1", attr, castNode(t, known, "int"), "double", true},
-		{"an attribute vs a date cast is clause 2.4", attr, castNode(t, known, "date"), "date", true},
-		{"an attribute vs a dayTimeDuration cast is clause 2.2", attr, castNode(t, known, "dayTimeDuration"), "dayTimeDuration", true},
-		{"an attribute vs a yearMonthDuration cast is clause 2.3", attr, castNode(t, known, "yearMonthDuration"), "yearMonthDuration", true},
-		{"two date casts share their primitive", castNode(t, known, "date"), castNode(t, known, "date"), "date", true},
-		{"a date cast vs a string literal shares nothing", castNode(t, known, "date"), str, "", false},
-		{"xs:boolean pairs are admitted for every comparator", castNode(t, known, "boolean"), castNode(t, known, "boolean"), "boolean", true},
-		{"a token cast vs a string literal is xs:string", castNode(t, known, "token"), str, "string", true},
-		{"an anyURI cast vs a string literal is B.1's URI promotion", castNode(t, known, "anyURI"), str, "string", true},
-		{"a float cast vs a decimal literal promotes to the wider", castNode(t, known, "float"), dec, "float", true},
+		{"two attributes are clause 1's xs:string", attr, attr, "string", ctaTypeSettled},
+		{"attribute vs string literal is clause 2.4", attr, str, "string", ctaTypeSettled},
+		{"attribute vs decimal literal is clause 2.1", attr, dec, "double", ctaTypeSettled},
+		{"decimal literal vs attribute is clause 2.1", dec, attr, "double", ctaTypeSettled},
+		{"attribute vs double literal is clause 2.1", attr, dbl, "double", ctaTypeSettled},
+		{"two decimal literals stay xs:decimal", dec, dec, "decimal", ctaTypeSettled},
+		{"decimal vs double literal promotes", dec, dbl, "double", ctaTypeSettled},
+		{"two string literals stay xs:string", str, str, "string", ctaTypeSettled},
+		{"string vs numeric literal has no B.2 row", str, dec, "", ctaTypeErrored},
+		{"a cast vs a literal of its own primitive", castNode(t, known, "int"), dec, "decimal", ctaTypeSettled},
+		{"an attribute vs a numeric cast is clause 2.1", attr, castNode(t, known, "int"), "double", ctaTypeSettled},
+		{"an attribute vs a date cast is clause 2.4", attr, castNode(t, known, "date"), "date", ctaTypeSettled},
+		{"an attribute vs a dayTimeDuration cast is clause 2.2", attr, castNode(t, known, "dayTimeDuration"), "dayTimeDuration", ctaTypeSettled},
+		{"an attribute vs a yearMonthDuration cast is clause 2.3", attr, castNode(t, known, "yearMonthDuration"), "yearMonthDuration", ctaTypeSettled},
+		{"two date casts share their primitive", castNode(t, known, "date"), castNode(t, known, "date"), "date", ctaTypeSettled},
+		{"a date cast vs a string literal shares nothing", castNode(t, known, "date"), str, "", ctaTypeErrored},
+		{"xs:boolean pairs are admitted for every comparator", castNode(t, known, "boolean"), castNode(t, known, "boolean"), "boolean", ctaTypeSettled},
+		{"a token cast vs a string literal is xs:string", castNode(t, known, "token"), str, "string", ctaTypeSettled},
+		// B.1's URI promotion is applied at the value comparison and not to
+		// the comparison TYPE, so an xs:anyURI pair stays xs:anyURI: clause
+		// 2.4 must cast the untypedAtomic operand to xs:anyURI, whose
+		// whiteSpace facet is collapse, and answering xs:string here would
+		// preserve it instead.
+		{"an attribute vs an anyURI cast is clause 2.4", attr, castNode(t, known, "anyURI"), "anyURI", ctaTypeSettled},
+		{"two anyURI casts share their primitive", castNode(t, known, "anyURI"), castNode(t, known, "anyURI"), "anyURI", ctaTypeSettled},
+		{"an anyURI cast vs a string literal is B.1's URI promotion", castNode(t, known, "anyURI"), str, "string", ctaTypeSettled},
+		// B.1 rule 1.2 is "created by casting" and stays admitted in both
+		// directions; rule 1.1 is the withhold. (#889)
+		{"a float cast vs a decimal literal promotes to the wider", castNode(t, known, "float"), dec, "float", ctaTypeSettled},
+		{"a double cast vs a decimal literal promotes to the wider", castNode(t, known, "double"), dec, "double", ctaTypeSettled},
+		{"two float casts share their primitive", castNode(t, known, "float"), castNode(t, known, "float"), "float", ctaTypeSettled},
+		{"a float cast vs a double literal needs rule 1.1", castNode(t, known, "float"), dbl, "", ctaTypeDeclined},
+		{"a double literal vs a float cast needs rule 1.1", dbl, castNode(t, known, "float"), "", ctaTypeDeclined},
+		{"a float cast vs a double cast needs rule 1.1", castNode(t, known, "float"), castNode(t, known, "double"), "", ctaTypeDeclined},
+		{"an attribute vs a float cast needs rule 1.1 under clause 2.1", attr, castNode(t, known, "float"), "", ctaTypeDeclined},
+		{"a float cast vs an attribute needs rule 1.1 under clause 2.1", castNode(t, known, "float"), attr, "", ctaTypeDeclined},
 	} {
-		got, admitted := known.comparison(tc.left, tc.right)
-		if admitted != tc.admitted {
-			t.Errorf("%s: admitted = %v, want %v", tc.name, admitted, tc.admitted)
+		got, typing := known.comparison(tc.left, tc.right)
+		if typing != tc.typing {
+			t.Errorf("%s: typing = %v, want %v", tc.name, typing, tc.typing)
 			continue
 		}
-		if admitted && got.Name() != ctaBuiltin(tc.want) {
+		if typing == ctaTypeSettled && got.Name() != ctaBuiltin(tc.want) {
 			t.Errorf("%s: comparison type = %v, want xs:%s", tc.name, got.Name(), tc.want)
+		}
+	}
+}
+
+// TestEvaluateAnyURIComparisons pins B.1's URI promotion at the place it is
+// applied — ctaCompare.eval's collation route — and the two answers that
+// route decides.
+//
+// The equality row is finding 2's witness: clause 2.4 casts the
+// xs:untypedAtomic operand to xs:anyURI, whose whiteSpace facet COLLAPSES the
+// surrounding space, so the two operands are the same xs:anyURI value.
+// Promoting the comparison type to xs:string instead would cast @u to
+// xs:string, whose whiteSpace facet is preserve, and decide false.
+//
+// The ordering row needs the collation route to decide at all: xs:anyURI
+// values are deliberately not value.Ordered (§3.3.17.3, ordered=false), so a
+// comparison type of xs:anyURI reaching holdsBetween raises err:XPTY0004 and
+// the {test} is false whichever way the two URIs sort.
+func TestEvaluateAnyURIComparisons(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{
+		uq("u"): " http://a ",
+		uq("v"): "http://a",
+		uq("w"): "http://b",
+	})
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		{"@u = @v cast as xs:anyURI", true},
+		{"@u != @v cast as xs:anyURI", false},
+		{"@u = @w cast as xs:anyURI", false},
+		{"@v cast as xs:anyURI < @w cast as xs:anyURI", true},
+		{"@w cast as xs:anyURI < @v cast as xs:anyURI", false},
+		{"@v cast as xs:anyURI <= @v cast as xs:anyURI", true},
+		{"@w cast as xs:anyURI > @v cast as xs:anyURI", true},
+		{"@v cast as xs:anyURI >= @w cast as xs:anyURI", false},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}
+
+// TestEvaluateFloatComparisons pins that the withhold #889 owns did not take
+// the xs:float pairs B.1 rule 1.2 and the identity arm DO reach: an xs:float
+// operand still compares against an xs:decimal literal and against another
+// xs:float operand, and both decide.
+func TestEvaluateFloatComparisons(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{
+		uq("f"): "0.5",
+		uq("g"): "0.25",
+	})
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		{"@f cast as xs:float = 0.5", true},
+		{"@f cast as xs:float = 0.25", false},
+		{"@f cast as xs:float > 0.25", true},
+		{"@f cast as xs:float > @g cast as xs:float", true},
+		{"@f cast as xs:float = @g cast as xs:float", false},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
 	}
 }

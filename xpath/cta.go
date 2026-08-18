@@ -109,6 +109,12 @@ type CTATest struct{ root ctaExpr }
 //   - a construct inside the required subset that this engine does not yet
 //     evaluate, each carrying its own marker at the production in
 //     ctaparser.go that recognizes it;
+//   - a comparison whose two operands need a type promotion this engine cannot
+//     perform, which today is exactly B.1 rule 1.1's xs:float to xs:double
+//     (ctaWider). Declining is what keeps the withhold and the DECIDED false
+//     apart: a promotion that cannot be performed is not err:XPTY0004 and must
+//     not become one, because that error is a decided false the caller reads as
+//     "this alternative did not select";
 //   - a cast target this engine does not cast to, which is TWO conditions
 //     sharing one encoding deliberately. A target naming an in-scope atomic
 //     type outside the XSD namespace is valid XPath outside §3.12.6's
@@ -130,12 +136,16 @@ type CTATest struct{ root ctaExpr }
 // (2.2.2), the default element/type namespace from expr.DefaultNamespace()
 // (2.2.3) and the default function namespace
 // http://www.w3.org/2005/xpath-functions (2.2.4). The default element/type
-// namespace is consulted for an unprefixed cast TARGET and for nothing else
-// (xpath20.md §3.10.2: "If the target type has no namespace prefix, it is
-// considered to be in the default element/type namespace"): [17] ta-AttrName
-// makes every NameTest in this grammar an attribute-axis one, whose principal
-// node kind is never element, so an unprefixed NameTest is always in no
-// namespace (xpath20.md §3.2.1.2, PRINCIPLES 15).
+// namespace is read only where [xsd.XPathExpression.DefaultNamespace] reports
+// it present, because that accessor's own doc makes the first result "not
+// meaningful" otherwise; an ABSENT one leaves ctaNames.defaultNamespace the
+// empty string, which is the no-namespace answer §3.10.2 wants. It is
+// consulted for an unprefixed cast TARGET and for nothing else (xpath20.md
+// §3.10.2: "If the target type has no namespace prefix, it is considered to be
+// in the default element/type namespace"): [17] ta-AttrName makes every
+// NameTest in this grammar an attribute-axis one, whose principal node kind is
+// never element, so an unprefixed NameTest is always in no namespace
+// (xpath20.md §3.2.1.2, PRINCIPLES 15).
 func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, bool) {
 	toks, ok := ctaTokenize(expr.Expression())
 	if !ok {
@@ -149,7 +159,9 @@ func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, 
 	for _, b := range expr.NamespaceBindings() {
 		names.prefixes[b.Prefix()] = b.Namespace()
 	}
-	names.defaultNamespace, _ = expr.DefaultNamespace()
+	if defaultNS, present := expr.DefaultNamespace(); present {
+		names.defaultNamespace = defaultNS
+	}
 	p := ctaParser{toks: toks, names: names, types: known}
 	root, ok := p.test()
 	if !ok {
@@ -461,8 +473,14 @@ func (n ctaAnd) eval(env ctaEnv) ctaAnswer {
 // empty sequence and nothing is raised.
 //
 // Both operands reach the comparison already converted into c.comparison,
-// which is where §3.5.2 clause 2's casts and B.1's promotions happened, so
-// what is left here is clause 3's value comparison.
+// which is where §3.5.2 clause 2's casts happened, so what is left here is
+// clause 3's value comparison — and B.1's URI promotion, which is applied
+// HERE and not in the comparison type: an xs:anyURI comparison type is decided
+// through the default collation exactly as an xs:string one is, because B.1
+// rule 2 promotes xs:anyURI to xs:string and B.2 then gives it the same six
+// fn:compare rows. Promoting the TYPE instead would change what clause 2.4
+// casts an xs:untypedAtomic operand to and so change the answer
+// (ctaTypes.comparison).
 func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
 	left := ctaItemOf(c.left, c.comparison, env)
 	right := ctaItemOf(c.right, c.comparison, env)
@@ -474,7 +492,7 @@ func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
 	if !leftPresent || !rightPresent {
 		return ctaFalse
 	}
-	if c.comparison.Name() == ctaBuiltin("string") {
+	if ctaStringLike(c.comparison) {
 		return c.op.holdsCollated(l.v, r.v)
 	}
 	return c.op.holdsBetween(l.v, r.v)

@@ -12,10 +12,14 @@
 //     an element's attributes, casts included: [15] ta-CastExpr's
 //     `cast as` tail and [18] ta-ConstructorFunction are one node,
 //     evaluated through value's facet pipeline, which is what
-//     xpath-functions.md §17.1.1 makes a cast. ONE shape inside that
-//     grammar compile-time-DECLINES rather than evaluating — a
+//     xpath-functions.md §17.1.1 makes a cast. THREE shapes inside
+//     that grammar compile-time-DECLINE rather than evaluating: a
 //     wildcard NameTest (#859), declined lexically before any
-//     production sees it — and so does a cast whose TARGET is not a
+//     production sees it; a cast whose target's primitive is xs:QName,
+//     whose lexical mapping needs a static context this engine has no
+//     value for (#888); and a comparison needing xpath20.md B.1 rule
+//     1.1's xs:float-to-xs:double promotion, which value exposes no
+//     widening for (#889). So does a cast whose TARGET is not a
 //     builtin datatype, which is the required subset's own boundary
 //     (§3.12.6 clause 4) rather than a construct of the grammar.
 //  2. Assertion essentials: axes, predicates, quantified expressions,

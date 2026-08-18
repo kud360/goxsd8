@@ -483,8 +483,11 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 	if !ok {
 		return nil, false
 	}
-	comparison, admitted := p.types.comparison(left, right)
-	if !admitted {
+	comparison, typing := p.types.comparison(left, right)
+	if typing == ctaTypeDeclined {
+		return nil, false
+	}
+	if typing == ctaTypeErrored {
 		return ctaTypeError{}, true
 	}
 	return ctaCompare{op: op, comparison: comparison, left: left, right: right}, true

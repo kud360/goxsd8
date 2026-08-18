@@ -153,9 +153,10 @@ func (t ctaTypes) ancestor(st *xsd.SimpleType, name xsd.QName) (*xsd.SimpleType,
 // resolves against the static context's namespaces (xpath-functions.md §5.3),
 // which is the [value.Context] this engine has no value for (PRINCIPLES 19) —
 // and F&O's casting table supports no dynamically-supplied operand for it at
-// all, so only the string-LITERAL spelling is being withheld here. It takes
-// [CompileCTATest]'s own withhold direction, argued there, rather than
-// deciding. (#888)
+// all. BOTH spellings decline, because the target is what is classified here;
+// only the string-LITERAL one is a LOSS, an attribute operand having no
+// defined result to withhold in the first place. It takes [CompileCTATest]'s
+// own withhold direction, argued there, rather than deciding. (#888)
 func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 	st, declared := t.simple(name)
 	if !declared {
@@ -182,11 +183,31 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 	return st, true
 }
 
+// ctaTyping is which of the three outcomes settling a comparison's type
+// reached, and the three are three DIFFERENT directions rather than degrees of
+// one (STYLE P3):
+//
+//   - ctaTypeSettled carries the type both operands are converted into.
+//   - ctaTypeErrored is err:XPTY0004 — no one type serves both operands, which
+//     is a raised type error and so a ctaTypeError node, decided false for the
+//     whole {test} by key-cta-ta-select clause 2.
+//   - ctaTypeDeclined is [CompileCTATest]'s WITHHOLD: this engine will not
+//     decide the pair at all, and the caller's ·governing type definition· is
+//     left undetermined rather than settled on a wrong answer.
+//
+// ctaTypeErrored is the zero value, so a fault that returns no type reports
+// the error direction and never the withhold by accident.
+type ctaTyping byte
+
+const (
+	ctaTypeErrored ctaTyping = iota
+	ctaTypeDeclined
+	ctaTypeSettled
+)
+
 // comparison settles the type a general comparison of l against r converts
 // BOTH its operands into, per xpath20.md §3.5.2 clause 2's
-// magnitude-relationship rules and B.1's type promotions. ok is false where no
-// one type serves both operands, which is err:XPTY0004 and so a ctaTypeError
-// node.
+// magnitude-relationship rules and B.1's type promotions.
 //
 // Two rules cover the three operand shapes this grammar builds, because an
 // operand is either xs:untypedAtomic (an uncast attribute) or typed (a
@@ -198,28 +219,19 @@ func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 //     other operand's type T — untypedAgainst.
 //   - NEITHER: one type must serve both, which is shared.
 //
-// B.1's URI promotion is applied to the ANSWER rather than inside one of those
-// rules, because it holds however the pair was formed: "a value of type
-// xs:anyURI (or any type derived by restriction from xs:anyURI) can be
-// promoted to the type xs:string", and B.2 gives xs:anyURI its six operator
-// rows through fn:compare exactly as it gives them to xs:string.
-func (t ctaTypes) comparison(l, r ctaValue) (*xsd.SimpleType, bool) {
-	c, admitted := t.compared(ctaStaticOf(l), ctaStaticOf(r))
-	if !admitted {
-		return nil, false
-	}
-	if c.Name() == ctaBuiltin("anyURI") {
-		return t.str, true
-	}
-	return c, true
-}
-
-// compared is comparison's dispatch over the two operands' static types.
-func (t ctaTypes) compared(l, r ctaStatic) (*xsd.SimpleType, bool) {
-	lt, lTyped := l.(ctaTyped)
-	rt, rTyped := r.(ctaTyped)
+// B.1's URI promotion is NOT applied here. Answering xs:string for an
+// xs:anyURI pair would change the type clause 2.4 casts the xs:untypedAtomic
+// operand to, from xs:anyURI (whiteSpace collapse) to xs:string (preserve),
+// and so change the answer: with @u=" http://a " and @v="http://a",
+// `@u = @v cast as xs:anyURI` is true only if @u was collapsed. The promotion
+// belongs where the comparison happens, and ctaCompare.eval applies it there
+// by routing an xs:anyURI comparison type through the default collation
+// exactly as it routes xs:string.
+func (t ctaTypes) comparison(l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
+	lt, lTyped := ctaStaticOf(l).(ctaTyped)
+	rt, rTyped := ctaStaticOf(r).(ctaTyped)
 	if !lTyped && !rTyped {
-		return t.str, true
+		return t.str, ctaTypeSettled
 	}
 	if !lTyped {
 		return t.untypedAgainst(rt.st)
@@ -244,60 +256,68 @@ func (t ctaTypes) compared(l, r ctaStatic) (*xsd.SimpleType, bool) {
 //     may arise when comparing the primitive type xs:duration with any
 //     duration type."
 //   - 2.4, "in all other cases, V is cast to the primitive base type of T".
-func (t ctaTypes) untypedAgainst(st *xsd.SimpleType) (*xsd.SimpleType, bool) {
+func (t ctaTypes) untypedAgainst(st *xsd.SimpleType) (*xsd.SimpleType, ctaTyping) {
 	p, resolved := t.primitive(st)
 	if !resolved {
-		return nil, false
+		return nil, ctaTypeErrored
 	}
 	if ctaNumeric(p) {
-		return t.double, true
+		// GAP(xpath): clause 2.1 answers xs:double for an xs:float-primitive
+		// T too, and B.1 rule 1.1 must then promote the T operand ITSELF to
+		// xs:double — the promotion ctaWider declines, for the reason argued
+		// there and under the same withhold. (#889)
+		if p.Name() == ctaBuiltin("float") {
+			return nil, ctaTypeDeclined
+		}
+		return t.double, ctaTypeSettled
 	}
 	dayTime, err := t.ancestor(st, ctaBuiltin("dayTimeDuration"))
 	if err != nil {
-		return nil, false
+		return nil, ctaTypeErrored
 	}
 	if dayTime != nil {
-		return dayTime, true
+		return dayTime, ctaTypeSettled
 	}
 	yearMonth, err := t.ancestor(st, ctaBuiltin("yearMonthDuration"))
 	if err != nil {
-		return nil, false
+		return nil, ctaTypeErrored
 	}
 	if yearMonth != nil {
-		return yearMonth, true
+		return yearMonth, ctaTypeSettled
 	}
-	return p, true
+	return p, ctaTypeSettled
 }
 
 // shared is the type serving two TYPED operands: their {primitive type
-// definition} where they share one, and otherwise the wider of the two under
-// B.1's promotions — which is the only way two different primitives are ever
-// admitted, and the reason a cast operand compared against a string literal is
-// err:XPTY0004 (the grammar's one such pair, and the shape §3.5.2's
-// untypedAtomic rules never reach because a StringLiteral is xs:string).
+// definition} where they share one, and otherwise B.1's two promotions — the
+// wider of two numeric primitives, and xs:string for an xs:anyURI met by an
+// xs:string. Those two are the only ways two DIFFERENT primitives are ever
+// admitted, which is the reason a date cast compared against a string literal
+// is err:XPTY0004 (the shape §3.5.2's untypedAtomic rules never reach, because
+// a StringLiteral is xs:string and so no operand is untyped).
 //
 // The comparison is by ·expanded name· rather than by component identity: a
 // primitive is always named, and a resolver is free to answer with a component
 // this compile did not itself resolve.
-func (t ctaTypes) shared(a, b *xsd.SimpleType) (*xsd.SimpleType, bool) {
+func (t ctaTypes) shared(a, b *xsd.SimpleType) (*xsd.SimpleType, ctaTyping) {
 	pa, resolved := t.primitive(a)
 	if !resolved {
-		return nil, false
+		return nil, ctaTypeErrored
 	}
 	pb, resolved := t.primitive(b)
 	if !resolved {
-		return nil, false
+		return nil, ctaTypeErrored
 	}
 	if pa.Name() == pb.Name() {
-		return pa, true
+		return pa, ctaTypeSettled
 	}
 	if ctaNumeric(pa) && ctaNumeric(pb) {
-		return ctaWider(pa, pb), true
+		return ctaWider(pa, pb)
 	}
 	if ctaStringLike(pa) && ctaStringLike(pb) {
-		return t.str, true
+		return t.str, ctaTypeSettled
 	}
-	return nil, false
+	return nil, ctaTypeErrored
 }
 
 // ctaNumeric reports whether p is one of the three primitives xpath20.md calls
@@ -316,11 +336,30 @@ func ctaStringLike(p *xsd.SimpleType) bool {
 // ctaWider is the target of B.1's numeric promotions between two different
 // numeric primitives: xs:float promotes to xs:double, and xs:decimal to either
 // of them, so the wider of the pair is the one both reach.
-func ctaWider(a, b *xsd.SimpleType) *xsd.SimpleType {
-	if ctaRank(a) >= ctaRank(b) {
-		return a
+//
+// GAP(xpath): the xs:float against xs:double pair is DECLINED rather than
+// compared, because reaching it needs B.1 rule 1.1 and this engine cannot
+// perform rule 1.1. That rule promotes the xs:float operand to "the xs:double
+// value that is the same as the original value" — the same point of the real
+// line, not a re-parse of any lexical — and value exposes no such widening:
+// over the strict backend an xs:float value and an xs:double value answer Eq
+// false and Cmp value.Incomparable, correctly, because they are values of
+// different types. ctaPromote's ·canonical representation· round-trip is not
+// that widening either: xs:float's canonical is the shortest decimal that
+// round-trips to the FLOAT, so reparsing it as an xs:double lands on a
+// DIFFERENT xs:double. (Rule 1.2's xs:decimal promotion IS "created by
+// casting", so the same round-trip is exactly right for the decimal pairs and
+// they stay admitted.) The direction is [CompileCTATest]'s withhold: the
+// {test} decides nothing rather than deciding it wrongly. (#889)
+func ctaWider(a, b *xsd.SimpleType) (*xsd.SimpleType, ctaTyping) {
+	wider, narrower := a, b
+	if ctaRank(b) > ctaRank(a) {
+		wider, narrower = b, a
 	}
-	return b
+	if wider.Name() == ctaBuiltin("double") && narrower.Name() == ctaBuiltin("float") {
+		return nil, ctaTypeDeclined
+	}
+	return wider, ctaTypeSettled
 }
 
 // ctaRank orders the three numeric primitives by which promotes to which, and
