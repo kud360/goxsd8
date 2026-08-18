@@ -11,13 +11,14 @@ import (
 // This file is the lexer and the recursive-descent parser for the §3.12.6
 // required subset, one of each (STYLE T4, xpath/doc.go's "There is never a
 // second, lenient parser"). Every method below is named for the production it
-// parses, and the whole grammar is both reached and evaluated. ONE construct
-// inside it is still declined rather than evaluated, and its decline is NOT
-// production-level: a wildcard NameTest, because `*` is no token kind, so no
-// wildcard spelling survives ctaTokenize to reach [17] ta-AttrName and the
-// marker sits on the tokenizer arm that declines it. A cast whose TARGET this
-// engine does not cast to declines as well (ctaTypes.castTarget), which is the
-// required subset's own boundary rather than a construct of the grammar.
+// parses, and the whole grammar is both reached and evaluated: no method here
+// is a stub, because no compile-time decline is production-level. xpath/doc.go
+// owns the enumeration of what declines; declines reach this file two ways. A
+// wildcard NameTest declines on the tokenizer arm below, because `*` is no
+// token kind and no wildcard spelling survives ctaTokenize to reach [17]
+// ta-AttrName. Everything else is ctaTypes answering ctaTypeDeclined for a
+// comparison type or a cast target it will not serve, which the production
+// that asked propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]

@@ -327,8 +327,11 @@ func ctaNumeric(p *xsd.SimpleType) bool {
 	return ctaRank(p) >= 0
 }
 
-// ctaStringLike reports whether p is one of the two primitives B.1's URI
-// promotion relates, xs:anyURI and xs:string.
+// ctaStringLike reports whether p is xs:anyURI or xs:string, the two
+// primitives B.1's URI promotion relates. p need not be primitive:
+// ctaCompare.eval asks it of a comparison type, which untypedAgainst may have
+// answered as a named duration type, and the name comparison answers false for
+// that as for anything else.
 func ctaStringLike(p *xsd.SimpleType) bool {
 	return p.Name() == ctaBuiltin("string") || p.Name() == ctaBuiltin("anyURI")
 }
