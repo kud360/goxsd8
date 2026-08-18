@@ -3,17 +3,19 @@ package parser
 import (
 	"fmt"
 
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
 // This file maps the <alternative> children of an <element> into the element
 // declaration's {type table} (§3.3.2.1 dcl.elt.common over §3.12.2 declare-ta)
-// and charges §3.12.3 src-ta over the same children. It serves the GLOBAL
-// <element> path (produceElement) and both LOCAL ones (produceLocalElement)
-// from one implementation (STYLE T4): §3.3.2.1's {type table} row is a COMMON
-// mapping rule and §3.3.2.2 dcl.elt.global supplements {target namespace} and
-// {scope} alone, so a top-level <element> has nothing to map differently.
+// and charges §3.12.3 src-ta and §3.12.6 ta-props-correct clause 2 over the
+// same children. It serves the GLOBAL <element> path (produceElement) and both
+// LOCAL ones (produceLocalElement) from one implementation (STYLE T4):
+// §3.3.2.1's {type table} row is a COMMON mapping rule and §3.3.2.2
+// dcl.elt.global supplements {target namespace} and {scope} alone, so a
+// top-level <element> has nothing to map differently.
 
 // ruleSrcTA is Type Alternative Representation OK (Structures §3.12.3,
 // id="src-ta"): "each <alternative> element must have one (and only one) of the
@@ -21,6 +23,16 @@ import (
 // child element". The rule is a single unnumbered sentence, so messages cite no
 // clause.
 const ruleSrcTA xsderr.Rule = "src-ta"
+
+// ruleTAPropsCorrect is Type Alternative Properties Correct (Structures §3.12.6,
+// id="ta-props-correct"), whose clause 2 is "If the {test} is not absent, then
+// it satisfies the constraint XPath Valid (§3.13.6.2)" — and xpath-valid clause
+// 2 in turn is "X does not produce any static error".
+//
+// The rule ID is BARE, with no clause suffix: xsderr's catalog is generated from
+// the specs and reserves exactly this ID, so a message names its clause inline
+// (STYLE E4) instead.
+const ruleTAPropsCorrect xsderr.Rule = "ta-props-correct"
 
 // typeTableOf maps the <alternative> children of el into the {type table} of
 // the element declaration el produces (§3.3.2.1 dcl.elt.common), returning nil
@@ -48,6 +60,16 @@ const ruleSrcTA xsderr.Rule = "src-ta"
 //     so declaredType is passed through WHOLE — the same component, not a copy,
 //     and whichever arm it holds, including the SubstitutionGroupHeadTypeRef a
 //     substitutionGroup=-typed element carries.
+//
+// ta-props-correct clause 2 is charged here, over each {test} as it is built,
+// because this is the only site in the module that builds one and alt.Loc() is
+// in hand. The constraint it delegates to — xpath-valid clause 2 (§3.13.6.2),
+// "does not produce any static error" — is a Schema Component Constraint, so it
+// is decided at construction and independent of whether any instance is ever
+// ·assessed·; xpath.CTATestStaticError proves the static error and this charges
+// it, the engine never minting a rule of its own. An {expression} that engine
+// merely cannot EVALUATE is no fault at all and passes straight through, on the
+// terms xpath/cta.go argues (PRINCIPLES 20).
 //
 // {annotations} is the empty sequence on every Type Alternative built here,
 // matching every other component this producer emits: no <annotation> is mapped
@@ -88,6 +110,11 @@ func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType x
 		// same record and the same xpathDefaultNamespace chain an <assert> gets,
 		// which is why this reuses buildXPathExpression rather than restating it.
 		test := p.buildXPathExpression(alt, "test")
+		if serr := xpath.CTATestStaticError(test); serr != nil {
+			return nil, xsderr.New(ruleTAPropsCorrect, alt.Loc(),
+				"the test attribute %q has an XPath static error (%s), but ta-props-correct clause 2 requires the {test} to satisfy xpath-valid, whose clause 2 admits none",
+				test.Expression(), serr)
+		}
 		ta, terr := xsd.NewTypeAlternative(alt.Loc(), &test, types[i], nil)
 		if terr != nil {
 			return nil, terr

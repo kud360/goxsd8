@@ -136,6 +136,62 @@ func TestCompileDeclines(t *testing.T) {
 	}
 }
 
+// TestCTATestStaticErrorReportsUnboundPrefix pins the static direction of
+// ta-props-correct clause 2: an unbound prefix inside a COMPLETE ta-Test is
+// err:XPST0081, reported as a fact about the schema — and CompileCTATest goes on
+// withholding the same expression, because the tree it built holds a name that
+// resolved to nothing.
+func TestCTATestStaticErrorReportsUnboundPrefix(t *testing.T) {
+	for _, tc := range []struct{ expr, prefix string }{
+		{"@p:kind = 'x'", "p"},
+		{"attribute::p:kind = 'x'", "p"},
+		{"@p:kind", "p"},
+		{"not(@p:kind = 'x')", "p"},
+		{"@a:kind = 'x' or @p:kind = 'y'", "p"},
+		{"@q:kind = @p:kind", "q"},
+		{"(@p:kind = 'x') and @a:kind = 'y'", "p"},
+	} {
+		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a")
+		err := CTATestStaticError(record)
+		if err == nil {
+			t.Errorf("CTATestStaticError(%q) = nil, want err:XPST0081", tc.expr)
+			continue
+		}
+		want := `err:XPST0081: no in-scope namespace binding for prefix "` + tc.prefix + `"`
+		if err.Error() != want {
+			t.Errorf("CTATestStaticError(%q) = %q, want %q", tc.expr, err, want)
+		}
+		if _, ok := CompileCTATest(record); ok {
+			t.Errorf("CompileCTATest(%q) compiled; a tree holding an unresolved name must never reach Evaluate", tc.expr)
+		}
+	}
+}
+
+// TestCTATestStaticErrorIsSilentForUnsupported pins UNSUPPORTED DOMINATES
+// STATIC. Every expression here declines, and none of them is a schema fault:
+// charging one would reject a schema §3.12.6 clause 2's Note says a processor
+// may decline but must not refuse.
+func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
+	for _, tc := range []struct{ expr, why string }{
+		{"@p:a = 'x' and count(@b) > 1", "a complete-looking prefix inside an expression a later constructor call declines"},
+		{"@p:kind cast as xs:string", "ta-CastExpr's cast tail (#858) after the unbound prefix"},
+		{"p:not(@kind = 'x')", "a constructor call (#858) — a prefixed name is never fn:not"},
+		{"@p:* = 'x'", "a wildcard NameTest (#859), declined lexically"},
+		{"@p:kind = 'x' extra", "trailing tokens are not part of a Test"},
+		{"@p:kind = ", "a Comparator with no right operand"},
+		{"count(//p:a) > 1", "full XPath 2.0, outside the subset"},
+		{"", "an empty {expression} is no Test production"},
+		{"self::message", "an axis step the grammar has no production for"},
+		{"@kind = 'book'", "a complete Test whose every name resolved"},
+		{"@a:kind = 'book'", "a complete Test whose prefix is bound"},
+	} {
+		bindings := []string{"a", "http://example.com/a", "xs", xsd.XMLSchemaNS}
+		if err := CTATestStaticError(ctaExprRecord(tc.expr, "", bindings...)); err != nil {
+			t.Errorf("CTATestStaticError(%q) = %v, want nil (%s)", tc.expr, err, tc.why)
+		}
+	}
+}
+
 // TestEvaluateStringComparators pins all six operators over the untypedAtomic
 // attribute against a string literal, which §3.5.2 rule 2.4 compares as
 // xs:string and B.2 decides through the default (codepoint) collation.

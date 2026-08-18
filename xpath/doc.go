@@ -14,6 +14,9 @@
 //     `cast as` tail and [18] ta-ConstructorFunction (#858), each
 //     declined at its own production, and a wildcard NameTest (#859),
 //     declined lexically before any production sees it.
+//     CTATestStaticError reports the XPath STATIC errors of the same
+//     grammar over the same traversal, which is a different question
+//     with a different owner — see below.
 //  2. Assertion essentials: axes, predicates, quantified expressions,
 //     typed comparisons, the F&O function core — M6. PLANNED; nothing
 //     of it is exported.
@@ -51,6 +54,22 @@
 // {test} is treated as if it had evaluated (without error) to false").
 // Confusing that with a decline flips false-accepts into false-rejects
 // or vice versa.
+//
+// # Static errors are the assembler's, not the engine's
+//
+// An XPath STATIC error is a third direction: ta-props-correct clause 2
+// (§3.12.6) over xpath-valid clause 2 (§3.13.6.2) forbids one outright,
+// so it is a Schema Component Constraint decided when the component is
+// assembled and independent of any instance. CTATestStaticError proves
+// it and returns the fact as a plain error; the CHARGE — the rule ID and
+// the location — is minted by the assembler that owns the constraint
+// (parser), never here.
+//
+// UNSUPPORTED DOMINATES STATIC. An {expression} outside the required
+// subset is declined and never charged, whatever its names resolve to,
+// because §3.12.6 clause 2's Note lets a processor decline it and never
+// lets one refuse the schema for it. Under-charging is a rejection this
+// engine can take later; over-charging is a false reject now.
 //
 // # Static context
 //

@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/kud360/goxsd8/value"
@@ -29,7 +30,7 @@ import (
 //	[17] AttrName            ::= '@' NameTest
 //	[18] ConstructorFunction ::= QName '(' SimpleValue ')'
 //
-// TWO ERROR DIRECTIONS MEET HERE AND NEITHER IS THE OTHER.
+// THREE ERROR DIRECTIONS MEET HERE AND NO TWO OF THEM ARE ONE.
 //
 // A test the engine cannot evaluate is declined at COMPILE time
 // ([CompileCTATest] reporting false), and its consequence — the caller
@@ -40,7 +41,10 @@ import (
 // evaluation, then the {test} is treated as if it had evaluated (without
 // error) to false." That is spec-normative behavior and not this module's
 // fail-open contract, so it carries no GAP marker and never reaches the
-// caller as a decline.
+// caller as a decline. An XPath STATIC error is neither: it is a
+// ta-props-correct clause 2 (§3.12.6) violation the assembler charges before
+// any instance exists, reported by [CTATestStaticError] and by nothing else in
+// this package.
 //
 // The nodes of the XDM instance a {test} runs against are UNTYPED
 // (key-cta-ta-select clause 1's Note), so every attribute operand atomizes to
@@ -90,7 +94,11 @@ type CTATest struct{ root ctaExpr }
 //     evaluate, each carrying its own marker at the production in
 //     ctaparser.go that recognizes it.
 //
-// It never returns an error: a decline is not a verdict about the schema.
+// It never returns an error: a decline is not a verdict about the schema. The
+// verdict the second bullet's static error does carry is [CTATestStaticError]'s
+// to report, over the same traversal and disagreeing with nothing here — this
+// entry point still withholds it, because a tree built over an unresolved name
+// is not evaluable whatever the schema's fate.
 //
 // The static context is xpath-valid clause 2.2's: XPath 1.0 compatibility mode
 // false (2.2.1), statically known namespaces from expr.NamespaceBindings()
@@ -101,9 +109,61 @@ type CTATest struct{ root ctaExpr }
 // never element, so an unprefixed NameTest here is always in no namespace
 // (xpath20.md §3.2.1.2, PRINCIPLES 15).
 func CompileCTATest(expr xsd.XPathExpression) (CTATest, bool) {
+	root, defect := compileCTATest(expr)
+	if defect.kind != ctaNoDefect {
+		return CTATest{}, false
+	}
+	return CTATest{root: root}, true
+}
+
+// CTATestStaticError reports the XPath STATIC error the {test} of a Type
+// Alternative carries, and nil for every other {expression} — including one
+// this engine merely cannot evaluate.
+//
+// It answers the one question ta-props-correct clause 2 (§3.12.6) asks of a
+// {test}: whether it "satisfies the constraint XPath Valid (§3.13.6.2)", whose
+// clause 2 is "X does not produce any static error". That is a Schema Component
+// Constraint, decided when the component is assembled and independent of
+// whether any instance is ever ·assessed·, so the charge belongs to the
+// assembler: this returns the FACT and its detail as a plain error, and never
+// mints an xsderr.Rule of its own.
+//
+// UNSUPPORTED DOMINATES STATIC. A static error is reported only where the token
+// stream parsed to its end as a complete [8] ta-Test production and name
+// resolution was the sole defect. `count(//p:a) > 1` with p unbound is legal
+// full XPath 2.0 that this engine declines under §3.12.6 clause 2's Note
+// ("Conforming processors may but are not required to support XPath
+// expressions not belonging to the required subset of XPath"), and reading its
+// unbound prefix in isolation would turn that decline into the rejection of a
+// conforming schema. Under-charging is a rejection this engine can take later;
+// over-charging is a false reject now.
+//
+// The message is the XPath error code and the fact, e.g.
+//
+//	err:XPST0081: no in-scope namespace binding for prefix "p"
+//
+// naming the FIRST unbound prefix in expression order (STYLE D2).
+func CTATestStaticError(expr xsd.XPathExpression) error {
+	_, defect := compileCTATest(expr)
+	if defect.kind != ctaStatic {
+		return nil
+	}
+	return errors.New(defect.detail)
+}
+
+// compileCTATest is the ONE traversal the two entry points above are façades
+// over (STYLE T4): it tokenizes the {expression}, indexes the {namespace
+// bindings} and parses [8] ta-Test, reporting the tree and what — if anything —
+// was wrong with it.
+//
+// Name resolution never fails a parse — it records and carries on — so a parse
+// that failed at all failed for another reason, and is ctaUnsupported with
+// whatever an unbound prefix recorded along the way DISCARDED. That is where
+// "unsupported dominates static" is enforced, once, for both façades.
+func compileCTATest(expr xsd.XPathExpression) (ctaExpr, ctaDefect) {
 	toks, ok := ctaTokenize(expr.Expression())
 	if !ok {
-		return CTATest{}, false
+		return nil, ctaDefect{kind: ctaUnsupported}
 	}
 	names := ctaNames{prefixes: make(map[string]string)}
 	for _, b := range expr.NamespaceBindings() {
@@ -112,10 +172,42 @@ func CompileCTATest(expr xsd.XPathExpression) (CTATest, bool) {
 	p := ctaParser{toks: toks, names: names}
 	root, ok := p.test()
 	if !ok {
-		return CTATest{}, false
+		return nil, ctaDefect{kind: ctaUnsupported}
 	}
-	return CTATest{root: root}, true
+	return root, p.defect
 }
+
+// ctaDefect is what compileCTATest found wrong with an {expression}. The three
+// states are sealed inside this package and none of them crosses the boundary:
+// each exported entry point answers about ONE of them, so no caller ever
+// classifies a defect and no caller can mistake a decline for a verdict.
+//
+// The zero value is "nothing wrong", which is the only state that yields an
+// evaluable tree.
+type ctaDefect struct {
+	kind ctaDefectKind
+	// detail is the rendered diagnostic of a ctaStatic defect. The other two
+	// kinds leave it empty because they have nothing to say: an {expression}
+	// outside what this engine evaluates is not a verdict about the schema, so
+	// there is no fact to report about it.
+	detail string
+}
+
+// ctaDefectKind is the kind of a [ctaDefect].
+type ctaDefectKind byte
+
+const (
+	// ctaNoDefect is a complete [8] ta-Test production this engine evaluates.
+	ctaNoDefect ctaDefectKind = iota
+	// ctaUnsupported is an {expression} this engine cannot evaluate — full XPath
+	// 2.0 outside the required subset, or one of the subset constructs whose own
+	// production declines it. It is the fail-open direction (PRINCIPLES 20) and
+	// never a schema fault.
+	ctaUnsupported
+	// ctaStatic is a complete ta-Test production carrying an XPath static error,
+	// which xpath-valid clause 2 (§3.13.6.2) forbids outright.
+	ctaStatic
+)
 
 // Evaluate reports whether the compiled {test} holds for the element
 // information item whose attributes attr reads, which is the whole of what
@@ -215,6 +307,10 @@ type ctaValue interface{ ctaValue() }
 // kind is never element (xpath20.md §3.2.1.2). That asymmetry is settled at
 // compile time so evaluation is a comparison of expanded names carrying no
 // axis of its own.
+//
+// A NameTest whose prefix has no binding holds ctaUnresolvedName instead, and
+// no such node is ever evaluated: it comes with a ctaStatic defect, on which
+// [CompileCTATest] withholds.
 type ctaAttr struct{ name xsd.QName }
 
 // ctaLiteral is the Literal arm of [16] ta-SimpleValue, with the value space
