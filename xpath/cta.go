@@ -63,24 +63,32 @@ import (
 // facet pipeline, whiteSpace and pattern and value facets included — and
 // never a lexical parser of this package's own (STYLE T4).
 
-// AttributeValue reads one attribute of the element information item E whose
-// ·selected type definition· is being decided: the [[normalized value]] of
-// E.[[attributes]] member whose ·expanded name· is name, and whether E carries
-// such an attribute at all.
+// Attributes yields the attributes of the element information item E whose
+// ·selected type definition· is being decided — §3.12.4 clause 1.1.2's copy of
+// E.[[attributes]], plus clause 1.1.3's non-clashing [[inherited attributes]] —
+// each as its ·expanded name· and its [[normalized value]], in DOCUMENT ORDER.
+// It must be non-nil, and a yield reporting false ends the walk.
 //
-// An ABSENT attribute — present false — atomizes to the empty sequence.
-// xpath20.md §3.5.2 makes a general comparison true only when "there is a pair
-// of atomic values, one in the first operand sequence and the other in the
-// second", so a comparison naming an attribute E does not carry is false;
-// §3.10.2 rule 3 makes the same absence a type error (err:XPTY0004) under a
-// `cast as T` written without the `?` occurrence indicator. That is neither a
-// decline nor an error to the caller in either case.
+// It is the ONE way this package reads an attribute, whatever NameTest [17]
+// ta-AttrName carries: a QName NameTest filters this sequence to the one
+// ·expanded name· it names, and each [37] Wildcard arm filters it its own way,
+// so no second entry point encodes "read an attribute" a second time (STYLE
+// D4).
+//
+// The sequence a NameTest matches is the operand xpath20.md §3.5.2 quantifies
+// a general comparison over: true only when "there is a pair of atomic values,
+// one in the first operand sequence and the other in the second", so a
+// comparison matching NO attribute is false; §3.10.2 rule 3 makes that same
+// empty sequence a type error (err:XPTY0004) under a `cast as T` written
+// without the `?` occurrence indicator, and a matched sequence of two or more
+// is err:XPTY0004 under any cast at all. That is neither a decline nor an error
+// to the caller in any of those cases.
 //
 // The lexical is the attribute's [[normalized value]]: XML 1.0 §3.3.3
 // attribute-value normalization applied, whiteSpace-facet normalization NOT —
 // the latter belongs to the type a cast targets, and [CTATest.Evaluate]
 // applies it per target type.
-type AttributeValue func(name xsd.QName) (lexical string, present bool)
+type Attributes func(yield func(name xsd.QName, lexical string) bool)
 
 // CTATest is a compiled Type Alternative {test}: the §3.12.6 required-subset
 // expression tree [CompileCTATest] admitted, ready to be evaluated against any
@@ -111,9 +119,6 @@ type CTATest struct{ root ctaExpr }
 //     assignment;
 //   - a prefix with no binding in the record's {namespace bindings}
 //     (err:XPST0081), which is a STATIC error and so not clause 2's false;
-//   - a construct inside the required subset that this engine does not yet
-//     evaluate, each carrying its own marker at the production in
-//     ctaparser.go that recognizes it;
 //   - a comparison whose two operands need a type promotion this engine cannot
 //     perform, which today is exactly B.1 rule 1.1's xs:float to xs:double
 //     (ctaWider). Declining is what keeps the withhold and the DECIDED false
@@ -274,7 +279,7 @@ const (
 )
 
 // Evaluate reports whether the compiled {test} holds for the element
-// information item whose attributes attr reads, which is the whole of what
+// information item whose attributes attrs yields, which is the whole of what
 // key-cta-ta-select (§3.12.4) asks of a {test}: "A.{test} evaluates to true".
 //
 // It always decides. Every way an evaluation can go wrong inside the compiled
@@ -295,8 +300,8 @@ const (
 // compiled tree holds — the same capability [CompileCTATest] classified those
 // types with, threaded as a parameter and stored nowhere (ARCHITECTURE), so
 // one compiled [CTATest] serves any resolver that answers for its components.
-func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attr AttributeValue) bool {
-	return ctaEval(t.root, ctaEnv{backend: b, types: types, attr: attr}) == ctaTrue
+func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attrs Attributes) bool {
+	return ctaEval(t.root, ctaEnv{backend: b, types: types, attrs: attrs}) == ctaTrue
 }
 
 // ctaEnv is the dynamic context of one [CTATest.Evaluate] call. cvc-xpath
@@ -308,7 +313,7 @@ func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attr Attribut
 type ctaEnv struct {
 	backend value.Backend
 	types   xsd.TypeResolver
-	attr    AttributeValue
+	attrs   Attributes
 }
 
 // ctaExpr is the sealed sum of the BOOLEAN-valued nodes of the compiled tree.
@@ -366,17 +371,79 @@ func (ctaTypeError) ctaExpr()        {}
 // ta-ConstructorFunction both build over one of them.
 type ctaValue interface{ ctaValue() }
 
-// ctaAttr is [17] ta-AttrName, with its NameTest ALREADY resolved to an
-// ·expanded name·: a prefixed one against the {namespace bindings}, an
-// unprefixed one to no namespace, because the attribute axis's principal node
-// kind is never element (xpath20.md §3.2.1.2). That asymmetry is settled at
-// compile time so evaluation is a comparison of expanded names carrying no
-// axis of its own.
+// ctaAttr is [17] ta-AttrName: the attribute step whose NameTest selects a
+// SEQUENCE of E's attributes, in document order, out of what [Attributes]
+// yields.
+//
+// The NameTest is settled at compile time, so evaluation carries no axis and no
+// prefix of its own — every name it could resolve is already an ·expanded name·
+// (ctaNameTest).
+type ctaAttr struct{ test ctaNameTest }
+
+// ctaNameTest is the sealed sum of [36] NameTest's arms as [17] ta-AttrName
+// reaches them, matching one ·expanded name· at a time on the ATTRIBUTE axis,
+// whose principal node kind is attribute and never element (xpath20.md
+// §3.2.1.2). The grammar closes the set (STYLE T2's schema-closed-set
+// exception), so no further arm is representable outside this package.
+type ctaNameTest interface {
+	ctaNameTest()
+	// matches reports whether an attribute with this ·expanded name· is
+	// selected by the test.
+	matches(name xsd.QName) bool
+}
+
+// ctaExactName is [36]'s QName arm, resolved: a prefixed NameTest against the
+// {namespace bindings}, an unprefixed one to NO namespace, because the
+// {default namespace} is the default ELEMENT/type namespace and this axis's
+// principal node kind is never element (PRINCIPLES 15).
 //
 // A NameTest whose prefix has no binding holds ctaUnresolvedName instead, and
 // no such node is ever evaluated: it comes with a ctaStaticError defect, on
 // which [CompileCTATest] withholds.
-type ctaAttr struct{ name xsd.QName }
+type ctaExactName struct{ name xsd.QName }
+
+// ctaAnyName is [37] Wildcard's `*` arm: "a node test * is true for any node of
+// the principal node kind of the step axis" (xpath20.md §3.2.1.2), which on the
+// attribute axis is every attribute of E.
+type ctaAnyName struct{}
+
+// ctaAnyLocal is [37]'s `NCName ':' '*'` arm, whose prefix is ALREADY resolved
+// against the {namespace bindings}: "true for any node ... whose expanded QName
+// has the namespace URI to which the prefix is bound, regardless of the local
+// part of the name".
+//
+// The empty space is a real matcher — every attribute in no namespace — and not
+// a sentinel, which is why an unbound prefix takes ctaUnresolvedTest instead.
+type ctaAnyLocal struct{ space string }
+
+// ctaAnySpace is [37]'s `'*' ':' NCName` arm: "true for any node ... whose local
+// name matches the given NCName, regardless of its namespace or lack of a
+// namespace". No prefix is resolved, so this arm has no err:XPST0081 exposure.
+type ctaAnySpace struct{ local string }
+
+// ctaUnresolvedTest is the NameTest an UNBOUND prefix in [37]'s `NCName ':' '*'`
+// resolves to. It matches nothing and is never evaluated: it comes with a
+// ctaStaticError defect, on which [CompileCTATest] withholds — ctaUnresolvedName's
+// role for a QName NameTest, as a TYPE rather than as a value, because no
+// namespace URI is uninhabited and so none can stand in for one that resolved
+// to nothing.
+type ctaUnresolvedTest struct{}
+
+func (ctaExactName) ctaNameTest()      {}
+func (ctaAnyName) ctaNameTest()        {}
+func (ctaAnyLocal) ctaNameTest()       {}
+func (ctaAnySpace) ctaNameTest()       {}
+func (ctaUnresolvedTest) ctaNameTest() {}
+
+func (t ctaExactName) matches(name xsd.QName) bool { return name == t.name }
+
+func (ctaAnyName) matches(xsd.QName) bool { return true }
+
+func (t ctaAnyLocal) matches(name xsd.QName) bool { return name.Space == t.space }
+
+func (t ctaAnySpace) matches(name xsd.QName) bool { return name.Local == t.local }
+
+func (ctaUnresolvedTest) matches(xsd.QName) bool { return false }
 
 // ctaLiteral is the Literal arm of [16] ta-SimpleValue, carrying the builtin
 // datatype its XPath literal kind fixes: a StringLiteral is xs:string, an
@@ -568,17 +635,23 @@ func (n ctaAnd) eval(env ctaEnv) ctaAnswer {
 	return answer
 }
 
-// eval decides one general comparison (xpath20.md §3.5.2). Both operands are
-// singletons or empty here — an attribute is at most one node, a literal is
-// exactly one value, and a cast of either is one or neither — so the
-// existential over pairs reduces to: no pair at all where either operand is
-// absent, and one pair otherwise.
+// eval decides one general comparison (xpath20.md §3.5.2), which is
+// EXISTENTIAL over the two operand sequences: "the result of the comparison is
+// true if and only if there is a pair of atomic values, one in the first
+// operand sequence and the other in the second operand sequence, that have the
+// required magnitude relationship. Otherwise the result of the comparison is
+// false." An operand matching no attribute forms no pair and so decides false,
+// which is not an error.
+//
+// A pair that raises decides for the whole comparison, on the same latitude the
+// operands take below; the pairs are walked in document order, so which one
+// that is does not vary between runs (STYLE D1).
 //
 // A RAISED operand decides first, whatever the other operand is: §3.5.2 says
 // a general comparison "may raise a dynamic error as soon as it encounters an
-// error in evaluating either operand". An ABSENT operand is then a decided
-// false and not an error, because forming no pair is what §3.5.2 asks of the
-// empty sequence and nothing is raised.
+// error in evaluating either operand" — which is also why an operand is
+// converted whole, so one item of a matched sequence failing §3.5.2 clause 2's
+// cast raises for the operand rather than being dropped from it.
 //
 // Both operands reach the comparison already converted into c.comparison,
 // which is where §3.5.2 clause 2's casts happened, so what is left here is
@@ -594,38 +667,48 @@ func (n ctaAnd) eval(env ctaEnv) ctaAnswer {
 // functions B.2 names for it are defined over the two values themselves and
 // not over an order the value space carries (holdsBoolean).
 func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
-	left := ctaItemOf(c.left, c.comparison, env)
-	right := ctaItemOf(c.right, c.comparison, env)
-	if ctaRaisedItem(left) || ctaRaisedItem(right) {
-		return ctaError
+	l, leftAtoms := ctaItemOf(c.left, c.comparison, env).(ctaAtoms)
+	r, rightAtoms := ctaItemOf(c.right, c.comparison, env).(ctaAtoms)
+	if !leftAtoms || !rightAtoms {
+		return ctaError // ctaRaised, the sum's only other arm
 	}
-	l, leftPresent := left.(ctaAtom)
-	r, rightPresent := right.(ctaAtom)
-	if !leftPresent || !rightPresent {
-		return ctaFalse
+	for _, lv := range l.vs {
+		for _, rv := range r.vs {
+			if got := c.holdsPair(lv, rv, env); got != ctaFalse {
+				return got
+			}
+		}
 	}
+	return ctaFalse
+}
+
+// holdsPair decides one PAIR of the existential above, which is §3.5.2 clause
+// 3's value comparison — both values having reached c.comparison already, where
+// clause 2's casts happened.
+func (c ctaCompare) holdsPair(l, r value.Value, env ctaEnv) ctaAnswer {
 	if ctaStringLike(c.comparison) {
-		return c.op.holdsCollated(l.v, r.v)
+		return c.op.holdsCollated(l, r)
 	}
 	if c.comparison.Name() == ctaBuiltin("boolean") {
-		return c.op.holdsBoolean(l.v, r.v, c.comparison, env)
+		return c.op.holdsBoolean(l, r, c.comparison, env)
 	}
-	return c.op.holdsBetween(l.v, r.v)
+	return c.op.holdsBetween(l, r)
 }
 
 // eval decides the ·effective boolean value· of a bare ValueExpr (xpath20.md
 // §2.4.3, the fn:boolean rules quoted there).
 //
-// An AttrName evaluates to a sequence of attribute NODES rather than to an
-// atomic value, so it takes rule 2 ("a sequence whose first item is a node")
-// when the attribute is present and rule 1 (the empty sequence) when it is
-// not, and no type of its own is involved. Every other operand is a singleton
-// atomic value or the empty sequence, which ctaBoolean decides.
+// An AttrName evaluates to a sequence of attribute NODES rather than to atomic
+// values, so it takes rule 2 ("a sequence whose first item is a node") whenever
+// its NameTest matches at all and rule 1 (the empty sequence) when it matches
+// nothing, and no type of its own is involved. Rule 2 holds whatever the
+// sequence's LENGTH, which is what a wildcard NameTest makes observable. Every
+// other operand is a singleton atomic value or the empty sequence, which
+// ctaBoolean decides.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 	switch n := e.operand.(type) {
 	case ctaAttr:
-		_, present := env.attr(n.name)
-		return ctaAnswerOf(present)
+		return ctaAnswerOf(len(ctaMatchedAttributes(n, env)) != 0)
 	case ctaLiteral:
 		return ctaBoolean(e.operand, n.st, env)
 	case ctaCast:
@@ -650,19 +733,27 @@ func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
 // fault (ctaValidate). It is unreachable for a tree this package compiled,
 // which resolved the primitive of every literal and every cast target before
 // admitting it.
+//
+// A sequence of TWO OR MORE items is rule 6 as well — fn:boolean is defined
+// over "a sequence whose first item is not a node" of length one, and raises
+// err:FORG0006 otherwise — and only a cast can put a wildcard-matched sequence
+// here, which raises err:XPTY0004 for that length before this is reached.
 func ctaBoolean(v ctaValue, st *xsd.SimpleType, env ctaEnv) ctaAnswer {
 	p, err := st.Primitive(env.types)
 	if err != nil || p == nil {
 		return ctaError
 	}
-	switch item := ctaItemOf(v, p, env).(type) {
-	case ctaAbsent:
-		return ctaFalse
-	case ctaAtom:
-		return ctaBooleanOf(item.v, p, env)
-	default:
+	atoms, converted := ctaItemOf(v, p, env).(ctaAtoms)
+	if !converted {
 		return ctaError
 	}
+	if len(atoms.vs) == 0 {
+		return ctaFalse
+	}
+	if len(atoms.vs) > 1 {
+		return ctaError // err:FORG0006
+	}
+	return ctaBooleanOf(atoms.vs[0], p, env)
 }
 
 // ctaBooleanOf applies fn:boolean's per-type rules to one atomic value of
@@ -708,49 +799,55 @@ func ctaBooleanOf(v value.Value, p *xsd.SimpleType, env ctaEnv) ctaAnswer {
 // A lexical outside p's value space is ctaError, and neither of the two is:
 // "true" is in xs:boolean's lexical space and "0" in every numeric one.
 func ctaEqualsLexical(eq value.Eq, p *xsd.SimpleType, lexical string, env ctaEnv) ctaAnswer {
-	against, isAtom := ctaValidate(lexical, p, env).(ctaAtom)
-	if !isAtom {
+	against, validated := ctaValidated(ctaValidate(lexical, p, env))
+	if !validated {
 		return ctaError
 	}
-	return ctaAnswerOf(eq.Eq(against.v))
+	return ctaAnswerOf(eq.Eq(against))
 }
 
 // ctaItem is what one [14] ta-ValueExpr contributes to the operator above it,
-// and it has THREE states rather than a value and a presence flag: xpath20.md
-// §3.10.2 rule 3 splits an absent operand into the empty SEQUENCE (with `?`)
-// and a raised err:XPTY0004 (without it), and those two are the opposite of
-// each other under fn:not. It is a sealed sum (STYLE T1/T2) so no fourth state
-// and no illegal pairing of the three is representable.
+// and it is a sequence or a raised error rather than a value and a presence
+// flag: xpath20.md §3.10.2 rule 3 splits an EMPTY operand into the empty
+// sequence (with `?`) and a raised err:XPTY0004 (without it), and those two are
+// the opposite of each other under fn:not. It is a sealed sum (STYLE T1/T2) so
+// no third state is representable.
 type ctaItem interface{ ctaItem() }
 
-// ctaAbsent is the empty sequence: an attribute the element does not carry, or
-// a cast of one written with the `?` occurrence indicator.
-type ctaAbsent struct{}
+// ctaAtoms is the sequence of atomic values an operand yields, in document
+// order, already in the type the enclosing operator asked for. A zero-length
+// slice IS the empty sequence — the XDM's own encoding, which a [17]
+// ta-AttrName whose NameTest matches nothing produces and which a cast written
+// with `?` produces over it — so no separate absence marker exists to disagree
+// with it (STYLE D3).
+type ctaAtoms struct{ vs []value.Value }
 
 // ctaRaised is a dynamic or type error raised while producing the item —
-// err:FORG0001 from a lexical or facet mismatch, err:XPTY0004 from an absent
-// operand under a cast written without `?` or from a cast this processor does
-// not support. Which of the two it was is not carried: key-cta-ta-select
-// clause 2 (§3.12.4) gives both the same consequence, and the {test} is where
-// that consequence is applied.
+// err:FORG0001 from a lexical or facet mismatch, err:XPTY0004 from an empty
+// operand under a cast written without `?`, from a cast over a sequence of two
+// or more items, or from a cast this processor does not support. Which of them
+// it was is not carried: key-cta-ta-select clause 2 (§3.12.4) gives them all
+// the same consequence, and the {test} is where that consequence is applied.
 type ctaRaised struct{}
 
-// ctaAtom is one atomic value, already in the type the enclosing operator
-// asked for.
-type ctaAtom struct{ v value.Value }
-
-func (ctaAbsent) ctaItem() {}
+func (ctaAtoms) ctaItem()  {}
 func (ctaRaised) ctaItem() {}
-func (ctaAtom) ctaItem()   {}
 
-// ctaRaisedItem reports whether an item is a raised error, which several
-// deciders test before reading the item itself.
-func ctaRaisedItem(i ctaItem) bool {
-	_, raised := i.(ctaRaised)
-	return raised
+// ctaSingleton is the one-item sequence a datatype validation yields.
+func ctaSingleton(v value.Value) ctaItem { return ctaAtoms{vs: []value.Value{v}} }
+
+// ctaValidated is the single value a ctaValidate or ctaPromote result carries,
+// reporting false where it raised: both answer a SINGLETON sequence or
+// ctaRaised, and their callers want the value itself.
+func ctaValidated(i ctaItem) (value.Value, bool) {
+	atoms, converted := i.(ctaAtoms)
+	if !converted || len(atoms.vs) != 1 {
+		return nil, false
+	}
+	return atoms.vs[0], true
 }
 
-// ctaItemOf evaluates one [14] ta-ValueExpr to the single item it yields,
+// ctaItemOf evaluates one [14] ta-ValueExpr to the sequence it yields,
 // converted into type c — the type the enclosing operator compares or reads it
 // in.
 //
@@ -771,18 +868,54 @@ func ctaRaisedItem(i ctaItem) bool {
 func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	switch n := v.(type) {
 	case ctaAttr:
-		lexical, present := env.attr(n.name)
-		if !present {
-			return ctaAbsent{}
-		}
-		return ctaValidate(lexical, c, env)
+		return ctaAttrItem(n, c, env)
 	case ctaLiteral:
 		return ctaConvert(n.text, n.st, c, env)
 	case ctaCast:
 		return ctaCastItem(n, c, env)
 	default:
-		return ctaAbsent{}
+		return ctaAtoms{}
 	}
+}
+
+// ctaMatchedAttributes is the [[normalized value]]s of the attributes n's
+// NameTest selects, in the DOCUMENT ORDER [Attributes] yields them in — which
+// is the order of the operand sequence itself and so of every answer decided
+// over it (STYLE D1).
+//
+// The whole sequence is walked: a QName NameTest matches at most one attribute
+// because no element carries two of one ·expanded name·, and a [37] Wildcard
+// arm has no such bound.
+func ctaMatchedAttributes(n ctaAttr, env ctaEnv) []string {
+	var matched []string
+	env.attrs(func(name xsd.QName, lexical string) bool {
+		if n.test.matches(name) {
+			matched = append(matched, lexical)
+		}
+		return true
+	})
+	return matched
+}
+
+// ctaAttrItem casts the matched attributes into c, which §3.5.2's casting rules
+// do to an xs:untypedAtomic operand.
+//
+// The conversion is EAGER over the whole sequence: one item that does not cast
+// raises for the OPERAND, on §3.5.2's own latitude ("may raise a dynamic error
+// as soon as it encounters an error in evaluating either operand"), rather than
+// dropping out of it. So `@* = 3` over an element carrying n="3" and s="abc"
+// raises and is false, where a per-pair conversion would answer true.
+func ctaAttrItem(n ctaAttr, c *xsd.SimpleType, env ctaEnv) ctaItem {
+	matched := ctaMatchedAttributes(n, env)
+	vs := make([]value.Value, 0, len(matched))
+	for _, lexical := range matched {
+		v, validated := ctaValidated(ctaValidate(lexical, c, env))
+		if !validated {
+			return ctaRaised{}
+		}
+		vs = append(vs, v)
+	}
+	return ctaAtoms{vs: vs}
 }
 
 // ctaCastItem evaluates one cast and converts its result into c.
@@ -791,28 +924,35 @@ func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 // the `?` occurrence indicator the cast of an empty operand IS the empty
 // sequence, and without it the cast raises err:XPTY0004. That difference is
 // the whole reason the `?` is carried on the node.
+//
+// TWO OR MORE items raise err:XPTY0004 whether or not the `?` is written: rule
+// 3 admits "exactly one atomic value" and `?` widens that to AT MOST one, never
+// to more, so a cast over a wildcard NameTest matching several attributes is a
+// type error and not the first of them.
 func ctaCastItem(n ctaCast, c *xsd.SimpleType, env ctaEnv) ctaItem {
-	switch inner := ctaItemOf(n.operand, n.target, env).(type) {
-	case ctaAbsent:
-		if n.allowsEmpty {
-			return ctaAbsent{}
-		}
-		return ctaRaised{}
-	case ctaAtom:
-		return ctaPromote(inner, n.target, c, env)
-	default:
+	inner, converted := ctaItemOf(n.operand, n.target, env).(ctaAtoms)
+	if !converted {
 		return ctaRaised{}
 	}
+	if len(inner.vs) == 0 {
+		if n.allowsEmpty {
+			return ctaAtoms{}
+		}
+		return ctaRaised{}
+	}
+	if len(inner.vs) > 1 {
+		return ctaRaised{}
+	}
+	return ctaPromote(inner.vs[0], n.target, c, env)
 }
 
 // ctaConvert casts lexical, a value of type from, into type to.
 func ctaConvert(lexical string, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
-	item := ctaValidate(lexical, from, env)
-	atom, isAtom := item.(ctaAtom)
-	if !isAtom {
-		return item
+	v, validated := ctaValidated(ctaValidate(lexical, from, env))
+	if !validated {
+		return ctaRaised{}
 	}
-	return ctaPromote(atom, from, to, env)
+	return ctaPromote(v, from, to, env)
 }
 
 // ctaPromote converts one atomic value of type from into type to, which is
@@ -829,11 +969,11 @@ func ctaConvert(lexical string, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
 // the target set [CompileCTATest] admits: the canonical mapping is absent
 // only for xs:QName and xs:NOTATION (value.Mapping), and a cast whose target
 // has either as its primitive is declined at compile time.
-func ctaPromote(atom ctaAtom, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
+func ctaPromote(v value.Value, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
 	if from.Name() == to.Name() {
-		return atom
+		return ctaSingleton(v)
 	}
-	canonical, renders := atom.v.(value.Canonical)
+	canonical, renders := v.(value.Canonical)
 	if !renders {
 		return ctaRaised{}
 	}
@@ -861,7 +1001,7 @@ func ctaPromote(atom ctaAtom, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
 func ctaValidate(lexical string, st *xsd.SimpleType, env ctaEnv) ctaItem {
 	v, err := value.ValidateLexical(env.backend, env.types, st, lexical, nil)
 	if err == nil {
-		return ctaAtom{v: v}
+		return ctaSingleton(v)
 	}
 	if value.IsDatatypeVerdict(err) {
 		return ctaRaised{} // err:FORG0001

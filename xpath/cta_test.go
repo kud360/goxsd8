@@ -33,12 +33,36 @@ func ctaExprRecord(expr, defaultNS string, bindings ...string) xsd.XPathExpressi
 // attribute NameTest resolves to.
 func uq(local string) xsd.QName { return xsd.QName{Local: local} }
 
-// ctaAttrs is the [AttributeValue] over a fixed attribute set.
-func ctaAttrs(m map[xsd.QName]string) AttributeValue {
-	return func(name xsd.QName) (string, bool) {
-		v, present := m[name]
-		return v, present
+// ctaAttribute is one attribute of the element a {test} is evaluated against.
+type ctaAttribute struct {
+	name    xsd.QName
+	lexical string
+}
+
+// ctaAttrs is the [Attributes] over a fixed attribute list, yielding it in the
+// order WRITTEN, which stands in for the source order a real element's
+// attributes arrive in. A map would yield them in a different order per run
+// (STYLE D2), which a wildcard NameTest matching several of them makes
+// observable in the answer.
+func ctaAttrs(attrs ...ctaAttribute) Attributes {
+	return func(yield func(xsd.QName, string) bool) {
+		for _, a := range attrs {
+			if !yield(a.name, a.lexical) {
+				return
+			}
+		}
 	}
+}
+
+// at is one attribute in no namespace, which is what an unprefixed NameTest
+// matches.
+func at(local, lexical string) ctaAttribute {
+	return ctaAttribute{name: uq(local), lexical: lexical}
+}
+
+// atNS is one attribute in the namespace space.
+func atNS(space, local, lexical string) ctaAttribute {
+	return ctaAttribute{name: xsd.QName{Space: space, Local: local}, lexical: lexical}
 }
 
 // seededTypes and seededBackend are the type knowledge and the value spaces
@@ -159,9 +183,13 @@ func TestCompileDeclines(t *testing.T) {
 		{"3 cast as @a:kind > 1", "a cast target is a QName, not an AttrName"},
 		{"@p:kind = 'x'", "a prefix with no binding is err:XPST0081"},
 		{"p:not(@kind = 'x')", "an unbound prefix on the function name too"},
-		{"@* = 'x'", "a wildcard NameTest"},
-		{"@p:* = 'x'", "a prefixed wildcard NameTest"},
-		{"@*:kind = 'x'", "a local-name wildcard NameTest"},
+		// The three WILDCARD NameTests were pinned here until they compiled
+		// (#859). They evaluate now — TestEvaluateWildcardNameTest — and only
+		// the one spelling that resolves a prefix can still withhold, which is
+		// the err:XPST0081 row below and not a decline for the wildcard's shape.
+		{"@p:* = 'x'", "a prefixed wildcard NameTest whose prefix has no binding is err:XPST0081"},
+		{"* = 'x'", "a wildcard reaches this grammar only through [17] ta-AttrName"},
+		{"1 * 2 = 2", "and no multiplicative production admits one either"},
 		{"@kind = 'x' extra", "trailing tokens are not part of a Test"},
 		{"@kind = ", "a Comparator with no right operand"},
 		{"(@kind = 'x'", "an unclosed parenthesis"},
@@ -206,6 +234,14 @@ func TestCTATestStaticErrorReportsUnboundPrefix(t *testing.T) {
 		{"@p:kind cast as xs:string", "p"},
 		{"@p:kind cast as xs:string = 'x'", "p"},
 		{"xs:string(@p:kind) = 'x'", "p"},
+		// [37]'s NCName ':' '*' is the one wildcard spelling that resolves a
+		// prefix, so it is the one that can carry this static error (#859). The
+		// other two name no prefix and appear in no row here.
+		{"@p:* = 'x'", "p"},
+		{"attribute::p:* = 'x'", "p"},
+		{"@p:*", "p"},
+		{"not(@p:* = 'x')", "p"},
+		{"@p:* cast as xs:string = 'x'", "p"},
 	} {
 		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a", "xs", xsd.XMLSchemaNS)
 		err := CTATestStaticError(record, seededTypes)
@@ -254,7 +290,6 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
 		{"@p:a = 'x' and count(@b) > 1", "a complete-looking prefix inside an expression a later constructor call declines"},
 		{"p:not(@kind = 'x')", "a constructor call whose argument is no SimpleValue — a prefixed name is never fn:not"},
-		{"@p:* = 'x'", "a wildcard NameTest (#859), declined lexically"},
 		{"@p:kind = 'x' extra", "trailing tokens are not part of a Test"},
 		{"@p:kind = ", "a Comparator with no right operand"},
 		{"count(//p:a) > 1", "full XPath 2.0, outside the subset"},
@@ -373,14 +408,7 @@ func TestCompileResolvesCastTargetInDefaultNamespace(t *testing.T) {
 // against the target datatype and the comparison then runs in that type's
 // value space rather than over lexicals.
 func TestEvaluateCastToBuiltin(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("n"):      "4",
-		uq("frac"):   "3.5",
-		uq("length"): "10",
-		uq("width"):  "9",
-		uq("d"):      "2026-03-01",
-		uq("k"):      "book",
-	})
+	attrs := ctaAttrs(at("n", "4"), at("frac", "3.5"), at("length", "10"), at("width", "9"), at("d", "2026-03-01"), at("k", "book"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -409,7 +437,7 @@ func TestEvaluateCastToBuiltin(t *testing.T) {
 // space· raises err:FORG0001, which makes the {test} false — not a decline,
 // and not a node-local false that fn:not could invert.
 func TestEvaluateFailedCastIsFalseNotDecline(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("frac"): "3.5", uq("k"): "book", uq("n"): "4"})
+	attrs := ctaAttrs(at("frac", "3.5"), at("k", "book"), at("n", "4"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -437,7 +465,7 @@ func TestEvaluateFailedCastIsFalseNotDecline(t *testing.T) {
 // tells the two apart, and §3.10.4's T($arg) ≡ (($arg) cast as T?) is why the
 // constructor spelling always takes the first.
 func TestEvaluateCastOfAbsentAttribute(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("other"): "x"})
+	attrs := ctaAttrs(at("other", "x"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -464,7 +492,7 @@ func TestEvaluateCastOfAbsentAttribute(t *testing.T) {
 // err:XPTY0004 and so a RAISED false, which is not the same answer as a
 // comparison that ran.
 func TestEvaluateCastAgainstStringLiteral(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("f"): "1.5", uq("type"): "float"})
+	attrs := ctaAttrs(at("f", "1.5"), at("type", "float"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -487,7 +515,7 @@ func TestEvaluateCastAgainstStringLiteral(t *testing.T) {
 // xs:token collapses the lexical before the comparison sees it, and the same
 // operand uncast does not.
 func TestEvaluateCastNormalizesWhiteSpace(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("k"): "a  b", uq("pad"): "  padded  "})
+	attrs := ctaAttrs(at("k", "a  b"), at("pad", "  padded  "))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -510,16 +538,7 @@ func TestEvaluateCastNormalizesWhiteSpace(t *testing.T) {
 // the numeric one — NaN included, which is false and not an error — and rule
 // 6's err:FORG0006 for every other type.
 func TestEvaluateEffectiveBooleanValueOfACast(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("zero"):  "0",
-		uq("five"):  "5",
-		uq("nan"):   "NaN",
-		uq("empty"): "",
-		uq("word"):  "book",
-		uq("yes"):   "true",
-		uq("no"):    "0",
-		uq("d"):     "2026-03-01",
-	})
+	attrs := ctaAttrs(at("zero", "0"), at("five", "5"), at("nan", "NaN"), at("empty", ""), at("word", "book"), at("yes", "true"), at("no", "0"), at("d", "2026-03-01"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -549,7 +568,7 @@ func TestEvaluateEffectiveBooleanValueOfACast(t *testing.T) {
 // attribute against a string literal, which §3.5.2 rule 2.4 compares as
 // xs:string and B.2 decides through the default (codepoint) collation.
 func TestEvaluateStringComparators(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("k"): "book"})
+	attrs := ctaAttrs(at("k", "book"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -576,13 +595,7 @@ func TestEvaluateStringComparators(t *testing.T) {
 // own numeric type, and compared in that space — so "3" and "3.0" and "03" are
 // one answer and not three lexical ones.
 func TestEvaluateNumericComparators(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("n"):    "3",
-		uq("wide"): "03.0",
-		uq("bad"):  "three",
-		uq("pad"):  "  3  ",
-		uq("big"):  "10",
-	})
+	attrs := ctaAttrs(at("n", "3"), at("wide", "03.0"), at("bad", "three"), at("pad", "  3  "), at("big", "10"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -618,7 +631,7 @@ func TestEvaluateNumericComparators(t *testing.T) {
 // than an error, and `!=` is false too — no pair of atomic values was formed,
 // so nothing is unequal either.
 func TestEvaluateBadCastIsFalseNotDecline(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("n"): "not a number"})
+	attrs := ctaAttrs(at("n", "not a number"))
 	for _, expr := range []string{"@n = 1", "@n != 1", "@n < 1", "@n >= 1"} {
 		if compile(t, expr).Evaluate(backend(), seededTypes, attrs) {
 			t.Errorf("Evaluate(%q) = true, want false", expr)
@@ -630,7 +643,7 @@ func TestEvaluateBadCastIsFalseNotDecline(t *testing.T) {
 // no pair can be formed against an absent attribute, so EVERY comparator is
 // false — including `!=`, which a naive reading would make true.
 func TestEvaluateAbsentAttributeIsFalse(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("other"): "x"})
+	attrs := ctaAttrs(at("other", "x"))
 	for _, expr := range []string{
 		"@k = 'book'", "@k != 'book'", "@k < 'book'", "@k <= 'book'",
 		"@k > 'book'", "@k >= 'book'", "@k = 1", "@k != 1",
@@ -651,10 +664,10 @@ func TestEvaluateUnprefixedNameTestIsInNoNamespace(t *testing.T) {
 	if !ok {
 		t.Fatal("CompileCTATest: declined")
 	}
-	if !c.Evaluate(backend(), seededTypes, ctaAttrs(map[xsd.QName]string{uq("k"): "book"})) {
+	if !c.Evaluate(backend(), seededTypes, ctaAttrs(at("k", "book"))) {
 		t.Error("an unprefixed NameTest did not match the no-namespace attribute")
 	}
-	inDefault := ctaAttrs(map[xsd.QName]string{{Space: ns, Local: "k"}: "book"})
+	inDefault := ctaAttrs(atNS(ns, "k", "book"))
 	if c.Evaluate(backend(), seededTypes, inDefault) {
 		t.Error("an unprefixed NameTest matched an attribute in the {default namespace}")
 	}
@@ -665,10 +678,10 @@ func TestEvaluateUnprefixedNameTestIsInNoNamespace(t *testing.T) {
 func TestEvaluatePrefixedNameTest(t *testing.T) {
 	const ns = "http://example.com/c2"
 	c := compile(t, "@c2:min = 1", "c2", ns)
-	if !c.Evaluate(backend(), seededTypes, ctaAttrs(map[xsd.QName]string{{Space: ns, Local: "min"}: "1"})) {
+	if !c.Evaluate(backend(), seededTypes, ctaAttrs(atNS(ns, "min", "1"))) {
 		t.Error("a prefixed NameTest did not match its expanded name")
 	}
-	if c.Evaluate(backend(), seededTypes, ctaAttrs(map[xsd.QName]string{uq("min"): "1"})) {
+	if c.Evaluate(backend(), seededTypes, ctaAttrs(at("min", "1"))) {
 		t.Error("a prefixed NameTest matched a no-namespace attribute")
 	}
 }
@@ -677,7 +690,7 @@ func TestEvaluatePrefixedNameTest(t *testing.T) {
 // unabbreviated attribute-axis spelling is the same AttrName as clause 2.1's
 // abbreviation, and decides the same way.
 func TestEvaluateAttributeAxisForm(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("k"): "book"})
+	attrs := ctaAttrs(at("k", "book"))
 	for _, expr := range []string{"attribute::k = 'book'", "attribute :: k = 'book'"} {
 		if !compile(t, expr).Evaluate(backend(), seededTypes, attrs) {
 			t.Errorf("Evaluate(%q) = false, want true", expr)
@@ -688,11 +701,206 @@ func TestEvaluateAttributeAxisForm(t *testing.T) {
 	}
 }
 
+// ctaWildcardNS is the namespace the wildcard tests bind their prefix to, and
+// the one their namespaced attributes carry.
+const ctaWildcardNS = "http://example.com/w"
+
+// TestCompileAdmitsWildcardNameTest pins that [17] ta-AttrName's NameTest is
+// xpath20.md's [36] whole: all three [37] Wildcard spellings compile, in both
+// the abbreviated and the attribute-axis form ta-props-correct clause 2 admits,
+// and in every position a ta-AttrName reaches.
+func TestCompileAdmitsWildcardNameTest(t *testing.T) {
+	for _, expr := range []string{
+		"@*",
+		"@* = 'x'",
+		"@w:* = 'x'",
+		"@*:kind = 'x'",
+		"attribute::* = 'x'",
+		"attribute::w:* = 'x'",
+		"attribute::*:kind = 'x'",
+		"attribute :: * = 'x'",
+		"'x' = @*",
+		"@* = @*:kind",
+		"not(@* = 'x')",
+		"@* cast as xs:integer = 1",
+		"xs:integer(@*) = 1",
+		"@* = 'x' or @*:kind = 'y'",
+	} {
+		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "w", ctaWildcardNS, "xs", xsd.XMLSchemaNS), seededTypes); !ok {
+			t.Errorf("CompileCTATest(%q): declined, want compiled", expr)
+		}
+	}
+}
+
+// TestEvaluateWildcardNameTest pins which attributes each [37] Wildcard arm
+// selects (xpath20.md §3.2.1.2): `*` every one of them, `NCName:*` those in the
+// namespace the prefix is bound to whatever their local name, and `*:NCName`
+// those with that local name in ANY namespace or none.
+//
+// Each arm is paired with an attribute set it must NOT match, so an
+// implementation that answered true for every wildcard would fail here.
+func TestEvaluateWildcardNameTest(t *testing.T) {
+	attrs := ctaAttrs(
+		at("kind", "book"),
+		atNS(ctaWildcardNS, "kind", "disc"),
+		atNS(ctaWildcardNS, "size", "large"),
+		atNS("http://example.com/other", "rank", "1"),
+	)
+	for _, tc := range []struct {
+		expr string
+		want bool
+		why  string
+	}{
+		{"@* = 'book'", true, "`*` reaches the no-namespace attribute"},
+		{"@* = 'large'", true, "and every namespaced one"},
+		{"@* = 'missing'", false, "and matches no value it does not carry"},
+		{"@w:* = 'disc'", true, "NCName:* takes any local name in the bound namespace"},
+		{"@w:* = 'large'", true, "including the other one"},
+		{"@w:* = 'book'", false, "and never the no-namespace attribute"},
+		{"@w:* = '1'", false, "nor one in a different namespace"},
+		{"@*:kind = 'book'", true, "*:NCName takes the local name in no namespace"},
+		{"@*:kind = 'disc'", true, "and in any namespace"},
+		{"@*:kind = 'large'", false, "and never another local name"},
+		{"attribute::* = 'book'", true, "clause 2.2's spelling is the same NameTest"},
+		{"attribute::w:* = 'disc'", true, "in the prefixed arm too"},
+		{"attribute::*:kind = 'disc'", true, "and in the local-name one"},
+	} {
+		got := compile(t, tc.expr, "w", ctaWildcardNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateWildcardIsExistential pins xpath20.md §3.5.2 over the sequence a
+// wildcard selects: "the result of the comparison is true if and only if there
+// is a pair of atomic values ... that have the required magnitude relationship.
+// Otherwise the result of the comparison is false."
+//
+// A wildcard matching SEVERAL attributes is the whole point — an evaluator that
+// took only the first would answer false for the second row and true for the
+// fifth. The fn:not rows separate that false from a raised error: an empty
+// match set forms no pair, which is a DECIDED false and inverts.
+func TestEvaluateWildcardIsExistential(t *testing.T) {
+	three := ctaAttrs(at("a", "x"), at("b", "y"), at("c", "z"))
+	for _, tc := range []struct {
+		attrs Attributes
+		expr  string
+		want  bool
+		why   string
+	}{
+		{three, "@* = 'x'", true, "the FIRST attribute satisfies it"},
+		{three, "@* = 'z'", true, "the LAST one does, which a first-item reading would miss"},
+		{three, "@* = 'q'", false, "no attribute does"},
+		{three, "@* != 'x'", true, "some pair is unequal, though one is equal"},
+		{three, "@* < 'y'", true, "the ordering comparators quantify the same way"},
+		{three, "@* < 'a'", false, "and are false where no pair relates"},
+		{three, "@* = @*", true, "both operands are sequences"},
+		{ctaAttrs(), "@* = 'x'", false, "an element carrying NO attribute forms no pair"},
+		{ctaAttrs(), "not(@* = 'x')", true, "which is a decided false, not an error, so it inverts"},
+		{ctaAttrs(at("k", "book")), "@w:* = 'book'", false, "a wildcard matching nothing is the same empty sequence"},
+		{ctaAttrs(at("k", "book")), "not(@w:* = 'book')", true, "and decides the same way"},
+	} {
+		got := compile(t, tc.expr, "w", ctaWildcardNS).Evaluate(backend(), seededTypes, tc.attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateWildcardOperandConvertsWhole pins that §3.5.2 clause 2's cast is
+// applied to the WHOLE matched sequence: one attribute that does not cast into
+// the comparison type raises for the operand, on §3.5.2's "may raise a dynamic
+// error as soon as it encounters an error in evaluating either operand", rather
+// than dropping out of the sequence.
+//
+// The fn:not rows are the assertion. Both halves false is the raised error; a
+// per-item reading would decide the first row true and invert the second.
+func TestEvaluateWildcardOperandConvertsWhole(t *testing.T) {
+	mixed := ctaAttrs(at("n", "7"), at("k", "book"))
+	numeric := ctaAttrs(at("n", "7"), at("m", "2"))
+	for _, tc := range []struct {
+		attrs Attributes
+		expr  string
+		want  bool
+		why   string
+	}{
+		{mixed, "@* > 5", false, "err:FORG0001: \"book\" is no xs:double"},
+		{mixed, "not(@* > 5)", false, "raised, so fn:not raises it too"},
+		{ctaAttrs(at("k", "book"), at("n", "7")), "@* > 5", false, "wherever in the sequence the uncastable item sits"},
+		{numeric, "@* > 5", true, "the discriminating row: every item casts, and 7 > 5"},
+		{numeric, "@* > 9", false, "a decided false"},
+		{numeric, "not(@* > 9)", true, "which inverts"},
+	} {
+		got := compile(t, tc.expr).Evaluate(backend(), seededTypes, tc.attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateWildcardUnderACast pins xpath20.md §3.10.2 rule 3 over the one
+// operand length only a wildcard can produce: a cast admits "exactly one atomic
+// value", and the `?` occurrence indicator widens that to AT MOST one, so TWO
+// OR MORE matched attributes are err:XPTY0004 under either spelling and never
+// the first of them.
+func TestEvaluateWildcardUnderACast(t *testing.T) {
+	one := ctaAttrs(at("n", "3"))
+	two := ctaAttrs(at("n", "3"), at("m", "4"))
+	for _, tc := range []struct {
+		attrs Attributes
+		expr  string
+		want  bool
+		why   string
+	}{
+		{one, "@* cast as xs:integer = 3", true, "a singleton sequence casts"},
+		{two, "@* cast as xs:integer = 3", false, "err:XPTY0004: two items under a cast"},
+		{two, "not(@* cast as xs:integer = 3)", false, "raised, so fn:not raises it"},
+		{two, "@* cast as xs:integer? = 3", false, "`?` widens rule 3 to at most one, not to more"},
+		{two, "not(@* cast as xs:integer? = 3)", false, "so this raises too"},
+		{two, "xs:integer(@*) = 3", false, "and §3.10.4's constructor equivalence carries the same `?`"},
+		{ctaAttrs(), "@* cast as xs:integer = 3", false, "err:XPTY0004: no items and no `?`"},
+		{ctaAttrs(), "not(@* cast as xs:integer = 3)", false, "which is raised"},
+		{ctaAttrs(), "not(@* cast as xs:integer? = 3)", true, "while `?` makes it the empty sequence, a decided false"},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, tc.attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateWildcardEffectiveBooleanValue pins fn:boolean's rule 2 over a
+// bare wildcard AttrName (xpath20.md §2.4.3): a sequence whose first item is a
+// node is true whatever its length, so a wildcard in a boolean position asks
+// only whether E carries an attribute its NameTest selects.
+func TestEvaluateWildcardEffectiveBooleanValue(t *testing.T) {
+	for _, tc := range []struct {
+		attrs Attributes
+		expr  string
+		want  bool
+	}{
+		{ctaAttrs(at("a", "x"), at("b", "y")), "@*", true},
+		{ctaAttrs(at("a", "")), "@*", true},
+		{ctaAttrs(), "@*", false},
+		{ctaAttrs(), "not(@*)", true},
+		{ctaAttrs(at("a", "x")), "@w:*", false},
+		{ctaAttrs(atNS(ctaWildcardNS, "a", "x")), "@w:*", true},
+		{ctaAttrs(at("kind", "x")), "@*:kind", true},
+		{ctaAttrs(at("kind", "x")), "@*:other", false},
+	} {
+		got := compile(t, tc.expr, "w", ctaWildcardNS).Evaluate(backend(), seededTypes, tc.attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}
+
 // TestEvaluateConnectives pins [9], [10], [11]'s parenthesised arm and the
 // fn:not the [12] production is fixed to, including that grouping changes the
 // answer (so the test would notice an evaluator that ignored the parens).
 func TestEvaluateConnectives(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("a"): "x", uq("b"): "y", uq("c"): "z"})
+	attrs := ctaAttrs(at("a", "x"), at("b", "y"), at("c", "z"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -726,7 +934,7 @@ func TestEvaluateConnectives(t *testing.T) {
 // has no xpath20.md B.2 row at all, which is err:XPTY0004 (a type error).
 // Clause 2 names both.
 func TestEvaluateRaisedErrorFalsifiesTheWholeTest(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("n"): "abc", uq("k"): "x"})
+	attrs := ctaAttrs(at("n", "abc"), at("k", "x"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -760,7 +968,7 @@ func TestEvaluateRaisedErrorFalsifiesTheWholeTest(t *testing.T) {
 // where the tables become observable, because only there does the difference
 // between "false" and "raised" survive to the {test}.
 func TestEvaluateRaisedErrorUnderConnectives(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("n"): "abc", uq("k"): "x"})
+	attrs := ctaAttrs(at("n", "abc"), at("k", "x"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -790,7 +998,7 @@ func TestEvaluateRaisedErrorUnderConnectives(t *testing.T) {
 // value· (xpath20.md §2.4.3), which for an AttrName is presence and for a
 // Literal is fn:boolean's rules 4 and 5.
 func TestEvaluateEffectiveBooleanValue(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("a"): "x", uq("empty"): ""})
+	attrs := ctaAttrs(at("a", "x"), at("empty", ""))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -821,7 +1029,7 @@ func TestEvaluateEffectiveBooleanValue(t *testing.T) {
 // err:XPTY0004 — which §3.12.4 clause 2 decides as false rather than
 // declining.
 func TestEvaluateLiteralOnlyComparisons(t *testing.T) {
-	attrs := ctaAttrs(nil)
+	attrs := ctaAttrs()
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -847,7 +1055,7 @@ func TestEvaluateLiteralOnlyComparisons(t *testing.T) {
 // TestEvaluateStringLiteralEscapes pins xpath20.md [74]: the quote character
 // appears inside a literal only doubled, and denotes one such character.
 func TestEvaluateStringLiteralEscapes(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{uq("k"): "it's"})
+	attrs := ctaAttrs(at("k", "it's"))
 	for _, expr := range []string{"@k = 'it''s'", "@k = \"it's\""} {
 		if !compile(t, expr).Evaluate(backend(), seededTypes, attrs) {
 			t.Errorf("Evaluate(%q) = false, want true", expr)
@@ -862,7 +1070,7 @@ func TestEvaluateStringLiteralEscapes(t *testing.T) {
 // CompileCTATest produces — still decides rather than panicking.
 func TestEvaluateZeroTestDecides(t *testing.T) {
 	var zero CTATest
-	if zero.Evaluate(backend(), seededTypes, ctaAttrs(nil)) {
+	if zero.Evaluate(backend(), seededTypes, ctaAttrs()) {
 		t.Error("the zero CTATest evaluated true")
 	}
 }
@@ -896,7 +1104,7 @@ func castNode(t *testing.T, known ctaTypes, local string) ctaValue {
 	if !admitted {
 		t.Fatalf("castTarget(xs:%s): declined, want admitted", local)
 	}
-	return ctaCast{operand: ctaAttr{name: uq("a")}, target: target}
+	return ctaCast{operand: ctaAttr{test: ctaExactName{name: uq("a")}}, target: target}
 }
 
 // compileTypes is the compile-time type knowledge over the seeded builtins.
@@ -924,7 +1132,7 @@ func compileTypes(t *testing.T) ctaTypes {
 // TestComparisonOperatorLegality's subject.
 func TestComparisonType(t *testing.T) {
 	known := compileTypes(t)
-	attr := ctaAttr{name: uq("a")}
+	attr := ctaAttr{test: ctaExactName{name: uq("a")}}
 	str := ctaLiteral{text: "x", st: known.str}
 	dec := ctaLiteral{text: "1", st: known.decimal}
 	dbl := ctaLiteral{text: "1e0", st: known.double}
@@ -1072,14 +1280,7 @@ func TestComparisonOperatorLegality(t *testing.T) {
 // value.Ordered under the strict backend, so a comparator reading the value
 // space would answer true for every ordering row here.
 func TestEvaluateOrderingWithoutB2Row(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("a"): "P2D",
-		uq("b"): "P1D",
-		uq("y"): "2001",
-		uq("z"): "2000",
-		uq("h"): "0F",
-		uq("i"): "0A",
-	})
+	attrs := ctaAttrs(at("a", "P2D"), at("b", "P1D"), at("y", "2001"), at("z", "2000"), at("h", "0F"), at("i", "0A"))
 	for _, expr := range []string{
 		"@a cast as xs:duration > @b cast as xs:duration",
 		"@a cast as xs:duration >= @b cast as xs:duration",
@@ -1104,13 +1305,7 @@ func TestEvaluateOrderingWithoutB2Row(t *testing.T) {
 // the types B.2 denies an ordering row still compare for equality, so the fix
 // narrowed the operators and not the operand set.
 func TestEvaluateEqualityWithoutOrdering(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("a"): "P2D",
-		uq("b"): "P1D",
-		uq("y"): "2001",
-		uq("z"): "2000",
-		uq("h"): "0F",
-	})
+	attrs := ctaAttrs(at("a", "P2D"), at("b", "P1D"), at("y", "2001"), at("z", "2000"), at("h", "0F"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -1138,10 +1333,7 @@ func TestEvaluateEqualityWithoutOrdering(t *testing.T) {
 // The fn:not rows are what separate a decided false from a raised error: they
 // invert, which an error would not.
 func TestEvaluateBooleanComparisons(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("t"): "true",
-		uq("f"): "0",
-	})
+	attrs := ctaAttrs(at("t", "true"), at("f", "0"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -1175,12 +1367,7 @@ func TestEvaluateBooleanComparisons(t *testing.T) {
 // operand of each subtype shares only xs:duration, which has eq and ne and no
 // ordering row.
 func TestEvaluateDurationSubtypeOrdering(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("a"): "P2D",
-		uq("b"): "PT1H",
-		uq("y"): "P1Y",
-		uq("m"): "P1M",
-	})
+	attrs := ctaAttrs(at("a", "P2D"), at("b", "PT1H"), at("y", "P1Y"), at("m", "P1M"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -1218,11 +1405,7 @@ func TestEvaluateDurationSubtypeOrdering(t *testing.T) {
 // comparison type of xs:anyURI reaching holdsBetween raises err:XPTY0004 and
 // the {test} is false whichever way the two URIs sort.
 func TestEvaluateAnyURIComparisons(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("u"): " http://a ",
-		uq("v"): "http://a",
-		uq("w"): "http://b",
-	})
+	attrs := ctaAttrs(at("u", " http://a "), at("v", "http://a"), at("w", "http://b"))
 	for _, tc := range []struct {
 		expr string
 		want bool
@@ -1248,10 +1431,7 @@ func TestEvaluateAnyURIComparisons(t *testing.T) {
 // operand still compares against an xs:decimal literal and against another
 // xs:float operand, and both decide.
 func TestEvaluateFloatComparisons(t *testing.T) {
-	attrs := ctaAttrs(map[xsd.QName]string{
-		uq("f"): "0.5",
-		uq("g"): "0.25",
-	})
+	attrs := ctaAttrs(at("f", "0.5"), at("g", "0.25"))
 	for _, tc := range []struct {
 		expr string
 		want bool

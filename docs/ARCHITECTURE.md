@@ -411,7 +411,7 @@ per STYLE T2), otherwise stdlib.
 
 **Status: the CTA required subset ships; the rest is the destination.**
 `go doc` renders four identifiers — `CompileCTATest`, `CTATest`,
-`AttributeValue` and `CTATestStaticError` — which compile, evaluate and
+`Attributes` and `CTATestStaticError` — which compile, evaluate and
 statically check §3.12.6's `ta-Test` grammar for a Type Alternative's
 `{test}`. They have two consumers in two phases: `parser` calls
 `CTATestStaticError` at schema construction, charging `ta-props-correct`

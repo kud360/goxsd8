@@ -222,6 +222,21 @@ func TestAbsentAttributeSelectsNothing(t *testing.T) {
 		ctaAlt{"@kind = 'book'", "First"}), "other")
 }
 
+// A WILDCARD NameTest reads the same [[attributes]] through the same walk
+// ctaAttributes hands the engine (#859), so a `@*` selects over the whole
+// sequence rather than over one ·expanded name·. The last case is the
+// discriminating one: `@*` matches the attribute the element DOES carry, whose
+// value satisfies nothing, so the alternative does not select — a wildcard is
+// not "true whenever E has an attribute".
+func TestWildcardTestSelectsOverTheElementsAttributes(t *testing.T) {
+	ctaWantGoverned(t, ctaAssess(t, ctaRoot("book"),
+		ctaAlt{"@* = 'book'", "First"}), ctaGovernedByFirst)
+	ctaWantGoverned(t, ctaAssess(t, ctaRoot("book"),
+		ctaAlt{"@*:kind = 'book'", "First"}), ctaGovernedByFirst)
+	ctaWantGoverned(t, ctaAssess(t, ctaRoot("", local("other")),
+		ctaAlt{"@* = 'book'", "First"}), "other")
+}
+
 // cvc-elt clause 4's ·override· is read against the CONDITIONALLY SELECTED
 // type, not against the declaration's own {type definition}: an xsi:type
 // naming Fallback — the declared type — does not ·override· the selected
