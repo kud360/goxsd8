@@ -797,8 +797,7 @@ func (op ctaComparator) holdsCollated(l, r value.Value) ctaAnswer {
 // conditionallySelected, which reads a true {test} as ·successfully selects·
 // and a false one as the next alternative's turn, so a wrong answer in either
 // direction hands the element a type §3.12.4 did not select, and both a false
-// accept and a false reject follow from that. (TODO(orchestrator): issue
-// number)
+// accept and a false reject follow from that. (#887)
 func (op ctaComparator) holdsBetween(l, r value.Value) ctaAnswer {
 	if op == ctaEqual || op == ctaNotEqual {
 		eq, comparable := l.(value.Eq)

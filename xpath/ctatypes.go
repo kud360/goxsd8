@@ -155,7 +155,7 @@ func (t ctaTypes) ancestor(st *xsd.SimpleType, name xsd.QName) (*xsd.SimpleType,
 // and F&O's casting table supports no dynamically-supplied operand for it at
 // all, so only the string-LITERAL spelling is being withheld here. It takes
 // [CompileCTATest]'s own withhold direction, argued there, rather than
-// deciding. (TODO(orchestrator): issue number)
+// deciding. (#888)
 func (t ctaTypes) castTarget(name xsd.QName) (*xsd.SimpleType, bool) {
 	st, declared := t.simple(name)
 	if !declared {
