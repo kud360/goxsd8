@@ -338,6 +338,7 @@ type ctaParser struct {
 	toks  []ctaToken
 	pos   int
 	names ctaNames
+	types ctaTypes
 }
 
 // peek reports the token at offset ahead of the cursor, or the EOF sentinel.
@@ -459,11 +460,11 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 	if !ok {
 		return nil, false
 	}
-	space, admitted := ctaComparisonSpace(left, right)
+	comparison, admitted := p.types.comparison(left, right)
 	if !admitted {
 		return ctaTypeError{}, true
 	}
-	return ctaCompare{op: op, space: space, left: left, right: right}, true
+	return ctaCompare{op: op, comparison: comparison, left: left, right: right}, true
 }
 
 // booleanFunction parses [12] ta-BooleanFunction, whose name the caller has
@@ -577,25 +578,14 @@ func (p *ctaParser) simpleValue() (ctaValue, bool) {
 	case ctaStringTok:
 		text := p.peek(0).text
 		p.advance()
-		return ctaLiteral{text: text, space: ctaSpaceString}, true
+		return ctaLiteral{text: text, st: p.types.str}, true
 	case ctaNumberTok:
 		text := p.peek(0).text
 		p.advance()
-		return ctaLiteral{text: text, space: ctaNumericSpace(text)}, true
+		return ctaLiteral{text: text, st: p.types.literal(text)}, true
 	default:
 		return nil, false
 	}
-}
-
-// ctaNumericSpace is the value space a NumericLiteral's own type puts it in: a
-// DoubleLiteral (the one with an exponent, xpath20.md [73]) is xs:double, and
-// an IntegerLiteral or DecimalLiteral is xs:decimal — xs:integer's primitive
-// base, and so the least common type of any two of them.
-func ctaNumericSpace(text string) ctaSpace {
-	if strings.ContainsAny(text, "eE") {
-		return ctaSpaceDouble
-	}
-	return ctaSpaceDecimal
 }
 
 // attrName parses [17] ta-AttrName in BOTH spellings ta-props-correct clause 2

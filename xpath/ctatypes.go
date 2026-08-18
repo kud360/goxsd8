@@ -1,0 +1,278 @@
+package xpath
+
+import "github.com/kud360/goxsd8/xsd"
+
+// This file is the COMPILE-TIME type knowledge of the §3.12.6 subset: which
+// builtin datatype a Literal carries, and which type a comparison's two
+// operands are converted into (xpath20.md §3.5.2's casting rules and B.1's
+// type promotions). Nothing here runs at evaluation time — the compiled tree
+// holds the resolved *[xsd.SimpleType] components and no resolver
+// (ARCHITECTURE), so [CTATest.Evaluate] takes one again.
+
+// ctaBuiltin is the ·expanded name· of a builtin datatype, which is the key an
+// [xsd.TypeResolver] holds it under. The XSD namespace is closed to user
+// declarations, so a type resolvable in it is one of the 49 builtins by
+// construction and no separate builtin table is needed here (STYLE T4).
+func ctaBuiltin(local string) xsd.QName {
+	return xsd.QName{Space: xsd.XMLSchemaNS, Local: local}
+}
+
+// ctaTypes is the type knowledge one [CompileCTATest] call reads: the resolver
+// itself, plus the three builtin datatypes the compiler names outright — the
+// two Literal kinds' types, and the xs:double §3.5.2 clause 2.1 answers with.
+//
+// It holds the resolver for the duration of the compile and puts it on no
+// compiled node, which is ARCHITECTURE's rule for every reader above xsd that
+// walks a {base type definition} chain.
+type ctaTypes struct {
+	resolver xsd.TypeResolver
+	str      *xsd.SimpleType
+	decimal  *xsd.SimpleType
+	double   *xsd.SimpleType
+}
+
+// ctaResolveTypes reads the three builtin datatypes the compiler names, or
+// reports false where the resolver answers for none of them — a schema whose
+// {type definitions} were assembled without the builtins seeded. That is a
+// whole-expression decline and not an error: no comparison in this grammar can
+// be evaluated without xs:string, so the caller withholds on
+// [CompileCTATest]'s own terms.
+func ctaResolveTypes(r xsd.TypeResolver) (ctaTypes, bool) {
+	t := ctaTypes{resolver: r}
+	var resolved bool
+	if t.str, resolved = t.simple(ctaBuiltin("string")); !resolved {
+		return ctaTypes{}, false
+	}
+	if t.decimal, resolved = t.simple(ctaBuiltin("decimal")); !resolved {
+		return ctaTypes{}, false
+	}
+	if t.double, resolved = t.simple(ctaBuiltin("double")); !resolved {
+		return ctaTypes{}, false
+	}
+	return t, true
+}
+
+// simple resolves name to a simple type definition, reporting false where the
+// {type definitions} hold none under that name or hold a COMPLEX one.
+//
+// The default arm is unreachable: [xsd.TypeDefinition] is a sealed sum of
+// exactly the two variants named (STYLE T2's schema-closed-set exception), and
+// the two are matched with the receiver kinds that sum's doc fixes — by value
+// for a complex type, by pointer for a simple one.
+func (t ctaTypes) simple(name xsd.QName) (*xsd.SimpleType, bool) {
+	td, declared := t.resolver.Type(name)
+	if !declared {
+		return nil, false
+	}
+	switch d := td.(type) {
+	case *xsd.SimpleType:
+		return d, true
+	case xsd.ComplexType:
+		return nil, false
+	default:
+		return nil, false
+	}
+}
+
+// literal is the builtin datatype a [16] ta-SimpleValue Literal carries: a
+// DoubleLiteral (the one with an exponent, xpath20.md [73]) is xs:double, and
+// an IntegerLiteral or DecimalLiteral is xs:decimal — xs:integer's primitive
+// base, and so the type any two of them are compared in. A StringLiteral does
+// not reach here; its type is xs:string with no text to inspect.
+func (t ctaTypes) literal(text string) *xsd.SimpleType {
+	for _, r := range text {
+		if r == 'e' || r == 'E' {
+			return t.double
+		}
+	}
+	return t.decimal
+}
+
+// primitive resolves st's {primitive type definition}, reporting false where
+// the chain cannot be walked or the property is ·absent· — xs:anySimpleType,
+// xs:anyAtomicType, and the list and union varieties, none of which any
+// operand of this grammar can carry once the cast targets are classified.
+func (t ctaTypes) primitive(st *xsd.SimpleType) (*xsd.SimpleType, bool) {
+	p, err := st.Primitive(t.resolver)
+	if err != nil || p == nil {
+		return nil, false
+	}
+	return p, true
+}
+
+// ancestor reports the ancestor of st named name — st ITSELF included — on the
+// {base type definition} chain, or nil where the chain holds no such type. An
+// unwalkable chain is the error, never a nil answer, so a caller cannot read
+// "could not resolve the base" as "is not derived from it" (STYLE S3).
+//
+// TERMINATION: the walk carries no visited set (STYLE D4), on
+// [xsd.SimpleType.Variety]'s terms — every base chain a finalized Schema holds
+// is acyclic, established in Phase B before any pass that walks one runs.
+func (t ctaTypes) ancestor(st *xsd.SimpleType, name xsd.QName) (*xsd.SimpleType, error) {
+	for at := st; at != nil; {
+		if at.Name() == name {
+			return at, nil
+		}
+		base, err := at.Base(t.resolver)
+		if err != nil {
+			return nil, err
+		}
+		at = base
+	}
+	return nil, nil
+}
+
+// comparison settles the type a general comparison of l against r converts
+// BOTH its operands into, per xpath20.md §3.5.2 clause 2's
+// magnitude-relationship rules and B.1's type promotions. ok is false where no
+// one type serves both operands, which is err:XPTY0004 and so a ctaTypeError
+// node.
+//
+// Two rules cover the three operand shapes this grammar builds, because an
+// operand is either xs:untypedAtomic (an uncast attribute) or typed (a
+// Literal, a cast, a constructor function):
+//
+//   - BOTH xs:untypedAtomic: clause 1, "the values are cast to the type
+//     xs:string".
+//   - EXACTLY ONE xs:untypedAtomic: clause 2 casts it to a type read off the
+//     other operand's type T — untypedAgainst.
+//   - NEITHER: one type must serve both, which is shared.
+//
+// B.1's URI promotion is applied to the ANSWER rather than inside one of those
+// rules, because it holds however the pair was formed: "a value of type
+// xs:anyURI (or any type derived by restriction from xs:anyURI) can be
+// promoted to the type xs:string", and B.2 gives xs:anyURI its six operator
+// rows through fn:compare exactly as it gives them to xs:string.
+func (t ctaTypes) comparison(l, r ctaValue) (*xsd.SimpleType, bool) {
+	c, admitted := t.compared(ctaStaticOf(l), ctaStaticOf(r))
+	if !admitted {
+		return nil, false
+	}
+	if c.Name() == ctaBuiltin("anyURI") {
+		return t.str, true
+	}
+	return c, true
+}
+
+// compared is comparison's dispatch over the two operands' static types.
+func (t ctaTypes) compared(l, r ctaStatic) (*xsd.SimpleType, bool) {
+	lt, lTyped := l.(ctaTyped)
+	rt, rTyped := r.(ctaTyped)
+	if !lTyped && !rTyped {
+		return t.str, true
+	}
+	if !lTyped {
+		return t.untypedAgainst(rt.st)
+	}
+	if !rTyped {
+		return t.untypedAgainst(lt.st)
+	}
+	return t.shared(lt.st, rt.st)
+}
+
+// untypedAgainst is xpath20.md §3.5.2 clause 2: the type an xs:untypedAtomic
+// operand is cast to, chosen from the other operand's type T. All four
+// sub-clauses are here, in their order.
+//
+//   - 2.1, "if T is a numeric type or is derived from a numeric type, then V
+//     is cast to xs:double" — whatever the numeric type actually is, so a
+//     comparison against an xs:integer cast runs in xs:double and not in
+//     xs:decimal.
+//   - 2.2 and 2.3, the two duration types, which are named rather than reduced
+//     to their xs:duration primitive. The Note attached to them says why: "the
+//     special treatment of the duration types is required to avoid errors that
+//     may arise when comparing the primitive type xs:duration with any
+//     duration type."
+//   - 2.4, "in all other cases, V is cast to the primitive base type of T".
+func (t ctaTypes) untypedAgainst(st *xsd.SimpleType) (*xsd.SimpleType, bool) {
+	p, resolved := t.primitive(st)
+	if !resolved {
+		return nil, false
+	}
+	if ctaNumeric(p) {
+		return t.double, true
+	}
+	dayTime, err := t.ancestor(st, ctaBuiltin("dayTimeDuration"))
+	if err != nil {
+		return nil, false
+	}
+	if dayTime != nil {
+		return dayTime, true
+	}
+	yearMonth, err := t.ancestor(st, ctaBuiltin("yearMonthDuration"))
+	if err != nil {
+		return nil, false
+	}
+	if yearMonth != nil {
+		return yearMonth, true
+	}
+	return p, true
+}
+
+// shared is the type serving two TYPED operands: their {primitive type
+// definition} where they share one, and otherwise the wider of the two under
+// B.1's promotions — which is the only way two different primitives are ever
+// admitted, and the reason a cast operand compared against a string literal is
+// err:XPTY0004 (the grammar's one such pair, and the shape §3.5.2's
+// untypedAtomic rules never reach because a StringLiteral is xs:string).
+//
+// The comparison is by ·expanded name· rather than by component identity: a
+// primitive is always named, and a resolver is free to answer with a component
+// this compile did not itself resolve.
+func (t ctaTypes) shared(a, b *xsd.SimpleType) (*xsd.SimpleType, bool) {
+	pa, resolved := t.primitive(a)
+	if !resolved {
+		return nil, false
+	}
+	pb, resolved := t.primitive(b)
+	if !resolved {
+		return nil, false
+	}
+	if pa.Name() == pb.Name() {
+		return pa, true
+	}
+	if ctaNumeric(pa) && ctaNumeric(pb) {
+		return ctaWider(pa, pb), true
+	}
+	if ctaStringLike(pa) && ctaStringLike(pb) {
+		return t.str, true
+	}
+	return nil, false
+}
+
+// ctaNumeric reports whether p is one of the three primitives xpath20.md calls
+// numeric: xs:decimal, xs:float and xs:double (§B.1's numeric promotions are
+// written over exactly these three).
+func ctaNumeric(p *xsd.SimpleType) bool {
+	return ctaRank(p) >= 0
+}
+
+// ctaStringLike reports whether p is one of the two primitives B.1's URI
+// promotion relates, xs:anyURI and xs:string.
+func ctaStringLike(p *xsd.SimpleType) bool {
+	return p.Name() == ctaBuiltin("string") || p.Name() == ctaBuiltin("anyURI")
+}
+
+// ctaWider is the target of B.1's numeric promotions between two different
+// numeric primitives: xs:float promotes to xs:double, and xs:decimal to either
+// of them, so the wider of the pair is the one both reach.
+func ctaWider(a, b *xsd.SimpleType) *xsd.SimpleType {
+	if ctaRank(a) >= ctaRank(b) {
+		return a
+	}
+	return b
+}
+
+// ctaRank orders the three numeric primitives by which promotes to which, and
+// reports -1 for a primitive that is not numeric at all.
+func ctaRank(p *xsd.SimpleType) int {
+	switch p.Name() {
+	case ctaBuiltin("decimal"):
+		return 0
+	case ctaBuiltin("float"):
+		return 1
+	case ctaBuiltin("double"):
+		return 2
+	}
+	return -1
+}

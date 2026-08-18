@@ -43,9 +43,19 @@ import (
 // caller as a decline.
 //
 // The nodes of the XDM instance a {test} runs against are UNTYPED
-// (key-cta-ta-select clause 1's Note), so every attribute operand atomizes to
-// xs:untypedAtomic and xpath20.md §3.5.2's untypedAtomic casting rules are the
-// normal path of every comparison here rather than an edge case.
+// (key-cta-ta-select clause 1's Note), so an UNCAST attribute operand
+// atomizes to xs:untypedAtomic and xpath20.md §3.5.2's untypedAtomic casting
+// rules are the normal path of every comparison here rather than an edge
+// case.
+//
+// EVERY CAST IS A DATATYPE VALIDATION. xpath-functions.md §17.1.1 fixes that
+// outright for an xs:string or xs:untypedAtomic operand: "Whitespace
+// normalization is applied as indicated by the whiteSpace facet for the
+// datatype. The resulting whitespace-normalized string must be a valid
+// lexical form for the datatype. The semantics of casting are identical to
+// XML Schema validation." So a cast is [value.ValidateLexical] — the whole
+// facet pipeline, whiteSpace and pattern and value facets included — and
+// never a lexical parser of this package's own (STYLE T4).
 
 // AttributeValue reads one attribute of the element information item E whose
 // ·selected type definition· is being decided: the [[normalized value]] of
@@ -74,6 +84,12 @@ type CTATest struct{ root ctaExpr }
 // [xsd.XPathExpression] property record) into an evaluable [CTATest],
 // reporting ok false for an {expression} this engine cannot evaluate.
 //
+// types resolves every QName the expression names a datatype with — the
+// builtin types a Literal carries and §3.5.2's casting rules answer with — and
+// is read here and stored nowhere: the compiled tree holds the resolved
+// *[xsd.SimpleType] components themselves, which is why [CTATest.Evaluate]
+// takes a resolver again rather than reading one off the tree.
+//
 // ok false is the WITHHOLD direction and covers every such {expression} under
 // one encoding, because they all have one consequence at the caller:
 //
@@ -100,8 +116,12 @@ type CTATest struct{ root ctaExpr }
 // NameTest in this grammar an attribute-axis one, whose principal node kind is
 // never element, so an unprefixed NameTest here is always in no namespace
 // (xpath20.md §3.2.1.2, PRINCIPLES 15).
-func CompileCTATest(expr xsd.XPathExpression) (CTATest, bool) {
+func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, bool) {
 	toks, ok := ctaTokenize(expr.Expression())
+	if !ok {
+		return CTATest{}, false
+	}
+	known, ok := ctaResolveTypes(types)
 	if !ok {
 		return CTATest{}, false
 	}
@@ -109,7 +129,7 @@ func CompileCTATest(expr xsd.XPathExpression) (CTATest, bool) {
 	for _, b := range expr.NamespaceBindings() {
 		names.prefixes[b.Prefix()] = b.Namespace()
 	}
-	p := ctaParser{toks: toks, names: names}
+	p := ctaParser{toks: toks, names: names, types: known}
 	root, ok := p.test()
 	if !ok {
 		return CTATest{}, false
@@ -133,24 +153,24 @@ func CompileCTATest(expr xsd.XPathExpression) (CTATest, bool) {
 // false here, at the root. An error under an fn:not is therefore a false
 // {test} and never the inversion of one.
 //
-// b supplies the value spaces the numeric comparisons run in and must be
-// non-nil; it is asked only for the primitives xs:decimal and xs:double, which
-// every [value.Backend] covers by contract. Comparisons of xs:string operands
-// do not reach it: xpath20.md B.2 defines all six operators on xs:string
-// through fn:compare, hence through the default collation, which xpath-valid
-// clause 2.2.10 fixes as the Unicode codepoint collation — a static-context
-// property no backend owns.
-func (t CTATest) Evaluate(b value.Backend, attr AttributeValue) bool {
-	return ctaEval(t.root, ctaEnv{backend: b, attr: attr}) == ctaTrue
+// b supplies the value spaces the comparisons and the casts run in and must be
+// non-nil. types resolves the {base type definition} chain of every type the
+// compiled tree holds — the same capability [CompileCTATest] classified those
+// types with, threaded as a parameter and stored nowhere (ARCHITECTURE), so
+// one compiled [CTATest] serves any resolver that answers for its components.
+func (t CTATest) Evaluate(b value.Backend, types xsd.TypeResolver, attr AttributeValue) bool {
+	return ctaEval(t.root, ctaEnv{backend: b, types: types, attr: attr}) == ctaTrue
 }
 
 // ctaEnv is the dynamic context of one [CTATest.Evaluate] call. cvc-xpath
 // (§3.13.4.2) fixes the rest of it — context item E, context position and size
 // 1, no variable values — and none of that is representable in this grammar,
 // which reaches no context item and has no VarRef production, so the
-// attributes and the value spaces are the whole of what evaluation reads.
+// attributes, the value spaces and the type knowledge the casts need are the
+// whole of what evaluation reads.
 type ctaEnv struct {
 	backend value.Backend
+	types   xsd.TypeResolver
 	attr    AttributeValue
 }
 
@@ -174,13 +194,14 @@ type ctaAnd struct{ operands []ctaExpr }
 type ctaNot struct{ operand ctaExpr }
 
 // ctaCompare is [11] ta-BooleanExpr's third arm with its Comparator present:
-// a general comparison (xpath20.md §3.5.2) whose operand value space was
-// settled at compile time by ctaComparisonSpace.
+// a general comparison (xpath20.md §3.5.2) whose comparison type — the one
+// type §3.5.2's casting rules convert BOTH operands into — was settled at
+// compile time by ctaTypes.comparison.
 type ctaCompare struct {
-	op    ctaComparator
-	space ctaSpace
-	left  ctaValue
-	right ctaValue
+	op         ctaComparator
+	comparison *xsd.SimpleType
+	left       ctaValue
+	right      ctaValue
 }
 
 // ctaEffectiveBoolean is [11] ta-BooleanExpr's third arm with its Comparator
@@ -189,11 +210,10 @@ type ctaCompare struct {
 type ctaEffectiveBoolean struct{ operand ctaValue }
 
 // ctaTypeError is a comparison whose operand types are not a valid combination
-// for its operator under xpath20.md B.2 — a string operand against a numeric
-// one, the only such pair this grammar can build once the untypedAtomic
-// casting rules have run. XPath raises err:XPTY0004 for it, so the node
-// evaluates to ctaError: a raised error the enclosing operators carry, not a
-// decline and not a node-local false.
+// for its operator under xpath20.md B.2 — no one type serves both operands,
+// which ctaTypes.comparison decides. XPath raises err:XPTY0004 for it, so the
+// node evaluates to ctaError: a raised error the enclosing operators carry,
+// not a decline and not a node-local false.
 type ctaTypeError struct{}
 
 func (ctaOr) ctaExpr()               {}
@@ -217,102 +237,49 @@ type ctaValue interface{ ctaValue() }
 // axis of its own.
 type ctaAttr struct{ name xsd.QName }
 
-// ctaLiteral is the Literal arm of [16] ta-SimpleValue, with the value space
-// its XPath literal kind fixes: a StringLiteral is xs:string, an
+// ctaLiteral is the Literal arm of [16] ta-SimpleValue, carrying the builtin
+// datatype its XPath literal kind fixes: a StringLiteral is xs:string, an
 // IntegerLiteral or DecimalLiteral is xs:decimal (xs:integer's primitive base,
-// which is the space two such literals are compared in), and a DoubleLiteral
-// is xs:double.
+// which is the type two such literals are compared in), and a DoubleLiteral is
+// xs:double.
 type ctaLiteral struct {
-	text  string
-	space ctaSpace
+	text string
+	st   *xsd.SimpleType
 }
 
 func (ctaAttr) ctaValue()    {}
 func (ctaLiteral) ctaValue() {}
 
-// ctaSpace is the value space a comparison's operands are compared in, which
-// xpath20.md §3.5.2 derives from the operand types. Only three arise: this
-// grammar's operands are xs:untypedAtomic attributes and string, decimal and
-// double literals, and §3.5.2's casting rules map every admissible pair of
-// those onto one of the three.
-type ctaSpace byte
+// ctaStatic is one operand's static type, which is what xpath20.md §3.5.2's
+// casting rules dispatch on. It is a sealed sum of the two states this grammar
+// can produce and not a datatype: an uncast attribute has no type ANNOTATION
+// at all, because key-cta-ta-select clause 1 labels every node of the
+// constructed instance untyped.
+type ctaStatic interface{ ctaStatic() }
 
-const (
-	// ctaSpaceString is xs:string, and comparison in it is the default
-	// (Unicode codepoint) collation rather than a backend value space.
-	ctaSpaceString ctaSpace = iota
-	// ctaSpaceDecimal is xs:decimal, the space two non-double numeric
-	// literals are compared in.
-	ctaSpaceDecimal
-	// ctaSpaceDouble is xs:double, which §3.5.2 clause 2.1 forces whenever an
-	// xs:untypedAtomic operand meets a numeric one.
-	ctaSpaceDouble
-)
+// ctaUntypedAtomic is an uncast attribute operand, which atomizes to a single
+// xs:untypedAtomic value (§3.13.4.1's note on the same "labeled as untyped"
+// condition: "its atomized value will be a single atomic value of type
+// untypedAtomic").
+type ctaUntypedAtomic struct{}
 
-// ctaSpaceName is the ·expanded name· of the builtin datatype a ctaSpace is,
-// which is the key a [value.Backend] maps.
-func ctaSpaceName(s ctaSpace) xsd.QName {
-	switch s {
-	case ctaSpaceDecimal:
-		return xsd.QName{Space: xsd.XMLSchemaNS, Local: "decimal"}
-	case ctaSpaceDouble:
-		return xsd.QName{Space: xsd.XMLSchemaNS, Local: "double"}
+// ctaTyped is an operand carrying a datatype: a Literal, or the result of a
+// cast or a constructor function. It carries the COMPONENT alone — st.Name()
+// is the name, and storing both would be two encodings of one fact (STYLE D3).
+type ctaTyped struct{ st *xsd.SimpleType }
+
+func (ctaUntypedAtomic) ctaStatic() {}
+func (ctaTyped) ctaStatic()         {}
+
+// ctaStaticOf reports the static type of one [14] ta-ValueExpr. The default
+// arm is unreachable: every branch of the ctaValue sum above is named.
+func ctaStaticOf(v ctaValue) ctaStatic {
+	switch n := v.(type) {
+	case ctaLiteral:
+		return ctaTyped{st: n.st}
 	default:
-		return xsd.QName{Space: xsd.XMLSchemaNS, Local: "string"}
+		return ctaUntypedAtomic{}
 	}
-}
-
-// ctaComparisonSpace settles which value space a comparison of l against r
-// runs in, per xpath20.md §3.5.2's magnitude-relationship rules read against
-// this grammar's operands (an attribute is xs:untypedAtomic, a literal is its
-// own type). ok is false where B.2 admits no combination for the pair, which
-// is err:XPTY0004 and so ctaTypeError.
-//
-//   - Two attributes are both xs:untypedAtomic, which rule 1 casts to
-//     xs:string.
-//   - An attribute against a string literal is rule 2.4's "primitive base type
-//     of T", xs:string.
-//   - An attribute against a numeric literal is rule 2.1's xs:double, whatever
-//     the literal's own numeric type — after which rule 3's value comparison
-//     promotes the literal to xs:double too (xpath20.md §B.1).
-//   - Two literals are compared in their least common type: the shared one, or
-//     xs:double where a double literal meets a decimal one.
-//   - A string literal against a numeric literal has no B.2 row at all.
-func ctaComparisonSpace(l, r ctaValue) (ctaSpace, bool) {
-	ls, lLiteral := ctaOperandSpace(l)
-	rs, rLiteral := ctaOperandSpace(r)
-	if !lLiteral && !rLiteral {
-		return ctaSpaceString, true
-	}
-	if !lLiteral || !rLiteral {
-		literal := ls
-		if !lLiteral {
-			literal = rs
-		}
-		if literal == ctaSpaceString {
-			return ctaSpaceString, true
-		}
-		return ctaSpaceDouble, true
-	}
-	if ls == rs {
-		return ls, true
-	}
-	if ls == ctaSpaceString || rs == ctaSpaceString {
-		return ctaSpaceString, false
-	}
-	return ctaSpaceDouble, true
-}
-
-// ctaOperandSpace reports the value space of one operand and whether it has
-// one at all: a literal carries its own type, an attribute is
-// xs:untypedAtomic, which is not a space this file compares in but the thing
-// §3.5.2's casting rules consume.
-func ctaOperandSpace(v ctaValue) (ctaSpace, bool) {
-	lit, isLiteral := v.(ctaLiteral)
-	if !isLiteral {
-		return ctaSpaceString, false
-	}
-	return lit.space, true
 }
 
 // ctaComparator is one operator of [13] ta-Comparator. All six are GENERAL
@@ -435,121 +402,266 @@ func (n ctaAnd) eval(env ctaEnv) ctaAnswer {
 }
 
 // eval decides one general comparison (xpath20.md §3.5.2). Both operands are
-// singletons or empty here — an attribute is at most one node and a literal is
-// exactly one value — so the existential over pairs reduces to: no pair at all
-// where either operand is absent, and one pair otherwise.
+// singletons or empty here — an attribute is at most one node, a literal is
+// exactly one value, and a cast of either is one or neither — so the
+// existential over pairs reduces to: no pair at all where either operand is
+// absent, and one pair otherwise.
 //
-// An ABSENT operand is a decided false and not an error: forming no pair is
-// what §3.5.2 asks of the empty sequence, and nothing is raised. A failed cast
-// of a PRESENT operand is err:FORG0001, so it is ctaError and the enclosing
-// operators decide what becomes of it.
+// A RAISED operand decides first, whatever the other operand is: §3.5.2 says
+// a general comparison "may raise a dynamic error as soon as it encounters an
+// error in evaluating either operand". An ABSENT operand is then a decided
+// false and not an error, because forming no pair is what §3.5.2 asks of the
+// empty sequence and nothing is raised.
+//
+// Both operands reach the comparison already converted into c.comparison,
+// which is where §3.5.2 clause 2's casts and B.1's promotions happened, so
+// what is left here is clause 3's value comparison.
 func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
-	left, leftPresent := ctaLexical(c.left, env)
-	right, rightPresent := ctaLexical(c.right, env)
+	left := ctaItemOf(c.left, c.comparison, env)
+	right := ctaItemOf(c.right, c.comparison, env)
+	if ctaRaisedItem(left) || ctaRaisedItem(right) {
+		return ctaError
+	}
+	l, leftPresent := left.(ctaAtom)
+	r, rightPresent := right.(ctaAtom)
 	if !leftPresent || !rightPresent {
 		return ctaFalse
 	}
-	if c.space == ctaSpaceString {
-		return ctaAnswerOf(c.op.holdsSign(strings.Compare(left, right)))
+	if c.comparison.Name() == ctaBuiltin("string") {
+		return c.op.holdsCollated(l.v, r.v)
 	}
-	lv, lok := ctaParseIn(env.backend, c.space, left)
-	rv, rok := ctaParseIn(env.backend, c.space, right)
-	if !lok || !rok {
-		return ctaError
-	}
-	return c.op.holdsBetween(lv, rv)
+	return c.op.holdsBetween(l.v, r.v)
 }
 
 // eval decides the ·effective boolean value· of a bare ValueExpr (xpath20.md
 // §2.4.3, the fn:boolean rules quoted there).
 //
-// The two arms are rules 2 and 4/5. An AttrName evaluates to a sequence of
-// attribute NODES, so a present attribute is rule 2's "sequence whose first
-// item is a node" and an absent one is rule 1's empty sequence. A literal is a
-// singleton atomic value: rule 4 for xs:string (false iff zero length), rule 5
-// for the numeric types (false iff numerically equal to zero — NaN, rule 5's
-// other false, has no literal in XPath's grammar to reach this by).
+// An AttrName evaluates to a sequence of attribute NODES rather than to an
+// atomic value, so it takes rule 2 ("a sequence whose first item is a node")
+// when the attribute is present and rule 1 (the empty sequence) when it is
+// not, and no type of its own is involved. Every other operand is a singleton
+// atomic value or the empty sequence, which ctaBoolean decides.
 func (e ctaEffectiveBoolean) eval(env ctaEnv) ctaAnswer {
-	switch v := e.operand.(type) {
+	switch n := e.operand.(type) {
 	case ctaAttr:
-		_, present := env.attr(v.name)
+		_, present := env.attr(n.name)
 		return ctaAnswerOf(present)
 	case ctaLiteral:
-		if v.space == ctaSpaceString {
-			return ctaAnswerOf(v.text != "")
-		}
-		return ctaNonZero(env.backend, v)
+		return ctaBoolean(e.operand, n.st, env)
 	default:
 		return ctaFalse
 	}
 }
 
-// ctaNonZero reports whether a numeric literal is numerically unequal to zero,
-// which is its ·effective boolean value·. It asks the backend rather than
-// reading the lexical, so "0.0", "0" and "0E0" are one answer decided in the
-// value space and not three lexical special cases.
+// ctaBoolean is fn:boolean over a singleton atomic operand of type st
+// (xpath20.md §2.4.3 rules 1 and 3 through 6), which it decides in st's
+// {primitive type definition}: the rules quantify over "xs:string ... or a
+// type derived from one of these", and the primitive is what answers that for
+// every builtin at once instead of a name list per rule.
 //
-// A cast that fails is err:FORG0001 like any other, hence ctaError. It is
-// unreachable for a backend meeting [value.Backend]'s contract: the lexical is
-// one the tokenizer already admitted as an XPath numeric literal, and every
-// such literal is in the lexical space of the ctaSpace its kind fixes.
-func ctaNonZero(b value.Backend, lit ctaLiteral) ctaAnswer {
-	v, ok := ctaParseIn(b, lit.space, lit.text)
-	if !ok {
+// Rule 6 — "in all other cases, fn:boolean raises a type error [err:FORG0006]"
+// — is the fallthrough, and it is reachable: this grammar can cast to any
+// builtin atomic datatype, and only the boolean, string, anyURI and numeric
+// families have a rule.
+//
+// An unresolvable primitive is ctaError on the same terms as any other type
+// fault (ctaValidate). It is unreachable for a tree this package compiled,
+// which resolved the primitive of every literal and every cast target before
+// admitting it.
+func ctaBoolean(v ctaValue, st *xsd.SimpleType, env ctaEnv) ctaAnswer {
+	p, err := st.Primitive(env.types)
+	if err != nil || p == nil {
 		return ctaError
 	}
-	zero, ok := ctaParseIn(b, lit.space, "0")
-	if !ok {
+	switch item := ctaItemOf(v, p, env).(type) {
+	case ctaAbsent:
+		return ctaFalse
+	case ctaAtom:
+		return ctaBooleanOf(item.v, p, env)
+	default:
 		return ctaError
 	}
-	return ctaNotEqual.holdsBetween(v, zero)
 }
 
-// ctaLexical reads one operand's lexical form, reporting false where the
-// operand is the empty sequence — which only an absent attribute is.
-func ctaLexical(v ctaValue, env ctaEnv) (string, bool) {
+// ctaBooleanOf applies fn:boolean's per-type rules to one atomic value of
+// primitive type p, through the capability interfaces the value itself carries
+// (STYLE T2) and never a type switch over a backend's concrete types.
+//
+//   - Rule 3, xs:boolean: the value unchanged, read as equality against the
+//     value of the lexical "true".
+//   - Rule 4, xs:string and xs:anyURI: false iff the value has zero length,
+//     which is [value.Lengthed]'s answer and the same one the length facet
+//     reads.
+//   - Rule 5, the numeric types: false iff NaN or numerically zero. NaN is
+//     detected as a value UNEQUAL TO ITSELF, which [value.Eq] states outright
+//     for float and double, so no NaN literal or backend-specific probe is
+//     needed.
+//   - Rule 6, everything else: err:FORG0006, hence ctaError.
+func ctaBooleanOf(v value.Value, p *xsd.SimpleType, env ctaEnv) ctaAnswer {
+	eq, comparable := v.(value.Eq)
+	switch p.Name() {
+	case ctaBuiltin("boolean"):
+		if !comparable {
+			return ctaError
+		}
+		return ctaEqualsLexical(eq, p, "true", env)
+	case ctaBuiltin("string"), ctaBuiltin("anyURI"):
+		measured, lengthed := v.(value.Lengthed)
+		if !lengthed {
+			return ctaError
+		}
+		return ctaAnswerOf(measured.Len() != 0)
+	case ctaBuiltin("decimal"), ctaBuiltin("float"), ctaBuiltin("double"):
+		if !comparable {
+			return ctaError
+		}
+		if !eq.Eq(v) {
+			return ctaFalse
+		}
+		return ctaEqualsLexical(eq, p, "0", env).negated()
+	}
+	return ctaError
+}
+
+// ctaEqualsLexical reports whether eq equals the value of lexical in type p,
+// which is how fn:boolean's rules 3 and 5 reach the two constants they name
+// (true, and numeric zero) without any backend-specific value construction.
+// A lexical outside p's value space is ctaError, and neither of the two is:
+// "true" is in xs:boolean's lexical space and "0" in every numeric one.
+func ctaEqualsLexical(eq value.Eq, p *xsd.SimpleType, lexical string, env ctaEnv) ctaAnswer {
+	against, isAtom := ctaValidate(lexical, p, env).(ctaAtom)
+	if !isAtom {
+		return ctaError
+	}
+	return ctaAnswerOf(eq.Eq(against.v))
+}
+
+// ctaItem is what one [14] ta-ValueExpr contributes to the operator above it,
+// and it has THREE states rather than a value and a presence flag: an operand
+// can be absent WITHOUT raising (the empty sequence, which forms no pair) and
+// can raise WITHOUT being absent (§3.5.2 clause 2's "if a cast operation
+// called for by these rules is not successful, a dynamic error is raised
+// [err:FORG0001]"), and those two are the opposite of each other under fn:not.
+// It is a sealed sum (STYLE T1/T2) so no fourth state and no illegal pairing of
+// the three is representable.
+type ctaItem interface{ ctaItem() }
+
+// ctaAbsent is the empty sequence, which in this grammar is an attribute the
+// element does not carry.
+type ctaAbsent struct{}
+
+// ctaRaised is a dynamic or type error raised while producing the item —
+// err:FORG0001 from a lexical or facet mismatch, err:XPTY0004 from a cast this
+// processor does not support. Which of the two it was is not carried:
+// key-cta-ta-select clause 2 (§3.12.4) gives both the same consequence, and the
+// {test} is where that consequence is applied.
+type ctaRaised struct{}
+
+// ctaAtom is one atomic value, already in the type the enclosing operator
+// asked for.
+type ctaAtom struct{ v value.Value }
+
+func (ctaAbsent) ctaItem() {}
+func (ctaRaised) ctaItem() {}
+func (ctaAtom) ctaItem()   {}
+
+// ctaRaisedItem reports whether an item is a raised error, which several
+// deciders test before reading the item itself.
+func ctaRaisedItem(i ctaItem) bool {
+	_, raised := i.(ctaRaised)
+	return raised
+}
+
+// ctaItemOf evaluates one [14] ta-ValueExpr to the single item it yields,
+// converted into type c — the type the enclosing operator compares or reads it
+// in.
+//
+// The arms are the ways an item acquires a type:
+//
+//   - an ATTRIBUTE is xs:untypedAtomic, which §3.5.2's casting rules cast
+//     STRAIGHT to c (clause 1's xs:string, or clause 2's type chosen from the
+//     other operand). No intermediate type exists to cast through.
+//   - a LITERAL carries its own type and is converted to c, which is a no-op
+//     wherever the two coincide.
+//
+// The default arm is unreachable: every branch of the ctaValue sum is named.
+func ctaItemOf(v ctaValue, c *xsd.SimpleType, env ctaEnv) ctaItem {
 	switch n := v.(type) {
 	case ctaAttr:
-		return env.attr(n.name)
+		lexical, present := env.attr(n.name)
+		if !present {
+			return ctaAbsent{}
+		}
+		return ctaValidate(lexical, c, env)
 	case ctaLiteral:
-		return n.text, true
+		return ctaConvert(n.text, n.st, c, env)
 	default:
-		return "", false
+		return ctaAbsent{}
 	}
 }
 
-// ctaXMLSpace is the whiteSpace characters XML recognizes, which the collapse
-// the numeric datatypes' whiteSpace facet prescribes removes from the ends of
-// a lexical before the cast reads it (F&O §17.1.1: "Whitespace normalization
-// is applied as indicated by the whiteSpace facet for the datatype").
-//
-// TRIMMING is the whole of collapse for these two targets, not an
-// approximation of it: the lexical spaces of xs:decimal and xs:double contain
-// no space character at all, so a lexical whose interior white space collapse
-// would rewrite is outside both spaces before and after the rewrite, and the
-// cast fails either way with the same err:FORG0001. value's own
-// normalizeWhiteSpace is not reachable for this — it is unexported and keyed
-// off a resolved xs:SimpleType's facet chain, and no simple type is in hand
-// here.
-const ctaXMLSpace = " \t\r\n"
+// ctaConvert casts lexical, a value of type from, into type to.
+func ctaConvert(lexical string, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
+	item := ctaValidate(lexical, from, env)
+	atom, isAtom := item.(ctaAtom)
+	if !isAtom {
+		return item
+	}
+	return ctaPromote(atom, from, to, env)
+}
 
-// ctaParseIn casts a lexical into space, reporting false where the cast fails.
-// A failed cast is err:FORG0001 — a dynamic error, hence key-cta-ta-select
-// clause 2's false at the caller and never a decline.
+// ctaPromote converts one atomic value of type from into type to, which is
+// what §3.5.2 clause 2's cast and B.1's type promotions ask of an operand
+// whose own type is not the type the comparison runs in.
 //
-// The [value.Context] is nil because it cannot be consulted: only the QName
-// and NOTATION mappings are context-dependent (PRINCIPLES 19), and neither is
-// a ctaSpace.
-func ctaParseIn(b value.Backend, space ctaSpace, lexical string) (value.Value, bool) {
-	m, mapped := b.Mapping(ctaSpaceName(space))
-	if !mapped {
-		return nil, false
+// It goes through the value's ·canonical representation·, which is the one
+// lexical the spec guarantees maps back to that same value (Datatypes
+// §2.3.1), so a conversion is one more datatype validation and never a
+// backend-specific value translation this package would have to know the
+// representations for. A value carrying no [value.Canonical] cannot be
+// converted at all, which is err:XPTY0004 — the "casting is not supported"
+// arm of xpath-functions.md §17 — and so ctaRaised. That is unreachable for
+// the target set [CompileCTATest] admits: the canonical mapping is absent
+// only for xs:QName and xs:NOTATION (value.Mapping), and a cast whose target
+// has either as its primitive is declined at compile time.
+func ctaPromote(atom ctaAtom, from, to *xsd.SimpleType, env ctaEnv) ctaItem {
+	if from.Name() == to.Name() {
+		return atom
 	}
-	v, err := m.Parse(strings.Trim(lexical, ctaXMLSpace), nil)
-	if err != nil {
-		return nil, false
+	canonical, renders := atom.v.(value.Canonical)
+	if !renders {
+		return ctaRaised{}
 	}
-	return v, true
+	return ctaValidate(canonical.Canonical(), to, env)
+}
+
+// ctaValidate casts lexical into st, which xpath-functions.md §17.1.1 makes
+// one datatype validation: "The semantics of casting are identical to XML
+// Schema validation", whiteSpace normalization included. [value.ValidateLexical]
+// is that validation, so this package holds no lexical parser of its own
+// (STYLE T4).
+//
+// The [value.Context] is nil, and there is nothing for it to carry: only the
+// QName and NOTATION mappings are context-dependent (PRINCIPLES 19), and a
+// cast whose target has either as its primitive is declined at compile time.
+//
+// A failure is ctaRaised either way, and the branch is what says WHICH error
+// it is (STYLE E2). A [value.IsDatatypeVerdict] error is a verdict about the
+// lexical — err:FORG0001, "it is not possible to cast the input value into
+// the value space of the target type". Anything else is a fault of the type
+// or of the backend and says nothing about the lexical, so it is not that
+// verdict; it is the one xpath-functions.md §17 gives an ST/TT pair this
+// processor cannot cast between at all, err:XPTY0004. key-cta-ta-select
+// clause 2 makes the {test} false for both.
+func ctaValidate(lexical string, st *xsd.SimpleType, env ctaEnv) ctaItem {
+	v, err := value.ValidateLexical(env.backend, env.types, st, lexical, nil)
+	if err == nil {
+		return ctaAtom{v: v}
+	}
+	if value.IsDatatypeVerdict(err) {
+		return ctaRaised{} // err:FORG0001
+	}
+	return ctaRaised{} // err:XPTY0004
 }
 
 // holdsSign reports whether op holds for two operands whose collation
@@ -573,15 +685,45 @@ func (op ctaComparator) holdsSign(sign int) bool {
 	return false
 }
 
-// holdsBetween reports whether op holds between two values of one numeric
-// space, through the capability interfaces the values themselves carry (STYLE
+// holdsCollated decides op between two xs:string values under the DEFAULT
+// COLLATION, which xpath-valid clause 2.2.10 fixes as the Unicode codepoint
+// collation — a static-context property no backend owns, which is why this
+// one comparison is decided here rather than through a value capability.
+// xpath20.md B.2 routes all six operators on xs:string (and, through B.1's
+// promotion, on xs:anyURI) through fn:compare, so one sign decides them all.
+//
+// The compared string is the value's ·canonical representation·, which is the
+// identity for xs:string and xs:anyURI (f-stringCanmap, f-anyURICanmap) and so
+// is the string the cast produced — whiteSpace-collapsed where the operand's
+// own type collapses, as `cast as xs:token` does. A value carrying no
+// [value.Canonical] is err:XPTY0004 on ctaPromote's terms.
+func (op ctaComparator) holdsCollated(l, r value.Value) ctaAnswer {
+	ls, lRenders := l.(value.Canonical)
+	rs, rRenders := r.(value.Canonical)
+	if !lRenders || !rRenders {
+		return ctaError
+	}
+	return ctaAnswerOf(op.holdsSign(strings.Compare(ls.Canonical(), rs.Canonical())))
+}
+
+// holdsBetween reports whether op holds between two values of one comparison
+// type, through the capability interfaces the values themselves carry (STYLE
 // T2) and never a type switch over a backend's concrete types.
 //
-// A value carrying neither capability cannot be compared at all, which is
-// err:XPTY0004 and so ctaError. It is unreachable for a backend meeting
-// [value.Backend]'s contract, which value/backendtest checks mechanically:
-// xs:decimal and xs:double are bounded, so their values are [value.Ordered]
-// and therefore [value.Eq] too.
+// GAP(xpath): xpath20.md B.2's PER-OPERATOR rows are not enforced. This engine
+// admits any two operands one type serves and lets the values answer which
+// operators they support, so where B.2 gives a type eq/ne rows but no ordering
+// rows — xs:duration, the Gregorian types, xs:hexBinary, xs:base64Binary — an
+// ordering comparison decides from the value space instead of raising
+// err:XPTY0004, and where B.2 DOES give ordering rows a value space cannot
+// serve (op:boolean-less-than on xs:boolean, whose values are deliberately not
+// [value.Ordered]) it decides ctaError instead of comparing. The direction is
+// UNESTABLISHED (STYLE P3a): the single consumer is validate/cta.go's
+// conditionallySelected, which reads a true {test} as ·successfully selects·
+// and a false one as the next alternative's turn, so a wrong answer in either
+// direction hands the element a type §3.12.4 did not select, and both a false
+// accept and a false reject follow from that. (TODO(orchestrator): issue
+// number)
 func (op ctaComparator) holdsBetween(l, r value.Value) ctaAnswer {
 	if op == ctaEqual || op == ctaNotEqual {
 		eq, comparable := l.(value.Eq)

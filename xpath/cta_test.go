@@ -3,6 +3,7 @@ package xpath
 import (
 	"testing"
 
+	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -36,15 +37,47 @@ func ctaAttrs(m map[xsd.QName]string) AttributeValue {
 	}
 }
 
-// backend is the value spaces the numeric comparisons run in. Only xs:decimal
-// and xs:double are ever asked for.
-func backend() value.Backend { return strict.New() }
+// seededTypes and seededBackend are the type knowledge and the value spaces
+// every test here compiles and evaluates against: the builtin datatypes
+// builtin.Seed produces, indexed by ·expanded name· exactly as a parsed
+// schema's {type definitions} index them. They are built ONCE and together —
+// Seed compiles each type's facets against the backend it is handed, so a
+// compile and the evaluation that follows it must see the same instance.
+//
+// A failed Seed is a broken fixture rather than a failed assertion, and it
+// would break every test in the file identically, so it panics here instead of
+// reporting through a *testing.T none of these helpers holds.
+var seededTypes, seededBackend = seedBuiltins()
+
+// ctaTestTypes is the minimal [xsd.TypeResolver] the seeded builtins fill.
+type ctaTestTypes map[xsd.QName]xsd.TypeDefinition
+
+func (t ctaTestTypes) Type(name xsd.QName) (xsd.TypeDefinition, bool) {
+	td, declared := t[name]
+	return td, declared
+}
+
+func seedBuiltins() (ctaTestTypes, value.Backend) {
+	b := strict.New()
+	types, err := builtin.Seed(b)
+	if err != nil {
+		panic("builtin.Seed: " + err.Error())
+	}
+	resolver := make(ctaTestTypes, len(types))
+	for _, st := range types {
+		resolver[st.Name()] = st
+	}
+	return resolver, b
+}
+
+// backend is the value spaces the comparisons and the casts run in.
+func backend() value.Backend { return seededBackend }
 
 // compile compiles expr or fails the test, so an evaluation case never
 // silently degrades into a decline case.
 func compile(t *testing.T, expr string, bindings ...string) CTATest {
 	t.Helper()
-	c, ok := CompileCTATest(ctaExprRecord(expr, "", bindings...))
+	c, ok := CompileCTATest(ctaExprRecord(expr, "", bindings...), seededTypes)
 	if !ok {
 		t.Fatalf("CompileCTATest(%q): declined, want compiled", expr)
 	}
@@ -83,7 +116,7 @@ func TestCompileAdmitsRequiredSubset(t *testing.T) {
 		"@kind = \"it's\"",
 		"@a.b = 'x'",
 	} {
-		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "fn", ctaFunctionNS)); !ok {
+		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "fn", ctaFunctionNS), seededTypes); !ok {
 			t.Errorf("CompileCTATest(%q): declined, want compiled", expr)
 		}
 	}
@@ -93,11 +126,11 @@ func TestCompileAdmitsRequiredSubset(t *testing.T) {
 // xpath-valid clause 2.2.4: a bare not(...) IS fn:not, with no binding needed,
 // while a prefix bound elsewhere is a different function and declines.
 func TestCompileResolvesUnprefixedFunctionInDefaultFunctionNamespace(t *testing.T) {
-	if _, ok := CompileCTATest(ctaExprRecord("not(@k = 'x')", "")); !ok {
+	if _, ok := CompileCTATest(ctaExprRecord("not(@k = 'x')", ""), seededTypes); !ok {
 		t.Error("an unprefixed not(...) declined; it is fn:not by clause 2.2.4")
 	}
 	elsewhere := ctaExprRecord("p:not(@k = 'x')", "", "p", "http://example.com/p")
-	if _, ok := CompileCTATest(elsewhere); ok {
+	if _, ok := CompileCTATest(elsewhere, seededTypes); ok {
 		t.Error("p:not bound outside the F&O namespace compiled as fn:not")
 	}
 }
@@ -130,7 +163,7 @@ func TestCompileDeclines(t *testing.T) {
 		{"@a = 'x' or", "an 'or' with no right operand"},
 	} {
 		bindings := []string{"a", "http://example.com/a", "xs", xsd.XMLSchemaNS}
-		if _, ok := CompileCTATest(ctaExprRecord(tc.expr, "", bindings...)); ok {
+		if _, ok := CompileCTATest(ctaExprRecord(tc.expr, "", bindings...), seededTypes); ok {
 			t.Errorf("CompileCTATest(%q): compiled, want declined (%s)", tc.expr, tc.why)
 		}
 	}
@@ -156,7 +189,7 @@ func TestEvaluateStringComparators(t *testing.T) {
 		{"@k >= 'book'", true},
 		{"@k >= 'cd'", false},
 	} {
-		if got := compile(t, tc.expr).Evaluate(backend(), attrs); got != tc.want {
+		if got := compile(t, tc.expr).Evaluate(backend(), seededTypes, attrs); got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
 	}
@@ -198,7 +231,7 @@ func TestEvaluateNumericComparators(t *testing.T) {
 		{"@bad != 3", false},
 		{"@bad < 3", false},
 	} {
-		if got := compile(t, tc.expr).Evaluate(backend(), attrs); got != tc.want {
+		if got := compile(t, tc.expr).Evaluate(backend(), seededTypes, attrs); got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
 	}
@@ -211,7 +244,7 @@ func TestEvaluateNumericComparators(t *testing.T) {
 func TestEvaluateBadCastIsFalseNotDecline(t *testing.T) {
 	attrs := ctaAttrs(map[xsd.QName]string{uq("n"): "not a number"})
 	for _, expr := range []string{"@n = 1", "@n != 1", "@n < 1", "@n >= 1"} {
-		if compile(t, expr).Evaluate(backend(), attrs) {
+		if compile(t, expr).Evaluate(backend(), seededTypes, attrs) {
 			t.Errorf("Evaluate(%q) = true, want false", expr)
 		}
 	}
@@ -226,7 +259,7 @@ func TestEvaluateAbsentAttributeIsFalse(t *testing.T) {
 		"@k = 'book'", "@k != 'book'", "@k < 'book'", "@k <= 'book'",
 		"@k > 'book'", "@k >= 'book'", "@k = 1", "@k != 1",
 	} {
-		if compile(t, expr).Evaluate(backend(), attrs) {
+		if compile(t, expr).Evaluate(backend(), seededTypes, attrs) {
 			t.Errorf("Evaluate(%q) with no such attribute = true, want false", expr)
 		}
 	}
@@ -238,15 +271,15 @@ func TestEvaluateAbsentAttributeIsFalse(t *testing.T) {
 // axis's principal node kind is never element (PRINCIPLES 15).
 func TestEvaluateUnprefixedNameTestIsInNoNamespace(t *testing.T) {
 	const ns = "http://example.com/d"
-	c, ok := CompileCTATest(ctaExprRecord("@k = 'book'", ns))
+	c, ok := CompileCTATest(ctaExprRecord("@k = 'book'", ns), seededTypes)
 	if !ok {
 		t.Fatal("CompileCTATest: declined")
 	}
-	if !c.Evaluate(backend(), ctaAttrs(map[xsd.QName]string{uq("k"): "book"})) {
+	if !c.Evaluate(backend(), seededTypes, ctaAttrs(map[xsd.QName]string{uq("k"): "book"})) {
 		t.Error("an unprefixed NameTest did not match the no-namespace attribute")
 	}
 	inDefault := ctaAttrs(map[xsd.QName]string{{Space: ns, Local: "k"}: "book"})
-	if c.Evaluate(backend(), inDefault) {
+	if c.Evaluate(backend(), seededTypes, inDefault) {
 		t.Error("an unprefixed NameTest matched an attribute in the {default namespace}")
 	}
 }
@@ -256,10 +289,10 @@ func TestEvaluateUnprefixedNameTestIsInNoNamespace(t *testing.T) {
 func TestEvaluatePrefixedNameTest(t *testing.T) {
 	const ns = "http://example.com/c2"
 	c := compile(t, "@c2:min = 1", "c2", ns)
-	if !c.Evaluate(backend(), ctaAttrs(map[xsd.QName]string{{Space: ns, Local: "min"}: "1"})) {
+	if !c.Evaluate(backend(), seededTypes, ctaAttrs(map[xsd.QName]string{{Space: ns, Local: "min"}: "1"})) {
 		t.Error("a prefixed NameTest did not match its expanded name")
 	}
-	if c.Evaluate(backend(), ctaAttrs(map[xsd.QName]string{uq("min"): "1"})) {
+	if c.Evaluate(backend(), seededTypes, ctaAttrs(map[xsd.QName]string{uq("min"): "1"})) {
 		t.Error("a prefixed NameTest matched a no-namespace attribute")
 	}
 }
@@ -270,11 +303,11 @@ func TestEvaluatePrefixedNameTest(t *testing.T) {
 func TestEvaluateAttributeAxisForm(t *testing.T) {
 	attrs := ctaAttrs(map[xsd.QName]string{uq("k"): "book"})
 	for _, expr := range []string{"attribute::k = 'book'", "attribute :: k = 'book'"} {
-		if !compile(t, expr).Evaluate(backend(), attrs) {
+		if !compile(t, expr).Evaluate(backend(), seededTypes, attrs) {
 			t.Errorf("Evaluate(%q) = false, want true", expr)
 		}
 	}
-	if compile(t, "attribute::k = 'cd'").Evaluate(backend(), attrs) {
+	if compile(t, "attribute::k = 'cd'").Evaluate(backend(), seededTypes, attrs) {
 		t.Error("attribute::k = 'cd' = true, want false")
 	}
 }
@@ -299,7 +332,7 @@ func TestEvaluateConnectives(t *testing.T) {
 		{"@a = 'no' and (@b = 'no' or @c = 'z')", false},
 		{"not(@a = 'no' or @b = 'no')", true},
 	} {
-		if got := compile(t, tc.expr, "fn", ctaFunctionNS).Evaluate(backend(), attrs); got != tc.want {
+		if got := compile(t, tc.expr, "fn", ctaFunctionNS).Evaluate(backend(), seededTypes, attrs); got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
 	}
@@ -337,7 +370,7 @@ func TestEvaluateRaisedErrorFalsifiesTheWholeTest(t *testing.T) {
 		{"not(@k = 'no')", true, "a decided false inverts"},
 		{"not(@k = 'x')", false, "a decided true inverts"},
 	} {
-		if got := compile(t, tc.expr).Evaluate(backend(), attrs); got != tc.want {
+		if got := compile(t, tc.expr).Evaluate(backend(), seededTypes, attrs); got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
 		}
 	}
@@ -370,7 +403,7 @@ func TestEvaluateRaisedErrorUnderConnectives(t *testing.T) {
 		{"not(@k = 'no' and @n = 5)", true, "the and is a decided false, which inverts"},
 		{"not(@n = 5 and @k = 'no')", true, "error and false: this evaluator takes the cell's false, so it inverts"},
 	} {
-		if got := compile(t, tc.expr).Evaluate(backend(), attrs); got != tc.want {
+		if got := compile(t, tc.expr).Evaluate(backend(), seededTypes, attrs); got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.cell)
 		}
 	}
@@ -400,7 +433,7 @@ func TestEvaluateEffectiveBooleanValue(t *testing.T) {
 		{"0e0", false},
 		{"1.5", true},
 	} {
-		if got := compile(t, tc.expr).Evaluate(backend(), attrs); got != tc.want {
+		if got := compile(t, tc.expr).Evaluate(backend(), seededTypes, attrs); got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
 	}
@@ -429,7 +462,7 @@ func TestEvaluateLiteralOnlyComparisons(t *testing.T) {
 		{"'1' != 1", false},
 		{"1 = 'a'", false},
 	} {
-		if got := compile(t, tc.expr).Evaluate(backend(), attrs); got != tc.want {
+		if got := compile(t, tc.expr).Evaluate(backend(), seededTypes, attrs); got != tc.want {
 			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
 	}
@@ -440,11 +473,11 @@ func TestEvaluateLiteralOnlyComparisons(t *testing.T) {
 func TestEvaluateStringLiteralEscapes(t *testing.T) {
 	attrs := ctaAttrs(map[xsd.QName]string{uq("k"): "it's"})
 	for _, expr := range []string{"@k = 'it''s'", "@k = \"it's\""} {
-		if !compile(t, expr).Evaluate(backend(), attrs) {
+		if !compile(t, expr).Evaluate(backend(), seededTypes, attrs) {
 			t.Errorf("Evaluate(%q) = false, want true", expr)
 		}
 	}
-	if compile(t, "@k = 'it''''s'").Evaluate(backend(), attrs) {
+	if compile(t, "@k = 'it''''s'").Evaluate(backend(), seededTypes, attrs) {
 		t.Error("a doubled pair was not folded to one quote")
 	}
 }
@@ -453,62 +486,76 @@ func TestEvaluateStringLiteralEscapes(t *testing.T) {
 // CompileCTATest produces — still decides rather than panicking.
 func TestEvaluateZeroTestDecides(t *testing.T) {
 	var zero CTATest
-	if zero.Evaluate(backend(), ctaAttrs(nil)) {
+	if zero.Evaluate(backend(), seededTypes, ctaAttrs(nil)) {
 		t.Error("the zero CTATest evaluated true")
 	}
 }
 
-// TestNumericSpaceOfLiteral pins which value space each NumericLiteral kind
-// puts a literal in, because it is what decides whether two literals are
-// compared as xs:decimal or promoted to xs:double.
-func TestNumericSpaceOfLiteral(t *testing.T) {
+// TestNumericLiteralType pins which builtin datatype each NumericLiteral kind
+// carries, because it is what decides whether two literals are compared as
+// xs:decimal or promoted to xs:double.
+func TestNumericLiteralType(t *testing.T) {
+	known := compileTypes(t)
 	for _, tc := range []struct {
 		text string
-		want ctaSpace
+		want string
 	}{
-		{"1", ctaSpaceDecimal},
-		{"1.5", ctaSpaceDecimal},
-		{".5", ctaSpaceDecimal},
-		{"1e0", ctaSpaceDouble},
-		{"1.5E-2", ctaSpaceDouble},
+		{"1", "decimal"},
+		{"1.5", "decimal"},
+		{".5", "decimal"},
+		{"1e0", "double"},
+		{"1.5E-2", "double"},
 	} {
-		if got := ctaNumericSpace(tc.text); got != tc.want {
-			t.Errorf("ctaNumericSpace(%q) = %v, want %v", tc.text, got, tc.want)
+		if got := known.literal(tc.text).Name(); got != ctaBuiltin(tc.want) {
+			t.Errorf("literal(%q) = %v, want xs:%s", tc.text, got, tc.want)
 		}
 	}
 }
 
-// TestComparisonSpace pins §3.5.2's casting rules as a table, so the space a
-// pair is compared in is checked directly and not only through an evaluation
-// that could agree by accident.
-func TestComparisonSpace(t *testing.T) {
+// compileTypes is the compile-time type knowledge over the seeded builtins.
+func compileTypes(t *testing.T) ctaTypes {
+	t.Helper()
+	known, ok := ctaResolveTypes(seededTypes)
+	if !ok {
+		t.Fatal("ctaResolveTypes over the seeded builtins: declined")
+	}
+	return known
+}
+
+// TestComparisonType pins §3.5.2's casting rules and B.1's promotions as a
+// table, so the type a pair is compared in is checked directly and not only
+// through an evaluation that could agree by accident. It re-derives the table
+// the deleted ctaComparisonSpace pinned, over datatypes rather than over the
+// three-valued space that function could name.
+func TestComparisonType(t *testing.T) {
+	known := compileTypes(t)
 	attr := ctaAttr{name: uq("a")}
-	str := ctaLiteral{text: "x", space: ctaSpaceString}
-	dec := ctaLiteral{text: "1", space: ctaSpaceDecimal}
-	dbl := ctaLiteral{text: "1e0", space: ctaSpaceDouble}
+	str := ctaLiteral{text: "x", st: known.str}
+	dec := ctaLiteral{text: "1", st: known.decimal}
+	dbl := ctaLiteral{text: "1e0", st: known.double}
 	for _, tc := range []struct {
 		name        string
 		left, right ctaValue
-		want        ctaSpace
+		want        string
 		admitted    bool
 	}{
-		{"two attributes are rule 1's xs:string", attr, attr, ctaSpaceString, true},
-		{"attribute vs string literal is rule 2.4", attr, str, ctaSpaceString, true},
-		{"attribute vs decimal literal is rule 2.1", attr, dec, ctaSpaceDouble, true},
-		{"decimal literal vs attribute is rule 2.1", dec, attr, ctaSpaceDouble, true},
-		{"attribute vs double literal is rule 2.1", attr, dbl, ctaSpaceDouble, true},
-		{"two decimal literals stay xs:decimal", dec, dec, ctaSpaceDecimal, true},
-		{"decimal vs double literal promotes", dec, dbl, ctaSpaceDouble, true},
-		{"two string literals stay xs:string", str, str, ctaSpaceString, true},
-		{"string vs numeric literal has no B.2 row", str, dec, ctaSpaceString, false},
+		{"two attributes are clause 1's xs:string", attr, attr, "string", true},
+		{"attribute vs string literal is clause 2.4", attr, str, "string", true},
+		{"attribute vs decimal literal is clause 2.1", attr, dec, "double", true},
+		{"decimal literal vs attribute is clause 2.1", dec, attr, "double", true},
+		{"attribute vs double literal is clause 2.1", attr, dbl, "double", true},
+		{"two decimal literals stay xs:decimal", dec, dec, "decimal", true},
+		{"decimal vs double literal promotes", dec, dbl, "double", true},
+		{"two string literals stay xs:string", str, str, "string", true},
+		{"string vs numeric literal has no B.2 row", str, dec, "", false},
 	} {
-		got, admitted := ctaComparisonSpace(tc.left, tc.right)
+		got, admitted := known.comparison(tc.left, tc.right)
 		if admitted != tc.admitted {
 			t.Errorf("%s: admitted = %v, want %v", tc.name, admitted, tc.admitted)
 			continue
 		}
-		if admitted && got != tc.want {
-			t.Errorf("%s: space = %v, want %v", tc.name, got, tc.want)
+		if admitted && got.Name() != ctaBuiltin(tc.want) {
+			t.Errorf("%s: comparison type = %v, want xs:%s", tc.name, got.Name(), tc.want)
 		}
 	}
 }

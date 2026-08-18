@@ -47,6 +47,11 @@ func (w *walk) selectedType(e Element, d xsd.ElementDeclaration) (xsd.TypeDefini
 // both directions (the charge governingType's own doc rules out). Withholding
 // can only cost a rejection.
 //
+// w.schema is the xsd.TypeResolver both halves of the engine take, and it is
+// passed rather than stored on either side: the compile reads the {type
+// definitions} to classify the datatype a {test} casts to, and the evaluation
+// reads them again to walk that type's {base type definition} chain.
+//
 // e-props-correct clause 6, which xsd.NewTypeTable enforces at construction,
 // makes every {alternatives} member's {test} present, so the presence flag
 // carries nothing here; a table that reached this package without it declines
@@ -56,11 +61,11 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable) (xsd.TypeDe
 	attr := ctaAttributes(e)
 	for _, alt := range table.Alternatives() {
 		test, _ := alt.Test()
-		compiled, evaluable := xpath.CompileCTATest(test)
+		compiled, evaluable := xpath.CompileCTATest(test, w.schema)
 		if !evaluable {
 			return nil, false
 		}
-		if !compiled.Evaluate(w.backend, attr) {
+		if !compiled.Evaluate(w.backend, w.schema, attr) {
 			continue
 		}
 		return w.schema.ResolvedType(alt.TypeDefinition())
