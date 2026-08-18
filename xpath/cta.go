@@ -119,9 +119,6 @@ type CTATest struct{ root ctaExpr }
 //     assignment;
 //   - a prefix with no binding in the record's {namespace bindings}
 //     (err:XPST0081), which is a STATIC error and so not clause 2's false;
-//   - a construct inside the required subset that this engine does not yet
-//     evaluate, each carrying its own marker at the production in
-//     ctaparser.go that recognizes it;
 //   - a comparison whose two operands need a type promotion this engine cannot
 //     perform, which today is exactly B.1 rule 1.1's xs:float to xs:double
 //     (ctaWider). Declining is what keeps the withhold and the DECIDED false
