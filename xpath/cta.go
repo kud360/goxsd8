@@ -405,9 +405,48 @@ type ctaNameTest interface {
 // which [CompileCTATest] withholds.
 type ctaExactName struct{ name xsd.QName }
 
-func (ctaExactName) ctaNameTest() {}
+// ctaAnyName is [37] Wildcard's `*` arm: "a node test * is true for any node of
+// the principal node kind of the step axis" (xpath20.md §3.2.1.2), which on the
+// attribute axis is every attribute of E.
+type ctaAnyName struct{}
+
+// ctaAnyLocal is [37]'s `NCName ':' '*'` arm, whose prefix is ALREADY resolved
+// against the {namespace bindings}: "true for any node ... whose expanded QName
+// has the namespace URI to which the prefix is bound, regardless of the local
+// part of the name".
+//
+// The empty space is a real matcher — every attribute in no namespace — and not
+// a sentinel, which is why an unbound prefix takes ctaUnresolvedTest instead.
+type ctaAnyLocal struct{ space string }
+
+// ctaAnySpace is [37]'s `'*' ':' NCName` arm: "true for any node ... whose local
+// name matches the given NCName, regardless of its namespace or lack of a
+// namespace". No prefix is resolved, so this arm has no err:XPST0081 exposure.
+type ctaAnySpace struct{ local string }
+
+// ctaUnresolvedTest is the NameTest an UNBOUND prefix in [37]'s `NCName ':' '*'`
+// resolves to. It matches nothing and is never evaluated: it comes with a
+// ctaStaticError defect, on which [CompileCTATest] withholds — ctaUnresolvedName's
+// role for a QName NameTest, as a TYPE rather than as a value, because no
+// namespace URI is uninhabited and so none can stand in for one that resolved
+// to nothing.
+type ctaUnresolvedTest struct{}
+
+func (ctaExactName) ctaNameTest()      {}
+func (ctaAnyName) ctaNameTest()        {}
+func (ctaAnyLocal) ctaNameTest()       {}
+func (ctaAnySpace) ctaNameTest()       {}
+func (ctaUnresolvedTest) ctaNameTest() {}
 
 func (t ctaExactName) matches(name xsd.QName) bool { return name == t.name }
+
+func (ctaAnyName) matches(xsd.QName) bool { return true }
+
+func (t ctaAnyLocal) matches(name xsd.QName) bool { return name.Space == t.space }
+
+func (t ctaAnySpace) matches(name xsd.QName) bool { return name.Local == t.local }
+
+func (ctaUnresolvedTest) matches(xsd.QName) bool { return false }
 
 // ctaLiteral is the Literal arm of [16] ta-SimpleValue, carrying the builtin
 // datatype its XPath literal kind fixes: a StringLiteral is xs:string, an
@@ -631,15 +670,10 @@ func (n ctaAnd) eval(env ctaEnv) ctaAnswer {
 // functions B.2 names for it are defined over the two values themselves and
 // not over an order the value space carries (holdsBoolean).
 func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
-	left := ctaItemOf(c.left, c.comparison, env)
-	right := ctaItemOf(c.right, c.comparison, env)
-	if ctaRaisedItem(left) || ctaRaisedItem(right) {
-		return ctaError
-	}
-	l, leftAtoms := left.(ctaAtoms)
-	r, rightAtoms := right.(ctaAtoms)
+	l, leftAtoms := ctaItemOf(c.left, c.comparison, env).(ctaAtoms)
+	r, rightAtoms := ctaItemOf(c.right, c.comparison, env).(ctaAtoms)
 	if !leftAtoms || !rightAtoms {
-		return ctaError
+		return ctaError // ctaRaised, the sum's only other arm
 	}
 	for _, lv := range l.vs {
 		for _, rv := range r.vs {
@@ -801,13 +835,6 @@ type ctaRaised struct{}
 
 func (ctaAtoms) ctaItem()  {}
 func (ctaRaised) ctaItem() {}
-
-// ctaRaisedItem reports whether an item is a raised error, which several
-// deciders test before reading the item itself.
-func ctaRaisedItem(i ctaItem) bool {
-	_, raised := i.(ctaRaised)
-	return raised
-}
 
 // ctaSingleton is the one-item sequence a datatype validation yields.
 func ctaSingleton(v value.Value) ctaItem { return ctaAtoms{vs: []value.Value{v}} }

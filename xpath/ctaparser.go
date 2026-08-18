@@ -14,12 +14,9 @@ import (
 // second, lenient parser"). Every method below is named for the production it
 // parses, and the whole grammar is both reached and evaluated: no method here
 // is a stub, because no compile-time decline is production-level. xpath/doc.go
-// owns the enumeration of what declines; declines reach this file two ways. A
-// wildcard NameTest declines on the tokenizer arm below, because `*` is no
-// token kind and no wildcard spelling survives ctaTokenize to reach [17]
-// ta-AttrName. Everything else is ctaTypes answering ctaTypeDeclined for a
-// comparison type or a cast target it will not serve, which the production
-// that asked propagates unchanged.
+// owns the enumeration of what declines; every decline reaching this file is
+// ctaTypes answering ctaTypeDeclined for a comparison type or a cast target it
+// will not serve, which the production that asked propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -58,20 +55,43 @@ type ctaNames struct {
 // It never escapes into an evaluable tree: recording the defect and building
 // this name are one step, compileCTATest reports that defect, and
 // [CompileCTATest] withholds on any defect at all. No QName the grammar can
-// write equals it either, since ctaScanQName admits no empty local part.
+// write equals it either, since ctaScanNameTest admits no empty local part.
+// The wildcard NameTest has no such uninhabited value to take and uses a sum
+// arm instead (ctaUnresolvedTest).
 var ctaUnresolvedName = xsd.QName{}
 
-// attributeName resolves a NameTest of [17] ta-AttrName to an ·expanded name·.
-// An unprefixed one is in NO namespace: the attribute axis's principal node
-// kind is attribute, never element, so xpath20.md §3.2.1.2's "otherwise, it has
-// no namespace URI" applies and the {default namespace} is not consulted
-// (PRINCIPLES 15).
+// attributeName resolves the QName arm of [17] ta-AttrName's NameTest to an
+// ·expanded name·. An unprefixed one is in NO namespace: the attribute axis's
+// principal node kind is attribute, never element, so xpath20.md §3.2.1.2's
+// "otherwise, it has no namespace URI" applies and the {default namespace} is
+// not consulted (PRINCIPLES 15).
 func (p *ctaParser) attributeName(text string) xsd.QName {
 	prefix, local, prefixed := strings.Cut(text, ":")
 	if !prefixed {
 		return xsd.QName{Local: text}
 	}
 	return p.prefixedName(prefix, local)
+}
+
+// wildcardTest resolves the WILDCARD arm of [17] ta-AttrName's NameTest —
+// xpath20.md's [37], all three spellings — into the matcher it names.
+//
+// Only `NCName ':' '*'` resolves a prefix, and so only it can be err:XPST0081;
+// `*` and `'*' ':' NCName` name no prefix at all and match across namespaces
+// (§3.2.1.2).
+func (p *ctaParser) wildcardTest(text string) ctaNameTest {
+	prefix, local, prefixed := strings.Cut(text, ":")
+	if !prefixed {
+		return ctaAnyName{}
+	}
+	if prefix == "*" {
+		return ctaAnySpace{local: local}
+	}
+	space, bound := p.prefixedSpace(prefix)
+	if !bound {
+		return ctaUnresolvedTest{}
+	}
+	return ctaAnyLocal{space: space}
 }
 
 // typeName resolves the QName naming a datatype on attributeName's terms,
@@ -107,12 +127,25 @@ func (p *ctaParser) functionName(text string) xsd.QName {
 // recording err:XPST0081 for a prefix with no binding among them and yielding
 // ctaUnresolvedName in its place.
 func (p *ctaParser) prefixedName(prefix, local string) xsd.QName {
-	space, bound := p.names.prefixes[prefix]
+	space, bound := p.prefixedSpace(prefix)
 	if !bound {
-		p.recordUnbound(prefix)
 		return ctaUnresolvedName
 	}
 	return xsd.QName{Space: space, Local: local}
+}
+
+// prefixedSpace resolves a prefix to the NAMESPACE it is bound to, recording
+// err:XPST0081 for one with no binding on prefixedName's terms and reporting ok
+// false — [37]'s `NCName ':' '*'` carries no local part to pair it with, and no
+// namespace URI is uninhabited, so the answer is the reported false and never a
+// sentinel URI a real attribute could match (ctaUnresolvedTest).
+func (p *ctaParser) prefixedSpace(prefix string) (string, bool) {
+	space, bound := p.names.prefixes[prefix]
+	if !bound {
+		p.recordUnbound(prefix)
+		return "", false
+	}
+	return space, true
 }
 
 // recordUnbound records the err:XPST0081 an unbound prefix is (xpath20.md
@@ -148,6 +181,13 @@ const (
 	// this kind too: XPath has no reserved words, so what a name means is the
 	// parser's to decide from position.
 	ctaNameTok
+	// ctaWildcardTok is one [37] Wildcard — `*`, `NCName ':' '*'` or
+	// `'*' ':' NCName` — whose text is as written. It is its own kind and not a
+	// ctaNameTok carrying a `*`, because ctaNameTok also carries the keywords and
+	// the axis name and a wildcard reaches none of those positions: attrName
+	// accepts this kind and no other production does, so `1 * 2` stays a decline
+	// and no multiplicative production is implied.
+	ctaWildcardTok
 	// ctaStringTok is a StringLiteral, whose text is its VALUE — quotes
 	// stripped, doubled quotes folded to one.
 	ctaStringTok
@@ -236,20 +276,11 @@ func ctaTokenize(s string) ([]ctaToken, bool) {
 			toks = append(toks, ctaToken{kind: ctaNumberTok, text: s[i:j]})
 			i = j
 		default:
-			// GAP(xpath): a WILDCARD NameTest — `@*`, `@p:*`, `@*:n` — is
-			// declined LEXICALLY, here: `*` is no token kind of this subset, so
-			// `@*` and `@*:n` die on this arm and `@p:*` one token later on the
-			// ':' arm. [17]'s NameTest is xpath20.md's [37], which does admit the
-			// wildcards, and [Attributes] already yields the SEQUENCE one selects.
-			// Retiring it takes a token kind here AND a NameTest
-			// production, not a change to attrName alone (#859). The decline
-			// withholds the element's ·governing type definition· on the terms
-			// validate/cta.go argues.
-			j := ctaScanQName(s, i)
+			kind, j := ctaScanNameTest(s, i)
 			if j == i {
 				return nil, false
 			}
-			toks = append(toks, ctaToken{kind: ctaNameTok, text: s[i:j]})
+			toks = append(toks, ctaToken{kind: kind, text: s[i:j]})
 			i = j
 		}
 	}
@@ -354,20 +385,48 @@ func ctaScanDigits(s string, i int) int {
 	return i
 }
 
-// ctaScanQName reports the end of the QName starting at i, or i itself where
-// none does: an NCName, optionally followed by ':' and a second NCName. The
-// ':' is consumed only when a name really follows it, so 'attribute::x' leaves
-// the '::' for the axis token.
-func ctaScanQName(s string, i int) int {
+// ctaScanNameTest reports the kind and the end of the [36] NameTest starting at
+// i, or i itself where none does. One scanner reads both arms (STYLE T4),
+// because they share their first NCName and differ only past the ':':
+//
+//   - `NCName` and `NCName ':' NCName` are ctaNameTok, the QName arm — and the
+//     spelling every keyword and the axis name arrives under.
+//   - `*`, `NCName ':' '*'` and `'*' ':' NCName` are ctaWildcardTok, [37]'s
+//     three arms.
+//
+// The ':' is consumed only when a name or a `*` really follows it, so
+// 'attribute::x' leaves the '::' for the axis token and 'attribute::*' leaves
+// it for the axis token followed by a bare wildcard. No white space may sit
+// inside a NameTest, which is what keeps `@p : name` out of the grammar.
+func ctaScanNameTest(s string, i int) (ctaKind, int) {
+	if s[i] == '*' {
+		return ctaWildcardTok, ctaScanWildcardTail(s, i+1)
+	}
 	j := ctaScanNCName(s, i)
 	if j == i || j >= len(s) || s[j] != ':' {
-		return j
+		return ctaNameTok, j
+	}
+	if j+1 < len(s) && s[j+1] == '*' {
+		return ctaWildcardTok, j + 2
 	}
 	k := ctaScanNCName(s, j+1)
 	if k == j+1 {
-		return j
+		return ctaNameTok, j
 	}
-	return k
+	return ctaNameTok, k
+}
+
+// ctaScanWildcardTail reports the end of the optional `':' NCName` following a
+// leading '*', or i itself where none does.
+func ctaScanWildcardTail(s string, i int) int {
+	if i >= len(s) || s[i] != ':' {
+		return i
+	}
+	j := ctaScanNCName(s, i+1)
+	if j == i+1 {
+		return i
+	}
+	return j
 }
 
 // ctaScanNCName reports the end of the NCName starting at i, or i where none
@@ -674,9 +733,10 @@ func (p *ctaParser) simpleValue() (ctaValue, bool) {
 // clause 2.2's "XPath expression involving the attribute axis whose
 // abbreviated form is as given above", i.e. `attribute::NameTest`.
 //
-// The NameTest admitted here is a QName and nothing else. A wildcard one never
-// arrives to be declined: ctaTokenize has no token kind for `*` and rejects
-// every wildcard spelling lexically, which is where that gap is marked.
+// BOTH arms of [36] NameTest are admitted, in both spellings: the QName one,
+// and xpath20.md's [37] Wildcard, which [17] reaches because it names NameTest
+// rather than a QName. ctaWildcardTok is accepted HERE and by no other
+// production, so no other position in this grammar admits a `*`.
 func (p *ctaParser) attrName() (ctaValue, bool) {
 	switch {
 	case p.at(ctaAtTok):
@@ -687,10 +747,15 @@ func (p *ctaParser) attrName() (ctaValue, bool) {
 	default:
 		return nil, false
 	}
-	if !p.at(ctaNameTok) {
+	text := p.peek(0).text
+	switch p.peek(0).kind {
+	case ctaNameTok:
+		p.advance()
+		return ctaAttr{test: ctaExactName{name: p.attributeName(text)}}, true
+	case ctaWildcardTok:
+		p.advance()
+		return ctaAttr{test: p.wildcardTest(text)}, true
+	default:
 		return nil, false
 	}
-	text := p.peek(0).text
-	p.advance()
-	return ctaAttr{test: ctaExactName{name: p.attributeName(text)}}, true
 }

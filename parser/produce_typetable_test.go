@@ -556,6 +556,39 @@ func TestProduceTypeTableStaticErrorUnderACastIsCharged(t *testing.T) {
 	}
 }
 
+// A WILDCARD NameTest reaches the charge for the same reason a QName one does,
+// and it became reachable only when the wildcard stopped declining lexically
+// (#859): `@p:*` is [37]'s one prefix-resolving spelling, so an unbound p is
+// err:XPST0081 and the schema is rejected, where the same {test} was previously
+// declined as unsupported and charged nowhere.
+//
+// The second document is the discriminating half: the two wildcard spellings
+// that resolve NO prefix are complete ta-Test productions with nothing static
+// wrong with them, so they must reach the {type table} rather than a charge.
+func TestProduceTypeTableWildcardStaticErrorIsCharged(t *testing.T) {
+	_, err := produce(t, wrap("", typeTableTypes+`
+	<xs:element name="e" type="B">
+	  <xs:alternative test="@p:* = 't'" type="T"/>
+	  <xs:alternative type="V"/>
+	</xs:element>`))
+	assertRule(t, err, "ta-props-correct")
+	if err != nil && !strings.Contains(err.Error(), "err:XPST0081") {
+		t.Errorf("error %v does not name the XPath static error it charges", err)
+	}
+	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
+	<xs:element name="e" type="B">
+	  <xs:alternative test="@* = 't'" type="T"/>
+	  <xs:alternative test="@*:kind = 't'" type="U"/>
+	  <xs:alternative type="V"/>
+	</xs:element>`), xsd.QName{Local: "e"})
+	if !present {
+		t.Fatal("{type table} is ·absent·, want present")
+	}
+	if got := altTypeNames(t, tt.Alternatives()); !slices.Equal(got, []string{"T", "U"}) {
+		t.Fatalf("{alternatives} = %v, want [T U]", got)
+	}
+}
+
 // A cast TARGET that is err:XPST0051 or err:XPST0080 is an xpath-valid clause 2
 // failure this engine does not prove: the target declines the parse before it
 // reaches the end of a ta-Test, so the {test} is withheld at ·assessment· and

@@ -183,9 +183,13 @@ func TestCompileDeclines(t *testing.T) {
 		{"3 cast as @a:kind > 1", "a cast target is a QName, not an AttrName"},
 		{"@p:kind = 'x'", "a prefix with no binding is err:XPST0081"},
 		{"p:not(@kind = 'x')", "an unbound prefix on the function name too"},
-		{"@* = 'x'", "a wildcard NameTest"},
-		{"@p:* = 'x'", "a prefixed wildcard NameTest"},
-		{"@*:kind = 'x'", "a local-name wildcard NameTest"},
+		// The three WILDCARD NameTests were pinned here until they compiled
+		// (#859). They evaluate now — TestEvaluateWildcardNameTest — and only
+		// the one spelling that resolves a prefix can still withhold, which is
+		// the err:XPST0081 row below and not a decline for the wildcard's shape.
+		{"@p:* = 'x'", "a prefixed wildcard NameTest whose prefix has no binding is err:XPST0081"},
+		{"* = 'x'", "a wildcard reaches this grammar only through [17] ta-AttrName"},
+		{"1 * 2 = 2", "and no multiplicative production admits one either"},
 		{"@kind = 'x' extra", "trailing tokens are not part of a Test"},
 		{"@kind = ", "a Comparator with no right operand"},
 		{"(@kind = 'x'", "an unclosed parenthesis"},
@@ -230,6 +234,14 @@ func TestCTATestStaticErrorReportsUnboundPrefix(t *testing.T) {
 		{"@p:kind cast as xs:string", "p"},
 		{"@p:kind cast as xs:string = 'x'", "p"},
 		{"xs:string(@p:kind) = 'x'", "p"},
+		// [37]'s NCName ':' '*' is the one wildcard spelling that resolves a
+		// prefix, so it is the one that can carry this static error (#859). The
+		// other two name no prefix and appear in no row here.
+		{"@p:* = 'x'", "p"},
+		{"attribute::p:* = 'x'", "p"},
+		{"@p:*", "p"},
+		{"not(@p:* = 'x')", "p"},
+		{"@p:* cast as xs:string = 'x'", "p"},
 	} {
 		record := ctaExprRecord(tc.expr, "", "a", "http://example.com/a", "xs", xsd.XMLSchemaNS)
 		err := CTATestStaticError(record, seededTypes)
@@ -278,7 +290,6 @@ func TestCTATestStaticErrorIsSilentForUnsupported(t *testing.T) {
 	for _, tc := range []struct{ expr, why string }{
 		{"@p:a = 'x' and count(@b) > 1", "a complete-looking prefix inside an expression a later constructor call declines"},
 		{"p:not(@kind = 'x')", "a constructor call whose argument is no SimpleValue — a prefixed name is never fn:not"},
-		{"@p:* = 'x'", "a wildcard NameTest (#859), declined lexically"},
 		{"@p:kind = 'x' extra", "trailing tokens are not part of a Test"},
 		{"@p:kind = ", "a Comparator with no right operand"},
 		{"count(//p:a) > 1", "full XPath 2.0, outside the subset"},
@@ -687,6 +698,201 @@ func TestEvaluateAttributeAxisForm(t *testing.T) {
 	}
 	if compile(t, "attribute::k = 'cd'").Evaluate(backend(), seededTypes, attrs) {
 		t.Error("attribute::k = 'cd' = true, want false")
+	}
+}
+
+// ctaWildcardNS is the namespace the wildcard tests bind their prefix to, and
+// the one their namespaced attributes carry.
+const ctaWildcardNS = "http://example.com/w"
+
+// TestCompileAdmitsWildcardNameTest pins that [17] ta-AttrName's NameTest is
+// xpath20.md's [36] whole: all three [37] Wildcard spellings compile, in both
+// the abbreviated and the attribute-axis form ta-props-correct clause 2 admits,
+// and in every position a ta-AttrName reaches.
+func TestCompileAdmitsWildcardNameTest(t *testing.T) {
+	for _, expr := range []string{
+		"@*",
+		"@* = 'x'",
+		"@w:* = 'x'",
+		"@*:kind = 'x'",
+		"attribute::* = 'x'",
+		"attribute::w:* = 'x'",
+		"attribute::*:kind = 'x'",
+		"attribute :: * = 'x'",
+		"'x' = @*",
+		"@* = @*:kind",
+		"not(@* = 'x')",
+		"@* cast as xs:integer = 1",
+		"xs:integer(@*) = 1",
+		"@* = 'x' or @*:kind = 'y'",
+	} {
+		if _, ok := CompileCTATest(ctaExprRecord(expr, "", "w", ctaWildcardNS, "xs", xsd.XMLSchemaNS), seededTypes); !ok {
+			t.Errorf("CompileCTATest(%q): declined, want compiled", expr)
+		}
+	}
+}
+
+// TestEvaluateWildcardNameTest pins which attributes each [37] Wildcard arm
+// selects (xpath20.md §3.2.1.2): `*` every one of them, `NCName:*` those in the
+// namespace the prefix is bound to whatever their local name, and `*:NCName`
+// those with that local name in ANY namespace or none.
+//
+// Each arm is paired with an attribute set it must NOT match, so an
+// implementation that answered true for every wildcard would fail here.
+func TestEvaluateWildcardNameTest(t *testing.T) {
+	attrs := ctaAttrs(
+		at("kind", "book"),
+		atNS(ctaWildcardNS, "kind", "disc"),
+		atNS(ctaWildcardNS, "size", "large"),
+		atNS("http://example.com/other", "rank", "1"),
+	)
+	for _, tc := range []struct {
+		expr string
+		want bool
+		why  string
+	}{
+		{"@* = 'book'", true, "`*` reaches the no-namespace attribute"},
+		{"@* = 'large'", true, "and every namespaced one"},
+		{"@* = 'missing'", false, "and matches no value it does not carry"},
+		{"@w:* = 'disc'", true, "NCName:* takes any local name in the bound namespace"},
+		{"@w:* = 'large'", true, "including the other one"},
+		{"@w:* = 'book'", false, "and never the no-namespace attribute"},
+		{"@w:* = '1'", false, "nor one in a different namespace"},
+		{"@*:kind = 'book'", true, "*:NCName takes the local name in no namespace"},
+		{"@*:kind = 'disc'", true, "and in any namespace"},
+		{"@*:kind = 'large'", false, "and never another local name"},
+		{"attribute::* = 'book'", true, "clause 2.2's spelling is the same NameTest"},
+		{"attribute::w:* = 'disc'", true, "in the prefixed arm too"},
+		{"attribute::*:kind = 'disc'", true, "and in the local-name one"},
+	} {
+		got := compile(t, tc.expr, "w", ctaWildcardNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateWildcardIsExistential pins xpath20.md §3.5.2 over the sequence a
+// wildcard selects: "the result of the comparison is true if and only if there
+// is a pair of atomic values ... that have the required magnitude relationship.
+// Otherwise the result of the comparison is false."
+//
+// A wildcard matching SEVERAL attributes is the whole point — an evaluator that
+// took only the first would answer false for the second row and true for the
+// fifth. The fn:not rows separate that false from a raised error: an empty
+// match set forms no pair, which is a DECIDED false and inverts.
+func TestEvaluateWildcardIsExistential(t *testing.T) {
+	three := ctaAttrs(at("a", "x"), at("b", "y"), at("c", "z"))
+	for _, tc := range []struct {
+		attrs Attributes
+		expr  string
+		want  bool
+		why   string
+	}{
+		{three, "@* = 'x'", true, "the FIRST attribute satisfies it"},
+		{three, "@* = 'z'", true, "the LAST one does, which a first-item reading would miss"},
+		{three, "@* = 'q'", false, "no attribute does"},
+		{three, "@* != 'x'", true, "some pair is unequal, though one is equal"},
+		{three, "@* < 'y'", true, "the ordering comparators quantify the same way"},
+		{three, "@* < 'a'", false, "and are false where no pair relates"},
+		{three, "@* = @*", true, "both operands are sequences"},
+		{ctaAttrs(), "@* = 'x'", false, "an element carrying NO attribute forms no pair"},
+		{ctaAttrs(), "not(@* = 'x')", true, "which is a decided false, not an error, so it inverts"},
+		{ctaAttrs(at("k", "book")), "@w:* = 'book'", false, "a wildcard matching nothing is the same empty sequence"},
+		{ctaAttrs(at("k", "book")), "not(@w:* = 'book')", true, "and decides the same way"},
+	} {
+		got := compile(t, tc.expr, "w", ctaWildcardNS).Evaluate(backend(), seededTypes, tc.attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateWildcardOperandConvertsWhole pins that §3.5.2 clause 2's cast is
+// applied to the WHOLE matched sequence: one attribute that does not cast into
+// the comparison type raises for the operand, on §3.5.2's "may raise a dynamic
+// error as soon as it encounters an error in evaluating either operand", rather
+// than dropping out of the sequence.
+//
+// The fn:not rows are the assertion. Both halves false is the raised error; a
+// per-item reading would decide the first row true and invert the second.
+func TestEvaluateWildcardOperandConvertsWhole(t *testing.T) {
+	mixed := ctaAttrs(at("n", "7"), at("k", "book"))
+	numeric := ctaAttrs(at("n", "7"), at("m", "2"))
+	for _, tc := range []struct {
+		attrs Attributes
+		expr  string
+		want  bool
+		why   string
+	}{
+		{mixed, "@* > 5", false, "err:FORG0001: \"book\" is no xs:double"},
+		{mixed, "not(@* > 5)", false, "raised, so fn:not raises it too"},
+		{ctaAttrs(at("k", "book"), at("n", "7")), "@* > 5", false, "wherever in the sequence the uncastable item sits"},
+		{numeric, "@* > 5", true, "the discriminating row: every item casts, and 7 > 5"},
+		{numeric, "@* > 9", false, "a decided false"},
+		{numeric, "not(@* > 9)", true, "which inverts"},
+	} {
+		got := compile(t, tc.expr).Evaluate(backend(), seededTypes, tc.attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateWildcardUnderACast pins xpath20.md §3.10.2 rule 3 over the one
+// operand length only a wildcard can produce: a cast admits "exactly one atomic
+// value", and the `?` occurrence indicator widens that to AT MOST one, so TWO
+// OR MORE matched attributes are err:XPTY0004 under either spelling and never
+// the first of them.
+func TestEvaluateWildcardUnderACast(t *testing.T) {
+	one := ctaAttrs(at("n", "3"))
+	two := ctaAttrs(at("n", "3"), at("m", "4"))
+	for _, tc := range []struct {
+		attrs Attributes
+		expr  string
+		want  bool
+		why   string
+	}{
+		{one, "@* cast as xs:integer = 3", true, "a singleton sequence casts"},
+		{two, "@* cast as xs:integer = 3", false, "err:XPTY0004: two items under a cast"},
+		{two, "not(@* cast as xs:integer = 3)", false, "raised, so fn:not raises it"},
+		{two, "@* cast as xs:integer? = 3", false, "`?` widens rule 3 to at most one, not to more"},
+		{two, "not(@* cast as xs:integer? = 3)", false, "so this raises too"},
+		{two, "xs:integer(@*) = 3", false, "and §3.10.4's constructor equivalence carries the same `?`"},
+		{ctaAttrs(), "@* cast as xs:integer = 3", false, "err:XPTY0004: no items and no `?`"},
+		{ctaAttrs(), "not(@* cast as xs:integer = 3)", false, "which is raised"},
+		{ctaAttrs(), "not(@* cast as xs:integer? = 3)", true, "while `?` makes it the empty sequence, a decided false"},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, tc.attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v (%s)", tc.expr, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestEvaluateWildcardEffectiveBooleanValue pins fn:boolean's rule 2 over a
+// bare wildcard AttrName (xpath20.md §2.4.3): a sequence whose first item is a
+// node is true whatever its length, so a wildcard in a boolean position asks
+// only whether E carries an attribute its NameTest selects.
+func TestEvaluateWildcardEffectiveBooleanValue(t *testing.T) {
+	for _, tc := range []struct {
+		attrs Attributes
+		expr  string
+		want  bool
+	}{
+		{ctaAttrs(at("a", "x"), at("b", "y")), "@*", true},
+		{ctaAttrs(at("a", "")), "@*", true},
+		{ctaAttrs(), "@*", false},
+		{ctaAttrs(), "not(@*)", true},
+		{ctaAttrs(at("a", "x")), "@w:*", false},
+		{ctaAttrs(atNS(ctaWildcardNS, "a", "x")), "@w:*", true},
+		{ctaAttrs(at("kind", "x")), "@*:kind", true},
+		{ctaAttrs(at("kind", "x")), "@*:other", false},
+	} {
+		got := compile(t, tc.expr, "w", ctaWildcardNS).Evaluate(backend(), seededTypes, tc.attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
 	}
 }
 
