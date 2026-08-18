@@ -619,3 +619,36 @@ func TestProduceTypeTableReservedXMLPrefixInTestIsNotCharged(t *testing.T) {
 		t.Fatalf("{alternatives} = %v, want [T]", got)
 	}
 }
+
+// The ·in-scope schema definitions· xpath-valid clause 2.2.5 fixes for a {test}
+// are the Built-in Simple Type Definitions ALONE, so what this schema declares
+// never joins them — not even when the schema targets the XSD namespace itself,
+// which no rule forbids. Both documents below declare xs:myAtomic and differ
+// only in whether they declare it BEFORE or AFTER the <element> whose test casts
+// to it, so a resolver reading the parser's build-once memo instead of the fixed
+// seeded set answers differently for the two and charges ta-props-correct on one
+// alone. Same schema components, same verdict, whatever the declaration order.
+func TestProduceTypeTableStaticTypesAreOrderIndependent(t *testing.T) {
+	const declaration = `<xs:simpleType name="myAtomic"><xs:restriction base="xs:string"/></xs:simpleType>`
+	// The cast target is the schema's OWN type, which clause 2.2.5 leaves out of
+	// scope, so the target declines and the unbound zz: prefix beside it is never
+	// reached — an unsupported construct dominates a recorded static error.
+	const element = `<xs:element name="e" type="xs:string">
+	  <xs:alternative test="@a cast as xs:myAtomic and @zz:b = '1'" type="xs:string"/>
+	  <xs:alternative type="xs:string"/>
+	</xs:element>`
+	const head = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.w3.org/2001/XMLSchema">`
+	for _, tc := range []struct {
+		name string
+		doc  string
+	}{
+		{name: "declared before the element", doc: head + declaration + element + `</xs:schema>`},
+		{name: "declared after the element", doc: head + element + declaration + `</xs:schema>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := produce(t, tc.doc); err != nil {
+				t.Fatalf("Produce: %v, want no charge — xs:myAtomic is this schema's own type and clause 2.2.5 does not put it in scope", err)
+			}
+		})
+	}
+}

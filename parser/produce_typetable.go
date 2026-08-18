@@ -41,20 +41,22 @@ const ruleTAPropsCorrect xsderr.Rule = "ta-props-correct"
 // schema's own {type definitions}, which clause 2.2.5 does not put in scope.
 // No schema is finalized at production time to hold those anyway.
 //
-// It answers from the build-once memo restricted to the XSD namespace, whose
-// entries there are exactly the [builtin.Seed] components newSymbols pre-seeded:
-// that namespace is closed to user declarations, so restricting by it is what
-// makes the answer clause 2.2.5's set and not whatever the memo has reached
-// (STYLE D3 — no second copy of the seeded components is kept).
+// It answers from symbols.builtins, the fixed [builtin.Seed] set newSymbols
+// indexes once — NOT from the build-once memo symbols.built, which starts as a
+// copy of that set and then grows with every named simple type the assembly
+// builds. Answering from the memo would make the answer depend on how far the
+// parse had reached, and a schema whose own targetNamespace is the XSD namespace
+// (unusual, but no rule forbids it) would put its top-level types in scope for
+// some <alternative> tests and not others, purely by declaration order — a false
+// reject of a legal schema in the over-charging direction.
 type ctaStaticTypes struct{ syms *symbols }
 
 // Type resolves a datatype name to the builtin declared under it, reporting
-// false for every other name.
+// false for every other name. Every key in the index carries
+// [xsd.XMLSchemaNS] as its {target namespace}, so the lookup needs no
+// namespace test of its own.
 func (t ctaStaticTypes) Type(name xsd.QName) (xsd.TypeDefinition, bool) {
-	if name.Space != xsd.XMLSchemaNS {
-		return nil, false
-	}
-	st, seeded := t.syms.built[name]
+	st, seeded := t.syms.builtins[name]
 	if !seeded {
 		return nil, false
 	}
