@@ -3,17 +3,19 @@ package parser
 import (
 	"fmt"
 
+	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
 // This file maps the <alternative> children of an <element> into the element
 // declaration's {type table} (§3.3.2.1 dcl.elt.common over §3.12.2 declare-ta)
-// and charges §3.12.3 src-ta over the same children. It serves the GLOBAL
-// <element> path (produceElement) and both LOCAL ones (produceLocalElement)
-// from one implementation (STYLE T4): §3.3.2.1's {type table} row is a COMMON
-// mapping rule and §3.3.2.2 dcl.elt.global supplements {target namespace} and
-// {scope} alone, so a top-level <element> has nothing to map differently.
+// and charges §3.12.3 src-ta and §3.12.6 ta-props-correct clause 2 over the
+// same children. It serves the GLOBAL <element> path (produceElement) and both
+// LOCAL ones (produceLocalElement) from one implementation (STYLE T4):
+// §3.3.2.1's {type table} row is a COMMON mapping rule and §3.3.2.2
+// dcl.elt.global supplements {target namespace} and {scope} alone, so a
+// top-level <element> has nothing to map differently.
 
 // ruleSrcTA is Type Alternative Representation OK (Structures §3.12.3,
 // id="src-ta"): "each <alternative> element must have one (and only one) of the
@@ -21,6 +23,50 @@ import (
 // child element". The rule is a single unnumbered sentence, so messages cite no
 // clause.
 const ruleSrcTA xsderr.Rule = "src-ta"
+
+// ruleTAPropsCorrect is Type Alternative Properties Correct (Structures §3.12.6,
+// id="ta-props-correct"), whose clause 2 is "If the {test} is not absent, then
+// it satisfies the constraint XPath Valid (§3.13.6.2)" — and xpath-valid clause
+// 2 in turn is "X does not produce any static error".
+//
+// The rule ID is BARE, with no clause suffix: xsderr's catalog is generated from
+// the specs and reserves exactly this ID, so a message names its clause inline
+// (STYLE E4) instead.
+const ruleTAPropsCorrect xsderr.Rule = "ta-props-correct"
+
+// ctaStaticTypes is the ·in-scope schema definitions· of the static context
+// xpath-valid clause 2.2.5 (§3.13.6.2) fixes for the {test} whose static errors
+// this file charges: "those components that are present in every schema by
+// definition", clause 2.2.5's own three sources (Built-in Attribute
+// Declarations §3.2.7, the Built-in Complex Type Definition §3.4.7, and the
+// Built-in Simple Type Definitions §3.16.7) — and NOT this schema's own {type
+// definitions}, which clause 2.2.5 does not put in scope. No schema is
+// finalized at production time to hold those anyway. A CTA cast target is
+// always a simple type (§3.12.6 clause 4), so only §3.16.7's Simple Type
+// Definitions are ever read here — §3.2.7 and §3.4.7 name no site this
+// package resolves against.
+//
+// It answers from symbols.builtins, the fixed [builtin.Seed] set newSymbols
+// indexes once — NOT from the build-once memo symbols.built, which starts as a
+// copy of that set and then grows with every named simple type the assembly
+// builds. Answering from the memo would make the answer depend on how far the
+// parse had reached, and a schema whose own targetNamespace is the XSD namespace
+// (unusual, but no rule forbids it) would put its top-level types in scope for
+// some <alternative> tests and not others, purely by declaration order — a false
+// reject of a legal schema in the over-charging direction.
+type ctaStaticTypes struct{ syms *symbols }
+
+// Type resolves a datatype name to the builtin declared under it, reporting
+// false for every other name. Every key in the index carries
+// [xsd.XMLSchemaNS] as its {target namespace}, so the lookup needs no
+// namespace test of its own.
+func (t ctaStaticTypes) Type(name xsd.QName) (xsd.TypeDefinition, bool) {
+	st, seeded := t.syms.builtins[name]
+	if !seeded {
+		return nil, false
+	}
+	return st, true
+}
 
 // typeTableOf maps the <alternative> children of el into the {type table} of
 // the element declaration el produces (§3.3.2.1 dcl.elt.common), returning nil
@@ -48,6 +94,17 @@ const ruleSrcTA xsderr.Rule = "src-ta"
 //     so declaredType is passed through WHOLE — the same component, not a copy,
 //     and whichever arm it holds, including the SubstitutionGroupHeadTypeRef a
 //     substitutionGroup=-typed element carries.
+//
+// ta-props-correct clause 2 is charged here, over each {test} as it is built,
+// because this is the only site in the module that builds one and alt.Loc() is
+// in hand. The constraint it delegates to — xpath-valid clause 2 (§3.13.6.2),
+// "does not produce any static error" — is a Schema Component Constraint, so it
+// is decided at construction and independent of whether any instance is ever
+// ·assessed·; xpath.CTATestStaticError proves the static error and this charges
+// it, the engine never minting a rule of its own. An {expression} that engine
+// merely cannot EVALUATE is no fault at all and passes straight through, on the
+// terms xpath/cta.go argues (PRINCIPLES 20). The type knowledge it is asked
+// against is ctaStaticTypes, clause 2.2.5's set and not this schema's.
 //
 // {annotations} is the empty sequence on every Type Alternative built here,
 // matching every other component this producer emits: no <annotation> is mapped
@@ -88,6 +145,11 @@ func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType x
 		// same record and the same xpathDefaultNamespace chain an <assert> gets,
 		// which is why this reuses buildXPathExpression rather than restating it.
 		test := p.buildXPathExpression(alt, "test")
+		if serr := xpath.CTATestStaticError(test, ctaStaticTypes{syms: p.symbols}); serr != nil {
+			return nil, xsderr.New(ruleTAPropsCorrect, alt.Loc(),
+				"the test attribute %q has an XPath static error (%s), but ta-props-correct clause 2 requires the {test} to satisfy xpath-valid, whose clause 2 admits none",
+				test.Expression(), serr)
+		}
 		ta, terr := xsd.NewTypeAlternative(alt.Loc(), &test, types[i], nil)
 		if terr != nil {
 			return nil, terr

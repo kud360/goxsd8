@@ -26,7 +26,10 @@ import "github.com/kud360/goxsd8/xsderr"
 // delegates {test}'s XML mapping verbatim to §3.13.2 (the same XPath Expression
 // property record Assertion uses), so the two components reuse
 // xsd.XPathExpression. Evaluation (cvc-type-alternative, cvc-cta-ta-select) is
-// validate/cta.go's, which reads the slot through Schema.ResolvedType.
+// validate/cta.go's, which reads the slot through Schema.ResolvedType, and
+// ta-props-correct clause 2 — the {test} satisfies xpath-valid, which admits no
+// XPath static error — is charged by parser as it builds the component, since
+// deciding it needs the XPath engine, which sits above this package.
 //
 // Construct only through NewTypeAlternative. TypeAlternative is immutable
 // after construction.

@@ -1,9 +1,12 @@
 package parser_test
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // typeTableOf produces doc and returns the {type table} of its top-level
@@ -504,4 +507,148 @@ func TestProduceTypeTableInlineAlternativeChargedClause7(t *testing.T) {
 		t.Fatal("Produce succeeded, want e-props-correct clause 7 for an inline alternative type that does not derive from B")
 	}
 	assertRule(t, err, "e-props-correct")
+}
+
+// ta-props-correct clause 2 (§3.12.6) is charged at CONSTRUCTION for a test=
+// carrying an XPath static error, over §3.13.6.2 xpath-valid clause 2's "does
+// not produce any static error". It is a Schema Component Constraint, so the
+// schema is rejected here rather than silently accepted with a {test} validate
+// would later withhold — and the charge lands on the <alternative>, whose Loc a
+// user needs to find it.
+func TestProduceTypeTableStaticErrorInTestIsCharged(t *testing.T) {
+	doc := wrap("", typeTableTypes+`
+	<xs:element name="e" type="B">
+	  <xs:alternative test="@p:k='t'" type="T"/>
+	  <xs:alternative type="V"/>
+	</xs:element>`)
+	_, err := produce(t, doc)
+	assertRule(t, err, "ta-props-correct")
+	if !strings.Contains(err.Error(), "err:XPST0081") {
+		t.Errorf("error %v does not name the XPath static error it charges", err)
+	}
+	loc, ok := xsderr.LocOf(err)
+	if !ok {
+		t.Fatalf("error %v carries no location", err)
+	}
+	if want := 1 + strings.Count(doc[:strings.Index(doc, "@p:k")], "\n"); loc.Line != want {
+		t.Errorf("charged at line %d, want %d — the <alternative> carrying the test", loc.Line, want)
+	}
+}
+
+// A CAST TAIL no longer declines the expression carrying it, so a {test} whose
+// unbound prefix sits under one now parses to a complete [8] ta-Test and its
+// err:XPST0081 reaches the charge instead of dying with the parse. This is the
+// one place the charge and the cast evaluation meet, and it moved.
+func TestProduceTypeTableStaticErrorUnderACastIsCharged(t *testing.T) {
+	for _, test := range []string{
+		"@p:k cast as xs:string = 't'",
+		"xs:string(@p:k) = 't'",
+	} {
+		_, err := produce(t, wrap("", typeTableTypes+`
+		<xs:element name="e" type="B">
+		  <xs:alternative test="`+test+`" type="T"/>
+		  <xs:alternative type="V"/>
+		</xs:element>`))
+		assertRule(t, err, "ta-props-correct")
+		if err != nil && !strings.Contains(err.Error(), "err:XPST0081") {
+			t.Errorf("test=%q: error %v does not name the XPath static error it charges", test, err)
+		}
+	}
+}
+
+// A cast TARGET that is err:XPST0051 or err:XPST0080 is an xpath-valid clause 2
+// failure this engine does not prove: the target declines the parse before it
+// reaches the end of a ta-Test, so the {test} is withheld at ·assessment· and
+// nothing is charged here. The under-charge is deliberate and pinned at the
+// charging site so a change to it is visible (#894).
+func TestProduceTypeTableCastTargetStaticErrorIsNotCharged(t *testing.T) {
+	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
+	<xs:element name="e" type="B">
+	  <xs:alternative test="@k cast as xs:Missing = 't'" type="T"/>
+	  <xs:alternative test="@k cast as xs:anyAtomicType = 't'" type="U"/>
+	  <xs:alternative type="V"/>
+	</xs:element>`), xsd.QName{Local: "e"})
+	if !present {
+		t.Fatal("{type table} is ·absent·, want present")
+	}
+	if got := altTypeNames(t, tt.Alternatives()); !slices.Equal(got, []string{"T", "U"}) {
+		t.Fatalf("{alternatives} = %v, want [T U]", got)
+	}
+}
+
+// A test= this engine merely cannot EVALUATE is no fault: §3.12.6 clause 2's
+// Note lets a processor decline an expression outside the required subset, and
+// charging one would reject a conforming schema. The withhold that decline
+// costs is validate's, at ·assessment· time, and is not this producer's
+// business.
+//
+// Both expressions carry an unbound p: too, so this pins the dominance
+// end to end — an unsupported construct is declined and never charged, whatever
+// its names resolve to. The second goes further: the walk RECORDS p's
+// err:XPST0081 and then meets a cast target that declines, and the recorded
+// defect dies with the parse rather than reaching the charge.
+func TestProduceTypeTableUnsupportedTestIsNotCharged(t *testing.T) {
+	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
+	<xs:element name="e" type="B">
+	  <xs:alternative test="count(//p:x) &gt; 1" type="T"/>
+	  <xs:alternative test="@p:k cast as xs:anyAtomicType = 't'" type="U"/>
+	  <xs:alternative type="V"/>
+	</xs:element>`), xsd.QName{Local: "e"})
+	if !present {
+		t.Fatal("{type table} is ·absent·, want present")
+	}
+	if got := altTypeNames(t, tt.Alternatives()); !slices.Equal(got, []string{"T", "U"}) {
+		t.Fatalf("{alternatives} = %v, want [T U]", got)
+	}
+}
+
+// The reserved xml prefix is ALWAYS in scope (Namespaces in XML, and xmltree's
+// InScopePrefixes with it), so a {test} naming @xml:lang resolves with no
+// xmlns:xml declaration anywhere and must not be charged. Regressing this
+// manufactures a false reject on ordinary schemas.
+func TestProduceTypeTableReservedXMLPrefixInTestIsNotCharged(t *testing.T) {
+	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
+	<xs:element name="e" type="B">
+	  <xs:alternative test="@xml:lang = 'en'" type="T"/>
+	  <xs:alternative type="V"/>
+	</xs:element>`), xsd.QName{Local: "e"})
+	if !present {
+		t.Fatal("{type table} is ·absent·, want present")
+	}
+	if got := altTypeNames(t, tt.Alternatives()); !slices.Equal(got, []string{"T"}) {
+		t.Fatalf("{alternatives} = %v, want [T]", got)
+	}
+}
+
+// The ·in-scope schema definitions· xpath-valid clause 2.2.5 fixes for a {test}
+// are the Built-in Simple Type Definitions ALONE, so what this schema declares
+// never joins them — not even when the schema targets the XSD namespace itself,
+// which no rule forbids. Both documents below declare xs:myAtomic and differ
+// only in whether they declare it BEFORE or AFTER the <element> whose test casts
+// to it, so a resolver reading the parser's build-once memo instead of the fixed
+// seeded set answers differently for the two and charges ta-props-correct on one
+// alone. Same schema components, same verdict, whatever the declaration order.
+func TestProduceTypeTableStaticTypesAreOrderIndependent(t *testing.T) {
+	const declaration = `<xs:simpleType name="myAtomic"><xs:restriction base="xs:string"/></xs:simpleType>`
+	// The cast target is the schema's OWN type, which clause 2.2.5 leaves out of
+	// scope, so the target declines and the unbound zz: prefix beside it is never
+	// reached — an unsupported construct dominates a recorded static error.
+	const element = `<xs:element name="e" type="xs:string">
+	  <xs:alternative test="@a cast as xs:myAtomic and @zz:b = '1'" type="xs:string"/>
+	  <xs:alternative type="xs:string"/>
+	</xs:element>`
+	const head = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.w3.org/2001/XMLSchema">`
+	for _, tc := range []struct {
+		name string
+		doc  string
+	}{
+		{name: "declared before the element", doc: head + declaration + element + `</xs:schema>`},
+		{name: "declared after the element", doc: head + element + declaration + `</xs:schema>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := produce(t, tc.doc); err != nil {
+				t.Fatalf("Produce: %v, want no charge — xs:myAtomic is this schema's own type and clause 2.2.5 does not put it in scope", err)
+			}
+		})
+	}
 }

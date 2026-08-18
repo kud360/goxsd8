@@ -11,9 +11,14 @@ import "github.com/kud360/goxsd8/xsd"
 // [CTATest.Evaluate] takes one again.
 
 // ctaBuiltin is the ·expanded name· of a builtin datatype, which is the key an
-// [xsd.TypeResolver] holds it under. The XSD namespace is closed to user
-// declarations, so a type resolvable in it is one of the 49 builtins by
-// construction and no separate builtin table is needed here (STYLE T4).
+// [xsd.TypeResolver] holds it under. Every call site names a literal builtin
+// local (STYLE T4's parallel-table concern does not arise: there is no second
+// table, only QName construction for an identity comparison the caller
+// already knows the answer to) — this is not a general classifier for an
+// arbitrary resolved name, and a schema is free to declare its OWN types with
+// `targetNamespace` set to the XSD namespace (produce_typetable.go's
+// ctaStaticTypes resolves against the fixed builtin set for exactly that
+// reason, not against whatever a schema document declares).
 func ctaBuiltin(local string) xsd.QName {
 	return xsd.QName{Space: xsd.XMLSchemaNS, Local: local}
 }
@@ -145,8 +150,20 @@ func (t ctaTypes) ancestor(st *xsd.SimpleType, name xsd.QName) (*xsd.SimpleType,
 //     err:XPST0051 for "the target type must be an atomic type that is in the
 //     in-scope schema types", and err:XPST0080 for the two named exclusions.
 //
-// GAP(xpath): a cast target that is XPST0051/XPST0080 is folded into the
-// compile-time withhold; xpath-valid cl. 2 is charged by its owner (#886).
+// GAP(xpath): the XPST0051/XPST0080 arm is folded into the compile-time
+// withhold and xpath-valid cl. 2 is NOT charged for it — the one static
+// condition [CTATestStaticError] proves is err:XPST0081, and proving this one
+// takes a parse that runs PAST the failed target to the end of a [8] ta-Test,
+// which "unsupported dominates static" requires and which no target stands in
+// for: an unbound prefix carries on under ctaUnresolvedName because a QName has
+// a zero value the grammar cannot write, and a *[xsd.SimpleType] has none. The
+// classification the charge would need is not this arm either, since the second
+// bullet above declines a user-defined atomic target as outside the required
+// subset while xpath-valid clause 2.2.5 puts only the BUILT-INS in scope — a
+// target that is out of scope there is err:XPST0051 rather than declinable, and
+// which reading governs wants its own grounding before either becomes a
+// rejection. Under-charging is a rejection this engine can take later;
+// over-charging is a false reject now. (#894)
 //
 // GAP(xpath): a target whose {primitive type definition} is xs:QName is
 // declined too, though §3.10.2 excludes only xs:NOTATION and xs:anyAtomicType
