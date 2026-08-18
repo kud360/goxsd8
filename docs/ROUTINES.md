@@ -39,18 +39,33 @@ translate the local times above and mind DST drift. Keep develop slots
   3. *`gh` CLI*: authenticated locally; cloud containers need it installed
      plus a `GH_TOKEN`.
 
-  **In this environment `gh` is a standing 403 and the MCP server serves
-  both reads and writes.** REST answers *"GitHub access is not enabled for
-  this session. An org admin must connect the Claude GitHub App for this
-  organization"*; the `gh` GraphQL path answers that only a pinned set of
-  PR-review operations is served. Both name a configuration state rather
-  than a transient one — recognize either text and fall through, rather
-  than concluding the thread is unreadable or filing it again (#527).
+  **Repository-scoped REST — `gh api repos/{owner}/{repo}/...` — serves
+  reads and writes in this environment, so `gh` is not a standing 403.**
+  What 403s is narrower, and each message names its own fix:
 
-  Falling through does not recover everything: the MCP channel strips
-  angle-bracketed tokens from the issue bodies it reads, so nothing quoted
-  through it is verbatim and anything bracketed is re-derived from the
-  repo (#764).
+  - the **GraphQL** path, which is what `gh issue list` and `gh issue view`
+    use: *"This GraphQL query is not enabled for this session — only the
+    pinned set of PR-review operations is served. Use REST via `gh api
+    repos/{owner}/{repo}/...` instead."*
+  - **non-repository-scoped REST**, such as `search/issues`: *"This GitHub
+    API path is not available: sessions are bound to their configured
+    repositories. Use repository-scoped endpoints
+    (repos/{owner}/{repo}/...)."*
+
+  Recognize either text and re-spell the call against the repository, or
+  fall through — never conclude the thread is unreadable or file it again
+  (#527). `gh auth status` reporting an invalid token is not evidence
+  against any of this: it checks account-level auth, which repository-scoped
+  calls do not use. This paragraph is an observation of one environment and
+  is only as good as its last probe — re-probe when it matters, and correct
+  it here when it drifts.
+
+  **The MCP channel's reads are lossy.** It deletes angle-bracketed tokens
+  from the issue bodies it returns and escapes `'`, `"` and `&` to `&#39;`,
+  `&#34;` and `&amp;`, so nothing quoted through it is verbatim. Read bodies
+  and comments through `gh api repos/{owner}/{repo}/issues/{n}`, which is
+  byte-faithful; where only the MCP channel is available, re-derive anything
+  bracketed from the repo (#764).
 - **The checkout is shallow.** History before the graft is absent, so
   `git merge-base` can come up empty — and
   `git rev-list --left-right --count A...B` does not fail when it does; it
@@ -64,6 +79,35 @@ translate the local times above and mind DST drift. Keep develop slots
 
 The gate and the other canonical commands are defined once, in CLAUDE.md.
 This file does not restate them.
+
+## Survey input
+
+`go tool wipsurvey` and `go tool gapaudit` read `gh issue list --json`-shaped
+JSON on stdin, so any channel that can write that JSON to a file feeds them.
+Over repository-scoped REST:
+
+```sh
+# `gh api --paginate` is a trap: the Link header carries numeric-ID repository
+# paths, the proxy answers "Numeric-ID repository paths (repositories/{id}/...)
+# are not supported through this proxy" (HTTP 403), and it does so AFTER
+# writing the pages it did fetch — a truncated file plus a non-zero exit that a
+# redirect into a survey tool does not notice. Page explicitly, and raise the
+# count while the last page still comes back non-empty.
+for p in $(seq 1 9); do
+  gh api "repos/kud360/goxsd8/issues?state=all&per_page=100&page=$p" > p$p.json
+done
+
+jq -s 'add | map(select(.pull_request == null))
+       | map({number, state, labels: [.labels[] | {name}]})' p*.json > issues.json
+
+jq -s 'add | map(select(.pull_request == null))
+       | map(select(.labels | map(.name) | index("kind/gap")))
+       | map({number, title, state, body})' p*.json > gapissues.json
+```
+
+Neither reshape is optional: **pull requests share the issues endpoint** and
+every survey miscounts unless `select(.pull_request == null)` drops them, and
+**`labels` arrives as full objects** where both tools want `{name}` (#840).
 
 ## Failure and overlap
 
