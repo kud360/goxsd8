@@ -11,15 +11,14 @@ import (
 // This file is the lexer and the recursive-descent parser for the §3.12.6
 // required subset, one of each (STYLE T4, xpath/doc.go's "There is never a
 // second, lenient parser"). Every method below is named for the production it
-// parses, and the whole grammar is reached: [15] ta-CastExpr's `cast as` tail
-// and [18] ta-ConstructorFunction, which this engine does not yet EVALUATE,
-// are consumed by their own production and then declined there, so each
-// decline is attributable to its construct rather than falling out of a
-// generic syntax failure, and retiring either is a change to that production
-// alone. The third declined construct, a wildcard NameTest, is NOT
-// production-level: `*` is no token kind, so no wildcard spelling survives
-// ctaTokenize to reach [17] ta-AttrName, and its marker sits on the tokenizer
-// arm that declines it.
+// parses, and the whole grammar is both reached and evaluated: no method here
+// is a stub, because no compile-time decline is production-level. xpath/doc.go
+// owns the enumeration of what declines; declines reach this file two ways. A
+// wildcard NameTest declines on the tokenizer arm below, because `*` is no
+// token kind and no wildcard spelling survives ctaTokenize to reach [17]
+// ta-AttrName. Everything else is ctaTypes answering ctaTypeDeclined for a
+// comparison type or a cast target it will not serve, which the production
+// that asked propagates unchanged.
 
 // ctaFunctionNS is the default function namespace of a {test}'s static context
 // (xpath-valid clause 2.2.4, §3.13.6.2), which an unprefixed [12]
@@ -33,13 +32,21 @@ const ctaFunctionNS = "http://www.w3.org/2005/xpath-functions"
 var ctaNotFunction = xsd.QName{Space: ctaFunctionNS, Local: "not"}
 
 // ctaNames resolves the QNames of one XPath Expression property record against
-// its {namespace bindings}. The map is internal and never iterated into output
-// (STYLE D2) — it is read by prefix and nothing else.
+// its {namespace bindings} and its {default namespace}. The map is internal
+// and never iterated into output (STYLE D2) — it is read by prefix and nothing
+// else.
 //
-// The record's {default namespace} is absent from the struct on purpose: it is
-// the default ELEMENT/TYPE namespace, and this grammar reaches neither an
-// element step nor (once the cast productions are declined) a type name.
-type ctaNames struct{ prefixes map[string]string }
+// The record's {default namespace} is the default ELEMENT/TYPE namespace, so
+// it answers for exactly one production here: [15] ta-CastExpr's target QName,
+// which xpath20.md §3.10.2 puts in it ("if the target type has no namespace
+// prefix, it is considered to be in the default element/type namespace"). An
+// absent {default namespace} is the empty string, which is the no-namespace
+// answer that case wants anyway. An unprefixed attribute NameTest and an
+// unprefixed function name take their own answers, and neither is this one.
+type ctaNames struct {
+	prefixes         map[string]string
+	defaultNamespace string
+}
 
 // attribute resolves a NameTest of [17] ta-AttrName to an ·expanded name·. An
 // unprefixed one is in NO namespace: the attribute axis's principal node kind
@@ -51,6 +58,23 @@ func (n ctaNames) attribute(text string) (xsd.QName, bool) {
 	prefix, local, prefixed := strings.Cut(text, ":")
 	if !prefixed {
 		return xsd.QName{Local: text}, true
+	}
+	space, bound := n.prefixes[prefix]
+	if !bound {
+		return xsd.QName{}, false
+	}
+	return xsd.QName{Space: space, Local: local}, true
+}
+
+// typeName resolves the QName naming a datatype, whose unprefixed form takes
+// the default ELEMENT/TYPE namespace (xpath20.md §3.10.2) rather than the
+// no-namespace answer an attribute NameTest gets or the function-namespace one
+// a function name gets. An unbound prefix is err:XPST0081 and declines the
+// whole expression.
+func (n ctaNames) typeName(text string) (xsd.QName, bool) {
+	prefix, local, prefixed := strings.Cut(text, ":")
+	if !prefixed {
+		return xsd.QName{Space: n.defaultNamespace, Local: text}, true
 	}
 	space, bound := n.prefixes[prefix]
 	if !bound {
@@ -338,6 +362,7 @@ type ctaParser struct {
 	toks  []ctaToken
 	pos   int
 	names ctaNames
+	types ctaTypes
 }
 
 // peek reports the token at offset ahead of the cursor, or the EOF sentinel.
@@ -459,11 +484,14 @@ func (p *ctaParser) booleanExpr() (ctaExpr, bool) {
 	if !ok {
 		return nil, false
 	}
-	space, admitted := ctaComparisonSpace(left, right)
-	if !admitted {
+	comparison, typing := p.types.comparison(left, right)
+	if typing == ctaTypeDeclined {
+		return nil, false
+	}
+	if typing == ctaTypeErrored {
 		return ctaTypeError{}, true
 	}
-	return ctaCompare{op: op, space: space, left: left, right: right}, true
+	return ctaCompare{op: op, comparison: comparison, left: left, right: right}, true
 }
 
 // booleanFunction parses [12] ta-BooleanFunction, whose name the caller has
@@ -518,12 +546,12 @@ func (p *ctaParser) valueExpr() (ctaValue, bool) {
 
 // castExpr parses [15] ta-CastExpr: a SimpleValue and an optional cast tail.
 //
-// GAP(xpath): a `cast as QName ?` tail is recognized and DECLINED (#858). The
-// cast is to a built-in datatype (§3.12.6 clause 4) and wants value's lexical
-// mapping over the untypedAtomic operand; until #858 supplies it, the whole
-// expression is unevaluable and CompileCTATest withholds. The tail is parsed
-// out in full rather than left to fail as a syntax error, so #858 replaces the
-// decline below with the cast and touches nothing else.
+// The tail's QName is resolved as a TYPE name and classified before the node
+// is built, so a target this engine does not cast to declines the whole
+// expression here rather than deciding anything at evaluation time
+// (ctaTypes.castTarget). §3.12.6 clause 4 fixes what an admitted one is: "Any
+// explicit casts (i.e. any strings which match the optional "cast as" QName in
+// the CastExpr production) are casts to built-in datatypes."
 func (p *ctaParser) castExpr() (ctaValue, bool) {
 	v, ok := p.simpleValue()
 	if !ok {
@@ -540,33 +568,59 @@ func (p *ctaParser) castExpr() (ctaValue, bool) {
 	if !p.at(ctaNameTok) {
 		return nil, false
 	}
+	text := p.peek(0).text
 	p.advance()
+	allowsEmpty := false
 	if p.at(ctaQuestionTok) {
 		p.advance()
+		allowsEmpty = true
 	}
-	return nil, false
+	name, resolved := p.names.typeName(text)
+	if !resolved {
+		return nil, false
+	}
+	target, admitted := p.types.castTarget(name)
+	if !admitted {
+		return nil, false
+	}
+	return ctaCast{operand: v, target: target, allowsEmpty: allowsEmpty}, true
 }
 
 // constructorFunction parses [18] ta-ConstructorFunction.
 //
-// GAP(xpath): a constructor function is recognized and DECLINED (#858).
 // §3.12.6 clause 3 makes every QName '(' SimpleValue ')' whose name is not
 // fn:not a constructor call for a built-in datatype, so this one production
 // covers both the constructor spelling of a cast and the "unknown boolean
-// function" reading — there is no third case to distinguish. xpath20.md
-// §3.10.4 defines T($arg) as (($arg) cast as T?), which is why #858 retires
-// this decline and castExpr's together.
+// function" reading — there is no third case to distinguish. The name is a
+// FUNCTION name, resolved as one, and it names the datatype at the same time:
+// an unprefixed int(...) is fn:int, which declares no constructor, and never
+// xs:int.
+//
+// The node is castExpr's, with allowsEmpty TRUE unconditionally: xpath20.md
+// §3.10.4 defines T($arg) as (($arg) cast as T?), and the `?` is part of that
+// equivalence however [18]'s own production is written — so a constructor call
+// over an absent attribute is the empty sequence where the same cast written
+// without `?` would be err:XPTY0004.
 func (p *ctaParser) constructorFunction() (ctaValue, bool) {
+	name, resolved := p.names.function(p.peek(0).text)
+	if !resolved {
+		return nil, false
+	}
 	p.advance() // the function name
 	p.advance() // '('
-	if _, ok := p.simpleValue(); !ok {
+	arg, ok := p.simpleValue()
+	if !ok {
 		return nil, false
 	}
 	if !p.at(ctaRParen) {
 		return nil, false
 	}
 	p.advance()
-	return nil, false
+	target, admitted := p.types.castTarget(name)
+	if !admitted {
+		return nil, false
+	}
+	return ctaCast{operand: arg, target: target, allowsEmpty: true}, true
 }
 
 // simpleValue parses [16] ta-SimpleValue's two arms.
@@ -577,25 +631,14 @@ func (p *ctaParser) simpleValue() (ctaValue, bool) {
 	case ctaStringTok:
 		text := p.peek(0).text
 		p.advance()
-		return ctaLiteral{text: text, space: ctaSpaceString}, true
+		return ctaLiteral{text: text, st: p.types.str}, true
 	case ctaNumberTok:
 		text := p.peek(0).text
 		p.advance()
-		return ctaLiteral{text: text, space: ctaNumericSpace(text)}, true
+		return ctaLiteral{text: text, st: p.types.literal(text)}, true
 	default:
 		return nil, false
 	}
-}
-
-// ctaNumericSpace is the value space a NumericLiteral's own type puts it in: a
-// DoubleLiteral (the one with an exponent, xpath20.md [73]) is xs:double, and
-// an IntegerLiteral or DecimalLiteral is xs:decimal — xs:integer's primitive
-// base, and so the least common type of any two of them.
-func ctaNumericSpace(text string) ctaSpace {
-	if strings.ContainsAny(text, "eE") {
-		return ctaSpaceDouble
-	}
-	return ctaSpaceDecimal
 }
 
 // attrName parses [17] ta-AttrName in BOTH spellings ta-props-correct clause 2
