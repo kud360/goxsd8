@@ -535,6 +535,47 @@ func TestProduceTypeTableStaticErrorInTestIsCharged(t *testing.T) {
 	}
 }
 
+// A CAST TAIL no longer declines the expression carrying it, so a {test} whose
+// unbound prefix sits under one now parses to a complete [8] ta-Test and its
+// err:XPST0081 reaches the charge instead of dying with the parse. This is the
+// one place the charge and the cast evaluation meet, and it moved.
+func TestProduceTypeTableStaticErrorUnderACastIsCharged(t *testing.T) {
+	for _, test := range []string{
+		"@p:k cast as xs:string = 't'",
+		"xs:string(@p:k) = 't'",
+	} {
+		_, err := produce(t, wrap("", typeTableTypes+`
+		<xs:element name="e" type="B">
+		  <xs:alternative test="`+test+`" type="T"/>
+		  <xs:alternative type="V"/>
+		</xs:element>`))
+		assertRule(t, err, "ta-props-correct")
+		if err != nil && !strings.Contains(err.Error(), "err:XPST0081") {
+			t.Errorf("test=%q: error %v does not name the XPath static error it charges", test, err)
+		}
+	}
+}
+
+// A cast TARGET that is err:XPST0051 or err:XPST0080 is an xpath-valid clause 2
+// failure this engine does not prove: the target declines the parse before it
+// reaches the end of a ta-Test, so the {test} is withheld at ·assessment· and
+// nothing is charged here. The under-charge is deliberate and pinned at the
+// charging site so a change to it is visible (#894).
+func TestProduceTypeTableCastTargetStaticErrorIsNotCharged(t *testing.T) {
+	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
+	<xs:element name="e" type="B">
+	  <xs:alternative test="@k cast as xs:Missing = 't'" type="T"/>
+	  <xs:alternative test="@k cast as xs:anyAtomicType = 't'" type="U"/>
+	  <xs:alternative type="V"/>
+	</xs:element>`), xsd.QName{Local: "e"})
+	if !present {
+		t.Fatal("{type table} is ·absent·, want present")
+	}
+	if got := altTypeNames(t, tt.Alternatives()); !slices.Equal(got, []string{"T", "U"}) {
+		t.Fatalf("{alternatives} = %v, want [T U]", got)
+	}
+}
+
 // A test= this engine merely cannot EVALUATE is no fault: §3.12.6 clause 2's
 // Note lets a processor decline an expression outside the required subset, and
 // charging one would reject a conforming schema. The withhold that decline
@@ -543,12 +584,14 @@ func TestProduceTypeTableStaticErrorInTestIsCharged(t *testing.T) {
 //
 // Both expressions carry an unbound p: too, so this pins the dominance
 // end to end — an unsupported construct is declined and never charged, whatever
-// its names resolve to.
+// its names resolve to. The second goes further: the walk RECORDS p's
+// err:XPST0081 and then meets a cast target that declines, and the recorded
+// defect dies with the parse rather than reaching the charge.
 func TestProduceTypeTableUnsupportedTestIsNotCharged(t *testing.T) {
 	tt, present := typeTableOf(t, wrap("", typeTableTypes+`
 	<xs:element name="e" type="B">
 	  <xs:alternative test="count(//p:x) &gt; 1" type="T"/>
-	  <xs:alternative test="@p:k cast as xs:string = 't'" type="U"/>
+	  <xs:alternative test="@p:k cast as xs:anyAtomicType = 't'" type="U"/>
 	  <xs:alternative type="V"/>
 	</xs:element>`), xsd.QName{Local: "e"})
 	if !present {

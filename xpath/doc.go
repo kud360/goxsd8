@@ -9,11 +9,19 @@
 //     xs:alternative) — M6. SHIPPED: CompileCTATest parses Structures
 //     §3.12.6's productions [8] ta-Test through [18]
 //     ta-ConstructorFunction and CTATest.Evaluate decides one against
-//     an element's attributes. Three shapes inside that grammar
-//     compile-time-DECLINE rather than evaluate: [15] ta-CastExpr's
-//     `cast as` tail and [18] ta-ConstructorFunction (#858), each
-//     declined at its own production, and a wildcard NameTest (#859),
-//     declined lexically before any production sees it.
+//     an element's attributes, casts included: [15] ta-CastExpr's
+//     `cast as` tail and [18] ta-ConstructorFunction are one node,
+//     evaluated through value's facet pipeline, which is what
+//     xpath-functions.md §17.1.1 makes a cast. THREE shapes inside
+//     that grammar compile-time-DECLINE rather than evaluating: a
+//     wildcard NameTest (#859), declined lexically before any
+//     production sees it; a cast whose target's primitive is xs:QName,
+//     whose lexical mapping needs a static context this engine has no
+//     value for (#888); and a comparison needing xpath20.md B.1 rule
+//     1.1's xs:float-to-xs:double promotion, which value exposes no
+//     widening for (#889). So does a cast whose TARGET is not a
+//     builtin datatype, which is the required subset's own boundary
+//     (§3.12.6 clause 4) rather than a construct of the grammar.
 //     CTATestStaticError reports the XPath STATIC errors of the same
 //     grammar over the same traversal, which is a different question
 //     with a different owner — see below.
@@ -71,15 +79,24 @@
 // lets one refuse the schema for it. Under-charging is a rejection this
 // engine can take later; over-charging is a false reject now.
 //
+// One static condition is proven today, err:XPST0081 for an unbound
+// prefix. The cast-target conditions — err:XPST0051 and err:XPST0080 —
+// are not, because proving one takes a parse that runs PAST the failed
+// target to the end of a ta-Test and no target stands in for one that
+// resolved to nothing; they stay folded into the compile-time withhold
+// under ctaTypes.castTarget's marker.
+//
 // # Static context
 //
 //   - $value binds a typed atom {Lexical, Kind}, not a bare string
 //     (PRINCIPLES 17). It is an ASSERTION binding: ta-props-correct
 //     adds no variable, so no CTA {test} sees one.
-//   - xpathDefaultNamespace supplies the default ELEMENT namespace for
-//     unprefixed element steps (never attribute steps) in assertions
-//     and IDC selector/field paths (PRINCIPLES 15). The CTA subset
-//     reaches no element step, so it never consults it.
+//   - xpathDefaultNamespace supplies the default ELEMENT/TYPE namespace
+//     for unprefixed element steps (never attribute steps) in
+//     assertions and IDC selector/field paths (PRINCIPLES 15), and for
+//     an unprefixed cast TARGET (xpath20.md §3.10.2). The CTA subset
+//     reaches no element step, so a cast target is the only thing it
+//     consults the default namespace for.
 //   - fn:matches / fn:replace / fn:tokenize bind to regex flavor FO,
 //     never the pattern-facet flavor.
 //

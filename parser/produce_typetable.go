@@ -34,6 +34,33 @@ const ruleSrcTA xsderr.Rule = "src-ta"
 // (STYLE E4) instead.
 const ruleTAPropsCorrect xsderr.Rule = "ta-props-correct"
 
+// ctaStaticTypes is the ·in-scope schema definitions· of the static context
+// xpath-valid clause 2.2.5 (§3.13.6.2) fixes for the {test} whose static errors
+// this file charges: "those components that are present in every schema by
+// definition", the Built-in Simple Type Definitions of §3.16.7 — and NOT this
+// schema's own {type definitions}, which clause 2.2.5 does not put in scope.
+// No schema is finalized at production time to hold those anyway.
+//
+// It answers from the build-once memo restricted to the XSD namespace, whose
+// entries there are exactly the [builtin.Seed] components newSymbols pre-seeded:
+// that namespace is closed to user declarations, so restricting by it is what
+// makes the answer clause 2.2.5's set and not whatever the memo has reached
+// (STYLE D3 — no second copy of the seeded components is kept).
+type ctaStaticTypes struct{ syms *symbols }
+
+// Type resolves a datatype name to the builtin declared under it, reporting
+// false for every other name.
+func (t ctaStaticTypes) Type(name xsd.QName) (xsd.TypeDefinition, bool) {
+	if name.Space != xsd.XMLSchemaNS {
+		return nil, false
+	}
+	st, seeded := t.syms.built[name]
+	if !seeded {
+		return nil, false
+	}
+	return st, true
+}
+
 // typeTableOf maps the <alternative> children of el into the {type table} of
 // the element declaration el produces (§3.3.2.1 dcl.elt.common), returning nil
 // for the ·absent· property. edID is that declaration's minted identity, the
@@ -69,7 +96,8 @@ const ruleTAPropsCorrect xsderr.Rule = "ta-props-correct"
 // ·assessed·; xpath.CTATestStaticError proves the static error and this charges
 // it, the engine never minting a rule of its own. An {expression} that engine
 // merely cannot EVALUATE is no fault at all and passes straight through, on the
-// terms xpath/cta.go argues (PRINCIPLES 20).
+// terms xpath/cta.go argues (PRINCIPLES 20). The type knowledge it is asked
+// against is ctaStaticTypes, clause 2.2.5's set and not this schema's.
 //
 // {annotations} is the empty sequence on every Type Alternative built here,
 // matching every other component this producer emits: no <annotation> is mapped
@@ -110,7 +138,7 @@ func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType x
 		// same record and the same xpathDefaultNamespace chain an <assert> gets,
 		// which is why this reuses buildXPathExpression rather than restating it.
 		test := p.buildXPathExpression(alt, "test")
-		if serr := xpath.CTATestStaticError(test); serr != nil {
+		if serr := xpath.CTATestStaticError(test, ctaStaticTypes{syms: p.symbols}); serr != nil {
 			return nil, xsderr.New(ruleTAPropsCorrect, alt.Loc(),
 				"the test attribute %q has an XPath static error (%s), but ta-props-correct clause 2 requires the {test} to satisfy xpath-valid, whose clause 2 admits none",
 				test.Expression(), serr)

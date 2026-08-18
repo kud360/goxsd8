@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
@@ -63,9 +64,18 @@ func ctaCandidateType(t *testing.T, name string) xsd.ComplexType {
 // definition} — so a test that reads the DECLARED type instead of running
 // key-cta-select is indistinguishable from one that fell through to the
 // default, and both are distinguishable from a real selection.
+//
+// The builtin datatypes are seeded because a {test} is evaluated against them:
+// xpath.CompileCTATest resolves the types §3.5.2's casting rules name — and
+// the type any explicit cast targets — through the schema's {type
+// definitions}, which is where parser.Parse's own builtin.Seed leaves them for
+// every parsed schema.
 func ctaSchema(t *testing.T, alts ...ctaAlt) *xsd.Schema {
 	t.Helper()
 	b := xsd.NewSchemaBuilder()
+	for _, st := range ctaBuiltins(t) {
+		b.AddType(st)
+	}
 	b.AddType(ctaFallbackType(t))
 	b.AddType(ctaCandidateType(t, "First"))
 	b.AddType(ctaCandidateType(t, "Second"))
@@ -91,6 +101,17 @@ func ctaSchema(t *testing.T, alts ...ctaAlt) *xsd.Schema {
 		t.Fatalf("finalizing the tabled schema: %v", err)
 	}
 	return schema
+}
+
+// ctaBuiltins is the seeded builtin datatype cohort every fixture schema
+// carries.
+func ctaBuiltins(t *testing.T) []*xsd.SimpleType {
+	t.Helper()
+	types, err := builtin.Seed(testBackend())
+	if err != nil {
+		t.Fatalf("seeding the builtin datatypes: %v", err)
+	}
+	return types
 }
 
 // ctaRoot is <root kind="…"/>, or <root/> when kind is empty.
