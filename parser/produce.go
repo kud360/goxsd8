@@ -1055,10 +1055,17 @@ func rejectProhibitedAttrs(decl *Element, form declForm) error {
 // Schema for Schema Documents — so charging src-resolve, mgd-props-correct or
 // ag-props-correct here would be fabricated (STYLE E2).
 //
-// BOTH callers run it before they read ref, which is rejectProhibitedAttrs's
+// EVERY caller runs it before it reads ref, which is rejectProhibitedAttrs's
 // ordering point from the other side: a document that writes name in a reference
 // position generally writes no ref, so the missing-ref fault would answer first
 // and report the consequence of the mistake rather than the mistake.
+//
+// The <group> position is charged TWICE by design, and the second charge is not
+// dead: produceGroupRefParticle covers every caller that dispatches straight to
+// it, while explicitContent charges the same element ahead of §3.4.2.3.3 clause
+// 2.1.4, whose maxOccurs="0" elision returns before that function is entered at
+// all. One fact, one encoding — the rule lives here alone, so the two call sites
+// cannot drift (STYLE D3).
 func rejectProhibitedRefAttrs(el *Element) error {
 	local := el.Name().Local()
 	var grammar string

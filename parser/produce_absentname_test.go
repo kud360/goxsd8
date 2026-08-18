@@ -1057,6 +1057,13 @@ func TestProduceQNameOutsideLexicalSpaceRejected(t *testing.T) {
 //     name and must NOT be the sibling missing-ref fault, which is what answers if
 //     the guard runs after the ref lookup instead of before it.
 //
+// The maxOccurs="0" rows carry a third failure mode, and it is an ORDERING one
+// against a different function: §3.4.2.3.3 clause 2.1.4 elides a model-group child
+// whose maxOccurs is 0, returning from explicitContent before
+// produceGroupRefParticle is ever entered, so a guard charged only there leaves
+// every one of these documents silently ACCEPTED. They pass only while the charge
+// runs ahead of that elision.
+//
 // Every ref row DECLARES the definition its ref names, so no row can pass as a
 // dangling reference, and the position assertion pins the offending element's own
 // line (STYLE E3, carried in the message text since a plain error holds no
@@ -1089,6 +1096,38 @@ func TestProduceRefFormNameProhibited(t *testing.T) {
 			body: "\n" + `<xs:complexType name="CT"><xs:sequence>` + "\n" +
 				`<xs:group name="X"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>` + "\n" +
 				`</xs:sequence></xs:complexType>`,
+			wantGrammar: "xs:groupRef",
+			wantLine:    3,
+		},
+		{
+			// The clause-2.1.4 shape: the <group> is the <complexType>'s own
+			// model-group child, so explicitContent elides it on maxOccurs="0" and
+			// returns before produceGroupRefParticle can charge anything.
+			name: `local <group ref= name= maxOccurs="0"> under <complexType>`,
+			body: "\n" + targetGroup + "\n" + `<xs:complexType name="CT">` + "\n" +
+				`<xs:group ref="tns:G" name="X" maxOccurs="0"/>` + "\n" +
+				`</xs:complexType>`,
+			wantGrammar: "xs:groupRef",
+			wantLine:    4,
+		},
+		{
+			// The same elision reached through the OTHER branch that reads its
+			// ·effective content· from effectiveContent.
+			name: `local <group ref= name= maxOccurs="0"> under <extension>`,
+			body: "\n" + targetGroup + "\n" + `<xs:complexType name="B"><xs:sequence/></xs:complexType>` + "\n" +
+				`<xs:complexType name="CT"><xs:complexContent><xs:extension base="tns:B">` + "\n" +
+				`<xs:group ref="tns:G" name="X" maxOccurs="0"/>` + "\n" +
+				`</xs:extension></xs:complexContent></xs:complexType>`,
+			wantGrammar: "xs:groupRef",
+			wantLine:    5,
+		},
+		{
+			// The elision over a definition form written where a reference belongs:
+			// elided, so not even the missing-ref fault answers without the hoist.
+			name: `local <group name= maxOccurs="0"> with no ref`,
+			body: "\n" + `<xs:complexType name="CT">` + "\n" +
+				`<xs:group name="X" maxOccurs="0"><xs:sequence><xs:element name="b" type="xs:string"/></xs:sequence></xs:group>` + "\n" +
+				`</xs:complexType>`,
 			wantGrammar: "xs:groupRef",
 			wantLine:    3,
 		},
@@ -1189,6 +1228,13 @@ func TestProduceRefFormNameLegalElsewhere(t *testing.T) {
 			body: targetAG + `<xs:complexType name="CT"><xs:sequence/>` +
 				`<xs:attributeGroup ref="tns:AG"/><xs:attribute name="b" type="xs:string"/>` +
 				`</xs:complexType>`,
+		},
+		{
+			// The clause-2.1.4 elision itself, which the pre-elision charge sits in
+			// front of: a nameless reference at maxOccurs="0" still maps to no
+			// component and must produce cleanly.
+			name: `local <group ref= maxOccurs="0"> elided under clause 2.1.4`,
+			body: targetGroup + `<xs:complexType name="CT"><xs:group ref="tns:G" maxOccurs="0"/></xs:complexType>`,
 		},
 		{
 			name: `<group ref=> inside a named <group> definition`,

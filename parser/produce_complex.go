@@ -1180,7 +1180,10 @@ func emptySequenceParticle(loc xsderr.Loc) (xsd.Particle, error) {
 // An <all> child has its own occurrence grammar checked FIRST (allOccursGrammar),
 // ahead of every elision test: 2.1.2/2.1.4 decide what the group maps TO, while
 // the {0,1} enumeration decides whether the <all> element is well-formed at all,
-// so an elided <all maxOccurs="0" minOccurs="2"> is still rejected.
+// so an elided <all maxOccurs="0" minOccurs="2"> is still rejected. A <group>
+// child's prohibited name (rejectProhibitedRefAttrs) is checked first for the
+// same reason: 2.1.4 elides a maxOccurs="0" child without ever entering
+// produceGroupRefParticle, so the charge made there would never answer.
 //
 // scopeParent is passed through to every local element declaration built beneath
 // this content model (§3.3.2.3 dcl.elt.local). It is generic rather than a
@@ -1196,6 +1199,15 @@ func (p *producer) explicitContent(group *Element, scopeParent xsd.ElementScopeP
 		// Before any clause-2 elision: an <all> whose occurrence attributes are
 		// outside the {0,1} enumeration is invalid however it maps.
 		if err := allOccursGrammar(group); err != nil {
+			return nil, err
+		}
+	}
+	if local == "group" {
+		// Before any clause-2 elision, on the same footing: a <group> reference
+		// carrying the name xs:groupRef prohibits is invalid however it maps, and
+		// 2.1.4 below returns without ever entering produceGroupRefParticle, where
+		// this same charge answers for the groupParticles path.
+		if err := rejectProhibitedRefAttrs(group); err != nil {
 			return nil, err
 		}
 	}
