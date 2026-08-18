@@ -3,11 +3,12 @@ package xpath
 import "github.com/kud360/goxsd8/xsd"
 
 // This file is the COMPILE-TIME type knowledge of the §3.12.6 subset: which
-// builtin datatype a Literal carries, and which type a comparison's two
-// operands are converted into (xpath20.md §3.5.2's casting rules and B.1's
-// type promotions). Nothing here runs at evaluation time — the compiled tree
-// holds the resolved *[xsd.SimpleType] components and no resolver
-// (ARCHITECTURE), so [CTATest.Evaluate] takes one again.
+// builtin datatype a Literal carries, which type a comparison's two operands
+// are converted into (xpath20.md §3.5.2's casting rules and B.1's type
+// promotions), and whether B.2 admits the operator over that type at all.
+// Nothing here runs at evaluation time — the compiled tree holds the resolved
+// *[xsd.SimpleType] components and no resolver (ARCHITECTURE), so
+// [CTATest.Evaluate] takes one again.
 
 // ctaBuiltin is the ·expanded name· of a builtin datatype, which is the key an
 // [xsd.TypeResolver] holds it under. The XSD namespace is closed to user
@@ -205,9 +206,30 @@ const (
 	ctaTypeSettled
 )
 
-// comparison settles the type a general comparison of l against r converts
-// BOTH its operands into, per xpath20.md §3.5.2 clause 2's
-// magnitude-relationship rules and B.1's type promotions.
+// comparison settles the type a general comparison of l against r with
+// operator op converts BOTH its operands into, per xpath20.md §3.5.2 clause
+// 2's magnitude-relationship rules and B.1's type promotions, and reports
+// ctaTypeErrored where B.2 admits no such comparison.
+//
+// The two error directions are ONE err:XPTY0004 and so one ctaTyping: §3.5.1
+// raises it both where no single type serves the two operands and where the
+// operand types "are not a valid combination for the given operator,
+// according to the rules in B.2 Operator Mapping". Deciding both here is what
+// makes a constructed ctaCompare B.2-legal by construction, so evaluation
+// never meets an operand pair its operator does not admit.
+func (t ctaTypes) comparison(op ctaComparator, l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
+	st, typing := t.converted(l, r)
+	if typing != ctaTypeSettled {
+		return nil, typing
+	}
+	admitted, err := t.admitsComparison(op, st)
+	if err != nil || !admitted {
+		return nil, ctaTypeErrored
+	}
+	return st, ctaTypeSettled
+}
+
+// converted settles the type alone, leaving B.2's operator rows to comparison.
 //
 // Two rules cover the three operand shapes this grammar builds, because an
 // operand is either xs:untypedAtomic (an uncast attribute) or typed (a
@@ -227,7 +249,7 @@ const (
 // belongs where the comparison happens, and ctaCompare.eval applies it there
 // by routing an xs:anyURI comparison type through the default collation
 // exactly as it routes xs:string.
-func (t ctaTypes) comparison(l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
+func (t ctaTypes) converted(l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
 	lt, lTyped := ctaStaticOf(l).(ctaTyped)
 	rt, rTyped := ctaStaticOf(r).(ctaTyped)
 	if !lTyped && !rTyped {
@@ -240,6 +262,66 @@ func (t ctaTypes) comparison(l, r ctaValue) (*xsd.SimpleType, ctaTyping) {
 		return t.untypedAgainst(lt.st)
 	}
 	return t.shared(lt.st, rt.st)
+}
+
+// admitsComparison reports whether xpath20.md B.2 holds a row for op with both
+// operands of type st, which is the question §3.5.1 makes err:XPTY0004 turn
+// on: "If the types of the operands, after evaluation, are not a valid
+// combination for the given operator, according to the rules in B.2 Operator
+// Mapping, a type error is raised."
+//
+// It walks st's {base type definition} chain because B.2's rows are written
+// over the types an operand can reach by SUBTYPE SUBSTITUTION, not over its
+// own type: "that operator can be applied to an operand of type AT if type AT
+// can be converted to type ET by a combination of type promotion and subtype
+// substitution". That is how xs:yearMonthDuration reaches eq and ne, for which
+// B.2 has an xs:duration row and none of its own.
+//
+// One chain answers for both operands, and the diagonal answers for every row:
+// §3.5.2 converts both operands into the ONE type st, and numeric is B.2's
+// only comparison macro expanding to rows whose two types differ — every such
+// row's diagonal is in the table beside it.
+//
+// An unwalkable chain is the error, never a false (STYLE S3); the caller folds
+// it into the same err:XPTY0004 direction ctaTypes.comparison gives every
+// other type fault.
+func (t ctaTypes) admitsComparison(op ctaComparator, st *xsd.SimpleType) (bool, error) {
+	for at := st; at != nil; {
+		if ctaB2Admits(op, at.Name(), at.Name()) {
+			return true, nil
+		}
+		base, err := at.Base(t.resolver)
+		if err != nil {
+			return false, err
+		}
+		at = base
+	}
+	return false, nil
+}
+
+// ctaB2Row is one row of xpath20.md B.2's operator mapping table for one of
+// the six comparison operators: the operator, and the LOCAL names of the two
+// operand types it admits. The namespace is not carried because B.2 names no
+// type outside the XSD namespace in a comparison row (gen_opmap.go).
+type ctaB2Row struct {
+	op   ctaComparator
+	a, b string
+}
+
+// ctaB2Admits reports whether B.2 holds a row for op over operand types a and
+// b, matched by ·expanded name· and exactly — subtype substitution is the
+// CALLER's walk (admitsComparison), because a row admits the types it names
+// and the derived types reach it rather than the row reaching them.
+func ctaB2Admits(op ctaComparator, a, b xsd.QName) bool {
+	if a.Space != xsd.XMLSchemaNS || b.Space != xsd.XMLSchemaNS {
+		return false
+	}
+	for _, row := range ctaB2Comparisons {
+		if row.op == op && row.a == a.Local && row.b == b.Local {
+			return true
+		}
+	}
+	return false
 }
 
 // untypedAgainst is xpath20.md §3.5.2 clause 2: the type an xs:untypedAtomic
@@ -289,7 +371,8 @@ func (t ctaTypes) untypedAgainst(st *xsd.SimpleType) (*xsd.SimpleType, ctaTyping
 }
 
 // shared is the type serving two TYPED operands: their {primitive type
-// definition} where they share one, and otherwise B.1's two promotions — the
+// definition} where they share one, narrowed to a named duration subtype where
+// both carry one (sharedNamed), and otherwise B.1's two promotions — the
 // wider of two numeric primitives, and xs:string for an xs:anyURI met by an
 // xs:string. Those two are the only ways two DIFFERENT primitives are ever
 // admitted, which is the reason a date cast compared against a string literal
@@ -309,7 +392,7 @@ func (t ctaTypes) shared(a, b *xsd.SimpleType) (*xsd.SimpleType, ctaTyping) {
 		return nil, ctaTypeErrored
 	}
 	if pa.Name() == pb.Name() {
-		return pa, ctaTypeSettled
+		return t.sharedNamed(a, b, pa)
 	}
 	if ctaNumeric(pa) && ctaNumeric(pb) {
 		return ctaWider(pa, pb)
@@ -318,6 +401,42 @@ func (t ctaTypes) shared(a, b *xsd.SimpleType) (*xsd.SimpleType, ctaTyping) {
 		return t.str, ctaTypeSettled
 	}
 	return nil, ctaTypeErrored
+}
+
+// sharedNamed narrows the primitive p two operands share to the NAMED duration
+// subtype both derive from, where there is one, and answers p otherwise.
+//
+// The narrowing is what keeps B.2's rows reachable, and only the two duration
+// subtypes need it: B.2 gives xs:yearMonthDuration and xs:dayTimeDuration the
+// four ordering rows and gives their xs:duration primitive none, so reducing
+// two xs:yearMonthDuration operands to xs:duration would make a comparison B.2
+// admits by subtype substitution into err:XPTY0004. The two are named in
+// §3.5.2 clause 2's own rules for the same reason, whose Note states it: "the
+// special treatment of the duration types is required to avoid errors that may
+// arise when comparing the primitive type xs:duration with any duration type."
+//
+// A pairing of the two subtypes with EACH OTHER settles on xs:duration, which
+// is correct: B.2 has no row relating them and no ordering row for their
+// primitive, so eq and ne are admitted through xs:duration and the four
+// ordering operators are the type error §3.5.1 raises.
+func (t ctaTypes) sharedNamed(a, b, p *xsd.SimpleType) (*xsd.SimpleType, ctaTyping) {
+	if p.Name() != ctaBuiltin("duration") {
+		return p, ctaTypeSettled
+	}
+	for _, name := range []xsd.QName{ctaBuiltin("dayTimeDuration"), ctaBuiltin("yearMonthDuration")} {
+		at, err := t.ancestor(a, name)
+		if err != nil {
+			return nil, ctaTypeErrored
+		}
+		bt, err := t.ancestor(b, name)
+		if err != nil {
+			return nil, ctaTypeErrored
+		}
+		if at != nil && bt != nil {
+			return at, ctaTypeSettled
+		}
+	}
+	return p, ctaTypeSettled
 }
 
 // ctaNumeric reports whether p is one of the three primitives xpath20.md calls

@@ -76,4 +76,7 @@
 //
 // Numbers follow the XDM model the subset needs; comparisons over typed
 // atoms delegate to value capabilities so backend values participate.
+// Which operators an operand type admits at ALL is xpath20.md B.2's
+// answer rather than a capability's, generated from the spec into the
+// package (tools/opmapgen) and enforced at compile time.
 package xpath
