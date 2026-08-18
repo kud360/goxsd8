@@ -347,10 +347,11 @@ type ctaCompare struct {
 type ctaEffectiveBoolean struct{ operand ctaValue }
 
 // ctaTypeError is a comparison whose operand types are not a valid combination
-// for its operator under xpath20.md B.2 — no one type serves both operands,
-// which ctaTypes.comparison decides. XPath raises err:XPTY0004 for it, so the
-// node evaluates to ctaError: a raised error the enclosing operators carry,
-// not a decline and not a node-local false.
+// for its operator under xpath20.md B.2 — no one type serves both operands, or
+// B.2 holds no row for that operator over the type that does, both of which
+// ctaTypes.comparison decides. XPath raises err:XPTY0004 for it, so the node
+// evaluates to ctaError: a raised error the enclosing operators carry, not a
+// decline and not a node-local false.
 type ctaTypeError struct{}
 
 func (ctaOr) ctaExpr()               {}
@@ -588,6 +589,10 @@ func (n ctaAnd) eval(env ctaEnv) ctaAnswer {
 // fn:compare rows. Promoting the TYPE instead would change what clause 2.4
 // casts an xs:untypedAtomic operand to and so change the answer
 // (ctaTypes.comparison).
+//
+// xs:boolean takes a third route for the same kind of reason: the operator
+// functions B.2 names for it are defined over the two values themselves and
+// not over an order the value space carries (holdsBoolean).
 func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
 	left := ctaItemOf(c.left, c.comparison, env)
 	right := ctaItemOf(c.right, c.comparison, env)
@@ -601,6 +606,9 @@ func (c ctaCompare) eval(env ctaEnv) ctaAnswer {
 	}
 	if ctaStringLike(c.comparison) {
 		return c.op.holdsCollated(l.v, r.v)
+	}
+	if c.comparison.Name() == ctaBuiltin("boolean") {
+		return c.op.holdsBoolean(l.v, r.v, c.comparison, env)
 	}
 	return c.op.holdsBetween(l.v, r.v)
 }
@@ -675,10 +683,7 @@ func ctaBooleanOf(v value.Value, p *xsd.SimpleType, env ctaEnv) ctaAnswer {
 	eq, comparable := v.(value.Eq)
 	switch p.Name() {
 	case ctaBuiltin("boolean"):
-		if !comparable {
-			return ctaError
-		}
-		return ctaEqualsLexical(eq, p, "true", env)
+		return ctaTruth(v, p, env)
 	case ctaBuiltin("string"), ctaBuiltin("anyURI"):
 		measured, lengthed := v.(value.Lengthed)
 		if !lengthed {
@@ -910,19 +915,11 @@ func (op ctaComparator) holdsCollated(l, r value.Value) ctaAnswer {
 // type, through the capability interfaces the values themselves carry (STYLE
 // T2) and never a type switch over a backend's concrete types.
 //
-// GAP(xpath): xpath20.md B.2's PER-OPERATOR rows are not enforced. This engine
-// admits any two operands one type serves and lets the values answer which
-// operators they support, so where B.2 gives a type eq/ne rows but no ordering
-// rows — xs:duration, the Gregorian types, xs:hexBinary, xs:base64Binary — an
-// ordering comparison decides from the value space instead of raising
-// err:XPTY0004, and where B.2 DOES give ordering rows a value space cannot
-// serve (op:boolean-less-than on xs:boolean, whose values are deliberately not
-// [value.Ordered]) it decides ctaError instead of comparing. The direction is
-// UNESTABLISHED (STYLE P3a): the single consumer is validate/cta.go's
-// conditionallySelected, which reads a true {test} as ·successfully selects·
-// and a false one as the next alternative's turn, so a wrong answer in either
-// direction hands the element a type §3.12.4 did not select, and both a false
-// accept and a false reject follow from that. (#887)
+// A value carrying neither capability is ctaError, and that is a fault of the
+// BACKEND rather than a judgment about the operator: which operators an
+// operand type admits is xpath20.md B.2's answer, settled when the node was
+// built (ctaTypes.admitsComparison), so every pair reaching here is one B.2
+// holds a row for.
 func (op ctaComparator) holdsBetween(l, r value.Value) ctaAnswer {
 	if op == ctaEqual || op == ctaNotEqual {
 		eq, comparable := l.(value.Eq)
@@ -936,6 +933,57 @@ func (op ctaComparator) holdsBetween(l, r value.Value) ctaAnswer {
 		return ctaError
 	}
 	return ctaAnswerOf(op.holdsOrdering(ord.Cmp(r)))
+}
+
+// holdsBoolean decides op between two xs:boolean values, which B.2 gives all
+// six rows: eq and ne through op:boolean-equal, and the four ordering
+// operators through op:boolean-less-than and op:boolean-greater-than.
+//
+// Those two functions are defined over the VALUES and not over an order —
+// "Returns true if $arg1 is false and $arg2 is true. Otherwise, returns false"
+// (xpath-functions.md §9.2.2) — so the ordering is decided through
+// [value.Eq] against the value of the lexical "true", exactly as fn:boolean
+// reads an xs:boolean operand (ctaTruth). It is deliberately NOT decided
+// through [value.Ordered]: that capability is the datatype's own order, which
+// xs:boolean does not have ("The XML Schema datatype xs:boolean is not
+// ordered", xpath-functions.md §9.2), and B.2's rows are about which operators
+// an operand type admits rather than about the value space.
+func (op ctaComparator) holdsBoolean(l, r value.Value, st *xsd.SimpleType, env ctaEnv) ctaAnswer {
+	if op == ctaEqual || op == ctaNotEqual {
+		return op.holdsBetween(l, r)
+	}
+	left := ctaTruth(l, st, env)
+	right := ctaTruth(r, st, env)
+	if left == ctaError || right == ctaError {
+		return ctaError
+	}
+	return ctaAnswerOf(op.holdsOrdering(ctaBooleanOrdering(left == ctaTrue, right == ctaTrue)))
+}
+
+// ctaTruth reads one xs:boolean value of type st as an answer, which is
+// equality against the value of the lexical "true" — fn:boolean's rule 3 for
+// an xs:boolean operand (xpath20.md §2.4.3), and the reading
+// op:boolean-less-than and op:boolean-greater-than are written in terms of.
+func ctaTruth(v value.Value, st *xsd.SimpleType, env ctaEnv) ctaAnswer {
+	eq, comparable := v.(value.Eq)
+	if !comparable {
+		return ctaError
+	}
+	return ctaEqualsLexical(eq, st, "true", env)
+}
+
+// ctaBooleanOrdering orders two xs:boolean values as op:boolean-less-than and
+// op:boolean-greater-than order them: "false is less than true" and nothing
+// else is related, which over two values is a total order and so never
+// [value.Incomparable].
+func ctaBooleanOrdering(l, r bool) value.Ordering {
+	if l == r {
+		return value.Equal
+	}
+	if !l {
+		return value.Less
+	}
+	return value.Greater
 }
 
 // holdsOrdering reports whether op holds for two values that compared as o.

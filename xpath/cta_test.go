@@ -918,6 +918,10 @@ func compileTypes(t *testing.T) ctaTypes {
 // All three ctaTyping outcomes are in the table, because they are three
 // different directions: a settled type, err:XPTY0004 (a decided false), and
 // the withhold #889 owns.
+//
+// It reads ctaTypes.converted rather than ctaTypes.comparison, which is the
+// same table plus B.2's per-operator rows; those are
+// TestComparisonOperatorLegality's subject.
 func TestComparisonType(t *testing.T) {
 	known := compileTypes(t)
 	attr := ctaAttr{name: uq("a")}
@@ -947,6 +951,13 @@ func TestComparisonType(t *testing.T) {
 		{"an attribute vs a dayTimeDuration cast is clause 2.2", attr, castNode(t, known, "dayTimeDuration"), "dayTimeDuration", ctaTypeSettled},
 		{"an attribute vs a yearMonthDuration cast is clause 2.3", attr, castNode(t, known, "yearMonthDuration"), "yearMonthDuration", ctaTypeSettled},
 		{"two date casts share their primitive", castNode(t, known, "date"), castNode(t, known, "date"), "date", ctaTypeSettled},
+		// The two duration subtypes keep their NAMES where both operands
+		// carry one, because B.2 writes their ordering rows under those names
+		// and gives their xs:duration primitive none (ctaTypes.sharedNamed).
+		{"two dayTimeDuration casts keep the named subtype", castNode(t, known, "dayTimeDuration"), castNode(t, known, "dayTimeDuration"), "dayTimeDuration", ctaTypeSettled},
+		{"two yearMonthDuration casts keep the named subtype", castNode(t, known, "yearMonthDuration"), castNode(t, known, "yearMonthDuration"), "yearMonthDuration", ctaTypeSettled},
+		{"the two duration subtypes share only their primitive", castNode(t, known, "dayTimeDuration"), castNode(t, known, "yearMonthDuration"), "duration", ctaTypeSettled},
+		{"two duration casts share their primitive", castNode(t, known, "duration"), castNode(t, known, "duration"), "duration", ctaTypeSettled},
 		{"a date cast vs a string literal shares nothing", castNode(t, known, "date"), str, "", ctaTypeErrored},
 		{"xs:boolean pairs are admitted for every comparator", castNode(t, known, "boolean"), castNode(t, known, "boolean"), "boolean", ctaTypeSettled},
 		{"a token cast vs a string literal is xs:string", castNode(t, known, "token"), str, "string", ctaTypeSettled},
@@ -969,13 +980,225 @@ func TestComparisonType(t *testing.T) {
 		{"an attribute vs a float cast needs rule 1.1 under clause 2.1", attr, castNode(t, known, "float"), "", ctaTypeDeclined},
 		{"a float cast vs an attribute needs rule 1.1 under clause 2.1", castNode(t, known, "float"), attr, "", ctaTypeDeclined},
 	} {
-		got, typing := known.comparison(tc.left, tc.right)
+		got, typing := known.converted(tc.left, tc.right)
 		if typing != tc.typing {
 			t.Errorf("%s: typing = %v, want %v", tc.name, typing, tc.typing)
 			continue
 		}
 		if typing == ctaTypeSettled && got.Name() != ctaBuiltin(tc.want) {
 			t.Errorf("%s: comparison type = %v, want xs:%s", tc.name, got.Name(), tc.want)
+		}
+	}
+}
+
+// TestComparisonOperatorLegality pins xpath20.md B.2's PER-OPERATOR rows: a
+// comparison is admitted exactly where B.2 holds a row for that operator over
+// the type both operands are converted into, and is err:XPTY0004 otherwise
+// (§3.5.1), whatever the operand values are then able to answer.
+//
+// The table names both directions B.2 disagrees with a value-space judgment
+// in. The types with eq and ne rows and no ordering rows are xs:duration, the
+// five Gregorian types, xs:hexBinary and xs:base64Binary; xs:boolean has all
+// six, its ordering rows included. xs:QName and xs:NOTATION are the eq/ne-only
+// pair the table cannot reach, both being declined as cast targets before a
+// comparison over them can be built (ctaTypes.castTarget).
+func TestComparisonOperatorLegality(t *testing.T) {
+	known := compileTypes(t)
+	equality := []ctaComparator{ctaEqual, ctaNotEqual}
+	ordering := []ctaComparator{ctaLess, ctaLessEqual, ctaGreater, ctaGreaterEqual}
+	all := []ctaComparator{ctaEqual, ctaNotEqual, ctaLess, ctaLessEqual, ctaGreater, ctaGreaterEqual}
+	for _, tc := range []struct {
+		name   string
+		local  string
+		ops    []ctaComparator
+		typing ctaTyping
+	}{
+		{"xs:duration has eq and ne", "duration", equality, ctaTypeSettled},
+		{"xs:duration has no ordering row", "duration", ordering, ctaTypeErrored},
+		{"xs:gYear has eq and ne", "gYear", equality, ctaTypeSettled},
+		{"xs:gYear has no ordering row", "gYear", ordering, ctaTypeErrored},
+		{"xs:gYearMonth has no ordering row", "gYearMonth", ordering, ctaTypeErrored},
+		{"xs:gMonthDay has no ordering row", "gMonthDay", ordering, ctaTypeErrored},
+		{"xs:gDay has no ordering row", "gDay", ordering, ctaTypeErrored},
+		{"xs:gMonth has no ordering row", "gMonth", ordering, ctaTypeErrored},
+		{"xs:hexBinary has eq and ne", "hexBinary", equality, ctaTypeSettled},
+		{"xs:hexBinary has no ordering row", "hexBinary", ordering, ctaTypeErrored},
+		{"xs:base64Binary has eq and ne", "base64Binary", equality, ctaTypeSettled},
+		{"xs:base64Binary has no ordering row", "base64Binary", ordering, ctaTypeErrored},
+		{"xs:boolean has all six", "boolean", all, ctaTypeSettled},
+		// The two duration subtypes carry the ordering rows their primitive
+		// lacks, and reach eq and ne through it by subtype substitution.
+		{"xs:dayTimeDuration has all six", "dayTimeDuration", all, ctaTypeSettled},
+		{"xs:yearMonthDuration has all six", "yearMonthDuration", all, ctaTypeSettled},
+		// A subtype of one reaches the same rows, which is what makes the
+		// lookup a walk of the {base type definition} chain and not a name
+		// match: xs:dateTimeStamp is derived from xs:dateTime.
+		{"xs:dateTimeStamp reaches xs:dateTime's rows", "dateTimeStamp", all, ctaTypeSettled},
+		{"xs:date has all six", "date", all, ctaTypeSettled},
+		{"xs:time has all six", "time", all, ctaTypeSettled},
+		{"xs:string has all six", "string", all, ctaTypeSettled},
+		{"xs:int reaches numeric's rows", "int", all, ctaTypeSettled},
+		// xs:precisionDecimal is the ONE cast target this engine admits that
+		// B.2 holds no row of any kind for: XPath 2.0's operator mapping
+		// predates it and derives it from xs:anyAtomicType, so no ancestor
+		// carries a row and every comparison over it is err:XPTY0004.
+		{"xs:precisionDecimal has no row at all", "precisionDecimal", all, ctaTypeErrored},
+	} {
+		for _, op := range tc.ops {
+			left := castNode(t, known, tc.local)
+			right := castNode(t, known, tc.local)
+			got, typing := known.comparison(op, left, right)
+			if typing != tc.typing {
+				t.Errorf("%s: comparison(%v) typing = %v, want %v", tc.name, op, typing, tc.typing)
+				continue
+			}
+			if typing == ctaTypeSettled && got == nil {
+				t.Errorf("%s: comparison(%v) settled on no type", tc.name, op)
+			}
+		}
+	}
+}
+
+// TestEvaluateOrderingWithoutB2Row is the first defect direction's witness at
+// the evaluation surface: an ordering comparison over a type B.2 gives eq and
+// ne rows but no ordering rows is err:XPTY0004, which key-cta-ta-select clause
+// 2 (§3.12.4) makes the {test} false.
+//
+// Each case is paired with the same expression under fn:not, and that pairing
+// is the whole assertion: a DECIDED false inverts to true, while a raised
+// error propagates through fn:not and is still false at the root. Both halves
+// false is therefore the error and not a comparison that merely came out
+// false — the xs:duration and Gregorian values these expressions compare are
+// value.Ordered under the strict backend, so a comparator reading the value
+// space would answer true for every ordering row here.
+func TestEvaluateOrderingWithoutB2Row(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{
+		uq("a"): "P2D",
+		uq("b"): "P1D",
+		uq("y"): "2001",
+		uq("z"): "2000",
+		uq("h"): "0F",
+		uq("i"): "0A",
+	})
+	for _, expr := range []string{
+		"@a cast as xs:duration > @b cast as xs:duration",
+		"@a cast as xs:duration >= @b cast as xs:duration",
+		"@b cast as xs:duration < @a cast as xs:duration",
+		"@b cast as xs:duration <= @a cast as xs:duration",
+		"@y cast as xs:gYear > @z cast as xs:gYear",
+		"@z cast as xs:gYear < @y cast as xs:gYear",
+		"@h cast as xs:hexBinary > @i cast as xs:hexBinary",
+		"@h cast as xs:base64Binary > @h cast as xs:base64Binary",
+	} {
+		if got := compile(t, expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs); got {
+			t.Errorf("Evaluate(%q) = true, want false (err:XPTY0004)", expr)
+		}
+		negated := "not(" + expr + ")"
+		if got := compile(t, negated, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs); got {
+			t.Errorf("Evaluate(%q) = true, want false: the error propagates through fn:not", negated)
+		}
+	}
+}
+
+// TestEvaluateEqualityWithoutOrdering pins the other half of the same rows:
+// the types B.2 denies an ordering row still compare for equality, so the fix
+// narrowed the operators and not the operand set.
+func TestEvaluateEqualityWithoutOrdering(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{
+		uq("a"): "P2D",
+		uq("b"): "P1D",
+		uq("y"): "2001",
+		uq("z"): "2000",
+		uq("h"): "0F",
+	})
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		{"@a cast as xs:duration = @a cast as xs:duration", true},
+		{"@a cast as xs:duration = @b cast as xs:duration", false},
+		{"@a cast as xs:duration != @b cast as xs:duration", true},
+		{"@y cast as xs:gYear = @y cast as xs:gYear", true},
+		{"@y cast as xs:gYear = @z cast as xs:gYear", false},
+		{"@h cast as xs:hexBinary = @h cast as xs:hexBinary", true},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}
+
+// TestEvaluateBooleanComparisons is the second defect direction's witness:
+// B.2 gives xs:boolean all six rows, so an ordering comparison over two
+// xs:boolean operands DECIDES — through op:boolean-less-than's own definition,
+// "false is less than true" (xpath-functions.md §9.2.2) — rather than raising
+// because the value space carries no order.
+//
+// The fn:not rows are what separate a decided false from a raised error: they
+// invert, which an error would not.
+func TestEvaluateBooleanComparisons(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{
+		uq("t"): "true",
+		uq("f"): "0",
+	})
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		{"@f cast as xs:boolean < @t cast as xs:boolean", true},
+		{"@t cast as xs:boolean < @f cast as xs:boolean", false},
+		{"not(@t cast as xs:boolean < @f cast as xs:boolean)", true},
+		{"@t cast as xs:boolean > @f cast as xs:boolean", true},
+		{"@f cast as xs:boolean > @t cast as xs:boolean", false},
+		{"@t cast as xs:boolean <= @t cast as xs:boolean", true},
+		{"@t cast as xs:boolean <= @f cast as xs:boolean", false},
+		{"@f cast as xs:boolean >= @f cast as xs:boolean", true},
+		{"@f cast as xs:boolean >= @t cast as xs:boolean", false},
+		{"@t cast as xs:boolean = @t cast as xs:boolean", true},
+		{"@t cast as xs:boolean != @f cast as xs:boolean", true},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}
+
+// TestEvaluateDurationSubtypeOrdering guards the regression the B.2 lookup
+// invites: B.2 writes the four ordering rows under xs:yearMonthDuration and
+// xs:dayTimeDuration and none under their xs:duration primitive, so reducing
+// two operands of one subtype to that primitive would turn a comparison B.2
+// admits into err:XPTY0004 (ctaTypes.sharedNamed).
+//
+// The last two rows are the pairing that legitimately does NOT order: one
+// operand of each subtype shares only xs:duration, which has eq and ne and no
+// ordering row.
+func TestEvaluateDurationSubtypeOrdering(t *testing.T) {
+	attrs := ctaAttrs(map[xsd.QName]string{
+		uq("a"): "P2D",
+		uq("b"): "PT1H",
+		uq("y"): "P1Y",
+		uq("m"): "P1M",
+	})
+	for _, tc := range []struct {
+		expr string
+		want bool
+	}{
+		{"@a cast as xs:dayTimeDuration > @b cast as xs:dayTimeDuration", true},
+		{"@b cast as xs:dayTimeDuration > @a cast as xs:dayTimeDuration", false},
+		{"not(@b cast as xs:dayTimeDuration > @a cast as xs:dayTimeDuration)", true},
+		{"@b cast as xs:dayTimeDuration <= @a cast as xs:dayTimeDuration", true},
+		{"@y cast as xs:yearMonthDuration > @m cast as xs:yearMonthDuration", true},
+		{"@m cast as xs:yearMonthDuration >= @y cast as xs:yearMonthDuration", false},
+		{"not(@m cast as xs:yearMonthDuration >= @y cast as xs:yearMonthDuration)", true},
+		{"@y cast as xs:yearMonthDuration = @y cast as xs:yearMonthDuration", true},
+		{"@a cast as xs:dayTimeDuration > @y cast as xs:yearMonthDuration", false},
+		{"not(@a cast as xs:dayTimeDuration > @y cast as xs:yearMonthDuration)", false},
+	} {
+		got := compile(t, tc.expr, "xs", xsd.XMLSchemaNS).Evaluate(backend(), seededTypes, attrs)
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.expr, got, tc.want)
 		}
 	}
 }
