@@ -18,6 +18,10 @@ tree means what you verify is not what will land, and you say so and stop.
 
 Read the ENTIRE diff. No skimming.
 
+Run `git submodule update --init testdata/xsdtests` before the gate: a
+fresh container starts with the W3C suite empty, and the gate fails on the
+missing-suite guard mid-judgment (#659).
+
 Run the gate exactly as CLAUDE.md defines it; any failure is a rejection.
 If a brief names a step that block does not contain, the brief is wrong —
 note it in one line and move on (#304).

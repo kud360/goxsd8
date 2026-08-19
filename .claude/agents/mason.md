@@ -65,6 +65,11 @@ purpose to test a test. Commit there and stop: never push, never switch
 branches, and read an unfamiliar `git log` as that worktree's own state.
 An uncommitted edit at handoff is an edit that does not exist.
 
+Run `git submodule update --init testdata/xsdtests` before the gate:
+`git worktree add` never populates submodules, so your worktree starts
+with the W3C suite empty whatever the session's checkout holds, and the
+gate fails on the missing-suite guard (#659).
+
 The gate (CLAUDE.md) passes. New behavior has tests that can actually fail
 — mutate the code mentally and ask whether the test would notice. Then
 summarize for the arbiter: files touched, spec rules implemented, anything
