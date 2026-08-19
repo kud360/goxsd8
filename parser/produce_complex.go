@@ -1215,8 +1215,8 @@ func (p *producer) explicitContent(group *Element, scopeParent xsd.ElementScopeP
 		// arm answers ahead of 2.1.4 and there is no subtree left to walk — while
 		// §3.8.2 maps that same element to a Particle whose {min occurs} of 1 exceeds
 		// its {max occurs} of 0, which is what rejects the identical element
-		// p-props-correct clause 2.1 one level down. Charging it here is unclaimed by
-		// #883, which settled the non-empty shapes only.
+		// p-props-correct clause 2.1 one level down. #901 owns charging it; #883,
+		// which found it, settled the non-empty shapes only.
 		return nil, nil // 2.1.2
 	}
 	if local == "choice" && !hasChildren && minOccursZero(group) {
