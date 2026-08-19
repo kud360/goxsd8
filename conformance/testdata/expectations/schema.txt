@@ -1085,7 +1085,7 @@ MS-Annotations2006-07-15/annotB026/schema/annotB026 pass
 MS-Annotations2006-07-15/annotB027/schema/annotB027 pass
 MS-Annotations2006-07-15/annotB028/schema/annotB028 pass
 MS-Annotations2006-07-15/annotB029/schema/annotB029 pass
-MS-Annotations2006-07-15/annotB030/schema/annotB030 fail
+MS-Annotations2006-07-15/annotB030/schema/annotB030 pass
 MS-Annotations2006-07-15/annotB031/schema/annotB031 pass
 MS-Annotations2006-07-15/annotB032/schema/annotB032 pass
 MS-Annotations2006-07-15/annotB033/schema/annotB033 pass
@@ -1688,7 +1688,7 @@ MS-ComplexType2006-07-15/ctC005/schema/ctC005 fail
 MS-ComplexType2006-07-15/ctC006/schema/ctC006 pass
 MS-ComplexType2006-07-15/ctC007/schema/ctC007 fail
 MS-ComplexType2006-07-15/ctC008/schema/ctC008 pass
-MS-ComplexType2006-07-15/ctC009/schema/ctC009 fail
+MS-ComplexType2006-07-15/ctC009/schema/ctC009 pass
 MS-ComplexType2006-07-15/ctC010/schema/ctC010 fail
 MS-ComplexType2006-07-15/ctC011/schema/ctC011 fail
 MS-ComplexType2006-07-15/ctC012/schema/ctC012 pass
@@ -1765,10 +1765,10 @@ MS-ComplexType2006-07-15/ctF008/schema/ctF008 pass
 MS-ComplexType2006-07-15/ctF009/schema/ctF009 pass
 MS-ComplexType2006-07-15/ctF010/schema/ctF010 pass
 MS-ComplexType2006-07-15/ctF011/schema/ctF011 pass
-MS-ComplexType2006-07-15/ctF012/schema/ctF012 fail
+MS-ComplexType2006-07-15/ctF012/schema/ctF012 pass
 MS-ComplexType2006-07-15/ctF013/schema/ctF013 pass
 MS-ComplexType2006-07-15/ctF014/schema/ctF014 pass
-MS-ComplexType2006-07-15/ctF015/schema/ctF015 fail
+MS-ComplexType2006-07-15/ctF015/schema/ctF015 pass
 MS-ComplexType2006-07-15/ctF016/schema/ctF016 fail
 MS-ComplexType2006-07-15/ctF017/schema/ctF017 fail
 MS-ComplexType2006-07-15/ctG001/schema/ctG001 pass
@@ -6179,7 +6179,7 @@ MS-Notations2006-07-15/notatF013/schema/notatF013 fail
 MS-Notations2006-07-15/notatF014/schema/notatF014 fail
 MS-Notations2006-07-15/notatF015/schema/notatF015 fail
 MS-Notations2006-07-15/notatF016/schema/notatF016 fail
-MS-Notations2006-07-15/notatF017/schema/notatF017 fail
+MS-Notations2006-07-15/notatF017/schema/notatF017 pass
 MS-Notations2006-07-15/notatF018/schema/notatF018 fail
 MS-Notations2006-07-15/notatF019/schema/notatF019 fail
 MS-Notations2006-07-15/notatF020/schema/notatF020 fail
@@ -6227,7 +6227,7 @@ MS-Notations2006-07-15/notatF061/schema/notatF061 fail
 MS-Notations2006-07-15/notatF062/schema/notatF062 fail
 MS-Notations2006-07-15/notatF063/schema/notatF063 fail
 MS-Notations2006-07-15/notatF064/schema/notatF064 fail
-MS-Notations2006-07-15/notatF065/schema/notatF065 fail
+MS-Notations2006-07-15/notatF065/schema/notatF065 pass
 MS-Notations2006-07-15/notatF066/schema/notatF066 fail
 MS-Notations2006-07-15/notatF067/schema/notatF067 fail
 MS-Notations2006-07-15/notatF068/schema/notatF068 fail

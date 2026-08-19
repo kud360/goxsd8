@@ -548,6 +548,14 @@ func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (
 // facet children of <restriction>, which this producer does not build yet, so it
 // is declined as a limitation, not charged a rule.
 //
+// A <simpleContent> with NEITHER alternant is a plain grammar fault rather than
+// that limitation, and is reported as one: §3.4.2.2 states outright that "either
+// <restriction> or <extension> must appear in the content of <simpleContent>",
+// and that requirement lives in the schema for schema documents, which src-ct
+// incorporates by reference without stating a clause of its own — the same
+// footing as the <complexContent> half (produceComplexContent). Reporting it as
+// the <restriction> limitation would name an element the source never carried.
+//
 // It enforces src-ct clause 1 (§3.4.3, simple-content-rules): with the
 // <simpleContent> alternative chosen, the <complexType> must not have
 // mixed="true". That is a Schema Representation Constraint on the source XML, so
@@ -559,7 +567,11 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 		return xsd.ComplexType{}, xsderr.New(ruleSrcCT, ctElem.Loc(),
 			"<complexType> has mixed=\"true\" and a <simpleContent> child, but src-ct clause 1 forbids mixed=true when the <simpleContent> alternative is chosen")
 	}
+	restriction := childElement(sc, xsd.XMLSchemaNS, "restriction")
 	ext := childElement(sc, xsd.XMLSchemaNS, "extension")
+	if restriction == nil && ext == nil {
+		return xsd.ComplexType{}, fmt.Errorf("parser: <simpleContent> at %s has neither a <restriction> nor an <extension> child, one of which §3.4.2.2 requires", sc.Loc())
+	}
 	if ext == nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <simpleContent> with <restriction> is not yet produced (§3.4.2.2 cases 1-2 synthesize a new anonymous simple type from the <restriction>'s facet children)")
 	}

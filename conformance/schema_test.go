@@ -50,6 +50,16 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"complexContent extension with attributes and a group ref", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:extension base="B"><xs:sequence><xs:group ref="g"/></xs:sequence><xs:attribute name="a" type="xs:string"/><xs:anyAttribute namespace="##other"/></xs:extension></xs:complexContent></xs:complexType>`},
 		{"simpleContent extension", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`},
 		{"simpleContent extension with attributes and an assert", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="a" type="xs:int"/><xs:attributeGroup ref="ag"/><xs:anyAttribute namespace="##other"/><xs:assert test="true()"/></xs:extension></xs:simpleContent></xs:complexType>`},
+		// #868: neither alternant under <simpleContent>/<complexContent> is a
+		// grammar fault (§3.4.2.2 and §3.4.2.3 each require one), and the producer
+		// rejects it as one — a genuine verdict, so no decline. The <simpleContent>
+		// half is NOT the unproduced <restriction> limitation that shares its arm,
+		// which still declines below.
+		{"complexType with a complexContent carrying neither alternant", `<xs:complexType name="T"><xs:complexContent/></xs:complexType>`},
+		{"complexType with a simpleContent carrying neither alternant", `<xs:complexType name="T"><xs:simpleContent/></xs:complexType>`},
+		// annotB030's shape, which the repeated-<annotation> guard (#836) and this
+		// fault each reject on their own.
+		{"complexType with a simpleContent holding only annotations", `<xs:complexType name="T"><xs:simpleContent><xs:annotation/><xs:annotation/></xs:simpleContent></xs:complexType>`},
 		{"top-level group definition (§3.7.2)", `<xs:group name="g"><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`},
 		{"top-level group with choice + any", `<xs:group name="g"><xs:choice><xs:element name="a" type="xs:string"/><xs:any/></xs:choice></xs:group>`},
 		{"top-level attributeGroup definition (§3.6.2)", `<xs:attributeGroup name="ag"><xs:attribute name="a" type="xs:string"/><xs:anyAttribute namespace="##other"/></xs:attributeGroup>`},
@@ -194,8 +204,6 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"top-level attributeGroup with an inline attribute type outside the produced simple-type subset", `<xs:attributeGroup name="ag"><xs:attribute name="a"><xs:simpleType/></xs:attribute></xs:attributeGroup>`},
 		{"complexType with bare nested group (no ref)", `<xs:complexType name="T"><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:complexType>`},
 		{"complexType with simpleContent restriction (synthesizes an anonymous simple type)", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleContent></xs:complexType>`},
-		{"complexType with a complexContent carrying neither alternant", `<xs:complexType name="T"><xs:complexContent/></xs:complexType>`},
-		{"complexType with a simpleContent carrying neither alternant", `<xs:complexType name="T"><xs:simpleContent/></xs:complexType>`},
 		// #336 admits <simpleContent> <extension>, but only in the shape
 		// xs:simpleExtensionType allows: §3.4.2.2 builds {content type} from the base
 		// alone, so a particle child is DROPPED without an error — a false accept, not

@@ -183,9 +183,11 @@ import (
 //       <simpleContent> <restriction> and the inline forms need a later producer slice,
 //       so Produce declines them with a plain limitation error, not a spec verdict. A
 //       <group ref>/ <attributeGroup ref> IS produced (#177): its target resolves (or
-//       fails src-resolve) genuinely. A real structural violation inside an admitted
-//       shape (src-ct, cos-all-limited, src-wildcard, …) flows through as a genuine
-//       rejection.
+//       fails src-resolve) genuinely. A <simpleContent>/<complexContent> carrying
+//       NEITHER alternant is admitted too (#868): §3.4.2.2 and §3.4.2.3 each require
+//       one, and the producer rejects a document carrying neither. A real structural
+//       violation inside an admitted shape (src-ct, cos-all-limited, src-wildcard, …)
+//       flows through as a genuine rejection.
 //     - attributeGroup (top-level named definition, §3.6.2): children only
 //       <attribute> (no inline anonymous type), <attributeGroup ref>, and
 //       <anyAttribute> — the shapes the producer folds in (§3.6.2.1/§3.6.2.2). A
@@ -941,10 +943,16 @@ func anonymousComplexTypeDecidable(el *parser.Element) bool {
 //     wherever the schema for schema documents allows one; a MISPLACED one —
 //     beside <simpleContent>/<complexContent>, or directly under
 //     <complexContent> — is rejected by the producer as the grammar fault it is,
-//     so it needs no decline of its own;
-//   - a <complexContent> carrying NEITHER alternant. §3.4.2.3 requires one of
-//     them, and the producer says so, but as a grammar fault about the source
-//     item rather than a rule verdict, so it is declined like any limitation.
+//     so it needs no decline of its own.
+//
+// A <simpleContent>/<complexContent> carrying NEITHER alternant is ADMITTED
+// (#868). §3.4.2.2 and §3.4.2.3 each require one of them, and the producer
+// rejects a document that carries neither; that the rejection is a grammar fault
+// about the source item rather than a rule verdict does not make it a
+// limitation, so it needs no decline any more than a misplaced <openContent>
+// does. The <simpleContent> half declined it only as collateral of sharing a
+// branch with the genuinely-unproduced <restriction> shape, which the producer
+// now reports separately.
 //
 // Both EXTENSION forms are ADMITTED as of #336. The producer builds them (#228),
 // cos-ct-extends (§3.4.6.2) judges them (#264), and its case-1 clauses read only
@@ -966,11 +974,13 @@ func anonymousComplexTypeDecidable(el *parser.Element) bool {
 // admitting them is safe because the producer's rejection is the right reason.
 func complexTypeDecidable(el *parser.Element) bool {
 	if sc := childXSD(el, "simpleContent"); sc != nil {
-		ext := childXSD(sc, "extension")
-		if ext == nil {
-			return false // <restriction>, or neither alternant — see above
+		if ext := childXSD(sc, "extension"); ext != nil {
+			return simpleContentExtensionDecidable(ext)
 		}
-		return simpleContentExtensionDecidable(ext)
+		// A <restriction> is the "not yet produced" limitation and declines;
+		// neither alternant is a grammar fault the producer rejects genuinely, so
+		// it is admitted — see above.
+		return childXSD(sc, "restriction") == nil
 	}
 	if cc := childXSD(el, "complexContent"); cc != nil {
 		derivation := childXSD(cc, "restriction")
@@ -978,7 +988,7 @@ func complexTypeDecidable(el *parser.Element) bool {
 			derivation = childXSD(cc, "extension")
 		}
 		if derivation == nil {
-			return false // neither alternant — see above
+			return true // neither alternant — a genuine rejection, see above
 		}
 		return contentDecidable(derivation)
 	}
