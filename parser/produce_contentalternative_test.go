@@ -102,38 +102,83 @@ func TestProduceSingleContentAlternativeAccepted(t *testing.T) {
 	}
 }
 
-// TestProduceContentAlternativeWithBothDerivationsUnchanged pins the behavior
-// this check deliberately leaves alone: a SINGLE <simpleContent>/<complexContent>
-// carrying BOTH <restriction> and <extension> is still accepted, mapped by one
-// alternant with the other silently dropped. That is a distinct grammar fault —
-// xs:simpleContent and xs:complexContent each hold a (restriction | extension)
-// choice of their own — and no document in the W3C suite exercises it, so it is
-// left to an issue of its own rather than absorbed here.
+// wrapperWithBothAlternants builds a schema whose one <complexType> carries a
+// single wrapper holding first and second as consecutive children, each on a line
+// of its own, so a rejection can be asserted to name the SECOND alternant: the
+// wrapper opens at line 3 column 1, first at line 4 column 1 and second at line 5
+// column 1.
+func wrapperWithBothAlternants(wrapper, first, second string) string {
+	return wrap("urn:x", "\n<xs:complexType name=\"D\">\n<xs:"+wrapper+">\n"+first+"\n"+second+
+		"\n</xs:"+wrapper+">\n</xs:complexType>")
+}
+
+// TestProduceRepeatedDerivationAlternantRejected pins the other half of the same
+// §3.4.2 cardinality: xs:simpleContent (§3.4.2.2) and xs:complexContent
+// (§3.4.2.3) each hold a plain xs:choice of <restriction> and <extension>, so a
+// wrapper carrying BOTH is a grammar fault in either ordering.
 //
-// The two halves drop opposite children, which is why each is asserted: a
-// <simpleContent> maps by its <extension> (produceSimpleContent short-circuits on
-// it), a <complexContent> by its <restriction> (complexContentDerivation looks
-// for that one first).
-func TestProduceContentAlternativeWithBothDerivationsUnchanged(t *testing.T) {
+// The two producers used to disagree about which alternant such a wrapper mapped
+// by — a <simpleContent> produced from its <extension> (produceSimpleContent
+// short-circuited on it), a <complexContent> from its <restriction>
+// (complexContentDerivation looks for that one first) — and each silently dropped
+// the other. Both wrappers are asserted for that reason: a guard folded into
+// either short-circuit would leave the opposite bias standing.
+//
+// Like the <complexType>-level fault, this one carries no rule ID (§5.1's first
+// bullet, STYLE E2) and names both the second alternant and its wrapper.
+func TestProduceRepeatedDerivationAlternantRejected(t *testing.T) {
+	const (
+		simpleRestriction  = `<xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction>`
+		simpleExtension    = `<xs:extension base="xs:string"/>`
+		complexRestriction = `<xs:restriction base="xs:anyType"><xs:sequence/></xs:restriction>`
+		complexExtension   = `<xs:extension base="xs:anyType"><xs:sequence/></xs:extension>`
+	)
+	for _, tc := range []struct {
+		name          string
+		wrapper       string
+		first, second string
+		wantLocal     string
+	}{
+		{"simpleContent restriction then extension", "simpleContent", simpleRestriction, simpleExtension, "extension"},
+		{"simpleContent extension then restriction", "simpleContent", simpleExtension, simpleRestriction, "restriction"},
+		{"complexContent restriction then extension", "complexContent", complexRestriction, complexExtension, "extension"},
+		{"complexContent extension then restriction", "complexContent", complexExtension, complexRestriction, "restriction"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrapperWithBothAlternants(tc.wrapper, tc.first, tc.second))
+			if err == nil {
+				t.Fatalf("Produce accepted a <%s> carrying both <restriction> and <extension>", tc.wrapper)
+			}
+			if _, ok := xsderr.RuleOf(err); ok {
+				t.Errorf("error = %v, want a plain grammar fault rather than a rule verdict", err)
+			}
+			if !strings.Contains(err.Error(), "<"+tc.wantLocal+"> at "+produceURI+":5:1") {
+				t.Errorf("error = %v, want it to name the second <%s> at line 5", err, tc.wantLocal)
+			}
+			if !strings.Contains(err.Error(), "<"+tc.wrapper+"> at "+produceURI+":3:1") {
+				t.Errorf("error = %v, want it to name the enclosing <%s> at line 3", err, tc.wrapper)
+			}
+		})
+	}
+}
+
+// TestProduceSingleDerivationAlternantAccepted is the guard on that check's other
+// side: one alternant is the well-formed case and still produces, with the
+// {derivation method} the alternant names.
+func TestProduceSingleDerivationAlternantAccepted(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		body   string
 		method xsd.DerivationMethod
 	}{
+		{"simpleContent extension", `<xs:complexType name="D">` + simpleContentExt + `</xs:complexType>`, xsd.DerivationExtension},
 		{
-			"simpleContent maps by its extension",
-			`<xs:complexType name="D"><xs:simpleContent>` +
-				`<xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction>` +
-				`<xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`,
-			xsd.DerivationExtension,
-		},
-		{
-			"complexContent maps by its restriction",
+			"complexContent restriction",
 			`<xs:complexType name="D"><xs:complexContent>` +
-				`<xs:restriction base="xs:anyType"><xs:sequence/></xs:restriction>` +
-				`<xs:extension base="xs:anyType"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`,
+				`<xs:restriction base="xs:anyType"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`,
 			xsd.DerivationRestriction,
 		},
+		{"complexContent extension", `<xs:complexType name="D">` + complexContentExt + `</xs:complexType>`, xsd.DerivationExtension},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, err := produce(t, wrap("urn:x", tc.body))
