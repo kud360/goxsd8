@@ -1210,6 +1210,13 @@ func (p *producer) explicitContent(group *Element, scopeParent xsd.ElementScopeP
 	}
 	hasChildren := hasParticleChild(group)
 	if (local == "all" || local == "sequence") && !hasChildren {
+		// GAP(xsd): an EMPTY <all>/<sequence> whose maxOccurs is 0 and whose
+		// minOccurs is not is accepted at the top model-group position, because this
+		// arm answers ahead of 2.1.4 and there is no subtree left to walk — while
+		// §3.8.2 maps that same element to a Particle whose {min occurs} of 1 exceeds
+		// its {max occurs} of 0, which is what rejects the identical element
+		// p-props-correct clause 2.1 one level down. Charging it here is unclaimed by
+		// #883, which settled the non-empty shapes only.
 		return nil, nil // 2.1.2
 	}
 	if local == "choice" && !hasChildren && minOccursZero(group) {
@@ -1239,10 +1246,19 @@ func (p *producer) modelGroupChildParticle(group *Element, scopeParent xsd.Eleme
 // wrapping a Model Group (§3.8.2), with {particles} in document order. A
 // minOccurs=maxOccurs=0 group maps to no component at all (§3.8.2) —
 // produceGroupParticle returns (nil, nil) — so the caller omits it. The children
-// are walked FIRST all the same: §5.1's first bullet binds every element
-// information item in the schema document to the Schema for Schema Documents
-// whatever it maps to, so the grammar faults groupParticles charges answer
-// inside a subtree that contributes no component too (#883).
+// are walked all the same: §5.1's first bullet binds every element information
+// item in the schema document to the Schema for Schema Documents whatever it
+// maps to, so the grammar faults groupParticles charges answer inside a subtree
+// that contributes no component too (#883). That walk runs through
+// discardingComponents and its particles are thrown away, since a subtree
+// mapping to no component may register none either — see produceElementParticle
+// for the one registration a content model reaches.
+//
+// occursOf therefore answers FIRST, since its elided verdict decides whether the
+// walk may contribute components at all — but the p-props-correct verdict it
+// charges on this element's own occurrence range is held back until after the
+// walk, so a Schema for Schema Documents fault inside the subtree answers ahead
+// of a Schema Component Constraint on the particle wrapping it.
 //
 // The grammar's own {0,1} occurrence restriction on <all> is charged here rather
 // than only for the top model-group child explicitContent maps, on the same
@@ -1273,16 +1289,17 @@ func (p *producer) produceGroupParticle(group *Element, scopeParent xsd.ElementS
 			return nil, err
 		}
 	}
+	occ, elided, occErr := occursOf(group)
+	if elided {
+		_, err := p.discardingComponents().groupParticles(group, scopeParent)
+		return nil, err
+	}
 	particles, err := p.groupParticles(group, scopeParent)
 	if err != nil {
 		return nil, err
 	}
-	occ, elided, err := occursOf(group)
-	if err != nil {
-		return nil, err
-	}
-	if elided {
-		return nil, nil
+	if occErr != nil {
+		return nil, occErr
 	}
 	mg, err := xsd.NewModelGroup(group.Loc(), compositor, particles, nil)
 	if err != nil {
@@ -1517,22 +1534,33 @@ func (p *producer) groupParticles(group *Element, scopeParent xsd.ElementScopePa
 // scopeParent: it denotes a top-level declaration, whose own {scope} is global
 // (§3.3.2.4 ref.elt.global maps only the Particle, never a declaration).
 //
-// The {term} is mapped even for the elided element, and then dropped with the
-// particle: §5.1's first bullet binds the <element> element information item
-// whatever it maps to, so the faults elementParticleTerm charges — an unbound
-// prefix on ref=, and everything produceLocalElement rejects on the inline form —
-// answer inside an elided subtree too (#883).
+// The elided element's {term} is mapped all the same, for the grammar faults
+// elementParticleTerm charges — an unbound prefix on ref=, and everything
+// produceLocalElement rejects on the inline form — which §5.1's first bullet
+// binds whatever the element maps to (#883). It is mapped through
+// discardingComponents, and the result thrown away: "maps to no component at
+// all" governs what the subtree CONTRIBUTES as firmly as §5.1 governs how it is
+// spelled, and produceLocalElement reaches produceIdentityConstraint's name=
+// arm, whose builder registration is NOT dropped by dropping the Particle.
+//
+// occursOf answers FIRST, since its elided verdict decides which producer maps
+// the {term} — but the p-props-correct verdict it charges on this element's own
+// occurrence range is held back until after that mapping, so a Schema for Schema
+// Documents fault inside the <element> answers ahead of a Schema Component
+// Constraint on the particle wrapping it (the ordering produceGroupParticle
+// keeps for the same reason).
 func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementScopeParent) (*xsd.Particle, error) {
+	occ, elided, occErr := occursOf(el)
+	if elided {
+		_, err := p.discardingComponents().elementParticleTerm(el, scopeParent)
+		return nil, err
+	}
 	term, err := p.elementParticleTerm(el, scopeParent)
 	if err != nil {
 		return nil, err
 	}
-	occ, elided, err := occursOf(el)
-	if err != nil {
-		return nil, err
-	}
-	if elided {
-		return nil, nil
+	if occErr != nil {
+		return nil, occErr
 	}
 	part, err := xsd.NewParticle(el.Loc(), occ, term, nil)
 	if err != nil {
@@ -1778,6 +1806,12 @@ func (p *producer) declaredType(el *Element, dflt xsd.QName) (xsd.TypeDefinition
 // first bullet binds the <any> element information item whatever it maps to, so
 // produceWildcard's namespace and processContents faults answer inside an elided
 // subtree too (#883).
+//
+// The Wildcard is mapped with THIS producer, not the discarding copy
+// produceElementParticle and produceGroupParticle use, because there is nothing
+// to discard: produceWildcard reaches namespaceConstraint, disallowedNames and
+// bindQName only, none of which touches the builder, so the value it returns is
+// the whole of what it produces.
 func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
 	wildcard, err := p.produceWildcard(el)
 	if err != nil {

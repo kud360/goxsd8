@@ -1029,18 +1029,27 @@ func (p *producer) redefinedGroupRestricted(decl *Element, qn xsd.QName) (xsd.Mo
 }
 
 // discardingComponents returns a shallow copy of p whose builder is a throwaway,
-// for producing a declaration §4.2.4 clause 4.1.2 excepts from the components its
-// document contributes: the component VALUE is wanted and every registration it
-// performs on the way is not.
+// for mapping a subtree whose registrations must not reach the schema. Two
+// callers want that:
 //
-// The one registration reachable from a <group> body is AddIdentityConstraint —
+//   - a declaration §4.2.4 clause 4.1.2 excepts from the components its document
+//     contributes, where the component VALUE is wanted and every registration it
+//     performs on the way is not (redefinedGroupRestricted);
+//   - an elided <element>/<all>/<choice>/<sequence> subtree, which maps to no
+//     component at all (§3.3.2.3, §3.8.2) and so contributes none either, while
+//     §5.1's first bullet still binds its grammar (produceElementParticle,
+//     produceGroupParticle, #883).
+//
+// The one registration reachable from a content model is AddIdentityConstraint —
 // produceIdentityConstraint's name= arm, for a named <unique>/<key>/<keyref> on a
 // local <element>; every other builder.Add* call site is run's top-level dispatch
-// or produceRedefinition's own — and it is exactly the one that must not run. The
-// original is in no property, so this would be the FIRST registration of that
-// constraint, out of document order (STYLE D2) and colliding sch-props-correct
-// (§3.17.6.1) clause 2 against the redefinition's own copy of the same named key,
-// which is the commonest redefine shape: a false reject.
+// or produceRedefinition's own — and it is exactly the one that must not run. Let
+// one out and it is the FIRST registration of that constraint, out of document
+// order (STYLE D2) and colliding sch-props-correct (§3.17.6.1) clause 2 against a
+// live definition of the same name — the redefinition's own copy of the redefined
+// key, the commonest redefine shape, or a sibling of the elided <element>. Both
+// are false rejects, and both have a false-accept twin: a <keyref> whose refer=
+// resolves only to the constraint that should not be there.
 //
 // Everything else the copy shares, symbols above all. An on-demand build reached
 // from the body runs through the DECLARING document's own producer (typeSource's

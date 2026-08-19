@@ -140,6 +140,86 @@ func TestProduceElidedSubtreeGrammarCharged(t *testing.T) {
 	}
 }
 
+// elidedKey is a named <key> on the <element> it is written into, and elidedRef
+// the <keyref> that resolves to it. Their expanded name is the only thing the
+// rows below vary the reachability of.
+const (
+	elidedKey = `<xs:key name="K"><xs:selector xpath="a"/><xs:field xpath="@b"/></xs:key>`
+	elidedRef = `<xs:keyref name="R" refer="tns:K"><xs:selector xpath="a"/><xs:field xpath="@b"/></xs:keyref>`
+)
+
+// elidedRoot wraps a content model in a global <element name="root">, with sibling
+// carried beside that content model as a second child of the same <element> — the
+// live position a constraint registered out of an elided subtree collides with, or
+// is wrongly resolved from.
+func elidedRoot(content, sibling string) string {
+	return `<xs:element name="root"><xs:complexType>` + content + `</xs:complexType>` + sibling + `</xs:element>`
+}
+
+// TestProduceElidedSubtreeRegistersNothing pins what "maps to no component at
+// all" (§3.3.2.3, §3.8.2) costs the SCHEMA, as against what the grammar walk
+// above costs the document. produceIdentityConstraint's name= arm is the one
+// builder registration a content model reaches (see discardingComponents), and
+// mapping an elided subtree without discarding it lets that registration into
+// the schema's {identity-constraint definitions} even though the Particle
+// carrying it is thrown away.
+//
+// Both directions are pinned, because they fail independently: the escaped
+// registration collides sch-props-correct (§3.17.6.1) clause 2 against a live
+// definition of the same name — a false reject — AND satisfies a <keyref> whose
+// refer= names a definition the schema does not contain, which src-resolve
+// clause 1.7 must refuse — a false accept.
+func TestProduceElidedSubtreeRegistersNothing(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, tc := range []struct {
+		name string
+		body string
+		// want is the rule the document must be rejected with, or "" for ACCEPT.
+		want string
+	}{
+		{
+			name: `a live <key> and one inside an elided <element> share a name`,
+			body: elidedRoot(`<xs:sequence><xs:element name="dead" minOccurs="0" maxOccurs="0">`+
+				`<xs:complexType/>`+elidedKey+`</xs:element></xs:sequence>`, elidedKey),
+		},
+		{
+			name: `a live <key> and one inside an elided <sequence> share a name`,
+			body: elidedRoot(`<xs:sequence><xs:sequence minOccurs="0" maxOccurs="0">`+
+				`<xs:element name="dead"><xs:complexType/>`+elidedKey+`</xs:element>`+
+				`</xs:sequence></xs:sequence>`, elidedKey),
+		},
+		{
+			name: `<keyref> refers to a <key> inside an elided <element>`,
+			body: elidedRoot(`<xs:sequence><xs:element name="dead" minOccurs="0" maxOccurs="0">`+
+				`<xs:complexType/>`+elidedKey+`</xs:element></xs:sequence>`, elidedRef),
+			want: "src-resolve",
+		},
+		{
+			name: `<keyref> refers to a <key> inside an elided <sequence>`,
+			body: elidedRoot(`<xs:sequence><xs:sequence minOccurs="0" maxOccurs="0">`+
+				`<xs:element name="dead"><xs:complexType/>`+elidedKey+`</xs:element>`+
+				`</xs:sequence></xs:sequence>`, elidedRef),
+			want: "src-resolve",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:po", tc.body))
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("Produce rejected a document whose only duplicate is unregistered: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Produce accepted a <keyref> whose refer= names no definition in the schema")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want the %s verdict", err, tc.want)
+			}
+		})
+	}
+}
+
 // TestProduceElidedSubtreeMapsToNothing pins the other half: a subtree that is
 // legal contributes NO component whichever elision reaches it. ·explicit content·
 // stays ***empty*** (clause 2.1.4) and the {content type} the complex type ends up
