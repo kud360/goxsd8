@@ -1559,8 +1559,8 @@ MS-ComplexType2006-07-15/ctB001/schema/ctB001 pass
 MS-ComplexType2006-07-15/ctB002/schema/ctB002 pass
 MS-ComplexType2006-07-15/ctB003/schema/ctB003 pass
 MS-ComplexType2006-07-15/ctB004/schema/ctB004 fail
-MS-ComplexType2006-07-15/ctB005/schema/ctB005 fail
-MS-ComplexType2006-07-15/ctB006/schema/ctB006 fail
+MS-ComplexType2006-07-15/ctB005/schema/ctB005 pass
+MS-ComplexType2006-07-15/ctB006/schema/ctB006 pass
 MS-ComplexType2006-07-15/ctB007/schema/ctB007 fail
 MS-ComplexType2006-07-15/ctB008/schema/ctB008 fail
 MS-ComplexType2006-07-15/ctB009/schema/ctB009 fail
@@ -1573,8 +1573,8 @@ MS-ComplexType2006-07-15/ctB015/schema/ctB015 fail
 MS-ComplexType2006-07-15/ctB016/schema/ctB016 fail
 MS-ComplexType2006-07-15/ctB017/schema/ctB017 pass
 MS-ComplexType2006-07-15/ctB018/schema/ctB018 fail
-MS-ComplexType2006-07-15/ctB019/schema/ctB019 fail
-MS-ComplexType2006-07-15/ctB020/schema/ctB020 fail
+MS-ComplexType2006-07-15/ctB019/schema/ctB019 pass
+MS-ComplexType2006-07-15/ctB020/schema/ctB020 pass
 MS-ComplexType2006-07-15/ctB021/schema/ctB021 fail
 MS-ComplexType2006-07-15/ctB022/schema/ctB022 fail
 MS-ComplexType2006-07-15/ctB023/schema/ctB023 fail

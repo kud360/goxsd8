@@ -495,6 +495,9 @@ func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.
 	if name, named := topLevelComplexTypeName(id); named && name.Local == "" {
 		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
 	}
+	if dup := repeatedContentAlternative(el); dup != nil {
+		return xsd.ComplexType{}, fmt.Errorf("parser: <%s> at %s is a second content alternative on the <complexType> at %s, which the schema for schema documents prohibits: xs:complexTypeModel (§3.4.2) is a plain xs:choice, so a <complexType> carries exactly one of <simpleContent>, <complexContent>, or the implicit-content form", dup.Name().Local(), dup.Loc(), el.Loc())
+	}
 	if oc := misplacedOpenContent(el); oc != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <openContent> at %s is in a position the schema for schema documents does not allow: it is a child of <complexType> only in the implicit-content form (no <simpleContent>/<complexContent>), under <complexContent> only of the <restriction>/<extension> alternant, and nowhere at all under <simpleContent>", oc.Loc())
 	}
@@ -554,7 +557,11 @@ func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (
 // and that requirement lives in the schema for schema documents, which src-ct
 // incorporates by reference without stating a clause of its own — the same
 // footing as the <complexContent> half (produceComplexContent). Reporting it as
-// the <restriction> limitation would name an element the source never carried.
+// the <restriction> limitation would name an element the source never carried. A
+// <simpleContent> carrying BOTH alternants is the other half of that same
+// xs:choice and is charged the same way, by repeatedDerivationAlternant ahead of
+// the reads below — without it the <extension> short-circuit would produce from
+// one alternant and drop the other in silence.
 //
 // It enforces src-ct clause 1 (§3.4.3, simple-content-rules): with the
 // <simpleContent> alternative chosen, the <complexType> must not have
@@ -566,6 +573,9 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 	if mixed, present := boolAttr(ctElem, "mixed"); present && mixed {
 		return xsd.ComplexType{}, xsderr.New(ruleSrcCT, ctElem.Loc(),
 			"<complexType> has mixed=\"true\" and a <simpleContent> child, but src-ct clause 1 forbids mixed=true when the <simpleContent> alternative is chosen")
+	}
+	if dup := repeatedDerivationAlternant(sc); dup != nil {
+		return xsd.ComplexType{}, fmt.Errorf("parser: <%s> at %s is a second derivation alternant on the <simpleContent> at %s, which the schema for schema documents prohibits: xs:simpleContent (§3.4.2.2) holds a plain xs:choice, so a <simpleContent> carries exactly one of <restriction>, <extension>", dup.Name().Local(), dup.Loc(), sc.Loc())
 	}
 	restriction := childElement(sc, xsd.XMLSchemaNS, "restriction")
 	ext := childElement(sc, xsd.XMLSchemaNS, "extension")
@@ -653,8 +663,15 @@ func simpleContentSimpleType(base xsd.TypeDefinition, anySimpleType *xsd.SimpleT
 // must appear in the content of <complexContent>", and that requirement lives in
 // the schema for schema documents, which src-ct incorporates by reference without
 // stating a clause of its own (the same footing as a nameless top-level
-// <complexType>).
+// <complexType>). A <complexContent> carrying BOTH alternants is the other half
+// of that same xs:choice and is charged the same way, by
+// repeatedDerivationAlternant ahead of complexContentDerivation — without it the
+// <restriction>-first read would produce from one alternant and drop the other in
+// silence.
 func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Element) (xsd.ComplexType, error) {
+	if dup := repeatedDerivationAlternant(cc); dup != nil {
+		return xsd.ComplexType{}, fmt.Errorf("parser: <%s> at %s is a second derivation alternant on the <complexContent> at %s, which the schema for schema documents prohibits: xs:complexContent (§3.4.2.3) holds a plain xs:choice, so a <complexContent> carries exactly one of <restriction>, <extension>", dup.Name().Local(), dup.Loc(), cc.Loc())
+	}
 	derivation, method := complexContentDerivation(cc)
 	if derivation == nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <complexContent> at %s has neither a <restriction> nor an <extension> child, one of which §3.4.2.3 requires", cc.Loc())
@@ -713,9 +730,10 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 
 // complexContentDerivation returns the <restriction> or <extension> child of a
 // <complexContent> together with the {derivation method} it maps to (§3.4.2.3),
-// or (nil, 0) when neither is present. <restriction> is looked for first, so a
-// malformed source carrying both is mapped by the same alternant every run
-// (STYLE D1).
+// or (nil, 0) when neither is present. Its two first-match reads are unambiguous
+// because produceComplexContent charges repeatedDerivationAlternant ahead of
+// them: a <complexContent> reaching here carries at most one alternant between
+// the two, so which one is looked for first decides nothing.
 func complexContentDerivation(cc *Element) (*Element, xsd.DerivationMethod) {
 	if r := childElement(cc, xsd.XMLSchemaNS, "restriction"); r != nil {
 		return r, xsd.DerivationRestriction
@@ -830,6 +848,79 @@ func (p *producer) effectiveContent(parent *Element, effectiveMixed bool, scopeP
 	return &part, true, nil
 }
 
+// repeatedContentAlternative returns the SECOND <simpleContent>/<complexContent>
+// child of a <complexType> in document order, or nil when it carries at most one
+// between the two. xs:complexTypeModel (§3.4.2, xmlschema11-1.md:4757) is a plain
+// xs:choice of <simpleContent>, <complexContent> and the implicit-content
+// sequence, with the maxOccurs="1" the schema for schema documents defaults to,
+// so a second one of either is a grammar fault — carrying no rule ID, on the same
+// §5.1 footing as a misplaced <openContent> below, since src-ct (§3.4.3) states
+// no clause for it and incorporates the schema for schema documents by reference.
+//
+// Charging it is what keeps produceComplexType's dispatch honest: that dispatch
+// reads one wrapper through childElement, a FIRST-match lookup that silently
+// drops every later sibling, so without this check a <complexType> carrying two
+// of them assembles clean from whichever came first.
+//
+// The walk is not childElements: the fault spans TWO expanded names, and only a
+// single pass over the children orders a <simpleContent> against a
+// <complexContent> to name the one that is second (STYLE D2).
+func repeatedContentAlternative(ctElem *Element) *Element {
+	var first *Element
+	for _, child := range ctElem.Children() {
+		c, ok := child.(*Element)
+		if !ok {
+			continue
+		}
+		if !isXSD(c, "simpleContent") && !isXSD(c, "complexContent") {
+			continue
+		}
+		if first != nil {
+			return c
+		}
+		first = c
+	}
+	return nil
+}
+
+// repeatedDerivationAlternant returns the SECOND <restriction>/<extension> child
+// of a <simpleContent> or a <complexContent> in document order, or nil when the
+// wrapper carries at most one between the two. xs:simpleContent
+// (xmlschema11-1.md:5003) and xs:complexContent (:4895) each hold a plain
+// xs:choice of the two, with the maxOccurs="1" the schema for schema documents
+// defaults to, so a second one of either is a grammar fault on the same §5.1
+// footing as repeatedContentAlternative above: src-ct (§3.4.3) states no clause
+// for it and incorporates the schema for schema documents by reference.
+//
+// Charging it is what keeps the two producers' alternant reads honest, and they
+// disagree about which alternant a malformed wrapper would have mapped by:
+// produceSimpleContent short-circuits on its <extension> and drops the
+// <restriction>, while complexContentDerivation looks for <restriction> first and
+// drops the <extension>. Neither bias is defensible, so the fault is charged
+// ahead of both reads rather than folded into either.
+//
+// The walk is not childElements for the same reason repeatedContentAlternative's
+// is not: the fault spans TWO expanded names, and only a single pass over the
+// children orders a <restriction> against an <extension> to name the one that is
+// second (STYLE D2).
+func repeatedDerivationAlternant(wrapper *Element) *Element {
+	var first *Element
+	for _, child := range wrapper.Children() {
+		c, ok := child.(*Element)
+		if !ok {
+			continue
+		}
+		if !isXSD(c, "restriction") && !isXSD(c, "extension") {
+			continue
+		}
+		if first != nil {
+			return c
+		}
+		first = c
+	}
+	return nil
+}
+
 // misplacedOpenContent returns the <openContent> element a <complexType> carries
 // in a position the schema for schema documents (§3.4.2) does not allow, or nil.
 // The type's own <openContent> is legal only in the IMPLICIT content form —
@@ -850,6 +941,10 @@ func (p *producer) effectiveContent(parent *Element, effectiveMixed bool, scopeP
 // with neither alternant (produceComplexContent), this is a plain grammar fault,
 // not an xsderr rule verdict: src-ct (§3.4.3) states no clause for it and
 // incorporates the schema for schema documents' own conditions by reference.
+//
+// Its two first-match wrapper reads are unambiguous because
+// repeatedContentAlternative is charged ahead of it: a <complexType> reaching
+// here carries at most one <simpleContent>/<complexContent> between them.
 func misplacedOpenContent(ctElem *Element) *Element {
 	cc := childElement(ctElem, xsd.XMLSchemaNS, "complexContent")
 	sc := childElement(ctElem, xsd.XMLSchemaNS, "simpleContent")
@@ -868,9 +963,11 @@ func misplacedOpenContent(ctElem *Element) *Element {
 // simpleContentOpenContent returns the <openContent> a <simpleContent> carries
 // either directly or under its <restriction>/<extension> alternant, or nil — every
 // position inside a <simpleContent> subtree is illegal (see misplacedOpenContent).
-// The alternants are searched restriction-first, matching
-// complexContentDerivation's precedent, so a malformed source carrying both is
-// reported at the same position every run (STYLE D1).
+// The alternants are searched restriction-first, so a malformed source carrying
+// both is reported at the same position every run (STYLE D1) — this check runs on
+// produceComplexType's entry path, ahead of the produceSimpleContent dispatch
+// that charges repeatedDerivationAlternant, so a <simpleContent> carrying both
+// alternants does reach it.
 func simpleContentOpenContent(sc *Element) *Element {
 	if oc := childElement(sc, xsd.XMLSchemaNS, "openContent"); oc != nil {
 		return oc
