@@ -1072,12 +1072,11 @@ func rejectProhibitedAttrs(decl *Element, form declForm) error {
 // position generally writes no ref, so the missing-ref fault would answer first
 // and report the consequence of the mistake rather than the mistake.
 //
-// The <group> position is charged TWICE by design, and the second charge is not
-// dead: produceGroupRefParticle covers every caller that dispatches straight to
-// it, while explicitContent charges the same element ahead of §3.4.2.3.3 clause
-// 2.1.4, whose maxOccurs="0" elision returns before that function is entered at
-// all. One fact, one encoding — the rule lives here alone, so the two call sites
-// cannot drift (STYLE D3).
+// The <group> position is charged at produceGroupRefParticle alone, which every
+// path to a reference-form <group> now enters: §3.4.2.3.3 clause 2.1.4's
+// maxOccurs="0" arm runs the clause-2.2 mapping and discards its particle rather
+// than returning ahead of it (#883), so explicitContent needs no charge of its
+// own.
 func rejectProhibitedRefAttrs(el *Element) error {
 	local := el.Name().Local()
 	var grammar string

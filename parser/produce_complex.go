@@ -1177,13 +1177,19 @@ func emptySequenceParticle(loc xsderr.Loc) (xsd.Particle, error) {
 // (2.1.1), an empty <all>/<sequence> (2.1.2), a childless <choice minOccurs="0">
 // (2.1.3), or a group child with maxOccurs="0" (2.1.4).
 //
-// An <all> child has its own occurrence grammar checked FIRST (allOccursGrammar),
-// ahead of every elision test: 2.1.2/2.1.4 decide what the group maps TO, while
-// the {0,1} enumeration decides whether the <all> element is well-formed at all,
-// so an elided <all maxOccurs="0" minOccurs="2"> is still rejected. A <group>
-// child's prohibited name (rejectProhibitedRefAttrs) is checked first for the
-// same reason: 2.1.4 elides a maxOccurs="0" child without ever entering
-// produceGroupRefParticle, so the charge made there would never answer.
+// Clause 2 decides what the model-group child maps TO, and nothing more: §5.1's
+// first bullet binds the child and its whole subtree to the Schema for Schema
+// Documents whatever they map to. So 2.1.4's arm runs the WHOLE clause-2.2
+// mapping and discards the particle it returns (#883) rather than returning
+// ahead of it — and since §3.7.2/§3.8.2 map the child itself to a Particle
+// unless minOccurs is 0 as well, a maxOccurs="0" child with the default
+// minOccurs of 1 earns the p-props-correct verdict here that the identical child
+// already earned one level down.
+//
+// 2.1.2 and 2.1.3 have no subtree to walk, so an EMPTY <all> is the one shape
+// that still needs its occurrence grammar charged ahead of them: allOccursGrammar
+// runs before every elision test, since the {0,1} enumeration decides whether the
+// <all> element is well-formed at all.
 //
 // scopeParent is passed through to every local element declaration built beneath
 // this content model (§3.3.2.3 dcl.elt.local). It is generic rather than a
@@ -1202,15 +1208,6 @@ func (p *producer) explicitContent(group *Element, scopeParent xsd.ElementScopeP
 			return nil, err
 		}
 	}
-	if local == "group" {
-		// Before any clause-2 elision, on the same footing: a <group> reference
-		// carrying the name xs:groupRef prohibits is invalid however it maps, and
-		// 2.1.4 below returns without ever entering produceGroupRefParticle, where
-		// this same charge answers for the groupParticles path.
-		if err := rejectProhibitedRefAttrs(group); err != nil {
-			return nil, err
-		}
-	}
 	hasChildren := hasParticleChild(group)
 	if (local == "all" || local == "sequence") && !hasChildren {
 		return nil, nil // 2.1.2
@@ -1219,21 +1216,39 @@ func (p *producer) explicitContent(group *Element, scopeParent xsd.ElementScopeP
 		return nil, nil // 2.1.3
 	}
 	if maxOccursZero(group) {
+		if _, err := p.modelGroupChildParticle(group, scopeParent); err != nil {
+			return nil, err
+		}
 		return nil, nil // 2.1.4
 	}
-	if local == "group" {
-		return p.produceGroupRefParticle(group) // 2.2, <group ref> content-model child
+	return p.modelGroupChildParticle(group, scopeParent) // 2.2
+}
+
+// modelGroupChildParticle maps the model-group child of a
+// <complexType>/<restriction>/<extension> by its form: a <group> is always a
+// reference in that position (§3.7.2), an <all>/<choice>/<sequence> a model
+// group (§3.8.2).
+func (p *producer) modelGroupChildParticle(group *Element, scopeParent xsd.ElementScopeParent) (*xsd.Particle, error) {
+	if group.Name().Local() == "group" {
+		return p.produceGroupRefParticle(group)
 	}
-	return p.produceGroupParticle(group, scopeParent) // 2.2
+	return p.produceGroupParticle(group, scopeParent)
 }
 
 // produceGroupParticle maps an <all>/<choice>/<sequence> element to a Particle
 // wrapping a Model Group (§3.8.2), with {particles} in document order. A
 // minOccurs=maxOccurs=0 group maps to no component at all (§3.8.2) —
-// produceGroupParticle returns (nil, nil) — so the caller omits it. The
-// grammar's own {0,1} occurrence restriction on <all> is a separate concern,
-// enforced by allOccursGrammar in explicitContent (the sole path by which an
-// <all> legally reaches here), not repeated in this function.
+// produceGroupParticle returns (nil, nil) — so the caller omits it. The children
+// are walked FIRST all the same: §5.1's first bullet binds every element
+// information item in the schema document to the Schema for Schema Documents
+// whatever it maps to, so the grammar faults groupParticles charges answer
+// inside a subtree that contributes no component too (#883).
+//
+// The grammar's own {0,1} occurrence restriction on <all> is charged here rather
+// than only for the top model-group child explicitContent maps, on the same
+// footing: a nested <all maxOccurs="2"> is an invalid <all> element wherever it
+// sits, and leaving it to cos-all-limited at finalize both named a different
+// rule and answered not at all once an ancestor was elided.
 //
 // WHERE the resulting model group may appear is not decided here at all:
 // cos-all-limited (§3.8.6.2) is a Schema Component Constraint over
@@ -1253,16 +1268,21 @@ func (p *producer) produceGroupParticle(group *Element, scopeParent xsd.ElementS
 		// reaches here; any other name is an unexpected model-group child.
 		return nil, fmt.Errorf("parser: model group child <%s> is not a compositor (all/choice/sequence)", local)
 	}
+	if local == "all" {
+		if err := allOccursGrammar(group); err != nil {
+			return nil, err
+		}
+	}
+	particles, err := p.groupParticles(group, scopeParent)
+	if err != nil {
+		return nil, err
+	}
 	occ, elided, err := occursOf(group)
 	if err != nil {
 		return nil, err
 	}
 	if elided {
 		return nil, nil
-	}
-	particles, err := p.groupParticles(group, scopeParent)
-	if err != nil {
-		return nil, err
 	}
 	mg, err := xsd.NewModelGroup(group.Loc(), compositor, particles, nil)
 	if err != nil {
@@ -1278,12 +1298,13 @@ func (p *producer) produceGroupParticle(group *Element, scopeParent xsd.ElementS
 // produceGroupRefParticle maps a <group ref> to a Particle whose {term} is a
 // deferred ModelGroupRef (§3.7.2, xr.mgd3), mirroring produceElementParticle's
 // <element ref> → ElementDeclarationRef mapping. A minOccurs=maxOccurs=0 <group
-// ref> maps to no component at all (returns nil, §3.7.2). The reference is
-// RETAINED, never rewritten to the {term} it denotes: resolution and the
-// no-circular-groups check happen at finalize (#173: src-resolve clause 1.5,
-// mg-props-correct clause 2), and neither VERDICT is ever duplicated here.
-// Occurs-range correctness (p-props-correct §3.9.6.1 clause 2.1) is enforced
-// inside xsd.NewParticle.
+// ref> maps to no component at all (returns nil, §3.7.2) — but only after the
+// two grammar faults below are charged, which §5.1's first bullet binds whatever
+// the element maps to (#883). The reference is RETAINED, never rewritten to the
+// {term} it denotes: resolution and the no-circular-groups check happen at
+// finalize (#173: src-resolve clause 1.5, mg-props-correct clause 2), and
+// neither VERDICT is ever duplicated here. Occurs-range correctness
+// (p-props-correct §3.9.6.1 clause 2.1) is enforced inside xsd.NewParticle.
 //
 // One mapping rule nonetheless has to LOOK through a reference produced here:
 // §3.4.2.3.3 clause 4.2.3 selects a sub-case by the {compositor} of the
@@ -1295,13 +1316,6 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 	if err := rejectProhibitedRefAttrs(el); err != nil {
 		return nil, err
 	}
-	occ, elided, err := occursOf(el)
-	if err != nil {
-		return nil, err
-	}
-	if elided {
-		return nil, nil
-	}
 	ref, ok := el.Attr("ref")
 	if !ok {
 		// A <group> in a content model is always a reference (§3.8.2: the named
@@ -1310,6 +1324,13 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 		// well-formedness fault, not an xsderr rule — the same footing as the
 		// prohibited name rejectProhibitedRefAttrs charges just above.
 		return nil, fmt.Errorf("parser: a <group> in a content model must be a reference (carry a ref attribute), but none is present")
+	}
+	occ, elided, err := occursOf(el)
+	if err != nil {
+		return nil, err
+	}
+	if elided {
+		return nil, nil
 	}
 	qn, err := p.resolveQName(el, ref, "ref")
 	if err != nil {
@@ -1495,7 +1516,17 @@ func (p *producer) groupParticles(group *Element, scopeParent xsd.ElementScopePa
 // scoped to scopeParent (§3.3.2.3 dcl.elt.local). The ref form takes no
 // scopeParent: it denotes a top-level declaration, whose own {scope} is global
 // (§3.3.2.4 ref.elt.global maps only the Particle, never a declaration).
+//
+// The {term} is mapped even for the elided element, and then dropped with the
+// particle: §5.1's first bullet binds the <element> element information item
+// whatever it maps to, so the faults elementParticleTerm charges — an unbound
+// prefix on ref=, and everything produceLocalElement rejects on the inline form —
+// answer inside an elided subtree too (#883).
 func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementScopeParent) (*xsd.Particle, error) {
+	term, err := p.elementParticleTerm(el, scopeParent)
+	if err != nil {
+		return nil, err
+	}
 	occ, elided, err := occursOf(el)
 	if err != nil {
 		return nil, err
@@ -1503,6 +1534,17 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 	if elided {
 		return nil, nil
 	}
+	part, err := xsd.NewParticle(el.Loc(), occ, term, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &part, nil
+}
+
+// elementParticleTerm maps a local <element> to the {term} of its Particle: the
+// deferred ElementDeclarationRef of §3.3.2.4 ref.elt.global for the ref= form,
+// the inline local Element Declaration of §3.3.2.3 dcl.elt.local otherwise.
+func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScopeParent) (xsd.TermOrRef, error) {
 	// GAP(xsd): an <element ref="..." substitutionGroup="..."> is silently ACCEPTED,
 	// the attribute simply ignored. The meta-schema prohibits substitutionGroup on
 	// xs:localElement whichever form it takes (§3.3.2, use="prohibited"), but this
@@ -1521,21 +1563,13 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 		if err != nil {
 			return nil, err
 		}
-		part, err := xsd.NewParticle(el.Loc(), occ, xsd.ElementDeclarationRef{Name: qn}, nil)
-		if err != nil {
-			return nil, err
-		}
-		return &part, nil
+		return xsd.ElementDeclarationRef{Name: qn}, nil
 	}
 	decl, err := p.produceLocalElement(el, scopeParent)
 	if err != nil {
 		return nil, err
 	}
-	part, err := xsd.NewParticle(el.Loc(), occ, xsd.ResolvedTerm{Term: decl}, nil)
-	if err != nil {
-		return nil, err
-	}
-	return &part, nil
+	return xsd.ResolvedTerm{Term: decl}, nil
 }
 
 // produceLocalElement maps a local inline <element name="..."> to a local
@@ -1739,18 +1773,22 @@ func (p *producer) declaredType(el *Element, dflt xsd.QName) (xsd.TypeDefinition
 }
 
 // produceAnyParticle maps an <any> to a Particle whose {term} is a Wildcard
-// (§3.10.2.1). A minOccurs=maxOccurs=0 <any> maps to no component (returns nil).
+// (§3.10.2.1). A minOccurs=maxOccurs=0 <any> maps to no component (returns nil),
+// but the Wildcard is mapped first and then dropped with the particle: §5.1's
+// first bullet binds the <any> element information item whatever it maps to, so
+// produceWildcard's namespace and processContents faults answer inside an elided
+// subtree too (#883).
 func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
+	wildcard, err := p.produceWildcard(el)
+	if err != nil {
+		return nil, err
+	}
 	occ, elided, err := occursOf(el)
 	if err != nil {
 		return nil, err
 	}
 	if elided {
 		return nil, nil
-	}
-	wildcard, err := p.produceWildcard(el)
-	if err != nil {
-		return nil, err
 	}
 	part, err := xsd.NewParticle(el.Loc(), occ, xsd.ResolvedTerm{Term: wildcard}, nil)
 	if err != nil {

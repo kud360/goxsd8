@@ -1230,11 +1230,13 @@ func TestProduceRefFormNameLegalElsewhere(t *testing.T) {
 				`</xs:complexType>`,
 		},
 		{
-			// The clause-2.1.4 elision itself, which the pre-elision charge sits in
-			// front of: a nameless reference at maxOccurs="0" still maps to no
-			// component and must produce cleanly.
-			name: `local <group ref= maxOccurs="0"> elided under clause 2.1.4`,
-			body: targetGroup + `<xs:complexType name="CT"><xs:group ref="tns:G" maxOccurs="0"/></xs:complexType>`,
+			// The elision itself, which the pre-elision charge sits in front of: a
+			// nameless reference at minOccurs=maxOccurs=0 maps to no component
+			// (§3.7.2) and must produce cleanly. maxOccurs="0" ALONE does not reach
+			// this shape — §3.7.2's gate is both-zero, so the default minOccurs of 1
+			// leaves a real particle that p-props-correct rejects (#883).
+			name: `local <group ref= minOccurs="0" maxOccurs="0"> mapping to no component`,
+			body: targetGroup + `<xs:complexType name="CT"><xs:group ref="tns:G" minOccurs="0" maxOccurs="0"/></xs:complexType>`,
 		},
 		{
 			name: `<group ref=> inside a named <group> definition`,
