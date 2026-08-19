@@ -103,6 +103,24 @@ func endUnusableSuiteRun(t *testing.T, err error, ratcheting bool) {
 	t.Skipf("%v (skipped: %s=1)", err, suiteOptionalEnv)
 }
 
+// suiteAbsentSkipMsg is what a fixture-driven test prints when the suite is
+// absent. It names the submodule-init command as written from the MODULE ROOT
+// (suiteModulePath), which is where a reader of a `go test ./...` skip line
+// stands — the package-relative suiteRoot would print a command that fails from
+// there (issue #374).
+const suiteAbsentSkipMsg = "W3C suite not present; run `git submodule update --init " + suiteModulePath + "`"
+
+// skipWithoutSuite skips the calling test when the suite index is absent. It is
+// the one body of the unconditional skip the fixture-driven tests in
+// datatypes_test.go, schema_test.go and instance_test.go each take (doc.go
+// "Missing suite"); TestConformance never skips this way.
+func skipWithoutSuite(t *testing.T) {
+	t.Helper()
+	if _, err := os.Stat(suitePath()); err != nil {
+		t.Skip(suiteAbsentSkipMsg)
+	}
+}
+
 // observeConformanceLane executes one lane and reports what the run saw of it:
 // its case count and its decline census (issue #327). Both are pure reporting
 // and belong to either path, so this pass is the same for a read-only and a

@@ -688,3 +688,17 @@ func TestCheckSuitePresent(t *testing.T) {
 		t.Errorf("an existing suite index must check clean, got %v", err)
 	}
 }
+
+// TestSuiteAbsentSkipNamesModuleRootPath pins the other half of the same fact
+// (issue #374): the skip the fixture-driven tests take must name the init
+// command as it is written from the module root, since that is where whoever
+// reads a `go test ./...` skip line stands. The package-relative suiteRoot
+// prints `git submodule update --init ../testdata/xsdtests`, which fails there.
+func TestSuiteAbsentSkipNamesModuleRootPath(t *testing.T) {
+	if !strings.Contains(suiteAbsentSkipMsg, "git submodule update --init "+suiteModulePath) {
+		t.Errorf("skip message must name the init command, got %q", suiteAbsentSkipMsg)
+	}
+	if strings.Contains(suiteAbsentSkipMsg, suiteRoot) {
+		t.Errorf("skip message must not print the package-relative path %q, got %q", suiteRoot, suiteAbsentSkipMsg)
+	}
+}

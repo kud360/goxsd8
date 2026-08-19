@@ -317,9 +317,7 @@ func TestParsedAnonymousExtensionIsNotFalselyRejected(t *testing.T) {
 // and the executor are proved together on the shape the lane actually meets.
 // Skips when the submodule is absent.
 func TestInstanceExecutorAgreesWithSuite(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newInstanceExec()
 	dir := filepath.Join(suiteRoot, "sunData", "ElemDecl", "typeDef", "typeDef00201m")
 	c := caseSpec{

@@ -121,9 +121,7 @@ func TestDatatypesSelectorClaimsOnlyCohort(t *testing.T) {
 // validity for the right reason: Parse accepts in-lexical-space values and
 // rejects out-of-space ones. Skips when the submodule is absent.
 func TestDatatypesExecutorAgreesWithSuite(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newDatatypesExec()
 
 	dir := filepath.Join(suiteRoot, "msData", "datatypes")
@@ -171,9 +169,7 @@ func TestDatatypesExecutorAgreesWithSuite(t *testing.T) {
 // test can actually fail if the cohort is mis-decided. Skips when the submodule
 // is absent.
 func TestDatatypesFacetsStringFamily(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newDatatypesExec()
 
 	facetsDir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets")
@@ -224,9 +220,7 @@ func TestDatatypesFacetsStringFamily(t *testing.T) {
 // polarities are asserted, and a wrong expectation must yield Fail. The NMTOKEN
 // cases carry the tested value in an attribute, exercising the reader path.
 func TestDatatypesFacetsWideStringFamily(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newDatatypesExec()
 
 	facetsDir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets")
@@ -313,9 +307,7 @@ func TestDatatypesFacetsWideStringFamily(t *testing.T) {
 // polarities are asserted and a wrong expectation must yield Fail. Skips when the
 // submodule is absent.
 func TestDatatypesFacetsBinaryAndURI(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newDatatypesExec()
 
 	facetsDir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets")
@@ -376,9 +368,7 @@ func TestDatatypesFacetsBinaryAndURI(t *testing.T) {
 // the guard covered for any future out-of-cohort shape. Skips when the submodule is
 // absent.
 func TestDatatypesFacetsShapeGuard(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	anyURIDir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets", "anyURI")
 
 	// The canonical single-<foo> shape is read: value and base recovered.
@@ -421,9 +411,7 @@ func TestDatatypesFacetsShapeGuard(t *testing.T) {
 // suite's queried invalid expectation (bugzilla 4126). Skips when the submodule is
 // absent.
 func TestDatatypesAnyURIShapeCohort(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	dir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets", "anyURI")
 	exec := newDatatypesExec()
 
@@ -506,9 +494,7 @@ func TestDatatypesAnyURIShapeCohort(t *testing.T) {
 // QName_enumeration001-004 fixtures are driven end-to-end and must decide
 // correctly in both polarities. Skips when the submodule is absent.
 func TestDatatypesQNameFacets(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	qnameDir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets", "QName")
 
 	// A real root-level context is built and the length case is read whole.
@@ -609,9 +595,7 @@ func TestBuildOwnFacetsRepeatedKinds(t *testing.T) {
 // attrTest attribute) is decoded by decodeNotationRestriction and decided by
 // execNotationFacetsCase. Skips when the submodule is absent.
 func TestDatatypesNotationFacets(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	dir := filepath.Join(suiteRoot, "msData", "datatypes", "Facets", "NOTATION")
 
 	// The decoder must find both restriction steps: the outer base step restricting
@@ -670,9 +654,7 @@ func TestDatatypesNotationFacets(t *testing.T) {
 // and a wrong expectation must yield Fail, so the test can actually fail if the
 // item shape is mis-read. Skips when the submodule is absent.
 func TestDatatypesLexicalItemShape(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newDatatypesExec()
 
 	dir := filepath.Join(suiteRoot, "msData", "datatypes")
@@ -841,9 +823,7 @@ func TestDatatypesLexicalDateTimeStampTimezone(t *testing.T) {
 // against xs:decimal would false-ACCEPT "128"/"65536"/"-129" and those wrong
 // "valid" claims would spuriously Pass. Skips when the submodule is absent.
 func TestDatatypesLexicalIntegerFamily(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newDatatypesExec()
 
 	dir := filepath.Join(suiteRoot, "msData", "datatypes")
@@ -942,9 +922,7 @@ func TestDatatypesLexicalIntegerFamily(t *testing.T) {
 // "-3.14159" as an xs:integer, and those wrong "valid" claims would spuriously
 // Pass. Skips when the submodule is absent.
 func TestDatatypesLexicalIntXFamily(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newDatatypesExec()
 
 	dir := filepath.Join(suiteRoot, "msData", "datatypes")
@@ -1089,9 +1067,7 @@ func TestDatatypesLexicalIntXFamily(t *testing.T) {
 // xs:nonNegativeInteger, and those wrong "valid" claims would spuriously Pass.
 // Skips when the submodule is absent.
 func TestDatatypesLexicalHalfBoundedIntegerFamily(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newDatatypesExec()
 
 	dir := filepath.Join(suiteRoot, "msData", "datatypes")
@@ -1245,9 +1221,7 @@ func TestDatatypesLexicalHalfBoundedIntegerFamily(t *testing.T) {
 // facet-cohort under Facets/NOTATION), so this cohort is QName-only today. Skips
 // when the submodule is absent.
 func TestDatatypesLexicalQNameCohort(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newDatatypesExec()
 
 	dir := filepath.Join(suiteRoot, "msData", "datatypes")
@@ -1313,9 +1287,7 @@ func TestDatatypesLexicalQNameCohort(t *testing.T) {
 // enumeration member) is pinned as spec-correct-VALID. Skips when the submodule is
 // absent.
 func TestDatatypesPDecimalCohort(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newDatatypesExec()
 
 	dir := filepath.Join(suiteRoot, "saxonData", "PDecimal")
@@ -1503,9 +1475,7 @@ func TestNSContextLookup(t *testing.T) {
 // which is what distinguishes a decline from a verdict — so it remains an honest
 // gap rather than a mis-decided case. Skips when the submodule is absent.
 func TestDatatypesD34Cohort(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newDatatypesExec()
 
 	validDir := filepath.Join(suiteRoot, "ibmData", "valid", "D3_3_4")
