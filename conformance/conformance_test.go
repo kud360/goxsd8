@@ -108,7 +108,7 @@ func endUnusableSuiteRun(t *testing.T, err error, ratcheting bool) {
 // (suiteModulePath), which is where a reader of a `go test ./...` skip line
 // stands — the package-relative suiteRoot would print a command that fails from
 // there (issue #374).
-const suiteAbsentSkipMsg = "W3C suite not present; run `git submodule update --init " + suiteModulePath + "`"
+const suiteAbsentSkipMsg = "W3C suite not present; run `git submodule update --init " + suiteModulePath + "` from the module root"
 
 // skipWithoutSuite skips the calling test when the suite index is absent. It is
 // the one body of the unconditional skip the fixture-driven tests in
