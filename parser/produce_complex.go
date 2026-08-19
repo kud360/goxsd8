@@ -495,6 +495,9 @@ func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.
 	if name, named := topLevelComplexTypeName(id); named && name.Local == "" {
 		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
 	}
+	if dup := repeatedContentAlternative(el); dup != nil {
+		return xsd.ComplexType{}, fmt.Errorf("parser: <%s> at %s is a second content alternative on the <complexType> at %s, which the schema for schema documents prohibits: xs:complexTypeModel (§3.4.2) is a plain xs:choice, so a <complexType> carries exactly one of <simpleContent>, <complexContent>, or the implicit-content form", dup.Name().Local(), dup.Loc(), el.Loc())
+	}
 	if oc := misplacedOpenContent(el); oc != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <openContent> at %s is in a position the schema for schema documents does not allow: it is a child of <complexType> only in the implicit-content form (no <simpleContent>/<complexContent>), under <complexContent> only of the <restriction>/<extension> alternant, and nowhere at all under <simpleContent>", oc.Loc())
 	}
@@ -830,6 +833,41 @@ func (p *producer) effectiveContent(parent *Element, effectiveMixed bool, scopeP
 	return &part, true, nil
 }
 
+// repeatedContentAlternative returns the SECOND <simpleContent>/<complexContent>
+// child of a <complexType> in document order, or nil when it carries at most one
+// between the two. xs:complexTypeModel (§3.4.2, xmlschema11-1.md:4757) is a plain
+// xs:choice of <simpleContent>, <complexContent> and the implicit-content
+// sequence, with the maxOccurs="1" the schema for schema documents defaults to,
+// so a second one of either is a grammar fault — carrying no rule ID, on the same
+// §5.1 footing as a misplaced <openContent> below, since src-ct (§3.4.3) states
+// no clause for it and incorporates the schema for schema documents by reference.
+//
+// Charging it is what keeps produceComplexType's dispatch honest: that dispatch
+// reads one wrapper through childElement, a FIRST-match lookup that silently
+// drops every later sibling, so without this check a <complexType> carrying two
+// of them assembles clean from whichever came first.
+//
+// The walk is not childElements: the fault spans TWO expanded names, and only a
+// single pass over the children orders a <simpleContent> against a
+// <complexContent> to name the one that is second (STYLE D2).
+func repeatedContentAlternative(ctElem *Element) *Element {
+	var first *Element
+	for _, child := range ctElem.Children() {
+		c, ok := child.(*Element)
+		if !ok {
+			continue
+		}
+		if !isXSD(c, "simpleContent") && !isXSD(c, "complexContent") {
+			continue
+		}
+		if first != nil {
+			return c
+		}
+		first = c
+	}
+	return nil
+}
+
 // misplacedOpenContent returns the <openContent> element a <complexType> carries
 // in a position the schema for schema documents (§3.4.2) does not allow, or nil.
 // The type's own <openContent> is legal only in the IMPLICIT content form —
@@ -850,6 +888,10 @@ func (p *producer) effectiveContent(parent *Element, effectiveMixed bool, scopeP
 // with neither alternant (produceComplexContent), this is a plain grammar fault,
 // not an xsderr rule verdict: src-ct (§3.4.3) states no clause for it and
 // incorporates the schema for schema documents' own conditions by reference.
+//
+// Its two first-match wrapper reads are unambiguous because
+// repeatedContentAlternative is charged ahead of it: a <complexType> reaching
+// here carries at most one <simpleContent>/<complexContent> between them.
 func misplacedOpenContent(ctElem *Element) *Element {
 	cc := childElement(ctElem, xsd.XMLSchemaNS, "complexContent")
 	sc := childElement(ctElem, xsd.XMLSchemaNS, "simpleContent")
