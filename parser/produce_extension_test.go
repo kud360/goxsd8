@@ -625,6 +625,50 @@ func TestProduceComplexContentWithoutDerivation(t *testing.T) {
 	}
 }
 
+// TestProduceSimpleContentWithoutDerivation is the <simpleContent> twin of the
+// case above (#868): §3.4.2.2 states the same requirement in the same words, and
+// the fault carries no rule ID for the same reason. It is asserted separately
+// because this arm also holds the genuinely-unproduced <restriction> shape, whose
+// limitation message named a <restriction> a document carrying neither alternant
+// never wrote — the absence of that wording is what fails if the arms merge again.
+func TestProduceSimpleContentWithoutDerivation(t *testing.T) {
+	for _, body := range []string{
+		`<xs:complexType name="D"><xs:simpleContent/></xs:complexType>`,
+		// One <annotation>, not two: the repeated-<annotation> guard rejects the
+		// two-annotation shape first and would mask this fault.
+		`<xs:complexType name="D"><xs:simpleContent><xs:annotation/></xs:simpleContent></xs:complexType>`,
+	} {
+		_, err := produce(t, wrap("urn:x", body))
+		if err == nil {
+			t.Fatalf("%s: Produce accepted a <simpleContent> with no <restriction>/<extension>", body)
+		}
+		if _, ok := xsderr.RuleOf(err); ok {
+			t.Errorf("%s: error = %v, want a plain grammar fault rather than a rule verdict", body, err)
+		}
+		if !strings.Contains(err.Error(), "has neither a <restriction> nor an <extension> child") {
+			t.Errorf("%s: error = %v, want it to name the missing alternants", body, err)
+		}
+		if strings.Contains(err.Error(), "not yet produced") {
+			t.Errorf("%s: error = %v, but no <restriction> is present: the limitation names an element the source never carried", body, err)
+		}
+	}
+}
+
+// TestProduceSimpleContentRestrictionStaysALimitation pins the other half of the
+// arm split above: a real <restriction> child is still the unimplemented-feature
+// limitation (§3.4.2.2 cases 1-2), never the grammar fault. The shape is
+// well-formed under the schema for schema documents, so calling it a fault would
+// fabricate an invalidity.
+func TestProduceSimpleContentRestrictionStaysALimitation(t *testing.T) {
+	_, err := produce(t, wrap("urn:x", `<xs:complexType name="D"><xs:simpleContent><xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleContent></xs:complexType>`))
+	if err == nil {
+		t.Fatal("Produce accepted a <simpleContent> <restriction> the producer does not build")
+	}
+	if !strings.Contains(err.Error(), "<simpleContent> with <restriction> is not yet produced") {
+		t.Fatalf("error = %v, want the not-yet-produced limitation", err)
+	}
+}
+
 // TestProduceExtensionOpenContentUnionsWithBase pins §3.4.2.3.3 clause 6.2's
 // {wildcard} on the extension path, where clause 4.2.3 has already handed the
 // base's {open content} through into the ·explicit content type·: the derived
