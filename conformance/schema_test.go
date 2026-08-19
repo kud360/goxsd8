@@ -302,9 +302,7 @@ func TestSchemaExecutorDeclinesNonSchemaRoot(t *testing.T) {
 // a wrong expectation yields Fail so the test can actually fail. Skips when the
 // submodule is absent.
 func TestSchemaExecutorAgreesWithSuite(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newSchemaExec()
 
 	sunSType := filepath.Join(suiteRoot, "sunData", "SType")
@@ -341,9 +339,7 @@ func TestSchemaExecutorAgreesWithSuite(t *testing.T) {
 // and must Fail under the flipped expectation rather than passing either way.
 // Skips when the submodule is absent.
 func TestSchemaExecutorDecidesInlineSimpleTypeSuiteCase(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newSchemaExec()
 	doc := filepath.Join(suiteRoot, "sunData", "ElemDecl", "typeDef", "typeDef00201m", "typeDef00201m.xsd")
 	if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
@@ -361,9 +357,7 @@ func TestSchemaExecutorDecidesInlineSimpleTypeSuiteCase(t *testing.T) {
 // and agree, and must Fail under the flipped expectation rather than passing
 // either way. Skips when the submodule is absent.
 func TestSchemaExecutorDecidesGlobalAttributeInlineSimpleTypeSuiteCase(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newSchemaExec()
 	doc := filepath.Join(suiteRoot, "sunData", "AttrDecl", "AD_type", "AD_type00102m", "AD_type00102m.xsd")
 	if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
@@ -386,9 +380,7 @@ func TestSchemaExecutorDecidesGlobalAttributeInlineSimpleTypeSuiteCase(t *testin
 // later slice produces this shape, REPOINT this test at another undecidable
 // fixture; deleting it retires the guard.
 func TestSchemaExecutorDeclinesUndecidableSuiteCase(t *testing.T) {
-	if _, err := os.Stat(suitePath()); err != nil {
-		t.Skipf("W3C suite not present; run `git submodule update --init %s`", suiteRoot)
-	}
+	skipWithoutSuite(t)
 	exec := newSchemaExec()
 	doc := filepath.Join(suiteRoot, "sunData", "CType", "baseTD", "baseTD00101m", "baseTD00101m1.xsd")
 	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
