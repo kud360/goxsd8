@@ -1295,6 +1295,11 @@ func emptySequenceParticle(loc xsderr.Loc) (xsd.Particle, error) {
 // minOccurs of 1 earns the p-props-correct verdict here that the identical child
 // already earned one level down.
 //
+// Clause 2.1 being a disjunction, that mapping is what orders the arms: 2.1.4 is
+// tested FIRST, because an EMPTY <all>/<sequence> satisfies 2.1.2 as well and
+// answering there would return before any Particle was built to charge (#901).
+// Every arm makes the ·explicit content· ***empty*** either way.
+//
 // 2.1.2 and 2.1.3 have no subtree to walk, so an EMPTY <all> is the one shape
 // that still needs its occurrence grammar charged ahead of them: allOccursGrammar
 // runs before every elision test, since the {0,1} enumeration decides whether the
@@ -1317,25 +1322,18 @@ func (p *producer) explicitContent(group *Element, scopeParent xsd.ElementScopeP
 			return nil, err
 		}
 	}
-	hasChildren := hasParticleChild(group)
-	if (local == "all" || local == "sequence") && !hasChildren {
-		// GAP(xsd): an EMPTY <all>/<sequence> whose maxOccurs is 0 and whose
-		// minOccurs is not is accepted at the top model-group position, because this
-		// arm answers ahead of 2.1.4 and there is no subtree left to walk — while
-		// §3.8.2 maps that same element to a Particle whose {min occurs} of 1 exceeds
-		// its {max occurs} of 0, which is what rejects the identical element
-		// p-props-correct clause 2.1 one level down. #901 owns charging it; #883,
-		// which found it, settled the non-empty shapes only.
-		return nil, nil // 2.1.2
-	}
-	if local == "choice" && !hasChildren && minOccursZero(group) {
-		return nil, nil // 2.1.3
-	}
 	if maxOccursZero(group) {
 		if _, err := p.modelGroupChildParticle(group, scopeParent); err != nil {
 			return nil, err
 		}
 		return nil, nil // 2.1.4
+	}
+	hasChildren := hasParticleChild(group)
+	if (local == "all" || local == "sequence") && !hasChildren {
+		return nil, nil // 2.1.2
+	}
+	if local == "choice" && !hasChildren && minOccursZero(group) {
+		return nil, nil // 2.1.3
 	}
 	return p.modelGroupChildParticle(group, scopeParent) // 2.2
 }
