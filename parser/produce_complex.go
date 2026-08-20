@@ -2738,13 +2738,17 @@ func hasParticleChild(group *Element) bool {
 	return false
 }
 
-// minOccursZero reports whether el's minOccurs actual value is 0.
+// minOccursZero reports whether el's minOccurs is lexically 0.
 func minOccursZero(el *Element) bool {
 	v, ok := el.Attr("minOccurs")
 	return ok && strings.TrimSpace(v) == "0"
 }
 
-// maxOccursZero reports whether el's maxOccurs actual value is 0.
+// maxOccursZero reports whether el's maxOccurs is lexically 0.
+//
+// GAP(xsd): clause 2.1.4 tests the ·actual value·, so maxOccurs="00" — value 0 —
+// is not elided here, though occursOf's own both-zero test parses it and is.
+// Reproduced through parser.Parse on #901; #929 owns closing it.
 func maxOccursZero(el *Element) bool {
 	v, ok := el.Attr("maxOccurs")
 	return ok && strings.TrimSpace(v) == "0"
