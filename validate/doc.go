@@ -70,6 +70,18 @@
 // are charged today, at the ·validation root· and at every descendant whose
 // ·governing element declaration· the descent determines.
 //
+// A charge that DELEGATES to another rule carries that rule's verdict as its
+// wrapped cause, so errors.Unwrap/Is/As reach the inner *xsderr.Error and
+// xsderr.RuleOf reads the inner rule ID off it — no consumer scrapes the
+// message for one. The three String Valid (§3.16.4, cvc-simple-type)
+// delegations below are the whole of it today: cvc-attribute clause 3,
+// cvc-type clause 3.1.3 and cvc-complex-type clause 1.2 each wrap the Datatype
+// Valid (Datatypes §4.1.4) verdict value.ValidateLexical returned, whose own
+// rule is cvc-datatype-valid or one of the facet rules under it — String
+// Valid's own clause 2 is where the delegation lands, and this package charges
+// no intermediate cvc-simple-type node of its own. Error() still renders that
+// verdict into the message as well, for a reader who holds only the string.
+//
 // Two come from [Validator.Assess]'s dispatch on the root's ·governing
 // element declaration·: cvc-assess-elt (§3.3.4.6) for a root that determines
 // neither a declaration nor a ·governing type definition·, and cvc-elt

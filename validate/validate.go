@@ -3,6 +3,7 @@ package validate
 import (
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
@@ -120,3 +121,25 @@ func (r *Result) Violations() []*xsderr.Error {
 // assessment is INCOMPLETE, not that the document is invalid: an invalid
 // document is reported through [Result.Violations].
 func (r *Result) Err() error { return r.err }
+
+// causedBy builds the [xsderr.Error] for one violation, carrying cause — the
+// verdict of the rule this one DELEGATES to — in both places a consumer looks
+// for it, from ONE argument (STYLE D3): appended to the formatted Msg after
+// ": ", and set as the wrapped cause so errors.Unwrap, errors.Is and errors.As
+// reach the inner *xsderr.Error and the rule ID it carries. A reader holding
+// only the rendered string has no chain to walk; a reader holding the error
+// should not have to scrape a message for a rule ID; and taking one argument
+// is what stops the two from naming different errors.
+//
+// format therefore stops at the delegating rule's own sentence — the ": " and
+// the cause's own rendering are this function's to append. A nil cause is the
+// whole of the non-delegating case, most charges, and yields the plain
+// [xsderr.New] result: Msg unadorned, Unwrap nil.
+func causedBy(rule xsderr.Rule, loc xsderr.Loc, cause error, format string, args ...any) *xsderr.Error {
+	if cause == nil {
+		return xsderr.New(rule, loc, format, args...)
+	}
+	v := xsderr.New(rule, loc, format+": %v", append(slices.Clone(args), cause)...)
+	v.Err = cause
+	return v
+}
