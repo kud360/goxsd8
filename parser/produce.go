@@ -484,38 +484,59 @@ func (p *producer) chameleon() bool {
 	return !own
 }
 
-// rejectRepeatedAnnotations rejects, anywhere in el's subtree, an element
+// rejectRepeatedAnnotations rejects, anywhere in el's subtree, two DISTINCT
+// annotation faults resting on two DIFFERENT spec footings — do not conflate
+// them.
+//
+// The first is xs:annotated's CARDINALITY: an element other than <annotation>
 // carrying a second <annotation> child. The cardinality is the shape of
 // xs:annotated itself — <xs:element ref="xs:annotation" minOccurs="0"/> inside a
 // <xs:sequence> (xmlschema11-1.md:4436), maxOccurs defaulting to 1 — and that
 // type "is extended by all types which allow annotation other than <schema>
 // itself" (:4429), so one check over the child list covers every annotatable
-// element rather than twenty call sites (STYLE D3/T4).
+// element rather than twenty call sites (STYLE D3/T4). TWO elements depart from
+// it, both by declaring their own content model instead of extending
+// xs:annotated, and both admit <annotation> unboundedly and interspersed:
+// <schema> (:4558, :4563, plus the composition group it repeats unboundedly at
+// :4555, whose own branch at :4448 is <annotation>) and <redefine>
+// (:5556-5559). <override> is NOT among them: it bypasses xs:annotated too, but
+// its own particle (:5576) is a plain <xs:element ref="xs:annotation"
+// minOccurs="0"/>, so the default cardinality binds it like the rest.
 //
-// TWO elements depart from it, both by declaring their own content model instead
-// of extending xs:annotated, and both admit <annotation> unboundedly and
-// interspersed: <schema> (:4558, :4563, plus the composition group it repeats
-// unboundedly at :4555, whose own branch at :4448 is <annotation>) and
-// <redefine> (:5556-5559). <override> is NOT among them: it bypasses
-// xs:annotated too, but its own particle (:5576) is a plain <xs:element
-// ref="xs:annotation" minOccurs="0"/>, so the default cardinality binds it like
-// the rest.
+// The second is <annotation>'s OWN CONTENT MODEL: an <annotation> whose direct
+// children include an <annotation>. <annotation>'s content is
+// (appinfo | documentation)* (:5747-5763, prose "Content: (appinfo |
+// documentation)*" at :3480) — no <annotation> branch exists, so a nested
+// <annotation> is inadmissible at ANY cardinality, one child no less than two.
+// This is not the cardinality fault above and does NOT inherit its {schema,
+// redefine} exemption: those exempt a PARENT from xs:annotated's maxOccurs="1",
+// not an <annotation> from its own content model.
 //
-// The fault carries NO numbered rule ID: §3.15.3, §3.15.4 and §3.15.5 each
+// Neither fault carries a numbered rule ID: §3.15.3, §3.15.4 and §3.15.5 each
 // answer "None as such" for annotations (xmlschema11-1.md:3499, :3503, :3507),
-// and no s4s-* identifier exists in the spec. It stands on §5.1 (:4296)
+// and no s4s-* identifier exists in the spec. Both stand on §5.1 (:4296)
 // directly, the footing rejectProhibitedAttrs's doc derives in full, so charging
 // a src-* or cos-* verdict would be a fabricated rule ID (STYLE E2).
 //
-// It descends through XSD-namespace elements only, and never into an
-// <annotation>: <appinfo> and <documentation> hold <xs:any
-// processContents="lax"> content (:5727, :5740), where an element that happens
-// to be named {XMLSchemaNS}annotation is content this cardinality never governs.
+// It descends through XSD-namespace elements only, and never into <appinfo> or
+// <documentation>: those hold <xs:any processContents="lax"> content (:5727,
+// :5740), where an element that happens to be named {XMLSchemaNS}annotation is
+// content neither fault governs. It DOES descend into <annotation> — that is how
+// the content-model check reaches an <annotation>'s direct children — but stops
+// at the <appinfo>/<documentation> below it.
 func rejectRepeatedAnnotations(el *Element) error {
-	if el.Name().Space() != xsd.XMLSchemaNS || isXSD(el, "annotation") {
+	if el.Name().Space() != xsd.XMLSchemaNS {
 		return nil
 	}
-	if !isXSD(el, "schema") && !isXSD(el, "redefine") {
+	if isXSD(el, "appinfo") || isXSD(el, "documentation") {
+		return nil
+	}
+	if isXSD(el, "annotation") {
+		if found := childElements(el, xsd.XMLSchemaNS, "annotation"); len(found) > 0 {
+			return fmt.Errorf("parser: <annotation> child of <annotation> at %s, which the schema for schema documents prohibits: <annotation>'s content model is (appinfo|documentation)* and admits no nested <annotation> at any cardinality", found[0].Loc())
+		}
+	}
+	if !isXSD(el, "annotation") && !isXSD(el, "schema") && !isXSD(el, "redefine") {
 		if found := childElements(el, xsd.XMLSchemaNS, "annotation"); len(found) > 1 {
 			return fmt.Errorf("parser: repeated <annotation> at %s, which the schema for schema documents prohibits: its parent <%s> at %s admits at most one, the maxOccurs=\"1\" xs:annotated defaults to, and only <schema> and <redefine> depart from that type", found[1].Loc(), el.Name().Local(), el.Loc())
 		}
