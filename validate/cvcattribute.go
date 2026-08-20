@@ -88,9 +88,9 @@ func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
 			w.logAttribute(a, ruleCvcAttribute, "3", "declined")
 			return
 		}
-		w.res.violations = append(w.res.violations, xsderr.New(ruleCvcAttribute, a.Loc(),
-			"the ·initial value· of the attribute %s is not ·valid· with respect to its declaration's {type definition} %s, which cvc-attribute clause 3 requires as per String Valid (§3.16.4): %v",
-			a.Name(), st.Name(), err))
+		w.res.violations = append(w.res.violations, causedBy(ruleCvcAttribute, a.Loc(), err,
+			"the ·initial value· of the attribute %s is not ·valid· with respect to its declaration's {type definition} %s, which cvc-attribute clause 3 requires as per String Valid (§3.16.4)",
+			a.Name(), st.Name()))
 		w.logAttribute(a, ruleCvcAttribute, "3", "charged")
 		return
 	}

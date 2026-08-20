@@ -504,9 +504,9 @@ func (c *contentCheck) simpleTypeValue(w *walk) {
 		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcType, "3.1.3", "satisfied")
 		return
 	}
-	c.charge(w, ruleCvcType, "3.1.3", c.e.Loc(),
-		"the ·initial value· of the element %s is not ·valid· with respect to its ·governing type definition· %s, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): %v",
-		c.e.Name(), typeName(st), verdict)
+	c.chargeCause(w, ruleCvcType, "3.1.3", c.e.Loc(), verdict,
+		"the ·initial value· of the element %s is not ·valid· with respect to its ·governing type definition· %s, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4)",
+		c.e.Name(), typeName(st))
 }
 
 // initialValue settles the ·initial value· half of clause 1.2: the ·initial
@@ -523,9 +523,9 @@ func (c *contentCheck) initialValue(w *walk, st *xsd.SimpleType) {
 		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcComplexType, "1.2", "satisfied")
 		return
 	}
-	c.charge(w, ruleCvcComplexType, "1.2", c.e.Loc(),
-		"the ·initial value· of the element %s is not ·valid· with respect to the {simple type definition} %s of its ·governing type definition·'s {content type}, which cvc-complex-type clause 1.2 requires as per String Valid (§3.16.4): %v",
-		c.e.Name(), st.Name(), verdict)
+	c.chargeCause(w, ruleCvcComplexType, "1.2", c.e.Loc(), verdict,
+		"the ·initial value· of the element %s is not ·valid· with respect to the {simple type definition} %s of its ·governing type definition·'s {content type}, which cvc-complex-type clause 1.2 requires as per String Valid (§3.16.4)",
+		c.e.Name(), st.Name())
 }
 
 // sequenceEnd settles clause 1.4 for a sequence that ran out: every item was
@@ -548,7 +548,14 @@ func (c *contentCheck) sequenceEnd(w *walk) {
 // charge records one violation and closes the element to any further content
 // charge (see the file comment).
 func (c *contentCheck) charge(w *walk, rule xsderr.Rule, clause string, loc xsderr.Loc, format string, args ...any) {
-	w.res.violations = append(w.res.violations, xsderr.New(rule, loc, format, args...))
+	c.chargeCause(w, rule, clause, loc, nil, format, args...)
+}
+
+// chargeCause is [contentCheck.charge] for a clause that DELEGATES: cause is
+// the verdict the delegated rule returned, and [causedBy] states what carrying
+// it buys and how format must end.
+func (c *contentCheck) chargeCause(w *walk, rule xsderr.Rule, clause string, loc xsderr.Loc, cause error, format string, args ...any) {
+	w.res.violations = append(w.res.violations, causedBy(rule, loc, cause, format, args...))
 	c.charged = true
 	c.log(w, c.e.Name(), loc, rule, clause, "charged")
 }

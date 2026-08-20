@@ -503,3 +503,70 @@ func TestAssessRejectsNilRoot(t *testing.T) {
 	}()
 	v.Assess(nil)
 }
+
+// Three of the four charges that DELEGATE to String Valid (§3.16.4,
+// cvc-simple-type) carry the delegated rule's verdict as their wrapped cause,
+// so a consumer reads the inner rule ID off the chain instead of scraping the
+// message for it (#914); the fourth, cvc-complex-type clause 4 over a
+// ·defaulted attribute·, unwraps to nil because xsd.ValueSpace.ValidDefault
+// decides in two booleans and returns no verdict to carry (see validate/doc.go).
+// The three that do wrap are driven here through their own fixture:
+// cvc-attribute clause 3 (§3.2.4.1), cvc-type clause 3.1.3 (§3.3.4.4) and
+// cvc-complex-type clause 1.2 (§3.4.4.2). String Valid clause 2 is Datatype
+// Valid (Datatypes §4.1.4), so the inner rule an xs:decimal lexical failure
+// carries is cvc-datatype-valid.
+func TestDelegatingChargesWrapTheirCause(t *testing.T) {
+	decimal := icBuiltin("decimal")
+	for _, tc := range []struct {
+		rule   xsderr.Rule
+		charge func(*testing.T) []*xsderr.Error
+	}{
+		{"cvc-attribute", func(t *testing.T) []*xsderr.Error {
+			return assessTyped(t, valuedRoot("n", "12,50"),
+				[]xsd.AttributeUse{typedUse(t, "n", decimal, false, nil, nil)})
+		}},
+		{"cvc-type", func(t *testing.T) []*xsderr.Error {
+			return cAssess(t, simpleTypedSchema(t, decimal, nil, false), cRoot("#12,50"))
+		}},
+		{"cvc-complex-type", func(t *testing.T) []*xsderr.Error {
+			return cAssess(t, simpleContentSchema(t, decimal), cRoot("#12,50"))
+		}},
+	} {
+		t.Run(string(tc.rule), func(t *testing.T) {
+			viol := onlyCharge(t, tc.charge(t), tc.rule)
+
+			inner := errors.Unwrap(viol)
+			if inner == nil {
+				t.Fatalf("Unwrap() = nil, want the String Valid verdict %s delegates to", tc.rule)
+			}
+			var datatype *xsderr.Error
+			if !errors.As(inner, &datatype) {
+				t.Fatalf("errors.As found no *xsderr.Error in the wrapped cause %v", inner)
+			}
+			if got, ok := xsderr.RuleOf(datatype); !ok || got != "cvc-datatype-valid" {
+				t.Errorf("RuleOf(Unwrap()) = %q, %t, want cvc-datatype-valid", got, ok)
+			}
+
+			// The verdict is rendered into the message as well: a reader
+			// holding only the string has no chain to walk.
+			if !strings.HasSuffix(viol.Msg, ": "+inner.Error()) {
+				t.Errorf("Msg = %q, want it to end with the wrapped verdict %q", viol.Msg, inner.Error())
+			}
+			if !strings.Contains(viol.Msg, "cvc-datatype-valid") || !strings.Contains(viol.Msg, `"12,50"`) {
+				t.Errorf("Msg = %q, want the inner rule ID and the offending lexical still in it", viol.Msg)
+			}
+		})
+	}
+}
+
+// A charge that delegates to nothing wraps nothing: Unwrap is nil rather than
+// some placeholder, which is what lets a consumer test the chain for the
+// delegation instead of testing it for a sentinel.
+func TestNonDelegatingChargeWrapsNothing(t *testing.T) {
+	got := cAssess(t, cSchema(t, cSequence(t, false, cParticle(t, "a", 1, 1))), cRoot("b"))
+
+	viol := onlyCharge(t, got, "cvc-complex-content")
+	if errors.Unwrap(viol) != nil {
+		t.Errorf("Unwrap() = %v, want nil for a charge that delegates to no other rule", errors.Unwrap(viol))
+	}
+}
