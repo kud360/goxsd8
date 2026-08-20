@@ -132,9 +132,10 @@ func (r *Result) Err() error { return r.err }
 // is what stops the two from naming different errors.
 //
 // format therefore stops at the delegating rule's own sentence — the ": " and
-// the cause's own rendering are this function's to append. A nil cause is the
-// whole of the non-delegating case, most charges, and yields the plain
-// [xsderr.New] result: Msg unadorned, Unwrap nil.
+// the cause's own rendering are this function's to append. A nil cause yields
+// the plain [xsderr.New] result, Msg unadorned and Unwrap nil, and reaches
+// here only through [contentCheck.charge]: every other non-delegating charge
+// site in the package calls [xsderr.New] itself.
 func causedBy(rule xsderr.Rule, loc xsderr.Loc, cause error, format string, args ...any) *xsderr.Error {
 	if cause == nil {
 		return xsderr.New(rule, loc, format, args...)
