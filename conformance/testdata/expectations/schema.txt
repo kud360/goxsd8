@@ -1056,11 +1056,11 @@ MS-Annotations2006-07-15/annotA020/schema/annotA020 pass
 MS-Annotations2006-07-15/annotA021/schema/annotA021 pass
 MS-Annotations2006-07-15/annotA022/schema/annotA022 pass
 MS-Annotations2006-07-15/annotA023/schema/annotA023 pass
-MS-Annotations2006-07-15/annotB001/schema/annotB001 fail
+MS-Annotations2006-07-15/annotB001/schema/annotB001 pass
 MS-Annotations2006-07-15/annotB002/schema/annotB002 pass
 MS-Annotations2006-07-15/annotB003/schema/annotB003 pass
 MS-Annotations2006-07-15/annotB004/schema/annotB004 pass
-MS-Annotations2006-07-15/annotB005/schema/annotB005 fail
+MS-Annotations2006-07-15/annotB005/schema/annotB005 pass
 MS-Annotations2006-07-15/annotB006/schema/annotB006 pass
 MS-Annotations2006-07-15/annotB007/schema/annotB007 fail
 MS-Annotations2006-07-15/annotB008/schema/annotB008 pass

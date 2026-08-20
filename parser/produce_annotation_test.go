@@ -131,13 +131,76 @@ func TestProduceRepeatedAnnotationRejected(t *testing.T) {
 	}
 }
 
+// TestProduceNestedAnnotationRejected pins the SECOND, distinct fault: an
+// <annotation> whose own children include an <annotation> is rejected, because
+// <annotation>'s content model is (appinfo | documentation)* (xmlschema11-1.md
+// :5747-5763, prose "Content: (appinfo | documentation)*" at :3480) with no
+// <annotation> branch — inadmissible at any cardinality, so a single nested
+// child (annotB001) is rejected no less than two (annotB005). This is NOT the
+// xs:annotated maxOccurs="1" cardinality fault TestProduceRepeatedAnnotation*
+// exercises, and does NOT inherit its {schema, redefine} exemption: the outer
+// <annotation> here is itself a child of <schema>, which the cardinality check
+// exempts, yet the nested <annotation> is still rejected.
+//
+// Like the cardinality fault it is a plain grammar fault, never a rule verdict
+// (§3.15.3/§3.15.4/§3.15.5 all answer "None as such", :3499/:3503/:3507; STYLE
+// E2), and each row asserts the diagnostic is positioned at the offending nested
+// <annotation>'s own line (STYLE D2/E3) — the FIRST one when there are two, the
+// document-order head of the child list.
+func TestProduceNestedAnnotationRejected(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			// annotB001-shaped: one nested <annotation> child, alongside the
+			// <appinfo>/<documentation> the content model does admit.
+			name: "one nested (annotB001)",
+			body: "\n" +
+				`<xs:annotation>` + "\n" +
+				`<xs:annotation><xs:documentation>d</xs:documentation></xs:annotation>` + "\n" +
+				`<xs:appinfo>a</xs:appinfo>` + "\n" +
+				`</xs:annotation>` + "\n",
+		},
+		{
+			// annotB005-shaped: two nested <annotation> children; the diagnostic
+			// names the FIRST (line 3), not the second.
+			name: "two nested (annotB005)",
+			body: "\n" +
+				`<xs:annotation>` + "\n" +
+				`<xs:annotation><xs:appinfo>a</xs:appinfo></xs:annotation>` + "\n" +
+				`<xs:annotation><xs:appinfo>a</xs:appinfo></xs:annotation>` + "\n" +
+				`</xs:annotation>` + "\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("urn:po", tc.body))
+			if err == nil {
+				t.Fatalf("Produce succeeded, want the nested <annotation> rejected")
+			}
+			var xe *xsderr.Error
+			if errors.As(err, &xe) {
+				t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+			}
+			if !strings.Contains(err.Error(), "content model") {
+				t.Fatalf("error = %v, want it to cite <annotation>'s content model, not the xs:annotated cardinality", err)
+			}
+			if at := fmt.Sprintf("%s:3:", produceURI); !strings.Contains(err.Error(), at) {
+				t.Fatalf("error = %v, want it positioned at the (first) nested <annotation>, %s (E3)", err, at)
+			}
+		})
+	}
+}
+
 // TestProduceRepeatedAnnotationAccepted pins the other side of the guard: the
 // two elements whose own content models admit <annotation> unboundedly —
 // <schema> (xmlschema11-1.md:4558, :4563) and <redefine> (:5556-5559) — keep
-// producing with two of them, as does an <appinfo> holding elements that merely
-// happen to be named xs:annotation, which its <xs:any processContents="lax">
-// content (:5727) never counts. A guard that rejected uniformly, or that
-// descended into annotation content, would fail here.
+// producing with two of them, as do <appinfo>/<documentation> holding elements
+// that merely happen to be named xs:annotation, which their <xs:any
+// processContents="lax"> content (:5727, :5740) never counts. A guard that
+// rejected uniformly, or that descended into annotation content, would fail
+// here.
 func TestProduceRepeatedAnnotationAccepted(t *testing.T) {
 	cases := []struct {
 		name string
@@ -156,6 +219,12 @@ func TestProduceRepeatedAnnotationAccepted(t *testing.T) {
 			body: `<xs:element name="foo" type="xs:string"><xs:annotation><xs:appinfo>` +
 				`<xs:annotation/><xs:annotation/>` +
 				`</xs:appinfo></xs:annotation></xs:element>`,
+		},
+		{
+			name: "inside <documentation>",
+			body: `<xs:element name="foo" type="xs:string"><xs:annotation><xs:documentation>` +
+				`<xs:annotation/><xs:annotation/>` +
+				`</xs:documentation></xs:annotation></xs:element>`,
 		},
 	}
 	for _, tc := range cases {
