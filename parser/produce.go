@@ -2378,11 +2378,15 @@ func (p *producer) simpleTypeFinal(stElem *Element) []xsd.DerivationMethod {
 // when its attribute is. Both absent is rejected inside [xsd.NewNotation]
 // (n-props-correct, §3.14.6) — §3.14.3 defines no Schema Representation
 // Constraint of its own. A name that is not an xs:NCName is rejected by
-// declarationName first, before anything is built. <notation> occurs only as a
+// declarationName first, before anything is built, and content the element's s4s
+// type does not admit by rejectNotationContent next. <notation> occurs only as a
 // <schema> child (§3.17.2), so there is no nested form to map.
 func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 	qname, err := declarationName(elem, p.target)
 	if err != nil {
+		return xsd.Notation{}, err
+	}
+	if err := rejectNotationContent(elem); err != nil {
 		return xsd.Notation{}, err
 	}
 	var systemID, publicID *string
@@ -2393,6 +2397,50 @@ func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 		publicID = &v
 	}
 	return xsd.NewNotation(elem.Loc(), qname, systemID, publicID, nil)
+}
+
+// rejectNotationContent rejects content under a <notation> that its schema for
+// schema documents type does not admit. xs:notation extends xs:annotated and
+// adds only name, public and system (xmlschema11-1.md:5701-:5709), so its whole
+// content model is xs:annotated's own <xs:element ref="xs:annotation"
+// minOccurs="0"/> inside a <xs:sequence> (:4426-:4438) — "(annotation?)", the
+// prose XML Representation Summary's wording at :3376.
+//
+// That content is element-only, so character data other than whitespace is
+// outside the model as well: xs:annotated descends from xs:openAttrs
+// (:4412-:4422), which restricts xs:anyType with an <xs:anyAttribute> and so
+// opens ATTRIBUTES alone, as the type's own documentation says at :4415. The
+// whitespace is #x9/#xA/#xD/#x20, never strings.TrimSpace's wider class, for the
+// reason facetFixed's doc gives.
+//
+// A SECOND <annotation> is not this function's fault to raise:
+// rejectRepeatedAnnotations already walks the whole document for that
+// cardinality, <notation> among every other xs:annotated-derived element, and
+// one s4s fault earns one diagnostic.
+//
+// The fault carries NO numbered rule ID: §3.14.3 and §3.14.4 both answer "None
+// as such." (:3407, :3411), and n-props-correct (§3.14.6, :3429) is a tableau
+// over {name}, {system identifier} and {public identifier} rather than a content
+// model. It stands on §5.1's first bullet (:4296) directly, exactly as
+// rejectRepeatedAnnotations does, so charging src-notation — an anchor xsderr's
+// generated catalog extracted from a section whose body is "None as such.", not
+// a constraint — would be a fabricated rule ID (STYLE E2).
+func rejectNotationContent(elem *Element) error {
+	for _, child := range elem.Children() {
+		switch n := child.(type) {
+		case *Element:
+			if isXSD(n, "annotation") {
+				continue
+			}
+			return fmt.Errorf("parser: <%s> at %s is not admitted inside the <notation> at %s: xs:notation extends xs:annotated, whose content model is (annotation?), so <annotation> is the only child element the schema for schema documents allows there", n.Name().Local(), n.Loc(), elem.Loc())
+		case *Text:
+			if strings.Trim(n.Data(), "\x09\x0A\x0D\x20") == "" {
+				continue
+			}
+			return fmt.Errorf("parser: character data at %s is not admitted inside the <notation> at %s: xs:notation extends xs:annotated, whose content model is (annotation?) and holds elements only, so nothing but whitespace may appear between its tags", n.Loc(), elem.Loc())
+		}
+	}
+	return nil
 }
 
 // produceAttribute maps a top-level <attribute> into a global Attribute
