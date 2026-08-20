@@ -234,12 +234,13 @@ func TestDecidedNotValidEnumeratesTheDecidableCharges(t *testing.T) {
 		{"no violation at all", nil, false},
 		{"cvc-assess-elt alone", []*xsderr.Error{charge(ruleCvcAssessElt)}, true},
 		{"cvc-elt alone", []*xsderr.Error{charge(ruleCvcElt)}, true},
+		{"cvc-type alone", []*xsderr.Error{charge(ruleCvcType)}, true},
 		{"cvc-complex-type alone", []*xsderr.Error{charge(ruleCvcComplexType)}, true},
 		{"cvc-attribute alone", []*xsderr.Error{charge(ruleCvcAttribute)}, true},
 		{"cvc-au alone", []*xsderr.Error{charge(ruleCvcAu)}, true},
-		{"a rule outside the enumeration", []*xsderr.Error{charge("cvc-type")}, false},
+		{"a rule outside the enumeration", []*xsderr.Error{charge("cvc-assertion")}, false},
 		{"two charges, both enumerated", []*xsderr.Error{charge(ruleCvcAttribute), charge(ruleCvcAu)}, true},
-		{"one enumerated, one not", []*xsderr.Error{charge(ruleCvcElt), charge("cvc-type")}, false},
+		{"one enumerated, one not", []*xsderr.Error{charge(ruleCvcElt), charge("cvc-assertion")}, false},
 	}
 	for _, tc := range cases {
 		if got := decidedNotValid(tc.violations); got != tc.want {

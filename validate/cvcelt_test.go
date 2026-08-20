@@ -230,12 +230,22 @@ func TestUnresolvedXSITypeIsNotChargedAtAll(t *testing.T) {
 // whose declaration carries a FIXED {value constraint}. The clause is reached
 // only through clause 5.2, which an element WITH [[children]] takes; an empty
 // one takes clause 5.1's arm and is not charged here.
+//
+// The fixture is MIXED content, because that is the shape 5.2.2.1 can be
+// observed on: cos-valid-default clause 2.1 admits a fixed {value constraint}
+// for mixed content and for a simple type alone, and under a SIMPLE one the
+// element child is charged where it SITS by cvc-type clause 3.1.2 first, one
+// element carrying at most one content charge (cvccomplexcontent.go). Both say
+// the same thing of the same item.
 func TestFixedValueConstraintChargesElementChildren(t *testing.T) {
 	fixed := xsd.NewValueConstraint(xsd.ValueFixed, "1", nil, nil)
-	schema := simpleTypedSchema(t, icBuiltin("integer"), &fixed, false)
+	mixed := nillableFixedMixedSchema(t, cSequence(t, true, cParticle(t, "a", 0, 1)), &fixed)
 
-	eWantClause(t, cAssess(t, schema, cRoot("a")), "5.2.2.1")
-	wantSilence(t, cAssess(t, schema, cRoot()), "an empty element takes clause 5.1's arm")
+	eWantClause(t, cAssess(t, mixed, cRoot("a")), "5.2.2.1")
+
+	simple := simpleTypedSchema(t, icBuiltin("integer"), &fixed, false)
+	wantContentCharge(t, cAssess(t, simple, cRoot("a")), "cvc-type", "3.1.2", loc(2, 1))
+	wantSilence(t, cAssess(t, simple, cRoot()), "an empty element takes clause 5.1's arm")
 }
 
 // Clause 5.2.2.2.2 compares ·actual values· for a simple ·governing type

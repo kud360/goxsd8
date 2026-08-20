@@ -44,7 +44,7 @@ import (
 //
 // # The only outcomes this slice can DECIDE
 //
-// validate.Validator.Assess charges exactly eight rules, about the ·validation
+// validate.Validator.Assess charges exactly nine rules, about the ·validation
 // root· and about any descendant the descent reaches (see "Charges at depth"
 // below):
 //
@@ -114,15 +114,22 @@ import (
 //     a reference to an undefined ID) (#718). cvc-elt clause 7 reads it AT THE
 //     ROOT ALONE, and it makes the root not locally ·valid· exactly as case 2
 //     does.
+//  9. cvc-type (§3.3.4.4) clause 3.1, when an element's ·governing type
+//     definition· is a Simple Type Definition and it carries an attribute
+//     beyond the four xsi: names (3.1.1), an element information item [[child]]
+//     (3.1.2), or — where it is not ·nilled· — an ·initial value· that is not
+//     ·valid· per String Valid against that type (3.1.3) (#913). The element is
+//     then not locally ·valid· with respect to its ·governing type definition·,
+//     so case 3's chain applies unchanged.
 //
-// All eight are unconditional: no verdict here can be overturned by anything in
+// All nine are unconditional: no verdict here can be overturned by anything in
 // the rest of the document, which is what makes them decidable while the engine
 // leaves most of the document undecided.
 //
 // # Charges at depth
 //
-// Cases 2 to 7 are charged against a DESCENDANT on the same terms as against
-// the root (#790), and stay unconditional there. §3.3.4.6 clause 3.1 has a
+// Cases 2 to 7 and case 9 are charged against a DESCENDANT on the same terms as
+// against the root (#790, #913), and stay unconditional there. §3.3.4.6 clause 3.1 has a
 // child assessed with respect to the ·governing element declaration· the
 // parent's content model ·attributed· it to, so a child validate charges is one
 // it was ·strictly assessed· against a declaration it really has, and its
@@ -141,8 +148,8 @@ import (
 // §3.12.6 required-subset evaluator declines one of the {test}s it had to try
 // (validate/cta.go).
 //
-// Cases 3 to 6 rest on conditions validate checks rather than this file
-// assuming them: the attribute half of cvc-complex-type is reached only where
+// Cases 3 to 6 and case 9 rest on conditions validate checks rather than this
+// file assuming them: the attribute half of cvc-complex-type is reached only where
 // the governing type was determinable — the ·selected type definition·, which
 // a {type table} may have ·conditionally selected·, or the ·instance-specified·
 // one that ·overrides· it — only for attributes clause 2 quantifies over (the
@@ -155,13 +162,14 @@ import (
 // group — each of which withholds clause 1.4 entirely rather than matching part
 // of a sequence, and a root with no character information item [[child]] at
 // all, whose ·initial value· cvc-elt clause 5.1 may take from a {value
-// constraint} instead. The value charges add their own: a declaration whose
-// {type definition} does not resolve to a simple type, and — the one that would
-// otherwise reject every typeless attribute — a value.ValidateLexical error
-// that is a fault of the type or of the backend rather than a verdict about the
-// lexical (value.IsDatatypeVerdict). Each of those is a DECLINE inside
-// validate, and a declined attribute charges nothing at all, so it cannot
-// arrive here.
+// constraint} instead — a decline case 9's clause 3.1.3 shares, over the same
+// ·initial value· and for the same reason. The value charges add their own: a
+// declaration whose {type definition} does not resolve to a simple type, and — the
+// one that would otherwise reject every typeless attribute — a
+// value.ValidateLexical error that is a fault of the type or of the backend rather
+// than a verdict about the lexical (value.IsDatatypeVerdict). Each of those is a
+// DECLINE inside validate, and a declined attribute charges nothing at all, so it
+// cannot arrive here.
 //
 // Case 2 fires through an ASSEMBLED schema: producer.produceElement maps
 // {abstract} from the top-level <element>'s abstract attribute (§3.3.2.1
@@ -182,11 +190,11 @@ import (
 // recursively into every attribute and child, which Assess now follows only as
 // far as it can type: a descendant is decided against the declaration its
 // parent's content model ·attributed· it to, and where that declaration or its
-// type is not determinable — a {type table}, a simple or unresolvable {type
-// definition}, a name no top-level declaration matches under a wildcard and no
-// xsi:type types either, a ·skipped· subtree — the element and everything below
-// it is decided against nothing. Every clause of every rule this engine does not
-// evaluate at all (cvc-type's simple half, assertions, cvc-elt clause 5.1) is
+// type is not determinable — a {type table}, an unresolvable {type definition},
+// a name no top-level declaration matches under a wildcard and no xsi:type types
+// either, a ·skipped· subtree — the element and everything below it is decided
+// against nothing. Every clause of every rule this engine does not evaluate at
+// all (assertions, cvc-elt clause 5.1, cvc-type's own clauses 1 and 2) is
 // undecided at every depth besides. The spec has no category for "this
 // processor did not implement that check" stronger than notKnown, so an empty
 // Result licenses no "valid" claim; equally it licenses no "invalid" one, so an
@@ -202,13 +210,13 @@ import (
 //
 // # Why no false pass is possible
 //
-// Every "not valid" observation this lane emits comes from one of the eight
+// Every "not valid" observation this lane emits comes from one of the nine
 // charges above, each of which is unconditional. It never emits a "valid"
 // observation at all: an empty Result declines. So the lane can record a
 // still-failing gap for a suite-invalid case it cannot see the defect in, and
 // for a suite-valid case whose root is undeclared or abstract, but it cannot
 // score a pass on a document it did not really reject — at the root or at any
-// depth, the charges being the same eight either way.
+// depth, the charges being the same nine either way.
 //
 // Case 3's ATTRIBUTE clauses are the ones whose unconditionality depends on a
 // schema COMPONENT being complete rather than on the instance alone: an
@@ -324,15 +332,16 @@ func assessInstance(v *validate.Validator, doc string) (*validate.Result, bool) 
 	return result, true
 }
 
-// These are the eight rules validate.Validator.Assess charges, and the whole of
-// what this lane may read as a verdict. All eight are catalog IDs in their BARE
+// These are the nine rules validate.Validator.Assess charges, and the whole of
+// what this lane may read as a verdict. All nine are catalog IDs in their BARE
 // form: the charged clause lives in the message text, not in a dotted rule ID,
 // so matching the rule alone is the only stable match — and it is the right
-// one, since a root failing ANY clause of any of the eight is not locally valid
+// one, since a root failing ANY clause of any of the nine is not locally valid
 // and so not valid (§3.3.5.1 e-validity clause 1.1.1.1).
 const (
 	ruleCvcAssessElt      xsderr.Rule = "cvc-assess-elt"
 	ruleCvcElt            xsderr.Rule = "cvc-elt"
+	ruleCvcType           xsderr.Rule = "cvc-type"
 	ruleCvcComplexType    xsderr.Rule = "cvc-complex-type"
 	ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 	ruleCvcAttribute      xsderr.Rule = "cvc-attribute"
@@ -346,7 +355,7 @@ const (
 // set is one edit and the test reads the same however long it gets — a chain of
 // != comparisons silently admits a rule someone forgot to add to it.
 var decidableRules = []xsderr.Rule{
-	ruleCvcAssessElt, ruleCvcElt, ruleCvcComplexType, ruleCvcComplexContent,
+	ruleCvcAssessElt, ruleCvcElt, ruleCvcType, ruleCvcComplexType, ruleCvcComplexContent,
 	ruleCvcAttribute, ruleCvcAu, ruleCvcIdentityConstraint, ruleCvcID,
 }
 

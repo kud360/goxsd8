@@ -191,7 +191,7 @@ func (w *walk) identityCheck(e Element, g governance, parent *icCheck) *icCheck 
 		c.inherit(w, parent)
 	}
 	c.open(w, g)
-	if candidate, decided := w.idCandidate(g.simpleType()); !decided || candidate {
+	if candidate, decided := w.idCandidate(g.valueType()); !decided || candidate {
 		// The ·initial value· of an element clause 3 of the ·eligible item set·
 		// admits is read on the way out (cvcid.go's idElement), so its character
 		// content has to be gathered on the way through. The gate is the
@@ -377,7 +377,7 @@ func (w *walk) identityExit(c *icCheck) {
 //
 //   - a ·governing type definition· that is not a simple type definition and
 //     not a complex type with {content type}.{variety} simple, which is
-//     governance.simpleType's nil — including the case where no type was
+//     governance.valueType's nil — including the case where no type was
 //     determinable at all (a {type table} carrying a {test} the §3.12.6
 //     evaluator declines, an unresolvable slot, an xsi:type whose ·override·
 //     could not be decided).
@@ -407,7 +407,7 @@ func (c *icCheck) fill(w *walk) {
 // elementKeyMember is the ·key-sequence· member c's element contributes as a
 // field node, on fill's terms.
 func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
-	st := c.g.simpleType()
+	st := c.g.valueType()
 	if st == nil || nilled(c.e, c.g) {
 		return icKeyMember{}, false, false
 	}

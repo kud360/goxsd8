@@ -98,10 +98,12 @@ func (w *walk) conditionallySelected(e Element, table xsd.TypeTable) (xsd.TypeDe
 // that comparison false (xpath20.md §3.5.2 — no pair exists), which makes the
 // alternative not ·successfully select·, which hands e the next alternative's
 // type or the {default type definition}'s. Both of those are REAL selections,
-// and cvcelt.go, cvccomplexcontent.go and cvcattribute.go then charge e
-// against whichever one arrived. Charging an element against a type the rule
-// did not select rejects a valid document as readily as it accepts an invalid
-// one, so no direction is claimed here.
+// and assess.go, cvcelt.go, cvccomplexcontent.go and cvcattribute.go then
+// charge e against whichever one arrived — including cvc-type clause 3.1's
+// three sub-clauses, which an alternative naming xs:error or a bare simple type
+// reaches. Charging an element against a type the rule did not select rejects a
+// valid document as readily as it accepts an invalid one, so no direction is
+// claimed here.
 func ctaAttributes(e Element) xpath.Attributes {
 	attrs := e.Attributes()
 	return func(yield func(xsd.QName, string) bool) {
