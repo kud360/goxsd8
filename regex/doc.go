@@ -46,8 +46,12 @@
 //
 //	func Translate(pattern string, flavor Flavor, flags string) (goRE string, err error)
 //	    Deterministic; errors carry the offending construct and offset.
-//	    Compilation of the result is the caller's concern (callers cache
-//	    compiled patterns alongside the facet/function that owns them).
+//	    Compilation of the result is the caller's concern. A caller whose
+//	    pattern is fixed translates and compiles it once at package init —
+//	    parser and builtin/strict both do, for the NCName pattern. value's
+//	    pattern facet instead re-translates per validateLexical call and
+//	    caches nothing: its profiled cost was inside Translate and was fixed
+//	    there rather than amortized behind a cache (#913).
 //
 // Callers: the pattern facet uses flavor XSD; xpath's fn:matches/
 // fn:replace/fn:tokenize use flavor FO. Never cross them.
