@@ -504,14 +504,17 @@ func TestAssessRejectsNilRoot(t *testing.T) {
 	v.Assess(nil)
 }
 
-// Every charge that DELEGATES carries the delegated rule's verdict as its
-// wrapped cause, so a consumer reads the inner rule ID off the chain instead
-// of scraping the message for it (#914). The three String Valid (§3.16.4,
-// cvc-simple-type) delegations are the whole of that class today, and each is
-// driven here through its own fixture: cvc-attribute clause 3 (§3.2.4.1),
-// cvc-type clause 3.1.3 (§3.3.4.4) and cvc-complex-type clause 1.2 (§3.4.4.2).
-// String Valid clause 2 is Datatype Valid (Datatypes §4.1.4), so the inner rule
-// an xs:decimal lexical failure carries is cvc-datatype-valid.
+// Three of the four charges that DELEGATE to String Valid (§3.16.4,
+// cvc-simple-type) carry the delegated rule's verdict as their wrapped cause,
+// so a consumer reads the inner rule ID off the chain instead of scraping the
+// message for it (#914); the fourth, cvc-complex-type clause 4 over a
+// ·defaulted attribute·, unwraps to nil because xsd.ValueSpace.ValidDefault
+// decides in two booleans and returns no verdict to carry (see validate/doc.go).
+// The three that do wrap are driven here through their own fixture:
+// cvc-attribute clause 3 (§3.2.4.1), cvc-type clause 3.1.3 (§3.3.4.4) and
+// cvc-complex-type clause 1.2 (§3.4.4.2). String Valid clause 2 is Datatype
+// Valid (Datatypes §4.1.4), so the inner rule an xs:decimal lexical failure
+// carries is cvc-datatype-valid.
 func TestDelegatingChargesWrapTheirCause(t *testing.T) {
 	decimal := icBuiltin("decimal")
 	for _, tc := range []struct {
