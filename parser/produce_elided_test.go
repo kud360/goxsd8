@@ -256,6 +256,14 @@ func TestProduceElidedSubtreeMapsToNothing(t *testing.T) {
 				`<xs:group ref="tns:G"/></xs:sequence></xs:complexType>`,
 		},
 		{
+			name: `<sequence minOccurs="0" maxOccurs="0"> with no children`,
+			body: `<xs:complexType name="T"><xs:sequence minOccurs="0" maxOccurs="0"/></xs:complexType>`,
+		},
+		{
+			name: `<all minOccurs="0" maxOccurs="0"> with no children`,
+			body: `<xs:complexType name="T"><xs:all minOccurs="0" maxOccurs="0"/></xs:complexType>`,
+		},
+		{
 			name: `<sequence minOccurs="0" maxOccurs="0"> holding an <any> and an elided <element>`,
 			body: `<xs:complexType name="T"><xs:sequence minOccurs="0" maxOccurs="0">` +
 				`<xs:any processContents="lax"/><xs:element name="a" type="xs:string" minOccurs="0" maxOccurs="0"/>` +
@@ -319,6 +327,44 @@ func TestProduceMaxOccursZeroParticleCharged(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "p-props-correct") {
 				t.Fatalf("error = %v, want the p-props-correct verdict", err)
+			}
+		})
+	}
+}
+
+// TestProduceEmptyMaxOccursZeroParticleCharged pins that §3.4.2.3.3 clause 2.1 is
+// a disjunction whose arms all reach the same ***empty*** ·explicit content·, so
+// which one answers may not decide whether the child maps to a Particle at all:
+// an EMPTY <all>/<sequence> carrying maxOccurs="0" satisfies 2.1.2 as well as
+// 2.1.4, and its §3.8.2 Particle has a {min occurs} of 1 over a {max occurs} of 0
+// — p-props-correct clause 2.1 (#901).
+//
+// The control is the identical element one level down, the position that already
+// charged it: each top-position row must reproduce ITS diagnostic, so a row
+// cannot pass on some other rejection the document happens to earn.
+func TestProduceEmptyMaxOccursZeroParticleCharged(t *testing.T) {
+	want := elidedReject(t, `<xs:complexType name="T"><xs:sequence>`+
+		`<xs:sequence maxOccurs="0"/></xs:sequence></xs:complexType>`)
+	if !strings.Contains(want, "p-props-correct") {
+		t.Fatalf("control diagnostic = %q, want the p-props-correct verdict", want)
+	}
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{
+			name: `<sequence maxOccurs="0"> with no children, top model-group position`,
+			body: `<xs:complexType name="T"><xs:sequence maxOccurs="0"/></xs:complexType>`,
+		},
+		{
+			name: `<all maxOccurs="0"> with no children, top model-group position`,
+			body: `<xs:complexType name="T"><xs:all maxOccurs="0"/></xs:complexType>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := elidedReject(t, tc.body); got != want {
+				t.Fatalf("error = %q, want the nested control's own diagnostic %q", got, want)
 			}
 		})
 	}
