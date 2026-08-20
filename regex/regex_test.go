@@ -324,3 +324,24 @@ func TestMultiCharEscapes(t *testing.T) {
 		t.Fatalf("\\s inside a class wrong")
 	}
 }
+
+func TestPropertyClassKeepsStrideGaps(t *testing.T) {
+	// Inside a class a \p{...} category is materialized through addTable, which
+	// adds a contiguous unicode.RangeTable interval whole and walks only a wider
+	// stride. Lu's Latin Extended-A run is stride 2 — U+0100, U+0102, U+0104 are
+	// Lu and the odd code points between them are Ll — so adding that interval
+	// whole would silently widen \p{Lu} to every other letter it excludes, and
+	// accepting a literal the pattern rejects is the direction propSet's comment
+	// forbids (PRINCIPLES 20).
+	re := mustCompile(t, mustTranslate(t, `[\p{Lu}]`, FlavorXSD, ""))
+	for _, in := range []string{"Ā", "Ă", "A"} {
+		if !re.MatchString(in) {
+			t.Errorf("[\\p{Lu}] must match %q", in)
+		}
+	}
+	for _, out := range []string{"ā", "ă", "a"} {
+		if re.MatchString(out) {
+			t.Errorf("[\\p{Lu}] must not match %q — the stride-2 gap was filled in", out)
+		}
+	}
+}

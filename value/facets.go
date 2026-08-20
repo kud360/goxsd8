@@ -427,13 +427,15 @@ func validateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 // validateLexical (list.go; dv_list §4.1.4 cl.2.2). So validating a 500-item
 // xs:byte list translates and compiles the item type's pattern regexes 500 times.
 // Nothing is amortized across calls and nothing memoizes st's checkers: a cache
-// here would be derivable state without a profile behind it (STYLE D3,
-// PRINCIPLES 6), and there is no hot path to profile today — validate/ does not
-// reach ValidateLexical at all, and the only list-validating consumer is the
-// conformance harness over fixtures of a handful of items each. It becomes real
-// performance work — measure first, then amortize behind one seam — when
-// xs:IDREFS/xs:NMTOKENS/xs:ENTITIES reach the validator and long lists are
-// validated in anger.
+// here would be derivable state (STYLE D3, PRINCIPLES 6). The call frequency is
+// high and known — validate/ reaches ValidateLexical once per attribute
+// (cvc-attribute cl.3), once per simpleContent element (cvc-complex-type
+// cl.1.2) and once per simple-typed element (cvc-type cl.3.1.3) — so it has
+// been profiled at that frequency rather than assumed: the cost was not the
+// recompilation but regex.Translate materializing \p{C} one code point at a
+// time, and it was fixed there (regex.runeSet.addTable, #913). Memoizing st's
+// checkers becomes real performance work — measure first, then amortize behind
+// one seam — when a profile puts the cost in this function.
 //
 // The whiteSpace facet is consumed by the normalize stage, not as a checker;
 // explicitTimezone is a value facet handled here (cvc-explicitTimezone-valid,

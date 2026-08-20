@@ -250,7 +250,7 @@ func (w *walk) idElement(c *icCheck) {
 		w.ids.declined = true
 		return
 	}
-	st := c.g.simpleType()
+	st := c.g.valueType()
 	if st == nil {
 		return
 	}

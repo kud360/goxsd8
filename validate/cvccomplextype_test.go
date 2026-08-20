@@ -340,10 +340,11 @@ func TestUnevaluableTypeTableDeclinesTheAttributeHalf(t *testing.T) {
 		"clause 3", loc(1, 1), "id")
 }
 
-// A SIMPLE-typed root's attributes stay entirely undecided. cvc-type clause
-// 3.2 dispatches to cvc-complex-type only for a complex T; a simple T is
-// clause 3.1.1's much narrower question, which this package does not decide.
-func TestSimpleTypedRootIsUndecided(t *testing.T) {
+// A SIMPLE-typed root's attributes reach cvc-complex-type through no clause of
+// it: cvc-type clause 3.2 dispatches to cvc-complex-type only for a complex T,
+// and a simple T is clause 3.1.1's much narrower question instead (the charge
+// itself is cvctype_test.go's).
+func TestSimpleTypedRootReachesNoComplexTypeClause(t *testing.T) {
 	st, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Local: "RootType"}, nil, nil)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
@@ -365,8 +366,10 @@ func TestSimpleTypedRootIsUndecided(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	res := v.Assess(attributedRoot(local("stray")))
-	wantSilence(t, res.Violations(), "a simple ·governing type definition· reaches cvc-complex-type through no clause")
+	got := v.Assess(attributedRoot(local("stray"))).Violations()
+	if len(got) != 1 || got[0].Rule != "cvc-type" {
+		t.Fatalf("Violations() = %v, want exactly one cvc-type charge and no cvc-complex-type one", got)
+	}
 }
 
 // A descendant's governing type comes from the particle it is ·attributed to·

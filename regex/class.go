@@ -32,17 +32,35 @@ func (s runeSet) add(lo, hi rune) runeSet {
 	return append(s, runeRange{lo, hi})
 }
 
-// addTable folds every interval of a unicode.RangeTable into the set.
+// addTable folds every interval of a unicode.RangeTable into the set. A stride
+// of 1 covers [Lo, Hi] contiguously and is added as the one interval it is;
+// only a wider stride needs the code-point walk, because the covered points are
+// then non-adjacent and no single runeRange spans them.
+//
+// Adding contiguous runs whole is what keeps the set proportional to the
+// table's intervals rather than to its code points: unicode.Categories["C"]
+// covers 965,096 code points in 609 intervals, so walking it materialized
+// 965,096 single-point runeRanges for normalize to sort back down to a few
+// hundred — 70ms per \w or \W translation, against 1.5µs for a class with no
+// property escape in it (#913).
 func (s runeSet) addTable(t *unicode.RangeTable) runeSet {
 	for _, r := range t.R16 {
-		for c := rune(r.Lo); c <= rune(r.Hi); c += rune(r.Stride) {
-			s = s.add(c, c)
-		}
+		s = s.addStrided(rune(r.Lo), rune(r.Hi), rune(r.Stride))
 	}
 	for _, r := range t.R32 {
-		for c := rune(r.Lo); c <= rune(r.Hi); c += rune(r.Stride) {
-			s = s.add(c, c)
-		}
+		s = s.addStrided(rune(r.Lo), rune(r.Hi), rune(r.Stride))
+	}
+	return s
+}
+
+// addStrided folds one unicode.RangeTable interval into the set: whole when the
+// stride is contiguous, one code point at a time otherwise.
+func (s runeSet) addStrided(lo, hi, stride rune) runeSet {
+	if stride == 1 {
+		return s.add(lo, hi)
+	}
+	for c := lo; c <= hi; c += stride {
+		s = s.add(c, c)
 	}
 	return s
 }

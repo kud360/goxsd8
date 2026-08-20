@@ -66,7 +66,7 @@
 // # Contract (M5, landing rule by rule)
 //
 // [Result] carries every violation charged so far as an *xsderr.Error
-// (cvc-* rule + instance and/or schema Loc), in document order. Eight rules
+// (cvc-* rule + instance and/or schema Loc), in document order. Nine rules
 // are charged today, at the ·validation root· and at every descendant whose
 // ·governing element declaration· the descent determines.
 //
@@ -94,6 +94,17 @@
 // a simple one (5.2.2.2.2). Clause 5.1's arm — an EMPTY element whose
 // declaration supplies a default — is not evaluated.
 //
+// The third is cvc-type (§3.3.4.4) clause 3.1, the arm taken where the
+// ·governing type definition· is a Simple Type Definition rather than a complex
+// one. Clause 3.1.1 admits no [[attributes]] beyond xsi:type, xsi:nil,
+// xsi:schemaLocation and xsi:noNamespaceSchemaLocation, charged per offending
+// attribute at its own Loc; clause 3.1.2 admits no element information item
+// [[children]] at all; and clause 3.1.3 has the element's ·initial value·
+// validated against that type per String Valid (§3.16.4), through the same
+// value.Backend and with the same declines as the simple-content charge below.
+// The first two apply to a ·nilled· element as much as to any other; the third
+// alone is skipped for one. cvc-type's own clauses 1 and 2 are not evaluated.
+//
 // Three more are the root's attribute half, against its ·governing
 // type definition·'s {attribute uses}. cvc-complex-type (§3.4.4.2) clauses
 // 2 and 3 decide EXISTENCE and need no value space. Clause 4 and the two
@@ -105,7 +116,7 @@
 // use (two independent rules over two properties, both charged), and a
 // ·defaulted attribute·'s own {lexical form} against its type.
 //
-// The sixth is the root's content half, against the same type's {content
+// The seventh is the root's content half, against the same type's {content
 // type}. cvc-complex-type clause 1 decides what its {variety} admits —
 // no [[children]] at all for empty, no element ones for simple, no
 // non-white-space character ones for element-only — and clause 1.4 sends
@@ -143,7 +154,7 @@
 // 3.2), and a child whose declaration is not determinable, whose own subtree is
 // then assessed against nothing in its turn.
 //
-// The seventh is cvc-identity-constraint (§3.11.4), over the {identity-constraint
+// The eighth is cvc-identity-constraint (§3.11.4), over the {identity-constraint
 // definitions} of the ·governing element declaration· of every element the
 // descent types. Its {selector} and {fields} are evaluated as the restricted
 // path subset §3.11.6.2 and §3.11.6.3 define, directly and never through the
@@ -155,7 +166,7 @@
 // node tables clause 4.3 reads are §3.11.5's, assembled bottom-up as the walk
 // leaves each element and conflict-resolved on the way.
 //
-// The eighth is cvc-id (§3.3.4.5), charged at the ·validation root· alone
+// The ninth is cvc-id (§3.3.4.5), charged at the ·validation root· alone
 // (cvc-elt clause 7): the [ID/IDREF table] of §3.17.5.2 is assembled across the
 // whole subtree from every attribute and element whose ·governing type
 // definition· is ID, IDREF or IDREFS or is ·derived· or ·constructed· from one
