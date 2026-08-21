@@ -36,6 +36,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # The head commit, named explicitly. A `pull_request` event checks out
+          # `refs/pull/<n>/merge` by default — an ephemeral merge of the head
+          # with main that nobody pushed and nothing lands. The tree a
+          # squash-merge puts on main is the head's, so the head's is the tree
+          # this job reads.
+          ref: ${{ github.event.pull_request.head.sha }}
           # The W3C suite. An absent submodule FAILS the run rather than
           # skipping it (conformance/conformance_test.go: a run that executed
           # zero cases must never be mistaken for a green one, #309), and
