@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
@@ -41,6 +42,7 @@ func TestConformance(t *testing.T) {
 	index := suitePath()
 	if err := checkSuitePresent(index); err != nil {
 		endUnusableSuiteRun(t, err, ratcheting)
+		return
 	}
 
 	found, err := parseSuite(index)
@@ -87,20 +89,51 @@ func assertedRemovals(t *testing.T, ratcheting bool) map[string]RemovalAssertion
 	return byLane
 }
 
-// endUnusableSuiteRun ends the run when the suite index is unusable. The default
-// is a hard failure so a container without the submodule cannot exit `ok`
-// (issue #309); GOXSD_SUITE_OPTIONAL=1 downgrades that to a skip for a read-only
-// run only, never for a ratchet run whose whole output would otherwise be an
-// unearned "no movement".
-func endUnusableSuiteRun(t *testing.T, err error, ratcheting bool) {
-	t.Helper()
-	if os.Getenv(suiteOptionalEnv) != "1" {
-		t.Fatalf("%v (set %s=1 only in an environment that legitimately has no suite)", err, suiteOptionalEnv)
+// suiteRunEnd is how a run whose suite index is unusable ends: fatal says the
+// run FAILS rather than skips, and msg is the single line it prints. Returning
+// the decision instead of taking a testing.TB keeps the policy exercisable in
+// all four env combinations from an ordinary table test (issue #375).
+type suiteRunEnd struct {
+	fatal bool
+	msg   string
+}
+
+// unusableSuiteEnd decides how the run ends when checkSuitePresent refuses the
+// index. optedOut is GOXSD_SUITE_OPTIONAL=1 and ratcheting is GOXSD_RATCHET=1,
+// taken as arguments so this stays a pure decision its caller binds to the
+// environment — the same split removalAssertions uses for the other opt-in.
+//
+// The policy: a missing suite is a hard failure by default, so a container
+// without the submodule cannot exit `ok` (issue #309). The opt-out downgrades
+// that to a skip for a READ-ONLY run alone, never for a ratchet run whose whole
+// output would otherwise be an unearned "no movement".
+func unusableSuiteEnd(err error, optedOut, ratcheting bool) suiteRunEnd {
+	if !optedOut {
+		return suiteRunEnd{
+			fatal: true,
+			msg:   fmt.Sprintf("%v (set %s=1 only in an environment that legitimately has no suite)", err, suiteOptionalEnv),
+		}
 	}
 	if ratcheting {
-		t.Fatalf("%v (%s=1 does not cover a ratchet run: an empty suite must not report no movement)", err, suiteOptionalEnv)
+		return suiteRunEnd{
+			fatal: true,
+			msg:   fmt.Sprintf("%v (%s=1 does not cover a ratchet run: an empty suite must not report no movement)", err, suiteOptionalEnv),
+		}
 	}
-	t.Skipf("%v (skipped: %s=1)", err, suiteOptionalEnv)
+	return suiteRunEnd{msg: fmt.Sprintf("%v (skipped: %s=1)", err, suiteOptionalEnv)}
+}
+
+// endUnusableSuiteRun reports unusableSuiteEnd's decision, binding it to the
+// environment. Every path ends the run, but the caller returns rather than
+// trusting that: the fall-through would run the suite on an index just proved
+// missing (issue #375).
+func endUnusableSuiteRun(t *testing.T, err error, ratcheting bool) {
+	t.Helper()
+	end := unusableSuiteEnd(err, os.Getenv(suiteOptionalEnv) == "1", ratcheting)
+	if end.fatal {
+		t.Fatal(end.msg)
+	}
+	t.Skip(end.msg)
 }
 
 // suiteAbsentSkipMsg is what a fixture-driven test prints when the suite is

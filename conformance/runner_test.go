@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"encoding/xml"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -700,5 +701,63 @@ func TestSuiteAbsentSkipNamesModuleRootPath(t *testing.T) {
 	}
 	if strings.Contains(suiteAbsentSkipMsg, suiteRoot) {
 		t.Errorf("skip message must not print the package-relative path %q, got %q", suiteRoot, suiteAbsentSkipMsg)
+	}
+}
+
+// TestUnusableSuiteEnd pins the policy TestConformance applies to an absent
+// suite (issue #375), over all four combinations of the two opt-ins the run
+// reads from the environment. THREE of them fail and only one skips: the
+// opt-out quietens a read-only run and never a ratchet run, so a
+// GOXSD_RATCHET=1 run over an empty suite cannot report "no movement"
+// (CLAUDE.md, "The one rule that outranks everything").
+//
+// Each message is pinned whole, not just its fail/skip verdict. Pass/fail alone
+// cannot tell the two refusals apart — one tells its reader an opt-out exists,
+// the other tells them it does not reach here — and both carry
+// checkSuitePresent's own text, which is what names the init command.
+func TestUnusableSuiteEnd(t *testing.T) {
+	absent := errors.New("W3C suite not present at " + suiteRoot + "/suite.xml; run `git submodule update --init " + suiteModulePath + "` from the module root")
+	for _, tc := range []struct {
+		name                 string
+		optedOut, ratcheting bool
+		want                 suiteRunEnd
+	}{
+		{
+			name: "default: no opt-out, read-only",
+			want: suiteRunEnd{
+				fatal: true,
+				msg:   absent.Error() + " (set GOXSD_SUITE_OPTIONAL=1 only in an environment that legitimately has no suite)",
+			},
+		},
+		{
+			name:       "no opt-out, ratcheting",
+			ratcheting: true,
+			want: suiteRunEnd{
+				fatal: true,
+				msg:   absent.Error() + " (set GOXSD_SUITE_OPTIONAL=1 only in an environment that legitimately has no suite)",
+			},
+		},
+		{
+			name:     "opted out, read-only: the one skip",
+			optedOut: true,
+			want:     suiteRunEnd{msg: absent.Error() + " (skipped: GOXSD_SUITE_OPTIONAL=1)"},
+		},
+		{
+			name:       "opted out AND ratcheting: still fails",
+			optedOut:   true,
+			ratcheting: true,
+			want: suiteRunEnd{
+				fatal: true,
+				msg:   absent.Error() + " (GOXSD_SUITE_OPTIONAL=1 does not cover a ratchet run: an empty suite must not report no movement)",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := unusableSuiteEnd(absent, tc.optedOut, tc.ratcheting)
+			if got != tc.want {
+				t.Errorf("unusableSuiteEnd(err, optedOut=%v, ratcheting=%v) =\n\tfatal=%v msg=%q\nwant\n\tfatal=%v msg=%q",
+					tc.optedOut, tc.ratcheting, got.fatal, got.msg, tc.want.fatal, tc.want.msg)
+			}
+		})
 	}
 }
