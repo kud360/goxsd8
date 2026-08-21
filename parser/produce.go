@@ -484,7 +484,80 @@ func (p *producer) chameleon() bool {
 	return !own
 }
 
-// rejectRepeatedAnnotations rejects, anywhere in el's subtree, two DISTINCT
+// rejectS4SFaults walks el's subtree once, before any producer runs, applying
+// every schema for schema documents guard that is keyed on the element ITSELF
+// rather than on a producer that would have reached it. A producer whose own
+// grammar does not mention an element never looks at it, so a fault written
+// where no producer descends would otherwise be silently discarded rather than
+// rejected (#928).
+//
+// It descends through XSD-namespace elements only, and never into <appinfo> or
+// <documentation>: those hold <xs:any processContents="lax"> content
+// (xmlschema11-1.md:5727, :5740), where an element that happens to be named
+// {XMLSchemaNS}annotation or {XMLSchemaNS}notation is content no guard here
+// governs. It DOES descend into <annotation> — that is how
+// rejectRepeatedAnnotations reaches an <annotation>'s direct children — but
+// stops at the <appinfo>/<documentation> below it.
+//
+// Placement is charged before content: a <notation> standing where the grammar
+// admits none is reported for where it stands, not for the second <annotation>
+// it also carries.
+func rejectS4SFaults(el *Element) error {
+	if el.Name().Space() != xsd.XMLSchemaNS {
+		return nil
+	}
+	if isXSD(el, "appinfo") || isXSD(el, "documentation") {
+		return nil
+	}
+	if err := rejectMisplacedNotation(el); err != nil {
+		return err
+	}
+	if err := rejectRepeatedAnnotations(el); err != nil {
+		return err
+	}
+	for _, child := range el.Children() {
+		c, ok := child.(*Element)
+		if !ok {
+			continue
+		}
+		if err := rejectS4SFaults(c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// rejectMisplacedNotation rejects a <notation> written anywhere but as a child
+// of <schema> or <override>. The schema for schema documents declares
+// <notation> in ONE group arm, xs:schemaTop (xmlschema11-1.md:4462), and
+// xs:schemaTop is referenced from exactly two content models: <schema>'s
+// (:4562) and <override>'s (:5577). <redefine> is NOT a third — its own model
+// reaches xs:redefinable (:5558), which is {simpleType, complexType, group,
+// attributeGroup} (:4465-4477) and omits <notation> — so this legal-parent list
+// is narrower than rejectLocalSimpleTypeAttrs's.
+//
+// The fault carries NO numbered rule ID: §3.14.3 and §3.14.4 both answer "None
+// as such." (:3409, :3413), so it stands on §5.1's first bullet (:4296)
+// directly, exactly as rejectNotationContent does, and charging a src-* verdict
+// would be a fabricated rule ID (STYLE E2).
+//
+// It is keyed on the <notation> and reached from rejectS4SFaults' walk, which
+// is one guard covering every illegal parent rather than one admission list per
+// parent (STYLE D3/T4). The <appinfo>/<documentation> exclusion is that walk's,
+// so an element named {XMLSchemaNS}notation inside lax wildcard content is
+// never charged here.
+func rejectMisplacedNotation(el *Element) error {
+	if !isXSD(el, "notation") {
+		return nil
+	}
+	parent := el.parent
+	if parent == nil || isXSD(parent, "schema") || isXSD(parent, "override") {
+		return nil
+	}
+	return fmt.Errorf("parser: <notation> at %s is not admitted inside the <%s> at %s: the schema for schema documents declares <notation> in the xs:schemaTop group alone, which only <schema> and <override> reference", el.Loc(), parent.Name().Local(), parent.Loc())
+}
+
+// rejectRepeatedAnnotations rejects, among el's children, two DISTINCT
 // annotation faults resting on two DIFFERENT spec footings — do not conflate
 // them.
 //
@@ -518,19 +591,10 @@ func (p *producer) chameleon() bool {
 // directly, the footing rejectProhibitedAttrs's doc derives in full, so charging
 // a src-* or cos-* verdict would be a fabricated rule ID (STYLE E2).
 //
-// It descends through XSD-namespace elements only, and never into <appinfo> or
-// <documentation>: those hold <xs:any processContents="lax"> content (:5727,
-// :5740), where an element that happens to be named {XMLSchemaNS}annotation is
-// content neither fault governs. It DOES descend into <annotation> — that is how
-// the content-model check reaches an <annotation>'s direct children — but stops
-// at the <appinfo>/<documentation> below it.
+// It checks ONE element's children; rejectS4SFaults is the walk that reaches
+// every element of the document with it, and owns the <appinfo>/<documentation>
+// exclusion that keeps lax wildcard content out of both faults.
 func rejectRepeatedAnnotations(el *Element) error {
-	if el.Name().Space() != xsd.XMLSchemaNS {
-		return nil
-	}
-	if isXSD(el, "appinfo") || isXSD(el, "documentation") {
-		return nil
-	}
 	if isXSD(el, "annotation") {
 		if found := childElements(el, xsd.XMLSchemaNS, "annotation"); len(found) > 0 {
 			return fmt.Errorf("parser: <annotation> child of <annotation> at %s, which the schema for schema documents prohibits: <annotation>'s content model is (appinfo|documentation)* and admits no nested <annotation> at any cardinality", found[0].Loc())
@@ -539,15 +603,6 @@ func rejectRepeatedAnnotations(el *Element) error {
 	if !isXSD(el, "annotation") && !isXSD(el, "schema") && !isXSD(el, "redefine") {
 		if found := childElements(el, xsd.XMLSchemaNS, "annotation"); len(found) > 1 {
 			return fmt.Errorf("parser: repeated <annotation> at %s, which the schema for schema documents prohibits: its parent <%s> at %s admits at most one, the maxOccurs=\"1\" xs:annotated defaults to, and only <schema> and <redefine> depart from that type", found[1].Loc(), el.Name().Local(), el.Loc())
-		}
-	}
-	for _, child := range el.Children() {
-		c, ok := child.(*Element)
-		if !ok {
-			continue
-		}
-		if err := rejectRepeatedAnnotations(c); err != nil {
-			return err
 		}
 	}
 	return nil
@@ -584,10 +639,10 @@ func rejectRepeatedAnnotations(el *Element) error {
 // <key ref="…"> resolution, but from the WHOLE subtree of each top-level
 // declaration rather than from its top level: see prescanIdentityConstraints.
 //
-// It runs rejectRepeatedAnnotations over the whole document first, before any
-// name is registered and before any body is walked.
+// It runs rejectS4SFaults over the whole document first, before any name is
+// registered and before any body is walked.
 func (p *producer) prescan() error {
-	if err := rejectRepeatedAnnotations(p.schemaElem); err != nil {
+	if err := rejectS4SFaults(p.schemaElem); err != nil {
 		return err
 	}
 	for _, child := range p.schemaElem.Children() {
@@ -2400,8 +2455,12 @@ func (p *producer) simpleTypeFinal(stElem *Element) []xsd.DerivationMethod {
 // (n-props-correct, §3.14.6) — §3.14.3 defines no Schema Representation
 // Constraint of its own. A name that is not an xs:NCName is rejected by
 // declarationName first, before anything is built, and content the element's s4s
-// type does not admit by rejectNotationContent next. <notation> occurs only as a
-// <schema> child (§3.17.2), so there is no nested form to map.
+// type does not admit by rejectNotationContent next. <notation> occurs as a
+// <schema> or an <override> child, the two content models referencing
+// xs:schemaTop (xmlschema11-1.md:4462, :4562, :5577), and rejectMisplacedNotation
+// rejects it anywhere else — so there is no nested form to map, and an
+// <override>'s <notation> is mapped here too, by the OVERRIDDEN document's
+// producer (§F.2 clause 1).
 func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 	qname, err := declarationName(elem, p.target)
 	if err != nil {
@@ -2435,12 +2494,12 @@ func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 // reason facetFixed's doc gives.
 //
 // A SECOND <annotation> is not this function's fault to raise:
-// rejectRepeatedAnnotations already walks the whole document for that
-// cardinality, <notation> among every other xs:annotated-derived element, and
-// one s4s fault earns one diagnostic.
+// rejectS4SFaults' walk already reaches every element of the document with
+// rejectRepeatedAnnotations, <notation> among every other xs:annotated-derived
+// element, and one s4s fault earns one diagnostic.
 //
 // The fault carries NO numbered rule ID: §3.14.3 and §3.14.4 both answer "None
-// as such." (:3407, :3411), and n-props-correct (§3.14.6, :3429) is a tableau
+// as such." (:3409, :3413), and n-props-correct (§3.14.6, :3429) is a tableau
 // over {name}, {system identifier} and {public identifier} rather than a content
 // model. It stands on §5.1's first bullet (:4296) directly, exactly as
 // rejectRepeatedAnnotations does, so charging src-notation — an anchor xsderr's
