@@ -2,7 +2,6 @@ package conformance
 
 import (
 	"encoding/xml"
-	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -716,7 +715,10 @@ func TestSuiteAbsentSkipNamesModuleRootPath(t *testing.T) {
 // the other tells them it does not reach here — and both carry
 // checkSuitePresent's own text, which is what names the init command.
 func TestUnusableSuiteEnd(t *testing.T) {
-	absent := errors.New("W3C suite not present at " + suiteRoot + "/suite.xml; run `git submodule update --init " + suiteModulePath + "` from the module root")
+	absent := checkSuitePresent(filepath.Join(t.TempDir(), "no-such-root", "suite.xml"))
+	if absent == nil {
+		t.Fatal("a non-existent suite root must yield an error, not a nil check")
+	}
 	for _, tc := range []struct {
 		name                 string
 		optedOut, ratcheting bool
