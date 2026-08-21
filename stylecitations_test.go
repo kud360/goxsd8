@@ -1,43 +1,34 @@
 // This file guards, module-wide, the STYLE-ID citation convention documented
 // in docs/STYLE.md: "A style rule is cited by its letter ID from this file
 // (`STYLE D4`, `STYLE T2`) — never by a position in CLAUDE.md's 'Style
-// headlines' list, which is a summary and carries no citable IDs." Two open
-// issues describe the same defect at scale, neither caught by anything today:
+// headlines' list, which is a summary and carries no citable IDs." It is the
+// sibling of citations_test.go, which guards `PRINCIPLES N` against the same
+// mistake — a token that reads as a citation but does not name the thing its
+// author meant — and reuses that file's moduleRootDir and goSourceFiles
+// rather than re-implementing the walk (STYLE T4).
 //
-//   - #382 — sites cite a letter ID docs/STYLE.md does not define: `T7`,
-//     `T8`, `D6`, `L6`, plus a malformed `T5/8` (one real ID, one bare
-//     number, slash-joined as if both were IDs).
-//   - #540 — sites cite a bare-numeric "STYLE N", which is a position in
-//     CLAUDE.md's headline list, not a citable ID; CLAUDE.md and
-//     docs/STYLE.md both say so explicitly.
+// Two halves, matching the sibling's:
 //
-// Both defects are the same shape as the one citations_test.go already
-// guards for PRINCIPLES: a number or token that reads as a citation but does
-// not name the thing its author meant. This file is that guard's sibling for
-// STYLE, reusing citations_test.go's moduleRootDir and goSourceFiles rather
-// than re-implementing the walk (STYLE T4).
+//   - BOUND: every citation token that is not bare digits must be an ID
+//     docs/STYLE.md actually defines, parsed from its own `**ID. ` headings.
+//     Slash-joined citations (`D2/D3`) are split and each token checked.
+//     This half has no allow-list and takes no judgement: #382 ruled that
+//     every invented letter ID in the tree — `T7`, `T8`, `D6`, `L6` — meant
+//     a rule docs/STYLE.md already states, and renumbered all 32 sites onto
+//     it, so an ID-shaped token naming no rule has no legitimate form left.
+//   - ALLOW-LIST: a bare-numeric token is a position in CLAUDE.md's headline
+//     list, which is #540's still-open defect. Every instance is pinned in
+//     allowedBadStyleCitations by file, token and count — exactly
+//     allowedCollisionCitations' shape — so a NEW or COPIED one cannot land
+//     without editing that list, and editing it is the review this file
+//     exists to force. The list shrinking to empty is what closes #540; it
+//     is not this file's job to shrink it. An entry whose token is NOT bare
+//     digits is itself an error, so the list cannot re-admit #382's class.
 //
-// One half, allow-listed rather than unconditional:
-//
-//   - Every `STYLE <token>` citation's token(s) — slash-joined multi-ID
-//     citations are split — must be an ID docs/STYLE.md actually defines.
-//     A token that is bare digits is reported as a CLAUDE.md headline
-//     position (#540's shape); any other undefined token is reported as an
-//     unknown letter ID (#382's shape).
-//   - Unlike the PRINCIPLES guard's bound check, this is not an unconditional
-//     fail: #382 and #540 are ALREADY 36 real, unfixed violations across 21
-//     files, and this guard must land without regressing the gate. Every
-//     violation observed at authoring time is pinned in
-//     allowedBadStyleCitations, by file, token and count — exactly
-//     allowedCollisionCitations' shape. A NEW or COPIED bad citation cannot
-//     land without editing that list, and editing it is the review this file
-//     exists to force. The list shrinking to empty is what closes #382/#540;
-//     it is not this file's job to shrink it.
-//
-// What this does NOT do is decide whether a citation is TOPICALLY right, or
-// whether a real ID's rule actually applies to the code it decorates; no
-// mechanical check can. It makes the undefined-ID and positional-citation
-// mistakes loud instead of silent.
+// The bound half is exactly decidable and that is its whole value. It does
+// not decide whether a citation is TOPICALLY right — whether a REAL ID's rule
+// governs the code it decorates — which #543 and #548 own and no mechanical
+// check can settle.
 package goxsd8_test
 
 import (
@@ -55,48 +46,20 @@ import (
 // not a citation.
 const styleCitationsGuardFile = "stylecitations_test.go"
 
-// allowedBadStyleCitations is the reviewed state of every undefined or
-// positional STYLE citation in the module as of #636's authoring: every site
-// #382 and #540 describe, confirmed by direct inspection of the cited
-// comment. Counts are per file and per token, not per line, so ordinary
-// editing above a citation does not trip the guard while a new or copied bad
-// citation does.
+// allowedBadStyleCitations is the reviewed state of every bare-numeric STYLE
+// citation in the module: the sites #540 describes, confirmed by direct
+// inspection of the cited comment. Counts are per file and per token, not per
+// line, so ordinary editing above a citation does not trip the guard while a
+// new or copied bad citation does. Every token here is bare digits; a
+// letter-shaped one is rejected by TestStyleCitationsNameARealRule's sibling
+// check rather than admitted here.
+//
+// #382's entries — `T7` ×29, `T8`, `D6`, `L6` across 19 files — are gone: that
+// issue ruled each of them onto the rule docs/STYLE.md already states (T1, T2,
+// T5, D3) and renumbered every site.
 var allowedBadStyleCitations = []styleCitationAllowance{
-	{file: "builtin/strict/datetime.go", token: "D6", count: 1},
-	{file: "builtin/strict/datetime.go", token: "T7", count: 1},
-	{file: "builtin/strict/duration.go", token: "T7", count: 1},
-	{file: "builtin/strict/precisiondecimal.go", token: "T7", count: 1},
 	{file: "conformance/datatypes.go", token: "10", count: 1},
-	{file: "conformance/expectations.go", token: "T7", count: 1},
-	{file: "conformance/runner.go", token: "T7", count: 1},
-	{file: "loader/resolver.go", token: "L6", count: 1},
-	{file: "parser/report.go", token: "T7", count: 2},
-	{file: "xsd/attributedeclaration.go", token: "T7", count: 1},
-	{file: "xsd/attributeuse.go", token: "T7", count: 1},
-	{file: "xsd/closedsets.go", token: "T7", count: 1},
-	{file: "xsd/complextype.go", token: "T7", count: 3},
-	{file: "xsd/defaultbinding.go", token: "T7", count: 1},
-	// The T8 entry that sat here is gone: it decorated
-	// effectiveValueConstraint's "unexported until a consumer justifies
-	// exporting it", and #766 is that consumer, so the sentence and its
-	// citation went with the export.
-	{file: "xsd/elementdeclaration.go", token: "T7", count: 1},
-	{file: "xsd/namespaceconstraint.go", token: "T7", count: 1},
-	{file: "xsd/namespaceconstraint.go", token: "T8", count: 1},
 	{file: "xsd/resolve.go", token: "8", count: 2},
-	{file: "xsd/schema.go", token: "T7", count: 3},
-	{file: "xsd/simpletype.go", token: "T7", count: 3},
-	// Landed by #636 while this guard was in review, so it grandfathers in
-	// rather than being caught before merge — the one entry here that is
-	// NEW debt, not inherited. Its `STYLE T2/T7` decorates a sealed sum,
-	// and T2 (capabilities are interfaces, not type switches) is the rule
-	// that governs sealed sums; T7 looks like CLAUDE.md's headline 7, the
-	// positional-citation defect #540 names. Left uncorrected on purpose:
-	// 30 other sites cite T7, and deciding what they all become is #382's
-	// question, not this file's.
-	{file: "xsd/simpletyperef.go", token: "T7", count: 1},
-	{file: "xsd/term.go", token: "T7", count: 2},
-	{file: "xsd/typedefinition.go", token: "T7", count: 4},
 }
 
 // The vacuity floors, sitting safely below the counts at the time of
@@ -117,10 +80,9 @@ const (
 // token is validated independently.
 var styleCitationRe = regexp.MustCompile(`STYLE (?:// )?([A-Za-z0-9]+(?:/[A-Za-z0-9]+)*)`)
 
-// styleIDShapeRe matches the SHAPE of a real docs/STYLE.md ID (a letter, then
-// digits, then an optional lowercase suffix like P3a's `a`) without regard to
-// whether docs/STYLE.md actually defines it — used only to choose which of
-// the two failure messages a token gets.
+// styleIDShapeRe matches the SHAPE of a docs/STYLE.md ID (a letter, then
+// digits, then an optional lowercase suffix like P3a's `a`), used to confirm
+// the heading parse below yields IDs and not prose.
 var styleIDShapeRe = regexp.MustCompile(`^[A-Z][0-9]+[a-z]?$`)
 
 // styleRuleHeadingRe matches one rule-ID heading in docs/STYLE.md, whose
@@ -137,7 +99,8 @@ type styleCitationSite struct {
 }
 
 // styleCitationAllowance is one reviewed allow-list entry: file cites token
-// exactly count times, and docs/STYLE.md does not define token.
+// exactly count times, and token is bare digits — a CLAUDE.md headline
+// position docs/STYLE.md cannot define.
 type styleCitationAllowance struct {
 	file  string
 	token string
@@ -152,21 +115,46 @@ type styleFileToken struct {
 	token string
 }
 
-// TestBadStyleCitationsAreAllowListed is the guard's one test: every STYLE
-// citation token that docs/STYLE.md does not define was reviewed onto
-// allowedBadStyleCitations, and no reviewed entry has gone stale.
-func TestBadStyleCitationsAreAllowListed(t *testing.T) {
+// TestStyleCitationsNameARealRule is the BOUND half: every citation token that
+// is not bare digits names a rule docs/STYLE.md defines. There is no allow-list
+// — #382 settled that an ID-shaped token naming no rule always meant a rule the
+// document already states.
+func TestStyleCitationsNameARealRule(t *testing.T) {
 	root := moduleRootDir(t)
 	defined := styleRuleIDs(t, root)
+	for _, s := range styleCitations(t, root) {
+		if defined[s.token] || isBareNumericToken(s.token) {
+			continue
+		}
+		t.Errorf("%s:%d: cites STYLE %s, which %s does not define — an invented ID "+
+			"(#382's defect) or a typo. Read the comment, pick the rule it means, and "+
+			"cite that ID; do not add the rule to %s to make this pass",
+			s.file, s.line, s.token, styleDocRelPath, styleDocRelPath)
+	}
+}
+
+// TestPositionalStyleCitationsAreAllowListed is the ALLOW-LIST half: every
+// bare-numeric citation — a position in CLAUDE.md's headline list rather than
+// an ID — was reviewed onto allowedBadStyleCitations, and no reviewed entry has
+// gone stale.
+func TestPositionalStyleCitationsAreAllowListed(t *testing.T) {
+	root := moduleRootDir(t)
 
 	allowed := make(map[styleFileToken]int, len(allowedBadStyleCitations))
 	for _, a := range allowedBadStyleCitations {
+		if !isBareNumericToken(a.token) {
+			t.Errorf("allowedBadStyleCitations entry {file: %q, token: %q} is not a bare "+
+				"number — this list pins #540's positional citations only, and a "+
+				"letter-shaped ID answers to TestStyleCitationsNameARealRule instead",
+				a.file, a.token)
+			continue
+		}
 		allowed[styleFileToken{file: a.file, token: a.token}] = a.count
 	}
 
 	found := make(map[styleFileToken]int, len(allowedBadStyleCitations))
 	for _, s := range styleCitations(t, root) {
-		if defined[s.token] {
+		if !isBareNumericToken(s.token) {
 			continue
 		}
 		key := styleFileToken{file: s.file, token: s.token}
@@ -174,16 +162,10 @@ func TestBadStyleCitationsAreAllowListed(t *testing.T) {
 		if _, ok := allowed[key]; ok {
 			continue
 		}
-		if isBareNumericToken(s.token) {
-			t.Errorf("%s:%d: cites STYLE %s, a bare number — that is a position in "+
-				"CLAUDE.md's headline list, not a citable ID (see %s's \"Citing rules\"). "+
-				"Confirm the intended letter ID, then add {file: %q, token: %q, count: N} "+
-				"to allowedBadStyleCitations",
-				s.file, s.line, s.token, styleDocRelPath, s.file, s.token)
-			continue
-		}
-		t.Errorf("%s:%d: cites STYLE %s, which %s does not define. Confirm the intended "+
-			"ID, then add {file: %q, token: %q, count: N} to allowedBadStyleCitations",
+		t.Errorf("%s:%d: cites STYLE %s, a bare number — that is a position in "+
+			"CLAUDE.md's headline list, not a citable ID (see %s's \"Citing rules\"). "+
+			"Confirm the intended letter ID, then add {file: %q, token: %q, count: N} "+
+			"to allowedBadStyleCitations",
 			s.file, s.line, s.token, styleDocRelPath, s.file, s.token)
 	}
 
@@ -266,7 +248,7 @@ func styleCitations(t *testing.T, root string) []styleCitationSite {
 // styleRuleIDs returns the set of rule IDs docs/STYLE.md actually defines,
 // parsed from its `**ID. Title.**` headings — the property that makes "ID is
 // in this set" mean "ID names a real rule". A token merely SHAPED like an ID
-// (styleIDShapeRe) that is absent from this set is exactly #382's mistake.
+// but absent from this set is exactly #382's mistake.
 func styleRuleIDs(t *testing.T, root string) map[string]bool {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(styleDocRelPath)))

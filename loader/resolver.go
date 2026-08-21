@@ -42,7 +42,7 @@ var ErrNotFound = errors.New("loader: schema document not found")
 // performs no URI-relative resolution of its own.
 //
 // There is deliberately no context.Context parameter: library code here
-// runs no concurrency of its own (STYLE D5/L6), and callers bound blocking
+// runs no concurrency of its own (STYLE D5), and callers bound blocking
 // behavior through the injected dependency — for HTTP, the *http.Client's
 // Transport timeouts; a caller needing cancellation wraps Resolve in its
 // own goroutine, which is its business, not this seam's.

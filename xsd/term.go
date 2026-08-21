@@ -5,7 +5,7 @@ package xsd
 // (§3.3.1), a Wildcard (§3.10.1), or a Model Group (§3.8.1). The spec's
 // definitional sentence names exactly "the three kinds of components which can
 // appear in particles", so the set is closed. The unexported term marker method
-// seals it (STYLE T2/T7), so consumers exhaustively switch these three variants
+// seals it (STYLE T2), so consumers exhaustively switch these three variants
 // and no fourth is representable; it mirrors attributeuse.go's
 // AttributeDeclarationOrRef sealed sum.
 //
@@ -16,11 +16,11 @@ type Term interface{ term() }
 
 // TermOrRef is the pre-resolution {term} slot of a Particle (Structures §3.9.1):
 // either an already-known Term or a deferred QName reference resolved to a live
-// component at finalize (#173). It is a sealed sum (STYLE T2/T7, the PRINCIPLES
-// 7 sealed-sum exception) mirroring attributeuse.go's AttributeDeclarationOrRef:
-// ResolvedTerm, ElementDeclarationRef, and ModelGroupRef are its only
-// implementations, sealed by the unexported termOrRef marker method, so
-// consumers exhaustively switch exactly these branches.
+// component at finalize (#173). It is a sealed sum (STYLE T2) mirroring
+// attributeuse.go's AttributeDeclarationOrRef: ResolvedTerm,
+// ElementDeclarationRef, and ModelGroupRef are its only implementations, sealed
+// by the unexported termOrRef marker method, so consumers exhaustively switch
+// exactly these branches.
 //
 // The split exists because two XML mappings — <element ref="..."> (§3.3.2.4,
 // ref.elt.global) and <group ref="..."> (§3.7.2, declare-namedModelGroup) — may

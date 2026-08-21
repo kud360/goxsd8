@@ -6,7 +6,7 @@ import "github.com/kud360/goxsd8/xsderr"
 // type-valued properties (§3.16.1) — {base type definition}, {item type
 // definition} and each member of {member type definitions} — as either a
 // DEFERRED reference by expanded name, resolved at finalize, or a component the
-// slot already holds. It is a sealed sum (STYLE T2/T7): SimpleTypeRef and
+// slot already holds. It is a sealed sum (STYLE T2): SimpleTypeRef and
 // OwnedSimpleType are its only implementations, sealed by the unexported
 // simpleTypeOrRef method, so consumers exhaustively switch the two branches and
 // no third variant is representable.

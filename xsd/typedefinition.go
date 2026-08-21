@@ -8,8 +8,8 @@ import "github.com/kud360/goxsd8/xsderr"
 // into one lookup bucket — a shared name between a simple and a complex type in
 // one namespace is exactly the sch-props-correct (§3.17.6.1 clause 2)
 // collision, so one sum keyed once makes the two-map illegal state
-// unrepresentable (STYLE T7). The unexported typeDefinition marker method seals
-// it (STYLE T2/T7): consumers exhaustively switch these two variants and no
+// unrepresentable (STYLE T1). The unexported typeDefinition marker method seals
+// it (STYLE T2): consumers exhaustively switch these two variants and no
 // third is representable, mirroring term.go's Term and complextype.go's
 // ContentType sealed sums.
 //
@@ -32,7 +32,7 @@ type TypeDefinition interface {
 	// doc's Components section). Both variants already expose it
 	// (ComplexType.Loc, (*SimpleType).Loc), so it is promoted into the sum to
 	// let the one {type definitions} bucket cite a position without a type
-	// switch (STYLE T7).
+	// switch (STYLE T2).
 	Loc() xsderr.Loc
 }
 
@@ -60,7 +60,7 @@ func (*SimpleType) typeDefinition() {}
 //     <simpleType> child, and which §3.3.2.1's synthesized {default type
 //     definition} fills by copying the declaring element's own slot.
 //
-// It is a sealed sum (STYLE T2/T7): TypeDefinitionRef, InlineTypeDefinition and
+// It is a sealed sum (STYLE T2): TypeDefinitionRef, InlineTypeDefinition and
 // SubstitutionGroupHeadTypeRef are its only implementations, sealed by the
 // unexported typeDefinitionOrRef method, so consumers exhaustively switch the
 // three branches and no fourth variant is representable. It copies

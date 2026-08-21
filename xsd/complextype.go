@@ -69,7 +69,7 @@ const ruleCTPropsCorrect xsderr.Rule = "ct-props-correct"
 // Type Definition (Structures §3.4.1 "Content Type" property record, id="ct").
 // The spec's {variety} property is closed to exactly {empty, simple,
 // element-only, mixed}, so the set of variant shapes is closed. The unexported
-// contentType marker method seals it (STYLE T2/T7) — consumers exhaustively
+// contentType marker method seals it (STYLE T2) — consumers exhaustively
 // switch these variants and no further one is representable — mirroring
 // term.go's Term sealed sum.
 //
@@ -206,7 +206,7 @@ func (o OpenContent) Wildcard() Wildcard {
 // complex type definition's {context} property may name (Structures §3.4.1,
 // id="ctd-context": "Either an Element Declaration or a Complex Type
 // Definition"). The unexported complexTypeContext marker method seals it (STYLE
-// T2/T7), mirroring this file's ContentType and elementdeclaration.go's
+// T2), mirroring this file's ContentType and elementdeclaration.go's
 // ElementScopeParent.
 //
 // Each arm carries a ComponentID, not a QName: §3.4.2.1 dcl.ctd.common makes
@@ -474,7 +474,7 @@ type ComplexType struct {
 // names is legal (the Note makes a prohibited <attribute> "pointless, though not
 // an error" outside a restriction). It arrives through this constructor rather
 // than through a setter because ComplexType is immutable after construction and
-// this is its single construction path (STYLE T1/T7); the alternative — an
+// this is its single construction path (STYLE T1); the alternative — an
 // exported With… copier — would add a second way to build the value for the sake
 // of one field that has nothing to check.
 //

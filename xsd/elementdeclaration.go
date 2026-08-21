@@ -107,7 +107,7 @@ func (t TypeTable) DefaultTypeDefinition() TypeAlternative {
 // {scope}.{parent} identifies its container (Structures §3.3.1, Scope record
 // id="sc_e", {parent}: "Either a Complex Type Definition or a Model Group
 // Definition"). The unexported elementScopeParent marker method seals it (STYLE
-// T2/T7), mirroring term.go's TermOrRef, so consumers exhaustively switch these
+// T2), mirroring term.go's TermOrRef, so consumers exhaustively switch these
 // variants and no fourth is representable.
 //
 // There are THREE arms for the spec's TWO component kinds, and the extra one is

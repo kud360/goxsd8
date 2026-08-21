@@ -35,7 +35,7 @@ const ruleAuPropsCorrect xsderr.Rule = "au-props-correct"
 
 // AttributeDeclarationOrRef is the {attribute declaration} slot of an Attribute
 // Use (Structures §3.5.1): the Required Attribute Declaration a use references.
-// It is a sealed sum (STYLE T2/T7): LocalAttributeDeclaration and
+// It is a sealed sum (STYLE T2): LocalAttributeDeclaration and
 // AttributeDeclarationRef are its only implementations, sealed by the
 // unexported attributeDeclarationRef method, so consumers exhaustively switch
 // the two branches and no third variant is representable. It mirrors

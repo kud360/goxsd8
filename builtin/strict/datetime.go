@@ -322,7 +322,7 @@ func (d dateTimeVal) instant() *big.Rat {
 // sevenProp is a date/timeSevenPropertyModel value projected onto the inputs of
 // ·timeOnTimeline· (§E.3.4) with nil-as-absence: a nil pointer is the spec's
 // ·absent· for that property, a non-nil pointer its present value — no parallel
-// presence flag (STYLE D6/T7, matching dateTimeVal.tzOffset's precedent). Each
+// presence flag (STYLE D3, matching dateTimeVal.tzOffset's precedent). Each
 // per-type value builds one to reach the shared timeline computation.
 type sevenProp struct {
 	year         *big.Int // nil ⇒ absent (filler year 1972)

@@ -32,7 +32,7 @@ const ruleSTPropsCorrect xsderr.Rule = "st-props-correct"
 
 // Variety is a Simple Type Definition's {variety} (Structures §3.16.1,
 // Datatypes §2.4.1): one of atomic, list, or union. It is a sealed sum (STYLE
-// T2/T7): Atomic, List, and Union are its only implementations, sealed by the
+// T2): Atomic, List, and Union are its only implementations, sealed by the
 // unexported variety method, so consumers exhaustively switch the three
 // branches and no fourth variety is representable. A {variety} of nil models
 // the absent variety that only xs:anySimpleType has (§3.16.1: "Required for all
@@ -83,7 +83,7 @@ func (Union) variety()  {}
 // of the <simpleType> alternatives Structures §3.16.2.1 (map.std.common, "Common
 // mapping rules for Simple Type Definitions") mapped to produce the component,
 // carrying only the property that alternative MINTS. It is a sealed sum (STYLE
-// T2/T7) mirroring term.go's TermOrRef.
+// T2) mirroring term.go's TermOrRef.
 //
 // It exists so {variety}, {primitive type definition}, {item type definition}
 // and {member type definitions} need not be stored a second time beside the
@@ -185,7 +185,7 @@ func (anyAtomicDerivation) simpleTypeDerivation()   {}
 // EffectiveFacets, the value/facets.go pipeline), so excluding them would force
 // a parallel mechanism for no gain — the constants themselves cite
 // xsd-precisionDecimal.md for provenance. The zero value is invalid (an unset
-// field is a caught bug, STYLE T1/T7); constants start at iota+1 and carry the
+// field is a caught bug, STYLE T1); constants start at iota+1 and carry the
 // verbatim spec token, returned by String().
 type FacetKind uint8
 

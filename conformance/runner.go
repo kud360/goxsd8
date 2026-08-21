@@ -133,7 +133,7 @@ type caseSpec struct {
 }
 
 // expectation is the suite's declared XSD 1.1 outcome for one case, as a closed
-// three-valued set (STYLE T7): the document is expected to be valid, expected to
+// three-valued set (STYLE T1): the document is expected to be valid, expected to
 // be invalid, or declared indeterminate — the Working Group could not agree on
 // one right answer. It is a struct so values are constructed ONLY via
 // expectValid, expectInvalid and expectIndeterminate, and so "valid or invalid"
