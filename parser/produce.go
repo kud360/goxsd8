@@ -550,7 +550,7 @@ func rejectMisplacedNotation(el *Element) error {
 	if !isXSD(el, "notation") {
 		return nil
 	}
-	parent := el.Parent()
+	parent := el.parent
 	if parent == nil || isXSD(parent, "schema") || isXSD(parent, "override") {
 		return nil
 	}
