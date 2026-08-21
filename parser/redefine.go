@@ -512,14 +512,14 @@ func (p *producer) redefinedTypeBase(at *Element, qn xsd.QName) (typeSource, boo
 // (redefined) component like any other reference and is genuinely circular if it
 // names the type it sits in.
 func redefinedTypeDeclaration(at *Element) *Element {
-	parent := at.Parent()
+	parent := at.parent
 	if parent == nil {
 		return nil
 	}
 	if isXSD(parent, "simpleType") {
 		return parent
 	}
-	grand := parent.Parent()
+	grand := parent.parent
 	if grand != nil && isXSD(grand, "complexType") {
 		return grand
 	}
@@ -567,7 +567,7 @@ func (p *producer) redefinedAttributeGroupOriginal(at *Element, qn xsd.QName) (t
 // with no such ancestor (a <group ref> in a redefining <complexType>, say) is an
 // ordinary reference to the visible redefined component, not a self-reference.
 func redefinedContainer(at *Element, kind string) *Element {
-	for cur := at.Parent(); cur != nil; cur = cur.Parent() {
+	for cur := at.parent; cur != nil; cur = cur.parent {
 		if isXSD(cur, kind) {
 			return cur
 		}
