@@ -121,7 +121,24 @@ import (
 //     INCLUDED document that is not a <schema> is the opposite case and is NOT
 //     declined: src-include clause 1 makes that a genuine rejection, which the
 //     assembly emits, and the document never enters the report to be gated.
-//  3. Top-level allowlist. Every top-level child element must be xsd:annotation,
+//  3. Top-level allowlist, unless the document is UNCONDITIONALLY REJECTED
+//     first. A document holding a MISPLACED <xs:notation> — one whose parent is
+//     neither <xs:schema> nor <xs:override>, the only two content models that
+//     reach the xs:schemaTop group <notation> is declared in — is admitted
+//     whatever else it holds (#945, holdsMisplacedNotation). Nothing in it can
+//     be silently skipped into a vacuous accept, because the parse cannot return
+//     nil: rejectS4SFaults walks the whole document before any producer runs and
+//     charges the fault wherever it stands. The verdict it buys is "invalid",
+//     which §5.1's first bullet (xmlschema11-1.md:4296) makes the right one for
+//     such a document however its remaining shape reads, and no later slice can
+//     flip it — that permanence is what separates this from the ReadDocument
+//     limitation step 1 declines. Only a construct the producer rejects
+//     GENUINELY and UNCONDITIONALLY may be admitted this way; a non-nil error is
+//     NOT decidability on its own, since the producer also rejects for
+//     not-yet-implemented reasons and the allowlist below is what guards that
+//     direction.
+//
+//     Every top-level child element must otherwise be xsd:annotation,
 //     xsd:include, xsd:import, xsd:override, xsd:simpleType, xsd:element,
 //     xsd:attribute, xsd:complexType, xsd:attributeGroup (named definition),
 //     xsd:group (named definition), xsd:defaultOpenContent (in every shape, as
@@ -547,11 +564,20 @@ func decideAgreement(observed, expected bool) Status {
 	return Fail()
 }
 
-// schemaShapeDecidable reports whether every top-level child of the <schema> root
-// lies within the producer's decidable subset (the step-3 allowlist documented
-// above). A single out-of-subset child declines the whole case, since Produce
-// would silently skip it (or reject it for a not-yet-supported reason) rather
-// than decide it genuinely.
+// schemaShapeDecidable reports whether this document contributes no false-accept
+// hazard to the assembly that read it: either it is UNCONDITIONALLY REJECTED
+// (holdsMisplacedNotation), or every top-level child lies within the producer's
+// decidable subset (the step-3 allowlist documented above). A single
+// out-of-subset child declines the whole case, since Produce would silently skip
+// it (or reject it for a not-yet-supported reason) rather than decide it
+// genuinely.
+//
+// The misplaced-<notation> short-circuit comes FIRST because it makes every
+// other question moot: a document carrying one is rejected before any producer
+// dispatches, so no shape below can be silently skipped into a vacuous accept
+// and no shape below can be rejected for a limitation instead. The remaining
+// allowlist runs unchanged on every other document, this one included once the
+// notation is moved into a slot the grammar admits.
 //
 // The root ELEMENT itself is checked first for defaultAttributes (§3.4.2.4): that
 // attribute names an attribute group whose {attribute uses} must be folded into
@@ -563,6 +589,9 @@ func decideAgreement(observed, expected bool) Status {
 // no defaultAttributes on <schema>, defaultAttributesApply on any complexType has
 // nothing to apply and skips nothing.
 func schemaShapeDecidable(doc *parser.Document) bool {
+	if holdsMisplacedNotation(doc.Root()) {
+		return true
+	}
 	if hasAttr(doc.Root(), "defaultAttributes") {
 		return false
 	}
@@ -654,6 +683,59 @@ func schemaShapeDecidable(doc *parser.Document) bool {
 		}
 	}
 	return true
+}
+
+// holdsMisplacedNotation reports whether the subtree under parent holds an
+// <xs:notation> the schema for schema documents admits nowhere: <notation> is
+// declared in the xs:schemaTop group alone (xmlschema11-1.md:4462), and only
+// <schema> (:4562) and <override> (:5577) reference that group. <redefine> is
+// not a third — its own model reaches xs:redefinable (:5558), which omits
+// <notation> (:4465-4477) — so a <notation> child of one is misplaced too, by a
+// different production and the same umbrella fault. The fault carries NO rule
+// ID: §3.14.3 and §3.14.4 both answer "None as such" (:3409, :3413), so it
+// stands on §5.1's first, unnumbered bullet (:4296) directly, and charging a
+// src-* verdict here would fabricate one (STYLE E2).
+//
+// A document holding one is DECIDABLE whatever else it holds (#945), because the
+// producer rejects it GENUINELY and UNCONDITIONALLY: parser's rejectS4SFaults
+// walks the whole document before any producer dispatches, so no position can
+// reach around the charge — and a <notation> under <redefine> is charged earlier
+// still, at discovery, by <redefine>'s own content-model guard. Both are grammar
+// verdicts the spec licenses, not limitations awaiting a slice, so the "invalid"
+// they buy cannot flip once some later slice lands. That permanence is the whole
+// admission argument; a merely non-nil parse error is NOT one, since the
+// producer also rejects for not-yet-implemented reasons.
+//
+// The walk MIRRORS rejectS4SFaults' — XSD-namespace elements only, never
+// descending into <appinfo> or <documentation>, whose <xs:any
+// processContents="lax"> content (:5727, :5740) makes an element merely NAMED
+// {XMLSchemaNS}notation ordinary content that no guard governs. The two must
+// agree exactly: a shape this predicate claimed and that walk did not would be
+// admitted on a rejection that never comes (MS-Notations2006-07-15/notatF009,
+// suite-VALID, is precisely such a document).
+//
+// parent is the element whose children are examined, so the top-level call
+// passes the <schema> root and every notation child of it is legal.
+func holdsMisplacedNotation(parent *parser.Element) bool {
+	name := parent.Name()
+	legal := name.Space() == xsd.XMLSchemaNS && (name.Local() == "schema" || name.Local() == "override")
+	for _, child := range parent.Children() {
+		el, ok := child.(*parser.Element)
+		if !ok || el.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		local := el.Name().Local()
+		if local == "appinfo" || local == "documentation" {
+			continue
+		}
+		if local == "notation" && !legal {
+			return true
+		}
+		if holdsMisplacedNotation(el) {
+			return true
+		}
+	}
+	return false
 }
 
 // redefineDecidable reports whether every child of an <xs:redefine> (§4.2.4) is

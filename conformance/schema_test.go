@@ -184,6 +184,31 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"top-level defaultOpenContent with no any child", `<xs:defaultOpenContent/>`},
 		{"top-level defaultOpenContent with mode=none", `<xs:defaultOpenContent mode="none"><xs:any/></xs:defaultOpenContent>`},
 		{"top-level defaultOpenContent with an out-of-enumeration mode", `<xs:defaultOpenContent mode="bogus"><xs:any/></xs:defaultOpenContent>`},
+		// #945: a document holding a MISPLACED <notation> is admitted whatever else
+		// it holds, because the producer rejects it before any producer dispatches
+		// (rejectS4SFaults) — so the shape of the rest can neither be silently
+		// skipped into a vacuous accept nor rejected for a limitation. Every parent
+		// below is one the W3C MS-Notations2006-07-15/notatF* family writes, and
+		// none of them is <schema> or <override>.
+		{"notation inside an <all>", `<xs:complexType name="foo"><xs:all><xs:notation name="jpeg" public="image/jpeg"/></xs:all></xs:complexType>`},
+		{"notation inside a <choice>", `<xs:complexType name="foo"><xs:choice><xs:notation name="jpeg" public="image/jpeg"/></xs:choice></xs:complexType>`},
+		{"notation inside a <sequence>", `<xs:complexType name="foo"><xs:sequence><xs:notation name="jpeg" public="image/jpeg"/></xs:sequence></xs:complexType>`},
+		{"notation directly inside a <complexType>", `<xs:complexType name="foo"><xs:notation name="jpeg" public="image/jpeg"/></xs:complexType>`},
+		{"notation inside a complexContent <extension>", `<xs:complexType name="bar"><xs:complexContent><xs:extension><xs:notation name="jpeg" public="image/jpeg"/></xs:extension></xs:complexContent></xs:complexType>`},
+		{"notation inside a named <group>'s body", `<xs:group name="foo"><xs:all><xs:notation name="jpeg" public="image/jpeg"/></xs:all></xs:group>`},
+		{"notation inside a named <attributeGroup>", `<xs:attributeGroup name="bar"><xs:notation name="jpeg" public="image/jpeg"/></xs:attributeGroup>`},
+		{"notation inside a <simpleType> naming no alternative", `<xs:simpleType name="foo"><xs:notation name="jpeg" public="image/jpeg"/></xs:simpleType>`},
+		{"notation inside a <redefine> (§4.2.4 admits none)", `<xs:redefine schemaLocation="foo"><xs:notation name="jpeg" public="image/jpeg"/></xs:redefine>`},
+		// The parent is itself no xs:schemaTop arm in these three, so the admission
+		// rests on the rejection being genuine and unconditional, never on the
+		// parent's own shape becoming decidable.
+		{"notation inside a top-level <any>", `<xs:any><xs:notation name="jpeg" public="image/jpeg"/></xs:any>`},
+		{"notation inside a top-level <key>'s field", `<xs:key name="foo"><xs:field><xs:notation name="jpeg" public="image/jpeg"/></xs:field></xs:key>`},
+		{"notation inside a top-level <keyref>", `<xs:keyref name="r" refer="fullName"><xs:notation name="jpeg" public="image/jpeg"/><xs:selector xpath=".//p"/><xs:field xpath="@first"/></xs:keyref>`},
+		// The short-circuit DOMINATES: a shape the allowlist would decline on its
+		// own is admitted alongside a misplaced notation, since the parse cannot
+		// reach it.
+		{"misplaced notation beside an otherwise undecidable simpleType", `<xs:simpleType name="U"/><xs:complexType name="T"><xs:sequence><xs:notation name="jpeg" public="image/jpeg"/></xs:sequence></xs:complexType>`},
 	}
 	for _, tc := range cases {
 		if !schemaShapeDecidable(schemaDoc(t, tc.body)) {
@@ -250,6 +275,17 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"override child that is a simpleType the gate declines", `<xs:override schemaLocation="b.xsd"><xs:simpleType name="U"/></xs:override>`},
 		{"override child of an out-of-model kind", `<xs:override schemaLocation="b.xsd"><xs:include schemaLocation="c.xsd"/></xs:override>`},
 		{"include beside an undecidable kind still declines", `<xs:include schemaLocation="lib.xsd"/><xs:simpleType name="U"/>`},
+		// #945's short-circuit must not reach an element merely NAMED
+		// {XMLSchemaNS}notation inside <appinfo>/<documentation>: that is
+		// <xs:any processContents="lax"> content the producer charges no guard on
+		// (MS-Notations2006-07-15/notatF009 is suite-VALID), so it licenses nothing
+		// and the undecidable sibling still declines the case.
+		{"notation inside appinfo does not launder an undecidable sibling", `<xs:annotation><xs:appinfo><xs:notation name="jpeg" public="image/jpeg"/></xs:appinfo></xs:annotation><xs:simpleType name="U"/>`},
+		{"notation inside documentation does not launder an undecidable sibling", `<xs:annotation><xs:documentation><xs:notation name="jpeg" public="image/jpeg"/></xs:documentation></xs:annotation><xs:simpleType name="U"/>`},
+		// A notation in a legal slot is no rejection either: <schema> and
+		// <override> are the two content models that reach xs:schemaTop.
+		{"top-level notation does not launder an undecidable sibling", `<xs:notation name="jpeg" public="image/jpeg"/><xs:simpleType name="U"/>`},
+		{"override notation does not launder an undecidable sibling", `<xs:override schemaLocation="b.xsd"><xs:notation name="jpeg" public="image/jpeg"/></xs:override><xs:simpleType name="U"/>`},
 	}
 	for _, tc := range cases {
 		if schemaShapeDecidable(schemaDoc(t, tc.body)) {
@@ -362,6 +398,53 @@ func TestSchemaExecutorDecidesGlobalAttributeInlineSimpleTypeSuiteCase(t *testin
 	doc := filepath.Join(suiteRoot, "sunData", "AttrDecl", "AD_type", "AD_type00102m", "AD_type00102m.xsd")
 	if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
 		t.Error("a suite-valid top-level <attribute> with an inline <simpleType> must now be decided and agreed with")
+	}
+	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectInvalid()}).IsPass() {
+		t.Error("executor must Fail under a flipped expectation (decides for real)")
+	}
+}
+
+// TestSchemaExecutorDecidesMisplacedNotationSuiteCases drives the real executor
+// over the MS-Notations fixtures whose only out-of-subset feature is a
+// <notation> the grammar admits nowhere (#945). Each is suite-INVALID and the
+// producer rejects it unconditionally, so the executor must decide it and agree,
+// and must Fail under the flipped expectation rather than passing either way.
+//
+// The last three rows are the ones whose parent is itself no xs:schemaTop arm,
+// and the <redefine> row is the one charged by <redefine>'s own content-model
+// guard rather than by rejectS4SFaults: all four are admitted on the rejection
+// being genuine, never on the parent's shape. Skips when the submodule is
+// absent.
+func TestSchemaExecutorDecidesMisplacedNotationSuiteCases(t *testing.T) {
+	skipWithoutSuite(t)
+	exec := newSchemaExec()
+	for _, name := range []string{
+		"notatF001", "notatF013", "notatF015", "notatF019", "notatF027",
+		"notatF031", "notatF063", "notatF067", "notatF055", "notatF005",
+		"notatF029", "notatF039",
+	} {
+		doc := filepath.Join(suiteRoot, "msData", "notations", name+".xsd")
+		if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectInvalid()}).IsPass() {
+			t.Errorf("%s: a suite-invalid misplaced <notation> must be decided and agreed with", name)
+		}
+		if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
+			t.Errorf("%s: executor must Fail under a flipped expectation (decides for real)", name)
+		}
+	}
+}
+
+// TestSchemaExecutorDecidesNotationInAppinfoSuiteCase proves the #945
+// short-circuit stops where rejectS4SFaults' walk stops: notatF009 writes its
+// <notation> inside <appinfo>, whose <xs:any processContents="lax"> content the
+// producer charges no guard on, so the case is decided by the ordinary allowlist
+// and observes the VALID the suite declares — not by an unconditional rejection
+// that never comes. Skips when the submodule is absent.
+func TestSchemaExecutorDecidesNotationInAppinfoSuiteCase(t *testing.T) {
+	skipWithoutSuite(t)
+	exec := newSchemaExec()
+	doc := filepath.Join(suiteRoot, "msData", "notations", "notatF009.xsd")
+	if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
+		t.Error("a <notation> inside <appinfo> is lax wildcard content: the case stays suite-valid and decided")
 	}
 	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectInvalid()}).IsPass() {
 		t.Error("executor must Fail under a flipped expectation (decides for real)")
