@@ -34,9 +34,9 @@ func TestElementLookupPrefixDelegatesToStartTag(t *testing.T) {
 
 // This test is package-internal because Element.parent is an unexported field
 // with no accessor (STYLE T5: nothing outside package parser navigates upward).
-// What it pins is what ReadDocument builds: the root's parent is nil and every
-// child's parent is the element enclosing it, the structural edge a later
-// src-resolve phase (§3.17.6.2) walks up to reach a <schema> ancestor.
+// What it pins is what ReadDocument builds: the root's parent is nil and its
+// child's parent is the root, the structural edge a later src-resolve phase
+// (§3.17.6.2) walks up to reach a <schema> ancestor.
 func TestReadDocumentLinksEachChildToItsParent(t *testing.T) {
 	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">` +
 		`<xs:element name="root"/>` +

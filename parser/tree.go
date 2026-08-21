@@ -25,13 +25,13 @@ type Node interface {
 // which the accessors delegate — the single canonical QName and scope
 // implementation, never re-derived here.
 //
-// Name, Attributes, Attr, Children, BaseURI and Loc are exported for a single
-// consumer, this module's own conformance harness, which walks raw schema
-// documents; Loc alone is exported because the Node interface carries it rather
-// than because anything calls it. No use case outside this module is known, so
-// pre-1.0 these names may be unexported without a deprecation path — the
-// ratchet and the gate are the only compatibility promises (docs/PLAN.md, "v1.0
-// — the stability line").
+// Name, Attr and Children are exported for a single consumer, this module's
+// own conformance harness, which walks raw schema documents. Loc is exported
+// because the Node interface carries it, not because anything calls it;
+// Attributes and BaseURI have no caller outside package parser at all. No use
+// case outside this module is known, so pre-1.0 these names may be unexported
+// without a deprecation path — the ratchet and the gate are the only
+// compatibility promises (docs/PLAN.md, "v1.0 — the stability line").
 type Element struct {
 	src *xmltree.StartElement
 	// parent is the enclosing element, nil for the tree's root. The link is set

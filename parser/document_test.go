@@ -104,6 +104,7 @@ func TestReadDocumentBaseURIInheritAndOverride(t *testing.T) {
 	if got := rootEl.BaseURI(); got != "http://example.org/base/" {
 		t.Errorf("inherited BaseURI() = %q, want %q", got, "http://example.org/base/")
 	}
+
 	// The "child" element overrides with a relative reference, resolved against
 	// its parent's base.
 	var child *parser.Element
