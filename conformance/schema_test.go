@@ -410,10 +410,11 @@ func TestSchemaExecutorDecidesGlobalAttributeInlineSimpleTypeSuiteCase(t *testin
 // producer rejects it unconditionally, so the executor must decide it and agree,
 // and must Fail under the flipped expectation rather than passing either way.
 //
-// The last two rows are the ones whose parent is itself no xs:schemaTop arm, and
-// the <redefine> row is the one charged by <redefine>'s own content-model guard
-// rather than by rejectS4SFaults: all three are admitted on the rejection being
-// genuine, never on the parent's shape. Skips when the submodule is absent.
+// The last three rows are the ones whose parent is itself no xs:schemaTop arm,
+// and the <redefine> row is the one charged by <redefine>'s own content-model
+// guard rather than by rejectS4SFaults: all four are admitted on the rejection
+// being genuine, never on the parent's shape. Skips when the submodule is
+// absent.
 func TestSchemaExecutorDecidesMisplacedNotationSuiteCases(t *testing.T) {
 	skipWithoutSuite(t)
 	exec := newSchemaExec()
@@ -432,13 +433,13 @@ func TestSchemaExecutorDecidesMisplacedNotationSuiteCases(t *testing.T) {
 	}
 }
 
-// TestSchemaExecutorDeclinesNotationInAppinfoSuiteCase proves the #945
+// TestSchemaExecutorDecidesNotationInAppinfoSuiteCase proves the #945
 // short-circuit stops where rejectS4SFaults' walk stops: notatF009 writes its
 // <notation> inside <appinfo>, whose <xs:any processContents="lax"> content the
 // producer charges no guard on, so the case is decided by the ordinary allowlist
 // and observes the VALID the suite declares — not by an unconditional rejection
 // that never comes. Skips when the submodule is absent.
-func TestSchemaExecutorDeclinesNotationInAppinfoSuiteCase(t *testing.T) {
+func TestSchemaExecutorDecidesNotationInAppinfoSuiteCase(t *testing.T) {
 	skipWithoutSuite(t)
 	exec := newSchemaExec()
 	doc := filepath.Join(suiteRoot, "msData", "notations", "notatF009.xsd")
