@@ -31,7 +31,6 @@ const (
 	ruleCTPropsCorr           xsderr.Rule = "ct-props-correct"
 	ruleSrcCT                 xsderr.Rule = "src-ct"
 	ruleSrcWildcard           xsderr.Rule = "src-wildcard"
-	ruleParticleCorr          xsderr.Rule = "p-props-correct"
 	ruleWildcardCorr          xsderr.Rule = "w-props-correct"
 	ruleSrcIdentityConstraint xsderr.Rule = "src-identity-constraint"
 	// ruleEPropsCorrect is the Element Declaration Properties Correct Schema
@@ -50,9 +49,12 @@ const (
 	// document attribute fails its own declared type and no Structures Schema
 	// Representation Constraint covers the case — notably an unrecognized ##
 	// token in notQName, whose value space is fixed by xs:qnameList/xs:qnameListA
-	// (§3.10.2) rather than by any src-wildcard clause, and a QName-valued
+	// (§3.10.2) rather than by any src-wildcard clause, a QName-valued
 	// attribute whose local part is empty (bindQName), which no src-* clause
-	// reaches because they all presuppose a well-formed QName.
+	// reaches because they all presuppose a well-formed QName, and a
+	// minOccurs/maxOccurs lexical outside the xs:nonNegativeInteger/xs:allNNI
+	// types Appendix A's occurs attribute group declares (nonNegativeInt),
+	// which p-props-correct cannot reach because no particle exists yet (#932).
 	ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 	// ruleSchPropsCorrect is the Schema Properties Correct Schema Component
 	// Constraint (§3.17.6.1). The producer charges only clause 2 ("None of the
