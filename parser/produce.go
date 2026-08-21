@@ -1588,7 +1588,7 @@ func (p *producer) resolveModelGroup(name xsd.QName) (xsd.ModelGroup, bool, erro
 // declaration order, so a document writing both is always reported at name
 // (STYLE D2).
 func rejectLocalSimpleTypeAttrs(elem *Element) error {
-	parent := elem.Parent()
+	parent := elem.parent
 	if parent == nil || isXSD(parent, "schema") || isXSD(parent, "redefine") || isXSD(parent, "override") {
 		return nil
 	}
@@ -2827,7 +2827,7 @@ func importsNamespace(schema *Element, ns string) bool {
 // (Document.IsSchema), so the walk cannot land on anything else.
 func containingSchema(elem *Element) *Element {
 	root := elem
-	for e := elem; e != nil; e = e.Parent() {
+	for e := elem; e != nil; e = e.parent {
 		root = e
 	}
 	return root

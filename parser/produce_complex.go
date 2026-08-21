@@ -1068,7 +1068,7 @@ func (p *producer) wildcardElement(owner *Element, explicit xsd.ContentType) *El
 // defaultOpenContentElem returns the <defaultOpenContent> child of THIS
 // document's <schema> (§3.4.2.3.3 clause 5.2's "the <schema> ancestor"), or nil
 // when it declares none. The <schema> is read off p.schemaElem, never by walking
-// Element.Parent() from the complex type: under ·override pre-processing· a
+// Element.parent from the complex type: under ·override pre-processing· a
 // substituted declaration is a child of the OVERRIDING document's <override>,
 // so an ancestor walk would climb into that document and read ITS default,
 // whereas §4.2.5 makes the substituted declaration a top-level declaration of
