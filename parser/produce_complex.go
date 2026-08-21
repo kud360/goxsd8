@@ -1362,10 +1362,11 @@ func (p *producer) modelGroupChildParticle(group *Element, scopeParent xsd.Eleme
 // for the one registration a content model reaches.
 //
 // occursOf therefore answers FIRST, since its elided verdict decides whether the
-// walk may contribute components at all — but the p-props-correct verdict it
-// charges on this element's own occurrence range is held back until after the
-// walk, so a Schema for Schema Documents fault inside the subtree answers ahead
-// of a Schema Component Constraint on the particle wrapping it.
+// walk may contribute components at all — but the verdict it charges on this
+// element's own occurrence range (p-props-correct for min greater than max,
+// cvc-datatype-valid for a lexical outside the declared type) is held back until
+// after the walk, so a Schema for Schema Documents fault inside the subtree
+// answers ahead of anything charged on the particle wrapping it.
 //
 // The grammar's own {0,1} occurrence restriction on <all> is charged here rather
 // than only for the top model-group child explicitContent maps, on the same
@@ -1651,11 +1652,12 @@ func (p *producer) groupParticles(group *Element, scopeParent xsd.ElementScopePa
 // arm, whose builder registration is NOT dropped by dropping the Particle.
 //
 // occursOf answers FIRST, since its elided verdict decides which producer maps
-// the {term} — but the p-props-correct verdict it charges on this element's own
-// occurrence range is held back until after that mapping, so a Schema for Schema
-// Documents fault inside the <element> answers ahead of a Schema Component
-// Constraint on the particle wrapping it (the ordering produceGroupParticle
-// keeps for the same reason).
+// the {term} — but the verdict it charges on this element's own occurrence range
+// (p-props-correct for min greater than max, cvc-datatype-valid for a lexical
+// outside the declared type) is held back until after that mapping, so a Schema
+// for Schema Documents fault inside the <element> answers ahead of anything
+// charged on the particle wrapping it (the ordering produceGroupParticle keeps
+// for the same reason).
 func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementScopeParent) (*xsd.Particle, error) {
 	occ, elided, occErr := occursOf(el)
 	if elided {
@@ -2614,12 +2616,23 @@ func occursOf(el *Element) (occ xsd.Occurs, elided bool, err error) {
 }
 
 // nonNegativeInt parses an xs:nonNegativeInteger-valued occurrence attribute,
-// charging p-props-correct (§3.9.6.1) on a malformed or negative value.
+// charging cvc-datatype-valid (Datatypes §4.1.4) on a malformed or negative
+// value: the schema for schema documents declares minOccurs
+// type="xs:nonNegativeInteger" and maxOccurs type="xs:allNNI" (Appendix A's
+// occurs attribute group), so a lexical outside that value space is an attribute
+// failing its own declared type, which is what ruleDatatypeValid names.
+//
+// NOT p-props-correct (§3.9.6.1). That constraint quantifies over an existing
+// particle's PROPERTIES, and occursOf returns this error before reaching
+// xsd.NewOccurs/xsd.NewUnboundedOccurs, so no Occurs and no Particle is ever
+// built for it to constrain. p-props-correct clause 2.1 — {min occurs} greater
+// than a numeric {max occurs} — is charged by those constructors, on the two
+// values this helper has already parsed (#932).
 func nonNegativeInt(lexical string, loc xsderr.Loc, attr string) (int, error) {
 	n, err := strconv.Atoi(strings.TrimSpace(lexical))
 	if err != nil || n < 0 {
-		return 0, xsderr.New(ruleParticleCorr, loc,
-			"%s value %q is not a nonNegativeInteger (p-props-correct)", attr, lexical)
+		return 0, xsderr.New(ruleDatatypeValid, loc,
+			"%s value %q is not a nonNegativeInteger", attr, lexical)
 	}
 	return n, nil
 }
@@ -2637,7 +2650,8 @@ func nonNegativeInt(lexical string, loc xsderr.Loc, attr string) (int, error) {
 // generic "attribute value is not valid against its declared type" rule. It is
 // NOT cos-all-limited, which constrains where the resulting particle may appear
 // rather than what the element's attributes may say, and not p-props-correct,
-// which covers lexicals that are not nonNegativeIntegers at all (or max < min).
+// which constrains an already-built particle's properties and is charged by
+// xsd.NewOccurs for max < min alone.
 //
 // Only the content-model <all> is checked: on the <all> body of a top-level named
 // <group>, Appendix A's xs:namedGroup makes both attributes use="prohibited", a
@@ -2662,8 +2676,9 @@ func allOccursGrammar(el *Element) error {
 // allOccursEnum checks one numeric <all> occurrence lexical against the {0,1}
 // enumeration. The enumeration facet compares VALUES, so "01" is the value 1 and
 // passes, matching how occursOf reads the same attribute; a lexical that is not a
-// nonNegativeInteger at all fails its base type first, charged p-props-correct by
-// nonNegativeInt.
+// nonNegativeInteger at all fails its base type first, charged cvc-datatype-valid
+// by nonNegativeInt — the same rule this function charges, since both are one
+// attribute failing one declared type.
 func allOccursEnum(lexical string, loc xsderr.Loc, attr string) error {
 	n, err := nonNegativeInt(lexical, loc, attr)
 	if err != nil {
@@ -2678,6 +2693,15 @@ func allOccursEnum(lexical string, loc xsderr.Loc, attr string) error {
 
 // processContentsOf maps a processContents lexical to a ProcessContents token,
 // charging w-props-correct (§3.10.6.1) on an out-of-range value.
+//
+// That charge has the shape #932 corrected in nonNegativeInt: Appendix A declares
+// processContents as an xs:NMTOKEN restricted to the enumeration skip/lax/strict
+// (xmlschema11-1.md:5346-5353), produceWildcard calls this before xsd.NewWildcard,
+// and xsd.NewWildcard charges w-props-correct clause 1 for the same out-of-range
+// {process contents} on a component that does exist — so the parser is charging a
+// component constraint for a lexical fault that builds no component. #932's
+// grounding rules only on the occurrence attributes and leaves this one open;
+// changing it wants its own grounding, so the charge stands as written.
 func processContentsOf(lexical string, loc xsderr.Loc) (xsd.ProcessContents, error) {
 	switch strings.TrimSpace(lexical) {
 	case "skip":

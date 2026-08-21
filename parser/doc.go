@@ -244,7 +244,8 @@
 // schema documents declares for it (a declaration name that is not an
 // xs:NCName, a QName-valued attribute with an empty local part, an empty
 // prefix, or more than one colon, an unrecognized ## token in notQName,
-// §3.10.2), which no Schema Representation Constraint covers. PLANNED
+// §3.10.2, a minOccurs/maxOccurs outside xs:nonNegativeInteger/xs:allNNI),
+// which no Schema Representation Constraint covers. PLANNED
 // (not yet implemented): collecting them in document order rather than
 // stopping at the first — [Parse] and [Produce] both return only the
 // first error today.
