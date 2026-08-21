@@ -1,0 +1,74 @@
+# gate — CLAUDE.md's gate, run on the pushed PR head.
+#
+# The tree that lands on `main` is the PR head, and this job is the only check
+# that reads it. `.githooks/pre-commit` (#246) reads the author's working tree,
+# and only in a session that ran `git config core.hooksPath .githooks` — a fresh
+# ephemeral clone carries no local git config, so that hook is advisory by
+# construction. The two are complements: the hook fails fast at commit time,
+# this job is the backstop that cannot be skipped. Landing this retires nothing
+# (#389).
+#
+# The steps below are CLAUDE.md's "The gate" block, part for part. That block is
+# the only definition of the gate: when it changes this file changes with it,
+# and CI never invents a fifth step of its own.
+name: gate
+
+on:
+  pull_request:
+    branches: [main]
+
+# CI is read-only, and never sets GOXSD_RATCHET=1: that mode rewrites
+# conformance/testdata/expectations/ and belongs to the arbiter alone
+# (CLAUDE.md, "Other commands").
+permissions:
+  contents: read
+
+# A later push to the same PR supersedes the run in flight: the head that run
+# measured is no longer the head that would land.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The W3C suite. An absent submodule FAILS the run rather than
+          # skipping it (conformance/conformance_test.go: a run that executed
+          # zero cases must never be mistaken for a green one, #309), and
+          # `go test ./...` reaches that test too — so the suite is a
+          # requirement of gate part 1 as much as of part 4.
+          submodules: true
+
+      - uses: actions/setup-go@v5
+        with:
+          # Whatever go.mod's `go` directive requires, so the toolchain this
+          # job runs cannot drift from the one the module declares.
+          go-version-file: go.mod
+
+      - name: gate part 1 — build, test, vet
+        run: go build ./... && go test ./... && go vet ./...
+
+      # `go tool lint` fetches its version-pinned linter with `go run
+      # pkg@version`, which needs network access on a cold module cache
+      # (docs/ROUTINES.md, "Environment requirements"): a GitHub-hosted runner
+      # has it, and this job must never be made hermetic. Its .lintcache/ is
+      # per-checkout and gitignored, so a fresh runner needs no cache setup.
+      - name: gate part 2 — lint
+        run: go tool lint
+
+      # Without -fix, commentwrap reports and writes nothing — it exits 1 on
+      # findings, 2 on an operational error (tools/commentwrap/main.go). -fix is
+      # the mutating mode and CI never passes it, so there is no reflow for a
+      # follow-up "nothing changed" step to detect, and none is added.
+      - name: gate part 3 — commentwrap
+        run: go tool commentwrap ./...
+
+      # Read-only: compares the run against the committed expectations and fails
+      # on a regression. -v is the gate's own flag and surfaces cases the branch
+      # improved but has not banked.
+      - name: gate part 4 — conformance (read-only)
+        run: go test ./conformance -run TestConformance -count=1 -v
