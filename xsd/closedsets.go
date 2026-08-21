@@ -4,7 +4,7 @@ import "strconv"
 
 // This file holds the sealed scalar enum types for the closed value sets of
 // the XSD 1.1 component model (Structures §2.2). Each is a uint8 whose zero
-// value is invalid — an unset field is a caught bug (STYLE T1/T7), never a
+// value is invalid — an unset field is a caught bug (STYLE T1), never a
 // valid instance. Constants start at iota+1 and carry the verbatim spec token
 // they denote; String() returns that exact token via a switch (no package-level
 // map — a map beside the switch would be a duplicate table, STYLE D3) and never

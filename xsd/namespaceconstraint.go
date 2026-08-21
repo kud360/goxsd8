@@ -23,7 +23,7 @@ const ruleWildcardCorrect xsderr.Rule = "w-props-correct"
 // NamespaceConstraintVariety is the {variety} property of a Namespace
 // Constraint property record (Structures §3.10.1). Legal tokens: "any",
 // "enumeration", "not". The zero value is invalid — an unset variety is a
-// caught bug (STYLE T1/T7), never a valid record, mirroring the sealed enums
+// caught bug (STYLE T1), never a valid record, mirroring the sealed enums
 // in closedsets.go.
 type NamespaceConstraintVariety uint8
 
@@ -289,7 +289,7 @@ func (c NamespaceConstraint) hasNamespace(v Namespace) bool {
 // D2/D3). It is the in-package membership test for the keywords: the resolution
 // of what a member MEANS is cvc-wildcard's (§3.10.4.1 clauses 2-3), and lives in
 // wildcardadmit.go, not here — this record has no declaration graph. No exported
-// accessor for the keyword slice exists: every reader is in-package (STYLE T5/T8);
+// accessor for the keyword slice exists: every reader is in-package (STYLE T5);
 // M5 adds one with its caller.
 func (c NamespaceConstraint) hasDisallowedNameKeyword(k DisallowedNameKeyword) bool {
 	for _, m := range c.disallowedNameKeywords {

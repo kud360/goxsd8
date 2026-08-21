@@ -26,7 +26,7 @@ import (
 // attributable.
 //
 // Its fields are unexported and it is constructed only by this package (STYLE
-// T7): a caller-built report would claim an assembly that never happened.
+// T1): a caller-built report would claim an assembly that never happened.
 type AssemblyReport struct {
 	documents  []AssembledDocument
 	unfollowed []UnfollowedDirective
@@ -103,7 +103,7 @@ type UnfollowedDirective struct {
 }
 
 // UnfollowedReason is why an ·inter-schema-document reference· yielded no
-// document. It is a closed set (STYLE T2/T7, the xsd/closedsets.go idiom): a
+// document. It is a closed set (STYLE T1, the xsd/closedsets.go idiom): a
 // uint8 whose zero value is invalid, so an unset Reason is a caught bug rather
 // than a valid one.
 type UnfollowedReason uint8

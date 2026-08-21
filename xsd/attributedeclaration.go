@@ -31,7 +31,7 @@ const ruleAPropsCorrect xsderr.Rule = "a-props-correct"
 // {scope}.{parent} identifies its container (Structures §3.2.1, Scope record
 // id="sc_a", {parent}: "Either a Complex Type Definition or a Attribute Group
 // Definition"). The unexported attributeScopeParent marker method seals it
-// (STYLE T2/T7), mirroring elementdeclaration.go's ElementScopeParent, so
+// (STYLE T2), mirroring elementdeclaration.go's ElementScopeParent, so
 // consumers exhaustively switch these variants and no fourth is representable.
 //
 // There are THREE arms for the spec's TWO component kinds, and the extra one is

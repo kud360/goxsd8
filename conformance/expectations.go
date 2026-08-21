@@ -205,7 +205,7 @@ func Compare(expected, actual map[string]Status, withheld []string) (Delta, erro
 // SECOND, independent lock, not the classifier: it never decides which cases are
 // sanctioned — the runner's withheld set does that — it only refuses to bank a
 // set whose size the arbiter did not predict. Construct values only via
-// AssertRemovals (STYLE T7).
+// AssertRemovals (STYLE T1).
 //
 // The zero value asserts none, which is the pre-#576 behaviour: a caller that
 // says nothing refuses any removal at all. There is no "did the caller assert?"

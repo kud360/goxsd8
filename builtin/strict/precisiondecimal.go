@@ -27,7 +27,7 @@ var precisionDecimalLexical = regexp.MustCompile(`^((\+|-)?([0-9]+(\.[0-9]*)?|\.
 // arm carries a (coefficient, scale, sign) triple, while the three special values
 // carry NONE of them — the spec's own iff-absence rules (·scale· absent iff
 // numericalValue is special; ·sign· absent iff notANumber) become unrepresentable
-// illegal states rather than runtime invariants (warden guardrail, STYLE T7).
+// illegal states rather than runtime invariants (warden guardrail, STYLE T1).
 type pdKind uint8
 
 const (

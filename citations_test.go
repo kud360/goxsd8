@@ -4,7 +4,7 @@
 // headlines" summary, which is a different list in a different order carrying
 // no citable IDs (a style rule is cited by its STYLE.md letter ID). Both lists
 // start at 1, so a number copied from the summary lands on a real but WRONG
-// principle and then reads as correct forever; #299 corrected 38 such sites.
+// principle and then reads as correct forever; #299 corrected 37 such sites.
 //
 // Two halves, both mechanical and both cheap:
 //

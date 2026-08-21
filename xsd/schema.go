@@ -139,7 +139,7 @@ func (b *SchemaBuilder) AddAnnotation(a Annotation) {
 // assembled per §4.2.1's "schema(D)"). It is constructible ONLY via
 // SchemaBuilder.Finalize or SchemaBuilder.FinalizeWith: its fields are
 // unexported and it has no other constructor, so a not-yet-finalized accumulator
-// can never be handed off as a finalized Schema (STYLE T1/T7) — "not finalized"
+// can never be handed off as a finalized Schema (STYLE T1) — "not finalized"
 // (SchemaBuilder) and "finalized" (Schema) are distinct Go types, not two states
 // of one type. The two entry points differ only in whether a [ValueSpace] is
 // installed.
@@ -302,7 +302,7 @@ func (b *SchemaBuilder) Finalize() (*Schema, error) {
 // both are finalize-time INPUTS, not accumulated schema state: a mutable setter
 // would make "builder with a capability installed" and "builder without" two
 // states of one type, which is exactly what the SchemaBuilder/Schema split exists
-// to avoid (STYLE T1/T7). For the same reason the two arrive at ONE seam and not
+// to avoid (STYLE T1). For the same reason the two arrive at ONE seam and not
 // two: a third entry point, or an options struct whose nil members were legal,
 // would make a partially installed schema representable.
 //
@@ -384,7 +384,7 @@ func (b *SchemaBuilder) finalize(vs ValueSpace, rc SimpleTypeRestrictionChecker)
 // duplicate rejection to. Every kind a schema's §3.17.1 properties hold
 // satisfies it, including the TypeDefinition sum — which promotes both methods
 // so its two variants stay on the one generic code path with no type switch
-// (STYLE T4/T7). It stays unexported: it is a generic constraint, not a
+// (STYLE T2/T4). It stays unexported: it is a generic constraint, not a
 // capability view a consumer takes (STYLE T5).
 type namedComponent interface {
 	Name() QName
