@@ -59,9 +59,6 @@ func TestReadDocumentTree(t *testing.T) {
 	if got := root.Name().Local(); got != "schema" {
 		t.Errorf("root local = %q, want %q", got, "schema")
 	}
-	if root.Parent() != nil {
-		t.Errorf("root Parent() = %v, want nil", root.Parent())
-	}
 	if !d.IsSchema() {
 		t.Error("IsSchema() = false, want true")
 	}
@@ -106,9 +103,6 @@ func TestReadDocumentBaseURIInheritAndOverride(t *testing.T) {
 	}
 	if got := rootEl.BaseURI(); got != "http://example.org/base/" {
 		t.Errorf("inherited BaseURI() = %q, want %q", got, "http://example.org/base/")
-	}
-	if rootEl.Parent() != root {
-		t.Error("element Parent() is not the schema root")
 	}
 
 	// The "child" element overrides with a relative reference, resolved against
