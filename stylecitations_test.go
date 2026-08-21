@@ -14,8 +14,9 @@
 //     Slash-joined citations (`D2/D3`) are split and each token checked.
 //     This half has no allow-list and takes no judgement: #382 ruled that
 //     every invented letter ID in the tree — `T7`, `T8`, `D6`, `L6` — meant
-//     a rule docs/STYLE.md already states, and renumbered all 32 sites onto
-//     it, so an ID-shaped token naming no rule has no legitimate form left.
+//     a rule docs/STYLE.md already states, and renumbered all 32 phantom
+//     tokens (31 sites — one comment cited two at once) onto it, so an
+//     ID-shaped token naming no rule has no legitimate form left.
 //   - ALLOW-LIST: a bare-numeric token is a position in CLAUDE.md's headline
 //     list, which is #540's still-open defect. Every instance is pinned in
 //     allowedBadStyleCitations by file, token and count — exactly
@@ -81,8 +82,11 @@ const (
 var styleCitationRe = regexp.MustCompile(`STYLE (?:// )?([A-Za-z0-9]+(?:/[A-Za-z0-9]+)*)`)
 
 // styleIDShapeRe matches the SHAPE of a docs/STYLE.md ID (a letter, then
-// digits, then an optional lowercase suffix like P3a's `a`), used to confirm
-// the heading parse below yields IDs and not prose.
+// digits, then an optional lowercase suffix like P3a's `a`). styleRuleIDs'
+// use of it below is redundant with styleRuleHeadingRe's own capture group,
+// which already restricts m[1] to this exact shape — it cannot fail as
+// written, and exists only so a future rewrite of styleRuleHeadingRe cannot
+// silently widen what counts as an ID without this assertion noticing.
 var styleIDShapeRe = regexp.MustCompile(`^[A-Z][0-9]+[a-z]?$`)
 
 // styleRuleHeadingRe matches one rule-ID heading in docs/STYLE.md, whose
