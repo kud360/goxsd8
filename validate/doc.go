@@ -85,9 +85,9 @@
 // renders that verdict into the message as well, for a reader who holds only
 // the string.
 //
-// Whether a cause is there is read off Unwrap and never off the rule ID: a
-// charge under cvc-complex-type may be clause 1.2, clause 4 or one of the
-// clauses that delegate to nothing, and only the chain tells them apart.
+// Whether a cause is there is read off Unwrap and never off the rule ID:
+// clauses 1.2 and 4 both charge under cvc-complex-type and both wrap the
+// verdict; the rule's other clauses wrap nothing.
 //
 // Two come from [Validator.Assess]'s dispatch on the root's ·governing
 // element declaration·: cvc-assess-elt (§3.3.4.6) for a root that determines

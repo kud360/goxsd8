@@ -81,7 +81,8 @@ func (vs valueSpace) EqualOrIdentical(r xsd.TypeResolver, ta *xsd.SimpleType, a 
 // returns which ARE that verdict from the ones that are not. Every gate answers
 // undecided, never invalid, per the [xsd.ValueSpace] fail-open contract. A
 // verdict rides out as the returned cause, unmodified and still carrying its own
-// cvc-* rule; an error a gate catches is discarded with it.
+// cvc-* rule; an error a gate catches is discarded, and that gate answers
+// undecided and causeless.
 //
 // The first gate runs BEFORE the pipeline; the second reads the pipeline's own
 // error through the ONE classification this package publishes:
