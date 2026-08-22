@@ -245,7 +245,13 @@
 // xs:NCName, a QName-valued attribute with an empty local part, an empty
 // prefix, or more than one colon, an unrecognized ## token in notQName,
 // §3.10.2, a minOccurs/maxOccurs outside xs:nonNegativeInteger/xs:allNNI),
-// which no Schema Representation Constraint covers. PLANNED
+// which no Schema Representation Constraint covers. A document that is
+// simply not VALID against the schema for schema documents — a prohibited
+// attribute on a top-level form, a child written where that element's
+// content model admits none, a child repeated past its maxOccurs — is
+// §5.1's first bullet and carries NO rule ID at all: it is a plain
+// wrapped error naming the offending item and the grammar it violates
+// (parser's rejectProhibitedAttrs and checkS4SChildOrder). PLANNED
 // (not yet implemented): collecting them in document order rather than
 // stopping at the first — [Parse] and [Produce] both return only the
 // first error today.
