@@ -180,8 +180,8 @@ plus log entry), `Closes #<N>` in the body closes the issue, and GitHub
 auto-deletes the head branch (keep the repo's "Automatically delete head
 branches" setting ON). Nothing is ever committed directly to `main`.
 
-Two preconditions, verified and stated by the orchestrating session before
-the PR is opened — neither is anyone else's to volunteer:
+Three preconditions, verified and stated by the orchestrating session
+before the PR is opened — none is anyone else's to volunteer:
 
 1. **The LOG entry is in the branch's diff** — literally
    `git diff origin/main...HEAD -- docs/LOG/`, not "the chronicler was
@@ -191,6 +191,13 @@ the PR is opened — neither is anyone else's to volunteer:
    `git log HEAD..origin/main` is empty. If it is not, merge forward and
    re-judge per **After the verdict**, then re-verify: main can drift
    again while the PR is open.
+3. **Mason's own account of the change is on the issue thread** — the
+   thread's comments read back over the GitHub channel, not "mason
+   reported". A `MASON:` comment covers every mason commit on the branch
+   and, on a repair round, dispositions every numbered item of the verdict
+   it repairs. If a channel failed, the orchestrator posts the text mason
+   returned and says whose it is; if it was never written, it is a mason
+   round, never the orchestrator's to compose (#565).
 
 ### After the verdict
 

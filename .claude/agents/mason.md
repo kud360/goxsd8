@@ -71,7 +71,21 @@ with the W3C suite empty whatever the session's checkout holds, and the
 gate fails on the missing-suite guard (#659).
 
 The gate (CLAUDE.md) passes. New behavior has tests that can actually fail
-— mutate the code mentally and ask whether the test would notice. Then
-summarize for the arbiter: files touched, spec rules implemented, anything
-you absorbed beyond the issue body, expected ratchet movement, and any
-uncertainty you want scrutinized.
+— mutate the code mentally and ask whether the test would notice.
+
+## The implementation account
+
+Post your handoff summary to the issue thread as a comment prefixed
+`MASON:` before you report — one artifact, not two: what the arbiter reads
+and what the thread keeps are the same text (#565).
+
+Name the branch and every commit SHA on it, the shape you chose and the
+alternative it beats, the spec rules implemented, the cases that moved,
+what you absorbed beyond the issue body, the gate result, expected ratchet
+movement, and what you want scrutinized hardest.
+
+**On a repair round, disposition every numbered item of the verdict** —
+delivered with its evidence, not delivered with the reason, or withdrawn.
+
+If your channel cannot reach the thread, return the comment verbatim and
+say it is unposted; docs/WORKFLOW.md makes it the orchestrator's to post.
