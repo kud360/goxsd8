@@ -628,9 +628,9 @@ func TestProduceComplexContentWithoutDerivation(t *testing.T) {
 // TestProduceSimpleContentWithoutDerivation is the <simpleContent> twin of the
 // case above (#868): §3.4.2.2 states the same requirement in the same words, and
 // the fault carries no rule ID for the same reason. It is asserted separately
-// because this arm also holds the genuinely-unproduced <restriction> shape, whose
-// limitation message named a <restriction> a document carrying neither alternant
-// never wrote — the absence of that wording is what fails if the arms merge again.
+// because this wrapper reaches the fault through its own producer, and what the
+// message must name is the two MISSING alternants — the failure this pins is a
+// producer that reports something else about a wrapper that carries neither.
 func TestProduceSimpleContentWithoutDerivation(t *testing.T) {
 	for _, body := range []string{
 		`<xs:complexType name="D"><xs:simpleContent/></xs:complexType>`,
@@ -648,24 +648,21 @@ func TestProduceSimpleContentWithoutDerivation(t *testing.T) {
 		if !strings.Contains(err.Error(), "has neither a <restriction> nor an <extension> child") {
 			t.Errorf("%s: error = %v, want it to name the missing alternants", body, err)
 		}
-		if strings.Contains(err.Error(), "not yet produced") {
-			t.Errorf("%s: error = %v, but no <restriction> is present: the limitation names an element the source never carried", body, err)
-		}
 	}
 }
 
-// TestProduceSimpleContentRestrictionStaysALimitation pins the other half of the
-// arm split above: a real <restriction> child is still the unimplemented-feature
-// limitation (§3.4.2.2 cases 1-2), never the grammar fault. The shape is
-// well-formed under the schema for schema documents, so calling it a fault would
-// fabricate an invalidity.
-func TestProduceSimpleContentRestrictionStaysALimitation(t *testing.T) {
+// TestProduceSimpleContentRestrictionIsNoGrammarFault pins the other half of the
+// arm split above: a real <restriction> child is a well-formed representation
+// under the schema for schema documents, so it must never take the
+// neither-alternant grammar fault. It is produced (#909, §3.4.2.2 cases 1-2), and
+// the document below is rejected only for what its base= really violates —
+// ct-props-correct clause 2, a simple type base under a restriction. The tableau
+// itself is pinned in produce_simplerestriction_test.go.
+func TestProduceSimpleContentRestrictionIsNoGrammarFault(t *testing.T) {
 	_, err := produce(t, wrap("urn:x", `<xs:complexType name="D"><xs:simpleContent><xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleContent></xs:complexType>`))
-	if err == nil {
-		t.Fatal("Produce accepted a <simpleContent> <restriction> the producer does not build")
-	}
-	if !strings.Contains(err.Error(), "<simpleContent> with <restriction> is not yet produced") {
-		t.Fatalf("error = %v, want the not-yet-produced limitation", err)
+	assertRule(t, err, "ct-props-correct")
+	if strings.Contains(err.Error(), "has neither a <restriction> nor an <extension> child") {
+		t.Fatalf("error = %v, but a <restriction> IS present: the grammar fault names the wrong item", err)
 	}
 }
 

@@ -3,6 +3,7 @@ package conformance
 import (
 	"path/filepath"
 
+	"github.com/kud360/goxsd8/builtin"
 	"github.com/kud360/goxsd8/builtin/strict"
 	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
@@ -35,17 +36,17 @@ import (
 // self), or an <xs:import> child (§4.2.6.2, which coerces nothing: the imported
 // document keeps its own namespace) — and maps top-level
 // <simpleType>/<element>/<attribute>/<attributeGroup>/<group>/<notation> and the
-// decidable subset of <complexType> (implicit content, both <complexContent>
-// alternants, and <simpleContent> <extension>; its particles including <group
+// decidable subset of <complexType> (implicit content, and both alternants of
+// each of <complexContent> and <simpleContent>; its particles including <group
 // ref>, local element/attribute declarations, attribute uses including
 // <attributeGroup ref>, wildcards, <openContent> and the schema-level
 // <defaultOpenContent> it falls back to, and <assert> assertions) into xsd
 // components, maps the name= identity constraints of global and local <element>s
 // (#178), seeds the ur-type xs:anyType, resolves cross-references, and rejects
 // duplicate top-level names within a kind. The ref= identity-constraint form and
-// the not-yet-produced complexType forms (<simpleContent> <restriction>, inline
-// anonymous local types) are SILENTLY SKIPPED or declined (§3.1.2 permits
-// ignoring a not-yet-produced representation), NOT rejected.
+// the inline anonymous local complexType forms outside the implicit-content
+// shape are SILENTLY SKIPPED or declined (§3.1.2 permits ignoring a
+// not-yet-produced representation), NOT rejected.
 //
 // The EXTENSION forms are DECIDED as of #336: Parse builds <complexContent>
 // <extension> and <simpleContent> <extension> types (#228; §3.4.2.3.3 clause 4.2,
@@ -1012,29 +1013,29 @@ func anonymousComplexTypeDecidable(el *parser.Element) bool {
 // and its silence is a real absence of one. It declines:
 //
 //   - every shape the producer declines with a plain "not yet produced"
-//     limitation error — <simpleContent> <restriction> (§3.4.2.2 cases 1-2
-//     synthesize an anonymous simple type from the restriction's facets) and a
-//     bare <group>/<attributeGroup> lacking a ref (a nested one is always a
-//     reference, so a bare one is malformed). An inline anonymous <simpleType>
-//     on a local element or attribute IS produced (#229) and an inline anonymous
-//     <complexType> on a local OR global element is produced too (#340); neither
-//     declines here — see localElementDecidable/elementDecidable, and
-//     anonymousComplexTypeDecidable for the separate, narrower gate the
-//     anonymous complex-type shape passes through. An <openContent> is produced
-//     as of #230 (§3.4.2.3.3 clauses 5-6) and is admitted by contentDecidable
-//     wherever the schema for schema documents allows one; a MISPLACED one —
-//     beside <simpleContent>/<complexContent>, or directly under
-//     <complexContent> — is rejected by the producer as the grammar fault it is,
-//     so it needs no decline of its own.
+//     limitation error — today a bare <group>/<attributeGroup> lacking a ref
+//     alone (a nested one is always a reference, so a bare one is malformed).
+//     <simpleContent> <restriction> was the other one and is no longer declined:
+//     #909 built §3.4.2.2 cases 1-2, so the shape goes through
+//     simpleContentRestrictionDecidable, which admits exactly what that mapping
+//     reads. An inline anonymous <simpleType> on a local element or attribute IS
+//     produced (#229) and an inline anonymous <complexType> on a local OR global
+//     element is produced too (#340); neither declines here — see
+//     localElementDecidable/elementDecidable, and anonymousComplexTypeDecidable
+//     for the separate, narrower gate the anonymous complex-type shape passes
+//     through. An <openContent> is produced as of #230 (§3.4.2.3.3 clauses 5-6)
+//     and is admitted by contentDecidable wherever the schema for schema
+//     documents allows one; a MISPLACED one — beside
+//     <simpleContent>/<complexContent>, or directly under <complexContent> — is
+//     rejected by the producer as the grammar fault it is, so it needs no
+//     decline of its own.
 //
 // A <simpleContent>/<complexContent> carrying NEITHER alternant is ADMITTED
 // (#868). §3.4.2.2 and §3.4.2.3 each require one of them, and the producer
 // rejects a document that carries neither; that the rejection is a grammar fault
 // about the source item rather than a rule verdict does not make it a
 // limitation, so it needs no decline any more than a misplaced <openContent>
-// does. The <simpleContent> half declined it only as collateral of sharing a
-// branch with the genuinely-unproduced <restriction> shape, which the producer
-// now reports separately.
+// does.
 //
 // Both EXTENSION forms are ADMITTED as of #336. The producer builds them (#228),
 // cos-ct-extends (§3.4.6.2) judges them (#264), and its case-1 clauses read only
@@ -1059,10 +1060,12 @@ func complexTypeDecidable(el *parser.Element) bool {
 		if ext := childXSD(sc, "extension"); ext != nil {
 			return simpleContentExtensionDecidable(ext)
 		}
-		// A <restriction> is the "not yet produced" limitation and declines;
-		// neither alternant is a grammar fault the producer rejects genuinely, so
+		if r := childXSD(sc, "restriction"); r != nil {
+			return simpleContentRestrictionDecidable(r)
+		}
+		// Neither alternant is a grammar fault the producer rejects genuinely, so
 		// it is admitted — see above.
-		return childXSD(sc, "restriction") == nil
+		return true
 	}
 	if cc := childXSD(el, "complexContent"); cc != nil {
 		derivation := childXSD(cc, "restriction")
@@ -1102,6 +1105,110 @@ func simpleContentExtensionDecidable(ext *parser.Element) bool {
 	return contentDecidable(ext)
 }
 
+// simpleContentRestrictionDecidable reports whether a <simpleContent>
+// <restriction> is in the shape the producer decides genuinely (#909). Its
+// content model is xs:simpleRestrictionType — (annotation?, (simpleType?,
+// facet*)?, ((attribute | attributeGroup)*, anyAttribute?), assert*) — and every
+// item of it is mapped: the facet children and the optional inline <simpleType>
+// into the anonymous simple type §3.4.2.2 cases 1-2 synthesize, the attribute
+// children into {attribute uses}/{attribute wildcard}, the trailing <assert>
+// children into the CTD's own {assertions}. So the shared tail goes through
+// attrDeclsDecidable unchanged and a facet child is admitted outright, as it
+// already is under <simpleType> <restriction> (simpleTypeDecidable) — the two
+// sites map facets through the very same restrictionFacets.
+//
+// What declines is a child the producer reads as nothing at all: a model group,
+// a <group>, or any other XSD-namespace name outside the content model, each of
+// which the producer SILENTLY DROPS — no tableau case reads a particle — which
+// is the same false accept simpleContentExtensionDecidable refuses beside it,
+// for the same reason. An inline <simpleType> outside the produced simple-type
+// subset moves the decline inward through simpleTypeDecidable, as every other
+// inline-type site does.
+//
+// Nothing here narrows for the tableau's case 5 (a base with element-only or
+// empty content, or a simple type base, under <restriction>), although that case
+// drops the facet children and any inline <simpleType> by the tableau's own
+// instruction: every case-5 restriction shape is REJECTED at finalize —
+// ct-props-correct clause 2 for a simple type base, derivation-ok-restriction
+// clause 2 for the rest — so no verdict rides on what the mapping dropped. The
+// one place that rejection is not reached is an anonymous complex type owned by
+// an <alternative>, which gets no Phase D verdict at all (#438/#584, and see
+// alternativeTypesDecidable, which accepts that residual for every shape it
+// admits).
+func simpleContentRestrictionDecidable(restriction *parser.Element) bool {
+	for _, child := range restriction.Children() {
+		el, ok := child.(*parser.Element)
+		if !ok || el.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		if decidable, shared := attrDeclsDecidable(el); shared {
+			if !decidable {
+				return false
+			}
+			continue
+		}
+		local := el.Name().Local()
+		if local == "simpleType" {
+			if !simpleTypeDecidable(el) {
+				return false
+			}
+			continue
+		}
+		if !facetElement(local) {
+			return false // a particle child, or any other name: dropped in silence — decline
+		}
+	}
+	return true
+}
+
+// facetElement reports whether local is the element name of one of §4.3's
+// constraining facets. It asks builtin.FacetKindByName, the ONE name→kind bridge
+// the module owns (STYLE T4/D3), rather than listing the names again here where
+// a future facet would be forgotten.
+//
+// xs:assertion is the one name that bridge cannot answer for: the facet is
+// spelled "assertions" (§4.3.13, a single facet holding the sequence) while the
+// element that contributes to it is <assertion>. The parser's restrictionFacets
+// makes the same exception at the same seam.
+func facetElement(local string) bool {
+	if local == "assertion" {
+		return true
+	}
+	_, ok := builtin.FacetKindByName(builtin.FacetName(local))
+	return ok
+}
+
+// attrDeclsDecidable reports whether one child from the tail every complex-type
+// derivation alternant ends with — annotation?, (attribute | attributeGroup)*,
+// anyAttribute?, assert* (§3.4.2) — is within the producer's decidable subset.
+// shared is false when el is none of those names, which leaves the verdict to
+// the caller's own site vocabulary: a model group, a <group> or an
+// <openContent> for contentDecidable, a facet or an inline <simpleType> for
+// simpleContentRestrictionDecidable.
+//
+// The tail is one vocabulary and is judged in one place, so a site that gains a
+// child kind cannot quietly disagree with the others about what an <attribute>
+// or an <attributeGroup> may be.
+func attrDeclsDecidable(el *parser.Element) (decidable, shared bool) {
+	switch el.Name().Local() {
+	case "annotation":
+		return true, true // harmless
+	case "attribute":
+		return localAttributeDecidable(el), true
+	case "attributeGroup":
+		// A nested <attributeGroup> is always a reference; a bare one is malformed.
+		return hasAttr(el, "ref"), true
+	case "anyAttribute":
+		return true, true // an attribute wildcard is produced
+	case "assert":
+		// Produced (#178) into {assertions}. An Assertion carries only an opaque
+		// XPath Expression record with no rejectable state, so admitting it can
+		// never turn into a fabricated "invalid" verdict.
+		return true, true
+	}
+	return false, false
+}
+
 // contentDecidable reports whether the content-model child and attribute children
 // of a <complexType> (implicit content) or <restriction> (explicit complex
 // content) are all within the producer's decidable subset. A <group ref> content
@@ -1110,36 +1217,30 @@ func simpleContentExtensionDecidable(ext *parser.Element) bool {
 // without a ref, or a stray <simpleContent> at this level, declines. A local
 // <attribute>'s inline anonymous <simpleType> is admitted when the inline type
 // itself is decidable — see localAttributeDecidable.
+//
+// The attribute/assert/annotation tail is judged by attrDeclsDecidable, shared
+// with simpleContentRestrictionDecidable; what stays here is the vocabulary only
+// a complex-content alternant carries.
 func contentDecidable(parent *parser.Element) bool {
 	for _, child := range parent.Children() {
 		el, ok := child.(*parser.Element)
 		if !ok || el.Name().Space() != xsd.XMLSchemaNS {
 			continue
 		}
+		if decidable, shared := attrDeclsDecidable(el); shared {
+			if !decidable {
+				return false
+			}
+			continue
+		}
 		switch el.Name().Local() {
-		case "annotation":
-			// Harmless.
 		case "sequence", "choice", "all":
 			if !modelGroupDecidable(el) {
 				return false
 			}
-		case "attribute":
-			if !localAttributeDecidable(el) {
-				return false
-			}
-		case "anyAttribute":
-			// An attribute wildcard is produced.
-		case "assert":
-			// Produced (#178) into {assertions}. An Assertion carries only an opaque
-			// XPath Expression record with no rejectable state, so admitting it can
-			// never turn into a fabricated "invalid" verdict.
 		case "group":
 			if !hasAttr(el, "ref") {
 				return false // a content <group> is always a reference; a bare one is malformed — decline
-			}
-		case "attributeGroup":
-			if !hasAttr(el, "ref") {
-				return false // a nested <attributeGroup> is always a reference; a bare one is malformed — decline
 			}
 		case "openContent":
 			// Produced (#230) into {open content} (§3.4.2.3.3 clauses 5-6). Its own

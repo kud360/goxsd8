@@ -275,9 +275,11 @@ func (s *Schema) checkExtensionContentType(t, b ComplexType) error {
 // definition}.
 //
 // "The same" is component identity. Pointer identity is tested first because it
-// is what the producer actually yields — simpleContentSimpleType
-// (parser/produce_complex.go) returns an EXISTING *xsd.SimpleType and rebuilds
-// nothing — and sameTypeDefinition's expanded-name reading catches the
+// is what the producer actually yields on the EXTENSION alternant this clause
+// governs — simpleContentSimpleType (parser/produce_complex.go) answers §3.4.2.2
+// cases 3-5 with an EXISTING *xsd.SimpleType and rebuilds nothing, where its
+// <restriction> alternant, which no clause of cos-ct-extends reaches, synthesizes
+// a fresh one — and sameTypeDefinition's expanded-name reading catches the
 // programmatically assembled case. Two ANONYMOUS simple types that are not the
 // same pointer are reported as different, the licence §3.4.6.5's no-identity
 // Note grants.

@@ -1757,21 +1757,16 @@ func TestProduceWildcardBothNamespaceFormsRejected(t *testing.T) {
 	assertRule(t, err, "src-wildcard")
 }
 
-func TestProduceSimpleContentRestrictionDeclined(t *testing.T) {
+func TestProduceSimpleContentRestrictionProduced(t *testing.T) {
 	// <simpleContent><restriction> synthesizes a NEW anonymous simple type from
-	// the <restriction>'s facet children (§3.4.2.2 cases 1-2) — not yet produced.
-	// Declined with a non-xsderr limitation error, never a fabricated rule
-	// verdict. <simpleContent><extension> (cases 3-5) IS produced; see
-	// produce_extension_test.go.
+	// the <restriction>'s facet children (§3.4.2.2 cases 1-2) and is produced
+	// (#909) — this is the smoke test that no limitation error survives on the
+	// form; the tableau itself is pinned in produce_simplerestriction_test.go.
 	body := `<xs:complexType name="B"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>` +
 		`<xs:complexType name="CT"><xs:simpleContent><xs:restriction base="tns:B">` +
 		`<xs:maxLength value="4"/></xs:restriction></xs:simpleContent></xs:complexType>`
-	_, err := produce(t, wrap("urn:x", body))
-	if err == nil {
-		t.Fatalf("expected a decline error for <simpleContent><restriction>, got nil")
-	}
-	if _, ok := xsderr.RuleOf(err); ok {
-		t.Fatalf("simpleContent restriction decline should be a plain limitation error, not an xsderr rule: %v", err)
+	if _, err := produce(t, wrap("urn:x", body)); err != nil {
+		t.Fatalf("Produce: %v", err)
 	}
 }
 
