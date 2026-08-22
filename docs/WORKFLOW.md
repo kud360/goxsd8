@@ -29,8 +29,9 @@ For issue operations use whichever GitHub channel works — docs/ROUTINES.md
 ranks them and states the fall-through rule. **A subagent's sandbox
 carries its own channel, and it is regularly not the orchestrator's**: an
 agent that cannot post returns the text it would have posted, and the
-orchestrator posts it saying whose it is. A verdict, grounding or RESUME
-note that reaches no thread is lost, whoever's fault the channel was.
+orchestrator posts it saying whose it is. A verdict, grounding,
+implementation account or RESUME note that reaches no thread is lost,
+whoever's fault the channel was.
 
 ## The branch scheme (the WIP discovery index)
 
@@ -193,11 +194,10 @@ before the PR is opened — none is anyone else's to volunteer:
    again while the PR is open.
 3. **Mason's own account of the change is on the issue thread** — the
    thread's comments read back over the GitHub channel, not "mason
-   reported". A `MASON:` comment covers every mason commit on the branch
-   and, on a repair round, dispositions every numbered item of the verdict
-   it repairs. If a channel failed, the orchestrator posts the text mason
-   returned and says whose it is; if it was never written, it is a mason
-   round, never the orchestrator's to compose (#565).
+   reported". Every mason commit on the branch is covered by some `MASON:`
+   comment, and a repair round's own comment dispositions every numbered
+   item of the verdict it repairs. An account that was never written is a
+   mason round, never the orchestrator's to compose (#565).
 
 ### After the verdict
 

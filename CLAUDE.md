@@ -137,8 +137,9 @@ that reader, and assume they are competent and trust the document.
 
 Work is planned as GitHub issues (label `ready`). One issue is one focused
 change and one landing. **The issue thread is the cross-session channel** —
-groundings, verdicts and RESUME notes are comments there, because sessions
-run in ephemeral containers and **anything not pushed does not exist**.
+groundings, verdicts, implementation accounts and RESUME notes are comments
+there, because sessions run in ephemeral containers and **anything not
+pushed does not exist**.
 
 `docs/WORKFLOW.md` is normative for the branch scheme, checkpointing,
 scope, landing and parking. The command files are the procedures
