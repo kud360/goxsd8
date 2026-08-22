@@ -825,15 +825,17 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 //     {base type definition} like any other, so Phase A descends it to LOOK UP
 //     a by-name base (src-resolve clause 1.1), and this pass descends it to
 //     CHARGE the two derivation halves. Neither visit substitutes for the
-//     other. The slot usually holds a NAMED type today — every arm the
-//     producer currently builds for it (parser/produce_complex.go's
-//     simpleContentSimpleType) reuses an EXISTING component, so this descent
-//     ordinarily re-charges a component slot 1 also reaches, which is
-//     harmless and already licensed by the NO VISITED SET paragraph below.
-//     But the slot CAN hold a component no index reaches — the anonymous
-//     type an eventual <simpleContent><restriction> producer would
-//     synthesize — so dropping this hop would be a false accept for that
-//     case.
+//     other. On the <simpleContent> <extension> alternant the slot holds an
+//     EXISTING component (parser/produce_complex.go's simpleContentSimpleType,
+//     tableau cases 3-5), usually a named one, so this descent re-charges a
+//     component slot 1 also reaches — harmless, and already licensed by the NO
+//     VISITED SET paragraph below. On the <restriction> alternant it holds the
+//     ANONYMOUS type §3.4.2.2 cases 1-2 synthesize from that restriction's facet
+//     children, which no index reaches at all, so dropping this hop would be a
+//     false accept for every one of them — including the case-2 shape with no
+//     inline <simpleType>, whose whole rejection is the CheckDerivation charged
+//     from here (§3.4.2.2's own Note: it "fails to obey the constraints on
+//     simple type definitions").
 //  4. ListDerivation.Item (simpletype.go). An anonymous item type is in no index.
 //  5. UnionDerivation.Members (simpletype.go). Ditto, for every member, walked in
 //     the declared order the property preserves (STYLE D2).

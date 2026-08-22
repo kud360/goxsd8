@@ -50,6 +50,13 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"complexContent extension with attributes and a group ref", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:extension base="B"><xs:sequence><xs:group ref="g"/></xs:sequence><xs:attribute name="a" type="xs:string"/><xs:anyAttribute namespace="##other"/></xs:extension></xs:complexContent></xs:complexType>`},
 		{"simpleContent extension", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`},
 		{"simpleContent extension with attributes and an assert", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:attribute name="a" type="xs:int"/><xs:attributeGroup ref="ag"/><xs:anyAttribute namespace="##other"/><xs:assert test="true()"/></xs:extension></xs:simpleContent></xs:complexType>`},
+		// #909: <simpleContent> <restriction> builds §3.4.2.2 cases 1-2, so every
+		// item of xs:simpleRestrictionType's content model is mapped — the facet
+		// children and the optional inline <simpleType> into the synthesized
+		// anonymous simple type, the rest into the CTD's own properties.
+		{"simpleContent restriction with facets", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:maxLength value="4"/><xs:enumeration value="ab"/><xs:pattern value="a*"/><xs:assertion test="true()"/></xs:restriction></xs:simpleContent></xs:complexType>`},
+		{"simpleContent restriction with an inline simpleType base", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:simpleType><xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleType></xs:restriction></xs:simpleContent></xs:complexType>`},
+		{"simpleContent restriction with attributes and an assert", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:maxLength value="4"/><xs:attribute name="a" type="xs:int"/><xs:attributeGroup ref="ag"/><xs:anyAttribute namespace="##other"/><xs:assert test="true()"/></xs:restriction></xs:simpleContent></xs:complexType>`},
 		// #868: neither alternant under <simpleContent>/<complexContent> is a
 		// grammar fault (§3.4.2.2 and §3.4.2.3 each require one), and the producer
 		// rejects it as one — a genuine verdict, so no decline. The <simpleContent>
@@ -228,7 +235,12 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"top-level group without name (reference form is malformed)", `<xs:group ref="g"/>`},
 		{"top-level attributeGroup with an inline attribute type outside the produced simple-type subset", `<xs:attributeGroup name="ag"><xs:attribute name="a"><xs:simpleType/></xs:attribute></xs:attributeGroup>`},
 		{"complexType with bare nested group (no ref)", `<xs:complexType name="T"><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:complexType>`},
-		{"complexType with simpleContent restriction (synthesizes an anonymous simple type)", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleContent></xs:complexType>`},
+		// #909 admits <simpleContent> <restriction> on the same terms #336 admitted
+		// its <extension> sibling: the alternant's own content model is mapped, and
+		// the shapes outside it that the producer would drop in silence decline.
+		{"simpleContent restriction carrying a particle the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:sequence/></xs:restriction></xs:simpleContent></xs:complexType>`},
+		{"simpleContent restriction carrying a group ref the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:group ref="g"/></xs:restriction></xs:simpleContent></xs:complexType>`},
+		{"simpleContent restriction whose inline simpleType is outside the produced subset", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:simpleType/></xs:restriction></xs:simpleContent></xs:complexType>`},
 		// #336 admits <simpleContent> <extension>, but only in the shape
 		// xs:simpleExtensionType allows: §3.4.2.2 builds {content type} from the base
 		// alone, so a particle child is DROPPED without an error — a false accept, not
@@ -263,7 +275,7 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		// A redefining <complexType> is gated by complexTypeDecidable like any
 		// other, so a shape THAT predicate declines declines the whole case; the
 		// self-deriving shape itself is admitted — see the decidable cases.
-		{"redefine child that is a complexType the gate declines", `<xs:redefine schemaLocation="b.xsd"><xs:complexType name="T"><xs:simpleContent><xs:restriction base="tns:T"/></xs:simpleContent></xs:complexType></xs:redefine>`},
+		{"redefine child that is a complexType the gate declines", `<xs:redefine schemaLocation="b.xsd"><xs:complexType name="T"><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:complexType></xs:redefine>`},
 		{"redefine child with no name (no pairing possible)", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:redefine>`},
 		{"redefine child that is a simpleType the gate declines", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType name="U"/></xs:redefine>`},
 		{"redefine child of an out-of-model kind", `<xs:redefine schemaLocation="b.xsd"><xs:element name="e" type="xs:string"/></xs:redefine>`},
@@ -452,20 +464,22 @@ func TestSchemaExecutorDecidesNotationInAppinfoSuiteCase(t *testing.T) {
 }
 
 // TestSchemaExecutorDeclinesUndecidableSuiteCase proves the false-accept guard on a
-// real fixture: baseTD00101m1.xsd is suite-VALID but its <complexType name="Test">
-// derives by <simpleContent> <restriction>, whose §3.4.2.2 cases 1-2 synthesize an
-// anonymous simple type the producer does not build, so complexTypeDecidable
-// declines it. The executor must therefore DECLINE (Fail) rather than vacuously
-// pass — a valid-declared case the executor refuses to claim, recording an honest
-// gap. Skips when the submodule is absent.
+// real fixture: disallowedSubst00105m.xsd is suite-VALID but its <element
+// name="Member3"> owns an inline <complexType> using <complexContent>, a shape
+// anonymousComplexTypeDecidable declines because no finalize pass quantifying
+// over {type definitions} ever visits an anonymous type (#414/#438). The
+// executor must therefore DECLINE (Fail) rather than vacuously pass — a
+// valid-declared case the executor refuses to claim, recording an honest gap.
+// Skips when the submodule is absent.
 //
-// Whatever fixture stands here must be one the producer still cannot build. When a
-// later slice produces this shape, REPOINT this test at another undecidable
-// fixture; deleting it retires the guard.
+// Whatever fixture stands here must be one the producer still cannot decide. When
+// a later slice decides this shape, REPOINT this test at another undecidable
+// fixture; deleting it retires the guard. It pointed at baseTD00101m1.xsd's
+// <simpleContent> <restriction> until #909 produced that form.
 func TestSchemaExecutorDeclinesUndecidableSuiteCase(t *testing.T) {
 	skipWithoutSuite(t)
 	exec := newSchemaExec()
-	doc := filepath.Join(suiteRoot, "sunData", "CType", "baseTD", "baseTD00101m", "baseTD00101m1.xsd")
+	doc := filepath.Join(suiteRoot, "sunData", "ElemDecl", "disallowedSubst", "disallowedSubst00105m", "disallowedSubst00105m.xsd")
 	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
 		t.Error("a suite-valid case with a skipped <simpleContent> <restriction> must be DECLINED (Fail), never vacuously passed")
 	}

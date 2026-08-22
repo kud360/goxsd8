@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -414,26 +415,17 @@ func ownedComplexBase(base xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 }
 
 // produceComplexType maps a <complexType> element (§3.4.2) into a Complex Type
-// Definition, in all four source forms: implicit complex content (§3.4.2.3.2,
+// Definition, in all five source forms: implicit complex content (§3.4.2.3.2,
 // restriction from xs:anyType), explicit <complexContent> with <restriction> or
 // with <extension> (§3.4.2.3.3 clauses 4.1 and 4.2), and <simpleContent> with
-// <extension> (§3.4.2.2 cases 3-5). Every form that names a base= needs the
-// {base type definition} COMPONENT — the two extension forms for their
-// content-type tableaux, and the <complexContent> <restriction> form for
-// §3.4.2.1 clause 1's {assertions} fold — and buildComplexType/resolveBaseType
-// supply it by building it on demand (§3.4.2's preamble: the mapping rules
-// "depend upon the {base type definition} having been identified before they
-// apply"). The implicit-content form names no base=; its base is xs:anyType,
-// always already seeded.
-//
-// <simpleContent> with <restriction> is the one form still declined: §3.4.2.2
-// cases 1-2 SYNTHESIZE a new anonymous simple type restricting the base's, from
-// the <restriction>'s own facet children, which this producer does not yet build.
-// It is declined with a plain "not yet produced" error rather than a fabricated
-// rule violation (mirroring Produce's non-schema-root precedent: no src-*/cos-*
-// rule governs "this representation is not yet produced"). The conformance
-// schema lane (conformance/schema.go) declines that shape, so the decline never
-// reaches a validity verdict.
+// <restriction> or with <extension> (§3.4.2.2 cases 1-2 and 3-5). Every form
+// that names a base= needs the {base type definition} COMPONENT — the three
+// <simpleContent>/<complexContent> forms whose content-type tableau reads it,
+// and the <complexContent> <restriction> form for §3.4.2.1 clause 1's
+// {assertions} fold — and buildComplexType/resolveBaseType supply it by building
+// it on demand (§3.4.2's preamble: the mapping rules "depend upon the {base type
+// definition} having been identified before they apply"). The implicit-content
+// form names no base=; its base is xs:anyType, always already seeded.
 //
 // id is BOTH what the built type is constructed from — a {name} for a top-level
 // one, a {context} for an inline anonymous one — and the {scope}.{parent} that
@@ -543,32 +535,38 @@ func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (
 // Complex Type Definition whose {content type} has {variety} simple, {particle}
 // and {open content} ·absent·, and {simple type definition} computed by the
 // five-case tableau keyed on the resolved {base type definition} and on which
-// derivation alternant is chosen.
+// derivation alternant is chosen (simpleContentSimpleType). Both alternants map
+// through this one body: §3.4.2.2 gives them the same {base type definition},
+// the same {content type} shape and the same {derivation method} row, and they
+// differ only in that tableau and in their content models, which the two
+// children-reading calls below already tell apart.
 //
-// Only <extension> is produced — tableau cases 3, 4 and 5, all of which REUSE an
-// already-built simple type (see simpleContentSimpleType). <restriction> (cases
-// 1-2) synthesizes a NEW anonymous simple type restricting the base's with the
-// facet children of <restriction>, which this producer does not build yet, so it
-// is declined as a limitation, not charged a rule.
-//
-// A <simpleContent> with NEITHER alternant is a plain grammar fault rather than
-// that limitation, and is reported as one: §3.4.2.2 states outright that "either
-// <restriction> or <extension> must appear in the content of <simpleContent>",
-// and that requirement lives in the schema for schema documents, which src-ct
+// A <simpleContent> with NEITHER alternant is a plain grammar fault, and is
+// reported as one: §3.4.2.2 states outright that "either <restriction> or
+// <extension> must appear in the content of <simpleContent>", and that
+// requirement lives in the schema for schema documents, which src-ct
 // incorporates by reference without stating a clause of its own — the same
-// footing as the <complexContent> half (produceComplexContent). Reporting it as
-// the <restriction> limitation would name an element the source never carried. A
+// footing as the <complexContent> half (produceComplexContent). A
 // <simpleContent> carrying BOTH alternants is the other half of that same
 // xs:choice and is charged the same way, by repeatedDerivationAlternant ahead of
-// the reads below — without it the <extension> short-circuit would produce from
-// one alternant and drop the other in silence.
+// derivationAlternant — without it the <restriction>-first read would produce
+// from one alternant and drop the other in silence.
 //
-// It enforces src-ct clause 1 (§3.4.3, simple-content-rules): with the
-// <simpleContent> alternative chosen, the <complexType> must not have
-// mixed="true". That is a Schema Representation Constraint on the source XML, so
-// it is charged here at the <complexType>'s own position — and it is charged
-// BEFORE the <restriction> decline, so a document that violates it gets the rule
-// verdict rather than a limitation error.
+// It enforces the two src-ct (§3.4.3) clauses this representation carries, both
+// Schema Representation Constraints on the source XML and both charged before
+// anything is built:
+//
+//   - clause 1 (simple-content-rules): with the <simpleContent> alternative
+//     chosen, the <complexType> must not have mixed="true". It is charged at the
+//     <complexType>'s own position, which is where the offending attribute is.
+//   - clause 2: under a <restriction>, no facet-specifying element other than
+//     xs:enumeration, xs:pattern or xs:assertion may appear more than once among
+//     its [children] (repeatedFacetChild). It is charged HERE, ahead of the
+//     synthesis, and not left to st-props-correct clause 4 — which would reject
+//     the same document at xsd.NewSimpleType for two {facets} of one kind, but
+//     under a Schema Component Constraint about the component rather than the
+//     representation rule the source actually violates (STYLE E2), and only for
+//     the kinds the two exception sets happen to agree on.
 func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Element) (xsd.ComplexType, error) {
 	if mixed, present := boolAttr(ctElem, "mixed"); present && mixed {
 		return xsd.ComplexType{}, xsderr.New(ruleSrcCT, ctElem.Loc(),
@@ -577,63 +575,200 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 	if dup := repeatedDerivationAlternant(sc); dup != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <%s> at %s is a second derivation alternant on the <simpleContent> at %s, which the schema for schema documents prohibits: xs:simpleContent (§3.4.2.2) holds a plain xs:choice, so a <simpleContent> carries exactly one of <restriction>, <extension>", dup.Name().Local(), dup.Loc(), sc.Loc())
 	}
-	restriction := childElement(sc, xsd.XMLSchemaNS, "restriction")
-	ext := childElement(sc, xsd.XMLSchemaNS, "extension")
-	if restriction == nil && ext == nil {
+	derivation, method := derivationAlternant(sc)
+	if derivation == nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <simpleContent> at %s has neither a <restriction> nor an <extension> child, one of which §3.4.2.2 requires", sc.Loc())
 	}
-	if ext == nil {
-		return xsd.ComplexType{}, fmt.Errorf("parser: <simpleContent> with <restriction> is not yet produced (§3.4.2.2 cases 1-2 synthesize a new anonymous simple type from the <restriction>'s facet children)")
+	if dup := repeatedFacetChild(derivation, method); dup != nil {
+		return xsd.ComplexType{}, xsderr.New(ruleSrcCT, dup.Loc(),
+			"<%s> is a second %s facet among the [children] of a <restriction> under <simpleContent>, but src-ct clause 2 admits a repeated facet-specifying element only for xs:enumeration, xs:pattern and xs:assertion", dup.Name().Local(), dup.Name().Local())
 	}
-	baseLex, hasBase := ext.Attr("base")
+	baseLex, hasBase := derivation.Attr("base")
 	if !hasBase {
-		// Appendix A declares base use="required" on xs:extensionType, and §3.4.3
-		// states no Schema Representation Constraint for its absence, so a missing
-		// base is a plain grammar fault carrying no rule — the same reading
+		// Appendix A declares base use="required" on both xs:extensionType and
+		// xs:simpleRestrictionType (which takes it from xs:restrictionType), and
+		// §3.4.3 states no Schema Representation Constraint for its absence, so a
+		// missing base is a plain grammar fault carrying no rule — the same reading
 		// produceGroupRefParticle gives a <group> with no ref. It is charged here
 		// rather than handed to resolveQName as an empty lexical, which would report
 		// an absent attribute as a base="" the author never wrote.
-		return xsd.ComplexType{}, fmt.Errorf("parser: the <extension> of a <simpleContent> at %s must carry a base attribute, but none is present", ext.Loc())
+		return xsd.ComplexType{}, fmt.Errorf("parser: the <%s> of a <simpleContent> at %s must carry a base attribute, but none is present", derivation.Name().Local(), derivation.Loc())
 	}
-	baseName, err := p.resolveQName(ext, baseLex, "base")
+	baseName, err := p.resolveQName(derivation, baseLex, "base")
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	base, baseRef, err := p.resolveBaseType(id, ext, baseName)
+	base, baseRef, err := p.resolveBaseType(id, derivation, baseName)
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
+	simple, err := p.simpleContentSimpleType(derivation, method, base)
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
 	abstract, _ := boolAttr(ctElem, "abstract")
-	uses, prohibited, wildcard, err := p.produceAttributeUses(ext, attributeScopeParentOf(id))
+	uses, prohibited, wildcard, err := p.produceAttributeUses(derivation, attributeScopeParentOf(id))
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	content := xsd.SimpleContent{SimpleType: simpleContentSimpleType(base, p.symbols.built[anySimpleTypeName])}
 	// {assertions} (§3.4.2.1): clause 1's members of the resolved base's own
-	// {assertions} — nothing at all when it is a simple type, the common case
-	// here — ahead of clause 2's <assert> children of <extension>.
+	// {assertions} — nothing at all when it is a simple type, the common case on
+	// the extension alternant — ahead of clause 2's <assert> children of the
+	// derivation alternant. Those <assert> children are the CTD's own assertions
+	// and NOT facets of a synthesized simple type: the <assertion> inside
+	// <restriction>'s facet choice is the facet (restrictionFacets folds it), and
+	// the trailing <assert>* of the same content model is this property. Two
+	// element names, two properties; conflating them would build a wrong component
+	// in silence.
 	return p.newComplexType(id, ctElem.Loc(), baseRef, p.complexTypeFinal(ctElem),
-		xsd.DerivationExtension, abstract, uses, prohibited, wildcard, content, p.complexTypeProhibitedSubstitutions(ctElem), assertionsWithBase(base, p.assertionsOf(ext)), nil)
+		method, abstract, uses, prohibited, wildcard, xsd.SimpleContent{SimpleType: simple},
+		p.complexTypeProhibitedSubstitutions(ctElem), assertionsWithBase(base, p.assertionsOf(derivation)), nil)
 }
 
-// simpleContentSimpleType is the §3.4.2.2 {simple type definition} tableau for
-// the <extension> alternant:
+// repeatedFacetChild returns the SECOND facet-specifying child of one kind under
+// a <simpleContent> <restriction> in document order, or nil when src-ct clause 2
+// (§3.4.3) is satisfied: "no facet-specifying element other than xs:enumeration,
+// xs:pattern, or xs:assertion may appear more than once among the [children] of
+// <restriction>". method carries the clause's own antecedent — the rule is
+// scoped to the <restriction> alternant — so the <extension> alternant, whose
+// content model admits no facet child at all, answers nil without a scan.
 //
-//   - case 3: the base is a complex type whose own {content type} has {variety}
-//     simple — reuse THAT content type's {simple type definition};
-//   - case 4: the base is a simple type definition — reuse it;
-//   - case 5 (c-ctsc-bad): otherwise xs:anySimpleType.
+// The three excepted names need no test of their own here, because facetKindOf
+// — the ONE name→kind bridge this package consults (builtin.FacetKindByName,
+// STYLE T4) — already answers "not a facet" for xs:enumeration and for
+// xs:assertion, whose element name is not the facet name "assertions" the bridge
+// is keyed by. Only xs:pattern has to be excepted explicitly. That reuse is what
+// keeps a future constraining facet from being admitted twice here by a
+// hand-typed list nobody updated (the drift builtin.FacetKindByName exists to
+// end), and the two borrowed exceptions are pinned by a test that repeats all
+// three excepted names under one <restriction> and requires it accepted.
 //
-// Every arm returns an EXISTING *xsd.SimpleType pointer; nothing is rebuilt, so
-// simple-type component identity is preserved (xsd/typedefinition.go). Case 5
-// deliberately MAPS rather than rejects: the tableau names a result for the
-// base-is-a-complex-type-with-non-simple-content case, and its invalidity is
-// cos-ct-extends' (§3.4.6.2) to charge, not the mapping's.
+// The kinds are collected in a slice scanned linearly, never a map: at most
+// sixteen kinds per <restriction> is no measured hot path (STYLE D3), and the
+// scan reports the FIRST repeat by document position (STYLE D2).
+func repeatedFacetChild(restriction *Element, method xsd.DerivationMethod) *Element {
+	if method != xsd.DerivationRestriction {
+		return nil
+	}
+	var seen []xsd.FacetKind
+	for _, child := range restriction.Children() {
+		el, ok := child.(*Element)
+		if !ok || el.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		kind, ok := facetKindOf(el.Name().Local())
+		if !ok || kind == xsd.FacetPattern {
+			continue
+		}
+		if slices.Contains(seen, kind) {
+			return el
+		}
+		seen = append(seen, kind)
+	}
+	return nil
+}
+
+// simpleContentSimpleType is the §3.4.2.2 {content type}.{simple type
+// definition} tableau, all five cases, keyed on the resolved {base type
+// definition} and on which derivation alternant was chosen:
 //
-// anySimpleType is case 5's fallback, read from the seeded builtins by the
-// caller; a nil one (an unseeded backend) is rejected downstream by
-// xsd.NewComplexType as an absent Required {simple type definition}.
-func simpleContentSimpleType(base xsd.TypeDefinition, anySimpleType *xsd.SimpleType) *xsd.SimpleType {
+//   - case 1 — the base is a complex type whose own {content type} has {variety}
+//     simple and the alternant is <restriction>: SYNTHESIZE an anonymous simple
+//     type restricting B, which is 1.1 the <simpleType> among the <restriction>'s
+//     [children] if there is one, and 1.2 otherwise the {simple type definition}
+//     of the base's own {content type};
+//   - case 2 — the base is a complex type whose own {content type} has {variety}
+//     mixed and an ·emptiable· {particle}, and the alternant is <restriction>:
+//     the same synthesis against SB, the inline <simpleType> if there is one and
+//     ·xs:anySimpleType· otherwise;
+//   - case 3 — the base is a complex type with simple content and the alternant
+//     is <extension>: reuse THAT content type's {simple type definition};
+//   - case 4 — the base is a simple type definition and the alternant is
+//     <extension>: reuse it;
+//   - case 5 (c-ctsc-bad): otherwise ·xs:anySimpleType·.
+//
+// Cases 3, 4 and 5 return an EXISTING *xsd.SimpleType pointer; nothing is
+// rebuilt, so simple-type component identity is preserved
+// (xsd/typedefinition.go). Cases 1 and 2 mint a NEW component, the one the
+// tableau spells out property by property: {name} ·absent·, {final} the empty
+// set, {base type definition} B/SB, {facets} the facet children mapped by
+// §3.16.6.4 (restrictionFacets, shared verbatim with <simpleType><restriction>),
+// and {variety}/{primitive type definition}/{item type definition}/{member type
+// definitions} all "B's" — which xsd.SimpleType derives off the base chain
+// rather than storing (STYLE D3), so naming B is the whole of it. Its
+// {target namespace} and {context} are unmodeled here, exactly as they are for
+// every other anonymous simple type this producer builds (resolveBase's inline
+// base, declaredType's inline <simpleType>): the component is unnameable, so no
+// reader can reach it by name, and §3.16.1 std-context is a property xsd models
+// for no simple type at all. Its retained position is the <restriction>'s own —
+// the source item the whole component is mapped from, this type having no
+// declaring element to take one from.
+//
+// THE B SLOT IS THE OWNED ARM even when B has a name — a base with simple
+// content usually hands over a builtin — because the tableau names a COMPONENT
+// of the already-resolved base, not a QName in the source: the base= this
+// <restriction> carries names the complex type, and B is read off it. That is
+// the fourth licensed use of xsd.OwnedSimpleType, recorded in its doc beside the
+// three that predate it; emitting a SimpleTypeRef instead would name a type this
+// <restriction> never wrote, and would be unrepresentable for a B that is
+// anonymous.
+//
+// CASE 2's ·emptiable· HALF IS NOT TESTED, and the omission changes no verdict.
+// Emptiability is Particle Emptiable (§3.9.6.3, cos-group-emptiable), which
+// xsd's particleEmptiable answers off an assembled Schema — <group ref> edges
+// resolved and the effective total range computed — and no Schema exists at
+// mapping time. What the untested half would decide is case 2 against case 5 for
+// a mixed base whose particle is NOT ·emptiable·, and a complex type restricting
+// such a base to simple content is rejected either way: derivation-ok-restriction
+// (§3.4.6.3) clause 2 has no branch for it — 2.1 wants xs:anyType, whose own
+// particle IS ·emptiable·; 2.2.2.1 wants a base with simple content, which a
+// mixed base is not; 2.2.2.2 wants exactly the ·emptiable· particle this case
+// lacks; 2.3 and 2.4 want a T that is not simple content. So the two readings
+// differ only in which rejection the schema earns, never in whether it is
+// rejected, and this is a deferred CHARGE rather than a withheld one (STYLE P3).
+//
+// Case 5 deliberately MAPS rather than rejects, on both alternants: the tableau
+// names a result for every base, and the invalidity of the ones it catches is
+// cos-ct-extends' (§3.4.6.2), ct-props-correct clause 2's (§3.4.6.1, a simple
+// base under a restriction) or derivation-ok-restriction's (§3.4.6.3) to charge
+// at finalize, never the mapping's. On the <restriction> alternant that means
+// the facet children AND any inline <simpleType> are dropped, which is what the
+// tableau says to do with them — case 5's result is ·xs:anySimpleType· itself,
+// not a restriction of it — and no verdict rides on them, since every case-5
+// restriction shape is rejected by one of those three rules.
+//
+// The seeded ·xs:anySimpleType· is read from the symbol table; a nil one (an
+// unseeded backend) is rejected downstream by xsd.NewComplexType as an absent
+// Required {simple type definition}.
+func (p *producer) simpleContentSimpleType(derivation *Element, method xsd.DerivationMethod, base xsd.TypeDefinition) (*xsd.SimpleType, error) {
+	anySimpleType := p.symbols.built[anySimpleTypeName]
+	if method == xsd.DerivationExtension {
+		return extendedSimpleType(base, anySimpleType), nil // cases 3, 4 and 5
+	}
+	b, restricts := restrictedSimpleBase(base, anySimpleType)
+	if !restricts {
+		return anySimpleType, nil // case 5
+	}
+	if inline := childElement(derivation, xsd.XMLSchemaNS, "simpleType"); inline != nil {
+		st, err := p.constructSimpleType(xsd.QName{}, inline) // clause 1.1, and case 2's SB
+		if err != nil {
+			return nil, err
+		}
+		b = st
+	}
+	facets, err := p.restrictionFacets(derivation)
+	if err != nil {
+		return nil, err
+	}
+	return xsd.NewSimpleType(derivation.Loc(), xsd.QName{}, xsd.RestrictionDerivation{},
+		xsd.OwnedSimpleType{Definition: b}, facets, nil)
+}
+
+// extendedSimpleType is the §3.4.2.2 tableau restricted to the <extension>
+// alternant: case 3 (a base with simple content hands over its own {simple type
+// definition}), case 4 (a simple type base is itself the result) and case 5
+// (anything else falls through to ·xs:anySimpleType·).
+func extendedSimpleType(base xsd.TypeDefinition, anySimpleType *xsd.SimpleType) *xsd.SimpleType {
 	switch b := base.(type) {
 	case *xsd.SimpleType:
 		return b // case 4
@@ -644,10 +779,43 @@ func simpleContentSimpleType(base xsd.TypeDefinition, anySimpleType *xsd.SimpleT
 		case xsd.EmptyContent, xsd.ElementContent:
 			return anySimpleType // case 5
 		default:
-			panic("parser: simpleContentSimpleType: non-exhaustive ContentType switch")
+			panic("parser: extendedSimpleType: non-exhaustive ContentType switch")
 		}
 	default:
-		panic("parser: simpleContentSimpleType: non-exhaustive TypeDefinition switch")
+		panic("parser: extendedSimpleType: non-exhaustive TypeDefinition switch")
+	}
+}
+
+// restrictedSimpleBase is the §3.4.2.2 tableau's case discrimination for the
+// <restriction> alternant, and returns the DEFAULT base of the simple type cases
+// 1 and 2 synthesize — clause 1.2's "the {simple type definition} of the {content
+// type} of the {base type definition}" for case 1, and case 2's
+// ·xs:anySimpleType· — which an inline <simpleType> child overrides at the caller
+// (clause 1.1, and case 2's parenthesis). restricts is false for case 5, where
+// nothing is synthesized at all.
+//
+// The discriminator is the BASE's own {content type}.{variety}, never whether an
+// inline <simpleType> is present: that child chooses B WITHIN case 1 and SB
+// within case 2, and a reading that keyed the case on it would put every
+// inline-typed restriction of an element-only base into case 2, which the
+// tableau leaves to case 5.
+func restrictedSimpleBase(base xsd.TypeDefinition, anySimpleType *xsd.SimpleType) (*xsd.SimpleType, bool) {
+	b, complex := base.(xsd.ComplexType)
+	if !complex {
+		return nil, false // case 5: a simple type base restricted rather than extended
+	}
+	switch bc := b.ContentType().(type) {
+	case xsd.SimpleContent:
+		return bc.SimpleType, true // case 1.2
+	case xsd.ElementContent:
+		if bc.Mixed {
+			return anySimpleType, true // case 2
+		}
+		return nil, false // case 5: element-only content
+	case xsd.EmptyContent:
+		return nil, false // case 5
+	default:
+		panic("parser: restrictedSimpleBase: non-exhaustive ContentType switch")
 	}
 }
 
@@ -665,14 +833,14 @@ func simpleContentSimpleType(base xsd.TypeDefinition, anySimpleType *xsd.SimpleT
 // stating a clause of its own (the same footing as a nameless top-level
 // <complexType>). A <complexContent> carrying BOTH alternants is the other half
 // of that same xs:choice and is charged the same way, by
-// repeatedDerivationAlternant ahead of complexContentDerivation — without it the
+// repeatedDerivationAlternant ahead of derivationAlternant — without it the
 // <restriction>-first read would produce from one alternant and drop the other in
 // silence.
 func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Element) (xsd.ComplexType, error) {
 	if dup := repeatedDerivationAlternant(cc); dup != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <%s> at %s is a second derivation alternant on the <complexContent> at %s, which the schema for schema documents prohibits: xs:complexContent (§3.4.2.3) holds a plain xs:choice, so a <complexContent> carries exactly one of <restriction>, <extension>", dup.Name().Local(), dup.Loc(), cc.Loc())
 	}
-	derivation, method := complexContentDerivation(cc)
+	derivation, method := derivationAlternant(cc)
 	if derivation == nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <complexContent> at %s has neither a <restriction> nor an <extension> child, one of which §3.4.2.3 requires", cc.Loc())
 	}
@@ -728,17 +896,24 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 		method, abstract, uses, prohibited, wildcard, content, p.complexTypeProhibitedSubstitutions(ctElem), assertionsWithBase(base, p.assertionsOf(derivation)), nil)
 }
 
-// complexContentDerivation returns the <restriction> or <extension> child of a
-// <complexContent> together with the {derivation method} it maps to (§3.4.2.3),
-// or (nil, 0) when neither is present. Its two first-match reads are unambiguous
-// because produceComplexContent charges repeatedDerivationAlternant ahead of
-// them: a <complexContent> reaching here carries at most one alternant between
-// the two, so which one is looked for first decides nothing.
-func complexContentDerivation(cc *Element) (*Element, xsd.DerivationMethod) {
-	if r := childElement(cc, xsd.XMLSchemaNS, "restriction"); r != nil {
+// derivationAlternant returns the <restriction> or <extension> child of a
+// <simpleContent> or a <complexContent> together with the {derivation method} it
+// maps to, or (nil, 0) when neither is present. One function serves both
+// wrappers (STYLE T4) because §3.4.2.2 and §3.4.2.3 state the same {derivation
+// method} row in the same words — restriction for the <restriction> alternative,
+// extension otherwise — and neither producer needs to tell the wrappers apart to
+// read it. What the two wrappers do NOT share is the alternant's content model,
+// and that is read by the callers, not here.
+//
+// Its two first-match reads are unambiguous because both callers charge
+// repeatedDerivationAlternant ahead of them: a wrapper reaching here carries at
+// most one alternant between the two, so which one is looked for first decides
+// nothing.
+func derivationAlternant(wrapper *Element) (*Element, xsd.DerivationMethod) {
+	if r := childElement(wrapper, xsd.XMLSchemaNS, "restriction"); r != nil {
 		return r, xsd.DerivationRestriction
 	}
-	if e := childElement(cc, xsd.XMLSchemaNS, "extension"); e != nil {
+	if e := childElement(wrapper, xsd.XMLSchemaNS, "extension"); e != nil {
 		return e, xsd.DerivationExtension
 	}
 	return nil, 0
@@ -892,12 +1067,11 @@ func repeatedContentAlternative(ctElem *Element) *Element {
 // footing as repeatedContentAlternative above: src-ct (§3.4.3) states no clause
 // for it and incorporates the schema for schema documents by reference.
 //
-// Charging it is what keeps the two producers' alternant reads honest, and they
-// disagree about which alternant a malformed wrapper would have mapped by:
-// produceSimpleContent short-circuits on its <extension> and drops the
-// <restriction>, while complexContentDerivation looks for <restriction> first and
-// drops the <extension>. Neither bias is defensible, so the fault is charged
-// ahead of both reads rather than folded into either.
+// Charging it is what keeps both producers' alternant reads honest: they share
+// derivationAlternant, whose first-match read would map a malformed wrapper by
+// its <restriction> and drop the <extension> in silence. That bias is not
+// defensible, so the fault is charged ahead of the read rather than folded into
+// it.
 //
 // The walk is not childElements for the same reason repeatedContentAlternative's
 // is not: the fault spans TWO expanded names, and only a single pass over the

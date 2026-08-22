@@ -117,12 +117,10 @@ func wrapperWithBothAlternants(wrapper, first, second string) string {
 // (§3.4.2.3) each hold a plain xs:choice of <restriction> and <extension>, so a
 // wrapper carrying BOTH is a grammar fault in either ordering.
 //
-// The two producers used to disagree about which alternant such a wrapper mapped
-// by — a <simpleContent> produced from its <extension> (produceSimpleContent
-// short-circuited on it), a <complexContent> from its <restriction>
-// (complexContentDerivation looks for that one first) — and each silently dropped
-// the other. Both wrappers are asserted for that reason: a guard folded into
-// either short-circuit would leave the opposite bias standing.
+// Both producers read the alternant through one derivationAlternant, whose
+// first-match read would map such a wrapper by its <restriction> and drop the
+// <extension> in silence. Both wrappers are asserted because the guard is what
+// makes that shared read honest, and it is charged per wrapper.
 //
 // Like the <complexType>-level fault, this one carries no rule ID (§5.1's first
 // bullet, STYLE E2) and names both the second alternant and its wrapper.

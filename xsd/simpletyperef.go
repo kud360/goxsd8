@@ -85,11 +85,14 @@ type SimpleTypeRef struct{ Name QName }
 // document emits SimpleTypeRef for EVERY by-name base, itemType= and
 // memberTypes= entry, and OwnedSimpleType only for a slot-owned inline
 // <simpleType>, the §4.2.4 src-expredef ORIGINAL a redefining <simpleType> is
-// paired with, or a pre-assembled Schema-less graph. Without that prohibition
-// this arm is an escape hatch that lets any producer opt out of deferred
-// resolution one call site at a time, and nothing detects the drift; it is
-// pinned by tests asserting a produced named base= and a produced named
-// itemType= each store SimpleTypeRef.
+// paired with, a component a MAPPING RULE names outright — §3.4.2.2's cases 1.2
+// and 2 hand the anonymous simple type a <simpleContent> <restriction>
+// synthesizes a B read off the already-resolved base complex type, which the
+// source names by no QName of its own — or a pre-assembled Schema-less graph.
+// Without that prohibition this arm is an escape hatch that lets any producer
+// opt out of deferred resolution one call site at a time, and nothing detects
+// the drift; it is pinned by tests asserting a produced named base= and a
+// produced named itemType= each store SimpleTypeRef.
 //
 // Definition is always present: in the base slot nil-the-interface is the only
 // encoding of absent, and in the item and member slots nothing encodes absent at
