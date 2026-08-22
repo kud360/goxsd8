@@ -67,11 +67,10 @@ heartbeat.
    verdict** before step 6.
 
 6. **Land.** Delegate the log entry to **chronicler** first, so it rides
-   the session commit. Verify WORKFLOW's two landing preconditions
-   yourself — the LOG entry is in `git diff origin/main...HEAD`, and
-   `git log HEAD..origin/main` is empty — then open the PR and
-   squash-merge it via the Merge API using CLAUDE.md's commit format. A PR
-   may close more than one issue when a landing carried more than one.
+   the session commit. Verify each of WORKFLOW's **Landing** preconditions
+   yourself, by the check it names, then open the PR and squash-merge it
+   via the Merge API using CLAUDE.md's commit format. A PR may close more
+   than one issue when a landing carried more than one.
 
 7. **Post-land.** Delegate to **cartographer**: unblock whatever this
    landing unblocked, and dispose of every follow-up this session raised

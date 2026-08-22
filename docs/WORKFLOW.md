@@ -29,8 +29,9 @@ For issue operations use whichever GitHub channel works — docs/ROUTINES.md
 ranks them and states the fall-through rule. **A subagent's sandbox
 carries its own channel, and it is regularly not the orchestrator's**: an
 agent that cannot post returns the text it would have posted, and the
-orchestrator posts it saying whose it is. A verdict, grounding or RESUME
-note that reaches no thread is lost, whoever's fault the channel was.
+orchestrator posts it saying whose it is. A verdict, grounding,
+implementation account or RESUME note that reaches no thread is lost,
+whoever's fault the channel was.
 
 ## The branch scheme (the WIP discovery index)
 
@@ -180,8 +181,8 @@ plus log entry), `Closes #<N>` in the body closes the issue, and GitHub
 auto-deletes the head branch (keep the repo's "Automatically delete head
 branches" setting ON). Nothing is ever committed directly to `main`.
 
-Two preconditions, verified and stated by the orchestrating session before
-the PR is opened — neither is anyone else's to volunteer:
+Three preconditions, verified and stated by the orchestrating session
+before the PR is opened — none is anyone else's to volunteer:
 
 1. **The LOG entry is in the branch's diff** — literally
    `git diff origin/main...HEAD -- docs/LOG/`, not "the chronicler was
@@ -191,6 +192,12 @@ the PR is opened — neither is anyone else's to volunteer:
    `git log HEAD..origin/main` is empty. If it is not, merge forward and
    re-judge per **After the verdict**, then re-verify: main can drift
    again while the PR is open.
+3. **Mason's own account of the change is on the issue thread** — the
+   thread's comments read back over the GitHub channel, not "mason
+   reported". Every mason commit on the branch is covered by some `MASON:`
+   comment, and a repair round's own comment dispositions every numbered
+   item of the verdict it repairs. An account that was never written is a
+   mason round, never the orchestrator's to compose (#565).
 
 ### After the verdict
 
