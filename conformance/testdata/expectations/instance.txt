@@ -275,8 +275,8 @@ BoeingXSDTestCases/ipo5/instance/ipo_1 fail
 BoeingXSDTestCases/ipo5/instance/ipo_2 fail
 BoeingXSDTestCases/ipo6/instance/ipo_1 fail
 BoeingXSDTestCases/ipo6/instance/ipo_2 fail
-CTA/cta0001/instance/cta0001.n01 fail
-CTA/cta0001/instance/cta0001.n02 fail
+CTA/cta0001/instance/cta0001.n01 pass
+CTA/cta0001/instance/cta0001.n02 pass
 CTA/cta0001/instance/cta0001.v01 fail
 CTA/cta0001/instance/cta0001.v02 fail
 CTA/cta0001/instance/cta0001.v03 fail
@@ -334,7 +334,7 @@ CType/annotation00101m2/instance/Positive fail
 CType/attributeuses00101m1/instance/Negative pass
 CType/attributeuses00101m1/instance/Positive fail
 CType/attrwildcard00101m1/instance/Positive fail
-CType/basetd00101m1/instance/Negative fail
+CType/basetd00101m1/instance/Negative pass
 CType/basetd00101m1/instance/Positive fail
 CType/basetd00101m2/instance/Negative pass
 CType/basetd00101m2/instance/Positive fail
@@ -25424,11 +25424,11 @@ TargetNS/target003/instance/target003.n2.xml pass
 TargetNS/target003/instance/target003.v1.xml fail
 TargetNS/targetNamespace_004/instance/targetNamespace_004_2 fail
 TargetNS/targetNamespace_005/instance/targetNamespace_005_2 fail
-TypeAlternativeTests/s3_12ii01/instance/s3_12ii01i fail
+TypeAlternativeTests/s3_12ii01/instance/s3_12ii01i pass
 TypeAlternativeTests/s3_12ii02/instance/s3_12ii02i pass
-TypeAlternativeTests/s3_12ii03/instance/s3_12ii03i fail
+TypeAlternativeTests/s3_12ii03/instance/s3_12ii03i pass
 TypeAlternativeTests/s3_12ii04/instance/s3_12ii04i pass
-TypeAlternativeTests/s3_12ii05/instance/s3_12ii05i fail
+TypeAlternativeTests/s3_12ii05/instance/s3_12ii05i pass
 TypeAlternativeTests/s3_12v01/instance/s3_12v01i fail
 TypeAlternativeTests/s3_12v02/instance/s3_12v02i fail
 TypeAlternativeTests/s3_12v03/instance/s3_12v03i fail
