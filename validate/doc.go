@@ -70,24 +70,24 @@
 // are charged today, at the ·validation root· and at every descendant whose
 // ·governing element declaration· the descent determines.
 //
-// Three of the four charges below that DELEGATE to String Valid (§3.16.4,
+// All four charges below that DELEGATE to String Valid (§3.16.4,
 // cvc-simple-type) carry the delegated verdict as their wrapped cause, so
 // errors.Unwrap/Is/As reach the inner *xsderr.Error and [xsderr.RuleOf] reads
 // the inner rule ID off it instead of a consumer scraping the message for one.
-// cvc-attribute clause 3, cvc-type clause 3.1.3 and cvc-complex-type clause
-// 1.2 each wrap the Datatype Valid (Datatypes §4.1.4) verdict
-// value.ValidateLexical returned, whose own rule is cvc-datatype-valid or one
-// of the facet rules under it — String Valid's own clause 2 is where the
-// delegation lands, and this package charges no intermediate cvc-simple-type
-// node of its own. Error() still renders that verdict into the message as
-// well, for a reader who holds only the string.
+// cvc-attribute clause 3, cvc-type clause 3.1.3, cvc-complex-type clause 1.2
+// and cvc-complex-type clause 4 over a ·defaulted attribute·'s {lexical form}
+// each wrap the Datatype Valid (Datatypes §4.1.4) verdict, whose own rule is
+// cvc-datatype-valid or one of the facet rules under it — String Valid's own
+// clause 2 is where the delegation lands, and this package charges no
+// intermediate cvc-simple-type node of its own. The first three read the
+// verdict off value.ValidateLexical directly; clause 4 reads it through
+// xsd.ValueSpace's ValidDefault, which returns the same error. Error() still
+// renders that verdict into the message as well, for a reader who holds only
+// the string.
 //
-// The fourth, cvc-complex-type clause 4 over a ·defaulted attribute·'s
-// {lexical form}, unwraps to nil: it reads its answer through
-// xsd.ValueSpace's ValidDefault, which decides in two booleans and returns no
-// verdict to carry. Clause 1.2 and clause 4 charge under the one
-// cvc-complex-type rule, so whether a cause is there is read off Unwrap and
-// never off the rule ID.
+// Whether a cause is there is read off Unwrap and never off the rule ID: a
+// charge under cvc-complex-type may be clause 1.2, clause 4 or one of the
+// clauses that delegate to nothing, and only the chain tells them apart.
 //
 // Two come from [Validator.Assess]'s dispatch on the root's ·governing
 // element declaration·: cvc-assess-elt (§3.3.4.6) for a root that determines

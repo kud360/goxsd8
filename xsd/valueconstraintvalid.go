@@ -419,6 +419,13 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 // 19), and a construction-stage failure in the TYPE's facets, which is not a
 // verdict about this value constraint at all.
 //
+// A decided rejection's cause — the datatype-layer cvc-* verdict ValueSpace hands
+// back — is DISCARDED here rather than wrapped, and this is the one place that
+// says why: the rejection is charged at the owning component's Loc under a
+// schema-component rule ID, so carrying a cvc-* verdict under it would blame the
+// wrong component under the wrong rule. A user who wants the datatype-layer
+// detail gets it from instance validation, which charges cvc-* and does wrap it.
+//
 // This is the first finalize-phase check that enters the installed value space's
 // FACET pipeline rather than its Mapping alone, so it is also the first that can
 // meet a facet-PRECONDITION fault of the type it is handed. There are two such
@@ -449,8 +456,8 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 // *xsderr.Error, it does not panic), so it lands in the accepting branch below:
 // this clause never rejects a schema for it, and never crashes on it.
 func (s *Schema) checkSimpleDefault(rule xsderr.Rule, loc xsderr.Loc, owner string, t *SimpleType, vc ValueConstraint) error {
-	valid, decided := s.valueSpace.ValidDefault(s, t, vc)
-	if !decided || valid {
+	cause, decided := s.valueSpace.ValidDefault(s, t, vc)
+	if !decided || cause == nil {
 		return nil
 	}
 	clause := string(rule) + " clause 2"

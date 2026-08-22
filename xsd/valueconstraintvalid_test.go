@@ -49,15 +49,19 @@ func (s *stubValueSpace) EqualOrIdentical(TypeResolver, *SimpleType, ValueConstr
 	return s.same, s.decided
 }
 
-func (s *stubValueSpace) ValidDefault(_ TypeResolver, _ *SimpleType, vc ValueConstraint) (bool, bool) {
+func (s *stubValueSpace) ValidDefault(_ TypeResolver, _ *SimpleType, vc ValueConstraint) (error, bool) {
 	s.defaultCalls++
 	if s.undecidedDefault {
-		return false, false
+		return nil, false
 	}
-	if s.validLexicals == nil {
-		return true, true
+	if s.validLexicals == nil || s.validLexicals[vc.LexicalForm()] {
+		return nil, true
 	}
-	return s.validLexicals[vc.LexicalForm()], true
+	// The real seam hands back the datatype-layer verdict, so the stub does
+	// too: a caller that wrapped it would otherwise be pinned against a cause
+	// no implementation produces.
+	return xsderr.New("cvc-datatype-valid", xsderr.Loc{},
+		"the literal %q is not in the ·lexical space· of the type", vc.LexicalForm()), true
 }
 
 // vcSchema is bSchema with a ValueSpace installed: it finalizes through

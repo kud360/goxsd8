@@ -79,7 +79,9 @@ func (vs valueSpace) EqualOrIdentical(r xsd.TypeResolver, ta *xsd.SimpleType, a 
 // decides exactly that rule — all three of its clauses, over all three varieties
 // — so the whole of this method is the two gates that separate the errors it
 // returns which ARE that verdict from the ones that are not. Every gate answers
-// undecided, never invalid, per the [xsd.ValueSpace] fail-open contract.
+// undecided, never invalid, per the [xsd.ValueSpace] fail-open contract. A
+// verdict rides out as the returned cause, unmodified and still carrying its own
+// cvc-* rule; an error a gate catches is discarded with it.
 //
 // The first gate runs BEFORE the pipeline; the second reads the pipeline's own
 // error through the ONE classification this package publishes:
@@ -126,15 +128,20 @@ func (vs valueSpace) EqualOrIdentical(r xsd.TypeResolver, ta *xsd.SimpleType, a 
 // nil is passed as the [Context] because gate 1 has already excluded every
 // context-dependent literal — unlike values, which parses each side under the
 // context its own value constraint captured.
-func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.ValueConstraint) (bool, bool) {
+func (vs valueSpace) ValidDefault(r xsd.TypeResolver, t *xsd.SimpleType, vc xsd.ValueConstraint) (error, bool) {
 	needs, err := needsContext(r, t)
 	if err != nil || needs {
-		return false, false
+		//nolint:nilerr // the first result is the VERDICT's cause, not this call's error: a needsContext fault is a fault of the type, which gate 1 answers undecided and so causeless.
+		return nil, false
 	}
-	if _, err := ValidateLexical(vs.b, r, t, vc.LexicalForm(), nil); err != nil {
-		return false, IsDatatypeVerdict(err)
+	_, err = ValidateLexical(vs.b, r, t, vc.LexicalForm(), nil)
+	if err == nil {
+		return nil, true
 	}
-	return true, true
+	if !IsDatatypeVerdict(err) {
+		return nil, false
+	}
+	return err, true
 }
 
 // ConstraintMatches reports whether lexical — an instance literal — and

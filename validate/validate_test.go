@@ -504,35 +504,42 @@ func TestAssessRejectsNilRoot(t *testing.T) {
 	v.Assess(nil)
 }
 
-// Three of the four charges that DELEGATE to String Valid (§3.16.4,
-// cvc-simple-type) carry the delegated rule's verdict as their wrapped cause,
-// so a consumer reads the inner rule ID off the chain instead of scraping the
-// message for it (#914); the fourth, cvc-complex-type clause 4 over a
-// ·defaulted attribute·, unwraps to nil because xsd.ValueSpace.ValidDefault
-// decides in two booleans and returns no verdict to carry (see validate/doc.go).
-// The three that do wrap are driven here through their own fixture:
-// cvc-attribute clause 3 (§3.2.4.1), cvc-type clause 3.1.3 (§3.3.4.4) and
-// cvc-complex-type clause 1.2 (§3.4.4.2). String Valid clause 2 is Datatype
-// Valid (Datatypes §4.1.4), so the inner rule an xs:decimal lexical failure
-// carries is cvc-datatype-valid.
+// All FOUR charges that DELEGATE to String Valid (§3.16.4, cvc-simple-type)
+// carry the delegated rule's verdict as their wrapped cause, so a consumer reads
+// the inner rule ID off the chain instead of scraping the message for it (#914,
+// #924). Each is driven here through its own fixture: cvc-attribute clause 3
+// (§3.2.4.1), cvc-type clause 3.1.3 (§3.3.4.4), and cvc-complex-type (§3.4.4.2)
+// clauses 1.2 and 4. Two rows charge the one cvc-complex-type rule, which is why
+// the subtest is keyed on the row's own name and not on the rule ID.
+//
+// Clause 4 reaches its verdict through xsd.ValueSpace's ValidDefault rather than
+// value.ValidateLexical directly, and wraps what that hands back. String Valid
+// clause 2 is Datatype Valid (Datatypes §4.1.4), so the inner rule an xs:decimal
+// lexical failure carries is cvc-datatype-valid at every one of the four.
 func TestDelegatingChargesWrapTheirCause(t *testing.T) {
 	decimal := icBuiltin("decimal")
 	for _, tc := range []struct {
+		name   string
 		rule   xsderr.Rule
 		charge func(*testing.T) []*xsderr.Error
 	}{
-		{"cvc-attribute", func(t *testing.T) []*xsderr.Error {
+		{"cvc-attribute clause 3", "cvc-attribute", func(t *testing.T) []*xsderr.Error {
 			return assessTyped(t, valuedRoot("n", "12,50"),
 				[]xsd.AttributeUse{typedUse(t, "n", decimal, false, nil, nil)})
 		}},
-		{"cvc-type", func(t *testing.T) []*xsderr.Error {
+		{"cvc-type clause 3.1.3", "cvc-type", func(t *testing.T) []*xsderr.Error {
 			return cAssess(t, simpleTypedSchema(t, decimal, nil, false), cRoot("#12,50"))
 		}},
-		{"cvc-complex-type", func(t *testing.T) []*xsderr.Error {
+		{"cvc-complex-type clause 1.2", "cvc-complex-type", func(t *testing.T) []*xsderr.Error {
 			return cAssess(t, simpleContentSchema(t, decimal), cRoot("#12,50"))
 		}},
+		{"cvc-complex-type clause 4", "cvc-complex-type", func(t *testing.T) []*xsderr.Error {
+			bad := xsd.NewValueConstraint(xsd.ValueDefault, "12,50", nil, nil)
+			return assessTyped(t, &testElement{name: xsd.QName{Local: "root"}, loc: loc(1, 1)},
+				[]xsd.AttributeUse{typedUse(t, "n", decimal, false, &bad, nil)})
+		}},
 	} {
-		t.Run(string(tc.rule), func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			viol := onlyCharge(t, tc.charge(t), tc.rule)
 
 			inner := errors.Unwrap(viol)
