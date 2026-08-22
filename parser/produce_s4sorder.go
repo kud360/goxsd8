@@ -53,8 +53,8 @@ func s4sNames(names ...string) func(string) bool {
 // all, and for the precisionDecimal extension facets maxScale/minScale
 // (xsd-precisionDecimal.md §4.2/§4.3), which the 2012 summary predates and this
 // processor produces. Both are over-admissions in a check that only ORDERS the
-// names its model admits somewhere: an element the grammar admits NOWHERE is a
-// different fault, and an unowned one (#928).
+// names its model admits somewhere: an element this position does not admit is a
+// different fault this check does not charge.
 func s4sFacetElement(local string) bool {
 	if local == "assertion" {
 		return true
@@ -226,12 +226,13 @@ var (
 // matched cannot re-enter the block behind it.
 //
 // A child whose name NO position of m admits is skipped, not rejected. What that
-// leaves unrejected is an element the grammar does not admit in this position at
-// all — a <complexContent> under a <simpleContent>, an <element> beside a facet —
-// which is a different fault with an owner of its own (#928), and one this check
-// must not pre-empt by charging an order verdict over it. Children outside the XSD
-// namespace are skipped for the same reason plus one: they are what
-// xs:simpleRestrictionModel's "{any with namespace: ##other}" position admits.
+// leaves unrejected is an element this model's chosen alternant does not admit in
+// this position — a <complexContent> under a <simpleContent>, an <attribute>
+// beside a facet in s4sComplexTypeWrapped where xs:complexTypeModel's OTHER
+// disjunct would admit it — a different fault this check must not pre-empt by
+// charging an order verdict over it. Children outside the XSD namespace are
+// skipped for the same reason plus one: they are what xs:simpleRestrictionModel's
+// "{any with namespace: ##other}" position admits.
 func checkS4SChildOrder(owner *Element, m s4sModel) error {
 	// last is the position the previous matched child filled, and the search start
 	// is derived from it rather than tracked beside it (STYLE D3): a repeated
