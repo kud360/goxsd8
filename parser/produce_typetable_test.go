@@ -466,6 +466,43 @@ func TestProduceSrcTA(t *testing.T) {
 	}
 }
 
+// src-element clause 5 (§3.3.3) — "Every <alternative> element but the last has
+// a test attribute; the last <alternative> element may have such an attribute" —
+// is charged over the same children src-ta passes. An untested child anywhere but
+// last is named by neither {alternatives} nor {default type definition}
+// (§3.3.2.1), so leaving it uncharged ACCEPTS a document that maps it to nothing
+// (#957). The last child is untested in the legal fixtures below, which is the
+// {default type definition} form and stays accepted.
+func TestProduceSrcElementClause5(t *testing.T) {
+	cases := []struct {
+		name       string
+		alternates string
+		wantRule   bool
+	}{
+		{name: "one untested alternative, first and last at once", alternates: `<xs:alternative type="T"/>`},
+		{name: "trailing untested alternative", alternates: `<xs:alternative test="@k='t'" type="T"/><xs:alternative type="V"/>`},
+		{name: "every alternative tested", alternates: `<xs:alternative test="@k='t'" type="T"/><xs:alternative test="@k='u'" type="U"/>`},
+		{name: "untested first of two", alternates: `<xs:alternative type="T"/><xs:alternative test="@k='u'" type="U"/>`, wantRule: true},
+		{name: "untested middle of three", alternates: `<xs:alternative test="@k='t'" type="T"/><xs:alternative type="U"/><xs:alternative type="V"/>`, wantRule: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("", typeTableTypes+`
+			<xs:element name="e" type="B">`+tc.alternates+`</xs:element>`))
+			if !tc.wantRule {
+				if err != nil {
+					t.Fatalf("Produce: %v, want no src-element charge", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("Produce succeeded, want a src-element charge")
+			}
+			assertRule(t, err, "src-element")
+		})
+	}
+}
+
 // A dangling alternative type name is charged src-resolve at finalize, which is
 // only reachable once the table is actually built.
 func TestProduceTypeTableAlternativeTypeResolves(t *testing.T) {
