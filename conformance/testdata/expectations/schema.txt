@@ -251,7 +251,7 @@ CTA/cta0042/schema/cta0042 pass
 CTA/cta0043/schema/cta0043 pass
 CTA/cta0044/schema/cta0044 pass
 CTA/cta0045/schema/cta0042 pass
-CTA/cta9001err/schema/cta9001err fail
+CTA/cta9001err/schema/cta9001err pass
 CTA/cta9004err/schema/cta9004err pass
 CTA/cta9005err/schema/cta9005err pass
 CTA/cta9006err/schema/cta9006err fail

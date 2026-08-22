@@ -10,12 +10,12 @@ import (
 
 // This file maps the <alternative> children of an <element> into the element
 // declaration's {type table} (§3.3.2.1 dcl.elt.common over §3.12.2 declare-ta)
-// and charges §3.12.3 src-ta and §3.12.6 ta-props-correct clause 2 over the
-// same children. It serves the GLOBAL <element> path (produceElement) and both
-// LOCAL ones (produceLocalElement) from one implementation (STYLE T4):
-// §3.3.2.1's {type table} row is a COMMON mapping rule and §3.3.2.2
-// dcl.elt.global supplements {target namespace} and {scope} alone, so a
-// top-level <element> has nothing to map differently.
+// and charges §3.12.3 src-ta, §3.3.3 src-element clause 5 and §3.12.6
+// ta-props-correct clause 2 over the same children. It serves the GLOBAL
+// <element> path (produceElement) and both LOCAL ones (produceLocalElement)
+// from one implementation (STYLE T4): §3.3.2.1's {type table} row is a COMMON
+// mapping rule and §3.3.2.2 dcl.elt.global supplements {target namespace} and
+// {scope} alone, so a top-level <element> has nothing to map differently.
 
 // ruleSrcTA is Type Alternative Representation OK (Structures §3.12.3,
 // id="src-ta"): "each <alternative> element must have one (and only one) of the
@@ -76,16 +76,17 @@ func (t ctaStaticTypes) Type(name xsd.QName) (xsd.TypeDefinition, bool) {
 // type definition}'s {type definition} whenever the final <alternative> carries
 // a test.
 //
-// The mapping, once src-ta has passed over every <alternative>:
+// The mapping, once src-ta and src-element clause 5 have passed over every
+// <alternative>:
 //
 //   - {alternatives} takes the <alternative> children WITH a test attribute, in
 //     document order, each through declare-ta. A TRAILING untested one is not
-//     among them — it feeds {default type definition} instead — and an untested
-//     one anywhere else maps to nothing at all, which is the mapping as written
-//     rather than an omission: {alternatives} is defined over the tested
-//     children and {default type definition} over the final child, so a
-//     non-final untested <alternative> is named by neither. src-element clause
-//     5 (§3.3.3) forbids that document, and this producer does not charge it.
+//     among them — it feeds {default type definition} instead. An untested one
+//     ANYWHERE ELSE is named by neither property, since {alternatives} is
+//     defined over the tested children and {default type definition} over the
+//     final child, so it would map to nothing at all; src-element clause 5
+//     (§3.3.3) forbids that document and the loop below charges it before any
+//     child is mapped.
 //   - {default type definition} is the final <alternative> through declare-ta
 //     when it has no test attribute, and otherwise a Type Alternative
 //     SYNTHESIZED with an ·absent· {test}, declaredType as its {type
@@ -114,16 +115,20 @@ func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType x
 	if len(alternatives) == 0 {
 		return nil, nil // §3.3.2.1: "otherwise ·absent·"
 	}
-	for _, alt := range alternatives {
+	last := len(alternatives) - 1
+	for i, alt := range alternatives {
 		if err := checkSrcTA(alt); err != nil {
 			return nil, err
+		}
+		if _, hasTest := alt.Attr("test"); !hasTest && i < last {
+			return nil, xsderr.New(ruleSrcElement, alt.Loc(),
+				"<alternative> %d of %d has no test attribute, but src-element clause 5 requires one on every <alternative> but the last", i+1, len(alternatives))
 		}
 	}
 	types, err := p.alternativeTypes(alternatives, edID)
 	if err != nil {
 		return nil, err
 	}
-	last := len(alternatives) - 1
 	defaultType := types[last] // §3.3.2.1 case 1
 	if _, lastTested := alternatives[last].Attr("test"); lastTested {
 		defaultType = declaredType // §3.3.2.1 case 2
@@ -134,9 +139,9 @@ func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType x
 	}
 	var alts []xsd.TypeAlternative
 	for i, alt := range alternatives {
-		// The test attribute is the whole membership rule, so a TRAILING untested
-		// <alternative> drops out here exactly as a non-final one does — it is
-		// already the {default type definition} above.
+		// The test attribute is the whole membership rule, and clause 5 has left the
+		// TRAILING child as the only untested one this can reach — it is already the
+		// {default type definition} above.
 		if _, hasTest := alt.Attr("test"); !hasTest {
 			continue
 		}
