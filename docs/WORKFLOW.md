@@ -181,12 +181,22 @@ plus log entry), `Closes #<N>` in the body closes the issue, and GitHub
 auto-deletes the head branch (keep the repo's "Automatically delete head
 branches" setting ON). Nothing is ever committed directly to `main`.
 
+The LOG entry comes due here and nowhere earlier. `/develop` step 5
+(Judge) runs before step 6 (Land), where the chronicler writes it, so the
+tree the arbiter judged carries no entry for this issue and an empty
+`docs/LOG/` diff at verdict time is the documented order rather than a
+skipped step (#820).
+
 Three preconditions, verified and stated by the orchestrating session
 before the PR is opened — none is anyone else's to volunteer:
 
-1. **The LOG entry is in the branch's diff** — literally
-   `git diff origin/main...HEAD -- docs/LOG/`, not "the chronicler was
-   invoked". The entry rides the session commit or the session does not
+1. **The LOG entry naming THIS issue is among the branch's added lines** —
+   `git diff origin/main...HEAD -- docs/LOG/` piped through
+   `grep -E '^\+.*(\(#<N>\)|issues/<N>|#<N>)'` for the issue number being
+   landed. Not "the chronicler was invoked", and not a non-empty
+   `docs/LOG/` path diff: a forward merge carries other issues' entries
+   into that diff, which read PRESENT on #813's branch while its own entry
+   was absent. The entry rides the session commit or the session does not
    land (PRINCIPLES 29).
 2. **`origin/main` has not moved past the verdict's base** —
    `git log HEAD..origin/main` is empty. If it is not, merge forward and

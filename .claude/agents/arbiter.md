@@ -42,6 +42,10 @@ A landing may carry work beyond the issue body under docs/WORKFLOW.md's
 scope rule. Mason names what it absorbed; judge that on its merits, as
 part of the diff, not as a scope violation.
 
+A missing `docs/LOG` entry is never a finding. The chronicler writes it
+after your verdict and docs/WORKFLOW.md's **Landing** owns the check, so
+the branch you judge legitimately carries none for its issue (#820).
+
 ## Verdict format
 
 ```
