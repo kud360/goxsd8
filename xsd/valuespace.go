@@ -19,7 +19,7 @@ package xsd
 //     general declaration's {value} against a specific (restricting) one's, and
 //     only the implementation can decide whether the two types share a value
 //     space.
-//   - the one-sided VALIDITY predicate, ValidDefault, which asks whether a single
+//   - the one-sided VALIDITY question, ValidDefault, which asks whether a single
 //     {lexical form} denotes a value of a single type at all (§3.2.6.2). It takes
 //     one type, and its fail-open scope differs from the comparisons' in
 //     consequence: see its own doc.
@@ -121,13 +121,17 @@ type ValueSpace interface {
 	//     it binds every implementation here rather than describing one.
 	//
 	// Only a genuine verdict-stage failure — the lexical form itself failing a
-	// facet or the mapping — may answer (false, true). The specific per-facet
-	// reason is deliberately dropped rather than returned: the caller reports
-	// under a-props-correct or au-props-correct at the owning component's Loc,
-	// and threading the datatype-layer reason out would file a cvc-* message
-	// under a schema-component rule ID. A user who wants the datatype-layer
-	// detail gets it from instance validation, where it is charged cvc-*.
-	ValidDefault(r TypeResolver, t *SimpleType, vc ValueConstraint) (valid, decided bool)
+	// facet or the mapping — may answer decided with a non-nil cause, and cause
+	// is that verdict itself, passed out unmodified: cvc-datatype-valid
+	// (Datatypes §4.1.4) for the mapping, one of the facet rules under it
+	// otherwise. No implementation re-tags it, and a caller charging under its
+	// own rule ID wraps it rather than replacing it.
+	//
+	// cause is non-nil IF AND ONLY IF decided and vc.{lexical form} is invalid:
+	// an undecided answer is (nil, false) and a valid one is (nil, true). The
+	// cause's presence IS the verdict, so neither valid-with-a-cause nor
+	// invalid-without-one is representable (STYLE D3).
+	ValidDefault(r TypeResolver, t *SimpleType, vc ValueConstraint) (cause error, decided bool)
 }
 
 // undecidedValueSpace is the ValueSpace a Schema finalized without one carries:
@@ -146,8 +150,8 @@ func (undecidedValueSpace) EqualOrIdentical(TypeResolver, *SimpleType, ValueCons
 	return false, false
 }
 
-func (undecidedValueSpace) ValidDefault(TypeResolver, *SimpleType, ValueConstraint) (bool, bool) {
-	return false, false
+func (undecidedValueSpace) ValidDefault(TypeResolver, *SimpleType, ValueConstraint) (error, bool) {
+	return nil, false
 }
 
 var _ ValueSpace = undecidedValueSpace{}

@@ -237,7 +237,8 @@ func (w *walk) defaultedAttributes(e Element, attrs []Attribute, governing xsd.C
 // space [Validator.Assess] built for this walk. Its undecided answer carries the
 // whole fail-open gate: an ungoverned type, a context-dependent one, a
 // construction-stage facet failure and a facet-pipeline precondition fault each
-// charge nothing.
+// charge nothing. A decided rejection hands back the Datatype Valid verdict
+// itself, which the charge carries as its wrapped cause (validate.go's causedBy).
 func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueConstraint) {
 	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 	if !resolved {
@@ -247,11 +248,11 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 	if !simple {
 		return
 	}
-	valid, decided := w.values.ValidDefault(w.schema, st, vc)
-	if !decided || valid {
+	cause, decided := w.values.ValidDefault(w.schema, st, vc)
+	if !decided || cause == nil {
 		return
 	}
-	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcComplexType, e.Loc(),
+	w.res.violations = append(w.res.violations, causedBy(ruleCvcComplexType, e.Loc(), cause,
 		"the element %s carries no attribute information item named %s, and the {lexical form} %q of the ·effective value constraint· of the ·defaulted attribute· it would supply is not ·valid· with respect to that declaration's {type definition} %s, which cvc-complex-type clause 4 requires as per String Valid (§3.16.4)",
 		e.Name(), u.DeclarationName(), vc.LexicalForm(), st.Name()))
 }

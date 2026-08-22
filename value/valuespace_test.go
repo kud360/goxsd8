@@ -431,36 +431,56 @@ func vsUnion(t *testing.T, local string, members ...*xsd.SimpleType) *xsd.Simple
 // The list and union rows are the difference from Identical/EqualOrIdentical,
 // which refuse both varieties outright: this predicate needs ONE type's mapping,
 // not a shared one, so Datatype Valid clauses 2.2 and 2.3 are decided here.
+//
+// The verdict IS the cause, so wantCause is the row's expected validity read the
+// only way the signature encodes it: a rejected lexical carries the datatype
+// layer's own error out, an accepted one carries nil.
 func TestValidDefaultDecidesGovernedTypes(t *testing.T) {
 	prim := vsPrim(t, "int")
 	vs := NewValueSpace(intBackend{mapped: prim.Name()})
 	derived := vsDerived(t, "narrow", prim)
 
 	for _, tc := range []struct {
-		name    string
-		t       *xsd.SimpleType
-		lexical string
-		want    bool
+		name      string
+		t         *xsd.SimpleType
+		lexical   string
+		wantCause bool
 	}{
-		{"an atomic lexical the mapping accepts", prim, "1", true},
-		{"an atomic lexical the mapping rejects", prim, "zzz", false},
-		{"whiteSpace normalization precedes the mapping", prim, " 1 ", true},
-		{"a derived type is decided by its base's mapping", derived, "01", true},
-		{"a derived type rejects too", derived, "zzz", false},
-		{"a list whose every item maps", vsList(t, "ints", prim), "1 2 3", true},
-		{"a list with one item that does not", vsList(t, "ints", prim), "1 zzz", false},
-		{"a union some member accepts", vsUnion(t, "u", prim), "1", true},
-		{"a union no member accepts", vsUnion(t, "u", prim), "zzz", false},
+		{"an atomic lexical the mapping accepts", prim, "1", false},
+		{"an atomic lexical the mapping rejects", prim, "zzz", true},
+		{"whiteSpace normalization precedes the mapping", prim, " 1 ", false},
+		{"a derived type is decided by its base's mapping", derived, "01", false},
+		{"a derived type rejects too", derived, "zzz", true},
+		{"a list whose every item maps", vsList(t, "ints", prim), "1 2 3", false},
+		{"a list with one item that does not", vsList(t, "ints", prim), "1 zzz", true},
+		{"a union some member accepts", vsUnion(t, "u", prim), "1", false},
+		{"a union no member accepts", vsUnion(t, "u", prim), "zzz", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			valid, decided := vs.ValidDefault(noSchema{}, tc.t, vsFixed(tc.lexical))
+			cause, decided := vs.ValidDefault(noSchema{}, tc.t, vsFixed(tc.lexical))
 			if !decided {
-				t.Fatalf("ValidDefault = (%t, false), want a decided verdict", valid)
+				t.Fatalf("ValidDefault = (%v, false), want a decided verdict", cause)
 			}
-			if valid != tc.want {
-				t.Errorf("ValidDefault = (%t, true), want (%t, true)", valid, tc.want)
+			if (cause != nil) != tc.wantCause {
+				t.Errorf("ValidDefault = (%v, true), want a cause: %t", cause, tc.wantCause)
 			}
 		})
+	}
+}
+
+// wantUndecidedDefault fails unless the answer is the fail-open one, (nil,
+// false). The nil half is asserted at every gate below and not only at one:
+// [xsd.ValueSpace] binds a cause to a DECIDED rejection, so an undecided answer
+// carrying one is the illegal state the two-result shape exists to exclude, and
+// a gate that returned the error it caught would reach that state silently.
+func wantUndecidedDefault(t *testing.T, what string, cause error, decided bool) {
+	t.Helper()
+	if decided {
+		t.Errorf("ValidDefault(%s) = (%v, true), want undecided (fail-open)", what, cause)
+		return
+	}
+	if cause != nil {
+		t.Errorf("ValidDefault(%s) = (%v, false), want no cause on an undecided answer", what, cause)
 	}
 }
 
@@ -490,9 +510,8 @@ func TestValidDefaultAcceptsUngovernedTypes(t *testing.T) {
 		{"a union with one ungoverned MEMBER", vsUnion(t, "u", prim, unmapped)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if valid, decided := vs.ValidDefault(noSchema{}, tc.t, vsFixed("zzz not a value of anything")); decided {
-				t.Errorf("ValidDefault = (%t, %t), want undecided (fail-open)", valid, decided)
-			}
+			cause, decided := vs.ValidDefault(noSchema{}, tc.t, vsFixed("zzz not a value of anything"))
+			wantUndecidedDefault(t, tc.name, cause, decided)
 		})
 	}
 }
@@ -525,9 +544,8 @@ func TestValidDefaultAcceptsContextDependentTypes(t *testing.T) {
 				{"a list of a union of it", vsList(t, "lu", vsUnion(t, "u2", prim))},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					if valid, decided := vs.ValidDefault(noSchema{}, tc.t, vsFixed("p:local")); decided {
-						t.Errorf("ValidDefault = (%t, %t), want undecided (fail-open)", valid, decided)
-					}
+					cause, decided := vs.ValidDefault(noSchema{}, tc.t, vsFixed("p:local"))
+					wantUndecidedDefault(t, tc.name, cause, decided)
 				})
 			}
 		})
@@ -553,9 +571,8 @@ func TestValidDefaultAcceptsConstructionStageFailures(t *testing.T) {
 	vs := NewValueSpace(intBackend{mapped: qn})
 
 	for _, lexical := range []string{"1", "zzz"} {
-		if valid, decided := vs.ValidDefault(noSchema{}, bad, vsFixed(lexical)); decided {
-			t.Errorf("ValidDefault(%q) = (%t, %t), want undecided (fail-open)", lexical, valid, decided)
-		}
+		cause, decided := vs.ValidDefault(noSchema{}, bad, vsFixed(lexical))
+		wantUndecidedDefault(t, strconv.Quote(lexical), cause, decided)
 	}
 }
 
@@ -577,8 +594,7 @@ func TestValidDefaultAcceptsFacetPreconditionFaults(t *testing.T) {
 	// "ab" has length 2 and so would SATISFY the length facet if the value space were
 	// Lengthed at all: the undecided answer is the fault's, not a smuggled rejection.
 	for _, lexical := range []string{"ab", "abcd"} {
-		if valid, decided := vs.ValidDefault(noSchema{}, st, vsFixed(lexical)); decided {
-			t.Errorf("ValidDefault(%q) = (%t, %t), want undecided (gate 4, fail-open)", lexical, valid, decided)
-		}
+		cause, decided := vs.ValidDefault(noSchema{}, st, vsFixed(lexical))
+		wantUndecidedDefault(t, strconv.Quote(lexical), cause, decided)
 	}
 }
