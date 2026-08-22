@@ -427,6 +427,13 @@ func ownedComplexBase(base xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 // definition} having been identified before they apply"). The implicit-content
 // form names no base=; its base is xs:anyType, always already seeded.
 //
+// Which of the five forms this is decides which xs:complexTypeModel disjunct the
+// <complexType>'s OWN children are ordered against (checkS4SChildOrder), so that
+// check is charged here rather than inside the arms. It runs BEHIND
+// repeatedContentAlternative, which would otherwise be pre-empted by an order
+// verdict: a second <simpleContent> fills a position twice, and only the
+// dedicated guard names the offending sibling and the <complexType> bounding it.
+//
 // id is BOTH what the built type is constructed from — a {name} for a top-level
 // one, a {context} for an inline anonymous one — and the {scope}.{parent} that
 // every local element declaration nested in this type's content model (§3.3.2.3
@@ -493,10 +500,21 @@ func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.
 	if oc := misplacedOpenContent(el); oc != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <openContent> at %s is in a position the schema for schema documents does not allow: it is a child of <complexType> only in the implicit-content form (no <simpleContent>/<complexContent>), under <complexContent> only of the <restriction>/<extension> alternant, and nowhere at all under <simpleContent>", oc.Loc())
 	}
-	if sc := childElement(el, xsd.XMLSchemaNS, "simpleContent"); sc != nil {
+	sc := childElement(el, xsd.XMLSchemaNS, "simpleContent")
+	cc := childElement(el, xsd.XMLSchemaNS, "complexContent")
+	// xs:complexTypeModel's own child order, on whichever of its three disjuncts
+	// this <complexType> writes.
+	model := s4sComplexTypeImplicit
+	if sc != nil || cc != nil {
+		model = s4sComplexTypeWrapped
+	}
+	if err := checkS4SChildOrder(el, model); err != nil {
+		return xsd.ComplexType{}, err
+	}
+	if sc != nil {
 		return p.produceSimpleContent(id, el, sc)
 	}
-	if cc := childElement(el, xsd.XMLSchemaNS, "complexContent"); cc != nil {
+	if cc != nil {
 		return p.produceComplexContent(id, el, cc)
 	}
 	return p.produceImplicitContent(id, el)
@@ -508,6 +526,11 @@ func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.
 // attribute wildcard come directly from the <complexType>'s own children, and
 // this type is the {scope}.{parent} of every local element and every local
 // attribute among them.
+//
+// Those children's ORDER is checked by produceComplexType, against
+// s4sComplexTypeImplicit, before this is reached: the positions are the
+// <complexType>'s own here, so the check belongs where the disjunct is chosen
+// rather than to one arm of the dispatch.
 func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (xsd.ComplexType, error) {
 	mixed, _ := boolAttr(el, "mixed")
 	abstract, _ := boolAttr(el, "abstract")
@@ -552,6 +575,12 @@ func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (
 // derivationAlternant — without it the <restriction>-first read would produce
 // from one alternant and drop the other in silence.
 //
+// The CHILD ORDER of the <simpleContent> and of the alternant it holds is
+// charged by checkS4SChildOrder, against s4sSimpleContentWrapper and then
+// s4sSimpleRestriction/s4sSimpleExtension. Both run ahead of the src-ct clauses
+// below, because src-ct states its conditions "in addition to" the schema for
+// schema documents rather than restating them (§3.4.3, :1945).
+//
 // It enforces the two src-ct (§3.4.3) clauses this representation carries, both
 // Schema Representation Constraints on the source XML and both charged before
 // anything is built:
@@ -575,9 +604,19 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 	if dup := repeatedDerivationAlternant(sc); dup != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <%s> at %s is a second derivation alternant on the <simpleContent> at %s, which the schema for schema documents prohibits: xs:simpleContent (§3.4.2.2) holds a plain xs:choice, so a <simpleContent> carries exactly one of <restriction>, <extension>", dup.Name().Local(), dup.Loc(), sc.Loc())
 	}
+	if err := checkS4SChildOrder(sc, s4sSimpleContentWrapper); err != nil {
+		return xsd.ComplexType{}, err
+	}
 	derivation, method := derivationAlternant(sc)
 	if derivation == nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <simpleContent> at %s has neither a <restriction> nor an <extension> child, one of which §3.4.2.2 requires", sc.Loc())
+	}
+	alternantModel := s4sSimpleRestriction
+	if method == xsd.DerivationExtension {
+		alternantModel = s4sSimpleExtension
+	}
+	if err := checkS4SChildOrder(derivation, alternantModel); err != nil {
+		return xsd.ComplexType{}, err
 	}
 	if dup := repeatedFacetChild(derivation, method); dup != nil {
 		return xsd.ComplexType{}, xsderr.New(ruleSrcCT, dup.Loc(),
@@ -836,13 +875,28 @@ func restrictedSimpleBase(base xsd.TypeDefinition, anySimpleType *xsd.SimpleType
 // repeatedDerivationAlternant ahead of derivationAlternant — without it the
 // <restriction>-first read would produce from one alternant and drop the other in
 // silence.
+//
+// The CHILD ORDER of the <complexContent> and of the alternant it holds is
+// charged by checkS4SChildOrder, against s4sComplexContentWrapper and then
+// s4sComplexRestriction/s4sComplexExtension, both ahead of src-ct clause 5 below
+// and on the same footing as the <simpleContent> half.
 func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Element) (xsd.ComplexType, error) {
 	if dup := repeatedDerivationAlternant(cc); dup != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <%s> at %s is a second derivation alternant on the <complexContent> at %s, which the schema for schema documents prohibits: xs:complexContent (§3.4.2.3) holds a plain xs:choice, so a <complexContent> carries exactly one of <restriction>, <extension>", dup.Name().Local(), dup.Loc(), cc.Loc())
 	}
+	if err := checkS4SChildOrder(cc, s4sComplexContentWrapper); err != nil {
+		return xsd.ComplexType{}, err
+	}
 	derivation, method := derivationAlternant(cc)
 	if derivation == nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <complexContent> at %s has neither a <restriction> nor an <extension> child, one of which §3.4.2.3 requires", cc.Loc())
+	}
+	alternantModel := s4sComplexRestriction
+	if method == xsd.DerivationExtension {
+		alternantModel = s4sComplexExtension
+	}
+	if err := checkS4SChildOrder(derivation, alternantModel); err != nil {
+		return xsd.ComplexType{}, err
 	}
 	ctMixed, ctHasMixed := boolAttr(ctElem, "mixed")
 	ccMixed, ccHasMixed := boolAttr(cc, "mixed")
