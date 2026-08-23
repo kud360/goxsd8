@@ -1723,8 +1723,8 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 // buildModelGroupDefinition, which memoizes it so one <group> is mapped exactly
 // once however many demand-driven lookups reach it. The named form has exactly
 // one <all>/<choice>/<sequence> child, whose Model Group becomes {model group};
-// an absent child yields the zero ModelGroup that NewModelGroupDefinition rejects
-// (mgd-props-correct §3.7.6, {model group} Required). Occurrence on the child is
+// any other body is rejected as the s4s-grammar fault it is, by
+// rejectNamedGroupBody, before a component is built. Occurrence on the child is
 // irrelevant here — a model group definition carries no {min occurs}/{max occurs}
 // (§3.7.2 note); those live solely on a <group ref> particle.
 //
@@ -1767,17 +1767,25 @@ func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd
 // buildDefinitionModelGroup builds the {model group} of a top-level <group>
 // definition from its single <all>/<choice>/<sequence> child (§3.7.2, xr.mgd1):
 // the Model Group term itself, not a Particle (a definition carries no
-// occurrence). An absent compositor child returns the zero ModelGroup, deferring
-// the {model group}-Required rejection to NewModelGroupDefinition
-// (mgd-props-correct). cos-all-limited is not charged here: an <all> definition
-// body is legal outright (§3.8.6.2 clause 1.1), and the constraint's usage-site
-// half is a component-shape verdict finalize owns (xsd/allgrouplimited.go).
-// scopeParent is the enclosing definition, threaded to the local element
-// declarations in the body (§3.3.2.3 dcl.elt.local).
+// occurrence). Any other body is rejected by rejectNamedGroupBody, at the child
+// that is not admitted rather than one phase later at the definition.
+//
+// The rejection belongs HERE and not at produceModelGroupDefinition, which is not
+// the only caller: src-expredef clause 2 builds the ORIGINAL a redefining
+// <group>'s self-reference resolves to through this function alone, and a zero
+// ModelGroup on that path reaches xsd.NewParticle — which admits it, its {term}
+// being a non-nil ResolvedTerm — and then the content automaton's Compositor
+// switch, over a compositor no <all>/<choice>/<sequence> ever set.
+//
+// cos-all-limited is not charged here: an <all> definition body is legal outright
+// (§3.8.6.2 clause 1.1), and the constraint's usage-site half is a component-shape
+// verdict finalize owns (xsd/allgrouplimited.go). scopeParent is the enclosing
+// definition, threaded to the local element declarations in the body (§3.3.2.3
+// dcl.elt.local).
 func (p *producer) buildDefinitionModelGroup(el *Element, scopeParent xsd.ElementScopeParent) (xsd.ModelGroup, error) {
 	group := compositorChild(el)
 	if group == nil {
-		return xsd.ModelGroup{}, nil // absent → NewModelGroupDefinition rejects
+		return xsd.ModelGroup{}, rejectNamedGroupBody(el)
 	}
 	compositor, _ := compositorOf(group.Name().Local()) // compositorChild guarantees ok
 	particles, err := p.groupParticles(group, scopeParent)
@@ -1785,6 +1793,42 @@ func (p *producer) buildDefinitionModelGroup(el *Element, scopeParent xsd.Elemen
 		return xsd.ModelGroup{}, err
 	}
 	return xsd.NewModelGroup(group.Loc(), compositor, particles, nil)
+}
+
+// rejectNamedGroupBody rejects a named <group> whose body is not the one
+// <all>/<choice>/<sequence> the schema for schema documents requires of it. Call
+// it only once compositorChild has answered nil, which is the whole set of bodies
+// this describes: a nested <group> reference, a bare <element>, an
+// annotation-only body, an empty one.
+//
+// It reports at the first child xs:namedGroup does not admit, and only at the
+// <group> itself when there is none, because an unadmitted child IS the mistake
+// while an unfilled required position is all that is left to say when the
+// document wrote nothing. That is rejectProhibitedRefAttrs's ordering read from
+// the same side: report the mistake, not its consequence. A <group ref= name=>
+// body is therefore charged here and not for its prohibited name — the reference
+// form is not admitted in this position under any spelling.
+//
+// The fault carries NO numbered rule ID: §3.7.3 (xmlschema11-1.md:2286) reads
+// "None as such." in full, there is no src-mgd, and mgd-props-correct (§3.7.6,
+// :2302) is a Schema Component Constraint over an already-built tableau, one
+// phase later and one element up from this document fault. What binds is §2.4
+// clause 1, sd-valid (:615) — the s4s-grammar class, a plain error naming the
+// offending item, its location and the Appendix A production (xsderr/doc.go,
+// #966).
+//
+// Foreign-namespace children are skipped rather than charged: xs:namedGroup
+// admits none of them either, but saying so is a different fault this check does
+// not claim, on checkS4SChildOrder's reasoning for the same skip.
+func rejectNamedGroupBody(el *Element) error {
+	for _, child := range el.Children() {
+		c, ok := child.(*Element)
+		if !ok || c.Name().Space() != xsd.XMLSchemaNS || c.Name().Local() == "annotation" {
+			continue
+		}
+		return fmt.Errorf("parser: <%s> at %s is not admitted in the body of the named <group> at %s: xs:namedGroup's content model (xmlschema11-1.md:5187) is (annotation?, (all | choice | sequence)), which admits exactly one <all>, <choice> or <sequence> and no other element", c.Name().Local(), c.Loc(), el.Loc())
+	}
+	return fmt.Errorf("parser: the named <group> at %s has no <all>, <choice> or <sequence> child: xs:namedGroup's content model (xmlschema11-1.md:5187) is (annotation?, (all | choice | sequence)), whose inner choice is minOccurs=\"1\" maxOccurs=\"1\" and so requires exactly one", el.Loc())
 }
 
 // compositorChild returns el's first <all>/<choice>/<sequence> child (a model

@@ -213,7 +213,8 @@ import (
 //       §3.6.2.1) are both decided genuinely.
 //     - group (top-level named definition, §3.7.2): must carry a name and a single
 //       all/choice/sequence body whose particles are decidable; the body maps to
-//       {model group} genuinely (mgd-props-correct rejects a missing body).
+//       {model group} genuinely (a missing body is the s4s-grammar rejection
+//       xs:namedGroup's content model requires, #884).
 //     - attribute: an inline <simpleType> child is admitted when its own shape is
 //       produced (#733 maps §3.2.2.1 dcl.att.global's tier 1, which dcl.att.local
 //       states in the same words), so a type= beside it is a genuine src-attribute
@@ -1302,7 +1303,8 @@ func modelGroupDecidable(group *parser.Element) bool {
 // within the producer's decidable subset: it must carry a name (the definition
 // form; a top-level <group ref> is malformed) and its single all/choice/sequence
 // body's particles must all be decidable. A missing body still produces genuinely
-// (mgd-props-correct rejects it), so it is admitted.
+// (the producer rejects it against xs:namedGroup's content model, #884), so it is
+// admitted.
 func groupDecidable(el *parser.Element) bool {
 	if !hasAttr(el, "name") || hasAttr(el, "ref") {
 		return false
