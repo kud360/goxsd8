@@ -70,6 +70,17 @@
 // are charged today, at the ·validation root· and at every descendant whose
 // ·governing element declaration· the descent determines.
 //
+// Read the verdict off [Result.Violations]; [Result.Err] reports whether the
+// walk finished, not whether the document is valid. An empty Violations means
+// NOT PROVEN INVALID rather than valid: [Validator.Assess] decides local
+// validity alone, which is clause 1.1.1 of the [validity] property
+// (§3.3.5.1), and evaluates neither clause 1.1.2 nor clause 1.1.3 — an
+// invalid descendant or attribute, and one ·attributed· to a strict
+// ·wildcard particle· whose own validity is notKnown — nor clause 2, which
+// makes an item that was not ·strictly assessed· notKnown rather than valid.
+// A consumer that may accept only what has been shown valid cannot read an
+// empty result as that showing.
+//
 // All four charges below that DELEGATE to String Valid (§3.16.4,
 // cvc-simple-type) carry the delegated verdict as their wrapped cause, so
 // errors.Unwrap/Is/As reach the inner *xsderr.Error and [xsderr.RuleOf] reads
