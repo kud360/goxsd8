@@ -43,13 +43,14 @@ identifier for any of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
 `xpath` has left this note: it exports the CTA compile, evaluate and
-statically-check entry points and imports `xsd` and `value` for real (its
-section says which tiers are shipped).
+statically-check entry points and imports `xsd`, `value` and `regex` for
+real (its section says which tiers are shipped).
 
 **[2] The infoset seam, the assessment skeleton and the XML adapter ship;
 the other two adapters do not.** `validate` exports the infoset views and
-`New`/`Validator`/`Result` and imports `xsd`, `xsderr`, `value` and `xpath`
-(and `regex` behind it, for the pattern facets `value` compiles) — but never a
+`New`/`Validator`/`Result` and imports `xsd`, `xsderr`, `value`, `xpath` and
+`regex` (the last for the NCName class its path lexer scans with, and behind
+`value` for the pattern facets it compiles) — but never a
 backend: `New` takes the `value.Backend` as a required parameter, so
 `builtin/strict` stays outside the closure exactly as it does for `parser`'s
 `Produce` (see its section);
@@ -605,12 +606,13 @@ compiles, is documented, and has **zero** callers module-wide.
   assembling function (`compile`) is unexported, and no exported API takes
   or returns a stage, so no consumer can exist. Either grow the composition
   seam the docs promise, or unexport the interfaces.
-- **`regex.FlavorFO`** and **`loader.FS`/`HTTP`/`Chain`/`ResolverFunc`** —
-  no consumer, but both are **justified and not to be filed**: the F&O
-  flavor is fully implemented against its M6/M7 consumer (`xpath`), and the
-  resolver helpers are declared library surface in `loader/doc.go` for
-  external users, which is the "documented contract it fulfills" half of
-  T5. Re-check, do not re-file.
+- **`loader.FS`/`HTTP`/`Chain`/`ResolverFunc`** — no consumer, but
+  **justified and not to be filed**: the resolver helpers are declared
+  library surface in `loader/doc.go` for external users, which is the
+  "documented contract it fulfills" half of T5. Re-check, do not re-file.
+  `regex.FlavorFO` sat here on the same terms until `xpath` and `validate`
+  took it for their NCName prefix scanners (#979); the F&O functions it was
+  built for still arrive at M6/M7.
 - **`validate.Validator.Schema()`** — exported for "the read-only view of
   the compiled schema an adapter needs" (`validate/validate.go:95`), but no
   adapter uses it and, per `validate/doc.go`, none can: adapters build

@@ -201,6 +201,11 @@ func multiEscSet(c byte) runeSet {
 // [XML 1.0] Fifth Edition, docs/specs/md/xml.md), i.e. the initial characters
 // of a name (Datatypes §G.4.2.5: "\i | the set of initial name characters,
 // those matched by NameStartChar"). \I is its complement.
+//
+// Which edition of XML supplies the productions is implementation-defined
+// (Datatypes §H.1 clause 1). This module takes [XML 1.0] Fifth Edition, the
+// edition the local spec corpus carries, and takes it HERE — every consumer of
+// \i and \c inherits the one choice rather than restating it.
 func nameStartSet() runeSet {
 	return runeSet{}.
 		add(':', ':').add('A', 'Z').add('_', '_').add('a', 'z').

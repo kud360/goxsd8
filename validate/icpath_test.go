@@ -182,3 +182,49 @@ func TestPathSubsetTokenizesADottedNameAsOneNameTest(t *testing.T) {
 		t.Error(`"a.b" selected at a; want one NameTest and not a self step`)
 	}
 }
+
+// TestScanNCNameIsTheXMLNameClass pins the NCName scan against XML's
+// NameStartChar and NameChar — the classes Datatypes §G.4.2.5 defines \i and \c
+// to be — and not against Unicode's letter and digit categories. The four rows
+// written as code-point escapes are the boundaries the two classes draw
+// differently; each of them is where one NameTest ends and the next token of
+// production [4] begins, so the prefix a binding is looked up under depends on
+// drawing it exactly.
+func TestScanNCNameIsTheXMLNameClass(t *testing.T) {
+	for _, tc := range []struct {
+		s    string
+		want int
+		why  string
+	}{
+		{"a", 1, "an ASCII name is the whole of it"},
+		{"a.b-c_d", 7, "'.', '-' and '_' continue a name"},
+		{"_x", 2, "'_' opens one"},
+		{"élan", 5, "U+00E9 is a NameStartChar and a letter both"},
+		{"日本", 6, "and so is U+65E5"},
+		{"9x", 0, "a digit opens no name"},
+		{"/x", 0, "nor does a step separator"},
+		{"", 0, "nor does the empty string"},
+		{"p:*", 1, "':' is subtracted from both classes: [\\i-[:]][\\c-[:]]*"},
+		{"\u00b5x", 0, "U+00B5 MICRO SIGN is a Unicode letter and NO NameStartChar"},
+		{"a\u00aa", 1, "U+00AA is a Unicode letter and NO NameChar"},
+		{"a\u00b7b", 4, "U+00B7 MIDDLE DOT is a NameChar and neither letter nor digit"},
+		{"a\u0301b", 4, "and so is U+0301 COMBINING ACUTE ACCENT"},
+	} {
+		if got := icScanNCName(tc.s, 0); got != tc.want {
+			t.Errorf("icScanNCName(%q, 0) = %d, want %d (%s)", tc.s, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestPathSubsetFollowsTheXMLNameClass is the same boundary reaching the
+// tokenizer: a name character of production [4] is read into the NameTest it
+// belongs to, and a character that is none opens no NameTest at all — which is
+// a decline of the whole {expression}, not a shorter name.
+func TestPathSubsetFollowsTheXMLNameClass(t *testing.T) {
+	if sel, _ := icWalk(icExprOf(t, "a\u00b7b", false, nil), xsd.QName{Local: "a\u00b7b"}); !sel {
+		t.Error(`"a·b" selected nothing at a·b; want one NameTest — U+00B7 continues the name`)
+	}
+	if _, ok := icCompile(xsd.NewXPathExpression("\u00b5", nil, nil, nil), false); ok {
+		t.Error(`icCompile("µ") compiled; want a decline — U+00B5 opens no NCName`)
+	}
+}

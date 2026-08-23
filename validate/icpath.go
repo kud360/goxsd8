@@ -1,10 +1,12 @@
 package validate
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/xsd"
 )
 
@@ -251,8 +253,9 @@ type icToken struct {
 // Longest-token is load-bearing in one place a shorter rule gets wrong: '.' is
 // a legal NCName character after the first, so "a.b" is ONE NameTest and not a
 // name, a self step and a second name. The scan reaches that by trying a
-// NameTest first wherever one can start, which '.' cannot (Datatypes §3.4.7,
-// NCName's \i excludes it).
+// NameTest first wherever one can start, which '.' cannot: an NCName opens with
+// \i (Datatypes §3.4.7.1's pattern facet), and \i is XML's NameStartChar
+// (§G.4.2.5), which does not admit '.'.
 func icTokenize(s string) ([]icToken, bool) {
 	var toks []icToken
 	for i := 0; i < len(s); {
@@ -305,25 +308,38 @@ func icScanNameTest(s string, i int) int {
 	return k
 }
 
+// icNCNameRE matches the longest NCName at the START of the string it is
+// applied to — [Namespaces in XML] production [4], spelled as the pattern
+// Datatypes §3.4.7.1 fixes for xs:NCName, "[\i-[:]][\c-[:]]*". It is
+// translated and compiled once here through [regex.Translate], so the code
+// points behind \i and \c are the ones the regex package owns and not a second
+// table (PRINCIPLES 26/27; regex/class.go records which edition of XML
+// supplies them).
+//
+// The flavor is FO because only FO's '^' is a real anchor: FlavorXSD anchors
+// the WHOLE string, which cannot express a prefix scan. This pattern carries
+// no construct the two flavors read differently.
+var icNCNameRE = func() *regexp.Regexp {
+	goRE, err := regex.Translate(`^[\i-[:]][\c-[:]]*`, regex.FlavorFO, "")
+	if err != nil {
+		panic("validate: translating the NCName pattern: " + err.Error())
+	}
+	return regexp.MustCompile(goRE)
+}()
+
 // icScanNCName reports the end of the NCName starting at i, or i where none
-// does. The character classes are Datatypes §3.4.7's \i and \c narrowed to what
-// Unicode's own categories decide: a name character this admits that XML would
-// not is never the difference between two documents' verdicts, because the name
-// still has to MATCH an ·expanded name· the source produced.
+// does. Datatypes §G.4.2.5 defines \i and \c by direct reference to XML's
+// NameStartChar and NameChar, so the class here is the grammar's own and not an
+// approximation of it — which is what a PREFIX has to have. The name this
+// bounds is resolved against the {namespace bindings} in scope (PRINCIPLES 15),
+// and a scan admitting one character too many would carry into the prefix a
+// character that ends the name and opens the next token.
+//
+// The match is anchored at i, so its length IS the end it reports. A miss and
+// an empty match are the same "" here, and mean the same thing: the pattern
+// requires a NameStartChar, so it never matches empty.
 func icScanNCName(s string, i int) int {
-	r, size := utf8.DecodeRuneInString(s[i:])
-	if !unicode.IsLetter(r) && r != '_' {
-		return i
-	}
-	j := i + size
-	for j < len(s) {
-		r, size = utf8.DecodeRuneInString(s[j:])
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '.' && r != '-' && r != '_' {
-			break
-		}
-		j += size
-	}
-	return j
+	return i + len(icNCNameRE.FindString(s[i:]))
 }
 
 // icParse parses the token stream as production [1]'s union of Paths, declining
