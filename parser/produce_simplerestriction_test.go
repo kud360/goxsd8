@@ -191,12 +191,22 @@ func TestProduceSimpleContentRestrictionCase2WithoutInlineSimpleType(t *testing.
 	}
 }
 
-// TestProduceSimpleContentRestrictionCase5 pins the two shapes the <restriction>
+// TestProduceSimpleContentRestrictionCase5 pins the two bases the <restriction>
 // alternant falls through to case 5 ("otherwise ·xs:anySimpleType·") on: a base
 // that is a simple type definition, and a base complex type whose own {content
 // type} is element-only. The tableau MAPS both — it states a result for every
 // base — and each is rejected downstream by the rule that really governs it, so
 // the mapping fabricates no representation error of its own.
+//
+// The third arm carries the inline <simpleType> case 5 DROPS: restrictedSimpleBase
+// discriminates the case off the base alone and returns before that child is
+// read, so it is never built and its own errors never surface. The arm's inline
+// type WOULD be rejected if it were built (st-props-correct clause 1, restricting
+// ·xs:anySimpleType· — the verdict
+// TestProduceSimpleContentRestrictionCase2WithoutInlineSimpleType pins), and the
+// arm asserts case 5's own governing rule lands instead, which is what makes the
+// drop safe rather than merely unobserved. It claims nothing for case 2 above,
+// which READS the same child.
 func TestProduceSimpleContentRestrictionCase5(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
@@ -222,6 +232,17 @@ func TestProduceSimpleContentRestrictionCase5(t *testing.T) {
 				<xs:maxLength value="4"/>
 			</xs:restriction></xs:simpleContent></xs:complexType>`,
 			"derivation-ok-restriction", "clause 2",
+		},
+		{
+			// ct-props-correct clause 2 again, over a <restriction> whose inline
+			// <simpleType> would be rejected by st-props-correct clause 1 if case 5
+			// built it.
+			"simple type base with a dropped inline simpleType", `
+			<xs:complexType name="D"><xs:simpleContent><xs:restriction base="xs:string">
+				<xs:simpleType><xs:restriction base="xs:anySimpleType"/></xs:simpleType>
+				<xs:maxLength value="4"/>
+			</xs:restriction></xs:simpleContent></xs:complexType>`,
+			"ct-props-correct", "clause 2",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

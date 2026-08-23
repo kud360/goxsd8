@@ -1161,21 +1161,28 @@ func simpleContentRestrictionDecidable(restriction *parser.Element) bool {
 	return true
 }
 
-// facetElement reports whether local is the element name of one of §4.3's
+// facetElement reports whether local is the ELEMENT name of one of §4.3's
 // constraining facets. It asks builtin.FacetKindByName, the ONE name→kind bridge
 // the module owns (STYLE T4/D3), rather than listing the names again here where
 // a future facet would be forgotten.
 //
-// xs:assertion is the one name that bridge cannot answer for: the facet is
-// spelled "assertions" (§4.3.13, a single facet holding the sequence) while the
-// element that contributes to it is <assertion>. The parser's restrictionFacets
-// makes the same exception at the same seam.
+// The bridge answers for FACET names, and §4.3.13 is where the two spellings
+// part: the facet is "assertions" (a single facet holding the sequence) while
+// the element contributing to it is <assertion>, which is what
+// xs:simpleRestrictionType's facet choice spells (xmlschema11-1.md:1692) — no
+// element is named "assertions" anywhere in the s4s grammar. So the singular is
+// admitted here and the plural declined: the producer's restrictionFacets
+// matches only "assertion" and its facetKindOf excludes xsd.FacetAssertions, so
+// an <assertions> child folds into no facet and is DROPPED IN SILENCE, which is
+// the false accept this allowlist exists to refuse. <assert> is the CTD-level
+// assertion of the same content model's trailing position, not a facet at all,
+// and attrDeclsDecidable takes it before this is reached.
 func facetElement(local string) bool {
 	if local == "assertion" {
 		return true
 	}
-	_, ok := builtin.FacetKindByName(builtin.FacetName(local))
-	return ok
+	kind, ok := builtin.FacetKindByName(builtin.FacetName(local))
+	return ok && kind != xsd.FacetAssertions
 }
 
 // attrDeclsDecidable reports whether one child from the tail every complex-type
