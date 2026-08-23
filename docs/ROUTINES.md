@@ -60,6 +60,19 @@ translate the local times above and mind DST drift. Keep develop slots
   is only as good as its last probe — re-probe when it matters, and correct
   it here when it drifts.
 
+  **A channel can also fail by returning nothing, and the fall-through
+  rule above keys on an error it never produces.**
+  `mcp__github__search_issues` does natural-language matching and takes the
+  repository as its `owner` and `repo` parameters; GitHub qualifier syntax
+  (`repo:…`, `is:open`, `label:…`) inside `query` is matched as literal
+  prose, hits nothing, and answers a well-formed zero. **Search with plain
+  prose, and exercise any search channel on a term you know hits before
+  believing an empty result** — otherwise the mandated open-queue search
+  silently no-ops and a session concludes "no duplicate exists" having
+  never searched (#893). Relevance ranking is not completeness: to
+  enumerate every open issue carrying a label, paginate the REST listing
+  under **Survey input** and filter locally.
+
   **Write bodies and comments from a file** with
   `gh api repos/{owner}/{repo}/issues/{n} -X PATCH -F body=@FILE`, and
   `.../issues/{n}/comments -F body=@FILE` for a comment. `-F key=@FILE`

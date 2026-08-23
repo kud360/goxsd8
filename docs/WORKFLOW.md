@@ -33,6 +33,33 @@ orchestrator posts it saying whose it is. A verdict, grounding,
 implementation account or RESUME note that reaches no thread is lost,
 whoever's fault the channel was.
 
+## Claims that outlive the session
+
+An issue body, a thread comment, an implementation account, a verdict, a
+commit body and a log entry are all read later as fact. Before a claim
+about the tree, the queue or a measurement enters one:
+
+- **Open the source and quote the words** — the spec file for a rule ID,
+  the cited `file:line` for a code claim, the issue itself for a claim
+  about a body. This binds hardest when you are contradicting the source:
+  *"the body is wrong about X"* is itself a claim about the body, and a
+  verdict is where it becomes durable (#958). Memory of prior discussion
+  is not reproduction, and neither is another artefact's account of the
+  same source.
+- **A citation resolves by KIND as well as number** — a `cvc-*` Validation
+  Rule lives in a different subsection from a Schema Component Constraint,
+  and CLAUDE.md's headline numbers are not STYLE IDs. Point at a site with
+  a `GAP(...)` marker's text or the enclosing identifier: a line number
+  into a file the previous landing touched has a one-session shelf life.
+- **Take a figure from the instrument that produces it** — lane scores
+  from `go tool lanestatus`, the exported surface from `go tool surface`,
+  the branch namespace from `go tool wipsurvey`, a case count from a run.
+  A `Ratchet:` trailer naming absolute lane endpoints pastes them; a
+  writer with no instrument in reach states the delta alone and says that
+  is what it is (#796).
+- **Anything unchecked is written as a hypothesis**, in the sentence that
+  makes the claim, not in a caveat elsewhere.
+
 ## The branch scheme (the WIP discovery index)
 
 The remote branch namespace is a machine-readable index. Any session
@@ -67,9 +94,14 @@ Invariants:
   EXPIRED — resumable. Checkpoint pushes are therefore the lease
   heartbeat; a long step pushes intermediate commits rather than letting
   its lease lapse. A branch that has pushed **no commits of its own** has
-  no tip time of its own — its tip is the landing it branched from, and
-  only its issue thread dates the claim, so it is never EXPIRED and never
-  resumable on age (#722).
+  no tip time of its own — its tip is the landing it branched from, so no
+  age reading may retire it and it is never EXPIRED (#722). **Its lease is
+  dated by its newest issue-thread comment instead, against the same 2h
+  TTL**: past that the claim is takeable, because a session still working
+  would have checkpointed. Taking one means posting a takeover comment
+  naming the branch tip you found, then pushing the heartbeat — which
+  makes the ref the arbiter of the race, exactly as it is everywhere else
+  (#867).
 - **Races are settled by git's atomic ref updates, never by force.** A
   rejected push to `wip/*` means you lost the race: fetch, abandon the
   local attempt, pick something else. Force-pushing `wip/*` or `parked/*`
@@ -197,7 +229,9 @@ before the PR is opened — none is anyone else's to volunteer:
    `docs/LOG/` path diff: a forward merge carries other issues' entries
    into that diff, which read PRESENT on #813's branch while its own entry
    was absent. The entry rides the session commit or the session does not
-   land (PRINCIPLES 29).
+   land (PRINCIPLES 29). A pass that closes no issue — a `post-land`
+   stamp, a `/backlog` run — has no number to grep for: its entry is due
+   by the same rule and this check has nothing to say about it.
 2. **`origin/main` has not moved past the verdict's base** —
    `git log HEAD..origin/main` is empty. If it is not, merge forward and
    re-judge per **After the verdict**, then re-verify: main can drift
@@ -280,21 +314,25 @@ entry is silently dropped. (#600 tracks the single-append-point layout.)
 ## Parking
 
 On a second arbiter rejection, or a resume whose merge will not resolve:
-checkpoint the branch one final time, label the issue `needs-replan`, and
-comment the findings that killed the attempt. Nothing is renamed or
-deleted — the label alone retires the branch in place as re-planning
-evidence. **Two rejections is the hard cap** (PRINCIPLES 30); never
-solicit a third round. After re-planning, the cartographer closes the
-issue as superseded and files a replacement.
+checkpoint the branch one final time, **relabel** the issue
+`needs-replan`, and comment the findings that killed the attempt. Nothing
+is renamed or deleted — the label alone retires the branch in place as
+re-planning evidence. **Two rejections is the hard cap** (PRINCIPLES 30);
+never solicit a third round. After re-planning, the cartographer closes
+the issue as superseded and files a replacement.
 
 ## GitHub conventions
 
-**Labels**: `ready` (unblocked, sized for one session), `blocked`,
-`needs-replan`, `epic`; `area/{model,xsderr,parser,value,builtin,xpath,`
-`validate,codegen,codec,regex,loader,conformance,cli,meta}`;
+**Labels**: **exactly one queue label** — `ready` (unblocked, sized for
+one session), `blocked`, `needs-replan` or `epic` — plus
+`area/{model,xsderr,parser,value,builtin,xpath,`
+`validate,codegen,codec,regex,loader,conformance,cli,meta}` and
 `kind/{feature,gap,bug,refactor,process,tooling,story}`. Milestones mirror
 docs/PLAN.md. `blocked` means waiting on a named dependency recorded in
-`## Depends on` — an issue or a trigger, not only an open issue.
+`## Depends on` — an issue or a trigger, not only an open issue. The queue
+labels are exclusive because the surveys read them that way: an issue
+wearing two is pickable and retired at once, and nothing this repo runs
+can see the contradiction (#968).
 
 **The body states the decision; the thread holds the reasoning.** A body
 carries goal, spec rule IDs, acceptance, surface and dependencies — enough
@@ -303,8 +341,9 @@ once. Verdicts, groundings and analysis belong in comments; transcribing
 them into the body is what produces issues longer than this document.
 
 **Filing discipline** — a defective body outlives the session that filed
-it (#315). Before filing, and again before grounding something already
-filed:
+it (#315). What a body may assert is governed above, under Claims that
+outlive the session; these are the rules particular to writing one,
+applied before filing and again before grounding something already filed:
 
 - **Correct a stale or wrong premise in the body**, not only in a comment;
   the next reader starts from the body. The comment stays as provenance.
@@ -325,15 +364,6 @@ filed:
   rendered page through a small model, so it returns a summary of that
   page rather than the stored body — read what an issue says with it,
   never the body you intend to write back (#764).
-- **State whether a runtime-mechanism claim was reproduced** against the
-  tree, or write it as a hypothesis. Memory of prior discussion is not
-  reproduction.
-- **Check every citation against the tree** — rule IDs, STYLE letter IDs,
-  file paths. A citation must resolve by KIND as well as number (a `cvc-*`
-  Validation Rule lives in a different subsection from a Schema Component
-  Constraint), and CLAUDE.md's headline numbers are not STYLE IDs. To
-  point at a site, prefer a `GAP(...)` marker's text or the enclosing
-  identifier over a line number.
 - **Search the open queue** for the primary file path and identifier. A
   hit is either a duplicate (close one, say which) or an adjacent issue
   (cross-reference both). Never pass a hit silently.
