@@ -1448,3 +1448,48 @@ func TestEvaluateFloatComparisons(t *testing.T) {
 		}
 	}
 }
+
+// TestScanNCNameIsTheXMLNameClass pins the NCName scan against XML's
+// NameStartChar and NameChar — the classes Datatypes §G.4.2.5 defines \i and \c
+// to be — and not against Unicode's letter and digit categories. The four rows
+// written as code-point escapes are the boundaries the two classes draw
+// differently, and each is a TOKEN boundary: what the scan stops before is what
+// the tokenizer reads next.
+func TestScanNCNameIsTheXMLNameClass(t *testing.T) {
+	for _, tc := range []struct {
+		s    string
+		want int
+		why  string
+	}{
+		{"kind", 4, "an ASCII name is the whole of it"},
+		{"a.b-c_d", 7, "'.', '-' and '_' continue a name"},
+		{"_x", 2, "'_' opens one"},
+		{"élan", 5, "U+00E9 is a NameStartChar and a letter both"},
+		{"日本", 6, "and so is U+65E5"},
+		{"9x", 0, "a digit opens no name"},
+		{".x", 0, "nor does '.'"},
+		{"", 0, "nor does the empty string"},
+		{"p:local", 1, `':' is subtracted from both classes: [\i-[:]][\c-[:]]*`},
+		{"\u00b5x", 0, "U+00B5 MICRO SIGN is a Unicode letter and NO NameStartChar"},
+		{"a\u00aa", 1, "U+00AA is a Unicode letter and NO NameChar"},
+		{"a\u00b7b", 4, "U+00B7 MIDDLE DOT is a NameChar and neither letter nor digit"},
+		{"a\u0301b", 4, "and so is U+0301 COMBINING ACUTE ACCENT"},
+	} {
+		if got := ctaScanNCName(tc.s, 0); got != tc.want {
+			t.Errorf("ctaScanNCName(%q, 0) = %d, want %d (%s)", tc.s, got, tc.want, tc.why)
+		}
+	}
+}
+
+// TestCompileFollowsTheXMLNameClass is the same boundary reaching the parser:
+// an AttrName the class does not admit is no [17] ta-AttrName at all, and one
+// it does admit is a single name token however Unicode's categories read it.
+func TestCompileFollowsTheXMLNameClass(t *testing.T) {
+	if _, ok := CompileCTATest(ctaExprRecord("@\u00b5 = 'x'", ""), seededTypes); ok {
+		t.Error(`CompileCTATest("@µ = 'x'"): compiled, want declined — U+00B5 opens no NCName`)
+	}
+	attrs := ctaAttrs(at("a\u00b7b", "x"))
+	if got := compile(t, "@a\u00b7b = 'x'").Evaluate(backend(), seededTypes, attrs); !got {
+		t.Error(`Evaluate("@a·b = 'x'") = false, want true — U+00B7 continues the name`)
+	}
+}

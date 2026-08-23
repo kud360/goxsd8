@@ -48,11 +48,16 @@
 //	    Deterministic; errors carry the offending construct and offset.
 //	    Compilation of the result is the caller's concern. A caller whose
 //	    pattern is fixed translates and compiles it once at package init —
-//	    parser and builtin/strict both do, for the NCName pattern. value's
-//	    pattern facet instead re-translates per validateLexical call and
-//	    caches nothing: its profiled cost was inside Translate and was fixed
-//	    there rather than amortized behind a cache (#913).
+//	    every caller of the NCName pattern does. value's pattern facet
+//	    instead re-translates per validateLexical call and caches nothing:
+//	    its profiled cost was inside Translate and was fixed there rather
+//	    than amortized behind a cache (#913).
 //
 // Callers: the pattern facet uses flavor XSD; xpath's fn:matches/
-// fn:replace/fn:tokenize use flavor FO. Never cross them.
+// fn:replace/fn:tokenize use flavor FO. Never cross them. The one pattern
+// translated both ways is the module's own fixed NCName pattern, which no
+// source wrote: parser and builtin/strict take flavor XSD for a whole-string
+// test, xpath and validate flavor FO for the '^'-anchored PREFIX scan that
+// whole-string anchoring cannot express, and the pattern carries no construct
+// the two flavors read differently.
 package regex

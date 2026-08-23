@@ -2,10 +2,12 @@ package xpath
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/xsd"
 )
 
@@ -429,25 +431,37 @@ func ctaScanWildcardTail(s string, i int) int {
 	return j
 }
 
+// ctaNCNameRE matches the longest NCName at the START of the string it is
+// applied to — [Namespaces in XML] production [4], spelled as the pattern
+// Datatypes §3.4.7.1 fixes for xs:NCName, "[\i-[:]][\c-[:]]*". It is
+// translated and compiled once here through [regex.Translate], so the code
+// points behind \i and \c are the ones the regex package owns and not a second
+// table (PRINCIPLES 26/27; parser and builtin/strict reach the same class the
+// same way, and regex/class.go records which edition of XML supplies it).
+//
+// The flavor is FO because only FO's '^' is a real anchor: FlavorXSD anchors
+// the WHOLE string, which cannot express a prefix scan. This pattern carries
+// no construct the two flavors read differently.
+var ctaNCNameRE = func() *regexp.Regexp {
+	goRE, err := regex.Translate(`^[\i-[:]][\c-[:]]*`, regex.FlavorFO, "")
+	if err != nil {
+		panic("xpath: translating the NCName pattern: " + err.Error())
+	}
+	return regexp.MustCompile(goRE)
+}()
+
 // ctaScanNCName reports the end of the NCName starting at i, or i where none
-// does. The character classes are Datatypes §3.4.7's \i and \c narrowed to
-// what Unicode's own categories decide: a name character this admits that XML
-// would not is never the difference between two documents' verdicts, because
-// the name still has to MATCH an ·expanded name· the source produced.
+// does. Its character classes are EXACT and not an approximation of the
+// grammar: Datatypes §G.4.2.5 defines \i and \c by direct reference to XML's
+// NameStartChar and NameChar, so the boundary reported here is the boundary
+// XML draws — no character that terminates a name is read into one, and none
+// that continues a name terminates it.
+//
+// The match is anchored at i, so its length IS the end it reports. A miss and
+// an empty match are the same "" here, and mean the same thing: the pattern
+// requires a NameStartChar, so it never matches empty.
 func ctaScanNCName(s string, i int) int {
-	r, size := utf8.DecodeRuneInString(s[i:])
-	if !unicode.IsLetter(r) && r != '_' {
-		return i
-	}
-	j := i + size
-	for j < len(s) {
-		r, size = utf8.DecodeRuneInString(s[j:])
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '.' && r != '-' && r != '_' {
-			break
-		}
-		j += size
-	}
-	return j
+	return i + len(ctaNCNameRE.FindString(s[i:]))
 }
 
 // ctaParser is the recursive-descent parser over the token stream. It carries
