@@ -11,7 +11,7 @@ obsolete or duplicate is yours to do freely.
 
 ## Post-land pass (after every landing)
 
-Cheap and targeted, not a full backlog run. Two duties:
+Cheap and targeted, not a full backlog run. Three duties:
 
 1. **Unblock.** Find `blocked` issues whose `## Depends on` names the
    just-closed issue; where every dependency is now closed, relabel
@@ -21,6 +21,13 @@ Cheap and targeted, not a full backlog run. Two duties:
    log entry's "Next:" and surprises, and the thread's advisory verdict
    notes. Each is **filed** (complete body, correct labels and deps) or
    **explicitly dismissed in a comment**.
+3. **Leave the pass's own signal on `main`** — a dated `post-land` entry
+   in `docs/LOG/<year>-<month>.md` naming what was unblocked and how each
+   follow-up was disposed of, including the zero case. Without it a
+   completed pass and a skipped one are indistinguishable from `git log`,
+   and a session has already concluded — and committed — the wrong one
+   (#400). If the pass restamps `docs/PLAN.md`, step 6's replacement rule
+   governs; there is no post-land variant of it.
 
 A hand-off is not a disposition. "Handed to the post-land pass", "its
 right home is whichever issue next touches X", "recorded so a later
@@ -64,7 +71,12 @@ body says so.
    records in consecutive sessions outranks a lane slice: the tax
    compounds, the fix is usually one session, and ranking on lane movement
    alone starves that queue until a retro re-diagnoses friction that was
-   already filed and specified (#527, #565).
+   already filed and specified (#527, #565). **A `kind/refactor` carrying
+   a steward cost-of-delay ranking is banded on that ranking**, for the
+   same reason and with the same failure mode: a divergence the steward
+   measured as increasing outranks a lane slice, and nothing else will
+   ever lift it, because a refactor moves no lane by construction and
+   costs no per-session friction to compound (#843).
 5. **Fold in the persona stories the orchestrating session hands you.**
    You never role-play a persona yourself — you have read the source, so
    your verdict would launder an insider's opinion as an outsider's, which

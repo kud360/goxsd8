@@ -20,19 +20,18 @@ heartbeat.
 
 2. **Pick.** Run `go tool wipsurvey` — CLAUDE.md spells its input — rather
    than re-deriving the branch namespace by hand (#399). It reports each
-   `wip/issue-<N>` as LIVE, CLAIMED, EXPIRED, RETIRED or UNKNOWN. LIVE and
-   CLAIMED branches and their issues are off-limits; RETIRED ones are not
-   work; UNKNOWN wants `git fetch origin` and a re-run. A CLAIMED branch
-   has pushed no commits of its own, so git dates nothing about it — only
-   its issue thread's own clock settles whether the holder is still
-   working, and no age reading may retire it (#722). If no channel yields
-   an issue list, run it on empty stdin: the lease-only report classifies
+   `wip/issue-<N>` as LIVE, CLAIMED, EXPIRED, RETIRED or UNKNOWN. LIVE
+   branches and their issues are off-limits; RETIRED ones are not work;
+   UNKNOWN wants `git fetch origin` and a re-run. A CLAIMED branch is
+   dated by its issue thread, not by git — WORKFLOW's lease invariant says
+   against what, and what taking one costs. If no channel yields an issue
+   list, run it on empty stdin: the lease-only report classifies
    everything but RETIRED, which is not a reason to survey by hand.
-   - **Resuming beats starting.** Take the oldest EXPIRED `wip/issue-<N>`
-     whose issue is open and not `needs-replan`; merge `origin/main` in if
-     main moved (never rebase; if the conflicts are not tractable, park it
-     and pick again), read the newest `RESUME:` comment, continue from its
-     "Next:" at the matching step below.
+   - **Resuming beats starting.** Take the oldest EXPIRED — or takeable
+     CLAIMED — `wip/issue-<N>` whose issue is open and not `needs-replan`;
+     merge `origin/main` in if main moved (never rebase; if the conflicts
+     are not tractable, park it and pick again), read the newest `RESUME:`
+     comment, continue from its "Next:" at the matching step below.
    - Otherwise claim the highest-priority `ready` issue with closed
      dependencies and no live branch:
      `git switch -c wip/issue-<N> origin/main && git push -u origin HEAD`.
