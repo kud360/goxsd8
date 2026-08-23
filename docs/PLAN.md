@@ -17,7 +17,7 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-08-23 (full `/backlog` derivation: lanes, branches, markers, milestones and queue all re-read this pass, and the persona consultations folded)
+## Status — 2026-08-23 (BAND RE-CUT ONLY, by #884's post-land pass: #884 landed as PR #983 / `b3f295a`, row 1 is dropped and every row below shifts up by one. Everything ABOVE the band is the earlier same-day full `/backlog` derivation — lanes, branches, markers, milestones, queue and personas — CARRIED UNCHANGED and NOT re-read here; #884's close has moved the queue counts since, and the two paragraphs that existed only to state its LIVE lease are spent and replaced. The next `/backlog` replaces the whole section)
 
 Conformance lanes — **paste `go tool lanestatus` verbatim**, never a
 hand-count:
@@ -90,19 +90,19 @@ only live subject.** This pass deliberately left no comment on #884, because
 under that rule doing so would have re-dated the lease and extended the lockout
 by two more hours — the incentive gradient is on #981's thread.
 
-**Correction, mid-pass: #884 is no longer an empty claim, and its lease is no
-longer dated by a comment.** While the log entry for this pass was being written,
-mason pushed `9c59a2e` — the implementation itself — and merged `main` into the
-branch at **`834f5c5`, 2026-08-23T14:30:46Z**. A branch with commits of its own
-has a tip time of its own, so `docs/WORKFLOW.md`'s primary rule — *"the name is
-the claim; the tip time is the lease"* — governs it, and the empty-claim
-exception (which reaches only a branch that has pushed *"no commits of its
-own"*) does not. **The verdict is unchanged — LIVE, off-limits — but the basis
-is the tip, not the thread**: the TTL lapses at **2026-08-23T16:30:46Z**, not the
-15:46:34Z stated above, and any takeover names tip **`834f5c5`**, never
-`a7531f7`. #884 is still `open`/`ready` with no PR. Band row 1 and the next
-planning action below are stated on the corrected basis; the `wipsurvey` paste
-that follows is left exactly as it ran and is stale in this one row.
+**Settled after the fact: #884 LANDED, so the lease question above is spent
+rather than corrected.** The paragraph this replaces recorded a mid-pass
+correction — mason had pushed `9c59a2e` and merged `main` at `834f5c5`, so
+`docs/WORKFLOW.md`'s primary *"the name is the claim; the tip time is the
+lease"* governed the branch instead of #946's empty-claim exception, and the TTL
+ran to 16:30:46Z. **No takeover ever needed it**: the same session judged and
+landed the issue, squash-merged as PR **#983** / **`b3f295a`**, and `origin`
+deleted `wip/issue-884` at the merge. So the two-column lease table above stands
+as a record of what the rule produced while it was live, the `wipsurvey` paste
+that follows still lists a `wip/issue-884` ref that no longer exists, and
+**#981** — the issue that owns the rule defect — keeps `wip/issue-862` as its
+only live subject, exactly as stated. Nothing here is a takeover instruction any
+more.
 
 ### Branch namespace, `origin` — report-only; a session never deletes a ref
 
@@ -347,28 +347,52 @@ What changed in the twelve:
 
 Dependency-ordered top of the `ready` queue, so a session need not scan the whole
 of it. Take from the top. Cross-references are stated by ISSUE rather than by row
-number, which decays at each re-cut. **This is a full re-cut, not a shift**: four
-issues enter, three leave to the unbanded list, and the two persona rows are
-promoted on the consultation cost measured above.
+number, which decays at each re-cut. **This is a SHIFT, not a re-cut**: **row 1
+was #884 and it LANDED** (PR #983, `b3f295a`), so it is dropped and every row
+below moves up by one. The full re-cut that seated these rows — four issues in,
+three out, the two persona rows promoted on the consultation cost measured above
+— is the earlier same-day `/backlog`'s, and its ordering is carried, not
+re-derived.
+
+**Every row's argument is carried verbatim, with ONE exception, at the new row
+15.** #975's row said *"so #884 first and #975 whenever a cheap session wants
+it"* — an ordering this landing has discharged, and left verbatim it would hold a
+cheap session behind an issue that is closed. That clause alone is replaced; the
+rest of the row is untouched. No other row named #884.
+
+**The unblock sweep relabelled nothing.** All 227 open bodies were fetched over
+`gh api` and searched for the literal `#884`; five cite it — **#981**, **#975**,
+**#972**, **#931**, **#907** — and **not one `## Depends on` names it**. #972's
+names #732 alone; the other four read "none". No label changed, and #931 in
+particular is adjacent-not-dependent exactly as #884's body said.
+
+**#975 needs no re-census and no rebase, checked rather than assumed.** Its
+stated criterion — the `"the schema for schema documents"` grep — returns **21
+sites at `b3f295a`, the same 21 it returned at `ebf6fa2`**, with all nine of its
+own byte-identical and at unchanged line numbers (`produceModelGroupDefinition`'s
+is still `parser/produce_complex.go:1758`). #884 edited the same file and moved
+none of them, and the compliant site it ADDED is not in the criterion's set at
+all, because its message names `xs:namedGroup` without using the boilerplate
+phrase the grep keys on. That last point is on #975's thread as a live note about
+the criterion, not the census.
 
 | # | Issue | Why here |
 |---:|---|---|
-| 1 | #884 | **Still the head, and now the best-prepared issue in the queue — but its lease is LIVE until 2026-08-23T16:30:46Z, two hours after its OWN tip `834f5c5` (2026-08-23T14:30:46Z).** Corrected mid-pass: this row was cut when `wip/issue-884` had no commits of its own and read under the empty-claim exception, lapsing 15:46:34Z; mason then pushed `9c59a2e` and merged `main`, so the primary tip-time rule governs and both the clock and the tip below changed. An oracle GROUNDING landed on the thread at 13:46Z answering all four of its spec questions: `xs:namedGroup` is `xmlschema11-1.md:5187-5216`, the `<choice>` is pinned `minOccurs="1" maxOccurs="1"` at `:5192`, neither a nested `<group ref>` nor a bare `<element>` is among its three alternants, and `mgd-props-correct` (`:2302`) is a post-construction component-tableau check that presupposes the very `{model group}` slot the malformed body failed to fill. So the issue's whole thesis is confirmed and its Spec section is settled twice over — by #966's ruling and now by the grammar itself. **After the lease lapses, take it with a takeover comment naming the branch tip (`834f5c5`) and RESUME that branch — `9c59a2e` is an implementation already pushed against this issue, so re-deriving it from `main` would redo work that already exists; before the lapse, do not touch it.** `xsderr/doc.go` gives the message shape, `rejectProhibitedAttrs`/`checkS4SChildOrder` the exemplars |
-| 2 | #732 | **The band's only false-reject, which CLAUDE.md's conformance stance treats as never acceptable**, and it gates #972. §4.2.2 `vc:minVersion`/`vc:maxVersion` conditional inclusion is unimplemented, falsely rejecting `VC/vc007` and `VC/vc_003_1`, both reproduced in its body by running `parser.Parse`; four more (`VC/vc003`–`vc006`) are banked `pass` today only through a double negative that expires the moment either half is fixed alone. **Unsized and it says so** — its first step is an oracle grounding, not code, and a session returning only a grounding comment has done the right amount. Unchanged from the previous stamp |
-| 3 | #669 → #625 → #748 → #492 → #934 (+ #896) | **PROMOTED from row 12, on the consultation cost rather than on lane movement.** One session closes six issues and ends a tax that has now run five consecutive passes. The argument that held it down — *"splitting it is why it sat"* — is spent: they are one ordered row, every body carries evidence re-derived at `155ec39` today, and #748's is the only one whose *shape* changed (resolved work, README stale the other way). Take them in the order named; **#896 is the one non-README member** (`validate/doc.go`) and should land beside #748, which sends readers to it |
-| 4 | #870 + #747 + #514 + #687 + #672 | **PROMOTED from row 13, same argument, and #720's body independently asks for three of them first**: *"Take #514, #672 and #687 before this lands. Each is a sentence or a dispatch branch while the CLI surface is still empty; taken afterwards every one of them is a change to shipped behaviour."* #472 is `ready` and is what makes that true. Fifth consecutive reconfirmation; **#687 now carries four triggers of one raw-token scan and #672 a spelling collision that narrows its own decision**. The CLI is still unreachable from its own documentation |
-| 5 | #978 | **NEW to the band, and the first issue ever banded on `.claude/agents/cartographer.md`'s steward-ranking rule** — which landed in `155ec39` about half an hour before this pass ran. `xpath` charges XPath/F&O error codes as message SUBSTRINGS while `regex` tags the same class as an `xsderr.Rule`. Ranked above #843 for one reason: **#894 is open and `ready`**, adds `err:XPST0051`/`err:XPST0080` to this exact function, and in #978's own words *"doubles this issue's diff"* if it lands first. Today the change is one error site, one constant, one wrap. The ordering #978-before-#894 is a cost ordering, not a dependency; neither `## Depends on` names the other and neither should |
-| 6 | #843 | **NEW to the band, the rule's own named exemplar, and the steepest ranking of the three.** Four hand-maintained copies of one complex-type descent have **already diverged** on the redefine-original containment edge — two of the four do not descend `c.Base()` at all. Its ranking re-read this pass: M4's open count is **46**, up from the 42 the 2026-08-16 audit recorded, so each new finalize-time constraint is a fifth copy picking its edges by eye. The bugs are **fail-open**, invisible to the ratchet, which is why an audit and not the suite found this one. **Sizing is the open question, not value** — a session returning only a design comment naming the parameterization has done the right amount |
-| 7 | #981 | **NEW, filed by this pass, and it charged its friction to this pass.** `docs/WORKFLOW.md`'s empty-claim lease is dated by ANY thread comment, so an oracle grounding posted 44 minutes earlier locked the band head for two hours — and `wipsurvey` cannot apply the rule at all, printing *"settle it from the issue thread"* for both CLAIMED rows. Banded on CLAUDE.md's cost rule: one session, doc-first, and the tool arm may split off. **A second sighting promotes it above the refactors** |
-| 8 | #963 | **The tax falls on every landing and its discriminator STILL could not fire.** #820 landed the *form* of landing precondition 1; nothing checks that the check was run, which is **#924**'s shape and is not reachable by prose. One session — `tools/landcheck`, three real-history fixtures, one WORKFLOW line — and explicitly **not** a gate part (#304 made CLAUDE.md's Commands block the sole gate definition). **No code landed this window**, so the only landings are two doc passes that carry their entries by definition; the retro also narrowed precondition 1's domain to exclude a pass that closes no issue, which is a change #963's fixtures must respect |
-| 9 | #493 | **On CLAUDE.md's cost rule; the friction was paid by hand two windows ago and the payment is still unlanded.** `docs/WORKFLOW.md`'s park step names neither the close reason nor the `ready` clear, so #968's session had to discover that a parked issue carrying `ready` is pickable. Doc-only, one session, and it targets the **park** paragraph — not the filing-discipline paragraph #510, #646, #679 and #912 all target — so it rebases against none of them. **Live corroboration this pass**: `wipsurvey`'s RETIRED rows include #933, closed `not_planned` and still carrying `ready`, exactly the state #493 exists to prevent |
-| 10 | #846 | **#909 paid the shadow tax and said so: 183 lines of `conformance/schema.go` shadowing 364 of `parser/produce_complex.go`.** Its promotion rule asks for a third landing that pays the tax and **no landing occurred this window, so the discriminator did not fire** — a different statement from "did not fire on evidence". Its structural argument from #968's family A stands unchanged: the fault deciding those four documents lives outside `<restriction>`'s child list, so no predicate over that list can tell a fabricated verdict from a correct one. Still a ~700-line refactor with no evidence it fits one session |
-| 11 | #941 | **#387's own unfiled debt, and the coldest files of any band row** (`07117dc`, 2026-08-21). `Element.Attributes` and `BaseURI` stand exactly where `Parent` stood: zero out-of-package non-test callers, no `Node` obligation, both prongs of STYLE T5 failed. The two are NOT the same shape — `BaseURI` is a delete, `Attributes` survives as an unexported delegation — and **three** black-box test sites move, not the two warden named. `surface: +0 -2`, strictly shrinking. **Warden pre-flight required**; do NOT start from #387's item-2 table, which cites a file that no longer contains either call |
-| 12 | #953 | **A doc claim that is FALSE rather than merely stale.** `xsd/valuespace.go`'s FAIL-OPEN CONTRACT says "every caller turns a decided negative into a schema rejection"; `validate/cvcattribute.go` charges an INSTANCE violation and has since before #924's branch. Because the claim is unenumerated it also violates STYLE P3a, so one edit settles two rules |
-| 13 | #853 | `cvc-elt` clause 5.1 is unimplemented, so an EMPTY element whose declaration carries a `{value constraint}` declines in three rules at once — and all three markers name no issue (STYLE P3). `instance` candidate, unmeasured, direction can only be up. **First step is an oracle question**, not code: whether #463's `checkSimpleDefault` is reusable at assessment time under clause 5.1.1's ·instance-specified· type |
-| 14 | #719 | `cvc-assertion` wired fail-open at every variety level — the M6 seam, marked and measured, and Group 2's only entry that is a live engine gap rather than a lane gap. It **gates #56** and decides the "genuine PASS versus unevaluated" encoding once (STYLE D4) for the CTA withhold to reuse. Nothing gates it; startable on `main` today |
-| 15 | #979 | **NEW to the band, third of the steward-ranked refactors and deliberately last of them.** `ctaScanNCName` and `icScanNCName` are byte-identical and both approximate a character class `regex` already owns generated. Ranked below #978 and #843 **on its own words**: its cost is *"Rising with M6/M7"*, and `lanestatus` reads `xpath` as a lane with no cases at all — the clock has not started. That also makes it the cheapest, *"a mechanical move of 13 lines"*, and the best pick for a session wanting a small complete landing. Safe to wait because only one copy can drift: `validate/icpath.go` is frozen at the §3.11.6.2/§3.11.6.3 subset by an explicit ruling |
-| 16 | #975 | **Placed here, discharging the previous stamp's "the next `/backlog` places it".** Nine s4s-grammar rejection messages name no Appendix A production — the bar `xsderr/doc.go` states as of #966 — censused at `ebf6fa2` with the re-deriving criterion stated ahead of the list. Cheap, mechanical, moves no lane, and **one of its nine sites (`produceModelGroupDefinition`) sits beside #884's in the same file**, so #884 first and #975 whenever a cheap session wants it. **#444 already owns the tenth deficient site** (`rejectBothInlineTypes`) on a stronger footing and is excluded rather than duplicated |
+| 1 | #732 | **The band's only false-reject, which CLAUDE.md's conformance stance treats as never acceptable**, and it gates #972. §4.2.2 `vc:minVersion`/`vc:maxVersion` conditional inclusion is unimplemented, falsely rejecting `VC/vc007` and `VC/vc_003_1`, both reproduced in its body by running `parser.Parse`; four more (`VC/vc003`–`vc006`) are banked `pass` today only through a double negative that expires the moment either half is fixed alone. **Unsized and it says so** — its first step is an oracle grounding, not code, and a session returning only a grounding comment has done the right amount. Unchanged from the previous stamp |
+| 2 | #669 → #625 → #748 → #492 → #934 (+ #896) | **PROMOTED from row 12, on the consultation cost rather than on lane movement.** One session closes six issues and ends a tax that has now run five consecutive passes. The argument that held it down — *"splitting it is why it sat"* — is spent: they are one ordered row, every body carries evidence re-derived at `155ec39` today, and #748's is the only one whose *shape* changed (resolved work, README stale the other way). Take them in the order named; **#896 is the one non-README member** (`validate/doc.go`) and should land beside #748, which sends readers to it |
+| 3 | #870 + #747 + #514 + #687 + #672 | **PROMOTED from row 13, same argument, and #720's body independently asks for three of them first**: *"Take #514, #672 and #687 before this lands. Each is a sentence or a dispatch branch while the CLI surface is still empty; taken afterwards every one of them is a change to shipped behaviour."* #472 is `ready` and is what makes that true. Fifth consecutive reconfirmation; **#687 now carries four triggers of one raw-token scan and #672 a spelling collision that narrows its own decision**. The CLI is still unreachable from its own documentation |
+| 4 | #978 | **NEW to the band, and the first issue ever banded on `.claude/agents/cartographer.md`'s steward-ranking rule** — which landed in `155ec39` about half an hour before this pass ran. `xpath` charges XPath/F&O error codes as message SUBSTRINGS while `regex` tags the same class as an `xsderr.Rule`. Ranked above #843 for one reason: **#894 is open and `ready`**, adds `err:XPST0051`/`err:XPST0080` to this exact function, and in #978's own words *"doubles this issue's diff"* if it lands first. Today the change is one error site, one constant, one wrap. The ordering #978-before-#894 is a cost ordering, not a dependency; neither `## Depends on` names the other and neither should |
+| 5 | #843 | **NEW to the band, the rule's own named exemplar, and the steepest ranking of the three.** Four hand-maintained copies of one complex-type descent have **already diverged** on the redefine-original containment edge — two of the four do not descend `c.Base()` at all. Its ranking re-read this pass: M4's open count is **46**, up from the 42 the 2026-08-16 audit recorded, so each new finalize-time constraint is a fifth copy picking its edges by eye. The bugs are **fail-open**, invisible to the ratchet, which is why an audit and not the suite found this one. **Sizing is the open question, not value** — a session returning only a design comment naming the parameterization has done the right amount |
+| 6 | #981 | **NEW, filed by this pass, and it charged its friction to this pass.** `docs/WORKFLOW.md`'s empty-claim lease is dated by ANY thread comment, so an oracle grounding posted 44 minutes earlier locked the band head for two hours — and `wipsurvey` cannot apply the rule at all, printing *"settle it from the issue thread"* for both CLAIMED rows. Banded on CLAUDE.md's cost rule: one session, doc-first, and the tool arm may split off. **A second sighting promotes it above the refactors** |
+| 7 | #963 | **The tax falls on every landing and its discriminator STILL could not fire.** #820 landed the *form* of landing precondition 1; nothing checks that the check was run, which is **#924**'s shape and is not reachable by prose. One session — `tools/landcheck`, three real-history fixtures, one WORKFLOW line — and explicitly **not** a gate part (#304 made CLAUDE.md's Commands block the sole gate definition). **No code landed this window**, so the only landings are two doc passes that carry their entries by definition; the retro also narrowed precondition 1's domain to exclude a pass that closes no issue, which is a change #963's fixtures must respect |
+| 8 | #493 | **On CLAUDE.md's cost rule; the friction was paid by hand two windows ago and the payment is still unlanded.** `docs/WORKFLOW.md`'s park step names neither the close reason nor the `ready` clear, so #968's session had to discover that a parked issue carrying `ready` is pickable. Doc-only, one session, and it targets the **park** paragraph — not the filing-discipline paragraph #510, #646, #679 and #912 all target — so it rebases against none of them. **Live corroboration this pass**: `wipsurvey`'s RETIRED rows include #933, closed `not_planned` and still carrying `ready`, exactly the state #493 exists to prevent |
+| 9 | #846 | **#909 paid the shadow tax and said so: 183 lines of `conformance/schema.go` shadowing 364 of `parser/produce_complex.go`.** Its promotion rule asks for a third landing that pays the tax and **no landing occurred this window, so the discriminator did not fire** — a different statement from "did not fire on evidence". Its structural argument from #968's family A stands unchanged: the fault deciding those four documents lives outside `<restriction>`'s child list, so no predicate over that list can tell a fabricated verdict from a correct one. Still a ~700-line refactor with no evidence it fits one session |
+| 10 | #941 | **#387's own unfiled debt, and the coldest files of any band row** (`07117dc`, 2026-08-21). `Element.Attributes` and `BaseURI` stand exactly where `Parent` stood: zero out-of-package non-test callers, no `Node` obligation, both prongs of STYLE T5 failed. The two are NOT the same shape — `BaseURI` is a delete, `Attributes` survives as an unexported delegation — and **three** black-box test sites move, not the two warden named. `surface: +0 -2`, strictly shrinking. **Warden pre-flight required**; do NOT start from #387's item-2 table, which cites a file that no longer contains either call |
+| 11 | #953 | **A doc claim that is FALSE rather than merely stale.** `xsd/valuespace.go`'s FAIL-OPEN CONTRACT says "every caller turns a decided negative into a schema rejection"; `validate/cvcattribute.go` charges an INSTANCE violation and has since before #924's branch. Because the claim is unenumerated it also violates STYLE P3a, so one edit settles two rules |
+| 12 | #853 | `cvc-elt` clause 5.1 is unimplemented, so an EMPTY element whose declaration carries a `{value constraint}` declines in three rules at once — and all three markers name no issue (STYLE P3). `instance` candidate, unmeasured, direction can only be up. **First step is an oracle question**, not code: whether #463's `checkSimpleDefault` is reusable at assessment time under clause 5.1.1's ·instance-specified· type |
+| 13 | #719 | `cvc-assertion` wired fail-open at every variety level — the M6 seam, marked and measured, and Group 2's only entry that is a live engine gap rather than a lane gap. It **gates #56** and decides the "genuine PASS versus unevaluated" encoding once (STYLE D4) for the CTA withhold to reuse. Nothing gates it; startable on `main` today |
+| 14 | #979 | **NEW to the band, third of the steward-ranked refactors and deliberately last of them.** `ctaScanNCName` and `icScanNCName` are byte-identical and both approximate a character class `regex` already owns generated. Ranked below #978 and #843 **on its own words**: its cost is *"Rising with M6/M7"*, and `lanestatus` reads `xpath` as a lane with no cases at all — the clock has not started. That also makes it the cheapest, *"a mechanical move of 13 lines"*, and the best pick for a session wanting a small complete landing. Safe to wait because only one copy can drift: `validate/icpath.go` is frozen at the §3.11.6.2/§3.11.6.3 subset by an explicit ruling |
+| 15 | #975 | **Placed here, discharging the previous stamp's "the next `/backlog` places it".** Nine s4s-grammar rejection messages name no Appendix A production — the bar `xsderr/doc.go` states as of #966 — censused at `ebf6fa2` with the re-deriving criterion stated ahead of the list. Cheap, mechanical, moves no lane, and **the ordering that held it — #884 first, because one of its nine sites (`produceModelGroupDefinition`) sits beside #884's in the same file — is DISCHARGED**: #884 landed, and this pass re-ran the criterion at `b3f295a` to find the same 21 sites, the same nine, and the same line numbers, so there is nothing to rebase and any cheap session can take it now. **#444 already owns the tenth deficient site** (`rejectBothInlineTypes`) on a stronger footing and is excluded rather than duplicated |
 
 **Left the band this pass, and why.** **#786** — its deletion branch now waits on
 #972, which is `blocked` on #732, so the strongest argument it has acquired is
@@ -419,28 +443,30 @@ movement.
 
 ### Next planning action
 
-**Take from the top, but read the clock first: #884 is the head and is
-off-limits until 2026-08-23T16:30:46Z** — two hours after its own tip
-`834f5c5`, under `docs/WORKFLOW.md`'s primary *"the name is the claim; the tip
-time is the lease"*. A `/develop` session starting after that takes it with a
-takeover comment naming tip **`834f5c5`** and **resumes that branch**, because
-`9c59a2e` is a pushed implementation and re-deriving it from `main` would redo
-work that already exists; one starting before it takes **#732** or drops to row
-3. **Corrected
-mid-pass**: when this section was cut the head was held instead by #946's
-empty-claim lease, dated by an oracle grounding and lapsing 15:46:34Z, and that
-basis died the moment the branch acquired a tip. So the first lease ever to hold
-this band head turned out to be an ordinary one. **#981** still owns the rule
-defect — its only live subject is now `wip/issue-862` — and a session that hits
-the same wall should add its sighting there rather than re-diagnose it.
+**Take from the top: start at #732, and there is no clock to read any more.**
+#884 landed, `origin` deleted `wip/issue-884` at the merge, and no band row is
+held by a lease: `wip/issue-862` is the only `wip/*` ref whose issue is open, it
+is takeable at well past its TTL, and #862 is unbanded. **#981** still owns the
+rule defect that briefly locked this head — its only live subject is now
+`wip/issue-862` — and a session that hits the same wall adds its sighting there
+rather than re-diagnosing it.
 
-**#884 is also the most implementation-ready issue this project has had banded.**
-Its oracle grounding landed this window and confirmed all four premises against
-`xmlschema11-1.md` by line number; #966's ruling settled its footing; all four
-malformed-body verdicts are reproduced in its body against a named tip. The
-session implements a stated answer, from a read spec, with the message shape
-given in `xsderr/doc.go` — and as of `834f5c5` that implementation is already
-begun on the branch, so the taking session resumes it rather than re-derives it.
+**#732 is the band's only false-reject, and it is deliberately unsized.** Its
+first step is an oracle grounding, not code — document-transform versus
+construction-time skip, composition with `<override>`'s §F.2 and `<include>`'s
+§F.1, an ill-formed version value — and a session that returns only that
+grounding comment has done the right amount. It also gates **#972**, which is the
+one `blocked` issue in the queue whose dependency a landing here would clear. A
+session wanting a small complete landing instead should drop to **#979** (row 14,
+*"a mechanical move of 13 lines"*) or take **#975** (row 15), whose #884 ordering
+this pass discharged and re-checked.
+
+**#884's landing is also the first real subject the two standing promotion
+discriminators have had in three windows** — #963's (did the landing carry its
+`docs/LOG` entry inside the squash?) and #846's (did its entry record the shadow
+tax?). Both now have a landing to run against, and neither is run here: a
+post-land pass re-cuts the band, and it is the next `/backlog` that fires a
+promotion discriminator. Say which way both fell on the next stamp.
 
 **The two persona rows are promoted, and this is the pass that should be judged
 on whether that was right.** Five consecutive consultations have reconfirmed
