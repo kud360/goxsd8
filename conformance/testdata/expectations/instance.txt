@@ -5213,7 +5213,7 @@ MS-Regex2006-07-15/reS34/instance/reS34.v fail
 MS-Regex2006-07-15/reS35/instance/reS35.v fail
 MS-Regex2006-07-15/reS36/instance/reS36.v fail
 MS-Regex2006-07-15/reS37/instance/reS37.v fail
-MS-Regex2006-07-15/reS38/instance/reS38.v fail
+MS-Regex2006-07-15/reS38/instance/reS38.v pass
 MS-Regex2006-07-15/reS39/instance/reS39.v fail
 MS-Regex2006-07-15/reS40/instance/reS40.v fail
 MS-Regex2006-07-15/reS41/instance/reS41.v fail
@@ -5311,7 +5311,7 @@ MS-Regex2006-07-15/reT48/instance/reT48.v fail
 MS-Regex2006-07-15/reT49/instance/reT49.v fail
 MS-Regex2006-07-15/reT5/instance/reT5.i pass
 MS-Regex2006-07-15/reT50/instance/reT50.v fail
-MS-Regex2006-07-15/reT51/instance/reT51.v fail
+MS-Regex2006-07-15/reT51/instance/reT51.v pass
 MS-Regex2006-07-15/reT52/instance/reT52.v fail
 MS-Regex2006-07-15/reT53/instance/reT53.v fail
 MS-Regex2006-07-15/reT54/instance/reT54.v fail
@@ -5406,7 +5406,7 @@ MS-Regex2006-07-15/reZ001/instance/reZ001.v pass
 MS-Regex2006-07-15/reZ002/instance/reZ002.i pass
 MS-Regex2006-07-15/reZ003v/instance/reZ003v.v fail
 MS-Regex2006-07-15/reZ004i/instance/reZ004i.i pass
-MS-Regex2006-07-15/reZ004v/instance/reZ004v.v fail
+MS-Regex2006-07-15/reZ004v/instance/reZ004v.v pass
 MS-Regex2006-07-15/reZ005i/instance/reZ005i.i pass
 MS-Regex2006-07-15/reZ005v/instance/reZ005v.v fail
 MS-Regex2006-07-15/reZ006i/instance/reZ006i.i fail
