@@ -51,9 +51,17 @@ surfaces to a user must let them find the schema construct that caused it
 without a debugger.
 
 **E2. Errors map to spec validation rules.** Anything that represents a
-schema or instance validity violation is an `*xsderr.Error` carrying the
-spec rule ID (`cvc-…`, `cos-…`, `src-…`, `derivation-ok-…`). One rule ID per
-error; if you can't name the rule, you haven't read the spec section yet.
+schema or instance validity violation the spec catalogs is an
+`*xsderr.Error` carrying the spec rule ID (`cvc-…`, `cos-…`, `src-…`,
+`derivation-ok-…`). One rule ID per error; if you can't name the rule, you
+haven't read the spec section yet — unless it is the one violation class the
+spec catalogs nowhere: a schema document that is simply not valid against
+the schema for schema documents (§2.4 clause 1 `sd-valid`) — a prohibited or
+missing attribute, a child its content model does not admit, one repeated
+past its maxOccurs, one out of order. Reject that as a plain error naming
+the offending item, its location and the Appendix A production it violates;
+never as an `*xsderr.Error`, never on `sd-valid` as a rule ID, and never on
+a borrowed `src-*`. `xsderr`'s package doc owns the derivation.
 
 **E3. Errors carry location.** Schema errors carry the schema document URI +
 line + column (from `parser/xmltree` positions). Instance errors carry the
