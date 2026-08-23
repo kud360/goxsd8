@@ -1193,11 +1193,11 @@ const (
 // ·lexical space· of xs:NCName, which Datatypes §3.4.7.1 fixes with the single
 // pattern facet "\i\c* ∩ [\i-[:]][\c-[:]]*". It is compiled once from the
 // XSD-flavor pattern through [regex.Translate], so the NameStartChar/NameChar
-// code-point sets behind \i and \c are the generated, spec-cross-checked ones
-// the regex package owns rather than a hand-typed table (PRINCIPLES 26/27).
-// FlavorXSD output is whole-string anchored, so a match means the WHOLE string
-// is an NCName: any string containing ':' fails, as does one starting with a
-// digit, '.' or '-', as does the empty string.
+// code-point sets behind \i and \c are the ones the regex package owns and not
+// a second table here (PRINCIPLES 26/27). Those sets are hand-typed rather than
+// generated (#989). FlavorXSD output is whole-string anchored, so a match means
+// the WHOLE string is an NCName: any string containing ':' fails, as does one
+// starting with a digit, '.' or '-', as does the empty string.
 var ncNameRE = func() *regexp.Regexp {
 	goRE, err := regex.Translate(`[\i-[:]][\c-[:]]*`, regex.FlavorXSD, "")
 	if err != nil {
