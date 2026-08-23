@@ -31,7 +31,6 @@ const (
 	ruleCTPropsCorr           xsderr.Rule = "ct-props-correct"
 	ruleSrcCT                 xsderr.Rule = "src-ct"
 	ruleSrcWildcard           xsderr.Rule = "src-wildcard"
-	ruleWildcardCorr          xsderr.Rule = "w-props-correct"
 	ruleSrcIdentityConstraint xsderr.Rule = "src-identity-constraint"
 	// ruleEPropsCorrect is the Element Declaration Properties Correct Schema
 	// Component Constraint (§3.3.6.1). The producer charges only clause 3 ("If
@@ -54,7 +53,10 @@ const (
 	// reaches because they all presuppose a well-formed QName, and a
 	// minOccurs/maxOccurs lexical outside the xs:nonNegativeInteger/xs:allNNI
 	// types Appendix A's occurs attribute group declares (nonNegativeInt),
-	// which p-props-correct cannot reach because no particle exists yet (#932).
+	// which p-props-correct cannot reach because no particle exists yet (#932),
+	// and a processContents lexical outside the skip/lax/strict enumeration
+	// Appendix A's wildcard attribute group declares (processContentsOf), which
+	// w-props-correct cannot reach because no wildcard exists yet (#950).
 	ruleDatatypeValid xsderr.Rule = "cvc-datatype-valid"
 	// ruleSchPropsCorrect is the Schema Properties Correct Schema Component
 	// Constraint (§3.17.6.1). The producer charges only clause 2 ("None of the
