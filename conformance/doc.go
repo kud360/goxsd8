@@ -22,11 +22,18 @@
 // #446); discovery WITHHOLDS every case it would have produced, which is
 // what makes an already-committed expectation for one a sanctioned
 // applicability removal (below) rather than a Vanished regression. This
-// processor supports exactly the token `1.1`, so groups scoped to XSD 1.0
-// only, and groups scoped to the `full-xpath-in-CTA` feature whose engine
-// is unlanded, are both out of scope. An absent `version` applies to
-// everything. This is unrelated to `expected/@version`, whose tokens are
-// AND-connected and only choose which declared outcome binds.
+// processor supports the tokens `1.1` and `Unicode_6.0.0`, so groups scoped
+// to XSD 1.0 only, and groups scoped to the `full-xpath-in-CTA` feature
+// whose engine is unlanded, are both out of scope. An absent `version`
+// applies to everything.
+//
+// `expected/@version` is a different question answered from the same claimed
+// tokens: they are AND-connected there, and choose WHICH declared outcome
+// binds a case this processor already runs. A case whose every declaration
+// is scoped to a configuration this processor does not claim has no
+// prescribed outcome for it and is DECLINED — recorded fail, never scored a
+// pass — rather than bound to whichever declaration the suite author wrote
+// first (issues #446, #862).
 //
 // # Lanes and expectation files
 //

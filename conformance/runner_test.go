@@ -51,11 +51,28 @@ func passSchema(c caseSpec) Status {
 // rejected the document for ANY reason.
 //
 // The mixed-declaration rows pin how the two rules compose. Precedence is decided
-// by @version alone, BEFORE validity is read: a version="1.1" declaration wins
+// by @version alone, BEFORE validity is read: a claimed scoped declaration wins
 // over an unversioned one whatever either says — so a 1.1 indeterminate beats an
 // unversioned valid, and symmetrically a 1.1 valid beats an unversioned
-// indeterminate. Declaration order does not matter, because the scan returns on
-// the first 1.1 match and only remembers the first unversioned one.
+// indeterminate. Declaration order does not matter between the two ranks, because
+// the scan takes the first claimed scoped match and only remembers the first
+// unversioned one.
+//
+// The remaining rows pin the AND connector xsts.xsd:1449-1458 gives `expected`
+// alone (issue #862), and they are the rows that fail against the deleted
+// document-order fallthrough. A declaration binds only when EVERY token it lists
+// is claimed, so "1.1 full-xpath-in-CTA" prescribes nothing here even though
+// versionApplicable admits a LEVEL carrying it. When NOTHING binds the case is
+// indeterminate — declined, not scored — which is what stops the CTA pairing
+// (`full-xpath-in-CTA` valid declared before `restricted-xpath-in-CTA` invalid)
+// and the pinned suite's lone version="1.0" instance declarations from binding an
+// outcome this processor never claimed. When TWO claimed declarations disagree it
+// is indeterminate as well; when they agree, that shared outcome binds.
+//
+// The Unicode rows use the pinned suite's real shapes (msMeta/Regex_w3c.xml, W3C
+// bugzilla id=13607), the one place where both the claimed and the unclaimed token
+// are Unicode_*: whichever way round the author declared the pair, the
+// `Unicode_6.0.0` row is the one that binds.
 func TestResolveExpectedClassifiesDeclaredValidity(t *testing.T) {
 	cases := []struct {
 		name string
@@ -87,14 +104,58 @@ func TestResolveExpectedClassifiesDeclaredValidity(t *testing.T) {
 			expectValid(), true,
 		},
 		{
-			"a 1.0-only indeterminate still falls back to the first declaration",
-			[]expected{{Validity: "indeterminate", Version: "1.0"}},
+			"an unversioned declaration beats an unclaimed scoped one",
+			[]expected{{Validity: "invalid", Version: "1.0"}, {Validity: "indeterminate"}},
 			expectIndeterminate(), true,
 		},
 		{
-			"an unversioned declaration beats a versioned non-1.1 one",
-			[]expected{{Validity: "invalid", Version: "1.0"}, {Validity: "indeterminate"}},
+			"a lone 1.0-only valid prescribes nothing here — attP029.v's shape",
+			[]expected{{Validity: "valid", Version: "1.0"}},
 			expectIndeterminate(), true,
+		},
+		{
+			"the CTA pairing binds neither, valid declared first",
+			[]expected{
+				{Validity: "valid", Version: "full-xpath-in-CTA"},
+				{Validity: "invalid", Version: "restricted-xpath-in-CTA"},
+			},
+			expectIndeterminate(), true,
+		},
+		{
+			"the claimed Unicode row binds, valid declared first — reS38.v's shape",
+			[]expected{
+				{Validity: "valid", Version: "Unicode_4.0.0"},
+				{Validity: "invalid", Version: "Unicode_6.0.0"},
+			},
+			expectInvalid(), true,
+		},
+		{
+			"the claimed Unicode row binds, invalid declared first — reS51.i's shape",
+			[]expected{
+				{Validity: "invalid", Version: "Unicode_4.0.0"},
+				{Validity: "valid", Version: "Unicode_6.0.0"},
+			},
+			expectValid(), true,
+		},
+		{
+			"the AND rejects a claimed token beside an unclaimed one",
+			[]expected{{Validity: "valid", Version: "1.1 full-xpath-in-CTA"}, {Validity: "invalid"}},
+			expectInvalid(), true,
+		},
+		{
+			"the AND accepts a list of claimed tokens",
+			[]expected{{Validity: "invalid", Version: "1.1 Unicode_6.0.0"}, {Validity: "valid"}},
+			expectInvalid(), true,
+		},
+		{
+			"claiming both, disagreeing, decides nothing",
+			[]expected{{Validity: "valid", Version: "1.1"}, {Validity: "invalid", Version: "Unicode_6.0.0"}},
+			expectIndeterminate(), true,
+		},
+		{
+			"claiming both, agreeing, binds the shared outcome",
+			[]expected{{Validity: "invalid", Version: "1.1"}, {Validity: "notKnown", Version: "Unicode_6.0.0"}},
+			expectInvalid(), true,
 		},
 		{"no declaration at all", nil, expectation{}, false},
 	}
@@ -141,7 +202,8 @@ func TestVersionApplicableUsesOrConnectedTokens(t *testing.T) {
 		{"restricted-xpath-in-CTA is unsupported too", "restricted-xpath-in-CTA", false},
 		{"a supported version beside an unsupported feature", "1.1 full-xpath-in-CTA", true},
 		{"two unsupported tokens", "1.0 full-xpath-in-CTA", false},
-		{"an unknown token", "Unicode_4.0.0", false},
+		{"an unclaimed Unicode database version", "Unicode_4.0.0", false},
+		{"the claimed Unicode database version", "Unicode_6.0.0", true},
 		{"several unsupported tokens", "1.0 Unicode_4.0.0 restricted-xpath-in-CTA", false},
 		{"a supported token last in a long list", "1.0 Unicode_4.0.0 1.1", true},
 		{"1.10 is not 1.1", "1.10", false},
