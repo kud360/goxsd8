@@ -528,9 +528,12 @@ func casesFromIndex(indexPath string, seen, seenSets map[string]struct{}) (disco
 
 // supportedVersionTokens is the ONE encoding (STYLE D3) of which xsts.xsd
 // `version` tokens this processor claims support for. Every applicability
-// decision reads it, so no "1.1" literal is repeated at the decode sites.
+// decision reads it, and so does every expected-outcome resolution
+// (resolveExpected), so no token literal is repeated at the decode sites.
 //
-// It holds exactly "1.1". xmlschema11-1.md §4.2.2 fixes the decimal "representing
+// It holds "1.1" and "Unicode_6.0.0".
+//
+// "1.1": xmlschema11-1.md §4.2.2 fixes the decimal "representing
 // the version of XSD supported by the processor" at 1.1 for a processor
 // conforming to that specification, and this processor targets that version
 // alone. §4.2.2 is borrowed for that ONE fact and nothing else: what §4.2.2
@@ -540,21 +543,44 @@ func casesFromIndex(indexPath string, seen, seenSets map[string]struct{}) (disco
 // testdata/xsdtests/common/xsts.xsd. The two happen to need the same number; do
 // not merge their readings.
 //
+// "Unicode_6.0.0": the token names the Unicode database version whose prescribed
+// results bind, and this processor's category escapes resolve against Go's
+// unicode tables, which are far later than 6.0.0 and agree with it on every
+// character the suite's Unicode-scoped rows turn on (W3C bugzilla id=13607:
+// U+1371 ETHIOPIC DIGIT NINE left Nd after Unicode 4.0 and U+0BE6 TAMIL DIGIT
+// ZERO entered it, and both classifications have held since 6.0.0). Claiming it
+// is spec-conformant rather than a convenience: `\d` is `\p{Nd}`
+// (xmlschema11-2.md:6804), and which database version resolves that membership is
+// explicitly implementation-defined — a minimally conforming processor supports
+// the cited version "or ... some later version" (xmlschema11-2.md:6692, repeated
+// for Appendix H.1 at :6835), and the Note at :6694 endorses "by default use the
+// latest supported version". The ratchet is what keeps the claim honest: of the
+// seven MS-Regex instance cases it re-binds, the three this processor decides
+// (reS38.v, reT51.v, reZ004v.v) pass only because its answers ARE the
+// `Unicode_6.0.0` row's, and the other four are declined by the instance executor
+// for unrelated reasons and record fail whichever row binds.
+//
+// "Unicode_4.0.0" is deliberately NOT claimed: this processor's tables disagree
+// with it on exactly the characters those rows turn on, so the one instanceTest
+// scoped to it (msMeta/Regex_w3c.xml:14480, reS17.v) stays withheld. A later
+// Unicode_* token appearing in a re-pinned suite is claimed the same way — by
+// checking this processor's answers against that row, not by assuming a newer
+// database subsumes an older one, which category membership does not.
+//
 // FEATURE tokens are deliberately NOT in the set. ts:version-info is an open
 // list over ts:version-token, so a token need not be a version number at all:
-// xsts.xsd:1854-1855 enumerates `restricted-xpath-in-CTA` and
-// `full-xpath-in-CTA` as processor FEATURES, and the pinned suite uses
-// `full-xpath-in-CTA` on 20 test groups (all in CTA.testSet) and `Unicode_4.0.0`
-// on one instanceTest. THE RULING, stated rather than defaulted (issue #446):
-// this processor's XPath engine is unlanded (M6/M7), so it supports neither full
-// XPath in conditional type assignment nor any declared Unicode version, and
-// those tokens are unsupported — the groups carrying only such a token are
-// inapplicable and produce no cases. Scoring this processor against a feature it
-// has never claimed is precisely the defect the XSD-1.0 groups exhibited, and
-// declaring support here to keep the case count up would be the same mistake
-// with the sign flipped. When the XPath engine lands, adding its token to this
-// slice is the whole change.
-var supportedVersionTokens = []string{"1.1"}
+// xsts.xsd:1854-1855 enumerates `restricted-xpath-in-CTA` and `full-xpath-in-CTA`
+// as processor FEATURES, and the pinned suite uses `full-xpath-in-CTA` on 20 test
+// groups (all in CTA.testSet) and `Unicode_4.0.0` on one instanceTest. THE
+// RULING, stated rather than defaulted (issue #446): this processor's XPath
+// engine is unlanded (M6/M7), so it supports full XPath in conditional type
+// assignment no more than the restricted subset, and both tokens are unsupported
+// — the groups carrying only such a token are inapplicable and produce no cases.
+// Scoring this processor against a feature it has never claimed is precisely the
+// defect the XSD-1.0 groups exhibited, and declaring support here to keep the
+// case count up would be the same mistake with the sign flipped. When the XPath
+// engine lands, adding its token to this slice is the whole change.
+var supportedVersionTokens = []string{"1.1", "Unicode_6.0.0"}
 
 // versionApplicable reports whether a level of the suite catalog is applicable to
 // this processor, given that level's `version` attribute value.
@@ -770,29 +796,94 @@ func resolveDoc(setDir, href string) string {
 	return filepath.Join(setDir, filepath.FromSlash(href))
 }
 
-// resolveExpected picks the declaration that applies to an XSD 1.1 processor and
-// classifies it: an explicit version="1.1" declaration wins, else an unversioned
-// one (applies to all versions), else the first declaration deterministically.
-// Precedence is decided by the version attribute ALONE and before the validity
-// is looked at, so a version="1.1" declaration wins over an unversioned one
-// whatever either says. ok is false only when no expected element is present.
+// resolveExpected picks the <expected> declaration whose declared processor
+// configuration THIS processor claims, and classifies it. Precedence is decided
+// by the version attribute ALONE and before the validity is looked at, so a
+// scoped declaration wins over an unversioned one whatever either says. ok is
+// false only when no expected element is present at all.
+//
+// The tokens of `expected/@version` are AND-connected, which is the whole reason
+// this is not versionApplicable: xsts.xsd:1449-1458 says that on `expected`, "by
+// contrast, the implicit connector is an and: if a processor configuration
+// supports all of them, the result given is prescribed". A declaration binds only
+// when EVERY token it lists is in supportedVersionTokens — the same ONE encoding
+// versionApplicable reads (STYLE D3) — so version="1.1 full-xpath-in-CTA"
+// prescribes nothing here even though versionApplicable admits a LEVEL carrying
+// it. The order is therefore:
+//
+//  1. the first scoped declaration in document order that this processor claims;
+//  2. else the first unversioned declaration, which scopes nothing and so binds
+//     any configuration (`version` is use="optional" at xsts.xsd:956 and
+//     ts:version-info declares no default);
+//  3. else indeterminate.
+//
+// CLAIMS NEITHER (3) is the ruling issue #446 already made, applied one level
+// down: the suite prescribed outcomes only for configurations this processor does
+// not claim, so it prescribed none for THIS one, and binding the first
+// declaration anyway scored a capability never claimed — which is exactly how the
+// ten CTA schemaTests pairing `full-xpath-in-CTA` valid with
+// `restricted-xpath-in-CTA` invalid would have bound "valid" by document order.
+// The case is DECLINED, not withheld (issue #277: an undecided outcome is
+// recorded Fail without reaching an executor). Withholding is for a level the
+// suite scoped away — an inapplicable case is not this processor's to run at all,
+// whereas this one is applicable and merely unscoreable, and the two must not be
+// conflated because withholding DELETES a committed expectation line. It is
+// reachable in the pinned suite: msMeta/Attribute_w3c.xml's attP029.v and
+// attP031.i each declare a lone <expected validity="valid" version="1.0"/> inside
+// an unversioned instanceTest.
+//
+// CLAIMS BOTH is indeterminate too, when the claimed declarations disagree: the
+// suite prescribes two incompatible outcomes for one configuration and the
+// harness has no ground for preferring either. Agreement is not a conflict — two
+// claimed declarations that classify the same bind that outcome — and an
+// unversioned sibling never conflicts with a scoped one, since rule 1 outranks
+// rule 2 rather than competing with it.
 func resolveExpected(exps []expected) (expectation, bool) {
-	unversioned := -1
+	if len(exps) == 0 {
+		return expectation{}, false
+	}
+	claimed, unversioned := -1, -1
 	for i := range exps {
-		if exps[i].Version == "1.1" {
-			return classifyValidity(exps[i].Validity), true
+		tokens := strings.Fields(exps[i].Version)
+		if len(tokens) == 0 {
+			if unversioned < 0 {
+				unversioned = i
+			}
+			continue
 		}
-		if exps[i].Version == "" && unversioned < 0 {
-			unversioned = i
+		if !versionPrescribed(tokens) {
+			continue
 		}
+		if claimed < 0 {
+			claimed = i
+			continue
+		}
+		if classifyValidity(exps[i].Validity) != classifyValidity(exps[claimed].Validity) {
+			return expectIndeterminate(), true
+		}
+	}
+	if claimed >= 0 {
+		return classifyValidity(exps[claimed].Validity), true
 	}
 	if unversioned >= 0 {
 		return classifyValidity(exps[unversioned].Validity), true
 	}
-	if len(exps) > 0 {
-		return classifyValidity(exps[0].Validity), true
+	return expectIndeterminate(), true
+}
+
+// versionPrescribed reports whether an <expected> declaration's already-split
+// `version` tokens are ALL supported, which is when xsts.xsd:1449-1458 says the
+// result it gives is prescribed for this processor. An empty token list satisfies
+// it vacuously; resolveExpected splits the value itself and handles that case
+// before calling, because an unversioned declaration ranks BELOW a claimed scoped
+// one rather than tying with it.
+func versionPrescribed(tokens []string) bool {
+	for _, tok := range tokens {
+		if !slices.Contains(supportedVersionTokens, tok) {
+			return false
+		}
 	}
-	return expectation{}, false
+	return true
 }
 
 // classifyValidity maps one @validity token to the outcome the harness scores
