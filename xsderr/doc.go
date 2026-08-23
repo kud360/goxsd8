@@ -2,9 +2,33 @@
 // that carry a spec validation rule ID and a source location.
 //
 // It is a pure leaf — stdlib imports only. Every schema- or
-// instance-validity violation anywhere in the module is an *Error
-// (STYLE E2); free-form errors are for I/O and programming faults, never
-// for validity verdicts.
+// instance-validity violation the spec CATALOGS is an *Error carrying that
+// catalog's rule ID (STYLE E2); free-form errors are for I/O faults,
+// programming faults, and the one validity class the spec catalogs nowhere,
+// below.
+//
+// # The s4s-grammar class
+//
+// A schema document that is simply not valid against the schema for schema
+// documents — a prohibited or missing attribute, a child its content model
+// does not admit, one repeated past its maxOccurs, one out of order —
+// violates §2.4 clause 1 (sd-valid, xmlschema11-1.md:615). That clause is
+// anchored but uncataloged: it is absent from Appendix B's three tables
+// (B.1 cvc-*, B.3 src-*, B.4 cos-*), which are the spec's own exhaustive
+// lists of citable codes, and §5.1's restatement of it (:4296) carries no
+// anchor at all. No src-* covers the grammar either, by construction:
+// §2.3's gloss-src (:607) defines Schema Representation Constraints as
+// constraints "beyond those which are expressed in" that grammar, and every
+// src-* with sub-clauses opens "In addition to the conditions imposed ...
+// by the schema for schema documents" (src-ct, :1946; src-ta, :3218).
+//
+// So a rejection in this class carries no Rule and is not an *Error at all.
+// It is a plain error whose message names the offending item, its location
+// and the Appendix A production it violates — parser's
+// rejectProhibitedAttrs and checkS4SChildOrder are the shape to copy. Do
+// not charge it sd-valid, which is not a catalog ID and would read as one
+// in the Rule position, and do not borrow the nearest src-*, which states a
+// different constraint (#966).
 //
 // # Contract (implemented in M2)
 //
@@ -21,7 +45,11 @@
 //	    faults (unbound prefixes, mismatched/unclosed tags, malformed XML),
 //	    and component-constructor rejections of a state the XML mapping
 //	    makes unrepresentable rather than any numbered clause forbidding.
-//	    IsValidRule accepts both.
+//	    IsValidRule accepts both. The set stays closed at two: the
+//	    s4s-grammar class above is the converse case — a real validity
+//	    verdict the spec declines to catalog, not a non-validity fault — and
+//	    gets no sentinel, because a Rule minted for it would be read as a
+//	    citation of a rule the spec does not state.
 //
 //	type Loc struct { URI string; Line, Col int }
 //	    Where the offending construct lives — the schema document or the
