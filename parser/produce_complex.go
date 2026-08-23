@@ -2920,16 +2920,17 @@ func allOccursEnum(lexical string, loc xsderr.Loc, attr string) error {
 }
 
 // processContentsOf maps a processContents lexical to a ProcessContents token,
-// charging w-props-correct (§3.10.6.1) on an out-of-range value.
+// charging cvc-datatype-valid (Datatypes §4.1.4) on an out-of-enumeration value:
+// the schema for schema documents declares processContents as an xs:NMTOKEN
+// restricted to the enumeration skip/lax/strict (Appendix A's wildcard attribute
+// group, xmlschema11-1.md:5346-5353), so a lexical outside that value space is an
+// attribute failing its own declared type, which is what ruleDatatypeValid names.
 //
-// That charge has the shape #932 corrected in nonNegativeInt: Appendix A declares
-// processContents as an xs:NMTOKEN restricted to the enumeration skip/lax/strict
-// (xmlschema11-1.md:5346-5353), produceWildcard calls this before xsd.NewWildcard,
-// and xsd.NewWildcard charges w-props-correct clause 1 for the same out-of-range
-// {process contents} on a component that does exist — so the parser is charging a
-// component constraint for a lexical fault that builds no component. #932's
-// grounding rules only on the occurrence attributes and leaves this one open;
-// changing it wants its own grounding, so the charge stands as written.
+// NOT w-props-correct (§3.10.6.1). That constraint quantifies over an existing
+// Wildcard's PROPERTIES, and produceWildcard returns this error before reaching
+// xsd.NewWildcard, so no Wildcard is ever built for it to constrain. Clause 1 —
+// {process contents} outside skip/lax/strict — is charged by that constructor, on
+// the token this helper has already mapped (#950).
 func processContentsOf(lexical string, loc xsderr.Loc) (xsd.ProcessContents, error) {
 	switch strings.TrimSpace(lexical) {
 	case "skip":
@@ -2939,7 +2940,7 @@ func processContentsOf(lexical string, loc xsderr.Loc) (xsd.ProcessContents, err
 	case "lax":
 		return xsd.ProcessLax, nil
 	}
-	return 0, xsderr.New(ruleWildcardCorr, loc,
+	return 0, xsderr.New(ruleDatatypeValid, loc,
 		"wildcard processContents %q is not one of skip/strict/lax", lexical)
 }
 
