@@ -839,6 +839,44 @@ func TestParseRedefineGroupResolvesToOriginal(t *testing.T) {
 	}
 }
 
+// TestParseRedefineGroupBodylessOriginalRejected pins the src-expredef clause 2
+// path onto #884's rejection: the ORIGINAL a redefining <group>'s self-reference
+// resolves to is built by buildDefinitionModelGroup directly, never through
+// produceModelGroupDefinition, because clause 4.1.2 keeps the redefined name out
+// of the top-level tables. A bodyless original therefore reaches nothing that
+// used to charge mgd-props-correct — it produced a Particle over a ZERO
+// xs:ModelGroup, which xsd.NewParticle admits (its {term} is a non-nil
+// ResolvedTerm) and the content automaton then PANICKED on, "non-exhaustive
+// Compositor switch" over the zero compositor.
+//
+// The named-group body check closes it at the document fault, in the redefined
+// document and at its own <group>, which is the only Loc that names the file the
+// author must edit.
+func TestParseRedefineGroupBodylessOriginalRejected(t *testing.T) {
+	_, err := parseMap(t, "main.xsd", map[string]string{
+		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+			`<xs:group name="g"><xs:sequence>`+
+			`<xs:group ref="tns:g"/>`+
+			`<xs:element name="b" type="xs:string"/>`+
+			`</xs:sequence></xs:group>`+
+			`</xs:redefine>`),
+		"lib.xsd": wrap("urn:a", `<xs:group name="g"/>`),
+	})
+	if err == nil {
+		t.Fatal("Parse accepted a redefinition over a bodyless original, want a grammar fault")
+	}
+	var xe *xsderr.Error
+	if errors.As(err, &xe) {
+		t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+	}
+	if !strings.Contains(err.Error(), "xs:namedGroup") {
+		t.Fatalf("error = %v, want it to name the xs:namedGroup production the original violates", err)
+	}
+	if !strings.Contains(err.Error(), "lib.xsd:") {
+		t.Fatalf("error = %v, want it positioned in lib.xsd, where the bodyless <group> is written (E3)", err)
+	}
+}
+
 // TestParseRedefineGroupClause611Rejected covers src-redefine clause 6.1.1: with
 // a qualifying self-reference present, "it has exactly one such group".
 func TestParseRedefineGroupClause611Rejected(t *testing.T) {

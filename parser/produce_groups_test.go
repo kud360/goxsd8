@@ -2,6 +2,7 @@ package parser_test
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -202,15 +203,145 @@ func TestProduceCircularGroupRef(t *testing.T) {
 	}
 }
 
-// TestProduceEmptyGroupDefinition proves a top-level <group> with no model-group
-// body is rejected mgd-props-correct (§3.7.6, {model group} Required).
-func TestProduceEmptyGroupDefinition(t *testing.T) {
-	_, err := produce(t, wrap("", `<xs:group name="g"/>`))
-	if err == nil {
-		t.Fatal("Produce accepted a <group> with no model-group body, want mgd-props-correct error")
+// TestProduceNamedGroupBodyRejected pins, END TO END from a schema DOCUMENT, that
+// a named <group> whose body is not the one <all>/<choice>/<sequence>
+// xs:namedGroup requires (xmlschema11-1.md:5187-:5216) is rejected as the
+// content-model fault it is, AT the child that is not admitted — not one phase
+// later at the definition element as mgd-props-correct's absent {model group}
+// (the row TestProduceEmptyGroupDefinition covered before #884).
+//
+// The fault is plain, never a rule verdict: §3.7.3 (:2286) reads "None as such."
+// in full, there is no src-mgd, and mgd-props-correct (§3.7.6, :2302) is a Schema
+// Component Constraint over an already-built tableau — charging it for a document
+// fault would be fabricated (STYLE E2). What binds is sd-valid (§2.4 clause 1,
+// :615), the s4s-grammar class (xsderr/doc.go, #966), so every row asserts the
+// error is NOT an *xsderr.Error and does NOT name mgd-props-correct.
+//
+// Every row DECLARES a legal <group name="G"> beside the malformed one, so no row
+// can pass as a dangling reference, and each pins the LINE the fault is reported
+// at (STYLE E3, carried in the message text since a plain error holds no
+// xsderr.Loc): the malformed child's own line where one exists, the definition's
+// where none does. Without the position assertion a guard that rejected at the
+// definition for every shape would pass the table.
+func TestProduceNamedGroupBodyRejected(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2). The legal <group> is
+	// on line 2, the malformed one opens line 3 and its body is written on line 4,
+	// so wantLine alone separates a fault reported at the child from one reported
+	// at the definition.
+	cases := []struct {
+		name     string
+		body     string
+		wantName string
+		wantLine int
+	}{
+		{
+			// Also carries the name and maxOccurs xs:groupRef and xs:namedGroup
+			// respectively prohibit (#876), and the content-model fault answers
+			// first: the reference form is not admitted in this position under ANY
+			// spelling, so its attributes are the consequence, not the mistake.
+			name:     `nested <group ref= name= maxOccurs=0>`,
+			body:     `<xs:group ref="tns:G" name="X" maxOccurs="0"/>`,
+			wantName: "<group> at",
+			wantLine: 4,
+		},
+		{
+			name:     `nested <group ref=>`,
+			body:     `<xs:group ref="tns:G"/>`,
+			wantName: "<group> at",
+			wantLine: 4,
+		},
+		{
+			name:     `bare <element>`,
+			body:     `<xs:element name="q" type="xs:string"/>`,
+			wantName: "<element> at",
+			wantLine: 4,
+		},
+		{
+			// Nothing is written that the grammar declines, so the only thing left to
+			// report is the unfilled required position, at the definition itself —
+			// line 3, NOT the <annotation> on line 4.
+			name:     `<annotation> only`,
+			body:     `<xs:annotation/>`,
+			wantName: "has no <all>, <choice> or <sequence> child",
+			wantLine: 3,
+		},
+		{
+			name:     `empty body`,
+			body:     ``,
+			wantName: "has no <all>, <choice> or <sequence> child",
+			wantLine: 3,
+		},
 	}
-	if !strings.Contains(err.Error(), "mgd-props-correct") {
-		t.Fatalf("error = %q, want it to cite mgd-props-correct", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := wrap("urn:po", "\n"+
+				`<xs:group name="G"><xs:sequence><xs:element name="p" type="xs:string"/></xs:sequence></xs:group>`+"\n"+
+				`<xs:group name="G2">`+"\n"+tc.body+"\n"+`</xs:group>`)
+			_, err := produce(t, doc)
+			if err == nil {
+				t.Fatalf("Produce succeeded, want a grammar fault for the malformed <group> body")
+			}
+			var xe *xsderr.Error
+			if errors.As(err, &xe) {
+				t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+			}
+			if strings.Contains(err.Error(), "mgd-props-correct") {
+				t.Fatalf("error = %v, want the document's content-model fault rather than the absent {model group} it causes", err)
+			}
+			if !strings.Contains(err.Error(), tc.wantName) {
+				t.Fatalf("error = %v, want it to name %s as the fault", err, tc.wantName)
+			}
+			if !strings.Contains(err.Error(), "xs:namedGroup") {
+				t.Fatalf("error = %v, want it to name the xs:namedGroup production it violates", err)
+			}
+			if at := fmt.Sprintf("%s:%d:", produceURI, tc.wantLine); !strings.Contains(err.Error(), at) {
+				t.Fatalf("error = %v, want it positioned at %s (E3)", err, at)
+			}
+		})
+	}
+}
+
+// TestProduceNamedGroupBodyAccepted proves the bodies xs:namedGroup DOES admit —
+// one <all>/<choice>/<sequence>, with and without a leading <annotation> — still
+// produce a definition whose {model group} carries the body's compositor, so the
+// sibling table's guard cannot be widened into them.
+func TestProduceNamedGroupBodyAccepted(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2).
+	cases := []struct {
+		name string
+		body string
+		want xsd.Compositor
+	}{
+		{
+			name: `<sequence> alone`,
+			body: `<xs:sequence><xs:element name="p" type="xs:string"/></xs:sequence>`,
+			want: xsd.CompositorSequence,
+		},
+		{
+			name: `<annotation> then <choice>`,
+			body: `<xs:annotation/><xs:choice><xs:element name="p" type="xs:string"/></xs:choice>`,
+			want: xsd.CompositorChoice,
+		},
+		{
+			name: `<annotation> then <all>`,
+			body: `<xs:annotation/><xs:all><xs:element name="p" type="xs:string"/></xs:all>`,
+			want: xsd.CompositorAll,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := produce(t, wrap("", `<xs:group name="g">`+tc.body+`</xs:group>`))
+			if err != nil {
+				t.Fatalf("Produce: %v", err)
+			}
+			d, ok := s.ModelGroup(xsd.QName{Local: "g"})
+			if !ok {
+				t.Fatal("schema has no model group definition g")
+			}
+			if got := d.ModelGroup().Compositor(); got != tc.want {
+				t.Fatalf("{model group} {compositor} = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
