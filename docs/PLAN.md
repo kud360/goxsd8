@@ -17,7 +17,7 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-08-23 (BAND RE-CUT ONLY, by #884's post-land pass: #884 landed as PR #983 / `b3f295a`, row 1 is dropped and every row below shifts up by one. Everything ABOVE the band is the earlier same-day full `/backlog` derivation — lanes, branches, markers, milestones, queue and personas — CARRIED UNCHANGED and NOT re-read here; #884's close has moved the queue counts since, and the two paragraphs that existed only to state its LIVE lease are spent and replaced. The next `/backlog` replaces the whole section)
+## Status — 2026-08-23 (LANE + SURVEY REFRESH, by #862's post-land pass: #862 landed as PR #985 / `109beb9` and MOVED A LANE — `instance` +3. Re-read and replaced here from the tools: the lane table (`lanestatus`), the branch namespace (`wipsurvey`), the marker census (`gapaudit`), and the milestone and queue counts, all from one 582-issue page-numbered fetch taken just after 17:00Z. NOT re-derived, and carried verbatim from the earlier same-day full `/backlog`: the two rule subsections, the persona consultations, and every band row's argument. **No band re-cut: #862 was never banded** — it was taken by CLAIMED-branch takeover, not from the top — so no row is dropped and nothing shifts. The next `/backlog` replaces the whole section)
 
 Conformance lanes — **paste `go tool lanestatus` verbatim**, never a
 hand-count:
@@ -26,7 +26,7 @@ hand-count:
 |---|---:|---:|---:|
 | `ber` | — | — | 0 |
 | `datatypes` | 1161 | 12 | 1173 |
-| `instance` | 10752 | 15609 | 26361 |
+| `instance` | 10755 | 15606 | 26361 |
 | `json` | — | — | 0 |
 | `schema` | 13225 | 2173 | 15398 |
 | `xpath` | — | — | 0 |
@@ -35,19 +35,26 @@ An em dash is a lane with no cases yet, which is a different claim from a lane
 scoring zero. `datatypes` is M3 and **complete**; `schema` is M4 and active;
 `instance` is M5 and active; `xpath`, `json` and `ber` wait on M6/M7, M8 and M11.
 
-**No lane moved, the figures are RE-DERIVED rather than carried, and the
-impossibility is measured in two commands.** The previous stamp carried these
-numbers forward without re-reading them and said so; this one ran the tool.
-`git diff --name-only a7531f7 HEAD` is six files, **not one of them a `.go`
-file**, and reaching further back to the last stamp that actually derived a lane
-score, `git diff --name-only af5c6ac HEAD -- '*.go'` returns exactly
-`xsderr/doc.go` while `git diff --stat af5c6ac HEAD --
-conformance/testdata/expectations/` returns **nothing**. So every figure above
-is byte-identical to the previous three stamps' by construction, and the one
-`.go` file touched in that whole span is a package comment.
+**`instance` moved, +3, and it is the first movement of THIS lane since
+`3d3ab5f` (#909, 2026-08-22)** — the previous stamp's movement was `schema`
++149, earlier the same day. 10752 → 10755 of 26361, banked by the arbiter at `469575a`
+and landed in `109beb9` (#862): `resolveExpected` stopped picking an `<expected>`
+row by document order and now binds the row whose `@version` tokens this
+processor claims in full, so `reS38.v`, `reT51.v` and `reZ004v.v` are scored
+against the `Unicode_6.0.0` answer their fixtures prescribe — the answer this
+processor was already giving. **No other lane moved**, and the three unchanged
+rows are carried from the same `lanestatus` run, not from the previous stamp.
+The `instance` lane's **indeterminate census moved 3 → 5** in the same landing
+(`attP029.v`, `attP031.i`, whose only `version="1.0"` declaration this processor
+does not claim); that is a decline, not a regression, and no expectation line
+moved for it.
 
-**What this window was: the seventh weekly `/retro`, both parts, and no code at
-all.** Part 2 landed first — `e6f8170`, the steward architecture audit (**#976**)
+**What the window BEFORE the earlier same-day `/backlog` was: the seventh weekly
+`/retro`, both parts, and no code at all** — carried verbatim, and it describes
+the window that closed at `155ec39`, not the day. Two code landings have followed
+it — **#884** (`b3f295a`) and **#862** (`109beb9`, this stamp's lane movement) —
+which is why the paragraph above and this one can both be true.
+Part 2 landed first — `e6f8170`, the steward architecture audit (**#976**)
 — and Part 1 second, `155ec39`, the chronicler's process retro (**#980**). Six
 issues closed, three filed by those two passes, one more filed here. The window
 is unusual in a way worth naming: **the retro changed the rules this very pass
@@ -106,34 +113,36 @@ more.
 
 ### Branch namespace, `origin` — report-only; a session never deletes a ref
 
-**`go tool wipsurvey`, verbatim** (fed the paginated issue JSON, 581 issues — the
-survey ran before #981 was filed, so it is one short of the 582 the queue
-paragraph below counts; no `wip/*` ref belongs to #981):
+**`go tool wipsurvey`, verbatim** (RE-RUN this pass against a fresh
+`git fetch --prune` and a fresh page-numbered fetch of all 582 issues):
 
 ```
-ISSUE  BRANCH         TIP AGE  VERDICT  REASON
-822    wip/issue-822  unknown  RETIRED  wip/issue-822: issue #822 is closed
-862    wip/issue-862  main's   CLAIMED  wip/issue-862: no commits of its own; tip age is main's, not the claim's -- do not retire on age, settle it from the issue thread
-872    wip/issue-872  unknown  RETIRED  wip/issue-872: issue #872 is closed
-884    wip/issue-884  main's   CLAIMED  wip/issue-884: no commits of its own; tip age is main's, not the claim's -- do not retire on age, settle it from the issue thread
-933    wip/issue-933  69h7m0s  RETIRED  wip/issue-933: issue #933 is closed
-968    wip/issue-968  8h12m0s  RETIRED  wip/issue-968: issue #968 is closed
+ISSUE  BRANCH         TIP AGE    VERDICT  REASON
+732    wip/issue-732  main's     CLAIMED  wip/issue-732: no commits of its own; tip age is main's, not the claim's -- do not retire on age, settle it from the issue thread
+822    wip/issue-822  177h40m0s  RETIRED  wip/issue-822: issue #822 is closed
+872    wip/issue-872  143h42m0s  RETIRED  wip/issue-872: issue #872 is closed
+933    wip/issue-933  71h55m0s   RETIRED  wip/issue-933: issue #933 is closed
+968    wip/issue-968  11h0m0s    RETIRED  wip/issue-968: issue #968 is closed
 ```
 
-`git ls-remote --heads origin` returns exactly `main` and those six `wip/*` refs,
-re-read this pass. Nothing is EXPIRED, no `parked/*` ref exists, and no verdict
-changed from the previous stamp.
+**Two refs left the namespace and one arrived.** `wip/issue-862` and
+`wip/issue-884` are gone — `origin` deleted each at its squash-merge, so the
+previous stamp's two CLAIMED rows are spent rather than corrected. The new row is
+**`wip/issue-732`**, the band head, and it is a **live claim being worked right
+now**: no commits of its own on `origin` yet, but its thread carries an oracle
+**GROUNDING** at 16:12:49Z and a **MASON** report at 17:03:06Z naming an
+unpushed `2574bb9` and a ruling it needs before landing. Nothing is EXPIRED and
+no `parked/*` ref exists.
 
-**The survey cannot apply the rule that decided its two CLAIMED rows when it
-ran.** Both still print *"settle it from the issue thread"* — correct output
-before #946 ruled, and now a tool declining the only rule that answers the
-question. (`wip/issue-884`'s row is stale a second way: that branch has had a tip
-of its own since 14:30:46Z, so it is no longer a CLAIMED-by-comment row at all —
-see the correction above. The paste stands as it ran.) It
-reads `{number, state, labels}` from stdin and never sees a comment timestamp, so
-this is a change to `docs/ROUTINES.md`'s calling convention as much as to the
-tool. That is **#981**'s Acceptance item 2; the two lease verdicts above were
-settled by hand, as every stamp since 2026-08-18 has settled #862's.
+**The survey still cannot apply the rule that decides a CLAIMED row**, and
+`wip/issue-732` is the second branch in one day to prove it: the verdict again
+reads *"settle it from the issue thread"*, and this stamp again settled it by
+hand. It reads `{number, state, labels}` from stdin and never sees a comment
+timestamp, so this is a change to `docs/ROUTINES.md`'s calling convention as much
+as to the tool. That is **#981**'s Acceptance item 2. What #732 does **not**
+corroborate is #981's other half: here the grounding belongs to the session that
+is actually working the issue, so dating the lease by it produced the right
+answer. The tool defect has a second sighting; the rule defect does not.
 
 **`wip/issue-822` and `wip/issue-872` show commits absent from `main`, and that
 is a squash-merge artefact, not an alarm.** `git log origin/main..origin/wip/issue-822`
@@ -143,7 +152,7 @@ carrying `needs-replan`** — parked, not landed — and both supersessions have
 since landed: **#851** and **#878**, closed `completed`. So the content question
 those rows raise is answered and stays answered. `wip/issue-933` (superseded by
 #862's duplicate ruling) and `wip/issue-968` (superseded by #972) are the same
-shape. **All six deletions remain a human's call.**
+shape. **All four deletions remain a human's call.**
 
 **`go tool gapaudit`, verbatim** (fed `kind/gap`-filtered, `state=all` JSON — 138
 issues, 50 of them open):
@@ -178,10 +187,11 @@ marker and belong here permanently)
   #921 conformance: <current status="queried"> is unmodeled, so the two gMonth XSD-1.0-lexical cases are permanently unbankable disagreements with no owner and no stated reason
 ```
 
-**Both groups are byte-identical to the previous stamp, and that is expected
-rather than reassuring**: no `.go` file changed, so the 64-marker census could
-not move, and the three issues filed this window (#978, #979, #981) are all
-`kind/refactor`/`kind/process`, so none entered the `kind/gap` input. **#972 is
+**Both groups are byte-identical to the previous stamp, and this pass RE-RAN the
+tool rather than carrying them.** Two `.go` landings (#884, #862) fall between
+the two runs and neither added, removed or re-sited a `GAP(` marker, so the
+64-marker census stands on a measurement and not on an inference; no issue filed
+since carries `kind/gap`, so the tracker input is unchanged too. **#972 is
 still absent from Group 2 where it belongs** — the file-path matcher artefact the
 previous stamp reproduced, owned by **#852**, unchanged because nothing has
 landed against it. **Group 1's emptiness stays qualified, not repeated**: a file
@@ -193,46 +203,40 @@ PROSE carries no `GAP(` marker and appears in neither group.
 
 ### Milestones and queue
 
-Milestones, read from `repos/kud360/goxsd8/milestones` this pass and
-cross-checked against the paginated issue list, which agrees exactly on every
-row once pull requests are dropped.
+Both columns and the queue below are RE-DERIVED this pass from one page-numbered
+`state=all` fetch (582 issues, pull requests dropped), not from the milestones
+endpoint; the two reads agreed exactly at the previous stamp.
 
 | Milestone | Closed | Open | State |
 |---|---:|---:|---|
 | M0–M2 | 8 | 0 | done |
 | M3 — Datatypes vertical slice | 12 | 0 | **complete** |
-| M4 — Schema parsing | 97 | 46 | **active** |
+| M4 — Schema parsing | 98 | 45 | **active** |
 | M5 — Instance validation (XML) | 15 | 13 | **active** |
 | M6–M12 | 0 | 0 | not filed |
 
-**One milestone row moved: M4 open 45 → 46, and it is #975 alone** — filed by the
-previous stamp's own pass and the only issue filed in this window with a
-milestone at all. #978, #979 and #981 carry none, following the convention that
-the milestones hold feature slices while process, tooling and cross-cutting
-refactor work sits outside them. **169 of the 228 open issues carry no
-milestone** (228 − 46 − 13), so the rows above are feature progress and the
-paragraph below is the queue.
+**One milestone row moved, and one closure did not move any row.** M4 open
+46 → 45 and closed 97 → 98 is **#884** alone. **#862 carries no milestone at
+all** — it is conformance-harness bookkeeping, not a feature slice — which is why
+the lane it moved and the milestone table disagree about whether anything
+happened; the lane table is the one to believe. **168 of the 226 open issues
+carry no milestone** (226 − 45 − 13), so the rows above are feature progress and
+the paragraph below is the queue.
 
-Queue: **228 open — 208 `ready`, 20 `blocked`, 0 `needs-replan`, 2 `epic`**
-(both `epic`s are `blocked`, counted inside the 20), against **354 closed**.
-208 + 20 = 228 exactly, and **every one of the 228 carries a queue label** — the
-class #773/#774 fell into is empty for the twelfth consecutive stamp. Both
+Queue: **226 open — 206 `ready`, 20 `blocked`, 0 `needs-replan`, 2 `epic`**
+(both `epic`s are `blocked`, counted inside the 20), against **356 closed**.
+206 + 20 = 226 exactly, and **every one of the 226 carries a queue label** — the
+class #773/#774 fell into is empty for the thirteenth consecutive stamp. The
 figures were re-derived by paginating the issue list page-numbered rather than
 with `--paginate`, whose Link header uses numeric-ID URLs the proxy blocks,
 raising the page count until a page came back empty (page 11) and discarding
 pull requests, which share the endpoint.
 
-**Every move reconciles, and the previous stamp's own carried figures are the
-baseline being reconciled against.** Closed 348 → 354 is six: **#966** (which
-closed 20 minutes *before* the previous stamp was written and which that stamp
-flagged as already having moved its counts), then **#681**, **#796**, **#881**,
-**#946** and **#400**, all closed `completed` by the retro at 14:01Z. Open 230 →
-228 is those six against four filings — **#975**, **#978**, **#979**, **#981**.
-`ready` 202 → 208 is −2 closed (#966 and #400 both carried `ready`, not
-`blocked`), +4 filed, +4 unblocked; `blocked` 28 → 20 is −4 closed (#681, #796,
-#881, #946) and −4 relabelled. **The four unblocked are #548, #622, #696 and
-#960**, all moved `blocked` → `ready` by the retro that ruled on them.
-`needs-replan` was 0 and stays 0.
+**Every move reconciles.** Open 228 → 226 and closed 354 → 356 is exactly the two
+landings since the previous stamp — **#884** and **#862**, both closed
+`completed`, both carrying `ready` — so `ready` 208 → 206, `blocked` unchanged at
+20, `needs-replan` still 0. **Nothing was filed and nothing was relabelled this
+pass**; the unblock sweep below is why.
 
 **The unblock sweep relabelled nothing, and for once the interesting cases are
 the ones where a TRIGGER fired.** All 20 `blocked` bodies were fetched over
@@ -347,24 +351,33 @@ What changed in the twelve:
 
 Dependency-ordered top of the `ready` queue, so a session need not scan the whole
 of it. Take from the top. Cross-references are stated by ISSUE rather than by row
-number, which decays at each re-cut. **This is a SHIFT, not a re-cut**: **row 1
-was #884 and it LANDED** (PR #983, `b3f295a`), so it is dropped and every row
-below moves up by one. The full re-cut that seated these rows — four issues in,
-three out, the two persona rows promoted on the consultation cost measured above
-— is the earlier same-day `/backlog`'s, and its ordering is carried, not
-re-derived.
+number, which decays at each re-cut. **Neither a re-cut nor a shift this pass:
+every row stands where it stood.** #862 was never banded — it was taken by
+CLAIMED-branch takeover rather than from the top — so its landing drops no row.
+The rows themselves come from the earlier same-day `/backlog` (four issues in,
+three out, the two persona rows promoted on the consultation cost measured
+above), shifted once by #884's landing, and their ordering is carried, not
+re-derived. Every row's argument is carried verbatim; the one clause any pass has
+replaced is row 15's #884 ordering, replaced by the pass that landed #884.
 
-**Every row's argument is carried verbatim, with ONE exception, at the new row
-15.** #975's row said *"so #884 first and #975 whenever a cheap session wants
-it"* — an ordering this landing has discharged, and left verbatim it would hold a
-cheap session behind an issue that is closed. That clause alone is replaced; the
-rest of the row is untouched. No other row named #884.
+**Row 1 is claimed and in flight.** `wip/issue-732` carries an oracle grounding
+and a mason report from the last hour, and the mason report says the gate does
+**not** pass and asks for a ruling before landing. A session taking from the top
+should read that thread first and drop to the next startable row rather than
+racing it.
 
-**The unblock sweep relabelled nothing.** All 227 open bodies were fetched over
-`gh api` and searched for the literal `#884`; five cite it — **#981**, **#975**,
-**#972**, **#931**, **#907** — and **not one `## Depends on` names it**. #972's
-names #732 alone; the other four read "none". No label changed, and #931 in
-particular is adjacent-not-dependent exactly as #884's body said.
+**The unblock sweep relabelled nothing, and could not have.** All 226 open bodies
+were fetched over `gh api` — byte-faithful, where MCP `issue_read` is lossy
+(#764) — and searched for the literal `#862`; three cite it — **#981**, **#921**,
+**#857** — and **not one `## Depends on` names it**. All three are already
+`ready`, and each cites #862 as evidence or as a sibling class rather than as a
+dependency: #921 says so in the section itself (*"Related, not gating"*). The 20
+`blocked` bodies were read in full for the same string and none contains it. The
+four §3.12.6 CTA gaps #862's own body named as the likely future triggers for a
+token widening — **#859** (since closed), **#888**, **#889**, **#894** — were
+checked directly: all three open ones are `ready`, none names #862 anywhere, and
+#862 deliberately did not widen `supportedVersionTokens` with the CTA feature
+tokens, so none of them acquired or lost a dependency here.
 
 **#975 needs no re-census and no rebase, checked rather than assumed.** Its
 stated criterion — the `"the schema for schema documents"` grep — returns **21
@@ -422,11 +435,11 @@ folded by the next landing touching `rejectRepeatedAnnotations`. **#920** and
 each beside #901's thread. **#455** is the live owner of the
 `strings.TrimSpace`-versus-§4.3.6 character class at **ten** sites — a pure
 false-accept narrowing with a provably flat ratchet — and **#456** stays
-`blocked` on it. **#862** is `ready`, its grounding is banked, and its lease is
-now **takeable** at 66 hours: #946 ruled, the rule landed, and the five stamps
-of "off-limits until #946 rules" are discharged. Taking it means a takeover
-comment naming tip `c2ba631` first. **#843–#849** are the 2026-08-16 audit's
-findings, **six open**, of which #843 is now banded and **#841** is `blocked` on a
+`blocked` on it. **#862** is **CLOSED** — taken by exactly the takeover this
+paragraph previously described, landed as PR #985 / `109beb9`, and it is this
+stamp's lane movement; `wip/issue-862` was deleted at the merge, so the branch
+question it carried across five stamps is spent, not deferred.
+**#843–#849** are the 2026-08-16 audit's findings, **six open**, of which #843 is now banded and **#841** is `blocked` on a
 trigger that fired without a ruling. **#566** is #565's open sibling, routed
 nowhere by #565's landing and correctly so. **#871** stays `blocked` on #831.
 **#852** owns both directions of the `gapaudit` matcher defect and stays below
@@ -437,36 +450,44 @@ enter the general queue unbanded; **#963**, **#857**, **#852**, **#839**,
 needing Go changes or live probes a retro cannot honestly perform, of which only
 #963 is banded. **#692**, **#925** and **#841** are the three whose triggers
 fired unruled. **#570** carries the standing `schema` decline-count argument at
-893 against a re-measured 788 — third consecutive reading of that figure, and the
-823 in #968's account is a never-committed branch's narrowed count, not a
+893 against a re-measured 788 — **fourth** consecutive reading of that figure,
+re-measured at `109beb9` by this pass's own `GOXSD_DECLINES=1` run, which also
+reads `instance` at **15589** declines against 15606 fails and `datatypes` at 8.
+The 823 in #968's account is a never-committed branch's narrowed count, not a
 movement.
 
 ### Next planning action
 
-**Take from the top: start at #732, and there is no clock to read any more.**
-#884 landed, `origin` deleted `wip/issue-884` at the merge, and no band row is
-held by a lease: `wip/issue-862` is the only `wip/*` ref whose issue is open, it
-is takeable at well past its TTL, and #862 is unbanded. **#981** still owns the
-rule defect that briefly locked this head — its only live subject is now
-`wip/issue-862` — and a session that hits the same wall adds its sighting there
+**Row 1 is being worked as this is written: do NOT take #732, take the next
+startable row.** `wip/issue-732` is a live claim — an oracle grounding at
+16:12:49Z, a mason report at 17:03:06Z that names an unpushed `2574bb9` and says
+**the gate does not pass**, one instance case regressing and a ruling wanted
+before it lands. That is the whole `wip/*` namespace: `wip/issue-862` and
+`wip/issue-884` were deleted at their merges, and no other band row is held by a
+lease. **#981** still owns the rule defect that locked this head earlier today;
+its subject is now `wip/issue-732`, which corroborates the tool half of it and
+not the rule half, and a session that hits the same wall adds its sighting there
 rather than re-diagnosing it.
 
-**#732 is the band's only false-reject, and it is deliberately unsized.** Its
-first step is an oracle grounding, not code — document-transform versus
+**#732 is the band's only false-reject, it was deliberately unsized, and the
+sizing question is now ANSWERED on its thread rather than open.** The oracle
+grounding this stamp's predecessor asked for — document-transform versus
 construction-time skip, composition with `<override>`'s §F.2 and `<include>`'s
-§F.1, an ill-formed version value — and a session that returns only that
-grounding comment has done the right amount. It also gates **#972**, which is the
+§F.1, an ill-formed version value — was posted at 16:12:49Z, and the
+implementation that followed it is seven files and one unresolved instance-case
+regression. It also gates **#972**, which is the
 one `blocked` issue in the queue whose dependency a landing here would clear. A
 session wanting a small complete landing instead should drop to **#979** (row 14,
 *"a mechanical move of 13 lines"*) or take **#975** (row 15), whose #884 ordering
 this pass discharged and re-checked.
 
-**#884's landing is also the first real subject the two standing promotion
-discriminators have had in three windows** — #963's (did the landing carry its
-`docs/LOG` entry inside the squash?) and #846's (did its entry record the shadow
-tax?). Both now have a landing to run against, and neither is run here: a
-post-land pass re-cuts the band, and it is the next `/backlog` that fires a
-promotion discriminator. Say which way both fell on the next stamp.
+**The two standing promotion discriminators now have TWO subjects, #884 and
+#862** — #963's (did the landing carry its `docs/LOG` entry inside the squash?)
+and #846's (did its entry record the shadow tax?). Neither is fired here: a
+post-land pass reports, and it is the next `/backlog` that fires a promotion
+discriminator. One fact for it to start from, cheap and already measured:
+`git show --stat 109beb9` is five files and `docs/LOG/2026-08.md` is one of them.
+Say which way both fell on the next stamp.
 
 **The two persona rows are promoted, and this is the pass that should be judged
 on whether that was right.** Five consecutive consultations have reconfirmed
@@ -487,12 +508,10 @@ rule cannot reach** — a `kind/refactor` with a steward ranking that stays
 not filed as an issue, because the fix belongs to whichever pass gives Part 2 of
 the retro the mailbox Part 1 just got.
 
-**Both standing promotion discriminators were checked and NEITHER COULD FIRE,
-for the second consecutive window.** #963's asks whether a landing carried its
-`docs/LOG` entry inside the squash; #846's asks whether a landing's entry
-recorded the shadow tax. **No code landed** — the whole window is two doc passes
-— so both questions had no subject. The next pass runs them against the next
-real landing.
+**The `/backlog`'s own reading of those discriminators is SUPERSEDED and kept
+only as provenance**: it recorded that neither could fire because no code had
+landed in its window. Two code landings have since followed it, so the paragraph
+above replaces that reading rather than sitting beside it.
 
 **Four unlanded corrections still target one paragraph of `docs/WORKFLOW.md`'s
 filing discipline** — **#510**, **#646**, **#679**, **#912** — and whichever
