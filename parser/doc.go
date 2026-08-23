@@ -6,7 +6,10 @@
 //
 //	phase 1  parse    — each schema document → raw form via parser/xmltree;
 //	                    every raw node keeps its Loc, so every later error
-//	                    can cite file:line:column.
+//	                    can cite file:line:column. ·Conditional-inclusion
+//	                    pre-processing· (§4.2.2, parser/conditional.go) is
+//	                    applied to each document as it is read, so what
+//	                    every later phase sees is S2 = ci(S1).
 //	phase 2  resolve  — schema composition (include, import, override
 //	                    and redefine) through ONE
 //	                    loader.Resolver, with chameleon namespace
@@ -63,6 +66,27 @@
 // tables are internal indexes only (STYLE D2). Parsing the same schema
 // set produces an identical model, identical error list, identical
 // order.
+//
+// # Conditional inclusion
+//
+// Every schema document is ·conditional-inclusion pre-processed· as it is
+// read — root, <include>d, <import>ed, <override>n and <redefine>d alike,
+// and the document a caller hands [Produce] too. §4.2.2's transform removes
+// each element whose vc:minVersion, vc:maxVersion, vc:typeAvailable,
+// vc:typeUnavailable, vc:facetAvailable or vc:facetUnavailable attribute
+// excludes this processor (V = 1.1), along with that element's attributes
+// and its whole subtree; an ignored <schema> root becomes the stub §4.2.2
+// prescribes, keeping only targetNamespace and the two version attributes
+// and no children at all. All six attributes are implemented
+// (parser/conditional.go); an ill-formed value is charged src-cip, not
+// guessed at.
+//
+// It runs FIRST, before every other pre-processing kind and before any
+// directive of the document is followed, which is what makes a declaration
+// §4.2.2 removes invisible to sch-props-correct clause 2 and an <include>
+// it removes a document never fetched. Everything the rest of this package
+// reads is S2, never the raw parsed document: "It is S2, not S1, which is
+// required to conform to this specification."
 //
 // # Composition
 //
@@ -239,21 +263,22 @@
 //	    Resolver as root schemas.
 //
 // Schema-validity violations are *xsderr.Error values carrying src-*/
-// cos-*/derivation-ok-* rules — plus cvc-datatype-valid where a schema
-// document attribute is simply not valid against the type the schema for
-// schema documents declares for it (a declaration name that is not an
-// xs:NCName, a QName-valued attribute with an empty local part, an empty
-// prefix, or more than one colon, an unrecognized ## token in notQName,
-// §3.10.2, a minOccurs/maxOccurs outside xs:nonNegativeInteger/xs:allNNI,
-// a processContents outside the enumeration skip/lax/strict),
-// which no Schema Representation Constraint covers. A document that is
-// simply not VALID against the schema for schema documents — a prohibited
-// attribute on a top-level form, a child written where that element's
-// content model admits none, a child repeated past its maxOccurs — is
-// §5.1's first bullet and carries NO rule ID at all: it is a plain
-// wrapped error naming the offending item and the grammar it violates
-// (parser's rejectProhibitedAttrs and checkS4SChildOrder). PLANNED
-// (not yet implemented): collecting them in document order rather than
-// stopping at the first — [Parse] and [Produce] both return only the
-// first error today.
+// cos-*/derivation-ok-* rules — src-cip among them, for a vc: attribute
+// whose value is not valid against the type §4.2.2 declares for it — plus
+// cvc-datatype-valid where a schema document attribute is simply not
+// valid against the type the schema for schema documents declares for it
+// (a declaration name that is not an xs:NCName, a QName-valued attribute
+// with an empty local part, an empty prefix, or more than one colon, an
+// unrecognized ## token in notQName, §3.10.2, a minOccurs/maxOccurs
+// outside xs:nonNegativeInteger/xs:allNNI, a processContents outside the
+// enumeration skip/lax/strict), which no Schema Representation Constraint
+// covers. A document that is simply not VALID against the schema for
+// schema documents — a prohibited attribute on a top-level form, a child
+// written where that element's content model admits none, a child
+// repeated past its maxOccurs — is §5.1's first bullet and carries NO
+// rule ID at all: it is a plain wrapped error naming the offending item
+// and the grammar it violates (parser's rejectProhibitedAttrs and
+// checkS4SChildOrder). PLANNED (not yet implemented): collecting them in
+// document order rather than stopping at the first — [Parse] and
+// [Produce] both return only the first error today.
 package parser

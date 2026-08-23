@@ -78,6 +78,11 @@ const (
 // as a schema-level {identity-constraint definitions} member (§3.17.1), while a
 // ref= form contributes the definition it names and registers nothing (§3.11.2).
 //
+// The document handed in is ·conditional-inclusion pre-processed· first
+// (§4.2.2, parser/conditional.go), since [ReadDocument] performs no
+// pre-processing: what is mapped below is S2 = ci(S1), and an ill-formed vc:
+// attribute value is returned as an src-cip verdict.
+//
 // Produce is the SINGLE-DOCUMENT entry point: it never dereferences an
 // <include>/<import>/<redefine>/<override>, so schema(D) here is immed(D) alone
 // (§4.2.1). Multi-document assembly through <include> — and with it chameleon
@@ -114,6 +119,14 @@ const (
 // src-*/cos-* rule governs "the document handed to a producer must be a schema
 // document".
 func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
+	// §4.2.2: the document a caller hands in is S1, the pre-processing INPUT, since
+	// [ReadDocument] performs no pre-processing of its own. Everything below maps
+	// S2 = ci(S1), which is what "schema document" means in every rule this
+	// producer charges.
+	doc, err := conditionalInclude(doc)
+	if err != nil {
+		return nil, err
+	}
 	if !doc.IsSchema() {
 		return nil, fmt.Errorf("parser: Produce requires a <schema> document root, got %s", doc.Root().Name().Local())
 	}
@@ -2675,8 +2688,9 @@ func (p *producer) resolveQName(elem *Element, lexical, attr string) (xsd.QName,
 // the assembly's namespace under chameleon coercion, deliberately never the
 // schema's own targetNamespace otherwise.
 //
-// Three lexical shapes are rejected before any of that, charged
-// cvc-datatype-valid (Datatypes §4.1.4) at attr: none is in the ·lexical space·
+// Three lexical shapes are rejected before any of that — split out into
+// qnameLexical, which conditional inclusion shares — charged cvc-datatype-valid
+// (Datatypes §4.1.4) at attr: none is in the ·lexical space·
 // of xs:QName, the type the schema for schema documents declares for every
 // QName-valued attribute (Structures §5.1, Appendix A). §3.3.18 admits exactly
 // the strings matching the Namespaces in XML QName production, whose
@@ -2709,20 +2723,7 @@ func (p *producer) resolveQName(elem *Element, lexical, attr string) (xsd.QName,
 // padded lexicals (type="xs:string ") whose verdict this producer settles
 // elsewhere today.
 func (p *producer) bindQName(elem *Element, lexical, attr string) (xsd.QName, error) {
-	before, after, found := strings.Cut(lexical, ":")
-	prefix, local := "", before
-	if found {
-		prefix, local = before, after
-	}
-	fault := ""
-	switch {
-	case local == "":
-		fault = "a QName's local part is an NCName and is never empty"
-	case found && prefix == "":
-		fault = "a QName's prefix is an NCName and is never empty"
-	case strings.Contains(local, ":"):
-		fault = "a QName's prefix and local part are both NCNames, and an NCName carries no colon, so a QName holds at most one"
-	}
+	prefix, local, fault := qnameLexical(lexical)
 	if fault != "" {
 		return xsd.QName{}, xsderr.New(ruleDatatypeValid, elem.Loc(),
 			"<%s> %s value %q is not in the ·lexical space· of xs:QName, the type the schema for schema documents declares for it: %s (Datatypes §3.3.18, §3.4.7.1)",
@@ -2745,6 +2746,35 @@ func (p *producer) bindQName(elem *Element, lexical, attr string) (xsd.QName, er
 			"the QName prefix %q of %q does not resolve to an in-scope namespace (src-resolve)", prefix, lexical)
 	}
 	return xsd.QName{Space: uri, Local: local}, nil
+}
+
+// qnameLexical splits a QName-valued lexical into its prefix and local part and
+// reports, as fault, the ·lexical space· violation that disqualifies it as an
+// xs:QName, or "" when the lexical is one. The unprefixed shape comes back with
+// an empty prefix, which is unambiguous precisely because an empty prefix before
+// a colon is itself a fault.
+//
+// It is the ONE encoding of §3.3.18's lexical space in this package: the three
+// faults and their reasoning are [producer.bindQName]'s, and conditional
+// inclusion needs the identical split for the QName items of a vc:typeAvailable
+// list (parser/conditional.go) while charging a different rule at a different
+// phase. Splitting the lexical test out is what keeps the two from drifting
+// (STYLE T4).
+func qnameLexical(lexical string) (prefix, local, fault string) {
+	before, after, found := strings.Cut(lexical, ":")
+	prefix, local = "", before
+	if found {
+		prefix, local = before, after
+	}
+	switch {
+	case local == "":
+		return prefix, local, "a QName's local part is an NCName and is never empty"
+	case found && prefix == "":
+		return prefix, local, "a QName's prefix is an NCName and is never empty"
+	case strings.Contains(local, ":"):
+		return prefix, local, "a QName's prefix and local part are both NCNames, and an NCName carries no colon, so a QName holds at most one"
+	}
+	return prefix, local, ""
 }
 
 // licensedNamespace charges src-resolve clause 4 (cl.qnr.nsdeclared, §3.17.6.2)
