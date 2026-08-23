@@ -57,6 +57,10 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"simpleContent restriction with facets", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:maxLength value="4"/><xs:enumeration value="ab"/><xs:pattern value="a*"/><xs:assertion test="true()"/></xs:restriction></xs:simpleContent></xs:complexType>`},
 		{"simpleContent restriction with an inline simpleType base", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:simpleType><xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction></xs:simpleType></xs:restriction></xs:simpleContent></xs:complexType>`},
 		{"simpleContent restriction with attributes and an assert", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:maxLength value="4"/><xs:attribute name="a" type="xs:int"/><xs:attributeGroup ref="ag"/><xs:anyAttribute namespace="##other"/><xs:assert test="true()"/></xs:restriction></xs:simpleContent></xs:complexType>`},
+		// The SINGULAR <assertion> is the facet element xs:simpleRestrictionType's
+		// facet choice admits (§4.3.13, xmlschema11-1.md:1692) and restrictionFacets
+		// folds; the plural names the FACET, not any element, and declines below.
+		{"simpleContent restriction with an assertion facet", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:assertion test="true()"/></xs:restriction></xs:simpleContent></xs:complexType>`},
 		// #868: neither alternant under <simpleContent>/<complexContent> is a
 		// grammar fault (§3.4.2.2 and §3.4.2.3 each require one), and the producer
 		// rejects it as one — a genuine verdict, so no decline. The <simpleContent>
@@ -241,6 +245,12 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"simpleContent restriction carrying a particle the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:sequence/></xs:restriction></xs:simpleContent></xs:complexType>`},
 		{"simpleContent restriction carrying a group ref the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:group ref="g"/></xs:restriction></xs:simpleContent></xs:complexType>`},
 		{"simpleContent restriction whose inline simpleType is outside the produced subset", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:simpleType/></xs:restriction></xs:simpleContent></xs:complexType>`},
+		// The FACET is spelled "assertions" (§4.3.13) and the element contributing to
+		// it <assertion>, so the plural names no element of the facet choice at all:
+		// restrictionFacets matches only the singular and facetKindOf excludes the
+		// assertions kind, leaving the child dropped in silence. The singular is
+		// admitted above.
+		{"simpleContent restriction carrying an <assertions> the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:assertions test="true()"/></xs:restriction></xs:simpleContent></xs:complexType>`},
 		// #336 admits <simpleContent> <extension>, but only in the shape
 		// xs:simpleExtensionType allows: §3.4.2.2 builds {content type} from the base
 		// alone, so a particle child is DROPPED without an error — a false accept, not
@@ -474,14 +484,15 @@ func TestSchemaExecutorDecidesNotationInAppinfoSuiteCase(t *testing.T) {
 //
 // Whatever fixture stands here must be one the producer still cannot decide. When
 // a later slice decides this shape, REPOINT this test at another undecidable
-// fixture; deleting it retires the guard. It pointed at baseTD00101m1.xsd's
-// <simpleContent> <restriction> until #909 produced that form.
+// fixture and restate the reason in the failure message with it; deleting it
+// retires the guard. It pointed at baseTD00101m1.xsd's <simpleContent>
+// <restriction> until #909 produced that form.
 func TestSchemaExecutorDeclinesUndecidableSuiteCase(t *testing.T) {
 	skipWithoutSuite(t)
 	exec := newSchemaExec()
 	doc := filepath.Join(suiteRoot, "sunData", "ElemDecl", "disallowedSubst", "disallowedSubst00105m", "disallowedSubst00105m.xsd")
 	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
-		t.Error("a suite-valid case with a skipped <simpleContent> <restriction> must be DECLINED (Fail), never vacuously passed")
+		t.Error("a suite-valid case whose <element>-owned anonymous <complexType> uses <complexContent> must be DECLINED (Fail), never vacuously passed")
 	}
 	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectInvalid()}).IsPass() {
 		t.Error("the fixture must be DECLINED under both polarities; passing under the flipped one means it is decided, not declined")
