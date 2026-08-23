@@ -13,10 +13,11 @@ import (
 // NameStartChar-minus-colon followed by NameChar-minus-colon, whole-string
 // anchored. It is compiled once from the XSD-flavor pattern "[\i-[:]][\c-[:]]*"
 // via regex.Translate so the NameStartChar/NameChar code-point sets are the
-// generated, spec-cross-checked ones the regex package already owns (PRINCIPLES
-// 26/27: spec data tables are never hand-typed here). FlavorXSD output is
-// whole-string anchored (\A(?:…)\z), so a match means the entire string is an
-// NCName — in particular an empty string and any string containing ':' fail.
+// ones the regex package already owns and not a second table here (PRINCIPLES
+// 26/27). Those sets are hand-typed rather than generated (#989). FlavorXSD
+// output is whole-string anchored (\A(?:…)\z), so a match means the entire
+// string is an NCName — in particular an empty string and any string containing
+// ':' fail.
 var ncNameRE = func() *regexp.Regexp {
 	goRE, err := regex.Translate(`[\i-[:]][\c-[:]]*`, regex.FlavorXSD, "")
 	if err != nil {
