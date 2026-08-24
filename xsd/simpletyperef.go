@@ -45,7 +45,7 @@ import "github.com/kud360/goxsd8/xsderr"
 // That construction-time discharge is what keeps this sum's contract narrower
 // than its sibling TypeDefinitionOrRef's, whose doc must instead make "the
 // meaning of nil is a property of the SUM, not of the slot the caller reached it
-// through" a doctrine, because ResolvedType and resolveTypeDefinition answer for four
+// through" a doctrine, because ResolvedType and resolveTypeDefinitionSlot answer for four
 // slots at once at READ time (STYLE T6, so the two do not drift silently).
 type SimpleTypeOrRef interface{ simpleTypeOrRef() }
 

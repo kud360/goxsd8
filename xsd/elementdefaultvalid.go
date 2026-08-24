@@ -89,7 +89,7 @@ func (s *Schema) checkElementDefaultValid(e ElementDeclaration) error {
 //
 // The default arm asserts the sealed-sum invariant and is unreachable for any
 // value an outside package can produce, since contentType is unexported (the same
-// footing checkParticleValueConstraints' Term switch stands on).
+// footing componentWalk.walkParticle's Term switch stands on).
 func (s *Schema) checkComplexDefaultValid(loc xsderr.Loc, owner string, c ComplexType, vc ValueConstraint) error {
 	switch ct := c.ContentType().(type) {
 	case SimpleContent:

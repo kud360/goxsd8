@@ -99,7 +99,7 @@ func (*SimpleType) typeDefinition() {}
 // ComplexType built with no base name is in. The meaning of nil is a property of
 // the SUM, not of the slot the caller reached it through: a consumer that
 // followed a slot must never read nil as "the ur-type" or as any other present
-// component, because ResolvedType and resolveTypeDefinition answer for all slots at
+// component, because ResolvedType and resolveTypeDefinitionSlot answer for all slots at
 // once and cannot be made arm-meaning-dependent on the caller's origin. It
 // replaces the zero QName that used to carry that meaning, which was ambiguous:
 // the same QName{} also had to stand for "anonymous type" (STYLE D3, one fact
@@ -266,7 +266,7 @@ func (SubstitutionGroupHeadTypeRef) typeDefinitionOrRef() {}
 // so the owner's own slot holds the component itself and never a second head
 // reference. That is enforced rather than assumed — an owner-of-owner chain
 // answers ok=false here, and Phase A rejects one outright
-// (resolveTypeDefinition), so for any schema that survived finalize this branch
+// (resolveTypeDefinitionSlot), so for any schema that survived finalize this branch
 // is unreachable. A read-time accessor must not loop on a programmatically built
 // graph that checkSubstitutionGroupsAcyclic has not yet seen, which is why the
 // non-recursion is a rule of this function and not a caller's obligation.
