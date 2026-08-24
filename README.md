@@ -196,10 +196,16 @@ if err != nil {
 }
 defer f.Close()
 
-// The returned error is a fault in the SOURCE that stopped the walk, not a
-// verdict about the document. The verdict is res.Violations(), NOT res.Err().
+// err means the assessment never RAN: a nil argument, or a document with no
+// well-formed document element to start it. A source fault that stopped the
+// walk mid-document lives in res.Err() alone and is never also returned here.
 res, err := xmlsrc.Validate(v, f, xmlsrc.WithURI("order.xml"))
 if err != nil {
+	log.Fatal(err)
+}
+// The verdict is res.Violations(); a non-nil res.Err() means the assessment
+// is INCOMPLETE, so an empty Violations() then proves nothing.
+if err := res.Err(); err != nil {
 	log.Fatal(err)
 }
 for _, e := range res.Violations() { // []*xsderr.Error, in document order
