@@ -52,6 +52,12 @@ func (d *Document) IsSchema() bool {
 // carrying an xsderr.Loc), on I/O, and on a rootless document; it never panics
 // on malformed input, and it produces no xsd components — recognizing the root
 // as a <schema> (IsSchema) and producing components are later concerns.
+//
+// The Document it returns is S1, the RAW document. ·Conditional-inclusion
+// pre-processing· (§4.2.2) is not applied here: it is applied by [Parse] to
+// every document of the assembly and by [Produce] to the one it is handed, so
+// that the src-cip verdict it can reach stays a schema-validity error rather
+// than arriving through this reader's well-formedness channel.
 func ReadDocument(uri string, r io.Reader) (*Document, error) {
 	reader := xmltree.NewReader(uri, r)
 	var root *Element
@@ -113,7 +119,7 @@ func buildElement(src *xmltree.StartElement, stack []*Element, docURI string) (*
 	if err != nil {
 		return nil, xsderr.Wrap(xsderr.RuleXMLWellFormed, src.Loc(), err)
 	}
-	return &Element{src: src, parent: parent, baseURI: base}, nil
+	return &Element{src: src, parent: parent, attrs: src.Attributes(), baseURI: base}, nil
 }
 
 // xmlBaseOf returns the value of the element's xml:base attribute

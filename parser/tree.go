@@ -38,7 +38,16 @@ type Element struct {
 	// once at build time (STYLE D3: a structural edge, not derived-redundant
 	// state) so a later src-resolve phase (§3.17.6.2) can walk up to a <schema>
 	// ancestor without re-searching the tree.
-	parent   *Element
+	parent *Element
+	// attrs is the element's attribute list. It is initialized from the start tag
+	// and is the ONE list every consumer reads: ·conditional-inclusion
+	// pre-processing· narrows it on the one element §4.2.2 strips attributes from
+	// without removing (the <schema>-root stub, parser/conditional.go), so after
+	// that transform src's own list is the pre-processing INPUT and this one is
+	// the schema document — S2, the document the specification's rules are
+	// stated over. src stays the source of the element's name, location and
+	// namespace scope, none of which any pre-processing touches.
+	attrs    []xmltree.Attribute
 	children []Node
 	baseURI  string
 }
@@ -48,9 +57,9 @@ type Element struct {
 func (e *Element) Name() xmltree.Name { return e.src.Name() }
 
 // Attributes returns the element's attributes in document order, excluding
-// namespace declarations, delegating to the underlying start tag. The slice is
-// the reader's own; its Attribute values are immutable.
-func (e *Element) Attributes() []xmltree.Attribute { return e.src.Attributes() }
+// namespace declarations. The slice is the reader's own (or, on the one element
+// §4.2.2 narrows, this package's); its Attribute values are immutable.
+func (e *Element) Attributes() []xmltree.Attribute { return e.attrs }
 
 // Attr returns the value of the element's UNPREFIXED (no-namespace) attribute
 // named local, reporting whether it is present at all. Presence is a distinct
