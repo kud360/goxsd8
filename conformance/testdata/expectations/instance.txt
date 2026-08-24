@@ -442,7 +442,7 @@ Complex/unique003/instance/unique003.n1.xml pass
 Complex/unique003/instance/unique003.n2.xml pass
 Complex/unique003/instance/unique003.v1.xml fail
 Complex/unique003/instance/unique003.v2.xml fail
-ConditionalInclusion/s4_2_2ii01/instance/s4_2_2ii01i fail
+ConditionalInclusion/s4_2_2ii01/instance/s4_2_2ii01i pass
 ConditionalInclusion/s4_2_2v01/instance/s4_2_2v01i fail
 DefaultFixed/s2_7_1ii01/instance/s2_7_1ii01i fail
 DefaultFixed/s2_7_1ii02/instance/s2_7_1ii02i fail
@@ -25461,14 +25461,14 @@ VC/vc008/instance/vc008.v1.xml fail
 VC/vc009/instance/vc009.n1.xml fail
 VC/vc009/instance/vc009.v1.xml fail
 VC/vc010/instance/vc010.v1.xml fail
-VC/vc011/instance/vc011.n1.xml fail
-VC/vc012/instance/vc012.n1.xml fail
+VC/vc011/instance/vc011.n1.xml pass
+VC/vc012/instance/vc012.n1.xml pass
 VC/vc013/instance/vc013.v1.xml fail
 VC/vc014/instance/vc014.n1.xml pass
 VC/vc014/instance/vc014.v1.xml fail
 VC/vc020/instance/vc020.v1.xml fail
-VC/vc021/instance/vc021.n1.xml fail
-VC/vc022/instance/vc022.n1.xml fail
+VC/vc021/instance/vc021.n1.xml pass
+VC/vc022/instance/vc022.n1.xml pass
 VC/vc023/instance/vc023.v1.xml fail
 VC/vc024-11/instance/vc024.n1.xml fail
 VC/vc024-11/instance/vc024.v1.xml fail

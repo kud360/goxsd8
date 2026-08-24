@@ -93,6 +93,11 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 // follow to one (see [AssemblyReport]). The report is never nil and is
 // populated as far as assembly got even when an error is returned.
 //
+// Every document of the assembly is ·conditional-inclusion pre-processed·
+// (§4.2.2) as it is read, before its own directives are followed, so schema(D)
+// below is always read over ci(D) — see parser/doc.go's Conditional inclusion
+// section.
+//
 // It implements §4.2.1's schema(D): the components of the root document plus,
 // transitively, those of every schema document reached through an <xs:include>
 // child (§4.2.3) — including chameleon inclusion, where a document with no
@@ -146,6 +151,15 @@ func ParseReport(location string, opts ...Option) (*xsd.Schema, *AssemblyReport,
 		// Nothing was assembled: an empty report, not a nil one, so every caller
 		// reads the same shape on every path.
 		return nil, &AssemblyReport{}, fmt.Errorf("parser: reading root schema document %q: %w", location, err)
+	}
+	// §4.2.2: the root is pre-processed the moment it is read, before its own
+	// directives are followed and before any rule is read against it. The verdict
+	// travels back unwrapped — an src-cip fault is a schema-validity verdict about
+	// a document that WAS read, not the plain I/O error a root that cannot be
+	// reached returns above.
+	root, err = conditionalInclude(root)
+	if err != nil {
+		return nil, &AssemblyReport{}, err
 	}
 	if !root.IsSchema() {
 		return nil, &AssemblyReport{}, fmt.Errorf("parser: assembling a schema requires a <schema> document root at %q, got %s", location, root.Root().Name().Local())
@@ -727,6 +741,20 @@ func (a *assembly) fetch(requested, namespace string, ov *overrideSet, rd *redef
 		a.unfollowedAt(el, UnfollowedUnreadable)
 		return fetched{}, xsderr.Wrap(rule, el.Loc(),
 			fmt.Errorf("the schema document %q named by this <%s> is not well-formed, but %s requires a well-formed information set: %w", requested, el.Name().Local(), rule, err))
+	}
+	// §4.2.2: every composed document is pre-processed as it is read, on the same
+	// terms as the root — "conditional-inclusion pre-processing is always performed
+	// first", ahead of the chameleon coercion, redefinition and override
+	// pre-processing that this document is about to be discovered under, and ahead
+	// of its own directives being followed. A document made empty by version
+	// control attributes contributes nothing and <include>s nothing.
+	//
+	// An src-cip fault here is NOT recorded as an unfollowed directive: the
+	// directive was followed to a document that resolved and was read, and the
+	// verdict is about that document, not about a reference that led nowhere.
+	doc, err = conditionalInclude(doc)
+	if err != nil {
+		return fetched{}, err
 	}
 	// D2's own targetNamespace is recorded WITH the load-once key, so a later
 	// directive that lands on this key can still be judged against D2 without
