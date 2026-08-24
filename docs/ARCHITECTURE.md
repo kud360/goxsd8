@@ -25,7 +25,7 @@ Value implementations, parsing, validation, and generation live above them.
                                   nothing else in the module — independent of the
                                   schema pipeline, not of the error currency)
                  loader          (schema resolution interfaces)
-                 xpath           (XPath 2.0 engine; imports xsd, value)
+                 xpath           (XPath 2.0 engine; imports xsd, value, xsderr)
                  parser          (schema docs -> xsd components; imports xmltree, loader,
                                   xsd, value, builtin, regex, xpath — and builtin/strict, as
                                   the DEFAULT backend Parse seeds when the caller supplies
@@ -43,8 +43,8 @@ identifier for any of them and they import nothing from this module, so the
 edges drawn above do not exist yet in `go list -deps`. Read every
 present-tense sentence in their sections below as "will", not "does".
 `xpath` has left this note: it exports the CTA compile, evaluate and
-statically-check entry points and imports `xsd`, `value` and `regex` for
-real (its section says which tiers are shipped).
+statically-check entry points and imports `xsd`, `value`, `regex` and
+`xsderr` for real (its section says which tiers are shipped).
 
 **[2] The infoset seam, the assessment skeleton and the XML adapter ship;
 the other two adapters do not.** `validate` exports the infoset views and
@@ -430,9 +430,10 @@ statically check §3.12.6's `ta-Test` grammar for a Type Alternative's
 `{test}`. They have two consumers in two phases: `parser` calls
 `CTATestStaticError` at schema construction, charging `ta-props-correct`
 clause 2 over `xpath-valid` clause 2 for a `{test}` with an XPath static
-error, and `validate` compiles and evaluates the same `{test}` at
-·assessment· time. Read the tiers below as "does" for tier 1 and "will"
-for tiers 2 and 3.
+error — wrapping the `*xsderr.Error` this package returns, which carries
+the XPath code (`err:XPST0081`) as its own rule — and `validate` compiles
+and evaluates the same `{test}` at ·assessment· time. Read the tiers below
+as "does" for tier 1 and "will" for tiers 2 and 3.
 
 Full XPath 2.0 is the destination; the engine grows outward from the
 XSD-required subset:

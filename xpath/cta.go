@@ -1,11 +1,11 @@
 package xpath
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // This file evaluates the RESTRICTED expression subset a Type Alternative's
@@ -171,6 +171,18 @@ func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, 
 	return CTATest{root: root}, true
 }
 
+// ruleXPST0081 is the XPath static error an unbound namespace prefix is
+// (xpath20.md Appendix G: "It is a static error if a QName used in an
+// expression contains a namespace prefix that cannot be expanded into a
+// namespace URI by using the statically known namespaces"), carried as the
+// [xsderr.Rule] of the error [CTATestStaticError] returns.
+//
+// The CHARGE is the assembler's and the CODE is this package's (STYLE E2): a
+// consumer reads this rule off the wrapped cause with [xsderr.RuleOf], never
+// off a message it scraped, and reads the schema-side verdict —
+// ta-props-correct — off the wrapper the assembler minted over it.
+const ruleXPST0081 xsderr.Rule = "err:XPST0081"
+
 // CTATestStaticError reports the XPath STATIC error the {test} of a Type
 // Alternative carries, and nil for every other {expression} — including one
 // this engine merely cannot evaluate.
@@ -180,8 +192,11 @@ func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, 
 // clause 2 is "X does not produce any static error". That is a Schema Component
 // Constraint, decided when the component is assembled and independent of
 // whether any instance is ever ·assessed·, so the charge belongs to the
-// assembler: this returns the FACT and its detail as a plain error, and never
-// mints an xsderr.Rule of its own.
+// assembler: it mints ta-props-correct at the <alternative>'s location and
+// wraps what this returns as the cause. The CODE is this package's, because
+// err:XPST0081 is XPath's static error and not the assembler's rule, so the
+// result is an *[xsderr.Error] carrying it (ruleXPST0081) and a consumer reads
+// it with [xsderr.RuleOf] after one errors.Unwrap of the charge.
 //
 // UNSUPPORTED DOMINATES STATIC. A static error is reported only where the token
 // stream parsed to its end as a complete [8] ta-Test production and name
@@ -200,17 +215,23 @@ func CompileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (CTATest, 
 // does not put in scope. It is read exactly as [CompileCTATest] reads it and
 // stored nowhere.
 //
-// The message is the XPath error code and the fact, e.g.
+// The rule is the XPath error code and the message is the fact, so the result
+// renders as
 //
-//	err:XPST0081: no in-scope namespace binding for prefix "p"
+//	?: [err:XPST0081] no statically-known namespace binding for prefix "p"
 //
-// naming the FIRST unbound prefix in expression order (STYLE D2).
+// naming the FIRST unbound prefix in expression order (STYLE D2). The
+// [xsderr.Loc] is the zero one, which renders as that `?`: this package reads
+// no schema document and so has no position to report — the real one is the
+// <alternative>'s, attached by the assembler that charges over this.
 func CTATestStaticError(expr xsd.XPathExpression, types xsd.TypeResolver) error {
 	_, defect := compileCTATest(expr, types)
 	if defect.kind != ctaStaticError {
+		// An untyped nil, never a nil *xsderr.Error in an error interface: a
+		// caller's `!= nil` must mean what it says.
 		return nil
 	}
-	return errors.New(defect.detail)
+	return defect.static
 }
 
 // compileCTATest is the ONE traversal the two entry points above are façades
@@ -255,11 +276,12 @@ func compileCTATest(expr xsd.XPathExpression, types xsd.TypeResolver) (ctaExpr, 
 // evaluable tree.
 type ctaDefect struct {
 	kind ctaDefectKind
-	// detail is the rendered diagnostic of a ctaStaticError defect. The other
-	// kinds leave it empty because they have nothing to say: an {expression}
-	// outside what this engine evaluates is not a verdict about the schema, so
-	// there is no fact to report about it.
-	detail string
+	// static is the verdict of a ctaStaticError defect, carrying the XPath error
+	// code it violates as its [xsderr.Rule] — the error [CTATestStaticError]
+	// hands the assembler to wrap. The other kinds leave it nil because they
+	// have nothing to say: an {expression} outside what this engine evaluates is
+	// not a verdict about the schema, so there is no fact to report about it.
+	static *xsderr.Error
 }
 
 // ctaDefectKind is the kind of a [ctaDefect].

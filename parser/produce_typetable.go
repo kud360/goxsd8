@@ -102,10 +102,12 @@ func (t ctaStaticTypes) Type(name xsd.QName) (xsd.TypeDefinition, bool) {
 // "does not produce any static error" — is a Schema Component Constraint, so it
 // is decided at construction and independent of whether any instance is ever
 // ·assessed·; xpath.CTATestStaticError proves the static error and this charges
-// it, the engine never minting a rule of its own. An {expression} that engine
-// merely cannot EVALUATE is no fault at all and passes straight through, on the
-// terms xpath/cta.go argues (PRINCIPLES 20). The type knowledge it is asked
-// against is ctaStaticTypes, clause 2.2.5's set and not this schema's.
+// it, wrapping that verdict as the charge's cause so the XPath code it carries
+// (err:XPST0081) stays readable with xsderr.RuleOf — the engine mints XPath's
+// code, never this schema rule. An {expression} that engine merely cannot
+// EVALUATE is no fault at all and passes straight through, on the terms
+// xpath/cta.go argues (PRINCIPLES 20). The type knowledge it is asked against
+// is ctaStaticTypes, clause 2.2.5's set and not this schema's.
 //
 // {annotations} is the empty sequence on every Type Alternative built here,
 // matching every other component this producer emits: no <annotation> is mapped
@@ -151,9 +153,17 @@ func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType x
 		// which is why this reuses buildXPathExpression rather than restating it.
 		test := p.buildXPathExpression(alt, "test")
 		if serr := xpath.CTATestStaticError(test, ctaStaticTypes{syms: p.symbols}); serr != nil {
-			return nil, xsderr.New(ruleTAPropsCorrect, alt.Loc(),
+			// The XPath code is xpath's verdict and ta-props-correct is this
+			// producer's, so the two travel as two layers: the delegated verdict is
+			// the wrapped cause, which errors.Unwrap reaches and xsderr.RuleOf then
+			// reads err:XPST0081 off, instead of a consumer scraping the message
+			// for it (validate/doc.go's delegated-verdict norm). It renders into
+			// the message as well, for a reader holding only the string.
+			charge := xsderr.New(ruleTAPropsCorrect, alt.Loc(),
 				"the test attribute %q has an XPath static error (%s), but ta-props-correct clause 2 requires the {test} to satisfy xpath-valid, whose clause 2 admits none",
 				test.Expression(), serr)
+			charge.Err = serr
+			return nil, charge
 		}
 		ta, terr := xsd.NewTypeAlternative(alt.Loc(), &test, types[i], nil)
 		if terr != nil {

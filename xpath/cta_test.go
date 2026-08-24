@@ -1,6 +1,7 @@
 package xpath
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/kud360/goxsd8/builtin"
@@ -219,6 +220,10 @@ func TestCompileDeclines(t *testing.T) {
 // err:XPST0081, reported as a fact about the schema — and CompileCTATest goes on
 // withholding the same expression, because the tree it built holds a name that
 // resolved to nothing.
+//
+// The code travels as the verdict's own [xsderr.Rule] and the message holds the
+// fact alone, which is what lets the assembler wrapping this read err:XPST0081
+// off the cause rather than scraping the rendering for it (#978).
 func TestCTATestStaticErrorReportsUnboundPrefix(t *testing.T) {
 	for _, tc := range []struct{ expr, prefix string }{
 		{"@p:kind = 'x'", "p"},
@@ -249,9 +254,19 @@ func TestCTATestStaticErrorReportsUnboundPrefix(t *testing.T) {
 			t.Errorf("CTATestStaticError(%q) = nil, want err:XPST0081", tc.expr)
 			continue
 		}
-		want := `err:XPST0081: no in-scope namespace binding for prefix "` + tc.prefix + `"`
-		if err.Error() != want {
-			t.Errorf("CTATestStaticError(%q) = %q, want %q", tc.expr, err, want)
+		var verdict *xsderr.Error
+		if !errors.As(err, &verdict) {
+			t.Errorf("CTATestStaticError(%q) = %v, which is not an *xsderr.Error: the assembler wraps this verdict and reads its rule off it", tc.expr, err)
+			continue
+		}
+		if verdict.Rule != ruleXPST0081 {
+			t.Errorf("CTATestStaticError(%q) reports rule %q, want %q", tc.expr, verdict.Rule, ruleXPST0081)
+		}
+		if want := `no statically-known namespace binding for prefix "` + tc.prefix + `"`; verdict.Msg != want {
+			t.Errorf("CTATestStaticError(%q).Msg = %q, want %q", tc.expr, verdict.Msg, want)
+		}
+		if verdict.Loc != (xsderr.Loc{}) {
+			t.Errorf("CTATestStaticError(%q) reports location %v, want the zero Loc: this package reads no schema document", tc.expr, verdict.Loc)
 		}
 		if _, ok := CompileCTATest(record, seededTypes); ok {
 			t.Errorf("CompileCTATest(%q) compiled; a tree holding an unresolved name must never reach Evaluate", tc.expr)
