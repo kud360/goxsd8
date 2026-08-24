@@ -25,7 +25,7 @@ Value implementations, parsing, validation, and generation live above them.
                                   nothing else in the module — independent of the
                                   schema pipeline, not of the error currency)
                  loader          (schema resolution interfaces)
-                 xpath           (XPath 2.0 engine; imports xsd, value, xsderr)
+                 xpath           (XPath 2.0 engine; imports xsd, value, regex, xsderr)
                  parser          (schema docs -> xsd components; imports xmltree, loader,
                                   xsd, value, builtin, regex, xpath — and builtin/strict, as
                                   the DEFAULT backend Parse seeds when the caller supplies
