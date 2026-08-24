@@ -80,33 +80,64 @@ is `<file>:<line>:<col>` (`?` when unknown) and `<rule>` is the spec
 validation rule ID:
 
 ```
-order.xml:12:5: [cvc-datatype-valid] decimal: "12,50" is not in the lexical space (decimal-lexical-representation, §3.3.3.1)
+order.xml:3:3: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): ?: [cvc-datatype-valid] decimal: "12,50" is not in the lexical space (decimal-lexical-representation, §3.3.3.1)
 ```
 
-### Library (seeding and parsing work today; validation is contract)
+`<rule>` is the rule CHARGED, and for the content of an element or attribute
+that is never `cvc-datatype-valid`: the charge is `cvc-type` (clause 3.1.3),
+`cvc-attribute` (clause 3) or `cvc-complex-type` (clause 1.2), each of which
+delegates through String Valid (§3.16.4) to Datatype Valid and carries that
+verdict as a WRAPPED cause — rendered into the message, as above, and
+reachable as an `*xsderr.Error` of its own through `errors.As` and
+`xsderr.RuleOf`. Key a dispatcher on the outer rule.
+
+### Library
 
 Seeding the builtin datatypes and compiling a schema set both work TODAY:
 
 ```go
-// A value backend supplies the builtin datatypes' value spaces. builtin.Seed
-// needs one that maps all 20 builtin primitives; builtin/strict maps all 20 on
-// its own, so nothing has to be composed in.
-backend := strict.New()
+package main
 
-// Seed the builtin datatype components. Call this when you want the
-// components yourself — parser.Parse seeds its own from its backend.
-builtins, err := builtin.Seed(backend)  // []*xsd.SimpleType, deterministic order
+import (
+	"fmt"
+	"log"
+	"log/slog"
 
-// parser.Parse assembles the <xs:include> / <xs:import> / <xs:override>
-// closure of the root document — including chameleon coercion of a
-// no-targetNamespace included (or overridden) document into the including
-// namespace — and returns it finalized. Every option has a default, so
-// parser.Parse("order.xsd") alone is valid too.
-schema, err := parser.Parse("order.xsd",
-	parser.WithBackend(backend),                 // default: builtin/strict
-	parser.WithResolver(loader.Dir("schemas")),  // default: loader.Dir(".")
-	parser.WithLogger(logger),                   // default: silent
+	"github.com/kud360/goxsd8/builtin"
+	"github.com/kud360/goxsd8/builtin/strict"
+	"github.com/kud360/goxsd8/loader"
+	"github.com/kud360/goxsd8/parser"
 )
+
+func main() {
+	// A value backend supplies the builtin datatypes' value spaces. builtin.Seed
+	// needs one that maps all 20 builtin primitives; builtin/strict maps all 20 on
+	// its own, so nothing has to be composed in.
+	backend := strict.New()
+
+	// Seed the builtin datatype components. Call this when you want the
+	// components yourself — parser.Parse seeds its own from its backend.
+	builtins, err := builtin.Seed(backend) // []*xsd.SimpleType, deterministic order
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// parser.Parse assembles the <xs:include> / <xs:import> / <xs:override>
+	// closure of the root document — including chameleon coercion of a
+	// no-targetNamespace included (or overridden) document into the including
+	// namespace — and returns it finalized. Every option has a default, so
+	// parser.Parse("order.xsd") alone is valid too.
+	schema, err := parser.Parse("order.xsd",
+		parser.WithBackend(backend),                // default: builtin/strict
+		parser.WithResolver(loader.Dir("schemas")), // default: loader.Dir(".")
+		parser.WithLogger(slog.Default()),          // default: silent
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("builtin types:", len(builtins), "top-level elements:", len(schema.Elements()))
+}
 ```
 
 To back one type with your own mapping and inherit the rest, compose:
@@ -116,20 +147,70 @@ type `money` defines and `strict`'s for all the others.
 One limit of `parser.Parse` worth knowing up front: it returns only the
 FIRST error, not a list of them.
 
+`parser.ParseReport(location string, opts ...Option) (*xsd.Schema,
+*AssemblyReport, error)` is the primitive, and `parser.Parse` is it without
+the report. Reach for it to diagnose an assembly that came back smaller than
+expected: `AssemblyReport.Documents()` lists the readings the assembly
+performed, and `Unfollowed()` the `xs:include` / `xs:redefine` /
+`xs:override` / `xs:import` references that yielded no document, each with
+the directive element's position and the reason — a `schemaLocation` that
+resolved to nothing, or a bare `xs:import` naming no document at all, which
+§4.2.6.2 makes legal. The report is never nil and is populated as far as
+assembly got even when an error comes back; `go doc
+github.com/kud360/goxsd8/parser AssemblyReport` is its contract. It does not
+lift the first-error limit above — `ParseReport` stops at the first error
+too, so directives it never reached are neither followed nor reported.
+
 The component model is also constructible directly, without a schema
 document: `xsd.NewSchemaBuilder()` → `Add*` → `Finalize()` returns an
 immutable `*xsd.Schema` you query by `xsd.QName` (`Type`, `Element`,
-`Attribute`). See `go doc github.com/kud360/goxsd8/xsd SchemaBuilder`; a
-worked example is tracked in
-[issue #203](https://github.com/kud360/goxsd8/issues/203).
+`Attribute`). That builder is PRODUCER surface, not application surface:
+every `Add*` takes an already-validated component value, and building one
+correctly means honoring every §3 tableau and cross-property invariant its
+constructors cannot check — which is `parser.Produce`'s job. An application
+that has a schema DOCUMENT calls `parser.Parse` and receives the finalized
+`*xsd.Schema`. See `go doc github.com/kud360/goxsd8/xsd SchemaBuilder`, and
+`Example_buildFinalizeQuery` in `xsd/example_test.go` for the construct →
+`Finalize` → query sequence.
 
-The instance-validation step below is still the PLANNED contract —
-`validate.New` / `xmlsrc.Validate` (M5) do not exist yet. Shown here for the
-shape the API will take, not code you can build today.
+Instance validation runs today: `validate.New` builds the engine and
+`validate/xmlsrc` drives an XML document through it. `go doc
+github.com/kud360/goxsd8/validate`'s "Contract (M5, landing rule by rule)"
+section is the authoritative account of which `cvc-` rules are charged and
+what is left undecided — this block only shows the calls. It continues the
+program above, with `schema` and `backend` in scope, and adds `os`,
+`github.com/kud360/goxsd8/validate` and
+`github.com/kud360/goxsd8/validate/xmlsrc` to its imports:
 
 ```go
-v, err := validate.New(schema)
-res := xmlsrc.Validate(v, r)  // res.Errors: []*xsderr.Error
+// backend MUST be the one the schema was compiled with: a different value
+// space rejects documents the schema admits, and nothing here can detect it.
+v, err := validate.New(schema, backend)
+if err != nil {
+	log.Fatal(err)
+}
+
+f, err := os.Open("order.xml")
+if err != nil {
+	log.Fatal(err)
+}
+defer f.Close()
+
+// err means the assessment never RAN: a nil argument, or a document with no
+// well-formed document element to start it. A source fault that stopped the
+// walk mid-document lives in res.Err() alone and is never also returned here.
+res, err := xmlsrc.Validate(v, f, xmlsrc.WithURI("order.xml"))
+if err != nil {
+	log.Fatal(err)
+}
+// The verdict is res.Violations(); a non-nil res.Err() means the assessment
+// is INCOMPLETE, so an empty Violations() then proves nothing.
+if err := res.Err(); err != nil {
+	log.Fatal(err)
+}
+for _, e := range res.Violations() { // []*xsderr.Error, in document order
+	fmt.Println(e)
+}
 ```
 
 Start at `go doc github.com/kud360/goxsd8` and follow the package list;
@@ -138,8 +219,12 @@ the runnable `Example*` funcs, so for working, tested end-to-end code
 (seed builtins → parse a lexical → assert capabilities) read the example
 tests directly: `value/example_test.go` (`ExampleOverride`),
 `builtin/example_test.go` (`ExampleSeed`, `ExampleSeed_missingPrimitive`),
-`builtin/strict/example_test.go` (`ExampleNew`), and
-`loader/example_test.go` (`Example_chain`).
+`builtin/strict/example_test.go` (`ExampleNew`),
+`loader/example_test.go` (`Example_chain`), `xsd/example_test.go`
+(`Example_termOrRefDiscrimination`, `Example_buildFinalizeQuery`,
+`Example_schemaEnumeration`, `Example_contentModelTraversal`,
+`Example_modelGroupScopeParent`), and `xsd/namespaceconstraint_test.go`
+(`ExampleNamespaceConstraint_AllowsNamespace`).
 
 ## Documentation map
 
