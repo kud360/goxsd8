@@ -4,10 +4,21 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
+	"strings"
 )
 
-// usage is the terminal rendering of the CLI contract in doc.go; the two
-// state the same interface and change together.
+// subcommands is the contract's whole subcommand vocabulary, in the order
+// usage documents it. Dispatch reads this one encoding rather than restating
+// the names (STYLE D3/T4), and TestUsageCoversContract pins usage's own text
+// to it. help and version are deliberately not members; doc.go states why.
+var subcommands = []string{"parse", "validate", "gen"}
+
+// usage is the terminal rendering of the CLI contract in doc.go: the
+// subcommand syntax, the common flags and the implementation status, which
+// the two state identically and change together. doc.go carries two things
+// the help path does not print — the argument vocabulary and the CLI's
+// relationship to the library.
 const usage = `goxsd8 — XSD 1.1 schema compilation, instance validation, and code generation.
 
 Usage (contract; subcommands land with their milestones):
@@ -31,9 +42,35 @@ Usage (contract; subcommands land with their milestones):
 
 Flags common to all subcommands: -q (quiet), -v (debug logging via
 slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec).
+
+Implemented today: the help path only. With no arguments, or with -h,
+-help or --help in any argument position, goxsd8 prints this usage to
+stdout and exits 0. Every other invocation exits 2, reporting on stderr
+that a subcommand above is reserved but not yet built, that the name is
+not one of them, or that the first argument is a flag and no subcommand
+was given.
 `
 
-const notImplemented = "goxsd8: not yet implemented — see `go doc github.com/kud360/goxsd8/cmd/goxsd8` for the planned interface"
+const (
+	// helpPointer is the remedy line under every usage error. It names the
+	// binary's own help path, which resolves wherever the binary runs; a
+	// `go doc <import path>` invocation needs the module tree and fails for
+	// an installed binary (#870).
+	helpPointer = "run `goxsd8 -help` for the usage contract, or see https://github.com/kud360/goxsd8"
+
+	// notImplementedFmt answers a name the contract reserves and no milestone
+	// has built yet. Reserved to those names: its promise that a planned
+	// interface documents the name is false for anything else (#514).
+	notImplementedFmt = "goxsd8: %s is not yet implemented"
+
+	// unknownSubcommandFmt answers a name outside the vocabulary.
+	unknownSubcommandFmt = "goxsd8: unknown subcommand %q"
+
+	// noSubcommand answers a first argument shaped like a flag. The common
+	// flags qualify a subcommand and never stand alone, so -q is neither
+	// unknown nor unimplemented — it is a subcommand short of an invocation.
+	noSubcommand = "goxsd8: no subcommand given"
+)
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -48,16 +85,29 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	// Subcommands land with their milestones (parse: M4, validate: M5,
-	// gen: M9); see doc.go for the committed CLI contract.
-	// A failed stderr write cannot change the outcome — the exit code is 2
-	// either way, and stderr is the only channel left to report it on.
-	_, _ = fmt.Fprintln(stderr, notImplemented)
+	// args is non-empty here: wantsHelp reports the bare invocation as a help
+	// request. A failed stderr write cannot change the outcome — the exit code
+	// is 2 either way, and stderr is the only channel left to report it on.
+	_, _ = fmt.Fprintf(stderr, "%s\n%s\n", diagnose(args[0]), helpPointer)
 	return 2
 }
 
-// wantsHelp accepts a help flag in any argument position: no subcommand is
-// implemented yet, so nothing downstream can claim -h/-help/--help first.
+// diagnose names what is wrong with a first argument that is not a help
+// request. Matching is case-sensitive per Go CLI convention, so goxsd8
+// VALIDATE is an unknown subcommand rather than a reserved one.
+func diagnose(arg string) string {
+	if strings.HasPrefix(arg, "-") {
+		return noSubcommand
+	}
+	if !slices.Contains(subcommands, arg) {
+		return fmt.Sprintf(unknownSubcommandFmt, arg)
+	}
+	return fmt.Sprintf(notImplementedFmt, arg)
+}
+
+// wantsHelp accepts a help flag in any argument position, and only in the
+// three bare spellings: the scan is deliberately positional-blind, gives --
+// no end-of-options meaning, and does not parse -help=true (doc.go).
 func wantsHelp(args []string) bool {
 	if len(args) == 0 {
 		return true

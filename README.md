@@ -43,19 +43,24 @@ git clone https://github.com/kud360/goxsd8
 cd goxsd8
 git submodule update --init testdata/xsdtests   # W3C suite, ~215 MB
 go build ./... && go test ./...
+go install ./cmd/goxsd8                         # goxsd8 onto $(go env GOPATH)/bin
 ```
+
+`go build ./...` compiles every package and writes no executable; the
+`go install` line is what produces the `goxsd8` binary the CLI section below
+invokes.
 
 ### CLI (contract; no subcommand is implemented yet)
 
 This block is a **contract**, exactly like the Library one below: only the
 help path runs today. A bare `goxsd8`, or `-h`/`-help`/`--help` in any
-argument position, prints the usage contract to stdout and exits 0. Every
-other invocation — an unimplemented subcommand (`parse`, `validate`, `gen`)
-as much as an unknown one — prints a one-line "not yet implemented" pointer
-to stderr and exits 2
-([issue #251](https://github.com/kud360/goxsd8/issues/251)); the exit codes
-in the block below are the contract's, not today's. Subcommands land with
-their milestones (`parse` M4, `validate` M5, `gen` M9).
+argument position, prints the usage contract to stdout and exits 0
+([issue #251](https://github.com/kud360/goxsd8/issues/251)). Every other
+invocation exits 2 with one of three lines on stderr: a reserved subcommand
+(`parse`, `validate`, `gen`) is not yet implemented, any other name is an
+unknown subcommand, and a leading flag is no subcommand at all. The exit
+codes in the block below are the contract's, not today's. Subcommands land
+with their milestones (`parse` M4, `validate` M5, `gen` M9).
 
 ```sh
 goxsd8 parse order.xsd items.xsd                # compile + summary, exit 0/1
@@ -71,9 +76,12 @@ instance source format instead of deriving it from the extension),
 `-backend strict|native` (which value backend `gen` emits against), `-q`
 (quiet) and `-v` (debug logging to stderr via `slog`, scoped with
 `GOXSD_DEBUG=parser,validate,codec`).
-**`go doc github.com/kud360/goxsd8/cmd/goxsd8` is the authoritative flag
-list**, and renders the usage text the help path prints; this section
-summarizes it.
+**`go doc github.com/kud360/goxsd8/cmd/goxsd8` is the authoritative CLI
+contract**, and this section summarizes it. `goxsd8 -help` prints the usage
+block from that contract — the subcommand syntax, the common flags and the
+implementation status — and not its argument vocabulary (which spellings of
+the help flag are recognized, whether `help` and `-version` are names, what
+`--` means) or its library relationship.
 
 Violations print one per line as `<loc>: [<rule>] <message>`, where `<loc>`
 is `<file>:<line>:<col>` (`?` when unknown) and `<rule>` is the spec
