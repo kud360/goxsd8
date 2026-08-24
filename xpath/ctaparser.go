@@ -1,7 +1,6 @@
 package xpath
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 	"unicode"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/kud360/goxsd8/regex"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // This file is the lexer and the recursive-descent parser for the §3.12.6
@@ -153,7 +153,8 @@ func (p *ctaParser) prefixedSpace(prefix string) (string, bool) {
 // recordUnbound records the err:XPST0081 an unbound prefix is (xpath20.md
 // Appendix G: "a static error if a QName used in an expression contains a
 // namespace prefix that cannot be expanded into a namespace URI") and lets the
-// parse go on.
+// parse go on. The code is the recorded verdict's own rule (ruleXPST0081) and
+// its [xsderr.Loc] is the zero one, this package holding no schema position.
 //
 // The FIRST unbound prefix decides the message, so the answer is the one the
 // walk reaches first in expression order and not a map's (STYLE D2).
@@ -166,8 +167,9 @@ func (p *ctaParser) recordUnbound(prefix string) {
 		return
 	}
 	p.defect = ctaDefect{
-		kind:   ctaStaticError,
-		detail: fmt.Sprintf("err:XPST0081: no in-scope namespace binding for prefix %q", prefix),
+		kind: ctaStaticError,
+		static: xsderr.New(ruleXPST0081, xsderr.Loc{},
+			"no statically-known namespace binding for prefix %q", prefix),
 	}
 }
 

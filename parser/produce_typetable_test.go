@@ -1,6 +1,7 @@
 package parser_test
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -562,6 +563,17 @@ func TestProduceTypeTableStaticErrorInTestIsCharged(t *testing.T) {
 	assertRule(t, err, "ta-props-correct")
 	if !strings.Contains(err.Error(), "err:XPST0081") {
 		t.Errorf("error %v does not name the XPath static error it charges", err)
+	}
+	// The two verdicts are two LAYERS, not one message: ta-props-correct is this
+	// producer's and err:XPST0081 is xpath's, so the delegated one is reachable
+	// as the wrapped cause and a consumer reads its rule off that instead of
+	// scraping the rendering (validate/doc.go's delegated-verdict norm, #978).
+	inner := errors.Unwrap(err)
+	if inner == nil {
+		t.Fatalf("error %v wraps no cause; the XPath verdict must travel as one", err)
+	}
+	if rule, ok := xsderr.RuleOf(inner); !ok || rule != "err:XPST0081" {
+		t.Errorf("wrapped cause %v carries rule %q (found %t), want err:XPST0081", inner, rule, ok)
 	}
 	loc, ok := xsderr.LocOf(err)
 	if !ok {

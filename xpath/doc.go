@@ -65,15 +65,17 @@
 // Confusing that with a decline flips false-accepts into false-rejects
 // or vice versa.
 //
-// # Static errors are the assembler's, not the engine's
+// # The static-error charge is the assembler's, the code is this engine's
 //
 // An XPath STATIC error is a third direction: ta-props-correct clause 2
 // (§3.12.6) over xpath-valid clause 2 (§3.13.6.2) forbids one outright,
 // so it is a Schema Component Constraint decided when the component is
 // assembled and independent of any instance. CTATestStaticError proves
-// it and returns the fact as a plain error; the CHARGE — the rule ID and
-// the location — is minted by the assembler that owns the constraint
-// (parser), never here.
+// it and returns the fact as an *xsderr.Error carrying the XPath error
+// code as its rule; the CHARGE — the schema rule ID and the location —
+// is minted by the assembler that owns the constraint (parser), which
+// wraps that verdict as its cause so xsderr.RuleOf reads the XPath code
+// off one errors.Unwrap and never off a scraped message.
 //
 // UNSUPPORTED DOMINATES STATIC. An {expression} outside the required
 // subset is declined and never charged, whatever its names resolve to,
