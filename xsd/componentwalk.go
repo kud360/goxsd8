@@ -24,9 +24,14 @@ import "github.com/kud360/goxsd8/xsderr"
 // the outer failure (STYLE D1). Slices are walked in document order (STYLE D2).
 //
 // BY-NAME ARMS ARE CHARGED, NEVER FOLLOWED. A TypeDefinitionRef base, an
-// <element ref>, a <group ref> and an <attribute ref> each name a top-level
-// component every phase's own root loop reaches in its own right, so following
-// one would re-walk it once per referring site. What the descent follows is
+// <element ref>, a <group ref> and an <attribute ref> each name a TOP-LEVEL
+// component, reached from a phase's ROOT LOOPS and never from a referring site,
+// so following one would re-walk it once per site. A phase whose roots omit one
+// of those tables owes nothing at what it holds: checkComponentValueConstraints
+// and checkTypeTableSubstitutability enumerate no s.attributes, because a global
+// attribute declaration nests only a simple {type definition} and neither phase
+// charges a simple type — a-props-correct clause 2 against the declaration
+// itself is checkAttributeDeclarationDefaults'. What the descent follows is
 // OWNERSHIP — an inline type definition, an attribute use's local declaration, a
 // particle's inline term — and an owned component must pre-exist the slot holding
 // it, which is what makes the walked structure a finite tree.
@@ -34,9 +39,8 @@ import "github.com/kud360/goxsd8/xsderr"
 // NO VISITED SET AND NO CYCLE GUARD (STYLE D4, PRINCIPLES 9). The edges that
 // could close a cycle are exactly the by-name ones the descent does not follow.
 // A circular {base type definition} chain is rejected by ct-props-correct clause
-// 3 in Phase B (checkComplexBaseAcyclic), which every phase using this descent
-// runs after; a seen-set here would mask that check's absence rather than defend
-// against anything.
+// 3 in Phase B (checkComplexBaseAcyclic); a seen-set here would mask that
+// check's absence rather than defend against anything.
 //
 // {attribute wildcard}, {open content} and {assertions} carry no field. Each is
 // a leaf of THIS tree — none nests a type definition, an attribute use or an
