@@ -83,7 +83,7 @@ func (s *Schema) checkAllGroupsLimited() error {
 // checkComplexTypeAllLimited decides one complex type's content model, plus the
 // OWNED arm of its {base type definition} — an anonymous inline base is in no
 // index, so dropping that hop would leave its content model unchecked (the same
-// inventory argument checkComplexTypeSimpleTypes records). A by-name base is not
+// inventory argument checkSimpleTypeDerivations records). A by-name base is not
 // followed: it is a top-level type this walk reaches in its own right.
 //
 // Rejections are charged to the complex type's own Loc, per resolveReferences'

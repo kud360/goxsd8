@@ -79,106 +79,45 @@ var errorTypeName = QName{Space: XMLSchemaNS, Local: "error"}
 // quantifier rests on clause 3 confining a {substitution group affiliations} to
 // a global scope. No clause confines a {type table}.
 //
-// The descent mirrors Phase A's and Phase E's site for site — top-level types,
-// then top-level element declarations (whose inline anonymous complex types hold
-// particles of their own), then top-level model group definitions. It carries no
-// visited set (STYLE D4): it descends only BY-VALUE structure and never follows
-// a by-name ref, each of which names a top-level component this walk reaches in
-// its own right.
+// The descent is componentwalk.go's, shared with every other phase that has one,
+// so this step supplies only the clause-7 charge and inherits which components
+// exist — including a redefine original reached through {base type definition},
+// which the hand-written copy this replaces missed (#843). Its roots are its own:
+// top-level types, then top-level element declarations (whose inline anonymous
+// complex types hold particles of their own), then top-level model group
+// definitions.
 //
 // Components are walked in document order (STYLE D1/D2 — no index map is
 // ranged), so the first reported failure is deterministic.
 func (s *Schema) checkTypeTableSubstitutability() error {
+	w := componentWalk{elementDeclaration: s.checkElementTypeTable}
 	for _, t := range s.types {
-		c, ok := t.(ComplexType)
-		if !ok {
-			continue // a simple type holds no particle, so no element declaration
-		}
-		if err := s.checkComplexTypeTypeTables(c); err != nil {
+		if err := w.walkTypeRoot(t); err != nil {
 			return err
 		}
 	}
 	for _, e := range s.elements {
-		if err := s.checkElementTypeTable(e); err != nil {
+		if err := w.walkElementDeclaration(e); err != nil {
 			return err
 		}
 	}
 	for _, mgd := range s.modelGroups {
-		if err := s.checkModelGroupTypeTables(mgd.ModelGroup()); err != nil {
+		if err := w.walkModelGroup(mgd.ModelGroup(), mgd.Loc()); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// checkComplexTypeTypeTables descends c's {content type} particle tree, where a
-// local element declaration may carry a {type table} of its own. Neither Empty
-// nor Simple content holds a particle, and a complex type has no {type table}
-// itself — the property is an Element Declaration's.
-func (s *Schema) checkComplexTypeTypeTables(c ComplexType) error {
-	ct, ok := c.ContentType().(ElementContent)
-	if !ok {
-		return nil
-	}
-	return s.checkParticleTypeTables(ct.Particle)
 }
 
 // checkElementTypeTable charges e-props-correct clause 7 against one element
-// declaration and then descends its inline {type definition}, mirroring
-// checkElementValueConstraints: a TypeDefinitionRef names a top-level type this
-// step already walked in its own right, and a SubstitutionGroupHeadTypeRef names
-// the HEAD's inline type, which the head's own pass descends — so only the
-// InlineTypeDefinition arm is followed, and each declaration is charged once at
-// its own Loc.
-//
-// The declaration's own clause is charged before the descent, so a reader
-// meeting both an outer and a nested failure is sent to the outer one (STYLE D1).
+// declaration, at its own Loc. A declaration with no {type table} owes the clause
+// nothing: "If E.{type table} exists" is its whole antecedent.
 func (s *Schema) checkElementTypeTable(e ElementDeclaration) error {
-	if tt, ok := e.TypeTable(); ok {
-		if err := s.checkTypeTableAlternatives(e, tt); err != nil {
-			return err
-		}
-	}
-	inline, ok := e.TypeDefinition().(InlineTypeDefinition)
+	tt, ok := e.TypeTable()
 	if !ok {
 		return nil
 	}
-	c, ok := inline.Definition.(ComplexType)
-	if !ok {
-		return nil // an inline *SimpleType holds no particle
-	}
-	return s.checkComplexTypeTypeTables(c)
-}
-
-// checkParticleTypeTables descends one particle's {term}, mirroring resolveTerm:
-// an <element ref>/<group ref> is a by-name leaf owned by the component it
-// names, never descended here.
-func (s *Schema) checkParticleTypeTables(p Particle) error {
-	t, ok := p.Term().(ResolvedTerm)
-	if !ok {
-		return nil
-	}
-	switch inner := t.Term.(type) {
-	case ElementDeclaration:
-		return s.checkElementTypeTable(inner)
-	case ModelGroup:
-		return s.checkModelGroupTypeTables(inner)
-	case Wildcard:
-		return nil // a wildcard carries no declaration
-	default:
-		panic("xsd: checkParticleTypeTables: non-exhaustive Term switch")
-	}
-}
-
-// checkModelGroupTypeTables descends every particle of a model group in document
-// order.
-func (s *Schema) checkModelGroupTypeTables(g ModelGroup) error {
-	for _, p := range g.Particles() {
-		if err := s.checkParticleTypeTables(p); err != nil {
-			return err
-		}
-	}
-	return nil
+	return s.checkTypeTableAlternatives(e, tt)
 }
 
 // checkTypeTableAlternatives charges clause 7 over e's whole {type table}: each

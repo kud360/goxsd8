@@ -107,12 +107,12 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // The two properties are still unfolded on an anonymous type owned by an
 // ELEMENT declaration, by an ATTRIBUTE declaration, or by a TYPE ALTERNATIVE,
 // none of which any {base type definition} slot can reach (an anonymous type is
-// unnameable, so only a redefinition can hold one as its base).
-// Its readers are checkComplexTypeValueConstraints (valueconstraintvalid.go) and
-// resolveComplexType (resolve.go), which quantify over the set to charge each
-// MEMBER: a smaller set means fewer charges, so both under-reject. No reader
-// charges on a member being absent from that set. Adding the missing Phase-D
-// verdict likewise only adds rejections that are not made today.
+// unnameable, so only a redefinition can hold one as its base). Its readers are the
+// shared descent's {attribute uses} step (componentwalk.go) under Phase A's and
+// Phase E's charges, which quantify over the set to charge each MEMBER: a smaller
+// set means fewer charges, so both under-reject. No reader charges on a member
+// being absent from that set. Adding the missing Phase-D verdict likewise only adds
+// rejections that are not made today.
 func (s *Schema) checkComplexDerivations() error {
 	for _, t := range s.types {
 		c, ok := t.(ComplexType)

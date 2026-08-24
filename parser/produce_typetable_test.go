@@ -520,7 +520,8 @@ func TestProduceTypeTableAlternativeTypeResolves(t *testing.T) {
 // An <alternative> on the INLINE arm has no QName of its own for src-resolve
 // clause 1.1 to charge, but the anonymous type it owns has its own references and
 // they are resolved like any other — resolveTypeTable reaches them by routing the
-// slot through resolveTypeDefinition rather than through a name lookup.
+// slot through the shared descent's walkTypeDefinition rather than through a name
+// lookup.
 func TestProduceTypeTableInlineAlternativeBaseResolves(t *testing.T) {
 	_, err := produce(t, wrap("", typeTableTypes+`
 	<xs:element name="e" type="B">

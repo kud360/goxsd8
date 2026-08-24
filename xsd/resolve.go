@@ -282,32 +282,24 @@ func (s *Schema) resolve() error {
 // attribute use belongs to exactly one such enclosing component, so its position
 // names the declaration a reader must open, one enclosing element out.
 func (s *Schema) resolveReferences() error {
+	w := s.referenceWalk()
 	for _, t := range s.types {
-		switch t := t.(type) {
-		case ComplexType:
-			if err := s.resolveComplexType(t); err != nil {
-				return err
-			}
-		case *SimpleType:
-			if err := s.resolveSimpleType(t); err != nil {
-				return err
-			}
-		default:
-			panic("xsd: resolveReferences: non-exhaustive TypeDefinition switch")
+		if err := w.walkTypeRoot(t); err != nil {
+			return err
 		}
 	}
 	for _, e := range s.elements {
-		if err := s.resolveElementDecl(e); err != nil {
+		if err := w.walkElementDeclaration(e); err != nil {
 			return err
 		}
 	}
 	for _, a := range s.attributes {
-		if err := s.resolveAttributeDecl(a); err != nil {
+		if err := w.walkAttributeDeclaration(a); err != nil {
 			return err
 		}
 	}
 	for _, mgd := range s.modelGroups {
-		if err := s.resolveModelGroup(mgd.ModelGroup(), mgd.Loc()); err != nil {
+		if err := w.walkModelGroup(mgd.ModelGroup(), mgd.Loc()); err != nil {
 			return err
 		}
 	}
@@ -320,7 +312,7 @@ func (s *Schema) resolveReferences() error {
 	// rejection, so a dangling name here is charged src-resolve as its own error
 	// rather than silently deciding someone else's clause.
 	for _, r := range s.modelGroupRedefinitions {
-		if err := s.resolveModelGroup(r.original.ModelGroup(), r.original.Loc()); err != nil {
+		if err := w.walkModelGroup(r.original.ModelGroup(), r.original.Loc()); err != nil {
 			return err
 		}
 	}
@@ -330,6 +322,26 @@ func (s *Schema) resolveReferences() error {
 		}
 	}
 	return nil
+}
+
+// referenceWalk is Phase A's set of charges for the shared component descent
+// (componentwalk.go): a src-resolve verdict at every BY-NAME arm the descent
+// reaches, and the two slots the descent does not itself enter — an element
+// declaration's {type table} and its keyrefs (resolveElementDecl), and a simple
+// type's own graph (resolveSimpleType).
+//
+// It is the only one of the four phases that charges anything at a by-name arm.
+// The other three read a name as a leaf owned by the component it names; this
+// phase is what proves that component exists in the first place, so every arm is
+// a site here.
+func (s *Schema) referenceWalk() componentWalk {
+	return componentWalk{
+		typeDefinitionSlot: s.resolveTypeDefinitionSlot,
+		attributeUse:       s.resolveAttributeUse,
+		elementDeclaration: s.resolveElementDecl,
+		simpleType:         s.resolveSimpleType,
+		termRef:            s.resolveTermRef,
+	}
 }
 
 // resolveTypeName resolves a {type definition}/{base type definition} reference
@@ -348,11 +360,11 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 	return t, nil
 }
 
-// resolveTypeDefinition resolves the {type definition} slot of an element or
-// attribute declaration (§3.3.2.1 dcl.elt.common, §3.2.2.2 dcl.att.local),
-// exhaustively over TypeDefinitionOrRef's three arms. ctx names the referring
-// site for the message and loc positions it at the owning declaration; the
-// InlineTypeDefinition arm re-roots that position at the inline type itself.
+// resolveTypeDefinitionSlot charges the {type definition}/{base type definition}
+// slot of a type, element declaration or attribute declaration (§3.3.2.1
+// dcl.elt.common, §3.2.2.2 dcl.att.local), exhaustively over
+// TypeDefinitionOrRef's three arms. ctx names the referring site for the message
+// and loc positions it at the component holding the slot.
 //
 //   - nil is an absent {type definition}: src-resolve has nothing to resolve.
 //   - TypeDefinitionRef is the by-name arm: the src-resolve clause 1.1 lookup.
@@ -361,13 +373,15 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 //     still do, and both variants have them: a *SimpleType carries a
 //     SimpleTypeOrRef {base type definition} that may name a top-level type
 //     (resolveSimpleType), and a ComplexType carries a by-name {base type
-//     definition} and a particle tree, so each is descended exactly as a
-//     top-level one is.
+//     definition} and a particle tree. The shared descent enters that component
+//     and this phase's charges are applied inside it exactly as at a top-level
+//     one — which is what reaches the src-expredef clause 1.1 original of a
+//     <redefine>, an anonymous component held by no index and named by nothing.
 //   - SubstitutionGroupHeadTypeRef names the element declaration that OWNS the
 //     inherited anonymous type. It is NOT charged src-resolve clause 1.3 when it
-//     names nothing — see below — and it is not descended either: the head is
-//     itself an entry of s.elements, so its own inline type is walked when its
-//     turn comes, exactly once.
+//     names nothing — see below — and the descent does not enter it either: the
+//     head is itself an entry of s.elements, so its own inline type is walked
+//     when its turn comes, exactly once.
 //
 // TWO §5.3 READINGS OF ONE NAME, and they must not be mixed up. That head name
 // reaches this component through {substitution group affiliations}, the ONE
@@ -387,7 +401,7 @@ func resolveTypeName(r TypeResolver, ref QName, loc xsderr.Loc, ctx string) (Typ
 // DEPTH-1 on the strength of it; rejecting the chain here is what makes ResolvedType's
 // not-ok branch unreachable for any schema that survived finalize, rather than a
 // silent fail-open (STYLE P3).
-func (s *Schema) resolveTypeDefinition(ref TypeDefinitionOrRef, loc xsderr.Loc, ctx string) error {
+func (s *Schema) resolveTypeDefinitionSlot(ref TypeDefinitionOrRef, loc xsderr.Loc, ctx string) error {
 	switch r := ref.(type) {
 	case nil:
 		return nil
@@ -395,14 +409,7 @@ func (s *Schema) resolveTypeDefinition(ref TypeDefinitionOrRef, loc xsderr.Loc, 
 		_, err := resolveTypeName(s, r.Name, loc, ctx)
 		return err
 	case InlineTypeDefinition:
-		switch d := r.Definition.(type) {
-		case *SimpleType:
-			return s.resolveSimpleType(d)
-		case ComplexType:
-			return s.resolveComplexType(d)
-		default:
-			panic("xsd: resolveTypeDefinition: non-exhaustive TypeDefinition switch")
-		}
+		return nil // the descent enters it; the slot itself resolves nothing
 	case SubstitutionGroupHeadTypeRef:
 		head, ok := s.Element(r.Head)
 		if !ok {
@@ -414,7 +421,7 @@ func (s *Schema) resolveTypeDefinition(ref TypeDefinitionOrRef, loc xsderr.Loc, 
 		}
 		return nil
 	default:
-		panic("xsd: resolveTypeDefinition: non-exhaustive TypeDefinitionOrRef switch")
+		panic("xsd: resolveTypeDefinitionSlot: non-exhaustive TypeDefinitionOrRef switch")
 	}
 }
 
@@ -508,49 +515,6 @@ func (s *Schema) resolveKeyref(ic IdentityConstraint) error {
 	return nil
 }
 
-// resolveComplexType descends a complex type's reference sites: its {base type
-// definition} (clause 1.1), each {attribute use}, and its {content type} —
-// SimpleContent's {simple type definition}, whose own {base type definition} may
-// name a top-level type, or ElementContent's particle tree. It runs for an
-// ANONYMOUS complex type too, reached through an owning declaration's
-// InlineTypeDefinition or through a redefining type's OWN base slot (see
-// resolveTypeDefinition), so the owner phrase in its message comes from
-// complexTypeOwner rather than from a {name} an anonymous type does not have
-// (STYLE T4).
-//
-// The {base type definition} goes through resolveTypeDefinition, not through a
-// bare resolveTypeName, because it is a TypeDefinitionOrRef: an
-// InlineTypeDefinition base needs no lookup but IS descended, so the anonymous
-// original of a redefine pairing has its own references resolved (src-expredef
-// clause 1.1 makes it a full component, subject to the ordinary rules).
-//
-// This is where the referrer-Loc convention re-roots: every rejection below this
-// point is positioned at c.Loc() until a nested declaration that retains its own
-// position takes over. An anonymous type's Loc is its own <complexType> element,
-// which is the right position for its base= and its attribute uses — nearer than
-// the owning declaration's.
-func (s *Schema) resolveComplexType(c ComplexType) error {
-	if err := s.resolveTypeDefinition(c.Base(), c.Loc(), complexTypeOwner(c)+" {base type definition}"); err != nil {
-		return err
-	}
-	for _, u := range c.AttributeUses() {
-		if err := s.resolveAttributeUse(u, c.Loc()); err != nil {
-			return err
-		}
-	}
-	switch ct := c.ContentType().(type) {
-	case EmptyContent:
-		// Empty content carries no reference at all.
-	case SimpleContent:
-		return s.resolveSimpleType(ct.SimpleType)
-	case ElementContent:
-		return s.resolveParticle(ct.Particle, c.Loc())
-	default:
-		panic("xsd: resolveComplexType: non-exhaustive ContentType switch")
-	}
-	return nil
-}
-
 // resolveSimpleType descends a simple type's reference sites. There is exactly
 // one KIND of them — a SimpleTypeOrRef slot, whose by-name arm is the
 // src-resolve clause 1.1 lookup (simpletyperef.go) — sitting in three PLACES:
@@ -613,73 +577,39 @@ func (s *Schema) resolveSimpleTypeSlot(t *SimpleType, ref SimpleTypeOrRef, slot 
 	return s.resolveSimpleType(ownedSimpleType(ref))
 }
 
-// resolveParticle descends a particle's {term}, carrying loc — the enclosing
-// component's position, since a Particle retains none of its own.
-func (s *Schema) resolveParticle(p Particle, loc xsderr.Loc) error {
-	return s.resolveTerm(p.Term(), loc)
-}
-
-// resolveTerm resolves a particle's {term}: a <element ref> or <group ref> is a
-// leaf resolved by a single lookup (never descended — that would cross into
-// another component's own resolution), while an inline ResolvedTerm is descended.
-func (s *Schema) resolveTerm(t TermOrRef, loc xsderr.Loc) error {
+// resolveTermRef resolves a particle's BY-NAME {term} — an <element ref>
+// (src-resolve clause 1.3) or a <group ref> (clause 1.5). Neither is descended:
+// that would cross into another component's own resolution. An inline
+// ResolvedTerm never reaches here — the shared descent enters it instead — so
+// the default arm asserts the sealed-sum invariant over the two ref variants and
+// an absent slot.
+//
+// loc is the enclosing component's position, since a Particle retains none of
+// its own.
+func (s *Schema) resolveTermRef(t TermOrRef, loc xsderr.Loc) error {
 	switch t := t.(type) {
-	case ResolvedTerm:
-		return s.resolveResolvedTerm(t.Term, loc)
 	case ElementDeclarationRef:
 		return resolveElementName(s, t.Name, loc, "particle {term} <element ref>")
 	case ModelGroupRef:
 		return s.resolveModelGroupName(t.Name, loc, "particle {term} <group ref>")
 	default:
-		panic("xsd: resolveTerm: non-exhaustive TermOrRef switch")
+		panic("xsd: resolveTermRef: non-exhaustive TermOrRef switch")
 	}
 }
 
-// resolveResolvedTerm descends an inline Term. A nil Term is unreachable on a
-// value built through NewParticle (which rejects ResolvedTerm{Term: nil}); the
-// default arm asserts the sealed-sum invariant.
+// resolveAttributeUse resolves an attribute use's <attribute ref> {attribute
+// declaration} by lookup (clause 1.2). A sibling LOCAL declaration resolves
+// nothing here: the shared descent enters it, and its own {type definition} slot
+// is charged there, at the declaration's own Loc.
 //
-// loc is the enclosing component's position, forwarded only to the ModelGroup arm
-// (an inline model group retains none of its own). The ElementDeclaration arm
-// deliberately drops it: a local declaration retains its own Loc, so
-// resolveElementDecl re-roots the convention there.
-func (s *Schema) resolveResolvedTerm(t Term, loc xsderr.Loc) error {
-	switch t := t.(type) {
-	case ElementDeclaration:
-		return s.resolveElementDecl(t)
-	case ModelGroup:
-		return s.resolveModelGroup(t, loc)
-	case Wildcard:
-		return nil // a wildcard carries no QName reference
-	default:
-		panic("xsd: resolveResolvedTerm: non-exhaustive Term switch")
-	}
-}
-
-// resolveModelGroup descends every particle of a model group in document order,
-// carrying loc: a ModelGroup retains no position of its own, so a top-level group
-// is walked under its ModelGroupDefinition's Loc and an inline one under whatever
-// component encloses it.
-func (s *Schema) resolveModelGroup(g ModelGroup, loc xsderr.Loc) error {
-	for _, p := range g.Particles() {
-		if err := s.resolveParticle(p, loc); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// resolveAttributeUse resolves an attribute use's {attribute declaration}: an
-// <attribute ref> is resolved by lookup (clause 1.2); a sibling local
-// declaration is descended so its own {type definition} reference resolves.
-//
-// loc is the enclosing complex type's position, used for the ref arm because an
-// AttributeUse retains none of its own. The local-declaration arm drops it, as an
-// AttributeDeclaration retains its own Loc.
-func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc) error {
+// loc is the enclosing complex type's or attribute group definition's position,
+// because an AttributeUse retains none of its own. The owner phrase the descent
+// also supplies names that component for a rejection this arm does not make, and
+// is ignored.
+func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc, _ string) error {
 	switch d := u.AttributeDeclaration().(type) {
 	case LocalAttributeDeclaration:
-		return s.resolveAttributeDecl(d.Declaration)
+		return nil
 	case AttributeDeclarationRef:
 		return resolveAttributeName(s, d.Name, loc, "attribute use <attribute ref>")
 	default:
@@ -687,10 +617,12 @@ func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc) error {
 	}
 }
 
-// resolveElementDecl resolves an element declaration's reference sites: its
-// {type definition} (clause 1.1), each type-table alternative's {type definition}
-// (clause 1.1), and each nested {identity-constraint definitions} keyref (clause
-// 1.7).
+// resolveElementDecl resolves the two reference-bearing slots of an element
+// declaration that the shared descent does not itself enter: each type-table
+// alternative's {type definition} (clause 1.1) and each nested
+// {identity-constraint definitions} keyref (clause 1.7). Its own {type
+// definition} is charged by the descent, before this runs
+// (resolveTypeDefinitionSlot).
 //
 // {substitution group affiliations} is the ONE reference slot this pass does NOT
 // hard-fail, and the exemption is §5.3's (Missing Sub-components), not a
@@ -713,7 +645,7 @@ func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc) error {
 //
 // GAP(xsd): the OTHER reference slots are not yet §5.3-aligned — a dangling
 // {type definition}, <element ref>, <attribute ref>, <group ref> or keyref is
-// still charged src-resolve here and rejects the whole schema, which is why W3C
+// still charged src-resolve by this phase and rejects the whole schema, which is why W3C
 // Missing/missing001 and missing003/006 sit at fail. That deviation is recorded
 // in parser/doc.go; this slot is aligned rather than joining it because #281 is
 // what first put data in the slot, and extending an unimplemented-§5.3 rejection
@@ -721,9 +653,6 @@ func (s *Schema) resolveAttributeUse(u AttributeUse, loc xsderr.Loc) error {
 // rest is #434: it needs ·absent· to be representable in every slot plus a
 // lax-assessment fallback at validation time, neither of which exists.
 func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
-	if err := s.resolveTypeDefinition(e.TypeDefinition(), e.Loc(), "element declaration "+e.Name().String()+" {type definition}"); err != nil {
-		return err
-	}
 	if tt, ok := e.TypeTable(); ok {
 		if err := s.resolveTypeTable(tt, e.Loc()); err != nil {
 			return err
@@ -741,12 +670,12 @@ func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 // (src-resolve clause 1.1; §3.12.2 declare-ta maps the type/@type of an
 // <alternative> via [·resolved·]). Both the {alternatives} members and the
 // {default type definition} carry the same TypeDefinitionOrRef slot, so both go
-// through resolveTypeDefinition — the one implementation that is total over the
-// sum. It charges src-resolve clause 1.1 for a by-name arm only: declare-ta's
-// INLINE arm is "the type definition corresponding to the complexType or
-// simpleType among the children", a direct structural mapping with no QName to
-// resolve, and the same call recurses into that anonymous type's OWN references
-// instead. A {default type definition} §3.3.2.1 case 2 synthesized carries the
+// through the shared descent's walkTypeDefinition — the one implementation that
+// is total over the sum. It charges src-resolve clause 1.1 for a by-name arm
+// only: declare-ta's INLINE arm is "the type definition corresponding to the
+// complexType or simpleType among the children", a direct structural mapping
+// with no QName to resolve, and the same call enters that anonymous type's OWN
+// references instead. A {default type definition} §3.3.2.1 case 2 synthesized carries the
 // declaring element's own slot, so resolveElementDecl reaches that component
 // twice; the descent writes nothing and answers the same either way.
 //
@@ -763,19 +692,13 @@ func (s *Schema) resolveElementDecl(e ElementDeclaration) error {
 // Phase B's acyclicity checks, and a circular chain is still representable while
 // this phase runs.
 func (s *Schema) resolveTypeTable(tt TypeTable, loc xsderr.Loc) error {
+	w := s.referenceWalk()
 	for _, alt := range tt.Alternatives() {
-		if err := s.resolveTypeDefinition(alt.TypeDefinition(), loc, "type alternative {type definition}"); err != nil {
+		if err := w.walkTypeDefinition(alt.TypeDefinition(), loc, "type alternative {type definition}"); err != nil {
 			return err
 		}
 	}
-	return s.resolveTypeDefinition(tt.DefaultTypeDefinition().TypeDefinition(), loc, "type table {default type definition}")
-}
-
-// resolveAttributeDecl resolves an attribute declaration's {type definition}
-// reference (src-resolve clause 1.1). An attribute's type is always a simple
-// type; the kind-specific lookup rejects a same-name non-type as dangling.
-func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
-	return s.resolveTypeDefinition(a.TypeDefinition(), a.Loc(), "attribute declaration "+a.Name().String()+" {type definition}")
+	return w.walkTypeDefinition(tt.DefaultTypeDefinition().TypeDefinition(), loc, "type table {default type definition}")
 }
 
 // checkSimpleTypeDerivations is Phase D's simple-type step: it puts every Simple
@@ -819,9 +742,9 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 //     arm is deliberately not followed — it names a top-level type this pass
 //     reaches through slot 1 in its own right, so following it would re-charge
 //     the same component once per type deriving from it.
-//  3. SimpleContent.{simple type definition} (complextype.go). Phase A descends
-//     this slot too (resolveComplexType), so the two passes must be told apart
-//     by what each TAKES it for: that simple type carries a SimpleTypeOrRef
+//  3. SimpleContent.{simple type definition} (complextype.go). The shared
+//     descent hands this slot to Phase A too, so the two passes must be told
+//     apart by what each TAKES it for: that simple type carries a SimpleTypeOrRef
 //     {base type definition} like any other, so Phase A descends it to LOOK UP
 //     a by-name base (src-resolve clause 1.1), and this pass descends it to
 //     CHARGE the two derivation halves. Neither visit substitutes for the
@@ -841,19 +764,20 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 //     the declared order the property preserves (STYLE D2).
 //  6. the InlineTypeDefinition/*SimpleType arm of a {type definition} or {base
 //     type definition} slot — the declaration-slot inline hop: an <element> or
-//     <attribute> whose type is written out in place. resolveTypeDefinition
-//     descends the same arm, and slot 3's split applies here unchanged: that
+//     <attribute> whose type is written out in place. The shared descent enters
+//     the same arm for Phase A, and slot 3's split applies here unchanged: that
 //     arm resolves the inline type's own by-name base, this pass charges its
 //     derivation.
 //
-// Reaching slots 3 and 6 means walking the same tree Phase A and Phase E walk —
-// types, then element declarations, then attribute declarations, then model group
-// definitions, then attribute group definitions, each descending into particles
-// and attribute uses. Attribute group definitions are walked although Phase A
-// does not walk them, for Phase E's reason (valueconstraintvalid.go) plus one of
-// this pass's own: the produce-time call this pass replaces charged every simple
-// type the producer CONSTRUCTED, whatever slot it ended up in, so a walk that
-// skipped a slot the producer can fill would be a silent regression.
+// Reaching slots 3 and 6 means walking the same tree Phase A and Phase E walk,
+// and this pass walks it by the same code (componentwalk.go), filling in only the
+// simpleType charge. Its ROOTS are its own: types, then element declarations,
+// then attribute declarations, then model group definitions, then attribute group
+// definitions. Attribute group definitions are rooted although Phase A does not
+// root them, for Phase E's reason (valueconstraintvalid.go) plus one of this
+// pass's own: the produce-time call this pass replaces charged every simple type
+// the producer CONSTRUCTED, whatever slot it ended up in, so a walk that skipped
+// a slot the producer can fill would be a silent regression.
 //
 // NO VISITED SET (STYLE D4, and STYLE D3's no-memoized-cache-without-a-profile).
 // A shared base is re-visited once per type that derives from it, which is
@@ -878,38 +802,30 @@ func (s *Schema) resolveAttributeDecl(a AttributeDeclaration) error {
 // failure is deterministic (STYLE D1/D2) and is the most basic one: a fault in a
 // base is reported against the base, not against everything derived from it.
 func (s *Schema) checkSimpleTypeDerivations() error {
+	w := componentWalk{simpleType: s.checkSimpleTypeGraph}
 	for _, t := range s.types {
-		switch t := t.(type) {
-		case ComplexType:
-			if err := s.checkComplexTypeSimpleTypes(t); err != nil {
-				return err
-			}
-		case *SimpleType:
-			if err := s.checkSimpleTypeGraph(t); err != nil {
-				return err
-			}
-		default:
-			panic("xsd: checkSimpleTypeDerivations: non-exhaustive TypeDefinition switch")
+		if err := w.walkTypeRoot(t); err != nil {
+			return err
 		}
 	}
 	for _, e := range s.elements {
-		if err := s.checkTypeDefinitionSimpleTypes(e.TypeDefinition()); err != nil {
+		if err := w.walkElementDeclaration(e); err != nil {
 			return err
 		}
 	}
 	for _, a := range s.attributes {
-		if err := s.checkTypeDefinitionSimpleTypes(a.TypeDefinition()); err != nil {
+		if err := w.walkAttributeDeclaration(a); err != nil {
 			return err
 		}
 	}
 	for _, mgd := range s.modelGroups {
-		if err := s.checkModelGroupSimpleTypes(mgd.ModelGroup()); err != nil {
+		if err := w.walkModelGroup(mgd.ModelGroup(), mgd.Loc()); err != nil {
 			return err
 		}
 	}
 	for _, g := range s.attributeGroups {
 		for _, u := range g.AttributeUses() {
-			if err := s.checkAttributeUseSimpleTypes(u); err != nil {
+			if err := w.walkAttributeUse(u, g.Loc(), attributeGroupOwner(g)); err != nil {
 				return err
 			}
 		}
@@ -958,96 +874,6 @@ func (s *Schema) checkSimpleTypeGraph(t *SimpleType) error {
 		return err
 	}
 	return s.restrictionChecker.CheckRestriction(s, t)
-}
-
-// checkTypeDefinitionSimpleTypes descends a {type definition}/{base type
-// definition} slot — inventory slot 6. Only the InlineTypeDefinition arm is
-// descended: a TypeDefinitionRef names a top-level type this pass walks in its
-// own right, and a SubstitutionGroupHeadTypeRef names the HEAD declaration that
-// owns the anonymous type, which is itself an entry of s.elements (charging it
-// from the member too would report the failure at the wrong declaration).
-func (s *Schema) checkTypeDefinitionSimpleTypes(ref TypeDefinitionOrRef) error {
-	inline, ok := ref.(InlineTypeDefinition)
-	if !ok {
-		return nil
-	}
-	switch d := inline.Definition.(type) {
-	case *SimpleType:
-		return s.checkSimpleTypeGraph(d)
-	case ComplexType:
-		return s.checkComplexTypeSimpleTypes(d)
-	default:
-		panic("xsd: checkTypeDefinitionSimpleTypes: non-exhaustive TypeDefinition switch")
-	}
-}
-
-// checkComplexTypeSimpleTypes descends one complex type for simple types: its
-// {base type definition} slot (an inline base may be a simple type, or a complex
-// one with simple content), its {attribute uses}, and its {content type} — where
-// SimpleContent's {simple type definition} is inventory slot 3. The descent
-// mirrors resolveComplexType's, which walks the same three places for the
-// reference half (see the inventory's slot 3 for why both passes need it).
-func (s *Schema) checkComplexTypeSimpleTypes(c ComplexType) error {
-	if err := s.checkTypeDefinitionSimpleTypes(c.Base()); err != nil {
-		return err
-	}
-	for _, u := range c.AttributeUses() {
-		if err := s.checkAttributeUseSimpleTypes(u); err != nil {
-			return err
-		}
-	}
-	switch ct := c.ContentType().(type) {
-	case EmptyContent:
-		return nil // empty content holds no type definition
-	case SimpleContent:
-		return s.checkSimpleTypeGraph(ct.SimpleType)
-	case ElementContent:
-		return s.checkParticleSimpleTypes(ct.Particle)
-	default:
-		panic("xsd: checkComplexTypeSimpleTypes: non-exhaustive ContentType switch")
-	}
-}
-
-// checkParticleSimpleTypes descends one particle's {term}, mirroring resolveTerm:
-// an <element ref>/<group ref> is a by-name leaf owned by the component it names,
-// never descended here.
-func (s *Schema) checkParticleSimpleTypes(p Particle) error {
-	t, ok := p.Term().(ResolvedTerm)
-	if !ok {
-		return nil
-	}
-	switch inner := t.Term.(type) {
-	case ElementDeclaration:
-		return s.checkTypeDefinitionSimpleTypes(inner.TypeDefinition())
-	case ModelGroup:
-		return s.checkModelGroupSimpleTypes(inner)
-	case Wildcard:
-		return nil // a wildcard carries no type definition
-	default:
-		panic("xsd: checkParticleSimpleTypes: non-exhaustive Term switch")
-	}
-}
-
-// checkModelGroupSimpleTypes descends every particle of a model group in
-// document order (STYLE D2).
-func (s *Schema) checkModelGroupSimpleTypes(g ModelGroup) error {
-	for _, p := range g.Particles() {
-		if err := s.checkParticleSimpleTypes(p); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// checkAttributeUseSimpleTypes descends the LOCAL declaration an attribute use
-// owns; an <attribute ref> names a global declaration this pass walks through
-// s.attributes instead.
-func (s *Schema) checkAttributeUseSimpleTypes(u AttributeUse) error {
-	d, ok := u.AttributeDeclaration().(LocalAttributeDeclaration)
-	if !ok {
-		return nil
-	}
-	return s.checkTypeDefinitionSimpleTypes(d.Declaration.TypeDefinition())
 }
 
 // checkComplexBaseAcyclic is Phase B for the complex-type base chain

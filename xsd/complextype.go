@@ -959,7 +959,7 @@ func (c ComplexType) Base() TypeDefinitionOrRef {
 
 // complexTypeLabel renders a complex type being CONSTRUCTED as the owner phrase
 // of a rejection message, from its {name} alone — the component does not exist
-// yet, so valueconstraintvalid.go's complexTypeOwner, which takes one, cannot
+// yet, so componentwalk.go's complexTypeOwner, which takes one, cannot
 // serve. An absent name (the anonymous variety) has no QName to print, so it is
 // described by what it is instead (STYLE E1).
 func complexTypeLabel(name QName) string {

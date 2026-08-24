@@ -61,7 +61,7 @@ import "github.com/kud360/goxsd8/xsderr"
 // least once, at a stable Loc; neither alone does. Not exactly once: since #401
 // materialised inherited attribute uses, a LOCAL declaration owned by an
 // inherited use is re-checked at every complex type that inherits it (see
-// checkComplexTypeValueConstraints below, which spells out why the repeats are
+// checkComponentValueConstraints below, which spells out why the repeats are
 // harmless — the charge is at the declaration's OWN Loc, so neither the verdict
 // nor the reported position moves).
 //
@@ -86,13 +86,9 @@ import "github.com/kud360/goxsd8/xsderr"
 // group affiliations} to a global scope, and no clause confines a {value
 // constraint}.
 //
-// D4 (no traversal state): the walk below carries no visited set, exactly as
-// Phase A's mirror walk does. It descends only BY-VALUE structure — a complex
-// type's {attribute uses} and content-model particles, an element declaration's
-// inline {type definition} — and never follows a by-name ref, which is what makes
-// the structure a finite tree. It additionally inherits Phase B's acyclicity
-// (checkComplexBaseAcyclic, checkModelGroupsAcyclic) for the by-name edges it
-// deliberately does not take, so no cycle check is needed (PRINCIPLES 9).
+// D4 (no traversal state): the shared descent carries no visited set, for the
+// reason componentwalk.go states — it follows only BY-VALUE structure and never
+// a by-name ref, which is what makes the structure a finite tree.
 
 // checkComponentValueConstraints is Phase E's DESCENDING walk: it charges
 // au-props-correct clauses 2 and 3 — and, for a use owning a LOCAL declaration,
@@ -107,13 +103,32 @@ import "github.com/kud360/goxsd8/xsderr"
 // over, so a second traversal of the same tree would be a parallel copy of five
 // functions that visits the same components in the same order.
 //
-// The walk mirrors Phase A's descent site for site, because the two must reach
-// the same attribute uses: top-level type definitions, then top-level element
+// The descent itself is componentwalk.go's, shared with every other phase that
+// has one, so this pass supplies only the two charges above and inherits which
+// components exist — including a redefine original reached through {base type
+// definition}, which a hand-written copy of this walk missed (#843). The roots
+// are this phase's own: top-level type definitions, then top-level element
 // declarations (whose inline anonymous complex types carry attribute uses of
-// their own, reached through resolveTypeDefinition's InlineTypeDefinition arm),
-// then top-level model group definitions (whose particles can carry element
-// declarations with inline complex types), and finally — where Phase A stops —
-// top-level attribute group definitions.
+// their own), then top-level model group definitions (whose particles can carry
+// element declarations with inline complex types), and finally — where Phase A
+// stops — top-level attribute group definitions. Between those roots and that
+// descent, every element declaration in the schema is charged exactly once, at
+// its own Loc, which is what makes clause 2's quantifier ("all element
+// declarations", §3.3.6) complete; see this file's head for the measurement
+// behind that shape.
+//
+// Since #401 materialised §3.4.2.4 clause 3, an INHERITED attribute use is a
+// member of the deriving type's {attribute uses} too, so it is re-checked at
+// every type that inherits it and charged against THAT type's Loc rather than
+// the ancestor's — deliberate, because clause 3 makes the use genuinely a
+// property of the derived type and that is the position a reader is looking at.
+// The extra passes cannot change the verdict: the walk is over a set, and a use
+// that passed once passes again. The same repetition reaches the element side by
+// a different route, an extension's {content type} particle containing the
+// base's, and is harmless for the same reason and one more — e-props-correct
+// clause 2 is charged at the DECLARATION's own Loc (checkElementDefaultValid),
+// which no enclosing type can move, so neither the verdict nor the reported
+// position depends on which route reached it.
 //
 // Phase A does NOT walk {attribute group definitions} (see resolve.go's
 // FOLLOW-COST ASYMMETRY note): every <attributeGroup ref> is inlined at producer
@@ -127,144 +142,30 @@ import "github.com/kud360/goxsd8/xsderr"
 // (ResolvedAttributeDeclaration reports no declaration), not charged src-resolve,
 // which is fail-open and never a false reject.
 func (s *Schema) checkComponentValueConstraints() error {
+	w := componentWalk{
+		attributeUse:       s.checkAttributeUseValueConstraint,
+		elementDeclaration: s.checkElementDefaultValid,
+	}
 	for _, t := range s.types {
-		c, ok := t.(ComplexType)
-		if !ok {
-			continue // a simple type has no {attribute uses}
-		}
-		if err := s.checkComplexTypeValueConstraints(c); err != nil {
+		if err := w.walkTypeRoot(t); err != nil {
 			return err
 		}
 	}
 	for _, e := range s.elements {
-		if err := s.checkElementValueConstraints(e); err != nil {
+		if err := w.walkElementDeclaration(e); err != nil {
 			return err
 		}
 	}
 	for _, mgd := range s.modelGroups {
-		if err := s.checkModelGroupValueConstraints(mgd.ModelGroup()); err != nil {
+		if err := w.walkModelGroup(mgd.ModelGroup(), mgd.Loc()); err != nil {
 			return err
 		}
 	}
 	for _, g := range s.attributeGroups {
 		for _, u := range g.AttributeUses() {
-			if err := s.checkAttributeUseValueConstraint(u, g.Loc(), "attribute group definition "+g.Name().String()); err != nil {
+			if err := w.walkAttributeUse(u, g.Loc(), attributeGroupOwner(g)); err != nil {
 				return err
 			}
-		}
-	}
-	return nil
-}
-
-// checkComplexTypeValueConstraints charges au-props-correct clauses 2 and 3 for
-// c's own {attribute uses} and then descends c's {content type} particle tree,
-// where a nested element declaration owes e-props-correct clause 2 in its own
-// right and may carry an inline complex type with attribute uses of its own. The
-// descent mirrors resolveComplexType's.
-//
-// Since #401 materialised §3.4.2.4 clause 3, an INHERITED use is a member here
-// too, so it is re-checked at every type that inherits it and charged against
-// THAT type's Loc rather than the ancestor's — deliberate, because clause 3 makes
-// the use genuinely a property of the derived type and that is the position a
-// reader is looking at. The extra passes cannot change the verdict: the walk is
-// over a set, and a use that passed once passes again.
-//
-// The same repetition reaches the element side, by a different route: an
-// extension's {content type} particle contains the base's, so a local declaration
-// inside a base content model is re-charged at every type extending it. It is
-// harmless for the same reason and one more — e-props-correct clause 2 is charged
-// at the DECLARATION's own Loc (checkElementDefaultValid), which no enclosing type
-// can move, so neither the verdict nor the reported position depends on which
-// route reached it.
-func (s *Schema) checkComplexTypeValueConstraints(c ComplexType) error {
-	for _, u := range c.AttributeUses() {
-		if err := s.checkAttributeUseValueConstraint(u, c.Loc(), complexTypeOwner(c)); err != nil {
-			return err
-		}
-	}
-	ct, ok := c.ContentType().(ElementContent)
-	if !ok {
-		return nil // Empty and Simple content carry no particle tree
-	}
-	return s.checkParticleValueConstraints(ct.Particle)
-}
-
-// complexTypeOwner renders c as the owner phrase of a rejection message. An
-// inline <xs:complexType> has no {name} (the zero QName, whose String is ""),
-// so naming it would leave a hole in the message; it is described by what it is
-// instead.
-func complexTypeOwner(c ComplexType) string {
-	n := c.Name()
-	if n == (QName{}) {
-		return "anonymous complex type"
-	}
-	return "complex type " + n.String()
-}
-
-// checkElementValueConstraints charges e-props-correct (§3.3.6.1) clause 2
-// against one element declaration and then descends its inline {type definition},
-// mirroring resolveElementDecl/resolveTypeDefinition: a TypeDefinitionRef names a
-// top-level type this phase already walked in its own right, so only the
-// InlineTypeDefinition arm is descended.
-//
-// A SubstitutionGroupHeadTypeRef is deliberately NOT descended, and the type
-// assertion below is what keeps it that way. The type it inherits is the HEAD's
-// inline anonymous one, and the head is itself an entry of s.elements whose own
-// pass through here descends it — so descending from the member too would charge
-// clause 2 / au-props-correct a second time over the same components, and report
-// the failure at the member rather than at the declaration that actually spells
-// the offending default. One component, one charge, at its owner.
-//
-// The declaration's OWN clause is charged before the descent, so the failure a
-// reader is sent to is the outer one when a declaration and something nested
-// inside its inline type are both wrong (STYLE D1).
-//
-// Every element declaration in the schema passes through here exactly this way —
-// a global one from checkComponentValueConstraints' s.elements loop, a local one
-// from checkParticleValueConstraints — which is what makes clause 2's quantifier
-// ("all element declarations", §3.3.6) complete; see this file's head for the
-// measurement behind that shape.
-func (s *Schema) checkElementValueConstraints(e ElementDeclaration) error {
-	if err := s.checkElementDefaultValid(e); err != nil {
-		return err
-	}
-	inline, ok := e.TypeDefinition().(InlineTypeDefinition)
-	if !ok {
-		return nil
-	}
-	c, ok := inline.Definition.(ComplexType)
-	if !ok {
-		return nil // an inline *SimpleType has no {attribute uses}
-	}
-	return s.checkComplexTypeValueConstraints(c)
-}
-
-// checkParticleValueConstraints descends one particle's {term}, mirroring
-// resolveTerm: an <element ref>/<group ref> is a by-name leaf owned by the
-// component it names, never descended here.
-func (s *Schema) checkParticleValueConstraints(p Particle) error {
-	t, ok := p.Term().(ResolvedTerm)
-	if !ok {
-		return nil
-	}
-	switch inner := t.Term.(type) {
-	case ElementDeclaration:
-		return s.checkElementValueConstraints(inner)
-	case ModelGroup:
-		return s.checkModelGroupValueConstraints(inner)
-	case Wildcard:
-		return nil // a wildcard carries no declaration
-	default:
-		panic("xsd: checkParticleValueConstraints: non-exhaustive Term switch")
-	}
-}
-
-// checkModelGroupValueConstraints descends every particle of a model group in
-// document order.
-func (s *Schema) checkModelGroupValueConstraints(g ModelGroup) error {
-	for _, p := range g.Particles() {
-		if err := s.checkParticleValueConstraints(p); err != nil {
-			return err
 		}
 	}
 	return nil

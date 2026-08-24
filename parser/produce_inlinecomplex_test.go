@@ -308,10 +308,10 @@ func TestProduceElementBothInlineTypesRejected(t *testing.T) {
 	}
 }
 
-// TestResolveInlineComplexTypeReferences pins xsd/resolve.go's
-// resolveTypeDefinition ComplexType inner arm: finalize must descend an
-// anonymous complex type owned by a declaration and charge src-resolve for its
-// dangling references, exactly as it does for a top-level one.
+// TestResolveInlineComplexTypeReferences pins xsd/componentwalk.go's
+// InlineTypeDefinition/ComplexType arm: finalize must descend an anonymous complex
+// type owned by a declaration and charge src-resolve for its dangling references,
+// exactly as it does for a top-level one.
 //
 // Only the PARTICLE TREE (clause 1.3) is covered from here. The arm's other
 // reference site, the {base type definition} (clause 1.1), is no longer reachable

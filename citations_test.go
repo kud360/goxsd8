@@ -64,6 +64,12 @@ var allowedCollisionCitations = []citationAllowance{
 	{file: "xsd/attributewildcardfold.go", number: 9, count: 1},
 	{file: "xsd/complexderivation.go", number: 9, count: 1},
 	{file: "xsd/complexextension.go", number: 9, count: 1},
+	// #843: the shared component descent records that it carries no visited set
+	// and no cycle guard — item 9's FIRST half, the phased-construction licence,
+	// naming ct-props-correct clause 3 in Phase B as what rejects a circular
+	// {base type definition} chain. It absorbed the citation Phase E's copy of
+	// that descent used to carry (xsd/valueconstraintvalid.go, now 0).
+	{file: "xsd/componentwalk.go", number: 9, count: 1},
 	{file: "xsd/contentrestricts.go", number: 9, count: 3},
 	// #636: CheckDerivation's termination note, which records that its
 	// unguarded base-chain walks presuppose the acyclicity proof Phase B
@@ -100,7 +106,6 @@ var allowedCollisionCitations = []citationAllowance{
 	{file: "xsd/simpletype.go", number: 9, count: 1},
 	{file: "xsd/substitutiongroup.go", number: 9, count: 1},
 	{file: "xsd/substitutiongrouptypes.go", number: 9, count: 1},
-	{file: "xsd/valueconstraintvalid.go", number: 9, count: 1},
 	{file: "xsd/wildcardadmit.go", number: 9, count: 1},
 }
 
