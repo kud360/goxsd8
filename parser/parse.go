@@ -228,6 +228,14 @@ type discovered struct {
 	// actually followed, which is what distinguishes an assembled document from
 	// one handed to [Produce].
 	redefines []*redefineSet
+
+	// unmapped is this discovery's coverage census (producer.census,
+	// parser/census.go), taken before any component of the document is built,
+	// for [AssembledDocument.Unmapped]. It is a property of the DISCOVERY rather
+	// than of the document (STYLE D3): rd excepts declarations from this reading
+	// alone (§4.2.4 clause 4.1.2), so the same file reached twice can hold a
+	// different census each time, and no field here derives it.
+	unmapped []UnmappedConstruct
 }
 
 // docKey is the load-once identity of one discovered document: its RESOLVED
@@ -302,7 +310,7 @@ type assembly struct {
 func (a *assembly) report() *AssemblyReport {
 	docs := make([]AssembledDocument, 0, len(a.docs))
 	for _, d := range a.docs {
-		docs = append(docs, AssembledDocument{Doc: d.doc, Location: d.resolved})
+		docs = append(docs, AssembledDocument{Doc: d.doc, Location: d.resolved, Unmapped: d.unmapped})
 	}
 	return &AssemblyReport{documents: docs, unfollowed: a.unfollowed}
 }
@@ -811,6 +819,10 @@ type fetched struct {
 // clauses 4.2/5.2.2) and the Simple Default Valid checks (a-props-correct clause
 // 2, au-props-correct clause
 // 2) decide rather than fail open — see [Produce] for the full statement.
+//
+// Each document's coverage census (producer.census) is taken in that same
+// pre-produce pass, so [AssemblyReport] carries what every discovery holds that
+// no dispatch maps whether or not the assembly went on to reject it.
 func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 	builder := xsd.NewSchemaBuilder()
 	sym, err := newSymbols(builder, backend)
@@ -818,8 +830,16 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 		return nil, err
 	}
 	producers := make([]*producer, 0, len(a.docs))
-	for _, d := range a.docs {
+	for i := range a.docs {
+		// A POINTER into docs, not a range copy: the census is written back
+		// through it, and a write through a copy of the struct would be silently
+		// lost.
+		d := &a.docs[i]
 		p := newProducer(d.doc, d.tns, d.ov, d.rd, d.redefines, builder, sym)
+		// Taken before the first thing that can fail, so a document its own
+		// pre-scan rejects still reports what it holds — the report is populated
+		// as far as assembly got on every path ([AssemblyReport]).
+		d.unmapped = p.census()
 		if err := p.prescan(); err != nil {
 			return nil, err
 		}

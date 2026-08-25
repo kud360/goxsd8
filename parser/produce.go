@@ -815,6 +815,31 @@ func compositionDirective(el *Element) bool {
 	return isXSD(el, "include") || isXSD(el, "import") || isXSD(el, "override") || isXSD(el, "redefine")
 }
 
+// topLevelMapped reports whether this producer maps a <schema> child named local
+// anywhere at all.
+//
+// It is the one statement of that vocabulary: run's dispatch below is exhaustive
+// over it and consults it as a guard rather than carrying a default arm of its
+// own, and census (census.go) reports exactly its complement. Neither can
+// therefore disagree with the other about what is mapped (STYLE D3) — a name
+// added to run's switch alone is dropped by the guard, which its own test sees.
+//
+// Two of the names have no arm in run because another pass of this producer
+// maps them: <defaultOpenContent>, read by checkDefaultOpenContent and by every
+// complex type that reaches §3.4.2.3.3 clause 5.2 (produce_complex.go), and
+// <annotation>, whose placement rejectS4SFaults judges and which yields no
+// Annotation component here — §3.15.4 gives annotations no validation rule ("None
+// as such"), so a component no rule reads is not a coverage gap.
+func topLevelMapped(local string) bool {
+	switch local {
+	case "simpleType", "complexType", "element", "attribute", "group", "attributeGroup", "notation",
+		"include", "import", "override", "redefine",
+		"annotation", "defaultOpenContent":
+		return true
+	}
+	return false
+}
+
 // run walks the <schema> children in strict document order, producing each
 // in-scope top-level declaration into the shared builder. prescan must already
 // have run — for every document of the assembly, not just this one.
@@ -844,6 +869,10 @@ func compositionDirective(el *Element) bool {
 // use="required", and that pair's prohibitions sit on the LOCAL grammar types
 // instead (xs:localComplexType prohibits name, abstract, final and block,
 // :4816).
+//
+// A child topLevelMapped declines is skipped before the switch is reached, which
+// is why the switch has no default arm: the vocabulary lives in that predicate
+// alone, and census (census.go) reports its complement.
 func (p *producer) run() error {
 	for _, child := range p.schemaElem.Children() {
 		el, ok := child.(*Element)
@@ -857,6 +886,12 @@ func (p *producer) run() error {
 			continue
 		}
 		decl := p.ov.replacement(el)
+		if !topLevelMapped(decl.Name().Local()) {
+			// Mapped by no pass of this producer, and not rejected here either
+			// (§5.1 grammar faults are rejectS4SFaults's): census (census.go)
+			// records it as UnmappedNoDispatch, keyed by this same predicate.
+			continue
+		}
 		switch decl.Name().Local() {
 		case "simpleType":
 			name, err := p.topLevelName(decl)
@@ -960,9 +995,10 @@ func (p *producer) run() error {
 				return err
 			}
 			p.builder.AddNotation(n)
-		default:
-			// annotation, defaultOpenContent, … — not this slice's scope
-			// (§3.1.2), skipped, not invalid.
+		case "annotation", "defaultOpenContent":
+			// Not this slice's scope (§3.1.2): each is mapped by a pass of this
+			// producer other than this one, which is why topLevelMapped admits it
+			// and the census does not report it. See topLevelMapped.
 		}
 	}
 	return nil
