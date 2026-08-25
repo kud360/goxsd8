@@ -90,12 +90,22 @@ type AssembledDocument struct {
 	// index does.
 	Location string
 
-	// Unmapped is every construct of THIS discovery of the document that the
-	// producer maps to no component, in document order. Empty means the whole
-	// document lies inside the producer's mapped vocabulary. It is a property of
-	// the DISCOVERY, not of the document: a ·redefinition· in force over one
-	// reading excepts declarations another reading maps (§4.2.4 clause 4.1.2), so
-	// two discoveries of one file can differ here.
+	// Unmapped is every TOP-LEVEL <schema> child of THIS discovery of the document
+	// that the producer maps to no component, in document order. The top level is
+	// the only region censused: a complex type's content model, a simple type's
+	// facets, an <override>'s or <redefine>'s children are each a region of their
+	// own, widened one at a time by later sessions (#846). Empty is therefore
+	// never a statement about the whole document, only about the region censused.
+	//
+	// It is populated exactly as far as assembly got, which is complete only when
+	// [ParseReport] returned a NIL ERROR: a discovery is recorded when the
+	// document is read, before any census is taken, so a document reached by an
+	// assembly that then failed carries an empty Unmapped meaning NOT COMPUTED
+	// rather than "nothing unmapped".
+	//
+	// It is a property of the DISCOVERY, not of the document: a ·redefinition· in
+	// force over one reading excepts declarations another reading maps (§4.2.4
+	// clause 4.1.2), so two discoveries of one file can differ here.
 	//
 	// The slice is the report's own; treat it as read-only.
 	Unmapped []UnmappedConstruct

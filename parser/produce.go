@@ -824,12 +824,14 @@ func compositionDirective(el *Element) bool {
 // therefore disagree with the other about what is mapped (STYLE D3) — a name
 // added to run's switch alone is dropped by the guard, which its own test sees.
 //
-// Two of the names have no arm in run because another pass of this producer
-// maps them: <defaultOpenContent>, read by checkDefaultOpenContent and by every
-// complex type that reaches §3.4.2.3.3 clause 5.2 (produce_complex.go), and
-// <annotation>, whose placement rejectS4SFaults judges and which yields no
-// Annotation component here — §3.15.4 gives annotations no validation rule ("None
-// as such"), so a component no rule reads is not a coverage gap.
+// Two of the names have no arm in run, for DIFFERENT reasons.
+// <defaultOpenContent> is mapped by another pass of this producer:
+// checkDefaultOpenContent reads it, as does every complex type that reaches
+// §3.4.2.3.3 clause 5.2 (produce_complex.go). <annotation> is mapped by NO pass
+// — this producer builds an [xsd.Annotation] nowhere, and rejectS4SFaults only
+// judges where the element stands. It is admitted here because §3.15.4 gives
+// annotations no validation rule ("None as such"), so no verdict this processor
+// reaches can be short by the Annotation that is never built.
 func topLevelMapped(local string) bool {
 	switch local {
 	case "simpleType", "complexType", "element", "attribute", "group", "attributeGroup", "notation",

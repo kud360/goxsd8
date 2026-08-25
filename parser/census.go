@@ -48,13 +48,16 @@ import (
 // producer's document that topLevelMapped declines — the complement of run's
 // dispatch vocabulary, taken over exactly the children run walks.
 //
-// The three skips it shares with run are not unmapped constructs:
+// The three skips it shares with run are not reported as unmapped constructs:
 //
 //   - a non-element child (comment, text, PI) maps to nothing anywhere and is
 //     not a construct;
-//   - a child outside the XSD namespace is a §5.1 grammar fault, not a silent
-//     skip, and naming an element the schema for schema documents admits nowhere
-//     would report the fault as a coverage gap;
+//   - a child outside the XSD namespace is an OPEN GAP, not a settled skip:
+//     rejectS4SFaults returns at its namespace test (produce.go) and no other
+//     producer pass rejects such a child either, so today it is NEITHER rejected
+//     as a §5.1 grammar fault NOR reported here. A later region-widening session
+//     (#846) decides which of the two it becomes; until then a consumer must not
+//     read this census as covering it;
 //   - a child a ·redefinition· in force over this document excepts (§4.2.4
 //     clause 4.1.2) IS mapped — by the REDEFINING document's producer, in its
 //     own document-order position there — so it is unmapped only from this

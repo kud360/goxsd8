@@ -23,10 +23,11 @@ func unmappedNames(d parser.AssembledDocument) []string {
 // of the discovery — or written to one index for every document — reports the
 // wrong document's top level, or none at all.
 //
-// Everything else on those top levels is in the producer's mapped vocabulary and
-// must stay unreported: the four §4.2.1 directives, the six named declaration
-// kinds, <notation>, and the two mapped by a pass other than run's dispatch,
-// <annotation> and <defaultOpenContent>.
+// Everything else on those top levels is in topLevelMapped's vocabulary and must
+// stay unreported: the four §4.2.1 directives, the six named declaration kinds,
+// <notation>, <defaultOpenContent> (mapped by a pass other than run's dispatch),
+// and <annotation> (mapped by no pass, admitted because §3.15.4 gives
+// annotations no validation rule).
 func TestParseReportUnmappedNamesUndispatchedChildren(t *testing.T) {
 	docs := map[string]string{
 		"main.xsd": wrap("urn:a",
