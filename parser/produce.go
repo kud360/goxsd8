@@ -1621,11 +1621,12 @@ func rejectLocalSimpleTypeAttrs(elem *Element) error {
 // constructSimpleType maps one <simpleType> element (named or anonymous) into a
 // component. It dispatches on which of the three §3.16.2.1 alternatives the
 // element's body chooses — <list> to constructListType, <union> to
-// constructUnionType, <restriction> to the code below, which resolves the base,
-// maps the own facets and {final} (simpleTypeFinal), and constructs. It does NOT
-// memoize — the memo/cycle bookkeeping lives in buildSimpleType; an anonymous
-// inline type has no name to key on and is unreferenceable, so it is built here
-// directly, once.
+// constructUnionType, <restriction> to the code below, which rejects the
+// XSD-namespace children §4.1.2's content model has no position for
+// (rejectOutOfModelFacetChildren), resolves the base, maps the own facets and
+// {final} (simpleTypeFinal), and constructs. It does NOT memoize — the
+// memo/cycle bookkeeping lives in buildSimpleType; an anonymous inline type has
+// no name to key on and is unreferenceable, so it is built here directly, once.
 //
 // It does NOT charge the facet-VALUE sub-clauses of cos-st-restricts (§3.16.6.2)
 // — facet applicability against the primitive, and the bound/enumeration
@@ -1650,6 +1651,12 @@ func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.Simp
 		return p.constructListType(name, elem, body)
 	case "union":
 		return p.constructUnionType(name, elem, body)
+	}
+	// The grammar fault is charged before the base is resolved, so the verdict on
+	// an s4s-invalid <restriction> does not depend on whether its base= happens to
+	// resolve — the content-independence discipline rejectProhibitedAttrs records.
+	if err := rejectOutOfModelFacetChildren(body); err != nil {
+		return nil, err
 	}
 	base, err := p.resolveBase(body)
 	if err != nil {
@@ -1915,6 +1922,61 @@ func (p *producer) resolveBase(restriction *Element) (xsd.SimpleTypeOrRef, error
 	return xsd.SimpleTypeRef{Name: qn}, nil
 }
 
+// rejectOutOfModelFacetChildren rejects an XSD-namespace child of a
+// <simpleType>'s <restriction> that Datatypes §4.1.2's content model
+// (xmlschema11-2.md:2748, the group xs:simpleRestrictionModel at :3929) has no
+// position for. Its wildcard position is namespace="##other", which EXCLUDES the
+// XSD namespace, so an XSD-namespace name the model does not list is admitted
+// nowhere in it and the producer would otherwise map a component out of an
+// s4s-invalid document (#972). Children outside the XSD namespace are the
+// wildcard's own and pass.
+//
+// The admitted set is what this producer can MAP: <annotation>, the inline base
+// <simpleType>, and the xs:facet substitution group as facetKindOf answers for it
+// plus the two names restrictionFacets folds above that lookup, <enumeration> and
+// <assertion> (singular — §4.3.13 spells the FACET in the plural and no element
+// bears that name). facetKindOf is the predicate rather than s4sFacetElement
+// (produce_s4sorder.go), which admits the plural <assertions> because it only
+// ORDERS names its models admit somewhere: harmless there, fatal for membership
+// here.
+//
+// It charges §5.1's FIRST bullet (xmlschema11-1.md:4296), which carries NO
+// numbered rule ID — the footing checkS4SChildOrder records at length and
+// rejectProhibitedAttrs already stands on, charging src-* or cvc-* here being a
+// fabricated verdict (STYLE E2). The first offending child in document order is
+// the one reported (STYLE D2).
+//
+// ONLY constructSimpleType calls it, and the seam is the content model rather
+// than the mapping: restrictionFacets' other caller, simpleContentSimpleType
+// (produce_complex.go), reads an xs:simpleRestrictionType (xmlschema11-1.md:1692)
+// whose tail "((attribute | attributeGroup)*, anyAttribute?), assert*" admits
+// four names §4.1.2 has no position for, and produceAttributeUses and
+// assertionsOf map all four off that same element. One shared answer would
+// false-reject every one of them, so the check sits at the caller that knows
+// which model it read.
+//
+// §5.1 binds the schema document "after the conditional-inclusion pre-processing
+// described in Conditional inclusion (§4.2.2)", which is what keeps a child
+// excluded by vc:minVersion (conditional.go) from ever reaching this walk.
+func rejectOutOfModelFacetChildren(restriction *Element) error {
+	for _, child := range restriction.Children() {
+		el, ok := child.(*Element)
+		if !ok || el.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		local := el.Name().Local()
+		if local == "annotation" || local == "simpleType" || local == "enumeration" || local == "assertion" {
+			continue
+		}
+		if _, ok := facetKindOf(local); ok {
+			continue
+		}
+		return fmt.Errorf("parser: <%s> at %s is a child the schema for schema documents does not admit under the <restriction> at %s: a <simpleType>'s <restriction> has the content model (xmlschema11-2.md §4.1.2) (annotation?, (simpleType?, (minExclusive | minInclusive | maxExclusive | maxInclusive | totalDigits | fractionDigits | length | minLength | maxLength | enumeration | whiteSpace | pattern | assertion | explicitTimezone | {any with namespace: ##other})*)), whose wildcard position excludes the XSD namespace",
+			local, el.Loc(), restriction.Loc())
+	}
+	return nil
+}
+
 // restrictionFacets maps the constraining-facet children of a <restriction> in
 // document order. The plain-lexical facets map one-to-one, with three folding
 // exceptions, each landing at the position of its kind's FIRST child element so
@@ -1934,6 +1996,11 @@ func (p *producer) resolveBase(restriction *Element) (xsd.SimpleTypeOrRef, error
 // skipped. src-simple-type clause 1 excepts xs:enumeration, xs:pattern and
 // xs:assertion from its no-two-children-with-one-name rule, which is what makes
 // all three folds reachable on a legal schema.
+//
+// A child whose name maps to no facet kind is skipped rather than rejected,
+// because the two callers read DIFFERENT content models and only one of them can
+// answer: rejectOutOfModelFacetChildren charges §4.1.2's, at the
+// constructSimpleType site alone.
 func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) {
 	var facets []xsd.Facet
 	var assertions []xsd.Assertion
