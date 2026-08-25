@@ -213,14 +213,23 @@ plus log entry), `Closes #<N>` in the body closes the issue, and GitHub
 auto-deletes the head branch (keep the repo's "Automatically delete head
 branches" setting ON). Nothing is ever committed directly to `main`.
 
+A landing that closes more than one issue writes ONE `Closes #<N>`
+sentence per issue — `Closes #669. Closes #625. Closes #748.` — never the
+comma form `Closes #669, #625, #748.`. GitHub binds a closing keyword to
+the single reference immediately following it, and every later item of a
+comma list is a plain mention that closes nothing. PR #991 / `34a8043`
+named six in the comma form and closed #669 alone; PR #998 / `abe781a`
+named five in the per-issue form and closed all five.
+
 The LOG entry comes due here and nowhere earlier. `/develop` step 5
 (Judge) runs before step 6 (Land), where the chronicler writes it, so the
 tree the arbiter judged carries no entry for this issue and an empty
 `docs/LOG/` diff at verdict time is the documented order rather than a
 skipped step (#820).
 
-Three preconditions, verified and stated by the orchestrating session
-before the PR is opened — none is anyone else's to volunteer:
+Four preconditions, verified and stated by the orchestrating session —
+the first three before the PR is opened, the fourth after the merge. None
+is anyone else's to volunteer:
 
 1. **The LOG entry naming THIS issue is among the branch's added lines** —
    `git diff origin/main...HEAD -- docs/LOG/` piped through
@@ -242,6 +251,15 @@ before the PR is opened — none is anyone else's to volunteer:
    comment, and a repair round's own comment dispositions every numbered
    item of the verdict it repairs. An account that was never written is a
    mason round, never the orchestrator's to compose (#565).
+4. **Every issue the squash body names reads `closed`** — AFTER the merge,
+   not before it: for each `Closes #<N>` sentence in the squash body, read
+   that issue's state back over the GitHub channel and state the result.
+   The failure is silent on both sides — the merge succeeds and the body
+   reads as intent — so a `Closes #<N>` whose issue is still open means
+   the body used the comma form or an otherwise unbound keyword (#993).
+   Close those issues by hand now and write the next body in the
+   per-issue form, rather than leaving a queue that offers a later session
+   work already on `main`.
 
 ### After the verdict
 
