@@ -217,9 +217,7 @@ A landing that closes more than one issue writes ONE `Closes #<N>`
 sentence per issue — `Closes #669. Closes #625. Closes #748.` — never the
 comma form `Closes #669, #625, #748.`. GitHub binds a closing keyword to
 the single reference immediately following it, and every later item of a
-comma list is a plain mention that closes nothing. PR #991 / `34a8043`
-named six in the comma form and closed #669 alone; PR #998 / `abe781a`
-named five in the per-issue form and closed all five.
+comma list is a plain mention that closes nothing.
 
 The LOG entry comes due here and nowhere earlier. `/develop` step 5
 (Judge) runs before step 6 (Land), where the chronicler writes it, so the
@@ -252,14 +250,15 @@ is anyone else's to volunteer:
    item of the verdict it repairs. An account that was never written is a
    mason round, never the orchestrator's to compose (#565).
 4. **Every issue the squash body names reads `closed`** — AFTER the merge,
-   not before it: for each `Closes #<N>` sentence in the squash body, read
-   that issue's state back over the GitHub channel and state the result.
-   The failure is silent on both sides — the merge succeeds and the body
-   reads as intent — so a `Closes #<N>` whose issue is still open means
-   the body used the comma form or an otherwise unbound keyword (#993).
-   Close those issues by hand now and write the next body in the
-   per-issue form, rather than leaving a queue that offers a later session
-   work already on `main`.
+   not before it. Take the list from what this landing set out to close,
+   the issues picked at `/develop` step 2, and never from the body's
+   `Closes` sentences, which the comma form collapses to one. Read each of
+   those issues back over the GitHub channel and state the result. The
+   failure is silent on both sides — the merge succeeds and the body reads
+   as intent — and its signature is the first named issue closed with
+   every later one of the same list open, which IS the comma form; a first
+   named issue that is itself open is an unbound keyword of some other
+   kind (#993). Close by hand whatever is still open.
 
 ### After the verdict
 
