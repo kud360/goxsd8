@@ -179,10 +179,11 @@
 //	    read-only runs ONLY — under GOXSD_RATCHET=1 the run still fails.
 //
 // The supplementary fixture-driven tests in this package (datatypes_test.go,
-// schema_test.go, instance_test.go) keep their plain skip on a missing suite,
-// unconditionally (skipWithoutSuite). They are deliberately treated differently
-// from TestConformance: each drives a named cohort of suite documents to prove
-// one executor decides them for the right reason, so skipping them loses unit
-// coverage but cannot dress an empty run up as suite-wide conformance.
-// TestConformance is the only test whose silence was mistakable for a score.
+// schema_test.go, instance_test.go, census_test.go) keep their plain skip on
+// a missing suite, unconditionally (skipWithoutSuite). They are deliberately
+// treated differently from TestConformance: each drives a named cohort of suite
+// documents to prove one executor decides them for the right reason, so
+// skipping them loses unit coverage but cannot dress an empty run up as
+// suite-wide conformance. TestConformance is the only test whose silence was
+// mistakable for a score.
 package conformance
