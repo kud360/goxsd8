@@ -633,9 +633,12 @@ compiles, is documented, and has **zero** callers module-wide.
   `conformance/schema.go`, and none outside package `conformance`;
   `parser.Node` and `Text.Data` have zero). Not a tier violation —
   infrastructure may import the library — but the surface exists because
-  `parser` reports no unmapped-construct list. Filed together with that gap
-  as **#846**; `Text`'s own justification (`<xs:documentation>` round-trip)
-  belongs to the annotation decision (#407).
+  that model has to re-derive the producer's coverage from the raw tree.
+  **#1029** supplies the signal that replaces it
+  (`parser.AssembledDocument.Unmapped`) and **#1030** consumes it, deleting
+  the model and unexporting these; `Text`'s own justification
+  (`<xs:documentation>` round-trip) belongs to the annotation decision
+  (#407).
 - **`xsderr.IsValidRule`** — **resolved (#273); re-check, do not re-file.**
   It still has zero non-test consumers, but the module-wide test
   `xsderr/doc.go` claims now exists and passes:

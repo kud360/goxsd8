@@ -815,21 +815,93 @@ func compositionDirective(el *Element) bool {
 	return isXSD(el, "include") || isXSD(el, "import") || isXSD(el, "override") || isXSD(el, "redefine")
 }
 
-// run walks the <schema> children in strict document order, producing each
-// in-scope top-level declaration into the shared builder. prescan must already
-// have run — for every document of the assembly, not just this one.
+// topLevelMapped reports whether this producer maps a <schema> child named local
+// anywhere at all.
 //
-// Each child is first passed through the override in force over this document
-// (§F.2 clauses 1 and 2): a top-level source declaration an <override> names is
-// produced from the OVERRIDING declaration in the overridden one's place, and
-// every other child is produced as written. The substitution never changes the
-// element TYPE — it is half of the matching key — so the switch below is the same
-// whichever declaration is produced.
+// It is the one statement of that vocabulary: run's dispatch below is exhaustive
+// over it and consults it as a guard rather than carrying a default arm of its
+// own, and census (census.go) reports exactly its complement. Neither can
+// therefore disagree with the other about what is mapped (STYLE D3) — a name
+// added to run's switch alone is dropped by the guard, which its own test sees.
 //
-// A declaration a <redefine> in force over this document replaces is skipped
-// outright (§4.2.4 clause 4.1.2): the redefining declaration is produced by the
-// REDEFINING document's producer, in its own document-order position there, and
-// this one survives only as the hidden original behind it (src-expredef).
+// Two of the names have no arm in run, for DIFFERENT reasons.
+// <defaultOpenContent> is mapped by another pass of this producer:
+// checkDefaultOpenContent reads it, as does every complex type that reaches
+// §3.4.2.3.3 clause 5.2 (produce_complex.go). <annotation> is mapped by NO pass
+// — this producer builds an [xsd.Annotation] nowhere, and rejectS4SFaults only
+// judges where the element stands. It is admitted here because §3.15.1 puts
+// annotations outside ·validation· altogether — "Annotations do not participate
+// in ·validation· as such. Provided an annotation itself satisfies all relevant
+// ·Schema Component Constraints· it cannot affect the ·validation· of element
+// information items" (:3465) — so no verdict this processor reaches can be short
+// by the Annotation that is never built.
+func topLevelMapped(local string) bool {
+	switch local {
+	case "simpleType", "complexType", "element", "attribute", "group", "attributeGroup", "notation",
+		"include", "import", "override", "redefine",
+		"annotation", "defaultOpenContent":
+		return true
+	}
+	return false
+}
+
+// topLevelDecls yields, in strict document order, every <schema> child this
+// producer considers at all.
+//
+// It is the one walk of that top level: run below dispatches over it and census
+// (census.go) takes topLevelMapped's complement over it, so a change to either
+// skip test moves both readers together and neither can come to believe the
+// other looked at a different set of children (STYLE T4).
+//
+// Each child is passed through the override in force over this document before
+// it is yielded (§F.2 clause 1, #c-override-xslt-match, :6568): a top-level
+// source declaration an <override> names is yielded as the OVERRIDING
+// declaration in the overridden one's place, and every other child as written.
+// The substitution never changes the element TYPE — it is half of the matching
+// key — so a caller switching on the yielded name sees the same name either way.
+//
+// Three children are not yielded:
+//
+//   - a non-element child (comment, text, PI), which maps to nothing anywhere
+//     and is not a construct;
+//   - a child a ·redefinition· in force over this document excepts (§4.2.4
+//     clause 4.1.2): the redefining declaration is produced by the REDEFINING
+//     document's producer, in its own document-order position there, and this
+//     one survives only as the hidden original behind it (src-expredef);
+//   - a child outside the XSD namespace, per the gap below.
+//
+// GAP(parser): a top-level <schema> child outside the XSD namespace is neither
+// rejected nor censused. <xs:schema>'s content model in the schema for schema
+// documents (:4562) has no wildcard arm — xs:openAttrs admits foreign
+// ATTRIBUTES, not foreign element children — so such a document is a §5.1
+// first-bullet grammar fault (:4296); rejectS4SFaults returns at its own
+// namespace test before reaching one, and no other pass of this producer judges
+// it. Skipping it here keeps it out of the census too, so
+// [AssembledDocument.Unmapped] does not name it either. Which of the two it
+// becomes is owned by #1036. No error direction is claimed for it: the value
+// withheld is a rejection, and the readers of that rejection are not enumerated
+// here (STYLE P3a).
+func (p *producer) topLevelDecls(yield func(decl *Element) bool) {
+	for _, child := range p.schemaElem.Children() {
+		el, ok := child.(*Element)
+		if !ok {
+			continue
+		}
+		if el.Name().Space() != xsd.XMLSchemaNS {
+			continue
+		}
+		if p.rd.excepts(el) {
+			continue
+		}
+		if !yield(p.ov.replacement(el)) {
+			return
+		}
+	}
+}
+
+// run produces each in-scope top-level declaration of the document into the
+// shared builder, over topLevelDecls' walk and in its order. prescan must
+// already have run — for every document of the assembly, not just this one.
 //
 // The six named kinds whose {name} the schema for schema documents makes
 // use="required" — <simpleType>, <complexType>, <group>, <attributeGroup>,
@@ -844,19 +916,18 @@ func compositionDirective(el *Element) bool {
 // use="required", and that pair's prohibitions sit on the LOCAL grammar types
 // instead (xs:localComplexType prohibits name, abstract, final and block,
 // :4816).
+//
+// A child topLevelMapped declines is skipped before the switch is reached, which
+// is why the switch has no default arm: the vocabulary lives in that predicate
+// alone, and census (census.go) reports its complement.
 func (p *producer) run() error {
-	for _, child := range p.schemaElem.Children() {
-		el, ok := child.(*Element)
-		if !ok {
+	for decl := range p.topLevelDecls {
+		if !topLevelMapped(decl.Name().Local()) {
+			// Mapped by no pass of this producer, and not rejected here either
+			// (§5.1 grammar faults are rejectS4SFaults's): census (census.go)
+			// records it as UnmappedNoDispatch, keyed by this same predicate.
 			continue
 		}
-		if el.Name().Space() != xsd.XMLSchemaNS {
-			continue
-		}
-		if p.rd.excepts(el) {
-			continue
-		}
-		decl := p.ov.replacement(el)
 		switch decl.Name().Local() {
 		case "simpleType":
 			name, err := p.topLevelName(decl)
@@ -960,9 +1031,9 @@ func (p *producer) run() error {
 				return err
 			}
 			p.builder.AddNotation(n)
-		default:
-			// annotation, defaultOpenContent, … — not this slice's scope
-			// (§3.1.2), skipped, not invalid.
+		case "annotation", "defaultOpenContent":
+			// Not this slice's scope (§3.1.2). topLevelMapped says, for each
+			// separately, what maps it and why the census does not report it.
 		}
 	}
 	return nil

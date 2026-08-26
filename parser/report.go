@@ -3,6 +3,7 @@ package parser
 import (
 	"strconv"
 
+	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -88,6 +89,81 @@ type AssembledDocument struct {
 	// Compare locations through this field, exactly as the assembly's own dedup
 	// index does.
 	Location string
+
+	// Unmapped is every TOP-LEVEL <schema> child of THIS discovery of the document
+	// that the producer maps to no component, in document order. The top level is
+	// the only region censused: a complex type's content model, a simple type's
+	// facets, an <override>'s or <redefine>'s children are each a region of their
+	// own, widened one at a time by later sessions (#1030). Empty is therefore
+	// never a statement about the whole document, only about the region censused
+	// — and not quite all of even that region: a top-level child outside the XSD
+	// namespace is passed over unreported, an open gap marked and owned at
+	// producer.topLevelDecls (#1036).
+	//
+	// It is populated exactly as far as assembly got, which is complete only when
+	// [ParseReport] returned a NIL ERROR: a discovery is recorded when the
+	// document is read, before any census is taken, so a document reached by an
+	// assembly that then failed carries an empty Unmapped meaning NOT COMPUTED
+	// rather than "nothing unmapped".
+	//
+	// It is a property of the DISCOVERY, not of the document: a ·redefinition· in
+	// force over one reading excepts declarations another reading maps (§4.2.4
+	// clause 4.1.2), so two discoveries of one file can differ here.
+	//
+	// The slice is the report's own; treat it as read-only.
+	Unmapped []UnmappedConstruct
+}
+
+// UnmappedConstruct is one element of a schema document that the producer maps
+// to no component and does not reject either — a construct whose contribution
+// to the assembled schema, whatever §3 says it should be, is silently absent.
+//
+// It is the positive form of the question a consumer gating on this processor's
+// coverage otherwise has to answer by re-walking the document against a
+// hand-kept allowlist of what the producer happens to read (the conformance
+// harness's schemaShapeDecidable), which is a second implementation of this
+// package's own dispatch.
+type UnmappedConstruct struct {
+	// Name is the expanded name of the ELEMENT that went unmapped — never the
+	// {name} of a component, there being none.
+	Name xsd.QName
+
+	// Reason is why it was not mapped.
+	Reason UnmappedReason
+
+	// At is the location of that element.
+	At xsderr.Loc
+}
+
+// UnmappedReason is why a construct yielded no component. It is a closed set
+// (STYLE T1, the [UnfollowedReason] idiom): a uint8 whose zero value is invalid,
+// so an unset Reason is a caught bug rather than a valid one.
+type UnmappedReason uint8
+
+// The UnmappedReason values.
+const (
+	// UnmappedNoDispatch is an element in the XSD namespace at a position whose
+	// mapping dispatch has NO ARM for its name at all: nothing about the element
+	// is read, so whatever §3 makes it contribute is absent entire.
+	//
+	// It is not the reason for a construct the producer DOES dispatch and maps
+	// only in part — an <element ref=> whose substitutionGroup= is ignored
+	// (produce_complex.go, elementParticleTerm), an extension whose base
+	// {attribute wildcard} is never folded in (§3.4.2.5 clause 2.2). Those have
+	// an arm, are mapped, and lose one property inside it; naming them here would
+	// make the two indistinguishable to a consumer. They want a reason of their
+	// own, which does not exist yet.
+	UnmappedNoDispatch UnmappedReason = iota + 1
+)
+
+// String returns a stable identifier for the reason, or a diagnostic form for
+// an invalid value (never panics — it is reached from logging and error
+// formatting).
+func (r UnmappedReason) String() string {
+	if r == UnmappedNoDispatch {
+		return "no-dispatch"
+	}
+	return "UnmappedReason(" + strconv.Itoa(int(r)) + ")"
 }
 
 // UnfollowedDirective is one ·inter-schema-document reference· that yielded no
