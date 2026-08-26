@@ -349,11 +349,13 @@ entry is silently dropped. (#600 tracks the single-append-point layout.)
 
 On a second arbiter rejection, or a resume whose merge will not resolve:
 checkpoint the branch one final time, **relabel** the issue
-`needs-replan`, and comment the findings that killed the attempt. Nothing
-is renamed or deleted — the label alone retires the branch in place as
-re-planning evidence. **Two rejections is the hard cap** (PRINCIPLES 30);
-never solicit a third round. After re-planning, the cartographer closes
-the issue as superseded and files a replacement.
+`needs-replan` and clear `ready`, and comment the findings that killed
+the attempt. Nothing is renamed or deleted — the label alone retires the
+branch in place as re-planning evidence. **Two rejections is the hard
+cap** (PRINCIPLES 30); never solicit a third round. After re-planning,
+the cartographer files the replacement, names it on the parked thread,
+and closes the `needs-replan` issue `not_planned` — never `completed`,
+which marks work that landed (#493).
 
 ## GitHub conventions
 
