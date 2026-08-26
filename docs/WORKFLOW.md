@@ -93,12 +93,16 @@ Invariants:
   TTL**: newer is LIVE — off-limits, and so is its issue; older is
   EXPIRED — resumable. Checkpoint pushes are therefore the lease
   heartbeat; a long step pushes intermediate commits rather than letting
-  its lease lapse. A branch that has pushed **no commits of its own** has
-  no tip time of its own — its tip is the landing it branched from, so no
-  age reading may retire it and it is never EXPIRED (#722). **Its lease is
-  dated by its newest issue-thread comment instead, against the same 2h
-  TTL**: past that the claim is takeable, because a session still working
-  would have checkpointed. Taking one means posting a takeover comment
+  its lease lapse, and a step that produces nothing to commit pushes
+  `git commit --allow-empty` instead. A branch that has pushed **no
+  commits of its own** has no tip time of its own — its tip is the landing
+  it branched from, so no tip-age reading may date it or retire it (#722).
+  **Its lease is dated by the newest thread comment whose body opens with
+  `RESUME:` or `TAKEOVER:`**, against the same 2h TTL. No other comment
+  dates it: a `GROUNDING:`, a verdict, a `MASON:` account and a planning
+  note each record work already done, not a session still holding the
+  branch. Past the TTL — or with no such comment on the thread at all —
+  the claim is takeable. Taking one means posting the `TAKEOVER:` comment
   naming the branch tip you found, then pushing the heartbeat — which
   makes the ref the arbiter of the race, exactly as it is everywhere else
   (#867).
