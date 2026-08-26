@@ -213,14 +213,21 @@ plus log entry), `Closes #<N>` in the body closes the issue, and GitHub
 auto-deletes the head branch (keep the repo's "Automatically delete head
 branches" setting ON). Nothing is ever committed directly to `main`.
 
+A landing that closes more than one issue writes ONE `Closes #<N>`
+sentence per issue — `Closes #669. Closes #625. Closes #748.` — never the
+comma form `Closes #669, #625, #748.`. GitHub binds a closing keyword to
+the single reference immediately following it, and every later item of a
+comma list is a plain mention that closes nothing.
+
 The LOG entry comes due here and nowhere earlier. `/develop` step 5
 (Judge) runs before step 6 (Land), where the chronicler writes it, so the
 tree the arbiter judged carries no entry for this issue and an empty
 `docs/LOG/` diff at verdict time is the documented order rather than a
 skipped step (#820).
 
-Three preconditions, verified and stated by the orchestrating session
-before the PR is opened — none is anyone else's to volunteer:
+Four preconditions, verified and stated by the orchestrating session —
+the first three before the PR is opened, the fourth after the merge. None
+is anyone else's to volunteer:
 
 1. **The LOG entry naming THIS issue is among the branch's added lines** —
    `git diff origin/main...HEAD -- docs/LOG/` piped through
@@ -242,6 +249,21 @@ before the PR is opened — none is anyone else's to volunteer:
    comment, and a repair round's own comment dispositions every numbered
    item of the verdict it repairs. An account that was never written is a
    mason round, never the orchestrator's to compose (#565).
+4. **Every issue the squash body names reads `closed`** — AFTER the merge,
+   not before it. The iteration set is every `#<N>` reference the squash
+   commit text names, subject and body, bound closing keyword and plain
+   mention alike — `git log -1 --format=%B <squash-sha>` piped through
+   `grep -oE '#[0-9]+' | sort -u`. Not the `Closes` sentences, which the
+   comma form collapses to the single bound reference, and not `/develop`
+   step 2's pick, which is one issue by construction while absorbed work
+   is written in the commit body and nowhere else. Read every number that
+   extraction yields back over the GitHub channel, and state `closed` or
+   `open` for each. The failure is silent on both sides — the merge
+   succeeds and the body reads as intent — and its signature is the first
+   named issue closed with every later one of the same list open, which IS
+   the comma form; a first named issue that is itself open is an unbound
+   keyword of some other kind (#993). Close by hand whatever reads `open`,
+   or state why the landing named it and did not close it.
 
 ### After the verdict
 
