@@ -17,7 +17,7 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-08-26 (`/backlog`. Replaced whole, per step 6: the lane table is a fresh `go tool lanestatus` paste, the branch namespace a fresh `wipsurvey` against a fresh `git fetch -p origin main`, the marker census a fresh `gapaudit`, and the milestone and queue counts a fresh 606-issue page-numbered `state=all` fetch taken after this pass's own writes. **A `/backlog` re-derives the band ordering rather than shifting it**, so every row's rank below is argued from this pass's evidence. This pass follows THREE landings, re-planned and closed **#846** after its park into **#1029** + **#1030**, **REOPENED #809** — closed by a squash body that says in words it does not close it — filed **#1031**–**#1034**, corrected seven open bodies, and folded the **eighth consecutive** persona consultation)
+## Status — 2026-08-26 (`/backlog`. Replaced whole, per step 6: the lane table is a fresh `go tool lanestatus` paste, the branch namespace a fresh `wipsurvey` against a fresh `git fetch -p origin main`, the marker census a fresh `gapaudit`, and the milestone and queue counts a fresh 606-issue page-numbered `state=all` fetch taken after this pass's own writes. **A `/backlog` re-derives the band ordering rather than shifting it**, so every row's rank below is argued from this pass's evidence. This pass follows THREE landings, re-planned and closed **#846** after its park into **#1029** + **#1030**, **REOPENED #809** — closed by a squash body that says in words it does not close it — filed **#1031**–**#1034**, corrected EIGHT open bodies, and folded the **eighth consecutive** persona consultation)
 
 Conformance lanes — **paste `go tool lanestatus` verbatim**, never a
 hand-count:
@@ -302,7 +302,7 @@ from a missing heading. The only `blocked` body naming a landed issue is
 `blocked` on a human ruling and nothing else. #493's own post-land pass
 (`9a8f3ef`) had already run this sweep to the same zero.
 
-**Seven open bodies were corrected rather than commented at**, per
+**Eight open bodies were corrected rather than commented at**, per
 `docs/WORKFLOW.md`'s filing discipline:
 
 - **#16** — its `## Notes` "Current state of the binary" paragraph was dated
