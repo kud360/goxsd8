@@ -231,6 +231,12 @@ comma form `Closes #669, #625, #748.`. GitHub binds a closing keyword to
 the single reference immediately following it, and every later item of a
 comma list is a plain mention that closes nothing.
 
+To name an issue WITHOUT closing it, write **names and leaves open** —
+never a closing keyword (`close`, `closes`, `closed`, `fix`, `fixes`,
+`fixed`, `resolve`, `resolves`, `resolved`) in a negated clause or a
+list heading. The binding holds whatever the surrounding prose means,
+and a line break does not break it (#1034).
+
 The LOG entry comes due here and nowhere earlier. `/develop` step 5
 (Judge) runs before step 6 (Land), where the chronicler writes it, so the
 tree the arbiter judged carries no entry for this issue and an empty
@@ -275,7 +281,8 @@ is anyone else's to volunteer:
    named issue closed with every later one of the same list open, which IS
    the comma form; a first named issue that is itself open is an unbound
    keyword of some other kind (#993). Close by hand whatever reads `open`,
-   or state why the landing named it and did not close it.
+   or state why the landing named it and did not close it; reopen by hand
+   whatever reads `closed` that the body named and meant to leave open.
 
 ### After the verdict
 
