@@ -159,6 +159,11 @@ REST spells the field `created_at` where the tools want `createdAt`, so that
 rename is not optional either. An issue with no `comments` key keeps every
 other verdict it would have had; only its empty claim goes undated.
 
+A claim whose thread carries no `RESUME:`/`TAKEOVER:` comment at all stays
+CLAIMED through the second pass. That is the answer, not a failed fetch:
+nothing has ever dated the claim, which is not the same as its lease having
+lapsed, and every claim looks like this until its holder's first checkpoint.
+
 ## Failure and overlap
 
 Assume every run starts in a fresh container with a fresh clone: anything

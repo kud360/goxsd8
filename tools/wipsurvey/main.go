@@ -53,8 +53,10 @@
 // lease from one locks the issue for a further TTL after its session died
 // (#981). Supply each issue's comments in the input and this tool applies
 // that rule, reporting the branch LIVE or EXPIRED with the heartbeat's
-// age; omit them and the branch stays CLAIMED for a reader to settle by
-// hand.
+// age. Omit them — or find a thread with no heartbeat ever posted on it,
+// which is how every claim starts life — and the branch stays CLAIMED for
+// a reader to settle by hand. Only an aged heartbeat makes an empty claim
+// EXPIRED; an absent one is not a lapsed one.
 //
 // That ancestry test needs main's commit object in this checkout, while
 // the SHA it tests against comes live from ls-remote, so a checkout that
@@ -148,7 +150,7 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 			issue = &state
 		}
 		got, lease, reason := classify(br.branch, tip, anc, now, issue)
-		rows = append(rows, row{issue: br.issue, branch: br.branch, lease: lease, verdict: got, reason: reason})
+		rows = append(rows, row{issue: br.issue, branch: br.branch, lease: lease, anc: anc, verdict: got, reason: reason})
 	}
 	sortRows(rows)
 
@@ -476,11 +478,13 @@ const (
 // pure — no git or process calls — so tests exercise it directly without a
 // repository or network access.
 //
-// The lease age is nil where no evidence dates the lease: an unfetched
-// tip, or an empty claim this input cannot date. It is what the report's
-// LEASE AGE column prints, and it is the tip's age for every branch that
-// has commits of its own and the heartbeat comment's age for one that does
-// not.
+// The lease age is the tip's age for a branch with commits of its own and
+// the newest heartbeat comment's age for one with none. It is nil where
+// nothing in this input dates the lease: an unfetched tip, an empty claim
+// no heartbeat dates, or a retired branch with no commits of its own —
+// retirement does not turn a landing's tip into the branch's own lease
+// (#809). It is what the report's LEASE AGE column prints, which renders
+// the nil cases as "main's" or "unknown" rather than as a duration.
 //
 // tip is nil when the branch's SHA has never been fetched into this
 // checkout's object store; classify then reports unknown rather than
@@ -495,7 +499,9 @@ const (
 //   - Retirement first: a closed or needs-replan issue retires its branch
 //     outright, with or without a fetched tip and with or without commits
 //     of its own, per WORKFLOW.md's "abandoned attempts are retired in
-//     place ... never resumed."
+//     place ... never resumed." The verdict ignores the ancestry, but the
+//     lease age reads it: a retired branch that never committed has no
+//     more age of its own than a live one does.
 //   - Then an unfetched tip, which is unknown.
 //   - Then anc == ancestryNoCommits, which classifyEmptyClaim dates from
 //     the issue thread: the tip belongs to a landing, not to this branch,
@@ -507,10 +513,10 @@ const (
 //     provisional rather than settled (#806).
 func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue *issueState) (verdict, *time.Duration, string) {
 	if issue != nil && issue.closed {
-		return retired, tipAge(tip, now), fmt.Sprintf("%s: issue #%d is closed", branch, issue.number)
+		return retired, retiredLease(tip, anc, now), fmt.Sprintf("%s: issue #%d is closed", branch, issue.number)
 	}
 	if issue != nil && issue.needsReplan {
-		return retired, tipAge(tip, now), fmt.Sprintf("%s: issue #%d is labelled needs-replan", branch, issue.number)
+		return retired, retiredLease(tip, anc, now), fmt.Sprintf("%s: issue #%d is labelled needs-replan", branch, issue.number)
 	}
 	if tip == nil {
 		return unknown, nil, fmt.Sprintf("%s: tip not fetched -- run `git fetch origin`", branch)
@@ -538,25 +544,42 @@ func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue 
 // Its tip is the landing it branched from, so the only clock left is
 // WORKFLOW.md's: the newest thread comment opening with a heartbeat
 // marker, against the same claim TTL. A thread whose newest heartbeat is
-// past the TTL — or which carries none at all — leaves the claim takeable,
-// which is EXPIRED, the verdict /develop reads as resumable. No tip age
-// reaches any of that arithmetic, so #722's hazard stays closed.
+// past the TTL leaves the claim takeable, which is EXPIRED, the verdict
+// /develop reads as resumable. No tip age reaches any of that arithmetic,
+// so #722's hazard stays closed.
 //
-// Without this issue's comments in the input there is no clock and the
-// branch stays CLAIMED, the verdict that asks a reader to settle it by
-// hand.
+// A lapsed heartbeat and an absent one are opposite evidence, not the same
+// evidence. /develop pushes every claim as a bare branch and posts nothing
+// heartbeat-shaped until its first checkpoint, so a thread carrying no
+// heartbeat at all is the shape of a claim made seconds ago just as much
+// as of one abandoned — EXPIRED there hands a session the branch someone
+// else is grounding right now (#981). Only an aged heartbeat demotes a
+// claim. With none ever posted, and equally without this issue's comments
+// in the input, the branch stays CLAIMED, the verdict that asks a reader
+// to settle it from the thread rather than on age.
 func classifyEmptyClaim(branch string, now time.Time, issue *issueState, leaseNote string) (verdict, *time.Duration, string) {
 	if issue == nil || !issue.commentsRead {
 		return claimed, nil, fmt.Sprintf("%s: no commits of its own; tip age is main's, not the claim's -- do not retire on age; supply this issue's comments to date the lease, or settle it from the issue thread%s", branch, leaseNote)
 	}
 	if issue.heartbeat == nil {
-		return expired, nil, fmt.Sprintf("%s: no commits of its own and no %s comment on the thread -- nothing dates this claim, it is takeable", branch, heartbeatMarkers)
+		return claimed, nil, fmt.Sprintf("%s: no commits of its own and no %s comment ever posted -- a claim is born undated, so this is not a lapsed lease; settle it from the issue thread", branch, heartbeatMarkers)
 	}
 	age := now.Sub(*issue.heartbeat)
 	if age <= claimTTL {
 		return live, &age, fmt.Sprintf("%s: no commits of its own; lease dated by its newest %s comment, posted %s ago, within the %s claim TTL", branch, heartbeatMarkers, formatAge(age), formatAge(claimTTL))
 	}
 	return expired, &age, fmt.Sprintf("%s: no commits of its own; newest %s comment posted %s ago, past the %s claim TTL -- takeable", branch, heartbeatMarkers, formatAge(age), formatAge(claimTTL))
+}
+
+// retiredLease is a retired branch's lease age: its tip's, or nil when the
+// branch pushed no commits of its own and that tip is therefore the
+// landing it branched from. Retirement changes the verdict, not whose
+// clock the tip is, and the LEASE AGE column is read (#809).
+func retiredLease(tip *time.Time, anc ancestry, now time.Time) *time.Duration {
+	if anc == ancestryNoCommits {
+		return nil
+	}
+	return tipAge(tip, now)
 }
 
 // tipAge is tip's age at now, or nil when the tip was never fetched.
@@ -576,11 +599,14 @@ func formatAge(d time.Duration) string {
 }
 
 // row is one line of the survey's output table. lease is the age classify
-// dated the verdict from, nil where nothing dated it.
+// dated the verdict from, nil where nothing dated it; anc is what git
+// could establish about the branch against main, which is what tells the
+// two kinds of nothing apart when the column is rendered.
 type row struct {
 	issue   int
 	branch  string
 	lease   *time.Duration
+	anc     ancestry
 	verdict verdict
 	reason  string
 }
@@ -621,18 +647,23 @@ func renderTable(w io.Writer, rows []row) error {
 	return nil
 }
 
-// leaseAgeCell renders one row's LEASE AGE. A claimed row reads "main's"
-// rather than a duration: the number would be a real duration attached to
-// the wrong branch, and a column scanned faster than it is read is the
-// whole reason that age got acted on (#722). Every other row with nothing
-// dating it reads "unknown", and its REASON says which kind of nothing —
-// an unfetched tip, or a thread with no heartbeat on it.
+// leaseAgeCell renders one row's LEASE AGE. A row nothing dated whose
+// branch has no commits of its own reads "main's" rather than a duration:
+// the number would be a real duration attached to the wrong branch, and a
+// column scanned faster than it is read is the whole reason that age got
+// acted on (#722). That is every CLAIMED row and the RETIRED rows that
+// never committed (#809). Any other row with nothing dating it reads
+// "unknown", and its REASON says which kind of nothing.
+//
+// A non-nil lease always prints: classify hands one back only from the
+// branch's own clock — its tip, or the heartbeat that dates an empty
+// claim — never from a borrowed tip.
 func leaseAgeCell(r row) string {
-	if r.verdict == claimed {
+	if r.lease != nil {
+		return formatAge(*r.lease)
+	}
+	if r.anc == ancestryNoCommits {
 		return "main's"
 	}
-	if r.lease == nil {
-		return "unknown"
-	}
-	return formatAge(*r.lease)
+	return "unknown"
 }
