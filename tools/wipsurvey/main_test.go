@@ -18,6 +18,9 @@ func TestClassify(t *testing.T) {
 		t := fixedNow.Add(-time.Duration(agoMinutes) * time.Minute)
 		return &t
 	}
+	// Both clocks are read the same way — minutes before fixedNow — and the
+	// alias keeps each case saying which clock it is setting.
+	heartbeat := tip
 
 	// A case that omits anc gets ancestryUnresolved — git declined to
 	// answer — which reaches the same verdict it did before this tool could
@@ -31,6 +34,11 @@ func TestClassify(t *testing.T) {
 		issue       *issueState
 		wantVerdict verdict
 		wantReason  string // substring the reason must contain
+		// wantCell is the LEASE AGE cell the row classify returns must
+		// render to. Empty means the case does not speak to the column —
+		// no real cell is ever empty, so absent and asserted stay
+		// distinguishable without a second field.
+		wantCell string
 	}{
 		{
 			name:        "fresh tip is live",
@@ -71,6 +79,9 @@ func TestClassify(t *testing.T) {
 			issue:       &issueState{number: 5, closed: true},
 			wantVerdict: retired,
 			wantReason:  "closed",
+			// The branch may have commits of its own, so its tip's age is
+			// its own to print.
+			wantCell: "1m0s",
 		},
 		{
 			name:        "closed issue retires even with no fetched tip",
@@ -79,6 +90,7 @@ func TestClassify(t *testing.T) {
 			issue:       &issueState{number: 6, closed: true},
 			wantVerdict: retired,
 			wantReason:  "closed",
+			wantCell:    "unknown",
 		},
 		{
 			name:        "needs-replan label retires regardless of tip age",
@@ -156,6 +168,9 @@ func TestClassify(t *testing.T) {
 			issue:       &issueState{number: 15, closed: true},
 			wantVerdict: retired,
 			wantReason:  "closed",
+			// Retirement does not make main's 10h the branch's own lease
+			// age; the cell must say whose it is (#809).
+			wantCell: "main's",
 		},
 		{
 			name:        "needs-replan retires a zero-commit branch",
@@ -165,6 +180,7 @@ func TestClassify(t *testing.T) {
 			issue:       &issueState{number: 16, needsReplan: true},
 			wantVerdict: retired,
 			wantReason:  "needs-replan",
+			wantCell:    "main's",
 		},
 		{
 			name:        "unfetched tip beats the ancestry answer",
@@ -240,16 +256,101 @@ func TestClassify(t *testing.T) {
 			wantVerdict: claimed,
 			wantReason:  "lease-only",
 		},
+		{
+			// The empty claim's own clock: a fresh heartbeat holds the lease
+			// even though the borrowed tip is ten hours old.
+			name:        "zero-commit branch with a fresh heartbeat is live",
+			branch:      "wip/issue-25",
+			tip:         tip(600),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 25, commentsRead: true, heartbeat: heartbeat(30)},
+			wantVerdict: live,
+			wantReason:  "lease dated by its newest RESUME:/TAKEOVER: comment, posted 30m0s ago",
+		},
+		{
+			name:        "zero-commit branch with a heartbeat exactly at the TTL is live",
+			branch:      "wip/issue-26",
+			tip:         tip(1),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 26, commentsRead: true, heartbeat: heartbeat(120)},
+			wantVerdict: live,
+			wantReason:  "within",
+		},
+		{
+			// The #981 sighting: the takeover comment that dated the lease was
+			// 4h18m old, so the claim was takeable.
+			name:        "zero-commit branch with a heartbeat past the TTL is takeable",
+			branch:      "wip/issue-27",
+			tip:         tip(1),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 27, commentsRead: true, heartbeat: heartbeat(258)},
+			wantVerdict: expired,
+			wantReason:  "takeable",
+			// The heartbeat's own age, not the borrowed tip's 1m.
+			wantCell: "4h18m0s",
+		},
+		{
+			// /develop pushes the claim before it posts anything, so this is
+			// also the shape of an issue being grounded right now: only an
+			// AGED heartbeat may demote a claim (#981).
+			name:        "zero-commit branch whose thread carries no heartbeat stays claimed",
+			branch:      "wip/issue-28",
+			tip:         tip(1),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 28, commentsRead: true},
+			wantVerdict: claimed,
+			wantReason:  "a claim is born undated, so this is not a lapsed lease",
+			wantCell:    "main's",
+		},
+		{
+			name:        "comments not supplied leaves the empty claim undated",
+			branch:      "wip/issue-29",
+			tip:         tip(1),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 29},
+			wantVerdict: claimed,
+			wantReason:  "supply this issue's comments",
+		},
+		{
+			name:        "a closed issue retires an empty claim with a fresh heartbeat",
+			branch:      "wip/issue-30",
+			tip:         tip(1),
+			anc:         ancestryNoCommits,
+			issue:       &issueState{number: 30, closed: true, commentsRead: true, heartbeat: heartbeat(1)},
+			wantVerdict: retired,
+			wantReason:  "closed",
+			// Retirement short-circuits the thread's clock too, so nothing
+			// dates this row and the tip it holds is main's.
+			wantCell: "main's",
+		},
+		{
+			// A branch with commits of its own is dated by its tip and nothing
+			// else: a stale tip is EXPIRED however fresh the thread is.
+			name:        "a heartbeat does not extend a branch that has its own tip",
+			branch:      "wip/issue-31",
+			tip:         tip(600),
+			anc:         ancestryOwnCommits,
+			issue:       &issueState{number: 31, commentsRead: true, heartbeat: heartbeat(1)},
+			wantVerdict: expired,
+			wantReason:  "tip pushed",
+		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			gotVerdict, gotReason := classify(c.branch, c.tip, c.anc, fixedNow, c.issue)
+			gotVerdict, gotLease, gotReason := classify(c.branch, c.tip, c.anc, fixedNow, c.issue)
 			if gotVerdict != c.wantVerdict {
 				t.Errorf("classify(%q) verdict = %s, want %s (reason: %s)", c.branch, gotVerdict, c.wantVerdict, gotReason)
 			}
 			if !strings.Contains(gotReason, c.wantReason) {
 				t.Errorf("classify(%q) reason = %q, want substring %q", c.branch, gotReason, c.wantReason)
+			}
+			if c.wantCell == "" {
+				return
+			}
+			got := leaseAgeCell(row{lease: gotLease, anc: c.anc, verdict: gotVerdict})
+			if got != c.wantCell {
+				t.Errorf("classify(%q) LEASE AGE cell = %q, want %q", c.branch, got, c.wantCell)
 			}
 		})
 	}
@@ -260,7 +361,7 @@ func TestClassify(t *testing.T) {
 // silently read as EXPIRED, because EXPIRED means resumable and that is
 // the dangerous direction for a branch this tool has no age data for.
 func TestClassifyNeverFallsThroughToExpired(t *testing.T) {
-	got, _ := classify("wip/issue-99", nil, ancestryUnresolved, fixedNow, nil)
+	got, _, _ := classify("wip/issue-99", nil, ancestryUnresolved, fixedNow, nil)
 	if got == expired {
 		t.Fatalf("classify with a nil tip returned EXPIRED; an absent tip must never be treated as an old one")
 	}
@@ -271,15 +372,56 @@ func TestClassifyNeverFallsThroughToExpired(t *testing.T) {
 
 // TestClassifyNeverExpiresABorrowedTip guards the #722 hazard at every tip
 // age: a branch with no commits of its own has no age of its own, so no
-// arrangement of the clock may make it EXPIRED — the verdict /develop
+// arrangement of the TIP clock may make it EXPIRED — the verdict /develop
 // reads as "resumable" and /backlog reads as grounds for needs-replan.
+// Only the thread's own clock decides such a branch, and this test hands
+// classify no heartbeat to read on any thread: absent issue data, an issue
+// whose comments were not supplied, and a thread that was read and carries
+// no heartbeat. None of the three is a lapsed lease (#981).
 func TestClassifyNeverExpiresABorrowedTip(t *testing.T) {
 	for _, agoMinutes := range []int{0, 1, 119, 120, 121, 600, 100000} {
 		tip := fixedNow.Add(-time.Duration(agoMinutes) * time.Minute)
-		got, reason := classify("wip/issue-98", &tip, ancestryNoCommits, fixedNow, nil)
-		if got != claimed {
-			t.Errorf("classify with a %dm-old borrowed tip = %s, want CLAIMED (reason: %s)", agoMinutes, got, reason)
+		for _, issue := range []*issueState{nil, {number: 98}, {number: 98, commentsRead: true}} {
+			got, lease, reason := classify("wip/issue-98", &tip, ancestryNoCommits, fixedNow, issue)
+			if got != claimed {
+				t.Errorf("classify with a %dm-old borrowed tip = %s, want CLAIMED (reason: %s)", agoMinutes, got, reason)
+			}
+			if lease != nil {
+				t.Errorf("classify with a %dm-old borrowed tip dated the lease %v; a borrowed tip dates nothing", agoMinutes, *lease)
+			}
 		}
+	}
+}
+
+// TestClassifyEmptyClaimIgnoresTheBorrowedTip pins the same hazard on the
+// path that CAN return EXPIRED for an empty claim: once the thread dates
+// the lease, the tip's age must not reach the arithmetic at all, in either
+// direction.
+func TestClassifyEmptyClaimIgnoresTheBorrowedTip(t *testing.T) {
+	fresh := fixedNow.Add(-30 * time.Minute)
+	stale := fixedNow.Add(-500 * time.Minute)
+	cases := []struct {
+		name      string
+		heartbeat time.Time
+		want      verdict
+	}{
+		{"heartbeat within the TTL", fresh, live},
+		{"heartbeat past the TTL", stale, expired},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			for _, tipAgoMinutes := range []int{0, 1, 119, 120, 121, 600, 100000} {
+				tip := fixedNow.Add(-time.Duration(tipAgoMinutes) * time.Minute)
+				issue := &issueState{number: 97, commentsRead: true, heartbeat: &c.heartbeat}
+				got, lease, reason := classify("wip/issue-97", &tip, ancestryNoCommits, fixedNow, issue)
+				if got != c.want {
+					t.Errorf("tip %dm old, %s: verdict = %s, want %s (reason: %s)", tipAgoMinutes, c.name, got, c.want, reason)
+				}
+				if lease == nil || *lease != fixedNow.Sub(c.heartbeat) {
+					t.Errorf("tip %dm old, %s: lease age = %v, want the heartbeat's %v", tipAgoMinutes, c.name, lease, fixedNow.Sub(c.heartbeat))
+				}
+			}
+		})
 	}
 }
 
@@ -306,12 +448,12 @@ func TestClassifyMarksOnlyUndecidedAncestry(t *testing.T) {
 	}
 
 	for _, tc := range tips {
-		got, reason := classify("wip/issue-1", &tc.tip, ancestryUnresolved, fixedNow, nil)
+		got, _, reason := classify("wip/issue-1", &tc.tip, ancestryUnresolved, fixedNow, nil)
 		if !strings.Contains(reason, marker) {
 			t.Errorf("classify(%s tip, unresolved) = %s, reason %q lacks %q", tc.name, got, reason, marker)
 		}
 		for _, d := range decided {
-			got, reason := classify("wip/issue-1", &tc.tip, d.anc, fixedNow, nil)
+			got, _, reason := classify("wip/issue-1", &tc.tip, d.anc, fixedNow, nil)
 			if strings.Contains(reason, marker) {
 				t.Errorf("classify(%s tip, %s) = %s, reason %q calls an ancestry git decided undecided", tc.name, d.name, got, reason)
 			}
@@ -509,17 +651,172 @@ func TestReadIssues(t *testing.T) {
 			t.Fatalf("readIssues(malformed): want error, got nil")
 		}
 	})
+
+	t.Run("an absent comments key is not an empty thread", func(t *testing.T) {
+		in := `[
+			{"number":1,"state":"OPEN","labels":[]},
+			{"number":2,"state":"OPEN","labels":[],"comments":[]}
+		]`
+		issues, err := readIssues(strings.NewReader(in))
+		if err != nil {
+			t.Fatalf("readIssues: %v", err)
+		}
+		if got := issues[1]; got.commentsRead {
+			t.Errorf("issue 1 = %+v, want commentsRead false: nobody supplied its comments", got)
+		}
+		if got := issues[2]; !got.commentsRead || got.heartbeat != nil {
+			t.Errorf("issue 2 = %+v, want commentsRead true with no heartbeat", got)
+		}
+	})
+
+	t.Run("the newest heartbeat comment dates the issue", func(t *testing.T) {
+		in := `[{"number":3,"state":"OPEN","labels":[],"comments":[
+			{"body":"RESUME: next action is the gate.","createdAt":"2026-08-26T06:00:00Z"},
+			{"body":"TAKEOVER: resuming this issue.","createdAt":"2026-08-26T08:22:50Z"},
+			{"body":"GROUNDING: no XSD rule is in scope.","createdAt":"2026-08-26T09:15:00Z"}
+		]}]`
+		issues, err := readIssues(strings.NewReader(in))
+		if err != nil {
+			t.Fatalf("readIssues: %v", err)
+		}
+		want := time.Date(2026, 8, 26, 8, 22, 50, 0, time.UTC)
+		got := issues[3]
+		if got.heartbeat == nil || !got.heartbeat.Equal(want) {
+			t.Errorf("issue 3 heartbeat = %v, want the 08:22:50Z takeover (the newer grounding dates nothing)", got.heartbeat)
+		}
+	})
+}
+
+// TestIsHeartbeat pins the criterion Acceptance item 1 asked to be
+// checkable from what a comment carries: the marker the body opens with,
+// never the author it is presumed to have.
+func TestIsHeartbeat(t *testing.T) {
+	cases := []struct {
+		body string
+		want bool
+	}{
+		{"RESUME: next action is the gate.", true},
+		{"TAKEOVER: resuming this issue. `wip/issue-981` carries no commits.", true},
+		{"\n  RESUME: leading whitespace is not a marker change.", true},
+		{"GROUNDING: no XSD/XPath/F&O rule is in scope.", false},
+		{"MASON: implementation account. Commits: abc1234.", false},
+		{"ARBITER: ACCEPT.", false},
+		{"CARTOGRAPHER (`/backlog`, 2026-08-25): promoted four rows.", false},
+		{"I will RESUME: this later.", false},
+		{"resume: lowercase is not the marker.", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := isHeartbeat(c.body); got != c.want {
+			t.Errorf("isHeartbeat(%q) = %v, want %v", c.body, got, c.want)
+		}
+	}
+}
+
+// TestNewestHeartbeat checks the newest heartbeat is taken by timestamp
+// and that non-heartbeat comments never win, however recent they are.
+func TestNewestHeartbeat(t *testing.T) {
+	at := func(s string) time.Time {
+		ts, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			t.Fatalf("parsing fixture time %q: %v", s, err)
+		}
+		return ts
+	}
+	comments := []ghComment{
+		{Body: "GROUNDING: posted last, dates nothing.", CreatedAt: at("2026-08-26T10:00:00Z")},
+		{Body: "TAKEOVER: taking the claim.", CreatedAt: at("2026-08-26T08:22:50Z")},
+		{Body: "RESUME: earlier heartbeat.", CreatedAt: at("2026-08-26T06:00:00Z")},
+	}
+	got := newestHeartbeat(comments)
+	if got == nil || !got.Equal(at("2026-08-26T08:22:50Z")) {
+		t.Errorf("newestHeartbeat = %v, want the 08:22:50Z takeover", got)
+	}
+
+	if got := newestHeartbeat([]ghComment{comments[0]}); got != nil {
+		t.Errorf("newestHeartbeat(grounding only) = %v, want nil", got)
+	}
+	if got := newestHeartbeat(nil); got != nil {
+		t.Errorf("newestHeartbeat(nil) = %v, want nil", got)
+	}
+}
+
+// TestEmptyClaimLeaseFixtures is the regression named by #981, driven end
+// to end from the input shape so both halves of the rule are exercised:
+// which comment dates the lease, and the TTL arithmetic on it.
+//
+// The negative is #884's: a grounding posted 44 minutes before the read
+// must not hold the claim for a further two hours. What it leaves behind
+// is CLAIMED and not EXPIRED, because a thread with no heartbeat on it is
+// also every claim's first minutes. The positive is #993's takeover
+// comment, which holds the lease while it is inside the TTL and stops
+// holding it once it is not.
+func TestEmptyClaimLeaseFixtures(t *testing.T) {
+	const read = "2026-08-26T09:00:00Z"
+	now, err := time.Parse(time.RFC3339, read)
+	if err != nil {
+		t.Fatalf("parsing the read time: %v", err)
+	}
+	borrowed := now.Add(-10 * time.Hour) // main's tip, ten hours old
+
+	cases := []struct {
+		name string
+		json string
+		want verdict
+	}{
+		{
+			// A grounding does not hold the lease — but it does not lapse one
+			// either, and a thread whose only comment is a grounding is
+			// exactly what /develop's step 3 leaves behind, so the claim
+			// stays CLAIMED for a reader to settle (#981).
+			name: "a grounding posted 44 minutes ago neither holds nor lapses the lease",
+			json: `[{"number":884,"state":"OPEN","labels":[{"name":"ready"}],"comments":[
+				{"body":"GROUNDING: no XSD/XPath/F&O rule is in scope.","createdAt":"2026-08-26T08:16:00Z"}
+			]}]`,
+			want: claimed,
+		},
+		{
+			name: "a takeover comment posted 38 minutes ago holds it",
+			json: `[{"number":884,"state":"OPEN","labels":[{"name":"ready"}],"comments":[
+				{"body":"TAKEOVER: resuming this issue.","createdAt":"2026-08-26T08:22:00Z"},
+				{"body":"GROUNDING: no XSD/XPath/F&O rule is in scope.","createdAt":"2026-08-26T08:16:00Z"}
+			]}]`,
+			want: live,
+		},
+		{
+			name: "the same takeover comment four hours later does not",
+			json: `[{"number":884,"state":"OPEN","labels":[{"name":"ready"}],"comments":[
+				{"body":"TAKEOVER: resuming this issue.","createdAt":"2026-08-26T04:22:00Z"},
+				{"body":"GROUNDING: no XSD/XPath/F&O rule is in scope.","createdAt":"2026-08-26T08:16:00Z"}
+			]}]`,
+			want: expired,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			issues, err := readIssues(strings.NewReader(c.json))
+			if err != nil {
+				t.Fatalf("readIssues: %v", err)
+			}
+			state := issues[884]
+			got, _, reason := classify("wip/issue-884", &borrowed, ancestryNoCommits, now, &state)
+			if got != c.want {
+				t.Fatalf("verdict = %s, want %s (reason: %s)", got, c.want, reason)
+			}
+		})
+	}
 }
 
 // TestSortRowsAndRenderTable exercises row ordering and rendering
 // together: rows are built out of issue-number order on purpose, so a
 // broken sort would show up as a non-ascending ISSUE column.
 func TestSortRowsAndRenderTable(t *testing.T) {
-	t1 := fixedNow.Add(-5 * time.Minute)
+	age := 5 * time.Minute
 	rows := []row{
-		{issue: 10, branch: "wip/issue-10", tip: &t1, verdict: live, reason: "wip/issue-10: tip pushed 5m0s ago, within the 2h0m0s claim TTL"},
-		{issue: 2, branch: "wip/issue-2", tip: nil, verdict: unknown, reason: "wip/issue-2: tip not fetched -- run `git fetch origin`"},
-		{issue: 5, branch: "wip/issue-5", tip: &t1, verdict: retired, reason: "wip/issue-5: issue #5 is closed"},
+		{issue: 10, branch: "wip/issue-10", lease: &age, verdict: live, reason: "wip/issue-10: tip pushed 5m0s ago, within the 2h0m0s claim TTL"},
+		{issue: 2, branch: "wip/issue-2", lease: nil, verdict: unknown, reason: "wip/issue-2: tip not fetched -- run `git fetch origin`"},
+		{issue: 5, branch: "wip/issue-5", lease: &age, verdict: retired, reason: "wip/issue-5: issue #5 is closed"},
 	}
 	sortRows(rows)
 
@@ -528,7 +825,7 @@ func TestSortRowsAndRenderTable(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := renderTable(&buf, rows, fixedNow); err != nil {
+	if err := renderTable(&buf, rows); err != nil {
 		t.Fatalf("renderTable: %v", err)
 	}
 	got := buf.String()
@@ -545,6 +842,12 @@ func TestSortRowsAndRenderTable(t *testing.T) {
 	if !strings.Contains(lines[1], "wip/issue-2") || !strings.Contains(lines[1], "UNKNOWN") {
 		t.Errorf("row 1 = %q, want issue 2 (UNKNOWN)", lines[1])
 	}
+	// A row nothing dated keeps reading "unknown" in the age column — the
+	// only place an unfetched tip shows on a RETIRED row, where the REASON
+	// speaks about the issue instead (#809 rests on that cell).
+	if got := strings.Fields(lines[1])[2]; got != "unknown" {
+		t.Errorf("row 1 age cell = %q, want `unknown` for an unfetched tip: %q", got, lines[1])
+	}
 	if !strings.Contains(lines[2], "wip/issue-5") || !strings.Contains(lines[2], "RETIRED") {
 		t.Errorf("row 2 = %q, want issue 5 (RETIRED)", lines[2])
 	}
@@ -554,42 +857,109 @@ func TestSortRowsAndRenderTable(t *testing.T) {
 }
 
 // TestRenderTableClaimedAge checks a CLAIMED row does not print a
-// duration in TIP AGE. The duration would be real and would belong to
-// main, and printing it there is what got acted on (#722).
+// duration in LEASE AGE. The duration would be real and would belong to
+// main, and printing it there is what got acted on (#722). The row is
+// built the way run builds one — from classify's own return values — so
+// the test pins the whole chain rather than a hand-assembled row classify
+// could never produce.
 func TestRenderTableClaimedAge(t *testing.T) {
-	borrowed := fixedNow.Add(-10 * time.Hour)
+	borrowedTip := fixedNow.Add(-10 * time.Hour)
+	got, lease, reason := classify("wip/issue-1", &borrowedTip, ancestryNoCommits, fixedNow, nil)
+	if got != claimed {
+		t.Fatalf("classify with a 10h borrowed tip = %s, want CLAIMED", got)
+	}
 	rows := []row{
-		{issue: 1, branch: "wip/issue-1", tip: &borrowed, verdict: claimed, reason: "wip/issue-1: no commits of its own"},
+		{issue: 1, branch: "wip/issue-1", lease: lease, anc: ancestryNoCommits, verdict: got, reason: reason},
 	}
 	var buf bytes.Buffer
-	if err := renderTable(&buf, rows, fixedNow); err != nil {
+	if err := renderTable(&buf, rows); err != nil {
+		t.Fatalf("renderTable: %v", err)
+	}
+	rendered := buf.String()
+	if !strings.Contains(rendered, "main's") {
+		t.Errorf("CLAIMED row does not name whose tip age it is:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "10h0m0s") {
+		t.Errorf("CLAIMED row prints main's age as the branch's:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "CLAIMED") {
+		t.Errorf("CLAIMED row does not carry the verdict:\n%s", rendered)
+	}
+}
+
+// TestRenderTableRetiredBorrowedAge is the same guard on the RETIRED rows.
+// Retirement changes the verdict, not whose clock the tip is, so a retired
+// branch that never committed must not print main's age under LEASE AGE
+// either (#809).
+func TestRenderTableRetiredBorrowedAge(t *testing.T) {
+	borrowedTip := fixedNow.Add(-10 * time.Hour)
+	issue := &issueState{number: 1, closed: true}
+	got, lease, reason := classify("wip/issue-1", &borrowedTip, ancestryNoCommits, fixedNow, issue)
+	if got != retired {
+		t.Fatalf("classify with a closed issue = %s, want RETIRED", got)
+	}
+	if lease != nil {
+		t.Errorf("retired zero-commit branch dated its lease %v; a borrowed tip dates nothing", *lease)
+	}
+	var buf bytes.Buffer
+	if err := renderTable(&buf, []row{{issue: 1, branch: "wip/issue-1", lease: lease, anc: ancestryNoCommits, verdict: got, reason: reason}}); err != nil {
+		t.Fatalf("renderTable: %v", err)
+	}
+	cell := strings.Fields(strings.Split(buf.String(), "\n")[1])[2]
+	if cell != "main's" {
+		t.Errorf("RETIRED zero-commit LEASE AGE cell = %q, want `main's`", cell)
+	}
+}
+
+// TestRenderTableHeartbeatAge checks an empty claim the thread dated
+// prints the HEARTBEAT's age, under a header that says LEASE AGE rather
+// than TIP AGE — the two clocks differ on exactly these rows, and the one
+// that decided the verdict is the one the column owes the reader.
+func TestRenderTableHeartbeatAge(t *testing.T) {
+	hb := 44 * time.Minute
+	rows := []row{
+		{issue: 1, branch: "wip/issue-1", lease: &hb, anc: ancestryNoCommits, verdict: live, reason: "wip/issue-1: no commits of its own; lease dated by its newest RESUME:/TAKEOVER: comment"},
+	}
+	var buf bytes.Buffer
+	if err := renderTable(&buf, rows); err != nil {
 		t.Fatalf("renderTable: %v", err)
 	}
 	got := buf.String()
-	if !strings.Contains(got, "main's") {
-		t.Errorf("CLAIMED row does not name whose tip age it is:\n%s", got)
+	if !strings.Contains(got, "LEASE AGE") {
+		t.Errorf("header does not say whose age the column is:\n%s", got)
 	}
-	if strings.Contains(got, "10h0m0s") {
-		t.Errorf("CLAIMED row prints main's age as the branch's:\n%s", got)
+	if !strings.Contains(got, "44m0s") {
+		t.Errorf("heartbeat-dated row does not print the heartbeat's age:\n%s", got)
 	}
-	if !strings.Contains(got, "CLAIMED") {
-		t.Errorf("CLAIMED row does not carry the verdict:\n%s", got)
+
+	// An empty claim no heartbeat ever dated has no age of its own to
+	// print. It stays CLAIMED and says whose the tip is, rather than
+	// borrowing main's age as a duration.
+	undated := []row{
+		{issue: 2, branch: "wip/issue-2", lease: nil, anc: ancestryNoCommits, verdict: claimed, reason: "wip/issue-2: no commits of its own and no RESUME:/TAKEOVER: comment ever posted"},
+	}
+	buf.Reset()
+	if err := renderTable(&buf, undated); err != nil {
+		t.Fatalf("renderTable: %v", err)
+	}
+	if cell := strings.Fields(strings.Split(buf.String(), "\n")[1])[2]; cell != "main's" {
+		t.Errorf("undated empty claim age cell = %q, want `main's`", cell)
 	}
 }
 
 // TestRenderTableDeterministic guards STYLE D1: rendering the same rows
 // twice must produce byte-identical output.
 func TestRenderTableDeterministic(t *testing.T) {
-	tip := fixedNow.Add(-30 * time.Minute)
+	age := 30 * time.Minute
 	rows := []row{
-		{issue: 1, branch: "wip/issue-1", tip: &tip, verdict: live, reason: "wip/issue-1: tip pushed 30m0s ago, within the 2h0m0s claim TTL"},
+		{issue: 1, branch: "wip/issue-1", lease: &age, verdict: live, reason: "wip/issue-1: tip pushed 30m0s ago, within the 2h0m0s claim TTL"},
 	}
 
 	var a, b bytes.Buffer
-	if err := renderTable(&a, rows, fixedNow); err != nil {
+	if err := renderTable(&a, rows); err != nil {
 		t.Fatalf("renderTable (a): %v", err)
 	}
-	if err := renderTable(&b, rows, fixedNow); err != nil {
+	if err := renderTable(&b, rows); err != nil {
 		t.Fatalf("renderTable (b): %v", err)
 	}
 	if a.String() != b.String() {

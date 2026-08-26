@@ -42,8 +42,21 @@
 // the main SHA the same ls-remote round trip already fetched. Those
 // branches are reported CLAIMED: the branch name establishes a claim,
 // nothing establishes its age, so the branch is off-limits for retirement
-// and is not resumable on age evidence alone. What settles a CLAIMED
-// branch is the issue thread's own clock, which this tool does not read.
+// and is not resumable on age evidence alone.
+//
+// What dates such a claim is the issue thread's own clock, and only part
+// of it: WORKFLOW.md's lease invariant dates an empty claim from the
+// newest comment whose body opens with a heartbeat marker (RESUME: or
+// TAKEOVER:), because those are the comments that assert a session is
+// still holding the branch. A grounding, a verdict, a mason's account or
+// a planning note records work already done and dates nothing — dating a
+// lease from one locks the issue for a further TTL after its session died
+// (#981). Supply each issue's comments in the input and this tool applies
+// that rule, reporting the branch LIVE or EXPIRED with the heartbeat's
+// age. Omit them — or find a thread with no heartbeat ever posted on it,
+// which is how every claim starts life — and the branch stays CLAIMED for
+// a reader to settle by hand. Only an aged heartbeat makes an empty claim
+// EXPIRED; an absent one is not a lapsed one.
 //
 // That ancestry test needs main's commit object in this checkout, while
 // the SHA it tests against comes live from ls-remote, so a checkout that
@@ -55,7 +68,8 @@
 // Usage:
 //
 //	git fetch origin
-//	gh issue list --state all --json number,state,labels | go tool wipsurvey
+//	gh issue list --state all --json number,state,labels,comments | go tool wipsurvey
+//	gh issue list --state all --json number,state,labels | go tool wipsurvey  # empty claims stay CLAIMED
 //	go tool wipsurvey < /dev/null   # issue data omitted: lease-only report
 //
 // Exit status is 0 for a normal report (whatever the branches' verdicts
@@ -135,12 +149,12 @@ func run(stdout, stderr io.Writer, stdin io.Reader, now time.Time) error {
 		if state, ok := issues[br.issue]; ok {
 			issue = &state
 		}
-		got, reason := classify(br.branch, tip, anc, now, issue)
-		rows = append(rows, row{issue: br.issue, branch: br.branch, tip: tip, verdict: got, reason: reason})
+		got, lease, reason := classify(br.branch, tip, anc, now, issue)
+		rows = append(rows, row{issue: br.issue, branch: br.branch, lease: lease, anc: anc, verdict: got, reason: reason})
 	}
 	sortRows(rows)
 
-	return renderTable(stdout, rows, now)
+	return renderTable(stdout, rows)
 }
 
 // refSHA is one line of `git ls-remote --heads` output: a remote head's
@@ -328,29 +342,94 @@ type ghLabel struct {
 	Name string `json:"name"`
 }
 
+// ghComment is one element of `gh issue list --json comments`'s comments
+// array — the two fields wipsurvey reads from it.
+type ghComment struct {
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 // ghIssue is one element of `gh issue list --state all --json
-// number,state,labels`'s JSON array — the exact fields wipsurvey reads
-// from it.
+// number,state,labels,comments`'s JSON array — the exact fields wipsurvey
+// reads from it. Comments is a pointer because absent and empty must not
+// collapse: no `comments` key means the caller supplied no comment data
+// and an empty claim cannot be dated at all, while `"comments": []` is the
+// positive statement that the thread carries no heartbeat, which dates the
+// claim as takeable.
 type ghIssue struct {
-	Number int       `json:"number"`
-	State  string    `json:"state"`
-	Labels []ghLabel `json:"labels"`
+	Number   int          `json:"number"`
+	State    string       `json:"state"`
+	Labels   []ghLabel    `json:"labels"`
+	Comments *[]ghComment `json:"comments"`
 }
 
 // issueState is the subset of a GitHub issue's state classify needs:
-// whether it is closed, and whether it carries the needs-replan label
-// WORKFLOW.md uses to retire an abandoned attempt in place.
+// whether it is closed, whether it carries the needs-replan label
+// WORKFLOW.md uses to retire an abandoned attempt in place, and what the
+// thread says about an empty claim's lease.
 type issueState struct {
 	number      int
 	closed      bool
 	needsReplan bool
+	// commentsRead records that the input carried this issue's comments,
+	// so a nil heartbeat means "the thread has none" rather than "nobody
+	// looked".
+	commentsRead bool
+	// heartbeat is the creation time of the newest comment asserting a
+	// session still holds the branch, or nil when the thread carries none.
+	heartbeat *time.Time
+}
+
+// heartbeatPrefixes are the comment markers WORKFLOW.md's lease invariant
+// gives a session for asserting it is still holding an empty claim.
+// Matching is against the body's first non-whitespace characters and is
+// case-sensitive, because every marker in this corpus is shouted and a
+// lease is not a thing to settle on a fuzzy match.
+var heartbeatPrefixes = []string{"RESUME:", "TAKEOVER:"}
+
+// heartbeatMarkers names the prefixes in report text, from the one list
+// that defines them.
+var heartbeatMarkers = strings.Join(heartbeatPrefixes, "/")
+
+// isHeartbeat reports whether a comment body opens with a heartbeat
+// marker. It is pure text matching, so tests exercise it directly against
+// the comment shapes the threads actually carry.
+func isHeartbeat(body string) bool {
+	body = strings.TrimLeft(body, " \t\r\n")
+	for _, prefix := range heartbeatPrefixes {
+		if strings.HasPrefix(body, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// newestHeartbeat returns the creation time of the newest heartbeat
+// comment, or nil when the thread carries none. It compares timestamps
+// rather than trusting input order, so a caller that concatenated pages
+// out of order still gets the newest.
+func newestHeartbeat(comments []ghComment) *time.Time {
+	var newest *time.Time
+	for _, c := range comments {
+		if !isHeartbeat(c.Body) {
+			continue
+		}
+		if newest == nil || c.CreatedAt.After(*newest) {
+			at := c.CreatedAt
+			newest = &at
+		}
+	}
+	return newest
 }
 
 // readIssues parses `gh issue list --state all --json
-// number,state,labels`'s JSON array from r into a lookup by issue number.
-// Empty input — no stdin redirected, or an explicit `< /dev/null` — is not
-// an error: it means the caller has no issue data to offer, and readIssues
-// returns a nil map so every branch is judged lease-only.
+// number,state,labels,comments`'s JSON array from r into a lookup by issue
+// number. Empty input — no stdin redirected, or an explicit `< /dev/null`
+// — is not an error: it means the caller has no issue data to offer, and
+// readIssues returns a nil map so every branch is judged lease-only. The
+// comments field is likewise optional, per issue: without it that issue's
+// branch can still be retired or dated from its own tip, only an empty
+// claim goes undated.
 func readIssues(r io.Reader) (map[int]issueState, error) {
 	dec := json.NewDecoder(r)
 	var raw []ghIssue
@@ -372,6 +451,10 @@ func readIssues(r io.Reader) (map[int]issueState, error) {
 				state.needsReplan = true
 			}
 		}
+		if gi.Comments != nil {
+			state.commentsRead = true
+			state.heartbeat = newestHeartbeat(*gi.Comments)
+		}
 		issues[gi.Number] = state
 	}
 	return issues, nil
@@ -389,10 +472,19 @@ const (
 	unknown verdict = "UNKNOWN"
 )
 
-// classify decides one branch's verdict and a short reason from its
-// remote tip time, its ancestry against main, and, optionally, the GitHub
-// issue it implements. It is pure — no git or process calls — so tests
-// exercise it directly without a repository or network access.
+// classify decides one branch's verdict, the age of the evidence dating
+// its lease, and a short reason, from its remote tip time, its ancestry
+// against main, and, optionally, the GitHub issue it implements. It is
+// pure — no git or process calls — so tests exercise it directly without a
+// repository or network access.
+//
+// The lease age is the tip's age for a branch with commits of its own and
+// the newest heartbeat comment's age for one with none. It is nil where
+// nothing in this input dates the lease: an unfetched tip, an empty claim
+// no heartbeat dates, or a retired branch with no commits of its own —
+// retirement does not turn a landing's tip into the branch's own lease
+// (#809). It is what the report's LEASE AGE column prints, which renders
+// the nil cases as "main's" or "unknown" rather than as a duration.
 //
 // tip is nil when the branch's SHA has never been fetched into this
 // checkout's object store; classify then reports unknown rather than
@@ -407,25 +499,27 @@ const (
 //   - Retirement first: a closed or needs-replan issue retires its branch
 //     outright, with or without a fetched tip and with or without commits
 //     of its own, per WORKFLOW.md's "abandoned attempts are retired in
-//     place ... never resumed."
+//     place ... never resumed." The verdict ignores the ancestry, but the
+//     lease age reads it: a retired branch that never committed has no
+//     more age of its own than a live one does.
 //   - Then an unfetched tip, which is unknown.
-//   - Then anc == ancestryNoCommits, which is claimed: the tip belongs to
-//     a landing, not to this branch, so no age question may be asked of
-//     it at all.
+//   - Then anc == ancestryNoCommits, which classifyEmptyClaim dates from
+//     the issue thread: the tip belongs to a landing, not to this branch,
+//     so no age question may be asked of it at all.
 //   - Only then the tip age, against the claim TTL. ancestryUnresolved
 //     lands here too — the age is the best evidence left, and it is the
 //     evidence this tool reported before it could ask about ancestry — but
 //     its reason says the ancestry was undecided, so the verdict reads as
 //     provisional rather than settled (#806).
-func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue *issueState) (verdict, string) {
+func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue *issueState) (verdict, *time.Duration, string) {
 	if issue != nil && issue.closed {
-		return retired, fmt.Sprintf("%s: issue #%d is closed", branch, issue.number)
+		return retired, retiredLease(tip, anc, now), fmt.Sprintf("%s: issue #%d is closed", branch, issue.number)
 	}
 	if issue != nil && issue.needsReplan {
-		return retired, fmt.Sprintf("%s: issue #%d is labelled needs-replan", branch, issue.number)
+		return retired, retiredLease(tip, anc, now), fmt.Sprintf("%s: issue #%d is labelled needs-replan", branch, issue.number)
 	}
 	if tip == nil {
-		return unknown, fmt.Sprintf("%s: tip not fetched -- run `git fetch origin`", branch)
+		return unknown, nil, fmt.Sprintf("%s: tip not fetched -- run `git fetch origin`", branch)
 	}
 
 	leaseNote := ""
@@ -433,7 +527,7 @@ func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue 
 		leaseNote = "; no issue data for this branch, lease-only"
 	}
 	if anc == ancestryNoCommits {
-		return claimed, fmt.Sprintf("%s: no commits of its own; tip age is main's, not the claim's -- do not retire on age, settle it from the issue thread%s", branch, leaseNote)
+		return classifyEmptyClaim(branch, now, issue, leaseNote)
 	}
 	ancestryNote := ""
 	if anc == ancestryUnresolved {
@@ -441,9 +535,60 @@ func classify(branch string, tip *time.Time, anc ancestry, now time.Time, issue 
 	}
 	age := now.Sub(*tip)
 	if age <= claimTTL {
-		return live, fmt.Sprintf("%s: tip pushed %s ago, within the %s claim TTL%s%s", branch, formatAge(age), formatAge(claimTTL), ancestryNote, leaseNote)
+		return live, &age, fmt.Sprintf("%s: tip pushed %s ago, within the %s claim TTL%s%s", branch, formatAge(age), formatAge(claimTTL), ancestryNote, leaseNote)
 	}
-	return expired, fmt.Sprintf("%s: tip pushed %s ago, past the %s claim TTL%s%s", branch, formatAge(age), formatAge(claimTTL), ancestryNote, leaseNote)
+	return expired, &age, fmt.Sprintf("%s: tip pushed %s ago, past the %s claim TTL%s%s", branch, formatAge(age), formatAge(claimTTL), ancestryNote, leaseNote)
+}
+
+// classifyEmptyClaim dates a branch that has pushed no commits of its own.
+// Its tip is the landing it branched from, so the only clock left is
+// WORKFLOW.md's: the newest thread comment opening with a heartbeat
+// marker, against the same claim TTL. A thread whose newest heartbeat is
+// past the TTL leaves the claim takeable, which is EXPIRED, the verdict
+// /develop reads as resumable. No tip age reaches any of that arithmetic,
+// so #722's hazard stays closed.
+//
+// A lapsed heartbeat and an absent one are opposite evidence, not the same
+// evidence. /develop pushes every claim as a bare branch and posts nothing
+// heartbeat-shaped until its first checkpoint, so a thread carrying no
+// heartbeat at all is the shape of a claim made seconds ago just as much
+// as of one abandoned — EXPIRED there hands a session the branch someone
+// else is grounding right now (#981). Only an aged heartbeat demotes a
+// claim. With none ever posted, and equally without this issue's comments
+// in the input, the branch stays CLAIMED, the verdict that asks a reader
+// to settle it from the thread rather than on age.
+func classifyEmptyClaim(branch string, now time.Time, issue *issueState, leaseNote string) (verdict, *time.Duration, string) {
+	if issue == nil || !issue.commentsRead {
+		return claimed, nil, fmt.Sprintf("%s: no commits of its own; tip age is main's, not the claim's -- do not retire on age; supply this issue's comments to date the lease, or settle it from the issue thread%s", branch, leaseNote)
+	}
+	if issue.heartbeat == nil {
+		return claimed, nil, fmt.Sprintf("%s: no commits of its own and no %s comment ever posted -- a claim is born undated, so this is not a lapsed lease; settle it from the issue thread", branch, heartbeatMarkers)
+	}
+	age := now.Sub(*issue.heartbeat)
+	if age <= claimTTL {
+		return live, &age, fmt.Sprintf("%s: no commits of its own; lease dated by its newest %s comment, posted %s ago, within the %s claim TTL", branch, heartbeatMarkers, formatAge(age), formatAge(claimTTL))
+	}
+	return expired, &age, fmt.Sprintf("%s: no commits of its own; newest %s comment posted %s ago, past the %s claim TTL -- takeable", branch, heartbeatMarkers, formatAge(age), formatAge(claimTTL))
+}
+
+// retiredLease is a retired branch's lease age: its tip's, or nil when the
+// branch pushed no commits of its own and that tip is therefore the
+// landing it branched from. Retirement changes the verdict, not whose
+// clock the tip is, and the LEASE AGE column is read (#809).
+func retiredLease(tip *time.Time, anc ancestry, now time.Time) *time.Duration {
+	if anc == ancestryNoCommits {
+		return nil
+	}
+	return tipAge(tip, now)
+}
+
+// tipAge is tip's age at now, or nil when the tip was never fetched.
+func tipAge(tip *time.Time, now time.Time) *time.Duration {
+	if tip == nil {
+		return nil
+	}
+	age := now.Sub(*tip)
+	return &age
 }
 
 // formatAge renders a duration the way the report shows one: rounded to
@@ -453,11 +598,15 @@ func formatAge(d time.Duration) string {
 	return d.Round(time.Minute).String()
 }
 
-// row is one line of the survey's output table.
+// row is one line of the survey's output table. lease is the age classify
+// dated the verdict from, nil where nothing dated it; anc is what git
+// could establish about the branch against main, which is what tells the
+// two kinds of nothing apart when the column is rendered.
 type row struct {
 	issue   int
 	branch  string
-	tip     *time.Time
+	lease   *time.Duration
+	anc     ancestry
 	verdict verdict
 	reason  string
 }
@@ -475,28 +624,20 @@ func sortRows(rows []row) {
 	})
 }
 
-// renderTable writes rows as an aligned table: ISSUE, BRANCH, TIP AGE,
+// renderTable writes rows as an aligned table: ISSUE, BRANCH, LEASE AGE,
 // VERDICT, REASON. It does not sort — callers order rows first (run calls
 // sortRows) — so the same rows always render the same text (STYLE D1).
 //
-// A claimed row's TIP AGE reads "main's" rather than a duration: the
-// number would be a real duration attached to the wrong branch, and a
-// column scanned faster than it is read is the whole reason that age got
-// acted on (#722).
-func renderTable(w io.Writer, rows []row, now time.Time) error {
+// The column is the LEASE's age, not the tip's, because for a branch with
+// no commits of its own those are different clocks and only the first
+// decided the verdict.
+func renderTable(w io.Writer, rows []row) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "ISSUE\tBRANCH\tTIP AGE\tVERDICT\tREASON"); err != nil {
+	if _, err := fmt.Fprintln(tw, "ISSUE\tBRANCH\tLEASE AGE\tVERDICT\tREASON"); err != nil {
 		return fmt.Errorf("writing table header: %w", err)
 	}
 	for _, r := range rows {
-		age := "unknown"
-		switch {
-		case r.verdict == claimed:
-			age = "main's"
-		case r.tip != nil:
-			age = formatAge(now.Sub(*r.tip))
-		}
-		if _, err := fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\n", r.issue, r.branch, age, r.verdict, r.reason); err != nil {
+		if _, err := fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\n", r.issue, r.branch, leaseAgeCell(r), r.verdict, r.reason); err != nil {
 			return fmt.Errorf("writing table row for issue #%d: %w", r.issue, err)
 		}
 	}
@@ -504,4 +645,25 @@ func renderTable(w io.Writer, rows []row, now time.Time) error {
 		return fmt.Errorf("flushing report table: %w", err)
 	}
 	return nil
+}
+
+// leaseAgeCell renders one row's LEASE AGE. A row nothing dated whose
+// branch has no commits of its own reads "main's" rather than a duration:
+// the number would be a real duration attached to the wrong branch, and a
+// column scanned faster than it is read is the whole reason that age got
+// acted on (#722). That is every CLAIMED row and the RETIRED rows that
+// never committed (#809). Any other row with nothing dating it reads
+// "unknown", and its REASON says which kind of nothing.
+//
+// A non-nil lease always prints: classify hands one back only from the
+// branch's own clock — its tip, or the heartbeat that dates an empty
+// claim — never from a borrowed tip.
+func leaseAgeCell(r row) string {
+	if r.lease != nil {
+		return formatAge(*r.lease)
+	}
+	if r.anc == ancestryNoCommits {
+		return "main's"
+	}
+	return "unknown"
 }

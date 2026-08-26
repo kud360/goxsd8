@@ -93,12 +93,20 @@ Invariants:
   TTL**: newer is LIVE — off-limits, and so is its issue; older is
   EXPIRED — resumable. Checkpoint pushes are therefore the lease
   heartbeat; a long step pushes intermediate commits rather than letting
-  its lease lapse. A branch that has pushed **no commits of its own** has
-  no tip time of its own — its tip is the landing it branched from, so no
-  age reading may retire it and it is never EXPIRED (#722). **Its lease is
-  dated by its newest issue-thread comment instead, against the same 2h
-  TTL**: past that the claim is takeable, because a session still working
-  would have checkpointed. Taking one means posting a takeover comment
+  its lease lapse, and a step that produces nothing to commit pushes
+  `git commit --allow-empty` instead — the first such push is also what
+  gives a bare claim a tip of its own to be dated by. A branch that has
+  pushed **no commits of its own** has no tip time of its own — its tip is
+  the landing it branched from, so no tip-age reading may date it or
+  retire it (#722). **Its lease is dated by the newest thread comment
+  whose body opens with `RESUME:` or `TAKEOVER:`**, against the same 2h
+  TTL. No other comment dates it: a `GROUNDING:`, a verdict, a `MASON:`
+  account and a planning note each record work already done, not a session
+  still holding the branch. Past the TTL the claim is takeable. With **no
+  such comment ever posted** it is not: the claim is pushed before its
+  first heartbeat, so an undated claim is as likely seconds old as
+  abandoned, and it stays CLAIMED until a human or a session settles it
+  from the thread. Taking a claim means posting the `TAKEOVER:` comment
   naming the branch tip you found, then pushing the heartbeat — which
   makes the ref the arbiter of the race, exactly as it is everywhere else
   (#867).
@@ -134,8 +142,12 @@ git push origin wip/issue-<N>
 
 Add a `RESUME:` comment on the issue whenever the next action is not
 obvious from the branch alone — last completed step, the exact next
-action, and where the grounding is. The branch carries the CONTENT; the
-comment carries the INTENT. Discovery never depends on the comment.
+action, and where the grounding is. On a branch with **no commits of its
+own**, post one at every checkpoint whether or not the next action is
+obvious: it is the only thing that dates such a branch's lease, and
+without it the claim reads as undated for as long as it lives. The branch
+carries the CONTENT; the comment carries the INTENT. Discovery never
+depends on the comment.
 
 Never destroy uncommitted work: `git clean`, `git restore .`,
 `git checkout -- <file>` and stashing of any kind are forbidden. A dirty

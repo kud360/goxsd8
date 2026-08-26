@@ -130,6 +130,40 @@ Neither reshape is optional: **pull requests share the issues endpoint** and
 every survey miscounts unless `select(.pull_request == null)` drops them, and
 **`labels` arrives as full objects** where both tools want `{name}` (#840).
 
+### Dating an empty claim
+
+`wipsurvey` reports a `wip/` branch with no commits of its own CLAIMED —
+undated — unless the input carries that issue's comments, because
+WORKFLOW.md dates such a claim from the thread and `{number, state, labels}`
+holds no comment. Its full shape is `gh issue list --json
+number,state,labels,comments`; the fourth field is optional and per issue,
+and its elements need only `{body, createdAt}`.
+
+Fetch it for the issues the first run printed CLAIMED — the set is small,
+and `repos/{owner}/{repo}/issues` carries no bodies, only a count:
+
+```sh
+for n in $(go tool wipsurvey < issues.json | awk '$4 == "CLAIMED" {print $1}'); do
+  gh api "repos/kud360/goxsd8/issues/$n/comments?per_page=100" \
+    | jq --argjson n "$n" '{number: $n, comments: [.[] | {body, createdAt: .created_at}]}' > c$n.json
+done
+
+jq -s 'INDEX(.[1:][]; .number) as $c
+       | .[0] | map(.comments = ($c[.number|tostring].comments // null))' \
+   issues.json c*.json > issues-dated.json
+
+go tool wipsurvey < issues-dated.json
+```
+
+REST spells the field `created_at` where the tools want `createdAt`, so that
+rename is not optional either. An issue with no `comments` key keeps every
+other verdict it would have had; only its empty claim goes undated.
+
+A claim whose thread carries no `RESUME:`/`TAKEOVER:` comment at all stays
+CLAIMED through the second pass. That is the answer, not a failed fetch:
+nothing has ever dated the claim, which is not the same as its lease having
+lapsed, and every claim looks like this until its holder's first checkpoint.
+
 ## Failure and overlap
 
 Assume every run starts in a fresh container with a fresh clone: anything
