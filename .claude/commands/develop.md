@@ -23,8 +23,9 @@ heartbeat.
    `wip/issue-<N>` as LIVE, CLAIMED, EXPIRED, RETIRED or UNKNOWN. LIVE
    branches and their issues are off-limits; RETIRED ones are not work;
    UNKNOWN wants `git fetch origin` and a re-run. A CLAIMED branch is
-   dated by its issue thread, not by git — WORKFLOW's lease invariant says
-   against what, and what taking one costs. If no channel yields an issue
+   dated by its thread's `RESUME:`/`TAKEOVER:` comments, not by git —
+   WORKFLOW's lease invariant says what an undated claim means, and what
+   taking one costs. If no channel yields an issue
    list, run it on empty stdin: the lease-only report classifies
    everything but RETIRED, which is not a reason to survey by hand.
    - **Resuming beats starting.** Take the oldest EXPIRED — or takeable
