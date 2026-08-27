@@ -164,6 +164,57 @@ func dispatchUnion(b Backend, r xsd.TypeResolver, members []*xsd.SimpleType, raw
 		rawLexical, len(members), strings.Join(rejections, "; "))
 }
 
+// activeBasicMember is ValidatingType's own descent for dt-active-member /
+// dt-active-basic-member (Datatypes Terminology, §4.1.4 cl.2.3): the FIRST of
+// st's {member type definitions} in declared order that accepts rawLexical,
+// descended through recursively while that member is itself a union, until a
+// non-union (basic) member is reached.
+//
+// It is deliberately its OWN scan, not a projection of dispatchUnion's: this
+// loop declines the WHOLE identification on ANY member error that is not a
+// verdict ([IsDatatypeVerdict]) — wider than dispatchUnion's own
+// [IsFacetPrecondition] abort test, which folds every other member fault into
+// "rejected" and keeps scanning (the #462 gap [dispatchUnion] documents).
+// ValidatingType calls dispatchUnion (via validateUnion) FIRST to decide V and
+// confirm st as a whole accepts rawLexical, then calls this to say WHICH
+// member — so on a member whose fault dispatchUnion tolerated and scanned
+// past, this declines even though validateUnion already succeeded. That is
+// deliberate: matching dispatchUnion's own tolerance here would silently
+// widen it, which is #462's fix to make under its own attribution, not this
+// one's to make by construction.
+//
+// Reaching the end of members without one deciding — despite validateUnion
+// having just confirmed rawLexical valid against st as a whole — is a
+// disagreement between this scan's narrower fault tolerance and
+// validateUnion's, not a fact about the document, so it is reported as a
+// fault of the scan rather than a verdict about rawLexical.
+func activeBasicMember(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context) (*xsd.SimpleType, error) {
+	members, err := st.Members(r)
+	if err != nil {
+		return nil, typeFault(err)
+	}
+	for _, m := range members {
+		_, _, err := validateLexical(b, r, m, rawLexical, ctx)
+		if err != nil {
+			if !IsDatatypeVerdict(err) {
+				return nil, err
+			}
+			continue
+		}
+		variety, err := m.Variety(r)
+		if err != nil {
+			return nil, typeFault(err)
+		}
+		if _, ok := variety.(xsd.Union); ok {
+			return activeBasicMember(b, r, m, rawLexical, ctx)
+		}
+		return m, nil
+	}
+	return nil, typeFault(xsderr.New(ruleCvcDatatypeValid, xsderr.Loc{},
+		"value %q identifies no active member among the union's %d {member type definitions}, though validateUnion already accepted it (dt-active-member, Datatypes §4.1.4 Terminology)",
+		rawLexical, len(members)))
+}
+
 // unionMapping builds the lexical mapping for a union-variety type out of its
 // {member type definitions}, so a union resolves through governingMapping exactly
 // as a list does: Parse IS the dv_union dispatch (§4.1.4 cl.2.3) and returns the

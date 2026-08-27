@@ -514,42 +514,26 @@ func (w *walk) idItemBindings(item *xsd.SimpleType, lexical string, owner Elemen
 // of T's transitive membership which actually ·validated· N" — the FIRST member
 // of {member type definitions} the lexical is Datatype Valid against, in
 // declared order (dt-active-member), descended through a member that is itself a
-// union until a non-union one is reached (dt-active-basic-member).
+// union until a non-union one is reached (dt-active-basic-member). It is a thin
+// wrapper over value.ValidatingType, which runs this identification (union.go's
+// activeBasicMember) alongside its own verdict rather than making this package
+// keep a second implementation of the same member scan (#819).
 //
-// The scan runs value.ValidateLexical per member, which is dv_union's own
-// dispatch (§4.1.4 cl.2.3) a second time: the exported entry point reports the
-// verdict and not the member that reached it, so the member the caller's own
-// String Valid already found cannot be read back off it.
-//
-// Two answers are declines rather than classifications. A member whose error is
+// Any error declines rather than classifies — value.ValidatingType's doc
+// comment enumerates why an error there is not always a verdict about lexical,
+// but this caller does not need to tell the two apart: a member whose error is
 // not a VERDICT (value.IsDatatypeVerdict) is a fault of the TYPE or of the
 // backend, and reading it as "this member rejected" would hand the value to a
-// LATER member — idRecord's own GAP, on the same terms. A membership no member
+// LATER member — idRecord's own GAP, on the same terms; a membership no member
 // accepts contradicts the String Valid the caller already ran, so it is a
 // disagreement between two readings of one dispatch and not a fact about the
-// document.
+// document. Both decline identically here.
 func (w *walk) validatingType(st *xsd.SimpleType, lexical string, owner Element) (*xsd.SimpleType, bool) {
-	variety, err := st.Variety(w.schema)
+	t, _, err := value.ValidatingType(w.backend, w.schema, st, lexical, elementContext{owner: owner})
 	if err != nil {
 		return nil, false
 	}
-	if _, union := variety.(xsd.Union); !union {
-		return st, true
-	}
-	members, err := st.Members(w.schema)
-	if err != nil {
-		return nil, false
-	}
-	for _, m := range members {
-		if _, err := value.ValidateLexical(w.backend, w.schema, m, lexical, elementContext{owner: owner}); err != nil {
-			if !value.IsDatatypeVerdict(err) {
-				return nil, false
-			}
-			continue
-		}
-		return w.validatingType(m, lexical, owner)
-	}
-	return nil, false
+	return t, true
 }
 
 // The three built-in types §3.17.5.2 clause 3 names by hand.

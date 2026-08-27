@@ -90,6 +90,14 @@
 // order, and the first one that is itself datatype-valid supplies both the value
 // and the whiteSpace normalization its own pattern facet then matches against —
 // so a union's value is always some member's value, never a wrapper of its own.
+// [ValidatingType] names that member (key-vtype §3.16.4 cl.1, the ·validating
+// type·): st itself, or the ·active basic member· a union dispatched to. Its
+// own member-identification scan applies a WIDER fault test than the dispatch
+// above does — it declines on any member error that is not [IsDatatypeVerdict],
+// where the dispatch folds anything short of [IsFacetPrecondition] into
+// "rejected" and keeps scanning (dv_union's own #462 gap) — so the two can
+// disagree on which members fault; ValidatingType's doc comment is the
+// authority on why.
 //
 // A facet's OWN {value} goes through the same whiteSpace normalization before it
 // is parsed, once at construction: a facet's {value} property is "a value from
