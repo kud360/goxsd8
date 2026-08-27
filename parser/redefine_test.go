@@ -1230,6 +1230,9 @@ func TestParseRedefineNamelessGroupRejected(t *testing.T) {
 	if !strings.Contains(err.Error(), "top-level <group>") || !strings.Contains(err.Error(), "no usable name") {
 		t.Fatalf("error = %v, want the <group> grammar fault reporting the unusable name", err)
 	}
+	if !strings.Contains(err.Error(), "xs:namedGroup") {
+		t.Fatalf("error = %v, want it to name xs:namedGroup, the production whose required name is missing (#975)", err)
+	}
 }
 
 // TestParseRedefineContentModelRejectsOverrideOnlyKinds pins the load-bearing

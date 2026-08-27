@@ -614,7 +614,7 @@ func rejectMisplacedNotation(el *Element) error {
 func rejectRepeatedAnnotations(el *Element) error {
 	if isXSD(el, "annotation") {
 		if found := childElements(el, xsd.XMLSchemaNS, "annotation"); len(found) > 0 {
-			return fmt.Errorf("parser: <annotation> child of <annotation> at %s, which the schema for schema documents prohibits: <annotation>'s content model is (appinfo|documentation)* and admits no nested <annotation> at any cardinality", found[0].Loc())
+			return fmt.Errorf("parser: <annotation> child of <annotation> at %s, which the schema for schema documents prohibits: xs:annotation's content model is (appinfo|documentation)* and admits no nested <annotation> at any cardinality", found[0].Loc())
 		}
 	}
 	if !isXSD(el, "annotation") && !isXSD(el, "schema") && !isXSD(el, "redefine") {
@@ -1052,18 +1052,17 @@ func (p *producer) run() error {
 //
 // That rejection is a plain grammar fault, not an xsderr rule verdict, and it is
 // the same fault for all six kinds. The schema for schema documents makes name
-// use="required" with type xs:NCName on xs:topLevelSimpleType,
-// xs:topLevelComplexType, xs:namedGroup, xs:namedAttributeGroup,
-// xs:topLevelElement and xs:topLevelAttribute, so an absent attribute and an
-// empty one are equally unusable — which is why the presence flag is
-// deliberately discarded rather than branched on. No numbered Schema
-// Representation Constraint states a clause of its own for it: §3.4.3 src-ct and
-// §3.16.3 src-simple-type each incorporate the schema for schema documents by
-// reference over their own clauses (none about name), and §3.6.3
-// src-attribute_group is literally "None as such". Charging src-ct,
-// src-simple-type, st-props-correct, e-props-correct or a-props-correct here
-// would be a fabricated verdict (STYLE E2); this is the footing <include> with
-// no schemaLocation already stands on (parse.go).
+// use="required" with type xs:NCName on every one of the six productions
+// topLevelGrammar names, so an absent attribute and an empty one are equally
+// unusable — which is why the presence flag is deliberately discarded rather
+// than branched on, and why the diagnostic cites the production for the whole
+// guard rather than splitting it. No numbered Schema Representation Constraint
+// states a clause of its own for it: §3.4.3 src-ct and §3.16.3 src-simple-type
+// each incorporate the schema for schema documents by reference over their own
+// clauses (none about name), and §3.6.3 src-attribute_group is literally "None
+// as such". Charging src-ct, src-simple-type, st-props-correct, e-props-correct
+// or a-props-correct here would be a fabricated verdict (STYLE E2); this is the
+// footing <include> with no schemaLocation already stands on (parse.go).
 //
 // For the two DECLARATION kinds the parser-level rejection is deliberate
 // defense in depth rather than the only enforcement: xsd.NewElementDeclaration
@@ -1104,9 +1103,55 @@ func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 		return xsd.QName{}, err
 	}
 	if qname.Local == "" {
-		return xsd.QName{}, fmt.Errorf("parser: top-level <%s> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", decl.Name().Local(), decl.Loc())
+		grammar := topLevelGrammar(decl.Name().Local())
+		if grammar == "" {
+			// run dispatches on the local name before calling, so no other kind
+			// reaches here; naming a production for one would be fabricated (STYLE
+			// E2).
+			return xsd.QName{}, fmt.Errorf("parser: <%s> is not one of the six top-level named kinds", decl.Name().Local())
+		}
+		return xsd.QName{}, fmt.Errorf("parser: top-level <%s> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires one — %s declares name use=\"required\" with type xs:NCName", decl.Name().Local(), decl.Loc(), grammar)
 	}
 	return qname, nil
+}
+
+// topLevelGrammar names the Appendix A production a top-level <simpleType>,
+// <complexType>, <element>, <attribute>, <group> or <attributeGroup> is read
+// against — the type its global element declaration carries — and returns "" for
+// any other name.
+//
+// It is the ONE encoding of those six names for every caller that must pick one
+// (STYLE T4): rejectProhibitedAttrs hangs its prohibition lists on four of them,
+// topLevelName cites one in the fault an unusable name raises, and newRedefineSet
+// (redefine.go) cites one for a <redefine> child. A REDEFINING declaration takes
+// the same production as a top-level one, which is what lets one table serve both
+// positions: §4.2.4's content model reaches the SAME global element declarations
+// through xs:redefinable (xmlschema11-1.md:4465). The two guards that know their
+// kind already — produceComplexType's and produceModelGroupDefinition's, both in
+// produce_complex.go — spell that one production literally instead of asking.
+//
+// Each of the six declares name use="required" with type xs:NCName —
+// xs:topLevelSimpleType (xmlschema11-2.md:3876, name at :3883),
+// xs:topLevelComplexType (xmlschema11-1.md:4804, :4811), xs:topLevelElement
+// (:5086, :5105), xs:topLevelAttribute (:4703, :4714), xs:namedGroup (:5187,
+// :5209) and xs:namedAttributeGroup (:5502, :5510) — which is the fact every
+// caller's diagnostic states.
+func topLevelGrammar(local string) string {
+	switch local {
+	case "simpleType":
+		return "xs:topLevelSimpleType"
+	case "complexType":
+		return "xs:topLevelComplexType"
+	case "element":
+		return "xs:topLevelElement"
+	case "attribute":
+		return "xs:topLevelAttribute"
+	case "group":
+		return "xs:namedGroup"
+	case "attributeGroup":
+		return "xs:namedAttributeGroup"
+	}
+	return ""
 }
 
 // rejectProhibitedAttrs rejects a top-level <element>, <attribute>, <group> or
@@ -1190,25 +1235,28 @@ func (p *producer) topLevelName(decl *Element) (xsd.QName, error) {
 // and belong to rejectProhibitedRefAttrs, which is charged where those positions
 // are mapped rather than here.
 func rejectProhibitedAttrs(decl *Element, form declForm) error {
-	var grammar string
+	local := decl.Name().Local()
 	var prohibited []string
-	switch decl.Name().Local() {
+	switch local {
 	case "element":
-		grammar, prohibited = "xs:topLevelElement", []string{"ref", "form", "targetNamespace", "minOccurs", "maxOccurs"}
+		prohibited = []string{"ref", "form", "targetNamespace", "minOccurs", "maxOccurs"}
 	case "attribute":
-		grammar, prohibited = "xs:topLevelAttribute", []string{"ref", "form", "use", "targetNamespace"}
+		prohibited = []string{"ref", "form", "use", "targetNamespace"}
 	case "group":
-		grammar, prohibited = "xs:namedGroup", []string{"ref", "minOccurs", "maxOccurs"}
+		prohibited = []string{"ref", "minOccurs", "maxOccurs"}
 	case "attributeGroup":
-		grammar, prohibited = "xs:namedAttributeGroup", []string{"ref"}
+		prohibited = []string{"ref"}
 	default:
 		return nil
 	}
+	// The production each list hangs on comes from topLevelGrammar, so this
+	// diagnostic and the unusable-name one cannot disagree about a name (STYLE T4).
+	grammar := topLevelGrammar(local)
 	for _, attr := range prohibited {
 		if _, ok := decl.Attr(attr); !ok {
 			continue
 		}
-		return fmt.Errorf("parser: %s <%s> at %s carries a %s attribute, which the schema for schema documents prohibits on the %s form: %s restricts %s to use=\"prohibited\", and it is legal on the local form alone", form, decl.Name().Local(), decl.Loc(), attr, form, grammar, attr)
+		return fmt.Errorf("parser: %s <%s> at %s carries a %s attribute, which the schema for schema documents prohibits on the %s form: %s restricts %s to use=\"prohibited\", and it is legal on the local form alone", form, local, decl.Loc(), attr, form, grammar, attr)
 	}
 	return nil
 }
@@ -2039,7 +2087,7 @@ func rejectOutOfModelFacetChildren(restriction *Element) error {
 		if local == "annotation" || local == "simpleType" || mappedFacetElement(local) {
 			continue
 		}
-		return fmt.Errorf("parser: <%s> at %s is a child the schema for schema documents does not admit under the <restriction> at %s: a <simpleType>'s <restriction> has the content model (xmlschema11-2.md §4.1.2) (annotation?, (simpleType?, (minExclusive | minInclusive | maxExclusive | maxInclusive | totalDigits | fractionDigits | length | minLength | maxLength | enumeration | whiteSpace | pattern | assertion | explicitTimezone | {any with namespace: ##other})*)), whose wildcard position excludes the XSD namespace",
+		return fmt.Errorf("parser: <%s> at %s is a child the schema for schema documents does not admit under the <restriction> at %s: a <simpleType>'s <restriction> extends xs:annotated with the group xs:simpleRestrictionModel (xmlschema11-2.md:3929, §4.1.2), giving the content model (annotation?, (simpleType?, (minExclusive | minInclusive | maxExclusive | maxInclusive | totalDigits | fractionDigits | length | minLength | maxLength | enumeration | whiteSpace | pattern | assertion | explicitTimezone | {any with namespace: ##other})*)), whose wildcard position excludes the XSD namespace",
 			local, el.Loc(), restriction.Loc())
 	}
 	return nil
