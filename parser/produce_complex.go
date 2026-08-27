@@ -429,10 +429,15 @@ func ownedComplexBase(base xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 //
 // Which of the five forms this is decides which xs:complexTypeModel disjunct the
 // <complexType>'s OWN children are ordered against (checkS4SChildOrder), so that
-// check is charged here rather than inside the arms. It runs BEHIND
-// repeatedContentAlternative, which would otherwise be pre-empted by an order
-// verdict: a second <simpleContent> fills a position twice, and only the
-// dedicated guard names the offending sibling and the <complexType> bounding it.
+// check is charged here rather than inside the arms. The two child-position
+// guards above it run first, on this entry path and so ahead of all five
+// checkS4SChildOrder calls, because it would otherwise pre-empt each with a
+// thinner verdict: repeatedContentAlternative, because a second <simpleContent>
+// fills a position twice and only that guard names the offending sibling and the
+// <complexType> bounding it; and misplacedOpenContent, because an <openContent>
+// in any position it rejects also fills no position of the model one of those
+// calls walks (#1047), and only that guard enumerates the positions
+// xs:openContent IS legal in (#975).
 //
 // id is BOTH what the built type is constructed from — a {name} for a top-level
 // one, a {context} for an inline anonymous one — and the {scope}.{parent} that

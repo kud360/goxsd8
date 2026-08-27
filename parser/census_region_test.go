@@ -40,9 +40,10 @@ func assertCensus(t *testing.T, got, want []string) {
 //
 // The four unmapped children are chosen to be names the schema for schema
 // documents admits SOMEWHERE — a facet under a complex-content alternant, a
-// model group under a simple-content one — because those are the ones
-// checkS4SChildOrder passes over rather than rejecting, and so the ones that
-// reach a component-less silence.
+// model group under a simple-content one — so what declines them is each
+// container's own vocabulary and not some cruder namespace test. Since #1047
+// checkS4SChildOrder rejects the document over each of them; the census is taken
+// before the first pass that can fail, so what it holds is unchanged (censusOf).
 func TestCensusDerivationTail(t *testing.T) {
 	got := censusOf(t, `<xs:complexType name="implicit">`+
 		`<xs:sequence/>`+
