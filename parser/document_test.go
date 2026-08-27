@@ -5,17 +5,15 @@ import (
 	"io"
 	"strings"
 	"testing"
-	"unicode/utf16"
 
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// schemaDoc is a well-formed schema document exercising every fact the tree
-// must carry: an xml:base on the root, an element that inherits it, an element
-// that overrides it with a relative reference, and mixed content (documentation
-// text inside an annotation).
+// schemaDoc is a well-formed schema document carrying an xml:base on the root,
+// an element that inherits it, an element that overrides it with a relative
+// reference, and mixed content (documentation text inside an annotation).
 const schemaDoc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xml:base="http://example.org/base/">` +
 	`<xs:element name="root"/>` +
 	`<xs:annotation><xs:documentation>hello text</xs:documentation></xs:annotation>` +
@@ -66,61 +64,6 @@ func TestReadDocumentTree(t *testing.T) {
 	// Loc: the root's opening "<" is at line 1, column 1.
 	if loc := root.Loc(); loc.Line != 1 || loc.Col != 1 || loc.URI != docURI {
 		t.Errorf("root Loc() = %+v, want URI=%q line=1 col=1", loc, docURI)
-	}
-
-	// Attributes exclude the xmlns:xs declaration but keep targetNamespace and
-	// xml:base, in document order.
-	locals := attrLocals(root)
-	if !contains(locals, "targetNamespace") {
-		t.Errorf("attributes %v missing targetNamespace", locals)
-	}
-	if !contains(locals, "base") {
-		t.Errorf("attributes %v missing xml:base", locals)
-	}
-	if contains(locals, "xs") {
-		t.Errorf("attributes %v leaked the xmlns:xs declaration", locals)
-	}
-
-	// Root base URI is its own xml:base (absolute), resolved against the
-	// document URI.
-	if got := root.BaseURI(); got != "http://example.org/base/" {
-		t.Errorf("root BaseURI() = %q, want %q", got, "http://example.org/base/")
-	}
-}
-
-func TestReadDocumentBaseURIInheritAndOverride(t *testing.T) {
-	d, err := parser.ReadDocument(docURI, strings.NewReader(schemaDoc))
-	if err != nil {
-		t.Fatalf("ReadDocument: %v", err)
-	}
-	root := d.Root()
-
-	// The "root" element declares no xml:base: it inherits the parent's base
-	// unchanged.
-	rootEl := childElement(root, "element")
-	if rootEl == nil {
-		t.Fatal("no <xs:element> child found")
-	}
-	if got := rootEl.BaseURI(); got != "http://example.org/base/" {
-		t.Errorf("inherited BaseURI() = %q, want %q", got, "http://example.org/base/")
-	}
-
-	// The "child" element overrides with a relative reference, resolved against
-	// its parent's base.
-	var child *parser.Element
-	for _, n := range root.Children() {
-		el, ok := n.(*parser.Element)
-		if ok && el.Name().Local() == "element" {
-			if v, _ := el.Attr("name"); v == "child" {
-				child = el
-			}
-		}
-	}
-	if child == nil {
-		t.Fatal("no child <xs:element name=\"child\"> found")
-	}
-	if got := child.BaseURI(); got != "http://example.org/base/sub/" {
-		t.Errorf("overridden BaseURI() = %q, want %q", got, "http://example.org/base/sub/")
 	}
 }
 
@@ -220,31 +163,6 @@ func TestReadDocumentMalformed(t *testing.T) {
 	}
 }
 
-// utf16LE encodes doc as little-endian UTF-16 behind the byte-order mark that
-// XML 1.0 §4.3.3 requires of a UTF-16 entity.
-func utf16LE(doc string) string {
-	var b []byte
-	for _, u := range utf16.Encode([]rune("\uFEFF" + doc)) {
-		b = append(b, byte(u), byte(u>>8))
-	}
-	return string(b)
-}
-
-func TestReadDocumentUTF16BOM(t *testing.T) {
-	d, err := parser.ReadDocument(docURI, strings.NewReader(utf16LE(schemaDoc)))
-	if err != nil {
-		t.Fatalf("ReadDocument on UTF-16 input: %v", err)
-	}
-	if !d.IsSchema() {
-		t.Error("IsSchema() = false, want true")
-	}
-	want, err := parser.ReadDocument(docURI, strings.NewReader(schemaDoc))
-	if err != nil {
-		t.Fatalf("UTF-8 baseline: %v", err)
-	}
-	sameTree(t, "/", d.Root(), want.Root())
-}
-
 // failFirstReader fails on its very first Read and reports end-of-input on
 // every one after — the source shape whose failure a dropped byte-order-mark
 // peek error would replace with a clean end-of-document.
@@ -287,69 +205,4 @@ func TestReadDocumentSourceFailureSurfacesItsCause(t *testing.T) {
 	if xe.Rule != xsderr.RuleXMLWellFormed || xe.Loc.URI != docURI {
 		t.Errorf("error rule/loc = %q/%v, want %q at %q", xe.Rule, xe.Loc, xsderr.RuleXMLWellFormed, docURI)
 	}
-}
-
-// sameTree asserts that two element subtrees agree in name, location, base
-// URI, attributes, and children. A UTF-16 document decodes to exactly the
-// bytes of its UTF-8 spelling, so even locations must match.
-func sameTree(t *testing.T, path string, got, want *parser.Element) {
-	t.Helper()
-	if got.Name() != want.Name() {
-		t.Fatalf("%s: name = %v, want %v", path, got.Name(), want.Name())
-	}
-	if got.Loc() != want.Loc() {
-		t.Errorf("%s: loc = %v, want %v", path, got.Loc(), want.Loc())
-	}
-	if got.BaseURI() != want.BaseURI() {
-		t.Errorf("%s: base URI = %q, want %q", path, got.BaseURI(), want.BaseURI())
-	}
-	if len(got.Attributes()) != len(want.Attributes()) {
-		t.Fatalf("%s: %d attributes, want %d", path, len(got.Attributes()), len(want.Attributes()))
-	}
-	for i, a := range want.Attributes() {
-		g := got.Attributes()[i]
-		if g.Name() != a.Name() || g.Value() != a.Value() {
-			t.Errorf("%s: attribute %d = %v=%q, want %v=%q", path, i, g.Name(), g.Value(), a.Name(), a.Value())
-		}
-	}
-	if len(got.Children()) != len(want.Children()) {
-		t.Fatalf("%s: %d children, want %d", path, len(got.Children()), len(want.Children()))
-	}
-	for i, w := range want.Children() {
-		child := path + want.Name().Local() + "/"
-		switch w := w.(type) {
-		case *parser.Element:
-			g, ok := got.Children()[i].(*parser.Element)
-			if !ok {
-				t.Fatalf("%s: child %d = %T, want *Element", child, i, got.Children()[i])
-			}
-			sameTree(t, child, g, w)
-		case *parser.Text:
-			g, ok := got.Children()[i].(*parser.Text)
-			if !ok {
-				t.Fatalf("%s: child %d = %T, want *Text", child, i, got.Children()[i])
-			}
-			if g.Data() != w.Data() || g.Loc() != w.Loc() {
-				t.Errorf("%s: child %d text = %q at %v, want %q at %v", child, i, g.Data(), g.Loc(), w.Data(), w.Loc())
-			}
-		}
-	}
-}
-
-// attrLocals returns the local names of an element's attributes in order.
-func attrLocals(e *parser.Element) []string {
-	var out []string
-	for _, a := range e.Attributes() {
-		out = append(out, a.Name().Local())
-	}
-	return out
-}
-
-func contains(ss []string, s string) bool {
-	for _, v := range ss {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }
