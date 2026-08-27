@@ -49,7 +49,7 @@ func TestConditionalIncludeRootStubAttributes(t *testing.T) {
 		{versioningNS, "minVersion", "3.2"},
 		{versioningNS, "maxVersion", "9.9"},
 	}
-	attrs := root.Attributes()
+	attrs := root.attrs
 	if len(attrs) != len(want) {
 		t.Fatalf("stub carries %d attributes, want %d: %v", len(attrs), len(want), attrs)
 	}
@@ -62,7 +62,7 @@ func TestConditionalIncludeRootStubAttributes(t *testing.T) {
 	}
 	// The INPUT is untouched: S1 is a value the caller may still hold, and the
 	// stub narrows a copy of its attribute list rather than the list itself.
-	if got := len(d.Root().Attributes()); got != 6 {
+	if got := len(d.Root().attrs); got != 6 {
 		t.Fatalf("S1's root carries %d attributes after the transform, want its original 6", got)
 	}
 }
