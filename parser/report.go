@@ -90,14 +90,13 @@ type AssembledDocument struct {
 	// index does.
 	Location string
 
-	// Unmapped is every TOP-LEVEL <schema> child of THIS discovery of the document
-	// that the producer maps to no component, in document order. The top level is
-	// the only region censused: a complex type's content model, a simple type's
-	// facets, an <override>'s or <redefine>'s children are each a region of their
-	// own, widened one at a time by later sessions (#1030). Empty is therefore
-	// never a statement about the whole document, only about the region censused
-	// — and not quite all of even that region: a top-level child outside the XSD
-	// namespace is passed over unreported, an open gap marked and owned at
+	// Unmapped is every element of THIS discovery of the document that the
+	// producer maps to no component and does not reject either, in document
+	// order. The census covers several regions of the vocabulary and not all of
+	// it — parser/census.go's "Scope" states which, and what each region left out
+	// costs — so empty is never a statement about the whole document, only about
+	// the regions censused. A top-level child outside the XSD namespace is passed
+	// over unreported at every depth, an open gap marked and owned at
 	// producer.topLevelDecls (#1036).
 	//
 	// It is populated exactly as far as assembly got, which is complete only when

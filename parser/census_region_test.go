@@ -184,6 +184,70 @@ func TestCensusModelGroupReportsNothingItselfAndDescends(t *testing.T) {
 	assertCensus(t, got, []string{"key"})
 }
 
+// TestCensusSimpleTypeAlternatives pins the <list> and <union> vocabularies
+// (§3.16.2.1): each carries the one inline <simpleType> position listItem and
+// unionMembers read, and any other name is dropped in silence.
+func TestCensusSimpleTypeAlternatives(t *testing.T) {
+	got := censusOf(t, `<xs:simpleType name="l"><xs:list>`+
+		`<xs:annotation><xs:documentation>d</xs:documentation></xs:annotation>`+
+		`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`+
+		`<xs:length value="3"/>`+
+		`</xs:list></xs:simpleType>`+
+		`<xs:simpleType name="u"><xs:union>`+
+		`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`+
+		`<xs:pattern value="."/>`+
+		`</xs:union></xs:simpleType>`)
+	assertCensus(t, got, []string{"length", "pattern"})
+}
+
+// TestCensusSimpleTypeRestrictionSilent pins the <restriction> alternative
+// reporting nothing of its own. rejectOutOfModelFacetChildren (#972) refuses
+// every XSD-namespace child Datatypes §4.1.2 has no position for, so the spec's
+// own silent-non-mapping carve-out — map.std.common case 2, an unrecognized
+// facet making the whole <simpleType> map to no component without being in error
+// — is unreachable here: the document is rejected instead. The census must not
+// claim what a verdict already names.
+//
+// A <simpleType> naming none of the three alternatives, or two, stops the walk
+// for the same reason (simpleTypeBody, src-simple-type §3.16.3).
+func TestCensusSimpleTypeRestrictionSilent(t *testing.T) {
+	outOfModel := censusOf(t, `<xs:simpleType name="s"><xs:restriction base="xs:string">`+
+		`<xs:period/>`+
+		`</xs:restriction></xs:simpleType>`)
+	assertCensus(t, outOfModel, nil)
+
+	noAlternative := censusOf(t, `<xs:simpleType name="s"><xs:attribute name="a"/></xs:simpleType>`)
+	assertCensus(t, noAlternative, nil)
+
+	twoAlternatives := censusOf(t, `<xs:simpleType name="s">`+
+		`<xs:restriction base="xs:string"/>`+
+		`<xs:list itemType="xs:string"><xs:length value="3"/></xs:list>`+
+		`</xs:simpleType>`)
+	assertCensus(t, twoAlternatives, nil)
+}
+
+// TestCensusReachesInlineSimpleTypeAtEveryOwner pins the descent into the simple
+// types the census must reach to censusing them at all: the one a local
+// <attribute> in a derivation tail owns, the one an <element>'s <alternative>
+// owns, and the base a <simpleContent> <restriction> synthesizes from. Each
+// carries a <list> holding a name nothing maps, so a missed descent shows up as
+// a missing report rather than as a shape nobody notices.
+func TestCensusReachesInlineSimpleTypeAtEveryOwner(t *testing.T) {
+	inlineList := `<xs:simpleType><xs:list itemType="xs:string"><xs:field xpath="."/></xs:list></xs:simpleType>`
+	got := censusOf(t, `<xs:complexType name="ct">`+
+		`<xs:sequence><xs:element name="e"><xs:complexType>`+
+		`<xs:attribute name="deep">`+inlineList+`</xs:attribute>`+
+		`</xs:complexType></xs:element></xs:sequence>`+
+		`<xs:attribute name="a">`+inlineList+`</xs:attribute>`+
+		`</xs:complexType>`+
+		`<xs:complexType name="sc"><xs:simpleContent><xs:restriction base="xs:string">`+
+		inlineList+
+		`</xs:restriction></xs:simpleContent></xs:complexType>`+
+		`<xs:element name="top"><xs:alternative test="true()">`+inlineList+`</xs:alternative></xs:element>`+
+		`<xs:attribute name="ta">`+inlineList+`</xs:attribute>`)
+	assertCensus(t, got, []string{"field", "field", "field", "field", "field"})
+}
+
 // TestCensusReasonIsNoDispatch pins that a construct found below the top level
 // carries the same closed-set reason a top-level one does: the position it stood
 // at has no arm for its name, which is what UnmappedNoDispatch states.

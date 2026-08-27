@@ -72,12 +72,12 @@ import (
 // complex-type derivation alternants and of the implicit-content form; the
 // derivation tail — annotation?, (attribute | attributeGroup)*, anyAttribute?,
 // assert* (§3.4.2) — wherever those five containers carry it; the body of a
-// top-level <group> and of a top-level <attributeGroup>.
+// top-level <group> and of a top-level <attributeGroup>; the <list> and <union>
+// alternatives of every <simpleType> any of those reaches.
 //
 // NOT censused, each a widening of its own and each a region with its own
 // dispatch:
 //
-//   - the simple-type alternatives, which the next commit of #1030 carries;
 //   - <element>, <attribute> and <simpleType>'s OWN children: each drops a name
 //     its content model does not admit in silence, so each holds real unmapped
 //     constructs, but reporting them flags documents conformance's shape gate
@@ -167,6 +167,10 @@ func (w *censusWalk) topLevel(decl *Element) {
 	switch decl.Name().Local() {
 	case "element":
 		w.element(decl)
+	case "attribute":
+		w.attributeDecl(decl)
+	case "simpleType":
+		w.simpleType(decl)
 	case "complexType":
 		w.complexType(decl)
 	case "group":
@@ -223,16 +227,63 @@ func (w *censusWalk) modelGroup(group *Element) {
 func (w *censusWalk) element(el *Element) {
 	for c := range xsdChildren(el) {
 		switch c.Name().Local() {
+		case "simpleType":
+			w.simpleType(c)
 		case "complexType":
 			w.complexType(c)
 		case "alternative":
 			for a := range xsdChildren(c) {
-				if a.Name().Local() == "complexType" {
+				switch a.Name().Local() {
+				case "simpleType":
+					w.simpleType(a)
+				case "complexType":
 					w.complexType(a)
 				}
 			}
 		}
 	}
+}
+
+// attributeDecl descends into the anonymous simple type an <attribute>
+// declaration owns — §3.2.2.1 dcl.att.global and §3.2.2.2 dcl.att.local state
+// the same tier-1 {type definition} chain and declaredType maps both — and
+// reports nothing of its own, per the Scope note above.
+func (w *censusWalk) attributeDecl(el *Element) {
+	for c := range xsdChildren(el) {
+		if c.Name().Local() == "simpleType" {
+			w.simpleType(c)
+		}
+	}
+}
+
+// simpleType censuses one <simpleType> by the §3.16.2.1 alternative it chose.
+// The choice is simpleTypeBody's own, so a <simpleType> naming none of the three
+// or more than one stops the walk: the producer rejects that document under
+// src-simple-type (§3.16.3), and nothing under a rejected alternative is a
+// silence.
+//
+// The <restriction> alternative reports NOTHING of its own.
+// rejectOutOfModelFacetChildren (#972) rejects every XSD-namespace child
+// Datatypes §4.1.2's content model has no position for, so the spec's own
+// silent-non-mapping carve-out — map.std.common case 2 (xmlschema11-2.md:3625),
+// where an unrecognized facet makes the whole <simpleType> "map to no component
+// at all" without being in error — is not reachable in this processor: that
+// document is refused before it can map to nothing. Only the inline base
+// <simpleType> of §3.16.3 clause 2 is descended into.
+func (w *censusWalk) simpleType(el *Element) {
+	body, err := simpleTypeBody(el)
+	if err != nil {
+		return
+	}
+	if body.Name().Local() == "restriction" {
+		for c := range xsdChildren(body) {
+			if c.Name().Local() == "simpleType" {
+				w.simpleType(c)
+			}
+		}
+		return
+	}
+	w.container(body, simpleTypeAlternativeChildMapped)
 }
 
 // complexType censuses one <complexType> by the disjunct of xs:complexTypeModel
@@ -250,7 +301,7 @@ func (w *censusWalk) complexType(el *Element) {
 	sc := childElement(el, xsd.XMLSchemaNS, "simpleContent")
 	cc := childElement(el, xsd.XMLSchemaNS, "complexContent")
 	if sc == nil && cc == nil {
-		w.complexContentContainer(el)
+		w.container(el, complexContentChildMapped)
 		return
 	}
 	if sc != nil {
@@ -290,38 +341,35 @@ func (w *censusWalk) complexContentAlternant(cc *Element) {
 	if derivation == nil {
 		return
 	}
-	w.complexContentContainer(derivation)
+	w.container(derivation, complexContentChildMapped)
 }
 
-// complexContentContainer censuses a container whose children are the structural
-// positions "openContent?, (group | all | choice | sequence)?" followed by the
-// derivation tail: the implicit-content <complexType> itself (§3.4.2.3.2) and
-// each <complexContent> alternant (§3.4.2.3.3).
+// container reports every child of parent that mapped declines, and descends
+// through the ones it admits into the regions of their own. It is the one shape
+// every site below the top level takes, so a region is added by naming its
+// vocabulary rather than by writing another walk (STYLE T4).
 //
-// Reporting and descent share ONE pass over the children, here and at every
-// other site, so the census comes out in document order however deep a construct
-// sits (STYLE D2).
-func (w *censusWalk) complexContentContainer(parent *Element) {
+// Reporting and descent share ONE pass over the children, so the census comes
+// out in document order however deep a construct sits (STYLE D2).
+//
+// The switch is over names ACROSS the site vocabularies, and each site's own
+// predicate is what makes an arm reachable from it: only the two complex-content
+// containers admit a model group, only the <simpleContent> <restriction> and the
+// two simple-type alternatives admit a <simpleType>.
+func (w *censusWalk) container(parent *Element, mapped func(local string) bool) {
 	for c := range xsdChildren(parent) {
 		local := c.Name().Local()
-		if !complexContentChildMapped(local) {
+		if !mapped(local) {
 			w.report(c)
 			continue
 		}
 		switch local {
+		case "attribute":
+			w.attributeDecl(c)
+		case "simpleType":
+			w.simpleType(c)
 		case "all", "choice", "sequence":
 			w.modelGroup(c)
-		}
-	}
-}
-
-// container reports every child of parent that mapped declines. It is the one
-// shape every site below the top level takes, so a region is added by naming its
-// vocabulary rather than by writing another walk (STYLE T4).
-func (w *censusWalk) container(parent *Element, mapped func(local string) bool) {
-	for c := range xsdChildren(parent) {
-		if !mapped(c.Name().Local()) {
-			w.report(c)
 		}
 	}
 }
@@ -405,4 +453,14 @@ func attributeGroupChildMapped(local string) bool {
 		return true
 	}
 	return false
+}
+
+// simpleTypeAlternativeChildMapped reports whether a child named local of a
+// <list> or a <union> is read. Both alternatives carry the one position
+// listItem and unionMembers read — the inline <simpleType> of §3.16.3 clauses 3
+// and 4 — so one vocabulary serves both (xs:list at xmlschema11-2.md:3897 and
+// xs:union at :3910 differ only in that position's maxOccurs, which is
+// cardinality and not vocabulary).
+func simpleTypeAlternativeChildMapped(local string) bool {
+	return local == "annotation" || local == "simpleType"
 }

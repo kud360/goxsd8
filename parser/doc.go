@@ -114,12 +114,12 @@
 // [xsd.Schema] cannot — which schema documents went into it, in
 // discovery order, which ·inter-schema-document references· could not be
 // followed to one, and what each discovery holds that no dispatch of
-// this producer maps to a component ([UnmappedConstruct]; top-level
-// <xs:schema> children only so far, so its silence is not yet coverage)
-// — so a consumer reasoning about the DOCUMENT SET (§4.2.1's schema(D))
-// does not have to re-walk §4.2's composition edges, or re-derive what
-// this package reads, itself. It is populated even when an error is
-// returned.
+// this producer maps to a component ([UnmappedConstruct]; several
+// regions of the vocabulary so far, not all of it, so its silence is not
+// yet coverage) — so a consumer reasoning about the DOCUMENT SET
+// (§4.2.1's schema(D)) does not have to re-walk §4.2's composition
+// edges, or re-derive what this package reads, itself. It is populated
+// even when an error is returned.
 //
 // Parse assembles the <xs:include>, <xs:override>, <xs:redefine> and
 // <xs:import> closure of the root document (§4.2.3, §4.2.5, §4.2.4,
