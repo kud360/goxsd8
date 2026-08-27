@@ -334,6 +334,57 @@ func ValidateLexical(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexic
 	return v, err
 }
 
+// ValidatingType is key-vtype clause 1 (Structures §3.16.4, consumed by
+// key-TYPE-value downstream): the ·validating type· of rawLexical against st —
+// st itself if st is not a union, otherwise the ·active basic member· of its
+// transitive membership (dt-active-member/dt-active-basic-member, Datatypes
+// §4.1.4 cl.2.3) that accepted it. It runs the same verdict ValidateLexical
+// runs (validateUnion, for the union case), so a caller learns the member the
+// verdict decided from ONE call instead of re-invoking ValidateLexical per
+// candidate member itself to rediscover it, which validate/cvcid.go's
+// validatingType used to do.
+//
+// For the union case, WHICH member decided is found by activeBasicMember
+// (union.go), a scan of its own rather than a projection of dispatchUnion's:
+// dispatchUnion folds any member fault that is not [IsFacetPrecondition] into
+// "rejected" and keeps scanning — a gap value/valuespace.go's own GAP(value)
+// comment charges to #462, not to be widened here. activeBasicMember instead
+// declines the whole identification on ANY member error that is not a verdict
+// ([IsDatatypeVerdict]), the wider test validate/cvcid.go's historical
+// per-member check already applied. Riding dispatchUnion's own fold-tolerant
+// granularity for the identification instead would make ValidatingType MORE
+// PERMISSIVE than that historical behavior on a member with a
+// non-facet-precondition fault — #462's fix to make, not this seam's to make
+// silently, so ValidatingType's err can legitimately disagree with
+// ValidateLexical's own verdict on such an input: a real, narrow, and
+// deliberate divergence, not a bug.
+//
+// A non-nil err here is not necessarily a rejection of rawLexical —
+// [IsDatatypeVerdict] says which, on the same terms ValidateLexical's own
+// callers already apply. On any non-nil err the *xsd.SimpleType result is nil.
+func ValidatingType(b Backend, r xsd.TypeResolver, st *xsd.SimpleType, rawLexical string, ctx Context) (*xsd.SimpleType, Value, error) {
+	variety, err := st.Variety(r)
+	if err != nil {
+		return nil, nil, typeFault(err)
+	}
+	if _, ok := variety.(xsd.Union); !ok {
+		v, _, err := validateLexical(b, r, st, rawLexical, ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		return st, v, nil
+	}
+	v, _, err := validateUnion(b, r, st, rawLexical, ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	t, err := activeBasicMember(b, r, st, rawLexical, ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	return t, v, nil
+}
+
 // validateLexical is ValidateLexical's internal form: the same verdict, plus the
 // whiteSpace mode of the ·basic member· that actually decided the literal — st's
 // own for the atomic and list varieties, the ·active basic member·'s for a union,
