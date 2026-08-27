@@ -481,7 +481,11 @@ func TestProduceTopLevelElementHasNoScopeParent(t *testing.T) {
 // of its own for any of them (§3.4.3 src-ct and §3.16.3 src-simple-type
 // incorporate the schema for schema documents by reference; §3.6.3
 // src-attribute_group is "None as such") — hence a plain grammar fault, not a
-// rule verdict. The two DECLARATION kinds are charged the same way here even
+// rule verdict. Each row also pins WHICH of the six its own diagnostic names,
+// which is topLevelGrammar's whole mapping: an s4s-grammar rejection carries no
+// Rule, so the production is the only citation it has (#975).
+//
+// The two DECLARATION kinds are charged the same way here even
 // though xsd.NewElementDeclaration/xsd.NewAttributeDeclaration would later
 // charge e-props-correct/a-props-correct clause 1 for the same empty {name}: at
 // top level the fault belongs to the schema document's grammar and is reported
@@ -507,45 +511,50 @@ func TestProduceTopLevelElementHasNoScopeParent(t *testing.T) {
 // was minted the same way.
 func TestProduceNamelessTopLevelRejected(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		decl string
+		name        string
+		decl        string
+		wantGrammar string // the Appendix A production the message must name (#975)
 	}{
 		// Each <simpleType> row carries a WELL-FORMED body, so the "no usable
 		// name" assertion cannot pass on a src-simple-type body fault standing in
 		// for the name fault. The facet-bearing row is the suite shape
 		// (MS-SimpleType2006-07-15/stA015).
 		{"simpleType absent name", `<xs:simpleType>` +
-			`<xs:restriction base="xs:string"/></xs:simpleType>`},
+			`<xs:restriction base="xs:string"/></xs:simpleType>`, "xs:topLevelSimpleType"},
 		{"simpleType with a facet", `<xs:simpleType><xs:restriction base="xs:string">` +
-			`<xs:length value="3"/></xs:restriction></xs:simpleType>`},
+			`<xs:length value="3"/></xs:restriction></xs:simpleType>`, "xs:topLevelSimpleType"},
 		{"simpleType with empty name", `<xs:simpleType name="">` +
-			`<xs:restriction base="xs:string"/></xs:simpleType>`},
-		{"complexType empty content", `<xs:complexType><xs:sequence/></xs:complexType>`},
+			`<xs:restriction base="xs:string"/></xs:simpleType>`, "xs:topLevelSimpleType"},
+		{"complexType empty content", `<xs:complexType><xs:sequence/></xs:complexType>`,
+			"xs:topLevelComplexType"},
 		{"complexType with local element", `<xs:complexType><xs:sequence>` +
-			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`},
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`,
+			"xs:topLevelComplexType"},
 		{"complexType with complexContent", `<xs:complexType><xs:complexContent>` +
 			`<xs:restriction base="xs:anyType"><xs:sequence>` +
 			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:restriction>` +
-			`</xs:complexContent></xs:complexType>`},
+			`</xs:complexContent></xs:complexType>`, "xs:topLevelComplexType"},
 		{"complexType with empty name", `<xs:complexType name=""><xs:sequence>` +
-			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`},
-		{"group empty content", `<xs:group><xs:sequence/></xs:group>`},
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType>`,
+			"xs:topLevelComplexType"},
+		{"group empty content", `<xs:group><xs:sequence/></xs:group>`, "xs:namedGroup"},
 		{"group with local element", `<xs:group><xs:sequence>` +
-			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`},
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`, "xs:namedGroup"},
 		{"group with empty name", `<xs:group name=""><xs:sequence>` +
-			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`},
-		{"attributeGroup empty content", `<xs:attributeGroup/>`},
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:group>`, "xs:namedGroup"},
+		{"attributeGroup empty content", `<xs:attributeGroup/>`, "xs:namedAttributeGroup"},
 		{"attributeGroup with attribute use", `<xs:attributeGroup>` +
-			`<xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`},
+			`<xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`, "xs:namedAttributeGroup"},
 		{"attributeGroup with empty name", `<xs:attributeGroup name="">` +
-			`<xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`},
-		{"element with type", `<xs:element type="xs:string"/>`},
+			`<xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`, "xs:namedAttributeGroup"},
+		{"element with type", `<xs:element type="xs:string"/>`, "xs:topLevelElement"},
 		{"element with inline complexType", `<xs:element><xs:complexType><xs:sequence>` +
-			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`},
-		{"element with empty name", `<xs:element name="" type="xs:string"/>`},
-		{"attribute with type", `<xs:attribute type="xs:string"/>`},
-		{"attribute with no type", `<xs:attribute/>`},
-		{"attribute with empty name", `<xs:attribute name="" type="xs:string"/>`},
+			`<xs:element name="a" type="xs:string"/></xs:sequence></xs:complexType></xs:element>`,
+			"xs:topLevelElement"},
+		{"element with empty name", `<xs:element name="" type="xs:string"/>`, "xs:topLevelElement"},
+		{"attribute with type", `<xs:attribute type="xs:string"/>`, "xs:topLevelAttribute"},
+		{"attribute with no type", `<xs:attribute/>`, "xs:topLevelAttribute"},
+		{"attribute with empty name", `<xs:attribute name="" type="xs:string"/>`, "xs:topLevelAttribute"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := produce(t, wrap("urn:po", tc.decl))
@@ -558,6 +567,9 @@ func TestProduceNamelessTopLevelRejected(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "no usable name") {
 				t.Fatalf("error = %v, want it to report the unusable name", err)
+			}
+			if !strings.Contains(err.Error(), tc.wantGrammar) {
+				t.Fatalf("error = %v, want it to name %s, the production whose required name is missing", err, tc.wantGrammar)
 			}
 		})
 	}

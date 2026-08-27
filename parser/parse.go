@@ -467,8 +467,17 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rd *redefin
 		// could not follow, and is recorded as one: the error says the assembly
 		// stopped, the report says which document set it stopped short of (§4.2.1
 		// makes these schemaLocations mandatory, "not hints").
+		//
+		// Each directive this composer follows IS its own Appendix A production — a
+		// global element declaration carrying its content model inline — and each
+		// declares schemaLocation use="required": xs:include (xmlschema11-1.md:5535,
+		// the attribute at :5543), xs:redefine (:5548, :5560), xs:override (:5567,
+		// :5579). Hence the production name below is the element name. <import> is
+		// the one directive whose schemaLocation is optional (xs:import, :5595, since
+		// §4.2.6.2 admits a bare <import>) and never reaches here: discover routes it
+		// to importDocument.
 		a.unfollowedAt(el, UnfollowedNoSchemaLocation)
-		return fmt.Errorf("parser: <%s> at %s has no schemaLocation attribute, which the schema for schema documents requires", el.Name().Local(), el.Loc())
+		return fmt.Errorf("parser: <%s> at %s has no schemaLocation attribute, which the schema for schema documents requires: xs:%s declares it use=\"required\"", el.Name().Local(), el.Loc(), el.Name().Local())
 	}
 	// §4.3.2 clause 4: the location is a URI REFERENCE, resolved against the base
 	// URI in scope at the directive element itself (xml:base-aware), not against
