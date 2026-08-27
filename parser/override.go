@@ -243,7 +243,7 @@ func writeCanonicalElement(b *strings.Builder, el *Element) {
 		writeToken(b, ns.URI())
 	}
 
-	attrs := slices.Clone(el.Attributes())
+	attrs := slices.Clone(el.attrs)
 	slices.SortFunc(attrs, func(x, y xmltree.Attribute) int {
 		if c := strings.Compare(x.Name().Space(), y.Name().Space()); c != 0 {
 			return c
