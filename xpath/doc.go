@@ -1,7 +1,10 @@
 // Package xpath is the XPath 2.0 engine serving conditional type
-// assignment (CTA), assertions, and identity-constraint paths. Full
-// XPath 2.0 is the destination; the engine grows outward from the
-// XSD-required subset, tracked by its own conformance lane.
+// assignment (CTA) and assertions. Identity-constraint {selector}/{fields}
+// (§3.11.6.2/3) are evaluated directly in validate against the restricted
+// selector/field path grammar those sections define, never through this
+// engine (docs/ARCHITECTURE.md). Full XPath 2.0 is the destination; the
+// engine grows outward from the XSD-required subset, tracked by its own
+// conformance lane.
 //
 // # Growth tiers
 //
