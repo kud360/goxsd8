@@ -62,10 +62,9 @@ import (
 // # The census is NAME-based
 //
 // A child dropped because the POSITION its name fills was already filled is not
-// reported — a second <all> in a named <group>'s body, a second <anyAttribute>
-// in an <attributeGroup>. Reporting it would make the census's answer depend on
-// how many siblings a name has, which no reader can act on without re-walking
-// the document itself.
+// reported — a second <anyAttribute> in an <attributeGroup>. Reporting it would
+// make the census's answer depend on how many siblings a name has, which no
+// reader can act on without re-walking the document itself.
 //
 // # Scope
 //
@@ -193,12 +192,17 @@ func (w *censusWalk) topLevel(decl *Element) {
 // sequence)), and buildDefinitionModelGroup reads the compositor child and
 // nothing else, so any other name is dropped in silence.
 //
-// It is dropped ONLY when a compositor is there to be read: with none,
+// It is dropped ONLY when a body admits a read at all. With no compositor,
 // rejectNamedGroupBody charges the first child xs:namedGroup does not admit, so
 // that child is named in a verdict rather than skipped and the census must not
-// claim it. A SECOND compositor is not reported either, the census being
-// name-based.
+// claim it. With TWO, the definition is rejected outright
+// (repeatedCompositorChild, #1048) and the walk stops for complexType's reason:
+// nothing under a refused document is silently skipped, and which compositor to
+// descend is not a census's to choose.
 func (w *censusWalk) namedGroup(el *Element) {
+	if repeatedCompositorChild(el) != nil {
+		return
+	}
 	compositor := compositorChild(el)
 	if compositor == nil {
 		return

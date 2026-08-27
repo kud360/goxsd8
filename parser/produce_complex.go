@@ -1773,7 +1773,10 @@ func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd
 // definition from its single <all>/<choice>/<sequence> child (§3.7.2, xr.mgd1):
 // the Model Group term itself, not a Particle (a definition carries no
 // occurrence). Any other body is rejected by rejectNamedGroupBody, at the child
-// that is not admitted rather than one phase later at the definition.
+// that is not admitted rather than one phase later at the definition. A body
+// carrying TWO compositors is the other end of the same cardinality and the same
+// fault, charged here at the second (repeatedCompositorChild) once the first has
+// been read, so the message can name the sibling it collides with.
 //
 // The rejection belongs HERE and not at produceModelGroupDefinition, which is not
 // the only caller: src-expredef clause 2 builds the ORIGINAL a redefining
@@ -1792,6 +1795,9 @@ func (p *producer) buildDefinitionModelGroup(el *Element, scopeParent xsd.Elemen
 	if group == nil {
 		return xsd.ModelGroup{}, rejectNamedGroupBody(el)
 	}
+	if dup := repeatedCompositorChild(el); dup != nil {
+		return xsd.ModelGroup{}, fmt.Errorf("parser: <%s> at %s is a second <all>, <choice> or <sequence> in the body of the named <group> at %s, which already carries the <%s> at %s: xs:namedGroup's content model (xmlschema11-1.md:5187) is (annotation?, (all | choice | sequence)), whose inner choice is minOccurs=\"1\" maxOccurs=\"1\" and so admits exactly one", dup.Name().Local(), dup.Loc(), el.Loc(), group.Name().Local(), group.Loc())
+	}
 	compositor, _ := compositorOf(group.Name().Local()) // compositorChild guarantees ok
 	particles, err := p.groupParticles(group, scopeParent)
 	if err != nil {
@@ -1804,7 +1810,9 @@ func (p *producer) buildDefinitionModelGroup(el *Element, scopeParent xsd.Elemen
 // <all>/<choice>/<sequence> the schema for schema documents requires of it. Call
 // it only once compositorChild has answered nil, which is the whole set of bodies
 // this describes: a nested <group> reference, a bare <element>, an
-// annotation-only body, an empty one.
+// annotation-only body, an empty one. A body with more than one compositor fails
+// the same cardinality from the other side and is charged by
+// repeatedCompositorChild's caller, on this citation.
 //
 // It reports at the first child xs:namedGroup does not admit, and only at the
 // <group> itself when there is none, because an unadmitted child IS the mistake
@@ -1838,7 +1846,9 @@ func rejectNamedGroupBody(el *Element) error {
 
 // compositorChild returns el's first <all>/<choice>/<sequence> child (a model
 // group definition's body, §3.7.2), or nil. Unlike modelGroupChild it excludes
-// <group>: a top-level <group> definition's body is never a nested reference.
+// <group>: a top-level <group> definition's body is never a nested reference. A
+// later such sibling is not returned and is not dropped either:
+// repeatedCompositorChild charges it.
 func compositorChild(el *Element) *Element {
 	for _, child := range el.Children() {
 		c, ok := child.(*Element)
@@ -1849,6 +1859,43 @@ func compositorChild(el *Element) *Element {
 		case "all", "choice", "sequence":
 			return c
 		}
+	}
+	return nil
+}
+
+// repeatedCompositorChild returns the SECOND <all>/<choice>/<sequence> child of a
+// named <group> in document order, or nil when it carries at most one among the
+// three. xs:namedGroup's content model (xmlschema11-1.md:5187) is (annotation?,
+// (all | choice | sequence)) with the inner choice at minOccurs="1"
+// maxOccurs="1", so a second one is the fault an absent one is, from the other
+// side of one cardinality: sd-valid (§2.4 clause 1, :615), no rule ID, on
+// rejectNamedGroupBody's citation above and reported at the second child.
+//
+// Charging it is what keeps buildDefinitionModelGroup's read honest, on
+// repeatedContentAlternative's reasoning: compositorChild is a first-match lookup
+// that drops every later sibling, so without this a <group> carrying two
+// compositors maps from whichever came first and the second leaves no trace
+// (#1048).
+//
+// The walk is not childElement: the fault spans THREE expanded names, and only a
+// single pass over the children orders an <all> against a <choice> against a
+// <sequence> to name the one that is second (STYLE D2). Foreign-namespace
+// siblings are skipped rather than charged, on rejectNamedGroupBody's reasoning
+// for the same skip — a scope choice, not a wildcard xs:namedGroup grants.
+func repeatedCompositorChild(el *Element) *Element {
+	var first *Element
+	for _, child := range el.Children() {
+		c, ok := child.(*Element)
+		if !ok {
+			continue
+		}
+		if !isXSD(c, "all") && !isXSD(c, "choice") && !isXSD(c, "sequence") {
+			continue
+		}
+		if first != nil {
+			return c
+		}
+		first = c
 	}
 	return nil
 }

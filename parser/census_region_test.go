@@ -137,16 +137,23 @@ func TestCensusStopsAtRepeatedAlternative(t *testing.T) {
 // is there to be read. With none, rejectNamedGroupBody charges that very child,
 // and a census claiming it would call a named fault a silent skip.
 //
-// A SECOND compositor is not reported either: the census is name-based, and the
-// name <sequence> is one xs:namedGroup admits.
+// A body carrying TWO compositors is refused outright since #1048, so the walk
+// stops there as well: reporting the <attribute> beside them would call a
+// construct unmapped in a document the producer refuses to map at all.
 func TestCensusNamedGroupBody(t *testing.T) {
 	withBody := censusOf(t, `<xs:group name="g">`+
 		`<xs:annotation><xs:documentation>d</xs:documentation></xs:annotation>`+
 		`<xs:sequence/>`+
-		`<xs:sequence/>`+
 		`<xs:attribute name="a" type="xs:string"/>`+
 		`</xs:group>`)
 	assertCensus(t, withBody, []string{"attribute"})
+
+	twoCompositors := censusOf(t, `<xs:group name="g">`+
+		`<xs:sequence/>`+
+		`<xs:choice/>`+
+		`<xs:attribute name="a" type="xs:string"/>`+
+		`</xs:group>`)
+	assertCensus(t, twoCompositors, nil)
 
 	noBody := censusOf(t, `<xs:group name="g"><xs:attribute name="a" type="xs:string"/></xs:group>`)
 	assertCensus(t, noBody, nil)
