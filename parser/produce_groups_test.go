@@ -218,29 +218,38 @@ func TestProduceCircularGroupRef(t *testing.T) {
 // error is NOT an *xsderr.Error and does NOT name mgd-props-correct.
 //
 // Every row DECLARES a legal <group name="G"> beside the malformed one, so no row
-// can pass as a dangling reference, and each pins the LINE the fault is reported
-// at (STYLE E3, carried in the message text since a plain error holds no
-// xsderr.Loc): the malformed child's own line where one exists, the definition's
-// where none does. Without the position assertion a guard that rejected at the
-// definition for every shape would pass the table.
+// can pass as a dangling reference, and each pins the SUBJECT the message opens
+// on together with its line — the element charged, at the position charged (STYLE
+// E3, carried in the message text since a plain error holds no xsderr.Loc). Every
+// message of this family opens "parser: <subject> at file:line:col", so the
+// assertion is a prefix and not a Contains: a message that mentions the right
+// element in some other ROLE, or the right line at some other element, fails the
+// row. Without it a guard that rejected at the definition for every shape, or one
+// that named the wrong one of two elements it holds, would pass the table.
 //
 // The two-compositor rows are the same fault from the other side of the same
-// cardinality (#1048), and their position assertions are what separate the second
-// compositor from the first: reporting either the first or the definition fails
-// the row.
+// cardinality (#1048), and the message names two elements: the second compositor,
+// charged, and the first, referenced. Swapping the two — charging the first and
+// referencing the second — fails both the subject assertion and the sibling one.
 func TestProduceNamedGroupBodyRejected(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2). The legal <group> is
-	// on line 2, the malformed one opens line 3 and its body starts on line 4, so
-	// wantLine alone separates a fault reported at the child from one reported at
-	// the definition. A body written over several lines puts each child on a line
-	// of its own, which is what wantSiblingLine reads.
+	// on line 2, the malformed one opens line 3 and its body starts on line 4. A
+	// body written over several lines puts each child on a line of its own, which
+	// is what the two-compositor rows count in.
 	cases := []struct {
-		name     string
-		body     string
-		wantName string
-		wantLine int
-		// wantSiblingLine is the line of the child the fault collides with, for the
-		// rows whose fault spans two of them; 0 where one child is the whole fault.
+		name string
+		body string
+		// wantSubject is the message's opening subject, as it names the element the
+		// fault is charged at, and wantLine that element's line.
+		wantSubject string
+		wantLine    int
+		// wantFault is a further phrase the message must carry where the subject
+		// alone does not separate the two branches; empty where it does.
+		wantFault string
+		// wantSibling is the clause naming the child the charged one collides with,
+		// and wantSiblingLine that child's line — for the rows whose fault spans two
+		// children; empty and 0 where one child is the whole fault.
+		wantSibling     string
 		wantSiblingLine int
 	}{
 		{
@@ -248,53 +257,61 @@ func TestProduceNamedGroupBodyRejected(t *testing.T) {
 			// respectively prohibit (#876), and the content-model fault answers
 			// first: the reference form is not admitted in this position under ANY
 			// spelling, so its attributes are the consequence, not the mistake.
-			name:     `nested <group ref= name= maxOccurs=0>`,
-			body:     `<xs:group ref="tns:G" name="X" maxOccurs="0"/>`,
-			wantName: "<group> at",
-			wantLine: 4,
+			name:        `nested <group ref= name= maxOccurs=0>`,
+			body:        `<xs:group ref="tns:G" name="X" maxOccurs="0"/>`,
+			wantSubject: "<group> at",
+			wantLine:    4,
 		},
 		{
-			name:     `nested <group ref=>`,
-			body:     `<xs:group ref="tns:G"/>`,
-			wantName: "<group> at",
-			wantLine: 4,
+			name:        `nested <group ref=>`,
+			body:        `<xs:group ref="tns:G"/>`,
+			wantSubject: "<group> at",
+			wantLine:    4,
 		},
 		{
-			name:     `bare <element>`,
-			body:     `<xs:element name="q" type="xs:string"/>`,
-			wantName: "<element> at",
-			wantLine: 4,
+			name:        `bare <element>`,
+			body:        `<xs:element name="q" type="xs:string"/>`,
+			wantSubject: "<element> at",
+			wantLine:    4,
 		},
 		{
 			// Nothing is written that the grammar declines, so the only thing left to
 			// report is the unfilled required position, at the definition itself —
 			// line 3, NOT the <annotation> on line 4.
-			name:     `<annotation> only`,
-			body:     `<xs:annotation/>`,
-			wantName: "has no <all>, <choice> or <sequence> child",
-			wantLine: 3,
+			name:        `<annotation> only`,
+			body:        `<xs:annotation/>`,
+			wantSubject: "the named <group> at",
+			wantLine:    3,
+			wantFault:   "has no <all>, <choice> or <sequence> child",
 		},
 		{
-			name:     `empty body`,
-			body:     ``,
-			wantName: "has no <all>, <choice> or <sequence> child",
-			wantLine: 3,
+			name:        `empty body`,
+			body:        ``,
+			wantSubject: "the named <group> at",
+			wantLine:    3,
+			wantFault:   "has no <all>, <choice> or <sequence> child",
 		},
 		{
 			name:            `<sequence> then <choice>`,
 			body:            "<xs:sequence/>\n<xs:choice/>",
-			wantName:        "<choice> at",
+			wantSubject:     "<choice> at",
 			wantLine:        5,
+			wantFault:       "is a second <all>, <choice> or <sequence>",
+			wantSibling:     "already carries the <sequence> at",
 			wantSiblingLine: 4,
 		},
 		{
-			// The <annotation> xs:namedGroup does admit, and a foreign-namespace child
-			// that is skipped rather than charged (rejectNamedGroupBody's convention),
-			// neither of which may shift the fault off the second <all>.
+			// Both compositors are <all>, so only the LINES separate the charged one
+			// from the referenced one here. The <annotation> xs:namedGroup does admit
+			// and the foreign-namespace child is skipped rather than charged
+			// (rejectNamedGroupBody's convention); neither may shift the fault off the
+			// second <all>.
 			name:            `<annotation>, <all>, foreign element, <all>`,
 			body:            "<xs:annotation/>\n<xs:all/>\n<f:x xmlns:f=\"urn:f\"/>\n<xs:all/>",
-			wantName:        "<all> at",
+			wantSubject:     "<all> at",
 			wantLine:        7,
+			wantFault:       "is a second <all>, <choice> or <sequence>",
+			wantSibling:     "already carries the <all> at",
 			wantSiblingLine: 5,
 		},
 	}
@@ -314,20 +331,22 @@ func TestProduceNamedGroupBodyRejected(t *testing.T) {
 			if strings.Contains(err.Error(), "mgd-props-correct") {
 				t.Fatalf("error = %v, want the document's content-model fault rather than the absent {model group} it causes", err)
 			}
-			if !strings.Contains(err.Error(), tc.wantName) {
-				t.Fatalf("error = %v, want it to name %s as the fault", err, tc.wantName)
+			subject := fmt.Sprintf("parser: %s %s:%d:", tc.wantSubject, produceURI, tc.wantLine)
+			if !strings.HasPrefix(err.Error(), subject) {
+				t.Fatalf("error = %v, want it to open by charging %q (E3)", err, subject)
+			}
+			if tc.wantFault != "" && !strings.Contains(err.Error(), tc.wantFault) {
+				t.Fatalf("error = %v, want it to state the fault %q", err, tc.wantFault)
 			}
 			if !strings.Contains(err.Error(), "xs:namedGroup") {
 				t.Fatalf("error = %v, want it to name the xs:namedGroup production it violates", err)
 			}
-			if at := fmt.Sprintf("%s:%d:", produceURI, tc.wantLine); !strings.Contains(err.Error(), at) {
-				t.Fatalf("error = %v, want it positioned at %s (E3)", err, at)
-			}
-			if tc.wantSiblingLine == 0 {
+			if tc.wantSibling == "" {
 				return
 			}
-			if at := fmt.Sprintf("%s:%d:", produceURI, tc.wantSiblingLine); !strings.Contains(err.Error(), at) {
-				t.Fatalf("error = %v, want it to name the child at %s the fault collides with", err, at)
+			sibling := fmt.Sprintf("%s %s:%d:", tc.wantSibling, produceURI, tc.wantSiblingLine)
+			if !strings.Contains(err.Error(), sibling) {
+				t.Fatalf("error = %v, want it to reference %q, the child the charged one collides with", err, sibling)
 			}
 		})
 	}
