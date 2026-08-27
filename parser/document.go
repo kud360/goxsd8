@@ -14,7 +14,7 @@ import (
 // Document is a parsed schema document: its own URI and the root of the element
 // tree ReadDocument built from it. The document URI is where the document was
 // read from and the base of its xml:base chain; it is distinct from any
-// individual element's BaseURI, which differs once an xml:base attribute
+// individual element's own base URI, which differs once an xml:base attribute
 // intervenes.
 type Document struct {
 	uri  string
@@ -22,8 +22,8 @@ type Document struct {
 }
 
 // URI returns the document's own URI — the value passed to ReadDocument and the
-// base of the xml:base composition chain. Root().BaseURI() may differ from it
-// when the root element itself carries an xml:base attribute.
+// base of the xml:base composition chain. The root element's own base URI may
+// differ from it when the root itself carries an xml:base attribute.
 func (d *Document) URI() string { return d.uri }
 
 // Root returns the root element of the document's tree. It is never nil for a
@@ -46,7 +46,7 @@ func (d *Document) IsSchema() bool {
 // tree, folding the parser/xmltree token stream through an open-element stack
 // and composing each element's base URI top-down as it is built. uri names the
 // document for locations and is the base of its xml:base chain; it is not
-// opened or resolved here (it may even be a filesystem path — see BaseURI).
+// opened or resolved here (it may even be a filesystem path).
 //
 // It errors only on XML well-formedness faults (delegated to xmltree's reader,
 // carrying an xsderr.Loc), on I/O, and on a rootless document; it never panics

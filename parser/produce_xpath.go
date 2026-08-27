@@ -24,7 +24,7 @@ import (
 //   - {default namespace} follows the two-level xpathDefaultNamespace chain,
 //     see xpathDefaultNamespace.
 //   - {base URI} is the host element's [[base URI]] — genuinely served here,
-//     xml:base and all, by parser.Element.BaseURI (see ReadDocument).
+//     xml:base and all, by the base URI ReadDocument composed for that element.
 //
 // An absent expression attribute yields an empty {expression}: the attribute's
 // "Required" status is a schema-for-schemas grammar concern this producer does
@@ -33,7 +33,7 @@ import (
 // there is no error to return.
 func (p *producer) buildXPathExpression(hostElem *Element, exprAttr string) xsd.XPathExpression {
 	expr, _ := hostElem.Attr(exprAttr)
-	baseURI := hostElem.BaseURI()
+	baseURI := hostElem.baseURI
 	return xsd.NewXPathExpression(expr, inScopeBindings(hostElem), p.xpathDefaultNamespace(hostElem), &baseURI)
 }
 
@@ -207,7 +207,7 @@ func (p *producer) referencedIdentityConstraint(el *Element, category xsd.Identi
 // before children, each in source order, so the first reported violation is
 // deterministic (STYLE D1).
 func checkIdentityConstraintRefBare(el *Element, local string) error {
-	for _, a := range el.Attributes() {
+	for _, a := range el.attrs {
 		if a.Name().Space() != "" {
 			continue // a foreign-namespace attribute is outside clause 4's vocabulary
 		}
