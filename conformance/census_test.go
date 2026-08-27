@@ -27,16 +27,30 @@ const maxCensusViolationsLogged = 10
 // unmapped that the gate would go on to decide is a case decided on a document
 // the producer did not read.
 //
-// The converse — every construct the gate declines is also flagged unmapped — is
-// NOT asserted, and does not hold: the gate declines on sub-shapes inside a
-// complex type, a simple type or a content model, regions this census does not
-// walk yet (parser/census.go "Scope"). Those documents are counted as the
-// RESIDUAL and logged, so the next region-widening session can read how far it
-// has to go, and drive that number down without ever being able to make this
-// test pass by widening the census wrongly.
+// The converse — every document the gate declines holds a flagged construct —
+// is NOT asserted, and does not hold. Those documents are counted as the
+// RESIDUAL and logged, so a widening session can read how far it has to go and
+// drive that number down without ever being able to make this test pass by
+// widening the census wrongly. It will not reach zero by censusing more, because
+// the residual has THREE causes and only one of them is a region left unwalked
+// (parser/census.go "Scope"):
 //
-// The comparison is against schemaShapeDecidable's own default arm (schema.go):
-// both sides are the top level of <schema> and nothing below it.
+//   - a region the census does not walk yet;
+//   - a shape the producer REJECTS, which the gate declines anyway out of
+//     conservatism — a <simpleType> naming none of §3.16.2.1's three
+//     alternatives (#786), a nested <group>/<attributeGroup> with no ref, a
+//     model group's non-particle child, a named definition with no usable name.
+//     No census can report these: they are verdicts, not silences, so each is a
+//     gate widening with its own ratchet measurement;
+//   - a shape the producer MAPS while the assembled schema is short of a
+//     property or of a verdict on it — anonymousComplexTypeDecidable's
+//     non-implicit shapes (#414/#438) and schemaShapeDecidable's
+//     defaultAttributes decline (§3.4.2.4). These are the bulk of the residual,
+//     they are finalize-side rather than dispatch-side, and UnmappedNoDispatch
+//     is by construction not their reason.
+//
+// So the residual is the measure of what still separates the two, not of how
+// much census is left to write.
 //
 // One class of document is exempt, and counted rather than asserted about:
 // schemaShapeDecidable's FIRST answer is not an allowlist verdict at all but the

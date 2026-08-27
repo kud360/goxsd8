@@ -2036,16 +2036,32 @@ func rejectOutOfModelFacetChildren(restriction *Element) error {
 			continue
 		}
 		local := el.Name().Local()
-		if local == "annotation" || local == "simpleType" || local == "enumeration" || local == "assertion" {
-			continue
-		}
-		if _, ok := facetKindOf(local); ok {
+		if local == "annotation" || local == "simpleType" || mappedFacetElement(local) {
 			continue
 		}
 		return fmt.Errorf("parser: <%s> at %s is a child the schema for schema documents does not admit under the <restriction> at %s: a <simpleType>'s <restriction> has the content model (xmlschema11-2.md §4.1.2) (annotation?, (simpleType?, (minExclusive | minInclusive | maxExclusive | maxInclusive | totalDigits | fractionDigits | length | minLength | maxLength | enumeration | whiteSpace | pattern | assertion | explicitTimezone | {any with namespace: ##other})*)), whose wildcard position excludes the XSD namespace",
 			local, el.Loc(), restriction.Loc())
 	}
 	return nil
+}
+
+// mappedFacetElement reports whether local is the ELEMENT name of a constraining
+// facet restrictionFacets maps — facetKindOf's answer plus the two names that
+// function folds above that lookup, <enumeration> and <assertion>.
+//
+// It is the MAPPING membership, not the ordering one: s4sFacetElement
+// (produce_s4sorder.go) also admits the plural <assertions>, which names no
+// element in the schema for schema documents and which restrictionFacets folds
+// into nothing, and the two precisionDecimal scale facets. Harmless where only
+// the ORDER of names a model admits somewhere is at stake, fatal for the two
+// callers here: rejectOutOfModelFacetChildren would let an unmappable child
+// through, and census (census.go) would call a silently dropped child mapped.
+func mappedFacetElement(local string) bool {
+	if local == "enumeration" || local == "assertion" {
+		return true
+	}
+	_, ok := facetKindOf(local)
+	return ok
 }
 
 // restrictionFacets maps the constraining-facet children of a <restriction> in
