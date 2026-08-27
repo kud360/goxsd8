@@ -66,6 +66,14 @@
 //     [Unevaluated] carrying the rule it answers to — cvc-assertion
 //     (§3.13.4.1) or cvc-assertions-valid (§4.3.13.3) — and none is ever
 //     reported as satisfied (PRINCIPLES 12, cvcassertion.go).
+//   - A *Validator is safe for concurrent use by multiple goroutines: [New]
+//     builds it once from an already-finalized [xsd.Schema] and a
+//     [value.Backend], and every [Validator.Assess] call builds and drops
+//     its own walk state (see the Validator doc), so two goroutines
+//     assessing through the same *Validator never observe each other's
+//     progress. This holds only as far as the backend does: a
+//     value.Backend implementation with its own unsynchronized per-call
+//     state is the caller's to make safe, not this package's.
 //
 // # Contract (M5, landing rule by rule)
 //

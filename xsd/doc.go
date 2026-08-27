@@ -27,6 +27,13 @@
 //     that same sum, so an itemType= or memberTypes= naming a
 //     forward-declared type defers exactly as a base= does.
 //
+//   - Safe for concurrent use by multiple goroutines once
+//     SchemaBuilder.Finalize or FinalizeWith returns: no *Schema method
+//     writes any field, so a compiled schema shared across request
+//     handlers needs no lock. The one exception is Schema.ContentMatcher's
+//     return value — a *Matcher is single-use and stateful, and its own
+//     doc says so.
+//
 //   - Every child collection is a slice in document order. Maps exist
 //     only as internal lookup indexes and never determine order (D2).
 //
