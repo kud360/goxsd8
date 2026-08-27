@@ -166,6 +166,14 @@ var (
 	// is repeated, so a facet written twice is ADMITTED here and rejected by
 	// repeatedFacetChild instead: src-ct clause 2 is the constraint that bounds
 	// facet repetition, and this check may not usurp it (STYLE E2).
+	//
+	// Its quoted model is NARROWER than the facet slot below, and the quotation
+	// reaches the diagnostic: :1692's summary omits <explicitTimezone> where the
+	// slot admits every member of the xs:facet substitution group
+	// (xmlschema11-2.md:3929, :4189), so a rejection printed here can quote a model
+	// that does not list a name this position takes. The quotation stays verbatim
+	// regardless — it is diffable against the spec line, and the slot, not the
+	// string, is what the check consults.
 	s4sSimpleRestriction = s4sModel{
 		grammar: "xs:simpleRestrictionType",
 		spec:    "xmlschema11-1.md:1692",

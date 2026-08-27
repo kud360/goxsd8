@@ -431,6 +431,12 @@ func TestProduceS4SChildOrderAccepted(t *testing.T) {
 	// attribute uses those rows write.
 	const simpleBase = `<xs:complexType name="B"><xs:simpleContent><xs:extension base="xs:string">` +
 		`<xs:anyAttribute namespace="##any"/></xs:extension></xs:simpleContent></xs:complexType>`
+	// The same over xs:dateTime: cos-applicable-facets (§4.1.5,
+	// xmlschema11-2.md:2823) applies <explicitTimezone> to the date/time primitives
+	// alone, so over simpleBase the row below is rejected for inapplicability
+	// instead and pins nothing about child order.
+	const stampBase = `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:dateTime">` +
+		`<xs:anyAttribute namespace="##any"/></xs:extension></xs:simpleContent></xs:complexType>`
 	for _, tc := range []struct {
 		name string
 		body string
@@ -464,6 +470,19 @@ func TestProduceS4SChildOrderAccepted(t *testing.T) {
 				`<xs:pattern value="a"/><xs:pattern value="b"/>` +
 				`<xs:assertion test="true()"/><xs:assertion test="true()"/>` +
 				`<xs:attribute name="a"/></xs:restriction></xs:simpleContent></xs:complexType>`,
+		},
+		{
+			// s4sFacetElement asks builtin.FacetKindByName rather than carrying a
+			// name list, and since #1047 a facet name the position does not admit is
+			// REJECTED rather than skipped — so that bridge's completeness is all
+			// that stands between this row and a false reject. <explicitTimezone> is
+			// the name a hand-typed list would have missed: the XML Representation
+			// Summary s4sSimpleRestriction quotes (xmlschema11-1.md:1692) omits it
+			// where Appendix A's grammar admits it.
+			name: "explicitTimezone facet under a simpleContent restriction",
+			body: `<xs:complexType name="D"><xs:simpleContent><xs:restriction base="tns:T">` +
+				`<xs:explicitTimezone value="required"/><xs:attribute name="a"/>` +
+				`</xs:restriction></xs:simpleContent></xs:complexType>`,
 		},
 		{
 			name: "full complexContent restriction in order",
@@ -505,7 +524,7 @@ func TestProduceS4SChildOrderAccepted(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := produce(t, wrap("urn:x", attrGroup+simpleBase+tc.body)); err != nil {
+			if _, err := produce(t, wrap("urn:x", attrGroup+simpleBase+stampBase+tc.body)); err != nil {
 				t.Fatalf("Produce rejected a legal permutation: %v", err)
 			}
 		})

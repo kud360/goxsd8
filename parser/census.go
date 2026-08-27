@@ -77,10 +77,10 @@ import (
 // alternatives of every <simpleType> any of those reaches.
 //
 // Since #1047 those five complex-type vocabularies report only names
-// checkS4SChildOrder rejects as well, save the three s4sFacetElement admits and
-// mappedFacetElement does not — <assertions>, <maxScale> and <minScale> under a
-// <simpleContent> <restriction>. The reports are kept: retiring a region is a
-// census change with a measurement of its own.
+// checkS4SChildOrder rejects as well, save the ONE name s4sFacetElement admits
+// and mappedFacetElement does not — <assertions> under a <simpleContent>
+// <restriction>. The reports are kept: retiring a region is a census change with
+// a measurement of its own.
 //
 // NOT censused, each a widening of its own and each a region with its own
 // dispatch:
