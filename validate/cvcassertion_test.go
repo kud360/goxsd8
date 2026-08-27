@@ -304,8 +304,9 @@ func TestBothRulesRecordAtOneElement(t *testing.T) {
 // this package does not evaluate, so [walk.matchedAttribute] never runs for it
 // — but cvcid.go and cvcidentityconstraint.go decide its lexical against the
 // type of the top-level declaration its name ·resolves· to, which is a site
-// with no other recording path.
-func TestLaxAttributeAssertionsAreRecorded(t *testing.T) {
+// with no other recording path. The recording follows that pipeline for every
+// {process contents}, skip included (#1043).
+func TestWildcardAttributeAssertionsAreRecorded(t *testing.T) {
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, local("RootType"), xsd.QName{}, nil,
 		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t), xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
@@ -359,7 +360,15 @@ func TestResultUnevaluatedIsCopied(t *testing.T) {
 // or appended to a Result's violations, turning a check nothing was decided by
 // into a false reject.
 func TestUnevaluatedIsNotAnError(t *testing.T) {
-	if _, isError := any(newUnevaluated("cvc-assertion", loc(1, 1), "sample")).(error); isError {
+	u := newUnevaluated("cvc-assertion", loc(1, 1), "sample")
+	if _, isError := any(u).(error); isError {
 		t.Fatal("Unevaluated satisfies error; it must carry no Error method")
+	}
+	// The pointer type is asserted separately because Result.Unevaluated()
+	// hands back an ADDRESSABLE slice: a func (u *Unevaluated) Error() string
+	// would leave the value assertion above clean while &got[0] mixed into a
+	// violation list, which is the same false reject by another route.
+	if _, isError := any(&u).(error); isError {
+		t.Fatal("*Unevaluated satisfies error; it must carry no Error method on either receiver")
 	}
 }

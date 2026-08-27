@@ -32,14 +32,14 @@ import (
 // claim about how many evaluations were skipped.
 //
 // The recording sites are the four places the assessment decides an instance
-// lexical against a simple type — cvc-attribute clause 3
-// ([walk.matchedAttribute]), cvc-complex-type clause 4 over a ·defaulted
-// attribute·'s {lexical form} ([walk.defaultedAttribute]), and cvc-type clause
-// 3.1.3 / cvc-complex-type clause 1.2 over an element's ·initial value·
-// ([contentCheck.stringValid]) — plus [walk.laxAttributeAssertions] for the one
-// path that reaches a simple type's facets without passing any of them.
-// cvcid.go and cvcidentityconstraint.go re-run the datatype pipeline over
-// lexicals those sites already recorded, and record nothing of their own.
+// lexical against a simple type — cvc-attribute clause 3 ([walk.matchedAttribute]),
+// cvc-complex-type clause 4 over a ·defaulted attribute·'s {lexical form}
+// ([walk.defaultedAttribute]), and cvc-type clause 3.1.3 / cvc-complex-type clause
+// 1.2 over an element's ·initial value· ([contentCheck.stringValid]) — plus
+// [walk.wildcardAttributeAssertions] for the one path that reaches a simple type's
+// facets without passing any of them. cvcid.go and cvcidentityconstraint.go re-run
+// the datatype pipeline over lexicals those sites already recorded, and record
+// nothing of their own.
 
 // ruleCvcAssertion is Assertion Satisfied (Structures §3.13.4.1,
 // cvc-assertion), whose single caller is cvc-complex-type clause 6. The clause
@@ -67,14 +67,15 @@ const ruleCvcAssertionsValid xsderr.Rule = "cvc-assertions-valid"
 // prefix of T.{assertions}, so unioning the chain here would report every
 // inherited assertion once per derivation step.
 //
-// GAP(validate): fail-open. Clause 6 is not evaluated — an assertion's {test}
-// is an XPath expression and this module has no evaluator for one (#1042) — so
-// the element is neither charged under cvc-assertion nor shown ·valid· with
-// respect to it. The withheld value is clause 6's own verdict, whose whole
-// consumer set inside this package is w.res.violations and its one reader
-// [Result.Violations]: neither is written here, both charge on a violation
-// PRESENT, and no other reader of the walk consults clause 6's outcome. The
-// skip can therefore only cost a rejection and can manufacture none.
+// GAP(validate): cvc-complex-type clause 6 is not evaluated — cvc-assertion
+// (§3.13.4.1) needs an XPath evaluator for an assertion's {test} and this
+// module has none (#1042) — so the element is neither charged under
+// cvc-assertion nor shown ·valid· with respect to it. Fail-open: the withheld
+// value is clause 6's own verdict, whose whole consumer set inside this
+// package is w.res.violations and its one reader [Result.Violations]: neither
+// is written here, both charge on a violation PRESENT, and no other reader of
+// the walk consults clause 6's outcome. The skip can therefore only cost a
+// rejection and can manufacture none.
 func (w *walk) elementAssertions(e Element, g governance) {
 	ct := g.complexType()
 	if ct == nil {
@@ -126,31 +127,40 @@ func (w *walk) simpleAssertions(st *xsd.SimpleType, loc xsderr.Loc) {
 // package value's own list and union recursions carry none either.
 //
 // An unresolvable hop — a {variety} whose base chain breaks, an itemType= or
-// memberTypes= naming a type the schema cannot resolve — yields the sites
-// gathered so far rather than an error: the same type fails
-// value.ValidateLexical at every charge site, which declines there, and there
-// is no charge here to be wrong about. Its assertions, if any, are unreachable
-// through a type nothing can map.
+// memberTypes= naming a type the schema cannot resolve — yields st's OWN
+// assertions-facet sites rather than an error. Those sites survive the break:
+// [walk.ownAssertionSites] reads [xsd.SimpleType.EffectiveFacets] and depends
+// on none of the three hops, so a list whose itemType= resolves to nothing
+// still has the list type's own assertions facet readable, while its
+// constituents' sites are unreachable through a type nothing can map. There is
+// no charge here to be wrong about: the same type fails value.ValidateLexical
+// at every recording site, which declines there.
+//
+// No test drives those three arms and none can: src-resolve clause 1.1 rejects
+// an itemType= or memberTypes= that resolves to nothing (or to a complex type)
+// when the Schema is finalized, so a finalized w.schema reaches none of them.
+// They are the safe answer for a resolver that is not one, which
+// [xsd.SimpleType.Variety] admits by taking a TypeResolver.
 func (w *walk) assertionSites(st *xsd.SimpleType, loc xsderr.Loc) []Unevaluated {
 	if st == nil {
 		return nil
 	}
 	variety, err := st.Variety(w.schema)
 	if err != nil {
-		return nil
+		return w.ownAssertionSites(st, loc)
 	}
 	var sites []Unevaluated
 	switch variety.(type) {
 	case xsd.List:
 		item, err := st.Item(w.schema)
 		if err != nil {
-			return nil
+			return w.ownAssertionSites(st, loc)
 		}
 		sites = w.assertionSites(item, loc)
 	case xsd.Union:
 		members, err := st.Members(w.schema)
 		if err != nil {
-			return nil
+			return w.ownAssertionSites(st, loc)
 		}
 		for _, m := range members {
 			sites = append(sites, w.assertionSites(m, loc)...)
@@ -185,20 +195,32 @@ func (w *walk) ownAssertionSites(st *xsd.SimpleType, loc xsderr.Loc) []Unevaluat
 	return sites
 }
 
-// laxAttributeAssertions records the sites of an attribute information item
-// that matches no {attribute use} and is left to an {attribute wildcard} this
-// package does not evaluate (cvc-complex-type clause 2.2, assess.go's
-// unmatchedAttribute). The spec's ·attribute assessment· of such an item runs
+// wildcardAttributeAssertions records the sites of an attribute information
+// item that matches no {attribute use} and is left to an {attribute wildcard}
+// this package does not evaluate (cvc-complex-type clause 2.2, assess.go's
+// unmatchedAttribute). Under a ***strict*** or ***lax*** wildcard — and under
+// those two only — the spec's ·attribute assessment· of such an item runs
 // cvc-attribute clause 3 against the top-level declaration its ·expanded name·
 // ·resolves· to, and [walk.attributeType] names exactly that type for cvcid.go
 // and cvcidentityconstraint.go, which decide the lexical against it — so the
 // site is reached here even though [walk.matchedAttribute], the ordinary
 // clause-3 recording site, never runs for it.
 //
+// Under ***skip*** none of that holds: §3.10.4.1's Note performs QName
+// resolution only for an item ·attributed to· a strict or lax wildcard, so a
+// skipped item has NO ·governing· declaration, cvc-assess-elt (§3.3.4.6)
+// clause 2.2 leaves its schema-validity unassessed, and no facet of any type is
+// reached over its lexical. This call is nonetheless DELIBERATELY NOT GATED on
+// {process contents}, because [walk.topLevelAttributeType] is not either
+// (#1043): what is recorded tracks what this package REACHES, and gating the
+// record alone would claim a precision the pipeline it reports on does not
+// have. Under skip the record is therefore an over-report, in the direction
+// this file's header states — a decline, never a charge.
+//
 // An attribute the schema resolves no top-level declaration for records
 // nothing: it has no ·governing type definition·, so §3.17.5.2 clause 3
 // excludes it and no facet of any type is reached over its lexical.
-func (w *walk) laxAttributeAssertions(a Attribute) {
+func (w *walk) wildcardAttributeAssertions(a Attribute) {
 	st, typed := w.topLevelAttributeType(a)
 	if !typed {
 		return

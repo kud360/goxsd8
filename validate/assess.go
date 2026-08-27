@@ -669,9 +669,13 @@ func (w *walk) attribute(a Attribute, e Element, governing *xsd.ComplexType) {
 // are stated. An anonymous governing type never reaches this function.
 //
 // The wildcard arm records the item's assertion sites before it declines
-// ([walk.laxAttributeAssertions]): the spec's ·lax assessment· of such an item
-// reaches cvc-attribute clause 3 against the top-level declaration its
-// ·expanded name· ·resolves· to, and [walk.matchedAttribute] never sees it.
+// ([walk.wildcardAttributeAssertions]): under a ***strict*** or ***lax***
+// wildcard the spec's ·attribute assessment· of such an item reaches
+// cvc-attribute clause 3 against the top-level declaration its ·expanded name·
+// ·resolves· to, and [walk.matchedAttribute] never sees it. Under ***skip***
+// §3.10.4.1's Note leaves the item with no ·governing· declaration and nothing
+// is assessed; the recording call is deliberately not gated on {process
+// contents} all the same, for the reason its own doc gives (#1043).
 func (w *walk) unmatchedAttribute(a Attribute, governing xsd.ComplexType) {
 	if _, wild := governing.AttributeWildcard(); wild {
 		// GAP(validate): clause 2.2.1 holds, but clause 2.2 is a conjunction
@@ -679,7 +683,7 @@ func (w *walk) unmatchedAttribute(a Attribute, governing xsd.ComplexType) {
 		// this package does not evaluate. Charging on 2.2.1 alone would reject
 		// every attribute a wildcard admits, so clause 2 is left undecided for
 		// an element whose type carries one (#717).
-		w.laxAttributeAssertions(a)
+		w.wildcardAttributeAssertions(a)
 		w.logAttribute(a, ruleCvcComplexType, "2.2", "declined")
 		return
 	}
