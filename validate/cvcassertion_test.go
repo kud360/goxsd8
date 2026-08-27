@@ -186,9 +186,14 @@ func TestComplexTypeAssertionsAreRecordedNeverCharged(t *testing.T) {
 
 	res := aAssess(t, schema, &testElement{name: local("root"), loc: loc(1, 1)})
 
-	wantRecords(t, res, "cvc-assertion", loc(1, 1), "assertion 1 of 2", "assertion 2 of 2")
+	// The {test} identifies WHICH assertion each record stands for, so the
+	// {assertions} order is observable and not merely counted.
+	wantRecords(t, res, "cvc-assertion", loc(1, 1), `"@a = @b"`, `"count(*) = 0"`)
 	if !strings.Contains(res.Unevaluated()[0].Msg(), "clause 6") {
 		t.Errorf("Msg = %q, want cvc-complex-type clause 6 named", res.Unevaluated()[0].Msg())
+	}
+	if !strings.Contains(res.Unevaluated()[0].Msg(), "assertion 1 of 2") {
+		t.Errorf("Msg = %q, want the assertion's position in {assertions} named", res.Unevaluated()[0].Msg())
 	}
 }
 

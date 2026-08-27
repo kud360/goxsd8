@@ -81,10 +81,10 @@ func (w *walk) elementAssertions(e Element, g governance) {
 		return
 	}
 	assertions := ct.Assertions()
-	for i := range assertions {
+	for i, a := range assertions {
 		w.res.unevaluated = append(w.res.unevaluated, newUnevaluated(ruleCvcAssertion, e.Loc(),
-			"assertion %d of %d in the {assertions} of the ·governing type definition· %s was not evaluated, so the element %s is not shown ·valid· with respect to it as cvc-complex-type clause 6 requires (Assertion Satisfied, §3.13.4.1)",
-			i+1, len(assertions), typeName(*ct), e.Name()))
+			"assertion %d of %d in the {assertions} of the ·governing type definition· %s, whose {test} is %q, was not evaluated, so the element %s is not shown ·valid· with respect to it as cvc-complex-type clause 6 requires (Assertion Satisfied, §3.13.4.1)",
+			i+1, len(assertions), typeName(*ct), a.Test().Expression(), e.Name()))
 	}
 }
 
@@ -176,10 +176,10 @@ func (w *walk) ownAssertionSites(st *xsd.SimpleType, loc xsderr.Loc) []Unevaluat
 		if !isAssertions {
 			continue
 		}
-		for i := range assertions {
+		for i, a := range assertions {
 			sites = append(sites, newUnevaluated(ruleCvcAssertionsValid, loc,
-				"assertion %d of %d in the {value} of the assertions facet of the simple type %s was not evaluated, so the value at this location is not shown facet-valid with respect to that facet as cvc-assertions-valid requires (Datatypes §4.3.13.3, reached from cvc-datatype-valid clause 3)",
-				i+1, len(assertions), typeName(st)))
+				"assertion %d of %d in the {value} of the assertions facet of the simple type %s, whose {test} is %q, was not evaluated, so the value at this location is not shown facet-valid with respect to that facet as cvc-assertions-valid requires (Datatypes §4.3.13.3, reached from cvc-datatype-valid clause 3)",
+				i+1, len(assertions), typeName(st), a.Test().Expression()))
 		}
 	}
 	return sites
