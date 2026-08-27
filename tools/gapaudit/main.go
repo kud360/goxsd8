@@ -20,22 +20,40 @@
 //  1. Markers with no OPEN tracking issue matched — the leak the rule
 //     exists to prevent. This includes a marker that only matches a CLOSED
 //     issue: STYLE P3 says a marker pointing at a closed issue is a dead
-//     end, so it is reported the same as an unmatched one, with the closed
-//     match named for context.
+//     end, so it is reported the same as an unmatched one. Each row carries
+//     its reason, and only an unannotated row is a candidate for filing:
+//     "dead end" names a CLOSED issue the marker actually cites and the
+//     landing that closed it should have repointed, "resemblance" names one
+//     it merely reads like, and an absent-from-input line names an owner the
+//     fed list cannot contain.
 //  2. OPEN `kind/gap` issues whose marker is no longer anywhere in the
 //     tree — a stale tracker: the gap was closed in code without closing
-//     the issue that tracked it.
+//     the issue that tracked it. A phrase-only marker match is printed under
+//     the row rather than retiring it.
 //  3. A per-area census of marker counts.
 //
-// # Matching is heuristic
+// # Matching: one certain signal, then two heuristic ones
 //
-// A marker is matched to an issue by its file path, or by a run of words
-// from the marker's text, appearing in the issue's title or body (see
-// [matches]). That is a resemblance test, not a citation graph: a marker
-// with no match is reported as "no tracking issue found", never as
-// "untracked" — the matcher has no way to rule out an issue that describes
-// the same gap in different words, so the reader is the one who gets to
-// call it truly untracked.
+// A marker that cites an issue number in its own text — STYLE P3's "names
+// that issue in the text" — is matched to that issue and to no other. That
+// is a citation, not a resemblance, and [matches] reports it as its own
+// [matchKind] so the report can say "cites" where it means cites (#852).
+//
+// The two fallbacks are heuristic: the marker's file path, or a run of
+// [minPhraseWords] of its words, appearing in the issue's title or body. A
+// marker with no match at all is reported as "no tracking issue found",
+// never as "untracked" — the matcher has no way to rule out an issue that
+// describes the same gap in different words, so the reader is the one who
+// gets to call it truly untracked.
+//
+// The two directions weigh those signals differently, because they do
+// opposite things to the report. Group 1 SHOWS a marker, so a weak signal
+// suppressing a row only costs a look that was never taken. Group 2 HIDES
+// an issue, so a weak signal deletes evidence the reader cannot then see:
+// a five-word run of this repo's own boilerplate is enough to collide, and
+// did (#852). Only a citation or a file path may retire a tracker; a
+// phrase-only match leaves the issue in group 2 and is printed beside it,
+// so the reader judges the collision instead of re-deriving it.
 //
 // # Usage
 //
@@ -45,6 +63,15 @@
 // dir defaults to "." (the whole tree). Empty or absent stdin runs in
 // marker-inventory-only mode: groups 1 and 2 are skipped (there is nothing
 // to reconcile against) and the report says so.
+//
+// The `kind/gap` filter is what makes group 2 meaningful, and it is also
+// why a citation can be unresolvable: nothing constrains a gap's owner to
+// that one label, so a marker citing a `kind/feature` or `kind/story`
+// owner names an issue this input structurally cannot contain. Such a
+// marker lands in group 1 with its cited number printed and flagged
+// absent-from-input. That is not a leak and needs no filing; widening the
+// input instead would need the label on every row, which this tool's input
+// shape does not carry.
 //
 // It exits 0 on a clean run (regardless of what it finds — the findings are
 // the report, not a failure) and 2 on an operational error: an unreadable
@@ -63,6 +90,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -165,6 +193,11 @@ func readIssues(r io.Reader) (issues []issue, haveIssues bool, err error) {
 // plus every immediately following comment line that continues the same
 // prose (docs/WORKFLOW.md prefers citing this text over a line number,
 // because later unrelated edits move line numbers but not prose).
+//
+// Text is also where the marker's issue citation lives, read back out by
+// [citations], so [paragraph]'s boundary rules decide what counts as cited:
+// a `#N` past a blank comment line, a bullet, or the next marker head
+// belongs to a different paragraph and is not this marker's owner.
 type marker struct {
 	Area string
 	File string
@@ -177,6 +210,45 @@ type marker struct {
 // apart from a comment merely mentioning an earlier one ("see the GAP(value)
 // gate above"), which this pattern does not match.
 var markerPattern = regexp.MustCompile(`GAP\(([A-Za-z][A-Za-z0-9_]*)\):\s*`)
+
+// citationPattern finds an issue citation inside a marker's text. Bare
+// `#<digits>` is the only form this repo writes one in — CLAUDE.md's commit
+// format and STYLE P3 both spell it that way, and spec clauses are cited
+// with `§` and rule IDs, never with a hash.
+//
+// It is not a perfect discriminator: this repo's comments do contain a
+// `#<digits>` that is not an issue ("acceptance #2", conformance/runner.go),
+// and nothing but its position keeps such a token out of a marker's
+// paragraph. One inside a marker would tie that marker to whatever issue
+// carries the number, so a marker's own prose is the place to fix it —
+// there is no signal here to tell the two apart.
+var citationPattern = regexp.MustCompile(`#(\d+)`)
+
+// citations returns every issue number text cites, in first-appearance
+// order with repeats dropped, so a marker naming one owner twice and a
+// marker naming two owners are both reported as written. It is derived
+// from the marker's text on demand rather than stored on [marker]: one
+// fact, one encoding (STYLE D4), and the whole audit runs a few thousand
+// of these.
+func citations(text string) []int {
+	var out []int
+	seen := make(map[int]bool)
+	for _, m := range citationPattern.FindAllStringSubmatch(text, -1) {
+		// The pattern guarantees digits, so Atoi fails only on a run too long
+		// to be an issue number. Skipping is the whole disposition: such a
+		// token is not a citation, and there is no caller to report it to.
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		if seen[n] {
+			continue
+		}
+		seen[n] = true
+		out = append(out, n)
+	}
+	return out
+}
 
 // bulletPattern recognizes a comment line opening a new list item — a
 // numbered entry ("1. ") or a dash/star bullet — which ends the current
@@ -323,14 +395,36 @@ type areaCount struct {
 	Count int
 }
 
+// closedMatch is a CLOSED issue that matched a group-1 marker, with the
+// signal that tied them. The kind is what separates STYLE P3's dead end — a
+// marker citing an issue that has since closed, which the landing that closed
+// it should have repointed — from a marker that merely reads like one.
+type closedMatch struct {
+	Issue issue
+	Kind  matchKind
+}
+
 // untrackedMarker is a group-1 finding: a marker with no OPEN issue matched.
-// closedMatches records any CLOSED issue that DID match, for context — STYLE
+// ClosedMatches records any CLOSED issue that DID match, for context — STYLE
 // P3 treats a marker pointing at a closed issue as a dead end, the same as
 // no match at all, but the reader deciding what to file next benefits from
-// knowing a plausible predecessor already exists and was closed.
+// knowing a plausible predecessor already exists and was closed. Unresolved
+// records issue numbers the marker cites that the fed list does not contain
+// at all: the marker names its owner, the input just cannot see it, which is
+// a different finding from naming no owner.
 type untrackedMarker struct {
 	Marker        marker
-	ClosedMatches []issue
+	Unresolved    []int
+	ClosedMatches []closedMatch
+}
+
+// staleTracker is a group-2 finding: an OPEN issue no marker retires. Weak
+// names any marker that matched it by phrase alone — too weak to retire a
+// tracker, and printed rather than dropped so the reader sees the collision
+// instead of re-deriving it (#852).
+type staleTracker struct {
+	Issue issue
+	Weak  []marker
 }
 
 // report is gapaudit's full output: the three groups described in the
@@ -339,7 +433,7 @@ type untrackedMarker struct {
 type report struct {
 	HaveIssues bool
 	Untracked  []untrackedMarker
-	Stale      []issue
+	Stale      []staleTracker
 	Census     []areaCount
 }
 
@@ -347,9 +441,15 @@ type report struct {
 // appear, in order, inside an issue's title+body before the marker counts as
 // matched by phrase rather than by file path. Below this a run of words is
 // common enough (English filler, repeated spec vocabulary like "content
-// model") to match issues that have nothing to do with the marker; at this
-// length a match is a run distinctive enough to be worth a human's second
-// look, per this tool's documented heuristic-not-proof contract.
+// model") to match issues that have nothing to do with the marker.
+//
+// Five is not enough to make a match distinctive, only enough to make it
+// worth a look: this repo's own idioms run that long, and "CLAUDE.md's one
+// rule" tied a parser marker to a conformance-lane tracker sharing nothing
+// else (#852). Raising the number is not the answer — it would silence real
+// matches to buy back a heuristic's certainty it never had — so the weight
+// of a phrase match lives in [matchKind.retires] instead, where the two
+// directions can charge it differently.
 const minPhraseWords = 5
 
 // reconcile computes the three-group report from a marker inventory and an
@@ -381,6 +481,7 @@ func reconcile(markers []marker, issues []issue, haveIssues bool) report {
 		}
 		rep.Untracked = append(rep.Untracked, untrackedMarker{
 			Marker:        m,
+			Unresolved:    unresolvedCitations(m, issues),
 			ClosedMatches: closedMatches(m, issues),
 		})
 	}
@@ -389,12 +490,13 @@ func reconcile(markers []marker, issues []issue, haveIssues bool) report {
 		if !iss.open() {
 			continue
 		}
-		if anyMarkerMatch(iss, markers) {
+		retired, weak := trackerEvidence(iss, sorted)
+		if retired {
 			continue
 		}
-		rep.Stale = append(rep.Stale, iss)
+		rep.Stale = append(rep.Stale, staleTracker{Issue: iss, Weak: weak})
 	}
-	sort.Slice(rep.Stale, func(i, j int) bool { return rep.Stale[i].Number < rep.Stale[j].Number })
+	sort.Slice(rep.Stale, func(i, j int) bool { return rep.Stale[i].Issue.Number < rep.Stale[j].Issue.Number })
 
 	return rep
 }
@@ -423,49 +525,128 @@ func census(markers []marker) []areaCount {
 
 func anyOpenMatch(m marker, issues []issue) bool {
 	for _, iss := range issues {
-		if iss.open() && matches(m, iss) {
+		if iss.open() && matches(m, iss).found() {
 			return true
 		}
 	}
 	return false
 }
 
-func anyMarkerMatch(iss issue, markers []marker) bool {
+// trackerEvidence weighs every marker against one OPEN issue: retired is
+// true once any marker matches it strongly enough to say the gap is gone
+// (see [matchKind.retires]), and weak collects the phrase-only matches that
+// are not. weak keeps the order markers arrives in, which [reconcile] has
+// already sorted, so the report inherits its determinism (STYLE D1) rather
+// than re-establishing it here.
+func trackerEvidence(iss issue, markers []marker) (retired bool, weak []marker) {
 	for _, m := range markers {
-		if matches(m, iss) {
-			return true
+		k := matches(m, iss)
+		if k.retires() {
+			return true, nil
+		}
+		if k == matchPhrase {
+			weak = append(weak, m)
 		}
 	}
-	return false
+	return false, weak
 }
 
-func closedMatches(m marker, issues []issue) []issue {
-	var out []issue
+// unresolvedCitations returns the issue numbers m cites that appear nowhere
+// in the fed list, open or closed. Under the documented `kind/gap` input
+// that is how a marker whose owner carries a different label reads, so the
+// report can name the number instead of calling the marker untracked.
+func unresolvedCitations(m marker, issues []issue) []int {
+	var out []int
+	for _, n := range citations(m.Text) {
+		known := false
+		for _, iss := range issues {
+			if iss.Number == n {
+				known = true
+				break
+			}
+		}
+		if !known {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func closedMatches(m marker, issues []issue) []closedMatch {
+	var out []closedMatch
 	for _, iss := range issues {
 		if iss.open() {
 			continue
 		}
-		if matches(m, iss) {
-			out = append(out, iss)
+		if k := matches(m, iss); k.found() {
+			out = append(out, closedMatch{Issue: iss, Kind: k})
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Number < out[j].Number })
+	sort.Slice(out, func(i, j int) bool { return out[i].Issue.Number < out[j].Issue.Number })
 	return out
 }
 
-// matches is the heuristic at the center of this tool: it reports whether
-// issue iss plausibly tracks marker m, by one of two signals — m's file path
-// named in the issue, or a distinctive run of m's own words appearing in the
-// issue's title or body. Neither signal is proof: a file gets renamed, a
-// marker's prose gets rephrased in the issue that files it. Callers must
-// treat a false result as "no match found", never as "definitely untracked"
-// (see the package doc's matching-is-heuristic section).
-func matches(m marker, iss issue) bool {
+// matchKind is the closed set of signals [matches] can find, ordered by
+// strength: a citation is what STYLE P3 asks a marker to carry, a file path
+// is a deliberate reference, a phrase run is a resemblance. The zero value
+// is [matchNone], so an unset kind is "no match" rather than a spurious one.
+type matchKind int
+
+const (
+	matchNone matchKind = iota
+	matchPhrase
+	matchFile
+	matchCited
+)
+
+// matches is the decision at the center of this tool: which signal, if any,
+// ties marker m to issue iss. It tries them strongest first and reports the
+// first that fires, so a caller can weigh a citation differently from a
+// resemblance instead of taking every match on the same word.
+//
+// Only [matchCited] is proof. A file gets renamed and a marker's prose gets
+// rephrased in the issue that files it, so callers must treat [matchNone] as
+// "no match found", never as "definitely untracked" (see the package doc).
+func matches(m marker, iss issue) matchKind {
+	for _, n := range citations(m.Text) {
+		if n == iss.Number {
+			return matchCited
+		}
+	}
 	haystack := strings.ToLower(iss.Title + "\n" + iss.Body)
 	if m.File != "" && strings.Contains(haystack, strings.ToLower(m.File)) {
-		return true
+		return matchFile
 	}
-	return phraseMatch(m.Text, haystack)
+	if phraseMatch(m.Text, haystack) {
+		return matchPhrase
+	}
+	return matchNone
+}
+
+// found reports whether any signal fired.
+func (k matchKind) found() bool { return k != matchNone }
+
+// retires reports whether k is strong enough to remove an OPEN issue from
+// group 2. A phrase run is not: five consecutive words of this repo's own
+// boilerplate ("CLAUDE.md's one rule") appear in markers and issue bodies
+// that have nothing to do with each other, and a group-2 match DELETES the
+// row rather than adding one, so the collision is invisible to the reader it
+// misleads (#852).
+func (k matchKind) retires() bool { return k == matchCited || k == matchFile }
+
+// String names the signal as the report prints it, in the verb form that
+// completes "<marker> <verb> <issue>".
+func (k matchKind) String() string {
+	switch k {
+	case matchCited:
+		return "cites"
+	case matchFile:
+		return "file-matches"
+	case matchPhrase:
+		return "phrase-matches"
+	default:
+		return "does not match"
+	}
 }
 
 // wordPattern extracts the alphanumeric runs normalizeWords tokenizes on.
@@ -552,15 +733,25 @@ func printReportTo(w io.Writer, rep report) {
 	}
 
 	_, _ = fmt.Fprintln(w, "\n=== Group 1: markers with no OPEN tracking issue found ===")
-	_, _ = fmt.Fprintln(w, "(matching is heuristic — file path or a distinctive phrase; treat a")
-	_, _ = fmt.Fprintln(w, "listing here as \"needs a human look\", not as proven untracked)")
+	_, _ = fmt.Fprintln(w, "(the file and phrase signals are heuristic, so a row here means \"needs a")
+	_, _ = fmt.Fprintln(w, "look\", not proven untracked. A row with NO annotation under it cites no")
+	_, _ = fmt.Fprintln(w, "issue at all — that is the list to file against; read the annotation on")
+	_, _ = fmt.Fprintln(w, "any other row first.)")
 	if len(rep.Untracked) == 0 {
 		_, _ = fmt.Fprintln(w, "(none)")
 	}
 	for _, u := range rep.Untracked {
 		_, _ = fmt.Fprintf(w, "  %s:%d [%s] %s\n", u.Marker.File, u.Marker.Line, u.Marker.Area, u.Marker.Text)
-		for _, iss := range u.ClosedMatches {
-			_, _ = fmt.Fprintf(w, "      dead end: matches CLOSED #%d %q\n", iss.Number, iss.Title)
+		for _, n := range u.Unresolved {
+			_, _ = fmt.Fprintf(w, "      cites #%d, absent from the fed list — expected for an owner"+
+				" outside kind/gap; not a leak\n", n)
+		}
+		for _, cm := range u.ClosedMatches {
+			label := "resemblance"
+			if cm.Kind == matchCited {
+				label = "dead end"
+			}
+			_, _ = fmt.Fprintf(w, "      %s: %s CLOSED #%d %q\n", label, cm.Kind, cm.Issue.Number, cm.Issue.Title)
 		}
 	}
 
@@ -571,7 +762,11 @@ func printReportTo(w io.Writer, rep report) {
 	if len(rep.Stale) == 0 {
 		_, _ = fmt.Fprintln(w, "(none)")
 	}
-	for _, iss := range rep.Stale {
-		_, _ = fmt.Fprintf(w, "  #%d %s\n", iss.Number, iss.Title)
+	for _, st := range rep.Stale {
+		_, _ = fmt.Fprintf(w, "  #%d %s\n", st.Issue.Number, st.Issue.Title)
+		for _, m := range st.Weak {
+			_, _ = fmt.Fprintf(w, "      phrase-matches %s:%d — too weak to retire this tracker;"+
+				" check whether it is the same gap\n", m.File, m.Line)
+		}
 	}
 }
