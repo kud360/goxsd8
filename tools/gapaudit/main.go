@@ -228,7 +228,7 @@ var citationPattern = regexp.MustCompile(`#(\d+)`)
 // order with repeats dropped, so a marker naming one owner twice and a
 // marker naming two owners are both reported as written. It is derived
 // from the marker's text on demand rather than stored on [marker]: one
-// fact, one encoding (STYLE D4), and the whole audit runs a few thousand
+// fact, one encoding (STYLE D3), and the whole audit runs a few thousand
 // of these.
 func citations(text string) []int {
 	var out []int

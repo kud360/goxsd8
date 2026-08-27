@@ -555,11 +555,13 @@ func TestMatchesByCitation(t *testing.T) {
 			name: "cvcid.go idDefaultedAttributes cites #774",
 			marker: marker{
 				Area: "validate", File: "validate/cvcid.go", Line: 196,
-				Text: "§3.17.5.2's own Note puts one in the ·eligible item set· — because " +
-					"cvc-complex-type clause 4 supplies the item and its ·actual value· is " +
-					"the constraint's. This package does not synthesize the item, so the id " +
-					"it would declare is one cvc-id never saw, and clause 1 would charge an " +
-					"empty binding for it (#774).",
+				Text: "§3.17.5.2's own Note puts one in the ·eligible item set· — \"the use " +
+					"of [schema actual value] ... means that default or fixed value " +
+					"constraints may play a part\" — because cvc-complex-type clause 4 " +
+					"supplies the item and its ·actual value· is the constraint's. This " +
+					"package does not synthesize the item, so the id it would declare is one " +
+					"cvc-id never saw, and clause 1 would charge an empty binding for it " +
+					"(#774).",
 			},
 			issue: issue{
 				Number: 774, State: "OPEN",
@@ -574,7 +576,8 @@ func TestMatchesByCitation(t *testing.T) {
 					"(value.IsDatatypeVerdict) declines, on cvcattribute.go's terms — an " +
 					"ungoverned type reports under cvc-datatype-valid exactly as a genuine " +
 					"rejection does, and reading one as \"no id here\" would hide a " +
-					"declaration clause 1 charges for the absence of (#774).",
+					"declaration clause 1 charges for the absence of (#774). validatingType's " +
+					"member scan declines on the same class for the same reason.",
 			},
 			issue: issue{
 				Number: 774, State: "OPEN",
