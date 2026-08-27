@@ -342,6 +342,146 @@ func TestDispatchUnionAbortsOnFacetPreconditionFault(t *testing.T) {
 	}
 }
 
+// TestValidatingTypeNonUnionIsItself pins ValidatingType's first clause (key-vtype
+// §3.16.4 cl.1): for a non-union st the ·validating type· is st itself, and the
+// value/error returned is exactly what ValidateLexical would produce.
+func TestValidatingTypeNonUnionIsItself(t *testing.T) {
+	num := primType(t, "numeric", "collapse")
+	b := memberBackend{num.Name(): allDigits}
+
+	typ, v, err := ValidatingType(b, noSchema{}, num, "7", nil)
+	if err != nil {
+		t.Fatalf("ValidatingType(non-union, %q) = %v, want accept", "7", err)
+	}
+	if typ != num {
+		t.Errorf("ValidatingType(non-union) type = %s, want st itself (%s)", typ.Name(), num.Name())
+	}
+	if want := (unionMemberVal{member: "numeric", lexical: "7"}); v != Value(want) {
+		t.Errorf("ValidatingType(non-union) value = %#v, want %#v", v, want)
+	}
+
+	if _, _, err := ValidatingType(b, noSchema{}, num, "abc", nil); err == nil {
+		t.Error("ValidatingType(non-union, rejected literal) = nil error, want the ValidateLexical rejection")
+	}
+}
+
+// TestValidatingTypeFirstMemberInOrderWins mirrors
+// TestValidateLexicalUnionFirstMemberWins for ValidatingType: the reported
+// ·validating type· is the FIRST member in {member type definitions} order that
+// accepts, matching dt-active-member ("the first of its members in order which
+// accepts the instance as valid").
+func TestValidatingTypeFirstMemberInOrderWins(t *testing.T) {
+	num := primType(t, "numeric", "collapse")
+	text := primType(t, "text", "preserve")
+	b := memberBackend{
+		num.Name():  allDigits,
+		text.Name(): func(string) bool { return true },
+	}
+	numFirst := unionType2(t, "numFirst", num, text)
+	textFirst := unionType2(t, "textFirst", text, num)
+
+	typ, _, err := ValidatingType(b, noSchema{}, numFirst, "7", nil)
+	if err != nil {
+		t.Fatalf("ValidatingType(numFirst, %q) = %v, want accept", "7", err)
+	}
+	if typ != num {
+		t.Errorf("ValidatingType(numFirst, %q) type = %s, want %s (first accepting member)", "7", typ.Name(), num.Name())
+	}
+
+	typ, _, err = ValidatingType(b, noSchema{}, textFirst, "7", nil)
+	if err != nil {
+		t.Fatalf("ValidatingType(textFirst, %q) = %v, want accept", "7", err)
+	}
+	if typ != text {
+		t.Errorf("ValidatingType(textFirst, %q) type = %s, want %s (first accepting member, text precedes numeric)", "7", typ.Name(), text.Name())
+	}
+}
+
+// TestValidatingTypeNestedUnionDescendsToTheBasicMember mirrors
+// TestValidateLexicalUnionNestedRecursion for ValidatingType: the reported type
+// descends through a member that is itself a union until a non-union (basic)
+// member is reached (dt-active-basic-member).
+func TestValidatingTypeNestedUnionDescendsToTheBasicMember(t *testing.T) {
+	num := primType(t, "numeric", "collapse")
+	text := primType(t, "text", "preserve")
+	b := memberBackend{
+		num.Name():  allDigits,
+		text.Name(): func(string) bool { return true },
+	}
+	inner := unionType2(t, "inner", text)
+	outer := unionType2(t, "outer", num, inner)
+
+	typ, _, err := ValidatingType(b, noSchema{}, outer, "abc", nil)
+	if err != nil {
+		t.Fatalf("ValidatingType(nested union, %q) = %v, want accept via the nested member", "abc", err)
+	}
+	if typ != text {
+		t.Errorf("ValidatingType(nested union, %q) type = %s, want %s (active basic member)", "abc", typ.Name(), text.Name())
+	}
+}
+
+// TestValidatingTypeDeclinesOnANonPreconditionMemberFault is the MUST-VERIFY
+// case from #819's warden pre-flight: dispatchUnion (union.go) folds any member
+// fault that is not [IsFacetPrecondition] into "rejected" and keeps scanning,
+// so ValidateLexical here ACCEPTS via member 1 despite member 0's fault. If
+// ValidatingType's own identification (activeBasicMember) rode dispatchUnion's
+// already-computed decision verbatim, it would report member 1 as the
+// ·validating type· too — MORE PERMISSIVE than validate/cvcid.go's historical
+// per-member test, which declines the whole identification on ANY member error
+// that is not a verdict ([IsDatatypeVerdict]). This pins that
+// activeBasicMember keeps applying the WIDER test independently, so
+// ValidatingType declines here even though ValidateLexical accepts — the
+// divergence #819's implementation account calls out as deliberate, not a bug.
+func TestValidatingTypeDeclinesOnANonPreconditionMemberFault(t *testing.T) {
+	badPattern, err := xsd.NewPrimitiveType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "badPattern"},
+		[]xsd.Facet{
+			xsd.NewFacet(xsd.FacetWhiteSpace, []string{"collapse"}, true),
+			xsd.NewFacet(xsd.FacetPattern, []string{"["}, false), // unclosed character class: src-pattern-value
+		}, nil)
+	if err != nil {
+		t.Fatalf("NewPrimitiveType(badPattern): %v", err)
+	}
+	accepting := primType(t, "text", "preserve")
+	b := plainBackend{badPattern.Name(): true, accepting.Name(): true}
+	u := unionType2(t, "faultingFirst", badPattern, accepting)
+
+	v, err := ValidateLexical(b, noSchema{}, u, "ab", nil)
+	if err != nil {
+		t.Fatalf("ValidateLexical(union whose member 0 faults on a non-precondition error) = %v, want accept via member 1 (dispatchUnion folds and continues)", err)
+	}
+	if v != Value("ab") {
+		t.Errorf("ValidateLexical(union whose member 0 faults) = %#v, want %q (member 1's own value)", v, "ab")
+	}
+
+	typ, _, verr := ValidatingType(b, noSchema{}, u, "ab", nil)
+	if verr == nil {
+		t.Fatalf("ValidatingType(union whose member 0 faults) = (%s, nil), want a decline: riding dispatchUnion's fold-tolerant scan here would be MORE PERMISSIVE than validate/cvcid.go's historical per-member test (#462's territory, not #819's to cross)", typ.Name())
+	}
+	if IsDatatypeVerdict(verr) {
+		t.Errorf("ValidatingType(union whose member 0 faults): IsDatatypeVerdict = true, want false — this is a type/backend fault on member 0, not a rejection of %q", "ab")
+	}
+}
+
+// TestActiveBasicMemberDeclinesOnMembershipExhaustion pins activeBasicMember's
+// own fallback: reaching the end of {member type definitions} without one
+// deciding is reported as a fault (not a verdict), since — reached only via
+// ValidatingType, which runs validateUnion FIRST — it can only mean this wider
+// scan disagrees with validateUnion's own about which member decided, never
+// that no member decided at all.
+func TestActiveBasicMemberDeclinesOnMembershipExhaustion(t *testing.T) {
+	rejecting := primType(t, "numeric", "collapse")
+	b := memberBackend{rejecting.Name(): allDigits}
+	u := unionType2(t, "noAccept", rejecting)
+
+	_, err := activeBasicMember(b, noSchema{}, u, "abc", nil)
+	if err == nil {
+		t.Fatal("activeBasicMember(union no member accepts) = nil error, want a decline")
+	}
+	if IsDatatypeVerdict(err) {
+		t.Error("activeBasicMember(union no member accepts): IsDatatypeVerdict = true, want false — a disagreement between two scans, not a fact about the document")
+	}
+}
+
 // TestValidateLexicalUnionMemberWithNoApplicableFacets pins the zero-mode guard in
 // validateUnion's clause-1 stage. When the ·active basic member· is a type
 // cos-applicable-facets (§4.1.5) makes NO facet applicable to, it resolves no
