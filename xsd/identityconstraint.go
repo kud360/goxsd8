@@ -32,9 +32,14 @@ const ruleICProps xsderr.Rule = "c-props-correct"
 // xpath attributes — exactly as Assertion's {test} does. Like Assertion,
 // IdentityConstraint is a STRUCTURAL, opaque holder: the selector/field
 // XPaths are preserved verbatim (see XPathExpression's doc), never compiled
-// or evaluated here. Evaluation (c-selector-xpath, c-fields-xpaths,
-// cvc-identity-constraint) is deferred to the M6+ XPath engine and is out of
-// scope.
+// or evaluated here. cvc-identity-constraint (§3.11.4), the Validation Rule
+// that evaluates {selector}/{fields} against an instance, is implemented in
+// validate (validate/cvcidentityconstraint.go, validate/icpath.go), landed by
+// #718. Still unimplemented are c-selector-xpath (§3.11.6.2) and
+// c-fields-xpaths (§3.11.6.3), the Schema Component Constraints that check
+// {selector}/{fields}'s own {expression} against the restricted selector/field
+// path grammar those sections define — a subset of the path axes, not XPath
+// 2.0 — owned by #812.
 //
 // Construct only through NewIdentityConstraint, which rejects the states
 // c-props-correct clause 1 (§3.11.6.1) forbids so they are unrepresentable
@@ -134,7 +139,9 @@ func (c IdentityConstraint) Category() IdentityConstraintCategory {
 }
 
 // Selector returns the {selector} property: the Required XPathExpression that
-// selects the target node set (evaluated once the M6+ engine exists).
+// selects the target node set (evaluated directly by validate against the
+// restricted selector subset, not through the xpath package — see this
+// package's doc comment above).
 func (c IdentityConstraint) Selector() XPathExpression {
 	return c.selector
 }
