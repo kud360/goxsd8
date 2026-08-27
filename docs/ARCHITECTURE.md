@@ -465,7 +465,9 @@ never the pattern-facet flavor.
 adapter ships over it.**
 `validate` exports the infoset views (`Element`, `Attribute`, `Text`,
 `Children`, `Child`, with `ElementChild`/`TextChild` constructing the sum)
-plus `New`/`Validator`/`Result`/`Option`/`WithLogger`, and `Assess` walks a
+plus `New`/`Validator`/`Result`/`Option`/`WithLogger` and `Unevaluated`
+(`Rule`/`Loc`/`Msg`, read off `Result.Unevaluated`: one check the assessment
+reached and did not perform, deliberately not an `error`), and `Assess` walks a
 source once, charging `cvc-assess-elt`, `cvc-elt`, `cvc-type`,
 `cvc-complex-type`, `cvc-complex-content`, `cvc-attribute`, `cvc-au`,
 `cvc-identity-constraint` and `cvc-id`. Which clauses of each, and which are
