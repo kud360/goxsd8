@@ -130,6 +130,60 @@ func TestCensusStopsAtRepeatedAlternative(t *testing.T) {
 	assertCensus(t, got, nil)
 }
 
+// TestCensusNamedGroupBody pins the named <group> region (§3.7.2):
+// buildDefinitionModelGroup reads the compositor child and nothing else, so a
+// name xs:namedGroup does not admit is a silence — but only where a compositor
+// is there to be read. With none, rejectNamedGroupBody charges that very child,
+// and a census claiming it would call a named fault a silent skip.
+//
+// A SECOND compositor is not reported either: the census is name-based, and the
+// name <sequence> is one xs:namedGroup admits.
+func TestCensusNamedGroupBody(t *testing.T) {
+	withBody := censusOf(t, `<xs:group name="g">`+
+		`<xs:annotation><xs:documentation>d</xs:documentation></xs:annotation>`+
+		`<xs:sequence/>`+
+		`<xs:sequence/>`+
+		`<xs:attribute name="a" type="xs:string"/>`+
+		`</xs:group>`)
+	assertCensus(t, withBody, []string{"attribute"})
+
+	noBody := censusOf(t, `<xs:group name="g"><xs:attribute name="a" type="xs:string"/></xs:group>`)
+	assertCensus(t, noBody, nil)
+}
+
+// TestCensusAttributeGroupBody pins the top-level <attributeGroup> region
+// (§3.6.2). Its three attribute names go through the same
+// collectAttributeContent a complex type's tail does, but xs:namedAttributeGroup
+// has no xs:assertions position and assertionsOf is reached from a complex type
+// alone, so an <assert> child of a group maps to nothing — the one place the
+// tail vocabulary may not be reused whole.
+func TestCensusAttributeGroupBody(t *testing.T) {
+	got := censusOf(t, `<xs:attributeGroup name="ag">`+
+		`<xs:annotation><xs:documentation>d</xs:documentation></xs:annotation>`+
+		`<xs:attribute name="a" type="xs:string"/>`+
+		`<xs:attributeGroup ref="other"/>`+
+		`<xs:anyAttribute/>`+
+		`<xs:assert test="true()"/>`+
+		`<xs:element name="e" type="xs:string"/>`+
+		`</xs:attributeGroup>`+
+		`<xs:attributeGroup name="other"/>`)
+	assertCensus(t, got, []string{"assert", "element"})
+}
+
+// TestCensusModelGroupReportsNothingItselfAndDescends pins both halves of the
+// model-group region: groupParticles REJECTS every name it has no arm for, so no
+// child of an <all>/<choice>/<sequence> is ever a silence, while the anonymous
+// complex type a local <element> owns is censused at whatever depth it sits.
+func TestCensusModelGroupReportsNothingItselfAndDescends(t *testing.T) {
+	got := censusOf(t, `<xs:complexType name="ct"><xs:sequence>`+
+		`<xs:any/>`+
+		`<xs:choice>`+
+		`<xs:element name="e"><xs:complexType><xs:key name="k"/></xs:complexType></xs:element>`+
+		`</xs:choice>`+
+		`</xs:sequence></xs:complexType>`)
+	assertCensus(t, got, []string{"key"})
+}
+
 // TestCensusReasonIsNoDispatch pins that a construct found below the top level
 // carries the same closed-set reason a top-level one does: the position it stood
 // at has no arm for its name, which is what UnmappedNoDispatch states.

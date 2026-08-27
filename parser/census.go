@@ -71,13 +71,13 @@ import (
 // Censused: the top level of <schema>; the child vocabulary of the four
 // complex-type derivation alternants and of the implicit-content form; the
 // derivation tail — annotation?, (attribute | attributeGroup)*, anyAttribute?,
-// assert* (§3.4.2) — wherever those five containers carry it.
+// assert* (§3.4.2) — wherever those five containers carry it; the body of a
+// top-level <group> and of a top-level <attributeGroup>.
 //
 // NOT censused, each a widening of its own and each a region with its own
 // dispatch:
 //
-//   - the model-group region, the named <group> and <attributeGroup> bodies, and
-//     the simple-type alternatives, which the next commits of #1030 carry;
+//   - the simple-type alternatives, which the next commit of #1030 carries;
 //   - <element>, <attribute> and <simpleType>'s OWN children: each drops a name
 //     its content model does not admit in silence, so each holds real unmapped
 //     constructs, but reporting them flags documents conformance's shape gate
@@ -169,6 +169,50 @@ func (w *censusWalk) topLevel(decl *Element) {
 		w.element(decl)
 	case "complexType":
 		w.complexType(decl)
+	case "group":
+		w.namedGroup(decl)
+	case "attributeGroup":
+		w.container(decl, attributeGroupChildMapped)
+	}
+}
+
+// namedGroup censuses a top-level <group> definition (§3.7.2). xs:namedGroup's
+// content model (xmlschema11-1.md:5187) is (annotation?, (all | choice |
+// sequence)), and buildDefinitionModelGroup reads the compositor child and
+// nothing else, so any other name is dropped in silence.
+//
+// It is dropped ONLY when a compositor is there to be read: with none,
+// rejectNamedGroupBody charges the first child xs:namedGroup does not admit, so
+// that child is named in a verdict rather than skipped and the census must not
+// claim it. A SECOND compositor is not reported either, the census being
+// name-based.
+func (w *censusWalk) namedGroup(el *Element) {
+	compositor := compositorChild(el)
+	if compositor == nil {
+		return
+	}
+	for c := range xsdChildren(el) {
+		switch c.Name().Local() {
+		case "annotation", "all", "choice", "sequence":
+		default:
+			w.report(c)
+		}
+	}
+	w.modelGroup(compositor)
+}
+
+// modelGroup descends through an <all>/<choice>/<sequence> (§3.8.2) and reports
+// nothing of its own: groupParticles' dispatch has a default arm that REJECTS
+// every name it holds no arm for, so nothing at this position is ever a silence.
+// What the descent reaches is the type definitions a local <element> owns.
+func (w *censusWalk) modelGroup(group *Element) {
+	for c := range xsdChildren(group) {
+		switch c.Name().Local() {
+		case "element":
+			w.element(c)
+		case "all", "choice", "sequence":
+			w.modelGroup(c)
+		}
 	}
 }
 
@@ -253,8 +297,22 @@ func (w *censusWalk) complexContentAlternant(cc *Element) {
 // positions "openContent?, (group | all | choice | sequence)?" followed by the
 // derivation tail: the implicit-content <complexType> itself (§3.4.2.3.2) and
 // each <complexContent> alternant (§3.4.2.3.3).
+//
+// Reporting and descent share ONE pass over the children, here and at every
+// other site, so the census comes out in document order however deep a construct
+// sits (STYLE D2).
 func (w *censusWalk) complexContentContainer(parent *Element) {
-	w.container(parent, complexContentChildMapped)
+	for c := range xsdChildren(parent) {
+		local := c.Name().Local()
+		if !complexContentChildMapped(local) {
+			w.report(c)
+			continue
+		}
+		switch local {
+		case "all", "choice", "sequence":
+			w.modelGroup(c)
+		}
+	}
 }
 
 // container reports every child of parent that mapped declines. It is the one
@@ -330,4 +388,21 @@ func complexContentChildMapped(local string) bool {
 		return true
 	}
 	return derivationTailMapped(local)
+}
+
+// attributeGroupChildMapped reports whether a child named local of a TOP-LEVEL
+// <attributeGroup> definition (§3.6.2) is read. buildAttributeGroup folds its
+// body in through the very collectAttributeContent a complex type's tail goes
+// through, so the three attribute names are the same ones — but <assert> is NOT
+// among them: xs:namedAttributeGroup (xmlschema11-1.md:5131) is "(annotation?,
+// ((attribute | attributeGroup)*, anyAttribute?))" with no xs:assertions
+// position, and assertionsOf is reached from a complex type alone. The tail
+// vocabulary is therefore not reused whole here; a group's <assert> child maps
+// to nothing.
+func attributeGroupChildMapped(local string) bool {
+	switch local {
+	case "annotation", "attribute", "attributeGroup", "anyAttribute":
+		return true
+	}
+	return false
 }
