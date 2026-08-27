@@ -600,6 +600,21 @@ func (w *walk) attributeType(e Element, g governance, a Attribute) (*xsd.SimpleT
 			return w.schema.ResolvedSimpleType(d.TypeDefinition())
 		}
 	}
+	return w.topLevelAttributeType(a)
+}
+
+// topLevelAttributeType is the wildcard arm of [walk.attributeType] on its own:
+// the {type definition} of the top-level Attribute Declaration a's ·expanded
+// name· ·resolves· to (§3.10.4.1), false where the name resolves to nothing or
+// to a declaration whose type this package cannot read as a simple type.
+//
+// It is factored out because [walk.wildcardAttributeAssertions] asks the same
+// question at the site that DECLINES such an attribute (assess.go's
+// unmatchedAttribute), and the two must read one encoding of that resolution
+// (STYLE T4): a second spelling of it there would let the type the sites are
+// recorded against drift from the type cvcid.go and cvcidentityconstraint.go
+// decide the lexical against.
+func (w *walk) topLevelAttributeType(a Attribute) (*xsd.SimpleType, bool) {
 	d, found := w.schema.Attribute(a.Name())
 	if !found {
 		return nil, false

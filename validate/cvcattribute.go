@@ -53,6 +53,12 @@ const ruleCvcAu xsderr.Rule = "cvc-au"
 // against the use itself. Both are charged here, in that order, and both can
 // fire for one attribute — they read two different {value constraint}s.
 //
+// The assertions facets clause 3's String Valid reaches on the declaration's
+// {type definition} are recorded before the lexical is read at all
+// ([walk.simpleAssertions], cvcassertion.go): they are a property of the type
+// and not of the verdict, so a charge, a pass and a decline record the same
+// sites.
+//
 // The three declines below withhold a verdict rather than guess one:
 //
 //   - a use whose {attribute declaration} does not resolve. Unreachable on a
@@ -83,6 +89,7 @@ func (w *walk) matchedAttribute(a Attribute, e Element, u xsd.AttributeUse) {
 		w.logAttribute(a, ruleCvcAttribute, "3", "declined")
 		return
 	}
+	w.simpleAssertions(st, a.Loc())
 	if _, err := value.ValidateLexical(w.backend, w.schema, st, a.Value(), elementContext{owner: e}); err != nil {
 		if !value.IsDatatypeVerdict(err) {
 			w.logAttribute(a, ruleCvcAttribute, "3", "declined")
@@ -239,6 +246,10 @@ func (w *walk) defaultedAttributes(e Element, attrs []Attribute, governing xsd.C
 // construction-stage facet failure and a facet-pipeline precondition fault each
 // charge nothing. A decided rejection hands back the Datatype Valid verdict
 // itself, which the charge carries as its wrapped cause (validate.go's causedBy).
+//
+// The type's assertion sites are recorded at the ELEMENT's location, on
+// [walk.simpleAssertions]'s terms: the attribute is absent, which is what makes
+// it defaulted, so there is no attribute item to carry a Loc.
 func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueConstraint) {
 	d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 	if !resolved {
@@ -248,6 +259,7 @@ func (w *walk) defaultedAttribute(e Element, u xsd.AttributeUse, vc xsd.ValueCon
 	if !simple {
 		return
 	}
+	w.simpleAssertions(st, e.Loc())
 	cause, decided := w.values.ValidDefault(w.schema, st, vc)
 	if !decided || cause == nil {
 		return

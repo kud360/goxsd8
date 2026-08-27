@@ -526,6 +526,10 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // type attributes nothing — and e's subtree is walked against nothing
 // throughout.
 //
+// cvc-complex-type clause 6 sits between the two halves and decides nothing:
+// [walk.elementAssertions] records e's {assertions} as [Unevaluated] and
+// charges no violation (cvcassertion.go).
+//
 // parent is the enclosing element's identity-constraint state, nil at the
 // ·validation root·. It is what carries the {selector} and {fields} evaluations
 // downward and the node tables back up (cvcidentityconstraint.go), so the
@@ -541,6 +545,7 @@ func (w *walk) element(e Element, g governance, parent *icCheck) {
 	id := w.identityCheck(e, g, parent)
 	w.idAttributes(id)
 	w.attributes(e, g)
+	w.elementAssertions(e, g)
 	w.children(e, w.contentCheck(e, g, isNilled), id)
 	if w.res.err != nil {
 		// A walk that stopped on a source fault never settles §3.11.4 or
@@ -662,6 +667,15 @@ func (w *walk) attribute(a Attribute, e Element, governing *xsd.ComplexType) {
 // kept away from this charge at the source instead, by
 // attributePropertiesFolded, which is where the bound and its spec grounds
 // are stated. An anonymous governing type never reaches this function.
+//
+// The wildcard arm records the item's assertion sites before it declines
+// ([walk.wildcardAttributeAssertions]): under a ***strict*** or ***lax***
+// wildcard the spec's ·attribute assessment· of such an item reaches
+// cvc-attribute clause 3 against the top-level declaration its ·expanded name·
+// ·resolves· to, and [walk.matchedAttribute] never sees it. Under ***skip***
+// §3.10.4.1's Note leaves the item with no ·governing· declaration and nothing
+// is assessed; the recording call is deliberately not gated on {process
+// contents} all the same, for the reason its own doc gives (#1043).
 func (w *walk) unmatchedAttribute(a Attribute, governing xsd.ComplexType) {
 	if _, wild := governing.AttributeWildcard(); wild {
 		// GAP(validate): clause 2.2.1 holds, but clause 2.2 is a conjunction
@@ -669,6 +683,7 @@ func (w *walk) unmatchedAttribute(a Attribute, governing xsd.ComplexType) {
 		// this package does not evaluate. Charging on 2.2.1 alone would reject
 		// every attribute a wildcard admits, so clause 2 is left undecided for
 		// an element whose type carries one (#717).
+		w.wildcardAttributeAssertions(a)
 		w.logAttribute(a, ruleCvcComplexType, "2.2", "declined")
 		return
 	}

@@ -463,7 +463,19 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // under cvc-datatype-valid exactly as a genuine rejection does, and charging it
 // would reject every element whose character content this backend cannot read
 // (#774).
+//
+// st's assertion sites are recorded BEFORE either decline
+// ([walk.simpleAssertions], cvcassertion.go), because both of them leave the
+// element's ·initial value· to be read by cvcid.go and
+// cvcidentityconstraint.go against the same type: an empty ·initial value·
+// declines here and still reaches the datatype pipeline there, so recording
+// after the decline would lose the site. A ·nilled· element records nothing —
+// its ·initial value· is ·absent· (§3.3.5.4), which is the same condition
+// [contentCheck.simpleTypeValue] gates clause 3.1.3 on.
 func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, verdict error) {
+	if !c.nilled {
+		w.simpleAssertions(st, c.e.Loc())
+	}
 	if c.initial.Len() == 0 {
 		return false, nil
 	}

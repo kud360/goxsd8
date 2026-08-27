@@ -102,8 +102,9 @@ func (v *Validator) Schema() xsd.ElementResolver { return v.schema }
 
 // Result is the outcome of one [Validator.Assess] call.
 type Result struct {
-	violations []*xsderr.Error
-	err        error
+	violations  []*xsderr.Error
+	unevaluated []Unevaluated
+	err         error
 }
 
 // Violations returns the violations the assessment charged, in document
@@ -114,6 +115,62 @@ func (r *Result) Violations() []*xsderr.Error {
 		return nil
 	}
 	return append([]*xsderr.Error(nil), r.violations...)
+}
+
+// Unevaluated is one check the assessment REACHED and did not perform: the
+// spec rule that check answers to, the instance location it was reached at,
+// and what was skipped. It is produced by the assessment alone, the way a
+// [Result] is, so its fields are unexported and it has no exported
+// constructor.
+//
+// It is not a violation and deliberately does NOT satisfy error: it has no
+// Error method, and must not grow one. [xsderr.Error]'s own doc fixes that
+// interface's meaning in this module — every schema- or instance-validity
+// violation is an *xsderr.Error — so a value that decides nothing about a
+// document must not be one, or a consumer can errors.Is it, join it into a
+// violation list, or append it to the violations of a Result and turn a
+// skipped check into a false reject.
+//
+// One record is one SITE, not one skipped evaluation: the sites are collected
+// statically off the ·governing type definition· (cvcassertion.go), so several
+// records may share a Loc and the count is not a claim about how many
+// evaluations a real evaluator would have run.
+type Unevaluated struct {
+	rule xsderr.Rule
+	loc  xsderr.Loc
+	msg  string
+}
+
+// newUnevaluated builds one record, mirroring [xsderr.New]'s shape so a site
+// that charges and a site that declines are written the same way.
+func newUnevaluated(rule xsderr.Rule, loc xsderr.Loc, format string, args ...any) Unevaluated {
+	return Unevaluated{rule: rule, loc: loc, msg: fmt.Sprintf(format, args...)}
+}
+
+// Rule returns the spec rule the check answers to — the ID it would have been
+// charged under had it been performed and failed.
+func (u Unevaluated) Rule() xsderr.Rule { return u.rule }
+
+// Loc returns the INSTANCE location the check was reached at: the element for
+// a check on an element information item, the attribute for one on an
+// attribute information item. The zero Loc means unknown.
+func (u Unevaluated) Loc() xsderr.Loc { return u.loc }
+
+// Msg returns the human-readable statement of which check was skipped and on
+// which component.
+func (u Unevaluated) Msg() string { return u.msg }
+
+// Unevaluated returns the checks the assessment reached and did not perform,
+// in document order. The slice is copied: mutating the result does not affect
+// r. No such check yields nil.
+//
+// An empty [Result.Violations] together with a non-empty result here is NOT a
+// pass; doc.go's Contract section states what that combination means.
+func (r *Result) Unevaluated() []Unevaluated {
+	if len(r.unevaluated) == 0 {
+		return nil
+	}
+	return append([]Unevaluated(nil), r.unevaluated...)
 }
 
 // Err reports the fault in the source that stopped the walk, or nil when

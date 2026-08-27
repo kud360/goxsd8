@@ -60,8 +60,12 @@
 //   - Union values validate against DirectMembers in order, with the
 //     validating member's whiteSpace driving pattern normalization
 //     (PRINCIPLES 11).
-//   - Assertions run at every variety level, fail-open per xpath's
-//     contract.
+//   - Assertions are VISITED at every variety level and evaluated at none.
+//     Complex type, list item and list, union member and union, atomic: each
+//     {assertions} site the assessment reaches is recorded as an
+//     [Unevaluated] carrying the rule it answers to — cvc-assertion
+//     (§3.13.4.1) or cvc-assertions-valid (§4.3.13.3) — and none is ever
+//     reported as satisfied (PRINCIPLES 12, cvcassertion.go).
 //
 // # Contract (M5, landing rule by rule)
 //
@@ -80,6 +84,11 @@
 // makes an item that was not ·strictly assessed· notKnown rather than valid.
 // A consumer that may accept only what has been shown valid cannot read an
 // empty result as that showing.
+//
+// An empty [Result.Violations] with a non-empty [Result.Unevaluated] is not a
+// pass either: each entry there is a check the assessment REACHED and did not
+// perform, so the document stands undecided against exactly the rules those
+// entries name.
 //
 // All four charges below that DELEGATE to String Valid (§3.16.4,
 // cvc-simple-type) carry the delegated verdict as their wrapped cause, so
