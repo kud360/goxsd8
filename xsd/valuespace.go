@@ -31,9 +31,17 @@ package xsd
 // whose prefix its ValueConstraint's captured context does not bind. A caller
 // treats undecided as "the clause is not competent to charge a failure" and
 // accepts; an implementation must never use undecided as licence to reject, must
-// never report a false NOT-same, and must never report a false NOT-valid, because
-// every caller turns a decided negative into a schema rejection (PRINCIPLES 20's
-// direction, applied to value spaces).
+// never report a false NOT-same, and must never report a false NOT-valid: every
+// reader turns a decided negative into a refusal, but not always the same kind of
+// refusal. checkSimpleDefault (valueconstraintvalid.go) reads ValidDefault for
+// a-props-correct cl.2, au-props-correct cl.2 and e-props-correct;
+// checkAttributeUseValueConstraint (valueconstraintvalid.go) reads Identical for
+// au-props-correct cl.3; and defaultbinding.go reads EqualOrIdentical for
+// loc-testSubP cl.4.3 and cl.5.2.2 — all four charge a SCHEMA rejection. But
+// validate/cvcattribute.go's defaultedAttribute also reads ValidDefault, for
+// cvc-complex-type cl.4, and charges an INSTANCE violation during document
+// assessment instead. Either way a decided negative is refused, never let
+// through (PRINCIPLES 20's direction, applied to value spaces).
 //
 // That contract is the deliberate OPPOSITE of the other capability installed at
 // the same seam, [SimpleTypeRestrictionChecker], and the two must not be
