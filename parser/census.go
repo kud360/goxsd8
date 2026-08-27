@@ -265,7 +265,7 @@ func (w *censusWalk) attributeDecl(el *Element) {
 // The <restriction> alternative reports NOTHING of its own.
 // rejectOutOfModelFacetChildren (#972) rejects every XSD-namespace child
 // Datatypes §4.1.2's content model has no position for, so the spec's own
-// silent-non-mapping carve-out — map.std.common case 2 (xmlschema11-2.md:3625),
+// silent-non-mapping carve-out — map.std.common case 2 (xmlschema11-1.md:3635),
 // where an unrecognized facet makes the whole <simpleType> "map to no component
 // at all" without being in error — is not reachable in this processor: that
 // document is refused before it can map to nothing. Only the inline base
@@ -442,11 +442,11 @@ func complexContentChildMapped(local string) bool {
 // <attributeGroup> definition (§3.6.2) is read. buildAttributeGroup folds its
 // body in through the very collectAttributeContent a complex type's tail goes
 // through, so the three attribute names are the same ones — but <assert> is NOT
-// among them: xs:namedAttributeGroup (xmlschema11-1.md:5131) is "(annotation?,
-// ((attribute | attributeGroup)*, anyAttribute?))" with no xs:assertions
-// position, and assertionsOf is reached from a complex type alone. The tail
-// vocabulary is therefore not reused whole here; a group's <assert> child maps
-// to nothing.
+// among them: xs:namedAttributeGroup (xmlschema11-1.md:5502, whose body is the
+// xs:attrDecls group at :4720) is "(annotation?, ((attribute | attributeGroup)*,
+// anyAttribute?))" with no xs:assertions position, and assertionsOf is reached
+// from a complex type alone. The tail vocabulary is therefore not reused whole
+// here; a group's <assert> child maps to nothing.
 func attributeGroupChildMapped(local string) bool {
 	switch local {
 	case "annotation", "attribute", "attributeGroup", "anyAttribute":
@@ -458,8 +458,8 @@ func attributeGroupChildMapped(local string) bool {
 // simpleTypeAlternativeChildMapped reports whether a child named local of a
 // <list> or a <union> is read. Both alternatives carry the one position
 // listItem and unionMembers read — the inline <simpleType> of §3.16.3 clauses 3
-// and 4 — so one vocabulary serves both (xs:list at xmlschema11-2.md:3897 and
-// xs:union at :3910 differ only in that position's maxOccurs, which is
+// and 4 — so one vocabulary serves both (xs:list at xmlschema11-2.md:3957 and
+// xs:union at :3977 differ only in that position's maxOccurs, which is
 // cardinality and not vocabulary).
 func simpleTypeAlternativeChildMapped(local string) bool {
 	return local == "annotation" || local == "simpleType"
