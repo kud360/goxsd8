@@ -482,7 +482,7 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rd *redefin
 	// §4.3.2 clause 4: the location is a URI REFERENCE, resolved against the base
 	// URI in scope at the directive element itself (xml:base-aware), not against
 	// the document URI.
-	requested := schemaloc.Resolve(el.BaseURI(), hint)
+	requested := schemaloc.Resolve(el.baseURI, hint)
 
 	f, err := a.fetch(requested, tns, ov, rd, el, rule)
 	if err != nil {
@@ -582,7 +582,7 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 	}
 	// §4.3.2 clause 4: a URI REFERENCE resolved against the base URI in scope at
 	// the <import> element itself (xml:base-aware).
-	requested := schemaloc.Resolve(el.BaseURI(), hint)
+	requested := schemaloc.Resolve(el.baseURI, hint)
 
 	// The resolver is asked under the IMPORT's namespace, not the importing
 	// document's: that pair — target namespace and location hint — is exactly the

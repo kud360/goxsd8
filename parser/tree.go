@@ -20,15 +20,13 @@ type Node interface {
 // its retained content. Unlike parser/xmltree, which streams and keeps only
 // bounded state, the tree holds the whole document so a later resolution phase
 // can walk parents and children (§3.17.6.2 src-resolve walks up to a <schema>
-// ancestor). Its resolved name, ordered attributes, in-scope namespace
-// bindings, and location are those of the underlying xmltree.StartElement, to
-// which the accessors delegate — the single canonical QName and scope
-// implementation, never re-derived here.
+// ancestor). Its resolved name, in-scope namespace bindings, and location are
+// those of the underlying xmltree.StartElement, to which the accessors delegate
+// — the single canonical QName and scope implementation, never re-derived here.
 //
 // Name, Attr and Children are exported for a single consumer, this module's
 // own conformance harness, which walks raw schema documents. Loc is exported
-// because the Node interface carries it, not because anything calls it;
-// Attributes and BaseURI have no caller outside package parser at all. No use
+// because the Node interface carries it, not because anything calls it. No use
 // case outside this module is known, so pre-1.0 these names may be unexported
 // without a deprecation path — the ratchet and the gate are the only
 // compatibility promises (docs/PLAN.md, "v1.0 — the stability line").
@@ -49,17 +47,17 @@ type Element struct {
 	// namespace scope, none of which any pre-processing touches.
 	attrs    []xmltree.Attribute
 	children []Node
-	baseURI  string
+	// baseURI is the element's base URI: its xml:base attribute resolved as an
+	// RFC 3986 relative reference against its parent's base URI, or the parent's
+	// base URI inherited unchanged when it declares no xml:base. ReadDocument
+	// composes it top-down as the tree is built; see composeBaseURI for the rule
+	// and its (external, not locally spec-grounded) provenance.
+	baseURI string
 }
 
 // Name returns the resolved (namespace, local) name of the element, delegating
 // to the underlying start tag.
 func (e *Element) Name() xmltree.Name { return e.src.Name() }
-
-// Attributes returns the element's attributes in document order, excluding
-// namespace declarations. The slice is the reader's own (or, on the one element
-// §4.2.2 narrows, this package's); its Attribute values are immutable.
-func (e *Element) Attributes() []xmltree.Attribute { return e.attrs }
 
 // Attr returns the value of the element's UNPREFIXED (no-namespace) attribute
 // named local, reporting whether it is present at all. Presence is a distinct
@@ -72,11 +70,11 @@ func (e *Element) Attributes() []xmltree.Attribute { return e.attrs }
 // for schema documents declares on an XSD element (name, ref, type,
 // schemaLocation, …) is unqualified, so a prefixed attribute of the same local
 // name is foreign markup and must not answer here. That rule is subtle enough
-// that a consumer walking a schema document tree through [Element.Attributes]
-// would otherwise re-derive it — as this module's own conformance harness did,
-// until the two implementations were collapsed into this one (issue #272).
+// that a consumer matching a schema document's raw attribute list by local name
+// alone would otherwise re-derive it — as this module's own conformance harness
+// did, until the two implementations were collapsed into this one (issue #272).
 func (e *Element) Attr(local string) (string, bool) {
-	for _, a := range e.Attributes() {
+	for _, a := range e.attrs {
 		if a.Name().Space() == "" && a.Name().Local() == local {
 			return a.Value(), true
 		}
@@ -113,13 +111,6 @@ func (e *Element) Loc() xsderr.Loc { return e.src.Loc() }
 // lost: the streaming reader discards the document as it advances, so text not
 // captured here is unrecoverable for later phases.
 func (e *Element) Children() []Node { return e.children }
-
-// BaseURI returns the element's base URI: its xml:base attribute resolved as an
-// RFC 3986 relative reference against its parent's base URI, or the parent's
-// base URI inherited unchanged when it declares no xml:base. See ReadDocument
-// for the composition rule and its (external, not locally spec-grounded)
-// provenance.
-func (e *Element) BaseURI() string { return e.baseURI }
 
 func (e *Element) node() {}
 
