@@ -256,7 +256,11 @@ is anyone else's to volunteer:
    was absent. The entry rides the session commit or the session does not
    land (PRINCIPLES 29). A pass that closes no issue — a `post-land`
    stamp, a `/backlog` run — has no number to grep for: its entry is due
-   by the same rule and this check has nothing to say about it.
+   by the same rule and this check has nothing to say about it. `go tool
+   landcheck -issue <N>` runs this precondition and precondition 2's
+   merge-base-current requirement together (#963) — exit 0 clean, 1 if
+   this precondition's grep fails, 2 if the base is stale or the tool
+   cannot run; hand-run the grep above only when the tool is unavailable.
 2. **`origin/main` has not moved past the verdict's base** —
    `git log HEAD..origin/main` is empty. If it is not, merge forward and
    re-judge per **After the verdict**, then re-verify: main can drift
