@@ -282,6 +282,140 @@ func TestProduceS4SChildOrderRejected(t *testing.T) {
 	}
 }
 
+// TestProduceS4SChildNoPositionRejected pins the OTHER fault the same walk
+// charges: a child no position of the chosen content model admits at all, which
+// the walk passed over silently until #1047. xs:complexTypeModel (:4757) is one
+// xs:choice of three arms, so a <complexType> that wrote <simpleContent> or
+// <complexContent> is on an arm holding "annotation?" and that one child alone —
+// an <attribute> or a model group beside it belongs to the third arm, which this
+// document did not write, and the document is not fully valid against Appendix A
+// under any arm (§5.1's first bullet, :4296). The same holds one level in, where
+// each wrapper and each alternant has a content model of its own.
+//
+// Every row asserts the fault names the offending child and the element that owns
+// the model, and that it carries no rule ID: the class is uncataloged
+// (xsderr/doc.go), exactly as the order and maxOccurs rows above.
+func TestProduceS4SChildNoPositionRejected(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, tc := range []struct {
+		name      string
+		lines     []string
+		wantChild string
+		wantOwner string
+	}{
+		{
+			// The largest suite shape: the attribute tail written beside a
+			// <complexContent>, where only xs:complexTypeModel's third arm carries it.
+			name: "attribute beside a complexContent on a complexType",
+			lines: []string{
+				`<xs:complexContent><xs:extension base="xs:anyType"/></xs:complexContent>`,
+				`<xs:attribute name="a"/>`,
+			},
+			wantChild: "<attribute> at " + produceURI + ":4:1",
+			wantOwner: "<complexType> at " + produceURI + ":2:1",
+		},
+		{
+			// Written BEFORE the wrapper, so the fault cannot be read as lateness.
+			name: "model group before a simpleContent on a complexType",
+			lines: []string{
+				`<xs:sequence/>`,
+				`<xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent>`,
+			},
+			wantChild: "<sequence> at " + produceURI + ":3:1",
+			wantOwner: "<complexType> at " + produceURI + ":2:1",
+		},
+		{
+			name: "attribute under a simpleContent wrapper",
+			lines: []string{
+				`<xs:simpleContent>`,
+				`<xs:extension base="xs:string"/>`,
+				`<xs:attribute name="a"/>`,
+				`</xs:simpleContent>`,
+			},
+			wantChild: "<attribute> at " + produceURI + ":5:1",
+			wantOwner: "<simpleContent> at " + produceURI + ":3:1",
+		},
+		{
+			name: "anyAttribute under a complexContent wrapper",
+			lines: []string{
+				`<xs:complexContent>`,
+				`<xs:extension base="xs:anyType"/>`,
+				`<xs:anyAttribute namespace="##other"/>`,
+				`</xs:complexContent>`,
+			},
+			wantChild: "<anyAttribute> at " + produceURI + ":5:1",
+			wantOwner: "<complexContent> at " + produceURI + ":3:1",
+		},
+		{
+			// xs:simpleExtensionType (:4979) has no structural position at all.
+			name: "model group under a simpleContent extension",
+			lines: []string{
+				`<xs:simpleContent>`,
+				`<xs:extension base="xs:string">`,
+				`<xs:sequence/>`,
+				`</xs:extension>`,
+				`</xs:simpleContent>`,
+			},
+			wantChild: "<sequence> at " + produceURI + ":5:1",
+			wantOwner: "<extension> at " + produceURI + ":4:1",
+		},
+		{
+			// The mirror image: xs:complexRestrictionType (:4850) has no facet
+			// position, which only xs:simpleRestrictionType carries.
+			name: "facet under a complexContent restriction",
+			lines: []string{
+				`<xs:complexContent>`,
+				`<xs:restriction base="xs:anyType">`,
+				`<xs:length value="5"/>`,
+				`</xs:restriction>`,
+				`</xs:complexContent>`,
+			},
+			wantChild: "<length> at " + produceURI + ":5:1",
+			wantOwner: "<restriction> at " + produceURI + ":4:1",
+		},
+		{
+			// A name NO arm of xs:complexTypeModel carries, on the arm that carries
+			// the most.
+			name: "identity constraint on an implicit-content complexType",
+			lines: []string{
+				`<xs:sequence/>`,
+				`<xs:key name="k"/>`,
+			},
+			wantChild: "<key> at " + produceURI + ":4:1",
+			wantOwner: "<complexType> at " + produceURI + ":2:1",
+		},
+		{
+			// <simpleType> is a position of xs:simpleRestrictionType alone, and an
+			// implicit-content <complexType> is not it.
+			name: "simpleType on an implicit-content complexType",
+			lines: []string{
+				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`,
+			},
+			wantChild: "<simpleType> at " + produceURI + ":3:1",
+			wantOwner: "<complexType> at " + produceURI + ":2:1",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, s4sDoc(tc.lines...))
+			if err == nil {
+				t.Fatal("Produce accepted a complex type carrying a child no position of its content model admits")
+			}
+			if rule, ok := xsderr.RuleOf(err); ok {
+				t.Errorf("error = %v, charged %s; want a plain grammar fault carrying no rule ID", err, rule)
+			}
+			if !strings.Contains(err.Error(), tc.wantChild) {
+				t.Errorf("error = %v, want it to name the offending %s", err, tc.wantChild)
+			}
+			if !strings.Contains(err.Error(), tc.wantOwner) {
+				t.Errorf("error = %v, want it to name the owning %s", err, tc.wantOwner)
+			}
+			if !strings.Contains(err.Error(), "fills no position") {
+				t.Errorf("error = %v, want the %q fault rather than an order or maxOccurs one", err, "fills no position")
+			}
+		})
+	}
+}
+
 // TestProduceS4SChildOrderAccepted is the other side of the check, and the row
 // that matters most: a positional check written as a fixed linear order over
 // element names would falsely reject most of these (PRINCIPLES 14). Every one is
@@ -361,8 +495,9 @@ func TestProduceS4SChildOrderAccepted(t *testing.T) {
 				`</xs:simpleContent></xs:complexType>`,
 		},
 		{
-			// A name no position of the model admits is #928's fault, not this
-			// check's: it is stepped over rather than charged an order verdict.
+			// A child outside the XSD namespace is stepped over whatever position it
+			// sits in — #928's fault to charge if any — where an XSD-namespace name
+			// no position admits is rejected by the test above.
 			name: "a foreign-namespace child among the facets",
 			body: `<xs:complexType name="D" xmlns:o="urn:other"><xs:simpleContent>` +
 				`<xs:restriction base="tns:B"><o:hint/><xs:length value="5"/>` +

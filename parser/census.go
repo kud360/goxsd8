@@ -51,12 +51,13 @@ import (
 // facet position and restrictionFacets folds it into nothing, so the name is
 // s4s-legal and unmapped at once (mappedFacetElement records the seam).
 //
-// A name outside the vocabulary is reported UnmappedNoDispatch only where no
-// pass rejects it either. Two shapes therefore stay out of the census although
-// no component comes of them, and both are rejections rather than silences: a
+// A name outside the vocabulary is reported UnmappedNoDispatch wherever this walk
+// reaches it, whether or not another pass goes on to REJECT the document over the
+// same name: a rejected document decides nothing vacuously, so a report redundant
+// with a rejection misleads no consumer. Two shapes are not reported at all, since
+// a rejection covers every name they can hold and neither can be a silence: a
 // model group's non-particle child (groupParticles' default arm) and a
-// <simpleType> <restriction>'s out-of-model child
-// (rejectOutOfModelFacetChildren).
+// <simpleType> <restriction>'s out-of-model child (rejectOutOfModelFacetChildren).
 //
 // # The census is NAME-based
 //
@@ -75,6 +76,12 @@ import (
 // top-level <group> and of a top-level <attributeGroup>; the <list> and <union>
 // alternatives of every <simpleType> any of those reaches.
 //
+// Since #1047 those five complex-type vocabularies report only names
+// checkS4SChildOrder rejects as well, save the three s4sFacetElement admits and
+// mappedFacetElement does not — <assertions>, <maxScale> and <minScale> under a
+// <simpleContent> <restriction>. The reports are kept: retiring a region is a
+// census change with a measurement of its own.
+//
 // NOT censused, each a widening of its own and each a region with its own
 // dispatch:
 //
@@ -84,10 +91,10 @@ import (
 //     still admits — a latent false accept of that gate, filed rather than
 //     ridden along here;
 //   - the <complexType> wrapper's own children once it has chosen <simpleContent>
-//     or <complexContent>, and those two wrappers' own children, on the same
-//     footing: xs:complexTypeModel's other disjunct admits <attribute> and a
-//     model group, checkS4SChildOrder deliberately does not charge a child the
-//     CHOSEN alternative excludes, and nothing maps it;
+//     or <complexContent>, and those two wrappers' own children: checkS4SChildOrder
+//     charges every XSD-namespace child the CHOSEN xs:complexTypeModel disjunct
+//     does not admit (#1047), so no silence is possible at those three positions
+//     and there is nothing left there for a census to report;
 //   - an <override>'s or <redefine>'s children as seen from HERE. An <override>'s
 //     need no walk from here at all: §F.2 clause 1 substitutes them into the
 //     OVERRIDDEN document, whose own producer censuses them through
@@ -99,9 +106,10 @@ import (
 // silence as coverage.
 
 // census reports, in document order, every element of this producer's document
-// that no pass of it maps and none of its passes rejects — the complement of the
-// dispatch vocabulary at each position the walk reaches, taken over exactly the
-// children those dispatches walk.
+// that no pass of it maps — the complement of the dispatch vocabulary at each
+// position the walk reaches, taken over exactly the children those dispatches
+// walk. Whether some pass also REJECTS the document over that element is not
+// consulted, for the reason the file comment above gives.
 //
 // The children topLevelDecls does not yield are not reported as unmapped
 // constructs, and the reasons they are not are stated there — including the
@@ -404,9 +412,10 @@ func derivationTailMapped(local string) bool {
 // xs:simpleExtensionType (:4979) is "(annotation?, ((attribute |
 // attributeGroup)*, anyAttribute?), assert*)" and §3.4.2.2 computes {content
 // type} from the resolved base alone (cases 3-5), so a model group written here
-// is read by nothing — neither produceSimpleContent, which never reaches a
-// particle, nor checkS4SChildOrder, which skips a name no position of the model
-// admits.
+// is read by nothing: produceSimpleContent never reaches a particle. The document
+// does not survive it either — checkS4SChildOrder rejects a child no position of
+// xs:simpleExtensionType admits (#1047) — and the report stands beside that
+// rejection rather than instead of it, per the Scope note above.
 func simpleExtensionChildMapped(local string) bool {
 	return derivationTailMapped(local)
 }
