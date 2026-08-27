@@ -223,16 +223,25 @@ func TestProduceCircularGroupRef(t *testing.T) {
 // xsderr.Loc): the malformed child's own line where one exists, the definition's
 // where none does. Without the position assertion a guard that rejected at the
 // definition for every shape would pass the table.
+//
+// The two-compositor rows are the same fault from the other side of the same
+// cardinality (#1048), and their position assertions are what separate the second
+// compositor from the first: reporting either the first or the definition fails
+// the row.
 func TestProduceNamedGroupBodyRejected(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2). The legal <group> is
-	// on line 2, the malformed one opens line 3 and its body is written on line 4,
-	// so wantLine alone separates a fault reported at the child from one reported
-	// at the definition.
+	// on line 2, the malformed one opens line 3 and its body starts on line 4, so
+	// wantLine alone separates a fault reported at the child from one reported at
+	// the definition. A body written over several lines puts each child on a line
+	// of its own, which is what wantSiblingLine reads.
 	cases := []struct {
 		name     string
 		body     string
 		wantName string
 		wantLine int
+		// wantSiblingLine is the line of the child the fault collides with, for the
+		// rows whose fault spans two of them; 0 where one child is the whole fault.
+		wantSiblingLine int
 	}{
 		{
 			// Also carries the name and maxOccurs xs:groupRef and xs:namedGroup
@@ -271,6 +280,23 @@ func TestProduceNamedGroupBodyRejected(t *testing.T) {
 			wantName: "has no <all>, <choice> or <sequence> child",
 			wantLine: 3,
 		},
+		{
+			name:            `<sequence> then <choice>`,
+			body:            "<xs:sequence/>\n<xs:choice/>",
+			wantName:        "<choice> at",
+			wantLine:        5,
+			wantSiblingLine: 4,
+		},
+		{
+			// The <annotation> xs:namedGroup does admit, and a foreign-namespace child
+			// that is skipped rather than charged (rejectNamedGroupBody's convention),
+			// neither of which may shift the fault off the second <all>.
+			name:            `<annotation>, <all>, foreign element, <all>`,
+			body:            "<xs:annotation/>\n<xs:all/>\n<f:x xmlns:f=\"urn:f\"/>\n<xs:all/>",
+			wantName:        "<all> at",
+			wantLine:        7,
+			wantSiblingLine: 5,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -296,6 +322,12 @@ func TestProduceNamedGroupBodyRejected(t *testing.T) {
 			}
 			if at := fmt.Sprintf("%s:%d:", produceURI, tc.wantLine); !strings.Contains(err.Error(), at) {
 				t.Fatalf("error = %v, want it positioned at %s (E3)", err, at)
+			}
+			if tc.wantSiblingLine == 0 {
+				return
+			}
+			if at := fmt.Sprintf("%s:%d:", produceURI, tc.wantSiblingLine); !strings.Contains(err.Error(), at) {
+				t.Fatalf("error = %v, want it to name the child at %s the fault collides with", err, at)
 			}
 		})
 	}
