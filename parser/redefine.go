@@ -229,7 +229,10 @@ func newRedefineSet(el *Element) (*redefineSet, error) {
 		}
 		name, ok := c.Attr("name")
 		if !ok {
-			return nil, fmt.Errorf("parser: the <%s> child of <redefine> at %s has no name attribute, which the schema for schema documents requires and which src-expredef needs in order to pair it with a top-level definition of the redefined schema document", c.Name().Local(), c.Loc())
+			// The production is the top level's own, for the reason this function's
+			// doc gives: xs:redefinable routes the child to the SAME global element
+			// declaration, so topLevelGrammar (produce.go) answers for both positions.
+			return nil, fmt.Errorf("parser: the <%s> child of <redefine> at %s has no name attribute, which the schema for schema documents requires (%s declares name use=\"required\" with type xs:NCName) and which src-expredef needs in order to pair it with a top-level definition of the redefined schema document", c.Name().Local(), c.Loc(), topLevelGrammar(c.Name().Local()))
 		}
 		entries = append(entries, redefineEntry{key: componentKey{kind: c.Name().Local(), name: name}, elem: c})
 	}

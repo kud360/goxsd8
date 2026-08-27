@@ -492,13 +492,13 @@ func ownedComplexBase(base xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 // union).
 func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.ComplexType, error) {
 	if name, named := topLevelComplexTypeName(id); named && name.Local == "" {
-		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
+		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires one — xs:topLevelComplexType declares name use=\"required\" with type xs:NCName", el.Loc())
 	}
 	if dup := repeatedContentAlternative(el); dup != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <%s> at %s is a second content alternative on the <complexType> at %s, which the schema for schema documents prohibits: xs:complexTypeModel (§3.4.2) is a plain xs:choice, so a <complexType> carries exactly one of <simpleContent>, <complexContent>, or the implicit-content form", dup.Name().Local(), dup.Loc(), el.Loc())
 	}
 	if oc := misplacedOpenContent(el); oc != nil {
-		return xsd.ComplexType{}, fmt.Errorf("parser: <openContent> at %s is in a position the schema for schema documents does not allow: it is a child of <complexType> only in the implicit-content form (no <simpleContent>/<complexContent>), under <complexContent> only of the <restriction>/<extension> alternant, and nowhere at all under <simpleContent>", oc.Loc())
+		return xsd.ComplexType{}, fmt.Errorf("parser: <openContent> at %s is in a position the schema for schema documents does not allow: xs:openContent is referenced as a child of <complexType> only in the implicit-content form (no <simpleContent>/<complexContent>), under <complexContent> only of the <restriction>/<extension> alternant, and nowhere at all under <simpleContent>", oc.Loc())
 	}
 	sc := childElement(el, xsd.XMLSchemaNS, "simpleContent")
 	cc := childElement(el, xsd.XMLSchemaNS, "complexContent")
@@ -1347,7 +1347,7 @@ func (p *producer) checkDefaultOpenContent() error {
 		return nil
 	}
 	if childElement(def, xsd.XMLSchemaNS, "any") == nil {
-		return fmt.Errorf("parser: <defaultOpenContent> at %s has no <any> child, but the schema for schema documents makes it mandatory", def.Loc())
+		return fmt.Errorf("parser: <defaultOpenContent> at %s has no <any> child, but the schema for schema documents makes it mandatory: xs:defaultOpenContent's content model is (annotation?, any), whose <any> carries no minOccurs of its own — unlike xs:openContent's, which is minOccurs=\"0\"", def.Loc())
 	}
 	mode, present := def.Attr("mode")
 	if !present {
@@ -1357,7 +1357,7 @@ func (p *producer) checkDefaultOpenContent() error {
 	case "interleave", "suffix":
 		return nil
 	}
-	return fmt.Errorf(`parser: <defaultOpenContent> at %s has mode=%q, but the schema for schema documents admits only interleave or suffix there ("none" is an <openContent> mode)`, def.Loc(), mode)
+	return fmt.Errorf(`parser: <defaultOpenContent> at %s has mode=%q, but the schema for schema documents admits only interleave or suffix there: xs:defaultOpenContent restricts mode to that two-value enumeration, and "none" belongs to xs:openContent's alone`, def.Loc(), mode)
 }
 
 // openContentOf computes §3.4.2.3.3 clause 6's {open content} from the
@@ -1755,7 +1755,7 @@ func (p *producer) produceGroupRefParticle(el *Element) (*xsd.Particle, error) {
 // attribute (cvc-datatype-valid) before a ModelGroupRef is minted at all.
 func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd.ModelGroupDefinition, error) {
 	if name.Local == "" {
-		return xsd.ModelGroupDefinition{}, fmt.Errorf("parser: top-level <group> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires an xs:NCName", el.Loc())
+		return xsd.ModelGroupDefinition{}, fmt.Errorf("parser: top-level <group> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires one — xs:namedGroup declares name use=\"required\" with type xs:NCName", el.Loc())
 	}
 	mg, err := p.buildDefinitionModelGroup(el, xsd.ModelGroupScopeParent{Name: name})
 	if err != nil {
