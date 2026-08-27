@@ -261,8 +261,8 @@ func TestMatchesByFilePath(t *testing.T) {
 	iss := issue{Number: 1, Title: "close the wildcard gap", State: "OPEN",
 		Body: "the fail-open site is xsd/wildcard.go, clause 1 only"}
 
-	if !matches(m, iss) {
-		t.Error("matches = false, want true (file path is named in the issue body)")
+	if got := matches(m, iss); got != matchFile {
+		t.Errorf("matches = %v, want matchFile (file path is named in the issue body)", got)
 	}
 }
 
@@ -284,8 +284,8 @@ func TestMatchesByPhrase(t *testing.T) {
 		Body:   "Tracking: expanded name matching is not yet folded in for this construct.",
 	}
 
-	if !matches(m, iss) {
-		t.Error("matches = false, want true (a 5-word run of the marker's text appears in the issue)")
+	if got := matches(m, iss); got != matchPhrase {
+		t.Errorf("matches = %v, want matchPhrase (a 5-word run of the marker's text appears in the issue)", got)
 	}
 }
 
@@ -295,8 +295,8 @@ func TestMatchesFalseWhenNeitherSignalFires(t *testing.T) {
 	m := marker{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "the wildcard case is not folded in yet"}
 	iss := issue{Number: 3, Title: "unrelated parser bug", State: "OPEN", Body: "a completely different problem in the lexer"}
 
-	if matches(m, iss) {
-		t.Error("matches = true, want false")
+	if got := matches(m, iss); got != matchNone {
+		t.Errorf("matches = %v, want matchNone", got)
 	}
 }
 
@@ -337,7 +337,7 @@ func TestReconcileClosedMatchIsStillUntracked(t *testing.T) {
 	if len(rep.Untracked) != 1 {
 		t.Fatalf("Untracked = %+v, want 1 entry (closed match is a dead end)", rep.Untracked)
 	}
-	if len(rep.Untracked[0].ClosedMatches) != 1 || rep.Untracked[0].ClosedMatches[0].Number != 42 {
+	if len(rep.Untracked[0].ClosedMatches) != 1 || rep.Untracked[0].ClosedMatches[0].Issue.Number != 42 {
 		t.Errorf("ClosedMatches = %+v, want [#42]", rep.Untracked[0].ClosedMatches)
 	}
 }
@@ -354,7 +354,7 @@ func TestReconcileOpenIssueNoMarkerLandsInGroup2(t *testing.T) {
 	}
 
 	rep := reconcile(markers, issues, true)
-	if len(rep.Stale) != 1 || rep.Stale[0].Number != 55 {
+	if len(rep.Stale) != 1 || rep.Stale[0].Issue.Number != 55 {
 		t.Fatalf("Stale = %+v, want [#55]", rep.Stale)
 	}
 	// The unrelated marker must still surface in group 1: it matches nothing.
@@ -475,7 +475,7 @@ func TestPrintReportDoesNotPanicAndNamesEachGroup(t *testing.T) {
 		Untracked: []untrackedMarker{
 			{Marker: marker{Area: "xsd", File: "x.go", Line: 1, Text: "an orphan"}},
 		},
-		Stale:  []issue{{Number: 9, Title: "stale tracker"}},
+		Stale:  []staleTracker{{Issue: issue{Number: 9, Title: "stale tracker"}}},
 		Census: []areaCount{{Area: "xsd", Count: 1}},
 	}
 
@@ -488,5 +488,286 @@ func TestPrintReportDoesNotPanicAndNamesEachGroup(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("report output missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// TestCitations checks the citation extractor: every `#<digits>` run in the
+// marker's text, first-appearance order, repeats dropped.
+func TestCitations(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want []int
+	}{
+		{name: "none", text: "no owner names this gap yet", want: nil},
+		{name: "one, parenthesized", text: "declines instead (#774).", want: []int{774}},
+		{name: "one, mid-sentence", text: "owned by #1002, which is blocked", want: []int{1002}},
+		{name: "repeat is dropped", text: "see #774 above; charged at #774 too", want: []int{774}},
+		{name: "two owners keep their order", text: "#900 folds what #56 declines", want: []int{900, 56}},
+		{name: "spec clauses are not citations", text: "§3.17.5.2 clause 4, cvc-id.1", want: nil},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := citations(tc.text)
+			if len(got) != len(tc.want) {
+				t.Fatalf("citations = %v, want %v", got, tc.want)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Fatalf("citations = %v, want %v", got, tc.want)
+				}
+			}
+		})
+	}
+}
+
+// TestMatchesByCitation is the #852 regression: four markers reproduced from
+// the tree, each naming its OPEN tracker with a `(#N)` the matcher used to be
+// blind to. The marker text is verbatim; the issue carries its real number
+// and title and no body, because against the real full bodies neither
+// heuristic signal fires either — the file path appears in none of them and
+// no minPhraseWords run is shared, which is exactly why all four reported
+// untracked. The stripped sub-case is that state: delete the citation and the
+// pair goes back to matching nothing.
+func TestMatchesByCitation(t *testing.T) {
+	tests := []struct {
+		name   string
+		marker marker
+		issue  issue
+	}{
+		{
+			name: "cvcid.go idAttributes cites #414",
+			marker: marker{
+				Area: "xsd", File: "validate/cvcid.go", Line: 169,
+				Text: "where the governing type is complex and its {attribute uses} were NOT " +
+					"folded, the same attribute may match a use this package cannot see " +
+					"(assess.go's attributePropertiesFolded, #414), so the type read off a " +
+					"top-level declaration — or the absence of one — is not the governing " +
+					"type, and it declines instead.",
+			},
+			issue: issue{
+				Number: 414, State: "OPEN",
+				Title: "xsd: BOTH finalize folds walk the Schema's TYPE DEFINITIONS only",
+			},
+		},
+		{
+			name: "cvcid.go idDefaultedAttributes cites #774",
+			marker: marker{
+				Area: "validate", File: "validate/cvcid.go", Line: 196,
+				Text: "§3.17.5.2's own Note puts one in the ·eligible item set· — \"the use " +
+					"of [schema actual value] ... means that default or fixed value " +
+					"constraints may play a part\" — because cvc-complex-type clause 4 " +
+					"supplies the item and its ·actual value· is the constraint's. This " +
+					"package does not synthesize the item, so the id it would declare is one " +
+					"cvc-id never saw, and clause 1 would charge an empty binding for it " +
+					"(#774).",
+			},
+			issue: issue{
+				Number: 774, State: "OPEN",
+				Title: "validate: the cvc-attribute/cvc-au declines an undecidable value space leaves",
+			},
+		},
+		{
+			name: "cvcid.go idRecord cites #774",
+			marker: marker{
+				Area: "validate", File: "validate/cvcid.go", Line: 290,
+				Text: "a value.ValidateLexical error that is not a VERDICT " +
+					"(value.IsDatatypeVerdict) declines, on cvcattribute.go's terms — an " +
+					"ungoverned type reports under cvc-datatype-valid exactly as a genuine " +
+					"rejection does, and reading one as \"no id here\" would hide a " +
+					"declaration clause 1 charges for the absence of (#774). validatingType's " +
+					"member scan declines on the same class for the same reason.",
+			},
+			issue: issue{
+				Number: 774, State: "OPEN",
+				Title: "validate: the cvc-attribute/cvc-au declines an undecidable value space leaves",
+			},
+		},
+		{
+			name: "cvccomplexcontent.go stringValid cites #774",
+			marker: marker{
+				Area: "validate", File: "validate/cvccomplexcontent.go", Line: 460,
+				Text: "a ValidateLexical error that is not a VERDICT is the same fail-open " +
+					"cvcattribute.go's matchedAttribute states in full, over the same " +
+					"[value.IsDatatypeVerdict] classification: an ungoverned simple type " +
+					"reports under cvc-datatype-valid exactly as a genuine rejection does, " +
+					"and charging it would reject every element whose character content this " +
+					"backend cannot read (#774).",
+			},
+			issue: issue{
+				Number: 774, State: "OPEN",
+				Title: "validate: the cvc-attribute/cvc-au declines an undecidable value space leaves",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := matches(tc.marker, tc.issue); got != matchCited {
+				t.Errorf("matches = %v, want matchCited", got)
+			}
+			if !anyOpenMatch(tc.marker, []issue{tc.issue}) {
+				t.Error("anyOpenMatch = false: the marker still lands in group 1")
+			}
+
+			stripped := tc.marker
+			stripped.Text = citationPattern.ReplaceAllString(stripped.Text, "")
+			if got := matches(stripped, tc.issue); got != matchNone {
+				t.Errorf("with the citation removed, matches = %v, want matchNone"+
+					" (the citation is the only signal tying this pair)", got)
+			}
+		})
+	}
+}
+
+// TestMatchesCitationOutranksResemblance checks the ordering [matches]
+// promises: a marker that cites an issue reports matchCited even where the
+// weaker signals would also have fired, so the report never downgrades a
+// citation to a resemblance.
+func TestMatchesCitationOutranksResemblance(t *testing.T) {
+	m := marker{Area: "xsd", File: "xsd/wildcard.go", Line: 5,
+		Text: "expanded name matching is not yet folded in (#7)"}
+	iss := issue{Number: 7, State: "OPEN", Title: "wildcard gap",
+		Body: "xsd/wildcard.go: expanded name matching is not yet folded in"}
+
+	if got := matches(m, iss); got != matchCited {
+		t.Errorf("matches = %v, want matchCited", got)
+	}
+}
+
+// TestUnresolvedCitationIsReportedNotCalledUntracked is the #852 defect-2
+// case: the documented input is `kind/gap` only, and a marker whose owner
+// carries another label cites a number the fed list cannot contain. The
+// marker still lands in group 1 — nothing open matched it — but with the
+// number it names, so the reader files nothing against it.
+func TestUnresolvedCitationIsReportedNotCalledUntracked(t *testing.T) {
+	markers := []marker{
+		{Area: "validate", File: "validate/assess.go", Line: 685,
+			Text: "an element whose type carries one (#717)."},
+	}
+	issues := []issue{{Number: 999, State: "OPEN", Title: "unrelated", Body: "nothing in common"}}
+
+	rep := reconcile(markers, issues, true)
+	if len(rep.Untracked) != 1 {
+		t.Fatalf("Untracked = %+v, want 1 entry", rep.Untracked)
+	}
+	got := rep.Untracked[0].Unresolved
+	if len(got) != 1 || got[0] != 717 {
+		t.Fatalf("Unresolved = %v, want [717]", got)
+	}
+
+	var buf strings.Builder
+	if err := printReport(&buf, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	if !strings.Contains(buf.String(), "cites #717, absent from the fed list") {
+		t.Errorf("report does not name the unresolved citation:\n%s", buf.String())
+	}
+}
+
+// TestPhraseCollisionDoesNotRetireATracker is the #852 defect-4 regression,
+// reproduced from real text: parser/conditional.go's GAP(parser) marker and
+// issue #921 — a conformance-lane tracker that carries no marker anywhere —
+// share exactly one five-word window, "CLAUDE.md's one rule", because both
+// cite the same line of CLAUDE.md. That collision used to delete #921 from
+// group 2 silently. It must now leave the row standing and print the marker
+// that collided.
+func TestPhraseCollisionDoesNotRetireATracker(t *testing.T) {
+	m := marker{Area: "parser", File: "parser/conditional.go", Line: 208,
+		Text: "vc:maxVersion does not prune. Owned by #1002, which is blocked on a human " +
+			"ruling: downgrading a banked case is not an agent's call (CLAUDE.md's one rule)."}
+	iss := issue{Number: 921, State: "OPEN",
+		Title: "conformance: <current status=\"queried\"> is unmodeled",
+		Body: "Downgrading it is not an agent's call (CLAUDE.md's one rule, " +
+			"`.claude/agents/arbiter.md`'s ratchet-integrity section)."}
+
+	if got := matches(m, iss); got != matchPhrase {
+		t.Fatalf("matches = %v, want matchPhrase (the fixture no longer reproduces the collision)", got)
+	}
+
+	rep := reconcile([]marker{m}, []issue{iss}, true)
+	if len(rep.Stale) != 1 || rep.Stale[0].Issue.Number != 921 {
+		t.Fatalf("Stale = %+v, want #921 still listed", rep.Stale)
+	}
+	if len(rep.Stale[0].Weak) != 1 || rep.Stale[0].Weak[0].File != "parser/conditional.go" {
+		t.Fatalf("Weak = %+v, want the colliding marker named", rep.Stale[0].Weak)
+	}
+
+	var buf strings.Builder
+	if err := printReport(&buf, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	if !strings.Contains(buf.String(), "phrase-matches parser/conditional.go:208 — too weak") {
+		t.Errorf("report does not name the colliding marker:\n%s", buf.String())
+	}
+}
+
+// TestCitationRetiresATracker checks the other direction of the same bar: a
+// marker that CITES an open issue is strong enough to retire it, so a gap
+// whose marker still stands never reports stale.
+func TestCitationRetiresATracker(t *testing.T) {
+	m := marker{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "still open (#7)"}
+	iss := issue{Number: 7, State: "OPEN", Title: "wildcard gap", Body: "unrelated prose"}
+
+	rep := reconcile([]marker{m}, []issue{iss}, true)
+	if len(rep.Stale) != 0 {
+		t.Errorf("Stale = %+v, want none (the marker cites #7)", rep.Stale)
+	}
+	if len(rep.Untracked) != 0 {
+		t.Errorf("Untracked = %+v, want none", rep.Untracked)
+	}
+}
+
+// TestFileMatchRetiresATracker checks that the file-path signal still retires
+// a tracker: only the phrase run was demoted.
+func TestFileMatchRetiresATracker(t *testing.T) {
+	m := marker{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "no owner named here"}
+	iss := issue{Number: 8, State: "OPEN", Title: "wildcard gap", Body: "the site is xsd/wildcard.go"}
+
+	rep := reconcile([]marker{m}, []issue{iss}, true)
+	if len(rep.Stale) != 0 {
+		t.Errorf("Stale = %+v, want none (the issue names the marker's file)", rep.Stale)
+	}
+}
+
+// TestDeadEndDistinguishesCitationFromResemblance is the #852 defect-3 case:
+// a CLOSED issue the marker actually cites is a STYLE P3 dead end and must be
+// repointed; a CLOSED issue that merely shares a phrase is not, and calling
+// it one sends the reader to repoint a marker that never pointed there.
+func TestDeadEndDistinguishesCitationFromResemblance(t *testing.T) {
+	m := marker{Area: "validate", File: "validate/assess.go", Line: 208,
+		Text: "the folded attribute uses of a governing type are not consulted here (#761)"}
+	issues := []issue{
+		{Number: 761, State: "CLOSED", Title: "the cited owner", Body: "unrelated prose entirely"},
+		{Number: 800, State: "CLOSED", Title: "a collision",
+			Body: "the folded attribute uses of a governing type are described here too"},
+	}
+
+	rep := reconcile([]marker{m}, issues, true)
+	if len(rep.Untracked) != 1 {
+		t.Fatalf("Untracked = %+v, want 1 entry", rep.Untracked)
+	}
+	cm := rep.Untracked[0].ClosedMatches
+	if len(cm) != 2 {
+		t.Fatalf("ClosedMatches = %+v, want both", cm)
+	}
+	if cm[0].Issue.Number != 761 || cm[0].Kind != matchCited {
+		t.Errorf("ClosedMatches[0] = %+v, want #761 matchCited", cm[0])
+	}
+	if cm[1].Issue.Number != 800 || cm[1].Kind != matchPhrase {
+		t.Errorf("ClosedMatches[1] = %+v, want #800 matchPhrase", cm[1])
+	}
+
+	var buf strings.Builder
+	if err := printReport(&buf, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "dead end: cites CLOSED #761") {
+		t.Errorf("the cited dead end is not rendered as one:\n%s", out)
+	}
+	if !strings.Contains(out, "resemblance: phrase-matches CLOSED #800") {
+		t.Errorf("a phrase collision is still rendered as a dead end:\n%s", out)
 	}
 }
