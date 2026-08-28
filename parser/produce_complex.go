@@ -2026,10 +2026,12 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 		// (§3.3.3, xmlschema11-1.md:1321), which admits <annotation> and nothing else
 		// under a ref= form: that clause is a numbered constraint of its own, this
 		// walk is the uncataloged §5.1 grammar class, and neither stands in for the
-		// other. Clause 2.2 is charged nowhere in this producer, so an <element
-		// ref="x"><simpleType/></element> is still ACCEPTED here — the content model
-		// has a position for a <simpleType>, and reading this rejection as clause 2.2's
-		// would make that acceptance look like a decision.
+		// other. GAP(parser): clause 2.2 is charged nowhere in this producer, so an
+		// <element ref="x"><simpleType/></element> is still ACCEPTED here — the
+		// content model has a position for a <simpleType>, and reading this
+		// rejection as clause 2.2's would make that acceptance look like a
+		// decision. Unowned: no issue tracks it yet (STYLE P3 requires an issue
+		// reference only when an issue does own the retirement).
 		if err := checkS4SChildOrder(el, s4sElement); err != nil {
 			return nil, err
 		}
