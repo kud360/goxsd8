@@ -38,17 +38,21 @@ func aUse(t *testing.T, local string, required bool, vc *xsd.ValueConstraint) xs
 	return u
 }
 
-// anyWildcard is the ·complete wildcard·: {variety} any, so clause 2.2.1 is
-// satisfied for every name and only cvc-wildcard's own clauses could reject.
-func anyWildcard(t *testing.T) *xsd.Wildcard {
+// anyWildcard is the ·complete wildcard· of the given {process contents}:
+// {variety} any, so clause 2.2.1 is satisfied for every name and only
+// cvc-wildcard's own clauses could reject. {process contents} is a parameter
+// because it decides what an admitted attribute is assessed against
+// (§3.10.4.1), which is a different question from admission and the one
+// icWildcardSchema varies.
+func anyWildcard(t *testing.T, pc xsd.ProcessContents) *xsd.Wildcard {
 	t.Helper()
 	c, err := xsd.NewNamespaceConstraint(xsderr.Loc{}, xsd.NamespaceConstraintAny, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("building the namespace constraint: %v", err)
 	}
-	w, err := xsd.NewWildcard(xsderr.Loc{}, c, xsd.ProcessStrict, nil)
+	w, err := xsd.NewWildcard(xsderr.Loc{}, c, pc, nil)
 	if err != nil {
-		t.Fatalf("building the wildcard: %v", err)
+		t.Fatalf("building the %s wildcard: %v", pc, err)
 	}
 	return &w
 }
@@ -217,9 +221,9 @@ func TestUndeclaredAttributeWithNoWildcardChargesClauseTwo(t *testing.T) {
 // comes from the wildcard and not from an accidental match.
 func TestUndeclaredAttributeWithWildcardIsDeclined(t *testing.T) {
 	uses := []xsd.AttributeUse{aUse(t, "id", false, nil)}
-	got := assessRoot(t, attributedRoot(local("stray")), uses, anyWildcard(t))
+	got := assessRoot(t, attributedRoot(local("stray")), uses, anyWildcard(t, xsd.ProcessStrict))
 	wantSilence(t, got, "clause 2.2.2 needs cvc-wildcard, so clause 2 is undecided")
-	if outcomes := assessOutcomes(t, attributedRoot(local("stray")), uses, anyWildcard(t)); !slices.Equal(outcomes, []string{"2.2/declined"}) {
+	if outcomes := assessOutcomes(t, attributedRoot(local("stray")), uses, anyWildcard(t, xsd.ProcessStrict)); !slices.Equal(outcomes, []string{"2.2/declined"}) {
 		t.Errorf("assessed %v, want the attribute DECLINED under clause 2.2 — not matched to a use", outcomes)
 	}
 
@@ -233,7 +237,7 @@ func TestUndeclaredAttributeWithWildcardIsDeclined(t *testing.T) {
 // whatever the type admits beyond its {attribute uses}, since clause 3 reads
 // only the uses.
 func TestWildcardDoesNotSilenceClauseThree(t *testing.T) {
-	got := assessRoot(t, attributedRoot(), []xsd.AttributeUse{aUse(t, "id", true, nil)}, anyWildcard(t))
+	got := assessRoot(t, attributedRoot(), []xsd.AttributeUse{aUse(t, "id", true, nil)}, anyWildcard(t, xsd.ProcessStrict))
 	wantCharge(t, got, "clause 3", loc(1, 1), "id")
 }
 
@@ -471,7 +475,7 @@ func anonymousRootSchema(t *testing.T, base xsd.QName, derivation xsd.Derivation
 	}
 	baseType, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "Base"}, xsd.QName{}, nil,
 		xsd.DerivationRestriction, false, []xsd.AttributeUse{aUse(t, "fromBase", false, nil)}, nil,
-		anyWildcard(t), xsd.EmptyContent{}, nil, nil, nil)
+		anyWildcard(t, xsd.ProcessStrict), xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("building Base: %v", err)
 	}
@@ -481,7 +485,7 @@ func anonymousRootSchema(t *testing.T, base xsd.QName, derivation xsd.Derivation
 	// here cannot be what makes the assessed case below silent.
 	anyType, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"},
 		xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"}, nil, xsd.DerivationRestriction, false,
-		nil, nil, anyWildcard(t), xsd.EmptyContent{}, nil, nil, nil)
+		nil, nil, anyWildcard(t, xsd.ProcessStrict), xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("building xs:anyType: %v", err)
 	}

@@ -292,6 +292,25 @@ func TestOnlyANilledElementDeclinesTheIDTable(t *testing.T) {
 		icCharge(ruleCvcElt, 4), icChargeAttr(ruleCvcID, 2))
 }
 
+// An attribute a ***skip*** {attribute wildcard} admits has no ·governing·
+// declaration (§3.10.4.1's Note), so cvc-assess-elt clause 2.2 leaves it
+// unassessed and §3.17.5.2 clause 3 keeps it out of the ·eligible item set·:
+// two of them sharing a lexical bind no ·ID value· and cvc-id clause 2 charges
+// nothing (#1043).
+func TestSkipWildcardAttributeBindsNoID(t *testing.T) {
+	twice := icRoot(idItem(2, "wid", "a"), idItem(3, "wid", "a"))
+
+	icWantCharges(t, icAssess(t, icWildcardSchema(t, xsd.ProcessSkip, nil), twice))
+
+	// Strict and lax ·resolve· the same ·expanded name· to the same top-level
+	// xs:ID declaration and DO bind it, which is what makes the silence above a
+	// withheld charge rather than a fixture that declares no id at all.
+	for _, pc := range []xsd.ProcessContents{xsd.ProcessStrict, xsd.ProcessLax} {
+		icWantCharges(t, icAssess(t, icWildcardSchema(t, pc, nil), twice),
+			icChargeAttr(ruleCvcID, 3))
+	}
+}
+
 // The rule ID is the BARE catalog name, with the clause in the message text.
 func TestCvcIDRuleIsTheBareCatalogName(t *testing.T) {
 	if !xsderr.IsValidRule(ruleCvcID) {

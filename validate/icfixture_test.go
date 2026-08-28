@@ -420,6 +420,55 @@ func icUnfoldedSchema(t *testing.T, kidAid, topAid string, rootICs []xsd.Identit
 	return schema
 }
 
+// icWildcardSchema is the third shape, holding the one property the other two
+// fix: <item>'s NAMED type carries NO attribute use at all and an {attribute
+// wildcard} of the given {process contents}, over a top-level declaration of
+// @wid as xs:ID.
+//
+//	root  RootType (named)  sequence( item* )
+//	item  WildType (named)  empty, no attribute uses, {attribute wildcard} pc
+//	top-level               @wid xs:ID
+//
+// Both types are NAMED, so both attribute properties are folded and
+// attributePropertiesFolded holds (#414): pc is the only thing two fixtures
+// built here differ in, which is what makes the ·governing type definition·
+// difference §3.10.4.1 draws between skip and the other two observable.
+func icWildcardSchema(t *testing.T, pc xsd.ProcessContents, rootICs []xsd.IdentityConstraint) *xsd.Schema {
+	t.Helper()
+	seeded := icSeeded(t)
+
+	itemType, err := xsd.NewComplexType(xsderr.Loc{}, xsd.QName{Local: "WildType"}, xsd.QName{}, nil,
+		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t, pc), xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("building WildType: %v", err)
+	}
+	item := icLocal(t, "RootType", xsd.QName{Local: "item"}, xsd.QName{Local: "WildType"}, false, nil)
+	rootType := icComplex(t, "RootType", nil, icContent(t, icRepeated(t, item)))
+	root, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
+		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "RootType"}}, nil, xsd.NewGlobalScope(),
+		nil, false, rootICs, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+
+	b := xsd.NewSchemaBuilder()
+	for _, st := range seeded {
+		b.AddType(st)
+	}
+	b.AddType(itemType)
+	b.AddType(rootType)
+	b.AddElement(root)
+	b.AddAttribute(icTopAttribute(t, "wid", "ID"))
+	for _, ic := range rootICs {
+		b.AddIdentityConstraint(ic)
+	}
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the wildcard schema: %v", err)
+	}
+	return schema
+}
+
 // icKid is <kid> at line, carrying the named no-namespace attributes, in
 // icItem's own curried shape: names first, values applied.
 func icKid(line int, names ...string) func(...string) *testElement {

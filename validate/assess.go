@@ -674,8 +674,9 @@ func (w *walk) attribute(a Attribute, e Element, governing *xsd.ComplexType) {
 // cvc-attribute clause 3 against the top-level declaration its ·expanded name·
 // ·resolves· to, and [walk.matchedAttribute] never sees it. Under ***skip***
 // §3.10.4.1's Note leaves the item with no ·governing· declaration and nothing
-// is assessed; the recording call is deliberately not gated on {process
-// contents} all the same, for the reason its own doc gives (#1043).
+// is assessed, which [walk.attributeType] acts on (#1043); the recording call
+// is deliberately not gated on {process contents} all the same, for the reason
+// its own doc gives.
 func (w *walk) unmatchedAttribute(a Attribute, governing xsd.ComplexType) {
 	if _, wild := governing.AttributeWildcard(); wild {
 		// GAP(validate): clause 2.2.1 holds, but clause 2.2 is a conjunction

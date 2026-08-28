@@ -302,13 +302,14 @@ func TestBothRulesRecordAtOneElement(t *testing.T) {
 
 // An attribute matching no {attribute use} is left to an {attribute wildcard}
 // this package does not evaluate, so [walk.matchedAttribute] never runs for it
-// — but cvcid.go and cvcidentityconstraint.go decide its lexical against the
-// type of the top-level declaration its name ·resolves· to, which is a site
-// with no other recording path. The recording follows that pipeline for every
-// {process contents}, skip included (#1043).
+// — but under a strict or a lax wildcard cvcid.go and cvcidentityconstraint.go
+// decide its lexical against the type of the top-level declaration its name
+// ·resolves· to, which is a site with no other recording path. The recording
+// runs under skip too, where nothing decides that lexical any more (#1043), for
+// the reason [walk.wildcardAttributeAssertions] gives.
 func TestWildcardAttributeAssertionsAreRecorded(t *testing.T) {
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, local("RootType"), xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t), xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t, xsd.ProcessStrict), xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
 	}
