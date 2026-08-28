@@ -66,7 +66,8 @@ func TestAttributeGroupComponentAndInlineFoldAgree(t *testing.T) {
 		t.Fatalf("buildAttributeGroup: %v", err)
 	}
 	tName := xsd.QName{Space: "urn:x", Local: "T"}
-	inlined, _, _, err := rootp.produceAttributeUses(childElement(rootp.schemaElem, xsd.XMLSchemaNS, "complexType"),
+	ctElem := childElement(rootp.schemaElem, xsd.XMLSchemaNS, "complexType")
+	inlined, _, _, err := rootp.produceAttributeUses(ctElem, ctElem,
 		attributeScopeParentOf(namedComplexType{name: tName}))
 	if err != nil {
 		t.Fatalf("produceAttributeUses: %v", err)
