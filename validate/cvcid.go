@@ -565,6 +565,12 @@ var (
 // such attributes sharing a lexical bind no ·ID value· between them, so cvc-id
 // clause 2 charges no duplicate for them (#1043).
 //
+// That test asks nothing of cvc-wildcard, which this package does not evaluate
+// (#717): a complex type carries at most one {attribute wildcard}, so where the
+// only one is skip the attribute is either ·attributed· to it — the Note's case
+// — or ·attributed· to nothing at all, and neither leaves it a ·governing·
+// declaration.
+//
 // The wildcard arm is otherwise taken WITHOUT checking that a wildcard is
 // present, and that is deliberate rather than an omission: an attribute
 // matching neither a use nor a wildcard already violates cvc-complex-type

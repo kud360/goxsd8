@@ -210,12 +210,15 @@ func (w *walk) ownAssertionSites(st *xsd.SimpleType, loc xsderr.Loc) []Unevaluat
 // resolution only for an item ·attributed to· a strict or lax wildcard, so a
 // skipped item has NO ·governing· declaration, cvc-assess-elt (§3.3.4.6)
 // clause 2.2 leaves its schema-validity unassessed, and no facet of any type is
-// reached over its lexical. This call is nonetheless DELIBERATELY NOT GATED on
-// {process contents}, because [walk.topLevelAttributeType] is not either
-// (#1043): what is recorded tracks what this package REACHES, and gating the
-// record alone would claim a precision the pipeline it reports on does not
-// have. Under skip the record is therefore an over-report, in the direction
-// this file's header states — a decline, never a charge.
+// reached over its lexical. [walk.attributeType] declines such an attribute for
+// exactly that reason (#1043), so under skip cvcid.go and
+// cvcidentityconstraint.go no longer decide its lexical against anything. This
+// call is DELIBERATELY NOT GATED on {process contents} all the same: dropping
+// the record would make [Result.Unevaluated] a claim about WHICH wildcard
+// admitted the item, which is cvc-wildcard's question and one this package does
+// not evaluate at all (#717, assess.go's unmatchedAttribute). Under skip the
+// record is therefore an over-report, in the direction this file's header
+// states — a decline, never a charge.
 //
 // An attribute the schema resolves no top-level declaration for records
 // nothing: it has no ·governing type definition·, so §3.17.5.2 clause 3
