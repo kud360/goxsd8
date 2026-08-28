@@ -154,7 +154,7 @@ func (s *Schema) foldComponentAttributeUses(f *attributeUseFold, c ComplexType, 
 	if !ok {
 		return c // clause 3.3: no complex {base type definition} to inherit from
 	}
-	c.attributeUses = inheritAttributeUses(c.attributeUses, base, c.DerivationMethod(), c.prohibitedAttributeNames)
+	c.attributeUses = s.inheritAttributeUses(c.attributeUses, base, c.DerivationMethod(), c.prohibitedAttributeNames)
 	return c
 }
 
@@ -207,13 +207,18 @@ func (s *Schema) baseAttributeUses(f *attributeUseFold, c ComplexType, i int) ([
 // {attribute uses}, method selects the case, and prohibited is the expanded names
 // the deriving type's own source gave use="prohibited".
 //
-//   - clause 3.1 (extension): every member of base is inherited, unconditionally.
-//     A name the extension also declares itself therefore appears TWICE, which is
-//     precisely what ct-props-correct clause 4 forbids and charges
-//     (checkAttributeUseNamesUnique) — an extension may add attributes, never
-//     re-declare the base's. prohibited is ignored on this branch, exactly as
-//     §3.4.2.4's Note directs: use="prohibited" outside a restriction is
-//     "pointless, though not an error", and the <attribute> "is simply ignored".
+//   - clause 3.1 (extension): every member of base is inherited, EXCEPT one whose
+//     properties, recursively, are identical to a member the fold already holds.
+//     §3.4.2.4 builds this property as "a union of SETS of attribute uses", and a
+//     member reached twice — once by clause 1 or 2, once by clause 3.1 from a base
+//     that folded the same <attributeGroup ref> — is one member of that union, not
+//     two (#1082). ct-props-correct clause 4 forbids "no two DISTINCT members"
+//     with one expanded name, and what still reaches it (checkAttributeUseNamesUnique)
+//     is a re-declaration that is value-DISTINCT: an extension may add attributes
+//     and may restate the base's identically, but may not re-declare one
+//     differently. prohibited is ignored on this branch, exactly as §3.4.2.4's
+//     Note directs: use="prohibited" outside a restriction is "pointless, though
+//     not an error", and the <attribute> "is simply ignored".
 //   - clause 3.2 (restriction): every member of base is inherited EXCEPT one whose
 //     {attribute declaration}'s expanded name is either already in own — clause
 //     3.2.1's "already been included in the set, following the rules in clause 1
@@ -222,59 +227,105 @@ func (s *Schema) baseAttributeUses(f *attributeUseFold, c ComplexType, i int) ([
 //     simple, or unresolvable never yields a position, so this function is not
 //     called at all.
 //
+// The two exclusions are DIFFERENT relations and stay apart. Clause 3.2.1's is
+// the expanded NAME, unconditionally: a restriction's own declaration displaces
+// the base's whatever their properties, which is what restricting one means.
+// Clause 3.1's is property identity, which admits strictly less: a member that
+// shares only a name is a member the extension added, and clause 4 charges it.
+// One helper taking the test as a parameter would give the two rules one
+// encoding and no reader a place to see they differ.
+//
+// The identity test bottoms out at COMPONENT IDENTITY and never reads {attribute
+// uses} (attributeUsesIdentical, complexextension.go). That is what makes it safe
+// HERE: it reaches s.ResolvedType and so s.typeIndex, which until
+// storeFoldedAttributeUses runs still hold the producer's partial value. An
+// identity test widened to compare a folded property would make this fold read
+// its own half-written output.
+//
 // The result is a slice in document order — own uses first, then the base's, each
 // in its own document order — and no map takes part (STYLE D2). own is copied
 // rather than appended to, so the component's backing array is never aliased into
 // a longer slice.
-func inheritAttributeUses(own, base []AttributeUse, method DerivationMethod, prohibited []QName) []AttributeUse {
+func (s *Schema) inheritAttributeUses(own, base []AttributeUse, method DerivationMethod, prohibited []QName) []AttributeUse {
 	folded := append(make([]AttributeUse, 0, len(own)+len(base)), own...)
 	for _, u := range base {
 		name := u.DeclarationName()
 		if method == DerivationRestriction && (hasAttributeUseNamed(own, name) || slices.Contains(prohibited, name)) {
 			continue // clause 3.2.1, clause 3.2.2
 		}
+		if method == DerivationExtension && s.hasAttributeUseIdentical(folded, u) {
+			continue // clause 3.1: one member of the union, reached twice
+		}
 		folded = append(folded, u) // clause 3.1, and clause 3.2 otherwise
 	}
 	return folded
 }
 
-// ownAttributeUses inverts inheritAttributeUses' EXTENSION branch: given an
-// extension-derived Complex Type Definition c and its resolved {base type
-// definition} b, both with §3.4.2.4 clause 3 already folded into them, it
-// recovers the uses clauses 1 and 2 gave c ITSELF — what the producer mapped from
-// c's own <attribute> and <attributeGroup ref> children, before clause 3 folded
-// the base's in. cos-ct-extends clause 1.5's collapse needs it, because the
-// re-ordering re-applies each extension step's own contribution against a
-// DIFFERENT base (collapsedintermediate.go).
+// ownAttributeUses answers what ONE extension step contributes to the collapsed
+// intermediate cos-ct-extends clause 1.5 needs: given an extension-derived
+// Complex Type Definition c and its resolved {base type definition} b, both with
+// §3.4.2.4 clause 3 already folded into them, it returns the uses the collapse
+// re-applies for c over a DIFFERENT base (collapsedintermediate.go). false is
+// the caller's decline: c's folded set is not one clause 3.1 could have built
+// over b's.
 //
-// The recovery is POSITIONAL and exact. inheritAttributeUses builds
+// It returns c's WHOLE folded set, OVER-APPROXIMATING the uses clauses 1 and 2
+// gave c itself, because clause 3.1's fold
 //
-//	folded(c) = own(c) ++ folded(b)
+//	folded(c) = own(c) ++ [u in folded(b) : u identical to no member of own(c)]
 //
-// as a value SEQUENCE — the extension branch appends every member of the base
-// set unconditionally, in order, after a copy of own — so own(c) is precisely the
-// leading len(folded(c)) - len(folded(b)) members. Each step folds against its
-// own immediate base alone, so no history perturbs the arithmetic: for
-// A ←ext E1 ←restr R ←ext E2 the identity holds for E2 over R whatever R dropped.
+// is not invertible: own(c) = [y], [y,x] and [y,x,z] over folded(b) = [x,z] all
+// fold to [y,x,z], so no function of folded(c) and folded(b) can tell them
+// apart. Replaying that fold over every prefix P of folded(c) and keeping the
+// prefixes it reproduces folded(c) from leaves exactly that family, and
+// P = folded(c) is always its LARGEST member: every member of folded(b) is
+// identical to some member of folded(c) — clause 3.1 either carried it forward,
+// or the own member that displaced it is identical to it — so replaying
+// folded(c) drops all of folded(b) and reproduces folded(c) memberwise. The loop
+// below is that statement, which is also cos-ct-extends clause 1.2's subset test
+// (checkExtensionAttributeUses), and the decline it gives is exact: a member of
+// folded(b) identical to nothing in folded(c) is dropped by no replay and stands
+// in no tail, so no SHORTER prefix reproduces folded(c) either.
 //
-// THIS IS A COUPLING TO inheritAttributeUses' EXACT CONCATENATION ORDER, not to
-// the set it produces. A fold that put the base's members first, or interleaved
-// them, would silently make this recovery return the wrong prefix — so the tail
-// is VERIFIED against folded(b) name for name before the prefix is trusted, and a
-// mismatch DECLINES (false) rather than guessing. Any edit to the extension
-// branch of inheritAttributeUses is an edit here, and
-// TestOwnAttributeUsesMixedChain is what fails when only one of the two moves.
-func ownAttributeUses(c, b ComplexType) ([]AttributeUse, bool) {
-	if len(c.attributeUses) < len(b.attributeUses) {
-		return nil, false
-	}
-	ownCount := len(c.attributeUses) - len(b.attributeUses)
-	for i, u := range b.attributeUses {
-		if c.attributeUses[ownCount+i].DeclarationName() != u.DeclarationName() {
+// The identity relation is attributeUsesIdentical, never DeclarationName: the
+// members the fold drops are dropped for being identical, and a name comparison
+// reports the drop where none happened. The positional len(folded(c)) -
+// len(folded(b)) prefix this replaced compared names, and returned the EMPTY set
+// for own [x] over base [x] — the shape #1082's dedup makes reachable.
+//
+// GAP(xsd): taking the largest of the family is a CHOICE, not a recovery, and it
+// is not fail-open against every reader. What it over-reports is members of
+// folded(b), and collapsedAttributeUses drops each one whose expanded name the
+// collapse already carries — so an over-report survives into M only for a name
+// that reached b through a step the re-ordering dropped, which is the case
+// taking the SMALLEST would lose. Over M's readers, all reached through
+// checkDerivationOKRestriction(t, M):
+//
+//   - checkAttributeRestriction (attributerestriction.go) looks each of T's uses
+//     up in M: an extra member can only turn a "neither declares nor admits"
+//     rejection into a binding, and then compares that binding for ·subsumption·,
+//     which an extra member CAN fail where M's wildcard would have satisfied it.
+//   - checkAttributeRestrictionWildcard exempts the names BOTH sides carry
+//     (sharedAttributeUseNames), so an extra member exempts more: fail-open.
+//   - checkAttributeRestrictionRequired charges a REQUIRED member of M that T
+//     carries no use for, so an extra required member T lacks is a false
+//     reject — fail-CLOSED, and the price of the choice.
+//   - duplicateAttributeUseName and restrictionFromCollapseIsVacuous
+//     (complexextension.go) read M's set too. The first cannot see an extra
+//     member: collapsedAttributeUses drops every own member whose name the
+//     collapse holds, so M stays name-unique. The second only declines the
+//     vacuous shortcut, which decides nothing on its own.
+//
+// Taking the smallest is fail-closed at the same checkAttributeRestriction arm
+// instead, on a use that reached b through a re-ordered-away restriction step,
+// so neither direction is uniformly open; the largest is the one this tree takes.
+func (s *Schema) ownAttributeUses(c, b ComplexType) ([]AttributeUse, bool) {
+	for _, u := range b.attributeUses {
+		if !s.hasAttributeUseIdentical(c.attributeUses, u) {
 			return nil, false
 		}
 	}
-	return c.attributeUses[:ownCount], true
+	return c.attributeUses, true
 }
 
 // hasAttributeUseNamed reports whether the set already carries an attribute use
@@ -283,6 +334,25 @@ func ownAttributeUses(c, b ComplexType) ([]AttributeUse, bool) {
 func hasAttributeUseNamed(uses []AttributeUse, name QName) bool {
 	_, ok := findAttributeUse(uses, name)
 	return ok
+}
+
+// hasAttributeUseIdentical reports whether the set already carries a member whose
+// properties, recursively, are identical to u's — cos-ct-extends clause 1.2's
+// relation, decided by attributeUsesIdentical (complexextension.go), which is the
+// spec's one notion of sameness between two attribute uses.
+//
+// It is the value-keyed sibling of hasAttributeUseNamed over the same
+// document-order scan (STYLE T4), and the two are NOT interchangeable. A member
+// that shares only an expanded name is a DIFFERENT member — "no two DISTINCT
+// members" is what ct-props-correct clause 4 forbids — so the value test admits
+// pairs the name test would reject, and rejects none it admits.
+func (s *Schema) hasAttributeUseIdentical(uses []AttributeUse, u AttributeUse) bool {
+	for _, have := range uses {
+		if s.attributeUsesIdentical(have, u) {
+			return true
+		}
+	}
+	return false
 }
 
 // storeFoldedAttributeUses writes each folded component back into the schema.

@@ -57,10 +57,14 @@ func TestComplexDerivationRejectionsCiteTheOffendingType(t *testing.T) {
 			under: `<xs:complexType name="R"><xs:complexContent><xs:restriction base="xs:string"/></xs:complexContent></xs:complexType>`,
 			want:  "ct-props-correct clause 2 requires extension"},
 
+		// R's own @a is typed differently from B's, which is what makes the two uses
+		// DISTINCT members: clause 3.1 collapses a re-declaration whose properties are
+		// recursively identical to the inherited one (#1082), so an @a of xs:string on
+		// both sides would reach no charge at all.
 		{site: "checkAttributeUseNamesUnique: ct-props-correct clause 4",
 			rule:  "ct-props-correct",
 			base:  `<xs:complexType name="B"><xs:attribute name="a" type="xs:string"/></xs:complexType>`,
-			under: `<xs:complexType name="R"><xs:complexContent><xs:extension base="tns:B"><xs:attribute name="a" type="xs:string"/></xs:extension></xs:complexContent></xs:complexType>`,
+			under: `<xs:complexType name="R"><xs:complexContent><xs:extension base="tns:B"><xs:attribute name="a" type="xs:int"/></xs:extension></xs:complexContent></xs:complexType>`,
 			want:  `share the expanded name a, but ct-props-correct clause 4 forbids it`},
 
 		{site: "checkRestrictionBaseFinal: derivation-ok-restriction clause 1",

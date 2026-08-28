@@ -790,7 +790,11 @@ func TestProduceExtensionBaseMappedExactlyOnce(t *testing.T) {
 //
 // The prohibition-free row is the control: with B inheriting @x silently, E's
 // re-declaration IS the clause 4 collision and must still be charged, so the
-// first row cannot be bought by weakening the uniqueness check.
+// first row cannot be bought by weakening the uniqueness check. E declares its
+// @x use="required" where A's is optional in both rows, which is what keeps that
+// collision two DISTINCT members: clause 3.1 holds a re-declaration whose
+// properties are recursively identical to the inherited one once (#1082), and
+// only a value-distinct one reaches clause 4.
 func TestProhibitedAttributeNotInheritedPastRestriction(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -798,7 +802,7 @@ func TestProhibitedAttributeNotInheritedPastRestriction(t *testing.T) {
 		wantRule   xsderr.Rule
 	}{
 		{"B prohibits @x, so E may declare its own", `<xs:attribute ref="x" use="prohibited"/>`, ""},
-		{"B inherits @x silently, so E may not re-declare it", ``, xsderr.Rule("ct-props-correct")},
+		{"B inherits @x silently, so E may not re-declare it differently", ``, xsderr.Rule("ct-props-correct")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body := `<xs:attribute name="x" type="xs:string"/>` +
@@ -807,7 +811,7 @@ func TestProhibitedAttributeNotInheritedPastRestriction(t *testing.T) {
 				`<xs:sequence/>` + tc.bProhibits +
 				`</xs:restriction></xs:complexContent></xs:complexType>` +
 				`<xs:complexType name="E"><xs:complexContent><xs:extension base="B">` +
-				`<xs:sequence/><xs:attribute ref="x"/>` +
+				`<xs:sequence/><xs:attribute ref="x" use="required"/>` +
 				`</xs:extension></xs:complexContent></xs:complexType>`
 			s, err := produce(t, wrap("", body))
 			if tc.wantRule != "" {
@@ -822,6 +826,59 @@ func TestProhibitedAttributeNotInheritedPastRestriction(t *testing.T) {
 			}
 			if got := attributeUseLocals(t, s, xsd.QName{Local: "E"}); !reflect.DeepEqual(got, []string{"x"}) {
 				t.Errorf("E.{attribute uses} = %v, want exactly [x]", got)
+			}
+		})
+	}
+}
+
+// TestExtensionAndBaseFoldTheSameAttributeGroup is the end-to-end §3.4.2.4 "union
+// of SETS" repro (#1082): a base and its extension each write ONE
+// <xs:attributeGroup ref="g"/>, so the group's attribute use reaches the
+// extension twice — by its own clause 2 fold, and by clause 3.1 inheriting the
+// base's already-folded set. The two are the same member, reached twice, so T
+// carries it ONCE and ct-props-correct clause 4 has no two DISTINCT members to
+// charge. The schema is valid, and both content forms map it by a different
+// producer path.
+//
+// The collision row is the control, and it is what stops the acceptance from
+// being bought by weakening clause 4: T declares its own @a of a DIFFERENT type
+// beside the same group's, which is two distinct members under one expanded name
+// and is still rejected.
+func TestExtensionAndBaseFoldTheSameAttributeGroup(t *testing.T) {
+	const group = `<xs:attributeGroup name="g"><xs:attribute name="a" type="xs:string"/></xs:attributeGroup>`
+	for _, tc := range []struct {
+		name     string
+		body     string
+		wantUses []string
+	}{
+		{"complexContent extension", group +
+			`<xs:complexType name="B"><xs:sequence/><xs:attributeGroup ref="g"/></xs:complexType>` +
+			`<xs:complexType name="T"><xs:complexContent><xs:extension base="B">` +
+			`<xs:sequence/><xs:attributeGroup ref="g"/></xs:extension></xs:complexContent></xs:complexType>`,
+			[]string{"a"}},
+		{"simpleContent extension", group +
+			`<xs:complexType name="B"><xs:simpleContent><xs:extension base="xs:string">` +
+			`<xs:attributeGroup ref="g"/></xs:extension></xs:simpleContent></xs:complexType>` +
+			`<xs:complexType name="T"><xs:simpleContent><xs:extension base="B">` +
+			`<xs:attributeGroup ref="g"/></xs:extension></xs:simpleContent></xs:complexType>`,
+			[]string{"a"}},
+		{"the group's use and a distinct own declaration of its name", group +
+			`<xs:complexType name="B"><xs:sequence/><xs:attributeGroup ref="g"/></xs:complexType>` +
+			`<xs:complexType name="T"><xs:complexContent><xs:extension base="B">` +
+			`<xs:sequence/><xs:attribute name="a" type="xs:int"/></xs:extension></xs:complexContent></xs:complexType>`,
+			nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := produce(t, wrap("", tc.body))
+			if tc.wantUses == nil {
+				assertRule(t, err, xsderr.Rule("ct-props-correct"))
+				return
+			}
+			if err != nil {
+				t.Fatalf("a base and an extension folding one attribute group were rejected: %v", err)
+			}
+			if got := attributeUseLocals(t, s, xsd.QName{Local: "T"}); !reflect.DeepEqual(got, tc.wantUses) {
+				t.Errorf("T.{attribute uses} = %v, want %v — the union of sets holds the twice-reached member once", got, tc.wantUses)
 			}
 		})
 	}

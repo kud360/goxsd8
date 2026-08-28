@@ -24,8 +24,8 @@ import "github.com/kud360/goxsd8/xsderr"
 // each property is recovered by inverting its own fold, and each inversion states
 // its exactness or its approximation where it is written:
 //
-//   - {attribute uses}: EXACT, by ownAttributeUses' positional prefix
-//     (attributeusefold.go).
+//   - {attribute uses}: OVER-approximated, deliberately — ownAttributeUses
+//     (attributeusefold.go), whose fold is not invertible.
 //   - {content type}: EXACT for every source-derived component, by
 //     recoverExtensionStepContent's structural inverse (extensioncontenttype.go),
 //     which DECLINES rather than guesses on a shape the merge does not build.
@@ -110,7 +110,7 @@ func (s *Schema) applyExtensionStep(loc xsderr.Loc, acc collapsedProperties, c C
 	if !ok {
 		return collapsedProperties{}, false, nil
 	}
-	own, ok := ownAttributeUses(c, b)
+	own, ok := s.ownAttributeUses(c, b)
 	if !ok {
 		return collapsedProperties{}, false, nil
 	}
@@ -123,7 +123,7 @@ func (s *Schema) applyExtensionStep(loc xsderr.Loc, acc collapsedProperties, c C
 		return collapsedProperties{}, false, err
 	}
 	return collapsedProperties{
-		uses:     collapsedAttributeUses(own, acc.uses),
+		uses:     s.collapsedAttributeUses(own, acc.uses),
 		wildcard: wildcard,
 		content:  content,
 	}, true, nil
@@ -134,6 +134,11 @@ func (s *Schema) applyExtensionStep(loc xsderr.Loc, acc collapsedProperties, c C
 // that fold), with ONE thing the re-ordering forces and the real chain never
 // meets: an own use for a name the collapse ALREADY carries is dropped, and the
 // inherited one stands.
+//
+// That drop carries a second load: own is ownAttributeUses' OVER-approximation,
+// which holds the step's own uses and the base members it cannot separate from
+// them, and the names the collapse already carries are how the base members that
+// reached the step through an extension are filtered back out.
 //
 // It is dropped because no legal intermediate can hold both. Clause 3.1 inherits
 // every base use unconditionally, so an extension of the collapse-so-far that
@@ -160,7 +165,12 @@ func (s *Schema) applyExtensionStep(loc xsderr.Loc, acc collapsedProperties, c C
 // T is checked against M. An identical re-declaration passes both; a conflicting
 // type or value constraint fails one of them, and clause 1.5 charges. Rejecting on
 // the collision itself would fail the compatible case, which is a valid schema.
-func collapsedAttributeUses(own, acc []AttributeUse) []AttributeUse {
+//
+// Clause 3.1's own dedup (inheritAttributeUses, #1082) never fires on this path
+// and needs no guard here: the drop above is by NAME, so no member of acc that
+// survives to be inherited can be identical to a kept own member — identity
+// implies the shared name that would have dropped it.
+func (s *Schema) collapsedAttributeUses(own, acc []AttributeUse) []AttributeUse {
 	kept := make([]AttributeUse, 0, len(own))
 	for _, u := range own {
 		if hasAttributeUseNamed(acc, u.DeclarationName()) {
@@ -168,7 +178,7 @@ func collapsedAttributeUses(own, acc []AttributeUse) []AttributeUse {
 		}
 		kept = append(kept, u)
 	}
-	return inheritAttributeUses(kept, acc, DerivationExtension, nil) // §3.4.2.4 clause 3.1
+	return s.inheritAttributeUses(kept, acc, DerivationExtension, nil) // §3.4.2.4 clause 3.1
 }
 
 // collapsedAttributeWildcard folds one extension step's {attribute wildcard} into

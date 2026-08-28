@@ -166,15 +166,16 @@ func checkExtensionBaseFinal(t, b ComplexType) error {
 // ·subsumption·; reusing the looser relation would decide a different constraint.
 //
 // NEITHER rejection below is reachable through Finalize, and the reason is the
-// fold, so it is stated rather than assumed. Clause 3.1 makes T.{attribute uses}
-// the concatenation of T's own uses with B's ENTIRE materialised set, member for
-// member, so the clause's set-inclusion half holds BY CONSTRUCTION: the lookup
-// cannot miss, and what it finds for a name T does not declare itself IS U, so
-// the identity comparison cannot fail either. The remaining shape — T re-declares
-// the name with different properties — leaves T holding two uses for it, which
-// ct-props-correct clause 4 charges earlier in the same pass
-// (checkCTPropsCorrectResolved runs before checkComplexTypeExtension for a given
-// type, checkComplexDerivations).
+// fold, so it is stated rather than assumed. Clause 3.1 unions B's ENTIRE
+// materialised set into T's own uses, dropping only a member of B's that is
+// already there IDENTICALLY (attributeusefold.go, #1082), so the clause's
+// set-inclusion half holds BY CONSTRUCTION: the lookup cannot miss, and what it
+// finds for a name T does not declare itself IS U — or, for the dropped member,
+// is identical to U — so the identity comparison cannot fail either. The
+// remaining shape — T re-declares the name with different properties — leaves T
+// holding two uses for it, which ct-props-correct clause 4 charges earlier in the
+// same pass (checkCTPropsCorrectResolved runs before checkComplexTypeExtension
+// for a given type, checkComplexDerivations).
 //
 // It is kept because it is the executable statement of clause 1.2 AND the guard
 // on the fold's clause 3.1 arm: a fold that stopped copying B's uses forward
@@ -768,9 +769,22 @@ func (s *Schema) extensionAllGroupPrefix(e, b Particle) bool {
 // descend into is the inline value tree of a model group's {particles}, which is
 // a finite tree by construction because it follows no reference.
 //
-// Properties NOT compared are listed at each predicate. Every omission makes the
-// relation LOOSER, i.e. reports MORE pairs identical, and since both consumers
-// read "identical" as "the clause is satisfied", every omission is FAIL-OPEN.
+// Properties NOT compared are listed at each predicate, and every omission makes
+// the relation LOOSER: it reports MORE pairs identical. The direction that has is
+// per reader, and attributeUsesIdentical has two beyond this file's:
+//
+//   - cos-ct-extends clause 1.2 (checkExtensionAttributeUses) and
+//     cos-particle-extend (particleValidExtension) read "identical" as the clause
+//     being SATISFIED, so a looser relation accepts more: FAIL-OPEN.
+//   - §3.4.2.4 clause 3.1's fold collapses an identical pair into one member of
+//     its union of sets (inheritAttributeUses, attributeusefold.go). A looser
+//     relation collapses more, which can only WITHHOLD a ct-props-correct clause
+//     4 charge, never invent one: FAIL-OPEN.
+//   - ownAttributeUses (attributeusefold.go) verifies an extension step against
+//     its base with it, and its decline is what makes cos-ct-extends clause 1.5
+//     accept UNDECIDED. A looser relation declines less, so more of clause 1.5 is
+//     decided and a charge becomes reachable: FAIL-CLOSED, and the one reader
+//     where a widening of these predicates is not free.
 
 // attributeUsesIdentical decides property identity between two Attribute Uses
 // (§3.5.1): {required}, {value constraint} (presence, {variety} and {lexical

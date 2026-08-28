@@ -247,17 +247,23 @@ func TestAttributeUsesFoldProhibitedIgnoredOnExtension(t *testing.T) {
 // never wrote.
 //
 // The second row is the control that keeps the first honest: with no prohibition
-// in the chain, an extension that re-declares a name its base really does carry
-// is still rejected. Without it, "accepts E" could be bought by disabling the
-// clause-4 check altogether.
+// in the chain, an extension that re-declares a name its base really does carry,
+// with a use that is NOT identical to the inherited one, is still rejected.
+// Without it, "accepts E" could be bought by disabling the clause-4 check
+// altogether. Its @x is {required} where A's is optional, which is the whole of
+// the difference — clause 3.1 collapses a re-declaration only when every property
+// matches recursively (#1082, TestExtensionFoldsOneMemberForAnIdenticalUse).
 func TestCTPropsCorrectExtensionOverProhibitingRestriction(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		b          ComplexType
+		eUse       AttributeUse
 		wantReject bool
 	}{
-		{"B prohibits @x, so E may declare its own", dProhibiting(t, uq("B"), uq("A"), nil, []QName{uq("x")}), false},
-		{"B inherits @x silently, so E may not re-declare it", dType(t, uq("B"), uq("A"), EmptyContent{}, nil, nil), true},
+		{"B prohibits @x, so E may declare its own", dProhibiting(t, uq("B"), uq("A"), nil, []QName{uq("x")}),
+			dAttr(t, uq("x"), uq("str")), false},
+		{"B inherits @x silently, so E may not re-declare it differently", dType(t, uq("B"), uq("A"), EmptyContent{}, nil, nil),
+			dAttrUse(t, uq("x"), uq("str"), true, nil), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := dFinalize(t, func(b *SchemaBuilder) {
@@ -265,7 +271,7 @@ func TestCTPropsCorrectExtensionOverProhibitingRestriction(t *testing.T) {
 					[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, nil))
 				b.AddType(tc.b)
 				b.AddType(xType(t, uq("E"), uq("B"), EmptyContent{},
-					[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, nil))
+					[]AttributeUse{tc.eUse}, nil))
 			})
 			if !tc.wantReject {
 				if err != nil {
@@ -276,6 +282,43 @@ func TestCTPropsCorrectExtensionOverProhibitingRestriction(t *testing.T) {
 			expectRule(t, err, ruleCTPropsCorrect)
 		})
 	}
+}
+
+// TestExtensionFoldsOneMemberForAnIdenticalUse pins §3.4.2.4's "union of SETS":
+// a member reached by clause 1 or 2 AND by clause 3.1 from a base that already
+// carries it is ONE member of the union, so ct-props-correct clause 4 — "no two
+// DISTINCT members" — has nothing to charge (#1082).
+//
+// The two E types differ in ONE property of their own @x and in nothing else.
+// Identical to A's, it collapses and E holds a single use for x; {required} where
+// A's is optional, it is a second member and the clause charges. A fold that
+// collapsed by expanded name instead would have to accept the second one too.
+//
+// That rejection is what makes the acceptance worth something: the dedup is keyed
+// on cos-ct-extends clause 1.2's recursive property identity
+// (attributeUsesIdentical), never on the name, so it cannot swallow the
+// re-declaration clause 4 exists to catch.
+func TestExtensionFoldsOneMemberForAnIdenticalUse(t *testing.T) {
+	types := func(eX AttributeUse) func(*SchemaBuilder) {
+		return func(b *SchemaBuilder) {
+			b.AddType(dType(t, uq("A"), anyTypeName, EmptyContent{},
+				[]AttributeUse{dAttr(t, uq("x"), uq("str"))}, nil))
+			b.AddType(xType(t, uq("E"), uq("A"), EmptyContent{},
+				[]AttributeUse{eX, dAttr(t, uq("y"), uq("str"))}, nil))
+		}
+	}
+	identical := types(dAttr(t, uq("x"), uq("str")))
+	if err := dFinalize(t, identical); err != nil {
+		t.Fatalf("an extension whose own @x is identical to the inherited one was rejected: %v", err)
+	}
+	s := xSchema(t, func(b *SchemaBuilder) {
+		b.AddType(dPrimitive(t, uq("str")))
+		identical(b)
+	})
+	if got := fUses(t, s, uq("E")); !fEqual(got, []string{"x", "y"}) {
+		t.Fatalf("{attribute uses} of E = %v, want [x y] — the union holds the twice-reached member once", got)
+	}
+	expectRule(t, dFinalize(t, types(dAttrUse(t, uq("x"), uq("str"), true, nil))), ruleCTPropsCorrect)
 }
 
 // TestDerivationOKRestrictionProhibitedRequired pins the charge clause 3.2.2

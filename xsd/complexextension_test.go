@@ -140,11 +140,14 @@ func TestCosCTExtendsClause11Passes(t *testing.T) {
 //
 // The two rejecting rows are charged ct-props-correct clause 4, NOT c-cte, and
 // that is the spec's own routing rather than an accident of ordering: clause 3.1
-// inherits the base's uses UNCONDITIONALLY, so re-declaring the name leaves the
-// extension holding two uses for it, which clause 4 forbids outright — an
-// extension may add attributes, never restate the base's, whether or not the
-// restatement is identical. Before §3.4.2.4 clause 3 was materialised (#401) the
-// re-declaration hid the inherited use instead, and c-cte was what caught it.
+// inherits every base use that is not already there identically, so re-declaring
+// the name with a DIFFERENT {required} or {attribute declaration} leaves the
+// extension holding two uses for it, which clause 4 forbids outright. Both rows
+// differ from the base's use in exactly one property, which is what keeps them
+// two members — a restatement identical to the base's is one member of clause 3's
+// union reached twice (#1082, attributeusefold.go). Before §3.4.2.4 clause 3 was
+// materialised (#401) the re-declaration hid the inherited use instead, and c-cte
+// was what caught it.
 func TestCosCTExtendsClause12(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -727,15 +730,24 @@ func TestCosCTExtendsClause15CollapsedIntermediate(t *testing.T) {
 	}
 }
 
-// TestOwnAttributeUsesMixedChain pins the positional recovery the collapse rests
-// on, over the chain shape that would break a set-difference reading: four steps,
-// ext-restr-ext, with a restriction step that PROHIBITS a name an earlier
-// extension inherited. §3.4.2.4 clause 3's fold makes folded(c) = own(c) ++
-// folded(b) for an extension step, per step and against its own immediate base
-// only, so no history perturbs the arithmetic.
+// TestOwnAttributeUsesMixedChain pins what the collapse rests on, over the chain
+// shape that would break a set-difference reading: four steps, ext-restr-ext,
+// with a restriction step that PROHIBITS a name an earlier extension inherited.
 //
-// The tail verification is pinned too: handed a base that is not the type's own,
-// the recovery DECLINES rather than returning a prefix that means nothing.
+// The rows assert the OVER-approximation, not a recovery. §3.4.2.4 clause 3.1's
+// fold is not invertible (ownAttributeUses, attributeusefold.go), so each step
+// answers its whole folded set — its own uses AND the base members it cannot
+// separate from them — and collapsedAttributeUses filters the base members back
+// out by name. TestCosCTExtendsClause15CollapsedIntermediate is where that
+// filtering is pinned, and its M is unchanged by the over-report.
+//
+// Before #1082 these rows read [b] and [c], recovered as the leading
+// len(folded(c)) - len(folded(b)) members. That arithmetic answers [] for own
+// [x] over base [x] — the shape the dedup makes reachable — so the prefix went
+// with the fold that licensed it.
+//
+// The verification is pinned too: handed a base that is not the type's own, the
+// step DECLINES rather than answering a set that means nothing.
 func TestOwnAttributeUsesMixedChain(t *testing.T) {
 	s := xSchema(t, func(b *SchemaBuilder) {
 		b.AddType(dPrimitive(t, uq("str")))
@@ -748,9 +760,9 @@ func TestOwnAttributeUsesMixedChain(t *testing.T) {
 		t.Helper()
 		d, _ := s.Type(derived)
 		b, _ := s.Type(base)
-		uses, ok := ownAttributeUses(d.(ComplexType), b.(ComplexType))
+		uses, ok := s.ownAttributeUses(d.(ComplexType), b.(ComplexType))
 		if !ok {
-			t.Fatalf("ownAttributeUses(%s, %s) declined a step whose fold it inverts", derived, base)
+			t.Fatalf("ownAttributeUses(%s, %s) declined a step whose fold it replays", derived, base)
 		}
 		var names []string
 		for _, u := range uses {
@@ -758,18 +770,18 @@ func TestOwnAttributeUsesMixedChain(t *testing.T) {
 		}
 		return names
 	}
-	if got := oOwn(uq("oE1"), uq("oA")); !fEqual(got, []string{"b"}) {
-		t.Fatalf("own {attribute uses} of oE1 = %v, want [b]", got)
+	if got := oOwn(uq("oE1"), uq("oA")); !fEqual(got, []string{"b", "a"}) {
+		t.Fatalf("the contribution of oE1 = %v, want [b a] — its own @b and oA's @a, which the fold does not separate", got)
 	}
-	// The load-bearing row: oR dropped @a, so folded(oE2) is [c b] and the prefix
-	// is [c] — the arithmetic is against oE2's OWN base, not against the chain.
-	if got := oOwn(uq("oE2"), uq("oR")); !fEqual(got, []string{"c"}) {
-		t.Fatalf("own {attribute uses} of oE2 = %v, want [c]", got)
+	// The load-bearing row: oR dropped @a, so folded(oE2) is [c b] and @a is in
+	// neither side — the answer is against oE2's OWN base, not against the chain.
+	if got := oOwn(uq("oE2"), uq("oR")); !fEqual(got, []string{"c", "b"}) {
+		t.Fatalf("the contribution of oE2 = %v, want [c b]", got)
 	}
 	d, _ := s.Type(uq("oE2"))
 	wrong, _ := s.Type(uq("oE1"))
-	if _, ok := ownAttributeUses(d.(ComplexType), wrong.(ComplexType)); ok {
-		t.Fatalf("ownAttributeUses accepted a base that is not the type's own, so the tail verification is not guarding the coupling")
+	if _, ok := s.ownAttributeUses(d.(ComplexType), wrong.(ComplexType)); ok {
+		t.Fatalf("ownAttributeUses accepted a base whose @a it carries no member for, so the verification is not guarding the replay")
 	}
 }
 
