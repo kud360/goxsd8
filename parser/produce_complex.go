@@ -543,7 +543,7 @@ func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	uses, prohibited, wildcard, err := p.produceAttributeUses(el, attributeScopeParentOf(id))
+	uses, prohibited, wildcard, err := p.produceAttributeUses(el, el, attributeScopeParentOf(id))
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -651,7 +651,7 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 		return xsd.ComplexType{}, err
 	}
 	abstract, _ := boolAttr(ctElem, "abstract")
-	uses, prohibited, wildcard, err := p.produceAttributeUses(derivation, attributeScopeParentOf(id))
+	uses, prohibited, wildcard, err := p.produceAttributeUses(ctElem, derivation, attributeScopeParentOf(id))
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -944,7 +944,7 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	uses, prohibited, wildcard, err := p.produceAttributeUses(derivation, attributeScopeParentOf(id))
+	uses, prohibited, wildcard, err := p.produceAttributeUses(ctElem, derivation, attributeScopeParentOf(id))
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
@@ -2283,14 +2283,21 @@ func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
 // that consumes them runs there, and by then the source is gone.
 //
 // GAP(xsd): the base's {attribute wildcard} is not folded in either — §3.4.2.5
-// clause 2.2's cos-aw-union for an extension — and unlike the uses, nothing
-// completes it at finalize. An extension's {attribute wildcard} is therefore its
-// own <anyAttribute> alone, which is NOT merely lenient: a name the base's
-// wildcard admits reads as inadmissible on the extension, and
-// xsd/defaultbinding.go's caller charges that absence as
+// clause 2.2's cos-aw-union for an extension, and that clause alone — and unlike
+// the uses, nothing completes it at finalize. An extension's {attribute
+// wildcard} is therefore its own <anyAttribute> and the groups' alone, which is
+// NOT merely lenient: a name the base's wildcard admits reads as inadmissible on
+// the extension, and xsd/defaultbinding.go's caller charges that absence as
 // derivation-ok-restriction — a false reject, not a fail-open. See
 // attributeDefaultBinding for the exact shape; closing it is #265 section 3's
 // job, not this producer's.
+//
+// ctElem is the <complexType> element itself, which is parent only in the
+// implicit-content form: the two wrapped forms pass their <restriction>/
+// <extension> as parent and the enclosing <complexType> here, because
+// §3.4.2.4's default-attributes precondition reads defaultAttributesApply off
+// the <complexType> while every other child this function walks is the
+// derivation alternant's.
 //
 // scopeParent is the {scope}.{parent} (§3.2.1 sc_a) of parent's OWN <attribute>
 // children — the enclosing complex type, supplied by the caller as an explicit
@@ -2298,10 +2305,19 @@ func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
 // mis-attribute a declaration. It does NOT reach the attributes of a referenced
 // <attributeGroup>: those are scoped to the group, and collectReferencedGroup
 // rebinds the parent at that hop (§3.2.2.2 dcl.att.local).
-func (p *producer) produceAttributeUses(parent *Element, scopeParent xsd.AttributeScopeParent) ([]xsd.AttributeUse, []xsd.QName, *xsd.Wildcard, error) {
+func (p *producer) produceAttributeUses(ctElem, parent *Element, scopeParent xsd.AttributeScopeParent) ([]xsd.AttributeUse, []xsd.QName, *xsd.Wildcard, error) {
 	var uses []xsd.AttributeUse
 	var wildcards []xsd.Wildcard
-	if err := p.collectAttributeContent(parent, scopeParent, map[xsd.QName]struct{}{}, &uses, &wildcards); err != nil {
+	visited := map[xsd.QName]struct{}{}
+	if err := p.collectAttributeContent(parent, scopeParent, visited, &uses, &wildcards); err != nil {
+		return nil, nil, nil, err
+	}
+	// §3.4.2.4's precondition, LAST: the synthesized <attributeGroup ref> appears
+	// "after any other <attributeGroup> [children]", so it enters clause 2's union
+	// behind them and its wildcard enters the §3.6.2.2 pre-order behind theirs —
+	// which is what leaves combineAttributeWildcards taking {process contents} off
+	// the container's own <anyAttribute> when it has one.
+	if err := p.foldDefaultAttributes(ctElem, visited, &uses, &wildcards); err != nil {
 		return nil, nil, nil, err
 	}
 	prohibited, err := p.prohibitedAttributeNames(parent)
@@ -2313,6 +2329,77 @@ func (p *producer) produceAttributeUses(parent *Element, scopeParent xsd.Attribu
 		return nil, nil, nil, err
 	}
 	return uses, prohibited, wildcard, nil
+}
+
+// foldDefaultAttributes applies §3.4.2.4's (dcl.ctd.attuses) precondition on
+// ctElem: when the <schema> ancestor carries defaultAttributes and the
+// <complexType> does not carry defaultAttributesApply="false", {attribute uses}
+// is computed "as if there were an <attributeGroup> [child] with empty content
+// and a ref [attribute] whose ·actual value· is the same as that of the
+// defaultAttributes [attribute]". §3.4.2.5 (dcl.ctd.anyatt) states the IDENTICAL
+// precondition for {attribute wildcard}, and both are discharged here at once:
+// the synthesized reference contributes to wildcards exactly as a written
+// <attributeGroup ref> does, so the two properties cannot come apart.
+//
+// The default group in force is derived from p.schemaElem per call rather than
+// stashed on the producer (STYLE D3, as chameleon() derives its own answer), and
+// defaultAttributesApply is read here and nowhere else: neither attribute is a
+// Schema-component property — §3.17.1's tableau has no {default attribute group}
+// and §3.4.1's none for the opt-out — so neither may travel past the mapping
+// that reads it, the same ruling wildcardElement gives appliesToEmpty.
+//
+// An ABSENT defaultAttributesApply folds: §3.4.2.4 tests only for the value
+// false, and the attribute's declared default is true (XML Representation
+// Summary, <complexType>).
+//
+// There is NO eager document-level check that defaultAttributes resolves. A
+// document that declares one and defines no <complexType> never invokes
+// ·resolve· on it, so an unresolvable QName there is charged nothing — the
+// reference exists only where the precondition synthesizes it.
+//
+// visited is the caller's, shared with the container walk that already ran, so a
+// <complexType> that ALSO writes an explicit <attributeGroup ref> naming the
+// default group splices it ONCE. Splicing it twice would put two uses with one
+// expanded name in the property and trip ct-props-correct (§3.4.6.1) clause 4 on
+// a schema the spec accepts — the set union of clause 2 has no such duplicate.
+//
+// GAP(xsd): visited reaches ONE type, so it cannot see a BASE type's fold. When
+// a <complexContent> or <simpleContent> EXTENSION's base folds this same default
+// group — the ordinary case, since the base need only not carry
+// defaultAttributesApply="false", and no duplicate ref is hand-written anywhere
+// — the group's uses reach the derived type TWICE: once from clause 2 here, and
+// once from §3.4.2.4 clause 3.1's unconditional inheritance of the base's
+// already-folded {attribute uses}. Clause 3.1 unions SETS, so the duplicate is
+// not there; xsd/attributeusefold.go's inheritAttributeUses concatenates, so it
+// is, and ct-props-correct (§3.4.6.1) clause 4 charges two uses with one
+// expanded name — a false reject, not a fail-open. The defect is the
+// concatenation rather than this fold, and predates it: a base and its extension
+// each writing one explicit <attributeGroup ref> earns the same verdict today
+// with no defaultAttributes anywhere. De-duplicating the inherited uses by
+// component is #1082's job, not this producer's.
+//
+// The QName is resolved at p.schemaElem, never at ctElem, because it is written
+// there: that is the element whose in-scope prefixes bind it, whose <import>s
+// license it (licensedNamespace reads containingSchema), and whose §F.1 task (b)
+// chameleon rewrite reaches it (declares(p.schemaElem) holds by construction).
+// Under <override> it also picks the right document: p.schemaElem is the
+// OVERRIDDEN document's root even for a <complexType> substituted in from the
+// overriding one, which is the reading §4.2.5 gives and defaultOpenContentElem
+// already takes for <defaultOpenContent>.
+func (p *producer) foldDefaultAttributes(ctElem *Element, visited map[xsd.QName]struct{},
+	uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
+	lexical, ok := p.schemaElem.Attr("defaultAttributes")
+	if !ok {
+		return nil
+	}
+	if apply, present := boolAttr(ctElem, "defaultAttributesApply"); present && !apply {
+		return nil
+	}
+	qn, err := p.resolveQName(p.schemaElem, lexical, "defaultAttributes")
+	if err != nil {
+		return err
+	}
+	return p.spliceAttributeGroup(qn, p.schemaElem.Loc(), "<schema defaultAttributes>", visited, uses, wildcards)
 }
 
 // prohibitedAttributeNames is §3.4.2.4 clause 3.2.2's input: the expanded names
@@ -2522,14 +2609,37 @@ func (p *producer) collectReferencedGroup(el *Element, visited map[xsd.QName]str
 		// expanded name, so it is the same {scope}.{parent} either way.
 		return src.owner.collectAttributeContent(src.elem, xsd.AttributeGroupScopeParent{Name: qn}, visited, uses, wildcards)
 	}
+	return p.spliceAttributeGroup(qn, el.Loc(), "<attributeGroup ref>", visited, uses, wildcards)
+}
+
+// spliceAttributeGroup resolves qn to a top-level <attributeGroup> and appends
+// that group's uses and wildcards to the collection under way, descending it
+// under its OWN producer for the reasons collectReferencedGroup's doc gives. It
+// is the resolve-and-descend tail shared by the two constructs that reach a
+// group by name: a written <attributeGroup ref> child, and the <attributeGroup
+// ref> §3.4.2.4 synthesizes for a <schema defaultAttributes> (foldDefaultAttributes).
+//
+// visited is honoured before the lookup, so a group already spliced into this
+// collection contributes once however many references reach it — the transitive
+// closure §3.6.2.1 mandates for a circular chain, and the guard that keeps the
+// synthesized default-group ref from double-splicing a group the type also names
+// explicitly.
+//
+// loc and construct are diagnostic only, naming the position and the source
+// construct the author actually wrote (STYLE E1) — the same role resolveQName's
+// attr parameter plays. The self-reference case src-expredef clause 2 admits is
+// NOT here: it is keyed on a redefining <attributeGroup> ancestor, which only a
+// written ref inside a <redefine> can have, so it stays in collectReferencedGroup.
+func (p *producer) spliceAttributeGroup(qn xsd.QName, loc xsderr.Loc, construct string,
+	visited map[xsd.QName]struct{}, uses *[]xsd.AttributeUse, wildcards *[]xsd.Wildcard) error {
 	if _, seen := visited[qn]; seen {
 		return nil
 	}
 	visited[qn] = struct{}{}
 	src, ok := p.symbols.attributeGroups[qn]
 	if !ok {
-		return xsderr.New(ruleSrcResolve, el.Loc(),
-			"<attributeGroup ref> %s does not resolve to any top-level attribute group definition (src-resolve clause 1.4)", qn)
+		return xsderr.New(ruleSrcResolve, loc,
+			"%s %s does not resolve to any top-level attribute group definition (src-resolve clause 1.4)", construct, qn)
 	}
 	return src.owner.collectAttributeContent(src.elem, xsd.AttributeGroupScopeParent{Name: qn}, visited, uses, wildcards)
 }

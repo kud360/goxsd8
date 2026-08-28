@@ -580,22 +580,9 @@ func decideAgreement(observed, expected bool) Status {
 // and no shape below can be rejected for a limitation instead. The remaining
 // allowlist runs unchanged on every other document, this one included once the
 // notation is moved into a slot the grammar admits.
-//
-// The root ELEMENT itself is checked first for defaultAttributes (§3.4.2.4): that
-// attribute names an attribute group whose {attribute uses} must be folded into
-// every complex type that does not set defaultAttributesApply="false". The
-// producer does not model defaultAttributes at all, so the fold is silently
-// skipped and a document invalid only because of the folded-in uses (a duplicate
-// attribute, an ID clash, a src-resolve failure on the named group) would
-// false-ACCEPT. Declining on the attribute's mere presence closes the gap: with
-// no defaultAttributes on <schema>, defaultAttributesApply on any complexType has
-// nothing to apply and skips nothing.
 func schemaShapeDecidable(doc *parser.Document) bool {
 	if holdsMisplacedNotation(doc.Root()) {
 		return true
-	}
-	if hasAttr(doc.Root(), "defaultAttributes") {
-		return false
 	}
 	for _, child := range doc.Root().Children() {
 		el, ok := child.(*parser.Element)
