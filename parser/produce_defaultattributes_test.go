@@ -33,11 +33,14 @@ func TestDefaultAttributesFoldReachesEveryComplexTypeForm(t *testing.T) {
 		{"implicit content", `<xs:complexType name="T"><xs:sequence/></xs:complexType>`},
 		{"simpleContent derivation", `<xs:complexType name="T"><xs:simpleContent>` +
 			`<xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`},
-		// Base opts OUT so the ONE folded da comes from T. Were it to fold too,
-		// clause 3.1 would inherit its da unconditionally beside T's and
-		// ct-props-correct clause 4 would reject — the same verdict a base and its
-		// extension both writing one <attributeGroup ref> already earn, and not a
-		// question this fold decides.
+		// Base opts OUT to route around #1082, NOT because a folding base is wrong
+		// to test: were Base to fold too, clause 3.1 would inherit its da beside T's
+		// own and ct-props-correct clause 4 would FALSELY reject, because
+		// inheritAttributeUses concatenates the inherited uses where §3.4.2.4 unions
+		// sets. That defect is not this fold's — a base and its extension each
+		// writing one explicit <attributeGroup ref> earns the same false verdict
+		// today — so this case pins the <complexContent> path with the base held out
+		// of the fold until #1082 lands, and the opt-out comes back then.
 		{"complexContent derivation", `<xs:complexType name="Base" defaultAttributesApply="false"><xs:sequence/></xs:complexType>` +
 			`<xs:complexType name="T"><xs:complexContent><xs:extension base="tns:Base">` +
 			`<xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`},

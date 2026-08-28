@@ -2363,6 +2363,21 @@ func (p *producer) produceAttributeUses(ctElem, parent *Element, scopeParent xsd
 // expanded name in the property and trip ct-props-correct (§3.4.6.1) clause 4 on
 // a schema the spec accepts — the set union of clause 2 has no such duplicate.
 //
+// GAP(xsd): visited reaches ONE type, so it cannot see a BASE type's fold. When
+// a <complexContent> or <simpleContent> EXTENSION's base folds this same default
+// group — the ordinary case, since the base need only not carry
+// defaultAttributesApply="false", and no duplicate ref is hand-written anywhere
+// — the group's uses reach the derived type TWICE: once from clause 2 here, and
+// once from §3.4.2.4 clause 3.1's unconditional inheritance of the base's
+// already-folded {attribute uses}. Clause 3.1 unions SETS, so the duplicate is
+// not there; xsd/attributeusefold.go's inheritAttributeUses concatenates, so it
+// is, and ct-props-correct (§3.4.6.1) clause 4 charges two uses with one
+// expanded name — a false reject, not a fail-open. The defect is the
+// concatenation rather than this fold, and predates it: a base and its extension
+// each writing one explicit <attributeGroup ref> earns the same verdict today
+// with no defaultAttributes anywhere. De-duplicating the inherited uses by
+// component is #1082's job, not this producer's.
+//
 // The QName is resolved at p.schemaElem, never at ctElem, because it is written
 // there: that is the element whose in-scope prefixes bind it, whose <import>s
 // license it (licensedNamespace reads containingSchema), and whose §F.1 task (b)
