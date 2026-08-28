@@ -417,6 +417,10 @@ applied before filing and again before grounding something already filed:
 - **An `## Acceptance` ratchet promise names its condition** ("moves the
   `schema` lane **provided** #N has landed"), so a later re-plan leaves the
   staleness one grep away.
+- **An `## Acceptance` bullet is ruled satisfiable before anything is
+  implemented against it** — `/develop` step 3, ruled by the agent that
+  step names and posted with the grounding. Writing the bullet correctly
+  at filing time is not that ruling.
 
 `// GAP(...)` and fail-open sites get `kind/gap` tracking issues, so
 nothing fails open silently forever.
