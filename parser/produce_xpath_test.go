@@ -296,7 +296,12 @@ func localElementConstraints(t *testing.T, s *xsd.Schema, typeName xsd.QName, lo
 }
 
 func TestProduceIdentityConstraintRefFormRejections(t *testing.T) {
-	// The definition every well-formed reference below resolves to.
+	// The definition every well-formed reference below resolves to. It is a SIBLING
+	// of the <element> each row's body sits in, never a child of it: xs:element's
+	// content model (xmlschema11-1.md:1120) has no position for a nested <element>,
+	// and checkS4SChildOrder rejects that shape ahead of the rule each row pins
+	// (#1076). prescanIdentityConstraints registers a named constraint from anywhere
+	// in the document, so a top-level sibling is resolved by every ref= below.
 	const def = `<xs:element name="owner">
 	  <xs:key name="k"><xs:selector xpath="a"/><xs:field xpath="@id"/></xs:key>
 	</xs:element>`
@@ -306,36 +311,36 @@ func TestProduceIdentityConstraintRefFormRejections(t *testing.T) {
 		rule xsderr.Rule
 	}{{
 		name: "both name and ref",
-		body: `<xs:key name="n" ref="k"/>` + def,
+		body: `<xs:key name="n" ref="k"/>`,
 		rule: "src-identity-constraint", // clause 1
 	}, {
 		name: "selector child alongside ref",
-		body: `<xs:key ref="k"><xs:selector xpath="a"/></xs:key>` + def,
+		body: `<xs:key ref="k"><xs:selector xpath="a"/></xs:key>`,
 		rule: "src-identity-constraint", // clause 4
 	}, {
 		name: "field child alongside ref",
-		body: `<xs:key ref="k"><xs:field xpath="@id"/></xs:key>` + def,
+		body: `<xs:key ref="k"><xs:field xpath="@id"/></xs:key>`,
 		rule: "src-identity-constraint", // clause 4
 	}, {
 		name: "refer alongside ref",
-		body: `<xs:keyref ref="k" refer="k"/>` + def,
+		body: `<xs:keyref ref="k" refer="k"/>`,
 		rule: "src-identity-constraint", // clause 4
 	}, {
 		name: "category mismatch",
-		body: `<xs:unique ref="k"/>` + def,
+		body: `<xs:unique ref="k"/>`,
 		rule: "src-identity-constraint", // clause 5: k is a key, not a unique
 	}, {
 		name: "keyref referencing a key",
-		body: `<xs:keyref ref="k"/>` + def,
+		body: `<xs:keyref ref="k"/>`,
 		rule: "src-identity-constraint", // clause 5: ref= is same-category reuse, not refer=
 	}, {
 		name: "unresolvable ref",
-		body: `<xs:key ref="missing"/>` + def,
+		body: `<xs:key ref="missing"/>`,
 		rule: "src-resolve", // clause 1.7
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := produce(t, wrap("", `<xs:element name="root">`+tt.body+`</xs:element>`))
+			_, err := produce(t, wrap("", `<xs:element name="root">`+tt.body+`</xs:element>`+def))
 			assertRule(t, err, tt.rule)
 		})
 	}

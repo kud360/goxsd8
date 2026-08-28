@@ -1738,7 +1738,14 @@ func rejectLocalSimpleTypeAttrs(elem *Element) error {
 }
 
 // constructSimpleType maps one <simpleType> element (named or anonymous) into a
-// component. It dispatches on which of the three §3.16.2.1 alternatives the
+// component. It is the ONE site a <simpleType>'s own children are read from, top
+// level and inline alike, so it is where those children are ordered against
+// xs:simpleType's content model (checkS4SChildOrder, s4sSimpleType, #1076) —
+// before the body is chosen, since a document holding a child no position of that
+// model admits is not fully valid against the schema for schema documents whether
+// or not it also names an alternative.
+//
+// It dispatches on which of the three §3.16.2.1 alternatives the
 // element's body chooses — <list> to constructListType, <union> to
 // constructUnionType, <restriction> to the code below, which rejects the
 // XSD-namespace children §4.1.2's content model has no position for
@@ -1759,6 +1766,9 @@ func rejectLocalSimpleTypeAttrs(elem *Element) error {
 // construction site.
 func (p *producer) constructSimpleType(name xsd.QName, elem *Element) (*xsd.SimpleType, error) {
 	if err := rejectLocalSimpleTypeAttrs(elem); err != nil {
+		return nil, err
+	}
+	if err := checkS4SChildOrder(elem, s4sSimpleType); err != nil {
 		return nil, err
 	}
 	body, err := simpleTypeBody(elem)
@@ -1951,6 +1961,14 @@ func (p *producer) unionMembers(union *Element) ([]xsd.SimpleTypeOrRef, error) {
 // The alternatives are examined in a fixed order so the rejection message is
 // deterministic (STYLE D1) rather than following document order into two
 // different messages for the same document.
+//
+// Since #1076 the MORE-THAN-ONE branch reaches no schema document: constructSimpleType
+// walks the same children against s4sSimpleType first, and a second alternative
+// repeats a position that model admits at most once. That is the fault's own class
+// — §5.1's first bullet, carrying no rule ID — where the src-simple-type this
+// branch charges states four clauses (§3.16.3), none about which alternative is
+// chosen or how many. The branch stays because census (census.go) asks this
+// function directly and must stop walking a <simpleType> that chose two.
 func simpleTypeBody(elem *Element) (*Element, error) {
 	var chosen *Element
 	for _, local := range []string{"restriction", "list", "union"} {
@@ -2240,6 +2258,12 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 // targetNamespace, minOccurs, maxOccurs — one step earlier still
 // (rejectProhibitedAttrs), so none of them reaches this mapping.
 //
+// The element's OWN children are ordered against s4sElement here
+// (checkS4SChildOrder, #1076), the one content model Appendix A gives every form
+// an <element> takes. rejectBothInlineTypes is charged ahead of it: a <simpleType>
+// beside a <complexType> repeats that model's single type position, and only that
+// guard names both children (#444 owns the pairing).
+//
 // Its {type definition} is §3.3.2.1 dcl.elt.common's tier chain, which is a
 // COMMON mapping rule — §3.3.2.2 supplements only {scope} and {target
 // namespace}, never {type definition} — so no tier of it is mapped differently
@@ -2274,6 +2298,9 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 			"element has both a type attribute and an inline <simpleType>/<complexType> child, but src-element clause 3 forbids both")
 	}
 	if err := rejectBothInlineTypes(elem, inlineSimple, inlineComplex); err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
+	if err := checkS4SChildOrder(elem, s4sElement); err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
 
@@ -2750,6 +2777,11 @@ func rejectNotationContent(elem *Element) error {
 // through the same function. qname reaches it from topLevelName through run, for
 // the reason produceElement's doc gives.
 //
+// The declaration's OWN children are ordered against s4sAttribute first
+// (checkS4SChildOrder, #1076), the one content model Appendix A gives the
+// top-level and the local form alike; produceAttributeUse orders every local
+// <attribute> against it.
+//
 // It charges the two src-attribute clauses (§3.2.3) this form can reach: 4
 // (type= and an inline <simpleType> mutually exclusive) and 1 (default and fixed
 // mutually exclusive, via valueConstraintOf). Clause 3 is guarded by "if the
@@ -2766,6 +2798,9 @@ func rejectNotationContent(elem *Element) error {
 // single encoding in useValueConstraintOK, which produceAttributeUse charges
 // over the local and ref= forms; this function no longer calls it.
 func (p *producer) produceAttribute(qname xsd.QName, elem *Element) (xsd.AttributeDeclaration, error) {
+	if err := checkS4SChildOrder(elem, s4sAttribute); err != nil {
+		return xsd.AttributeDeclaration{}, err
+	}
 	_, hasType := elem.Attr("type")
 	if hasType && childElement(elem, xsd.XMLSchemaNS, "simpleType") != nil {
 		return xsd.AttributeDeclaration{}, xsderr.New(ruleSrcAttribute, elem.Loc(),

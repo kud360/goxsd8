@@ -16,6 +16,9 @@ var s4sModels = []struct {
 	{"simpleExtension", s4sSimpleExtension},
 	{"complexRestriction", s4sComplexRestriction},
 	{"complexExtension", s4sComplexExtension},
+	{"element", s4sElement},
+	{"attribute", s4sAttribute},
+	{"simpleType", s4sSimpleType},
 }
 
 // s4sProbe is the vocabulary the models above draw on: every element name they
@@ -25,7 +28,9 @@ var s4sModels = []struct {
 var s4sProbe = []string{
 	"annotation", "simpleContent", "complexContent", "restriction", "extension",
 	"openContent", "group", "all", "choice", "sequence",
-	"simpleType", "attribute", "attributeGroup", "anyAttribute", "assert",
+	"simpleType", "complexType", "element", "list", "union",
+	"alternative", "unique", "key", "keyref",
+	"attribute", "attributeGroup", "anyAttribute", "assert",
 	"length", "minLength", "maxLength", "pattern", "enumeration", "whiteSpace",
 	"maxInclusive", "maxExclusive", "minInclusive", "minExclusive",
 	"totalDigits", "fractionDigits", "assertion", "explicitTimezone",
