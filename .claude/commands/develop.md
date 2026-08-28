@@ -47,6 +47,14 @@ heartbeat.
    answer verbatim as a `GROUNDING:` comment — that comment is the only
    durable copy.
 
+   **Rule every `## Acceptance` bullet in that same comment**: read it
+   against the current tree and call it satisfiable, unsatisfiable or not
+   applicable, with the reason. The **oracle** rules where the issue takes
+   spec grounding; the **arbiter** rules where it does not, since the
+   bullet states the bar its own verdict will apply. An unsatisfiable
+   bullet is re-stated in the body — **cartographer**'s pen — before step
+   4 starts.
+
 4. **Implement.** If the issue's `## Surface` is non-"none", have
    **warden** pre-flight the planned shape before any code exists; shape
    errors are cheapest before they are built. Then delegate to **mason**,
