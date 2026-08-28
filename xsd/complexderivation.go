@@ -180,8 +180,11 @@ func (s *Schema) checkSimpleBaseIsExtension(c ComplexType) error {
 // local use and an INHERITED one is charged here, which is the whole substance
 // this clause has. Clauses 3.2.1 and 3.2.2 remove the collision for a restriction,
 // so what reaches this check is clause 3.1's: an extension that re-declares a name
-// its base already carries, identically or not. An extension may add attributes;
-// it may not restate the base's.
+// its base already carries with a use that is value-DISTINCT from the inherited
+// one. A use whose properties are recursively identical to it is the same member
+// of clause 3's union of sets reached twice, and the fold holds it once (#1082) —
+// "no two DISTINCT members" is what this clause forbids, so an extension may add
+// attributes and may restate the base's identically, never differently.
 //
 // Clause 3.2.2 is load-bearing for this check, not decoration. A name a
 // restriction B prohibits must leave B's set entirely; if it lingered, an

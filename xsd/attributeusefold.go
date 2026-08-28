@@ -154,7 +154,7 @@ func (s *Schema) foldComponentAttributeUses(f *attributeUseFold, c ComplexType, 
 	if !ok {
 		return c // clause 3.3: no complex {base type definition} to inherit from
 	}
-	c.attributeUses = inheritAttributeUses(c.attributeUses, base, c.DerivationMethod(), c.prohibitedAttributeNames)
+	c.attributeUses = s.inheritAttributeUses(c.attributeUses, base, c.DerivationMethod(), c.prohibitedAttributeNames)
 	return c
 }
 
@@ -207,13 +207,18 @@ func (s *Schema) baseAttributeUses(f *attributeUseFold, c ComplexType, i int) ([
 // {attribute uses}, method selects the case, and prohibited is the expanded names
 // the deriving type's own source gave use="prohibited".
 //
-//   - clause 3.1 (extension): every member of base is inherited, unconditionally.
-//     A name the extension also declares itself therefore appears TWICE, which is
-//     precisely what ct-props-correct clause 4 forbids and charges
-//     (checkAttributeUseNamesUnique) — an extension may add attributes, never
-//     re-declare the base's. prohibited is ignored on this branch, exactly as
-//     §3.4.2.4's Note directs: use="prohibited" outside a restriction is
-//     "pointless, though not an error", and the <attribute> "is simply ignored".
+//   - clause 3.1 (extension): every member of base is inherited, EXCEPT one whose
+//     properties, recursively, are identical to a member the fold already holds.
+//     §3.4.2.4 builds this property as "a union of SETS of attribute uses", and a
+//     member reached twice — once by clause 1 or 2, once by clause 3.1 from a base
+//     that folded the same <attributeGroup ref> — is one member of that union, not
+//     two (#1082). ct-props-correct clause 4 forbids "no two DISTINCT members"
+//     with one expanded name, and what still reaches it (checkAttributeUseNamesUnique)
+//     is a re-declaration that is value-DISTINCT: an extension may add attributes
+//     and may restate the base's identically, but may not re-declare one
+//     differently. prohibited is ignored on this branch, exactly as §3.4.2.4's
+//     Note directs: use="prohibited" outside a restriction is "pointless, though
+//     not an error", and the <attribute> "is simply ignored".
 //   - clause 3.2 (restriction): every member of base is inherited EXCEPT one whose
 //     {attribute declaration}'s expanded name is either already in own — clause
 //     3.2.1's "already been included in the set, following the rules in clause 1
@@ -222,16 +227,34 @@ func (s *Schema) baseAttributeUses(f *attributeUseFold, c ComplexType, i int) ([
 //     simple, or unresolvable never yields a position, so this function is not
 //     called at all.
 //
+// The two exclusions are DIFFERENT relations and stay apart. Clause 3.2.1's is
+// the expanded NAME, unconditionally: a restriction's own declaration displaces
+// the base's whatever their properties, which is what restricting one means.
+// Clause 3.1's is property identity, which admits strictly less: a member that
+// shares only a name is a member the extension added, and clause 4 charges it.
+// One helper taking the test as a parameter would give the two rules one
+// encoding and no reader a place to see they differ.
+//
+// The identity test bottoms out at COMPONENT IDENTITY and never reads {attribute
+// uses} (attributeUsesIdentical, complexextension.go). That is what makes it safe
+// HERE: it reaches s.ResolvedType and so s.typeIndex, which until
+// storeFoldedAttributeUses runs still hold the producer's partial value. An
+// identity test widened to compare a folded property would make this fold read
+// its own half-written output.
+//
 // The result is a slice in document order — own uses first, then the base's, each
 // in its own document order — and no map takes part (STYLE D2). own is copied
 // rather than appended to, so the component's backing array is never aliased into
 // a longer slice.
-func inheritAttributeUses(own, base []AttributeUse, method DerivationMethod, prohibited []QName) []AttributeUse {
+func (s *Schema) inheritAttributeUses(own, base []AttributeUse, method DerivationMethod, prohibited []QName) []AttributeUse {
 	folded := append(make([]AttributeUse, 0, len(own)+len(base)), own...)
 	for _, u := range base {
 		name := u.DeclarationName()
 		if method == DerivationRestriction && (hasAttributeUseNamed(own, name) || slices.Contains(prohibited, name)) {
 			continue // clause 3.2.1, clause 3.2.2
+		}
+		if method == DerivationExtension && s.hasAttributeUseIdentical(folded, u) {
+			continue // clause 3.1: one member of the union, reached twice
 		}
 		folded = append(folded, u) // clause 3.1, and clause 3.2 otherwise
 	}

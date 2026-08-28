@@ -140,11 +140,14 @@ func TestCosCTExtendsClause11Passes(t *testing.T) {
 //
 // The two rejecting rows are charged ct-props-correct clause 4, NOT c-cte, and
 // that is the spec's own routing rather than an accident of ordering: clause 3.1
-// inherits the base's uses UNCONDITIONALLY, so re-declaring the name leaves the
-// extension holding two uses for it, which clause 4 forbids outright — an
-// extension may add attributes, never restate the base's, whether or not the
-// restatement is identical. Before §3.4.2.4 clause 3 was materialised (#401) the
-// re-declaration hid the inherited use instead, and c-cte was what caught it.
+// inherits every base use that is not already there identically, so re-declaring
+// the name with a DIFFERENT {required} or {attribute declaration} leaves the
+// extension holding two uses for it, which clause 4 forbids outright. Both rows
+// differ from the base's use in exactly one property, which is what keeps them
+// two members — a restatement identical to the base's is one member of clause 3's
+// union reached twice (#1082, attributeusefold.go). Before §3.4.2.4 clause 3 was
+// materialised (#401) the re-declaration hid the inherited use instead, and c-cte
+// was what caught it.
 func TestCosCTExtendsClause12(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

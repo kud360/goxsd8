@@ -33,15 +33,11 @@ func TestDefaultAttributesFoldReachesEveryComplexTypeForm(t *testing.T) {
 		{"implicit content", `<xs:complexType name="T"><xs:sequence/></xs:complexType>`},
 		{"simpleContent derivation", `<xs:complexType name="T"><xs:simpleContent>` +
 			`<xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`},
-		// Base opts OUT to route around #1082, NOT because a folding base is wrong
-		// to test: were Base to fold too, clause 3.1 would inherit its da beside T's
-		// own and ct-props-correct clause 4 would FALSELY reject, because
-		// inheritAttributeUses concatenates the inherited uses where §3.4.2.4 unions
-		// sets. That defect is not this fold's — a base and its extension each
-		// writing one explicit <attributeGroup ref> earns the same false verdict
-		// today — so this case pins the <complexContent> path with the base held out
-		// of the fold until #1082 lands, and the opt-out comes back then.
-		{"complexContent derivation", `<xs:complexType name="Base" defaultAttributesApply="false"><xs:sequence/></xs:complexType>` +
+		// Base folds the default group too, which is the ordinary case: neither type
+		// writes the group's name, and clause 3.1 inherits Base's da beside T's own.
+		// §3.4.2.4 unions SETS, so T holds it once and ct-props-correct clause 4 has
+		// nothing to charge (#1082).
+		{"complexContent derivation", `<xs:complexType name="Base"><xs:sequence/></xs:complexType>` +
 			`<xs:complexType name="T"><xs:complexContent><xs:extension base="tns:Base">` +
 			`<xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`},
 	}
@@ -51,8 +47,14 @@ func TestDefaultAttributesFoldReachesEveryComplexTypeForm(t *testing.T) {
 			t.Fatalf("%s: Produce: %v", tc.name, err)
 		}
 		uses := topComplexTypeIn(t, s, xq("T")).AttributeUses()
-		if !hasAttrUse(uses, "da") {
-			t.Errorf("%s: {attribute uses} = %d uses, none named da — §3.4.2.4's precondition folds the <schema defaultAttributes> group into this form too", tc.name, len(uses))
+		da := 0
+		for _, u := range uses {
+			if u.DeclarationName().Local == "da" {
+				da++
+			}
+		}
+		if da != 1 {
+			t.Errorf("%s: {attribute uses} = %d uses, %d named da — §3.4.2.4's precondition folds the <schema defaultAttributes> group into this form too, and its union of sets holds the folded member exactly once", tc.name, len(uses), da)
 		}
 	}
 }
