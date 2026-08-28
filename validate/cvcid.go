@@ -558,25 +558,33 @@ var (
 //
 // A ***skip*** {attribute wildcard} reports false without resolving anything:
 // §3.10.4.1's Note performs QName resolution only for an item ·attributed to· a
-// strict or lax wildcard, so a skipped item has NO ·governing· declaration,
+// strict or lax wildcard, so a ·skipped· item has NO ·governing· declaration,
 // cvc-assess-elt (§3.3.4.6) clause 2.2 leaves it unassessed, and §3.17.5.2
-// clause 3 excludes it from the ·eligible item set· — the same shape
-// [walk.childGoverning] gives the element half of the rule (assess.go). Two
-// such attributes sharing a lexical bind no ·ID value· between them, so cvc-id
-// clause 2 charges no duplicate for them (#1043).
+// clause 3 excludes it from the ·eligible item set·. Two such attributes
+// sharing a lexical bind no ·ID value· between them, so cvc-id clause 2 charges
+// no duplicate for them (#1043).
 //
-// That test asks nothing of cvc-wildcard, which this package does not evaluate
-// (#717): a complex type carries at most one {attribute wildcard}, so where the
-// only one is skip the attribute is either ·attributed· to it — the Note's case
-// — or ·attributed· to nothing at all, and neither leaves it a ·governing·
-// declaration.
+// ·skipped· is a property of the ·attribution·, not of the wildcard: §3.4.4.4
+// attributes an item to the wildcard only where the item MATCHES it, and an
+// item matching neither a use nor the wildcard is ·attributed· to nothing,
+// hence not ·skipped·, hence resolved by name after all under key-governing-ad
+// (§3.2.4.2) clause 3. The guard below decides ·skipped· by the wildcard's
+// presence and so covers that item too, which is the GAP marked at its site.
+// [walk.childGoverning] is no precedent for it (assess.go): that one switches
+// on the [xsd.Attribution] the content model produced, so it reads an
+// attribution this one can only infer.
 //
 // The wildcard arm is otherwise taken WITHOUT checking that a wildcard is
-// present, and that is deliberate rather than an omission: an attribute
-// matching neither a use nor a wildcard already violates cvc-complex-type
-// clause 2, which [walk.unmatchedAttribute] charges in its own right, and the
-// type this reads off a top-level declaration is the type that attribute would
-// have been assessed against wherever it is admitted at all.
+// present, and that is deliberate rather than an omission: key-governing-ad
+// clause 3 resolves by name for every attribute that is not ·skipped·, and an
+// attribute matching neither a use nor a wildcard is ·attributed· to nothing
+// (§3.4.4.4) and so is not. It covers the element whose ·governing type
+// definition· is not complex at all, where g.complexType() is nil and there is
+// no {attribute wildcard} to be skip; and it covers the ·laxly assessed·
+// element, since the {attribute wildcard} of xs:anyType is ***lax*** (§3.4.7)
+// and lax resolves. An attribute matching neither a use nor a wildcard also
+// violates cvc-complex-type clause 2, which [walk.unmatchedAttribute] charges
+// in its own right.
 //
 // GAP(xsd): a governing type whose {attribute uses} are NOT folded (assess.go's
 // attributePropertiesFolded, #414) reports false for EVERY attribute, whether
@@ -598,6 +606,28 @@ func (w *walk) attributeType(e Element, g governance, a Attribute) (*xsd.SimpleT
 			}
 			return w.schema.ResolvedSimpleType(d.TypeDefinition())
 		}
+		// GAP(validate): the test is the PRESENCE of a skip {attribute
+		// wildcard}, not the attribute's ·attribution· to it. Attribution needs
+		// cvc-wildcard, which this package does not evaluate (#717), so an
+		// attribute the wildcard does NOT match — ·attributed· to nothing
+		// (§3.4.4.4), therefore not ·skipped·, therefore resolved by name under
+		// key-governing-ad (§3.2.4.2) clause 3 — is declined here along with the
+		// genuinely ·skipped· one. #717 retires this by deciding the match.
+		//
+		// Direction over the consumers of the withheld type (STYLE P3a), which
+		// is NOT uniformly fail-open. [walk.idAttributes] reaches
+		// [idTable.charge]: its clause 2 charges on an EXTRA binding member, so
+		// a withheld ·ID value· can only withdraw a charge, while its clause 1
+		// charges on the ABSENCE of a declaration, so a withheld one can charge
+		// an IDREF the document does declare a target for — fail-CLOSED, and not
+		// covered by the ids.declined flag, which is the unfolded type's
+		// (#414) and is not set here. That shape is bounded to a document the
+		// spec rejects anyway: the same unmatched attribute fails
+		// cvc-complex-type clause 2, which [walk.unmatchedAttribute] declines
+		// under the same #717 rather than charging. [icCheck.fieldAttributes]
+		// declines its slot, which [icFrame.qualify] turns into a whole-frame
+		// decline — clauses 3, 4.1, 4.2.2 and 4.2.3 uncharged, and clause 4.2.1
+		// with them, per the GAP that site carries.
 		if wild, has := ct.AttributeWildcard(); has && wild.ProcessContents() == xsd.ProcessSkip {
 			return nil, false
 		}

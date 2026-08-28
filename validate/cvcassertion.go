@@ -213,12 +213,13 @@ func (w *walk) ownAssertionSites(st *xsd.SimpleType, loc xsderr.Loc) []Unevaluat
 // reached over its lexical. [walk.attributeType] declines such an attribute for
 // exactly that reason (#1043), so under skip cvcid.go and
 // cvcidentityconstraint.go no longer decide its lexical against anything. This
-// call is DELIBERATELY NOT GATED on {process contents} all the same: dropping
-// the record would make [Result.Unevaluated] a claim about WHICH wildcard
-// admitted the item, which is cvc-wildcard's question and one this package does
-// not evaluate at all (#717, assess.go's unmatchedAttribute). Under skip the
-// record is therefore an over-report, in the direction this file's header
-// states — a decline, never a charge.
+// call is DELIBERATELY NOT GATED on {process contents} all the same: a complex
+// type carries at most one {attribute wildcard} (§3.4.1), so the open question
+// is never which wildcard admitted the item but WHETHER that one matched it,
+// which is cvc-wildcard's and one this package does not evaluate at all (#717,
+// assess.go's unmatchedAttribute) — dropping the record would answer it. Under
+// skip the record is therefore an over-report, in the direction this file's
+// header states — a decline, never a charge.
 //
 // An attribute the schema resolves no top-level declaration for records
 // nothing: it has no ·governing type definition·, so §3.17.5.2 clause 3
