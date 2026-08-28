@@ -308,7 +308,7 @@ func TestBothRulesRecordAtOneElement(t *testing.T) {
 // {process contents}, skip included (#1043).
 func TestWildcardAttributeAssertionsAreRecorded(t *testing.T) {
 	ct, err := xsd.NewComplexType(xsderr.Loc{}, local("RootType"), xsd.QName{}, nil,
-		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t), xsd.EmptyContent{}, nil, nil, nil)
+		xsd.DerivationRestriction, false, nil, nil, anyWildcard(t, xsd.ProcessStrict), xsd.EmptyContent{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("building RootType: %v", err)
 	}

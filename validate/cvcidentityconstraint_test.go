@@ -261,6 +261,24 @@ func TestFieldOverAnUnfoldedTypeDeclinesRatherThanReadingTheTopLevelType(t *test
 	icWantCharges(t, icAssess(t, schema, icRoot(icKid(2, "aid")("1"), icKid(3, "aid")("01"))))
 }
 
+// A `@NameTest` field reads the same ·governing type definition· cvc-id does
+// (icCheck.fieldAttributes over walk.attributeType), so an attribute a
+// ***skip*** {attribute wildcard} admits lengthens no ·key-sequence· either
+// (#1043): the two ·target nodes· below share no key-sequence to be charged
+// clause 4.2.2 for, since neither has one at all.
+func TestSkipWildcardAttributeLengthensNoKeySequence(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, "item", nil, "", "@wid")
+	twice := icRoot(idItem(2, "wid", "a"), idItem(3, "wid", "a"))
+
+	icWantCharges(t, icAssess(t, icWildcardSchema(t, xsd.ProcessSkip, []xsd.IdentityConstraint{key}), twice))
+
+	// Under lax the same field DOES read the top-level declaration and the two
+	// key-sequences collide, which is the charge the skip case withholds. The
+	// declaration is xs:ID, so the id it also binds is charged alongside it.
+	icWantCharges(t, icAssess(t, icWildcardSchema(t, xsd.ProcessLax, []xsd.IdentityConstraint{key}), twice),
+		icCharge(ruleCvcIdentityConstraint, 3), icChargeAttr(ruleCvcID, 3))
+}
+
 // The rule ID is the BARE catalog name, with the clause in the message text.
 func TestIdentityConstraintRuleIsTheBareCatalogName(t *testing.T) {
 	if !xsderr.IsValidRule(ruleCvcIdentityConstraint) {
