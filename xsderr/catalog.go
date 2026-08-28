@@ -2,7 +2,8 @@
 
 package xsderr
 
-// ruleCatalog contains all normative validation rule IDs extracted from the specs.
+// ruleCatalog contains every rule ID extracted from the specs: the normative
+// validation rule IDs, plus the irregular anchors tools/rulecat lists by hand.
 var ruleCatalog = map[Rule]struct{}{
 	"a-props-correct": {},
 	"ag-props-correct": {},
@@ -141,6 +142,7 @@ var ruleCatalog = map[Rule]struct{}{
 	"f-ms-fixed": {},
 	"fractionDigits-totalDigits": {},
 	"fractionDigits-valid-restriction": {},
+	"key-cta-ta-select": {},
 	"length-minLength-maxLength": {},
 	"length-valid-restriction": {},
 	"maxExclusive-valid-restriction": {},

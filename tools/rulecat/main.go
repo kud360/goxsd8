@@ -40,14 +40,23 @@ const (
 	propsCorrectRegex = `\b[a-z]{1,3}-props-correct\b`
 )
 
-// irregularRules are genuine "Schema Component Constraint:"-labeled rule IDs
-// whose anchors do not follow the cvc-/cos-/src-/sic- prefix convention and are
-// not part of a recognizable open-ended family. They are matched as whole
-// words, so they only enter the catalog when they actually appear in the specs.
-// doc.go's own contract cites derivation-ok-restriction as a valid Rule; see
-// .agent/grounding-issue-3.md for the exhaustive list. The "-props-correct"
-// family is deliberately NOT listed here — it is a pattern (propsCorrectRegex)
-// so new family members are caught automatically without a hand-edit.
+// irregularRules are spec anchors the module cites as an xsderr.Rule whose IDs
+// do not follow the cvc-/cos-/src-/sic- prefix convention and are not part of a
+// recognizable open-ended family. They are matched as whole words, so they only
+// enter the catalog when they actually appear in the specs. doc.go's own
+// contract cites derivation-ok-restriction as a valid Rule; see
+// .agent/grounding-issue-3.md for the exhaustive list of the "Schema Component
+// Constraint:"-labeled ones. The "-props-correct" family is deliberately NOT
+// listed here — it is a pattern (propsCorrectRegex) so new family members are
+// caught automatically without a hand-edit.
+//
+// Most entries are "Schema Component Constraint:"-labeled. key-cta-ta-select is
+// not, and is listed anyway because §3.12.4 defines conditional type assignment
+// through [Definition:] anchors and gives it no Validation Rule of its own:
+// there is no cvc-* ID for "this Type Alternative's {test} was not evaluated",
+// so a call site reporting that has no other spec-text ID to cite (#56). Add a
+// non-rule anchor here only under that condition — the spec names the check and
+// names no rule for it.
 var irregularRules = []string{
 	"derivation-ok-restriction",
 	"length-valid-restriction",
@@ -74,6 +83,8 @@ var irregularRules = []string{
 	"minScale-totalDigits",
 	"f-ms-fixed",
 	"f-mns-fixed",
+	// The one non-SCC entry, per the paragraph above.
+	"key-cta-ta-select",
 }
 
 func main() {
@@ -173,7 +184,8 @@ func writeCatalog(f *os.File, rules []string) error {
 		"\n",
 		"package xsderr\n",
 		"\n",
-		"// ruleCatalog contains all normative validation rule IDs extracted from the specs.\n",
+		"// ruleCatalog contains every rule ID extracted from the specs: the normative\n",
+		"// validation rule IDs, plus the irregular anchors tools/rulecat lists by hand.\n",
 		"var ruleCatalog = map[Rule]struct{}{\n",
 	}
 

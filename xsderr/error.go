@@ -5,10 +5,12 @@ import (
 	"fmt"
 )
 
-// Rule is a spec validation rule ID, such as "cvc-complex-type",
-// "cos-st-restricts", or "derivation-ok-restriction". Exactly one Rule
-// identifies each Error. Every Rule constructed in this module is expected to
-// be present in the generated catalog (see IsValidRule).
+// Rule is a spec rule ID, such as "cvc-complex-type", "cos-st-restricts", or
+// "derivation-ok-restriction". Exactly one Rule identifies each Error. It is
+// usually a VALIDATION rule; where the spec names a check but states no rule
+// for it, the definition anchor naming that check is the ID instead
+// (key-cta-ta-select, validate/cta.go). Every Rule constructed in this module
+// is expected to be present in the generated catalog (see IsValidRule).
 type Rule string
 
 // RuleXMLWellFormed is the sentinel Rule for XML well-formedness faults
