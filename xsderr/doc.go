@@ -33,9 +33,10 @@
 // # Contract (implemented in M2)
 //
 //	type Rule string
-//	    A spec validation rule ID: "cvc-complex-type",
-//	    "cos-st-restricts", "src-resolve", "derivation-ok-restriction".
-//	    Exactly one rule per error.
+//	    A spec rule ID: "cvc-complex-type", "cos-st-restricts",
+//	    "src-resolve", "derivation-ok-restriction". Exactly one rule per
+//	    error. Usually a validation rule; see Rule's own doc for the case
+//	    where the spec names a check and states no rule for it.
 //
 //	const RuleXMLWellFormed Rule = "xml-wf"
 //	const RuleComponentInvariant Rule = "component-invariant"

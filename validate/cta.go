@@ -3,12 +3,28 @@ package validate
 import (
 	"github.com/kud360/goxsd8/xpath"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // This file is §3.3.4.1's ·selected type definition· — the half of the
 // ·governing type definition· that a {type table} decides — and nothing else.
 // The ·overriding· xsi:type read that sits above it stays in assess.go, where
 // key-governing-type-elem's own clause order lives.
+
+// ruleKeyCTATASelect is ·successfully selects· (§3.12.4, key-cta-ta-select),
+// the check conditionallySelected reaches for each Type Alternative and does
+// not perform when the alternative's {test} cannot be compiled. It is a
+// [Definition:] anchor and NOT a Validation Rule, because §3.12.4 defines
+// conditional type assignment through definitions and gives it no cvc-* rule of
+// its own — so this is the only ID the spec text offers for the check, and an
+// invented cvc-cta* one would name nothing (#56).
+//
+// It is a Rule only ever carried by an [Unevaluated], never by an
+// [xsderr.Error]: a failed key-cta-ta-select charges no element. The
+// alternative simply does not ·successfully select·, and key-cta-select's scan
+// moves to the next one or to the {default type definition} — which is why the
+// package charges nothing under this ID and must not start.
+const ruleKeyCTATASelect xsderr.Rule = "key-cta-ta-select"
 
 // selectedType is the ·selected type definition· S of an element information
 // item E whose ·governing element declaration· is d (§3.3.4.1,
@@ -47,6 +63,20 @@ func (w *walk) selectedType(e Element, d xsd.ElementDeclaration) (xsd.TypeDefini
 // both directions (the charge governingType's own doc rules out). Withholding
 // can only cost a rejection.
 //
+// That withhold is RECORDED, as one [Unevaluated] under ruleKeyCTATASelect at
+// the element's own location, and it is the only thing here that is: nothing
+// downstream charges the element, so without the record an element whose
+// ·governing type definition· was withheld is byte-identical at the [Result]
+// API to one that passed every rule (#56).
+//
+// A DYNAMIC OR TYPE ERROR INSIDE AN EVALUABLE {test} IS NOT RECORDED, because
+// it is not a withhold: key-cta-ta-select clause 2 says such a {test} "is
+// treated as if it had evaluated (without error) to false", so the alternative
+// has been tried and did not select, and the scan continues to the next one or
+// to the {default type definition} with a real type in hand. [xpath.CTATest]
+// evaluation therefore reports a bool and no error at all, and the two
+// outcomes stay apart at the type level rather than by a check here.
+//
 // w.schema is the xsd.TypeResolver both halves of the engine take, and it is
 // passed rather than stored on either side: the compile reads the {type
 // definitions} to classify the datatype a {test} casts to, and the evaluation
@@ -59,10 +89,14 @@ func (w *walk) selectedType(e Element, d xsd.ElementDeclaration) (xsd.TypeDefini
 // no {expression} is a Test production.
 func (w *walk) conditionallySelected(e Element, table xsd.TypeTable) (xsd.TypeDefinition, bool) {
 	attr := ctaAttributes(e)
-	for _, alt := range table.Alternatives() {
+	alts := table.Alternatives()
+	for i, alt := range alts {
 		test, _ := alt.Test()
 		compiled, evaluable := xpath.CompileCTATest(test, w.schema)
 		if !evaluable {
+			w.res.unevaluated = append(w.res.unevaluated, newUnevaluated(ruleKeyCTATASelect, e.Loc(),
+				"alternative %d of %d in the {alternatives} of the {type table} of %s's ·governing element declaration·, whose {test} is %q, was not evaluated: this engine's §3.12.6 required-subset compiler declined it, which ta-props-correct clause 2 licenses (a conforming processor may but is not required to support XPath outside that subset), so whether it ·successfully selects· its {type definition} is undecided and the type the table ·conditionally selects· (§3.3.4.1, key-cta-select) is withheld along with it, together with every alternative behind it",
+				i+1, len(alts), e.Name(), test.Expression()))
 			return nil, false
 		}
 		if !compiled.Evaluate(w.backend, w.schema, attr) {

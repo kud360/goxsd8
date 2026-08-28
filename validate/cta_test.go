@@ -81,7 +81,12 @@ func ctaSchema(t *testing.T, alts ...ctaAlt) *xsd.Schema {
 	b.AddType(ctaCandidateType(t, "Second"))
 	var tas []xsd.TypeAlternative
 	for _, a := range alts {
-		test := xsd.NewXPathExpression(a.test, nil, nil, nil)
+		// Every {test} carries the xs binding a real <alternative> inherits
+		// from the schema document it is written in, so a fixture can write
+		// the explicit cast §3.12.4 clause 1's Note calls for over untyped
+		// nodes; a {test} not naming a prefix is unaffected by its presence.
+		test := xsd.NewXPathExpression(a.test,
+			[]xsd.NamespaceBinding{xsd.NewNamespaceBinding("xs", xsd.XMLSchemaNS)}, nil, nil)
 		tas = append(tas, namedTypeAlternative(t, &test, local(a.typ)))
 	}
 	table, err := xsd.NewTypeTable(xsderr.Loc{}, tas,
@@ -129,6 +134,13 @@ func ctaRoot(kind string, extra ...xsd.QName) *testElement {
 // ctaAssess assesses root against a table built from alts.
 func ctaAssess(t *testing.T, root Element, alts ...ctaAlt) []*xsderr.Error {
 	t.Helper()
+	return ctaResult(t, root, alts...).Violations()
+}
+
+// ctaResult is ctaAssess's whole [Result], for the tests that read the
+// withhold channel as well as the charges.
+func ctaResult(t *testing.T, root Element, alts ...ctaAlt) *Result {
+	t.Helper()
 	v, err := New(ctaSchema(t, alts...), testBackend())
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -137,7 +149,7 @@ func ctaAssess(t *testing.T, root Element, alts ...ctaAlt) []*xsderr.Error {
 	if res.Err() != nil {
 		t.Fatalf("Err() = %v, want nil", res.Err())
 	}
-	return res.Violations()
+	return res
 }
 
 // ctaWantGoverned fails unless exactly one violation was charged and it
@@ -194,6 +206,70 @@ func TestUnevaluableTestWithholdsTheGoverningType(t *testing.T) {
 		ctaAlt{"count(@kind) > 0", "First"},
 		ctaAlt{"@kind = 'book'", "Second"}),
 		"a decline BEFORE a matching alternative stops the scan")
+}
+
+// The silence above is the whole point of the record: an element whose
+// ·governing type definition· CTA withheld charges nothing, so without an
+// [Unevaluated] it is byte-identical at the [Result] API to one that passed
+// every rule. The record names the alternative, its {test} and the
+// key-cta-select consequence, and sits at the ELEMENT's location.
+func TestUnevaluableTestIsRecordedAsUnevaluated(t *testing.T) {
+	res := ctaResult(t, ctaRoot("book"),
+		ctaAlt{"@kind = 'book'", "First"},
+		ctaAlt{"count(@kind) > 0", "Second"},
+		ctaAlt{"@kind = 'cd'", "First"})
+	// The first alternative selects, so the second is never tried: a record
+	// here would report a check the scan did not reach.
+	if got := res.Unevaluated(); got != nil {
+		t.Fatalf("Unevaluated() = %v, want none — the scan stopped before the unevaluable alternative", messages(got))
+	}
+	res = ctaResult(t, ctaRoot("book"),
+		ctaAlt{"@kind = 'cd'", "First"},
+		ctaAlt{"count(@kind) > 0", "Second"},
+		ctaAlt{"@kind = 'book'", "First"})
+	wantSilence(t, res.Violations(), "the withheld type charges nothing")
+	got := res.Unevaluated()
+	if len(got) != 1 {
+		t.Fatalf("Unevaluated() = %v, want exactly one record for the withheld ·conditionally selected· type", messages(got))
+	}
+	if got[0].Rule() != "key-cta-ta-select" {
+		t.Errorf("Rule() = %q, want key-cta-ta-select", got[0].Rule())
+	}
+	if got[0].Loc() != loc(1, 1) {
+		t.Errorf("Loc() = %s, want the element's %s", got[0].Loc(), loc(1, 1))
+	}
+	for _, want := range []string{"alternative 2 of 3", "count(@kind) > 0", "key-cta-select"} {
+		if !strings.Contains(got[0].Msg(), want) {
+			t.Errorf("Msg() = %q, want it to name %s", got[0].Msg(), want)
+		}
+	}
+}
+
+// A dynamic or type error inside a {test} this engine CAN evaluate is a
+// decided false, not a withhold: key-cta-ta-select clause 2 makes it "treated
+// as if it had evaluated (without error) to false", so the alternative was
+// tried and did not select, the scan reaches the {default type definition},
+// and NOTHING is recorded. `@kind cast as xs:integer` over kind="book" raises
+// err:FORG0001 and over an absent kind raises err:XPTY0004 — both are that
+// clause's false and neither is this package's decline.
+func TestDynamicErrorInAnEvaluableTestRecordsNothing(t *testing.T) {
+	for _, tc := range []struct {
+		root *testElement
+		// governed is the attribute Fallback does not declare, which is the
+		// one charge a REAL selection of the {default type definition}
+		// leaves — silence would mean the type was withheld instead.
+		governed string
+		why      string
+	}{
+		{ctaRoot("book"), ctaGovernedByFallback, "a cast whose operand is not a valid lexical (err:FORG0001)"},
+		{ctaRoot("", local("other")), "other", "a cast over the empty sequence (err:XPTY0004)"},
+	} {
+		res := ctaResult(t, tc.root, ctaAlt{"@kind cast as xs:integer = 3", "First"})
+		if got := res.Unevaluated(); got != nil {
+			t.Errorf("Unevaluated() = %v, want none: %s is a decided false, not a withhold", messages(got), tc.why)
+		}
+		ctaWantGoverned(t, res.Violations(), tc.governed)
+	}
 }
 
 // An unevaluable {test} BEHIND an alternative that already succeeded costs the

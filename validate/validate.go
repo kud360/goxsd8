@@ -131,10 +131,13 @@ func (r *Result) Violations() []*xsderr.Error {
 // violation list, or append it to the violations of a Result and turn a
 // skipped check into a false reject.
 //
-// One record is one SITE, not one skipped evaluation: the sites are collected
-// statically off the ·governing type definition· (cvcassertion.go), so several
-// records may share a Loc and the count is not a claim about how many
-// evaluations a real evaluator would have run.
+// One record is one SITE, not one skipped evaluation: the assertion sites are
+// collected statically off the ·governing type definition· (cvcassertion.go),
+// so several records may share a Loc and the count is not a claim about how
+// many evaluations a real evaluator would have run. The CTA site (cta.go) is
+// reached by the walk rather than collected, and is likewise one record per
+// withheld ·conditionally selected· type and not one per alternative the scan
+// never tried.
 type Unevaluated struct {
 	rule xsderr.Rule
 	loc  xsderr.Loc
@@ -147,8 +150,13 @@ func newUnevaluated(rule xsderr.Rule, loc xsderr.Loc, format string, args ...any
 	return Unevaluated{rule: rule, loc: loc, msg: fmt.Sprintf(format, args...)}
 }
 
-// Rule returns the spec rule the check answers to — the ID it would have been
-// charged under had it been performed and failed.
+// Rule returns the spec rule the check answers to. For a check whose failure is
+// a charge, that is the ID it would have been charged under — cvc-assertion and
+// cvc-assertions-valid both are. It is NOT always a chargeable rule: §3.12.4
+// gives conditional type assignment no Validation Rule of its own, so a
+// withheld Type Alternative {test} is recorded under the [Definition:] anchor
+// key-cta-ta-select (cta.go), whose failure selects no type rather than
+// charging one.
 func (u Unevaluated) Rule() xsderr.Rule { return u.rule }
 
 // Loc returns the INSTANCE location the check was reached at: the element for
