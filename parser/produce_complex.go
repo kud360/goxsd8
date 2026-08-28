@@ -2020,6 +2020,21 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 	// tracks it yet (STYLE P3 requires an issue reference only when an issue does
 	// own the retirement).
 	if ref, hasRef := el.Attr("ref"); hasRef {
+		// The ref= form reads no child of its own, so this is where its children are
+		// ordered against xs:element's content model — the one model Appendix A gives
+		// all three forms (s4sElement, #1076). It is NOT src-element clause 2.2
+		// (§3.3.3, xmlschema11-1.md:1321), which admits <annotation> and nothing else
+		// under a ref= form: that clause is a numbered constraint of its own, this
+		// walk is the uncataloged §5.1 grammar class, and neither stands in for the
+		// other. GAP(parser): clause 2.2 is charged nowhere in this producer, so an
+		// <element ref="x"><simpleType/></element> is still ACCEPTED here — the
+		// content model has a position for a <simpleType>, and reading this
+		// rejection as clause 2.2's would make that acceptance look like a
+		// decision. Unowned: no issue tracks it yet (STYLE P3 requires an issue
+		// reference only when an issue does own the retirement).
+		if err := checkS4SChildOrder(el, s4sElement); err != nil {
+			return nil, err
+		}
 		qn, err := p.resolveQName(el, ref, "ref")
 		if err != nil {
 			return nil, err
@@ -2058,6 +2073,11 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 // owns, and NewElementDeclarationOwningTypes checks each of them agrees; the
 // per-edge CONTAINER tokens the nested scopes report are minted separately, one
 // per <alternative> (see typeAlternativeOwnedComplexType).
+//
+// The element's OWN children are ordered against s4sElement here
+// (checkS4SChildOrder, #1076), behind rejectBothInlineTypes for the reason that
+// function's doc gives. The ref= form never reaches this function, and
+// elementParticleTerm orders its children against the same model instead.
 //
 // src-element clause 3 (§3.3.3) is charged here for the both-present case, on the
 // same footing produceElement charges it for a global <element>: without it,
@@ -2111,6 +2131,9 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 			"element has both a type attribute and an inline <simpleType>/<complexType> child, but src-element clause 3 forbids both")
 	}
 	if err := rejectBothInlineTypes(el, inlineSimple, inlineComplex); err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
+	if err := checkS4SChildOrder(el, s4sElement); err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
 	qname, err := declarationName(el, p.localTargetNS(el, "elementFormDefault"))
@@ -2169,6 +2192,11 @@ func (p *producer) localDeclaredType(el *Element, edID xsd.ComponentID, inlineCo
 // It is shared by the global and the local element path (STYLE T4): §3.3.2.1's
 // tier 1 is a COMMON mapping rule and the meta-schema restriction is the same on
 // xs:topLevelElement and xs:localElement, so one implementation serves both.
+//
+// s4sElement (produce_s4sorder.go) charges the same shape as a repeat of its
+// single "(simpleType | complexType)?" position, and both paths run this guard
+// FIRST so only one of the two ever answers: this one names BOTH children where
+// that walk names the second alone. #444 owns whether the pairing stays.
 func rejectBothInlineTypes(el *Element, inlineSimple, inlineComplex *Element) error {
 	if inlineSimple == nil || inlineComplex == nil {
 		return nil
@@ -2703,6 +2731,15 @@ func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.W
 // ref= form (§3.2.2.3 ref.att.local) builds no declaration at all, and the
 // top-level one it names carries the global {scope} its own mapping gave it.
 func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeScopeParent) (*xsd.AttributeUse, error) {
+	// Every local <attribute> reaches this function, ref= and use="prohibited"
+	// included, so it is where all three of them are ordered against xs:attribute's
+	// content model (s4sAttribute, #1076) — ahead of the prohibited form's early
+	// return, for the reason produceElementParticle maps an elided element's {term}
+	// all the same: mapping to no component bounds what the subtree CONTRIBUTES, not
+	// how §5.1 binds the way it is spelled.
+	if err := checkS4SChildOrder(el, s4sAttribute); err != nil {
+		return nil, err
+	}
 	use := attributeUseToken(el)
 	vc, err := valueConstraintOf(el, ruleSrcAttribute)
 	if err != nil {

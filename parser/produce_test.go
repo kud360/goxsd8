@@ -542,10 +542,30 @@ func TestProduceListNeitherItemTypeNorInlineRejected(t *testing.T) {
 // two of the three §3.16.2.1 alternatives is rejected rather than silently
 // mapped from whichever the dispatch reaches first, which would drop the other's
 // whole mapping.
+//
+// The verdict carries NO rule ID since #1076: the second alternative repeats the
+// single position xs:simpleType's content model (xmlschema11-2.md:2743) gives the
+// three, which is §5.1's first bullet, and src-simple-type's four clauses
+// (§3.16.3) say nothing about which alternative is chosen or how many — charging
+// it would be a fabricated verdict (STYLE E2).
 func TestProduceSimpleTypeTwoAlternativesRejected(t *testing.T) {
 	body := `<xs:simpleType name="B"><xs:restriction base="xs:string"/><xs:list itemType="xs:string"/></xs:simpleType>`
 	_, err := produce(t, wrap("", body))
-	assertRule(t, err, "src-simple-type")
+	if err == nil {
+		t.Fatal("Produce accepted a <simpleType> naming two of the three §3.16.2.1 alternatives")
+	}
+	if rule, ok := xsderr.RuleOf(err); ok {
+		t.Errorf("error = %v, charged %s; want a plain grammar fault carrying no rule ID", err, rule)
+	}
+	if !strings.Contains(err.Error(), "repeats a position") {
+		t.Errorf("error = %v, want the %q fault", err, "repeats a position")
+	}
+	if !strings.Contains(err.Error(), "<list> at "+produceURI+":1:") {
+		t.Errorf("error = %v, want it to name the offending <list>", err)
+	}
+	if !strings.Contains(err.Error(), "<simpleType> at "+produceURI+":1:") {
+		t.Errorf("error = %v, want it to name the owning <simpleType>", err)
+	}
 }
 
 // TestProduceListUnresolvableItemTypeRejected pins that a by-name item joins the

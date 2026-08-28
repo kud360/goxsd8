@@ -16,13 +16,24 @@ func s4sDoc(lines ...string) string {
 	return wrap("urn:x", "\n<xs:complexType name=\"D\">\n"+strings.Join(lines, "\n")+"\n</xs:complexType>")
 }
 
+// s4sTopLevelDoc is s4sDoc without the <complexType> wrapper: <schema> is line 1
+// and lines[i] line 2+i. The three models #1076 adds order declarations no
+// complex type need enclose, and their top-level form is where each is written
+// without one.
+func s4sTopLevelDoc(lines ...string) string {
+	return wrap("urn:x", "\n"+strings.Join(lines, "\n"))
+}
+
 // TestProduceS4SChildOrderRejected pins the schema-for-schema-documents child
 // ORDER and maxOccurs of every element position a complex type is written
 // through: xs:complexTypeModel on both its wrapped and its implicit-content
 // disjunct (xmlschema11-1.md:1649), the xs:simpleContent (:1687) and
 // xs:complexContent (:1713) wrappers, and all four derivation alternants —
 // xs:simpleRestrictionType (:1692), xs:simpleExtensionType (:1697),
-// xs:complexRestrictionType (:1718) and xs:extensionType (:1723).
+// xs:complexRestrictionType (:1718) and xs:extensionType (:1723) — and, since
+// #1076, the three declarations that carry a content model of their own: xs:element
+// (:1120), xs:attribute (:828) and xs:simpleType (xmlschema11-2.md:2743), each
+// ordered by ONE model whichever form it is written in.
 //
 // Before this check the producer read every one of these subtrees by name and
 // never by position, so all of these documents assembled clean (#956). The four
@@ -40,6 +51,7 @@ func TestProduceS4SChildOrderRejected(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		lines     []string
+		topLevel  bool   // lines are the <schema>'s own children, not a <complexType>'s
 		wantChild string // "<local> at <uri>:<line>:1"
 		wantOwner string
 		wantKind  string // the phrase distinguishing an order fault from a maxOccurs one
@@ -260,11 +272,88 @@ func TestProduceS4SChildOrderRejected(t *testing.T) {
 			wantOwner: "<complexType> at " + produceURI + ":2:1",
 			wantKind:  "out of the child order",
 		},
+		{
+			// xs:element's tail is "alternative*, (unique | key | keyref)*" — two
+			// separately-cardinalitied positions in that order, so an <alternative>
+			// after an identity constraint is late even though both positions repeat.
+			name:     "alternative after an identity constraint on a top-level element",
+			topLevel: true,
+			lines: []string{
+				`<xs:element name="e" type="xs:string">`,
+				`<xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique>`,
+				`<xs:alternative type="xs:string"/>`,
+				`</xs:element>`,
+			},
+			wantChild: "<alternative> at " + produceURI + ":4:1",
+			wantOwner: "<element> at " + produceURI + ":2:1",
+			wantKind:  "out of the child order",
+		},
+		{
+			// "simpleType?" on xs:attribute is not repeated, so the second inline base
+			// is charged here rather than dropped by declaredType's first-child lookup.
+			name:     "two simpleType children on a top-level attribute",
+			topLevel: true,
+			lines: []string{
+				`<xs:attribute name="a">`,
+				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`,
+				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`,
+				`</xs:attribute>`,
+			},
+			wantChild: "<simpleType> at " + produceURI + ":4:1",
+			wantOwner: "<attribute> at " + produceURI + ":2:1",
+			wantKind:  "repeats a position",
+		},
+		{
+			name:     "annotation after the alternative of a top-level simpleType",
+			topLevel: true,
+			lines: []string{
+				`<xs:simpleType name="S">`,
+				`<xs:restriction base="xs:string"/>`,
+				`<xs:annotation/>`,
+				`</xs:simpleType>`,
+			},
+			wantChild: "<annotation> at " + produceURI + ":4:1",
+			wantOwner: "<simpleType> at " + produceURI + ":2:1",
+			wantKind:  "out of the child order",
+		},
+		{
+			// The same walk one level in, on a LOCAL <element>: one model serves both
+			// forms, so the local one is ordered exactly as the top-level one is.
+			name: "annotation after the inline type of a local element",
+			lines: []string{
+				`<xs:sequence>`,
+				`<xs:element name="e">`,
+				`<xs:complexType/>`,
+				`<xs:annotation/>`,
+				`</xs:element>`,
+				`</xs:sequence>`,
+			},
+			wantChild: "<annotation> at " + produceURI + ":6:1",
+			wantOwner: "<element> at " + produceURI + ":4:1",
+			wantKind:  "out of the child order",
+		},
+		{
+			name:     "two alternatives on a top-level simpleType",
+			topLevel: true,
+			lines: []string{
+				`<xs:simpleType name="S">`,
+				`<xs:restriction base="xs:string"/>`,
+				`<xs:list itemType="xs:string"/>`,
+				`</xs:simpleType>`,
+			},
+			wantChild: "<list> at " + produceURI + ":4:1",
+			wantOwner: "<simpleType> at " + produceURI + ":2:1",
+			wantKind:  "repeats a position",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := produce(t, s4sDoc(tc.lines...))
+			doc := s4sDoc(tc.lines...)
+			if tc.topLevel {
+				doc = s4sTopLevelDoc(tc.lines...)
+			}
+			_, err := produce(t, doc)
 			if err == nil {
-				t.Fatal("Produce accepted a complex type whose children are out of the s4s order")
+				t.Fatal("Produce accepted a declaration whose children are out of the s4s order")
 			}
 			if rule, ok := xsderr.RuleOf(err); ok {
 				t.Errorf("error = %v, charged %s; want a plain grammar fault carrying no rule ID", err, rule)
@@ -300,6 +389,7 @@ func TestProduceS4SChildNoPositionRejected(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		lines     []string
+		topLevel  bool // lines are the <schema>'s own children, not a <complexType>'s
 		wantChild string
 		wantOwner string
 	}{
@@ -394,11 +484,128 @@ func TestProduceS4SChildNoPositionRejected(t *testing.T) {
 			wantChild: "<simpleType> at " + produceURI + ":3:1",
 			wantOwner: "<complexType> at " + produceURI + ":2:1",
 		},
+		{
+			// xs:element's model carries no attribute position at all: <attribute> is
+			// xs:complexType's, and an <element> is not one.
+			name:     "attribute on a top-level element",
+			topLevel: true,
+			lines: []string{
+				`<xs:element name="e">`,
+				`<xs:attribute name="a"/>`,
+				`</xs:element>`,
+			},
+			wantChild: "<attribute> at " + produceURI + ":3:1",
+			wantOwner: "<element> at " + produceURI + ":2:1",
+		},
+		{
+			name:     "model group on a top-level attribute",
+			topLevel: true,
+			lines: []string{
+				`<xs:attribute name="a">`,
+				`<xs:sequence/>`,
+				`</xs:attribute>`,
+			},
+			wantChild: "<sequence> at " + produceURI + ":3:1",
+			wantOwner: "<attribute> at " + produceURI + ":2:1",
+		},
+		{
+			name:     "attribute on a top-level simpleType",
+			topLevel: true,
+			lines: []string{
+				`<xs:simpleType name="S">`,
+				`<xs:restriction base="xs:string"/>`,
+				`<xs:attribute name="a"/>`,
+				`</xs:simpleType>`,
+			},
+			wantChild: "<attribute> at " + produceURI + ":4:1",
+			wantOwner: "<simpleType> at " + produceURI + ":2:1",
+		},
+		{
+			// The <simpleType> that names no alternative at all is still charged over
+			// the child, not over the missing body: the walk runs before simpleTypeBody.
+			name:     "attribute on a top-level simpleType with no alternative",
+			topLevel: true,
+			lines: []string{
+				`<xs:simpleType name="S">`,
+				`<xs:attribute name="a"/>`,
+				`</xs:simpleType>`,
+			},
+			wantChild: "<attribute> at " + produceURI + ":3:1",
+			wantOwner: "<simpleType> at " + produceURI + ":2:1",
+		},
+		{
+			// Every LOCAL form is ordered against the same three models: an inline
+			// <element>, the <attribute> of a complex type's tail, and the anonymous
+			// <simpleType> that attribute owns.
+			name: "attribute on a local element",
+			lines: []string{
+				`<xs:sequence>`,
+				`<xs:element name="e">`,
+				`<xs:attribute name="a"/>`,
+				`</xs:element>`,
+				`</xs:sequence>`,
+			},
+			wantChild: "<attribute> at " + produceURI + ":5:1",
+			wantOwner: "<element> at " + produceURI + ":4:1",
+		},
+		{
+			// The ref= form reads no child of its own, and is ordered all the same:
+			// elementParticleTerm charges the model before it resolves the name.
+			name: "attribute on a local element ref",
+			lines: []string{
+				`<xs:sequence>`,
+				`<xs:element ref="tns:E">`,
+				`<xs:attribute name="a"/>`,
+				`</xs:element>`,
+				`</xs:sequence>`,
+			},
+			wantChild: "<attribute> at " + produceURI + ":5:1",
+			wantOwner: "<element> at " + produceURI + ":4:1",
+		},
+		{
+			name: "model group on a local attribute",
+			lines: []string{
+				`<xs:attribute name="a">`,
+				`<xs:sequence/>`,
+				`</xs:attribute>`,
+			},
+			wantChild: "<sequence> at " + produceURI + ":4:1",
+			wantOwner: "<attribute> at " + produceURI + ":3:1",
+		},
+		{
+			// use="prohibited" maps to no component, which bounds what the subtree
+			// CONTRIBUTES and not how §5.1 binds the way it is spelled.
+			name: "model group on a prohibited local attribute",
+			lines: []string{
+				`<xs:attribute name="a" use="prohibited">`,
+				`<xs:sequence/>`,
+				`</xs:attribute>`,
+			},
+			wantChild: "<sequence> at " + produceURI + ":4:1",
+			wantOwner: "<attribute> at " + produceURI + ":3:1",
+		},
+		{
+			name: "attribute on the anonymous simpleType of a local attribute",
+			lines: []string{
+				`<xs:attribute name="a">`,
+				`<xs:simpleType>`,
+				`<xs:restriction base="xs:string"/>`,
+				`<xs:attribute name="b"/>`,
+				`</xs:simpleType>`,
+				`</xs:attribute>`,
+			},
+			wantChild: "<attribute> at " + produceURI + ":6:1",
+			wantOwner: "<simpleType> at " + produceURI + ":4:1",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := produce(t, s4sDoc(tc.lines...))
+			doc := s4sDoc(tc.lines...)
+			if tc.topLevel {
+				doc = s4sTopLevelDoc(tc.lines...)
+			}
+			_, err := produce(t, doc)
 			if err == nil {
-				t.Fatal("Produce accepted a complex type carrying a child no position of its content model admits")
+				t.Fatal("Produce accepted a declaration carrying a child no position of its content model admits")
 			}
 			if rule, ok := xsderr.RuleOf(err); ok {
 				t.Errorf("error = %v, charged %s; want a plain grammar fault carrying no rule ID", err, rule)
@@ -437,6 +644,10 @@ func TestProduceS4SChildOrderAccepted(t *testing.T) {
 	// instead and pins nothing about child order.
 	const stampBase = `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:dateTime">` +
 		`<xs:anyAttribute namespace="##any"/></xs:extension></xs:simpleContent></xs:complexType>`
+	// A top-level <element> for the <element ref> rows to denote, and a complex
+	// type for the <alternative> rows to select between.
+	const refTarget = `<xs:element name="E" type="xs:string"/>` +
+		`<xs:complexType name="A"><xs:sequence/></xs:complexType>`
 	for _, tc := range []struct {
 		name string
 		body string
@@ -522,9 +733,62 @@ func TestProduceS4SChildOrderAccepted(t *testing.T) {
 				`<xs:restriction base="tns:B"><o:hint/><xs:length value="5"/>` +
 				`<xs:attribute name="a"/></xs:restriction></xs:simpleContent></xs:complexType>`,
 		},
+		{
+			// Every position of xs:element filled, in order, with both tail positions
+			// repeated: "alternative*" then "(unique | key | keyref)*".
+			name: "full top-level element in order",
+			body: `<xs:element name="D" type="tns:A"><xs:annotation/>` +
+				`<xs:alternative test="true()" type="tns:A"/><xs:alternative type="tns:A"/>` +
+				`<xs:unique name="u"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique>` +
+				`<xs:key name="k"><xs:selector xpath="b"/><xs:field xpath="@y"/></xs:key>` +
+				`<xs:keyref name="kr" refer="tns:k"><xs:selector xpath="c"/><xs:field xpath="@z"/></xs:keyref>` +
+				`</xs:element>`,
+		},
+		{
+			// The inline type arm of the same single "(simpleType | complexType)?"
+			// position, on a LOCAL <element>, beside the ref= form that fills none of it.
+			name: "local element inline type and local element ref in one content model",
+			body: `<xs:complexType name="D"><xs:sequence>` +
+				`<xs:element name="a"><xs:annotation/><xs:simpleType>` +
+				`<xs:restriction base="xs:string"/></xs:simpleType>` +
+				`<xs:unique name="u2"><xs:selector xpath="p"/><xs:field xpath="@q"/></xs:unique></xs:element>` +
+				`<xs:element ref="tns:E"><xs:annotation/></xs:element>` +
+				`</xs:sequence></xs:complexType>`,
+		},
+		{
+			// xs:attribute's whole model, on the top-level and the local form alike,
+			// with the local one's use="prohibited" mapping to no component at all.
+			name: "attribute annotation and simpleType in order, top-level and local",
+			body: `<xs:attribute name="G"><xs:annotation/><xs:simpleType>` +
+				`<xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>` +
+				`<xs:complexType name="D"><xs:attribute name="a"><xs:annotation/>` +
+				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>` +
+				`<xs:attribute name="b" use="prohibited"><xs:annotation/></xs:attribute></xs:complexType>`,
+		},
+		{
+			// All three of xs:simpleType's alternatives, each behind the annotation
+			// position, top-level and inline.
+			name: "simpleType annotation before each of the three alternatives",
+			body: `<xs:simpleType name="R"><xs:annotation/><xs:restriction base="xs:string"/></xs:simpleType>` +
+				`<xs:simpleType name="L"><xs:annotation/><xs:list itemType="xs:string"/></xs:simpleType>` +
+				`<xs:simpleType name="U"><xs:annotation/><xs:union memberTypes="xs:string"/></xs:simpleType>` +
+				`<xs:element name="D"><xs:simpleType><xs:annotation/>` +
+				`<xs:restriction base="xs:string"/></xs:simpleType></xs:element>`,
+		},
+		{
+			// None of the three models has a wildcard position, and none needs one: the
+			// namespace guard steps over a foreign child wherever it sits.
+			name: "foreign-namespace children under the three declarations",
+			body: `<xs:element name="D" xmlns:o="urn:other"><o:hint/><xs:simpleType>` +
+				`<o:hint/><xs:restriction base="xs:string"/></xs:simpleType>` +
+				`<o:hint/><xs:unique name="u3"><xs:selector xpath="a"/><xs:field xpath="@x"/></xs:unique>` +
+				`</xs:element>` +
+				`<xs:attribute name="H" xmlns:o="urn:other"><o:hint/>` +
+				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute>`,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := produce(t, wrap("urn:x", attrGroup+simpleBase+stampBase+tc.body)); err != nil {
+			if _, err := produce(t, wrap("urn:x", attrGroup+simpleBase+stampBase+refTarget+tc.body)); err != nil {
 				t.Fatalf("Produce rejected a legal permutation: %v", err)
 			}
 		})

@@ -84,16 +84,16 @@ import (
 // NOT censused, each a widening of its own and each a region with its own
 // dispatch:
 //
-//   - <element>, <attribute> and <simpleType>'s OWN children: each drops a name
-//     its content model does not admit in silence, so each holds real unmapped
-//     constructs, but reporting them flags documents conformance's shape gate
-//     still admits — a latent false accept of that gate, filed rather than
-//     ridden along here;
 //   - the <complexType> wrapper's own children once it has chosen <simpleContent>
 //     or <complexContent>, and those two wrappers' own children: checkS4SChildOrder
 //     charges every XSD-namespace child the CHOSEN xs:complexTypeModel disjunct
 //     does not admit (#1047), so no silence is possible at those three positions
 //     and there is nothing left there for a census to report;
+//   - <element>, <attribute> and <simpleType>'s OWN children, on the same footing
+//     since #1076: each of the three is now ordered against the one content model
+//     Appendix A gives its every form (s4sElement, s4sAttribute, s4sSimpleType),
+//     so a name those models do not admit is charged rather than dropped and no
+//     silence is left at those positions either;
 //   - an <override>'s or <redefine>'s children as seen from HERE. An <override>'s
 //     need no walk from here at all: §F.2 clause 1 substitutes them into the
 //     OVERRIDDEN document, whose own producer censuses them through
@@ -235,7 +235,8 @@ func (w *censusWalk) modelGroup(group *Element) {
 // element descends into the type definitions an <element> OWNS — its inline
 // <simpleType>/<complexType> (§3.3.2.1 dcl.elt.common clause 1) and the ones its
 // <alternative> children own (§3.12.2 declare-ta) — and reports nothing of its
-// own, per the Scope note above.
+// own: checkS4SChildOrder charges every XSD-namespace child s4sElement does not
+// admit (#1076), so no name at this position is a silence.
 func (w *censusWalk) element(el *Element) {
 	for c := range xsdChildren(el) {
 		switch c.Name().Local() {
@@ -259,7 +260,8 @@ func (w *censusWalk) element(el *Element) {
 // attributeDecl descends into the anonymous simple type an <attribute>
 // declaration owns — §3.2.2.1 dcl.att.global and §3.2.2.2 dcl.att.local state
 // the same tier-1 {type definition} chain and declaredType maps both — and
-// reports nothing of its own, per the Scope note above.
+// reports nothing of its own: checkS4SChildOrder charges every XSD-namespace child
+// s4sAttribute does not admit (#1076), so no name at this position is a silence.
 func (w *censusWalk) attributeDecl(el *Element) {
 	for c := range xsdChildren(el) {
 		if c.Name().Local() == "simpleType" {
@@ -268,10 +270,14 @@ func (w *censusWalk) attributeDecl(el *Element) {
 	}
 }
 
-// simpleType censuses one <simpleType> by the §3.16.2.1 alternative it chose.
+// simpleType censuses one <simpleType> by the §3.16.2.1 alternative it chose, and
+// reports nothing of its own at that position: checkS4SChildOrder charges every
+// XSD-namespace child s4sSimpleType does not admit (#1076).
+//
 // The choice is simpleTypeBody's own, so a <simpleType> naming none of the three
-// or more than one stops the walk: the producer rejects that document under
-// src-simple-type (§3.16.3), and nothing under a rejected alternative is a
+// or more than one stops the walk: the producer rejects that document either way —
+// none under src-simple-type (§3.16.3), more than one as a repeat of the model's
+// single alternative position — and nothing under a rejected alternative is a
 // silence.
 //
 // The <restriction> alternative reports NOTHING of its own.
