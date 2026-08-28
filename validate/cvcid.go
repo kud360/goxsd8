@@ -556,12 +556,21 @@ var (
 // declarations (§3.10.4.1). A name that resolves to nothing under either arm
 // leaves the attribute with no governing type, which is reported false.
 //
-// The wildcard arm is taken WITHOUT checking that a wildcard is present, and
-// that is deliberate rather than an omission: an attribute matching neither a
-// use nor a wildcard already violates cvc-complex-type clause 2, which
-// [walk.unmatchedAttribute] charges in its own right, and the type this reads
-// off a top-level declaration is the type that attribute would have been
-// assessed against wherever it is admitted at all.
+// A ***skip*** {attribute wildcard} reports false without resolving anything:
+// §3.10.4.1's Note performs QName resolution only for an item ·attributed to· a
+// strict or lax wildcard, so a skipped item has NO ·governing· declaration,
+// cvc-assess-elt (§3.3.4.6) clause 2.2 leaves it unassessed, and §3.17.5.2
+// clause 3 excludes it from the ·eligible item set· — the same shape
+// [walk.childGoverning] gives the element half of the rule (assess.go). Two
+// such attributes sharing a lexical bind no ·ID value· between them, so cvc-id
+// clause 2 charges no duplicate for them (#1043).
+//
+// The wildcard arm is otherwise taken WITHOUT checking that a wildcard is
+// present, and that is deliberate rather than an omission: an attribute
+// matching neither a use nor a wildcard already violates cvc-complex-type
+// clause 2, which [walk.unmatchedAttribute] charges in its own right, and the
+// type this reads off a top-level declaration is the type that attribute would
+// have been assessed against wherever it is admitted at all.
 //
 // GAP(xsd): a governing type whose {attribute uses} are NOT folded (assess.go's
 // attributePropertiesFolded, #414) reports false for EVERY attribute, whether
@@ -582,6 +591,9 @@ func (w *walk) attributeType(e Element, g governance, a Attribute) (*xsd.SimpleT
 				return nil, false
 			}
 			return w.schema.ResolvedSimpleType(d.TypeDefinition())
+		}
+		if wild, has := ct.AttributeWildcard(); has && wild.ProcessContents() == xsd.ProcessSkip {
+			return nil, false
 		}
 	}
 	return w.topLevelAttributeType(a)
