@@ -217,7 +217,9 @@ func TestCensusSimpleTypeAlternatives(t *testing.T) {
 // claim what a verdict already names.
 //
 // A <simpleType> naming none of the three alternatives, or two, stops the walk
-// for the same reason (simpleTypeBody, src-simple-type §3.16.3).
+// for the same reason: simpleTypeBody answers neither, and the producer refuses
+// the document either way — none under src-simple-type (§3.16.3), two as a repeat
+// of the single alternative position s4sSimpleType gives them (#1076).
 func TestCensusSimpleTypeRestrictionSilent(t *testing.T) {
 	outOfModel := censusOf(t, `<xs:simpleType name="s"><xs:restriction base="xs:string">`+
 		`<xs:period/>`+

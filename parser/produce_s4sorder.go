@@ -99,17 +99,19 @@ var s4sStructuralTail = slices.Concat([]s4sSlot{
 // inherited from xs:annotated (:4426).
 var s4sAnnotationFirst = []s4sSlot{{admits: s4sNames("annotation")}}
 
-// The eight models checkS4SChildOrder is charged with, one per element position a
-// complex type is written through — xs:complexTypeModel appearing twice, once for
-// each of its disjuncts a <complexType> can be dispatched on. Each model is quoted
-// verbatim from its XML Representation Summary, and its slots are that quotation
-// read left to right.
+// The eleven models checkS4SChildOrder is charged with. Eight are the element
+// positions a complex type is written through — xs:complexTypeModel appearing
+// twice, once for each of its disjuncts a <complexType> can be dispatched on. The
+// last three are the declarations whose own children were ordered against no
+// content model at all until #1076: <element>, <attribute> and <simpleType>. Each
+// model is quoted verbatim from its XML Representation Summary, and its slots are
+// that quotation read left to right.
 //
 // These are TRANSCRIBED from the spec, not generated (PRINCIPLES 26). Generating
 // them means flattening Appendix A itself — resolving xs:group refs and the
 // xs:restriction/xs:extension chains through xs:annotated — for the whole schema
-// for schema documents rather than these eight, which is its own tool and its own
-// grounding; the eight here are pinned against their quoted model text and against
+// for schema documents rather than these eleven, which is its own tool and its own
+// grounding; the eleven here are pinned against their quoted model text and against
 // the disjointness their fault classification rests on (the tests beside this
 // file), and rejectProhibitedAttrs (produce.go) already transcribes s4s facts on
 // the same footing.
@@ -210,6 +212,67 @@ var (
 		spec:    "xmlschema11-1.md:1723",
 		model:   "(annotation?, openContent?, ((group | all | choice | sequence)?, ((attribute | attributeGroup)*, anyAttribute?), assert*))",
 		slots:   slices.Concat(s4sAnnotationFirst, s4sStructuralTail),
+	}
+
+	// s4sElement is ONE model for every form an <element> takes — top-level, local
+	// inline and local ref=. Appendix A's xs:topLevelElement (:5086) and
+	// xs:localElement (:5110) restrict xs:element (:5044) with a byte-identical
+	// child sequence and differ only in which ATTRIBUTES each prohibits, which is
+	// no part of a content model.
+	//
+	// "(simpleType | complexType)?" is ONE optional position, the way
+	// s4sComplexTypeWrapped's "(simpleContent | complexContent)" is: an <element>
+	// carrying both type children REPEATS that position rather than filling two
+	// consecutive optionals. rejectBothInlineTypes (produce_complex.go) is charged
+	// ahead of this model on that shape all the same, and #444 owns the pairing.
+	//
+	// "alternative*" and "(unique | key | keyref)*" are SEPARATE repeated positions
+	// in that order, not one merged tail: an <alternative> written after a
+	// <unique>/<key>/<keyref> is out of order though both positions repeat.
+	s4sElement = s4sModel{
+		grammar: "xs:element",
+		spec:    "xmlschema11-1.md:1120",
+		model:   "(annotation?, ((simpleType | complexType)?, alternative*, (unique | key | keyref)*))",
+		slots: slices.Concat(s4sAnnotationFirst, []s4sSlot{
+			{admits: s4sNames("simpleType", "complexType")},
+			{admits: s4sNames("alternative"), repeated: true},
+			{admits: s4sNames("unique", "key", "keyref"), repeated: true},
+		}),
+	}
+
+	// s4sAttribute is ONE model for every form an <attribute> takes. Appendix A
+	// declares no local-attribute type at all: the local form's own type is
+	// xs:attribute (:4677), and xs:topLevelAttribute (:4703) restates the identical
+	// sequence.
+	//
+	// Its "simpleType?" is genuinely non-repeated, so a second <simpleType> child is
+	// a maxOccurs fault this walk charges rather than a second inline base for
+	// declaredType (produce_complex.go) to silently drop.
+	s4sAttribute = s4sModel{
+		grammar: "xs:attribute",
+		spec:    "xmlschema11-1.md:828",
+		model:   "(annotation?, simpleType?)",
+		slots: slices.Concat(s4sAnnotationFirst, []s4sSlot{
+			{admits: s4sNames("simpleType")},
+		}),
+	}
+
+	// s4sSimpleType is ONE model for a top-level and a local <simpleType> alike:
+	// xs:topLevelSimpleType (xmlschema11-2.md:3876) and xs:localSimpleType (:3894)
+	// carry the identical sequence, both reaching the three alternatives through
+	// the group xs:simpleDerivation (:3826).
+	//
+	// Its one alternative position does not repeat, so a <simpleType> writing two of
+	// <restriction>, <list> and <union> is charged here. simpleTypeBody (produce.go)
+	// still answers that shape for the census walk, and the note there records why
+	// its verdict no longer reaches a schema document.
+	s4sSimpleType = s4sModel{
+		grammar: "xs:simpleType",
+		spec:    "xmlschema11-2.md:2743",
+		model:   "(annotation?, (restriction | list | union))",
+		slots: slices.Concat(s4sAnnotationFirst, []s4sSlot{
+			{admits: s4sNames("restriction", "list", "union")},
+		}),
 	}
 )
 
