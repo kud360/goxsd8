@@ -337,8 +337,8 @@ func TestReconcileClosedMatchIsStillUntracked(t *testing.T) {
 	if len(rep.Untracked) != 1 {
 		t.Fatalf("Untracked = %+v, want 1 entry (closed match is a dead end)", rep.Untracked)
 	}
-	if len(rep.Untracked[0].ClosedMatches) != 1 || rep.Untracked[0].ClosedMatches[0].Issue.Number != 42 {
-		t.Errorf("ClosedMatches = %+v, want [#42]", rep.Untracked[0].ClosedMatches)
+	if len(rep.Untracked[0].Matches) != 1 || rep.Untracked[0].Matches[0].Issue.Number != 42 {
+		t.Errorf("Matches = %+v, want [#42]", rep.Untracked[0].Matches)
 	}
 }
 
@@ -364,10 +364,10 @@ func TestReconcileOpenIssueNoMarkerLandsInGroup2(t *testing.T) {
 }
 
 // TestReconcileTrackedMarkerIsNotReported checks the ordinary passing case:
-// a marker matched to an OPEN issue appears in neither group.
+// a marker that CITES an OPEN issue appears in neither group.
 func TestReconcileTrackedMarkerIsNotReported(t *testing.T) {
 	markers := []marker{
-		{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "the wildcard case is not folded in yet"},
+		{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "the wildcard case is not folded in yet (#7)"},
 	}
 	issues := []issue{
 		{Number: 7, Title: "wildcard gap", State: "OPEN", Body: "tracked at xsd/wildcard.go"},
@@ -690,7 +690,7 @@ func TestPhraseCollisionDoesNotRetireATracker(t *testing.T) {
 	if len(rep.Stale) != 1 || rep.Stale[0].Issue.Number != 921 {
 		t.Fatalf("Stale = %+v, want #921 still listed", rep.Stale)
 	}
-	if len(rep.Stale[0].Weak) != 1 || rep.Stale[0].Weak[0].File != "parser/conditional.go" {
+	if len(rep.Stale[0].Weak) != 1 || rep.Stale[0].Weak[0].Marker.File != "parser/conditional.go" {
 		t.Fatalf("Weak = %+v, want the colliding marker named", rep.Stale[0].Weak)
 	}
 
@@ -719,15 +719,78 @@ func TestCitationRetiresATracker(t *testing.T) {
 	}
 }
 
-// TestFileMatchRetiresATracker checks that the file-path signal still retires
-// a tracker: only the phrase run was demoted.
-func TestFileMatchRetiresATracker(t *testing.T) {
-	m := marker{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "no owner named here"}
-	iss := issue{Number: 8, State: "OPEN", Title: "wildcard gap", Body: "the site is xsd/wildcard.go"}
+// TestFileMentionDoesNotRetireATracker is the #1060 group-2 case, and the
+// inversion of the file-retires-a-tracker direction this test used to assert.
+// #972's body names parser/produce_complex.go to rule that restrictionFacets'
+// OTHER caller must NOT get the check — an exclusion — while the marker in
+// that file says in its own text that no issue tracks it. A path named to
+// exclude scores identically to one named to own, so it must retire nothing.
+func TestFileMentionDoesNotRetireATracker(t *testing.T) {
+	m := marker{Area: "parser", File: "parser/produce_complex.go", Line: 2009,
+		Text: "an <element ref=\"...\" substitutionGroup=\"...\"> is silently ACCEPTED, the attribute " +
+			"simply ignored. Unowned: no issue tracks it yet."}
+	iss := issue{Number: 972, State: "OPEN",
+		Title: "parser: restrictionFacets silently DROPS an XSD-namespace child",
+		Body: "Only that site — `restrictionFacets` has TWO callers and their content models differ. " +
+			"The `<simpleContent><restriction>` construction (`parser/produce_complex.go`) is " +
+			"`xs:simpleRestrictionType`. Those four names stay admitted at the second site and " +
+			"must be rejected at the first."}
+
+	if got := matches(m, iss); got != matchFile {
+		t.Fatalf("matches = %v, want matchFile (the fixture no longer reproduces the mention)", got)
+	}
 
 	rep := reconcile([]marker{m}, []issue{iss}, true)
-	if len(rep.Stale) != 0 {
-		t.Errorf("Stale = %+v, want none (the issue names the marker's file)", rep.Stale)
+	if len(rep.Stale) != 1 || rep.Stale[0].Issue.Number != 972 {
+		t.Fatalf("Stale = %+v, want #972 still listed (a path named to exclude owns nothing)", rep.Stale)
+	}
+	if len(rep.Stale[0].Weak) != 1 || rep.Stale[0].Weak[0].Kind != matchFile {
+		t.Fatalf("Weak = %+v, want the file mention printed beside the row", rep.Stale[0].Weak)
+	}
+
+	var buf strings.Builder
+	if err := printReport(&buf, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	if !strings.Contains(buf.String(), "file-matches parser/produce_complex.go:2009 — too weak") {
+		t.Errorf("report does not name the file mention it refused to charge:\n%s", buf.String())
+	}
+}
+
+// TestFileMentionDoesNotSuppressAnUncitedMarker is the #1060 group-1 case:
+// xsd/attributeusefold.go:296 cites nothing, and #1102 — the issue that exists
+// to give it an owner — names that path in its body. Under a file-path bar the
+// mention hid the very marker the issue was filed about, so the row STYLE P3
+// wants surfaced was the one the tool silenced. It must now surface, with
+// #1102 printed beside it as the candidate owner.
+func TestFileMentionDoesNotSuppressAnUncitedMarker(t *testing.T) {
+	m := marker{Area: "xsd", File: "xsd/attributeusefold.go", Line: 296,
+		Text: "taking the largest of the family is a CHOICE, not a recovery, and it is not " +
+			"fail-open against every reader."}
+	iss := issue{Number: 1102, State: "OPEN",
+		Title: "xsd: ownAttributeUses is a proven OVER-approximation since #1082, not a recovery",
+		Body: "The `GAP(xsd)` at `xsd/attributeusefold.go:296` has an owner and a ruling: " +
+			"its file — `xsd/attributeusefold.go` — is named here."}
+
+	if got := matches(m, iss); got != matchFile {
+		t.Fatalf("matches = %v, want matchFile (the fixture no longer reproduces the mention)", got)
+	}
+
+	rep := reconcile([]marker{m}, []issue{iss}, true)
+	if len(rep.Untracked) != 1 || rep.Untracked[0].Marker.Line != 296 {
+		t.Fatalf("Untracked = %+v, want the uncited marker surfaced", rep.Untracked)
+	}
+	got := rep.Untracked[0].Matches
+	if len(got) != 1 || got[0].Issue.Number != 1102 || got[0].Kind != matchFile {
+		t.Fatalf("Matches = %+v, want #1102 recorded as a file match", got)
+	}
+
+	var buf strings.Builder
+	if err := printReport(&buf, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	if !strings.Contains(buf.String(), "candidate owner: file-matches OPEN #1102") {
+		t.Errorf("report does not offer #1102 as the candidate owner:\n%s", buf.String())
 	}
 }
 
@@ -748,15 +811,15 @@ func TestDeadEndDistinguishesCitationFromResemblance(t *testing.T) {
 	if len(rep.Untracked) != 1 {
 		t.Fatalf("Untracked = %+v, want 1 entry", rep.Untracked)
 	}
-	cm := rep.Untracked[0].ClosedMatches
+	cm := rep.Untracked[0].Matches
 	if len(cm) != 2 {
-		t.Fatalf("ClosedMatches = %+v, want both", cm)
+		t.Fatalf("Matches = %+v, want both", cm)
 	}
 	if cm[0].Issue.Number != 761 || cm[0].Kind != matchCited {
-		t.Errorf("ClosedMatches[0] = %+v, want #761 matchCited", cm[0])
+		t.Errorf("Matches[0] = %+v, want #761 matchCited", cm[0])
 	}
 	if cm[1].Issue.Number != 800 || cm[1].Kind != matchPhrase {
-		t.Errorf("ClosedMatches[1] = %+v, want #800 matchPhrase", cm[1])
+		t.Errorf("Matches[1] = %+v, want #800 matchPhrase", cm[1])
 	}
 
 	var buf strings.Builder
