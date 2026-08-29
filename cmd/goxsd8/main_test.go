@@ -142,10 +142,22 @@ func TestRunHelpWriteFailure(t *testing.T) {
 func TestUsageCoversContract(t *testing.T) {
 	want := []string{
 		"goxsd8 parse <schema.xsd>...",
-		"goxsd8 validate -schema <schema.xsd>... <instance>...",
+		"goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...",
 		"goxsd8 gen -schema <schema.xsd> -out <dir>",
 		"GOXSD_DEBUG=parser,validate,codec",
 		"Implemented today: the help path only.",
+		// The four answers a batch script needs and the page withheld
+		// (#1066, #1031): which stream carries parse's summary and its
+		// error lines, which carries validate's violations, that the
+		// exit code aggregates over the instance arguments, and what
+		// -format accepts.
+		"declarations) on stdout.",
+		"one line per error",
+		"on stderr.",
+		"1 if any one of them is invalid.",
+		"prints one line on stdout",
+		"-format xml|json|ber",
+		"case-sensitively",
 	}
 	for _, w := range want {
 		if !strings.Contains(usage, w) {
