@@ -7,6 +7,11 @@ import (
 	"testing"
 )
 
+// gapLabels is the label set that puts a fixture issue into group 2's
+// selection. Group 2 filters on [gapLabel] itself since #1062, so an issue a
+// test expects to see reported stale must carry it.
+func gapLabels() []label { return []label{{Name: gapLabel}} }
+
 // TestExtractMarkerBasic checks that a single-line marker yields the area,
 // line, and trailing text a caller needs to cite it (docs/WORKFLOW.md
 // prefers citing marker text over a line number).
@@ -307,7 +312,8 @@ func TestReconcileUnmatchedMarkerLandsInGroup1(t *testing.T) {
 		{Area: "xsd", File: "xsd/orphan.go", Line: 9, Text: "nobody has filed a tracking issue for this one yet"},
 	}
 	issues := []issue{
-		{Number: 1, Title: "unrelated", State: "OPEN", Body: "nothing to do with the marker above"},
+		{Number: 1, Title: "unrelated", State: "OPEN", Body: "nothing to do with the marker above",
+			Labels: gapLabels()},
 	}
 
 	rep := reconcile(markers, issues, true)
@@ -350,7 +356,8 @@ func TestReconcileOpenIssueNoMarkerLandsInGroup2(t *testing.T) {
 		{Area: "xsd", File: "xsd/still-here.go", Line: 1, Text: "an entirely different still-open gap in this file"},
 	}
 	issues := []issue{
-		{Number: 55, Title: "gap that got fixed without closing the issue", State: "OPEN", Body: "xsd/long-gone.go had a fail-open branch"},
+		{Number: 55, Title: "gap that got fixed without closing the issue", State: "OPEN",
+			Body: "xsd/long-gone.go had a fail-open branch", Labels: gapLabels()},
 	}
 
 	rep := reconcile(markers, issues, true)
@@ -370,7 +377,8 @@ func TestReconcileTrackedMarkerIsNotReported(t *testing.T) {
 		{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "the wildcard case is not folded in yet"},
 	}
 	issues := []issue{
-		{Number: 7, Title: "wildcard gap", State: "OPEN", Body: "tracked at xsd/wildcard.go"},
+		{Number: 7, Title: "wildcard gap", State: "OPEN", Body: "tracked at xsd/wildcard.go",
+			Labels: gapLabels()},
 	}
 
 	rep := reconcile(markers, issues, true)
@@ -636,32 +644,151 @@ func TestMatchesCitationOutranksResemblance(t *testing.T) {
 	}
 }
 
-// TestUnresolvedCitationIsReportedNotCalledUntracked is the #852 defect-2
-// case: the documented input is `kind/gap` only, and a marker whose owner
-// carries another label cites a number the fed list cannot contain. The
-// marker still lands in group 1 — nothing open matched it — but with the
-// number it names, so the reader files nothing against it.
-func TestUnresolvedCitationIsReportedNotCalledUntracked(t *testing.T) {
-	markers := []marker{
-		{Area: "validate", File: "validate/assess.go", Line: 685,
-			Text: "an element whose type carries one (#717)."},
+// TestCitedOwnerOutsideKindGapResolves is #1062's bar, at the level the
+// mechanism actually lives: the same marker and the same cited number, once
+// against a feed that holds the owner and once against one that does not.
+//
+// The owner carries `kind/feature`, never `kind/gap`, so the widened feed is
+// the only input that can contain it — under the pre-#1062 `kind/gap` feed
+// the marker could only reach matchNone and report an unresolved citation.
+// The two subtests are that before and after, and the pair is what makes
+// this test discriminate: asserting only the resolving half would also pass
+// on a tool that resolved everything.
+func TestCitedOwnerOutsideKindGapResolves(t *testing.T) {
+	// The prose shares no five-word run with the owner's title or body and
+	// names no file the owner mentions, so the citation is the only signal
+	// that can tie the two.
+	m := marker{Area: "validate", File: "validate/assess.go", Line: 682,
+		Text: "an element whose type carries one (#717)."}
+	owner := issue{Number: 717, State: "OPEN",
+		Title:  "validate: open content is not folded into the governing type",
+		Body:   "Blocked on the assertion rework.",
+		Labels: []label{{Name: "kind/feature"}, {Name: "blocked"}}}
+	// A kind/gap row the marker has nothing to do with, so group 2 is
+	// non-empty in both directions and neither subtest reads the group-2
+	// predicate as the thing under test.
+	bystander := issue{Number: 921, State: "OPEN", Title: "an unrelated lane gap",
+		Body: "no marker anywhere", Labels: gapLabels()}
+
+	tests := []struct {
+		name           string
+		issues         []issue
+		against        issue
+		wantKind       matchKind
+		wantUntracked  int
+		wantUnresolved []int
+	}{
+		{
+			name:     "owner in the feed — the citation resolves",
+			issues:   []issue{owner, bystander},
+			against:  owner,
+			wantKind: matchCited,
+		},
+		{
+			name:           "owner outside the feed — the citation cannot resolve",
+			issues:         []issue{bystander},
+			against:        bystander,
+			wantKind:       matchNone,
+			wantUntracked:  1,
+			wantUnresolved: []int{717},
+		},
 	}
-	issues := []issue{{Number: 999, State: "OPEN", Title: "unrelated", Body: "nothing in common"}}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := matches(m, tc.against); got != tc.wantKind {
+				t.Errorf("matches(m, #%d) = %v, want %v", tc.against.Number, got, tc.wantKind)
+			}
+
+			rep := reconcile([]marker{m}, tc.issues, true)
+			if len(rep.Untracked) != tc.wantUntracked {
+				t.Fatalf("Untracked = %+v, want %d entr(ies)", rep.Untracked, tc.wantUntracked)
+			}
+			if tc.wantUntracked == 0 {
+				return
+			}
+			got := rep.Untracked[0].Unresolved
+			if len(got) != len(tc.wantUnresolved) || (len(got) == 1 && got[0] != tc.wantUnresolved[0]) {
+				t.Errorf("Unresolved = %v, want %v", got, tc.wantUnresolved)
+			}
+		})
+	}
+}
+
+// TestGroup2SelectsOnlyKindGapIssues pins the predicate #1062 added to
+// [reconcile]'s group-2 loop. Widening the input to the whole repository is
+// what makes the predicate necessary: without it every open issue with no
+// marker is a "stale tracker", which on this repo is 116 rows instead of 8.
+func TestGroup2SelectsOnlyKindGapIssues(t *testing.T) {
+	markers := []marker{{Area: "xsd", File: "xsd/x.go", Line: 1, Text: "a gap with no tracker at all"}}
+	issues := []issue{
+		{Number: 10, State: "OPEN", Title: "a tracker whose marker is gone",
+			Body: "unrelated prose", Labels: gapLabels()},
+		{Number: 11, State: "OPEN", Title: "an ordinary feature",
+			Body: "unrelated prose", Labels: []label{{Name: "kind/feature"}}},
+		{Number: 12, State: "OPEN", Title: "an unlabeled issue", Body: "unrelated prose"},
+	}
 
 	rep := reconcile(markers, issues, true)
-	if len(rep.Untracked) != 1 {
-		t.Fatalf("Untracked = %+v, want 1 entry", rep.Untracked)
+	if len(rep.Stale) != 1 || rep.Stale[0].Issue.Number != 10 {
+		t.Fatalf("Stale = %+v, want only the kind/gap row #10", rep.Stale)
 	}
-	got := rep.Untracked[0].Unresolved
-	if len(got) != 1 || got[0] != 717 {
-		t.Fatalf("Unresolved = %v, want [717]", got)
+}
+
+// TestUnlabeledFeedSaysGroup2SelectedNothing covers the shape hazard the
+// predicate creates: the pre-#1062 reshape drops `labels`, so every row
+// fails the kind/gap test and group 2 comes back empty. Empty must not read
+// as "no tracker is stale".
+func TestUnlabeledFeedSaysGroup2SelectedNothing(t *testing.T) {
+	issues := []issue{{Number: 10, State: "OPEN", Title: "a tracker", Body: "unrelated prose"}}
+
+	rep := reconcile(nil, issues, true)
+	if rep.Labeled {
+		t.Error("Labeled = true on a feed carrying no labels")
 	}
 
 	var buf strings.Builder
 	if err := printReport(&buf, rep); err != nil {
 		t.Fatalf("printReport: %v", err)
 	}
-	if !strings.Contains(buf.String(), "cites #717, absent from the fed list") {
+	if !strings.Contains(buf.String(), "no row of the fed list carries a label") {
+		t.Errorf("report does not flag the labelless feed:\n%s", buf.String())
+	}
+
+	labeled := reconcile(nil, []issue{{Number: 10, State: "OPEN", Labels: gapLabels()}}, true)
+	if !labeled.Labeled {
+		t.Error("Labeled = false on a feed carrying labels")
+	}
+}
+
+// TestUnresolvedCitationNamesNoIssueInTheFeed is the #852 defect-2 mechanism
+// under #1062's wording. On the whole-repository feed this tool now
+// documents, a cited number the input does not contain names no issue at
+// all — a mistyped citation — rather than an owner the input cannot see, so
+// the report line says the citation is the defect.
+func TestUnresolvedCitationNamesNoIssueInTheFeed(t *testing.T) {
+	markers := []marker{
+		{Area: "validate", File: "validate/assess.go", Line: 685,
+			Text: "an element whose type carries one (#71700)."},
+	}
+	issues := []issue{{Number: 999, State: "OPEN", Title: "unrelated",
+		Body: "nothing in common", Labels: gapLabels()}}
+
+	rep := reconcile(markers, issues, true)
+	if len(rep.Untracked) != 1 {
+		t.Fatalf("Untracked = %+v, want 1 entry", rep.Untracked)
+	}
+	got := rep.Untracked[0].Unresolved
+	if len(got) != 1 || got[0] != 71700 {
+		t.Fatalf("Unresolved = %v, want [71700]", got)
+	}
+
+	var buf strings.Builder
+	if err := printReport(&buf, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	if !strings.Contains(buf.String(),
+		"cites #71700, which names no issue in the fed list — the citation itself is the defect") {
 		t.Errorf("report does not name the unresolved citation:\n%s", buf.String())
 	}
 }
@@ -677,7 +804,7 @@ func TestPhraseCollisionDoesNotRetireATracker(t *testing.T) {
 	m := marker{Area: "parser", File: "parser/conditional.go", Line: 208,
 		Text: "vc:maxVersion does not prune. Owned by #1002, which is blocked on a human " +
 			"ruling: downgrading a banked case is not an agent's call (CLAUDE.md's one rule)."}
-	iss := issue{Number: 921, State: "OPEN",
+	iss := issue{Number: 921, State: "OPEN", Labels: gapLabels(),
 		Title: "conformance: <current status=\"queried\"> is unmodeled",
 		Body: "Downgrading it is not an agent's call (CLAUDE.md's one rule, " +
 			"`.claude/agents/arbiter.md`'s ratchet-integrity section)."}
@@ -708,7 +835,8 @@ func TestPhraseCollisionDoesNotRetireATracker(t *testing.T) {
 // whose marker still stands never reports stale.
 func TestCitationRetiresATracker(t *testing.T) {
 	m := marker{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "still open (#7)"}
-	iss := issue{Number: 7, State: "OPEN", Title: "wildcard gap", Body: "unrelated prose"}
+	iss := issue{Number: 7, State: "OPEN", Title: "wildcard gap", Body: "unrelated prose",
+		Labels: gapLabels()}
 
 	rep := reconcile([]marker{m}, []issue{iss}, true)
 	if len(rep.Stale) != 0 {
@@ -723,7 +851,8 @@ func TestCitationRetiresATracker(t *testing.T) {
 // a tracker: only the phrase run was demoted.
 func TestFileMatchRetiresATracker(t *testing.T) {
 	m := marker{Area: "xsd", File: "xsd/wildcard.go", Line: 5, Text: "no owner named here"}
-	iss := issue{Number: 8, State: "OPEN", Title: "wildcard gap", Body: "the site is xsd/wildcard.go"}
+	iss := issue{Number: 8, State: "OPEN", Title: "wildcard gap", Body: "the site is xsd/wildcard.go",
+		Labels: gapLabels()}
 
 	rep := reconcile([]marker{m}, []issue{iss}, true)
 	if len(rep.Stale) != 0 {
