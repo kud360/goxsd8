@@ -311,6 +311,48 @@ func TestSkipWildcardAttributeBindsNoID(t *testing.T) {
 	}
 }
 
+// idDefaulted is <item><dtag/></item>, whose EMPTY ID-governed element takes its
+// ·initial value· from cvc-elt clause 5.1's substitution rather than from its own
+// (absent) character content, so the id it declares is the {lexical form} of its
+// declaration's {value constraint} and it binds the ITEM (#853).
+func idDefaulted(line int) *testElement {
+	dtag := icElem(xsd.QName{Local: "dtag"}, line+1, nil)
+	return icElem(xsd.QName{Local: "item"}, line, nil, ElementChild(dtag))
+}
+
+// An EMPTY element whose declaration carries a {value constraint} declares the id
+// that constraint supplies: §3.17.5.2's Note says "default or fixed value
+// constraints may play a part", and clause 5.1 is what puts the substituted item
+// in the ·eligible item set·. Two of them claim ONE id, which cvc-id clause 2
+// charges — a charge the decline this replaced could not make, having recorded no
+// member at all.
+func TestDefaultedEmptyElementDeclaresItsID(t *testing.T) {
+	schema := idSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idDefaulted(2), idDefaulted(4))),
+		icCharge(ruleCvcID, 5))
+
+	// The same document with one of them carrying its own character content
+	// takes clause 5.2's arm instead, so the two ids differ and clause 2 is
+	// satisfied — which is what makes the charge above the substitution's and
+	// not a fixture that charges whatever it is given.
+	own := icElem(xsd.QName{Local: "item"}, 4, nil, ElementChild(
+		icElem(xsd.QName{Local: "dtag"}, 5, nil, TextChild(&testText{data: "d2", loc: loc(5, 8)}))))
+	icWantCharges(t, icAssess(t, schema, icRoot(idDefaulted(2), own)))
+}
+
+// An IDREF naming the id a defaulted empty element declares RESOLVES, which is
+// the other direction of the same substitution: clause 1 charges an empty
+// binding, and the reference finds its declaration only because the default was
+// read.
+func TestDefaultedEmptyElementSatisfiesAnIDREF(t *testing.T) {
+	schema := idSchema(t)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "ref", "d1"), idDefaulted(3))))
+	icWantCharges(t, icAssess(t, schema, icRoot(idItem(2, "ref", "d2"), idDefaulted(3))),
+		icChargeAttr(ruleCvcID, 2))
+}
+
 // The rule ID is the BARE catalog name, with the clause in the message text.
 func TestCvcIDRuleIsTheBareCatalogName(t *testing.T) {
 	if !xsderr.IsValidRule(ruleCvcID) {

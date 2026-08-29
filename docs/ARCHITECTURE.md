@@ -288,21 +288,21 @@ from position. `Loc` is provenance, not identity.
 
 ### Why the finalize machinery lives in `xsd` (a steward ruling, 2026-08-02; re-confirmed 2026-08-23)
 
-`xsd` is by far the largest package, and **8,412** of its non-test lines
-export **nothing at all** — the same 20 files as of 2026-08-23 (13 files /
+`xsd` is by far the largest package, and **8,044** of its non-test lines
+export **nothing at all** — 19 files as of 2026-08-29 (13 files /
 ~6,700 lines at the 2026-08-02 audit): `allgrouplimited.go`,
 `assertionprefix.go`, `attributerestriction.go`, `attributeusefold.go`,
 `attributewildcardfold.go`, `collapsedintermediate.go`,
 `complexextension.go`, `contentrestricts.go`, `effectivetotalrange.go`,
-`elementconsistent.go`, `elementdefaultvalid.go`,
-`namespaceconstraint_sets.go`, `namespaceconstraint_subset.go`,
-`particleattribution.go`, `resolve.go`, `substitutiongroup.go`,
-`substitutiongrouptypes.go`, `typetablesubstitutable.go`,
-`valueconstraintvalid.go`, `wildcardadmit.go`. Three of the 2026-08-09
-twenty have since grown an export and left the list
+`elementconsistent.go`, `namespaceconstraint_sets.go`,
+`namespaceconstraint_subset.go`, `particleattribution.go`, `resolve.go`,
+`substitutiongroup.go`, `substitutiongrouptypes.go`,
+`typetablesubstitutable.go`, `valueconstraintvalid.go`, `wildcardadmit.go`.
+Four of the 2026-08-09 twenty have since grown an export and left the list
 (`complexderivation.go`'s `ValidlySubstitutable`, `defaultbinding.go`'s three
-`Resolved*`/`EffectiveValueConstraint`, `derivation.go`'s `CheckDerivation` —
-all with real M5 consumers), and three joined it. That looks like a
+`Resolved*`/`EffectiveValueConstraint`, `derivation.go`'s `CheckDerivation`,
+`elementdefaultvalid.go`'s `ElementDefaultValid` — all with real M5
+consumers), and three joined it. That looks like a
 candidate for an `xsd/finalize` sub-package. **It is not; do not propose the
 split.**
 
@@ -325,13 +325,14 @@ Two access styles over the compiled model, one shared core:
   only `ElementByName` receives only that.
 - **Walk**: traversal of a type's effective content model. The algebra
   ships (type-derivation validity, substitution-group acceptance, wildcard
-  admission, attribute-use lookup) — **mostly unexported, with three
+  admission, attribute-use lookup) — **mostly unexported, with four
   deliberate entry points M5 needed**: `Schema.ValidlySubstitutable` (the
-  derivation half, for `cvc-elt` clause 4), `Wildcard.AllowsName` (the one
-  canonical admission entry point) and `NamespaceConstraint.AllowsName`/
-  `AllowsNamespace` beneath it. `xsd/doc.go`'s "Walk API" section is
-  authoritative on which. Of the two drivers over it one ships and one does
-  not:
+  derivation half, for `cvc-elt` clause 4), `Schema.ElementDefaultValid`
+  (`cos-valid-default`, for `cvc-elt` clause 5.1.1), `Wildcard.AllowsName`
+  (the one canonical admission entry point) and
+  `NamespaceConstraint.AllowsName`/`AllowsNamespace` beneath it.
+  `xsd/doc.go`'s "Walk API" section is authoritative on which. Of the two
+  drivers over it one ships and one does not:
   - a **pull** driver — `Matcher`, the instance-guided advance of the
     content model one child at a time (the validation consumer) —
     **ships**, as `Schema.ContentMatcher`/`Matcher`/`Attribution`; it

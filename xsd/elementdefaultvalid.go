@@ -1,12 +1,31 @@
 package xsd
 
-import "github.com/kud360/goxsd8/xsderr"
+import (
+	"strings"
+
+	"github.com/kud360/goxsd8/xsderr"
+)
+
+// ruleCosValidDefault is Element Default Valid (Immediate) (Structures §3.3.6.2,
+// cos-valid-default) charged AS ITSELF, which only [Schema.ElementDefaultValid]
+// does: every in-package caller charges it as a clause of its own rule instead
+// and cites that one.
+const ruleCosValidDefault xsderr.Rule = "cos-valid-default"
 
 // This file is the element-side leaf of Phase E (resolve.go): Element
 // Declaration Properties Correct (§3.3.6.1, e-props-correct) clause 2 — "If E has
 // a ·non-absent· {value constraint}, then E.{value constraint} is a valid default
 // with respect to E.{type definition} as defined in Element Default Valid
 // (Immediate) (§3.3.6.2)" — and the predicate it defers to, cos-valid-default.
+//
+// The predicate is charged from outside Phase E too, and so is exported
+// ([Schema.ElementDefaultValid]): cvc-elt clause 5.1.1 asks the same question of
+// an empty element's ·governing type definition· at assessment time, over the
+// same (T, {value constraint}) pair shape and a different T. Everything below is
+// generic over that pair and over the citation, which is the CALLER's rule and
+// clause for the in-package callers that charge cos-valid-default as a clause of
+// their own, and cos-valid-default itself across the package boundary — the
+// predicate cites the predicate, and the caller cites itself (defaultCharge).
 //
 // cos-valid-default is a CASE ANALYSIS, not a conjunction, and reading it as one
 // would be the easy mistake: its two clauses are guarded by mutually exclusive
@@ -70,15 +89,87 @@ func (s *Schema) checkElementDefaultValid(e ElementDeclaration) error {
 	if !ok {
 		return nil
 	}
-	owner := "element declaration " + e.Name().String()
+	return s.elementDefaultValid(s.valueSpace, ruleEPropsCorrect, "2", e.Loc(),
+		"element declaration "+e.Name().String(), t, vc)
+}
+
+// ElementDefaultValid decides Element Default Valid (Immediate) (§3.3.6.2,
+// cos-valid-default) over one type definition and one {value constraint}: nil
+// where vc is a valid default with respect to t, and the rejection — charged
+// under cos-valid-default, the predicate's OWN rule — otherwise.
+//
+// It is exported for the ONE caller that charges cos-valid-default over a type
+// definition no ElementDeclaration supplies: cvc-elt (§3.3.4.3) clause 5.1.1,
+// which asks it at ASSESSMENT time of an empty element's ·governing type
+// definition· where that type is an ·instance-specified type definition·
+// (§3.3.4.1, key-itd — the xsi:type-driven case alone). The predicate is the same
+// one Phase E charges and is deliberately not re-derived there (STYLE T4); what
+// differs is only the (t, vc) pair and the location.
+//
+// The rule the CALLER charges is its own and does not cross this seam: a
+// cvc-elt clause 5.1.1 charge names itself in its own message and carries this
+// verdict as the cause, which is the contract [ValueSpace.ValidDefault] already
+// publishes one layer down — it hands back a cvc-datatype-valid verdict and
+// leaves a-props-correct to say so.
+//
+// vs is the value space clause 1's datatype question is decided in, and is a
+// PARAMETER rather than this schema's own installed one because the two are not
+// the same space at assessment time: a schema assembled through
+// [SchemaBuilder.Finalize] carries undecidedValueSpace{}, which answers every
+// question undecided, so reading s.valueSpace would leave cvc-elt clause 5.1.1
+// permanently undecidable for such a schema, while the walk charging that clause
+// holds the space its own backend defines. It is the same seam validate's
+// cvc-complex-type clause 4 charge reads for the same reason. A nil vs panics on
+// [SchemaBuilder.FinalizeWith]'s grounds, this being the one door that can carry
+// one in.
+//
+// loc and owner locate and name the item charged: the element information item
+// and its ·expanded name·.
+//
+// t is the RESOLVED type definition, never a [TypeDefinitionRef]: cos-valid-default
+// predicates over a T that must be there to be read, and a caller holding a slot
+// resolves it first (checkElementDefaultValid) or declines.
+func (s *Schema) ElementDefaultValid(vs ValueSpace, loc xsderr.Loc, owner string, t TypeDefinition, vc ValueConstraint) error {
+	if vs == nil {
+		panic("xsd: Schema.ElementDefaultValid: nil ValueSpace")
+	}
+	return s.elementDefaultValid(vs, ruleCosValidDefault, "", loc, owner, t, vc)
+}
+
+// elementDefaultValid is cos-valid-default's case analysis, over the citation its
+// caller charges it under: an in-package rule and clause, or the predicate's own
+// rule with no clause of another's to name (defaultCharge).
+func (s *Schema) elementDefaultValid(vs ValueSpace, rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, t TypeDefinition, vc ValueConstraint) error {
 	switch td := t.(type) {
 	case *SimpleType:
-		return s.checkSimpleDefault(ruleEPropsCorrect, e.Loc(), owner, td, vc) // clause 1, T simple
+		return s.checkSimpleDefault(vs, rule, clause, loc, owner, td, vc) // clause 1, T simple
 	case ComplexType:
-		return s.checkComplexDefaultValid(e.Loc(), owner, td, vc)
+		return s.checkComplexDefaultValid(vs, rule, clause, loc, owner, td, vc)
 	default:
-		panic("xsd: checkElementDefaultValid: non-exhaustive TypeDefinition switch")
+		panic("xsd: elementDefaultValid: non-exhaustive TypeDefinition switch")
 	}
+}
+
+// defaultCharge closes a cos-valid-default rejection with the citation it is
+// CHARGED under: the caller's own rule and clause where it charges the predicate
+// as a clause of one of its rules, and nothing at all where it charges
+// cos-valid-default as itself — that caller's rule is the message's own, which
+// [xsderr.Error] already renders, and every message here names the
+// cos-valid-default or cos-valid-simple-default clause it decided on inline
+// (STYLE E4).
+//
+// also carries whatever else the message cites in the same parenthetical, so one
+// encoding serves the three rejection sites rather than each spelling its own
+// bracket (STYLE T4).
+func defaultCharge(rule xsderr.Rule, clause string, also ...string) string {
+	cites := also
+	if clause != "" {
+		cites = append([]string{string(rule) + " clause " + clause}, also...)
+	}
+	if len(cites) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(cites, ", ") + ")"
 }
 
 // checkComplexDefaultValid decides cos-valid-default for a COMPLEX T, switching
@@ -90,24 +181,24 @@ func (s *Schema) checkElementDefaultValid(e ElementDeclaration) error {
 // The default arm asserts the sealed-sum invariant and is unreachable for any
 // value an outside package can produce, since contentType is unexported (the same
 // footing componentWalk.walkParticle's Term switch stands on).
-func (s *Schema) checkComplexDefaultValid(loc xsderr.Loc, owner string, c ComplexType, vc ValueConstraint) error {
+func (s *Schema) checkComplexDefaultValid(vs ValueSpace, rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, c ComplexType, vc ValueConstraint) error {
 	switch ct := c.ContentType().(type) {
 	case SimpleContent:
 		// Clause 1's complex arm: the governing type is
 		// T.{content type}.{simple type definition}, never T itself.
-		return s.checkSimpleDefault(ruleEPropsCorrect, loc, owner, ct.SimpleType, vc)
+		return s.checkSimpleDefault(vs, rule, clause, loc, owner, ct.SimpleType, vc)
 	case ElementContent:
 		if !ct.Mixed {
-			return notMixedDefault(loc, owner, c, vc) // clause 2.1
+			return notMixedDefault(rule, clause, loc, owner, c, vc) // clause 2.1
 		}
 		if s.particleEmptiable(ct.Particle) {
 			return nil // clause 2.2 holds, and 2.1 held above
 		}
-		return xsderr.New(ruleEPropsCorrect, loc,
-			"%s has a {value constraint} of %q and a mixed complex {type definition} %s, but that type's {content type}.{particle} is not ·emptiable· (§3.9.6.3 cos-group-emptiable), which cos-valid-default clause 2.2 requires of a default on a non-simple content type (e-props-correct clause 2)",
-			owner, vc.LexicalForm(), typeDefinitionLabel(c))
+		return xsderr.New(rule, loc,
+			"%s has a {value constraint} of %q and a mixed complex {type definition} %s, but that type's {content type}.{particle} is not ·emptiable· (§3.9.6.3 cos-group-emptiable), which cos-valid-default clause 2.2 requires of a default on a non-simple content type%s",
+			owner, vc.LexicalForm(), typeDefinitionLabel(c), defaultCharge(rule, clause))
 	case EmptyContent:
-		return notMixedDefault(loc, owner, c, vc) // clause 2.1
+		return notMixedDefault(rule, clause, loc, owner, c, vc) // clause 2.1
 	default:
 		panic("xsd: checkComplexDefaultValid: non-exhaustive ContentType switch")
 	}
@@ -122,8 +213,8 @@ func (s *Schema) checkComplexDefaultValid(loc xsderr.Loc, owner string, c Comple
 // complex type, not the content type its caller already has in hand: the token is
 // derivable from c, and taking both would let a caller pass a variety that is not
 // c's (STYLE D3).
-func notMixedDefault(loc xsderr.Loc, owner string, c ComplexType, vc ValueConstraint) error {
-	return xsderr.New(ruleEPropsCorrect, loc,
-		"%s has a {value constraint} of %q, but its {type definition} %s is a complex type whose {content type}.{variety} is %s, and cos-valid-default clause 2.1 admits a default only on mixed content (e-props-correct clause 2)",
-		owner, vc.LexicalForm(), typeDefinitionLabel(c), c.ContentType().Variety())
+func notMixedDefault(rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, c ComplexType, vc ValueConstraint) error {
+	return xsderr.New(rule, loc,
+		"%s has a {value constraint} of %q, but its {type definition} %s is a complex type whose {content type}.{variety} is %s, and cos-valid-default clause 2.1 admits a default only on mixed content%s",
+		owner, vc.LexicalForm(), typeDefinitionLabel(c), c.ContentType().Variety(), defaultCharge(rule, clause))
 }

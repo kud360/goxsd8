@@ -72,15 +72,14 @@ func TestSimpleTypeReadsTheWholeInitialValue(t *testing.T) {
 	tWantCharge(t, cAssess(t, schema, cRoot("#4", "#-2")), "3.1.3", loc(1, 1))
 }
 
-// An element with NO character information item [[child]] declines rather than
-// being charged for the empty string, on cvc-complex-type clause 1.2's own
-// grounds: cvc-elt clause 5.1 may supply the ·initial value· from a {value
-// constraint} instead, and that dispatch is unimplemented (#716).
-func TestSimpleTypeDeclinesAnEmptyElement(t *testing.T) {
+// An element with NO character information item [[child]] and no {value
+// constraint} on its declaration is on cvc-elt clause 5.2's arm, so clause 5.2.1
+// sends E ITSELF to cvc-type and clause 3.1.3 charges its empty ·initial value·
+// against a type whose lexical space excludes "".
+func TestSimpleTypeChargesAnEmptyElement(t *testing.T) {
 	schema := simpleTypedSchema(t, icBuiltin("integer"), nil, false)
 
-	wantSilence(t, cAssess(t, schema, cRoot()),
-		"cvc-elt clause 5.1 may validate a default in place of the empty ·initial value·")
+	tWantCharge(t, cAssess(t, schema, cRoot()), "3.1.3", loc(1, 1))
 }
 
 // Clause 3.1.1 admits xsi:type, xsi:nil, xsi:schemaLocation and

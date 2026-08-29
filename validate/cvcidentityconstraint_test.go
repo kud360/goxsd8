@@ -286,6 +286,34 @@ func TestSkipWildcardAttributeLengthensNoKeySequence(t *testing.T) {
 		icCharge(ruleCvcIdentityConstraint, 3), icChargeAttr(ruleCvcID, 3))
 }
 
+// A field node that is an EMPTY element whose declaration carries a {value
+// constraint} contributes the ·actual value· of that constraint's {lexical form}
+// to the ·key-sequence·, which is exactly what §3.11.4's Note calls for: "default
+// or fixed value constraints may play a part in ·key-sequences·" (cvc-elt clause
+// 5.1, #853).
+//
+// Two such nodes therefore share ONE ·key-sequence· and a key charges clause
+// 4.2.2 against the later — a charge the decline this replaced could not make,
+// having contributed no member and left the sequence short. The three documents
+// are the discriminating set: two substituted values collide, a substituted value
+// and an owned one do not, and a MISSING <dtag> leaves the sequence short, which
+// is clause 4.2.1's own charge and not this one.
+func TestDefaultedEmptyElementFillsItsKeySequence(t *testing.T) {
+	key := icDef(t, "K", xsd.IdentityConstraintKey, ".//item", nil, "", "dtag")
+	schema := icSchema(t, "", false, []xsd.IdentityConstraint{key}, nil)
+
+	icWantCharges(t, icAssess(t, schema, icRoot(idDefaulted(2), idDefaulted(4))),
+		icCharge(ruleCvcIdentityConstraint, 4), icCharge(ruleCvcID, 5))
+
+	own := icElem(xsd.QName{Local: "item"}, 4, nil, ElementChild(
+		icElem(xsd.QName{Local: "dtag"}, 5, nil, TextChild(&testText{data: "d2", loc: loc(5, 8)}))))
+	icWantCharges(t, icAssess(t, schema, icRoot(idDefaulted(2), own)))
+
+	bare := icElem(xsd.QName{Local: "item"}, 4, nil)
+	icWantCharges(t, icAssess(t, schema, icRoot(idDefaulted(2), bare)),
+		icCharge(ruleCvcIdentityConstraint, 4))
+}
+
 // The rule ID is the BARE catalog name, with the clause in the message text.
 func TestIdentityConstraintRuleIsTheBareCatalogName(t *testing.T) {
 	if !xsderr.IsValidRule(ruleCvcIdentityConstraint) {

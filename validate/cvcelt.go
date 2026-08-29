@@ -130,6 +130,65 @@ func (w *walk) nilCheck(e Element, g governance) bool {
 	return isNilled
 }
 
+// elementDefault applies cvc-elt clause 5's case split and reports the
+// {value constraint} clause 5.1 substitutes: D has a {value constraint}, E has
+// neither element nor character information item [[children]], and E is not
+// ·nilled· with respect to D. Where it holds, what clause 5.1.2 assesses is
+// "the element information item with D.{value constraint}.{lexical form} used as
+// its ·normalized value·" and never the empty [[children]] E actually has; where
+// it fails, clause 5.2 assesses E itself and this reports false.
+//
+// Clause 5.1.2 stipulates a ·normalized value· and cvc-type clause 3.1.3 reads
+// an ·initial value·, and this hands the one on as the other: the {lexical form}
+// becomes the string String Valid (§3.16.4) normalizes under the ·governing type
+// definition·'s whiteSpace facet. It is NOT pre-normalized against any type —
+// [xsd.NewValueConstraint] stores it verbatim and parser's valueConstraintOf
+// hands it the raw default=/fixed= attribute value — so the composition
+// normalizes it exactly once, under the type doing the validating. That is the
+// same composition [xsd.ValueSpace.ValidDefault] applies wherever a {value
+// constraint}'s lexical is read: a-props-correct clause 2, au-props-correct
+// clause 2, e-props-correct clause 2 and cvc-complex-type clause 4
+// ([walk.defaultedAttribute]) all predate this rule and all compose it the same
+// way, so clause 5.1.1 and clause 5.1.2 cannot disagree about the lexical either.
+//
+// GAP(validate): where the {lexical form} is not already a fixed point of that
+// facet, normalizing once is a READING of clause 5.1.2 and not a transcription
+// of it — §3.3.5.4 clause 1.1 makes the {lexical form} the [schema normalized
+// value] outright, with no second normalization, and key-nv (§3.3) defines a
+// ·normalized value· only relative to the type validating it. The four readers
+// of the value this hands on split on which way that cuts, so the direction is
+// stated per reader and not once (STYLE P3a):
+//
+//   - [contentCheck.simpleTypeValue] (cvc-type 3.1.3) and
+//     [contentCheck.initialValue] (cvc-complex-type 1.2) CHARGE on a lexical
+//     outside the type's lexical space, and the direction for these two is
+//     UNESTABLISHED. Collapsing a padded lexical into a type's lexical space
+//     withholds a charge, but the pattern stage runs on the normalized string
+//     (value/facets.go), so a {pattern} matching only strings whose white space
+//     collapse deletes is charged HERE and satisfied under a literal reading —
+//     the same normalization cuts both ways and no one direction covers the
+//     reader set.
+//   - [walk.idRecord] (§3.17.5.2) and [walk.keyMember] (§3.11.4 clause 3) read
+//     an ·actual value· off it, and for these two normalizing is not a
+//     permission at all but the only way to have a value: key-nv derives the
+//     ·actual value· from the NORMALIZED lexical, so skipping it would map the
+//     wrong string or none, shortening a ·key-sequence· and dropping an ·ID
+//     value·.
+//
+// No issue owns this residual yet.
+//
+// The emptiness is the caller's to establish, since only the walk that consumed
+// E.[[children]] knows it ([contentCheck.empty]). Both varieties are returned:
+// clause 5.1 quantifies over "a {value constraint}" with no {variety} condition,
+// which is what makes it the arm an empty element with a FIXED constraint takes
+// (elementFixed's is clause 5.2.2's narrower reading, on the other arm).
+func elementDefault(g governance, empty, isNilled bool) (xsd.ValueConstraint, bool) {
+	if !empty || isNilled || !g.hasDecl {
+		return xsd.ValueConstraint{}, false
+	}
+	return g.decl.ValueConstraint()
+}
+
 // elementFixed reports D.{value constraint} where its {variety} is fixed — the
 // shape cvc-elt clauses 3.2.3.2 and 5.2.2 both read — for an element whose
 // ·governing element declaration· is known.

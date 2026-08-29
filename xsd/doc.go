@@ -168,8 +168,15 @@
 // leaf — so the whole capability is taken as an INPUT: the ValueSpace
 // interface, passed to SchemaBuilder.FinalizeWith. Every ValueSpace method
 // may answer "undecided", and undecided always accepts, so plain Finalize
-// (which installs none) is the fully fail-open configuration.
+// (which installs undecidedValueSpace) is the fully fail-open configuration.
 // value.NewValueSpace is the implementation the parser installs.
+//
+// One exported method takes a ValueSpace PER CALL instead of reading the
+// installed one: Schema.ElementDefaultValid, whose caller charges
+// cos-valid-default during instance assessment rather than at finalize and
+// holds the space its own backend defines. A schema finalized without one
+// answers every question undecided, so reading the installed space there
+// would make that charge permanently undecidable.
 //
 // FinalizeWith installs a SECOND capability at the same seam, and it is
 // deliberately a second interface rather than a fourth ValueSpace method:
@@ -208,8 +215,11 @@
 // are exported beneath it as the {namespace constraint} property's own
 // lower-level accessors. Schema.ValidlySubstitutable is the derivation
 // half's one exported entry point, for the instance-side reader of
-// key-val-sub-type that cvc-elt clause 4 needs. The rest is in-package
-// machinery finalize drives.
+// key-val-sub-type that cvc-elt clause 4 needs, and
+// Schema.ElementDefaultValid is cos-valid-default's, for the one cvc-elt
+// clause 5.1.1 charges at assessment time over a type an xsi:type supplied
+// rather than over any declaration's. The rest is in-package machinery
+// finalize drives.
 //
 // One of the two drivers designed on that algebra ships: Matcher,
 // validation's pull driver. Schema.ContentMatcher returns one over a
