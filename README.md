@@ -64,17 +64,24 @@ with their milestones (`parse` M4, `validate` M5, `gen` M9).
 
 ```sh
 goxsd8 parse order.xsd items.xsd                # compile + summary, exit 0/1
-goxsd8 validate -schema order.xsd order1.xml order2.json
+goxsd8 validate -schema order.xsd -schema items.xsd order1.xml order2.json
                                                 # exit 0 valid, 1 invalid, 2 usage
 goxsd8 gen -schema order.xsd -out ./gen/order \
            -schema items.xsd -out ./gen/items  # one package per -schema/-out pair
 ```
 
-Beyond `-schema` and `-out`, the contract carries `-format` (force the
-instance source format instead of deriving it from the extension),
-`-no-hints` (ignore `xsi:schemaLocation` hints in XML instances),
-`-backend strict|native` (which value backend `gen` emits against), `-q`
-(quiet) and `-v` (debug logging to stderr via `slog`, scoped with
+Every schema needs its own `-schema`, and every positional argument is an
+instance. `validate`'s exit code aggregates over those instances: 1 if any
+one of them is invalid. `parse` prints its summary on stdout and one line
+per schema error on stderr.
+
+Beyond `-schema` and `-out`, the contract carries `-format xml|json|ber`
+(force the instance source format instead of deriving it from the
+extension; matched case-sensitively and applying to every instance of the
+invocation, there being no per-instance spelling), `-no-hints` (ignore
+`xsi:schemaLocation` hints in XML instances), `-backend strict|native`
+(which value backend `gen` emits against), `-q` (quiet) and `-v` (debug
+logging to stderr via `slog`, scoped with
 `GOXSD_DEBUG=parser,validate,codec`).
 **`go doc github.com/kud360/goxsd8/cmd/goxsd8` is the authoritative CLI
 contract**, and this section summarizes it. `goxsd8 -help` prints the usage
@@ -83,9 +90,9 @@ implementation status — and not its argument vocabulary (which spellings of
 the help flag are recognized, whether `help` and `-version` are names, what
 `--` means) or its library relationship.
 
-Violations print one per line as `<loc>: [<rule>] <message>`, where `<loc>`
-is `<file>:<line>:<col>` (`?` when unknown) and `<rule>` is the spec
-validation rule ID:
+Violations print one per line on stdout as `<loc>: [<rule>] <message>`,
+where `<loc>` is `<file>:<line>:<col>` (`?` when unknown) and `<rule>` is
+the spec validation rule ID:
 
 ```
 order.xml:3:3: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): ?: [cvc-datatype-valid] decimal: "12,50" is not in the lexical space (decimal-lexical-representation, §3.3.3.1)
