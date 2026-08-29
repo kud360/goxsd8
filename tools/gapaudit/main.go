@@ -801,11 +801,12 @@ func printReportTo(w io.Writer, rep report) {
 				" the citation itself is the defect\n", n)
 		}
 		for _, cm := range u.ClosedMatches {
-			label := "resemblance"
+			// Not "label": that names the issue-label type since #1062.
+			verdict := "resemblance"
 			if cm.Kind == matchCited {
-				label = "dead end"
+				verdict = "dead end"
 			}
-			_, _ = fmt.Fprintf(w, "      %s: %s CLOSED #%d %q\n", label, cm.Kind, cm.Issue.Number, cm.Issue.Title)
+			_, _ = fmt.Fprintf(w, "      %s: %s CLOSED #%d %q\n", verdict, cm.Kind, cm.Issue.Number, cm.Issue.Title)
 		}
 	}
 
