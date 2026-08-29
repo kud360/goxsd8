@@ -479,18 +479,20 @@ func attributePropertiesFolded(ct xsd.ComplexType) bool {
 // written here.
 //
 // values is [value.NewValueSpace] over that same backend, built once per
-// assessment for the one charge that asks a value-constraint question of the
-// SCHEMA rather than of the instance (cvc-complex-type clause 4,
-// [walk.defaultedAttribute]). It is not derived state to be re-derived per call:
-// the constructor is total on a non-nil backend and the result is immutable, so
-// building it per ·defaulted attribute· would allocate once per use per element
-// to reach the same object. nodes counts the element information items the walk
-// has entered, and the count doubles as each one's IDENTITY: §3.11.5's conflict
-// resolution turns on "the same key-sequence but distinct nodes" and §3.17.5.2's
-// [binding] is a SET of elements, and an [Element] is an interface whose ==
-// compares whatever an adapter's dynamic type compares. ids is the [ID/IDREF
-// table] those ordinals bind into, assembled across the whole walk and read
-// once, at the ·validation root· (cvcid.go).
+// assessment for the two charges that ask a value-constraint question of the
+// SCHEMA rather than of the instance: cvc-complex-type clause 4
+// ([walk.defaultedAttribute]) and cvc-elt clause 5.1.1
+// ([contentCheck.defaultValid], which reads this seam on the first one's
+// terms). It is not derived state to be re-derived per call: the constructor is
+// total on a non-nil backend and the result is immutable, so building it per
+// ·defaulted attribute· would allocate once per use per element to reach the
+// same object. nodes counts the element information items the walk has entered,
+// and the count doubles as each one's IDENTITY: §3.11.5's conflict resolution
+// turns on "the same key-sequence but distinct nodes" and §3.17.5.2's [binding]
+// is a SET of elements, and an [Element] is an interface whose == compares
+// whatever an adapter's dynamic type compares. ids is the [ID/IDREF table] those
+// ordinals bind into, assembled across the whole walk and read once, at the
+// ·validation root· (cvcid.go).
 type walk struct {
 	log     *slog.Logger
 	schema  *xsd.Schema

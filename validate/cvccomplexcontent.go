@@ -212,15 +212,16 @@ func (c *contentCheck) assessed() string {
 //
 // The predicate is [xsd.Schema.ElementDefaultValid], the same one Phase E
 // charges, and is deliberately not re-derived here (STYLE T4). Its verdict
-// arrives already citing cvc-elt clause 5.1.1 and is carried as the cause on
-// [contentCheck.chargeCause]'s terms, so the rejection names which of
-// cos-valid-default's clauses turned the default away.
+// arrives under cos-valid-default, the predicate's own rule, naming which of
+// that constraint's clauses turned the default away; THIS clause is named here
+// and nowhere else, in the message [contentCheck.chargeCause] wraps that verdict
+// as the cause of.
 //
 // The value space handed to it is the WALK's ([walk.values]) and not the one the
 // schema was finalized with, on [walk.defaultedAttribute]'s terms and for the
 // same reason: a schema assembled through [xsd.SchemaBuilder.Finalize] carries
-// none, and reading its would make this charge decidable only for schemas
-// finalized a particular way.
+// undecidedValueSpace, which answers every question undecided, so reading its
+// would leave this charge permanently undecidable for such a schema.
 func (c *contentCheck) defaultValid(w *walk) {
 	if c.charged || !c.g.instance || c.g.typ == nil {
 		return
@@ -229,7 +230,7 @@ func (c *contentCheck) defaultValid(w *walk) {
 	if !defaulted {
 		return
 	}
-	cause := w.schema.ElementDefaultValid(w.values, ruleCvcElt, "5.1.1", c.e.Loc(),
+	cause := w.schema.ElementDefaultValid(w.values, c.e.Loc(),
 		"the element "+c.e.Name().String(), c.g.typ, vc)
 	if cause == nil {
 		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.1.1", "satisfied")

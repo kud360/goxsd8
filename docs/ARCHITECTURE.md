@@ -288,8 +288,8 @@ from position. `Loc` is provenance, not identity.
 
 ### Why the finalize machinery lives in `xsd` (a steward ruling, 2026-08-02; re-confirmed 2026-08-23)
 
-`xsd` is by far the largest package, and **8,412** of its non-test lines
-export **nothing at all** — the same 20 files as of 2026-08-23 (13 files /
+`xsd` is by far the largest package, and **8,044** of its non-test lines
+export **nothing at all** — 19 files as of 2026-08-29 (13 files /
 ~6,700 lines at the 2026-08-02 audit): `allgrouplimited.go`,
 `assertionprefix.go`, `attributerestriction.go`, `attributeusefold.go`,
 `attributewildcardfold.go`, `collapsedintermediate.go`,
@@ -331,8 +331,8 @@ Two access styles over the compiled model, one shared core:
   (`cos-valid-default`, for `cvc-elt` clause 5.1.1), `Wildcard.AllowsName`
   (the one canonical admission entry point) and
   `NamespaceConstraint.AllowsName`/`AllowsNamespace` beneath it.
-  `xsd/doc.go`'s "Walk API" section is authoritative on which. Of the two drivers over it one ships and one does
-  not:
+  `xsd/doc.go`'s "Walk API" section is authoritative on which. Of the two
+  drivers over it one ships and one does not:
   - a **pull** driver — `Matcher`, the instance-guided advance of the
     content model one child at a time (the validation consumer) —
     **ships**, as `Schema.ContentMatcher`/`Matcher`/`Attribution`; it

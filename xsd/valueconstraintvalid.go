@@ -304,13 +304,12 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 // element-side caller does a case analysis first (elementdefaultvalid.go) to work
 // out which simple type that is.
 //
-// rule and clause together are the citation the message closes with, and the two
-// travel as separate parameters because the clause number is NOT constant across
-// the callers: the three Phase E rules above all charge it as their clause 2,
-// and cvc-elt charges the same predicate at ASSESSMENT time as its clause 5.1.1
-// ([Schema.ElementDefaultValid]). Neither is derivable from the other, and
-// spelling either rule's name a second time here would silently mislabel any
-// further caller (STYLE D3).
+// rule and clause together are the citation the message closes with
+// (defaultCharge), and the two travel as separate parameters because neither is
+// derivable from the other: the three Phase E rules above charge the predicate as
+// their own clause 2, and [Schema.ElementDefaultValid] charges cos-valid-default
+// as ITSELF, with no clause of another rule to name. Spelling either rule's name
+// a second time here would silently mislabel any further caller (STYLE D3).
 //
 // The verdict is the installed ValueSpace's, and an UNDECIDED verdict ACCEPTS.
 // That is not laxity, it is the fail-open contract (ValueSpace, PRINCIPLES 20):
@@ -364,5 +363,6 @@ func (s *Schema) checkSimpleDefault(vs ValueSpace, rule xsderr.Rule, clause stri
 		return nil
 	}
 	return xsderr.New(rule, loc,
-		"%s has a {value constraint} of %q, which is not Datatype Valid with respect to its {type definition} (Datatypes §4.1.4 cvc-datatype-valid), so it is not a valid default (%s clause %s, cos-valid-simple-default §3.2.6.2)", owner, vc.LexicalForm(), rule, clause)
+		"%s has a {value constraint} of %q, which is not Datatype Valid with respect to its {type definition} (Datatypes §4.1.4 cvc-datatype-valid), so it is not a valid default%s",
+		owner, vc.LexicalForm(), defaultCharge(rule, clause, "cos-valid-simple-default §3.2.6.2"))
 }

@@ -549,37 +549,74 @@ func TestPhaseEClause2PrecedesClause3(t *testing.T) {
 // TestPhaseEClause2ClauseDerivesFromRule pins checkSimpleDefault's message to the
 // citation it is charged under: the rule's own name plus its caller's own clause
 // number, never a hardcoded pair with one of them as the default (STYLE D3). All
-// four of today's callers are asserted, so the four phrases the message may carry
-// are nailed down byte for byte.
-//
-// The fourth is the one that broke the constant " clause 2" suffix the first three
-// shared: cvc-elt clause 5.1.1 charges the same predicate at ASSESSMENT time
-// ([Schema.ElementDefaultValid], #853), under a different rule AND a different
-// clause number, so the clause travels as its own parameter.
+// three in-package callers are asserted, so the three phrases the message may
+// carry are nailed down byte for byte.
 //
 // It calls the helper directly rather than through a schema because the callers
 // reach it from different walks, and what is under test is the message, not any of
 // the walks.
 func TestPhaseEClause2ClauseDerivesFromRule(t *testing.T) {
 	for _, tc := range []struct {
-		rule   xsderr.Rule
-		clause string
-		want   string
+		rule xsderr.Rule
+		want string
 	}{
-		{ruleAPropsCorrect, "2", "a-props-correct clause 2"},
-		{ruleAuPropsCorrect, "2", "au-props-correct clause 2"},
-		{ruleEPropsCorrect, "2", "e-props-correct clause 2"},
-		{"cvc-elt", "5.1.1", "cvc-elt clause 5.1.1"},
+		{ruleAPropsCorrect, "a-props-correct clause 2"},
+		{ruleAuPropsCorrect, "au-props-correct clause 2"},
+		{ruleEPropsCorrect, "e-props-correct clause 2"},
 	} {
 		t.Run(tc.want, func(t *testing.T) {
 			s := &Schema{}
-			err := s.checkSimpleDefault(vcOnly("7"), tc.rule, tc.clause, vcLoc, "attribute declaration g", nil, NewValueConstraint(ValueDefault, "not a value of str", nil, nil))
+			err := s.checkSimpleDefault(vcOnly("7"), tc.rule, "2", vcLoc, "attribute declaration g", nil, NewValueConstraint(ValueDefault, "not a value of str", nil, nil))
 			expectRule(t, err, tc.rule)
-			if !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("message %q does not name %q", err.Error(), tc.want)
+			if !strings.Contains(err.Error(), "("+tc.want+", cos-valid-simple-default §3.2.6.2)") {
+				t.Errorf("message %q does not close with %q beside the delegated constraint", err.Error(), tc.want)
 			}
 		})
 	}
+}
+
+// A caller that charges cos-valid-default AS ITSELF names no clause of another
+// rule, so every message drops the charged-under parenthetical rather than
+// closing with a tautology: [Schema.ElementDefaultValid] is that caller, and its
+// rejection is already an xsderr.Error carrying cos-valid-default as its Rule
+// (#853).
+//
+// The three in-package callers above keep the parenthetical byte for byte, which
+// is what makes this the boundary's difference and not a message rewrite.
+func TestExportedDefaultValidCitesThePredicateAlone(t *testing.T) {
+	s := &Schema{}
+	err := s.ElementDefaultValid(vcOnly("7"), vcLoc, "the element g", (*SimpleType)(nil),
+		NewValueConstraint(ValueDefault, "not a value of str", nil, nil))
+	if err == nil {
+		t.Fatal("ElementDefaultValid = nil, want the cos-valid-default rejection")
+	}
+	expectRule(t, err, ruleCosValidDefault)
+	if !strings.HasSuffix(err.Error(), "so it is not a valid default (cos-valid-simple-default §3.2.6.2)") {
+		t.Errorf("message %q closes with a charged-under citation; the predicate charges itself", err.Error())
+	}
+	for _, unwanted := range []string{"e-props-correct", "cvc-elt", "clause 5.1.1"} {
+		if strings.Contains(err.Error(), unwanted) {
+			t.Errorf("message %q names %q: the caller's rule does not cross this seam", err.Error(), unwanted)
+		}
+	}
+}
+
+// A nil ValueSpace is a caller bug and is named at the door, on
+// [SchemaBuilder.FinalizeWith]'s grounds: this export is the one entry point that
+// can carry one in, Schema.valueSpace being non-nil by construction.
+func TestExportedDefaultValidPanicsOnNilValueSpace(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("ElementDefaultValid(nil, …) did not panic")
+		}
+		if got, want := r.(string), "xsd: Schema.ElementDefaultValid: nil ValueSpace"; got != want {
+			t.Errorf("panic = %q, want %q", got, want)
+		}
+	}()
+	s := &Schema{}
+	_ = s.ElementDefaultValid(nil, vcLoc, "the element g", (*SimpleType)(nil),
+		NewValueConstraint(ValueDefault, "7", nil, nil))
 }
 
 // TestPhaseEClause2FailsOpenWhenUndecided pins the fail-open contract at both call
