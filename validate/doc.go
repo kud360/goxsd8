@@ -191,11 +191,9 @@
 //
 // Everything not decidable is left undecided rather than guessed at: an
 // {attribute wildcard} to evaluate, a ·governing type definition· that is
-// not determinable or whose {attribute uses}/{attribute wildcard} are not
-// yet the spec's (the attribute half alone: a {content type} needs no such
-// fold), a {content type} whose shape xsd.Schema.ContentMatcher declines, a
-// declaration whose {type definition} is not a simple type, and — the
-// decline that matters most — a value.ValidateLexical error that is a fault
+// not determinable, a {content type} whose shape xsd.Schema.ContentMatcher
+// declines, a declaration whose {type definition} is not a simple type, and —
+// the decline that matters most — a value.ValidateLexical error that is a fault
 // of the type or of the backend rather than a verdict about the lexical
 // (value.IsDatatypeVerdict), which is what keeps a typeless attribute
 // (xs:anySimpleType, §3.2.2.2), or simple content of a type this backend

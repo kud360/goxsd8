@@ -403,7 +403,10 @@ func nilledRoot(t *testing.T, lexical string, kids ...string) *testElement {
 
 // An ANONYMOUS governing type decides its element's [[children]]: no finalize
 // pass folds a {content type} the way §3.4.2.4 clause 3 folds {attribute
-// uses}, so attributePropertiesFolded's decline is the attribute half's alone.
+// uses}, so a complex type's particle is whatever its producer built for it,
+// named or anonymous. The content half turns on no property of the {name} at
+// all, which is a separate mechanism from the two attribute folds and not a
+// consequence of them.
 func TestAnonymousGoverningTypeStillDecidesContent(t *testing.T) {
 	anonymous := func() *xsd.Schema {
 		id := xsd.NewComponentID()

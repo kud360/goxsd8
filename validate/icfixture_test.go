@@ -24,9 +24,9 @@ import (
 //	tabled  a declaration carrying a {type table}, so its ·governing type
 //	        definition· is the one shape this package cannot determine at all
 //
-// Every complex type is NAMED, so an attribute is matched rather than declined
-// (assess.go's attributePropertiesFolded), and every simple type is the SEEDED
-// builtin, so a value comparison runs the real facets.
+// Every complex type is NAMED, which icAnonymousSchema below is the deliberate
+// exception to, and every simple type is the SEEDED builtin, so a value
+// comparison runs the real facets.
 //
 // icNS is the one namespace in play besides the absent one; item, box and ref
 // are declared in it or not per the ns argument, and @p:id is in it always, so
@@ -34,9 +34,10 @@ import (
 // xpathDefaultNamespace.
 //
 // icAnonymousSchema is the second shape, built precisely because the first one
-// names every type: it holds an ANONYMOUS governing type, which
-// attributePropertiesFolded declines, over top-level attribute declarations
-// colliding with that type's own uses.
+// names every type: it holds an ANONYMOUS governing type over top-level
+// attribute declarations colliding with that type's own uses, which is what
+// catches a reader resolving an attribute by ·expanded name· at the top level
+// where the governing type's own {attribute use} is what governs it.
 
 const icNS = "urn:p"
 
@@ -379,9 +380,8 @@ func icTopAttribute(t *testing.T, local, typ string) xsd.AttributeDeclaration {
 
 // icAnonymousSchema builds the shape icSchema's every-type-named convention
 // cannot reach: <kid> OWNS an ANONYMOUS complex type restricting a named base,
-// which attributePropertiesFolded declines the attribute half of, and the
-// schema ALSO declares top-level attributes of the same ·expanded names·
-// carrying OTHER types.
+// and the schema ALSO declares top-level attributes of the same ·expanded
+// names· carrying OTHER types.
 //
 //	root  RootType (named)              sequence( kid* )
 //	kid   (anonymous, restricts Base)   empty, @aid <kidAid>, @ref xs:IDREF
@@ -436,7 +436,7 @@ func icAnonymousSchema(t *testing.T, kidAid, topAid string, rootICs []xsd.Identi
 	}
 	schema, err := b.Finalize()
 	if err != nil {
-		t.Fatalf("finalizing the unfolded-type schema: %v", err)
+		t.Fatalf("finalizing the anonymous-type schema: %v", err)
 	}
 	return schema
 }
@@ -450,10 +450,10 @@ func icAnonymousSchema(t *testing.T, kidAid, topAid string, rootICs []xsd.Identi
 //	item  WildType (named)  empty, no attribute uses, {attribute wildcard} pc
 //	top-level               @wid xs:ID
 //
-// Both types are NAMED, so attributePropertiesFolded holds: pc is the only
-// thing two fixtures built here differ in, which is what makes the
-// ·governing type definition· difference §3.10.4.1 draws between skip and
-// the other two observable.
+// WildType carries no attribute use at all, so pc is the only thing two
+// fixtures built here differ in, which is what makes the ·governing type
+// definition· difference §3.10.4.1 draws between skip and the other two
+// observable.
 func icWildcardSchema(t *testing.T, pc xsd.ProcessContents, rootICs []xsd.IdentityConstraint) *xsd.Schema {
 	t.Helper()
 	seeded := icSeeded(t)

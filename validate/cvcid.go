@@ -162,30 +162,19 @@ func (t *idTable) charge(w *walk, root Element) {
 //
 // An attribute that matches no attribute use and resolves to no top-level
 // declaration is not a decline where the element's ·governing type definition·
-// was determinable AND folded: it is then ·laxly assessed· against nothing, so
-// it has no ·governing type definition· and §3.17.5.2 clause 3 excludes it from
-// the ·eligible item set· outright.
-//
-// GAP(validate): where the governing type is complex and this package declined
-// to read its two attribute properties (assess.go's attributePropertiesFolded,
-// whose retirement #1116 owns), the same attribute may match a use it cannot
-// see, so the type read off a top-level declaration — or the absence of one —
-// is not the governing type, and it declines instead.
+// was determinable: it is then ·laxly assessed· against nothing, so it has no
+// ·governing type definition· and §3.17.5.2 clause 3 excludes it from the
+// ·eligible item set· outright.
 func (w *walk) idAttributes(c *icCheck) {
 	ct := c.g.complexType()
-	folded := ct != nil && attributePropertiesFolded(*ct)
 	attrs := c.e.Attributes()
 	for _, a := range attrs {
 		st, typed := w.attributeType(c.e, c.g, a)
 		if typed {
 			w.idRecord(st, a.Value(), c.e, c.node, a.Loc())
-			continue
-		}
-		if ct != nil && !folded {
-			w.ids.declined = true
 		}
 	}
-	if folded {
+	if ct != nil {
 		w.idDefaultedAttributes(c, attrs, *ct)
 	}
 }
@@ -583,20 +572,16 @@ var (
 // violates cvc-complex-type clause 2, which [walk.unmatchedAttribute] charges
 // in its own right.
 //
-// GAP(validate): #1116 owns the retirement. A governing type whose two
-// attribute properties this package declined to read (assess.go's
-// attributePropertiesFolded) reports false for EVERY attribute, whether or not
-// a top-level declaration of the name exists. The wildcard arm is no fallback
-// for a use arm that cannot be decided: that declaration is a DIFFERENT
-// component from the unseen use's, so a lookup succeeding there governs the
-// attribute by whichever type the schema happens to ALSO declare at the top
-// level. Both callers turn the false into their own decline
-// ([walk.idAttributes], [icCheck.fieldAttributes]).
+// The {attribute uses} read here are the spec's for an ANONYMOUS governing type
+// as much as for a named one (§3.4.2.4 clause 3 is "the same for all complex
+// type definitions", and xsd/ownedtypefold.go folds a declaration-owned type
+// through the slot that owns it), so the use arm is asked of every complex
+// governing type and the top-level fallback below is reached only where no use
+// matches. Reaching it on an unread use would govern the attribute by whichever
+// type the schema happens to ALSO declare at the top level, that declaration
+// being a DIFFERENT component from the use's {attribute declaration}.
 func (w *walk) attributeType(e Element, g governance, a Attribute) (*xsd.SimpleType, bool) {
 	if ct := g.complexType(); ct != nil {
-		if !attributePropertiesFolded(*ct) {
-			return nil, false
-		}
 		if u, matched := attributeUseNamed(ct.AttributeUses(), a.Name()); matched {
 			d, resolved := w.schema.ResolvedAttributeDeclaration(u)
 			if !resolved {
@@ -617,9 +602,9 @@ func (w *walk) attributeType(e Element, g governance, a Attribute) (*xsd.SimpleT
 		// [idTable.charge]: its clause 2 charges on an EXTRA binding member, so
 		// a withheld ·ID value· can only withdraw a charge, while its clause 1
 		// charges on the ABSENCE of a declaration, so a withheld one can charge
-		// an IDREF the document does declare a target for — fail-CLOSED, and not
-		// covered by the ids.declined flag, which is the anonymous type's
-		// (attributePropertiesFolded) and is not set here. That shape is bounded
+		// an IDREF the document does declare a target for — fail-CLOSED, and no
+		// ids.declined flag covers it: [walk.idAttributes] records the decline
+		// of no attribute it could not type. That shape is bounded
 		// to a document the spec rejects anyway: the same unmatched attribute
 		// fails cvc-complex-type clause 2, which [walk.unmatchedAttribute]
 		// declines under the same #717 rather than charging.

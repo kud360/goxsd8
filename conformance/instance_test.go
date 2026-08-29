@@ -249,23 +249,23 @@ func TestDecidedNotValidEnumeratesTheDecidableCharges(t *testing.T) {
 	}
 }
 
-// TestParsedAnonymousExtensionIsNotFalselyRejected proves the decline
-// validate's attributePropertiesFolded makes is reachable from a PARSED
-// document and not only from a hand-assembled xsd.Schema: produceComplexType
-// dispatches on the <complexContent>/<simpleContent> children before it
-// considers whether the type is named, so an inline <complexContent>
-// <extension> under an <element> is produced exactly as a top-level one is.
+// TestParsedAnonymousExtensionIsNotFalselyRejected proves the shape whose two
+// attribute properties are folded through the OWNING SLOT alone (#414) is
+// reachable from a PARSED document and not only from a hand-assembled
+// xsd.Schema: produceComplexType dispatches on the
+// <complexContent>/<simpleContent> children before it considers whether the type
+// is named, so an inline <complexContent><extension> under an <element> is
+// produced exactly as a top-level one is.
 //
 // The document below is VALID — @fromBase is the base's own attribute use and
-// @own the extension's — and an assessment that read the type's two attribute
-// properties without the decline would have to get both right or charge
-// cvc-complex-type clause 2 for an attribute the base declares. This test lives
-// here rather than in validate because it needs the parser, which validate's
-// import closure excludes (validate/imports_test.go); it goes through
-// parser.Parse and xmlsrc.Validate directly rather than through the lane
-// executor, since assembleCase's decidability gate declines this schema before
-// validate ever sees it — which is why no suite case can expose the defect and
-// why the lane cannot pin it.
+// @own the extension's — so the assessment has to get both of the anonymous
+// type's folded attribute properties right or charge cvc-complex-type clause 2
+// for an attribute the base declares. This test lives here rather than in
+// validate because it needs the parser, which validate's import closure excludes
+// (validate/imports_test.go); it goes through parser.Parse and xmlsrc.Validate
+// directly rather than through the lane executor, since assembleCase's
+// decidability gate declines this schema before validate ever sees it — which is
+// why no suite case scores this shape either way.
 func TestParsedAnonymousExtensionIsNotFalselyRejected(t *testing.T) {
 	dir := t.TempDir()
 	writeFixture(t, filepath.Join(dir, "s.xsd"), `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
@@ -300,13 +300,13 @@ func TestParsedAnonymousExtensionIsNotFalselyRejected(t *testing.T) {
 		return result.Violations()
 	}
 	if got := assess(`<root fromBase="x" own="y"/>`); len(got) != 0 {
-		t.Errorf("Violations() = %v, want none: the anonymous extension's {attribute uses} and {attribute wildcard} are unfolded, so neither clause of cvc-complex-type may be charged against it", got)
+		t.Errorf("Violations() = %v, want none: the anonymous extension's {attribute uses} hold both @fromBase and @own once §3.4.2.4 clause 3 has folded them, so cvc-complex-type clause 2 matches each of them to a use", got)
 	}
-	// The control, and the reason the decline is bounded to the unfolded
-	// shape: the sibling implicit-content anonymous type IS a restriction of
-	// xs:anyType, both folds are the identity on it, and it still charges —
-	// this is the shape the instance lane's decidable subset is made of
-	// (conformance/schema.go's anonymousComplexTypeDecidable).
+	// The control, over an anonymous type of the other shape: the sibling
+	// implicit-content one IS a restriction of xs:anyType, both folds are the
+	// identity on it, and it charges its own {required} use — this is the shape
+	// the instance lane's decidable subset is made of (conformance/schema.go's
+	// anonymousComplexTypeDecidable).
 	if got := assess(`<plain/>`); len(got) != 1 {
 		t.Fatalf("Violations() = %v, want exactly one: an implicit-content anonymous type is still assessed", got)
 	}
