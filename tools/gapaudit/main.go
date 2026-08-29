@@ -396,7 +396,7 @@ type issue struct {
 // label is one entry of an issue's `labels` array. Only the name is read;
 // gh emits id, description and color beside it and they decode away.
 //
-// tools/wipsurvey declares the same two fields as `ghLabel`, and the two
+// tools/wipsurvey declares the same one field as `ghLabel`, and the two
 // stay separate: both tools are `package main`, so sharing the shape means
 // a new package under tools/ with its own surface, which is a refactor of
 // the survey pipeline rather than part of widening this one's input (T4).
