@@ -701,6 +701,12 @@ func TestCitedOwnerOutsideKindGapResolves(t *testing.T) {
 			}
 
 			rep := reconcile([]marker{m}, tc.issues, true)
+			// The owner is kind/feature, so widening the feed must not drag
+			// it into group 2: the bystander is the only row either way.
+			if len(rep.Stale) != 1 || rep.Stale[0].Issue.Number != bystander.Number {
+				t.Errorf("Stale = %+v, want only #%d", rep.Stale, bystander.Number)
+			}
+
 			if len(rep.Untracked) != tc.wantUntracked {
 				t.Fatalf("Untracked = %+v, want %d entr(ies)", rep.Untracked, tc.wantUntracked)
 			}
