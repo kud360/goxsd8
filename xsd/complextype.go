@@ -1000,11 +1000,13 @@ func (c ComplexType) Abstract() bool {
 // On a type reached through a finalized [Schema] this is the §3.4.2.4 clause 3
 // property — the type's own uses followed by those inherited from its {base type
 // definition}, less what clauses 3.2.1 and 3.2.2 exclude — because Finalize
-// materialises the fold (attributeusefold.go, #401). That holds for an ANONYMOUS
-// type a declaration owns as well as for a named one: §3.4.2.4 makes the mapping
-// rule "the same for all complex type definitions", and the fold reaches an
-// inline <complexType> nested in a particle tree or declared under an
-// <alternative> through the slot that owns it (ownedtypefold.go, #414).
+// materialises the fold (attributeusefold.go, #401). §3.4.2.4 makes that mapping
+// rule "the same for all complex type definitions", and an ANONYMOUS type gets
+// it too at the slots Finalize walks: an element declaration's own {type
+// definition}, a {type table} alternative's, and every such slot those two nest,
+// at top level or down a particle tree (ownedtypefold.go, #414). An ATTRIBUTE
+// declaration's own {type definition} is not one of them — ownedtypefold.go's
+// GAP marker names the shape that seats a complex type there.
 //
 // On a ComplexType a caller built with [NewComplexType] and has not yet
 // finalized, it is only what that caller passed in: clause 3 needs the base
@@ -1025,11 +1027,10 @@ func (c ComplexType) AttributeUses() []AttributeUse {
 // (clause 2.1); for an EXTENSION it is that wildcard's {namespace constraint}
 // unioned with the {base type definition}'s per cos-aw-union, under the
 // extension's own {process contents} and {annotations} (clause 2.2), because
-// Finalize materialises the fold (attributewildcardfold.go, #265). As for
-// AttributeUses, that holds for an ANONYMOUS type a declaration owns too: the
-// §3.4.2.5 mapping rule is "the same for all complex type definitions", and the
-// fold reaches such a type through the slot that owns it (ownedtypefold.go,
-// #414).
+// Finalize materialises the fold (attributewildcardfold.go, #265). The §3.4.2.5
+// mapping rule is likewise "the same for all complex type definitions", and an
+// anonymous type gets it at exactly the slots AttributeUses names and no others
+// (ownedtypefold.go, #414).
 //
 // On a ComplexType a caller built with [NewComplexType] and has not yet
 // finalized, it is only what that caller passed in: clause 2.2 needs the base

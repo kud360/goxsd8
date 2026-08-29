@@ -487,6 +487,11 @@ func ownedComplexBase(base xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 // FINALIZE-side folds do reach it, through the owning slot
 // (xsd/ownedtypefold.go, #414), so a widened read-only walk now meets a folded
 // component rather than turning an anonymous extension into a FALSE rejection.
+// That covers everything THIS producer builds: the three identities that yield
+// an unnamed one are elementOwnedComplexType, newTypeAlternativeOwned and
+// newRedefineOriginal, and the fold walks every one of those slots. The slot
+// xsd/ownedtypefold.go's GAP marker leaves unwalked — an attribute declaration's
+// own {type definition} — is one no XSD production puts a <complexType> under.
 // §3.4.2.1 clause 1's {assertions} fold is NOT among them and needs no issue of
 // its own: assertionsWithBase runs HERE, on every produced type, anonymous ones
 // included (#346). The direction today is open (under-rejection), never

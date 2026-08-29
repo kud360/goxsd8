@@ -60,9 +60,39 @@ type ownedTypeFold struct {
 // {attribute uses} of any type declared inside them.
 //
 // {attribute declarations} and {attribute group definitions} are absent because
-// neither nests a complex type: an attribute's {type definition} is always
-// simple (§3.2.1), and an attribute group definition holds attribute uses and a
-// wildcard and nothing else.
+// §3.2.1 types an attribute's {type definition} as a SIMPLE type definition, and
+// an attribute group definition holds attribute uses and a wildcard and nothing
+// else.
+//
+// GAP(xsd): this package does not enforce that §3.2.1 typing, so the three
+// attribute-side slots stay unfolded. checkTypeDefinitionOrRef
+// (typedefinition.go) decides the ARM of an attributeTypeSlot, never the
+// VARIETY, so NewAttributeDeclaration accepts an InlineTypeDefinition wrapping a
+// ComplexType and Finalize accepts the Schema. A caller assembling one through
+// [SchemaBuilder] can therefore seat an anonymous complex type at a top-level
+// attribute declaration's {type definition}, at a LocalAttributeDeclaration's
+// inside a complex type's {attribute uses}, or at one inside an attribute group
+// definition — all three reach that one constructor — and no root here walks any
+// of them, so such a type reports its own {attribute uses} and its own
+// <anyAttribute> alone. The PARSER cannot produce the shape: no production puts
+// a <complexType> under an <attribute>. Nothing owns the retirement — enforcing
+// the variety and widening these roots are two changes, and neither is #414's.
+//
+// Direction (STYLE P3a): the withheld members are UNDER-reported and no reader
+// charges on their absence. In this package the one reader is
+// componentWalk.walkComplexType, which ranges AttributeUses() to DESCEND, for
+// resolveReferences and checkSimpleTypeDerivations (resolve.go),
+// checkTypeTableSubstitutability (typetablesubstitutable.go) and
+// checkComponentValueConstraints (valueconstraintvalid.go); every member clause
+// 3 would have added comes from the {base type definition}, which that same walk
+// enters one slot above, so no descent is lost. Outside it no reader obtains the
+// component at all: every consumer of an attribute declaration's {type
+// definition} narrows through [Schema.ResolvedSimpleType], which declines a
+// complex type outright — attributeUseType (defaultbinding.go),
+// checkAttributeDeclarationValueConstraint and checkAttributeUseValueConstraint
+// (valueconstraintvalid.go) here, and validate's walk.matchedAttribute,
+// walk.defaultedAttribute, walk.idDefaultedAttributes, walk.attributeType and
+// walk.topLevelAttributeType (cvcattribute.go, cvcid.go).
 //
 // Roots are walked in document order and no index map is ranged (STYLE D2).
 func (o ownedTypeFold) schema(s *Schema) error {
@@ -199,13 +229,17 @@ func (o ownedTypeFold) particle(p Particle) (Particle, error) {
 // modelGroup descends every particle of a model group in document order,
 // returning the group re-seated with a FRESH {particles} slice.
 //
-// The copy is load-bearing, not hygiene. §3.4.2.3.2 builds an extension's
-// {content type} particle around its BASE's, so one backing array is reachable
-// from more than one root; rewriting in place would fold every type declared
-// below it once per root that reaches it, and would seat one root's rewritten
-// components inside another's subtree. Copying gives each path components of its
-// own, which is what the value semantics already say they are, and keeps every
-// owning slot folded exactly once.
+// The copy keeps Finalize from rewriting a slice a CALLER still holds.
+// NewModelGroup copies its input, so the array walked here is the one the
+// ModelGroup value the caller built points at; writing a folded particle into it
+// would fold that unfinalized component too, against what AttributeUses
+// documents ("only what that caller passed in"). It is not a defence against
+// double folding: §3.4.2.3.2 builds an extension's {content type} particle
+// around its BASE's, so one backing array is reachable from more than one root,
+// but both mapping rules are idempotent — clause 3.2.1 excludes an inherited use
+// whose name an own use already carries, cos-aw-union re-unions to the same
+// constraint — so folding a component twice yields what folding it once does.
+// TestOwnedFoldLeavesTheCallersSlicesAlone pins what the copy actually decides.
 func (o ownedTypeFold) modelGroup(g ModelGroup) (ModelGroup, error) {
 	particles := append([]Particle(nil), g.particles...)
 	for i, p := range particles {
@@ -253,9 +287,9 @@ func (o ownedTypeFold) elementDeclaration(e ElementDeclaration) (ElementDeclarat
 //
 // §3.3.2.1 dcl.elt.common case 2 can make the {default type definition} hold the
 // declaration's OWN {type definition}, in which case one component is folded at
-// two slots. Each slot holds its own copy, so each is folded exactly once and
-// both answer alike; ownedTypeSlots enumerates that slot unconditionally for the
-// same reason.
+// two slots. Both answer alike whichever way that lands, for the idempotence
+// modelGroup's comment states; ownedTypeSlots enumerates that slot
+// unconditionally for the same reason.
 func (o ownedTypeFold) typeTable(tt TypeTable) (TypeTable, error) {
 	alternatives := append([]TypeAlternative(nil), tt.alternatives...)
 	for i, alt := range alternatives {

@@ -51,6 +51,17 @@ func oOwnedType(t *testing.T, e ElementDeclaration) ComplexType {
 	return c
 }
 
+// oAlternativeType reads back the complex type a Type Alternative's {type
+// definition} slot owns, failing the test if the slot does not hold one.
+func oAlternativeType(t *testing.T, a TypeAlternative) ComplexType {
+	t.Helper()
+	c, owns := ownedComplexType(a.TypeDefinition())
+	if !owns {
+		t.Fatal("the alternative owns no anonymous complex type")
+	}
+	return c
+}
+
 // oGlobal reads a top-level element declaration back off the finalized schema.
 func oGlobal(t *testing.T, s *Schema, name QName) ElementDeclaration {
 	t.Helper()
@@ -177,10 +188,7 @@ func TestOwnedFoldAlternativeInlineType(t *testing.T) {
 	if !ok {
 		t.Fatal("element declaration g carries no {type table}")
 	}
-	c, owns := ownedComplexType(table.Alternatives()[0].TypeDefinition())
-	if !owns {
-		t.Fatal("the alternative owns no anonymous complex type")
-	}
+	c := oAlternativeType(t, table.Alternatives()[0])
 	if got, want := oUseNames(c), []string{"own", "b"}; !fEqual(got, want) {
 		t.Fatalf("{attribute uses} of the alternative's inline type = %v, want %v", got, want)
 	}
@@ -235,28 +243,61 @@ func TestOwnedFoldModelGroupDefinition(t *testing.T) {
 	}
 }
 
-// TestOwnedFoldRunsOncePerSlot pins the copy modelGroup makes. Two roots hold
-// one Particle value here, so one {particles} backing array is reachable from
-// both — the shape §3.4.2.3.2 produces when it builds an extension's {content
-// type} particle around its base's, assembled from two independent types
-// because the extension form of it is rejected first by cos-ct-extends clause
-// 1.6 (two anonymous ·locally declared types· are substitutable for neither).
-// A walk rewriting in place would fold the nested type once per root; the
-// fixture asserts one member per name at BOTH roots.
-func TestOwnedFoldRunsOncePerSlot(t *testing.T) {
-	s := oSchema(t, func(b *SchemaBuilder) {
+// TestOwnedFoldLeavesTheCallersSlicesAlone pins the two copies the descent
+// makes — modelGroup's {particles} and typeTable's {alternatives}. Both
+// constructors copy their input slice, so the array the finalized Schema walks
+// is the one the ModelGroup or TypeTable VALUE the caller still holds points
+// at; rewriting a member in place would fold that retained component too, and
+// AttributeUses documents an unfinalized component as "only what that caller
+// passed in".
+//
+// Each case reads the same component twice: through the finalized Schema, where
+// the fold must have run, and through the value the caller kept, where it must
+// not have.
+func TestOwnedFoldLeavesTheCallersSlicesAlone(t *testing.T) {
+	t.Run("model group particles", func(t *testing.T) {
 		inline := oInline(t, uq("Base"), []AttributeUse{dAttr(t, uq("own"), uq("str"))}, nil, EmptyContent{})
-		local := dOwnInline(t, uq("child"), inline, uLocalScope(t))
-		shared := uOne(t, ResolvedTerm{Term: uGroup(t, CompositorSequence, uOne(t, ResolvedTerm{Term: local}))})
-		b.AddType(uCT(t, uq("Holder"), shared))
-		b.AddType(uCT(t, uq("Other"), shared))
-	})
-	for _, name := range []QName{uq("Holder"), uq("Other")} {
-		t.Run(name.Local, func(t *testing.T) {
-			c := oOwnedType(t, oLocal(t, s, name))
-			if got, want := oUseNames(c), []string{"own", "b"}; !fEqual(got, want) {
-				t.Fatalf("{attribute uses} of the inline type under %s = %v, want %v", name, got, want)
-			}
+		retained := uGroup(t, CompositorSequence, uOne(t, ResolvedTerm{Term: dOwnInline(t, uq("child"), inline, uLocalScope(t))}))
+		s := oSchema(t, func(b *SchemaBuilder) {
+			b.AddType(uCT(t, uq("Holder"), uOne(t, ResolvedTerm{Term: retained})))
 		})
-	}
+		if got, want := oUseNames(oOwnedType(t, oLocal(t, s, uq("Holder")))), []string{"own", "b"}; !fEqual(got, want) {
+			t.Fatalf("{attribute uses} of the inline type under Holder = %v, want %v", got, want)
+		}
+		kept := oOwnedType(t, retained.Particles()[0].Term().(ResolvedTerm).Term.(ElementDeclaration))
+		if got, want := oUseNames(kept), []string{"own"}; !fEqual(got, want) {
+			t.Fatalf("Finalize rewrote the {particles} array the caller still holds: {attribute uses} = %v, want %v", got, want)
+		}
+	})
+	t.Run("type table alternatives", func(t *testing.T) {
+		inline := oInline(t, uq("Base"), []AttributeUse{dAttr(t, uq("own"), uq("str"))}, nil, EmptyContent{})
+		test := NewXPathExpression("true()", nil, nil, nil)
+		retained, err := NewTypeTable(xsderr.Loc{},
+			[]TypeAlternative{iTypeAlternative(t, &test, InlineTypeDefinition{Definition: inline})},
+			iTypeAlternative(t, nil, TypeDefinitionRef{Name: uq("Base")}))
+		if err != nil {
+			t.Fatalf("NewTypeTable: %v", err)
+		}
+		s := oSchema(t, func(b *SchemaBuilder) {
+			context, _ := inline.Context()
+			e, err := NewElementDeclarationOwningTypes(xsderr.Loc{}, context.ID(), uq("g"),
+				TypeDefinitionRef{Name: uq("Base")}, &retained, NewGlobalScope(),
+				nil, false, nil, nil, nil, false, nil, nil)
+			if err != nil {
+				t.Fatalf("NewElementDeclarationOwningTypes(g): %v", err)
+			}
+			b.AddElement(e)
+		})
+		table, ok := oGlobal(t, s, uq("g")).TypeTable()
+		if !ok {
+			t.Fatal("element declaration g carries no {type table}")
+		}
+		if got, want := oUseNames(oAlternativeType(t, table.Alternatives()[0])), []string{"own", "b"}; !fEqual(got, want) {
+			t.Fatalf("{attribute uses} of the alternative's inline type = %v, want %v", got, want)
+		}
+		kept := oAlternativeType(t, retained.Alternatives()[0])
+		if got, want := oUseNames(kept), []string{"own"}; !fEqual(got, want) {
+			t.Fatalf("Finalize rewrote the {alternatives} array the caller still holds: {attribute uses} = %v, want %v", got, want)
+		}
+	})
 }
