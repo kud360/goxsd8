@@ -70,10 +70,10 @@ goxsd8 gen -schema order.xsd -out ./gen/order \
            -schema items.xsd -out ./gen/items  # one package per -schema/-out pair
 ```
 
-Every schema needs its own `-schema`, and every positional argument is an
-instance. `validate`'s exit code aggregates over those instances: 1 if any
-one of them is invalid. `parse` prints its summary on stdout and one line
-per schema error on stderr.
+`validate` needs its own `-schema` for every schema, and reads every
+positional argument as an instance. Its exit code aggregates over those
+instances: 1 if any one of them is invalid. `parse` prints its summary on
+stdout and one line per schema error on stderr.
 
 Beyond `-schema` and `-out`, the contract carries `-format xml|json|ber`
 (force the instance source format instead of deriving it from the
