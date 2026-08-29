@@ -23,7 +23,9 @@ Cheap and targeted, not a full backlog run. Three duties:
    **explicitly dismissed in a comment**.
 3. **Leave the pass's own signal on `main`** — a dated `post-land` entry
    in `docs/LOG/<year>-<month>.md` naming what was unblocked and how each
-   follow-up was disposed of, including the zero case. Without it a
+   follow-up was disposed of, including the zero case. Land that entry
+   through its own PR — commit locally, open a PR, and squash-merge it in
+   this same pass; never commit it directly to `main`. Without it a
    completed pass and a skipped one are indistinguishable from `git log`,
    and a session has already concluded — and committed — the wrong one
    (#400). If the pass restamps `docs/PLAN.md`, step 6's replacement rule
