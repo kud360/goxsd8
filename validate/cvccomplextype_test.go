@@ -456,7 +456,8 @@ func TestAttributeLogNamesTheRuleAndClause(t *testing.T) {
 // anonymousRootSchema declares "root" governed by the ANONYMOUS complex type
 // it owns (§3.3.2.1 dcl.elt.common clause 1), derived from base by derivation
 // and carrying uses. Base is a named type carrying one attribute use and an
-// ##any wildcard, so a fold that HAD run would give the anonymous type both.
+// ##any wildcard, which the folds give the anonymous type both of under an
+// EXTENSION and the use alone under a restriction (§3.4.2.5 clause 2.1).
 // It is the component shape parser.Parse builds for an inline <complexType>
 // child of an <element>, reached here through the constructors because this
 // package imports no parser.
@@ -514,34 +515,37 @@ func assessAgainst(t *testing.T, schema *xsd.Schema, root Element) []*xsderr.Err
 	return res.Violations()
 }
 
-// An ANONYMOUS governing type derived from a named base withholds the whole
-// attribute assessment: attributePropertiesFolded declines every anonymous
-// type but the implicit-content one, so neither Base's attribute use nor its
-// <anyAttribute> reaches a charge. The decline is this package's own and
-// conservative — the two folds do reach such a type since #414 — and what it
-// pins here is that the withholding is total rather than partial.
-func TestAnonymousDerivedRootDeclinesTheAttributeHalf(t *testing.T) {
+// An ANONYMOUS governing type derived from a named base decides the attribute
+// half exactly as a named one does (#1116): §3.4.2.4 clause 3 and §3.4.2.5
+// clause 2 are "the same for all complex type definitions", and both folds
+// reach a type an element declaration OWNS (xsd/ownedtypefold.go), so Base's
+// @fromBase use is among this type's {attribute uses} under either derivation
+// method.
+//
+// The two documents separate the clauses. @fromBase is the INHERITED use and
+// @own the type's own, so clause 2.1 matches both and charges nothing; the
+// RESTRICTION arm is what pins the use fold, its {attribute wildcard} being the
+// ·complete wildcard· of a type carrying no <anyAttribute> (§3.4.2.5 clause
+// 2.1), so nothing but a matched use can keep @fromBase from clause 2. The
+// empty document leaves the {required} @own with no attribute information item
+// of its name, which is clause 3's charge and lands at the element.
+func TestAnonymousDerivedRootDecidesTheAttributeHalf(t *testing.T) {
 	for _, derivation := range []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction} {
 		schema := anonymousRootSchema(t, xsd.QName{Local: "Base"}, derivation,
 			[]xsd.AttributeUse{aUse(t, "own", true, nil)})
 		wantSilence(t, assessAgainst(t, schema, attributedRoot(local("fromBase"), local("own"))),
-			"an unfolded anonymous type reports neither Base's uses nor its wildcard ("+derivation.String()+")")
-		// The control: clause 3 is withheld on the same type too. The
-		// unfolded type's own {required} use is present in it, so a walk that
-		// assessed this type at all would charge the missing @own here.
-		wantSilence(t, assessAgainst(t, schema, attributedRoot()),
-			"the decline covers clause 3, not clause 2 alone ("+derivation.String()+")")
+			"the folded {attribute uses} hold Base's use as well as the type's own ("+derivation.String()+")")
+		wantCharge(t, assessAgainst(t, schema, attributedRoot()), "clause 3", loc(1, 1), "own", "root")
 	}
 }
 
-// The one anonymous shape that IS assessed: a restriction of xs:anyType, the
-// §3.4.2.3.2 implicit-content form, where both folds are provably the
-// identity — §3.4.7 makes xs:anyType's {attribute uses} empty so clause 3
-// inherits nothing, and §3.4.2.5 clause 2 unions the base's wildcard for an
-// EXTENSION only. Declining it as well would withdraw every inline
-// <complexType> with no <complexContent>/<simpleContent> child from the
-// assessment, which is the shape the conformance suite's decidable subset is
-// made of.
+// The anonymous shape on which both folds are provably the identity: a
+// restriction of xs:anyType, the §3.4.2.3.2 implicit-content form — §3.4.7
+// makes xs:anyType's {attribute uses} empty so clause 3 inherits nothing, and
+// §3.4.2.5 clause 2 unions the base's wildcard for an EXTENSION only. It is
+// the shape the conformance suite's decidable subset is made of
+// (conformance/schema.go's anonymousComplexTypeDecidable), and it is assessed
+// on the same terms as the derived shape above rather than on any of its own.
 func TestAnonymousRestrictionOfAnyTypeIsAssessed(t *testing.T) {
 	schema := anonymousRootSchema(t, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"},
 		xsd.DerivationRestriction, []xsd.AttributeUse{aUse(t, "id", true, nil)})

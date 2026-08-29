@@ -137,29 +137,35 @@ func TestAnUntypedItemDeclinesClauseOneAndNotClauseTwo(t *testing.T) {
 		icChargeAttr(ruleCvcID, 4))
 }
 
-// An attribute of an ANONYMOUS governing type declines even where a top-level
-// declaration of its ·expanded name· exists: that declaration is a different
-// component from the {attribute declaration} of the use this package cannot
-// see, so its type is not the ·governing type definition· (walk.attributeType).
-// Reading it would classify @aid by whichever type the schema happens to also
-// declare at the top level, and charge clause 1 against a document whose own
-// type declares the id.
-func TestAnonymousTypeAttributeDeclinesOverACollidingTopLevelType(t *testing.T) {
+// An attribute of an ANONYMOUS governing type is read off THAT type's own
+// {attribute uses}, not off a top-level declaration of the same ·expanded
+// name·: the two are different components, and only the use's {attribute
+// declaration} carries the ·governing type definition· §3.17.5.2 clause 3 asks
+// for (walk.attributeType). The <kid> type's uses are read because they are the
+// spec's — §3.4.2.4 clause 3 folds a declaration-owned type through its owning
+// slot (#414) — and the top-level declarations here differ in type from them,
+// so a lookup that reached one would misclassify the value.
+func TestAnonymousTypeAttributeReadsItsOwnUseOverACollidingTopLevelType(t *testing.T) {
 	// @aid is xs:ID where <kid>'s own type governs it and xs:string at the
 	// top level, so the top-level reading declares no id at all.
 	schema := icAnonymousSchema(t, "ID", "string", nil)
 
+	// The id IS declared, by <kid>'s own xs:ID use, so the reference to it
+	// binds: reading @aid as the top-level xs:string would leave the binding
+	// empty and charge clause 1 here.
 	icWantCharges(t, icAssess(t, schema, icRoot(icKid(2, "aid", "ref")("x1", "x1"))))
-	// The decline holds in the other direction too: a reference this package
-	// cannot type is not charged for the declaration it never read.
-	icWantCharges(t, icAssess(t, schema, icRoot(icKid(2, "ref")("ghost"))))
+	// The reference is read through the same type's own xs:IDREF use, so a
+	// dangling one leaves an empty binding, which clause 1 charges.
+	icWantCharges(t, icAssess(t, schema, icRoot(icKid(2, "ref")("ghost"))),
+		icChargeAttr(ruleCvcID, 2))
 }
 
-// The same decline keeps clause 2 from charging a duplicate the document does
-// not have: an item read under the WRONG type is not the unread item
-// [idTable.charge]'s asymmetry reasons about, since it adds a binding member
-// off a type that governs nothing here.
-func TestAnonymousTypeAttributeDeclinesRatherThanManufacturingADuplicate(t *testing.T) {
+// The same reading keeps clause 2 from charging a duplicate the document does
+// not have: <kid>'s own use makes @aid xs:string, and a value no ·validating
+// type· reads as an ·ID value· puts no member in a binding at all, so the two
+// items below collide only under the type the schema declares at the TOP level
+// and never under the one that governs them.
+func TestAnonymousTypeAttributeReadsItsOwnUseRatherThanManufacturingADuplicate(t *testing.T) {
 	// @aid is xs:string where <kid>'s own type governs it and xs:ID at the
 	// top level, so the top-level reading declares one id twice.
 	schema := icAnonymousSchema(t, "string", "ID", nil)

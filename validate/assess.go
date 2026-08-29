@@ -263,13 +263,9 @@ func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration) governanc
 // The type this returns is the governing one for EVERY reader, and they narrow
 // it separately from here on: governance.complexType and governance.simpleType
 // for cvc-type clause 3's two arms, and governance.valueType for the ·initial
-// value· §3.11.4 clause 3 and §3.17.5.2 read. The attribute half narrows once
-// more through attributePropertiesFolded, which the content half does not,
-// because no finalize pass folds a {content type} the way §3.4.2.4 clause 3
-// folds {attribute uses} — a complex type's {content type} is whatever its
-// producer built for it, named or anonymous. That narrowing is re-asked of
-// whatever this returns, so an xsi:type naming an anonymous type is
-// folded-checked on its own terms and not on the declaration's.
+// value· §3.11.4 clause 3 and §3.17.5.2 read. No reader narrows further on the
+// type's {name}: an anonymous governing type is assessed exactly as a named
+// one, for both halves (#1116).
 func (w *walk) governingType(e Element, d xsd.ElementDeclaration) (xsd.TypeDefinition, bool) {
 	selected, ok := w.selectedType(e, d)
 	if !ok {
@@ -428,57 +424,6 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 	return governance{typ: t, instance: true}, true
 }
 
-// attributePropertiesFolded reports whether ct's {attribute uses} and
-// {attribute wildcard} are the §3.4.2.4 clause 3 and §3.4.2.5 clause 2
-// properties cvc-complex-type clause 2 quantifies over, rather than the
-// producer's pre-fold approximation of them.
-//
-// GAP(validate): the xsd-side under-report this was built for is CLOSED. Both
-// folds used to walk a finalized schema's {type definitions} alone, every member
-// of which is NAMED — §3.17.2 scopes the property to the <simpleType>/
-// <complexType> children of <schema> — so a complex type whose {name} is
-// ·absent· was folded for neither property and reported its own <attribute>
-// children and its own ·complete wildcard· alone; the two folds now reach such a
-// type through the slot that owns it (xsd/ownedtypefold.go). What is left here
-// is a CONSERVATIVE decline of this package's own: an anonymous governing type
-// is still narrowed away from the attribute charges rather than assessed. The
-// retirement is #1116's, and it widens what the instance lane assesses, so it
-// carries its own ratchet attribution.
-//
-// The decline it withholds is cvc-complex-type clause 2's, which is why keeping
-// it costs no false reject: [walk.attributes] narrows the type to nothing, and
-// every reader downstream of that — [walk.attribute], [walk.requiredAttributeUses],
-// [walk.defaultedAttributes], [walk.idAttributes], [icCheck.fieldAttributes] —
-// then charges nothing and records a decline instead (STYLE P3a).
-//
-// The one anonymous shape admitted is a RESTRICTION of xs:anyType, on which both
-// folds are the identity in any case: §3.4.7 gives xs:anyType an empty {attribute
-// uses}, so clause 3 inherits nothing, and clause 2 unions the base's wildcard
-// for an EXTENSION only, so clause 2.1 keeps the ·complete wildcard· the
-// producer already stored. §3.4.2.3.2 maps the implicit-content
-// <complexType> — no <simpleContent>, no <complexContent> — to exactly that
-// shape.
-//
-// Anonymity is read off the component's {name} and not off the arm of the
-// {type definition} slot it was reached through, because
-// [xsd.SubstitutionGroupHeadTypeRef] reaches an anonymous type the head
-// declaration owns just as [xsd.InlineTypeDefinition] reaches its own. Neither
-// arm is exotic: parser.Parse maps an inline <complexContent>/<simpleContent>
-// derivation under an <element> exactly as it maps a top-level one
-// (parser/produce_complex.go's produceComplexType dispatches on those children
-// before it considers the type's name), so a document a caller parses reaches
-// this decline without [xsd.SchemaBuilder] being involved at all.
-func attributePropertiesFolded(ct xsd.ComplexType) bool {
-	if ct.Name() != (xsd.QName{}) {
-		return true
-	}
-	if ct.DerivationMethod() != xsd.DerivationRestriction {
-		return false
-	}
-	base, byName := ct.Base().(xsd.TypeDefinitionRef)
-	return byName && base.Name == (xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"})
-}
-
 // walk is the state of one [Validator.Assess] call, held here and not on the
 // Validator so nothing survives the call that made it. schema and backend are
 // the Validator's, reachable from the walk methods that need them — the one
@@ -607,28 +552,27 @@ func (w *walk) element(e Element, g governance, parent *icCheck) {
 //
 // A ·governing type definition· this package could not determine selects
 // NEITHER arm and decides nothing at all: every attribute is walked (the log
-// records the visit) and none is charged or passed. A complex type whose two
-// attribute PROPERTIES are not the spec's yet is narrowed to that same nothing
-// here, and here only — its {content type} still decides its element's
-// [[children]] (see attributePropertiesFolded and governingType).
+// records the visit) and none is charged or passed. That is the only nothing
+// left here — a complex type is read for its two attribute properties whether
+// its {name} is ·absent· or not, because §3.4.2.4 clause 3 and §3.4.2.5 clause
+// 2 are "the same for all complex type definitions" and both folds reach a
+// declaration-owned anonymous type through the slot that owns it
+// (xsd/ownedtypefold.go, #414).
 func (w *walk) attributes(e Element, g governance) {
 	if st := g.simpleType(); st != nil {
 		w.simpleTypeAttributes(e, st)
 		return
 	}
-	folded := g.complexType()
-	if folded != nil && !attributePropertiesFolded(*folded) {
-		folded = nil
-	}
+	ct := g.complexType()
 	attrs := e.Attributes()
 	for _, a := range attrs {
-		w.attribute(a, e, folded)
+		w.attribute(a, e, ct)
 	}
-	if folded == nil {
+	if ct == nil {
 		return
 	}
-	w.requiredAttributeUses(e, attrs, *folded)
-	w.defaultedAttributes(e, attrs, *folded)
+	w.requiredAttributeUses(e, attrs, *ct)
+	w.defaultedAttributes(e, attrs, *ct)
 }
 
 // simpleTypeAttributes settles cvc-type clause 3.1.1: E.[[attributes]] is
@@ -693,10 +637,13 @@ func (w *walk) attribute(a Attribute, e Element, governing *xsd.ComplexType) {
 // use, where only clause 2.2 is left to satisfy.
 //
 // This is the one charge in the package that a property REPORTED TOO SMALL
-// could fabricate. Nothing is asserted about that here — the anonymous types are
-// kept away from this charge at the source instead, by
-// attributePropertiesFolded, which is where the bound and its grounds are
-// stated. An anonymous governing type never reaches this function.
+// could fabricate, and what keeps it from fabricating one is that both
+// properties are the spec's for every governing type this package can reach:
+// §3.4.2.4 clause 3 and §3.4.2.5 clause 2 fold a declaration-owned ANONYMOUS
+// type through the slot that owns it as well as a named one
+// (xsd/ownedtypefold.go, #414). The attribute-side slots that fold reaches no
+// root for (#1115) are unreachable from here — a governing type arrives from an
+// element declaration, never from an attribute one.
 //
 // The wildcard arm records the item's assertion sites before it declines
 // ([walk.wildcardAttributeAssertions]): under a ***strict*** or ***lax***

@@ -947,10 +947,11 @@ func elementDecidable(el *parser.Element) bool {
 // it, because checkComplexDerivations quantifies over Schema.types and an owned
 // anonymous type is in no such set, so no Phase D verdict is reached at all and
 // nothing this lane scores turns on one. The INSTANCE lane cannot either:
-// validate declines the attribute half of every anonymous governing type but the
-// implicit-content one (assess.go's attributePropertiesFolded), so it charges
-// cvc-complex-type clause 2 against no attribute an <alternative>'s inline type
-// governs.
+// validate charges cvc-complex-type clause 2 against the attributes an
+// <alternative>'s inline type governs, and it charges them against the FOLDED
+// properties above, so the charge stands on what the spec says that type
+// reports and not on an approximation of it. What stays unreached is the Phase
+// D verdict, and a verdict never reached is an under-rejection.
 //
 // It serves both element paths (STYLE T4): §3.3.2.1's {type table} row is a
 // COMMON mapping rule, so a top-level and a local <element> carry the same
@@ -981,17 +982,17 @@ func alternativeTypesDecidable(el *parser.Element) bool {
 //
 // This gate therefore admits only the IMPLICIT-CONTENT form — no <simpleContent>
 // and no <complexContent> child — the shape on which the missing verdicts cost
-// least, and the one validate assesses the attribute half of rather than
-// declining (assess.go's attributePropertiesFolded): §3.4.2.3.2 makes the {base
-// type definition} xs:anyType with {derivation method} restriction, §3.4.7 gives
-// xs:anyType an empty {attribute uses} so §3.4.2.4 clause 3 adds nothing, and
-// §3.4.2.5 clause 2 unions the base's wildcard only for an EXTENSION, which this
-// form is not. What stays genuinely unenforced on the admitted shape is
-// narrower but real: cos-nonambig and cos-element-consistent inside the
-// anonymous content model, and ct-props-correct clause 4's attribute-name
-// uniqueness. All three are UNDER-rejections — this lane can report "valid" for
-// a schema a complete processor rejects, never "invalid" for a valid one — which
-// is the safe direction for a ratchet.
+// least, and the one on which both attribute folds are provably the
+// identity: §3.4.2.3.2 makes the {base type definition} xs:anyType with
+// {derivation method} restriction, §3.4.7 gives xs:anyType an empty {attribute
+// uses} so §3.4.2.4 clause 3 adds nothing, and §3.4.2.5 clause 2 unions the
+// base's wildcard only for an EXTENSION, which this form is not. What stays
+// genuinely unenforced on the admitted shape is narrower but real: cos-nonambig
+// and cos-element-consistent inside the anonymous content model, and
+// ct-props-correct clause 4's attribute-name uniqueness. All three are
+// UNDER-rejections — this lane can report "valid" for a schema a complete
+// processor rejects, never "invalid" for a valid one — which is the safe
+// direction for a ratchet.
 //
 // The nesting recursion is contentDecidable's: an inline <complexType> deeper in
 // the tree is reached through modelGroupDecidable → localElementDecidable and

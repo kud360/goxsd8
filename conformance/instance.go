@@ -221,11 +221,13 @@ import (
 // Case 3's ATTRIBUTE clauses are the ones whose unconditionality depends on a
 // schema COMPONENT being complete rather than on the instance alone: an
 // under-reported {attribute uses} or {attribute wildcard} would make a valid
-// attribute look unmatched. validate declines the attribute half of an ANONYMOUS
-// governing type (assess.go's attributePropertiesFolded), so the charge
-// cannot reach this lane from such a type — and it is validate that must
-// decline it, because assembleCase's decidability gate bounds what THIS lane
-// assembles and says nothing about the library's other callers.
+// attribute look unmatched. Both properties are the spec's for every governing
+// type validate can reach, an ANONYMOUS one included: §3.4.2.4 clause 3 and
+// §3.4.2.5 clause 2 fold a declaration-owned type through the slot that owns it
+// (xsd/ownedtypefold.go, #414), which is why validate reads them with no
+// anonymity test at all. The completeness has to hold in the LIBRARY
+// rather than here, because assembleCase's decidability gate bounds what THIS
+// lane assembles and says nothing about the library's other callers.
 //
 // Cases 7 and 8 carry their own, and validate declines rather than charging at
 // every one: an identity constraint whose {selector} or {fields} fall outside
@@ -236,9 +238,9 @@ import (
 // inside validate, so it cannot arrive here.
 //
 // Case 3's clause 1 and case 6 do not share that dependency, and are not
-// declined with it: no finalize pass folds a {content type}, so a complex
+// declined with it: no finalize pass folds a {content type} at all, so a complex
 // type's particle is whatever its producer built for it whether the type is
-// named or anonymous (validate's governingType records the split).
+// named or anonymous.
 //
 // The cvc-assess-elt charge does carry one hazard of its own: a root is equally
 // undeclared when an <import>/<include> the assembly did not follow took the
