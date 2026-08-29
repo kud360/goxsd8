@@ -66,6 +66,12 @@ const ruleCvcIdentityConstraint xsderr.Rule = "cvc-identity-constraint"
 // element's OWN ·initial value· fills, which is why gather exists: an element's
 // character content is complete only once its [[children]] are exhausted, so a
 // field node's value is recorded on the way out and not on the way in.
+//
+// defaulted and hasDefault are the {value constraint} cvc-elt clause 5.1
+// substituted for that ·initial value·, written by substitute once the
+// [[children]] are exhausted and read by assessed. They are not derivable from
+// initial: a {lexical form} of "" substitutes the same empty string an element
+// with no character [[children]] already has, and the two are different answers.
 type icCheck struct {
 	e      Element
 	g      governance
@@ -76,9 +82,11 @@ type icCheck struct {
 	sels   []icSelCursor
 	flds   []icFieldCursor
 
-	pending []icPending
-	gather  bool
-	initial strings.Builder
+	pending    []icPending
+	gather     bool
+	initial    strings.Builder
+	defaulted  xsd.ValueConstraint
+	hasDefault bool
 
 	table icTable
 }
@@ -359,6 +367,34 @@ func (c *icCheck) text(t Text) {
 	c.initial.WriteString(t.Data())
 }
 
+// substitute takes cvc-elt clause 5's case split from the content check that
+// consumed the same [[children]] ([contentCheck.defaulted]), which is the one
+// reading of it (STYLE T4): only that check records whether E has element or
+// character information item [[children]] at all, and §3.11.4 and §3.17.5.2 read
+// the value the split settles rather than deciding it a second time.
+//
+// It is called once per element, after the [[children]] are exhausted and before
+// anything reads assessed ([walk.element]).
+func (c *icCheck) substitute(content *contentCheck) {
+	c.defaulted, c.hasDefault = content.defaulted()
+}
+
+// assessed is the ·initial value· cvc-elt clause 5 leaves this element assessed
+// on, which is what §3.11.4 clause 3 and §3.17.5.2 both read a [schema actual
+// value] off: D.{value constraint}.{lexical form} on clause 5.1's arm, and the
+// gathered ·initial value· on clause 5.2's.
+//
+// §3.11.4's own Note is why the substituted one reaches here and not just
+// cvc-type: "the use of [schema actual value] in the definition of ·key sequence·
+// above means that default or fixed value constraints may play a part in
+// ·key-sequences·", and §3.17.5.2's Note says the same of the ·eligible item set·.
+func (c *icCheck) assessed() string {
+	if c.hasDefault {
+		return c.defaulted.LexicalForm()
+	}
+	return c.initial.String()
+}
+
 // identityExit settles everything about one element that only its exhausted
 // [[children]] can settle, in the order §3.11.5 and §3.11.4 depend on:
 //
@@ -384,7 +420,7 @@ func (w *walk) identityExit(c *icCheck) {
 // fill records c's element as the field node it was selected as, from its own
 // ·governing type definition· and its own ·initial value·.
 //
-// Three shapes decline rather than contribute a value, each because the
+// Two shapes decline rather than contribute a value, each because the
 // [schema actual value] §3.11.4 clause 3 reads does not exist for them:
 //
 //   - a ·governing type definition· that is not a simple type definition and
@@ -399,13 +435,11 @@ func (w *walk) identityExit(c *icCheck) {
 //     leaving the ·key-sequence· short — which for a key is a clause 4.2.1
 //     charge. Recording that absence rather than declining would widen clause
 //     4.2.1 on the strength of this reading, so the slot declines instead.
-//   - GAP(validate): an element with NO character information item [[child]]
-//     whose declaration carries a {value constraint}. cvc-elt clause 5.1
-//     replaces the item assessed with one whose ·normalized value· is that
-//     constraint's {lexical form}, and §3.11.4's Note is explicit that "default
-//     or fixed value constraints may play a part in ·key-sequences·"; reading
-//     the empty ·initial value· instead would compare a value the document does
-//     not have.
+//
+// An EMPTY element whose declaration carries a {value constraint} is not among
+// them: cvc-elt clause 5.1 replaces the item assessed with one whose ·normalized
+// value· is that constraint's {lexical form}, and that lexical is what the field
+// node contributes (assessed, #853).
 func (c *icCheck) fill(w *walk) {
 	if len(c.pending) == 0 {
 		return
@@ -423,13 +457,8 @@ func (w *walk) elementKeyMember(c *icCheck) (icKeyMember, bool, bool) {
 	if st == nil || nilled(c.e, c.g) {
 		return icKeyMember{}, false, false
 	}
-	if c.initial.Len() == 0 && c.g.hasDecl {
-		if _, constrained := c.g.decl.ValueConstraint(); constrained {
-			return icKeyMember{}, false, false
-		}
-	}
 	nillable := c.g.hasDecl && c.g.decl.Nillable()
-	return w.keyMember(st, c.initial.String(), c.e, true, nillable)
+	return w.keyMember(st, c.assessed(), c.e, true, nillable)
 }
 
 // keyMember maps one field node's lexical to the ·actual value· that is its

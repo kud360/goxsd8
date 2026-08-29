@@ -157,10 +157,21 @@ func (v *Validator) Assess(root Element) *Result {
 // that type alone (key-governing-type-elem clause 8). Every rule that reads the
 // DECLARATION — cvc-elt, §3.11.4's {identity-constraint definitions} — is
 // vacuous for it, and every rule that reads the type applies in full.
+//
+// instance is whether typ is E's ·instance-specified type definition· (§3.3.4.1,
+// key-itd) — the xsi:type-driven cases of key-governing-type-elem, clauses 3 and
+// 8 here. It is recorded rather than re-derived because governingType folds the
+// decision away and nothing left in this struct can recover it: comparing typ
+// against decl.TypeDefinition() answers a DIFFERENT question, since a {type
+// table} may ·conditionally select· a type that differs from the declared one
+// with no xsi:type present at all, and key-itd counts only the attribute. The
+// one reader is cvc-elt clause 5.1.1, whose antecedent is exactly this bit
+// (cvccomplexcontent.go).
 type governance struct {
-	decl    xsd.ElementDeclaration
-	hasDecl bool
-	typ     xsd.TypeDefinition
+	decl     xsd.ElementDeclaration
+	hasDecl  bool
+	typ      xsd.TypeDefinition
+	instance bool
 }
 
 // complexType narrows the ·governing type definition· to the Complex Type
@@ -212,13 +223,16 @@ func (g governance) valueType() *xsd.SimpleType {
 // declaredGovernance pairs a ·governing element declaration· with the
 // ·governing type definition· it supplies for e (governingType).
 func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration) governance {
-	return governance{decl: d, hasDecl: true, typ: w.governingType(e, d)}
+	t, instance := w.governingType(e, d)
+	return governance{decl: d, hasDecl: true, typ: t, instance: instance}
 }
 
 // governingType is the ·governing type definition· (§3.3.4.6) of an
 // element information item whose ·governing element declaration· is d; it is nil
 // wherever this package cannot determine that type, and the element's attributes
-// are then assessed against nothing.
+// are then assessed against nothing. The second result is whether the type
+// returned is E's ·instance-specified type definition· (governance.instance),
+// which only clause 3 below supplies and which no later comparison can recover.
 //
 // It walks key-governing-type-elem's cases in their own order, this package
 // stipulating no type of its own: clause 3, an ·instance-specified type
@@ -256,14 +270,14 @@ func (w *walk) declaredGovernance(e Element, d xsd.ElementDeclaration) governanc
 // producer built for it, named or anonymous. That narrowing is re-asked of
 // whatever this returns, so an xsi:type naming an anonymous type is
 // folded-checked on its own terms and not on the declaration's.
-func (w *walk) governingType(e Element, d xsd.ElementDeclaration) xsd.TypeDefinition {
+func (w *walk) governingType(e Element, d xsd.ElementDeclaration) (xsd.TypeDefinition, bool) {
 	selected, ok := w.selectedType(e, d)
 	if !ok {
-		return nil
+		return nil, false
 	}
 	instance, specified := w.instanceTypeDefinition(e)
 	if !specified {
-		return selected
+		return selected, false
 	}
 	return w.instanceOverride(e, d, instance, selected)
 }
@@ -271,7 +285,9 @@ func (w *walk) governingType(e Element, d xsd.ElementDeclaration) xsd.TypeDefini
 // instanceOverride settles cvc-elt clause 4 for an element carrying an
 // ·instance-specified type definition·, and reports the ·governing type
 // definition· that leaves: the instance's where it ·overrides· the selected
-// type, the selected one where it does not.
+// type, the selected one where it does not. The second result says which of the
+// two it returned, key-governing-type-elem clause 3 against clause 4, and it is
+// the ONE place that answer exists (governance.instance).
 //
 // ·overrides· (§3.3.4.2, key-overrides) is ·validly substitutable· subject to
 // the blocking keywords of E's ·governing element declaration· — its
@@ -289,18 +305,18 @@ func (w *walk) governingType(e Element, d xsd.ElementDeclaration) xsd.TypeDefini
 // content against the base, which is the reject governingType's own doc rules
 // out; charging clause 4 would reject a document for a fault in the schema's own
 // base chain.
-func (w *walk) instanceOverride(e Element, d xsd.ElementDeclaration, instance, selected xsd.TypeDefinition) xsd.TypeDefinition {
+func (w *walk) instanceOverride(e Element, d xsd.ElementDeclaration, instance, selected xsd.TypeDefinition) (xsd.TypeDefinition, bool) {
 	overrides, err := w.schema.ValidlySubstitutable(instance, selected, d.DisallowedSubstitutions())
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	if overrides {
-		return instance
+		return instance, true
 	}
 	w.res.violations = append(w.res.violations, xsderr.New(ruleCvcElt, e.Loc(),
 		"the xsi:type attribute of the element %s names the type definition %s, which is not ·validly substitutable· for the ·selected type definition· %s of its ·governing element declaration· subject to that declaration's {disallowed substitutions}, so it does not ·override· it as cvc-elt clause 4 requires (§3.3.4.2, key-overrides)",
 		e.Name(), typeName(instance), typeName(selected)))
-	return selected
+	return selected, false
 }
 
 // typeName names a type definition for a message: its ·expanded name·, or a
@@ -409,7 +425,7 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 	if !specified {
 		return governance{}, false
 	}
-	return governance{typ: t}, true
+	return governance{typ: t, instance: true}, true
 }
 
 // attributePropertiesFolded reports whether ct's {attribute uses} and
@@ -537,6 +553,11 @@ func (c elementContext) LookupNamespace(prefix string) (string, bool) {
 // [[attributes]] are read, because a field path may name one of them, and
 // identityExit settles §3.11.4 and §3.11.5 only once e's [[children]] are
 // exhausted, because a ·key-sequence· and a node table are complete only then.
+//
+// [icCheck.substitute] sits between the two, carrying cvc-elt clause 5's case
+// split across from the content check that decided it: the ·initial value· the
+// two rules below read is the one clause 5.1 substituted where its arm is live,
+// and only the check that consumed the [[children]] knows that it is.
 func (w *walk) element(e Element, g governance, parent *icCheck) {
 	if w.log.Enabled(context.Background(), slog.LevelDebug) {
 		w.log.Debug("assessing element", slog.Any("name", e.Name()), slog.Any("loc", e.Loc()))
@@ -546,7 +567,8 @@ func (w *walk) element(e Element, g governance, parent *icCheck) {
 	w.idAttributes(id)
 	w.attributes(e, g)
 	w.elementAssertions(e, g)
-	w.children(e, w.contentCheck(e, g, isNilled), id)
+	content := w.contentCheck(e, g, isNilled)
+	w.children(e, content, id)
 	if w.res.err != nil {
 		// A walk that stopped on a source fault never settles §3.11.4 or
 		// §3.17.5.2 for this element, on [contentCheck.end]'s grounds: the
@@ -555,6 +577,7 @@ func (w *walk) element(e Element, g governance, parent *icCheck) {
 		// for the absence of.
 		return
 	}
+	id.substitute(content)
 	w.idElement(id)
 	w.identityExit(id)
 }

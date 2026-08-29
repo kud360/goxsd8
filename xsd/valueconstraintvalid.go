@@ -229,7 +229,7 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 	n := u.DeclarationName()
 	t, hasType := s.ResolvedSimpleType(d.TypeDefinition())
 	if hasType {
-		if err := s.checkSimpleDefault(ruleAuPropsCorrect, loc, owner+" attribute "+n.String(), t, uvc); err != nil {
+		if err := s.checkSimpleDefault(ruleAuPropsCorrect, "2", loc, owner+" attribute "+n.String(), t, uvc); err != nil {
 			return err
 		}
 	}
@@ -292,7 +292,7 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 	if !ok {
 		return nil
 	}
-	return s.checkSimpleDefault(ruleAPropsCorrect, d.Loc(), "attribute declaration "+d.Name().String(), t, dvc)
+	return s.checkSimpleDefault(ruleAPropsCorrect, "2", d.Loc(), "attribute declaration "+d.Name().String(), t, dvc)
 }
 
 // checkSimpleDefault is Simple Default Valid (§3.2.6.2, cos-valid-simple-default)
@@ -302,13 +302,15 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 // e-props-correct clause 2. The three differ only in which (type, value
 // constraint) pair they hand it and which rule the failure is charged to; the
 // element-side caller does a case analysis first (elementdefaultvalid.go) to work
-// out which simple type that is. The clause phrase in the message is DERIVED from
-// rule — the rule's own name plus " clause 2" — rather than passed alongside it
-// or re-spelled here: a second parameter would make "ruleAPropsCorrect +
-// au-props-correct clause 2" a representable, wrong state, and a hardcoded pair
-// would spell both rule names a second time and silently mislabel any further
-// caller (STYLE D3). The suffix is constant because cos-valid-simple-default is
-// clause 2 of every rule that charges it.
+// out which simple type that is.
+//
+// rule and clause together are the citation the message closes with, and the two
+// travel as separate parameters because the clause number is NOT constant across
+// the callers: the three Phase E rules above all charge it as their clause 2,
+// and cvc-elt charges the same predicate at ASSESSMENT time as its clause 5.1.1
+// ([Schema.ElementDefaultValid]). Neither is derivable from the other, and
+// spelling either rule's name a second time here would silently mislabel any
+// further caller (STYLE D3).
 //
 // The verdict is the installed ValueSpace's, and an UNDECIDED verdict ACCEPTS.
 // That is not laxity, it is the fail-open contract (ValueSpace, PRINCIPLES 20):
@@ -356,12 +358,11 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 // rather than as a verdict (#321 settled that contract: the pipeline returns an
 // *xsderr.Error, it does not panic), so it lands in the accepting branch below:
 // this clause never rejects a schema for it, and never crashes on it.
-func (s *Schema) checkSimpleDefault(rule xsderr.Rule, loc xsderr.Loc, owner string, t *SimpleType, vc ValueConstraint) error {
+func (s *Schema) checkSimpleDefault(rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, t *SimpleType, vc ValueConstraint) error {
 	cause, decided := s.valueSpace.ValidDefault(s, t, vc)
 	if !decided || cause == nil {
 		return nil
 	}
-	clause := string(rule) + " clause 2"
 	return xsderr.New(rule, loc,
-		"%s has a {value constraint} of %q, which is not Datatype Valid with respect to its {type definition} (Datatypes §4.1.4 cvc-datatype-valid), so it is not a valid default (%s, cos-valid-simple-default §3.2.6.2)", owner, vc.LexicalForm(), clause)
+		"%s has a {value constraint} of %q, which is not Datatype Valid with respect to its {type definition} (Datatypes §4.1.4 cvc-datatype-valid), so it is not a valid default (%s clause %s, cos-valid-simple-default §3.2.6.2)", owner, vc.LexicalForm(), rule, clause)
 }

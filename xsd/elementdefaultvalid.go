@@ -8,6 +8,12 @@ import "github.com/kud360/goxsd8/xsderr"
 // with respect to E.{type definition} as defined in Element Default Valid
 // (Immediate) (§3.3.6.2)" — and the predicate it defers to, cos-valid-default.
 //
+// The predicate is charged from outside Phase E too, and so is exported
+// ([Schema.ElementDefaultValid]): cvc-elt clause 5.1.1 asks the same question of
+// an empty element's ·governing type definition· at assessment time, over the
+// same (T, {value constraint}) pair shape and a different T. Everything below is
+// generic over that pair and over the rule and clause the caller cites.
+//
 // cos-valid-default is a CASE ANALYSIS, not a conjunction, and reading it as one
 // would be the easy mistake: its two clauses are guarded by mutually exclusive
 // antecedents on T.{content type}.{variety}, and exactly one arm runs for any T.
@@ -70,14 +76,39 @@ func (s *Schema) checkElementDefaultValid(e ElementDeclaration) error {
 	if !ok {
 		return nil
 	}
-	owner := "element declaration " + e.Name().String()
+	return s.ElementDefaultValid(ruleEPropsCorrect, "2", e.Loc(),
+		"element declaration "+e.Name().String(), t, vc)
+}
+
+// ElementDefaultValid decides Element Default Valid (Immediate) (§3.3.6.2,
+// cos-valid-default) over one type definition and one {value constraint}: nil
+// where vc is a valid default with respect to t, and the rejection otherwise.
+//
+// It is exported for the ONE caller that charges cos-valid-default over a type
+// definition no ElementDeclaration supplies: cvc-elt (§3.3.4.3) clause 5.1.1,
+// which asks it at ASSESSMENT time of an empty element's ·governing type
+// definition· where that type is an ·instance-specified type definition·
+// (§3.3.4.1, key-itd — the xsi:type-driven case alone). The predicate is the
+// same one Phase E charges and is deliberately not re-derived there (STYLE T4);
+// what differs is only the (t, vc) pair, the location, and the citation.
+//
+// rule and clause are the caller's own — e-props-correct clause 2 for the schema
+// side, cvc-elt clause 5.1.1 for the instance side — and close every message this
+// returns. loc and owner locate and name the component or item charged: the
+// <xs:element> and its {name} at construction, the element information item and
+// its ·expanded name· at assessment.
+//
+// t is the RESOLVED type definition, never a [TypeDefinitionRef]: cos-valid-default
+// predicates over a T that must be there to be read, and a caller holding a slot
+// resolves it first (checkElementDefaultValid) or declines.
+func (s *Schema) ElementDefaultValid(rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, t TypeDefinition, vc ValueConstraint) error {
 	switch td := t.(type) {
 	case *SimpleType:
-		return s.checkSimpleDefault(ruleEPropsCorrect, e.Loc(), owner, td, vc) // clause 1, T simple
+		return s.checkSimpleDefault(rule, clause, loc, owner, td, vc) // clause 1, T simple
 	case ComplexType:
-		return s.checkComplexDefaultValid(e.Loc(), owner, td, vc)
+		return s.checkComplexDefaultValid(rule, clause, loc, owner, td, vc)
 	default:
-		panic("xsd: checkElementDefaultValid: non-exhaustive TypeDefinition switch")
+		panic("xsd: ElementDefaultValid: non-exhaustive TypeDefinition switch")
 	}
 }
 
@@ -90,24 +121,24 @@ func (s *Schema) checkElementDefaultValid(e ElementDeclaration) error {
 // The default arm asserts the sealed-sum invariant and is unreachable for any
 // value an outside package can produce, since contentType is unexported (the same
 // footing componentWalk.walkParticle's Term switch stands on).
-func (s *Schema) checkComplexDefaultValid(loc xsderr.Loc, owner string, c ComplexType, vc ValueConstraint) error {
+func (s *Schema) checkComplexDefaultValid(rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, c ComplexType, vc ValueConstraint) error {
 	switch ct := c.ContentType().(type) {
 	case SimpleContent:
 		// Clause 1's complex arm: the governing type is
 		// T.{content type}.{simple type definition}, never T itself.
-		return s.checkSimpleDefault(ruleEPropsCorrect, loc, owner, ct.SimpleType, vc)
+		return s.checkSimpleDefault(rule, clause, loc, owner, ct.SimpleType, vc)
 	case ElementContent:
 		if !ct.Mixed {
-			return notMixedDefault(loc, owner, c, vc) // clause 2.1
+			return notMixedDefault(rule, clause, loc, owner, c, vc) // clause 2.1
 		}
 		if s.particleEmptiable(ct.Particle) {
 			return nil // clause 2.2 holds, and 2.1 held above
 		}
-		return xsderr.New(ruleEPropsCorrect, loc,
-			"%s has a {value constraint} of %q and a mixed complex {type definition} %s, but that type's {content type}.{particle} is not ·emptiable· (§3.9.6.3 cos-group-emptiable), which cos-valid-default clause 2.2 requires of a default on a non-simple content type (e-props-correct clause 2)",
-			owner, vc.LexicalForm(), typeDefinitionLabel(c))
+		return xsderr.New(rule, loc,
+			"%s has a {value constraint} of %q and a mixed complex {type definition} %s, but that type's {content type}.{particle} is not ·emptiable· (§3.9.6.3 cos-group-emptiable), which cos-valid-default clause 2.2 requires of a default on a non-simple content type (%s clause %s)",
+			owner, vc.LexicalForm(), typeDefinitionLabel(c), rule, clause)
 	case EmptyContent:
-		return notMixedDefault(loc, owner, c, vc) // clause 2.1
+		return notMixedDefault(rule, clause, loc, owner, c, vc) // clause 2.1
 	default:
 		panic("xsd: checkComplexDefaultValid: non-exhaustive ContentType switch")
 	}
@@ -122,8 +153,8 @@ func (s *Schema) checkComplexDefaultValid(loc xsderr.Loc, owner string, c Comple
 // complex type, not the content type its caller already has in hand: the token is
 // derivable from c, and taking both would let a caller pass a variety that is not
 // c's (STYLE D3).
-func notMixedDefault(loc xsderr.Loc, owner string, c ComplexType, vc ValueConstraint) error {
-	return xsderr.New(ruleEPropsCorrect, loc,
-		"%s has a {value constraint} of %q, but its {type definition} %s is a complex type whose {content type}.{variety} is %s, and cos-valid-default clause 2.1 admits a default only on mixed content (e-props-correct clause 2)",
-		owner, vc.LexicalForm(), typeDefinitionLabel(c), c.ContentType().Variety())
+func notMixedDefault(rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, c ComplexType, vc ValueConstraint) error {
+	return xsderr.New(rule, loc,
+		"%s has a {value constraint} of %q, but its {type definition} %s is a complex type whose {content type}.{variety} is %s, and cos-valid-default clause 2.1 admits a default only on mixed content (%s clause %s)",
+		owner, vc.LexicalForm(), typeDefinitionLabel(c), c.ContentType().Variety(), rule, clause)
 }

@@ -130,6 +130,31 @@ func (w *walk) nilCheck(e Element, g governance) bool {
 	return isNilled
 }
 
+// elementDefault applies cvc-elt clause 5's case split and reports the
+// {value constraint} clause 5.1 substitutes: D has a {value constraint}, E has
+// neither element nor character information item [[children]], and E is not
+// ·nilled· with respect to D. Where it holds, what clause 5.1.2 assesses is
+// "the element information item with D.{value constraint}.{lexical form} used as
+// its ·normalized value·" and never the empty [[children]] E actually has; where
+// it fails, clause 5.2 assesses E itself and this reports false.
+//
+// The {lexical form} is already the NORMALIZED lexical
+// ([xsd.NewValueConstraint]), so handing it on as the ·initial value· the
+// ·normalized value· is derived from is exact for every whiteSpace mode: preserve
+// is the identity, and replace and collapse are both idempotent.
+//
+// The emptiness is the caller's to establish, since only the walk that consumed
+// E.[[children]] knows it ([contentCheck.empty]). Both varieties are returned:
+// clause 5.1 quantifies over "a {value constraint}" with no {variety} condition,
+// which is what makes it the arm an empty element with a FIXED constraint takes
+// (elementFixed's is clause 5.2.2's narrower reading, on the other arm).
+func elementDefault(g governance, empty, isNilled bool) (xsd.ValueConstraint, bool) {
+	if !empty || isNilled || !g.hasDecl {
+		return xsd.ValueConstraint{}, false
+	}
+	return g.decl.ValueConstraint()
+}
+
 // elementFixed reports D.{value constraint} where its {variety} is fixed — the
 // shape cvc-elt clauses 3.2.3.2 and 5.2.2 both read — for an element whose
 // ·governing element declaration· is known.

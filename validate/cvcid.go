@@ -229,22 +229,25 @@ func (w *walk) idDefaultedAttributes(c *icCheck, attrs []Attribute, ct xsd.Compl
 // declaring node is the element's PARENT, per §3.17.5.2's [binding], and -1
 // where it has none.
 //
-// GAP(validate): three shapes decline instead — a declaration whose type was
-// not determinable (a {type table} carrying a {test} the §3.12.6 evaluator
-// declines, an unresolvable {type definition}, an xsi:type whose ·override·
-// could not be decided), an element that is ·nilled·, and an element with no
-// character information item [[child]] whose declaration carries a {value
-// constraint}, whose ·initial value· cvc-elt clause 5.1 takes from that
-// constraint and not from the empty content.
+// The ·initial value· read is [icCheck.assessed]'s, so an EMPTY element whose
+// declaration carries a {value constraint} declares the id that constraint's
+// {lexical form} carries: §3.17.5.2's own Note is explicit that "default or fixed
+// value constraints may play a part", and cvc-elt clause 5.1 is what puts the
+// substituted item in the ·eligible item set· (#853).
 //
-// The middle one is a value the spec says IS ·absent· — §3.3.5.4 gives a
-// ·nilled· element an absent [schema normalized value] and so an absent [schema
-// actual value] — and it declines rather than recording that absence because
-// recording it would let cvc-id clause 1 charge an empty binding on the
-// strength of it, which is a widening of that clause and not a reading of this
-// one. An element with NO ·governing element declaration· is not among the
-// three: it is ·laxly assessed· against xs:anyType, whose complex {content
-// type} is not derived from ID and so contributes nothing under clause 3.
+// GAP(validate): two shapes decline instead — a declaration whose type was not
+// determinable (a {type table} carrying a {test} the §3.12.6 evaluator declines,
+// an unresolvable {type definition}, an xsi:type whose ·override· could not be
+// decided), and an element that is ·nilled·.
+//
+// The second is a value the spec says IS ·absent· — §3.3.5.4 gives a ·nilled·
+// element an absent [schema normalized value] and so an absent [schema actual
+// value] — and it declines rather than recording that absence because recording
+// it would let cvc-id clause 1 charge an empty binding on the strength of it,
+// which is a widening of that clause and not a reading of this one. An element
+// with NO ·governing element declaration· is not among the two: it is ·laxly
+// assessed· against xs:anyType, whose complex {content type} is not derived from
+// ID and so contributes nothing under clause 3.
 func (w *walk) idElement(c *icCheck) {
 	if c.g.hasDecl && c.g.typ == nil {
 		w.ids.declined = true
@@ -258,17 +261,11 @@ func (w *walk) idElement(c *icCheck) {
 		w.ids.declined = true
 		return
 	}
-	if c.initial.Len() == 0 && c.g.hasDecl {
-		if _, constrained := c.g.decl.ValueConstraint(); constrained {
-			w.ids.declined = true
-			return
-		}
-	}
 	node := -1
 	if c.parent != nil {
 		node = c.parent.node
 	}
-	w.idRecord(st, c.initial.String(), c.e, node, c.e.Loc())
+	w.idRecord(st, c.assessed(), c.e, node, c.e.Loc())
 }
 
 // idRecord adds whatever one item contributes to the table. node is the element

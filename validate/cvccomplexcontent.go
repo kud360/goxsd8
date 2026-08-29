@@ -64,7 +64,7 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 // child would report the rest of the sequence against a position the document
 // never reached.
 //
-// Two cvc-elt (§3.3.4.3) clauses read the same [[children]] and are settled
+// Three cvc-elt (§3.3.4.3) clauses read the same [[children]] and are settled
 // here rather than in cvcelt.go, because arriving children are what decide
 // them:
 //
@@ -72,11 +72,18 @@ const ruleCvcComplexContent xsderr.Rule = "cvc-complex-content"
 //     [[children]] at all. It REPLACES clause 1 rather than joining it — clause
 //     1 applies "if E is not ·nilled·" — so the two are never both live, and it
 //     shares the one-charge rule above for the same reason.
-//   - 5.2.2, for an element whose ·governing element declaration· carries a
-//     fixed {value constraint}: no element information item [[children]]
-//     (5.2.2.1) and an ·initial value· agreeing with the constraint (5.2.2.2).
-//     It joins clause 1 rather than replacing it, and is settled once the
-//     [[children]] are exhausted (fixedValue).
+//   - 5.1, for an EMPTY element whose ·governing element declaration· carries a
+//     {value constraint} and which is not ·nilled·: 5.1.1, that constraint is a
+//     valid default for an ·instance-specified· ·governing type definition·
+//     (defaultValid), and 5.1.2, cvc-type over the ·normalized value· the
+//     constraint's {lexical form} substitutes ([contentCheck.assessed]). It is
+//     the arm clause 5 takes INSTEAD of 5.2, so the cvc-type dispatch above runs
+//     over the substituted value and never over the empty [[children]].
+//   - 5.2.2, for an element on clause 5.2's arm whose ·governing element
+//     declaration· carries a fixed {value constraint}: no element information
+//     item [[children]] (5.2.2.1) and an ·initial value· agreeing with the
+//     constraint (5.2.2.2). It joins clause 1 rather than replacing it, and is
+//     settled once the [[children]] are exhausted (fixedValue).
 
 // contentCheck is the state of one element's [[children]] assessment against
 // its ·governing type definition·. It is built per element by
@@ -146,6 +153,89 @@ func (c *contentCheck) governing() *xsd.ComplexType {
 		return nil
 	}
 	return c.g.complexType()
+}
+
+// empty reports that E has neither element nor character information item
+// [[children]] — the emptiness cvc-elt clause 5's case split and clause 5.2.2.1
+// both quantify over.
+//
+// It is read off sawElement and sawText and not off initial, which is gathered
+// conditionally, and the two are recorded before any charge those same
+// [[children]] provoke: a run or an item that arrives after the element is
+// already charged leaves both flags untouched, and the one that did the charging
+// has already set one of them.
+func (c *contentCheck) empty() bool {
+	return !c.sawElement && !c.sawText
+}
+
+// defaulted is the {value constraint} cvc-elt clause 5.1 substitutes for this
+// element's ·normalized value·, and whether clause 5.1's arm of the clause 5 case
+// split is the live one (elementDefault).
+//
+// It is the element's ONE reading of that split (STYLE T4): assessed takes the
+// string from it for the cvc-type charges here, and [icCheck.substitute] takes
+// the same answer across to §3.11.4 and §3.17.5.2, which read the same value once
+// these [[children]] are exhausted. Only this check knows E has neither element
+// nor character information item [[children]], which is why the reading is here
+// and not on either consumer.
+func (c *contentCheck) defaulted() (xsd.ValueConstraint, bool) {
+	return elementDefault(c.g, c.empty(), c.nilled)
+}
+
+// assessed is the ·initial value· cvc-elt clause 5 leaves this element assessed
+// on, and whether clause 5.1 substituted it: D.{value constraint}.{lexical form}
+// on clause 5.1's arm, and the ·initial value· E actually carries on clause 5.2's.
+//
+// The second result is not "the string is non-empty": a {value constraint} whose
+// {lexical form} is the empty string substitutes that, and the difference between
+// substituting "" and reading E's own "" is what tells clause 5.1's decided arm
+// from clause 5.2's decline (stringValid).
+func (c *contentCheck) assessed() (string, bool) {
+	if vc, defaulted := c.defaulted(); defaulted {
+		return vc.LexicalForm(), true
+	}
+	return c.initial.String(), false
+}
+
+// defaultValid settles cvc-elt clause 5.1.1: where clause 5.1's arm is live and
+// E's ·governing type definition· is an ·instance-specified type definition·,
+// D.{value constraint} is a valid default for THAT type as Element Default Valid
+// (Immediate) (§3.3.6.2, cos-valid-default) defines it.
+//
+// The antecedent is the ·instance-specified· one alone (governance.instance,
+// §3.3.4.1 key-itd), which is narrower than "the governing type differs from the
+// declared type": a {type table} ·conditionally selects· a ·selected type
+// definition· with no xsi:type present at all, and clause 5.1.1 does not reach
+// that case however far the selected type is from the declared one.
+//
+// Nothing is charged where the declaration's OWN type governs, and nothing is
+// missed either: e-props-correct (§3.3.6.1) clause 2 has already charged
+// cos-valid-default over that type at assembly, against the same {value
+// constraint}, which is why clause 5.1.1 asks only about the type the INSTANCE
+// introduced.
+//
+// The predicate is [xsd.Schema.ElementDefaultValid], the same one Phase E
+// charges, and is deliberately not re-derived here (STYLE T4). Its verdict
+// arrives already citing cvc-elt clause 5.1.1 and is carried as the cause on
+// [contentCheck.chargeCause]'s terms, so the rejection names which of
+// cos-valid-default's clauses turned the default away.
+func (c *contentCheck) defaultValid(w *walk) {
+	if c.charged || !c.g.instance || c.g.typ == nil {
+		return
+	}
+	vc, defaulted := c.defaulted()
+	if !defaulted {
+		return
+	}
+	cause := w.schema.ElementDefaultValid(ruleCvcElt, "5.1.1", c.e.Loc(),
+		"the element "+c.e.Name().String(), c.g.typ, vc)
+	if cause == nil {
+		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.1.1", "satisfied")
+		return
+	}
+	c.chargeCause(w, ruleCvcElt, "5.1.1", c.e.Loc(), cause,
+		"the ·governing type definition· of the element %s is the ·instance-specified type definition· %s, and cvc-elt clause 5.1.1 requires the {value constraint} %q of its ·governing element declaration· to be a valid default for that type as Element Default Valid (Immediate) (§3.3.6.2) defines it",
+		c.e.Name(), typeName(c.g.typ), vc.LexicalForm())
 }
 
 // gathers reports whether any charge reads this element's ·initial value·:
@@ -292,7 +382,13 @@ func (c *contentCheck) match(w *walk, child Element) xsd.Attribution {
 
 // end settles the clauses that only exhausted [[children]] can settle.
 //
-// cvc-type clause 3.1.3 comes first, for a SIMPLE ·governing type definition·,
+// cvc-elt clause 5.1.1 comes before all of them (defaultValid), because clause 5
+// is a case split on whether the [[children]] are empty and 5.1.1 is the first
+// conjunct of the arm an empty element with a {value constraint} takes: the
+// cvc-type charges below are that arm's SECOND conjunct, 5.1.2, over the
+// substituted ·normalized value· ([contentCheck.assessed]).
+//
+// cvc-type clause 3.1.3 comes next, for a SIMPLE ·governing type definition·,
 // over the runs text gathered (simpleTypeValue). It and the clause-1 dispatch
 // below are never both live: clause 3's two arms are a dispatch on the
 // ·governing type definition· itself, so at most one of governance.simpleType
@@ -314,6 +410,7 @@ func (c *contentCheck) match(w *walk, child Element) xsd.Attribution {
 // reads the DECLARATION's {value constraint}, which a type this package could
 // not determine does not withhold.
 func (c *contentCheck) end(w *walk) {
+	c.defaultValid(w)
 	if c.charged {
 		return
 	}
@@ -363,8 +460,8 @@ func (c *contentCheck) fixedValue(w *walk) {
 	if !fixed || c.nilled {
 		return
 	}
-	if !c.sawElement && !c.sawText {
-		return // clause 5.1's arm; see initialValue
+	if c.empty() {
+		return // clause 5.1's arm; see defaultValid
 	}
 	if c.sawElement {
 		c.charge(w, ruleCvcElt, "5.2.2.1", c.e.Loc(),
@@ -442,20 +539,19 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // (ct-props-correct clause 1) — so the two declines below are the whole of what
 // these charges withhold.
 //
-// GAP(validate): an element with NO character information item [[child]] is
-// declined, because cvc-elt clause 5 dispatches BEFORE cvc-type reaches either
-// rule and its clause 5.1 may replace the item validated. Where the
-// ·governing element declaration· has a {value constraint} and the element is
-// not ·nilled·, what is assessed is "the element information item with
-// D.{value constraint}.{lexical form} used as its ·normalized value·", whose
-// ·initial value· is that lexical and never the empty string; only clause 5.2
-// assesses the element itself. Clause 5.1's own two conjuncts are unimplemented
-// — 5.1.1 is Element Default Valid (Immediate) (§3.3.6.2) over an
-// ·instance-specified· governing type, and 5.1.2 re-enters cvc-type with a
-// substituted ·normalized value· — so charging the empty ·initial value· here
-// would reject every empty element its declaration supplies a default for.
-// fixedValue above declines the same shape for clause 5.2.2, which clause 5.1
-// takes the arm of.
+// The string tested is [contentCheck.assessed]'s and not c.initial: cvc-elt
+// clause 5 dispatches BEFORE cvc-type reaches either rule, and clause 5.1
+// replaces the item assessed with one whose ·normalized value· is
+// D.{value constraint}.{lexical form}. Reading the empty ·initial value· of a
+// defaulted element instead would reject every empty element its declaration
+// supplies a default for (clause 5.1.2, #853).
+//
+// GAP(validate): an element that clause 5.1 supplies NO substitute for — one
+// whose ·governing element declaration· carries no {value constraint} — and
+// whose ·initial value· is empty is declined. Clause 5.2.1 sends that element to
+// cvc-type over the empty string, which is a charge with its own conformance
+// attribution rather than part of clause 5.1's arm, and until it is made
+// charging here would be a widening (#853).
 //
 // GAP(validate): a ValidateLexical error that is not a VERDICT is the same
 // fail-open cvcattribute.go's matchedAttribute states in full, over the same
@@ -476,10 +572,11 @@ func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, v
 	if !c.nilled {
 		w.simpleAssertions(st, c.e.Loc())
 	}
-	if c.initial.Len() == 0 {
+	lexical, substituted := c.assessed()
+	if !substituted && lexical == "" {
 		return false, nil
 	}
-	_, err := value.ValidateLexical(w.backend, w.schema, st, c.initial.String(), elementContext{owner: c.e})
+	_, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: c.e})
 	if err == nil {
 		return true, nil
 	}

@@ -547,30 +547,33 @@ func TestPhaseEClause2PrecedesClause3(t *testing.T) {
 }
 
 // TestPhaseEClause2ClauseDerivesFromRule pins checkSimpleDefault's message to the
-// rule it is charged under: the clause phrase is the rule's own name plus " clause
-// 2", never a hardcoded pair with one of them as the default (STYLE D3). All three
-// of today's callers are asserted, so the three phrases the message may carry are
-// nailed down byte for byte; a fourth caller inherits the same derivation rather
-// than the wrong branch of an if. The third, e-props-correct (#463), is the one
-// that would have broken a hardcoded pair — it is a different rule reaching the
-// same predicate through cos-valid-default clause 1, and its own clause number is
-// 2 as well, which is why the constant suffix still holds.
+// citation it is charged under: the rule's own name plus its caller's own clause
+// number, never a hardcoded pair with one of them as the default (STYLE D3). All
+// four of today's callers are asserted, so the four phrases the message may carry
+// are nailed down byte for byte.
 //
-// It calls the helper directly rather than through a schema because the three
-// callers reach it from different walks, and what is under test is the message,
-// not any of the walks.
+// The fourth is the one that broke the constant " clause 2" suffix the first three
+// shared: cvc-elt clause 5.1.1 charges the same predicate at ASSESSMENT time
+// ([Schema.ElementDefaultValid], #853), under a different rule AND a different
+// clause number, so the clause travels as its own parameter.
+//
+// It calls the helper directly rather than through a schema because the callers
+// reach it from different walks, and what is under test is the message, not any of
+// the walks.
 func TestPhaseEClause2ClauseDerivesFromRule(t *testing.T) {
 	for _, tc := range []struct {
-		rule xsderr.Rule
-		want string
+		rule   xsderr.Rule
+		clause string
+		want   string
 	}{
-		{ruleAPropsCorrect, "a-props-correct clause 2"},
-		{ruleAuPropsCorrect, "au-props-correct clause 2"},
-		{ruleEPropsCorrect, "e-props-correct clause 2"},
+		{ruleAPropsCorrect, "2", "a-props-correct clause 2"},
+		{ruleAuPropsCorrect, "2", "au-props-correct clause 2"},
+		{ruleEPropsCorrect, "2", "e-props-correct clause 2"},
+		{"cvc-elt", "5.1.1", "cvc-elt clause 5.1.1"},
 	} {
-		t.Run(string(tc.rule), func(t *testing.T) {
+		t.Run(tc.want, func(t *testing.T) {
 			s := &Schema{valueSpace: vcOnly("7")}
-			err := s.checkSimpleDefault(tc.rule, vcLoc, "attribute declaration g", nil, NewValueConstraint(ValueDefault, "not a value of str", nil, nil))
+			err := s.checkSimpleDefault(tc.rule, tc.clause, vcLoc, "attribute declaration g", nil, NewValueConstraint(ValueDefault, "not a value of str", nil, nil))
 			expectRule(t, err, tc.rule)
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("message %q does not name %q", err.Error(), tc.want)
