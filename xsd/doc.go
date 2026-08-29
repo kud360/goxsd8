@@ -208,8 +208,11 @@
 // are exported beneath it as the {namespace constraint} property's own
 // lower-level accessors. Schema.ValidlySubstitutable is the derivation
 // half's one exported entry point, for the instance-side reader of
-// key-val-sub-type that cvc-elt clause 4 needs. The rest is in-package
-// machinery finalize drives.
+// key-val-sub-type that cvc-elt clause 4 needs, and
+// Schema.ElementDefaultValid is cos-valid-default's, for the one cvc-elt
+// clause 5.1.1 charges at assessment time over a type an xsi:type supplied
+// rather than over any declaration's. The rest is in-package machinery
+// finalize drives.
 //
 // One of the two drivers designed on that algebra ships: Matcher,
 // validation's pull driver. Schema.ContentMatcher returns one over a

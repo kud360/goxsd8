@@ -139,12 +139,19 @@
 // the ·governing type definition· the rest of the assessment reads, and one that
 // does not resolve at all charges nothing and leaves the selected type governing
 // — the Note under cvc-elt is explicit that the two failures share that
-// fallback and differ only in the charge. Clause 5.2.2 decides a fixed {value
-// constraint} on an element that HAS [[children]]: no element ones (5.2.2.1),
-// and an ·initial value· matching the {lexical form} under a mixed {content
-// type} (5.2.2.2.1) or an ·actual value· equal or identical to the {value} under
-// a simple one (5.2.2.2.2). Clause 5.1's arm — an EMPTY element whose
-// declaration supplies a default — is not evaluated.
+// fallback and differ only in the charge. Clause 5 is a case split on whether
+// the element is EMPTY and its declaration carries a {value constraint}, and
+// both arms are decided. Clause 5.2's, for an element that HAS [[children]]:
+// 5.2.1's ordinary cvc-type dispatch, and 5.2.2 for a fixed constraint — no
+// element [[children]] (5.2.2.1), and an ·initial value· matching the {lexical
+// form} under a mixed {content type} (5.2.2.2.1) or an ·actual value· equal or
+// identical to the {value} under a simple one (5.2.2.2.2). Clause 5.1's, for an
+// empty one: the item assessed is the one carrying D.{value constraint}.{lexical
+// form} as its ·normalized value·, which 5.1.2 sends to the same cvc-type
+// dispatch and which the [ID/IDREF table] and a ·key-sequence· read in place of
+// the empty ·initial value·; and 5.1.1 charges Element Default Valid (Immediate)
+// (§3.3.6.2) over that constraint where the ·governing type definition· is an
+// ·instance-specified· one, which is the xsi:type case alone.
 //
 // The third is cvc-type (§3.3.4.4) clause 3.1, the arm taken where the
 // ·governing type definition· is a Simple Type Definition rather than a complex
@@ -186,15 +193,13 @@
 // {attribute wildcard} to evaluate, a ·governing type definition· that is
 // not determinable or whose {attribute uses}/{attribute wildcard} are not
 // yet the spec's (the attribute half alone: a {content type} needs no such
-// fold), a {content type} whose shape xsd.Schema.ContentMatcher declines, an
-// element with no character content for cvc-elt clause 5.1 to have supplied a
-// default in place of, a declaration whose {type definition} is not a simple
-// type, and — the decline that matters most — a value.ValidateLexical error
-// that is a fault of the type or of the backend rather than a verdict about
-// the lexical (value.IsDatatypeVerdict), which is what keeps a typeless
-// attribute (xs:anySimpleType, §3.2.2.2), or simple content of a type this
-// backend does not map, from being rejected by every document that carries
-// one.
+// fold), a {content type} whose shape xsd.Schema.ContentMatcher declines, a
+// declaration whose {type definition} is not a simple type, and — the
+// decline that matters most — a value.ValidateLexical error that is a fault
+// of the type or of the backend rather than a verdict about the lexical
+// (value.IsDatatypeVerdict), which is what keeps a typeless attribute
+// (xs:anySimpleType, §3.2.2.2), or simple content of a type this backend
+// does not map, from being rejected by every document that carries one.
 //
 // Every one of those charges reaches a DESCENDANT on the same terms, against
 // the ·governing type definition· the particle its parent's {content type}

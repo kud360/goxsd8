@@ -572,8 +572,8 @@ func TestPhaseEClause2ClauseDerivesFromRule(t *testing.T) {
 		{"cvc-elt", "5.1.1", "cvc-elt clause 5.1.1"},
 	} {
 		t.Run(tc.want, func(t *testing.T) {
-			s := &Schema{valueSpace: vcOnly("7")}
-			err := s.checkSimpleDefault(tc.rule, tc.clause, vcLoc, "attribute declaration g", nil, NewValueConstraint(ValueDefault, "not a value of str", nil, nil))
+			s := &Schema{}
+			err := s.checkSimpleDefault(vcOnly("7"), tc.rule, tc.clause, vcLoc, "attribute declaration g", nil, NewValueConstraint(ValueDefault, "not a value of str", nil, nil))
 			expectRule(t, err, tc.rule)
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("message %q does not name %q", err.Error(), tc.want)

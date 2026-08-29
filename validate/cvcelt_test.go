@@ -332,3 +332,131 @@ func TestNilledElementSkipsTheFixedValueCheck(t *testing.T) {
 
 	eWantClause(t, cAssess(t, schema, root), "3.2.3.2")
 }
+
+// The fixtures and tests below drive cvc-elt clause 5.1, the arm an EMPTY
+// element whose declaration carries a {value constraint} takes instead of 5.2:
+// what is assessed is "the element information item with D.{value
+// constraint}.{lexical form} used as its ·normalized value·" (#853).
+
+// eSubstituted assesses root against schema with a recording logger and returns
+// the violations beside every line the walk wrote, so a test can assert what was
+// DECIDED and not only that nothing was charged — a decline and a satisfied
+// clause are both silent in [Result].
+func eSubstituted(t *testing.T, schema *xsd.Schema, root Element) ([]*xsderr.Error, []string) {
+	t.Helper()
+	log, visits := recordingLogger()
+	v, err := New(schema, testBackend(), WithLogger(log))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	res := v.Assess(root)
+	if res.Err() != nil {
+		t.Fatalf("Err() = %v, want nil", res.Err())
+	}
+	return res.Violations(), *visits
+}
+
+// eWantOutcome fails unless the visits hold a content line for rule and clause
+// carrying want, and never one carrying "declined" for that same clause. The
+// negative half is the point: a clause this package DECLINES charges nothing,
+// exactly as a satisfied one does, so silence alone cannot tell the two apart.
+func eWantOutcome(t *testing.T, visits []string, rule xsderr.Rule, clause, want string) {
+	t.Helper()
+	line := func(outcome string) string {
+		return "validate.rule=" + string(rule) + " validate.clause=" + clause + " validate.outcome=" + outcome
+	}
+	var found bool
+	for _, v := range visits {
+		if !strings.HasPrefix(v, "assessing content") {
+			continue
+		}
+		if strings.Contains(v, line("declined")) {
+			t.Errorf("the walk DECLINED %s clause %s: %q", rule, clause, v)
+		}
+		if strings.Contains(v, line(want)) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no %s clause %s line with outcome %q among %v", rule, clause, want, visits)
+	}
+}
+
+// Clause 5.1.2 assesses the SUBSTITUTED ·normalized value· against the ·governing
+// type definition·, so an empty element whose default is a value of that type is
+// decided VALID and one whose default is not is charged — where before both
+// declined, the empty ·initial value· being unreadable until clause 5's case
+// split was made.
+func TestEmptyElementIsAssessedAgainstItsDefault(t *testing.T) {
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "42", nil, nil)
+	got, visits := eSubstituted(t, simpleTypedSchema(t, icBuiltin("integer"), &dflt, false), cRoot())
+	wantSilence(t, got, "42 is an xs:integer, so the substituted ·normalized value· is ·valid·")
+	eWantOutcome(t, visits, "cvc-type", "3.1.3", "satisfied")
+
+	bad := xsd.NewValueConstraint(xsd.ValueDefault, "abc", nil, nil)
+	got, visits = eSubstituted(t, simpleTypedSchema(t, icBuiltin("integer"), &bad, false), cRoot())
+	wantContentCharge(t, got, "cvc-type", "3.1.3", loc(1, 1))
+	eWantOutcome(t, visits, "cvc-type", "3.1.3", "charged")
+}
+
+// The substitution is the constraint's {lexical form} and never the element's own
+// content: an element that HAS character [[children]] is on clause 5.2's arm and
+// is assessed against what it carries, whatever its declaration defaults to.
+func TestDefaultIsSubstitutedOnlyForAnEmptyElement(t *testing.T) {
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "42", nil, nil)
+	schema := simpleTypedSchema(t, icBuiltin("integer"), &dflt, false)
+
+	wantSilence(t, cAssess(t, schema, cRoot("#7")), "clause 5.2 assesses E itself")
+	wantContentCharge(t, cAssess(t, schema, cRoot("#abc")), "cvc-type", "3.1.3", loc(1, 1))
+}
+
+// eOverrideSchema declares "root" over Loose — a MIXED {content type} whose
+// particle is ·emptiable·, which cos-valid-default clause 2 admits a default on —
+// with the given {value constraint}, and adds Tight, a restriction of Loose to
+// EMPTY content that an xsi:type can ·override· Loose with.
+//
+// The pair is what makes clause 5.1.1 observable: the same {value constraint} is
+// a valid default for the DECLARED type and not for the ·instance-specified· one,
+// so the charge turns on which type governs and on nothing else.
+func eOverrideSchema(t *testing.T, vc *xsd.ValueConstraint) *xsd.Schema {
+	t.Helper()
+	b := xsd.NewSchemaBuilder()
+	b.AddType(eType(t, "Loose", "", xsd.DerivationRestriction,
+		cSequence(t, true, cParticle(t, "a", 0, 1))))
+	b.AddType(eType(t, "Tight", "Loose", xsd.DerivationRestriction, xsd.EmptyContent{}))
+	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "root"},
+		xsd.TypeDefinitionRef{Name: xsd.QName{Local: "Loose"}}, nil, xsd.NewGlobalScope(),
+		vc, false, nil, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("building the root element declaration: %v", err)
+	}
+	b.AddElement(d)
+	schema, err := b.Finalize()
+	if err != nil {
+		t.Fatalf("finalizing the override schema: %v", err)
+	}
+	return schema
+}
+
+// Clause 5.1.1 charges cos-valid-default over the ·governing type definition·
+// ONLY where that type is an ·instance-specified type definition· (§3.3.4.1,
+// key-itd) — an xsi:type that ·overrides·, and nothing else. The two documents
+// differ in that attribute alone: with it the empty element's default is charged
+// against a type that admits no default at all, without it the declared type
+// governs, clause 5.1.1's antecedent fails, and the same default stands.
+func TestClause511ChargesOnlyAnInstanceSpecifiedType(t *testing.T) {
+	dflt := xsd.NewValueConstraint(xsd.ValueDefault, "x", nil, nil)
+	schema := eOverrideSchema(t, &dflt)
+
+	eWantClause(t, cAssess(t, schema, eRoot(map[string]string{"type": "Tight"})), "5.1.1")
+	wantSilence(t, cAssess(t, schema, eRoot(nil)),
+		"the declared type governs, so clause 5.1.1's antecedent fails")
+}
+
+// Clause 5.1's antecedent is D having a {value constraint} of ANY {variety}, so
+// an empty element with no constraint at all takes clause 5.2's arm and neither
+// conjunct of 5.1 is reached — the xsi:type override notwithstanding.
+func TestClause511IsNotReachedWithoutAValueConstraint(t *testing.T) {
+	wantSilence(t, cAssess(t, eOverrideSchema(t, nil), eRoot(map[string]string{"type": "Tight"})),
+		"with no {value constraint} there is no default for cos-valid-default to judge")
+}

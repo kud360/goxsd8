@@ -299,18 +299,17 @@ func TestSimpleContentValidatesTheInitialValue(t *testing.T) {
 	}
 }
 
-// An element with NO character information item [[child]] DECLINES rather than
-// being charged for the empty string: cvc-elt clause 5.1 has a declaration's
-// {value constraint} supply the ·initial value· of an empty element, so the
-// charge needs a dispatch this check cannot make (#716).
-func TestSimpleContentDeclinesAnEmptyElement(t *testing.T) {
+// An element with NO character information item [[child]] whose declaration
+// carries no {value constraint} takes cvc-elt clause 5.2's arm, so clause 5.2.1
+// assesses E ITSELF and its empty ·initial value· is charged exactly as a
+// non-empty one outside the lexical space would be.
+func TestSimpleContentChargesAnEmptyElement(t *testing.T) {
 	schema := simpleContentSchema(t, integerType())
 
-	wantSilence(t, cAssess(t, schema, cRoot()),
-		"cvc-elt clause 5.1 may validate a default in place of the empty ·initial value·")
-	// White space IS a character information item [[child]], so an element
-	// carrying only white space is decided — and xs:integer's collapsing
-	// whiteSpace facet leaves nothing an xs:integer admits.
+	wantContentCharge(t, cAssess(t, schema, cRoot()), "cvc-complex-type", "1.2", loc(1, 1))
+	// White space IS a character information item [[child]], and xs:integer's
+	// collapsing whiteSpace facet leaves nothing an xs:integer admits, so the two
+	// reach the same charge by different routes.
 	wantContentCharge(t, cAssess(t, schema, cRoot("#  ")), "cvc-complex-type", "1.2", loc(1, 1))
 }
 

@@ -183,18 +183,14 @@ func (c *contentCheck) defaulted() (xsd.ValueConstraint, bool) {
 }
 
 // assessed is the ·initial value· cvc-elt clause 5 leaves this element assessed
-// on, and whether clause 5.1 substituted it: D.{value constraint}.{lexical form}
-// on clause 5.1's arm, and the ·initial value· E actually carries on clause 5.2's.
-//
-// The second result is not "the string is non-empty": a {value constraint} whose
-// {lexical form} is the empty string substitutes that, and the difference between
-// substituting "" and reading E's own "" is what tells clause 5.1's decided arm
-// from clause 5.2's decline (stringValid).
-func (c *contentCheck) assessed() (string, bool) {
+// on: D.{value constraint}.{lexical form} on clause 5.1's arm, and the ·initial
+// value· E actually carries on clause 5.2's. It is [icCheck.assessed]'s twin, one
+// per state the [[children]] are read into.
+func (c *contentCheck) assessed() string {
 	if vc, defaulted := c.defaulted(); defaulted {
-		return vc.LexicalForm(), true
+		return vc.LexicalForm()
 	}
-	return c.initial.String(), false
+	return c.initial.String()
 }
 
 // defaultValid settles cvc-elt clause 5.1.1: where clause 5.1's arm is live and
@@ -219,6 +215,12 @@ func (c *contentCheck) assessed() (string, bool) {
 // arrives already citing cvc-elt clause 5.1.1 and is carried as the cause on
 // [contentCheck.chargeCause]'s terms, so the rejection names which of
 // cos-valid-default's clauses turned the default away.
+//
+// The value space handed to it is the WALK's ([walk.values]) and not the one the
+// schema was finalized with, on [walk.defaultedAttribute]'s terms and for the
+// same reason: a schema assembled through [xsd.SchemaBuilder.Finalize] carries
+// none, and reading its would make this charge decidable only for schemas
+// finalized a particular way.
 func (c *contentCheck) defaultValid(w *walk) {
 	if c.charged || !c.g.instance || c.g.typ == nil {
 		return
@@ -227,7 +229,7 @@ func (c *contentCheck) defaultValid(w *walk) {
 	if !defaulted {
 		return
 	}
-	cause := w.schema.ElementDefaultValid(ruleCvcElt, "5.1.1", c.e.Loc(),
+	cause := w.schema.ElementDefaultValid(w.values, ruleCvcElt, "5.1.1", c.e.Loc(),
 		"the element "+c.e.Name().String(), c.g.typ, vc)
 	if cause == nil {
 		c.log(w, c.e.Name(), c.e.Loc(), ruleCvcElt, "5.1.1", "satisfied")
@@ -536,22 +538,19 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // st needs no resolution, unlike the {type definition} the attribute charges
 // reach through — a ·governing type definition· is the component itself, and
 // [xsd.SimpleContent] carries one that [xsd.NewComplexType] rejects a nil of
-// (ct-props-correct clause 1) — so the two declines below are the whole of what
+// (ct-props-correct clause 1) — so the one decline below is the whole of what
 // these charges withhold.
 //
-// The string tested is [contentCheck.assessed]'s and not c.initial: cvc-elt
-// clause 5 dispatches BEFORE cvc-type reaches either rule, and clause 5.1
-// replaces the item assessed with one whose ·normalized value· is
-// D.{value constraint}.{lexical form}. Reading the empty ·initial value· of a
-// defaulted element instead would reject every empty element its declaration
-// supplies a default for (clause 5.1.2, #853).
-//
-// GAP(validate): an element that clause 5.1 supplies NO substitute for — one
-// whose ·governing element declaration· carries no {value constraint} — and
-// whose ·initial value· is empty is declined. Clause 5.2.1 sends that element to
-// cvc-type over the empty string, which is a charge with its own conformance
-// attribution rather than part of clause 5.1's arm, and until it is made
-// charging here would be a widening (#853).
+// The string tested is [contentCheck.assessed]'s and not c.initial, because
+// cvc-elt clause 5 dispatches BEFORE cvc-type reaches either rule and its two
+// arms disagree about which item is assessed. On clause 5.1's, an EMPTY element
+// whose declaration carries a {value constraint}, the item is the one with
+// D.{value constraint}.{lexical form} used as its ·normalized value· (5.1.2), so
+// the string is that lexical and never the empty ·initial value·. On clause
+// 5.2's it is E itself (5.2.1), so an empty element with no {value constraint}
+// is charged for the empty string exactly as one carrying text is charged for
+// its own — the ·initial value· being a concatenation of no runs, which every
+// type whose lexical space excludes "" then rejects.
 //
 // GAP(validate): a ValidateLexical error that is not a VERDICT is the same
 // fail-open cvcattribute.go's matchedAttribute states in full, over the same
@@ -560,23 +559,18 @@ func (c *contentCheck) fixedActualValue(w *walk, f xsd.ValueConstraint) {
 // would reject every element whose character content this backend cannot read
 // (#774).
 //
-// st's assertion sites are recorded BEFORE either decline
-// ([walk.simpleAssertions], cvcassertion.go), because both of them leave the
-// element's ·initial value· to be read by cvcid.go and
-// cvcidentityconstraint.go against the same type: an empty ·initial value·
-// declines here and still reaches the datatype pipeline there, so recording
-// after the decline would lose the site. A ·nilled· element records nothing —
-// its ·initial value· is ·absent· (§3.3.5.4), which is the same condition
-// [contentCheck.simpleTypeValue] gates clause 3.1.3 on.
+// st's assertion sites are recorded BEFORE the decline ([walk.simpleAssertions],
+// cvcassertion.go), because it leaves the element's ·initial value· to be read
+// by cvcid.go and cvcidentityconstraint.go against the same type: a value this
+// backend cannot read declines here and still reaches the datatype pipeline
+// there, so recording after the decline would lose the site. A ·nilled· element
+// records nothing — its ·initial value· is ·absent· (§3.3.5.4), which is the
+// same condition [contentCheck.simpleTypeValue] gates clause 3.1.3 on.
 func (c *contentCheck) stringValid(w *walk, st *xsd.SimpleType) (decided bool, verdict error) {
 	if !c.nilled {
 		w.simpleAssertions(st, c.e.Loc())
 	}
-	lexical, substituted := c.assessed()
-	if !substituted && lexical == "" {
-		return false, nil
-	}
-	_, err := value.ValidateLexical(w.backend, w.schema, st, lexical, elementContext{owner: c.e})
+	_, err := value.ValidateLexical(w.backend, w.schema, st, c.assessed(), elementContext{owner: c.e})
 	if err == nil {
 		return true, nil
 	}

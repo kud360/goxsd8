@@ -266,17 +266,22 @@ func TestAssertionSitesRecurseThroughListAndUnion(t *testing.T) {
 	}
 }
 
-// An element with no character content declines String Valid (cvccomplexcontent.go)
-// and still has its ·initial value· read against the same type by cvcid.go and
-// cvcidentityconstraint.go, so the site is recorded before that decline rather
-// than after it.
-func TestEmptyInitialValueStillRecordsItsSites(t *testing.T) {
+// An ·initial value· String Valid REJECTS still has its assertion sites recorded:
+// the recording precedes the verdict, so a charge does not cost the site the way
+// returning after the verdict would.
+func TestRejectedInitialValueStillRecordsItsSites(t *testing.T) {
 	types := aVarietyTypes(t)
 	schema := aSchema(t, aComplexType(t, nil, xsd.SimpleContent{SimpleType: types[0]}, nil), types...)
 
-	res := aAssess(t, schema, cRoot())
+	res := aAssess(t, schema, cRoot("#not an integer"))
 
-	wantRecords(t, res, "cvc-assertions-valid", loc(1, 1), "AssertedInt")
+	if len(res.Violations()) != 1 {
+		t.Fatalf("Violations() = %v, want the clause 1.2 charge", res.Violations())
+	}
+	got := res.Unevaluated()
+	if len(got) != 1 || !strings.Contains(got[0].Msg(), "AssertedInt") {
+		t.Fatalf("Unevaluated() = %v, want the AssertedInt site recorded despite the charge", messages(got))
+	}
 }
 
 // The two rule IDs are never conflated: one element carrying both an

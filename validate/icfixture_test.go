@@ -133,6 +133,26 @@ func icLocal(t *testing.T, parent string, name xsd.QName, typ xsd.QName, nillabl
 	return d
 }
 
+// icDefaulted is icLocal with a {value constraint} of {variety} default, the
+// property cvc-elt clause 5.1 substitutes for an EMPTY element's ·normalized
+// value· — so <dtag/> contributes the constraint's {lexical form} to both the
+// [ID/IDREF table] and a ·key-sequence·, and <dtag>text</dtag> contributes its
+// own (#853).
+func icDefaulted(t *testing.T, parent string, name xsd.QName, typ xsd.QName, lexical string) xsd.ElementDeclaration {
+	t.Helper()
+	scope, err := xsd.NewLocalScope(xsderr.Loc{}, xsd.ComplexTypeScopeParent{Name: xsd.QName{Local: parent}})
+	if err != nil {
+		t.Fatalf("NewLocalScope: %v", err)
+	}
+	vc := xsd.NewValueConstraint(xsd.ValueDefault, lexical, nil, nil)
+	d, err := xsd.NewElementDeclaration(xsderr.Loc{}, name, xsd.TypeDefinitionRef{Name: typ}, nil, scope,
+		&vc, false, nil, nil, nil, false, nil, nil)
+	if err != nil {
+		t.Fatalf("building the %s element declaration: %v", name, err)
+	}
+	return d
+}
+
 // icTabled builds a local element declaration carrying a {type table} whose
 // one <alternative> has a {test} OUTSIDE the §3.12.6 required subset, so the
 // engine cannot decide which type the table ·conditionally selects· and
@@ -296,6 +316,7 @@ func icSchema(t *testing.T, ns string, nillable bool, rootICs, boxICs []xsd.Iden
 		icUseOf(t, named("unest"), named("UNest")),
 		icUseOf(t, named("lur"), named("LURef")),
 	}, icContent(t, icOptional(t, nameDecl), icOptional(t, tagDecl), icOptional(t, utagDecl),
+		icOptional(t, icDefaulted(t, "ItemType", in("dtag"), icBuiltin("ID"), "d1")),
 		icOptional(t, icTabled(t, "ItemType", in("tabled")))))
 	refType := icComplex(t, "RefType", []xsd.AttributeUse{
 		icUse(t, xsd.QName{Local: "r"}, "string"),

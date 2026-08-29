@@ -229,7 +229,7 @@ func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc
 	n := u.DeclarationName()
 	t, hasType := s.ResolvedSimpleType(d.TypeDefinition())
 	if hasType {
-		if err := s.checkSimpleDefault(ruleAuPropsCorrect, "2", loc, owner+" attribute "+n.String(), t, uvc); err != nil {
+		if err := s.checkSimpleDefault(s.valueSpace, ruleAuPropsCorrect, "2", loc, owner+" attribute "+n.String(), t, uvc); err != nil {
 			return err
 		}
 	}
@@ -292,7 +292,7 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 	if !ok {
 		return nil
 	}
-	return s.checkSimpleDefault(ruleAPropsCorrect, "2", d.Loc(), "attribute declaration "+d.Name().String(), t, dvc)
+	return s.checkSimpleDefault(s.valueSpace, ruleAPropsCorrect, "2", d.Loc(), "attribute declaration "+d.Name().String(), t, dvc)
 }
 
 // checkSimpleDefault is Simple Default Valid (§3.2.6.2, cos-valid-simple-default)
@@ -358,8 +358,8 @@ func (s *Schema) checkAttributeDeclarationValueConstraint(d AttributeDeclaration
 // rather than as a verdict (#321 settled that contract: the pipeline returns an
 // *xsderr.Error, it does not panic), so it lands in the accepting branch below:
 // this clause never rejects a schema for it, and never crashes on it.
-func (s *Schema) checkSimpleDefault(rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, t *SimpleType, vc ValueConstraint) error {
-	cause, decided := s.valueSpace.ValidDefault(s, t, vc)
+func (s *Schema) checkSimpleDefault(vs ValueSpace, rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, t *SimpleType, vc ValueConstraint) error {
+	cause, decided := vs.ValidDefault(s, t, vc)
 	if !decided || cause == nil {
 		return nil
 	}

@@ -76,7 +76,7 @@ func (s *Schema) checkElementDefaultValid(e ElementDeclaration) error {
 	if !ok {
 		return nil
 	}
-	return s.ElementDefaultValid(ruleEPropsCorrect, "2", e.Loc(),
+	return s.ElementDefaultValid(s.valueSpace, ruleEPropsCorrect, "2", e.Loc(),
 		"element declaration "+e.Name().String(), t, vc)
 }
 
@@ -92,6 +92,14 @@ func (s *Schema) checkElementDefaultValid(e ElementDeclaration) error {
 // same one Phase E charges and is deliberately not re-derived there (STYLE T4);
 // what differs is only the (t, vc) pair, the location, and the citation.
 //
+// vs is the value space clause 1's datatype question is decided in, and is a
+// PARAMETER rather than this schema's own installed one because the two are not
+// the same space at assessment time: a schema assembled through
+// [SchemaBuilder.Finalize] carries none, so reading s.valueSpace would leave
+// cvc-elt clause 5.1.1 unable to decide anything for it, while the walk charging
+// that clause holds the space its own backend defines. It is the same seam
+// validate's cvc-complex-type clause 4 charge reads for the same reason.
+//
 // rule and clause are the caller's own — e-props-correct clause 2 for the schema
 // side, cvc-elt clause 5.1.1 for the instance side — and close every message this
 // returns. loc and owner locate and name the component or item charged: the
@@ -101,12 +109,12 @@ func (s *Schema) checkElementDefaultValid(e ElementDeclaration) error {
 // t is the RESOLVED type definition, never a [TypeDefinitionRef]: cos-valid-default
 // predicates over a T that must be there to be read, and a caller holding a slot
 // resolves it first (checkElementDefaultValid) or declines.
-func (s *Schema) ElementDefaultValid(rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, t TypeDefinition, vc ValueConstraint) error {
+func (s *Schema) ElementDefaultValid(vs ValueSpace, rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, t TypeDefinition, vc ValueConstraint) error {
 	switch td := t.(type) {
 	case *SimpleType:
-		return s.checkSimpleDefault(rule, clause, loc, owner, td, vc) // clause 1, T simple
+		return s.checkSimpleDefault(vs, rule, clause, loc, owner, td, vc) // clause 1, T simple
 	case ComplexType:
-		return s.checkComplexDefaultValid(rule, clause, loc, owner, td, vc)
+		return s.checkComplexDefaultValid(vs, rule, clause, loc, owner, td, vc)
 	default:
 		panic("xsd: ElementDefaultValid: non-exhaustive TypeDefinition switch")
 	}
@@ -121,12 +129,12 @@ func (s *Schema) ElementDefaultValid(rule xsderr.Rule, clause string, loc xsderr
 // The default arm asserts the sealed-sum invariant and is unreachable for any
 // value an outside package can produce, since contentType is unexported (the same
 // footing componentWalk.walkParticle's Term switch stands on).
-func (s *Schema) checkComplexDefaultValid(rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, c ComplexType, vc ValueConstraint) error {
+func (s *Schema) checkComplexDefaultValid(vs ValueSpace, rule xsderr.Rule, clause string, loc xsderr.Loc, owner string, c ComplexType, vc ValueConstraint) error {
 	switch ct := c.ContentType().(type) {
 	case SimpleContent:
 		// Clause 1's complex arm: the governing type is
 		// T.{content type}.{simple type definition}, never T itself.
-		return s.checkSimpleDefault(rule, clause, loc, owner, ct.SimpleType, vc)
+		return s.checkSimpleDefault(vs, rule, clause, loc, owner, ct.SimpleType, vc)
 	case ElementContent:
 		if !ct.Mixed {
 			return notMixedDefault(rule, clause, loc, owner, c, vc) // clause 2.1
