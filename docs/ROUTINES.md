@@ -112,23 +112,42 @@ Over repository-scoped REST:
 # paths, the proxy answers "Numeric-ID repository paths (repositories/{id}/...)
 # are not supported through this proxy" (HTTP 403), and it does so AFTER
 # writing the pages it did fetch — a truncated file plus a non-zero exit that a
-# redirect into a survey tool does not notice. Page explicitly, and raise the
-# count while the last page still comes back non-empty.
-for p in $(seq 1 9); do
-  gh api "repos/kud360/goxsd8/issues?state=all&per_page=100&page=$p" > p$p.json
+# redirect into a survey tool does not notice. Page explicitly. Stop at the
+# first short page — a page below per_page is the last one, where any fixed
+# count goes stale and truncates in silence — and abort on a failed fetch
+# rather than looping on its error body.
+mkdir -p pages && rm -f pages/p*.json
+p=1
+while :; do
+  gh api "repos/kud360/goxsd8/issues?state=all&per_page=100&page=$p" > pages/p$p.json || exit 1
+  if [ "$(jq length pages/p$p.json)" -lt 100 ]; then break; fi
+  p=$((p + 1))
 done
 
 jq -s 'add | map(select(.pull_request == null))
-       | map({number, state, labels: [.labels[] | {name}]})' p[0-9]*.json > issues.json
+       | map({number, state, labels: [.labels[] | {name}]})' pages/*.json > issues.json
 
 jq -s 'add | map(select(.pull_request == null))
-       | map(select(.labels | map(.name) | index("kind/gap")))
-       | map({number, title, state, body})' p[0-9]*.json > gapissues.json
+       | map({number, title, state, body, labels: [.labels[] | {name}]})' pages/*.json > gapissues.json
 ```
 
-Neither reshape is optional: **pull requests share the issues endpoint** and
-every survey miscounts unless `select(.pull_request == null)` drops them, and
-**`labels` arrives as full objects** where both tools want `{name}` (#840).
+No part of the reshape is optional: **pull requests share the issues endpoint**
+and every survey miscounts unless `select(.pull_request == null)` drops them,
+and **both tools read a label** — `needs-replan` in `wipsurvey`, `kind/gap` in
+`gapaudit` — so a row that loses `labels` loses a verdict (#840, #1062). The
+`{name}` projection only keeps the files small; the other fields gh emits
+decode away either way.
+
+Feed `gapaudit` the whole repository — do not select `kind/gap` here. The tool
+makes that selection itself, for its group 2 alone, so that a marker citing an
+owner labeled anything else resolves instead of reading as an untracked leak
+(#1062).
+
+The pages go in their own directory, emptied first, because a bare
+`p[0-9]*.json` glob in the working directory swallows any unrelated file that
+happens to match — and a page left over from a longer earlier run is read back
+in as current. `jq -s add` fails outright on the first of those and silently
+believes the second.
 
 ### Dating an empty claim
 
