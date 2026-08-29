@@ -75,8 +75,8 @@ type ownedTypeFold struct {
 // definition — all three reach that one constructor — and no root here walks any
 // of them, so such a type reports its own {attribute uses} and its own
 // <anyAttribute> alone. The PARSER cannot produce the shape: no production puts
-// a <complexType> under an <attribute>. Nothing owns the retirement — enforcing
-// the variety and widening these roots are two changes, and neither is #414's.
+// a <complexType> under an <attribute>. #1115 owns the retirement and names the
+// two candidate changes as two: enforce the variety, or widen these roots.
 //
 // Direction (STYLE P3a): the withheld members are UNDER-reported and no reader
 // charges on their absence. In this package the one reader is

@@ -167,10 +167,10 @@ func (t *idTable) charge(w *walk, root Element) {
 // the ·eligible item set· outright.
 //
 // GAP(validate): where the governing type is complex and this package declined
-// to read its two attribute properties (assess.go's attributePropertiesFolded),
-// the same attribute may match a use it cannot see, so the type read off a
-// top-level declaration — or the absence of one — is not the governing type,
-// and it declines instead.
+// to read its two attribute properties (assess.go's attributePropertiesFolded,
+// whose retirement #1116 owns), the same attribute may match a use it cannot
+// see, so the type read off a top-level declaration — or the absence of one —
+// is not the governing type, and it declines instead.
 func (w *walk) idAttributes(c *icCheck) {
 	ct := c.g.complexType()
 	folded := ct != nil && attributePropertiesFolded(*ct)
@@ -586,14 +586,15 @@ var (
 // violates cvc-complex-type clause 2, which [walk.unmatchedAttribute] charges
 // in its own right.
 //
-// GAP(validate): a governing type whose two attribute properties this package
-// declined to read (assess.go's attributePropertiesFolded) reports false for
-// EVERY attribute, whether or not a top-level declaration of the name exists.
-// The wildcard arm is no fallback for a use arm that cannot be decided: that
-// declaration is a DIFFERENT component from the unseen use's, so a lookup
-// succeeding there governs the attribute by whichever type the schema happens
-// to ALSO declare at the top level. Both callers turn the false into their own
-// decline ([walk.idAttributes], [icCheck.fieldAttributes]).
+// GAP(validate): #1116 owns the retirement. A governing type whose two
+// attribute properties this package declined to read (assess.go's
+// attributePropertiesFolded) reports false for EVERY attribute, whether or not
+// a top-level declaration of the name exists. The wildcard arm is no fallback
+// for a use arm that cannot be decided: that declaration is a DIFFERENT
+// component from the unseen use's, so a lookup succeeding there governs the
+// attribute by whichever type the schema happens to ALSO declare at the top
+// level. Both callers turn the false into their own decline
+// ([walk.idAttributes], [icCheck.fieldAttributes]).
 func (w *walk) attributeType(e Element, g governance, a Attribute) (*xsd.SimpleType, bool) {
 	if ct := g.complexType(); ct != nil {
 		if !attributePropertiesFolded(*ct) {

@@ -1004,9 +1004,13 @@ func (c ComplexType) Abstract() bool {
 // rule "the same for all complex type definitions", and an ANONYMOUS type gets
 // it too at the slots Finalize walks: an element declaration's own {type
 // definition}, a {type table} alternative's, and every such slot those two nest,
-// at top level or down a particle tree (ownedtypefold.go, #414). An ATTRIBUTE
-// declaration's own {type definition} is not one of them — ownedtypefold.go's
-// GAP marker names the shape that seats a complex type there.
+// at top level or down a particle tree (ownedtypefold.go, #414). The
+// src-expredef clause 1.1 ORIGINAL a redefining complex type owns in its {base
+// type definition} is anonymous and folded too, by a different route:
+// baseAttributeUses re-seats the owned inline base (attributeusefold.go, #505),
+// not the owned descent. An ATTRIBUTE declaration's own {type definition} is in
+// neither — ownedtypefold.go's GAP marker names the shape that seats a complex
+// type there.
 //
 // On a ComplexType a caller built with [NewComplexType] and has not yet
 // finalized, it is only what that caller passed in: clause 3 needs the base
@@ -1029,8 +1033,9 @@ func (c ComplexType) AttributeUses() []AttributeUse {
 // extension's own {process contents} and {annotations} (clause 2.2), because
 // Finalize materialises the fold (attributewildcardfold.go, #265). The §3.4.2.5
 // mapping rule is likewise "the same for all complex type definitions", and an
-// anonymous type gets it at exactly the slots AttributeUses names and no others
-// (ownedtypefold.go, #414).
+// anonymous type gets it at the slots AttributeUses names, by the two routes
+// that entry distinguishes (ownedtypefold.go, #414; baseAttributeWildcard,
+// #505).
 //
 // On a ComplexType a caller built with [NewComplexType] and has not yet
 // finalized, it is only what that caller passed in: clause 2.2 needs the base

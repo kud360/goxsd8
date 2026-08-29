@@ -423,11 +423,11 @@ func (w *walk) instanceGovernance(e Element) (governance, bool) {
 // <complexType> children of <schema> — so a complex type whose {name} is
 // ·absent· was folded for neither property and reported its own <attribute>
 // children and its own ·complete wildcard· alone; the two folds now reach such a
-// type through the slot that owns it (xsd/ownedtypefold.go, #414). What is left
-// here is a CONSERVATIVE decline of this package's own: an anonymous governing
-// type is still narrowed away from the attribute charges rather than assessed.
-// Retiring it widens what the instance lane assesses and is measurable movement
-// this landing did not take.
+// type through the slot that owns it (xsd/ownedtypefold.go). What is left here
+// is a CONSERVATIVE decline of this package's own: an anonymous governing type
+// is still narrowed away from the attribute charges rather than assessed. The
+// retirement is #1116's, and it widens what the instance lane assesses, so it
+// carries its own ratchet attribution.
 //
 // The decline it withholds is cvc-complex-type clause 2's, which is why keeping
 // it costs no false reject: [walk.attributes] narrows the type to nothing, and
