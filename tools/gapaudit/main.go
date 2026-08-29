@@ -24,8 +24,8 @@
 //     its reason, and only an unannotated row is a candidate for filing:
 //     "dead end" names a CLOSED issue the marker actually cites and the
 //     landing that closed it should have repointed, "resemblance" names one
-//     it merely reads like, and an absent-from-input line names an owner the
-//     fed list cannot contain.
+//     it merely reads like, and an unresolved-citation line names a number
+//     that is no issue in the fed list at all.
 //  2. OPEN `kind/gap` issues whose marker is no longer anywhere in the
 //     tree — a stale tracker: the gap was closed in code without closing
 //     the issue that tracked it. A phrase-only marker match is printed under
@@ -58,20 +58,21 @@
 // # Usage
 //
 //	go run ./tools/gapaudit [dir] < issues.json
-//	gh issue list --label kind/gap --state all --json number,title,state,body | go run ./tools/gapaudit
+//	gh issue list --state all --json number,title,state,body,labels | go run ./tools/gapaudit
 //
 // dir defaults to "." (the whole tree). Empty or absent stdin runs in
 // marker-inventory-only mode: groups 1 and 2 are skipped (there is nothing
 // to reconcile against) and the report says so.
 //
-// The `kind/gap` filter is what makes group 2 meaningful, and it is also
-// why a citation can be unresolvable: nothing constrains a gap's owner to
-// that one label, so a marker citing a `kind/feature` or `kind/story`
-// owner names an issue this input structurally cannot contain. Such a
-// marker lands in group 1 with its cited number printed and flagged
-// absent-from-input. That is not a leak and needs no filing; widening the
-// input instead would need the label on every row, which this tool's input
-// shape does not carry.
+// Feed the whole repository, not a `kind/gap` slice of it, and carry
+// `labels` on every row: this tool makes the `kind/gap` selection itself,
+// for group 2 alone (#1062). Nothing constrains a gap's owner to that one
+// label, so a marker citing a `kind/feature` or `kind/story` owner resolves
+// against it on the wide input and would only have read as an absent
+// citation on the narrow one. What remains unresolvable on a wide input is a
+// number naming no issue at all — a mistyped citation, reported in group 1
+// beside the marker. A labelless input selects nothing into group 2, and the
+// report says so rather than reading as "no tracker is stale".
 //
 // It exits 0 on a clean run (regardless of what it finds — the findings are
 // the report, not a failure) and 2 on an operational error: an unreadable
@@ -171,9 +172,10 @@ func skipDir(name string) bool {
 		(len(name) > 1 && name[0] == '.')
 }
 
-// readIssues decodes the `gh issue list ... --json number,title,state,body`
-// shape from r. An empty or absent stdin is not an error: haveIssues comes
-// back false, and the caller runs in marker-inventory-only mode.
+// readIssues decodes the `gh issue list ... --json
+// number,title,state,body,labels` shape from r. An empty or absent stdin is
+// not an error: haveIssues comes back false, and the caller runs in
+// marker-inventory-only mode.
 func readIssues(r io.Reader) (issues []issue, haveIssues bool, err error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -374,19 +376,45 @@ func commentLines(path string, src []byte) ([]commentLine, error) {
 	return lines, nil
 }
 
-// issue is one row of `gh issue list --json number,title,state,body`: the
-// fields this tool needs to decide whether a marker is tracked. State is
+// issue is one row of `gh issue list --json number,title,state,body,labels`:
+// the fields this tool needs to decide whether a marker is tracked. State is
 // "OPEN" or "CLOSED" as gh emits it; matching compares it case-insensitively
 // rather than adding a second encoding of the same fact.
+//
+// Labels is what lets the input be the whole repository rather than the
+// `kind/gap` slice of it: [reconcile] does the [gapLabel] selection itself,
+// so group 1 can resolve a citation whose owner carries some other label
+// (#1062).
 type issue struct {
-	Number int    `json:"number"`
-	Title  string `json:"title"`
-	State  string `json:"state"`
-	Body   string `json:"body"`
+	Number int     `json:"number"`
+	Title  string  `json:"title"`
+	State  string  `json:"state"`
+	Body   string  `json:"body"`
+	Labels []label `json:"labels"`
 }
+
+// label is one entry of an issue's `labels` array. Only the name is read;
+// gh emits id, description and color beside it and they decode away.
+type label struct {
+	Name string `json:"name"`
+}
+
+// gapLabel is the label docs/WORKFLOW.md puts on the issue that tracks a
+// marked gap. It selects group 2 and nothing else: group 1 weighs a marker
+// against every issue in the input, whatever it is labeled.
+const gapLabel = "kind/gap"
 
 func (iss issue) open() bool {
 	return strings.EqualFold(iss.State, "OPEN")
+}
+
+func (iss issue) hasLabel(name string) bool {
+	for _, l := range iss.Labels {
+		if l.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // areaCount is one row of the per-area marker census.
@@ -410,8 +438,8 @@ type closedMatch struct {
 // no match at all, but the reader deciding what to file next benefits from
 // knowing a plausible predecessor already exists and was closed. Unresolved
 // records issue numbers the marker cites that the fed list does not contain
-// at all: the marker names its owner, the input just cannot see it, which is
-// a different finding from naming no owner.
+// at all: the marker names an owner that does not exist, which is a
+// different finding from naming no owner.
 type untrackedMarker struct {
 	Marker        marker
 	Unresolved    []int
@@ -430,11 +458,30 @@ type staleTracker struct {
 // report is gapaudit's full output: the three groups described in the
 // package doc, plus whether an issue list was supplied at all (haveIssues
 // false means groups 1 and 2 are meaningless and were not computed).
+//
+// Labeled records whether any row of that list carried a label at all. An
+// input reshaped without a `labels` field — the shape this tool documented
+// before #1062 — selects nothing into group 2, and an empty group 2 then
+// means "no tracker was seen" rather than "no tracker is stale". The
+// report says which.
 type report struct {
 	HaveIssues bool
+	Labeled    bool
 	Untracked  []untrackedMarker
 	Stale      []staleTracker
 	Census     []areaCount
+}
+
+// anyLabeled reports whether any fed issue carries a label, which is how a
+// pre-#1062 labelless input is told apart from a repository whose issues
+// happen to carry no `kind/gap`.
+func anyLabeled(issues []issue) bool {
+	for _, iss := range issues {
+		if len(iss.Labels) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // minPhraseWords is how many consecutive words of a marker's text must
@@ -458,7 +505,7 @@ const minPhraseWords = 5
 // census (group 3) is populated, since there is nothing to reconcile markers
 // against.
 func reconcile(markers []marker, issues []issue, haveIssues bool) report {
-	rep := report{HaveIssues: haveIssues, Census: census(markers)}
+	rep := report{HaveIssues: haveIssues, Labeled: anyLabeled(issues), Census: census(markers)}
 	if !haveIssues {
 		return rep
 	}
@@ -487,7 +534,7 @@ func reconcile(markers []marker, issues []issue, haveIssues bool) report {
 	}
 
 	for _, iss := range issues {
-		if !iss.open() {
+		if !iss.open() || !iss.hasLabel(gapLabel) {
 			continue
 		}
 		retired, weak := trackerEvidence(iss, sorted)
@@ -552,9 +599,11 @@ func trackerEvidence(iss issue, markers []marker) (retired bool, weak []marker) 
 }
 
 // unresolvedCitations returns the issue numbers m cites that appear nowhere
-// in the fed list, open or closed. Under the documented `kind/gap` input
-// that is how a marker whose owner carries a different label reads, so the
-// report can name the number instead of calling the marker untracked.
+// in the fed list, open or closed. On the whole-repository input this tool
+// now documents, such a number names no issue at all — a mistyped citation,
+// or a pull-request number the reshape dropped — so the report names the
+// number rather than calling the marker untracked, and the number itself is
+// the thing to fix (#1062).
 func unresolvedCitations(m marker, issues []issue) []int {
 	var out []int
 	for _, n := range citations(m.Text) {
@@ -743,8 +792,8 @@ func printReportTo(w io.Writer, rep report) {
 	for _, u := range rep.Untracked {
 		_, _ = fmt.Fprintf(w, "  %s:%d [%s] %s\n", u.Marker.File, u.Marker.Line, u.Marker.Area, u.Marker.Text)
 		for _, n := range u.Unresolved {
-			_, _ = fmt.Fprintf(w, "      cites #%d, absent from the fed list — expected for an owner"+
-				" outside kind/gap; not a leak\n", n)
+			_, _ = fmt.Fprintf(w, "      cites #%d, which names no issue in the fed list —"+
+				" the citation itself is the defect\n", n)
 		}
 		for _, cm := range u.ClosedMatches {
 			label := "resemblance"
@@ -759,6 +808,11 @@ func printReportTo(w io.Writer, rep report) {
 	_, _ = fmt.Fprintln(w, "(a stale tracker if the gap was a marked fail-open site — but")
 	_, _ = fmt.Fprintln(w, "kind/gap also labels conformance-lane gaps, which never carry a")
 	_, _ = fmt.Fprintln(w, "marker and belong here permanently)")
+	if !rep.Labeled {
+		_, _ = fmt.Fprintln(w, "gapaudit: no row of the fed list carries a label, so this group selected")
+		_, _ = fmt.Fprintln(w, "nothing. Reshape the input with `labels: [.labels[] | {name}]` — see")
+		_, _ = fmt.Fprintln(w, "docs/ROUTINES.md's \"Survey input\".")
+	}
 	if len(rep.Stale) == 0 {
 		_, _ = fmt.Fprintln(w, "(none)")
 	}
