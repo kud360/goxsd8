@@ -81,6 +81,12 @@ var allowedCollisionCitations = []citationAllowance{
 	{file: "xsd/effectivetotalrange.go", number: 9, count: 1},
 	{file: "xsd/example_test.go", number: 9, count: 1},
 	{file: "xsd/modelgroup.go", number: 9, count: 1},
+	// #414: the two finalize folds' shared descent over declaration-owned
+	// anonymous complex types records that it carries no visited set — item 9's
+	// FIRST half, the phased-construction licence, on the same footing
+	// componentwalk.go's read-only descent states it: the walk follows
+	// ownership only, and an owned component pre-exists the slot holding it.
+	{file: "xsd/ownedtypefold.go", number: 9, count: 1},
 	// #503: the src-redefine clause 7.2.2 pass walks a single edge from a named
 	// attribute group definition to the off-index original it redefines, and
 	// records that no `seen` set belongs there — item 9's first half, the

@@ -248,15 +248,15 @@ func TestKeyrefChargesWhenTheReferencedKeyNeverOccurred(t *testing.T) {
 	icWantCharges(t, icAssess(t, schema, doc), icCharge(ruleCvcIdentityConstraint, 3))
 }
 
-// A `@NameTest` field over an UNFOLDED governing type declines for the same
+// A `@NameTest` field over an ANONYMOUS governing type declines for the same
 // reason cvc-id does: the top-level declaration its ·expanded name· resolves to
 // is not the ·governing type definition·, and a key-sequence member compared
 // under the wrong simple type is compared in the wrong ·value space·. The two
 // documents below are one duplicate under xs:integer and two distinct values
 // under the xs:string <kid> actually declares.
-func TestFieldOverAnUnfoldedTypeDeclinesRatherThanReadingTheTopLevelType(t *testing.T) {
+func TestFieldOverAnAnonymousTypeDeclinesRatherThanReadingTheTopLevelType(t *testing.T) {
 	key := icDef(t, "K", xsd.IdentityConstraintKey, "kid", nil, "", "@aid")
-	schema := icUnfoldedSchema(t, "string", "integer", []xsd.IdentityConstraint{key})
+	schema := icAnonymousSchema(t, "string", "integer", []xsd.IdentityConstraint{key})
 
 	icWantCharges(t, icAssess(t, schema, icRoot(icKid(2, "aid")("1"), icKid(3, "aid")("01"))))
 }

@@ -175,7 +175,11 @@ var anyTypeName = QName{Space: XMLSchemaNS, Local: "anyType"}
 // (STYLE D3). Its only mutations are Phase D's two folds, which are mapping rules
 // finished rather than references cached: each overwrites a property with the
 // value its §3.4.2 rule defines, leaving one encoding of it and not two (see
-// foldAttributeUses and foldAttributeWildcards).
+// foldAttributeUses and foldAttributeWildcards). Each writes into every root that
+// can OWN a complex type — {type definitions}, {element declarations}, {model
+// group definitions} and the <redefine> originals, with the by-name index derived
+// from each — because a folded type is observable only through the slot holding
+// it (ownedtypefold.go).
 //
 // An absent reference is skipped, not treated as dangling: absence — a zero
 // QName in a bare-QName slot, a nil TypeDefinitionOrRef in a {type definition}
@@ -237,7 +241,9 @@ func (s *Schema) resolve() error {
 	if err := s.checkSimpleTypeDerivations(); err != nil {
 		return err
 	}
-	s.foldAttributeUses()
+	if err := s.foldAttributeUses(); err != nil {
+		return err
+	}
 	if err := s.foldAttributeWildcards(); err != nil {
 		return err
 	}
