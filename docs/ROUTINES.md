@@ -115,7 +115,7 @@ Over repository-scoped REST:
 # redirect into a survey tool does not notice. Page explicitly, and stop on the
 # first empty page: the repository outgrows any fixed count, and a `seq` that
 # has gone short truncates in silence.
-rm -rf pages && mkdir pages
+mkdir -p pages && rm -f pages/p*.json
 p=1
 while :; do
   gh api "repos/kud360/goxsd8/issues?state=all&per_page=100&page=$p" > pages/p$p.json
@@ -140,9 +140,11 @@ owner labeled anything else resolves instead of reading as an untracked leak
 (#1062). Drop `labels` from this reshape and group 2 selects nothing; the
 report says so rather than reporting no stale trackers.
 
-The pages go in their own directory because a bare `p[0-9]*.json` glob in the
-working directory swallows any unrelated file that happens to match, and
-`jq -s add` then fails outright on it.
+The pages go in their own directory, emptied first, because a bare
+`p[0-9]*.json` glob in the working directory swallows any unrelated file that
+happens to match — and a page left over from a longer earlier run is read back
+in as current. `jq -s add` fails outright on the first of those and silently
+believes the second.
 
 ### Dating an empty claim
 
