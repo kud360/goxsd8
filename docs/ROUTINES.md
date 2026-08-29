@@ -133,13 +133,15 @@ jq -s 'add | map(select(.pull_request == null))
 
 No part of the reshape is optional: **pull requests share the issues endpoint**
 and every survey miscounts unless `select(.pull_request == null)` drops them,
-and **`labels` arrives as full objects** where both tools want `{name}` (#840).
+and **both tools read a label** — `needs-replan` in `wipsurvey`, `kind/gap` in
+`gapaudit` — so a row that loses `labels` loses a verdict (#840, #1062). The
+`{name}` projection only keeps the files small; the other fields gh emits
+decode away either way.
 
 Feed `gapaudit` the whole repository — do not select `kind/gap` here. The tool
 makes that selection itself, for its group 2 alone, so that a marker citing an
 owner labeled anything else resolves instead of reading as an untracked leak
-(#1062). Drop `labels` from this reshape and group 2 selects nothing; the
-report says so rather than reporting no stale trackers.
+(#1062).
 
 The pages go in their own directory, emptied first, because a bare
 `p[0-9]*.json` glob in the working directory swallows any unrelated file that
