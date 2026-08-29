@@ -58,7 +58,7 @@
 // # Usage
 //
 //	go run ./tools/gapaudit [dir] < issues.json
-//	gh issue list --state all --json number,title,state,body,labels | go run ./tools/gapaudit
+//	gh issue list --state all --limit 5000 --json number,title,state,body,labels | go run ./tools/gapaudit
 //
 // dir defaults to "." (the whole tree). Empty or absent stdin runs in
 // marker-inventory-only mode: groups 1 and 2 are skipped (there is nothing
