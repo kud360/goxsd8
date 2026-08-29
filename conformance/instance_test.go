@@ -254,19 +254,18 @@ func TestDecidedNotValidEnumeratesTheDecidableCharges(t *testing.T) {
 // document and not only from a hand-assembled xsd.Schema: produceComplexType
 // dispatches on the <complexContent>/<simpleContent> children before it
 // considers whether the type is named, so an inline <complexContent>
-// <extension> under an <element> is produced exactly as a top-level one is,
-// and neither attribute fold reaches it (#414).
+// <extension> under an <element> is produced exactly as a top-level one is.
 //
 // The document below is VALID — @fromBase is the base's own attribute use and
-// @own the extension's — and every property the walk would read is
-// under-reported, so an assessment against that type charges cvc-complex-type
-// clause 2 for an attribute the base declares. This test lives here rather
-// than in validate because it needs the parser, which validate's import
-// closure excludes (validate/imports_test.go); it goes through parser.Parse
-// and xmlsrc.Validate directly rather than through the lane executor, since
-// assembleCase's decidability gate declines this schema before validate ever
-// sees it — which is why no suite case can expose the defect and why the lane
-// cannot pin it.
+// @own the extension's — and an assessment that read the type's two attribute
+// properties without the decline would have to get both right or charge
+// cvc-complex-type clause 2 for an attribute the base declares. This test lives
+// here rather than in validate because it needs the parser, which validate's
+// import closure excludes (validate/imports_test.go); it goes through
+// parser.Parse and xmlsrc.Validate directly rather than through the lane
+// executor, since assembleCase's decidability gate declines this schema before
+// validate ever sees it — which is why no suite case can expose the defect and
+// why the lane cannot pin it.
 func TestParsedAnonymousExtensionIsNotFalselyRejected(t *testing.T) {
 	dir := t.TempDir()
 	writeFixture(t, filepath.Join(dir, "s.xsd"), `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">

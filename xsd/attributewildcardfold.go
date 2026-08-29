@@ -97,12 +97,18 @@ type attributeWildcardFold struct {
 // excludes by position rather than by a guard (PRINCIPLES 9, STYLE D4). It must run
 // before Phase D, the first phase to read {attribute wildcard}.
 //
-// It returns an error where foldAttributeUses cannot, because clause 2.2.2.3
-// CONSTRUCTS a component: NewNamespaceConstraint (through UnionNamespaceConstraint)
-// and NewWildcard both re-check w-props-correct. Neither can fail for two
-// validly-constructed operands — see UnionNamespaceConstraint's own note — but the
-// error is plumbed out as a real return value rather than swallowed or panicked,
-// so any future divergence fails closed as a w-props-correct rejection (STYLE P3).
+// It folds the DECLARATION-OWNED anonymous complex types too, in a second walk
+// over the roots ownedtypefold.go enumerates; §3.4.2.5's own Note makes the rule
+// "the same for all complex type definitions", and such a type is in no {type
+// definitions} slice for the position walk above to reach (#414).
+//
+// Its rejections are its own, where foldAttributeUses only relays the shared
+// descent's, because clause 2.2.2.3 CONSTRUCTS a component: NewNamespaceConstraint
+// (through UnionNamespaceConstraint) and NewWildcard both re-check
+// w-props-correct. Neither can fail for two validly-constructed operands — see
+// UnionNamespaceConstraint's own note — but the error is plumbed out as a real
+// return value rather than swallowed or panicked, so any future divergence fails
+// closed as a w-props-correct rejection (STYLE P3).
 func (s *Schema) foldAttributeWildcards() error {
 	f := &attributeWildcardFold{
 		position: make(map[QName]int, len(s.types)),
@@ -125,7 +131,23 @@ func (s *Schema) foldAttributeWildcards() error {
 		}
 	}
 	s.storeFoldedAttributeWildcards(f)
-	return nil
+	return s.foldOwnedAttributeWildcards(f)
+}
+
+// foldOwnedAttributeWildcards runs §3.4.2.5 clause 2 over every complex type a
+// DECLARATION owns, through the descent ownedtypefold.go supplies. It is
+// foldOwnedAttributeUses' property-wise sibling and runs after
+// storeFoldedAttributeWildcards for the reason stated there: every position is
+// memoised by then, so an owned type deriving by name from a top-level one
+// cannot re-enter the position walk at a position still mid-fold.
+//
+// Positions belong to the first walk alone, so every type this one folds is
+// handed noTypePosition.
+func (s *Schema) foldOwnedAttributeWildcards(f *attributeWildcardFold) error {
+	w := ownedTypeFold{fold: func(c ComplexType) (ComplexType, error) {
+		return s.clause2AttributeWildcard(f, c, noTypePosition)
+	}}
+	return w.schema(s)
 }
 
 // foldTypeAttributeWildcard computes and memoises the folded Complex Type

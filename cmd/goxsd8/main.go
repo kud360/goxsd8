@@ -25,16 +25,22 @@ Usage (contract; subcommands land with their milestones):
 
   goxsd8 parse <schema.xsd>...
       Compile one or more schemas into a single set and print a
-      summary (target namespaces, global declarations, errors).
-      Exit 0 on a valid set, 1 on schema errors.
+      summary (target namespaces, global declarations) on stdout.
+      Exit 0 on a valid set; 1 on schema errors, one line per error
+      on stderr.
 
-  goxsd8 validate -schema <schema.xsd>... <instance>...
-      Assess instances against the compiled set. Source format by
-      extension (.xml, .json, .ber) or forced with -format.
+  goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...
+      Assess instances against the compiled set; every schema needs
+      its own -schema, and every positional argument is an instance.
+      Source format by extension (.xml, .json, .ber) or forced with
+      -format xml|json|ber, matched case-sensitively and applying to
+      every instance of the invocation (there is no per-instance
+      spelling).
       xsi:schemaLocation hints in XML instances augment the schema set
       (resolved relative to the instance; disable with -no-hints).
-      Exit 0 valid, 1 invalid, 2 usage/IO. Each violation prints one
-      line: <loc>: [<rule>] <message>.
+      Exit 0 valid, 1 invalid, 2 usage/IO, aggregated over the
+      instances: 1 if any one of them is invalid. Each violation
+      prints one line on stdout: <loc>: [<rule>] <message>.
 
   goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
       Generate Go types; repeated -schema/-out pairs map schemas to

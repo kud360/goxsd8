@@ -83,7 +83,18 @@ type attributeUseFold struct {
 // base's use, and an EXTENSION of B that declares that name itself then holds two
 // same-named members and is FALSELY rejected by ct-props-correct clause 4
 // (checkAttributeUseNamesUnique) for a duplicate the source never wrote.
-func (s *Schema) foldAttributeUses() {
+//
+// It folds the DECLARATION-OWNED anonymous complex types too, in a second walk
+// over the roots ownedtypefold.go enumerates: §3.4.2.4's own opening sentence
+// makes the rule "the same for all complex type definitions", and a type nested
+// in a particle tree or under an <alternative> is in no {type definitions} slice
+// for the position walk above to reach (#414).
+//
+// The error is the shared descent's, not this rule's: clause 3 selects among
+// attribute uses already built and constructs no component, so nothing it does
+// can fail. foldAttributeWildcards, whose clause 2.2.2.3 does construct one, is
+// where a rejection actually originates.
+func (s *Schema) foldAttributeUses() error {
 	f := &attributeUseFold{
 		position: make(map[QName]int, len(s.types)),
 		types:    make([]ComplexType, len(s.types)),
@@ -103,6 +114,27 @@ func (s *Schema) foldAttributeUses() {
 		s.foldTypeAttributeUses(f, i)
 	}
 	s.storeFoldedAttributeUses(f)
+	return s.foldOwnedAttributeUses(f)
+}
+
+// foldOwnedAttributeUses runs §3.4.2.4 clause 3 over every complex type a
+// DECLARATION owns, through the descent ownedtypefold.go supplies.
+//
+// It runs after storeFoldedAttributeUses so every position is already memoised:
+// an owned type deriving by name from a top-level one takes a memo hit rather
+// than re-entering the position walk, which is what keeps this second walk free
+// of the one recursion the first cannot have. The content-model graph is not the
+// {base type definition} graph Phase B proved acyclic — a type declared inside T
+// may extend T — so entering the position walk from here could reach a position
+// mid-fold; running the walks in this order means none is.
+//
+// Positions belong to the first walk alone, so every type this one folds is
+// handed noTypePosition.
+func (s *Schema) foldOwnedAttributeUses(f *attributeUseFold) error {
+	w := ownedTypeFold{fold: func(c ComplexType) (ComplexType, error) {
+		return s.foldComponentAttributeUses(f, c, noTypePosition), nil
+	}}
+	return w.schema(s)
 }
 
 // foldTypeAttributeUses computes and MEMOISES the folded Complex Type Definition
