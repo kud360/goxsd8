@@ -112,11 +112,10 @@ Over repository-scoped REST:
 # paths, the proxy answers "Numeric-ID repository paths (repositories/{id}/...)
 # are not supported through this proxy" (HTTP 403), and it does so AFTER
 # writing the pages it did fetch — a truncated file plus a non-zero exit that a
-# redirect into a survey tool does not notice. Page explicitly, and stop at the
-# first short page: the repository outgrows any fixed count, and a `seq` that
-# has gone short truncates in silence. Abort on a failed fetch rather than
-# looping on it — a page that is not a full 100 must be the last one, not an
-# error body.
+# redirect into a survey tool does not notice. Page explicitly. Stop at the
+# first short page — a page below per_page is the last one, where any fixed
+# count goes stale and truncates in silence — and abort on a failed fetch
+# rather than looping on its error body.
 mkdir -p pages && rm -f pages/p*.json
 p=1
 while :; do
