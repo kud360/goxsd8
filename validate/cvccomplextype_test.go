@@ -515,12 +515,11 @@ func assessAgainst(t *testing.T, schema *xsd.Schema, root Element) []*xsderr.Err
 }
 
 // An ANONYMOUS governing type derived from a named base withholds the whole
-// attribute assessment: §3.4.2.4 clause 3's {attribute uses} and §3.4.2.5
-// clause 2's {attribute wildcard} are folded over the schema's NAMED type
-// definitions alone (#414), so Base's attribute use and its <anyAttribute>
-// are both missing from the component the walk would read. Under-report the
-// uses and @fromBase looks unmatched; under-report the wildcard and clause
-// 2.2 does not decline it — together they charge a document Base admits.
+// attribute assessment: attributePropertiesFolded declines every anonymous
+// type but the implicit-content one, so neither Base's attribute use nor its
+// <anyAttribute> reaches a charge. The decline is this package's own and
+// conservative — the two folds do reach such a type since #414 — and what it
+// pins here is that the withholding is total rather than partial.
 func TestAnonymousDerivedRootDeclinesTheAttributeHalf(t *testing.T) {
 	for _, derivation := range []xsd.DerivationMethod{xsd.DerivationExtension, xsd.DerivationRestriction} {
 		schema := anonymousRootSchema(t, xsd.QName{Local: "Base"}, derivation,

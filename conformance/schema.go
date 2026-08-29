@@ -928,22 +928,29 @@ func elementDecidable(el *parser.Element) bool {
 // anonymousComplexTypeDecidable, which is the deliberate half of this gate. Both
 // would decline the shapes the producer answers with a limitation error, which
 // is what this gate is for. What only the narrower one adds is the
-// IMPLICIT-CONTENT restriction, and that restriction is about the two attribute
-// folds no owning slot reaches (xsd/complexderivation.go's GAP marker, #414/#438
-// under #584) — a property-value gap this lane ALREADY scores on this shape,
-// because an <alternative>'s children were never inspected here before and the
-// producer's silence about them was itself ungated. Applying it now would decline
-// six schema cases and one instance case the lane decides today, so the narrowing
-// belongs to the landing that closes the fold, not to the one that first builds
-// the component.
+// IMPLICIT-CONTENT restriction, and that restriction is about the Phase D
+// VERDICTS no owning slot reaches (xsd/complexderivation.go's GAP marker, #438
+// under #584) — a gap this lane ALREADY scores on this shape, because an
+// <alternative>'s children were never inspected here before and the producer's
+// silence about them was itself ungated. Applying it now would decline six
+// schema cases and one instance case the lane decides today, so the narrowing
+// belongs to the landing that closes the verdicts, not to the one that first
+// builds the component.
+//
+// The two attribute FOLDS were the other half of this and are no longer:
+// §3.4.2.4 clause 3 and §3.4.2.5 clause 2 reach a type an <alternative> owns
+// through the owning slot (xsd/ownedtypefold.go, #414), so the {attribute
+// uses}/{attribute wildcard} an EXTENSION under an <alternative> reports are the
+// spec's.
 //
 // The residual, per reader (STYLE P3a): the SCHEMA lane cannot over-reject on
 // it, because checkComplexDerivations quantifies over Schema.types and an owned
 // anonymous type is in no such set, so no Phase D verdict is reached at all and
-// the unfolded {attribute uses}/{attribute wildcard} are read by nothing. The
-// INSTANCE lane can: validate's cvc-complex-type clause 3 reads the selected
-// type's {attribute uses} to decide an attribute, so an unfolded EXTENSION
-// under an <alternative> can reject an attribute its base declares.
+// nothing this lane scores turns on one. The INSTANCE lane cannot either:
+// validate declines the attribute half of every anonymous governing type but the
+// implicit-content one (assess.go's attributePropertiesFolded), so it charges
+// cvc-complex-type clause 2 against no attribute an <alternative>'s inline type
+// governs.
 //
 // It serves both element paths (STYLE T4): §3.3.2.1's {type table} row is a
 // COMMON mapping rule, so a top-level and a local <element> carry the same
@@ -968,15 +975,18 @@ func alternativeTypesDecidable(el *parser.Element) bool {
 // xsd/typedefinition.go records why registering one would be worse), so every
 // finalize pass that quantifies over it silently produces NO verdict for the
 // anonymous type — see the GAP marker on parser's produceComplexType for the
-// exact list and its issues (#414, #438).
+// exact list and its issue (#438). The two attribute FOLDS are not on that list
+// any more: they reach an owned anonymous type through the slot that owns it
+// (xsd/ownedtypefold.go, #414).
 //
 // This gate therefore admits only the IMPLICIT-CONTENT form — no <simpleContent>
-// and no <complexContent> child — because on that shape the two MISSING
-// attribute folds are provably the identity: §3.4.2.3.2 makes the {base type
-// definition} xs:anyType with {derivation method} restriction, §3.4.7 gives
-// xs:anyType an empty {attribute uses} so §3.4.2.4 clause 3's fold adds nothing,
-// and §3.4.2.5 clause 2 unions the base's wildcard only for an EXTENSION, which
-// this form is not. What stays genuinely unenforced on the admitted shape is
+// and no <complexContent> child — the shape on which the missing verdicts cost
+// least, and the one validate assesses the attribute half of rather than
+// declining (assess.go's attributePropertiesFolded): §3.4.2.3.2 makes the {base
+// type definition} xs:anyType with {derivation method} restriction, §3.4.7 gives
+// xs:anyType an empty {attribute uses} so §3.4.2.4 clause 3 adds nothing, and
+// §3.4.2.5 clause 2 unions the base's wildcard only for an EXTENSION, which this
+// form is not. What stays genuinely unenforced on the admitted shape is
 // narrower but real: cos-nonambig and cos-element-consistent inside the
 // anonymous content model, and ct-props-correct clause 4's attribute-name
 // uniqueness. All three are UNDER-rejections — this lane can report "valid" for

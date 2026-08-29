@@ -81,7 +81,7 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // GAP(xsd): this walk quantifies over s.types, so an ANONYMOUS complex type —
 // one reachable only through a slot that owns it — gets NO verdict from any
 // constraint above. That covers the inline <complexType> of an element or
-// attribute declaration (#438/#414); since #505, the src-expredef clause 1.1
+// attribute declaration (#438); since #505, the src-expredef clause 1.1
 // ORIGINAL a redefining complex type owns, which the spec makes a full component
 // "as defined in Schema Component Details (§3)" and therefore subject to these
 // same rules; and, since #851, the inline <complexType> of an <alternative>,
@@ -93,8 +93,8 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // four; #584 owns it.
 //
 // DIRECTION, per reader rather than in general (STYLE P3a). What is withheld is
-// a VERDICT, never a property value: the two folds now materialise §3.4.2.4
-// clause 3 and §3.4.2.5 clause 2 on an anonymous type reachable as a {base type
+// a VERDICT, never a property value: the two folds materialise §3.4.2.4 clause
+// 3 and §3.4.2.5 clause 2 on an anonymous type reachable as a {base type
 // definition} and re-seat it into the owning slot, so the readers that charge a
 // derivation AGAINST its base — checkRestrictionAttributes,
 // checkAttributeRestrictionRequired and checkAttributeRestrictionWildcard, each
@@ -104,15 +104,13 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // fail-CLOSED through exactly those three, which is why it is closed here rather
 // than deferred (#505).
 //
-// The two properties are still unfolded on an anonymous type owned by an
-// ELEMENT declaration, by an ATTRIBUTE declaration, or by a TYPE ALTERNATIVE,
-// none of which any {base type definition} slot can reach (an anonymous type is
-// unnameable, so only a redefinition can hold one as its base). Its readers are the
-// shared descent's {attribute uses} step (componentwalk.go) under Phase A's and
-// Phase E's charges, which quantify over the set to charge each MEMBER: a smaller
-// set means fewer charges, so both under-reject. No reader charges on a member
-// being absent from that set. Adding the missing Phase-D verdict likewise only adds
-// rejections that are not made today.
+// The two properties are folded on an anonymous type owned by an ELEMENT
+// declaration or by a TYPE ALTERNATIVE too, which no {base type definition} slot
+// can reach (an anonymous type is unnameable, so only a redefinition can hold
+// one as its base): the folds walk those owning slots in a second pass of their
+// own (ownedtypefold.go, #414). What this walk still withholds there is the
+// Phase-D VERDICT alone, and adding it only adds rejections that are not made
+// today.
 func (s *Schema) checkComplexDerivations() error {
 	for _, t := range s.types {
 		c, ok := t.(ComplexType)

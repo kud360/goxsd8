@@ -256,7 +256,7 @@ func TestKeyrefChargesWhenTheReferencedKeyNeverOccurred(t *testing.T) {
 // under the xs:string <kid> actually declares.
 func TestFieldOverAnUnfoldedTypeDeclinesRatherThanReadingTheTopLevelType(t *testing.T) {
 	key := icDef(t, "K", xsd.IdentityConstraintKey, "kid", nil, "", "@aid")
-	schema := icUnfoldedSchema(t, "string", "integer", []xsd.IdentityConstraint{key})
+	schema := icAnonymousSchema(t, "string", "integer", []xsd.IdentityConstraint{key})
 
 	icWantCharges(t, icAssess(t, schema, icRoot(icKid(2, "aid")("1"), icKid(3, "aid")("01"))))
 }

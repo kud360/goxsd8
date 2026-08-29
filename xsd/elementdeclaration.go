@@ -558,6 +558,12 @@ type ownedTypeSlot struct {
 // owned type reached through any of them — so it is one producer rather than two
 // hand-written enumerations that would drift apart (STYLE T4).
 //
+// The finalize folds enumerate the SAME three slots in the same order and must
+// stay in step with this list, in ownedTypeFold.elementDeclaration and
+// ownedTypeFold.typeTable (ownedtypefold.go). They cannot take this producer:
+// they WRITE each slot back with the folded type, which a flattened list of refs
+// and labels cannot express.
+//
 // The {default type definition} slot is enumerated UNCONDITIONALLY, and where
 // §3.3.2.1's case 2 synthesized it from the declaring element's own {type
 // definition} that means the same component is visited twice. Both readers are

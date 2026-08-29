@@ -166,9 +166,9 @@ func (t *idTable) charge(w *walk, root Element) {
 // it has no ·governing type definition· and §3.17.5.2 clause 3 excludes it from
 // the ·eligible item set· outright.
 //
-// GAP(xsd): where the governing type is complex and its {attribute uses} were
-// NOT folded, the same attribute may match a use this package cannot see
-// (assess.go's attributePropertiesFolded, #414), so the type read off a
+// GAP(validate): where the governing type is complex and this package declined
+// to read its two attribute properties (assess.go's attributePropertiesFolded),
+// the same attribute may match a use it cannot see, so the type read off a
 // top-level declaration — or the absence of one — is not the governing type,
 // and it declines instead.
 func (w *walk) idAttributes(c *icCheck) {
@@ -586,14 +586,14 @@ var (
 // violates cvc-complex-type clause 2, which [walk.unmatchedAttribute] charges
 // in its own right.
 //
-// GAP(xsd): a governing type whose {attribute uses} are NOT folded (assess.go's
-// attributePropertiesFolded, #414) reports false for EVERY attribute, whether
-// or not a top-level declaration of the name exists. The wildcard arm is no
-// fallback for a use arm that cannot be decided: that declaration is a
-// DIFFERENT component from the unseen use's, so a lookup succeeding there
-// governs the attribute by whichever type the schema happens to ALSO declare at
-// the top level. Both callers turn the false into their own decline
-// ([walk.idAttributes], [icCheck.fieldAttributes]).
+// GAP(validate): a governing type whose two attribute properties this package
+// declined to read (assess.go's attributePropertiesFolded) reports false for
+// EVERY attribute, whether or not a top-level declaration of the name exists.
+// The wildcard arm is no fallback for a use arm that cannot be decided: that
+// declaration is a DIFFERENT component from the unseen use's, so a lookup
+// succeeding there governs the attribute by whichever type the schema happens
+// to ALSO declare at the top level. Both callers turn the false into their own
+// decline ([walk.idAttributes], [icCheck.fieldAttributes]).
 func (w *walk) attributeType(e Element, g governance, a Attribute) (*xsd.SimpleType, bool) {
 	if ct := g.complexType(); ct != nil {
 		if !attributePropertiesFolded(*ct) {
@@ -620,14 +620,14 @@ func (w *walk) attributeType(e Element, g governance, a Attribute) (*xsd.SimpleT
 		// a withheld ·ID value· can only withdraw a charge, while its clause 1
 		// charges on the ABSENCE of a declaration, so a withheld one can charge
 		// an IDREF the document does declare a target for — fail-CLOSED, and not
-		// covered by the ids.declined flag, which is the unfolded type's
-		// (#414) and is not set here. That shape is bounded to a document the
-		// spec rejects anyway: the same unmatched attribute fails
-		// cvc-complex-type clause 2, which [walk.unmatchedAttribute] declines
-		// under the same #717 rather than charging. [icCheck.fieldAttributes]
-		// declines its slot, which [icFrame.qualify] turns into a whole-frame
-		// decline — clauses 3, 4.1, 4.2.2 and 4.2.3 uncharged, and clause 4.2.1
-		// with them, per the GAP that site carries.
+		// covered by the ids.declined flag, which is the anonymous type's
+		// (attributePropertiesFolded) and is not set here. That shape is bounded
+		// to a document the spec rejects anyway: the same unmatched attribute
+		// fails cvc-complex-type clause 2, which [walk.unmatchedAttribute]
+		// declines under the same #717 rather than charging.
+		// [icCheck.fieldAttributes] declines its slot, which [icFrame.qualify]
+		// turns into a whole-frame decline — clauses 3, 4.1, 4.2.2 and 4.2.3
+		// uncharged, and clause 4.2.1 with them, per the GAP that site carries.
 		if wild, has := ct.AttributeWildcard(); has && wild.ProcessContents() == xsd.ProcessSkip {
 			return nil, false
 		}

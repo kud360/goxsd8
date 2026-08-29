@@ -997,25 +997,18 @@ func (c ComplexType) Abstract() bool {
 // The spec property is a set (§3.4.1); the document order here is an
 // implementation choice for determinism and carries no spec significance.
 //
-// On a NAMED type reached through a finalized [Schema] this is the §3.4.2.4
-// clause 3 property — the type's own uses followed by those inherited from its
-// {base type definition}, less what clauses 3.2.1 and 3.2.2 exclude — because
-// Finalize materialises the fold (attributeusefold.go, #401). On a ComplexType a
-// caller built with [NewComplexType] and has not yet finalized, it is only what
-// that caller passed in: clause 3 needs the base COMPONENT, which a standalone
-// value has no way to reach.
+// On a type reached through a finalized [Schema] this is the §3.4.2.4 clause 3
+// property — the type's own uses followed by those inherited from its {base type
+// definition}, less what clauses 3.2.1 and 3.2.2 exclude — because Finalize
+// materialises the fold (attributeusefold.go, #401). That holds for an ANONYMOUS
+// type a declaration owns as well as for a named one: §3.4.2.4 makes the mapping
+// rule "the same for all complex type definitions", and the fold reaches an
+// inline <complexType> nested in a particle tree or declared under an
+// <alternative> through the slot that owns it (ownedtypefold.go, #414).
 //
-// GAP(xsd): the fold walks the finalized Schema's TYPE DEFINITIONS only, so an
-// anonymous complex type owned by a declaration (an InlineTypeDefinition, at top
-// level or nested in a particle tree) is not folded and reports its own uses
-// alone. The parser reaches that shape as of #340, for the inline <complexType>
-// child of a local or a global <element>; a caller assembling a Schema through
-// [SchemaBuilder] reaches it too. The parser's own shape is provably unaffected
-// — conformance/schema.go admits only the IMPLICIT-CONTENT form, whose base is
-// xs:anyType, whose {attribute uses} §3.4.7 makes empty, so the unrun fold is
-// the identity — but the widening itself is #414's, one shape with two sites.
-// Under-reporting the set is the direction the whole fold's absence had before
-// #401: it can withhold a member, never fabricate one.
+// On a ComplexType a caller built with [NewComplexType] and has not yet
+// finalized, it is only what that caller passed in: clause 3 needs the base
+// COMPONENT, which a standalone value has no way to reach.
 func (c ComplexType) AttributeUses() []AttributeUse {
 	if len(c.attributeUses) == 0 {
 		return nil
@@ -1032,24 +1025,15 @@ func (c ComplexType) AttributeUses() []AttributeUse {
 // (clause 2.1); for an EXTENSION it is that wildcard's {namespace constraint}
 // unioned with the {base type definition}'s per cos-aw-union, under the
 // extension's own {process contents} and {annotations} (clause 2.2), because
-// Finalize materialises the fold (attributewildcardfold.go, #265). On a
-// ComplexType a caller built with [NewComplexType] and has not yet finalized, it
-// is only what that caller passed in: clause 2.2 needs the base COMPONENT, which a
-// standalone value has no way to reach.
+// Finalize materialises the fold (attributewildcardfold.go, #265). As for
+// AttributeUses, that holds for an ANONYMOUS type a declaration owns too: the
+// §3.4.2.5 mapping rule is "the same for all complex type definitions", and the
+// fold reaches such a type through the slot that owns it (ownedtypefold.go,
+// #414).
 //
-// GAP(xsd): the {attribute wildcard} half of the seam AttributeUses records for
-// {attribute uses} — ONE unfolded shape with two sites, not two gaps, tracked as
-// #414. Both folds walk the finalized Schema's TYPE DEFINITIONS only, so an
-// anonymous complex type owned by a declaration (an InlineTypeDefinition) is
-// folded for neither property and reports its own <anyAttribute> alone. The
-// parser reaches that shape as of #340, in the implicit-content form alone — see
-// AttributeUses for why that form makes the unrun fold the identity — and a
-// caller assembling a Schema through [SchemaBuilder] can nest an inline complex
-// type that extends a base carrying a wildcard. Phase D quantifies over
-// the same type definitions, so no constraint in this package reads the unfolded
-// value; the exposure is a READING consumer's, and under-reporting is the
-// direction the whole fold's absence had before #265 — it can withhold admitted
-// names, never fabricate them.
+// On a ComplexType a caller built with [NewComplexType] and has not yet
+// finalized, it is only what that caller passed in: clause 2.2 needs the base
+// COMPONENT, which a standalone value has no way to reach.
 func (c ComplexType) AttributeWildcard() (Wildcard, bool) {
 	return c.attributeWildcard, c.hasAttributeWildcard
 }

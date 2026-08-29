@@ -44,7 +44,7 @@ const maxCensusViolationsLogged = 10
 //     gate widening with its own ratchet measurement;
 //   - a shape the producer MAPS while the assembled schema is short of a
 //     property or of a verdict on it — anonymousComplexTypeDecidable's
-//     non-implicit shapes (#414/#438). These are the bulk of the residual, they
+//     non-implicit shapes (#438). These are the bulk of the residual, they
 //     are finalize-side rather than dispatch-side, and UnmappedNoDispatch is by
 //     construction not their reason.
 //

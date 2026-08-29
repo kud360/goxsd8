@@ -147,7 +147,7 @@ func TestAnUntypedItemDeclinesClauseOneAndNotClauseTwo(t *testing.T) {
 func TestUnfoldedAttributeDeclinesOverACollidingTopLevelType(t *testing.T) {
 	// @aid is xs:ID where <kid>'s own type governs it and xs:string at the
 	// top level, so the top-level reading declares no id at all.
-	schema := icUnfoldedSchema(t, "ID", "string", nil)
+	schema := icAnonymousSchema(t, "ID", "string", nil)
 
 	icWantCharges(t, icAssess(t, schema, icRoot(icKid(2, "aid", "ref")("x1", "x1"))))
 	// The decline holds in the other direction too: a reference this package
@@ -162,7 +162,7 @@ func TestUnfoldedAttributeDeclinesOverACollidingTopLevelType(t *testing.T) {
 func TestUnfoldedAttributeDeclinesRatherThanManufacturingADuplicate(t *testing.T) {
 	// @aid is xs:string where <kid>'s own type governs it and xs:ID at the
 	// top level, so the top-level reading declares one id twice.
-	schema := icUnfoldedSchema(t, "string", "ID", nil)
+	schema := icAnonymousSchema(t, "string", "ID", nil)
 
 	icWantCharges(t, icAssess(t, schema,
 		icRoot(icKid(2, "aid")("x1"), icKid(3, "aid")("x1"))))

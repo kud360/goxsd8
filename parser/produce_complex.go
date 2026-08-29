@@ -484,10 +484,9 @@ func ownedComplexBase(base xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 // (xsd/complexderivation.go) with the checkAttributeUseNamesUnique
 // (ct-props-correct clause 4) and checkExtensionAttributeUses
 // (xsd/complexextension.go, cos-ct-extends clause 1.2) it drives — #438. The two
-// FINALIZE-side folds (xsd/attributeusefold.go's foldAttributeUses,
-// xsd/attributewildcardfold.go's foldAttributeWildcards) miss it as well —
-// #414, and #438 depends on #414 because widening a read-only walk ahead of the
-// folds would turn an unfolded anonymous extension into a FALSE rejection.
+// FINALIZE-side folds do reach it, through the owning slot
+// (xsd/ownedtypefold.go, #414), so a widened read-only walk now meets a folded
+// component rather than turning an anonymous extension into a FALSE rejection.
 // §3.4.2.1 clause 1's {assertions} fold is NOT among them and needs no issue of
 // its own: assertionsWithBase runs HERE, on every produced type, anonymous ones
 // included (#346). The direction today is open (under-rejection), never

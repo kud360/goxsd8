@@ -221,8 +221,8 @@ import (
 // Case 3's ATTRIBUTE clauses are the ones whose unconditionality depends on a
 // schema COMPONENT being complete rather than on the instance alone: an
 // under-reported {attribute uses} or {attribute wildcard} would make a valid
-// attribute look unmatched (#414). validate declines a governing type whose two
-// folds have not run (assess.go's attributePropertiesFolded), so the charge
+// attribute look unmatched. validate declines the attribute half of an ANONYMOUS
+// governing type (assess.go's attributePropertiesFolded), so the charge
 // cannot reach this lane from such a type — and it is validate that must
 // decline it, because assembleCase's decidability gate bounds what THIS lane
 // assembles and says nothing about the library's other callers.

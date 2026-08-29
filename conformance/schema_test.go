@@ -268,11 +268,11 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"local attribute with an inline simpleType outside the produced subset", `<xs:complexType name="T"><xs:sequence/><xs:attribute name="a"><xs:simpleType/></xs:attribute></xs:complexType>`},
 		// anonymousComplexTypeDecidable is NARROWER than complexTypeDecidable on
 		// purpose: an anonymous type is in no {type definitions} set, so the three
-		// read-only finalize passes and the two attribute folds never visit it
-		// (#414/#438). Only the implicit-content form is admitted, because there
-		// alone the missing folds are provably the identity — every explicit-content
-		// form declines, at every nesting depth, and so does one whose own content
-		// is outside the produced subset.
+		// read-only finalize passes never visit it (#438; the two attribute folds
+		// do, through the owning slot, since #414). Only the implicit-content form
+		// is admitted, because there alone the missing verdicts cost least — every
+		// explicit-content form declines, at every nesting depth, and so does one
+		// whose own content is outside the produced subset.
 		{"element with an inline complexType using complexContent", `<xs:element name="e"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
 		{"element with an inline complexType using simpleContent", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element>`},
 		{"local element with an inline complexType using complexContent", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType></xs:element></xs:sequence></xs:complexType>`},
@@ -476,8 +476,8 @@ func TestSchemaExecutorDecidesNotationInAppinfoSuiteCase(t *testing.T) {
 // TestSchemaExecutorDeclinesUndecidableSuiteCase proves the false-accept guard on a
 // real fixture: disallowedSubst00105m.xsd is suite-VALID but its <element
 // name="Member3"> owns an inline <complexType> using <complexContent>, a shape
-// anonymousComplexTypeDecidable declines because no finalize pass quantifying
-// over {type definitions} ever visits an anonymous type (#414/#438). The
+// anonymousComplexTypeDecidable declines because no read-only finalize pass
+// quantifying over {type definitions} ever visits an anonymous type (#438). The
 // executor must therefore DECLINE (Fail) rather than vacuously pass — a
 // valid-declared case the executor refuses to claim, recording an honest gap.
 // Skips when the submodule is absent.
