@@ -160,10 +160,20 @@ func (c *contentCheck) governing() *xsd.ComplexType {
 // both quantify over.
 //
 // It is read off sawElement and sawText and not off initial, which is gathered
-// conditionally, and the two are recorded before any charge those same
-// [[children]] provoke: a run or an item that arrives after the element is
-// already charged leaves both flags untouched, and the one that did the charging
-// has already set one of them.
+// conditionally. The answer is correct for an element that is not ·nilled·, and
+// for one that is it reports true whatever the [[children]] were — which is why
+// both readers settle ·nilled· BEFORE they ask (elementDefault takes it as its
+// own parameter, fixedValue returns on c.nilled), and why a third must too.
+//
+// The asymmetry is in text and element: on the non-·nilled· path each sets its
+// flag before any charge those same [[children]] provoke, so a later run or item
+// arriving after the element is charged leaves the flags untouched and the one
+// that did the charging has already set one of them. On the ·nilled· path both
+// charge cvc-elt clause 3.2.3.1 and return BEFORE the write, so a ·nilled·
+// element carrying [[children]] leaves both clear. Nothing reads a wrong answer
+// out of that today, and clause 5's case split excludes a ·nilled· element from
+// clause 5.1 in any case, but the flags are a record of what the CHARGES saw and
+// not of what the [[children]] held.
 func (c *contentCheck) empty() bool {
 	return !c.sawElement && !c.sawText
 }
@@ -441,8 +451,7 @@ func (c *contentCheck) end(w *walk) {
 // ·nilled·. With a fixed constraint present and E not nilled, the first and
 // third disjuncts are false, so clause 5.2 — and with it 5.2.2 — is live for
 // exactly the elements that HAVE [[children]]. An empty element with a fixed
-// constraint takes clause 5.1's arm instead, which is the decline initialValue
-// states.
+// constraint takes clause 5.1's arm instead (defaultValid).
 //
 // Clause 5.2.2.2's two cases are read off the ·governing type definition·: a
 // mixed complex type compares LEXICALS (5.2.2.2.1, "matches"), and a simple type
