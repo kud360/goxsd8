@@ -83,7 +83,12 @@ heartbeat.
 
 7. **Post-land.** Delegate to **cartographer**: unblock whatever this
    landing unblocked, and dispose of every follow-up this session raised
-   while it is still fresh.
+   while it is still fresh. Tell it in the same prompt that its
+   `post-land` log entry lands through its own PR — commit locally, open a
+   PR, squash-merge it — never a push straight to `main`. WORKFLOW's
+   **Landing** section has always said so; the passes that pushed straight
+   to `main` were following this step, which — unlike the mason and
+   chronicler delegations beside it — never said it (#1109).
 
 Ending early at a checkpoint with a good `RESUME:` comment is a successful
 session. Budget: one landing.
