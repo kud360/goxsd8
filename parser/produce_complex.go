@@ -2030,13 +2030,13 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 		// (§3.3.3, xmlschema11-1.md:1321), which admits <annotation> and nothing else
 		// under a ref= form: that clause is a numbered constraint of its own, this
 		// walk is the uncataloged §5.1 grammar class, and neither stands in for the
-		// other. GAP(parser): clause 2.2 is charged nowhere in this producer, so an
-		// <element ref="x"><simpleType/></element> is still ACCEPTED here — the
-		// content model has a position for a <simpleType>, and reading this
-		// rejection as clause 2.2's would make that acceptance look like a
-		// decision. Unowned: no issue tracks it yet (STYLE P3 requires an issue
-		// reference only when an issue does own the retirement).
+		// other. Both run, the walk FIRST, so every shape it already rejected keeps
+		// the grammar fault it was charged and clause 2.2 answers only for the
+		// shapes the content model admits.
 		if err := checkS4SChildOrder(el, s4sElement); err != nil {
+			return nil, err
+		}
+		if err := rejectRefElementChildren(el); err != nil {
 			return nil, err
 		}
 		qn, err := p.resolveQName(el, ref, "ref")
@@ -2050,6 +2050,40 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 		return nil, err
 	}
 	return xsd.ResolvedTerm{Term: decl}, nil
+}
+
+// rejectRefElementChildren charges src-element clause 2.2 (§3.3.3,
+// xmlschema11-1.md:1321) on a child in the Schema namespace other than
+// <annotation> under a local <element ref="...">: "If ref is present, then …
+// no children in the Schema namespace (xs) other than <annotation>."
+//
+// It is narrower than checkS4SChildOrder(el, s4sElement) and cannot be folded
+// into it. s4sElement is xs:element's content model, which Appendix A leaves
+// byte-identical across all three forms the element takes, so an <element
+// ref="x"><simpleType/></element> fills its "(simpleType | complexType)?"
+// position and passes that walk outright. Clause 2.2 is a Schema Representation
+// Constraint stated BEYOND the schema for schema documents, which is why it is
+// the only footing this rejection stands on (STYLE E2) and why the walk keeps
+// running ahead of it.
+//
+// Only the CHILD half of the clause is charged here. Its other half — no
+// unqualified attribute but minOccurs, maxOccurs and id — is charged nowhere in
+// this producer, and #471 owns it.
+//
+// A child outside the Schema namespace is admitted: the clause reaches that
+// namespace alone, and whether xs:element's grammar admits a foreign child at
+// all is the question checkS4SChildOrder steps over (#928), not this clause's.
+func rejectRefElementChildren(el *Element) error {
+	for _, child := range el.Children() {
+		c, ok := child.(*Element)
+		if !ok || c.Name().Space() != xsd.XMLSchemaNS || c.Name().Local() == "annotation" {
+			continue
+		}
+		return xsderr.New(ruleSrcElement, c.Loc(),
+			"the <element ref=\"...\"> at %s carries a <%s> child, but src-element clause 2.2 admits no child in the Schema namespace other than <annotation> when ref is present",
+			el.Loc(), c.Name().Local())
+	}
+	return nil
 }
 
 // produceLocalElement maps a local inline <element name="..."> to a local
