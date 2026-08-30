@@ -4474,8 +4474,8 @@ MS-Element2006-07-15/elemP003/schema/elemP003 pass
 MS-Element2006-07-15/elemP004/schema/elemP004 pass
 MS-Element2006-07-15/elemP005/schema/elemP005 pass
 MS-Element2006-07-15/elemP006/schema/elemP006 fail
-MS-Element2006-07-15/elemP007/schema/elemP007 fail
-MS-Element2006-07-15/elemP008/schema/elemP008 fail
+MS-Element2006-07-15/elemP007/schema/elemP007 pass
+MS-Element2006-07-15/elemP008/schema/elemP008 pass
 MS-Element2006-07-15/elemP009/schema/elemP009 fail
 MS-Element2006-07-15/elemQ001/schema/elemQ001 pass
 MS-Element2006-07-15/elemQ002/schema/elemQ002 pass
