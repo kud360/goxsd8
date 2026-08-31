@@ -198,8 +198,9 @@ func readIssues(r io.Reader) (issues []issue, haveIssues bool, err error) {
 //
 // Text is also where the marker's issue citation lives, read back out by
 // [citations], so [paragraph]'s boundary rules decide what counts as cited:
-// a `#N` past a blank comment line, a bullet, or the next marker head
-// belongs to a different paragraph and is not this marker's owner.
+// a `#N` past a blank comment line, a bullet, a heading, or the next marker
+// head belongs to a different paragraph and is not this marker's owner. A
+// `#N` that merely OPENS a wrapped line is this marker's own (#1117).
 type marker struct {
 	Area string
 	File string
@@ -299,10 +300,28 @@ func quotesAComment(text string) bool {
 	return strings.HasPrefix(strings.TrimSpace(text), "//")
 }
 
+// hashEndsParagraph reports whether a comment line's leading `#` opens
+// something other than an issue citation — a Markdown heading (`# Notes`,
+// `## Group 1`), a bare `#`, a stray `#word` — and so ends the current
+// marker's paragraph. A `#` immediately followed by digits does not: that is
+// a citation as [citationPattern] reads one, and `go tool commentwrap`
+// reflows marker prose to 79 columns without regard to which token starts a
+// line, so an owner's number lands at a line start on its own schedule.
+// Dropping it there scored a correctly-owned marker as citing nothing
+// (#1117).
+func hashEndsParagraph(text string) bool {
+	if !strings.HasPrefix(text, "#") {
+		return false
+	}
+	loc := citationPattern.FindStringIndex(text)
+	return loc == nil || loc[0] != 0
+}
+
 // paragraph assembles a marker's trailing text: the remainder of its own
 // line from headEnd, plus every contiguous following comment line that is
-// neither blank, a new bullet, a new marker, nor a heading — the same
-// paragraph-boundary rules a human reading the comment would apply.
+// neither blank, a new bullet, a new marker, nor a heading
+// ([hashEndsParagraph]) — the same paragraph-boundary rules a human reading
+// the comment would apply.
 func paragraph(lines []commentLine, at, headEnd int) string {
 	var parts []string
 	if first := strings.TrimSpace(lines[at].text[headEnd:]); first != "" {
@@ -315,7 +334,7 @@ func paragraph(lines []commentLine, at, headEnd int) string {
 			break
 		}
 		t := strings.TrimSpace(lines[j].text)
-		if t == "" || strings.HasPrefix(t, "#") ||
+		if t == "" || hashEndsParagraph(t) ||
 			bulletPattern.MatchString(t) || markerPattern.MatchString(t) {
 			break
 		}
