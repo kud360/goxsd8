@@ -43,9 +43,9 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"complexContent restriction", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="CT"><xs:complexContent><xs:restriction base="B"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType>`},
 		// #336: both <extension> forms are produced (#228) and judged by
 		// cos-ct-extends (§3.4.6.2, #264) over the §3.4.2 base folds #401/#265/#346
-		// completed, so a NAMED complex type using either is decided rather than
-		// declined. The inline anonymous forms below stay declined — that is
-		// anonymousComplexTypeDecidable's separate, narrower gate, not this one.
+		// completed, so a complex type using either is decided rather than
+		// declined — a NAMED one here, and since #1126 an inline anonymous one on
+		// the same terms, through the same predicate.
 		{"complexContent extension", `<xs:complexType name="T"><xs:complexContent><xs:extension base="xs:anyType"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`},
 		{"complexContent extension with attributes and a group ref", `<xs:complexType name="B"><xs:sequence/></xs:complexType><xs:complexType name="T"><xs:complexContent><xs:extension base="B"><xs:sequence><xs:group ref="g"/></xs:sequence><xs:attribute name="a" type="xs:string"/><xs:anyAttribute namespace="##other"/></xs:extension></xs:complexContent></xs:complexType>`},
 		{"simpleContent extension", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType>`},
@@ -111,15 +111,21 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"local element with both type= and an inline simpleType (src-element clause 3)", `<xs:complexType name="T"><xs:sequence><xs:element name="a" type="xs:string"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:element></xs:sequence></xs:complexType>`},
 		{"local attribute with both type= and an inline simpleType (src-attribute clause 4)", `<xs:complexType name="T"><xs:sequence/><xs:attribute name="a" type="xs:string"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:attribute></xs:complexType>`},
 		// #340 produced §3.3.2.1 dcl.elt.common clause 1's inline <complexType>
-		// child on BOTH the global and the local path, so the IMPLICIT-CONTENT form
-		// is decided rather than declined at every nesting depth — and its
+		// child on BOTH the global and the local path, so the form is decided
+		// rather than declined at every nesting depth — and its
 		// both-present-with-type= case becomes a genuine src-element clause 3
-		// verdict. anonymousComplexTypeDecidable is what admits them; see the
-		// declines below for the shapes it deliberately still keeps out.
+		// verdict. #1126 took the last narrowing off that admission: the inline
+		// anonymous type goes through complexTypeDecidable, so the EXPLICIT-content
+		// forms below are admitted exactly where their named counterparts above
+		// are, and declined exactly where those are.
 		{"element with an inline implicit-content complexType", `<xs:element name="e"><xs:complexType/></xs:element>`},
 		{"element with an inline complexType holding attributes and content", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="x" type="xs:string"/></xs:complexType></xs:element>`},
 		{"local element with an inline complexType", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType/></xs:element></xs:sequence></xs:complexType>`},
 		{"inline complexType nested inside an inline complexType", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType><xs:sequence/></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`},
+		{"element with an inline complexType using complexContent", `<xs:element name="e"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
+		{"element with an inline complexType using simpleContent", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element>`},
+		{"local element with an inline complexType using complexContent", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType></xs:element></xs:sequence></xs:complexType>`},
+		{"inline complexType nesting an explicit-content inline complexType", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`},
 		{"element with both type= and an inline complexType (src-element clause 3)", `<xs:element name="e" type="xs:string"><xs:complexType/></xs:element>`},
 		{"local element with both type= and an inline complexType (src-element clause 3)", `<xs:complexType name="T"><xs:sequence><xs:element name="a" type="xs:string"><xs:complexType/></xs:element></xs:sequence></xs:complexType>`},
 		{"override child with an inline complexType", `<xs:override schemaLocation="b.xsd"><xs:element name="e"><xs:complexType/></xs:element></xs:override>`},
@@ -266,18 +272,15 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"top-level attribute with an inline simpleType outside the produced subset", `<xs:attribute name="a"><xs:simpleType/></xs:attribute>`},
 		{"local element with an inline simpleType outside the produced subset", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:simpleType/></xs:element></xs:sequence></xs:complexType>`},
 		{"local attribute with an inline simpleType outside the produced subset", `<xs:complexType name="T"><xs:sequence/><xs:attribute name="a"><xs:simpleType/></xs:attribute></xs:complexType>`},
-		// anonymousComplexTypeDecidable is NARROWER than complexTypeDecidable on
-		// purpose: an anonymous type is in no {type definitions} set, so the three
-		// read-only finalize passes never visit it (#438; the two attribute folds
-		// do, through the owning slot, since #414). Only the implicit-content form
-		// is admitted, because there alone the missing verdicts cost least — every
-		// explicit-content form declines, at every nesting depth, and so does one
-		// whose own content is outside the produced subset.
-		{"element with an inline complexType using complexContent", `<xs:element name="e"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType></xs:element>`},
-		{"element with an inline complexType using simpleContent", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element>`},
-		{"local element with an inline complexType using complexContent", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:sequence/></xs:restriction></xs:complexContent></xs:complexType></xs:element></xs:sequence></xs:complexType>`},
+		// An inline anonymous <complexType> declines on exactly the terms a NAMED
+		// one does, and on no others (#1126): the shape the producer would drop in
+		// silence, or one whose own content is outside the produced subset, at
+		// every nesting depth. Anonymity itself narrows nothing — the admitted
+		// explicit-content forms are in the decidable table above.
 		{"inline complexType whose own content is undecidable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:simpleType/></xs:element></xs:sequence></xs:complexType></xs:element>`},
-		{"inline complexType nesting an explicit-content inline complexType", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`},
+		{"inline complexType using simpleContent that drops a particle", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`},
+		{"local element's inline complexType using complexContent over a bare group", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:group name="inner"><xs:sequence/></xs:group></xs:restriction></xs:complexContent></xs:complexType></xs:element></xs:sequence></xs:complexType>`},
+		{"inline complexType nesting an inline complexType the gate declines", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`},
 		{"list-variety simpleType whose inline item is itself undecidable", `<xs:simpleType name="L"><xs:list><xs:simpleType/></xs:list></xs:simpleType>`},
 		{"union-variety simpleType whose inline member is itself undecidable", `<xs:simpleType name="U"><xs:union memberTypes="xs:string"><xs:simpleType/></xs:union></xs:simpleType>`},
 		{"anonymous inline base outside the produced subset (recursed decline)", `<xs:simpleType name="N"><xs:restriction><xs:simpleType/></xs:restriction></xs:simpleType>`},
@@ -293,7 +296,7 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		// outside the decidable subset, declines the whole case: after substitution
 		// it would be an unmapped or undecidable TOP-LEVEL declaration.
 		{"override child with no name (matches nothing, silently ignored)", `<xs:override schemaLocation="b.xsd"><xs:element type="xs:string"/></xs:override>`},
-		{"override child with an undecidable inline anonymous type", `<xs:override schemaLocation="b.xsd"><xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"/></xs:simpleContent></xs:complexType></xs:element></xs:override>`},
+		{"override child with an undecidable inline anonymous type", `<xs:override schemaLocation="b.xsd"><xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType></xs:element></xs:override>`},
 		{"override child that is a simpleType the gate declines", `<xs:override schemaLocation="b.xsd"><xs:simpleType name="U"/></xs:override>`},
 		{"override child of an out-of-model kind", `<xs:override schemaLocation="b.xsd"><xs:include schemaLocation="c.xsd"/></xs:override>`},
 		{"include beside an undecidable kind still declines", `<xs:include schemaLocation="lib.xsd"/><xs:simpleType name="U"/>`},
@@ -473,28 +476,33 @@ func TestSchemaExecutorDecidesNotationInAppinfoSuiteCase(t *testing.T) {
 	}
 }
 
-// TestSchemaExecutorDeclinesUndecidableSuiteCase proves the false-accept guard on a
-// real fixture: disallowedSubst00105m.xsd is suite-VALID but its <element
-// name="Member3"> owns an inline <complexType> using <complexContent>, a shape
-// anonymousComplexTypeDecidable declines because no read-only finalize pass
-// quantifying over {type definitions} ever visits an anonymous type (#438). The
-// executor must therefore DECLINE (Fail) rather than vacuously pass — a
-// valid-declared case the executor refuses to claim, recording an honest gap.
-// Skips when the submodule is absent.
+// TestSchemaExecutorDeclinesUndecidableSuiteCase proves the withholding guard on
+// a real fixture: stB001.xsd's <simpleType name="fooType"> carries an
+// <annotation> and names NONE of §3.16.2.1's three alternatives, which
+// simpleTypeDecidable declines out of conservatism even though the producer
+// rejects that document for the right reason (#786 owns the widening). The
+// executor must therefore DECLINE (Fail) under BOTH polarities. The flipped one
+// is the sharp assertion here: the fixture is suite-INVALID, so an executor that
+// decided it would PASS, and only the decline can make it Fail. Skips when the
+// submodule is absent.
 //
-// Whatever fixture stands here must be one the producer still cannot decide. When
-// a later slice decides this shape, REPOINT this test at another undecidable
-// fixture and restate the reason in the failure message with it; deleting it
-// retires the guard. It pointed at baseTD00101m1.xsd's <simpleContent>
-// <restriction> until #909 produced that form.
+// It pointed at a valid-declared fixture until #1126 — baseTD00101m1.xsd's
+// <simpleContent> <restriction> until #909 produced that form, then
+// disallowedSubst00105m.xsd's <element>-owned anonymous <complexType> using
+// <complexContent> — and no valid-declared fixture can stand here any more: with
+// the anonymity narrowing gone the gate declines ZERO suite-valid schema
+// documents, down from 372, so the guard has only invalid-declared fixtures left
+// to stand on. When #786 decides this shape, REPOINT this test at another
+// declined fixture and restate the reason in the failure messages with it;
+// deleting it retires the guard.
 func TestSchemaExecutorDeclinesUndecidableSuiteCase(t *testing.T) {
 	skipWithoutSuite(t)
 	exec := newSchemaExec()
-	doc := filepath.Join(suiteRoot, "sunData", "ElemDecl", "disallowedSubst", "disallowedSubst00105m", "disallowedSubst00105m.xsd")
-	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
-		t.Error("a suite-valid case whose <element>-owned anonymous <complexType> uses <complexContent> must be DECLINED (Fail), never vacuously passed")
-	}
+	doc := filepath.Join(suiteRoot, "msData", "simpleType", "stB001.xsd")
 	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectInvalid()}).IsPass() {
+		t.Error("a case whose <simpleType> names none of §3.16.2.1's three alternatives must be DECLINED (Fail), never claimed — the executor would PASS this suite-INVALID fixture if it decided it, so a pass here means the gate admits the shape")
+	}
+	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
 		t.Error("the fixture must be DECLINED under both polarities; passing under the flipped one means it is decided, not declined")
 	}
 }

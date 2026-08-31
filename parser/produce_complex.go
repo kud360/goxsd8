@@ -495,10 +495,9 @@ func ownedComplexBase(base xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 // §3.4.2.1 clause 1's {assertions} fold is NOT among them and needs no issue of
 // its own: assertionsWithBase runs HERE, on every produced type, anonymous ones
 // included (#346). The direction today is open (under-rejection), never
-// fail-closed, and conformance/schema.go's anonymousComplexTypeDecidable narrows
-// the conformance lane to the implicit-content shape, on which the two folds are
-// provably the identity (base xs:anyType, §3.4.7 empty uses and no wildcard to
-// union).
+// fail-closed, which is why conformance/schema.go judges an anonymous complex
+// type on the same terms as a named one and narrows its lane for anonymity
+// nowhere (#1126, complexTypeDecidable's doc comment).
 func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.ComplexType, error) {
 	if name, named := topLevelComplexTypeName(id); named && name.Local == "" {
 		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires one — xs:topLevelComplexType declares name use=\"required\" with type xs:NCName", el.Loc())

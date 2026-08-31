@@ -32,8 +32,8 @@ const maxCensusViolationsLogged = 10
 // RESIDUAL and logged, so a widening session can read how far it has to go and
 // drive that number down without ever being able to make this test pass by
 // widening the census wrongly. It will not reach zero by censusing more, because
-// the residual has THREE causes and only one of them is a region left unwalked
-// (parser/census.go "Scope"):
+// only ONE of the residual's causes is a region left unwalked (parser/census.go
+// "Scope"):
 //
 //   - a region the census does not walk yet;
 //   - a shape the producer REJECTS, which the gate declines anyway out of
@@ -41,12 +41,14 @@ const maxCensusViolationsLogged = 10
 //     alternatives (#786), a nested <group>/<attributeGroup> with no ref, a
 //     model group's non-particle child, a named definition with no usable name.
 //     No census can report these: they are verdicts, not silences, so each is a
-//     gate widening with its own ratchet measurement;
-//   - a shape the producer MAPS while the assembled schema is short of a
-//     property or of a verdict on it — anonymousComplexTypeDecidable's
-//     non-implicit shapes (#438). These are the bulk of the residual, they
-//     are finalize-side rather than dispatch-side, and UnmappedNoDispatch is by
-//     construction not their reason.
+//     gate widening with its own ratchet measurement.
+//
+// A third cause was the BULK of the residual until #1126 and is gone: a shape
+// the producer maps while every finalize pass quantifying over {type
+// definitions} reaches no verdict for it — an anonymous complex type outside the
+// implicit-content form (#438). The gate stopped declining for it, those
+// verdicts being under-rejections, and the residual fell by an order of
+// magnitude in the same run.
 //
 // So the residual is the measure of what still separates the two, not of how
 // much census is left to write.

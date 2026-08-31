@@ -543,9 +543,9 @@ func TestAnonymousDerivedRootDecidesTheAttributeHalf(t *testing.T) {
 // restriction of xs:anyType, the §3.4.2.3.2 implicit-content form — §3.4.7
 // makes xs:anyType's {attribute uses} empty so clause 3 inherits nothing, and
 // §3.4.2.5 clause 2 unions the base's wildcard for an EXTENSION only. It is
-// the shape the conformance suite's decidable subset is made of
-// (conformance/schema.go's anonymousComplexTypeDecidable), and it is assessed
-// on the same terms as the derived shape above rather than on any of its own.
+// assessed on the same terms as the derived shape above rather than on any of
+// its own, which is the whole claim: no assessment here reads {name} or
+// {context}.
 func TestAnonymousRestrictionOfAnyTypeIsAssessed(t *testing.T) {
 	schema := anonymousRootSchema(t, xsd.QName{Space: xsd.XMLSchemaNS, Local: "anyType"},
 		xsd.DerivationRestriction, []xsd.AttributeUse{aUse(t, "id", true, nil)})
