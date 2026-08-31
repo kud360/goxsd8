@@ -20,14 +20,18 @@
 //  1. Markers that cite no OPEN tracking issue — the leak the rule exists
 //     to prevent. This includes a marker that only cites a CLOSED issue:
 //     STYLE P3 says a marker pointing at a closed issue is a dead end, so it
-//     is reported the same as an uncited one. Each row carries its reason,
-//     and only an unannotated row is a candidate for filing: "candidate
-//     owner" names an OPEN issue the marker resembles but does not cite, so
-//     the fix is writing that number into the marker rather than filing
-//     another, "dead end" names a CLOSED issue the marker actually cites and
-//     the landing that closed it should have repointed, "resemblance" names
-//     a CLOSED one it merely reads like, and an unresolved-citation line
-//     names a number that is no issue in the fed list at all.
+//     is reported the same as an uncited one. Each row prints every
+//     annotation it has, in the order to act on them ([issueMatch.rank]):
+//     "dead end" names a CLOSED issue the marker itself cites and the
+//     landing that closed it should have repointed, "candidate owner" names
+//     an OPEN issue the marker resembles but does not cite, so the fix is
+//     writing that number into the marker rather than filing another,
+//     "resemblance" names a CLOSED one it merely reads like, and an
+//     unresolved-citation line names a number that is no issue in the fed
+//     list at all. Filing a new issue is what a row wants when no annotation
+//     names an owner — a judgment on the annotations rather than on their
+//     absence, because on a whole-repository feed nearly every marker in a
+//     non-trivial file resembles something (#1108).
 //  2. OPEN `kind/gap` issues no marker in the tree cites — a stale tracker:
 //     the gap was closed in code without closing the issue that tracked it.
 //     A marker that matches by file path or by phrase alone is printed under
@@ -54,6 +58,13 @@
 // repo's own boilerplate collides outright (#852, #1060). Each fallback is
 // printed beside the row it did not retire, so the reader judges the
 // resemblance instead of re-deriving it.
+//
+// One fallback is dropped rather than printed: a CLOSED issue matching a
+// group-1 marker by file path alone. It is neither an owner nor an action —
+// the path was as likely named to EXCLUDE the site as to own it, and the
+// issue naming it is already closed — and it was the largest single block of
+// the report (#1108). Group 2 prints its file matches unchanged: there the
+// marker is live and the issue is OPEN, so the collision is the finding.
 //
 // # Usage
 //
@@ -449,27 +460,58 @@ type areaCount struct {
 
 // issueMatch is an issue that matched a group-1 marker without retiring it,
 // with the signal that tied them. The kind and the issue's state together
-// separate the three annotations printed under a group-1 row: a CLOSED issue
-// the marker cites is STYLE P3's dead end, a CLOSED one it merely reads like
-// is a resemblance, and an OPEN one it reads like is a candidate owner whose
-// number belongs in the marker.
+// separate the three annotations printed under a group-1 row; see
+// [issueMatch.rank].
 type issueMatch struct {
 	Issue issue
 	Kind  matchKind
 }
 
+// annotationRank orders the annotations under one group-1 row by what the
+// reader does about each, most actionable first. It orders and nothing else:
+// which annotations a row carries at all is [annotations]' decision.
+type annotationRank int
+
+const (
+	rankDeadEnd annotationRank = iota
+	rankCandidateOwner
+	rankResemblance
+)
+
+// rank classes one annotation: a CLOSED issue the marker CITES is STYLE P3's
+// dead end, so the marker must be repointed at a live owner; an OPEN issue it
+// resembles is a candidate owner whose number belongs in the marker; a CLOSED
+// one it merely reads like is a resemblance for the reader to judge. Both
+// [annotations]'s sort and [printReportTo]'s wording read this one
+// classification, so a row's order and its words cannot drift apart (STYLE
+// D3).
+//
+// An OPEN citation cannot reach here — [reconcile] only annotates a marker
+// [anyOpenMatch] already rejected — so its rank is the candidate-owner one it
+// would have as any other OPEN match.
+func (im issueMatch) rank() annotationRank {
+	if im.Issue.open() {
+		return rankCandidateOwner
+	}
+	if im.Kind == matchCited {
+		return rankDeadEnd
+	}
+	return rankResemblance
+}
+
 // untrackedMarker is a group-1 finding: a marker no OPEN issue retires.
-// Matches records every issue that DID match without retiring it, for
-// context — the reader deciding what to do next needs to know whether a
+// Annotations records the matches worth printing under the row — every match
+// that did not retire it, less the CLOSED file matches [annotations] drops —
+// because the reader deciding what to do next needs to know whether a
 // plausible owner is already open (write its number into the marker) or
 // already closed (STYLE P3's dead end) before filing another. Unresolved
 // records issue numbers the marker cites that the fed list does not contain
 // at all: the marker names an owner that does not exist, which is a
 // different finding from naming no owner.
 type untrackedMarker struct {
-	Marker     marker
-	Unresolved []int
-	Matches    []issueMatch
+	Marker      marker
+	Unresolved  []int
+	Annotations []issueMatch
 }
 
 // markerMatch is a marker that matched a group-2 issue without retiring it,
@@ -560,9 +602,9 @@ func reconcile(markers []marker, issues []issue, haveIssues bool) report {
 			continue
 		}
 		rep.Untracked = append(rep.Untracked, untrackedMarker{
-			Marker:     m,
-			Unresolved: unresolvedCitations(m, issues),
-			Matches:    weakIssueMatches(m, issues),
+			Marker:      m,
+			Unresolved:  unresolvedCitations(m, issues),
+			Annotations: annotations(m, issues),
 		})
 	}
 
@@ -666,29 +708,48 @@ func unresolvedCitations(m marker, issues []issue) []int {
 	return out
 }
 
-// weakIssueMatches returns every issue that matched m without retiring it,
-// in issue-number order (STYLE D1). Its callers reach it only for a marker
-// already in group 1, so an OPEN issue here is by construction one m does
-// not cite.
-func weakIssueMatches(m marker, issues []issue) []issueMatch {
+// annotations returns the matches printed under m's group-1 row, ranked by
+// [issueMatch.rank] and by issue number within a rank (STYLE D1).
+//
+// A CLOSED issue matching m by file path alone is dropped rather than
+// returned: an issue names a path as readily to EXCLUDE a site as to own it
+// (#1060), so a closed one naming m's file is neither an owner to adopt nor a
+// dead end to repoint, and it was the largest block of the report (#1108).
+// Every other non-retiring match is kept, and none is capped — a row prints
+// as many as it has.
+func annotations(m marker, issues []issue) []issueMatch {
 	var out []issueMatch
 	for _, iss := range issues {
 		k := matches(m, iss)
-		if !k.found() || (iss.open() && k.retires()) {
+		if !k.found() {
+			continue
+		}
+		if !iss.open() && k == matchFile {
 			continue
 		}
 		out = append(out, issueMatch{Issue: iss, Kind: k})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Issue.Number < out[j].Issue.Number })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].rank() != out[j].rank() {
+			return out[i].rank() < out[j].rank()
+		}
+		return out[i].Issue.Number < out[j].Issue.Number
+	})
 	return out
 }
 
-// matchKind is the closed set of signals [matches] can find, ordered by
-// strength: a citation is what STYLE P3 asks a marker to carry, a file path
-// says only that the issue mentions the file — which it does as readily to
-// EXCLUDE the site as to own it (#1060) — and a phrase run is a resemblance.
-// The zero value is [matchNone], so an unset kind is "no match" rather than
-// a spurious one.
+// matchKind is the closed set of signals [matches] can find: a citation is
+// what STYLE P3 asks a marker to carry, a file path says only that the issue
+// mentions the file — which it does as readily to EXCLUDE the site as to own
+// it (#1060) — and a phrase run is a resemblance. The zero value is
+// [matchNone], so an unset kind is "no match" rather than a spurious one.
+//
+// The constants carry no rank: every reader of a matchKind compares it for
+// equality ([matchKind.found], [matchKind.retires], [matches]'s own written
+// order), so a claim that the iota block is ordered by strength would be a
+// second encoding of a strength nothing consults (STYLE D3). The rank the
+// report does act on is [annotationRank], over a match's kind AND its issue's
+// state together.
 type matchKind int
 
 const (
@@ -832,9 +893,16 @@ func printReportTo(w io.Writer, rep report) {
 
 	_, _ = fmt.Fprintln(w, "\n=== Group 1: markers citing no OPEN tracking issue ===")
 	_, _ = fmt.Fprintln(w, "(only a citation keeps a marker out of this group, so a row means \"needs a")
-	_, _ = fmt.Fprintln(w, "look\", not proven untracked. Read every row's annotations first: a candidate")
-	_, _ = fmt.Fprintln(w, "owner wants that issue's number written into the marker, and only a row with")
-	_, _ = fmt.Fprintln(w, "NO annotation at all is a candidate for filing.)")
+	_, _ = fmt.Fprintln(w, "look\", not proven untracked. Act on each row's annotations in the order")
+	_, _ = fmt.Fprintln(w, "printed: \"dead end\" is a CLOSED issue the marker itself cites — repoint the")
+	_, _ = fmt.Fprintln(w, "marker at a live owner; \"candidate owner\" is an OPEN issue it resembles —")
+	_, _ = fmt.Fprintln(w, "write that number into the marker if it owns this gap; \"resemblance\" is a")
+	_, _ = fmt.Fprintln(w, "CLOSED one it merely reads like — evidence to judge, never an owner. File a")
+	_, _ = fmt.Fprintln(w, "new issue when no annotation names an owner: against a whole-repository feed")
+	_, _ = fmt.Fprintln(w, "nearly every marker resembles something, so filing is a judgment on the")
+	_, _ = fmt.Fprintln(w, "annotations, not on their absence. Nothing here is capped or elided — a row")
+	_, _ = fmt.Fprintln(w, "prints every annotation it has, however many — except a CLOSED issue matching")
+	_, _ = fmt.Fprintln(w, "only the marker's file path, which is neither an owner nor an action.)")
 	if len(rep.Untracked) == 0 {
 		_, _ = fmt.Fprintln(w, "(none)")
 	}
@@ -844,15 +912,15 @@ func printReportTo(w io.Writer, rep report) {
 			_, _ = fmt.Fprintf(w, "      cites #%d, which names no issue in the fed list —"+
 				" the citation itself is the defect\n", n)
 		}
-		for _, im := range u.Matches {
-			if im.Issue.open() {
+		for _, im := range u.Annotations {
+			if im.rank() == rankCandidateOwner {
 				_, _ = fmt.Fprintf(w, "      candidate owner: %s OPEN #%d %q — write the number into"+
 					" the marker if it owns this\n", im.Kind, im.Issue.Number, im.Issue.Title)
 				continue
 			}
 			// Not "label": that names the issue-label type since #1062.
 			verdict := "resemblance"
-			if im.Kind == matchCited {
+			if im.rank() == rankDeadEnd {
 				verdict = "dead end"
 			}
 			_, _ = fmt.Fprintf(w, "      %s: %s CLOSED #%d %q\n", verdict, im.Kind, im.Issue.Number, im.Issue.Title)
