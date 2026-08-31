@@ -304,9 +304,10 @@ func TestParsedAnonymousExtensionIsNotFalselyRejected(t *testing.T) {
 	}
 	// The control, over an anonymous type of the other shape: the sibling
 	// implicit-content one IS a restriction of xs:anyType, both folds are the
-	// identity on it, and it charges its own {required} use — this is the shape
-	// the instance lane's decidable subset is made of (conformance/schema.go's
-	// anonymousComplexTypeDecidable).
+	// identity on it, and it charges its own {required} use — so the assertion
+	// above is about the FOLDS and not about which anonymous shapes the lane
+	// admits, which since #1126 is all of them (conformance/schema.go's
+	// complexTypeDecidable).
 	if got := assess(`<plain/>`); len(got) != 1 {
 		t.Fatalf("Violations() = %v, want exactly one: an implicit-content anonymous type is still assessed", got)
 	}
