@@ -116,6 +116,111 @@ func TestExtractMarkerStopsAtNextMarker(t *testing.T) {
 	}
 }
 
+// TestExtractMarkerHashBoundary pins the `#` paragraph boundary in both
+// directions on one synthetic marker and one OPEN owner. A citation the
+// wrapper happened to push to a line start continues the paragraph and
+// retires the row; every other `#` opener still ends the paragraph, so a
+// number on the far side of a heading is a different paragraph's owner and
+// retires nothing (#1117). The pair is what makes this discriminate:
+// asserting only the continuing half would also pass on a guard that never
+// broke at all.
+func TestExtractMarkerHashBoundary(t *testing.T) {
+	owner := issue{Number: 1117, State: "OPEN", Title: "gapaudit: the wrapped-citation boundary"}
+
+	tests := []struct {
+		name    string
+		src     string
+		want    string
+		cites   []int
+		retired bool
+	}{
+		{
+			name: "wrapped citation at line start continues the paragraph",
+			src: "package p\n\n" +
+				"// GAP(xsd): the wildcard case is not yet folded in, and the owner\n" +
+				"// #1117 is the issue that retires it.\n" +
+				"func f() {}\n",
+			want: "the wildcard case is not yet folded in, and the owner #1117 is the" +
+				" issue that retires it.",
+			cites:   []int{1117},
+			retired: true,
+		},
+		{
+			name: "one-hash heading ends the paragraph",
+			src: "package p\n\n" +
+				"// GAP(xsd): the wildcard case is not yet folded in.\n" +
+				"// # Notes\n" +
+				"// #1117 owns the section below, not this marker.\n" +
+				"func f() {}\n",
+			want:    "the wildcard case is not yet folded in.",
+			cites:   nil,
+			retired: false,
+		},
+		{
+			name: "two-hash heading ends the paragraph",
+			src: "package p\n\n" +
+				"// GAP(xsd): the wildcard case is not yet folded in.\n" +
+				"// ## Group 1\n" +
+				"// #1117 owns the section below, not this marker.\n" +
+				"func f() {}\n",
+			want:    "the wildcard case is not yet folded in.",
+			cites:   nil,
+			retired: false,
+		},
+		{
+			name: "a hash that opens no citation ends the paragraph",
+			src: "package p\n\n" +
+				"// GAP(xsd): the wildcard case is not yet folded in.\n" +
+				"// #hashtag is not a number, so it opens nothing this reads.\n" +
+				"func f() {}\n",
+			want:    "the wildcard case is not yet folded in.",
+			cites:   nil,
+			retired: false,
+		},
+		{
+			name: "a bare hash ends the paragraph",
+			src: "package p\n\n" +
+				"// GAP(xsd): the wildcard case is not yet folded in.\n" +
+				"// #\n" +
+				"// #1117 belongs to whatever that rule opened.\n" +
+				"func f() {}\n",
+			want:    "the wildcard case is not yet folded in.",
+			cites:   nil,
+			retired: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := extractMarkers("xsd/wildcard.go", []byte(tc.src))
+			if err != nil {
+				t.Fatalf("extractMarkers: %v", err)
+			}
+			if len(got) != 1 {
+				t.Fatalf("got %d markers, want 1: %+v", len(got), got)
+			}
+			if got[0].Text != tc.want {
+				t.Errorf("Text = %q, want %q", got[0].Text, tc.want)
+			}
+
+			cited := citations(got[0].Text)
+			if len(cited) != len(tc.cites) {
+				t.Fatalf("citations = %v, want %v", cited, tc.cites)
+			}
+			for i := range tc.cites {
+				if cited[i] != tc.cites[i] {
+					t.Fatalf("citations = %v, want %v", cited, tc.cites)
+				}
+			}
+
+			if anyOpenMatch(got[0], []issue{owner}) != tc.retired {
+				t.Errorf("anyOpenMatch = %v, want %v (only a citation keeps the marker"+
+					" out of group 1)", !tc.retired, tc.retired)
+			}
+		})
+	}
+}
+
 // TestExtractMarkerFalsePositives checks the two shapes that look like a
 // marker but are not one: the marker syntax appearing inside a string
 // literal (not a comment at all), and a comment that merely MENTIONS an
