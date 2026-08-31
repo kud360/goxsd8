@@ -139,9 +139,9 @@ candidate:**
 **Exactly ONE row carries no annotation at all** — `validate/cvcelt.go:154`, whose
 owner **#1119** was filed hours earlier by #853's post-land pass and whose
 Acceptance already requires the number be written into the marker. So the tool's
-own filing rule (*"only a row with NO annotation at all is a candidate for
-filing"*) selects one row, and that row is already owned. **Zero untracked GAP
-sites. First time that has been true.**
+filing rule as it then read (*"only a row with NO annotation at all is a
+candidate for filing"*, replaced in #1108) selects one row, and that row is
+already owned. **Zero untracked GAP sites. First time that has been true.**
 
 **#265 alone owns five of the nine dead citations**, and its successors — #267,
 #345, #413, #584 — sit in group 2 as trackers no marker cites. **`gapaudit`

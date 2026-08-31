@@ -448,8 +448,8 @@ func TestReconcileClosedMatchIsStillUntracked(t *testing.T) {
 	if len(rep.Untracked) != 1 {
 		t.Fatalf("Untracked = %+v, want 1 entry (closed match is a dead end)", rep.Untracked)
 	}
-	if len(rep.Untracked[0].Matches) != 1 || rep.Untracked[0].Matches[0].Issue.Number != 42 {
-		t.Errorf("Matches = %+v, want [#42]", rep.Untracked[0].Matches)
+	if len(rep.Untracked[0].Annotations) != 1 || rep.Untracked[0].Annotations[0].Issue.Number != 42 {
+		t.Errorf("Annotations = %+v, want [#42]", rep.Untracked[0].Annotations)
 	}
 }
 
@@ -826,10 +826,13 @@ func TestCitedOwnerOutsideKindGapResolves(t *testing.T) {
 	}
 }
 
-// TestGroup2SelectsOnlyKindGapIssues pins the predicate #1062 added to
-// [reconcile]'s group-2 loop. Widening the input to the whole repository is
-// what makes the predicate necessary: without it every open issue with no
+// TestGroup2SelectsOnlyKindGapIssues pins BOTH halves of [reconcile]'s
+// composed group-2 predicate. Widening the input to the whole repository is
+// what makes the kind/gap half necessary: without it every open issue with no
 // marker is a "stale tracker", which on this repo is 116 rows instead of 8.
+// The CLOSED kind/gap row is the other half: a closed tracker is not stale,
+// and every other CLOSED fixture in this file is unlabeled, so the kind/gap
+// half alone would mask dropping `!iss.open()` (#1108).
 func TestGroup2SelectsOnlyKindGapIssues(t *testing.T) {
 	markers := []marker{{Area: "xsd", File: "xsd/x.go", Line: 1, Text: "a gap with no tracker at all"}}
 	issues := []issue{
@@ -838,11 +841,13 @@ func TestGroup2SelectsOnlyKindGapIssues(t *testing.T) {
 		{Number: 11, State: "OPEN", Title: "an ordinary feature",
 			Body: "unrelated prose", Labels: []label{{Name: "kind/feature"}}},
 		{Number: 12, State: "OPEN", Title: "an unlabeled issue", Body: "unrelated prose"},
+		{Number: 13, State: "CLOSED", Title: "a kind/gap tracker that was closed",
+			Body: "unrelated prose", Labels: gapLabels()},
 	}
 
 	rep := reconcile(markers, issues, true)
 	if len(rep.Stale) != 1 || rep.Stale[0].Issue.Number != 10 {
-		t.Fatalf("Stale = %+v, want only the kind/gap row #10", rep.Stale)
+		t.Fatalf("Stale = %+v, want only the OPEN kind/gap row #10", rep.Stale)
 	}
 }
 
@@ -968,6 +973,11 @@ func TestFileMentionDoesNotRetireATracker(t *testing.T) {
 	m := marker{Area: "parser", File: "parser/produce_complex.go", Line: 2009,
 		Text: "an <element ref=\"...\" substitutionGroup=\"...\"> is silently ACCEPTED, the attribute " +
 			"simply ignored. Unowned: no issue tracks it yet."}
+	// #972 is CLOSED today; the fixture forces OPEN because group 2 selects
+	// open trackers only and the witness is what a file mention does to a row
+	// that has already been selected. The mention itself is #972's real body
+	// text, so what this test pins — a path named to EXCLUDE a site retires
+	// nothing — is unaffected by the state (#1108).
 	iss := issue{Number: 972, State: "OPEN", Labels: gapLabels(),
 		Title: "parser: restrictionFacets silently DROPS an XSD-namespace child",
 		Body: "Only that site — `restrictionFacets` has TWO callers and their content models differ. " +
@@ -1019,9 +1029,9 @@ func TestFileMentionDoesNotSuppressAnUncitedMarker(t *testing.T) {
 	if len(rep.Untracked) != 1 || rep.Untracked[0].Marker.Line != 296 {
 		t.Fatalf("Untracked = %+v, want the uncited marker surfaced", rep.Untracked)
 	}
-	got := rep.Untracked[0].Matches
+	got := rep.Untracked[0].Annotations
 	if len(got) != 1 || got[0].Issue.Number != 1102 || got[0].Kind != matchFile {
-		t.Fatalf("Matches = %+v, want #1102 recorded as a file match", got)
+		t.Fatalf("Annotations = %+v, want #1102 recorded as a file match", got)
 	}
 
 	var buf strings.Builder
@@ -1050,15 +1060,15 @@ func TestDeadEndDistinguishesCitationFromResemblance(t *testing.T) {
 	if len(rep.Untracked) != 1 {
 		t.Fatalf("Untracked = %+v, want 1 entry", rep.Untracked)
 	}
-	cm := rep.Untracked[0].Matches
+	cm := rep.Untracked[0].Annotations
 	if len(cm) != 2 {
-		t.Fatalf("Matches = %+v, want both", cm)
+		t.Fatalf("Annotations = %+v, want both", cm)
 	}
 	if cm[0].Issue.Number != 761 || cm[0].Kind != matchCited {
-		t.Errorf("Matches[0] = %+v, want #761 matchCited", cm[0])
+		t.Errorf("Annotations[0] = %+v, want #761 matchCited", cm[0])
 	}
 	if cm[1].Issue.Number != 800 || cm[1].Kind != matchPhrase {
-		t.Errorf("Matches[1] = %+v, want #800 matchPhrase", cm[1])
+		t.Errorf("Annotations[1] = %+v, want #800 matchPhrase", cm[1])
 	}
 
 	var buf strings.Builder
@@ -1071,5 +1081,111 @@ func TestDeadEndDistinguishesCitationFromResemblance(t *testing.T) {
 	}
 	if !strings.Contains(out, "resemblance: phrase-matches CLOSED #800") {
 		t.Errorf("a phrase collision is still rendered as a dead end:\n%s", out)
+	}
+}
+
+// TestClosedFileResemblanceIsDropped pins #1108's keep/drop split, which the
+// sibling above cannot: its resemblance fixture is a PHRASE match, so it
+// passes either way. A CLOSED issue that merely names the marker's file is
+// dropped — a path is named as readily to EXCLUDE a site as to own it
+// (#1060), so a closed one is neither an owner nor an action. The OPEN file
+// match and the CLOSED phrase match beside it are the control: the same file
+// signal against an OPEN issue still prints, so this cannot pass on a tool
+// that stopped matching file paths at all.
+func TestClosedFileResemblanceIsDropped(t *testing.T) {
+	m := marker{Area: "validate", File: "validate/assess.go", Line: 208,
+		Text: "the folded attribute uses of a governing type are not consulted here"}
+	dropped := issue{Number: 300, State: "CLOSED", Title: "a closed pass over that file",
+		Body: "it reworked validate/assess.go and is long since done"}
+	issues := []issue{
+		dropped,
+		{Number: 400, State: "CLOSED", Title: "a collision",
+			Body: "the folded attribute uses of a governing type are described here too"},
+		{Number: 500, State: "OPEN", Title: "a plausible owner",
+			Body: "the fail-open site is validate/assess.go"},
+	}
+
+	if got := matches(m, dropped); got != matchFile {
+		t.Fatalf("matches = %v, want matchFile (the fixture no longer reproduces the mention)", got)
+	}
+
+	rep := reconcile([]marker{m}, issues, true)
+	if len(rep.Untracked) != 1 {
+		t.Fatalf("Untracked = %+v, want 1 entry", rep.Untracked)
+	}
+	got := rep.Untracked[0].Annotations
+	if len(got) != 2 {
+		t.Fatalf("Annotations = %+v, want 2 (the CLOSED file match is dropped)", got)
+	}
+	if got[0].Issue.Number != 500 || got[0].Kind != matchFile {
+		t.Errorf("Annotations[0] = %+v, want the OPEN file match #500 kept", got[0])
+	}
+	if got[1].Issue.Number != 400 || got[1].Kind != matchPhrase {
+		t.Errorf("Annotations[1] = %+v, want the CLOSED phrase match #400 kept", got[1])
+	}
+
+	var buf strings.Builder
+	if err := printReport(&buf, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "#300") {
+		t.Errorf("the CLOSED file match is still printed under the row:\n%s", out)
+	}
+	if !strings.Contains(out, "candidate owner: file-matches OPEN #500") {
+		t.Errorf("the OPEN file match went away with it:\n%s", out)
+	}
+}
+
+// TestGroup1AnnotationsLeadWithTheActionableOnes pins the row's print order
+// (#1108): a dead end the marker itself cites, then the candidate owners
+// whose numbers could be written into it, then the resemblances to judge —
+// each rank by issue number within itself. Issue-number order alone, which
+// this replaced, would print 100, 300, 500, 900 and bury the dead end.
+func TestGroup1AnnotationsLeadWithTheActionableOnes(t *testing.T) {
+	m := marker{Area: "validate", File: "validate/assess.go", Line: 208,
+		Text: "the folded attribute uses of a governing type are not consulted here (#500)"}
+	issues := []issue{
+		{Number: 100, State: "OPEN", Title: "a plausible owner",
+			Body: "the fail-open site is validate/assess.go"},
+		{Number: 300, State: "CLOSED", Title: "a collision",
+			Body: "the folded attribute uses of a governing type are described here too"},
+		{Number: 500, State: "CLOSED", Title: "the cited owner", Body: "unrelated prose entirely"},
+		{Number: 900, State: "OPEN", Title: "another plausible owner",
+			Body: "see also validate/assess.go"},
+	}
+
+	rep := reconcile([]marker{m}, issues, true)
+	if len(rep.Untracked) != 1 {
+		t.Fatalf("Untracked = %+v, want 1 entry", rep.Untracked)
+	}
+	want := []int{500, 100, 900, 300}
+	got := rep.Untracked[0].Annotations
+	if len(got) != len(want) {
+		t.Fatalf("Annotations = %+v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i].Issue.Number != want[i] {
+			t.Fatalf("Annotations order = %+v, want %v", got, want)
+		}
+	}
+
+	var buf strings.Builder
+	if err := printReport(&buf, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	out := buf.String()
+	for _, pair := range [][2]string{
+		{"dead end: cites CLOSED #500", "candidate owner: file-matches OPEN #100"},
+		{"candidate owner: file-matches OPEN #100", "candidate owner: file-matches OPEN #900"},
+		{"candidate owner: file-matches OPEN #900", "resemblance: phrase-matches CLOSED #300"},
+	} {
+		first, second := strings.Index(out, pair[0]), strings.Index(out, pair[1])
+		if first < 0 || second < 0 {
+			t.Fatalf("report is missing %q or %q:\n%s", pair[0], pair[1], out)
+		}
+		if first > second {
+			t.Errorf("%q prints after %q:\n%s", pair[0], pair[1], out)
+		}
 	}
 }
