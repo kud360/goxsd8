@@ -218,8 +218,9 @@ func TestCensusSimpleTypeAlternatives(t *testing.T) {
 //
 // A <simpleType> naming none of the three alternatives, or two, stops the walk
 // for the same reason: simpleTypeBody answers neither, and the producer refuses
-// the document either way — none under src-simple-type (§3.16.3), two as a repeat
-// of the single alternative position s4sSimpleType gives them (#1076).
+// the document either way under §5.1's first bullet and no numbered rule — none
+// as an unfilled alternative position, two as a repeat of that same single
+// position s4sSimpleType gives them (#1076).
 func TestCensusSimpleTypeRestrictionSilent(t *testing.T) {
 	outOfModel := censusOf(t, `<xs:simpleType name="s"><xs:restriction base="xs:string">`+
 		`<xs:period/>`+

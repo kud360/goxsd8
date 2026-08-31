@@ -1441,9 +1441,10 @@ func localAttributeDecidable(el *parser.Element) bool {
 //
 // A <simpleType> naming NONE of the three is the one shape left declining, and
 // the decline is now conservative rather than forced: simpleTypeBody rejects that
-// document under src-simple-type §3.16.3 just as genuinely, so admitting it would
-// not fabricate a verdict. Widening it is a measurable ratchet movement of its
-// own and stays out of the change that produced the enumeration facet (#740).
+// document just as genuinely — under §5.1's first bullet and no numbered rule, an
+// unfilled alternative position — so admitting it would not fabricate a verdict.
+// Widening it is a measurable ratchet movement of its own and stays out of the
+// change that produced the enumeration facet (#740).
 func simpleTypeDecidable(el *parser.Element) bool {
 	if list := childXSD(el, "list"); list != nil {
 		inline := childXSD(list, "simpleType")
