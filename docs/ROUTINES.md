@@ -115,10 +115,11 @@ Over repository-scoped REST:
 # redirect into a survey tool does not notice. Page explicitly, never to a fixed
 # count, and abort on a failed fetch rather than looping on its error body.
 #
-# Stop only on an empty page, never on a short one, and re-request every short
-# page before keeping it: a page below per_page is a transient answer as often
-# as it is the end of the list, and taking it for the end truncates the feed
-# with exit status 0 and valid JSON that no exit check anywhere catches
+# Re-request every page that comes back below per_page — empty included — and
+# keep whichever answer has more items; stop only once a page survives its
+# re-request empty. A short answer is either the end of the list or a transient
+# truncation of a full page, and taking a transient for the end truncates the
+# feed with exit status 0 and valid JSON that no exit check anywhere catches
 # (#1145). Every page but the last must then be full, so a short page the loop
 # walked past is that transient and the run aborts instead of handing a survey
 # a partial list.
@@ -127,15 +128,18 @@ p=1
 while :; do
   gh api "repos/kud360/goxsd8/issues?state=all&per_page=100&page=$p" > pages/p$p.json || exit 1
   n=$(jq length pages/p$p.json)
-  if [ "$n" -eq 0 ]; then rm pages/p$p.json; break; fi
   if [ "$n" -lt 100 ]; then
     sleep 2
-    gh api "repos/kud360/goxsd8/issues?state=all&per_page=100&page=$p" > pages/p$p.json || exit 1
+    r=$(gh api "repos/kud360/goxsd8/issues?state=all&per_page=100&page=$p") || exit 1
+    m=$(printf '%s' "$r" | jq length)
+    if [ "$m" -gt "$n" ]; then printf '%s\n' "$r" > pages/p$p.json; n=$m; fi
   fi
+  if [ "$n" -eq 0 ]; then rm pages/p$p.json; break; fi
   p=$((p + 1))
 done
 
 for f in pages/p*.json; do
+  [ -e "$f" ] || continue
   [ "$f" = "pages/p$((p - 1)).json" ] && continue
   [ "$(jq length "$f")" -eq 100 ] && continue
   echo "$f came back short and is not the last page — re-run the loop" >&2
