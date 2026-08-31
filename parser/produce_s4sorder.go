@@ -264,8 +264,8 @@ var (
 	//
 	// Its one alternative position does not repeat, so a <simpleType> writing two of
 	// <restriction>, <list> and <union> is charged here. simpleTypeBody (produce.go)
-	// still answers that shape for the census walk, and the note there records why
-	// its verdict no longer reaches a schema document.
+	// still answers that shape for the census walk, on this same footing, and the
+	// note there records why its rejection no longer reaches a schema document.
 	s4sSimpleType = s4sModel{
 		grammar: "xs:simpleType",
 		spec:    "xmlschema11-2.md:2743",
