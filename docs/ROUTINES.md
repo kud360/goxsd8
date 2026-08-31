@@ -112,16 +112,34 @@ Over repository-scoped REST:
 # paths, the proxy answers "Numeric-ID repository paths (repositories/{id}/...)
 # are not supported through this proxy" (HTTP 403), and it does so AFTER
 # writing the pages it did fetch — a truncated file plus a non-zero exit that a
-# redirect into a survey tool does not notice. Page explicitly. Stop at the
-# first short page — a page below per_page is the last one, where any fixed
-# count goes stale and truncates in silence — and abort on a failed fetch
-# rather than looping on its error body.
+# redirect into a survey tool does not notice. Page explicitly, never to a fixed
+# count, and abort on a failed fetch rather than looping on its error body.
+#
+# Stop only on an empty page, never on a short one, and re-request every short
+# page before keeping it: a page below per_page is a transient answer as often
+# as it is the end of the list, and taking it for the end truncates the feed
+# with exit status 0 and valid JSON that no exit check anywhere catches
+# (#1145). Every page but the last must then be full, so a short page the loop
+# walked past is that transient and the run aborts instead of handing a survey
+# a partial list.
 mkdir -p pages && rm -f pages/p*.json
 p=1
 while :; do
   gh api "repos/kud360/goxsd8/issues?state=all&per_page=100&page=$p" > pages/p$p.json || exit 1
-  if [ "$(jq length pages/p$p.json)" -lt 100 ]; then break; fi
+  n=$(jq length pages/p$p.json)
+  if [ "$n" -eq 0 ]; then rm pages/p$p.json; break; fi
+  if [ "$n" -lt 100 ]; then
+    sleep 2
+    gh api "repos/kud360/goxsd8/issues?state=all&per_page=100&page=$p" > pages/p$p.json || exit 1
+  fi
   p=$((p + 1))
+done
+
+for f in pages/p*.json; do
+  [ "$f" = "pages/p$((p - 1)).json" ] && continue
+  [ "$(jq length "$f")" -eq 100 ] && continue
+  echo "$f came back short and is not the last page — re-run the loop" >&2
+  exit 1
 done
 
 jq -s 'add | map(select(.pull_request == null))
@@ -147,7 +165,9 @@ The pages go in their own directory, emptied first, because a bare
 `p[0-9]*.json` glob in the working directory swallows any unrelated file that
 happens to match — and a page left over from a longer earlier run is read back
 in as current. `jq -s add` fails outright on the first of those and silently
-believes the second.
+believes the second. The empty page that ends the loop is deleted for the same
+reason: every file left in `pages/` is a page with issues on it, which is what
+the fullness check and the reshape both read.
 
 ### Dating an empty claim
 
