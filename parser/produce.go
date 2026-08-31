@@ -1954,21 +1954,32 @@ func (p *producer) unionMembers(union *Element) ([]xsd.SimpleTypeOrRef, error) {
 
 // simpleTypeBody returns the ONE §3.16.2.1 alternative a <simpleType> chooses —
 // its <restriction>, <list> or <union> child. Neither none nor more than one is
-// skipped silently: src-simple-type's preamble incorporates the schema for
-// schema documents, whose <simpleType> content model admits exactly one, and a
-// producer that picked a winner would drop the loser's whole mapping.
+// skipped silently: xs:simpleType's content model (xmlschema11-2.md:2743) admits
+// exactly one, and a producer that picked a winner would drop the loser's whole
+// mapping.
 //
 // The alternatives are examined in a fixed order so the rejection message is
 // deterministic (STYLE D1) rather than following document order into two
 // different messages for the same document.
 //
-// Since #1076 the MORE-THAN-ONE branch reaches no schema document: constructSimpleType
-// walks the same children against s4sSimpleType first, and a second alternative
-// repeats a position that model admits at most once. That is the fault's own class
-// — §5.1's first bullet, carrying no rule ID — where the src-simple-type this
-// branch charges states four clauses (§3.16.3), none about which alternative is
-// chosen or how many. The branch stays because census (census.go) asks this
-// function directly and must stop walking a <simpleType> that chose two.
+// BOTH rejections carry NO rule ID. Writing two of the three alternatives or none
+// fails that content model, which is §5.1's FIRST bullet (xmlschema11-1.md:4296)
+// — "not fully valid with respect to … the Schema for Schema Documents" — the
+// class carrying no numbered identifier. src-simple-type's four clauses (§3.16.3,
+// :3658) each govern a condition WITHIN an alternative already chosen, and none
+// states how many are present, so charging it for either branch would be a
+// fabricated verdict (STYLE E2). The plain wrapped error is the footing
+// checkS4SChildOrder (produce_s4sorder.go) already stands on for this same class.
+//
+// The two branches differ in REACH, not in class. Since #1076 no schema document
+// reaches the MORE-THAN-ONE branch: constructSimpleType walks the same children
+// against s4sSimpleType first, and a second alternative repeats a position that
+// model admits at most once. It stays because census (census.go) asks this
+// function directly and must stop walking a <simpleType> that chose two. The
+// NEITHER branch IS reached, and is the one site enforcing "at least one
+// alternative" against a real document: s4sSlot carries no required/minOccurs
+// notion, so checkS4SChildOrder walks only the children that are present and an
+// unfilled alternative position is invisible to it.
 func simpleTypeBody(elem *Element) (*Element, error) {
 	var chosen *Element
 	for _, local := range []string{"restriction", "list", "union"} {
@@ -1977,15 +1988,14 @@ func simpleTypeBody(elem *Element) (*Element, error) {
 			continue
 		}
 		if chosen != nil {
-			return nil, xsderr.New(ruleSrcSimpleType, elem.Loc(),
-				"simpleType has both a <%s> and a <%s> child, but §3.16.2.1 admits exactly one of <restriction>, <list> and <union>",
-				chosen.Name().Local(), local)
+			return nil, fmt.Errorf("parser: <simpleType> at %s has both a <%s> and a <%s> child, but §3.16.2.1 admits exactly one of <restriction>, <list> and <union>",
+				elem.Loc(), chosen.Name().Local(), local)
 		}
 		chosen = alt
 	}
 	if chosen == nil {
-		return nil, xsderr.New(ruleSrcSimpleType, elem.Loc(),
-			"simpleType has no <restriction>, <list> or <union> child, but §3.16.2.1 requires exactly one of the three alternatives")
+		return nil, fmt.Errorf("parser: <simpleType> at %s has no <restriction>, <list> or <union> child, but §3.16.2.1 requires exactly one of the three alternatives",
+			elem.Loc())
 	}
 	return chosen, nil
 }

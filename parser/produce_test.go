@@ -568,6 +568,35 @@ func TestProduceSimpleTypeTwoAlternativesRejected(t *testing.T) {
 	}
 }
 
+// TestProduceSimpleTypeNoAlternativeRejected pins the branch of simpleTypeBody
+// that a schema document DOES reach. checkS4SChildOrder walks only the children
+// that are present — s4sSlot carries no required/minOccurs notion — so an
+// unfilled alternative position is invisible to it, leaving simpleTypeBody the
+// one site enforcing "at least one of <restriction>, <list> and <union>".
+//
+// The rejection carries NO rule ID since #1097: an unfilled position of
+// xs:simpleType's content model (xmlschema11-2.md:2743) is §5.1's first bullet,
+// and src-simple-type's four clauses (§3.16.3) each govern a condition within an
+// alternative already chosen — charging one would be a fabricated verdict (STYLE
+// E2). Unlike the two-alternative shape this rejection is user-reachable, so the
+// wrong rule ID reached real callers until it was corrected.
+func TestProduceSimpleTypeNoAlternativeRejected(t *testing.T) {
+	body := `<xs:simpleType name="B"><xs:annotation/></xs:simpleType>`
+	_, err := produce(t, wrap("", body))
+	if err == nil {
+		t.Fatal("Produce accepted a <simpleType> naming none of the three §3.16.2.1 alternatives")
+	}
+	if rule, ok := xsderr.RuleOf(err); ok {
+		t.Errorf("error = %v, charged %s; want a plain grammar fault carrying no rule ID", err, rule)
+	}
+	if !strings.Contains(err.Error(), "has no <restriction>, <list> or <union> child") {
+		t.Errorf("error = %v, want the missing-alternative fault", err)
+	}
+	if !strings.Contains(err.Error(), "<simpleType> at "+produceURI+":1:") {
+		t.Errorf("error = %v, want it to position the offending <simpleType>", err)
+	}
+}
+
 // TestProduceListUnresolvableItemTypeRejected pins that a by-name item joins the
 // same graph layer a by-name base does: an itemType= with nothing behind it is
 // charged src-resolve clause 1.1 at finalize, never silently accepted.

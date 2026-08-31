@@ -275,10 +275,10 @@ func (w *censusWalk) attributeDecl(el *Element) {
 // XSD-namespace child s4sSimpleType does not admit (#1076).
 //
 // The choice is simpleTypeBody's own, so a <simpleType> naming none of the three
-// or more than one stops the walk: the producer rejects that document either way —
-// none under src-simple-type (§3.16.3), more than one as a repeat of the model's
-// single alternative position — and nothing under a rejected alternative is a
-// silence.
+// or more than one stops the walk: the producer rejects that document either way,
+// under §5.1's first bullet and no numbered rule — none as an unfilled
+// alternative position, more than one as a repeat of that same single position —
+// and nothing under a rejected alternative is a silence.
 //
 // The <restriction> alternative reports NOTHING of its own.
 // rejectOutOfModelFacetChildren (#972) rejects every XSD-namespace child
