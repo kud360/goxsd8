@@ -97,8 +97,8 @@ func (wildcardKeywordBinding) defaultBinding()    {}
 // guessing "a top-level declaration of that name exists, so case 3 applies"
 // makes an unrelated global declaration silently constrain a restriction's local
 // attribute type. Falling through to the keyword is FAIL-OPEN — cases 4/5 are
-// weaker tests than case 3's clause-5 comparison — and never a false reject
-// (#265).
+// weaker tests than case 3's clause-5 comparison — and never a false reject.
+// #267 owns the retirement.
 func (s *Schema) attributeDefaultBinding(side attributeRestrictionSide, n QName) (defaultBinding, bool) {
 	if u, ok := findAttributeUse(side.uses, n); ok {
 		return attributeUseBinding{use: u}, true // case 2
@@ -261,7 +261,7 @@ func keywordSubsumes(general wildcardKeywordBinding, specific defaultBinding) bo
 		// decline the canonical valid pattern "base carries a ##any wildcard,
 		// restriction names specific attributes or elements" — W3C suite
 		// MS-ComplexType ctG007 and ctO003 declare exactly that VALID. Accepting
-		// is FAIL-OPEN, never a false reject (#265).
+		// is FAIL-OPEN, never a false reject. #345 owns the retirement.
 		return true
 	default:
 		panic("xsd: keywordSubsumes: non-exhaustive ProcessContents switch")
@@ -351,8 +351,9 @@ func (s *Schema) elementDeclarationSubsumes(general, specific ElementDeclaration
 // definition} that is absent, unresolvable, or COMPLEX (a simple-content complex
 // type still bearing a value constraint) is skipped here for the same reason
 // ResolvedSimpleType's other callers skip it: there is no simple type to name the
-// value space. Every one of those accepts, so none is ever a false reject
-// (#265).
+// value space. Every one of those accepts, so none is ever a false reject. No
+// issue owns this residual: the landing that built the value comparison and the
+// one that narrowed it to the QName and NOTATION context are both closed.
 func (s *Schema) fixedValueConstraintSubsumes(general, specific ElementDeclaration) bool {
 	gvc, present := general.ValueConstraint()
 	if !present || gvc.Kind() != ValueFixed {
@@ -554,7 +555,10 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, r attributeRestriction, ge
 // ValueConstraint captured (see package value's own GAP(value) marker; a
 // resolvable one IS compared) — plus a {type definition} that is absent,
 // unresolvable, or complex, skipped exactly as ResolvedSimpleType's other callers skip
-// it. Every one of those accepts, so none is ever a false reject (#265).
+// it. Every one of those accepts, so none is ever a false reject. No issue owns
+// this residual, exactly as at fixedValueConstraintSubsumes' clause 4.2 twin:
+// the landing that built the value comparison and the one that narrowed it to
+// the QName and NOTATION context are both closed.
 func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, r attributeRestriction, general, specific AttributeUse) error {
 	gvc, present := s.EffectiveValueConstraint(general)
 	if !present || gvc.Kind() != ValueFixed {

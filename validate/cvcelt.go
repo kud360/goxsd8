@@ -155,9 +155,9 @@ func (w *walk) nilCheck(e Element, g governance) bool {
 // facet, normalizing once is a READING of clause 5.1.2 and not a transcription
 // of it — §3.3.5.4 clause 1.1 makes the {lexical form} the [schema normalized
 // value] outright, with no second normalization, and key-nv (§3.3) defines a
-// ·normalized value· only relative to the type validating it. The four readers
-// of the value this hands on split on which way that cuts, so the direction is
-// stated per reader and not once (STYLE P3a):
+// ·normalized value· only relative to the type validating it. #1119 owns this
+// residual. The four readers of the value this hands on split on which way that
+// cuts, so the direction is stated per reader and not once (STYLE P3a):
 //
 //   - [contentCheck.simpleTypeValue] (cvc-type 3.1.3) and
 //     [contentCheck.initialValue] (cvc-complex-type 1.2) CHARGE on a lexical
@@ -174,8 +174,6 @@ func (w *walk) nilCheck(e Element, g governance) bool {
 //     ·actual value· from the NORMALIZED lexical, so skipping it would map the
 //     wrong string or none, shortening a ·key-sequence· and dropping an ·ID
 //     value·.
-//
-// No issue owns this residual yet.
 //
 // The emptiness is the caller's to establish, since only the walk that consumed
 // E.[[children]] knows it ([contentCheck.empty]). Both varieties are returned:
