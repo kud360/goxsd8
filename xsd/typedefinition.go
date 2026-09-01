@@ -188,8 +188,18 @@ type TypeDefinitionRef struct{ Name QName }
 // Definition is always present and always ANONYMOUS (its Name() is the zero
 // QName): a named type is reachable by name and so is always the
 // TypeDefinitionRef arm. NewElementDeclaration, NewAttributeDeclaration and the
-// ComplexType constructors reject both violations. The field is read-only by
-// convention; do not mutate it after construction.
+// ComplexType constructors reject both violations.
+//
+// Its VARIETY is constrained by the slot, not by this arm: an attribute
+// declaration's {type definition} is a Simple Type Definition (§3.2.1), so
+// NewAttributeDeclaration additionally rejects a wrapped ComplexType there
+// (a-props-correct clause 1) and no AttributeDeclaration can hold one. An
+// element declaration's, a Type Alternative's and a {base type definition} are
+// each typed as the simple/complex union, so all three admit either variety —
+// and NewElementDeclaration's own rejection of a wrapped ComplexType routes that
+// legal shape to NewElementDeclarationOwningTypes rather than forbidding it.
+//
+// The field is read-only by convention; do not mutate it after construction.
 type InlineTypeDefinition struct{ Definition TypeDefinition }
 
 // SubstitutionGroupHeadTypeRef is the variant carrying the {type definition} an

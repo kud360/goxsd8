@@ -60,39 +60,14 @@ type ownedTypeFold struct {
 // {attribute uses} of any type declared inside them.
 //
 // {attribute declarations} and {attribute group definitions} are absent because
-// §3.2.1 types an attribute's {type definition} as a SIMPLE type definition, and
-// an attribute group definition holds attribute uses and a wildcard and nothing
-// else.
-//
-// GAP(xsd): this package does not enforce that §3.2.1 typing, so the three
-// attribute-side slots stay unfolded. checkTypeDefinitionOrRef
-// (typedefinition.go) decides the ARM of an attributeTypeSlot, never the
-// VARIETY, so NewAttributeDeclaration accepts an InlineTypeDefinition wrapping a
-// ComplexType and Finalize accepts the Schema. A caller assembling one through
-// [SchemaBuilder] can therefore seat an anonymous complex type at a top-level
-// attribute declaration's {type definition}, at a LocalAttributeDeclaration's
-// inside a complex type's {attribute uses}, or at one inside an attribute group
-// definition — all three reach that one constructor — and no root here walks any
-// of them, so such a type reports its own {attribute uses} and its own
-// <anyAttribute> alone. The PARSER cannot produce the shape: no production puts
-// a <complexType> under an <attribute>. #1115 owns the retirement and names the
-// two candidate changes as two: enforce the variety, or widen these roots.
-//
-// Direction (STYLE P3a): the withheld members are UNDER-reported and no reader
-// charges on their absence. In this package the one reader is
-// componentWalk.walkComplexType, which ranges AttributeUses() to DESCEND, for
-// resolveReferences and checkSimpleTypeDerivations (resolve.go),
-// checkTypeTableSubstitutability (typetablesubstitutable.go) and
-// checkComponentValueConstraints (valueconstraintvalid.go); every member clause
-// 3 would have added comes from the {base type definition}, which that same walk
-// enters one slot above, so no descent is lost. Outside it no reader obtains the
-// component at all: every consumer of an attribute declaration's {type
-// definition} narrows through [Schema.ResolvedSimpleType], which declines a
-// complex type outright — attributeUseType (defaultbinding.go),
-// checkAttributeDeclarationValueConstraint and checkAttributeUseValueConstraint
-// (valueconstraintvalid.go) here, and validate's walk.matchedAttribute,
-// walk.defaultedAttribute, walk.idDefaultedAttributes, walk.attributeType and
-// walk.topLevelAttributeType (cvcattribute.go, cvcid.go).
+// no attribute-side slot can hold a complex type to fold. §3.2.1 types an
+// attribute's {type definition} as a SIMPLE type definition and
+// NewAttributeDeclaration enforces that typing (a-props-correct clause 1,
+// #1115), so all three slots that reach that one constructor — a top-level
+// attribute declaration's {type definition}, a LocalAttributeDeclaration's
+// inside a complex type's {attribute uses}, and one inside an attribute group
+// definition — are simple-typed by construction. An attribute group definition
+// holds attribute uses and a wildcard and nothing else.
 //
 // Roots are walked in document order and no index map is ranged (STYLE D2).
 func (o ownedTypeFold) schema(s *Schema) error {

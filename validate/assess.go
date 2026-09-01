@@ -641,9 +641,10 @@ func (w *walk) attribute(a Attribute, e Element, governing *xsd.ComplexType) {
 // properties are the spec's for every governing type this package can reach:
 // §3.4.2.4 clause 3 and §3.4.2.5 clause 2 fold a declaration-owned ANONYMOUS
 // type through the slot that owns it as well as a named one
-// (xsd/ownedtypefold.go, #414). The attribute-side slots that fold reaches no
-// root for (#1115) are unreachable from here — a governing type arrives from an
-// element declaration, never from an attribute one.
+// (xsd/ownedtypefold.go, #414). That fold needs no attribute-side root, because
+// §3.2.1 types an attribute declaration's {type definition} as a Simple Type
+// Definition and xsd.NewAttributeDeclaration enforces it, so no unfolded complex
+// type exists on that side to reach here.
 //
 // The wildcard arm records the item's assertion sites before it declines
 // ([walk.wildcardAttributeAssertions]): under a ***strict*** or ***lax***

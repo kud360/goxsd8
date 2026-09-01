@@ -85,6 +85,60 @@ func TestTypeDefinitionOrRefInvariants(t *testing.T) {
 	}
 }
 
+// TestInlineTypeDefinitionVarietyBySlot pins §3.2.1's typing of an attribute
+// declaration's {type definition} as a Simple Type Definition: an
+// InlineTypeDefinition wrapping an anonymous ComplexType is rejected by
+// NewAttributeDeclaration and charged a-props-correct, while the legal inline
+// shape — an anonymous simple type — still constructs there.
+//
+// NewElementDeclaration is driven from the same table to pin that the ELEMENT
+// side is unchanged by that rejection: §3.3.1 types its slot as the simple/complex
+// union, so a wrapped ComplexType stays legal there and its rejection remains the
+// component-invariant ROUTING one that sends the caller to
+// NewElementDeclarationOwningTypes.
+func TestInlineTypeDefinitionVarietyBySlot(t *testing.T) {
+	// The empty Rule means the constructor must ACCEPT the ref.
+	cases := []struct {
+		name         string
+		ref          func(t *testing.T) xsd.TypeDefinitionOrRef
+		wantAttrRule xsderr.Rule
+		wantElemRule xsderr.Rule
+	}{
+		{"inline anonymous complex type", func(t *testing.T) xsd.TypeDefinitionOrRef {
+			return xsd.InlineTypeDefinition{Definition: edAnonType(t, xsd.ElementDeclarationContext{Component: xsd.NewComponentID()})}
+		}, "a-props-correct", "component-invariant"},
+		{"inline anonymous simple type", func(t *testing.T) xsd.TypeDefinitionOrRef {
+			return xsd.InlineTypeDefinition{Definition: anonSimpleType(t)}
+		}, "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, attrErr := xsd.NewAttributeDeclaration(xsderr.Loc{}, xsd.QName{Local: "a"}, tc.ref(t),
+				xsd.NewAttributeGlobalScope(), nil, false, nil)
+			assertConstructorRule(t, "NewAttributeDeclaration", attrErr, tc.wantAttrRule)
+			_, elemErr := xsd.NewElementDeclaration(xsderr.Loc{}, xsd.QName{Local: "e"}, tc.ref(t), nil,
+				xsd.NewGlobalScope(), nil, false, nil, nil, nil, false, nil, nil)
+			assertConstructorRule(t, "NewElementDeclaration", elemErr, tc.wantElemRule)
+		})
+	}
+}
+
+// assertConstructorRule checks that err carries want, or that it is nil when want
+// is the empty Rule.
+func assertConstructorRule(t *testing.T, who string, err error, want xsderr.Rule) {
+	t.Helper()
+	if want == "" {
+		if err != nil {
+			t.Fatalf("%s unexpected error: %v", who, err)
+		}
+		return
+	}
+	if err == nil {
+		t.Fatalf("%s succeeded, want a rejection charged %s", who, want)
+	}
+	assertRule(t, err, want)
+}
+
 // TestTypeDefinitionRoundTrip pins that both declarations hand back the very arm
 // they were built with, so a consumer can switch it without a lookup.
 func TestTypeDefinitionRoundTrip(t *testing.T) {

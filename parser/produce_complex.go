@@ -489,15 +489,16 @@ func ownedComplexBase(base xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 // component rather than turning an anonymous extension into a FALSE rejection.
 // That covers everything THIS producer builds: the three identities that yield
 // an unnamed one are elementOwnedComplexType, newTypeAlternativeOwned and
-// newRedefineOriginal, and the fold walks every one of those slots. The slot
-// xsd/ownedtypefold.go's GAP marker leaves unwalked — an attribute declaration's
-// own {type definition} — is one no XSD production puts a <complexType> under.
-// §3.4.2.1 clause 1's {assertions} fold is NOT among them and needs no issue of
-// its own: assertionsWithBase runs HERE, on every produced type, anonymous ones
-// included (#346). The direction today is open (under-rejection), never
-// fail-closed, which is why conformance/schema.go judges an anonymous complex
-// type on the same terms as a named one and narrows its lane for anonymity
-// nowhere (#1126, complexTypeDecidable's doc comment).
+// newRedefineOriginal, and the fold walks every one of those slots. The
+// attribute-side slot the fold has no root for — an attribute declaration's own
+// {type definition} — needs none: no XSD production puts a <complexType> under
+// an <attribute>, and xsd.NewAttributeDeclaration rejects the shape outright
+// (§3.2.1, a-props-correct clause 1). §3.4.2.1 clause 1's {assertions} fold is
+// NOT among them and needs no issue of its own: assertionsWithBase runs HERE, on
+// every produced type, anonymous ones included (#346). The direction today is
+// open (under-rejection), never fail-closed, which is why conformance/schema.go
+// judges an anonymous complex type on the same terms as a named one and narrows
+// its lane for anonymity nowhere (#1126, complexTypeDecidable's doc comment).
 func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.ComplexType, error) {
 	if name, named := topLevelComplexTypeName(id); named && name.Local == "" {
 		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires one — xs:topLevelComplexType declares name use=\"required\" with type xs:NCName", el.Loc())
