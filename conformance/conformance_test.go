@@ -207,6 +207,15 @@ func reportLaneReadOnly(t *testing.T, r laneRun, withheld []string) {
 	}
 }
 
+// censusNotScore is the disclosure every decline-census line carries. Both
+// counts partition ONE RUN's recorded failures — the decided disagreements are
+// in neither, and a failure already flipped to pass this run is in no count at
+// all — so neither is the lane's score, and a reader who quotes one into a
+// `Ratchet:` trailer publishes a figure the committed tree cannot reproduce
+// (issue #1120). It is one string appended to every census line rather than
+// prose in each, so no line can be added that omits it (STYLE D3).
+const censusNotScore = "not the lane score, which `go tool lanestatus` reports"
+
 // reportDeclines surfaces the lane's decline census (issue #327) through the
 // same t.Logf channel the Improved cases already use, so a -v run shows how many
 // of the lane's recorded failures no executor decided at all. That count is the
@@ -218,12 +227,12 @@ func reportDeclines(t *testing.T, l lane, cases []caseSpec, actual map[string]St
 	t.Helper()
 	census := takeDeclineCensus(l, cases, actual)
 	if len(census.candidates) > 0 {
-		t.Logf("lane %s: %d declined case(s) recorded fail — harvest candidates re-checked this run (%s=1 lists them)",
-			l.name, len(census.candidates), declinesEnv)
+		t.Logf("lane %s: %d declined case(s) recorded fail — harvest candidates re-checked this run (%s=1 lists them), %s",
+			l.name, len(census.candidates), declinesEnv, censusNotScore)
 	}
 	if census.indeterminate > 0 {
-		t.Logf("lane %s: %d further case(s) declined as indeterminate, never harvestable (issue #277)",
-			l.name, census.indeterminate)
+		t.Logf("lane %s: %d further case(s) declined as indeterminate, never harvestable (issue #277), %s",
+			l.name, census.indeterminate, censusNotScore)
 	}
 	if os.Getenv(declinesEnv) != "1" {
 		return

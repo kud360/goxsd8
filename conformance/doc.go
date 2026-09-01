@@ -161,6 +161,15 @@
 // visibly at the landing that widens an engine. The census reports only: it
 // scores no case and writes no expectation.
 //
+// Neither census count is the lane's SCORE, and every logged census line says
+// so where it prints (issue #1120). They partition the failures of ONE RUN,
+// which is not the set the committed file records: a case this run decided and
+// got wrong is in neither count, and a case whose expectation still reads
+// `fail` while this run passes it is in no count at all. The lane's score is
+// the census of its expectation file — what `go tool lanestatus` prints, and
+// what docs/WORKFLOW.md's "Claims that outlive the session" binds a `docs/LOG`
+// entry and a `Ratchet:` trailer to quote.
+//
 //	GOXSD_DECLINES=1
 //	    Additionally logs the candidate case IDs themselves, sorted. Opt-in
 //	    because a lane still awaiting its milestone declines every case it

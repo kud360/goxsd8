@@ -1,10 +1,11 @@
 // Command lanestatus reports the committed conformance score per lane as a
 // Markdown table, for docs/PLAN.md's Status section.
 //
-// The expectation files are the only source of truth for a lane score
-// (conformance/testdata/expectations/README.md). Counting them is
-// deterministic and mechanical, so it is a tool rather than a grep
-// (PRINCIPLES 27): a hand-count is indistinguishable from a fresh one once
+// A lane's score is the census of its expectation file, and this tool is
+// where docs/WORKFLOW.md's "Claims that outlive the session" sends the
+// writer of a `docs/LOG` entry or a `Ratchet:` trailer for it. Counting
+// those lines is deterministic and mechanical, so it is a tool rather
+// than a grep (PRINCIPLES 27): a hand-count is indistinguishable from a fresh one once
 // it is stamped into docs/PLAN.md, and stays wrong until someone re-reads
 // 15,000 lines.
 //
