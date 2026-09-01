@@ -642,10 +642,10 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		// incompleteness is live rather than latent, and it is retired only by a
 		// construction that decides containment without materializing an
 		// automaton per occurrence, never by raising the constant. No issue owns
-		// that retirement: #501 landed this ceiling rather than owning it, #499's
-		// is the product walk's different constant in a later phase, and #578
-		// owns this boundary's construction COST rather than this declined
-		// verdict.
+		// that retirement: the landing this file's header records introduced the
+		// ceiling rather than owning its removal, the product walk's own ceiling
+		// is a different constant in a later phase, and the open issue on this
+		// boundary owns its construction COST rather than this declined verdict.
 		return true
 	}
 	r, err := s.contentAutomatonOf(rc)

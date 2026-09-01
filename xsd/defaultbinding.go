@@ -352,8 +352,8 @@ func (s *Schema) elementDeclarationSubsumes(general, specific ElementDeclaration
 // type still bearing a value constraint) is skipped here for the same reason
 // ResolvedSimpleType's other callers skip it: there is no simple type to name the
 // value space. Every one of those accepts, so none is ever a false reject. No
-// issue owns this residual: #236 landed the comparison and #372 the QName and
-// NOTATION context, and both are closed.
+// issue owns this residual: the landing that built the value comparison and the
+// one that narrowed it to the QName and NOTATION context are both closed.
 func (s *Schema) fixedValueConstraintSubsumes(general, specific ElementDeclaration) bool {
 	gvc, present := general.ValueConstraint()
 	if !present || gvc.Kind() != ValueFixed {
@@ -557,8 +557,8 @@ func (s *Schema) checkAttributeTypeDerivedOK(n QName, r attributeRestriction, ge
 // unresolvable, or complex, skipped exactly as ResolvedSimpleType's other callers skip
 // it. Every one of those accepts, so none is ever a false reject. No issue owns
 // this residual, exactly as at fixedValueConstraintSubsumes' clause 4.2 twin:
-// #236 landed the comparison and #372 the QName and NOTATION context, and both
-// are closed.
+// the landing that built the value comparison and the one that narrowed it to
+// the QName and NOTATION context are both closed.
 func (s *Schema) checkAttributeValueConstraintSubsumes(n QName, r attributeRestriction, general, specific AttributeUse) error {
 	gvc, present := s.EffectiveValueConstraint(general)
 	if !present || gvc.Kind() != ValueFixed {
