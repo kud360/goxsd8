@@ -1,6 +1,7 @@
 package xsd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kud360/goxsd8/xsderr"
@@ -292,4 +293,49 @@ func TestWalkEntersAnOwnedBaseWithoutChargingIt(t *testing.T) {
 			t.Fatalf("the owned base was charged a verdict of its own, which is #584's to charge: %v", err)
 		}
 	})
+}
+
+// cwAnonymousExtension builds an ANONYMOUS complex type EXTENDING base, the one
+// shape the helpers here cannot otherwise reach: dType hard-codes restriction.
+// It is the cheapest fixture whose rejection is written by complexextension.go
+// rather than complexderivation.go.
+func cwAnonymousExtension(t *testing.T, base QName) ComplexType {
+	t.Helper()
+	ct, err := NewAnonymousComplexType(xsderr.Loc{}, ElementDeclarationContext{Component: NewComponentID()},
+		base, nil, DerivationExtension, false, nil, nil, nil, EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAnonymousComplexType: %v", err)
+	}
+	return ct
+}
+
+// TestWalkRejectionNamesTheAnonymousType pins STYLE E1 for the messages this
+// widening newly reaches. A type a DECLARATION owns has the zero QName, which
+// String()s to the EMPTY string, so a message printing its {name} leaves a hole
+// exactly where the reader looks for the construct — "complex type  extends base
+// with a mixed {content type}". complexTypeOwner (componentwalk.go) is the one
+// renderer that answers for both cases, and every message in
+// complexderivation.go and complexextension.go goes through it.
+func TestWalkRejectionNamesTheAnonymousType(t *testing.T) {
+	t.Run("complexderivation.go, ct-props-correct clause 4", func(t *testing.T) {
+		cwExpectNamed(t, cwFinalize(t, func(b *SchemaBuilder) {
+			b.AddElement(dOwnInline(t, uq("g"), cwDuplicateAttributes(t), NewGlobalScope()))
+		}), ruleCTPropsCorrect)
+	})
+	t.Run("complexextension.go, cos-ct-extends clause 1.1", func(t *testing.T) {
+		cwExpectNamed(t, cwFinalize(t, func(b *SchemaBuilder) {
+			b.AddType(xFinal(t, uq("shut"), anyTypeName, []DerivationMethod{DerivationExtension}))
+			b.AddElement(dOwnInline(t, uq("g"), cwAnonymousExtension(t, uq("shut")), NewGlobalScope()))
+		}), ruleCosCTExtends)
+	})
+}
+
+// cwExpectNamed asserts err carries rule and describes the type it is charged to
+// rather than leaving the hole a zero QName renders as.
+func cwExpectNamed(t *testing.T, err error, rule xsderr.Rule) {
+	t.Helper()
+	expectRule(t, err, rule)
+	if !strings.Contains(err.Error(), "anonymous complex type") {
+		t.Fatalf("message %q does not name the anonymous type it is charged to, so the reader cannot tell which construct was meant", err)
+	}
 }

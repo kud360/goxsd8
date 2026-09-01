@@ -10,14 +10,39 @@ package xsd
 // <complexType> children OF <schema> — so a pass ranging s.types alone reached
 // none of them and produced no verdict at all for one (#438).
 //
-// The roots are s.types, s.elements and s.modelGroups: the three ownedTypeFold
-// (ownedtypefold.go), checkComponentValueConstraints (valueconstraintvalid.go)
-// and checkTypeTableSubstitutability (typetablesubstitutable.go) already descend
-// from. s.modelGroups is a root in its OWN right rather than a convenience:
-// §3.7.2 gives <group name="..."> an (all|choice|sequence) child that can nest
+// The roots are s.types, s.elements and s.modelGroups — the three
+// checkTypeTableSubstitutability (typetablesubstitutable.go) descends from, and
+// THREE OF THE FOUR ownedTypeFold (ownedtypefold.go) descends from. Its fourth
+// is s.modelGroupRedefinitions, the <redefine> ORIGINALS, "which are in no
+// property and no index yet whose content models checkModelGroupRedefinitions
+// charges clause 6.2.2 against" (ownedtypefold.go). This walk deliberately omits
+// that root, which #438's Acceptance puts out of scope, and the residue the
+// omission leaves is the GAP marker below. (checkComponentValueConstraints has a
+// fourth of its own, s.attributeGroups, which holds attribute uses and a
+// wildcard and so reaches no complex type definition at all.)
+//
+// s.modelGroups is a root in its OWN right rather than a convenience: §3.7.2
+// gives <group name="..."> an (all|choice|sequence) child that can nest
 // <element> children carrying inline <complexType>s, and where no <group ref>
 // reachable from s.types names that Model Group Definition those types are
 // reachable from nothing else.
+//
+// GAP(xsd): an anonymous complex type reachable ONLY through a <redefine>d
+// <group>'s ORIGINAL definition (s.modelGroupRedefinitions[i].original,
+// redefinition.go) gets no §3.4.6 or §3.8.6 verdict from any pass driven here.
+// Its seating is the very one this walk otherwise covers — §3.7.2 lets that
+// original nest <element> children whose LOCAL DECLARATIONS own inline
+// <complexType>s — but the original itself sits in none of the three roots: it is
+// in no property and no index, and s.modelGroups holds the REDEFINING definition
+// under src-redefine clause 6.2, not the original. checkModelGroupRedefinitions
+// (redefinition.go) charges src-redefine clause 6.2.2 language containment
+// against it and nothing else, so no cos-nonambig, no cos-element-consistent, no
+// ct-props-correct, no cos-ct-extends and no derivation-ok-restriction reaches
+// those types. The gap is PRE-EXISTING — the s.types+s.modelGroups loops this
+// walk replaces missed it too — and the direction is under-rejection, never a
+// withheld property value: ownedTypeFold's fourth root folds them (#414). Adding
+// the root is #584's, alongside the redefine original an owned {base type
+// definition} seats.
 //
 // It is a second walk beside componentwalk.go's rather than a field on it
 // because the two ENUMERATE DIFFERENTLY, not merely charge differently.
