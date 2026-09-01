@@ -63,10 +63,10 @@ package xsd
 // describe the offending arm with %T instead.
 //
 // The same fact binds any future ID→component resolver — no issue owns one yet,
-// so none is built (STYLE T5): #438, the nearest landing to touch the anonymous
-// complex types reached only through an InlineTypeDefinition, walks them by
-// TRAVERSAL from the owning Element Declaration rather than by identity, so it
-// does not need one either. Such a resolver must never range a
+// so none is built (STYLE T5): #438, the landing that gave the anonymous complex
+// types reached only through an InlineTypeDefinition their finalize verdicts,
+// walks them by TRAVERSAL from the owning Element Declaration rather than by
+// identity, so it needed none either. Such a resolver must never range a
 // map[ComponentID]… to produce output or ordering, because that iteration order
 // is address order (STYLE D2). Order such output by the components' own document
 // order, never by their identities.

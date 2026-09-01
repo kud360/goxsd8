@@ -379,18 +379,27 @@ func icTopAttribute(t *testing.T, local, typ string) xsd.AttributeDeclaration {
 }
 
 // icAnonymousSchema builds the shape icSchema's every-type-named convention
-// cannot reach: <kid> OWNS an ANONYMOUS complex type restricting a named base,
+// cannot reach: <kid> OWNS an ANONYMOUS complex type extending a named base,
 // and the schema ALSO declares top-level attributes of the same ·expanded
 // names· carrying OTHER types.
 //
-//	root  RootType (named)              sequence( kid* )
-//	kid   (anonymous, restricts Base)   empty, @aid <kidAid>, @ref xs:IDREF
-//	Base  (named)                       empty
-//	top-level                           @aid <topAid>, @ref xs:IDREF
+//	root  RootType (named)             sequence( kid* )
+//	kid   (anonymous, extends Base)    empty, @aid <kidAid>, @ref xs:IDREF
+//	Base  (named)                      empty
+//	top-level                          @aid <topAid>, @ref xs:IDREF
 //
 // kidAid is <kid>'s own governing type for @aid and topAid is the colliding
 // top-level one, so a fixture spells both halves of the misreading a top-level
 // lookup would be: the two differ in exactly what the rule under test reads.
+//
+// The derivation method is EXTENSION and must stay one. Base declares no
+// attribute use and no {attribute wildcard}, so a RESTRICTION adding @aid and
+// @ref is invalid under derivation-ok-restriction clause 3 (c-ran): an element
+// valid against the derived type would carry an attribute the base rejects.
+// This fixture finalized as a restriction only while Phase D reached no
+// declaration-owned anonymous type at all; it reaches this one now (#438).
+// Extension leaves what these tests read untouched — §3.4.2.4 clause 3 unions
+// the base's {attribute uses} in, and Base has none.
 func icAnonymousSchema(t *testing.T, kidAid, topAid string, rootICs []xsd.IdentityConstraint) *xsd.Schema {
 	t.Helper()
 	seeded := icSeeded(t)
@@ -398,7 +407,7 @@ func icAnonymousSchema(t *testing.T, kidAid, topAid string, rootICs []xsd.Identi
 	kidID := xsd.NewComponentID()
 	kidType, err := xsd.NewAnonymousComplexType(xsderr.Loc{},
 		xsd.ElementDeclarationContext{Component: kidID}, xsd.QName{Local: "Base"}, nil,
-		xsd.DerivationRestriction, false, []xsd.AttributeUse{
+		xsd.DerivationExtension, false, []xsd.AttributeUse{
 			icUse(t, xsd.QName{Local: "aid"}, kidAid),
 			icUse(t, xsd.QName{Local: "ref"}, "IDREF"),
 		}, nil, nil, xsd.EmptyContent{}, nil, nil, nil)

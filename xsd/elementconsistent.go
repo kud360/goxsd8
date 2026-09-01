@@ -71,38 +71,42 @@ type groupContents struct {
 // checkElementDeclarationsConsistent is the cos-element-consistent half of Phase
 // C. It walks the compiled set in document order (STYLE D2) and returns the first
 // violation.
+//
+// The complex types are complextypewalk.go's, not s.types: §3.8.6's chapeau
+// binds the content model of an ANONYMOUS type a declaration owns exactly as it
+// binds a named one's, and ranging s.types reached none of them (#438).
 func (s *Schema) checkElementDeclarationsConsistent() error {
-	for _, t := range s.types {
-		ct, ok := t.(ComplexType)
-		if !ok {
-			continue // a *SimpleType has no content model
-		}
-		ec, ok := ct.ContentType().(ElementContent)
-		if !ok {
-			continue // empty and simple {content type}s hold no particle
-		}
-		// The content model's {term} is the one model group for which clause 2.2's
-		// "the Model Group is the {term} of the ·content model· of some Complex
-		// Type Definition CTD" holds, so {open content} is passed here and nowhere
-		// deeper.
-		if err := s.checkTermConsistent(ec.Particle.Term(), ct, ec.OpenContent, QName{}, ""); err != nil {
-			return err
-		}
+	w := complexTypeWalk{
+		complexType:          s.checkContentModelElementsConsistent,
+		modelGroupDefinition: s.checkModelGroupDefinitionConsistent,
 	}
-	for _, mgd := range s.modelGroups {
-		// A Model Group Definition's {model group} is a Model Group component in
-		// its own right (§3.7.1), so §3.8.6 binds it whether or not a <group ref>
-		// points at it. It has no containing complex type and no {open content}:
-		// the zero ComplexType is the correct "no containing type" context, since
-		// its content model contains no declaration and so the sibling keyword
-		// excludes nothing — which is the right reading, cvc-wildcard clause 3's
-		// remaining preconditions (3.3-3.6) naming a containing complex type that
-		// does not exist here.
-		if err := s.checkGroupConsistent(mgd.ModelGroup(), ComplexType{}, nil, mgd.Name(), ""); err != nil {
-			return err
-		}
+	return w.schema(s)
+}
+
+// checkContentModelElementsConsistent charges cos-element-consistent against one
+// complex type's content model. An empty or simple {content type} holds no
+// particle and so no model group for the constraint to bind.
+func (s *Schema) checkContentModelElementsConsistent(c ComplexType) error {
+	ec, ok := c.ContentType().(ElementContent)
+	if !ok {
+		return nil
 	}
-	return nil
+	// The content model's {term} is the one model group for which clause 2.2's
+	// "the Model Group is the {term} of the ·content model· of some Complex Type
+	// Definition CTD" holds, so {open content} is passed here and nowhere deeper.
+	return s.checkTermConsistent(ec.Particle.Term(), c, ec.OpenContent, QName{}, "")
+}
+
+// checkModelGroupDefinitionConsistent charges cos-element-consistent against one
+// Model Group Definition's {model group}, which is a Model Group component in
+// its own right (§3.7.1), so §3.8.6 binds it whether or not a <group ref> points
+// at it. It has no containing complex type and no {open content}: the zero
+// ComplexType is the correct "no containing type" context, since its content
+// model contains no declaration and so the sibling keyword excludes nothing —
+// which is the right reading, cvc-wildcard clause 3's remaining preconditions
+// (3.3-3.6) naming a containing complex type that does not exist here.
+func (s *Schema) checkModelGroupDefinitionConsistent(mgd ModelGroupDefinition) error {
+	return s.checkGroupConsistent(mgd.ModelGroup(), ComplexType{}, nil, mgd.Name(), "")
 }
 
 // checkTermConsistent checks the model group at a particle's {term}, if the

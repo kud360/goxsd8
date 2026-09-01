@@ -740,11 +740,11 @@ func holdsMisplacedNotation(parent *parser.Element) bool {
 // puts the original in no by-name index, which narrows nothing this predicate can
 // see — every clause a redefinition turns on reads the base COMPONENT, and
 // finalize reaches it through the {base type definition} slot. What it does NOT
-// reach is the original itself: Phase D's derivation checks quantify over the
-// schema's type definitions and so produce no verdict for it (GAP(xsd),
-// xsd/complexderivation.go). That is an under-rejection on a component the
-// redefinition's own verdict already covers structurally, the same safe direction
-// as the residue below.
+// reach is the original itself: Phase D's walk enters an owned {base type
+// definition} to reach the declarations inside it but charges the base no
+// verdict of its own (GAP(xsd), xsd/complexderivation.go, #584). That is an
+// under-rejection on a component the redefinition's own verdict already covers
+// structurally, the same safe direction as the residue below.
 //
 // A child with no name= declines rather than being waved through: the pairing is
 // keyed on (element type, name), and src-expredef requires a top-level definition
@@ -1015,18 +1015,20 @@ func alternativeTypesDecidable(el *parser.Element) bool {
 // localElementDecidable comes back here), alternativeTypesDecidable for
 // §3.12.2's inline arm, which took this predicate from the start (#851).
 //
-// The residual anonymity does leave is one-directional, per reader (STYLE P3a),
-// and is the reason the earlier narrowing existed: an anonymous type is in no
-// {type definitions} set (§3.17.2 scopes the property to the <complexType>
-// children OF <schema>; xsd/typedefinition.go records why registering one would
-// be worse), so every finalize pass quantifying over that set reaches NO verdict
-// for it — checkContentModelsUnambiguous (cos-nonambig),
-// checkElementDeclarationsConsistent (cos-element-consistent) and
-// checkComplexDerivations with the ct-props-correct clause 4 and cos-ct-extends
-// clause 1.2 checks it drives (#438 under #584, and the GAP marker on parser's
-// produceComplexType for the exact list). Every one is an UNDER-rejection: this
-// lane can report "valid" for a schema a complete processor rejects, never
-// "invalid" for a valid one. Nothing an INSTANCE case turns on is approximate on
+// The residual anonymity used to leave — every finalize pass quantifying over
+// {type definitions} reaching NO verdict for a type in no such set (§3.17.2
+// scopes the property to the <complexType> children OF <schema>;
+// xsd/typedefinition.go records why registering one would be worse) — is GONE
+// for both slots this predicate reaches. Since #438 checkContentModelsUnambiguous
+// (cos-nonambig), checkElementDeclarationsConsistent (cos-element-consistent)
+// and checkComplexDerivations with the ct-props-correct clause 4 and
+// cos-ct-extends clause 1.2 checks it drives all walk the owning slots
+// (xsd/complextypewalk.go), so an anonymous type here is charged what a named
+// one is. What is left uncharged is the redefine ORIGINAL alone (#584, and the
+// GAP marker on parser's produceComplexType), which no <element> and no
+// <alternative> can seat. That remainder is an UNDER-rejection: this lane can
+// report "valid" for a schema a complete processor rejects, never "invalid" for
+// a valid one. Nothing an INSTANCE case turns on is approximate on
 // either newly admitted alternant — {content type} is computed at PRODUCE time
 // (produceSimpleContent for §3.4.2.2, produceComplexContent for §3.4.2.3.3,
 // the extension merge of clause 4.2 through xsd.ExtensionContentType), and
@@ -1114,11 +1116,10 @@ func simpleContentExtensionDecidable(ext *parser.Element) bool {
 // drops the facet children and any inline <simpleType> by the tableau's own
 // instruction: every case-5 restriction shape is REJECTED at finalize —
 // ct-props-correct clause 2 for a simple type base, derivation-ok-restriction
-// clause 2 for the rest — so no verdict rides on what the mapping dropped. The
-// one place that rejection is not reached is an anonymous complex type owned by
-// an <alternative>, which gets no Phase D verdict at all (#438/#584, and see
-// alternativeTypesDecidable, which accepts that residual for every shape it
-// admits).
+// clause 2 for the rest — so no verdict rides on what the mapping dropped. Since
+// #438 that holds for an anonymous complex type owned by an <alternative> too:
+// Phase D reaches it through the owning slot (xsd/complextypewalk.go) and makes
+// the same rejection.
 func simpleContentRestrictionDecidable(restriction *parser.Element) bool {
 	for _, child := range restriction.Children() {
 		el, ok := child.(*parser.Element)

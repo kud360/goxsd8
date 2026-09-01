@@ -30,9 +30,9 @@ const ruleDerivationOKRestriction xsderr.Rule = "derivation-ok-restriction"
 var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, DerivationList, DerivationUnion}
 
 // checkComplexDerivations is Phase D of finalize: the complex-type derivation
-// constraints that need the whole assembled set. It walks s.types in DOCUMENT
-// ORDER (STYLE D2 — never typeIndex, so the first reported failure is
-// deterministic) and, per Complex Type Definition, charges
+// constraints that need the whole assembled set. It walks complextypewalk.go's
+// three roots in DOCUMENT ORDER (STYLE D2 — never typeIndex, so the first
+// reported failure is deterministic) and, per Complex Type Definition, charges
 //
 //   - the ct-props-correct (§3.4.6.1) clauses that need a resolved
 //     {base type definition} or a resolved {attribute declaration} — clause 2 and
@@ -78,56 +78,47 @@ var restrictionBlockingKeywords = []DerivationMethod{DerivationExtension, Deriva
 // unrepresentable and a runtime test would be dead code. See complextype.go's
 // ruleCTPropsCorrect doc, which records the by-construction discharge.
 //
-// GAP(xsd): this walk quantifies over s.types, so an ANONYMOUS complex type —
-// one reachable only through a slot that owns it — gets NO verdict from any
-// constraint above. That covers the inline <complexType> of an element or
-// attribute declaration (#438); since #505, the src-expredef clause 1.1
-// ORIGINAL a redefining complex type owns, which the spec makes a full component
-// "as defined in Schema Component Details (§3)" and therefore subject to these
-// same rules; and, since #851, the inline <complexType> of an <alternative>,
-// which §3.12.2 declare-ta gives a Type Alternative's {type definition} and which
-// §3.4.6.1 ct-props-correct binds like every other complex type definition
-// ("All complex type definitions ... must satisfy the following constraints",
-// with no carve-out for the slot that reaches one). Closing it means a
-// declaration-descending walk over the owning slots, which is one change for all
-// four; #584 owns it.
+// AN ANONYMOUS complex type a DECLARATION owns is charged every constraint
+// above, reached through the slot that owns it — an element declaration's own
+// {type definition}, and, since §3.12.2 declare-ta gives one to a Type
+// Alternative, an <alternative>'s inline <complexType> (#438). §3.4.6.1's
+// chapeau binds it like every other complex type definition ("All complex type
+// definitions ... must satisfy the following constraints", with no carve-out for
+// the slot that reaches one), and the two folds already materialise §3.4.2.4
+// clause 3 and §3.4.2.5 clause 2 on it (ownedtypefold.go, #414), so the
+// derivation clauses below meet a FOLDED component rather than turning an
+// anonymous extension into a false rejection.
 //
-// DIRECTION, per reader rather than in general (STYLE P3a). What is withheld is
-// a VERDICT, never a property value: the two folds materialise §3.4.2.4 clause
-// 3 and §3.4.2.5 clause 2 on an anonymous type reachable as a {base type
-// definition} and re-seat it into the owning slot, so the readers that charge a
-// derivation AGAINST its base — checkRestrictionAttributes,
-// checkAttributeRestrictionRequired and checkAttributeRestrictionWildcard, each
-// of which rejects on a base that reports FEWER attribute uses or no wildcard —
-// see the complete set (attributeusefold.go's baseAttributeUses,
-// attributewildcardfold.go's baseAttributeWildcard). Withholding that value was
-// fail-CLOSED through exactly those three, which is why it is closed here rather
-// than deferred (#505).
-//
-// The two properties are folded on an anonymous type owned by an ELEMENT
-// declaration or by a TYPE ALTERNATIVE too, which no {base type definition} slot
-// can reach (an anonymous type is unnameable, so only a redefinition can hold
-// one as its base): the folds walk those owning slots in a second pass of their
-// own (ownedtypefold.go, #414). What this walk still withholds there is the
-// Phase-D VERDICT alone, and adding it only adds rejections that are not made
-// today.
+// GAP(xsd): the src-expredef clause 1.1 ORIGINAL a redefining complex type owns
+// still gets NO verdict from any constraint above. It is seated by a {base type
+// definition} slot rather than by a declaration's {type definition}, which is
+// the one owning slot complextypewalk.go enters without charging, and the spec
+// makes it a full component "as defined in Schema Component Details (§3)" and
+// therefore subject to these same rules; #584 owns closing it. The direction is
+// under-rejection: what is withheld is a VERDICT, never a property value, since
+// the folds reach that original through baseAttributeUses (attributeusefold.go)
+// and baseAttributeWildcard (attributewildcardfold.go) and re-seat the folded
+// component, so the readers that charge a derivation AGAINST its base —
+// checkRestrictionAttributes, checkAttributeRestrictionRequired and
+// checkAttributeRestrictionWildcard, each of which rejects on a base reporting
+// FEWER attribute uses or no wildcard — see the complete set (#505).
 func (s *Schema) checkComplexDerivations() error {
-	for _, t := range s.types {
-		c, ok := t.(ComplexType)
-		if !ok {
-			continue // a *SimpleType derives under cos-st-restricts, checked at construction
-		}
-		if err := s.checkCTPropsCorrectResolved(c); err != nil {
-			return err
-		}
-		if err := s.checkComplexTypeRestriction(c); err != nil {
-			return err
-		}
-		if err := s.checkComplexTypeExtension(c); err != nil {
-			return err
-		}
+	w := complexTypeWalk{complexType: s.checkComplexTypeDerivation}
+	return w.schema(s)
+}
+
+// checkComplexTypeDerivation charges one Complex Type Definition the three
+// constraint groups checkComplexDerivations documents, in that order. A
+// *SimpleType reaches this from no slot: it derives under cos-st-restricts,
+// checked at construction.
+func (s *Schema) checkComplexTypeDerivation(c ComplexType) error {
+	if err := s.checkCTPropsCorrectResolved(c); err != nil {
+		return err
 	}
-	return nil
+	if err := s.checkComplexTypeRestriction(c); err != nil {
+		return err
+	}
+	return s.checkComplexTypeExtension(c)
 }
 
 // checkCTPropsCorrectResolved charges the two Complex Type Definition Properties
