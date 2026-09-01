@@ -524,7 +524,7 @@ itself M5 and the largest single lane move this project has recorded.
 
 **Landings OUTSIDE this milestone keep moving this lane, by four distinct
 mechanisms, and a running total of them is not maintained here** — take the
-figure from the Status section's `lanestatus` paste (#646). The four:
+figure from the Status section's table (#646). The four:
 
 - **A slice PRODUCES a component the engine could not previously see** — #733
   (a top-level `<xs:attribute>`'s inline `<xs:simpleType>`), #909
@@ -598,13 +598,13 @@ milestone's remaining slices are what turn declines into decisions.
 
 **Do not read the lane score as a pass rate.** It is the count of documents this
 engine can honestly call not-valid. **Read the current figure from the Status
-section's `lanestatus` paste and never from this paragraph** — an absolute
-figure written here is stale before the next landing (#646). It grew most
-because #913 decided `cvc-type` clause 3.1 — the commonest simple-typed-leaf
-shape the lane had declined outright — which is the counterpart to #790's
-lesson, not a contradiction of it: a slice that decides a *new* rule moves the
-number far MORE than its rule count suggests when the declined shape is common,
-and #913 moved it more than #790's descent did.
+section's table and never from this paragraph** — an absolute figure written
+here is stale before the next landing (#646). It grew most because #913
+decided `cvc-type` clause 3.1 — the commonest simple-typed-leaf shape the lane
+had declined outright — which is the counterpart to #790's lesson, not a
+contradiction of it: a slice that decides a *new* rule moves the number far
+MORE than its rule count suggests when the declined shape is common, and #913
+moved it more than #790's descent did.
 
 **TWO classes are decided and decided WRONG, and the first is a single case —
 #771**, a root whose declaring schema is reachable only through the instance's

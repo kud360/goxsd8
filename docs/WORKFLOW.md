@@ -51,12 +51,22 @@ about the tree, the queue or a measurement enters one:
   and CLAUDE.md's headline numbers are not STYLE IDs. Point at a site with
   a `GAP(...)` marker's text or the enclosing identifier: a line number
   into a file the previous landing touched has a one-session shelf life.
-- **Take a figure from the instrument that produces it** — lane scores
-  from `go tool lanestatus`, the exported surface from `go tool surface`,
-  the branch namespace from `go tool wipsurvey`, a case count from a run.
-  A `Ratchet:` trailer naming absolute lane endpoints pastes them; a
-  writer with no instrument in reach states the delta alone and says that
-  is what it is (#796).
+- **Take a figure from the instrument that produces it** — the exported
+  surface from `go tool surface`, the branch namespace from `go tool
+  wipsurvey`, a case count from a run. A `Ratchet:` trailer naming
+  absolute lane endpoints pastes them; a writer with no instrument in
+  reach states the delta alone and says that is what it is (#796).
+- **A lane's score is the census of
+  `conformance/testdata/expectations/<lane>.txt` — its `pass` and `fail`
+  line counts, which `go tool lanestatus` prints. A `docs/LOG` entry and a
+  `Ratchet:` trailer quote that figure and no other.** It is the only lane
+  figure the ratchet writes, so it is the only one a later session
+  re-derives from the committed tree alone. A conformance run prints other
+  per-lane counts — a decline census partitioning ONE RUN's failures,
+  improved-but-unbanked and sanctioned removals offering movement it has
+  not banked — and none of them scores the lane, so subtracting one
+  instrument's delta from another's baseline yields a figure no instrument
+  ever printed (#1120).
 - **Anything unchecked is written as a hypothesis**, in the sentence that
   makes the claim, not in a caveat elsewhere.
 
