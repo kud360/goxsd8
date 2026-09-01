@@ -213,7 +213,8 @@ func reportLaneReadOnly(t *testing.T, r laneRun, withheld []string) {
 // all — so neither is the lane's score, and a reader who quotes one into a
 // `Ratchet:` trailer publishes a figure the committed tree cannot reproduce
 // (issue #1120). It is one string appended to every census line rather than
-// prose in each, so no line can be added that omits it (STYLE D3).
+// prose repeated in each, so the disclosure is worded identically on every line
+// and is edited in one place (STYLE D3).
 const censusNotScore = "not the lane score, which `go tool lanestatus` reports"
 
 // reportDeclines surfaces the lane's decline census (issue #327) through the
