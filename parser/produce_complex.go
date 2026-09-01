@@ -2019,9 +2019,8 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 	// {substitution group affiliations} slot to populate, so no component property
 	// is affected and no downstream rule sees a different value. The whole loss is
 	// one unmade syntax rejection — an under-reject, not a false-accept of a
-	// validity conclusion. No W3C suite case has this shape. Unowned: no issue
-	// tracks it yet (STYLE P3 requires an issue reference only when an issue does
-	// own the retirement).
+	// validity conclusion. No W3C suite case has this shape. #471 owns the
+	// retirement.
 	if ref, hasRef := el.Attr("ref"); hasRef {
 		// The ref= form reads no child of its own, so this is where its children are
 		// ordered against xs:element's content model — the one model Appendix A gives
@@ -2345,17 +2344,11 @@ func (p *producer) produceAnyParticle(el *Element) (*xsd.Particle, error) {
 // What this function returns is therefore clauses 1 and 2 alone, and the
 // component xsd.NewComplexType is handed carries exactly that until finalize
 // overwrites it. The clause 3.2.2 names ride along for the same reason: the fold
-// that consumes them runs there, and by then the source is gone.
-//
-// GAP(xsd): the base's {attribute wildcard} is not folded in either — §3.4.2.5
-// clause 2.2's cos-aw-union for an extension, and that clause alone — and unlike
-// the uses, nothing completes it at finalize. An extension's {attribute
-// wildcard} is therefore its own <anyAttribute> and the groups' alone, which is
-// NOT merely lenient: a name the base's wildcard admits reads as inadmissible on
-// the extension, and xsd/defaultbinding.go's caller charges that absence as
-// derivation-ok-restriction — a false reject, not a fail-open. See
-// attributeDefaultBinding for the exact shape; closing it is #265 section 3's
-// job, not this producer's.
+// that consumes them runs there, and by then the source is gone. The base's
+// contribution to {attribute wildcard} is split the same way and for the same
+// reason — §3.4.2.5 clause 2.2's cos-aw-union for an extension needs that same
+// resolved base — with xsd/attributewildcardfold.go completing that property at
+// finalize (#414).
 //
 // ctElem is the <complexType> element itself, which is parent only in the
 // implicit-content form: the two wrapped forms pass their <restriction>/

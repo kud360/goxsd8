@@ -108,7 +108,7 @@ func (b *SchemaBuilder) AddRedefiningAttributeGroup(g, original AttributeGroupDe
 // GAP(xsd): a reference on EITHER side — an <attribute ref>, or a type= on a
 // local <attribute> child, of the redefinition or of the original — that names
 // nothing the assembled schema holds gets no src-resolve (§3.17.6.2) verdict,
-// and no issue owns its retirement yet. This is not clause 4.1.2's doing:
+// and #725 owns its retirement. This is not clause 4.1.2's doing:
 // resolveReferences (resolve.go) never walks s.attributeGroups for ANY
 // top-level attribute group, redefinition or not, so the redefinition side (in
 // {attribute group definitions} like any other component) is exactly as

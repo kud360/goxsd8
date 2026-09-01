@@ -118,7 +118,7 @@ func (w Wildcard) Annotations() []Annotation {
 // rejects: it is NECESSARY but not SUFFICIENT for wildcard admission, and an
 // external caller using it alone can false-accept. The marker is retired when
 // M5 ships a cvc-wildcard-complete exported entry point over the declaration
-// graph (#51 keeps the resolution half unexported until that caller exists).
+// graph; #248 owns that retirement and the export of the resolution half.
 //
 // {process contents} plays no part in this decision: even a skip wildcard
 // admits everything {namespace constraint} admits; ProcessContents tells the

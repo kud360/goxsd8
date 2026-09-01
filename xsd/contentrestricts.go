@@ -619,7 +619,7 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		// restriction whose Open Content is wider than its base's is accepted
 		// where derivation-ok-restriction clause 2.4 would reject it. The
 		// direction is fail-open — a missing rejection, never a false one — so it
-		// costs verdicts and cannot fabricate them; the fold lands with #265.
+		// costs verdicts and cannot fabricate them; the fold lands with #413.
 		return true
 	}
 	if s.usesAllCompositor(rc.Particle.Term()) {
@@ -641,7 +641,11 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		// millions (the measurement is recorded on maxContentPositions) — so the
 		// incompleteness is live rather than latent, and it is retired only by a
 		// construction that decides containment without materializing an
-		// automaton per occurrence, never by raising the constant.
+		// automaton per occurrence, never by raising the constant. No issue owns
+		// that retirement: #501 landed this ceiling rather than owning it, #499's
+		// is the product walk's different constant in a later phase, and #578
+		// owns this boundary's construction COST rather than this declined
+		// verdict.
 		return true
 	}
 	r, err := s.contentAutomatonOf(rc)

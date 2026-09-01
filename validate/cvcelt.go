@@ -175,7 +175,7 @@ func (w *walk) nilCheck(e Element, g governance) bool {
 //     wrong string or none, shortening a ·key-sequence· and dropping an ·ID
 //     value·.
 //
-// No issue owns this residual yet.
+// #1119 owns this residual.
 //
 // The emptiness is the caller's to establish, since only the walk that consumed
 // E.[[children]] knows it ([contentCheck.empty]). Both varieties are returned:

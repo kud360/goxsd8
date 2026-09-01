@@ -48,7 +48,7 @@ import (
 // c-fields-xpaths are the schema-side rules that would reject such an
 // {expression} at assembly, and neither is implemented
 // (xsd/identityconstraint.go), so nothing upstream has narrowed what reaches
-// here. No issue owns its retirement yet.
+// here. #812 owns its retirement.
 
 // icNameTest is one NameTest of production [4], with its prefix ALREADY
 // resolved: the {namespace bindings} of the XPath Expression property record

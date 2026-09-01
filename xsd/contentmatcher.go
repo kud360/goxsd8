@@ -155,13 +155,13 @@ type Matcher struct {
 //     such particle. That is cvc-accept's own named non-determinism, where the
 //     greedy walk can reject a sequence some other partition accepts (see the
 //     file comment); declining is what keeps this file free of false rejects.
-//     No issue owns its retirement yet: deciding it needs a walk over a SET of
+//     #782 owns its retirement: deciding it needs a walk over a SET of
 //     live partitions, which is a different engine, not a wider case here.
 //   - GAP(xsd): an <all> group with a model group among its {particles}, which
 //     cos-all-limited clause 2 admits only as a nested all group. Interleaving
 //     two all groups' members needs per-member positions this walk does not
 //     keep, and it keeps only counters because every other all group's members
-//     are leaves. No issue owns its retirement yet.
+//     are leaves. #783 owns its retirement.
 func (s *Schema) ContentMatcher(t ComplexType) (*Matcher, bool) {
 	ec, ok := t.ContentType().(ElementContent)
 	if !ok {
