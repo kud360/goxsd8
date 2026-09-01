@@ -6,7 +6,7 @@
 // stream (streaming, definite and indefinite lengths, byte offsets
 // retained for Loc) and builds infoset values.
 //
-// # Mapping (contract; detailed design lands with M11)
+// # Planned mapping (M11 — not yet implemented; contract fixed now)
 //
 //   - The caller supplies the tag ↔ element correspondence (a schema-
 //     derived tag map produced at compile time), since BER carries tags,

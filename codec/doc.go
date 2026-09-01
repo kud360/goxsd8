@@ -2,7 +2,10 @@
 // decode of instance data into Go values and canonical encode back out —
 // built for minimal allocation.
 //
-// # Two decode paths, one semantics
+// The package declares no exported surface today; both sections below
+// state the M10 contract.
+//
+// # Planned decode paths, one semantics (M10 — not yet implemented)
 //
 //   - Runtime path (always available): the facet pipeline +
 //     value.Mapping, driven by the compiled schema. General, reflective,
@@ -20,7 +23,7 @@
 // benchmarks pin the fast path's budget. A fast path that disagrees with
 // the runtime path is wrong by definition.
 //
-// # Debuggability
+// # Planned debuggability (M10 — not yet implemented)
 //
 // Every decode error carries the pipeline stage that rejected
 // (whitespace / pattern / lexical-map / facet / assertion), the type

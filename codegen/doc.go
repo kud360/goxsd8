@@ -1,6 +1,9 @@
 // Package codegen emits Go source from a compiled schema set:
 // deterministic, type-narrowed, and allocation-conscious.
 //
+// The package declares no exported surface today; every section below
+// states the M9 contract.
+//
 // # Determinism (STYLE D1/D2)
 //
 // Identical schema input produces byte-identical output. No map
@@ -30,7 +33,9 @@
 // disambiguated deterministically by document order. Every generated
 // type's header comment records its schema Loc and original QName.
 //
-// # Multiple schemas, multiple output dirs
+// # Planned entry point (M9 — not yet implemented)
+//
+// Multiple schemas, multiple output dirs:
 //
 //	type Target struct { Schema *xsd.Schema; Dir, Package string }
 //	func Generate(targets []Target, opts ...Option) error
@@ -43,7 +48,7 @@
 // generated packages. The CLI maps its repeated -schema/-out flag pairs
 // onto targets.
 //
-// # The Emitter seam (value.Emitter; API frozen in M9)
+// # The Emitter seam (value.Emitter; API frozen in M9; not yet declared here)
 //
 // Backends contribute specialized decode/encode source for their value
 // representations — parsing straight from the reader's byte window into
