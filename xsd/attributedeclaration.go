@@ -389,6 +389,21 @@ type AttributeDeclaration struct {
 // encoding of an absent {type definition}, which a programmatically built
 // declaration is in before the §3.2.2.2 defaulting tiers are applied.
 //
+// An InlineTypeDefinition wrapping a ComplexType is rejected on top of those,
+// and charged a-props-correct instead: §3.2.1 types {type definition} as a
+// Simple Type Definition, <attribute>'s content model offers only a <simpleType>
+// child, and §3.2.2.1 dcl.att.global and §3.2.2.2 dcl.att.local fill the slot
+// from a simple type definition on every branch — so the shape breaks a tableau
+// clause a caller violates, not an encoding this package owns (STYLE E2). The
+// element side's twin rejection is xsderr.RuleComponentInvariant because THERE
+// the shape is legal and only the entry point is wrong; an attribute declaration
+// has no owning entry point and needs none, since no mapping rule can produce
+// the shape for it. The check lives here rather than behind
+// checkTypeDefinitionOrRef's slot switch, which decides which ARM a slot admits
+// on this package's representation footing and charges every rejection to
+// xsderr.RuleComponentInvariant; a spec-rule verdict does not belong there
+// (#441).
+//
 // valueConstraint is a pointer so absence (nil) is distinct from a present zero
 // record (mirroring elementdeclaration.go's *ValueConstraint handling); when
 // non-nil the pointed-to value is COPIED into the struct and hasValueConstraint
@@ -409,6 +424,10 @@ func NewAttributeDeclaration(loc xsderr.Loc, name QName, typeDefinition TypeDefi
 	}
 	if err := checkTypeDefinitionOrRef(loc, typeDefinition, attributeTypeSlot, "attribute declaration "+name.String()); err != nil {
 		return AttributeDeclaration{}, err
+	}
+	if _, isComplex := ownedComplexType(typeDefinition); isComplex {
+		return AttributeDeclaration{}, xsderr.New(ruleAPropsCorrect, loc,
+			"attribute declaration %s {type definition} is an InlineTypeDefinition wrapping a ComplexType, but the §3.2.1 tableau types that property as a Simple Type Definition and <attribute>'s content model admits only a <simpleType> child, so no complex type can sit here through any mapping rule (a-props-correct clause 1)", name)
 	}
 	if valueConstraint != nil {
 		switch valueConstraint.Kind() {
