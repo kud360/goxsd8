@@ -298,17 +298,19 @@ is anyone else's to volunteer:
    or state why the landing named it and did not close it; reopen by hand
    whatever reads `closed` that the body named and meant to leave open.
 
-**A PR that closes no issue is verified by the agent that opens it** —
-that agent is the orchestrating session for this shape, and the
-cartographer verifies its own `post-land` PR. Precondition 1 already says
-what it has to say here. Precondition 2 binds with nothing keyed on a
-verdict: `git log HEAD..origin/main` is empty, and a branch that is behind
-merges forward and re-runs the gate. Precondition 3 does not bind — there
-is no mason round and no owning issue thread, and the pass composes its
-own account into the LOG entry and the PR body instead. Precondition 4
-binds only the issues the squash body closes with a keyword; such a body
-names issues in order to record what it unblocked or disposed of, and
-those read `open` correctly.
+**A PR that closes no issue is verified by the agent that opens it**,
+which verifies and states these preconditions in the orchestrating
+session's place — the cartographer for its own `post-land` PR.
+Precondition 1 already says what it has to say here. Precondition 2 binds
+with nothing keyed on a verdict: `git log HEAD..origin/main` is empty,
+and a branch that is behind merges forward and re-runs the gate.
+Precondition 3 does not bind — there is no mason round and no owning
+issue thread, and the pass composes its own account into the LOG entry
+and the PR body instead. Precondition 4 runs its full procedure here,
+every `#<N>` the squash body names read back alike: a body of this shape
+names issues in order to record what it unblocked or disposed of, so
+`open` is an expected reading, disposed of by stating why the landing
+named it rather than by closing it by hand.
 
 ### After the verdict
 
