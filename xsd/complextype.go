@@ -1009,8 +1009,9 @@ func (c ComplexType) Abstract() bool {
 // type definition} is anonymous and folded too, by a different route:
 // baseAttributeUses re-seats the owned inline base (attributeusefold.go, #505),
 // not the owned descent. An ATTRIBUTE declaration's own {type definition} is in
-// neither — ownedtypefold.go's GAP marker names the shape that seats a complex
-// type there.
+// neither route and needs neither: §3.2.1 types that slot as a Simple Type
+// Definition and [NewAttributeDeclaration] enforces it (a-props-correct clause
+// 1), so no complex type can be seated there to fold.
 //
 // On a ComplexType a caller built with [NewComplexType] and has not yet
 // finalized, it is only what that caller passed in: clause 3 needs the base
