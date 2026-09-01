@@ -64,6 +64,13 @@ var allowedCollisionCitations = []citationAllowance{
 	{file: "xsd/attributewildcardfold.go", number: 9, count: 1},
 	{file: "xsd/complexderivation.go", number: 9, count: 1},
 	{file: "xsd/complexextension.go", number: 9, count: 1},
+	// #438: the three read-only passes' shared descent over the complex types a
+	// Schema's roots hold or own records that it carries no visited set and no
+	// cycle guard — item 9's FIRST half, the phased-construction licence, on the
+	// same footing componentwalk.go and ownedtypefold.go state it: the walk
+	// follows ownership only, and an owned component pre-exists the slot holding
+	// it.
+	{file: "xsd/complextypewalk.go", number: 9, count: 1},
 	// #843: the shared component descent records that it carries no visited set
 	// and no cycle guard — item 9's FIRST half, the phased-construction licence,
 	// naming ct-props-correct clause 3 in Phase B as what rejects a circular

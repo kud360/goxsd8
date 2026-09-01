@@ -471,34 +471,45 @@ func ownedComplexBase(base xsd.TypeDefinitionOrRef) (xsd.ComplexType, bool) {
 // missing, and its own equivalent — an unminted owner — is unconstructible,
 // since produceElement/produceLocalElement mint the identity before calling.
 //
-// GAP(xsd): an ANONYMOUS complex type built here enters no
-// xsd.SchemaBuilder.AddType (§3.17.2 scopes {type definitions} to the
-// <complexType> children OF <schema>, and registering it would fork the
-// component in two — see xsd/typedefinition.go's InlineTypeDefinition). Finalize
-// Phase A reaches it through the owning declaration, so src-resolve is charged
-// normally, but every finalize pass that quantifies over the Schema's type
-// definitions never visits it and produces NO verdict for it:
-// checkContentModelsUnambiguous (xsd/particleattribution.go, cos-nonambig),
-// checkElementDeclarationsConsistent (xsd/elementconsistent.go,
-// cos-element-consistent), and checkComplexDerivations
+// An ANONYMOUS complex type built here enters no xsd.SchemaBuilder.AddType
+// (§3.17.2 scopes {type definitions} to the <complexType> children OF <schema>,
+// and registering it would fork the component in two — see
+// xsd/typedefinition.go's InlineTypeDefinition), and is reached instead through
+// the SLOT that owns it. Finalize Phase A charges src-resolve that way, the two
+// FINALIZE-side folds materialise §3.4.2.4 clause 3 and §3.4.2.5 clause 2 that
+// way (xsd/ownedtypefold.go, #414), and since #438 the three read-only passes
+// charge their verdicts that way too — checkContentModelsUnambiguous
+// (xsd/particleattribution.go, cos-nonambig), checkElementDeclarationsConsistent
+// (xsd/elementconsistent.go, cos-element-consistent) and checkComplexDerivations
 // (xsd/complexderivation.go) with the checkAttributeUseNamesUnique
 // (ct-props-correct clause 4) and checkExtensionAttributeUses
-// (xsd/complexextension.go, cos-ct-extends clause 1.2) it drives — #438. The two
-// FINALIZE-side folds do reach it, through the owning slot
-// (xsd/ownedtypefold.go, #414), so a widened read-only walk now meets a folded
-// component rather than turning an anonymous extension into a FALSE rejection.
-// That covers everything THIS producer builds: the three identities that yield
-// an unnamed one are elementOwnedComplexType, newTypeAlternativeOwned and
-// newRedefineOriginal, and the fold walks every one of those slots. The
-// attribute-side slot the fold has no root for — an attribute declaration's own
-// {type definition} — needs none: no XSD production puts a <complexType> under
-// an <attribute>, and xsd.NewAttributeDeclaration rejects the shape outright
-// (§3.2.1, a-props-correct clause 1). §3.4.2.1 clause 1's {assertions} fold is
-// NOT among them and needs no issue of its own: assertionsWithBase runs HERE, on
-// every produced type, anonymous ones included (#346). The direction today is
-// open (under-rejection), never fail-closed, which is why conformance/schema.go
-// judges an anonymous complex type on the same terms as a named one and narrows
-// its lane for anonymity nowhere (#1126, complexTypeDecidable's doc comment).
+// (xsd/complexextension.go, cos-ct-extends clause 1.2) it drives, all three over
+// xsd/complextypewalk.go's three roots.
+//
+// GAP(xsd): of the three identities here that yield an unnamed type —
+// elementOwnedComplexType, newTypeAlternativeOwned and newRedefineOriginal — the
+// LAST gets no §3.4.6 verdict at all, and the FIRST escapes one in a single
+// shape. Both are #584's to close. A redefine original is seated by a {base type
+// definition} rather than by a declaration's {type definition}, which is the one
+// owning slot complextypewalk.go enters without charging. The escaping
+// elementOwnedComplexType is the one a local <element> owns inside a <redefine>d
+// <group>'s ORIGINAL definition (redefine.go's redefinedGroupRestricted, seated
+// by AddRedefiningModelGroup into xsd/redefinition.go's
+// modelGroupRedefinitions): its own seating is the ordinary {type
+// definition} the walk charges everywhere else, but the original holding it is
+// in no property and no index, and is therefore in none of complextypewalk.go's
+// three roots. The {attribute uses} and {attribute wildcard} of BOTH ARE folded
+// (xsd/attributeusefold.go's baseAttributeUses, #505; xsd/ownedtypefold.go's
+// fourth root, #414), so what is withheld is a verdict and never a property
+// value. §3.4.2.1 clause 1's {assertions} fold is not among the gaps and needs
+// no issue of its own: assertionsWithBase runs HERE, on every produced type,
+// anonymous ones included (#346). The attribute side has no slot to reach at
+// all: no XSD production puts a <complexType> under an <attribute>, and
+// xsd.NewAttributeDeclaration rejects the shape outright (§3.2.1,
+// a-props-correct clause 1). The direction is open (under-rejection), never
+// fail-closed, which is why conformance/schema.go judges an anonymous complex
+// type on the same terms as a named one and narrows its lane for anonymity
+// nowhere (#1126, complexTypeDecidable's doc comment).
 func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.ComplexType, error) {
 	if name, named := topLevelComplexTypeName(id); named && name.Local == "" {
 		return xsd.ComplexType{}, fmt.Errorf("parser: top-level <complexType> at %s has no usable name: its name attribute is absent or empty, and the schema for schema documents requires one — xs:topLevelComplexType declares name use=\"required\" with type xs:NCName", el.Loc())

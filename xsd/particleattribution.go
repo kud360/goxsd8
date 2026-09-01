@@ -144,36 +144,49 @@ type automaton struct {
 // makes it a Model Group component the moment <group name="…"> is processed, and
 // §3.8.4.1.4 calls a standalone group shape violating UPA non-conforming without
 // mentioning reference status.
+//
+// The complex types are complextypewalk.go's, not s.types: an ANONYMOUS type a
+// declaration owns has a content model the same chapeau binds, and ranging
+// s.types reached none of them (#438). A declaration nested in one type's
+// content model is entered for its own owned types, so the walk is by descent
+// and not by a second root loop.
 func (s *Schema) checkContentModelsUnambiguous() error {
-	for _, t := range s.types {
-		ct, ok := t.(ComplexType)
-		if !ok {
-			continue // a *SimpleType has no content model
-		}
-		ec, ok := ct.ContentType().(ElementContent)
-		if !ok {
-			continue // empty and simple {content type}s hold no particle
-		}
-		b := &automaton{s: s, unfold: unfoldCopies}
-		first, _, _, err := b.addParticle(ec.Particle)
-		if err != nil {
-			return err
-		}
-		if err := b.check(first, "complex type "+ct.Name().String()+" content model"); err != nil {
-			return err
-		}
+	w := complexTypeWalk{
+		complexType:          s.checkContentModelUnambiguous,
+		modelGroupDefinition: s.checkModelGroupDefinitionUnambiguous,
 	}
-	for _, mgd := range s.modelGroups {
-		b := &automaton{s: s, unfold: unfoldCopies}
-		first, _, _, err := b.addModelGroup(mgd.ModelGroup())
-		if err != nil {
-			return err
-		}
-		if err := b.check(first, "model group definition "+mgd.Name().String()); err != nil {
-			return err
-		}
+	return w.schema(s)
+}
+
+// checkContentModelUnambiguous charges cos-nonambig against one complex type's
+// content model. An empty or simple {content type} holds no particle and so no
+// content model to be ambiguous.
+//
+// The context phrase is complexTypeOwner's, which renders an anonymous type by
+// what it is: its {name} is the zero QName, so naming it would leave a hole in
+// the message.
+func (s *Schema) checkContentModelUnambiguous(c ComplexType) error {
+	ec, ok := c.ContentType().(ElementContent)
+	if !ok {
+		return nil
 	}
-	return nil
+	b := &automaton{s: s, unfold: unfoldCopies}
+	first, _, _, err := b.addParticle(ec.Particle)
+	if err != nil {
+		return err
+	}
+	return b.check(first, complexTypeOwner(c)+" content model")
+}
+
+// checkModelGroupDefinitionUnambiguous charges cos-nonambig against one Model
+// Group Definition's {model group}.
+func (s *Schema) checkModelGroupDefinitionUnambiguous(mgd ModelGroupDefinition) error {
+	b := &automaton{s: s, unfold: unfoldCopies}
+	first, _, _, err := b.addModelGroup(mgd.ModelGroup())
+	if err != nil {
+		return err
+	}
+	return b.check(first, "model group definition "+mgd.Name().String())
 }
 
 // check reports the first competing pair in the automaton. States are visited in

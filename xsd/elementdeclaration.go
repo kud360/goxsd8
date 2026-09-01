@@ -552,11 +552,13 @@ type ownedTypeSlot struct {
 // ownedTypeSlots enumerates every slot of an element declaration that can hold
 // an anonymous type the declaration OWNS, in a fixed order: its own {type
 // definition}, then each {type table}.{alternatives} member's, then the {type
-// table}.{default type definition}'s. It has TWO readers that must agree
+// table}.{default type definition}'s. It has THREE readers that must agree
 // exactly — checkOwnedTypeContexts, which checks each owned type's {context}
-// back-pointer, and NewElementDeclaration's symmetry rejection, which refuses an
-// owned type reached through any of them — so it is one producer rather than two
-// hand-written enumerations that would drift apart (STYLE T4).
+// back-pointer; NewElementDeclaration's symmetry rejection, which refuses an
+// owned type reached through any of them; and complexTypeWalk's
+// walkElementDeclaration (complextypewalk.go), which charges the three read-only
+// finalize passes at each type it finds — so it is one producer rather than
+// three hand-written enumerations that would drift apart (STYLE T4).
 //
 // The finalize folds enumerate the SAME three slots in the same order and must
 // stay in step with this list, in ownedTypeFold.elementDeclaration and
@@ -566,14 +568,14 @@ type ownedTypeSlot struct {
 //
 // The {default type definition} slot is enumerated UNCONDITIONALLY, and where
 // §3.3.2.1's case 2 synthesized it from the declaring element's own {type
-// definition} that means the same component is visited twice. Both readers are
-// idempotent over one component — a {context} check and a shape rejection each
-// answer the same way for the second visit as for the first — and the two
-// visits are indistinguishable anyway: a ComplexType is a value holding slices,
-// so two slots holding one component cannot be told from two slots holding
-// structurally equal copies. Skipping the slot is not an option either: a
-// TRAILING untested <alternative> feeds this slot and NO other, so its owned
-// type appears here alone.
+// definition} that means the same component is visited twice. All three readers
+// are idempotent over one component — a {context} check, a shape rejection and a
+// read-only verdict each answer the same way for the second visit as for the
+// first — and the two visits are indistinguishable anyway: a ComplexType is a
+// value holding slices, so two slots holding one component cannot be told from
+// two slots holding structurally equal copies. Skipping the slot is not an
+// option either: a TRAILING untested <alternative> feeds this slot and NO other,
+// so its owned type appears here alone.
 func ownedTypeSlots(typeDefinition TypeDefinitionOrRef, typeTable *TypeTable) []ownedTypeSlot {
 	slots := []ownedTypeSlot{{property: "{type definition}", ref: typeDefinition}}
 	if typeTable == nil {
