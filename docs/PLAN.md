@@ -35,7 +35,7 @@ An em dash is a lane with no cases yet, which is a different claim from a lane
 scoring zero. `datatypes` is M3 and **complete**; `schema` is M4 and active;
 `instance` is M5 and active; `xpath`, `json` and `ber` wait on M6/M7, M8 and M11.
 
-### The census made an EXACT prediction, and it is a different kind of evidence from the near-match that filed #1164
+### The census made an EXACT prediction, and the 584/588 near-match is a coincidence
 
 **`schema` 13830 → 13868 (+38); `instance` flat at 11029; `datatypes` flat.**
 Two of the six landings moved it and both are attributable to the line.
@@ -58,12 +58,39 @@ figure against a two-file expectation diff, this one compares one named bucket
 against one lane on a landing whose entire executable change was `return false`
 → `return true` in one predicate.
 
-**The rule does not relax on it, and this is the fourth stamp to say so.** An
-exact hit on the easy case — a bucket where each discovery reaches exactly one
-lane — is consistent with both of #1164's answers. **Do not band on the
-remaining bucket counts and do not cite either figure as a prediction until
-#1164 rules.** The measurement is posted on that thread; it is the strongest
-reason yet to take the issue, not to pre-empt it.
+**Never cite 584-predicted-588 as a prediction. The two counts measure sets that
+do not correspond and their agreement is arithmetic accident (#1164).**
+Re-derived at `adb6d57`, the commit the bucket was measured on: 670 residual
+discoveries, of which **584** (`simpleContent-forbidden` 416,
+`complexContent-forbidden` 168) declined at `anonymousComplexTypeDecidable`,
+sitting in **580 distinct schema documents**. #1126's 588 flipped expectation
+lines are **475 distinct documents** — 475 `schema` lines, exactly one per
+document, plus 113 `instance` lines over 92 of those same 475. All 475 were in
+the 580, so the bucket contains the movers and contains them entirely; the other
+**105 bucket documents moved nothing**, their 130 cases still `fail` at
+`4e1d49b`.
+
+**No conversion in that chain is one.** 584 discoveries → 580 documents → 475
+movers → 588 lines is **0.993** documents per discovery times a yield of
+**0.819** movers per bucket document times a fan-out of **1.238** lines per
+mover, and their product, 1.007, is the whole of the near-match. Nothing
+measurable before a landing fixes any of the three: #786's exact 10 → +10 hit a
+combined factor of 1.00 on a bucket that moved `schema` alone with `instance`
+flat, which is a property of that bucket and not of the instrument.
+
+**Read a residual bucket count as a candidate filter and never as a sort key —
+the six per-class counts for the remaining 55 (10 / 9 / 14 / 11 / 9 / 2)
+included.** Each bounds the documents a widening can reach and predicts no lane
+movement, because the factors that convert documents to expectation lines are
+measurable only after the landing. That is the same rule four stamps have held,
+now with a case-by-case reconciliation under it rather than an open question.
+
+**Repeat the reconciliation rather than re-quoting it**: extract `adb6d57` to a
+scratch tree, name the reason at each arm of `anonymousComplexTypeDecidable`,
+re-run `TestUnmappedCensusSoundAgainstShapeGate`'s loop recording that reason per
+residual discovery, then map the keys `git diff` flips under
+`conformance/testdata/expectations/` between `6123653` and `4e1d49b` to
+documents through `censusRoot`.
 
 **The last stamp's armed trigger resolved by NOT firing, second consecutive
 stamp.** It read: *"if #438 lands and both lanes are flat, the thing to
@@ -324,15 +351,14 @@ nearest, and its own body records the ranking as falsified and unreplaced.
    and the class is larger than discoverability — re-examine whether the defect is
    that a `/retro` ruling closes an issue at all, rather than where the ruling is
    written down.
-2. **#1164 must rule, and the SHARPEST test available is band row 3.** **Trigger
-   set here**: **if #1182 lands and `schema` moves by anything other than 18, that
-   is #1164's answer arriving from the other direction.** #786 predicted 10 and
-   delivered exactly 10; #1182's two buckets predict 9 + 9 on the same instrument.
-   A second exact hit makes the units commensurable on evidence no reconciliation
-   session could manufacture; a miss bounds the instrument's reliability to the
-   single-lane single-bucket case. **Either way, do not band on the counts before
-   it resolves** — that rule is now four stamps old and is held, not relaxed, on a
-   near-match and an exact match together.
+2. **#1164 has ruled — the near-match is a coincidence — and band row 3 is still
+   the sharpest test of what survives it.** **Trigger set here**: **if #1182 lands
+   and `schema` moves by anything other than 18, read 18 as the upper bound the
+   ruling says it is.** #786 predicted 10 and delivered exactly 10; #1182's two
+   buckets predict 9 + 9 on the same instrument. A second exact hit would say the
+   yield is 1.00 on single-lane single-bucket widenings specifically; a shortfall
+   is the measured 0.819 reappearing. **Do not band on the counts either way** —
+   see the ruling above.
 3. **The CLI ceiling lifted exactly as the last stamp said it would, and the
    prediction is worth banking as a method rather than a lucky call.** Twelve
    consultations produced seven documentation issues about a stub; the thirteenth
@@ -346,8 +372,9 @@ nearest, and its own body records the ranking as falsified and unreplaced.
    rather than fanning them out speculatively now"*. #786 discharged one bucket
    and #1182 filed two more; what is left unfiled is the named `<group>` body
    outside its content model (14), the model group's non-particle child (11) and
-   the `<redefine>` child outside its content model (2). #1164's verdict is what
-   should reopen that decision.
+   the `<redefine>` child outside its content model (2). #1164's verdict has
+   landed and leaves that instruction standing: those three counts bound what a
+   widening reaches and rank nothing.
 5. **The human decision blocking #1002 is unchanged and is now carried for a
    NINTH stamp.** #1002 waits on a ruling between (a) a constitutional
    "superseded pass" ratchet class alongside `GOXSD_RATCHET_REMOVALS`, enumerated
