@@ -9,9 +9,10 @@ import (
 )
 
 // subcommands is the contract's whole subcommand vocabulary, in the order
-// usage documents it. Dispatch reads this one encoding rather than restating
-// the names (STYLE D3/T4), and TestUsageCoversContract pins usage's own text
-// to it. help and version are deliberately not members; doc.go states why.
+// usage documents it. Diagnosis reads this one encoding rather than restating
+// the names (STYLE D3/T4) — which name is built is answered where that name is
+// dispatched, in run — and TestUsageCoversContract pins usage's own text to it.
+// help and version are deliberately not members; doc.go states why.
 var subcommands = []string{"parse", "validate", "gen"}
 
 // usage is the terminal rendering of the CLI contract in doc.go: the
@@ -23,11 +24,16 @@ const usage = `goxsd8 — XSD 1.1 schema compilation, instance validation, and c
 
 Usage (contract; subcommands land with their milestones):
 
-  goxsd8 parse <schema.xsd>...
-      Compile one or more schemas into a single set and print a
-      summary (target namespaces, global declarations) on stdout.
-      Exit 0 on a valid set; 1 on schema errors, one line per error
-      on stderr.
+  goxsd8 parse [-q] [-v] <schema.xsd>...
+      Compile each schema argument and print its summary on stdout:
+      the namespaces its components are in, then a count of each kind
+      of declaration the schema documents make. Each argument is its
+      own root document and its own run, in argument order — several
+      arguments are several compilations, not one set.
+      Exit 0 when every one compiles; 1 when any is rejected, one
+      line per error on stderr as <loc>: [<rule>] <message>; 2 when
+      an argument cannot be read, which is never a verdict about a
+      schema. The exit code is the worst of those outcomes.
 
   goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...
       Assess instances against the compiled set; every schema needs
@@ -47,14 +53,20 @@ Usage (contract; subcommands land with their milestones):
       output directories (multiple schemas, multiple output dirs).
 
 Flags common to all subcommands: -q (quiet), -v (debug logging via
-slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec).
+slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec). They
+qualify a subcommand and follow its name — goxsd8 parse -q a.xsd, not
+goxsd8 -q parse a.xsd. -q suppresses a subcommand's informational
+output, which is parse's summary, and never a diagnosis: neither the
+error lines above nor validate's violations are silenced by it.
 
-Implemented today: the help path only. With no arguments, or with -h,
--help or --help in any argument position, goxsd8 prints this usage to
-stdout and exits 0. Every other invocation exits 2, reporting on stderr
-that a subcommand above is reserved but not yet built, that the name is
-not one of them, or that the first argument is a flag and no subcommand
-was given.
+Implemented today: the help path and parse. With no arguments, or with
+-h, -help or --help in any argument position, goxsd8 prints this usage
+to stdout and exits 0. goxsd8 parse compiles its arguments as above and
+honours -q and -v, though GOXSD_DEBUG does not scope -v yet. Every other
+invocation exits 2, reporting on stderr that validate or gen is reserved
+but not yet built, that the name is not one of the three, that a flag
+stands before the subcommand it qualifies, or that the first argument is
+a flag and no subcommand was given.
 `
 
 const (
@@ -72,10 +84,18 @@ const (
 	// unknownSubcommandFmt answers a name outside the vocabulary.
 	unknownSubcommandFmt = "goxsd8: unknown subcommand %q"
 
-	// noSubcommand answers a first argument shaped like a flag. The common
-	// flags qualify a subcommand and never stand alone, so -q is neither
-	// unknown nor unimplemented — it is a subcommand short of an invocation.
+	// noSubcommand answers a first argument shaped like a flag with no
+	// subcommand anywhere after it. The common flags qualify a subcommand and
+	// never stand alone, so -q is neither unknown nor unimplemented — it is a
+	// subcommand short of an invocation.
 	noSubcommand = "goxsd8: no subcommand given"
+
+	// leadingFlagFmt answers a flag placed BEFORE the subcommand it qualifies.
+	// The flags are the subcommand's own and follow its name (doc.go's
+	// Argument vocabulary), so this invocation names a real subcommand and is
+	// still a usage error — one that must not be reported as no subcommand at
+	// all, which is what a scan of the first argument alone concluded (#472).
+	leadingFlagFmt = "goxsd8: %s must follow the subcommand: goxsd8 %s %s ..."
 )
 
 func main() {
@@ -84,31 +104,53 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if wantsHelp(args) {
-		// 2 is the contract's usage/IO exit code: a truncated write means
-		// the user never got the help they asked for.
+		// A truncated write means the user never got the help they asked for,
+		// which is an IO fault and not a success.
 		if _, err := fmt.Fprint(stdout, usage); err != nil {
-			return 2
+			return exitUsage
 		}
-		return 0
+		return exitOK
 	}
 	// args is non-empty here: wantsHelp reports the bare invocation as a help
-	// request. A failed stderr write cannot change the outcome — the exit code
-	// is 2 either way, and stderr is the only channel left to report it on.
-	_, _ = fmt.Fprintf(stderr, "%s\n%s\n", diagnose(args[0]), helpPointer)
-	return 2
+	// request.
+	if args[0] == "parse" {
+		return runParse(args[1:], stdout, stderr)
+	}
+	return usageError(stderr, diagnose(args))
 }
 
-// diagnose names what is wrong with a first argument that is not a help
-// request. Matching is case-sensitive per Go CLI convention, so goxsd8
-// VALIDATE is an unknown subcommand rather than a reserved one.
-func diagnose(arg string) string {
+// diagnose names what is wrong with an invocation that neither requests help
+// nor names a built subcommand. Matching is case-sensitive per Go CLI
+// convention, so goxsd8 VALIDATE is an unknown subcommand rather than a
+// reserved one.
+//
+// It reads past the first argument for one purpose only: a flag standing where
+// a subcommand belongs is a different fault depending on whether a subcommand
+// follows it, and reporting `goxsd8 -q parse a.xsd` as no subcommand at all
+// contradicts the argument list (#472). args is non-empty.
+func diagnose(args []string) string {
+	arg := args[0]
 	if strings.HasPrefix(arg, "-") {
+		if name, ok := subcommandIn(args[1:]); ok {
+			return fmt.Sprintf(leadingFlagFmt, arg, name, arg)
+		}
 		return noSubcommand
 	}
 	if !slices.Contains(subcommands, arg) {
 		return fmt.Sprintf(unknownSubcommandFmt, arg)
 	}
 	return fmt.Sprintf(notImplementedFmt, arg)
+}
+
+// subcommandIn returns the first argument that is a contract subcommand name.
+// It reads the same one encoding of the vocabulary dispatch does (STYLE D3).
+func subcommandIn(args []string) (string, bool) {
+	for _, a := range args {
+		if slices.Contains(subcommands, a) {
+			return a, true
+		}
+	}
+	return "", false
 }
 
 // wantsHelp accepts a help flag in any argument position, and only in the
