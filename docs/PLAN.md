@@ -583,19 +583,28 @@ MORE than its rule count suggests when the declined shape is common, and #913
 moved it more than #790's descent did.
 
 **All TWELVE decided-and-wrong `instance` cases carry an owner, and the two
-classes below name eight of them.** Measured at `c720206`: 15332 fail = 15315
-decline candidates + 5 declined indeterminate + **12** decided-and-wrong. The
-other four are owned outside these paragraphs (#1160) —
+classes below account for nine of them.** Measured at `c720206`: 15332 fail =
+15315 decline candidates + 5 declined indeterminate + **12** decided-and-wrong.
+The other three are owned outside these paragraphs (#1160) —
 `MS-DataTypes2006-07-15/gMonth002_2061/instance/gMonth002_2061.v` and
-`gMonth004_2063.v` by **#921**, `Open/open013/instance/open013.v1.xml` by
-**#456**, and `SType/st_targetns00101m/instance/ST_targetNS00101m2_p` by
-**#771** — a second case of the mechanism the next paragraph describes, which
-that paragraph does not name and #771's decline branch covers by construction.
+`gMonth004_2063.v` by **#921**, and `Open/open013/instance/open013.v1.xml` by
+**#456**.
 
-**TWO classes are decided and decided WRONG, and the first is a single case —
-#771**, a root whose declaring schema is reachable only through the instance's
-own `xsi:schemaLocation`. It was four,
-and #800 retired two of them: `Assert/assert_019/instance/assert_019_2` and
+**TWO classes are decided and decided WRONG, and the first is two cases, both
+#771**: `ElemDecl/targetns00101m/instance/targetNS00101m1_p`, whose root
+element `{ElemDecl/targetNSa}number` is declared in `targetNS00101m1a.xsd`,
+and `SType/st_targetns00101m/instance/ST_targetNS00101m2_p`, whose root
+`{ST_targetNSa}test` is declared by neither of its group's schema documents
+and whose rescuing `xsi:type` resolves to `{ST_targetNSa}Test` in
+`ST_targetNS00101ma.xsd` (attributed by #1160). **One root cause, two routes
+to the same charge**: each turns on a schema document the harness never
+assembles, because only the instance's own `xsi:schemaLocation` points at it,
+so the root-name lookup fails in the first case and the `xsi:type` lookup
+fails in the second — and since `validate/cvcelt.go`'s
+`instanceTypeDefinition` treats an absent, non-QName and unresolvable
+`xsi:type` alike, both land on `cvc-assess-elt`. The first case was one of
+four, and #800 retired two of them:
+`Assert/assert_019/instance/assert_019_2` and
 `CTA/typeAlternatives_001/instance/typeAlternatives_001_2` now decline honestly
 instead of rejecting a document the ·conditionally selected· type admits.
 **That is two, not three, and `CTA/cta0008.v01` was never among them** — it
