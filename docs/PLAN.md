@@ -63,8 +63,8 @@ do not correspond and their agreement is arithmetic accident (#1164).**
 Re-derived at `adb6d57`, the commit the bucket was measured on: 670 residual
 discoveries, of which **584** (`simpleContent-forbidden` 416,
 `complexContent-forbidden` 168) declined at `anonymousComplexTypeDecidable`,
-sitting in **580 distinct schema documents**. #1126's 588 flipped expectation
-lines are **475 distinct documents** — 475 `schema` lines, exactly one per
+sitting in **580 distinct assembled root documents**. #1126's 588 flipped
+expectation lines are **475 distinct documents** — 475 `schema` lines, one per
 document, plus 113 `instance` lines over 92 of those same 475. All 475 were in
 the 580, so the bucket contains the movers and contains them entirely; the other
 **105 bucket documents moved nothing**, their 130 cases still `fail` at
@@ -78,12 +78,16 @@ measurable before a landing fixes any of the three: #786's exact 10 → +10 hit 
 combined factor of 1.00 on a bucket that moved `schema` alone with `instance`
 flat, which is a property of that bucket and not of the instrument.
 
-**Read a residual bucket count as a candidate filter and never as a sort key —
-the six per-class counts for the remaining 55 (10 / 9 / 14 / 11 / 9 / 2)
-included.** Each bounds the documents a widening can reach and predicts no lane
-movement, because the factors that convert documents to expectation lines are
-measurable only after the landing. That is the same rule four stamps have held,
-now with a case-by-case reconciliation under it rather than an open question.
+**Read a residual bucket count as a candidate filter and never as a sort key,
+and take the total from the instrument rather than from a thread.**
+`TestUnmappedCensusSoundAgainstShapeGate` reports **46** residual at HEAD. The
+five per-class counts left by #786's discharge of the first — 9 and 9, filed as
+#1182, plus the 14, 11 and 2 still unfiled — were measured at `adb6d57` and
+total 45, so they do not even decompose the live figure. Each bounds the
+documents a widening can reach and predicts no lane movement, because the
+factors that convert documents to expectation lines are measurable only after
+the landing. That is the same rule four stamps have held, now with a
+case-by-case reconciliation under it rather than an open question.
 
 **Repeat the reconciliation rather than re-quoting it**: extract `adb6d57` to a
 scratch tree, name the reason at each arm of `anonymousComplexTypeDecidable`,
