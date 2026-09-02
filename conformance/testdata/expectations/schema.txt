@@ -1700,9 +1700,9 @@ MS-ComplexType2006-07-15/ctD005/schema/ctD005 pass
 MS-ComplexType2006-07-15/ctD006/schema/ctD006 pass
 MS-ComplexType2006-07-15/ctD007/schema/ctD007 pass
 MS-ComplexType2006-07-15/ctD008/schema/ctD008 pass
-MS-ComplexType2006-07-15/ctD009/schema/ctD009 fail
+MS-ComplexType2006-07-15/ctD009/schema/ctD009 pass
 MS-ComplexType2006-07-15/ctD010/schema/ctD010 pass
-MS-ComplexType2006-07-15/ctD011/schema/ctD011 fail
+MS-ComplexType2006-07-15/ctD011/schema/ctD011 pass
 MS-ComplexType2006-07-15/ctD012/schema/ctD012 pass
 MS-ComplexType2006-07-15/ctD013/schema/ctD013 fail
 MS-ComplexType2006-07-15/ctD014/schema/ctD014 fail
@@ -4891,7 +4891,7 @@ MS-Group2006-07-15/groupO019/schema/groupO019 pass
 MS-Group2006-07-15/groupO020/schema/groupO020 pass
 MS-Group2006-07-15/groupO021/schema/groupO021 pass
 MS-Group2006-07-15/groupO022/schema/groupO022 pass
-MS-Group2006-07-15/groupO023/schema/groupO023 fail
+MS-Group2006-07-15/groupO023/schema/groupO023 pass
 MS-Group2006-07-15/groupO024/schema/groupO024 pass
 MS-Group2006-07-15/groupO025/schema/groupO025 fail
 MS-Group2006-07-15/groupO026/schema/groupO026 fail
@@ -4924,7 +4924,7 @@ MS-IdentityConstraint2006-07-15/idA025/schema/idA025 fail
 MS-IdentityConstraint2006-07-15/idA026/schema/idA026 fail
 MS-IdentityConstraint2006-07-15/idA027/schema/idA027 fail
 MS-IdentityConstraint2006-07-15/idA028/schema/idA028 fail
-MS-IdentityConstraint2006-07-15/idA029/schema/idA029 fail
+MS-IdentityConstraint2006-07-15/idA029/schema/idA029 pass
 MS-IdentityConstraint2006-07-15/idA030/schema/idA030 pass
 MS-IdentityConstraint2006-07-15/idA031/schema/idA031 pass
 MS-IdentityConstraint2006-07-15/idA032/schema/idA032 pass
@@ -4984,7 +4984,7 @@ MS-IdentityConstraint2006-07-15/idB025/schema/idB025 fail
 MS-IdentityConstraint2006-07-15/idB026/schema/idB026 fail
 MS-IdentityConstraint2006-07-15/idB027/schema/idB027 fail
 MS-IdentityConstraint2006-07-15/idB028/schema/idB028 fail
-MS-IdentityConstraint2006-07-15/idB029/schema/idB029 fail
+MS-IdentityConstraint2006-07-15/idB029/schema/idB029 pass
 MS-IdentityConstraint2006-07-15/idB030/schema/idB030 pass
 MS-IdentityConstraint2006-07-15/idB031/schema/idB031 pass
 MS-IdentityConstraint2006-07-15/idB032/schema/idB032 pass
@@ -5044,7 +5044,7 @@ MS-IdentityConstraint2006-07-15/idC025/schema/idC025 fail
 MS-IdentityConstraint2006-07-15/idC026/schema/idC026 fail
 MS-IdentityConstraint2006-07-15/idC027/schema/idC027 fail
 MS-IdentityConstraint2006-07-15/idC028/schema/idC028 fail
-MS-IdentityConstraint2006-07-15/idC029/schema/idC029 fail
+MS-IdentityConstraint2006-07-15/idC029/schema/idC029 pass
 MS-IdentityConstraint2006-07-15/idC030/schema/idC030 pass
 MS-IdentityConstraint2006-07-15/idC031/schema/idC031 pass
 MS-IdentityConstraint2006-07-15/idC032/schema/idC032 pass
@@ -9774,7 +9774,7 @@ MS-Schema2006-07-15/schN5/schema/schN5 pass
 MS-Schema2006-07-15/schN6/schema/schN6 pass
 MS-Schema2006-07-15/schN7/schema/schN7 pass
 MS-Schema2006-07-15/schO2/schema/schO2 pass
-MS-Schema2006-07-15/schP1/schema/schP1 fail
+MS-Schema2006-07-15/schP1/schema/schP1 pass
 MS-Schema2006-07-15/schP2/schema/schP2 pass
 MS-Schema2006-07-15/schP3/schema/schP3 pass
 MS-Schema2006-07-15/schQ1/schema/schQ1 pass
@@ -9838,8 +9838,8 @@ MS-SimpleType2006-07-15/stA017/schema/stA017 pass
 MS-SimpleType2006-07-15/stA018/schema/stA018 pass
 MS-SimpleType2006-07-15/stA019/schema/stA019 pass
 MS-SimpleType2006-07-15/stA020/schema/stA020 pass
-MS-SimpleType2006-07-15/stB001/schema/stB001 fail
-MS-SimpleType2006-07-15/stB002/schema/stB002 fail
+MS-SimpleType2006-07-15/stB001/schema/stB001 pass
+MS-SimpleType2006-07-15/stB002/schema/stB002 pass
 MS-SimpleType2006-07-15/stB003/schema/stB003 pass
 MS-SimpleType2006-07-15/stB004/schema/stB004 pass
 MS-SimpleType2006-07-15/stB005/schema/stB005 pass
@@ -9893,7 +9893,7 @@ MS-SimpleType2006-07-15/stC028/schema/stC028 pass
 MS-SimpleType2006-07-15/stC029/schema/stC029 pass
 MS-SimpleType2006-07-15/stC030/schema/stC030 pass
 MS-SimpleType2006-07-15/stC031/schema/stC031 pass
-MS-SimpleType2006-07-15/stC032/schema/stC032 fail
+MS-SimpleType2006-07-15/stC032/schema/stC032 pass
 MS-SimpleType2006-07-15/stC033/schema/stC033 pass
 MS-SimpleType2006-07-15/stC034/schema/stC034 pass
 MS-SimpleType2006-07-15/stC035/schema/stC035 pass
