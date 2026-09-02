@@ -30,9 +30,10 @@ Usage (contract; subcommands land with their milestones):
       of declaration the schema documents make. Each argument is its
       own root document and its own run, in argument order — several
       arguments are several compilations, not one set.
-      Exit 0 when every one compiles; 1 when any is rejected, one
-      line per error on stderr as <loc>: [<rule>] <message>; 2 when
-      an argument cannot be read, which is never a verdict about a
+      Exit 0 when every one compiles; 1 when any is rejected, its
+      first error on stderr as <loc>: [<rule>] <message> (assembly
+      stops there, so a rejected schema is one line); 2 when an
+      argument cannot be read, which is never a verdict about a
       schema. The exit code is the worst of those outcomes.
 
   goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...

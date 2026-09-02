@@ -26,11 +26,37 @@ const orderSummary = `testdata/order.xsd
   components: 8
 `
 
+// importsSummary is the whole stdout block `goxsd8 parse testdata/imports.xsd`
+// prints. Its two namespace lines are what makes namespacesOf's ordering
+// observable at all: with one namespace the order slice never holds two
+// entries, so ranging the seen map instead would print the same bytes.
+//
+// The order is first appearance over the buckets, which is the root document's
+// namespace and then the imported one — not sorted, which would put
+// .../imported first.
+const importsSummary = `testdata/imports.xsd
+  namespace: http://example.com/root
+  namespace: http://example.com/imported
+  types: 0
+  elements: 2
+  attributes: 0
+  attribute groups: 0
+  model groups: 0
+  notations: 0
+  identity constraints: 0
+  components: 2
+`
+
 // brokenRule is the src-resolve charge testdata/broken.xsd earns. The line is
 // asserted by its shape and this substring rather than in full: the message is
 // the parser's and the location is absolute, so pinning either here would make
 // this test a copy of parser's wording.
 const brokenRule = "[src-resolve]"
+
+// malformedRule is the charge testdata/malformed.xsd earns. Unlike broken.xsd's
+// src-resolve, the parser returns this one WRAPPED in the assembly context it
+// was read under, so it is the fixture that reaches violationLine's unwrap.
+const malformedRule = "[xml-wf]"
 
 func TestParseSummary(t *testing.T) {
 	var stdout, stderr bytes.Buffer
@@ -46,29 +72,48 @@ func TestParseSummary(t *testing.T) {
 	}
 }
 
+// TestParseNamespaceOrder pins the one order the summary derives rather than
+// reads off an enumeration: namespacesOf's first-appearance order over the
+// buckets. A two-namespace set is what makes it assertable — with a single
+// namespace, ranging the seen map produces the same bytes.
+func TestParseNamespaceOrder(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"parse", "testdata/imports.xsd"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("parse of an importing schema = %d, want 0 (stderr %q)", code, stderr.String())
+	}
+	if stdout.String() != importsSummary {
+		t.Errorf("summary =\n%s\nwant\n%s", stdout.String(), importsSummary)
+	}
+}
+
 // TestParseSummaryIsDeterministic is the acceptance bar, not a nicety (STYLE
 // D1/D2): the same input must produce the same bytes, run after run. A summary
 // assembled by ranging a map would pass TestParseSummary most of the time and
-// fail here.
+// fail here — but only on the importing fixture, whose set carries the two
+// namespaces map iteration has something to permute between.
 func TestParseSummaryIsDeterministic(t *testing.T) {
-	var first bytes.Buffer
-	if code := run([]string{"parse", "testdata/order.xsd"}, &first, &bytes.Buffer{}); code != 0 {
-		t.Fatalf("parse = %d, want 0", code)
-	}
-	for i := range 20 {
-		var again bytes.Buffer
-		if code := run([]string{"parse", "testdata/order.xsd"}, &again, &bytes.Buffer{}); code != 0 {
-			t.Fatalf("parse = %d, want 0", code)
+	for _, location := range []string{"testdata/order.xsd", "testdata/imports.xsd"} {
+		var first bytes.Buffer
+		if code := run([]string{"parse", location}, &first, &bytes.Buffer{}); code != 0 {
+			t.Fatalf("parse %s = %d, want 0", location, code)
 		}
-		if again.String() != first.String() {
-			t.Fatalf("run %d differs from run 0:\n%s\nvs\n%s", i+1, again.String(), first.String())
+		for i := range 20 {
+			var again bytes.Buffer
+			if code := run([]string{"parse", location}, &again, &bytes.Buffer{}); code != 0 {
+				t.Fatalf("parse %s = %d, want 0", location, code)
+			}
+			if again.String() != first.String() {
+				t.Fatalf("%s run %d differs from run 0:\n%s\nvs\n%s", location, i+1, again.String(), first.String())
+			}
 		}
 	}
 }
 
 // TestParseSchemaErrors pins the failure contract: exit 1, nothing on stdout,
-// and one line per error on stderr in xsderr.Error's own rendering — a
-// location a reader can open, the rule ID in brackets, then the message.
+// and the rejected schema's first error on stderr in xsderr.Error's own
+// rendering — a location a reader can open, the rule ID in brackets, then the
+// message. Assembly stops at that error, so one rejected argument is one line.
 func TestParseSchemaErrors(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"parse", "testdata/broken.xsd"}, &stdout, &stderr)
@@ -94,8 +139,38 @@ func TestParseSchemaErrors(t *testing.T) {
 	if !strings.HasPrefix(line, abs+":9:") {
 		t.Errorf("stderr = %q, want it to open with %q", line, abs+":9:")
 	}
-	// The wrapper the parser puts around some rejections must not reach the
-	// line: the contract's first field is a location, not a package name.
+}
+
+// TestParseWrappedSchemaError pins violationLine's unwrap, which no
+// src-resolve fixture can reach: the parser returns that class unwrapped.
+// A document that is not well-formed XML comes back WRAPPED in the assembly
+// context it was read under, and the contract's first field is a location a
+// reader can open, not the package that did the reading. Deleting the
+// errors.As branch fails here and nowhere else.
+func TestParseWrappedSchemaError(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"parse", "testdata/malformed.xsd"}, &stdout, &stderr)
+	if code != 1 {
+		t.Errorf("parse of a malformed document = %d, want 1", code)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty — a rejected schema has no summary", stdout.String())
+	}
+	line := strings.TrimSuffix(stderr.String(), "\n")
+	if strings.Contains(line, "\n") {
+		t.Errorf("stderr = %q, want one line", stderr.String())
+	}
+	if !strings.Contains(line, malformedRule) {
+		t.Errorf("stderr = %q, want the charged rule in brackets", line)
+	}
+	abs, err := filepath.Abs("testdata/malformed.xsd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The unclosed start tag runs to line 9 of the fixture.
+	if !strings.HasPrefix(line, abs+":9:") {
+		t.Errorf("stderr = %q, want it to open with %q", line, abs+":9:")
+	}
 	if strings.HasPrefix(line, "parser:") {
 		t.Errorf("stderr = %q, want xsderr.Error's own rendering, unwrapped", line)
 	}

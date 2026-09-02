@@ -9,9 +9,10 @@
 //	    of declaration the schema documents make. Each argument is its
 //	    own root document and its own run, in argument order — several
 //	    arguments are several compilations, not one set.
-//	    Exit 0 when every one compiles; 1 when any is rejected, one
-//	    line per error on stderr as <loc>: [<rule>] <message>; 2 when
-//	    an argument cannot be read, which is never a verdict about a
+//	    Exit 0 when every one compiles; 1 when any is rejected, its
+//	    first error on stderr as <loc>: [<rule>] <message> (assembly
+//	    stops there, so a rejected schema is one line); 2 when an
+//	    argument cannot be read, which is never a verdict about a
 //	    schema. The exit code is the worst of those outcomes.
 //
 //	goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...
@@ -79,7 +80,9 @@
 // the document is read: an argument spelled absolutely or through "../" works,
 // and an error cites a path the reader can open. Relative <xs:include>,
 // <xs:import> and <xs:override> locations inside it resolve against that
-// document's own directory.
+// document's own directory. That resolution is confined to no subtree: a
+// schema document may name any path the invoking user can read, so an
+// <xs:include schemaLocation="../../../etc/passwd"> is served like any other.
 //
 // There is no version entry point and none is planned before 1.0: run
 // go version -m $(which goxsd8) for the module version of a tagged build.

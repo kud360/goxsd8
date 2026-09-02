@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The imported half of the two-namespace fixture; imports.xsd is the root
+     that pulls it in. Its namespace sorts BEFORE the root's, so a summary
+     that sorted its namespace lines instead of keeping first-appearance
+     order would print this one first. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/imported">
+
+  <xs:element name="carried" type="xs:string"/>
+
+</xs:schema>

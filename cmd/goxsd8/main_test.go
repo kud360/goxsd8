@@ -10,10 +10,13 @@ import (
 )
 
 // helpCases reach the help path: usage on stdout, nothing on stderr, exit 0.
-// The last four pin decisions doc.go's argument vocabulary states rather than
-// accidents — a help flag before its subcommand, a help flag alongside an
-// unrecognized one, -- with no end-of-options meaning, and a help flag after a
-// name that is not in the vocabulary at all.
+// Everything after the four bare spellings pins a decision doc.go's argument
+// vocabulary states rather than an accident — a help flag before its
+// subcommand, a help flag alongside an unrecognized one, -- with no
+// end-of-options meaning, a help flag after a name outside the vocabulary
+// altogether, and `parse -h`: parse owns the only flag.FlagSet in the binary,
+// so it is the one row where a subcommand's own flag parsing could take -h
+// away from the help path.
 var helpCases = [][]string{
 	nil,
 	{"-h"},
@@ -24,6 +27,7 @@ var helpCases = [][]string{
 	{"-xyz", "-help"},
 	{"--", "-help"},
 	{"frobnicate", "-h"},
+	{"parse", "-h"},
 }
 
 // dispatchCases is the diagnosis every non-help invocation that reaches no
@@ -163,7 +167,8 @@ func TestUsageCoversContract(t *testing.T) {
 		// exit code aggregates over the instance arguments, and what
 		// -format accepts.
 		"summary on stdout",
-		"one\n      line per error on stderr",
+		"first error on stderr as <loc>: [<rule>] <message>",
+		"assembly\n      stops there",
 		"1 if any one of them is invalid.",
 		"prints one line on stdout",
 		"-format xml|json|ber",
@@ -173,7 +178,7 @@ func TestUsageCoversContract(t *testing.T) {
 		// document parse cannot read is exit 2 rather than a verdict,
 		// where the common flags may stand, and what -q suppresses.
 		"several\n      arguments are several compilations, not one set.",
-		"2 when\n      an argument cannot be read",
+		"2 when an\n      argument cannot be read",
 		"qualify a subcommand and follow its name",
 		"-q suppresses a subcommand's informational",
 	}

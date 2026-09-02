@@ -63,6 +63,11 @@ func runParse(args []string, stdout, stderr io.Writer) int {
 
 	// A nil logger selects parser's silent default, so -v is the whole of the
 	// injection and quiet is the default (STYLE L1).
+	//
+	// GAP(cmd): GOXSD_DEBUG does not scope -v. The contract names
+	// GOXSD_DEBUG=parser,validate,codec in all three of its copies and nothing
+	// reads the variable, so -v is all or nothing. #1185 owns wiring the
+	// scoping or dropping the mention.
 	var log *slog.Logger
 	if *verbose {
 		log = slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
