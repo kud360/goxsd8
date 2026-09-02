@@ -230,10 +230,13 @@ import (
 //       the two folded ones included — one assertions facet per restriction
 //       (#178, Datatypes §4.3.13) and one enumeration facet per restriction
 //       (#740, §4.3.5.2 xr-enumeration) — and an inline <simpleType> base child
-//       (§3.16.3 clause 2) is recursed into. No alternative's member-source
-//       arrangement is pre-checked: those ARE the genuine src-simple-type clauses
-//       2, 3 and 4 Produce correctly enforces, so a violation flows through as a
-//       real decidable rejection.
+//       (§3.16.3 clause 2) is recursed into. A <simpleType> naming NONE of the
+//       three is admitted too (#786): simpleTypeBody rejects that document
+//       unconditionally, so the rejection is the producer's own and not a
+//       limitation. No alternative's member-source arrangement is pre-checked:
+//       those ARE the genuine src-simple-type clauses 2, 3 and 4 Produce
+//       correctly enforces, so a violation flows through as a real decidable
+//       rejection.
 //     - annotation: always allowed, no further check.
 //  4. Decide. When every document of the closure passes, observed =
 //     (parser.ParseReport's err == nil): a nil error is genuine evidence of
@@ -294,9 +297,8 @@ import (
 // assembly (by definition) has none of the checked violations, so Parse
 // correctly finds none. An "invalid" verdict coincides only with truly-invalid
 // ground truth via a REAL implemented violation — never a fabricated one, since
-// the shape allowlist excludes every form (a simpleType naming none of
-// §3.16.2.1's three alternatives, the not-yet-produced complexType forms —
-// <simpleContent> <restriction>, inline anonymous local types — and the
+// the shape allowlist excludes every form (a <simpleContent> <restriction>
+// carrying a child the producer drops in silence, a bare nested <group>, the
 // produced-but-unjudged extension forms) where the producer's rejection would be
 // a limitation rather than a spec violation, or its silence a missing rejection.
 // A suite-invalid case whose only defect is a rule finalize does NOT yet check
@@ -1403,7 +1405,8 @@ func localAttributeDecidable(el *parser.Element) bool {
 
 // simpleTypeDecidable reports whether a <simpleType> (top-level, or an anonymous
 // inline one reached through a restriction, list, union or element/attribute
-// chain) is decidable. All three §3.16.2.1 alternatives now are:
+// chain) is decidable. Every §3.16.2.1 alternative is, and so is a document
+// naming none of them:
 //
 //   - <list> (#447): produced in both its forms, so it is admitted. Its
 //     itemType= is a deferred by-name reference resolved at finalize, whose
@@ -1421,17 +1424,20 @@ func localAttributeDecidable(el *parser.Element) bool {
 //     restriction (#178, Datatypes §4.3.13) and one enumeration facet per
 //     restriction (#740, §4.3.5.2 xr-enumeration). An inline <simpleType> base
 //     child (§3.16.3 clause 2) is recursed into.
+//   - NONE of the three (#786): admitted. simpleTypeBody rejects that document
+//     unconditionally — under §5.1's first bullet and no numbered rule, an
+//     unfilled alternative position, which is why the rejection carries no
+//     rule ID — so the harness observes "invalid" and no verdict is fabricated.
 //
 // A <simpleType> naming TWO alternatives is admitted through whichever branch is
 // tested first, and correctly: the producer rejects that document outright
 // (simpleTypeBody), so the verdict is genuine whichever branch let it through.
 //
-// A <simpleType> naming NONE of the three is the one shape left declining, and
-// the decline is now conservative rather than forced: simpleTypeBody rejects that
-// document just as genuinely — under §5.1's first bullet and no numbered rule, an
-// unfilled alternative position — so admitting it would not fabricate a verdict.
-// Widening it is a measurable ratchet movement of its own and stays out of the
-// change that produced the enumeration facet (#740).
+// EVERY return here is therefore true and the recursion only propagates that:
+// the predicate is a constant, and no call site of it gates anything. Retiring
+// it collapses attributeDecidable and localAttributeDecidable to constants too
+// and rewrites the justification every call site carries, so it is a refactor of
+// its own rather than part of the widening that made it one (#786).
 func simpleTypeDecidable(el *parser.Element) bool {
 	if list := childXSD(el, "list"); list != nil {
 		inline := childXSD(list, "simpleType")
@@ -1447,7 +1453,7 @@ func simpleTypeDecidable(el *parser.Element) bool {
 	}
 	restriction := childXSD(el, "restriction")
 	if restriction == nil {
-		return false
+		return true
 	}
 	for _, child := range restriction.Children() {
 		r, ok := child.(*parser.Element)

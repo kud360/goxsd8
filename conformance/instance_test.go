@@ -129,8 +129,15 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 			knownRoot, `<unknown`,
 		},
 		{
-			"a schema document outside the producer's decidable subset (a simpleType naming no §3.16.2.1 alternative)",
-			knownRoot + `<xs:simpleType name="undec"/>`,
+			// The witness must be a shape the producer would build WITHOUT error,
+			// or the case declines for the assembly-rejected reason below instead
+			// and stops testing the decidable-subset gate: a particle under
+			// xs:simpleExtensionType is dropped in silence (§3.4.2.2 builds
+			// {content type} from the base alone).
+			"a schema document outside the producer's decidable subset (a simpleContent extension whose particle is dropped)",
+			knownRoot + `<xs:complexType name="undec"><xs:simpleContent>` +
+				`<xs:extension base="xs:string"><xs:sequence/></xs:extension>` +
+				`</xs:simpleContent></xs:complexType>`,
 			`<unknown/>`,
 		},
 		{

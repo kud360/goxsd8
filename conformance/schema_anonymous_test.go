@@ -142,9 +142,8 @@ func TestAnonymousComplexTypeDecidesAsTheNamedTypeDoes(t *testing.T) {
 		// The other polarity, so an equivalence that admitted everything would
 		// fail here. Each of these is declined on BOTH paths, and for a reason
 		// that is about the producer rather than about anonymity: a particle under
-		// xs:simpleExtensionType is dropped in silence, a bare <group> with no ref
-		// is malformed, an inline <simpleType> naming none of §3.16.2.1's three
-		// alternatives is outside the produced subset.
+		// xs:simpleExtensionType is dropped in silence, and a bare <group> with no
+		// ref is malformed.
 		{
 			"simpleContent extension carrying a particle",
 			`<xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent>`,
@@ -161,8 +160,8 @@ func TestAnonymousComplexTypeDecidesAsTheNamedTypeDoes(t *testing.T) {
 			false,
 		},
 		{
-			"complexContent extension nesting an undecidable inline simpleType",
-			`<xs:complexContent><xs:extension base="xs:anyType"><xs:sequence><xs:element name="a"><xs:simpleType/></xs:element></xs:sequence></xs:extension></xs:complexContent>`,
+			"complexContent extension nesting an undecidable inline complexType",
+			`<xs:complexContent><xs:extension base="xs:anyType"><xs:sequence><xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType></xs:element></xs:sequence></xs:extension></xs:complexContent>`,
 			false,
 		},
 	}
