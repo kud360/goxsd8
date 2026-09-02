@@ -53,10 +53,17 @@ func closureGateIn(t *testing.T, root string, docs map[string]string) (declined,
 	return !closureDecidable(report) || (unfollowed && perr != nil), unfollowed
 }
 
-// undecidable is a top-level <simpleType> naming NONE of §3.16.2.1's three
-// alternatives: the shape schemaShapeDecidable still refuses, so a verdict on it
-// would be scored against a schema that was never built.
-const undecidable = `<xs:simpleType name="undec"/>`
+// undecidable is a top-level <complexType> whose <simpleContent> <extension>
+// carries a particle — the shape simpleContentExtensionDecidable refuses, so a
+// verdict on this document would be scored against a schema that was never
+// built. The producer REJECTS it rather than dropping it: xs:simpleExtensionType
+// is (annotation?, ((attribute | attributeGroup)*, anyAttribute?), assert*)
+// (xmlschema11-1.md:1697), which admits no particle in any position, and the s4s
+// order check charges that. It replaced a <simpleType> naming none of
+// §3.16.2.1's three alternatives, which schemaShapeDecidable admits since #786.
+const undecidable = `<xs:complexType name="undec"><xs:simpleContent>` +
+	`<xs:extension base="xs:string"><xs:sequence/></xs:extension>` +
+	`</xs:simpleContent></xs:complexType>`
 
 // decidableType is a top-level restriction-only simpleType — squarely inside the
 // producer's decidable subset.

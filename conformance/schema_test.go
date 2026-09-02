@@ -23,8 +23,9 @@ func schemaDoc(t *testing.T, body string) *parser.Document {
 
 // TestSchemaShapeDecidableAccepts proves schemaShapeDecidable admits exactly the
 // producer's decidable subset: type=-form elements, bare-or-typed attributes,
-// restriction-only simpleTypes (including a recursed anonymous inline base), and
-// annotations — the shapes parser.Produce genuinely decides.
+// simpleTypes in every §3.16.2.1 shape and in none of them (including a recursed
+// anonymous inline base), and annotations — the shapes parser.Produce either
+// genuinely decides or genuinely rejects.
 func TestSchemaShapeDecidableAccepts(t *testing.T) {
 	cases := []struct {
 		name string
@@ -146,8 +147,8 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"local element with an inline enumeration-bearing simpleType", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value="a"/></xs:restriction></xs:simpleType></xs:element></xs:sequence></xs:complexType>`},
 		// #447 produces the <list> alternative in both its forms, so both are
 		// admitted, at every position an anonymous simple type can sit in — and an
-		// inline item child is recursed into, so an undecidable one still declines
-		// (see the declines below).
+		// inline item child is recursed into, which since #786 can no longer
+		// decline: see the alternative-less block below.
 		{"list-variety simpleType by itemType=", `<xs:simpleType name="L"><xs:list itemType="xs:string"/></xs:simpleType>`},
 		{"list-variety simpleType with an inline item", `<xs:simpleType name="L"><xs:list><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:list></xs:simpleType>`},
 		{"local element with an inline list-variety simpleType", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:simpleType><xs:list itemType="xs:string"/></xs:simpleType></xs:element></xs:sequence></xs:complexType>`},
@@ -155,13 +156,36 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		// #738 produces the <union> alternative in all three of its forms —
 		// memberTypes= alone, inline <simpleType> children alone, and both at once
 		// — so each is admitted wherever a simple type can sit, and an inline
-		// member child is recursed into exactly as a list's item child is (see the
-		// declines below).
+		// member child is recursed into exactly as a list's item child is.
 		{"union-variety simpleType by memberTypes=", `<xs:simpleType name="U"><xs:union memberTypes="xs:string xs:int"/></xs:simpleType>`},
 		{"union-variety simpleType with inline members", `<xs:simpleType name="U"><xs:union><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType></xs:union></xs:simpleType>`},
 		{"union-variety simpleType with both member sources", `<xs:simpleType name="U"><xs:union memberTypes="xs:string"><xs:simpleType><xs:restriction base="xs:int"/></xs:simpleType></xs:union></xs:simpleType>`},
 		{"local element with an inline union-variety simpleType", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:simpleType><xs:union memberTypes="xs:string"/></xs:simpleType></xs:element></xs:sequence></xs:complexType>`},
 		{"redefine child that is a union-variety simpleType", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType name="U"><xs:union memberTypes="xs:string"/></xs:simpleType></xs:redefine>`},
+		// #786 admits the last shape simpleTypeDecidable declined: a <simpleType>
+		// naming NONE of §3.16.2.1's three alternatives. simpleTypeBody rejects
+		// that document unconditionally — §5.1's first bullet, an unfilled
+		// alternative position — so the verdict is the producer's own and this
+		// gate fabricates nothing. Every row below was a DECLINE before that
+		// widening, one per position an anonymous or named simple type can sit in.
+		{"simpleType with only an annotation", `<xs:simpleType name="T"><xs:annotation/></xs:simpleType>`},
+		{"simpleType with two annotations", `<xs:simpleType name="T"><xs:annotation/><xs:annotation/></xs:simpleType>`},
+		{"simpleType whose only child is a particle", `<xs:simpleType name="T"><xs:group ref="g"/></xs:simpleType>`},
+		{"simpleType whose only child is an identity constraint", `<xs:simpleType name="T"><xs:unique name="u"><xs:selector xpath="b"/><xs:field xpath="@x"/></xs:unique></xs:simpleType>`},
+		{"simpleType with no children at all", `<xs:simpleType name="T"/>`},
+		{"restriction whose inline base names none of the three", `<xs:simpleType name="N"><xs:restriction base="xs:string"><xs:simpleType><xs:length value="5"/></xs:simpleType></xs:restriction></xs:simpleType>`},
+		{"list whose inline item names none of the three", `<xs:simpleType name="L"><xs:list><xs:simpleType/></xs:list></xs:simpleType>`},
+		{"union whose inline member names none of the three", `<xs:simpleType name="U"><xs:union memberTypes="xs:string"><xs:simpleType/></xs:union></xs:simpleType>`},
+		{"top-level element with an inline simpleType naming none of the three", `<xs:element name="e"><xs:simpleType/></xs:element>`},
+		{"top-level attribute with an inline simpleType naming none of the three", `<xs:attribute name="a"><xs:simpleType/></xs:attribute>`},
+		{"local element with an inline simpleType naming none of the three", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:simpleType/></xs:element></xs:sequence></xs:complexType>`},
+		{"local attribute with an inline simpleType naming none of the three", `<xs:complexType name="T"><xs:sequence/><xs:attribute name="a"><xs:simpleType/></xs:attribute></xs:complexType>`},
+		{"attributeGroup attribute with an inline simpleType naming none of the three", `<xs:attributeGroup name="ag"><xs:attribute name="a"><xs:simpleType/></xs:attribute></xs:attributeGroup>`},
+		{"alternative's inline simpleType naming none of the three", `<xs:element name="e" type="xs:string"><xs:alternative test="@x"><xs:simpleType/></xs:alternative></xs:element>`},
+		{"simpleContent restriction whose inline simpleType names none of the three", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:simpleType/></xs:restriction></xs:simpleContent></xs:complexType>`},
+		{"redefine child that is a simpleType naming none of the three", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType name="U"/></xs:redefine>`},
+		{"override child that is a simpleType naming none of the three", `<xs:override schemaLocation="b.xsd"><xs:simpleType name="U"/></xs:override>`},
+		{"alternative-less simpleType beside a decidable kind", `<xs:element name="e" type="xs:string"/><xs:simpleType name="U"/>`},
 		// #242: <include> contributes no component of its own, so it is admitted
 		// here; the decidability of what it points at is the closure gate's job
 		// (closureDecidable over the assembly's report), not this allowlist's.
@@ -214,6 +238,10 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		{"notation inside a complexContent <extension>", `<xs:complexType name="bar"><xs:complexContent><xs:extension><xs:notation name="jpeg" public="image/jpeg"/></xs:extension></xs:complexContent></xs:complexType>`},
 		{"notation inside a named <group>'s body", `<xs:group name="foo"><xs:all><xs:notation name="jpeg" public="image/jpeg"/></xs:all></xs:group>`},
 		{"notation inside a named <attributeGroup>", `<xs:attributeGroup name="bar"><xs:notation name="jpeg" public="image/jpeg"/></xs:attributeGroup>`},
+		// This parent is the one the allowlist would now admit on its own too
+		// (#786 admits a <simpleType> naming no alternative), so it pins the
+		// notatF067 family's parent coverage and NOT the domination claim, which
+		// the last row of this table carries.
 		{"notation inside a <simpleType> naming no alternative", `<xs:simpleType name="foo"><xs:notation name="jpeg" public="image/jpeg"/></xs:simpleType>`},
 		{"notation inside a <redefine> (§4.2.4 admits none)", `<xs:redefine schemaLocation="foo"><xs:notation name="jpeg" public="image/jpeg"/></xs:redefine>`},
 		// The parent is itself no xs:schemaTop arm in these three, so the admission
@@ -225,7 +253,7 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		// The short-circuit DOMINATES: a shape the allowlist would decline on its
 		// own is admitted alongside a misplaced notation, since the parse cannot
 		// reach it.
-		{"misplaced notation beside an otherwise undecidable simpleType", `<xs:simpleType name="U"/><xs:complexType name="T"><xs:sequence><xs:notation name="jpeg" public="image/jpeg"/></xs:sequence></xs:complexType>`},
+		{"misplaced notation beside an otherwise undecidable group", `<xs:group ref="g"/><xs:complexType name="T"><xs:sequence><xs:notation name="jpeg" public="image/jpeg"/></xs:sequence></xs:complexType>`},
 	}
 	for _, tc := range cases {
 		if !schemaShapeDecidable(schemaDoc(t, tc.body)) {
@@ -243,14 +271,12 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		body string
 	}{
 		{"top-level group without name (reference form is malformed)", `<xs:group ref="g"/>`},
-		{"top-level attributeGroup with an inline attribute type outside the produced simple-type subset", `<xs:attributeGroup name="ag"><xs:attribute name="a"><xs:simpleType/></xs:attribute></xs:attributeGroup>`},
 		{"complexType with bare nested group (no ref)", `<xs:complexType name="T"><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:complexType>`},
 		// #909 admits <simpleContent> <restriction> on the same terms #336 admitted
 		// its <extension> sibling: the alternant's own content model is mapped, and
 		// the shapes outside it that the producer would drop in silence decline.
 		{"simpleContent restriction carrying a particle the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:sequence/></xs:restriction></xs:simpleContent></xs:complexType>`},
 		{"simpleContent restriction carrying a group ref the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:group ref="g"/></xs:restriction></xs:simpleContent></xs:complexType>`},
-		{"simpleContent restriction whose inline simpleType is outside the produced subset", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:simpleType/></xs:restriction></xs:simpleContent></xs:complexType>`},
 		// The FACET is spelled "assertions" (§4.3.13) and the element contributing to
 		// it <assertion>, so the plural names no element of the facet choice at all:
 		// restrictionFacets matches only the singular and facetKindOf excludes the
@@ -264,53 +290,45 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		{"simpleContent extension carrying a particle the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType>`},
 		{"simpleContent extension carrying a group ref the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:group ref="g"/></xs:extension></xs:simpleContent></xs:complexType>`},
 		{"complexContent extension with a bare nested group (no ref)", `<xs:complexType name="T"><xs:complexContent><xs:extension base="xs:anyType"><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:extension></xs:complexContent></xs:complexType>`},
-		// On every path an inline simple type outside the produced subset moves the
-		// decline inward. Since #740 admitted the last unproduced facet, the
-		// out-of-subset simple type is the one naming NONE of §3.16.2.1's three
-		// alternatives, and it is the specimen every recursion below carries.
-		{"top-level element with an inline simpleType outside the produced subset", `<xs:element name="e"><xs:simpleType/></xs:element>`},
-		{"top-level attribute with an inline simpleType outside the produced subset", `<xs:attribute name="a"><xs:simpleType/></xs:attribute>`},
-		{"local element with an inline simpleType outside the produced subset", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:simpleType/></xs:element></xs:sequence></xs:complexType>`},
-		{"local attribute with an inline simpleType outside the produced subset", `<xs:complexType name="T"><xs:sequence/><xs:attribute name="a"><xs:simpleType/></xs:attribute></xs:complexType>`},
+		// No inline SIMPLE type declines any more (#786 admitted the last shape
+		// that did), so every recursion below carries a complex-type or bare-group
+		// specimen instead. The simple-type positions those rows held moved to the
+		// decidable table, verdict reversed and shapes unchanged.
+		//
 		// An inline anonymous <complexType> declines on exactly the terms a NAMED
 		// one does, and on no others (#1126): the shape the producer would drop in
 		// silence, or one whose own content is outside the produced subset, at
 		// every nesting depth. Anonymity itself narrows nothing — the admitted
 		// explicit-content forms are in the decidable table above.
-		{"inline complexType whose own content is undecidable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:simpleType/></xs:element></xs:sequence></xs:complexType></xs:element>`},
+		{"inline complexType whose own content is undecidable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:complexType></xs:element>`},
 		{"inline complexType using simpleContent that drops a particle", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`},
 		{"local element's inline complexType using complexContent over a bare group", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:group name="inner"><xs:sequence/></xs:group></xs:restriction></xs:complexContent></xs:complexType></xs:element></xs:sequence></xs:complexType>`},
 		{"inline complexType nesting an inline complexType the gate declines", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`},
-		{"list-variety simpleType whose inline item is itself undecidable", `<xs:simpleType name="L"><xs:list><xs:simpleType/></xs:list></xs:simpleType>`},
-		{"union-variety simpleType whose inline member is itself undecidable", `<xs:simpleType name="U"><xs:union memberTypes="xs:string"><xs:simpleType/></xs:union></xs:simpleType>`},
-		{"anonymous inline base outside the produced subset (recursed decline)", `<xs:simpleType name="N"><xs:restriction><xs:simpleType/></xs:restriction></xs:simpleType>`},
-		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:simpleType name="U"/>`},
+		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/><xs:group ref="g"/>`},
 		// A redefining <complexType> is gated by complexTypeDecidable like any
 		// other, so a shape THAT predicate declines declines the whole case; the
 		// self-deriving shape itself is admitted — see the decidable cases.
 		{"redefine child that is a complexType the gate declines", `<xs:redefine schemaLocation="b.xsd"><xs:complexType name="T"><xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence></xs:complexType></xs:redefine>`},
 		{"redefine child with no name (no pairing possible)", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:redefine>`},
-		{"redefine child that is a simpleType the gate declines", `<xs:redefine schemaLocation="b.xsd"><xs:simpleType name="U"/></xs:redefine>`},
 		{"redefine child of an out-of-model kind", `<xs:redefine schemaLocation="b.xsd"><xs:element name="e" type="xs:string"/></xs:redefine>`},
 		// An <override> child the parser can only ignore, or one whose own shape is
 		// outside the decidable subset, declines the whole case: after substitution
 		// it would be an unmapped or undecidable TOP-LEVEL declaration.
 		{"override child with no name (matches nothing, silently ignored)", `<xs:override schemaLocation="b.xsd"><xs:element type="xs:string"/></xs:override>`},
 		{"override child with an undecidable inline anonymous type", `<xs:override schemaLocation="b.xsd"><xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType></xs:element></xs:override>`},
-		{"override child that is a simpleType the gate declines", `<xs:override schemaLocation="b.xsd"><xs:simpleType name="U"/></xs:override>`},
 		{"override child of an out-of-model kind", `<xs:override schemaLocation="b.xsd"><xs:include schemaLocation="c.xsd"/></xs:override>`},
-		{"include beside an undecidable kind still declines", `<xs:include schemaLocation="lib.xsd"/><xs:simpleType name="U"/>`},
+		{"include beside an undecidable kind still declines", `<xs:include schemaLocation="lib.xsd"/><xs:group ref="g"/>`},
 		// #945's short-circuit must not reach an element merely NAMED
 		// {XMLSchemaNS}notation inside <appinfo>/<documentation>: that is
 		// <xs:any processContents="lax"> content the producer charges no guard on
 		// (MS-Notations2006-07-15/notatF009 is suite-VALID), so it licenses nothing
 		// and the undecidable sibling still declines the case.
-		{"notation inside appinfo does not launder an undecidable sibling", `<xs:annotation><xs:appinfo><xs:notation name="jpeg" public="image/jpeg"/></xs:appinfo></xs:annotation><xs:simpleType name="U"/>`},
-		{"notation inside documentation does not launder an undecidable sibling", `<xs:annotation><xs:documentation><xs:notation name="jpeg" public="image/jpeg"/></xs:documentation></xs:annotation><xs:simpleType name="U"/>`},
+		{"notation inside appinfo does not launder an undecidable sibling", `<xs:annotation><xs:appinfo><xs:notation name="jpeg" public="image/jpeg"/></xs:appinfo></xs:annotation><xs:group ref="g"/>`},
+		{"notation inside documentation does not launder an undecidable sibling", `<xs:annotation><xs:documentation><xs:notation name="jpeg" public="image/jpeg"/></xs:documentation></xs:annotation><xs:group ref="g"/>`},
 		// A notation in a legal slot is no rejection either: <schema> and
 		// <override> are the two content models that reach xs:schemaTop.
-		{"top-level notation does not launder an undecidable sibling", `<xs:notation name="jpeg" public="image/jpeg"/><xs:simpleType name="U"/>`},
-		{"override notation does not launder an undecidable sibling", `<xs:override schemaLocation="b.xsd"><xs:notation name="jpeg" public="image/jpeg"/></xs:override><xs:simpleType name="U"/>`},
+		{"top-level notation does not launder an undecidable sibling", `<xs:notation name="jpeg" public="image/jpeg"/><xs:group ref="g"/>`},
+		{"override notation does not launder an undecidable sibling", `<xs:override schemaLocation="b.xsd"><xs:notation name="jpeg" public="image/jpeg"/></xs:override><xs:group ref="g"/>`},
 	}
 	for _, tc := range cases {
 		if schemaShapeDecidable(schemaDoc(t, tc.body)) {
@@ -476,33 +494,11 @@ func TestSchemaExecutorDecidesNotationInAppinfoSuiteCase(t *testing.T) {
 	}
 }
 
-// TestSchemaExecutorDeclinesUndecidableSuiteCase proves the withholding guard on
-// a real fixture: stB001.xsd's <simpleType name="fooType"> carries an
-// <annotation> and names NONE of §3.16.2.1's three alternatives, which
-// simpleTypeDecidable declines out of conservatism even though the producer
-// rejects that document for the right reason (#786 owns the widening). The
-// executor must therefore DECLINE (Fail) under BOTH polarities. The flipped one
-// is the sharp assertion here: the fixture is suite-INVALID, so an executor that
-// decided it would PASS, and only the decline can make it Fail. Skips when the
-// submodule is absent.
-//
-// It pointed at a valid-declared fixture until #1126 — baseTD00101m1.xsd's
-// <simpleContent> <restriction> until #909 produced that form, then
-// disallowedSubst00105m.xsd's <element>-owned anonymous <complexType> using
-// <complexContent> — and no valid-declared fixture can stand here any more: with
-// the anonymity narrowing gone the gate declines ZERO suite-valid schema
-// documents, down from 372, so the guard has only invalid-declared fixtures left
-// to stand on. When #786 decides this shape, REPOINT this test at another
-// declined fixture and restate the reason in the failure messages with it;
-// deleting it retires the guard.
-func TestSchemaExecutorDeclinesUndecidableSuiteCase(t *testing.T) {
-	skipWithoutSuite(t)
-	exec := newSchemaExec()
-	doc := filepath.Join(suiteRoot, "msData", "simpleType", "stB001.xsd")
-	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectInvalid()}).IsPass() {
-		t.Error("a case whose <simpleType> names none of §3.16.2.1's three alternatives must be DECLINED (Fail), never claimed — the executor would PASS this suite-INVALID fixture if it decided it, so a pass here means the gate admits the shape")
-	}
-	if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValid()}).IsPass() {
-		t.Error("the fixture must be DECLINED under both polarities; passing under the flipped one means it is decided, not declined")
-	}
-}
+// The suite-fixture withholding guard is RETIRED (#786). It stood in turn on
+// baseTD00101m1.xsd, disallowedSubst00105m.xsd and stB001.xsd, each repointing
+// forced by the widening that made the previous fixture's shape decidable, and
+// the last of them stood on a <simpleType> naming none of §3.16.2.1's three
+// alternatives. Do not repoint it a fourth time: the guard it enforced is
+// TestSchemaExecutorDeclinesUndecidableInclusion's (schema_closure_test.go),
+// which drives the same withholding end-to-end over a written tree and so needs
+// no suite fixture to stay pointed at a live shape.

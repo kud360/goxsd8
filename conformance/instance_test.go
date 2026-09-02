@@ -129,8 +129,22 @@ func TestInstanceExecutorDeclinesUndecidableShapes(t *testing.T) {
 			knownRoot, `<unknown`,
 		},
 		{
-			"a schema document outside the producer's decidable subset (a simpleType naming no §3.16.2.1 alternative)",
-			knownRoot + `<xs:simpleType name="undec"/>`,
+			// The witness must be a shape the producer BUILDS WITHOUT ERROR, or
+			// perr alone declines the case and the row stops testing the
+			// decidable-subset gate it names. An <override> child carrying no
+			// name= is one: §F.2 clause 1 makes it a top-level declaration of the
+			// overridden document, so overrideDecidable declines it, while the
+			// producer neither rejects nor substitutes it: the directive names a
+			// document that does not resolve, and src-override clause 1 is
+			// guarded on the schemaLocation resolving, so ParseReport returns a
+			// nil error and only !decidable can decline. The instance is one the
+			// executor DOES decide once a schema is built (an undeclared root
+			// charges cvc-assess-elt), so disabling the gate makes this row FAIL
+			// rather than fall through to another decline reason.
+			"a schema document outside the producer's decidable subset (an <override> child with no name=)",
+			knownRoot + `<xs:override schemaLocation="lib.xsd">` +
+				`<xs:element type="xs:string"/>` +
+				`</xs:override>`,
 			`<unknown/>`,
 		},
 		{
