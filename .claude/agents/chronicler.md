@@ -31,9 +31,12 @@ rewrite or reorder existing entries.
 **Friction is what the documents did not predict.** A documented setup
 step, a cost a retro has already ruled on, a `docs/PLAN.md` Status stale
 between stamps — those are the process working, and they earn a clause
-naming the rule, not a paragraph re-deriving it. A documented thing that
-keeps costing is a finding about the document: file it, and stop paying
-for it once per session in prose.
+naming the rule, not a paragraph re-deriving it. Before calling a cost
+open or queued for `/retro`, search the closed `kind/process` queue for a
+ruling on its subject and cite that ruling instead; the full gate on a
+diff that touches no `.go` file is ruled — keep the gate uniform (#881).
+A documented thing that keeps costing is a finding about the document:
+file it, and stop paying for it once per session in prose.
 
 Cite the session's thread comments by `issuecomment-<id>` — grounding,
 each verdict, the parking notice — so a later session reaches the
