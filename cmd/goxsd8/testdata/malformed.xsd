@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Not well-formed XML: the <xs:element> start tag is never closed, so the
+     rejection is xml-wf and the parser returns it WRAPPED in assembly context.
+     broken.xsd's src-resolve verdict comes back unwrapped, which leaves
+     violationLine's unwrap unreached without this fixture. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/malformed">
+  <xs:element name="a" type="xs:string"
+</xs:schema>

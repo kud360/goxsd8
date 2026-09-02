@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Two namespaces in one compiled set, so the summary carries two namespace
+     lines and namespacesOf's first-appearance order has something to order. A
+     one-namespace fixture leaves that order unreachable by any assertion. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/root">
+
+  <xs:import namespace="http://example.com/imported" schemaLocation="imported.xsd"/>
+
+  <xs:element name="entry" type="xs:string"/>
+
+</xs:schema>

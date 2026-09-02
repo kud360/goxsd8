@@ -50,20 +50,28 @@ go install ./cmd/goxsd8                         # goxsd8 onto $(go env GOPATH)/b
 `go install` line is what produces the `goxsd8` binary the CLI section below
 invokes.
 
-### CLI (contract; no subcommand is implemented yet)
+### CLI (contract; `parse` is implemented, `validate` and `gen` are not)
 
-This block is a **contract**, exactly like the Library one below: only the
-help path runs today. A bare `goxsd8`, or `-h`/`-help`/`--help` in any
+This block is a **contract**, exactly like the Library one below: the help
+path and `parse` run today. A bare `goxsd8`, or `-h`/`-help`/`--help` in any
 argument position, prints the usage contract to stdout and exits 0
-([issue #251](https://github.com/kud360/goxsd8/issues/251)). Every other
-invocation exits 2 with one of three lines on stderr: a reserved subcommand
-(`parse`, `validate`, `gen`) is not yet implemented, any other name is an
-unknown subcommand, and a leading flag is no subcommand at all. The exit
-codes in the block below are the contract's, not today's. Subcommands land
-with their milestones (`parse` M4, `validate` M5, `gen` M9).
+([issue #251](https://github.com/kud360/goxsd8/issues/251)). Every invocation
+that reaches no built subcommand exits 2 with one of four lines on stderr:
+`validate` or `gen` is reserved but not yet implemented, any other name is an
+unknown subcommand, a flag stands before the subcommand it qualifies, and a
+leading flag with no subcommand after it is no subcommand at all. The exit
+codes below are the contract's, and today's for `parse` alone. `validate`
+lands with M5 and `gen` with M9.
+
+**Exit 2 narrowed when `parse` landed.** It used to mean "this binary is a
+stub" for every invocation; for `parse` it now means a usage or IO fault — a
+missing argument, an undefined flag, a schema document that cannot be read —
+and never a verdict about a schema's content. A script that read exit 2 as
+"skip, unimplemented" must read the stderr line, or check for exit 1 (schema
+errors) and 0 (compiled) instead.
 
 ```sh
-goxsd8 parse order.xsd items.xsd                # compile + summary, exit 0/1
+goxsd8 parse order.xsd items.xsd                # compile + summary, exit 0/1/2
 goxsd8 validate -schema order.xsd -schema items.xsd order1.xml order2.json
                                                 # exit 0 valid, 1 invalid, 2 usage
 goxsd8 gen -schema order.xsd -out ./gen/order \
@@ -72,8 +80,16 @@ goxsd8 gen -schema order.xsd -out ./gen/order \
 
 `validate` needs its own `-schema` for every schema, and reads every
 positional argument as an instance. Its exit code aggregates over those
-instances: 1 if any one of them is invalid. `parse` prints its summary on
-stdout and one line per schema error on stderr.
+instances: 1 if any one of them is invalid.
+
+`parse` compiles **each argument separately**, in argument order — several
+schema arguments are several compilations, not one set — and prints each
+summary on stdout: the namespaces that schema's components are in, then a
+count of each kind of declaration its documents make. A rejected schema prints
+its first error on stderr as `<loc>: [<rule>] <message>` and assembly stops
+there, so that is one line per rejected argument; the exit code is the worst
+outcome over the arguments: 0 when every one compiles, 1 when any is rejected,
+2 when any cannot be read.
 
 Beyond `-schema` and `-out`, the contract carries `-format xml|json|ber`
 (force the instance source format instead of deriving it from the
@@ -82,17 +98,23 @@ invocation, there being no per-instance spelling), `-no-hints` (ignore
 `xsi:schemaLocation` hints in XML instances), `-backend strict|native`
 (which value backend `gen` emits against), `-q` (quiet) and `-v` (debug
 logging to stderr via `slog`, scoped with
-`GOXSD_DEBUG=parser,validate,codec`).
+`GOXSD_DEBUG=parser,validate,codec` — a scoping `parse` does not honour
+yet). The common flags qualify a subcommand and **follow its name**:
+`goxsd8 parse -q order.xsd`, not `goxsd8 -q parse order.xsd`. `-q`
+suppresses a subcommand's informational output — `parse`'s summary — and
+never a diagnosis: neither `parse`'s error lines nor `validate`'s
+violations.
 **`go doc github.com/kud360/goxsd8/cmd/goxsd8` is the authoritative CLI
 contract**, and this section summarizes it. `goxsd8 -help` prints the usage
 block from that contract — the subcommand syntax, the common flags and the
 implementation status — and not its argument vocabulary (which spellings of
 the help flag are recognized, whether `help` and `-version` are names, what
-`--` means) or its library relationship.
+`--` means, how a schema path is resolved) or its library relationship.
 
-Violations print one per line on stdout as `<loc>: [<rule>] <message>`,
-where `<loc>` is `<file>:<line>:<col>` (`?` when unknown) and `<rule>` is
-the spec validation rule ID:
+`validate`'s violations print one per line on stdout as
+`<loc>: [<rule>] <message>` — the same rendering `parse` gives a schema
+error on stderr — where `<loc>` is `<file>:<line>:<col>` (`?` when unknown)
+and `<rule>` is the spec validation rule ID:
 
 ```
 order.xml:3:3: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): ?: [cvc-datatype-valid] decimal: "12,50" is not in the lexical space (decimal-lexical-representation, §3.3.3.1)

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A valid schema exercising every §3.17.1 property the summary counts:
+     one of each, so a miscounted bucket cannot hide behind a matching one. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:o="http://example.com/order"
+           targetNamespace="http://example.com/order"
+           elementFormDefault="qualified">
+
+  <xs:element name="order" type="o:OrderType">
+    <xs:key name="ItemKey">
+      <xs:selector xpath="o:item"/>
+      <xs:field xpath="@sku"/>
+    </xs:key>
+  </xs:element>
+
+  <xs:complexType name="OrderType">
+    <xs:sequence>
+      <xs:element name="item" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:attribute name="sku" type="o:Sku"/>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+    <xs:attributeGroup ref="o:Audit"/>
+  </xs:complexType>
+
+  <xs:simpleType name="Sku">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[A-Z]{3}-[0-9]{4}"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:attribute name="lang" type="xs:language"/>
+
+  <xs:attributeGroup name="Audit">
+    <xs:attribute name="createdBy" type="xs:string"/>
+  </xs:attributeGroup>
+
+  <xs:group name="Shipping">
+    <xs:sequence>
+      <xs:element name="carrier" type="xs:string"/>
+    </xs:sequence>
+  </xs:group>
+
+  <xs:notation name="jpeg" public="image/jpeg" system="viewer.exe"/>
+
+</xs:schema>

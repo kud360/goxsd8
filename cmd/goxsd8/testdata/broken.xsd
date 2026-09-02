@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- One src-resolve error: a type= naming a type no schema document declares.
+     Assembly stops at the first error, so a rejected schema is one line on
+     stderr and a second bad reference here would report nothing more. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:b="http://example.com/broken"
+           targetNamespace="http://example.com/broken">
+
+  <xs:element name="first" type="b:NoSuchType"/>
+
+</xs:schema>

@@ -10,10 +10,13 @@ import (
 )
 
 // helpCases reach the help path: usage on stdout, nothing on stderr, exit 0.
-// The last four pin decisions doc.go's argument vocabulary states rather than
-// accidents — a help flag before its subcommand, a help flag alongside an
-// unrecognized one, -- with no end-of-options meaning, and a help flag after a
-// name that is not in the vocabulary at all.
+// Everything after the four bare spellings pins a decision doc.go's argument
+// vocabulary states rather than an accident — a help flag before its
+// subcommand, a help flag alongside an unrecognized one, -- with no
+// end-of-options meaning, a help flag after a name outside the vocabulary
+// altogether, and `parse -h`: parse owns the only flag.FlagSet in the binary,
+// so it is the one row where a subcommand's own flag parsing could take -h
+// away from the help path.
 var helpCases = [][]string{
 	nil,
 	{"-h"},
@@ -24,17 +27,20 @@ var helpCases = [][]string{
 	{"-xyz", "-help"},
 	{"--", "-help"},
 	{"frobnicate", "-h"},
+	{"parse", "-h"},
 }
 
-// dispatchCases is the diagnosis every non-help invocation earns: a reserved
-// name, a name outside the vocabulary, or no subcommand at all. Each is
+// dispatchCases is the diagnosis every non-help invocation that reaches no
+// built subcommand earns: a reserved name, a name outside the vocabulary, a
+// flag before the subcommand it qualifies, or no subcommand at all. Each is
 // followed on stderr by helpPointer. One encoding of the matrix, driven twice
 // — through run below and through the built binary in TestBuiltBinaryMatrix.
+//
+// parse has no row here: it is built, and parse_test.go is its matrix.
 var dispatchCases = []struct {
 	args []string
 	want string
 }{
-	{[]string{"parse", "schema.xsd"}, `goxsd8: parse is not yet implemented`},
 	{[]string{"validate", "-schema", "a.xsd", "a.xml"}, `goxsd8: validate is not yet implemented`},
 	{[]string{"gen", "-schema", "a.xsd", "-out", "d"}, `goxsd8: gen is not yet implemented`},
 	{[]string{"frobnicate"}, `goxsd8: unknown subcommand "frobnicate"`},
@@ -45,12 +51,19 @@ var dispatchCases = []struct {
 	// help is not a contract name (doc.go); version is not one either.
 	{[]string{"help"}, `goxsd8: unknown subcommand "help"`},
 	{[]string{"version"}, `goxsd8: unknown subcommand "version"`},
-	// A flag as args[0] is no subcommand at all — not an unknown one. -q is
-	// documented and -version is not, and neither is a subcommand name.
+	// A flag as args[0] with no subcommand anywhere after it is no subcommand
+	// at all — not an unknown one. -q is documented and -version is not, and
+	// neither is a subcommand name.
 	{[]string{"-q"}, noSubcommand},
 	{[]string{"-xyz"}, noSubcommand},
 	{[]string{"-version"}, noSubcommand},
 	{[]string{"-help=true"}, noSubcommand},
+	{[]string{"-q", "frobnicate"}, noSubcommand},
+	// A flag BEFORE a real subcommand is the one #472 settled: the common
+	// flags follow the name they qualify, and the diagnosis says so instead of
+	// claiming a subcommand that is right there was never given.
+	{[]string{"-q", "parse", "a.xsd"}, `goxsd8: -q must follow the subcommand: goxsd8 parse -q ...`},
+	{[]string{"-v", "gen", "-schema", "a.xsd"}, `goxsd8: -v must follow the subcommand: goxsd8 gen -v ...`},
 }
 
 // TestRunHelp pins issue #251: a help request — including the bare
@@ -72,8 +85,8 @@ func TestRunHelp(t *testing.T) {
 	}
 }
 
-// TestRunDispatch pins #514: the three diagnoses are distinct, and each is
-// the true one for its input.
+// TestRunDispatch pins #514 and #472: the four diagnoses are distinct, and
+// each is the true one for its input.
 func TestRunDispatch(t *testing.T) {
 	for _, c := range dispatchCases {
 		var stdout, stderr bytes.Buffer
@@ -91,23 +104,25 @@ func TestRunDispatch(t *testing.T) {
 	}
 }
 
-// TestDiagnosesAreDistinct is the property #514 exists for: the answers to
-// "you typed a name I do not have", "that one is reserved but unbuilt" and
-// "you gave me no subcommand" must not collapse into one another.
+// TestDiagnosesAreDistinct is the property #514 exists for, widened by #472's
+// fourth answer: "you typed a name I do not have", "that one is reserved but
+// unbuilt", "your flag is on the wrong side of the subcommand" and "you gave
+// me no subcommand" must not collapse into one another.
 func TestDiagnosesAreDistinct(t *testing.T) {
 	kinds := []string{
-		diagnose("validate"),   // reserved by the contract, unbuilt
-		diagnose("frobnicate"), // outside the vocabulary
-		diagnose("-q"),         // a flag, so no subcommand at all
+		diagnose([]string{"validate"}),   // reserved by the contract, unbuilt
+		diagnose([]string{"frobnicate"}), // outside the vocabulary
+		diagnose([]string{"-q"}),         // a flag, so no subcommand at all
+		diagnose([]string{"-q", "gen"}),  // a flag before the name it qualifies
 	}
 	for i, a := range kinds {
 		for _, b := range kinds[i+1:] {
 			if a == b {
-				t.Errorf("two of the three diagnoses collapse to %q", a)
+				t.Errorf("two of the four diagnoses collapse to %q", a)
 			}
 		}
 	}
-	if got := diagnose("VALIDATE"); got == diagnose("validate") {
+	if got := diagnose([]string{"VALIDATE"}); got == diagnose([]string{"validate"}) {
 		t.Errorf("a reserved name and its wrong-case spelling both diagnose as %q", got)
 	}
 }
@@ -141,23 +156,31 @@ func TestRunHelpWriteFailure(t *testing.T) {
 // from the doc.go contract it renders.
 func TestUsageCoversContract(t *testing.T) {
 	want := []string{
-		"goxsd8 parse <schema.xsd>...",
+		"goxsd8 parse [-q] [-v] <schema.xsd>...",
 		"goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...",
 		"goxsd8 gen -schema <schema.xsd> -out <dir>",
 		"GOXSD_DEBUG=parser,validate,codec",
-		"Implemented today: the help path only.",
+		"Implemented today: the help path and parse.",
 		// The four answers a batch script needs and the page withheld
 		// (#1066, #1031): which stream carries parse's summary and its
 		// error lines, which carries validate's violations, that the
 		// exit code aggregates over the instance arguments, and what
 		// -format accepts.
-		"declarations) on stdout.",
-		"one line per error",
-		"on stderr.",
+		"summary on stdout",
+		"first error on stderr as <loc>: [<rule>] <message>",
+		"assembly\n      stops there",
 		"1 if any one of them is invalid.",
 		"prints one line on stdout",
 		"-format xml|json|ber",
 		"case-sensitively",
+		// #472's own four decisions, each of which a user can only learn
+		// from this block: what several schema arguments mean, that a
+		// document parse cannot read is exit 2 rather than a verdict,
+		// where the common flags may stand, and what -q suppresses.
+		"several\n      arguments are several compilations, not one set.",
+		"2 when an\n      argument cannot be read",
+		"qualify a subcommand and follow its name",
+		"-q suppresses a subcommand's informational",
 	}
 	for _, w := range want {
 		if !strings.Contains(usage, w) {
@@ -207,6 +230,36 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 		want := c.want + "\n" + helpPointer + "\n"
 		if stderr != want {
 			t.Errorf("%s %q stderr = %q, want %q", bin, c.args, stderr, want)
+		}
+	}
+
+	// parse's own three outcomes, through the shipped executable rather than
+	// through run: the exit code, the stream each answer lands on, and the
+	// summary's bytes are what a script sees (#251's shape, #472's subject).
+	for _, c := range []struct {
+		args        []string
+		code        int
+		stdout      string
+		stderrMatch string
+	}{
+		{[]string{"parse", "testdata/order.xsd"}, 0, orderSummary, ""},
+		{[]string{"parse", "-q", "testdata/order.xsd"}, 0, "", ""},
+		{[]string{"parse", "testdata/broken.xsd"}, 1, "", "[src-resolve]"},
+		{[]string{"parse", "testdata/nosuch.xsd"}, 2, "", "no such file or directory"},
+		{[]string{"parse"}, 2, "", "goxsd8: parse: no schema given"},
+	} {
+		stdout, stderr, code := runBinary(t, bin, c.args)
+		if code != c.code {
+			t.Errorf("%s %q = %d, want %d (stderr %q)", bin, c.args, code, c.code, stderr)
+		}
+		if stdout != c.stdout {
+			t.Errorf("%s %q stdout = %q, want %q", bin, c.args, stdout, c.stdout)
+		}
+		if c.stderrMatch == "" && stderr != "" {
+			t.Errorf("%s %q stderr = %q, want empty", bin, c.args, stderr)
+		}
+		if c.stderrMatch != "" && !strings.Contains(stderr, c.stderrMatch) {
+			t.Errorf("%s %q stderr = %q, want it to contain %q", bin, c.args, stderr, c.stderrMatch)
 		}
 	}
 }
