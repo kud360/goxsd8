@@ -297,8 +297,9 @@ import (
 // assembly (by definition) has none of the checked violations, so Parse
 // correctly finds none. An "invalid" verdict coincides only with truly-invalid
 // ground truth via a REAL implemented violation — never a fabricated one, since
-// the shape allowlist excludes every form (a <simpleContent> <restriction>
-// carrying a child the producer drops in silence, a bare nested <group>, the
+// the shape allowlist excludes every form (an <override> child carrying no
+// name=, an <override> child of a kind <override>'s own content model does not
+// admit — both passed over in silence — a bare nested <group>, the
 // produced-but-unjudged extension forms) where the producer's rejection would be
 // a limitation rather than a spec violation, or its silence a missing rejection.
 // A suite-invalid case whose only defect is a rule finalize does NOT yet check
