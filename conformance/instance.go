@@ -245,9 +245,9 @@ import (
 // The cvc-assess-elt charge does carry one hazard of its own: a root is equally
 // undeclared when an <import>/<include> the assembly did not follow took the
 // declaring components with it, which is not the defect the suite meant to test.
-// assembleCase's `Unfollowed() && perr != nil` conjunction bounds that for the
-// SCHEMA lane, where the fabricated verdict shows up as a failed parse, and does
-// not transfer here, where the parse succeeds and the charge lands anyway.
+// assembleCase's fabricatedRejection bounds that for the SCHEMA lane, where the
+// fabricated verdict shows up as a failed parse, and does not transfer here,
+// where the parse succeeds and the charge lands anyway.
 //
 // Three further declines close the ways a NON-verdict could reach that
 // comparison. An instance document that will not resolve or read is a recorded

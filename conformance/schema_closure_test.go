@@ -39,9 +39,12 @@ func override(location, body string) string {
 // keyed by the exact location string, so it pins the resolution chain the
 // assembly computes) and reports the two facts execSchemaCase decides on: whether
 // the case is DECLINED — either some assembled document is out of the producer's
-// decidable subset, or an unfollowed reference coincides with a failed parse
-// (#276) — and whether any ·inter-schema-document reference· went unfollowed at
-// all.
+// decidable subset, or an unfollowed reference coincides with a failure it could
+// have fabricated (#276, #404) — and whether any ·inter-schema-document reference·
+// went unfollowed at all.
+//
+// It calls the two production predicates rather than restating them, so a table
+// entry below cannot pass against a gate the executor does not run.
 //
 // The second output is not derivable from the first and is asserted separately on
 // purpose: it is what records a directive that named NO document, which leaves no
@@ -50,7 +53,7 @@ func closureGateIn(t *testing.T, root string, docs map[string]string) (declined,
 	t.Helper()
 	_, report, perr := parser.ParseReport(root, parser.WithResolver(loader.Map(docs)))
 	unfollowed = len(report.Unfollowed()) > 0
-	return !closureDecidable(report) || (unfollowed && perr != nil), unfollowed
+	return !closureDecidable(report) || fabricatedRejection(report, perr), unfollowed
 }
 
 // undecidable is a top-level <complexType> whose <simpleContent> <extension>
@@ -120,11 +123,12 @@ func TestClosureGateOverAssembledDocuments(t *testing.T) {
 		},
 		{
 			// §4.2.1 makes this schemaLocation mandatory ("not hints"), so the
-			// assembly stops with a grammar fault AND records the reference it could
-			// not follow — the conjunction declines, as the walk did outright.
-			name:           "<include> without schemaLocation declines (target cannot be named)",
+			// assembly stops with a §2.4 clause 1 grammar fault against the DIRECTIVE
+			// ITSELF and records the reference it could not follow. The fault names no
+			// missing component, so no shortfall could have fabricated it: the case is
+			// DECIDED on it, and only the recording remains (#404).
+			name:           "<include> without schemaLocation is decided on its own grammar fault (#404)",
 			docs:           map[string]string{"main.xsd": schemaSrc("urn:a", `<xs:include/>`)},
-			wantDeclined:   true,
 			wantUnfollowed: true,
 		},
 		{
@@ -252,9 +256,8 @@ func TestClosureGateOverAssembledDocuments(t *testing.T) {
 			wantUnfollowed: true,
 		},
 		{
-			name:           "<override> without schemaLocation declines (target cannot be named)",
+			name:           "<override> without schemaLocation is decided on its own grammar fault (#404)",
 			docs:           map[string]string{"main.xsd": schemaSrc("urn:a", `<xs:override><xs:element name="e" type="xs:string"/></xs:override>`)},
-			wantDeclined:   true,
 			wantUnfollowed: true,
 		},
 		{
@@ -768,6 +771,48 @@ func TestSchemaExecutorDecidesUnbrokenUnresolvedDirective(t *testing.T) {
 		}
 		if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(false)}).IsPass() {
 			t.Errorf("%s: must Fail under a flipped expectation (decides for real)", name)
+		}
+	}
+}
+
+// TestSchemaExecutorDecidesFailureNoShortfallCouldFabricate pins #404's half of
+// the conjunction, across the same four directives noD2Trees drives: a parse that
+// failed for a reason NO absent document could have produced must be DECIDED, not
+// declined for the coincidence of an unfollowed directive somewhere else in the
+// document.
+//
+// The two faults are the two shapes the measured suite cohort actually holds. A
+// repeated <annotation> is a §2.4 clause 1 grammar fault, charged as a plain
+// unruled error (STYLE E2), which is what MS-Annotations annotB020 carries
+// alongside an <include> naming a document the suite does not ship. A duplicate
+// top-level name is sch-props-correct clause 2, a RULED rejection that needs TWO
+// components to collide and so is unreachable by an assembly that is one document
+// SHORT. Neither names a missing component, so both are the document's own fault
+// whatever the directive did.
+//
+// What makes it able to fail: each root still carries a directive that named no
+// document, so the pre-#404 conjunction — any unfollowed reference paired with any
+// parse failure — declines every one of these eight cases and neither assertion
+// can hold. The flipped-expectation half is what keeps the first from passing
+// vacuously on a decline.
+func TestSchemaExecutorDecidesFailureNoShortfallCouldFabricate(t *testing.T) {
+	exec := newSchemaExec()
+	faults := map[string]string{
+		"repeated <annotation> (§2.4 clause 1, unruled)": `<xs:element name="root" type="xs:string">` +
+			`<xs:annotation/><xs:annotation/></xs:element>`,
+		"duplicate top-level name (sch-props-correct clause 2)": `<xs:element name="root" type="xs:string"/>` +
+			`<xs:element name="root" type="xs:int"/>`,
+	}
+	for _, fault := range slices.Sorted(maps.Keys(faults)) {
+		trees := noD2Trees(faults[fault], faults[fault])
+		for _, name := range slices.Sorted(maps.Keys(trees)) {
+			doc := writeSchemaTree(t, "main.xsd", trees[name])
+			if !exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(false)}).IsPass() {
+				t.Errorf("%s / %s: a failure no shortfall could fabricate must be DECIDED invalid", fault, name)
+			}
+			if exec(caseSpec{kind: kindSchema, doc: doc, expect: expectValidity(true)}).IsPass() {
+				t.Errorf("%s / %s: must Fail under a flipped expectation (decides for real)", fault, name)
+			}
 		}
 	}
 }

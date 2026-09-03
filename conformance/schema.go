@@ -9,6 +9,7 @@ import (
 	"github.com/kud360/goxsd8/parser"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // This file activates the schema lane (issue #175) by giving the schema entry of
@@ -160,8 +161,9 @@ import (
 //       decides genuinely. An <include> whose schemaLocation does not resolve
 //       yields no document to gate: the assembly reports that
 //       (parser.UnfollowedLocationUnresolved) exactly as it does for an <import>
-//       that yields no D2, and assembleCase declines only if the parse then
-//       fails (#276).
+//       that yields no D2, and assembleCase declines only if the parse then fails
+//       with the src-resolve rejection that shortfall could have fabricated
+//       (#276, narrowed by #404 — see fabricatedRejection).
 //     - override: admitted (#183) when every child of it is a decidable source
 //       declaration in its own right (overrideDecidable), because §F.2 clause 1
 //       makes those children top-level declarations of the OVERRIDDEN document.
@@ -171,10 +173,10 @@ import (
 //       enforced genuinely by the assembly.
 //     - import: admitted at top level (#182) on the same reasoning. As for
 //       include, a directive that yields no D2 (no schemaLocation, or one that
-//       does not resolve) is REPORTED as unfollowed, and declines the case
-//       only when the parse also fails — that failure being the fabricated
-//       src-resolve rejection the missing components would produce. See the
-//       Composition section below and parser.AssemblyReport.Unfollowed.
+//       does not resolve) is REPORTED as unfollowed, and declines the case only
+//       when the parse also fails with the src-resolve rejection the missing
+//       components would produce. See the Composition section below,
+//       fabricatedRejection and parser.AssemblyReport.Unfollowed.
 //     - element: must have no inline <simpleType>/<complexType> child, and every
 //       <unique>/<key>/<keyref> child must use the name= form. A bare
 //       element (no type=) defaults to xs:anyType (§3.3.2.1 case 4), now seeded as
@@ -265,19 +267,21 @@ import (
 //     limitation-in-disguise. The case Passes iff observed agrees with the suite's
 //     declared validity.
 //
-//     No error-type discrimination (errors.As over *xsderr.Error) is needed to
-//     make that trustworthy, because steps 1-3 have ruled out the
-//     non-verdict failure modes ACROSS THE WHOLE CLOSURE: the root was
-//     independently confirmed resolvable, readable and <schema>-rooted before the
-//     assembly ran, and every document the assembly did take in is reported and
-//     shape-gated. The plain non-xsderr errors ParseReport can otherwise return —
-//     an unresolvable root, an I/O or encoding failure, a non-schema root, and an
-//     <include>/<override> carrying no schemaLocation at all, which is a grammar
-//     fault no Schema Representation Constraint covers (parse.go's compose) — are
-//     exactly the modes the root pre-check and the Unfollowed conjunction
-//     eliminate: the last two are reported as parser.UnfollowedUnreadable and
-//     parser.UnfollowedNoSchemaLocation, so a case failing on either declines
-//     rather than being read as a verdict. What remains is spec verdicts.
+//     Steps 1-3 rule out the non-verdict failure modes ACROSS THE WHOLE CLOSURE:
+//     the root was independently confirmed resolvable, readable and
+//     <schema>-rooted before the assembly ran, and every document the assembly
+//     did take in is reported and shape-gated. What is left of those modes is an
+//     I/O or encoding failure on a COMPOSED document, reported as
+//     parser.UnfollowedUnreadable, and a rejection fabricated by components a
+//     directive did not bring in: fabricatedRejection eliminates both, and is the
+//     ONE site that discriminates on the error, by rule (xsderr.RuleOf) rather
+//     than by type. Everything else this step reads as a verdict, an unruled
+//     plain error included: an <include>/<override> carrying no schemaLocation at
+//     all is a §2.4 clause 1 grammar fault no Schema Representation Constraint
+//     covers (parse.go's compose), which STYLE E2 requires be charged WITHOUT a
+//     rule ID — an unruled error is this processor's spelling of "not valid
+//     against the schema for schema documents", not a signal that no verdict was
+//     reached (#404).
 //
 // # sch-props-correct clause 2 is per-kind
 //
@@ -343,17 +347,20 @@ import (
 // an <import> with no schemaLocation, or an <include>, <override> or <import> whose
 // schemaLocation does not resolve — is REPORTED as unfollowed
 // (parser.AssemblyReport.Unfollowed) and declines the case only when the parse ALSO
-// fails: the missing document's components are then absent from the assembly and the
-// reference that wanted them failed src-resolve clauses 1-3 at finalize, a FABRICATED
-// "invalid" verdict, the one direction that can corrupt the ratchet. The conjunction
-// is the whole hazard (#276): where the parse succeeds despite the missing document,
-// §4.2.3 clause 2.4's "not an error ... the inclusion must not be performed" is
-// simply in force and the case is decided normally — the suite's own cl. 2.4 tests
-// (MS-Schema schD8 and friends) depend on that. The directives are one hazard, not
-// two: src-include clause 2.4 and src-import's "not an error" text are parallel, and
-// src-resolve clause 4 (cl.qnr.nsdeclared) licenses a same-namespace reference
-// (4.2.1) and a reference into a namespace with a PRESENT <import> element (4.2.2)
-// alike, whether or not that import's schemaLocation resolved.
+// fails src-resolve: the missing document's components are then absent from the
+// assembly and the reference that wanted them failed src-resolve clauses 1-3 at
+// finalize, a FABRICATED "invalid" verdict, the one direction that can corrupt the
+// ratchet. That conjunction is the whole hazard (#276): where the parse succeeds
+// despite the missing document, §4.2.3 clause 2.4's "not an error ... the inclusion
+// must not be performed" is simply in force and the case is decided normally — the
+// suite's own cl. 2.4 tests (MS-Schema schD8 and friends) depend on that. Where it
+// fails on a rule the shortfall cannot reach, the rejection is the document's own
+// and the case is likewise decided (#404, fabricatedRejection). The directives are
+// one hazard, not two: src-include clause 2.4 and src-import's "not an error" text
+// are parallel, and src-resolve clause 4 (cl.qnr.nsdeclared) licenses a
+// same-namespace reference (4.2.1) and a reference into a namespace with a PRESENT
+// <import> element (4.2.2) alike, whether or not that import's schemaLocation
+// resolved.
 //
 // Two import-adjacent gaps are the OTHER direction — fabricated "valid" — which
 // can only cost wins, never corrupt: src-resolve clause 4 (cl.qnr.nsdeclared,
@@ -457,8 +464,9 @@ func execSchemaCase(backend value.Backend, c caseSpec) Status {
 // error, including a parser encoding limitation such as unsupported UTF-16); a
 // root element that is not <schema>; a closure holding one document outside the
 // producer's decidable subset, or missing one the case further declared; and a
-// case that both carries a directive naming no document and fails to parse
-// (#276). The other two results say nothing then.
+// case whose parse failed with a rejection its own unfollowed directives could
+// have fabricated (fabricatedRejection, #276/#404). The other two results say
+// nothing then.
 //
 // Where decidable is true, the third result is the assembly's OWN error: nil is
 // genuine evidence of validity — no document of the assembly has any of the
@@ -522,12 +530,81 @@ func assembleCase(backend value.Backend, doc string, extraDocs []string) (*xsd.S
 	// 1-3 error the spec does not attach to the missing document (§5.3). A parse
 	// that SUCCEEDED past an unfollowed directive fabricated nothing — §4.2.3
 	// clause 2.4's "not an error ... the inclusion must not be performed" is
-	// exactly that outcome — so the case is still decided. Only the conjunction
-	// declines.
-	if len(report.Unfollowed()) > 0 && perr != nil {
+	// exactly that outcome — so the case is still decided, and so is a parse that
+	// failed for a reason no unfollowed directive could have produced (#404).
+	if fabricatedRejection(report, perr) {
 		return nil, false, nil
 	}
 	return schema, true, perr
+}
+
+// ruleSrcResolve is the rule the producer charges for a reference the assembled
+// schema holds no component for (QName resolution, §3.17.6.2 clauses 1-3). It is
+// matched in its BARE catalog form, the clause living in the message text rather
+// than in a dotted rule ID — the instance lane's decidableRules idiom.
+const ruleSrcResolve xsderr.Rule = "src-resolve"
+
+// fabricatedRejection reports whether perr is a rejection this assembly's own
+// unfollowed directives could have FABRICATED: an "invalid" resting on a
+// document this processor did not read rather than on the document under test.
+// That is the one direction able to corrupt the ratchet, and the whole reason
+// assembleCase declines rather than deciding (#276).
+//
+// The correlation it draws is an ENGINEERING HEURISTIC over the rules THIS
+// producer charges, not a spec rule, and there is no spec rule to have: §3.17.6.2
+// src-resolve tests a QName against the composed schema's aggregate properties
+// and back-references no directive, §4.2.3 clause 2.4 instructs retention of
+// unresolved QName references rather than attribution of blame, and §5.3
+// describes the ·absent· consequence generically. Nothing in either document
+// correlates a specific unfollowed directive with a specific downstream failure,
+// so the reasoning below is about this producer's charge sites and is revisited
+// whenever they change (#404).
+//
+// Two directive reasons carry a hazard, and they are different hazards:
+//
+//   - A location that did not resolve, or a directive naming none at all
+//     (parser.UnfollowedLocationUnresolved, parser.UnfollowedNoLocation), leaves
+//     the assembly SHORT of components. Having FEWER components surfaces at
+//     exactly one rule: the producer charges src-resolve for every reference
+//     whose target the schema does not hold, and no other rule it charges can be
+//     reached by a shortfall — sch-props-correct clause 2 needs two components to
+//     collide, cos-nonambig needs particles that already resolved,
+//     src-include/src-import/src-redefine are the directive's OWN faults and so
+//     are causes of the shortfall rather than consequences of it, and the §2.4
+//     clause 1 grammar faults are properties of one document's element tree.
+//   - A location that resolved to a document that could not be READ
+//     (parser.UnfollowedUnreadable) is charged src-include/src-import/
+//     src-redefine "not well-formed" — and a read failure does not distinguish a
+//     genuine well-formedness fault from a reader LIMITATION, an encoding this
+//     parser does not decode. That is step 1's own reasoning for declining an
+//     unreadable ROOT, and it holds whatever rule carries the failure, so any
+//     failure alongside such a directive declines.
+//
+// Every other reason fabricates nothing, parser.UnfollowedNoSchemaLocation most
+// clearly: §4.2.1 makes that attribute mandatory ("not hints: conforming
+// processors must attempt to de-reference"), so the assembly rejects the
+// DIRECTIVE ITSELF against the §2.4 clause 1 grammar (STYLE E2's unruled plain
+// error) — a genuine rejection of the document under test, naming no missing
+// component at all. Reading it as a verdict is what the lane already does for
+// every other grammar fault.
+//
+// The shortfall arm stays SCAN-scoped: ANY unfollowed directive plus a
+// src-resolve failure declines, without asking whether that directive is the one
+// that would have supplied the component the reference wanted. Narrowing it
+// needs the reference's namespace on the error and the directive's namespace on
+// the report, and neither xsderr.Error nor parser.UnfollowedDirective carries
+// one — a data-shape change, where this is not (#404).
+func fabricatedRejection(report *parser.AssemblyReport, perr error) bool {
+	if perr == nil || len(report.Unfollowed()) == 0 {
+		return false
+	}
+	for _, u := range report.Unfollowed() {
+		if u.Reason == parser.UnfollowedUnreadable {
+			return true
+		}
+	}
+	rule, ok := xsderr.RuleOf(perr)
+	return ok && rule == ruleSrcResolve
 }
 
 // extraDocsInClosure reports whether every FURTHER document the case declares
