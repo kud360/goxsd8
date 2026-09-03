@@ -56,17 +56,20 @@ func closureGateIn(t *testing.T, root string, docs map[string]string) (declined,
 	return !closureDecidable(report) || fabricatedRejection(report, perr), unfollowed
 }
 
-// undecidable is a top-level <complexType> whose <simpleContent> <extension>
-// carries a particle — the shape simpleContentExtensionDecidable refuses, so a
-// verdict on this document would be scored against a schema that was never
-// built. The producer REJECTS it rather than dropping it: xs:simpleExtensionType
-// is (annotation?, ((attribute | attributeGroup)*, anyAttribute?), assert*)
-// (xmlschema11-1.md:1697), which admits no particle in any position, and the s4s
-// order check charges that. It replaced a <simpleType> naming none of
-// §3.16.2.1's three alternatives, which schemaShapeDecidable admits since #786.
-const undecidable = `<xs:complexType name="undec"><xs:simpleContent>` +
-	`<xs:extension base="xs:string"><xs:sequence/></xs:extension>` +
-	`</xs:simpleContent></xs:complexType>`
+// undecidable is a top-level <xs:sequence>, an XSD-namespace name no arm of
+// xs:schemaTop admits (xmlschema11-1.md:4462). The producer SILENTLY SKIPS a
+// top-level child it has no dispatch for and returns no error at all, so a
+// verdict on this document would be scored against a schema that never saw it —
+// which is the false accept schemaShapeDecidable's top-level default arm
+// refuses. It sits at the LAST-RESORT arm on purpose: every narrower decline
+// this const stood on has since been measured conservative and widened away.
+//
+// It replaced a <complexType> whose <simpleContent> <extension> carried a
+// particle, which schemaShapeDecidable admits since #1181 because the s4s order
+// check REJECTS that shape rather than dropping it; that one had in turn
+// replaced a <simpleType> naming none of §3.16.2.1's three alternatives, which
+// #786 admitted on the same footing.
+const undecidable = `<xs:sequence/>`
 
 // decidableType is a top-level restriction-only simpleType — squarely inside the
 // producer's decidable subset.

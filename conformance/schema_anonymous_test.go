@@ -155,34 +155,45 @@ func TestAnonymousComplexTypeDecidesAsTheNamedTypeDoes(t *testing.T) {
 			`<xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence>`,
 			true,
 		},
-		// The other polarity, so an equivalence that admitted everything would
-		// fail here. Each of these is declined on BOTH paths, and for a reason
-		// that is about the producer rather than about anonymity: the producer
-		// REJECTS every one of them, the s4s order check charging that a particle
-		// fills no position of xs:simpleExtensionType (xmlschema11-1.md:1697) or
-		// of xs:simpleRestrictionType (:1692), and a <simpleContent> none of
-		// xs:complexRestrictionType (:1718). The last row carries the first row's
-		// shape inline, so it declines through that same fault. Every decline here
-		// is therefore conservative rather than forced, as #1182 measured the
-		// <group> ones to be.
+		// #1181 admits the particle and stray-wrapper shapes that used to carry
+		// this table's other polarity: the s4s order check REJECTS every one of
+		// them — a particle fills no position of xs:simpleExtensionType
+		// (xmlschema11-1.md:1697) or of xs:simpleRestrictionType (:1692), and a
+		// stray <simpleContent> none of xs:complexRestrictionType (:1718) — so the
+		// verdict is the producer's own. Every one was a DECLINE before that
+		// widening, with the shapes unchanged.
 		{
 			"simpleContent extension carrying a particle",
 			`<xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent>`,
-			false,
+			true,
 		},
 		{
 			"simpleContent restriction carrying a particle",
 			`<xs:simpleContent><xs:restriction base="B"><xs:sequence/></xs:restriction></xs:simpleContent>`,
-			false,
+			true,
 		},
 		{
 			"complexContent restriction carrying a stray simpleContent",
 			`<xs:complexContent><xs:restriction base="xs:anyType"><xs:simpleContent/></xs:restriction></xs:complexContent>`,
+			true,
+		},
+		// The other polarity, so an equivalence that admitted everything would
+		// fail here. Both are declined on BOTH paths, and for a reason that is
+		// about the producer rather than about anonymity: the PLURAL <assertions>
+		// FILLS xs:simpleRestrictionType's facet position — the parser's
+		// s4sFacetElement admits it, §4.3.13 spelling the facet in the plural
+		// where the element contributing to it is <assertion> — and then folds
+		// into no facet at all, so the producer drops it in silence. The second
+		// row carries the first row's shape inline, so it declines through that
+		// same drop at depth.
+		{
+			"simpleContent restriction carrying a plural <assertions>",
+			`<xs:simpleContent><xs:restriction base="B"><xs:assertions test="true()"/></xs:restriction></xs:simpleContent>`,
 			false,
 		},
 		{
 			"complexContent extension nesting an undecidable inline complexType",
-			`<xs:complexContent><xs:extension base="xs:anyType"><xs:sequence><xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType></xs:element></xs:sequence></xs:extension></xs:complexContent>`,
+			`<xs:complexContent><xs:extension base="xs:anyType"><xs:sequence><xs:element name="a"><xs:complexType><xs:simpleContent><xs:restriction base="B"><xs:assertions test="true()"/></xs:restriction></xs:simpleContent></xs:complexType></xs:element></xs:sequence></xs:extension></xs:complexContent>`,
 			false,
 		},
 	}

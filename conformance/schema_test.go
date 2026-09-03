@@ -62,6 +62,33 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		// facet choice admits (§4.3.13, xmlschema11-1.md:1692) and restrictionFacets
 		// folds; the plural names the FACET, not any element, and declines below.
 		{"simpleContent restriction with an assertion facet", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:assertion test="true()"/></xs:restriction></xs:simpleContent></xs:complexType>`},
+		// #1181 admits every child a DERIVATION ALTERNANT's content model does not
+		// admit, at all three positions the gate reaches one. checkS4SChildOrder
+		// walks each alternant against its own model and charges §2.4 clause 1
+		// sd-valid (§5.1's first bullet for schema construction, which carries no
+		// numbered rule ID) for a name no position takes: a particle or a <group>
+		// against xs:simpleExtensionType (xmlschema11-1.md:1697) and
+		// xs:simpleRestrictionType (:1692), a stray <simpleContent>/<complexContent>
+		// against those two, xs:complexRestrictionType (:1718) and xs:extensionType
+		// (:1723), and an <openContent> under <simpleContent> against
+		// misplacedOpenContent ahead of all of them. Every verdict is the
+		// producer's own, so this gate fabricates nothing by admitting the shape.
+		// Each row was a DECLINE before that widening, shapes unchanged.
+		{"simpleContent extension carrying a particle", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType>`},
+		{"simpleContent extension carrying a group ref", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:group ref="g"/></xs:extension></xs:simpleContent></xs:complexType>`},
+		{"simpleContent extension carrying a stray complexContent", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:complexContent/></xs:extension></xs:simpleContent></xs:complexType>`},
+		{"simpleContent restriction carrying a particle", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:sequence/></xs:restriction></xs:simpleContent></xs:complexType>`},
+		{"simpleContent restriction carrying a group ref", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:group ref="g"/></xs:restriction></xs:simpleContent></xs:complexType>`},
+		{"simpleContent restriction carrying a stray simpleContent", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:simpleContent/></xs:restriction></xs:simpleContent></xs:complexType>`},
+		{"complexContent restriction carrying a stray simpleContent", `<xs:complexType name="T"><xs:complexContent><xs:restriction base="xs:anyType"><xs:simpleContent/></xs:restriction></xs:complexContent></xs:complexType>`},
+		{"complexContent extension carrying a stray complexContent", `<xs:complexType name="T"><xs:complexContent><xs:extension base="xs:anyType"><xs:complexContent/></xs:extension></xs:complexContent></xs:complexType>`},
+		// The implicit-content position, whose own model is xs:complexTypeModel's
+		// third disjunct (:1649). A stray <simpleContent>/<complexContent> cannot
+		// reach it — complexTypeDecidable dispatches on either wrapper first — so
+		// the row that pins it carries a name xs:complexTypeModel admits nowhere.
+		{"complexType with implicit content carrying a stray element", `<xs:complexType name="T"><xs:element name="x"/></xs:complexType>`},
+		{"local element's inline complexType using complexContent over a stray simpleContent", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:simpleContent/></xs:restriction></xs:complexContent></xs:complexType></xs:element></xs:sequence></xs:complexType>`},
+		{"inline complexType using simpleContent that carries a particle", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`},
 		// #868: neither alternant under <simpleContent>/<complexContent> is a
 		// grammar fault (§3.4.2.2 and §3.4.2.3 each require one), and the producer
 		// rejects it as one — a genuine verdict, so no decline. The <simpleContent>
@@ -277,7 +304,7 @@ func TestSchemaShapeDecidableAccepts(t *testing.T) {
 		// The short-circuit DOMINATES: a shape the allowlist would decline on its
 		// own is admitted alongside a misplaced notation, since the parse cannot
 		// reach it.
-		{"misplaced notation beside an otherwise undecidable complexType", undecidable + `<xs:complexType name="T"><xs:sequence><xs:notation name="jpeg" public="image/jpeg"/></xs:sequence></xs:complexType>`},
+		{"misplaced notation beside an otherwise undecidable top-level child", undecidable + `<xs:complexType name="T"><xs:sequence><xs:notation name="jpeg" public="image/jpeg"/></xs:sequence></xs:complexType>`},
 	}
 	for _, tc := range cases {
 		if !schemaShapeDecidable(schemaDoc(t, tc.body)) {
@@ -295,31 +322,25 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		body string
 	}{
 		// No <group>/<attributeGroup> shape declines any more (#1182 admitted the
-		// last three that did, at all five sites), so every witness below that used
-		// a ref-less or reference-form group as its stand-in "undecidable shape"
+		// last three that did, at all five sites) and no particle or stray
+		// <simpleContent> under a derivation alternant does either (#1181), so
+		// every witness below that used one as its stand-in "undecidable shape"
 		// now carries a different specimen: `undecidable` (schema_closure_test.go)
-		// at a top-level position, an <attributeGroup> at a PARTICLE position or a
-		// stray <simpleContent> at a content-model one where the decline has to
-		// come from inside a complex type. The group rows those witnesses held
-		// moved to the decidable table, verdict reversed and shapes unchanged.
+		// at a top-level position, an <attributeGroup> at a PARTICLE position, or
+		// the plural <assertions> where the decline has to come from inside a
+		// <simpleContent> <restriction>. The rows those witnesses held moved to the
+		// decidable table, verdict reversed and shapes unchanged.
 		//
 		// #909 admits <simpleContent> <restriction> on the same terms #336 admitted
 		// its <extension> sibling: the alternant's own content model is mapped, and
-		// the shapes outside it that the producer would drop in silence decline.
-		{"simpleContent restriction carrying a particle the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:sequence/></xs:restriction></xs:simpleContent></xs:complexType>`},
-		{"simpleContent restriction carrying a group ref the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:group ref="g"/></xs:restriction></xs:simpleContent></xs:complexType>`},
-		// The FACET is spelled "assertions" (§4.3.13) and the element contributing to
-		// it <assertion>, so the plural names no element of the facet choice at all:
-		// restrictionFacets matches only the singular and facetKindOf excludes the
-		// assertions kind, leaving the child dropped in silence. The singular is
-		// admitted above.
+		// the ONE shape outside it the producer drops in silence declines. That is
+		// the plural <assertions> and nothing else — the FACET is spelled
+		// "assertions" (§4.3.13) while the element contributing to it is
+		// <assertion>, so the plural names no element of the facet choice, yet the
+		// parser's s4sFacetElement admits it into that position (its bridge is
+		// keyed by facet names) and restrictionFacets then folds it into nothing.
+		// The singular is admitted above.
 		{"simpleContent restriction carrying an <assertions> the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:restriction base="B"><xs:assertions test="true()"/></xs:restriction></xs:simpleContent></xs:complexType>`},
-		// #336 admits <simpleContent> <extension>, but only in the shape
-		// xs:simpleExtensionType allows: §3.4.2.2 builds {content type} from the base
-		// alone, so a particle child is DROPPED without an error — a false accept, not
-		// a verdict.
-		{"simpleContent extension carrying a particle the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType>`},
-		{"simpleContent extension carrying a group ref the producer drops", `<xs:complexType name="T"><xs:simpleContent><xs:extension base="xs:string"><xs:group ref="g"/></xs:extension></xs:simpleContent></xs:complexType>`},
 		// No inline SIMPLE type declines any more (#786 admitted the last shape
 		// that did), so every recursion below carries a complex-type specimen
 		// instead. The simple-type positions those rows held moved to the decidable
@@ -331,9 +352,8 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		// every nesting depth. Anonymity itself narrows nothing — the admitted
 		// explicit-content forms are in the decidable table above.
 		{"inline complexType whose own content is undecidable", `<xs:element name="e"><xs:complexType><xs:sequence><xs:attributeGroup ref="ag"/></xs:sequence></xs:complexType></xs:element>`},
-		{"inline complexType using simpleContent that drops a particle", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType></xs:element>`},
-		{"local element's inline complexType using complexContent over a stray simpleContent", `<xs:complexType name="T"><xs:sequence><xs:element name="a"><xs:complexType><xs:complexContent><xs:restriction base="xs:anyType"><xs:simpleContent/></xs:restriction></xs:complexContent></xs:complexType></xs:element></xs:sequence></xs:complexType>`},
-		{"inline complexType nesting an inline complexType the gate declines", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`},
+		{"inline complexType using simpleContent that drops an <assertions>", `<xs:element name="e"><xs:complexType><xs:simpleContent><xs:restriction base="B"><xs:assertions test="true()"/></xs:restriction></xs:simpleContent></xs:complexType></xs:element>`},
+		{"inline complexType nesting an inline complexType the gate declines", `<xs:element name="e"><xs:complexType><xs:sequence><xs:element name="a"><xs:complexType><xs:simpleContent><xs:restriction base="B"><xs:assertions test="true()"/></xs:restriction></xs:simpleContent></xs:complexType></xs:element></xs:sequence></xs:complexType></xs:element>`},
 		{"one decidable + one undecidable child declines whole", `<xs:element name="e" type="xs:string"/>` + undecidable},
 		// A redefining <complexType> is gated by complexTypeDecidable like any
 		// other, so a shape THAT predicate declines declines the whole case; the
@@ -345,7 +365,7 @@ func TestSchemaShapeDecidableDeclines(t *testing.T) {
 		// outside the decidable subset, declines the whole case: after substitution
 		// it would be an unmapped or undecidable TOP-LEVEL declaration.
 		{"override child with no name (matches nothing, silently ignored)", `<xs:override schemaLocation="b.xsd"><xs:element type="xs:string"/></xs:override>`},
-		{"override child with an undecidable inline anonymous type", `<xs:override schemaLocation="b.xsd"><xs:element name="e"><xs:complexType><xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent></xs:complexType></xs:element></xs:override>`},
+		{"override child with an undecidable inline anonymous type", `<xs:override schemaLocation="b.xsd"><xs:element name="e"><xs:complexType><xs:simpleContent><xs:restriction base="B"><xs:assertions test="true()"/></xs:restriction></xs:simpleContent></xs:complexType></xs:element></xs:override>`},
 		{"override child of an out-of-model kind", `<xs:override schemaLocation="b.xsd"><xs:include schemaLocation="c.xsd"/></xs:override>`},
 		{"include beside an undecidable kind still declines", `<xs:include schemaLocation="lib.xsd"/>` + undecidable},
 		// #945's short-circuit must not reach an element merely NAMED

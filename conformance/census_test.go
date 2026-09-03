@@ -17,7 +17,8 @@ const maxCensusViolationsLogged = 10
 
 // TestUnmappedCensusSoundAgainstShapeGate holds parser's coverage census
 // (parser.AssembledDocument.Unmapped, #1029) to the ONE direction this session
-// establishes, over every schema document of every suite case:
+// establishes, over every schema document of every suite case whose assembly
+// SUCCEEDS:
 //
 //	len(d.Unmapped) > 0  ⟹  !schemaShapeDecidable(d.Doc)
 //
@@ -26,6 +27,12 @@ const maxCensusViolationsLogged = 10
 // while the census names NOTHING the allowlist still admits: a construct flagged
 // unmapped that the gate would go on to decide is a case decided on a document
 // the producer did not read.
+//
+// The assembly's OUTCOME is the antecedent's other half because a rejected case
+// accepts nothing — the census reports a name "whether or not another pass goes
+// on to REJECT the document over the same name" (parser/census.go's Scope note),
+// so a report redundant with a rejection is no false-accept hazard and the
+// allowlist is free to admit the shape it stands beside.
 //
 // The converse — every document the gate declines holds a flagged construct —
 // is NOT asserted, and does not hold. Those documents are counted as the
@@ -37,11 +44,13 @@ const maxCensusViolationsLogged = 10
 //
 //   - a region the census does not walk yet;
 //   - a shape the producer REJECTS, which the gate declines anyway out of
-//     conservatism — a <simpleType> naming none of §3.16.2.1's three
-//     alternatives (#786), a nested <group>/<attributeGroup> with no ref, a
-//     model group's non-particle child, a named definition with no usable name.
-//     No census can report these: they are verdicts, not silences, so each is a
-//     gate widening with its own ratchet measurement.
+//     conservatism — a model group's non-particle child, a <redefine>/<override>
+//     child with no usable name. No census can report these: they are verdicts,
+//     not silences, so each is a gate widening with its own ratchet measurement.
+//     The examples that stood here before them are gone, each admitted by the
+//     widening that measured it: a <simpleType> naming none of §3.16.2.1's three
+//     alternatives (#786), a ref-less <group>/<attributeGroup> (#1182), a
+//     derivation alternant's out-of-model child (#1181).
 //
 // A third cause was the BULK of the residual until #1126 and is gone: a shape
 // the producer maps while every finalize pass quantifying over {type
@@ -53,15 +62,17 @@ const maxCensusViolationsLogged = 10
 // So the residual is the measure of what still separates the two, not of how
 // much census is left to write.
 //
-// One class of document is exempt, and counted rather than asserted about:
-// schemaShapeDecidable's FIRST answer is not an allowlist verdict at all but the
-// unconditional-rejection short-circuit (holdsMisplacedNotation), which admits a
-// document precisely because the producer rejects it whatever it holds. Three
-// suite fixtures are both — msData/notations/notatF005, notatF029 and notatF039
-// hang their misplaced <notation> off a top-level <xs:any>, <xs:key> and
-// <xs:keyref> the census duly flags — and no unmapped construct can make a
-// rejected document accept anything, so flagging one there is no false-accept
-// hazard.
+// Documents of a REJECTED assembly are exempt, and counted rather than asserted
+// about: no unmapped construct can make a rejected case accept anything. Two
+// admissions land there. schemaShapeDecidable's FIRST answer is not an allowlist
+// verdict at all but the unconditional-rejection short-circuit
+// (holdsMisplacedNotation), which admits a document precisely because the
+// producer rejects it whatever it holds — msData/notations/notatF005, notatF029
+// and notatF039 hang their misplaced <notation> off a top-level <xs:any>,
+// <xs:key> and <xs:keyref> the census duly flags. And the allowlist admits every
+// child a complex-type derivation alternant's own content model does not admit
+// (#1181), because checkS4SChildOrder rejects the document over it while the
+// census goes on reporting it beside that rejection.
 func TestUnmappedCensusSoundAgainstShapeGate(t *testing.T) {
 	skipWithoutSuite(t)
 	found, err := parseSuite(suitePath())
@@ -84,9 +95,10 @@ func TestUnmappedCensusSoundAgainstShapeGate(t *testing.T) {
 			continue
 		}
 		assembled[root] = struct{}{}
-		// The report, never the error: a rejected assembly still reports the
-		// documents it read, and their censuses with them.
-		_, report, _ := parser.ParseReport(filepath.Base(root),
+		// The report AND the error: a rejected assembly still reports the documents
+		// it read, and their censuses with them, but its verdict is what makes
+		// every one of those reports harmless.
+		_, report, perr := parser.ParseReport(filepath.Base(root),
 			parser.WithResolver(loader.Dir(filepath.Dir(root))), parser.WithBackend(backend))
 		for _, d := range report.Documents() {
 			discoveries++
@@ -101,10 +113,10 @@ func TestUnmappedCensusSoundAgainstShapeGate(t *testing.T) {
 			if !decidable {
 				continue
 			}
-			if holdsMisplacedNotation(d.Doc.Root()) {
-				// Admitted by the short-circuit, not by the allowlist: the producer
-				// rejects this document unconditionally, so nothing it holds decides
-				// anything vacuously.
+			if perr != nil {
+				// The producer rejects this case, so nothing any of its documents
+				// holds decides anything vacuously — see the exemption paragraph
+				// above for the two admissions that land here.
 				exempt++
 				continue
 			}
@@ -119,7 +131,7 @@ func TestUnmappedCensusSoundAgainstShapeGate(t *testing.T) {
 		t.Errorf("census unsound on %d document discoveries in all; %d named above",
 			violations, maxCensusViolationsLogged)
 	}
-	t.Logf("coverage census: %d document discoveries over %d assembled roots, %d flagged unmapped (%d of them in unconditionally-rejected documents), %d residual (gate declines, census silent)",
+	t.Logf("coverage census: %d document discoveries over %d assembled roots, %d flagged unmapped (%d of them in rejected assemblies), %d residual (gate declines, census silent)",
 		discoveries, len(assembled), flagged, exempt, residual)
 }
 
