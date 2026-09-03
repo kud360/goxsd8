@@ -139,11 +139,32 @@ func TestAnonymousComplexTypeDecidesAsTheNamedTypeDoes(t *testing.T) {
 			`<xs:sequence><xs:element name="a" type="xs:string"/></xs:sequence><xs:attribute name="x" type="xs:string"/>`,
 			true,
 		},
+		// #1182 admits the ref-less <group> at both the content-model and the
+		// model-group position: the producer REJECTS it (produceGroupRefParticle
+		// charges the name= xs:groupRef restricts to use="prohibited", or the
+		// absent ref= it requires, under §2.4 clause 1 sd-valid), so the verdict is
+		// its own. Both rows were DECLINES before that widening, with the shapes
+		// unchanged.
+		{
+			"complexContent restriction over a ref-less group",
+			`<xs:complexContent><xs:restriction base="xs:anyType"><xs:group name="inner"><xs:sequence/></xs:group></xs:restriction></xs:complexContent>`,
+			true,
+		},
+		{
+			"model group holding a ref-less group",
+			`<xs:sequence><xs:group name="inner"><xs:sequence/></xs:group></xs:sequence>`,
+			true,
+		},
 		// The other polarity, so an equivalence that admitted everything would
 		// fail here. Each of these is declined on BOTH paths, and for a reason
-		// that is about the producer rather than about anonymity: a particle under
-		// xs:simpleExtensionType is dropped in silence, and a bare <group> with no
-		// ref is malformed.
+		// that is about the producer rather than about anonymity: the producer
+		// REJECTS every one of them, the s4s order check charging that a particle
+		// fills no position of xs:simpleExtensionType (xmlschema11-1.md:1697) or
+		// of xs:simpleRestrictionType (:1692), and a <simpleContent> none of
+		// xs:complexRestrictionType (:1718). The last row carries the first row's
+		// shape inline, so it declines through that same fault. Every decline here
+		// is therefore conservative rather than forced, as #1182 measured the
+		// <group> ones to be.
 		{
 			"simpleContent extension carrying a particle",
 			`<xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent>`,
@@ -155,8 +176,8 @@ func TestAnonymousComplexTypeDecidesAsTheNamedTypeDoes(t *testing.T) {
 			false,
 		},
 		{
-			"complexContent restriction over a bare group",
-			`<xs:complexContent><xs:restriction base="xs:anyType"><xs:group name="inner"><xs:sequence/></xs:group></xs:restriction></xs:complexContent>`,
+			"complexContent restriction carrying a stray simpleContent",
+			`<xs:complexContent><xs:restriction base="xs:anyType"><xs:simpleContent/></xs:restriction></xs:complexContent>`,
 			false,
 		},
 		{
