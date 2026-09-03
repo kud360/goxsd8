@@ -45,7 +45,7 @@ func refElementDoc(lines ...string) string {
 //
 // Only the child half of clause 2.2 is in reach here; its attribute half —
 // "no unqualified attributes … other than minOccurs, maxOccurs, and id" — is
-// charged nowhere in the producer and #471 owns it.
+// TestProduceRefElementSubstitutionGroupRejected's.
 func TestProduceRefElementChildRejected(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2).
 	for _, tc := range []struct {
@@ -130,6 +130,100 @@ func TestProduceRefElementChildRejected(t *testing.T) {
 			if loc.URI != produceURI || loc.Line != tc.wantLine || loc.Col == 0 {
 				t.Fatalf("position = %s:%d:%d, want the offending child at %s:%d with a column",
 					loc.URI, loc.Line, loc.Col, produceURI, tc.wantLine)
+			}
+		})
+	}
+}
+
+// TestProduceRefElementSubstitutionGroupRejected pins clause 2.2's ATTRIBUTE
+// half for substitutionGroup on a local <element ref="..."> (§3.3.3,
+// xmlschema11-1.md:1320 — "If ref is present, then no unqualified attributes are
+// present other than minOccurs, maxOccurs, and id"): before this charge the
+// attribute was read by nothing on the ref= path and the document was accepted
+// outright.
+//
+// The rule ID is the assertion that matters. The INLINE local form is pinned to
+// e-props-correct clause 3 by TestProduceLocalElementSubstitutionGroupRejected,
+// and the two must not converge: the ref= form maps to an
+// ElementDeclarationRef, which has no {substitution group affiliations}
+// property for that component constraint to be violated by, so src-element is
+// the only footing that is not fabricated (STYLE E2).
+//
+// The second row asserts the order of the clause's two halves on a document that
+// violates both: the attribute half answers, at the <element> itself, not at the
+// child.
+func TestProduceRefElementSubstitutionGroupRejected(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		lines []string
+	}{
+		{
+			name: "substitutionGroup on a ref element",
+			lines: []string{
+				`<xs:element ref="tns:E" substitutionGroup="tns:E"/>`,
+			},
+		},
+		{
+			name: "substitutionGroup on a ref element that also has a child",
+			lines: []string{
+				`<xs:element ref="tns:E" substitutionGroup="tns:E">`,
+				`<xs:simpleType>`,
+				`<xs:restriction base="xs:string"/>`,
+				`</xs:simpleType>`,
+				`</xs:element>`,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, refElementDoc(tc.lines...))
+			if err == nil {
+				t.Fatalf("Produce accepted an <element ref> carrying substitutionGroup, want the src-element clause 2.2 fault")
+			}
+			const want = "carries a substitutionGroup attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id"
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %v, want it to state %q", err, want)
+			}
+			assertRule(t, err, "src-element")
+			loc, ok := xsderr.LocOf(err)
+			if !ok {
+				t.Fatalf("error %v carries no position, want %s:5:col (E3)", err, produceURI)
+			}
+			if loc.URI != produceURI || loc.Line != 5 || loc.Col == 0 {
+				t.Fatalf("position = %s:%d:%d, want the <element ref> itself at %s:5 with a column",
+					loc.URI, loc.Line, loc.Col, produceURI)
+			}
+		})
+	}
+}
+
+// TestProduceRefElementSubstitutionGroupAccepted is the other side of the
+// attribute half: clause 2.2 reaches UNQUALIFIED attributes only — Element.Attr
+// answers for those alone, and xs:localElement admits foreign ones outright
+// (<anyAttribute namespace="##other"> at xmlschema11-1.md:5127) — and it exempts
+// minOccurs, maxOccurs and id by name. A check written as "a ref= element has no
+// substitutionGroup-shaped attribute", or one that swept the exempt set in with
+// it, would reject these.
+func TestProduceRefElementSubstitutionGroupAccepted(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		lines []string
+	}{
+		{
+			name: "foreign-namespace substitutionGroup on a ref element",
+			lines: []string{
+				`<xs:element ref="tns:E" xmlns:o="urn:other" o:substitutionGroup="tns:E"/>`,
+			},
+		},
+		{
+			name: "the exempt attributes on a ref element",
+			lines: []string{
+				`<xs:element ref="tns:E" minOccurs="0" maxOccurs="2" id="r1"/>`,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := produce(t, refElementDoc(tc.lines...)); err != nil {
+				t.Fatalf("Produce rejected an <element ref> clause 2.2 admits: %v", err)
 			}
 		})
 	}
