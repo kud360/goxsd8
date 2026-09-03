@@ -157,9 +157,14 @@ func TestAnonymousComplexTypeDecidesAsTheNamedTypeDoes(t *testing.T) {
 		},
 		// The other polarity, so an equivalence that admitted everything would
 		// fail here. Each of these is declined on BOTH paths, and for a reason
-		// that is about the producer rather than about anonymity: a particle under
-		// xs:simpleExtensionType is dropped in silence, and a <simpleContent> at a
-		// content-model position folds into nothing at all.
+		// that is about the producer rather than about anonymity: the producer
+		// REJECTS every one of them, the s4s order check charging that a particle
+		// fills no position of xs:simpleExtensionType (xmlschema11-1.md:1697) or
+		// of xs:simpleRestrictionType (:1692), and a <simpleContent> none of
+		// xs:complexRestrictionType (:1718). The last row carries the first row's
+		// shape inline, so it declines through that same fault. Every decline here
+		// is therefore conservative rather than forced, as #1182 measured the
+		// <group> ones to be.
 		{
 			"simpleContent extension carrying a particle",
 			`<xs:simpleContent><xs:extension base="xs:string"><xs:sequence/></xs:extension></xs:simpleContent>`,

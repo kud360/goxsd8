@@ -309,22 +309,29 @@ import (
 // ground truth via a REAL implemented violation — never a fabricated one, since
 // the shape allowlist excludes every form (an <override> child carrying no
 // name=, an <override> child of a kind <override>'s own content model does not
-// admit — both passed over in silence — a particle under a <simpleContent>
-// alternant and an <assertions> facet child, each folding into nothing, the
-// produced-but-unjudged extension forms) where the producer's rejection would be
-// a limitation rather than a spec violation, or its silence a missing rejection.
-// A suite-invalid case whose only defect is a rule finalize does NOT yet check
-// (cos-content-act-restrict — derivation-ok-restriction clause 2.4.2, #263 —
-// cos-ns-subset, #265, or the Open Content half of derivation-ok-restriction
-// clause 2.4, which xsd.Schema's content-model automaton fails open on:
-// xsd/contentrestricts.go's GAP(xsd), live for a produced {open content} since
-// #230) is produced cleanly, so the lane observes "valid", disagrees with the
-// suite, and records a still-failing gap — never a wrong "invalid" pass. The
-// remaining risk the allowlist closes is the VACUOUS pass — a document of
-// entirely skipped top-level content that would otherwise always "pass" through a
-// producer doing nothing — which is why step 3 confines the whole top level of
-// EVERY document in the closure to the processed kinds and the decidable
-// complexType subset.
+// admit — both passed over in silence — an <assertions> facet child folding into
+// nothing, the produced-but-unjudged extension forms) where the producer's
+// rejection would be a limitation rather than a spec violation, or its silence a
+// missing rejection. A particle under a <simpleContent> alternant is excluded
+// CONSERVATIVELY instead, on neither of those grounds: the producer REJECTS it,
+// the s4s order check charging that xs:simpleExtensionType is (annotation?,
+// ((attribute | attributeGroup)*, anyAttribute?), assert*)
+// (xmlschema11-1.md:1697), which admits no particle in any position — the
+// reading schema_closure_test.go's undecidable const records. Declining over an
+// explicit rejection forgoes a verdict and cannot fabricate one, so that
+// exclusion is a harvest candidate on #1182's reasoning rather than a soundness
+// requirement. A suite-invalid case whose only defect is a rule finalize does NOT
+// yet check (cos-content-act-restrict — derivation-ok-restriction clause 2.4.2,
+// #263 — cos-ns-subset, #265, or the Open Content half of
+// derivation-ok-restriction clause 2.4, which xsd.Schema's content-model
+// automaton fails open on: xsd/contentrestricts.go's GAP(xsd), live for a
+// produced {open content} since #230) is produced cleanly, so the lane observes
+// "valid", disagrees with the suite, and records a still-failing gap — never a
+// wrong "invalid" pass. The remaining risk the allowlist closes is the VACUOUS
+// pass — a document of entirely skipped top-level content that would otherwise
+// always "pass" through a producer doing nothing — which is why step 3 confines
+// the whole top level of EVERY document in the closure to the processed kinds and
+// the decidable complexType subset.
 //
 // # Composition: <include>, <import> and <override> decided, redefine deferred
 //
