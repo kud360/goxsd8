@@ -137,7 +137,7 @@ func TestProduceRefElementChildRejected(t *testing.T) {
 
 // TestProduceRefElementSubstitutionGroupRejected pins clause 2.2's ATTRIBUTE
 // half for substitutionGroup on a local <element ref="..."> (§3.3.3,
-// xmlschema11-1.md:1320 — "If ref is present, then no unqualified attributes are
+// xmlschema11-1.md:1321 — "If ref is present, then no unqualified attributes are
 // present other than minOccurs, maxOccurs, and id"): before this charge the
 // attribute was read by nothing on the ref= path and the document was accepted
 // outright.
@@ -179,9 +179,18 @@ func TestProduceRefElementSubstitutionGroupRejected(t *testing.T) {
 			if err == nil {
 				t.Fatalf("Produce accepted an <element ref> carrying substitutionGroup, want the src-element clause 2.2 fault")
 			}
-			const want = "carries a substitutionGroup attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id"
+			const want = `the <element ref="..."> carries a substitutionGroup attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id`
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %v, want it to state %q", err, want)
+			}
+			// The rendered error states its position ONCE, from the prefix xsderr
+			// adds (STYLE E3). Unlike rejectRefElementChildren, whose two locations
+			// differ — the fault at the child, the message naming the parent — this
+			// check has only el.Loc(), so restating it in the message text would be
+			// a copy of the prefix.
+			if at := produceURI + ":5:"; strings.Count(err.Error(), at) != 1 {
+				t.Errorf("error = %v, names %s %d times, want exactly once (E3)",
+					err, at, strings.Count(err.Error(), at))
 			}
 			assertRule(t, err, "src-element")
 			loc, ok := xsderr.LocOf(err)

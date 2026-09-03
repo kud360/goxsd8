@@ -2054,7 +2054,7 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 }
 
 // rejectRefElementSubstitutionGroup charges src-element clause 2.2 (§3.3.3,
-// xmlschema11-1.md:1320) on a substitutionGroup attribute written on a local
+// xmlschema11-1.md:1321) on a substitutionGroup attribute written on a local
 // <element ref="...">: "If ref is present, then no unqualified attributes are
 // present other than minOccurs, maxOccurs, and id."
 //
@@ -2066,11 +2066,15 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 // verdict the component tableau cannot carry (STYLE E2). Clause 2.2 reaches the
 // XML attribute directly and is the footing that fits.
 //
-// Only substitutionGroup is charged. The clause's exempt set is {minOccurs,
-// maxOccurs, id}, so ten further attributes xs:element declares (name, type,
-// default, fixed, nillable, abstract, final, block, form, targetNamespace) also
-// fall under this half and are charged nowhere in this producer — a wider
-// tightening with W3C suite fixtures of its own, deliberately not folded in here.
+// GAP(xsd): only substitutionGroup is charged. The clause's exempt set is
+// {minOccurs, maxOccurs, id}, so ten further attributes xs:element declares also
+// fall under this half and are charged nowhere in this producer. They split by
+// footing, and by owner: final and abstract carry the same unconditional
+// use="prohibited" on xs:localElement that substitutionGroup does — escaping the
+// inline path too, since produceLocalElement charges neither — and #1205 owns
+// them; the remaining eight (name, type, default, fixed, nillable, block, form,
+// targetNamespace) have no grammar-level prohibition at all, rest on clause 2.2's
+// prose alone, carry W3C suite fixtures of their own, and #1206 owns them.
 //
 // "Unqualified attributes" scopes the clause to no-namespace attributes, which
 // Element.Attr already enforces by construction: a foreign-namespace
@@ -2082,8 +2086,7 @@ func rejectRefElementSubstitutionGroup(el *Element) error {
 		return nil
 	}
 	return xsderr.New(ruleSrcElement, el.Loc(),
-		"the <element ref=\"...\"> at %s carries a substitutionGroup attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id when ref is present",
-		el.Loc())
+		"the <element ref=\"...\"> carries a substitutionGroup attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id when ref is present")
 }
 
 // rejectRefElementChildren charges src-element clause 2.2 (§3.3.3,
