@@ -206,15 +206,25 @@ import (
 //       one, and the producer rejects a document carrying neither. A real structural
 //       violation inside an admitted shape (src-ct, cos-all-limited, src-wildcard, …)
 //       flows through as a genuine rejection.
-//     - attributeGroup (top-level named definition, §3.6.2): children only
-//       <attribute> (no inline anonymous type), <attributeGroup ref>, and
-//       <anyAttribute> — the shapes the producer folds in (§3.6.2.1/§3.6.2.2). A
-//       dangling ref (src-resolve clause 1.4) and a circular ref chain (spec-legal,
-//       §3.6.2.1) are both decided genuinely.
-//     - group (top-level named definition, §3.7.2): must carry a name and a single
-//       all/choice/sequence body whose particles are decidable; the body maps to
-//       {model group} genuinely (a missing body is the s4s-grammar rejection
-//       xs:namedGroup's content model requires, #884).
+//     - attributeGroup (top-level, §3.6.2): children only <attribute> (no inline
+//       anonymous type), <attributeGroup>, and <anyAttribute> — the shapes the
+//       producer folds in (§3.6.2.1/§3.6.2.2). A dangling ref (src-resolve clause
+//       1.4) and a circular ref chain (spec-legal, §3.6.2.1) are both decided
+//       genuinely.
+//     - group (top-level, §3.7.2): a single all/choice/sequence body whose
+//       particles are decidable; the body maps to {model group} genuinely (a
+//       missing body is the s4s-grammar rejection xs:namedGroup's content model
+//       requires, #884).
+//     - Neither of those two requires the DEFINITION form (#1182). A top-level
+//       <group>/<attributeGroup> with no name=, or one carrying the ref= that
+//       xs:namedGroup/xs:namedAttributeGroup restricts to use="prohibited", is
+//       admitted here and REJECTED by the producer under §2.4 clause 1 sd-valid
+//       (§5.1's first bullet for schema construction) — an s4s attribute-use
+//       fault, which carries no numbered rule ID. The nested reference forms are
+//       the mirror image and are admitted on the same terms: a <group> in a
+//       content model or an <attributeGroup> in an attribute-declaration tail
+//       with no ref=, or carrying the prohibited name=, is the producer's
+//       rejection to make, not this gate's to pre-empt.
 //     - attribute: an inline <simpleType> child is admitted when its own shape is
 //       produced (#733 maps §3.2.2.1 dcl.att.global's tier 1, which dcl.att.local
 //       states in the same words), so a type= beside it is a genuine src-attribute
@@ -299,7 +309,8 @@ import (
 // ground truth via a REAL implemented violation — never a fabricated one, since
 // the shape allowlist excludes every form (an <override> child carrying no
 // name=, an <override> child of a kind <override>'s own content model does not
-// admit — both passed over in silence — a bare nested <group>, the
+// admit — both passed over in silence — a particle under a <simpleContent>
+// alternant and an <assertions> facet child, each folding into nothing, the
 // produced-but-unjudged extension forms) where the producer's rejection would be
 // a limitation rather than a spec violation, or its silence a missing rejection.
 // A suite-invalid case whose only defect is a rule finalize does NOT yet check
@@ -959,8 +970,10 @@ func alternativeTypesDecidable(el *parser.Element) bool {
 // paragraphs below. It declines:
 //
 //   - every shape the producer declines with a plain "not yet produced"
-//     limitation error — today a bare <group>/<attributeGroup> lacking a ref
-//     alone (a nested one is always a reference, so a bare one is malformed).
+//     limitation error — today NONE at this level. The bare <group>/
+//     <attributeGroup> lacking a ref was the last one named here and is no
+//     longer declined: the producer REJECTS it as the s4s attribute-use fault it
+//     is (#1182), so the verdict is genuine and the shape is admitted.
 //     <simpleContent> <restriction> was the other one and is no longer declined:
 //     #909 built §3.4.2.2 cases 1-2, so the shape goes through
 //     simpleContentRestrictionDecidable, which admits exactly what that mapping
@@ -1191,8 +1204,11 @@ func attrDeclsDecidable(el *parser.Element) (decidable, shared bool) {
 	case "attribute":
 		return localAttributeDecidable(el), true
 	case "attributeGroup":
-		// A nested <attributeGroup> is always a reference; a bare one is malformed.
-		return hasAttr(el, "ref"), true
+		// Admitted in both shapes (#1182). The ref form is produced (#177); the
+		// ref-less one is REJECTED by collectReferencedGroup, either for carrying
+		// the name= xs:attributeGroupRef prohibits or for missing the ref= it
+		// requires, so the verdict is the producer's own and nothing is fabricated.
+		return true, true
 	case "anyAttribute":
 		return true, true // an attribute wildcard is produced
 	case "assert":
@@ -1208,10 +1224,11 @@ func attrDeclsDecidable(el *parser.Element) (decidable, shared bool) {
 // of a <complexType> (implicit content) or <restriction> (explicit complex
 // content) are all within the producer's decidable subset. A <group ref> content
 // child and an <attributeGroup ref> are admitted (produced, #177); an
-// <openContent> is admitted (produced, #230); a bare <group>/<attributeGroup>
-// without a ref, or a stray <simpleContent> at this level, declines. A local
-// <attribute>'s inline anonymous <simpleType> is admitted when the inline type
-// itself is decidable — see localAttributeDecidable.
+// <openContent> is admitted (produced, #230); a ref-less <group>/
+// <attributeGroup> is admitted too, the producer rejecting it as the s4s
+// attribute-use fault it is (#1182). A stray <simpleContent> at this level
+// declines. A local <attribute>'s inline anonymous <simpleType> is admitted when
+// the inline type itself is decidable — see localAttributeDecidable.
 //
 // The attribute/assert/annotation tail is judged by attrDeclsDecidable, shared
 // with simpleContentRestrictionDecidable; what stays here is the vocabulary only
@@ -1234,9 +1251,10 @@ func contentDecidable(parent *parser.Element) bool {
 				return false
 			}
 		case "group":
-			if !hasAttr(el, "ref") {
-				return false // a content <group> is always a reference; a bare one is malformed — decline
-			}
+			// Produced in the ref form (#177) and REJECTED in the ref-less one
+			// (#1182): produceGroupRefParticle charges the name= xs:groupRef
+			// prohibits, or the absent ref= it requires. Both verdicts are genuine,
+			// so both shapes are admitted.
 		case "openContent":
 			// Produced (#230) into {open content} (§3.4.2.3.3 clauses 5-6). Its own
 			// src-ct clause 3/4 violations and its <any>'s src-wildcard/w-props-correct
@@ -1255,8 +1273,9 @@ func contentDecidable(parent *parser.Element) bool {
 // model groups recurse, <element> must be locally decidable
 // (localElementDecidable) — its identity constraints impose no condition of
 // their own, both forms being produced for local declarations too (#178, #240) —
-// <any> is fine, and a <group ref> is produced (#177). A bare <group> without a
-// ref (a nested group is always a reference) or any other child declines.
+// <any> is fine, and a <group> is admitted in both shapes — produced in the ref
+// form (#177), rejected by the producer in the ref-less one (#1182). Any other
+// child declines.
 func modelGroupDecidable(group *parser.Element) bool {
 	for _, child := range group.Children() {
 		el, ok := child.(*parser.Element)
@@ -1275,9 +1294,9 @@ func modelGroupDecidable(group *parser.Element) bool {
 				return false
 			}
 		case "group":
-			if !hasAttr(el, "ref") {
-				return false // a nested <group> is always a reference; a bare one is malformed — decline
-			}
+			// Produced in the ref form (#177) and REJECTED in the ref-less one
+			// (#1182), by the same produceGroupRefParticle arms contentDecidable's
+			// <group> child reaches.
 		default:
 			// any other child: not produced — decline.
 			return false
@@ -1286,16 +1305,19 @@ func modelGroupDecidable(group *parser.Element) bool {
 	return true
 }
 
-// groupDecidable reports whether a top-level named <group> definition (§3.7.2) is
-// within the producer's decidable subset: it must carry a name (the definition
-// form; a top-level <group ref> is malformed) and its single all/choice/sequence
-// body's particles must all be decidable. A missing body still produces genuinely
-// (the producer rejects it against xs:namedGroup's content model, #884), so it is
-// admitted.
+// groupDecidable reports whether a top-level <group> (§3.7.2) is within the
+// producer's decidable subset: its single all/choice/sequence body's particles
+// must all be decidable. A missing body still produces genuinely (the producer
+// rejects it against xs:namedGroup's content model, #884), so it is admitted.
+//
+// The DEFINITION FORM is not required either (#1182). A top-level <group> with
+// no name=, or one carrying the ref= xs:namedGroup restricts to
+// use="prohibited", is REJECTED by the producer — parser.topLevelName and
+// rejectProhibitedAttrs respectively — under §2.4 clause 1 sd-valid, with no
+// numbered rule ID because an s4s attribute-use fault has none. Admitting those
+// two shapes therefore fabricates no verdict; it only lets the producer's own
+// rejection be observed.
 func groupDecidable(el *parser.Element) bool {
-	if !hasAttr(el, "name") || hasAttr(el, "ref") {
-		return false
-	}
 	for _, child := range el.Children() {
 		c, ok := child.(*parser.Element)
 		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
@@ -1317,17 +1339,19 @@ func groupDecidable(el *parser.Element) bool {
 	return true
 }
 
-// attributeGroupDecidable reports whether a top-level named <attributeGroup>
-// definition (§3.6.2) is within the producer's decidable subset: it must carry a
-// name, and its children must be only <attribute> (locally decidable — the group's
-// <attribute> children map to LOCAL declarations, §3.6.2.1), <attributeGroup ref>,
-// or <anyAttribute> — the shapes the producer folds in (§3.6.2.1/§3.6.2.2). A
-// dangling or circular ref is decided genuinely at producer/finalize time, so it
-// is admitted.
+// attributeGroupDecidable reports whether a top-level <attributeGroup> (§3.6.2)
+// is within the producer's decidable subset: its children must be only
+// <attribute> (locally decidable — the group's <attribute> children map to LOCAL
+// declarations, §3.6.2.1), <attributeGroup>, or <anyAttribute> — the shapes the
+// producer folds in (§3.6.2.1/§3.6.2.2). A dangling or circular ref is decided
+// genuinely at producer/finalize time, so it is admitted.
+//
+// The DEFINITION FORM is not required, on exactly groupDecidable's terms
+// (#1182): xs:namedAttributeGroup makes name= use="required" and ref=
+// use="prohibited", and the producer charges both faults itself, so a top-level
+// <attributeGroup> missing the one or carrying the other is admitted here and
+// rejected there.
 func attributeGroupDecidable(el *parser.Element) bool {
-	if !hasAttr(el, "name") || hasAttr(el, "ref") {
-		return false
-	}
 	for _, child := range el.Children() {
 		c, ok := child.(*parser.Element)
 		if !ok || c.Name().Space() != xsd.XMLSchemaNS {
@@ -1341,9 +1365,9 @@ func attributeGroupDecidable(el *parser.Element) bool {
 				return false
 			}
 		case "attributeGroup":
-			if !hasAttr(c, "ref") {
-				return false // a nested <attributeGroup> is always a reference; a bare one is malformed — decline
-			}
+			// Produced in the ref form (#177) and REJECTED in the ref-less one
+			// (#1182), by the same collectReferencedGroup arms attrDeclsDecidable's
+			// <attributeGroup> child reaches.
 		default:
 			return false
 		}
