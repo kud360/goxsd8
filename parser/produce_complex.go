@@ -2021,18 +2021,6 @@ func (p *producer) produceElementParticle(el *Element, scopeParent xsd.ElementSc
 // deferred ElementDeclarationRef of §3.3.2.4 ref.elt.global for the ref= form,
 // the inline local Element Declaration of §3.3.2.3 dcl.elt.local otherwise.
 func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScopeParent) (xsd.TermOrRef, error) {
-	// GAP(xsd): an <element ref="..." substitutionGroup="..."> is silently ACCEPTED,
-	// the attribute simply ignored. The meta-schema prohibits substitutionGroup on
-	// xs:localElement whichever form it takes (§3.3.2, use="prohibited"), but this
-	// branch returns before produceLocalElement — the one place the producer charges
-	// e-props-correct clause 3 on the attribute's presence — ever runs. Nothing else
-	// reads it here: substitutionGroupAffiliations is called only from
-	// produceElement (the global path), and an ElementDeclarationRef term has no
-	// {substitution group affiliations} slot to populate, so no component property
-	// is affected and no downstream rule sees a different value. The whole loss is
-	// one unmade syntax rejection — an under-reject, not a false-accept of a
-	// validity conclusion. No W3C suite case has this shape. #471 owns the
-	// retirement.
 	if ref, hasRef := el.Attr("ref"); hasRef {
 		// The ref= form reads no child of its own, so this is where its children are
 		// ordered against xs:element's content model — the one model Appendix A gives
@@ -2044,6 +2032,9 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 		// the grammar fault it was charged and clause 2.2 answers only for the
 		// shapes the content model admits.
 		if err := checkS4SChildOrder(el, s4sElement); err != nil {
+			return nil, err
+		}
+		if err := rejectRefElementSubstitutionGroup(el); err != nil {
 			return nil, err
 		}
 		if err := rejectRefElementChildren(el); err != nil {
@@ -2062,6 +2053,42 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 	return xsd.ResolvedTerm{Term: decl}, nil
 }
 
+// rejectRefElementSubstitutionGroup charges src-element clause 2.2 (§3.3.3,
+// xmlschema11-1.md:1321) on a substitutionGroup attribute written on a local
+// <element ref="...">: "If ref is present, then no unqualified attributes are
+// present other than minOccurs, maxOccurs, and id."
+//
+// The rule ID is src-element, NOT the e-props-correct clause 3 produceLocalElement
+// charges for the same attribute on the inline local form. The ref= form maps to
+// an xsd.ElementDeclarationRef, a deferred reference with no {substitution group
+// affiliations} property at all, so there is nothing for a component constraint
+// over that property to be violated by; charging e-props-correct here would be a
+// verdict the component tableau cannot carry (STYLE E2). Clause 2.2 reaches the
+// XML attribute directly and is the footing that fits.
+//
+// GAP(xsd): only substitutionGroup is charged. The clause's exempt set is
+// {minOccurs, maxOccurs, id}, so ten further attributes xs:element declares also
+// fall under this half and are charged nowhere in this producer. They split by
+// footing, and by owner: final and abstract carry the same unconditional
+// use="prohibited" on xs:localElement that substitutionGroup does — escaping the
+// inline path too, since produceLocalElement charges neither — and #1205 owns
+// them; the remaining eight (name, type, default, fixed, nillable, block, form,
+// targetNamespace) have no grammar-level prohibition at all, rest on clause 2.2's
+// prose alone, carry W3C suite fixtures of their own, and #1206 owns them.
+//
+// "Unqualified attributes" scopes the clause to no-namespace attributes, which
+// Element.Attr already enforces by construction: a foreign-namespace
+// substitutionGroup is invisible to it, and xs:localElement admits foreign
+// attributes outright (<anyAttribute namespace="##other"> at
+// xmlschema11-1.md:5127).
+func rejectRefElementSubstitutionGroup(el *Element) error {
+	if _, ok := el.Attr("substitutionGroup"); !ok {
+		return nil
+	}
+	return xsderr.New(ruleSrcElement, el.Loc(),
+		"the <element ref=\"...\"> carries a substitutionGroup attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id when ref is present")
+}
+
 // rejectRefElementChildren charges src-element clause 2.2 (§3.3.3,
 // xmlschema11-1.md:1321) on a child in the Schema namespace other than
 // <annotation> under a local <element ref="...">: "If ref is present, then …
@@ -2077,8 +2104,9 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 // running ahead of it.
 //
 // Only the CHILD half of the clause is charged here. Its other half — no
-// unqualified attribute but minOccurs, maxOccurs and id — is charged nowhere in
-// this producer, and #471 owns it.
+// unqualified attribute but minOccurs, maxOccurs and id — is
+// rejectRefElementSubstitutionGroup's, which runs first and reaches
+// substitutionGroup alone.
 //
 // A child outside the Schema namespace is admitted: the clause reaches that
 // namespace alone, and whether xs:element's grammar admits a foreign child at
@@ -2153,9 +2181,10 @@ func rejectRefElementChildren(el *Element) error {
 // nothing but the attribute's presence.
 //
 // The reach is the INLINE local form only, which is the only form that arrives
-// here: produceElementParticle's <element ref> branch returns before this
-// function runs, so a ref= local element carrying the prohibited attribute is
-// accepted with the attribute ignored (GAP marker on that branch).
+// here: elementParticleTerm's <element ref> branch returns before this function
+// runs, and charges the same attribute there under src-element clause 2.2
+// instead (rejectRefElementSubstitutionGroup, whose doc gives the reason the
+// rule ID differs).
 //
 // {disallowed substitutions} comes from the same disallowedSubstitutions mapping
 // the global path uses (STYLE T4): §3.3.2.1's row is a COMMON rule and the
