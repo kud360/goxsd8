@@ -1096,15 +1096,16 @@ func alternativeTypesDecidable(el *parser.Element) bool {
 //     is (#1182), so the verdict is genuine and the shape is admitted.
 //     <simpleContent> <restriction> was the other one and is no longer declined:
 //     #909 built §3.4.2.2 cases 1-2, so the shape goes through
-//     simpleContentRestrictionDecidable, which admits exactly what that mapping
-//     reads. An inline anonymous <simpleType> on a local element or attribute IS
-//     produced (#229) and an inline anonymous <complexType> on a local OR global
-//     element is produced too (#340); neither declines here — see
-//     localElementDecidable/elementDecidable, which route the anonymous
-//     complex-type shape into THIS function, and the anonymity paragraphs below.
-//     An <openContent> is produced as of #230 (§3.4.2.3.3 clauses 5-6)
-//     and is admitted by contentDecidable wherever the schema for schema
-//     documents allows one; a MISPLACED one — beside
+//     simpleContentRestrictionDecidable, which admits what that mapping reads
+//     plus every child the s4s order check rejects outright (#1181), leaving the
+//     plural <assertions> as its one decline. An inline anonymous <simpleType>
+//     on a local element or attribute IS produced (#229) and an inline anonymous
+//     <complexType> on a local OR global element is produced too (#340); neither
+//     declines here — see localElementDecidable/elementDecidable, which route
+//     the anonymous complex-type shape into THIS function, and the anonymity
+//     paragraphs below. An <openContent> is produced as of #230 (§3.4.2.3.3
+//     clauses 5-6) and is admitted by contentDecidable wherever the schema for
+//     schema documents allows one; a MISPLACED one — beside
 //     <simpleContent>/<complexContent>, or directly under <complexContent> — is
 //     rejected by the producer as the grammar fault it is, so it needs no
 //     decline of its own.
@@ -1203,28 +1204,33 @@ func complexTypeDecidable(el *parser.Element) bool {
 }
 
 // simpleContentExtensionDecidable reports whether a <simpleContent> <extension>
-// is in the shape the producer decides genuinely. It is contentDecidable MINUS
-// the particles: xs:simpleExtensionType's content model is (annotation?,
-// ((attribute | attributeGroup)*, anyAttribute?), assert*), so a
-// <sequence>/<choice>/<all>/<group> child is a grammar fault — but §3.4.2.2
-// computes {content type} from the resolved base alone (cases 3-5) and
-// produceSimpleContent never reads a particle, so the producer SILENTLY DROPS
-// such a child and returns no error at all. That silence is exactly the false
-// accept this allowlist exists to refuse, so the shape declines here, while the
-// attribute children the producer really does fold in (§3.4.2.4) go through
-// contentDecidable unchanged.
+// is in the shape the producer decides genuinely. xs:simpleExtensionType
+// (xmlschema11-1.md:1697) is (annotation?, ((attribute | attributeGroup)*,
+// anyAttribute?), assert*) — the one derivation alternant with no structural
+// position at all — so attrDeclsDecidable's vocabulary is the whole of this
+// content model and the attribute children the producer folds in (§3.4.2.4) are
+// the only ones with a shape to judge.
+//
+// Every OTHER XSD-namespace child is ADMITTED because the producer REJECTS it
+// (#1181), never because it is harmless: checkS4SChildOrder walks this element
+// against that model and charges §2.4 clause 1 sd-valid (:615, restated at
+// §5.1's first bullet, :4296) for a name no position admits — a
+// <sequence>/<choice>/<all>, a <group>, a stray <simpleContent>/<complexContent>
+// alike — and an <openContent> is charged earlier still by misplacedOpenContent.
+// §3.4.2.2 cases 3-5 do compute {content type} from the resolved base alone, but
+// no document carrying such a child reaches that tableau, so NOTHING is dropped
+// in silence at this position.
 func simpleContentExtensionDecidable(ext *parser.Element) bool {
 	for _, child := range ext.Children() {
 		el, ok := child.(*parser.Element)
 		if !ok || el.Name().Space() != xsd.XMLSchemaNS {
 			continue
 		}
-		switch el.Name().Local() {
-		case "sequence", "choice", "all", "group":
+		if decidable, shared := attrDeclsDecidable(el); shared && !decidable {
 			return false
 		}
 	}
-	return contentDecidable(ext)
+	return true
 }
 
 // simpleContentRestrictionDecidable reports whether a <simpleContent>
@@ -1239,13 +1245,17 @@ func simpleContentExtensionDecidable(ext *parser.Element) bool {
 // already is under <simpleType> <restriction> (simpleTypeDecidable) — the two
 // sites map facets through the very same restrictionFacets.
 //
-// What declines is a child the producer reads as nothing at all: a model group,
-// a <group>, or any other XSD-namespace name outside the content model, each of
-// which the producer SILENTLY DROPS — no tableau case reads a particle — which
-// is the same false accept simpleContentExtensionDecidable refuses beside it,
-// for the same reason. An inline <simpleType> outside the produced simple-type
-// subset moves the decline inward through simpleTypeDecidable, as every other
-// inline-type site does.
+// A name OUTSIDE that content model is ADMITTED, and the two mechanisms behind
+// that must not be conflated (#1181). A model group, a <group>, a stray
+// <simpleContent>/<complexContent> or any other name no position of
+// xs:simpleRestrictionType admits is REJECTED: checkS4SChildOrder charges §2.4
+// clause 1 sd-valid (:615, restated at §5.1's first bullet, :4296) over it, so
+// the verdict is the producer's own. The PLURAL <assertions> is the one child
+// that really is DROPPED IN SILENCE — it fills the facet position and folds into
+// no facet — and it alone still declines here, through
+// silentlyDroppedFacetElement. An inline <simpleType> outside the produced
+// simple-type subset moves the decline inward through simpleTypeDecidable, as
+// every other inline-type site does.
 //
 // Nothing here narrows for the tableau's case 5 (a base with element-only or
 // empty content, or a simple type base, under <restriction>), although that case
@@ -1275,35 +1285,36 @@ func simpleContentRestrictionDecidable(restriction *parser.Element) bool {
 			}
 			continue
 		}
-		if !facetElement(local) {
-			return false // a particle child, or any other name: dropped in silence — decline
+		if silentlyDroppedFacetElement(local) {
+			return false
 		}
 	}
 	return true
 }
 
-// facetElement reports whether local is the ELEMENT name of one of §4.3's
-// constraining facets. It asks builtin.FacetKindByName, the ONE name→kind bridge
-// the module owns (STYLE T4/D3), rather than listing the names again here where
-// a future facet would be forgotten.
+// silentlyDroppedFacetElement reports whether local names a child the parser's
+// s4s order check lets THROUGH the facet position of xs:simpleRestrictionType
+// (xmlschema11-1.md:1692) and the mapping then folds into NO facet — the false
+// accept this allowlist exists to refuse.
 //
-// The bridge answers for FACET names, and §4.3.13 is where the two spellings
+// That is exactly the PLURAL <assertions>. §4.3.13 is where the two spellings
 // part: the facet is "assertions" (a single facet holding the sequence) while
-// the element contributing to it is <assertion>, which is what
-// xs:simpleRestrictionType's facet choice spells (xmlschema11-1.md:1692) — no
-// element is named "assertions" anywhere in the s4s grammar. So the singular is
-// admitted here and the plural declined: the producer's restrictionFacets
-// matches only "assertion" and its facetKindOf excludes xsd.FacetAssertions, so
-// an <assertions> child folds into no facet and is DROPPED IN SILENCE, which is
-// the false accept this allowlist exists to refuse. <assert> is the CTD-level
-// assertion of the same content model's trailing position, not a facet at all,
-// and attrDeclsDecidable takes it before this is reached.
-func facetElement(local string) bool {
-	if local == "assertion" {
-		return true
-	}
+// the element contributing to it is <assertion>, which is what the facet choice
+// spells — no element is named "assertions" anywhere in the s4s grammar. The
+// parser's s4sFacetElement nevertheless admits the name into that position,
+// because it asks builtin.FacetKindByName and that bridge answers for FACET
+// names; its restrictionFacets then matches only the singular and its
+// facetKindOf excludes xsd.FacetAssertions, so the child reaches no component
+// and no error.
+//
+// It asks the same bridge, the ONE name→kind bridge the module owns (STYLE
+// T4/D3), rather than spelling "assertions" here where the two would drift.
+// <assert> is the CTD-level assertion of the same content model's trailing
+// position, not a facet at all, and attrDeclsDecidable takes it before this is
+// reached.
+func silentlyDroppedFacetElement(local string) bool {
 	kind, ok := builtin.FacetKindByName(builtin.FacetName(local))
-	return ok && kind != xsd.FacetAssertions
+	return ok && kind == xsd.FacetAssertions
 }
 
 // attrDeclsDecidable reports whether one child from the tail every complex-type
@@ -1341,18 +1352,31 @@ func attrDeclsDecidable(el *parser.Element) (decidable, shared bool) {
 }
 
 // contentDecidable reports whether the content-model child and attribute children
-// of a <complexType> (implicit content) or <restriction> (explicit complex
-// content) are all within the producer's decidable subset. A <group ref> content
-// child and an <attributeGroup ref> are admitted (produced, #177); an
-// <openContent> is admitted (produced, #230); a ref-less <group>/
+// of a <complexType> (implicit content) or of a <complexContent>
+// <restriction>/<extension> are all within the producer's decidable subset. A
+// <group ref> content child and an <attributeGroup ref> are admitted (produced,
+// #177); an <openContent> is admitted (produced, #230); a ref-less <group>/
 // <attributeGroup> is admitted too, the producer rejecting it as the s4s
-// attribute-use fault it is (#1182). A stray <simpleContent> at this level
-// declines. A local <attribute>'s inline anonymous <simpleType> is admitted when
-// the inline type itself is decidable — see localAttributeDecidable.
+// attribute-use fault it is (#1182). A local <attribute>'s inline anonymous
+// <simpleType> is admitted when the inline type itself is decidable — see
+// localAttributeDecidable.
 //
 // The attribute/assert/annotation tail is judged by attrDeclsDecidable, shared
 // with simpleContentRestrictionDecidable; what stays here is the vocabulary only
 // a complex-content alternant carries.
+//
+// ITS TWO CALL POSITIONS SHARE ONE GRAMMAR, and that is what lets an unrecognized
+// name be admitted rather than declined (#1181). xs:complexTypeModel's
+// implicit-content disjunct (:1649), xs:complexRestrictionType (:1718) and
+// xs:extensionType (:1723) each end with "openContent?, (group | all | choice |
+// sequence)?, ((attribute | attributeGroup)*, anyAttribute?), assert*" behind an
+// "annotation?" — exactly the names the arms below spell — so a name reaching
+// the default arm fills no position of whichever model the producer ordered this
+// element against, and checkS4SChildOrder charges §2.4 clause 1 sd-valid (:615,
+// restated at §5.1's first bullet, :4296) over it. A stray <simpleContent>/
+// <complexContent> is that fault at BOTH positions and no third one:
+// complexTypeDecidable dispatches on either wrapper before it ever calls here,
+// so neither name can reach the implicit-content position at all.
 func contentDecidable(parent *parser.Element) bool {
 	for _, child := range parent.Children() {
 		el, ok := child.(*parser.Element)
@@ -1380,9 +1404,11 @@ func contentDecidable(parent *parser.Element) bool {
 			// src-ct clause 3/4 violations and its <any>'s src-wildcard/w-props-correct
 			// ones are genuine rejections, so nothing here is limitation-shaped.
 		default:
-			// simpleContent/complexContent or any other name at this level: not
-			// produced — decline.
-			return false
+			// Any other name — a stray <simpleContent>/<complexContent> included —
+			// fills no position of the model this element is ordered against, so
+			// checkS4SChildOrder rejects the document. The verdict is the producer's
+			// own, so the shape is admitted (#1181); see above for why the two call
+			// positions agree about that.
 		}
 	}
 	return true
