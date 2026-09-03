@@ -45,7 +45,8 @@ func refElementDoc(lines ...string) string {
 //
 // Only the child half of clause 2.2 is in reach here; its attribute half —
 // "no unqualified attributes … other than minOccurs, maxOccurs, and id" — is
-// TestProduceRefElementSubstitutionGroupRejected's.
+// TestProduceRefElementSubstitutionGroupRejected's and
+// TestProduceRefElementDeclarationAttrRejected's.
 func TestProduceRefElementChildRejected(t *testing.T) {
 	// A slice, not a map: subtest order is output (STYLE D2).
 	for _, tc := range []struct {
@@ -233,6 +234,100 @@ func TestProduceRefElementSubstitutionGroupAccepted(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := produce(t, refElementDoc(tc.lines...)); err != nil {
 				t.Fatalf("Produce rejected an <element ref> clause 2.2 admits: %v", err)
+			}
+		})
+	}
+}
+
+// TestProduceRefElementDeclarationAttrRejected pins clause 2.2's attribute half
+// for the eight attributes xs:localElement leaves syntactically LEGAL under
+// ref= (§3.3.3, xmlschema11-1.md:1321). Unlike substitutionGroup, none of these
+// carries a use="prohibited" narrowing on xs:localElement
+// (xmlschema11-1.md:5124-5126 prohibits three, and none of these is among them),
+// so clause 2.2's prose is the only thing rejecting them and every row here
+// produced cleanly before this charge.
+//
+// Two rows carry an attribute a SECOND clause of src-element governs
+// independently — name (clause 2.1, ref and name both present) and
+// targetNamespace (clause 4.1, ed-with-ns requiring name) — and both are
+// asserted to report clause 2.2 all the same. The rule ID is one per attribute:
+// a later session charging 2.1 or 4 must decide what these rows say, not
+// discover the choice was never made.
+//
+// The last row is the order assertion, and it is the one a rewrite is most
+// likely to break: the attributes are checked in xs:element's DECLARATION
+// order, so a ref= element carrying type= before name= in the document is still
+// rejected for name (STYLE D2 — the reported attribute is output, and output
+// does not follow a document's or a map's order).
+func TestProduceRefElementDeclarationAttrRejected(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		line     string
+		wantAttr string
+	}{
+		{name: "name", line: `<xs:element ref="tns:E" name="F"/>`, wantAttr: "name"},
+		{name: "type", line: `<xs:element ref="tns:E" type="xs:string"/>`, wantAttr: "type"},
+		{name: "default", line: `<xs:element ref="tns:E" default="d"/>`, wantAttr: "default"},
+		{name: "fixed", line: `<xs:element ref="tns:E" fixed="f"/>`, wantAttr: "fixed"},
+		{name: "nillable", line: `<xs:element ref="tns:E" nillable="true"/>`, wantAttr: "nillable"},
+		{name: "block", line: `<xs:element ref="tns:E" block="#all"/>`, wantAttr: "block"},
+		{name: "form", line: `<xs:element ref="tns:E" form="qualified"/>`, wantAttr: "form"},
+		{name: "targetNamespace", line: `<xs:element ref="tns:E" targetNamespace="urn:x"/>`, wantAttr: "targetNamespace"},
+		{
+			name:     "declaration order wins over document order",
+			line:     `<xs:element ref="tns:E" type="xs:string" name="F"/>`,
+			wantAttr: "name",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, refElementDoc(tc.line))
+			if err == nil {
+				t.Fatalf("Produce accepted an <element ref> carrying %s, want the src-element clause 2.2 fault", tc.wantAttr)
+			}
+			want := fmt.Sprintf(`the <element ref="..."> carries a %s attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id`, tc.wantAttr)
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %v, want it to state %q", err, want)
+			}
+			assertRule(t, err, "src-element")
+			loc, ok := xsderr.LocOf(err)
+			if !ok {
+				t.Fatalf("error %v carries no position, want %s:5:col (E3)", err, produceURI)
+			}
+			if loc.URI != produceURI || loc.Line != 5 || loc.Col == 0 {
+				t.Fatalf("position = %s:%d:%d, want the <element ref> itself at %s:5 with a column",
+					loc.URI, loc.Line, loc.Col, produceURI)
+			}
+		})
+	}
+}
+
+// TestProduceRefElementDeclarationAttrAccepted is the other side: clause 2.2
+// reaches UNQUALIFIED attributes only, so the same eight names in a foreign
+// namespace are admitted (xs:localElement takes <anyAttribute
+// namespace="##other"> at xmlschema11-1.md:5127), and the eight are rejected
+// under ref= ALONE — the inline form declares every one of them legitimately, so
+// a check hoisted out of the ref= branch would reject the whole language.
+func TestProduceRefElementDeclarationAttrAccepted(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		lines []string
+	}{
+		{
+			name: "foreign-namespace declaration attributes on a ref element",
+			lines: []string{
+				`<xs:element ref="tns:E" xmlns:o="urn:other" o:name="F" o:type="xs:string" o:form="qualified"/>`,
+			},
+		},
+		{
+			name: "the same attributes on the inline local form",
+			lines: []string{
+				`<xs:element name="F" type="xs:string" default="d" nillable="true" block="#all" form="qualified"/>`,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := produce(t, refElementDoc(tc.lines...)); err != nil {
+				t.Fatalf("Produce rejected an <element> clause 2.2 admits: %v", err)
 			}
 		})
 	}

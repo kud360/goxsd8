@@ -2037,6 +2037,9 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 		if err := rejectRefElementSubstitutionGroup(el); err != nil {
 			return nil, err
 		}
+		if err := rejectRefElementDeclarationAttrs(el); err != nil {
+			return nil, err
+		}
 		if err := rejectRefElementChildren(el); err != nil {
 			return nil, err
 		}
@@ -2066,15 +2069,13 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 // verdict the component tableau cannot carry (STYLE E2). Clause 2.2 reaches the
 // XML attribute directly and is the footing that fits.
 //
-// GAP(xsd): only substitutionGroup is charged. The clause's exempt set is
-// {minOccurs, maxOccurs, id}, so ten further attributes xs:element declares also
-// fall under this half and are charged nowhere in this producer. They split by
-// footing, and by owner: final and abstract carry the same unconditional
-// use="prohibited" on xs:localElement that substitutionGroup does — escaping the
-// inline path too, since produceLocalElement charges neither — and #1205 owns
-// them; the remaining eight (name, type, default, fixed, nillable, block, form,
-// targetNamespace) have no grammar-level prohibition at all, rest on clause 2.2's
-// prose alone, carry W3C suite fixtures of their own, and #1206 owns them.
+// GAP(xsd): only substitutionGroup is charged here. The clause's exempt set is
+// {minOccurs, maxOccurs, id}, so eight further attributes xs:element declares
+// fall under this half and are rejectRefElementDeclarationAttrs's, on a footing
+// of their own; two more — final and abstract, which carry the same
+// unconditional use="prohibited" on xs:localElement that substitutionGroup does,
+// and escape the inline path too since produceLocalElement charges neither — are
+// charged nowhere in this producer, and #1205 owns them.
 //
 // "Unqualified attributes" scopes the clause to no-namespace attributes, which
 // Element.Attr already enforces by construction: a foreign-namespace
@@ -2087,6 +2088,47 @@ func rejectRefElementSubstitutionGroup(el *Element) error {
 	}
 	return xsderr.New(ruleSrcElement, el.Loc(),
 		"the <element ref=\"...\"> carries a substitutionGroup attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id when ref is present")
+}
+
+// rejectRefElementDeclarationAttrs charges src-element clause 2.2 (§3.3.3,
+// xmlschema11-1.md:1321) on the eight attributes only a DECLARING <element> can
+// carry, written on a local <element ref="...">: "If ref is present, then no
+// unqualified attributes are present other than minOccurs, maxOccurs, and id."
+//
+// They are walked in xs:element's own declaration order — name from the
+// xs:defRef attribute group (xmlschema11-1.md:4642, reached from xs:element at
+// :5065), then type, default, fixed, nillable, block, form and targetNamespace
+// inline at :5066-:5082 — because the attribute the rejection names is output,
+// and output never follows the document's attribute order or a map's (STYLE D2).
+//
+// Clause 2.2's prose is the ONLY footing that rejects these eight, which is what
+// separates them from substitutionGroup: xs:localElement narrows exactly three
+// of the base type's attributes with use="prohibited" (substitutionGroup, final,
+// abstract at xmlschema11-1.md:5124-5126) and none of these, so every one of
+// them is syntactically legal under ref= and no grammar walk will ever reach
+// them. Clause 2's "if the item's parent is not <schema>" precondition is
+// satisfied by the call site alone: elementParticleTerm maps local particles,
+// and produceElement's top-level arm never reaches here.
+//
+// Two of the eight are ALSO governed by a second clause of the same rule, and
+// both are charged under 2.2 regardless, so one attribute draws one rule ID from
+// one helper: name violates clause 2.1 ("One of ref or name is present, but not
+// both") simultaneously, and targetNamespace violates clause 4.1 (ed-with-ns,
+// which requires name present) simultaneously. The spec adjudicates no
+// precedence between clauses that fire together — §B leaves the tabulation of
+// error conditions deliberately incomplete (xmlschema11-1.md:6925) — so the
+// choice is this producer's, and clause 2.2 is the one it reaches by. Clauses
+// 2.1 and 4 are charged nowhere in this producer.
+func rejectRefElementDeclarationAttrs(el *Element) error {
+	for _, name := range [...]string{"name", "type", "default", "fixed", "nillable", "block", "form", "targetNamespace"} {
+		if _, ok := el.Attr(name); !ok {
+			continue
+		}
+		return xsderr.New(ruleSrcElement, el.Loc(),
+			"the <element ref=\"...\"> carries a %s attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id when ref is present",
+			name)
+	}
+	return nil
 }
 
 // rejectRefElementChildren charges src-element clause 2.2 (§3.3.3,
@@ -2104,9 +2146,10 @@ func rejectRefElementSubstitutionGroup(el *Element) error {
 // running ahead of it.
 //
 // Only the CHILD half of the clause is charged here. Its other half — no
-// unqualified attribute but minOccurs, maxOccurs and id — is
-// rejectRefElementSubstitutionGroup's, which runs first and reaches
-// substitutionGroup alone.
+// unqualified attribute but minOccurs, maxOccurs and id — belongs to
+// rejectRefElementSubstitutionGroup and rejectRefElementDeclarationAttrs, both
+// of which run first, so a document violating both halves is answered at the
+// attribute.
 //
 // A child outside the Schema namespace is admitted: the clause reaches that
 // namespace alone, and whether xs:element's grammar admits a foreign child at
