@@ -270,18 +270,38 @@ import (
 //     Steps 1-3 rule out the non-verdict failure modes ACROSS THE WHOLE CLOSURE:
 //     the root was independently confirmed resolvable, readable and
 //     <schema>-rooted before the assembly ran, and every document the assembly
-//     did take in is reported and shape-gated. What is left of those modes is an
-//     I/O or encoding failure on a COMPOSED document, reported as
+//     did take in is reported and shape-gated. Two of those modes reach this
+//     step — an I/O or encoding failure on a COMPOSED document, reported as
 //     parser.UnfollowedUnreadable, and a rejection fabricated by components a
-//     directive did not bring in: fabricatedRejection eliminates both, and is the
-//     ONE site that discriminates on the error, by rule (xsderr.RuleOf) rather
-//     than by type. Everything else this step reads as a verdict, an unruled
-//     plain error included: an <include>/<override> carrying no schemaLocation at
-//     all is a §2.4 clause 1 grammar fault no Schema Representation Constraint
-//     covers (parse.go's compose), which STYLE E2 requires be charged WITHOUT a
-//     rule ID — an unruled error is this processor's spelling of "not valid
-//     against the schema for schema documents", not a signal that no verdict was
-//     reached (#404).
+//     directive did not bring in — and fabricatedRejection eliminates both, as
+//     the ONE site that discriminates on the error, by rule (xsderr.RuleOf)
+//     rather than by type. Every OTHER failure this step reads as a verdict, an
+//     unruled plain error included, with the single exception the GAP below
+//     states: an <include>/<override> carrying no schemaLocation at all is a
+//     §2.4 clause 1 grammar fault no Schema Representation Constraint covers
+//     (parse.go's compose), which STYLE E2 requires be charged WITHOUT a rule ID
+//     — an unruled error is this processor's spelling of "not valid against the
+//     schema for schema documents", not a signal that no verdict was reached
+//     (#404).
+//
+//     GAP(conformance): a THIRD non-verdict mode survives to this step, and
+//     reading it as a verdict scores in the ratchet-corrupting direction.
+//     parser/parse.go's fetch has TWO error-returning exits and only one of them
+//     is a read: a resolver fault that is not loader.ErrNotFound — a permission
+//     or transport error, ENOTDIR among them — records
+//     parser.UnfollowedLocationUnresolved, NOT parser.UnfollowedUnreadable, and
+//     returns an unruled plain Go error. fabricatedRejection therefore finds no
+//     unreadable directive and no src-resolve rule, and this step decides
+//     "invalid" off a pure I/O failure on a NON-ROOT document — the fault
+//     assembleCase's own step 1 declines when it hits the ROOT. #1201 owns the
+//     fix, which is parser's rather than this file's; both shapes it may take
+//     are stated there. No suite case takes that exit today — every
+//     schemaLocation in the corpus was scanned through the loader.Dir open path
+//     and none yields a non-ErrNotFound error (#404) — which is exactly why
+//     neither the gate nor the ratchet can see it. Do not close it by declining
+//     on "unruled AND
+//     UnfollowedLocationUnresolved": that predicate is annotB020, this lane's
+//     own witness, and it gives back a banked win (#404).
 //
 // # sch-props-correct clause 2 is per-kind
 //
@@ -594,6 +614,22 @@ const ruleSrcResolve xsderr.Rule = "src-resolve"
 // needs the reference's namespace on the error and the directive's namespace on
 // the report, and neither xsderr.Error nor parser.UnfollowedDirective carries
 // one — a data-shape change, where this is not (#404).
+//
+// GAP(conformance): one non-verdict failure is invisible to BOTH arms, and the
+// caller then scores it "invalid". parser/parse.go's fetch records
+// parser.UnfollowedLocationUnresolved and returns an UNRULED plain error for a
+// resolver fault that is not loader.ErrNotFound — a permission or transport
+// error. The reason is not parser.UnfollowedUnreadable, so the read arm misses
+// it; the error carries no rule, so xsderr.RuleOf yields no src-resolve and the
+// shortfall arm misses it too. The two arms above assume every non-verdict a
+// composed document can produce is a READ failure; a RESOLVE failure that is not
+// mere absence is the one that is not. It cannot be told from the shape this
+// predicate reads: parser.UnfollowedLocationUnresolved with an unruled error is
+// also annotB020, whose <include> names a document that plain does not exist and
+// whose unruled error is an unrelated §2.4 clause 1 grammar fault that must
+// DECIDE. #1201 owns the fix and states why it belongs in parser rather than
+// here. Zero suite cases reach that exit today, so this predicate's measured
+// behavior over the whole corpus is unaffected (#404).
 func fabricatedRejection(report *parser.AssemblyReport, perr error) bool {
 	if perr == nil || len(report.Unfollowed()) == 0 {
 		return false

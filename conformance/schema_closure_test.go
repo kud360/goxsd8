@@ -781,14 +781,26 @@ func TestSchemaExecutorDecidesUnbrokenUnresolvedDirective(t *testing.T) {
 // declined for the coincidence of an unfollowed directive somewhere else in the
 // document.
 //
-// The two faults are the two shapes the measured suite cohort actually holds. A
-// repeated <annotation> is a §2.4 clause 1 grammar fault, charged as a plain
-// unruled error (STYLE E2), which is what MS-Annotations annotB020 carries
-// alongside an <include> naming a document the suite does not ship. A duplicate
-// top-level name is sch-props-correct clause 2, a RULED rejection that needs TWO
-// components to collide and so is unreachable by an assembly that is one document
-// SHORT. Neither names a missing component, so both are the document's own fault
-// whatever the directive did.
+// The measured suite cohort holds THREE shapes, of which the two faults below
+// are the two these four directives can carry. A repeated <annotation> is a §2.4
+// clause 1 grammar fault, charged as a plain unruled error (STYLE E2), which is
+// what MS-Annotations annotB020 carries alongside an <include> naming a document
+// the suite does not ship. A duplicate top-level name is sch-props-correct
+// clause 2, a RULED rejection that needs TWO components to collide and so is
+// unreachable by an assembly that is one document SHORT. Neither names a missing
+// component, so both are the document's own fault whatever the directive did.
+//
+// The third shape is src-redefine clause 1, the LARGEST of the three — four of
+// the eleven movers — and it is not driven here because noD2Trees builds no
+// <xs:redefine>, whose fault is not separable from its directive the way these
+// two are. A non-empty <xs:redefine> whose schemaLocation does not resolve is an
+// ERROR, unlike <include>'s clause 2.4 non-error skip, so it is the one cohort
+// shape where the unresolved directive IS the cause of the rejection — and
+// deciding it is still right, because clause 1 makes the non-resolution itself
+// the fault of the document under test rather than a shortfall of components it
+// wanted. parser's TestParseRedefineUnresolvableIsAnError pins that rule against
+// <include>'s opposite; what this test pins is the disjointness the other two
+// shapes have.
 //
 // What makes it able to fail: each root still carries a directive that named no
 // document, so the pre-#404 conjunction — any unfollowed reference paired with any
