@@ -271,13 +271,18 @@ nearest, and its own body records the ranking as falsified and unreplaced.
    **DISCHARGED — do not take it.** The trigger set here resolved: #1181 landed
    clean (`7df8d7f`), and #1199 closed on the no-new-rule ruling
    (`issuecomment-5529902800`, squash `b57d37d`). Band row 1 carries the
-   corrected record. **Start at #1206.**
-2. **#1206 is the lane slice with its grounding already done — take it and hold
-   the ratchet to account.** **Trigger set here**: #1206 predicts genuine
-   `schema` movement (its fixtures are under-rejected `fail` today). Predict a
-   figure before running and account for it case by case, per CLAUDE.md; the
-   `name` attribute is the one where clause 2.1 also bites, and the grounding
-   must rule which clause is reported rather than letting statement order decide.
+   corrected record. ~~**Start at #1206.**~~ #1206 has since landed too — see
+   item 2.
+2. ~~**#1206 is the lane slice with its grounding already done — take it and hold
+   the ratchet to account.**~~ **DISCHARGED — do not take it.** The trigger set
+   here resolved: mason predicted **15**, the arbiter's independent UTF-16-aware
+   census found **16**, every case was accounted for before banking (`e70c1ae`),
+   and #1206 closed on squash `1780670` at `schema` **13912 → 13928**. The
+   grounding did rule which clause `name` reports — clause 2.2, not the clause
+   2.1 that also bites it — on the finding that the spec adjudicates no
+   precedence (`xmlschema11-1.md:6925`). **Band row 2 is the next `/backlog`'s to
+   replace whole**, per that landing's own entry; it is a closed issue until
+   then.
 3. **#1164's ruling is landed — the near-match is a coincidence — and #1196 is
    the instrument that replaces every stale per-class count.** **Standing
    instruction unchanged**: do not band on the numbers #1196 produces, and take
@@ -285,16 +290,24 @@ nearest, and its own body records the ranking as falsified and unreplaced.
    bucket from 670. #1051's stage-2 deletion waits on the three unfiled buckets
    (the named `<group>` body, `groupParticles`' default arm, the `<redefine>`
    child), which #1051's standing instruction says to file as they are taken.
-4. **The `src-element` clause 4 follow-up is DISMISSED, with the reason.** #471's
-   post-land deferred to this pass whether to file a tracker for clause 4
-   (`ed-with-ns`), which governs `targetNamespace` on a local declaration and is
-   **charged nowhere in `parser`**. Dismissed: the ref= overlap has **zero suite
-   fixtures**, the rule's other clauses are unimplemented, and #1206's Notes
-   already record it where the session that meets the `targetNamespace` bullet
-   reads it. Filing an ungrounded spec claim with no case to exercise it is the
-   speculative widening #471's own Notes and #1051's standing instruction both
-   forbid. It becomes fileable the moment a fixture surfaces; until then it is a
-   recorded scope boundary, not a queue row.
+4. ~~**The `src-element` clause 4 follow-up is DISMISSED, with the reason.**~~
+   **SUPERSEDED — the dismissal's own reopening condition fired and the tracker
+   is filed as #1215, with its attribute-side twin as #1216.** The dismissal
+   rested on *"the ref= overlap has **zero suite fixtures**"* and ended *"It
+   becomes fileable the moment a fixture surfaces."* The zero was an artefact of
+   a UTF-16LE blind spot in `ibmData/`, not of the suite: #1206's landing found
+   `constraintsOnAttribute/s3_2_3si10`, and the post-land scan of the decoded
+   `ibmData/schema_invalid/S3_2_3/` then found **six further `fail` cases** the
+   dismissal never contemplated — three element-side (`s3_2_3si01`, `si06`,
+   `si08`, `src-element` clause 4) and three attribute-side (`si02`, `si05`,
+   `si09`, `src-attribute` clause 6, `att-with-ns`, equally uncharged and never
+   dismissed because never looked at). All six are accepted by the parser today
+   against a suite that marks them schema-invalid. The dismissal's other two
+   grounds do not survive contact with that: a rule whose clauses an issue
+   implements together is no longer *"one clause of a rule whose other clauses
+   stay unimplemented"*, and a boundary recorded in a closed issue's Notes is not
+   a tracker. **This is not a queue-row count the next `/backlog` should
+   re-derive from here** — read it from GitHub, as step 6 requires.
 5. **The human decision blocking #1002 is unchanged and is now carried for a
    TENTH stamp.** #1002 waits on a ruling between (a) a constitutional
    "superseded pass" ratchet class alongside `GOXSD_RATCHET_REMOVALS`, enumerated
