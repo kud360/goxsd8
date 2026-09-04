@@ -383,6 +383,27 @@ func TestParseAbsentNamespace(t *testing.T) {
 	}
 }
 
+// TestParseNamespaceWithNoComponents pins the other end of the same
+// derivation: §3.17.1 gives the Schema component no {target namespace}
+// property, so a document's targetNamespace is observable only through the
+// components it declares, and one that declares none reports no namespace at
+// all — not the ·absent· one, which would claim a schema with no namespace.
+func TestParseNamespaceWithNoComponents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nocomponents.xsd")
+	body := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.com/ns">` +
+		`<xs:annotation><xs:documentation>declares nothing</xs:documentation></xs:annotation></xs:schema>`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"parse", path}, &stdout, &stderr); code != 0 {
+		t.Fatalf("parse = %d, want 0 (stderr %q)", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), "  namespace:") {
+		t.Errorf("stdout =\n%s\nwant no namespace line at all", stdout.String())
+	}
+}
+
 // TestParseAdversarialArguments is the robustness bar the stub set and this
 // landing must not fall below (#472, the 2026-08-12 cliuser pass): no panic,
 // an exit code in the contract's three, and the streams kept apart, whatever

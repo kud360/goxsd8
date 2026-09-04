@@ -84,12 +84,13 @@ instances: 1 if any one of them is invalid.
 
 `parse` compiles **each argument separately**, in argument order — several
 schema arguments are several compilations, not one set — and prints each
-summary on stdout: the namespaces that schema's components are in, then a
-count of each kind of declaration its documents make. A rejected schema prints
-its first error on stderr as `<loc>: [<rule>] <message>` and assembly stops
-there, so that is one line per rejected argument; the exit code is the worst
-outcome over the arguments: 0 when every one compiles, 1 when any is rejected,
-2 when any cannot be read.
+summary on stdout: the distinct namespaces of the components that schema
+declares, in first-appearance order, then a count of each kind of declaration
+its documents make; a schema that declares no components prints no namespace
+line. A rejected schema prints its first error on stderr as
+`<loc>: [<rule>] <message>` and assembly stops there, so that is one line per
+rejected argument; the exit code is the worst outcome over the arguments: 0
+when every one compiles, 1 when any is rejected, 2 when any cannot be read.
 
 Beyond `-schema` and `-out`, the contract carries `-format xml|json|ber`
 (force the instance source format instead of deriving it from the
