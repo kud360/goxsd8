@@ -5,7 +5,10 @@
 //
 //	goxsd8 parse [-q] [-v] <schema.xsd>...
 //	    Compile each schema argument and print its summary on stdout:
-//	    the namespaces its components are in, then a count of each kind
+//	    the distinct namespaces of the components the compilation
+//	    declares (the argument document and every one it includes,
+//	    imports, overrides or redefines), in first-appearance order
+//	    and none when it declares nothing, then a count of each kind
 //	    of declaration the schema documents make. Each argument is its
 //	    own root document and its own run, in argument order — several
 //	    arguments are several compilations, not one set.
