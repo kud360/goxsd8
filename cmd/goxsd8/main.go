@@ -42,15 +42,25 @@ Usage (contract; subcommands land with their milestones):
   goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...
       Assess instances against the compiled set; every schema needs
       its own -schema, and every positional argument is an instance.
+      The -schema documents compose into ONE set — several of them are
+      one compilation, not one each — and - names standard input as an
+      instance, never as a schema.
       Source format by extension (.xml, .json, .ber) or forced with
       -format xml|json|ber, matched case-sensitively and applying to
       every instance of the invocation (there is no per-instance
-      spelling).
-      xsi:schemaLocation hints in XML instances augment the schema set
-      (resolved relative to the instance; disable with -no-hints).
-      Exit 0 valid, 1 invalid, 2 usage/IO, aggregated over the
-      instances: 1 if any one of them is invalid. Each violation
-      prints one line on stdout: <loc>: [<rule>] <message>.
+      spelling); an unrecognized token, and an instance whose
+      extension names none of the three, are usage errors listing the
+      values. Only xml is assessed today: json and ber are reserved,
+      and an instance in either exits 2 saying so.
+      xsi:schemaLocation hints on the document element of an XML
+      instance augment the schema set for that instance (resolved
+      relative to the instance; disable with -no-hints).
+      Exit 0 when no instance was charged a violation, 1 invalid,
+      2 usage/IO, 3 when the schema set does not compile, aggregated
+      over the instances: 1 if any one of them is invalid. Every
+      instance is assessed — the run never stops at the first invalid
+      one — and each violation prints one line on stdout:
+      <loc>: [<rule>] <message>.
 
   goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
       Generate Go types; repeated -schema/-out pairs map schemas to
@@ -63,17 +73,43 @@ goxsd8 -q parse a.xsd. -q suppresses a subcommand's informational
 output, which is parse's summary, and never a diagnosis: neither the
 error lines above nor validate's violations are silenced by it.
 
-Implemented today: the help path and parse. With no arguments, or with
--h, -help or --help in any argument position, goxsd8 prints this usage
-to stdout and exits 0. goxsd8 parse compiles its arguments as above and
-honours -q and -v, though GOXSD_DEBUG does not scope -v yet. Every other
-invocation exits 2, reporting on stderr that validate or gen is reserved
-but not yet built, that the name is not one of the three, that a flag
-stands before the subcommand it qualifies, or that the first argument is
-a flag and no subcommand was given.
+Implemented today: the help path, parse and validate. With no arguments,
+or with -h, -help or --help in any argument position, goxsd8 prints this
+usage to stdout and exits 0. goxsd8 parse compiles its arguments as above
+and honours -q and -v; goxsd8 validate assesses XML instances as above and
+honours -v, -q silencing nothing there because it writes no informational
+output. GOXSD_DEBUG scopes -v for neither. Every other invocation exits 2,
+reporting on stderr that gen is reserved but not yet built, that the name
+is not one of the three, that a flag stands before the subcommand it
+qualifies, or that the first argument is a flag and no subcommand was
+given.
 `
 
+// The exit codes the CLI answers with, ordered by severity so that an
+// invocation over several arguments reports the worst outcome over its runs by
+// taking their maximum: a clean run, a rejected document, an argument list or a
+// file this process could not work with at all, and — for validate alone — a
+// schema set that does not compile, which is the most severe because it leaves
+// every instance unassessed rather than any one of them decided.
+//
+// Which fault each code names is per subcommand and stated in doc.go: parse
+// charges exitInvalid for the schema it was asked to compile, where validate
+// charges it for an instance and answers exitSchema for its schema set.
 const (
+	exitOK      = 0
+	exitInvalid = 1
+	exitUsage   = 2
+	exitSchema  = 3
+)
+
+const (
+	// helpNotAFlagValueFmt answers the flag-package spellings -h=…/-help=…,
+	// which wantsHelp deliberately does not accept: the help vocabulary is the
+	// three bare tokens and nothing else (doc.go), so this is a usage error
+	// naming the spelling that would have worked. The subcommand fills the
+	// verb, because the flag set that rejected the spelling is its own.
+	helpNotAFlagValueFmt = "goxsd8: %s: a help request is spelled -h, -help or --help, with no value"
+
 	// helpPointer is the remedy line under every usage error. It names the
 	// binary's own help path, which resolves wherever the binary runs; a
 	// `go doc <import path>` invocation needs the module tree and fails for
@@ -119,6 +155,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	// request.
 	if args[0] == "parse" {
 		return runParse(args[1:], stdout, stderr)
+	}
+	if args[0] == "validate" {
+		return runValidate(args[1:], stdout, stderr)
 	}
 	return usageError(stderr, diagnose(args))
 }
