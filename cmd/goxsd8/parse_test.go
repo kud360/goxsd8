@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -286,7 +287,7 @@ func TestParseUsageErrors(t *testing.T) {
 		// -help=true is not one of the three help spellings, at any position
 		// (doc.go's argument vocabulary); after a subcommand it is a flag
 		// whose value that subcommand does not accept.
-		{"help as a flag value", []string{"parse", "-help=true"}, helpNotAFlagValue},
+		{"help as a flag value", []string{"parse", "-help=true"}, fmt.Sprintf(helpNotAFlagValueFmt, "parse")},
 	}
 	seen := make(map[string]string)
 	for _, c := range cases {

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The schema hinted.xml names through xsi:schemaLocation and no -schema
+     argument has to. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/hinted">
+  <xs:element name="note" type="xs:string"/>
+</xs:schema>

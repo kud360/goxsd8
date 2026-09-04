@@ -16,22 +16,6 @@ import (
 	"github.com/kud360/goxsd8/xsderr"
 )
 
-// The exit codes parse answers with, ordered by severity so that a
-// multi-argument invocation reports the worst outcome over its runs by taking
-// their maximum: a clean compilation, a schema the parser rejected, and a
-// document that yielded no verdict at all.
-const (
-	exitOK      = 0
-	exitInvalid = 1
-	exitUsage   = 2
-)
-
-// helpNotAFlagValue answers the flag-package spellings -h=…/-help=…, which
-// wantsHelp deliberately does not accept: the help vocabulary is the three
-// bare tokens and nothing else (doc.go), so this is a usage error naming the
-// spelling that would have worked.
-const helpNotAFlagValue = "goxsd8: parse: a help request is spelled -h, -help or --help, with no value"
-
 // runParse implements `goxsd8 parse`: it compiles each schema argument and
 // writes its summary to stdout, one run per argument in argument order.
 // args excludes the subcommand name itself.
@@ -52,7 +36,7 @@ func runParse(args []string, stdout, stderr io.Writer) int {
 	verbose := flags.Bool("v", false, "log the parser's assembly at debug level to stderr")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			return usageError(stderr, helpNotAFlagValue)
+			return usageError(stderr, fmt.Sprintf(helpNotAFlagValueFmt, "parse"))
 		}
 		return usageError(stderr, fmt.Sprintf("goxsd8: parse: %v", err))
 	}
@@ -97,7 +81,7 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 	// this process reads the documents its own user named, with that user's
 	// privileges.
 	schema, err := parser.Parse(root,
-		parser.WithResolver(loader.Dir(filepath.VolumeName(root)+string(filepath.Separator))),
+		parser.WithResolver(loader.Dir(filesystemRoot(root))),
 		parser.WithLogger(log))
 	if err != nil {
 		// A schema verdict, not an IO fault: rootLocation already opened the

@@ -21,15 +21,29 @@
 //	goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...
 //	    Assess instances against the compiled set; every schema needs
 //	    its own -schema, and every positional argument is an instance.
+//	    The -schema documents compose into ONE set — several of them are
+//	    one compilation, not one each — and - names standard input as an
+//	    instance, never as a schema.
 //	    Source format by extension (.xml, .json, .ber) or forced with
 //	    -format xml|json|ber, matched case-sensitively and applying to
 //	    every instance of the invocation (there is no per-instance
-//	    spelling).
-//	    xsi:schemaLocation hints in XML instances augment the schema set
-//	    (resolved relative to the instance; disable with -no-hints).
-//	    Exit 0 valid, 1 invalid, 2 usage/IO, aggregated over the
-//	    instances: 1 if any one of them is invalid. Each violation
-//	    prints one line on stdout: <loc>: [<rule>] <message>.
+//	    spelling); an unrecognized token, and an instance whose
+//	    extension names none of the three, are usage errors listing the
+//	    values. Only xml is assessed today: json and ber are reserved,
+//	    and an instance in either exits 2 saying so.
+//	    xsi:schemaLocation hints on the document element of an XML
+//	    instance augment the schema set for that instance (resolved
+//	    relative to the instance; disable with -no-hints). A hint the
+//	    set will not compose with is the instance's own fault, not
+//	    the schema set's: it is reported on stderr naming that
+//	    instance, whose hints are then dropped, and it is assessed
+//	    against the -schema documents alone.
+//	    Exit 0 when no instance was charged a violation, 1 invalid,
+//	    2 usage/IO, 3 when the schema set does not compile, aggregated
+//	    over the instances: 1 if any one of them is invalid. Every
+//	    instance is assessed — the run never stops at the first invalid
+//	    one — and each violation prints one line on stdout:
+//	    <loc>: [<rule>] <message>.
 //
 //	goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
 //	    Generate Go types; repeated -schema/-out pairs map schemas to
@@ -42,14 +56,16 @@
 // output, which is parse's summary, and never a diagnosis: neither the
 // error lines above nor validate's violations are silenced by it.
 //
-// Implemented today: the help path and parse. With no arguments, or with
-// -h, -help or --help in any argument position, goxsd8 prints this usage
-// to stdout and exits 0. goxsd8 parse compiles its arguments as above and
-// honours -q and -v, though GOXSD_DEBUG does not scope -v yet. Every other
-// invocation exits 2, reporting on stderr that validate or gen is reserved
-// but not yet built, that the name is not one of the three, that a flag
-// stands before the subcommand it qualifies, or that the first argument is
-// a flag and no subcommand was given.
+// Implemented today: the help path, parse and validate. With no arguments,
+// or with -h, -help or --help in any argument position, goxsd8 prints this
+// usage to stdout and exits 0. goxsd8 parse compiles its arguments as above
+// and honours -q and -v; goxsd8 validate assesses XML instances as above and
+// honours -v, -q silencing nothing there because it writes no informational
+// output. GOXSD_DEBUG scopes -v for neither. Every other invocation exits 2,
+// reporting on stderr that gen is reserved but not yet built, that the name
+// is not one of the three, that a flag stands before the subcommand it
+// qualifies, or that the first argument is a flag and no subcommand was
+// given.
 //
 // # Argument vocabulary
 //
@@ -86,6 +102,44 @@
 // document's own directory. That resolution is confined to no subtree: a
 // schema document may name any path the invoking user can read, so an
 // <xs:include schemaLocation="../../../etc/passwd"> is served like any other.
+//
+// validate composes its -schema documents into ONE schema set, through a
+// synthesized wrapper schema document that <import>s each document declaring a
+// target namespace of its own and <include>s each declaring none. Every
+// cross-document rule an ordinary assembly enforces therefore holds over the
+// set: two documents colliding on a name are sch-props-correct clause 2, and a
+// reference no document of the set supplies is src-resolve. A set that does not
+// compile exits 3, which is neither a verdict about an instance (1) nor an
+// argument this process could not read (2), so a script tells "your schema is
+// wrong" from "your data is wrong" by exit code alone.
+//
+// An instance argument spelled - is standard input. -schema - is not
+// supported: a schema document's location is the base URI its own relative
+// <xs:include>, <xs:import> and <xs:override> references resolve against, and
+// standard input has none.
+//
+// validate follows an xsi:schemaLocation or xsi:noNamespaceSchemaLocation hint
+// carried by the DOCUMENT ELEMENT of an XML instance, and no other element's.
+// §4.3.2 clause 5 admits one on any element and makes its effect global to the
+// assessment either way, and clause 3 obliges a processor to dereference none
+// of them, so the scope above is the strategy this CLI publishes rather than a
+// shortfall. Each hinted location is resolved against the instance's own path
+// (clause 4) and joins that instance's schema set alone.
+//
+// A hint that instance's set will not compose with — one pairing a namespace
+// with a document declaring another (src-import clause 3.1), or naming a
+// document that is not well-formed — is a fault of the INSTANCE that carried
+// it and never of the -schema set: clause 3 obliges a processor to dereference
+// no hint at all, so the hints of that instance are reported unusable on
+// stderr, naming it, and it is assessed against the -schema documents alone,
+// exactly as a hint naming a document that is not there already degrades. Exit
+// 3 answers a -schema set that does not compile and nothing else.
+//
+// -no-hints turns all of it off — clause 3's "Schema processors should provide
+// an option to control whether they do so" — and turning it off is what makes
+// an insufficient -schema set fail: a validation root the set declares nothing
+// for is charged cvc-assess-elt (§3.3.4.6) instead of the run quietly
+// succeeding on a schema document the instance itself named.
 //
 // There is no version entry point and none is planned before 1.0: run
 // go version -m $(which goxsd8) for the module version of a tagged build.

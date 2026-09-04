@@ -50,37 +50,68 @@ go install ./cmd/goxsd8                         # goxsd8 onto $(go env GOPATH)/b
 `go install` line is what produces the `goxsd8` binary the CLI section below
 invokes.
 
-### CLI (contract; `parse` is implemented, `validate` and `gen` are not)
+### CLI (contract; `parse` and `validate` are implemented, `gen` is not)
 
 This block is a **contract**, exactly like the Library one below: the help
-path and `parse` run today. A bare `goxsd8`, or `-h`/`-help`/`--help` in any
-argument position, prints the usage contract to stdout and exits 0
+path, `parse` and `validate` run today. A bare `goxsd8`, or
+`-h`/`-help`/`--help` in any argument position, prints the usage contract to
+stdout and exits 0
 ([issue #251](https://github.com/kud360/goxsd8/issues/251)). Every invocation
 that reaches no built subcommand exits 2 with one of four lines on stderr:
-`validate` or `gen` is reserved but not yet implemented, any other name is an
-unknown subcommand, a flag stands before the subcommand it qualifies, and a
-leading flag with no subcommand after it is no subcommand at all. The exit
-codes below are the contract's, and today's for `parse` alone. `validate`
-lands with M5 and `gen` with M9.
+`gen` is reserved but not yet implemented, any other name is an unknown
+subcommand, a flag stands before the subcommand it qualifies, and a leading
+flag with no subcommand after it is no subcommand at all. `gen` lands with M9.
 
-**Exit 2 narrowed when `parse` landed.** It used to mean "this binary is a
-stub" for every invocation; for `parse` it now means a usage or IO fault — a
-missing argument, an undefined flag, a schema document that cannot be read —
-and never a verdict about a schema's content. A script that read exit 2 as
-"skip, unimplemented" must read the stderr line, or check for exit 1 (schema
-errors) and 0 (compiled) instead.
+**Exit 2 narrowed when `parse` landed, and again when `validate` did.** It
+used to mean "this binary is a stub" for every invocation; for both built
+subcommands it now means a usage or IO fault — a missing argument, an
+undefined flag, a document that cannot be read, and for `validate` a
+`-format` token outside `xml|json|ber` or an instance whose format is
+`json` or `ber`, which the contract reserves and no milestone has built. It
+is never a verdict about a schema or an instance. A script that read exit 2
+as "skip, unimplemented" must read the stderr line, or branch on the other
+codes instead: for `parse`, 0 compiled and 1 rejected; for `validate`, 0 no
+violation charged, 1 an invalid instance, and 3 a schema set that does not
+compile.
 
 ```sh
 goxsd8 parse order.xsd items.xsd                # compile + summary, exit 0/1/2
-goxsd8 validate -schema order.xsd -schema items.xsd order1.xml order2.json
-                                                # exit 0 valid, 1 invalid, 2 usage
+goxsd8 validate -schema order.xsd -schema items.xsd order1.xml order2.xml
+                                                # exit 0 clean, 1 invalid, 2 usage, 3 schema
 goxsd8 gen -schema order.xsd -out ./gen/order \
            -schema items.xsd -out ./gen/items  # one package per -schema/-out pair
 ```
 
 `validate` needs its own `-schema` for every schema, and reads every
-positional argument as an instance. Its exit code aggregates over those
-instances: 1 if any one of them is invalid.
+positional argument as an instance. The `-schema` documents compose into
+**one schema set** — several of them are one compilation, not one each,
+through a synthesized wrapper document that `<xs:import>`s each schema with a
+target namespace of its own and `<xs:include>`s each with none — so a name
+two of them collide on is `sch-props-correct` clause 2 and a set that does
+not compile exits **3**, distinctly from an invalid instance (1). **Every
+instance is assessed**, in argument order: the run never stops at the first
+invalid one, and its exit code is the worst outcome over them — 1 if any one
+of them is invalid. An instance argument spelled `-` is standard input;
+`-schema -` is not supported, a schema document's location being the base URI
+its own relative references resolve against.
+
+`validate` derives each instance's source format from its extension, or from
+`-format` when that is given; an instance whose extension names none of
+`.xml`, `.json` and `.ber` — `-` among them — is a usage error naming the
+values rather than a guess. Only `xml` is assessed today: `json` and `ber`
+are recognized tokens whose adapters (`validate/jsonsrc`, `validate/bersrc`)
+are M8 and M11 stubs, so an instance in either exits 2 saying so. An
+`xsi:schemaLocation` or `xsi:noNamespaceSchemaLocation` hint on an XML
+instance's **document element** augments that instance's schema set, resolved
+against the instance's own path; `-no-hints` turns that off, so a `-schema`
+set that declares nothing for the validation root is then charged
+`cvc-assess-elt` instead of quietly succeeding on a schema the instance
+itself named. A hint that set will not compose with — a namespace paired with
+a document declaring another, a document that is not well-formed, a document
+that is not there — is the **instance's** fault and not the schema set's: it
+is reported on stderr against that instance, whose hints are then dropped, and
+the instance is assessed against the `-schema` documents alone. Exit **3**
+answers a `-schema` set that does not compile and nothing else.
 
 `parse` compiles **each argument separately**, in argument order — several
 schema arguments are several compilations, not one set — and prints each
@@ -100,9 +131,9 @@ invocation, there being no per-instance spelling), `-no-hints` (ignore
 `xsi:schemaLocation` hints in XML instances), `-backend strict|native`
 (which value backend `gen` emits against), `-q` (quiet) and `-v` (debug
 logging to stderr via `slog`, scoped with
-`GOXSD_DEBUG=parser,validate,codec` — a scoping `parse` does not honour
-yet). The common flags qualify a subcommand and **follow its name**:
-`goxsd8 parse -q order.xsd`, not `goxsd8 -q parse order.xsd`. `-q`
+`GOXSD_DEBUG=parser,validate,codec` — a scoping neither `parse` nor
+`validate` honours yet). The common flags qualify a subcommand and **follow
+its name**: `goxsd8 parse -q order.xsd`, not `goxsd8 -q parse order.xsd`. `-q`
 suppresses a subcommand's informational output — `parse`'s summary — and
 never a diagnosis: neither `parse`'s error lines nor `validate`'s
 violations.

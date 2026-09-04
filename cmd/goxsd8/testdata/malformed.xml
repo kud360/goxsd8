@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<o:order xmlns:o="http://example.com/order">
+  <o:item sku="ABC-1234">
+</o:order>

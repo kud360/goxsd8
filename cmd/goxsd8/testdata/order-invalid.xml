@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- One violation, of one rule: the sku lexical is outside the Sku pattern,
+     which cvc-attribute clause 3 charges through String Valid. -->
+<o:order xmlns:o="http://example.com/order">
+  <o:item sku="nope"/>
+</o:order>

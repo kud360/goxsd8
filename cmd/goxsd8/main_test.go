@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -14,9 +15,9 @@ import (
 // vocabulary states rather than an accident — a help flag before its
 // subcommand, a help flag alongside an unrecognized one, -- with no
 // end-of-options meaning, a help flag after a name outside the vocabulary
-// altogether, and `parse -h`: parse owns the only flag.FlagSet in the binary,
-// so it is the one row where a subcommand's own flag parsing could take -h
-// away from the help path.
+// altogether, and `parse -h` / `validate -h`: those two own the flag.FlagSets
+// in the binary, so they are the rows where a subcommand's own flag parsing
+// could take -h away from the help path.
 var helpCases = [][]string{
 	nil,
 	{"-h"},
@@ -28,6 +29,8 @@ var helpCases = [][]string{
 	{"--", "-help"},
 	{"frobnicate", "-h"},
 	{"parse", "-h"},
+	{"validate", "-h"},
+	{"validate", "-schema", "testdata/order.xsd", "-h"},
 }
 
 // dispatchCases is the diagnosis every non-help invocation that reaches no
@@ -36,12 +39,12 @@ var helpCases = [][]string{
 // followed on stderr by helpPointer. One encoding of the matrix, driven twice
 // — through run below and through the built binary in TestBuiltBinaryMatrix.
 //
-// parse has no row here: it is built, and parse_test.go is its matrix.
+// parse and validate have no row here: both are built, and parse_test.go and
+// validate_test.go are their matrices.
 var dispatchCases = []struct {
 	args []string
 	want string
 }{
-	{[]string{"validate", "-schema", "a.xsd", "a.xml"}, `goxsd8: validate is not yet implemented`},
 	{[]string{"gen", "-schema", "a.xsd", "-out", "d"}, `goxsd8: gen is not yet implemented`},
 	{[]string{"frobnicate"}, `goxsd8: unknown subcommand "frobnicate"`},
 	{[]string{"parsee", "a.xsd"}, `goxsd8: unknown subcommand "parsee"`},
@@ -110,7 +113,7 @@ func TestRunDispatch(t *testing.T) {
 // me no subcommand" must not collapse into one another.
 func TestDiagnosesAreDistinct(t *testing.T) {
 	kinds := []string{
-		diagnose([]string{"validate"}),   // reserved by the contract, unbuilt
+		diagnose([]string{"gen"}),        // reserved by the contract, unbuilt
 		diagnose([]string{"frobnicate"}), // outside the vocabulary
 		diagnose([]string{"-q"}),         // a flag, so no subcommand at all
 		diagnose([]string{"-q", "gen"}),  // a flag before the name it qualifies
@@ -122,7 +125,7 @@ func TestDiagnosesAreDistinct(t *testing.T) {
 			}
 		}
 	}
-	if got := diagnose([]string{"VALIDATE"}); got == diagnose([]string{"validate"}) {
+	if got := diagnose([]string{"GEN"}); got == diagnose([]string{"gen"}) {
 		t.Errorf("a reserved name and its wrong-case spelling both diagnose as %q", got)
 	}
 }
@@ -160,7 +163,7 @@ func TestUsageCoversContract(t *testing.T) {
 		"goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...",
 		"goxsd8 gen -schema <schema.xsd> -out <dir>",
 		"GOXSD_DEBUG=parser,validate,codec",
-		"Implemented today: the help path and parse.",
+		"Implemented today: the help path, parse and validate.",
 		// The four answers a batch script needs and the page withheld
 		// (#1066, #1031): which stream carries parse's summary and its
 		// error lines, which carries validate's violations, that the
@@ -173,6 +176,21 @@ func TestUsageCoversContract(t *testing.T) {
 		"prints one line on stdout",
 		"-format xml|json|ber",
 		"case-sensitively",
+		// #720's own answers, none of which any earlier copy carried: that
+		// several -schema arguments are ONE set, that a broken schema set has
+		// an exit code of its own, that the run reports every instance rather
+		// than stopping at the first bad one, what an unrecognized -format
+		// token earns, that two of the three tokens are reserved and unbuilt,
+		// that - is an instance spelling alone, and which elements' hints are
+		// followed.
+		"compose into ONE set",
+		"3 when the schema set does not compile",
+		"Every\n      instance is assessed — the run never stops at the first invalid",
+		"are usage errors listing the\n      values.",
+		"Only xml is assessed today",
+		"- names standard input as an\n      instance, never as a schema.",
+		"hints on the document element of an XML",
+		"set will not compose with is the instance's own fault",
 		// #472's own four decisions, each of which a user can only learn
 		// from this block: what several schema arguments mean, that a
 		// document parse cannot read is exit 2 rather than a verdict,
@@ -233,27 +251,49 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 		}
 	}
 
-	// parse's own three outcomes, through the shipped executable rather than
-	// through run: the exit code, the stream each answer lands on, and the
-	// summary's bytes are what a script sees (#251's shape, #472's subject).
+	// parse's and validate's own outcomes, through the shipped executable
+	// rather than through run: the exit code, the stream each answer lands on,
+	// and the summary's bytes are what a script sees (#251's shape, #472's
+	// subject). The two stdin rows are the only place standard input is
+	// reachable at all — run takes its writers as arguments and its reader from
+	// the process — and they pin the hint scan's replay as well as the
+	// spelling: the scan consumes the document's prefix, so a broken replay
+	// would leave the assessment nothing to read.
 	for _, c := range []struct {
 		args        []string
+		stdin       string
 		code        int
 		stdout      string
+		stdoutMatch string
 		stderrMatch string
 	}{
-		{[]string{"parse", "testdata/order.xsd"}, 0, orderSummary, ""},
-		{[]string{"parse", "-q", "testdata/order.xsd"}, 0, "", ""},
-		{[]string{"parse", "testdata/broken.xsd"}, 1, "", "[src-resolve]"},
-		{[]string{"parse", "testdata/nosuch.xsd"}, 2, "", "no such file or directory"},
-		{[]string{"parse"}, 2, "", "goxsd8: parse: no schema given"},
+		{args: []string{"parse", "testdata/order.xsd"}, code: 0, stdout: orderSummary},
+		{args: []string{"parse", "-q", "testdata/order.xsd"}, code: 0},
+		{args: []string{"parse", "testdata/broken.xsd"}, code: 1, stderrMatch: "[src-resolve]"},
+		{args: []string{"parse", "testdata/nosuch.xsd"}, code: 2, stderrMatch: "no such file or directory"},
+		{args: []string{"parse"}, code: 2, stderrMatch: "goxsd8: parse: no schema given"},
+		{args: []string{"validate", "-schema", orderSchema, validInstance}, code: 0},
+		{args: []string{"validate", "-schema", orderSchema, invalidInstance}, code: 1,
+			stdoutMatch: invalidInstance + ":5:3: [cvc-attribute]"},
+		{args: []string{"validate", "-schema", "testdata/broken.xsd", validInstance}, code: 3,
+			stderrMatch: "[src-resolve]"},
+		{args: []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, code: 2,
+			stderrMatch: "no such file or directory"},
+		{args: []string{"validate"}, code: 2, stderrMatch: "goxsd8: validate: no schema given"},
+		{args: []string{"validate", "-format", "xml", "-schema", orderSchema, "-"},
+			stdin: readFixture(t, validInstance), code: 0},
+		{args: []string{"validate", "-format", "xml", "-schema", orderSchema, "-"},
+			stdin: readFixture(t, invalidInstance), code: 1, stdoutMatch: "-:5:3: [cvc-attribute]"},
 	} {
-		stdout, stderr, code := runBinary(t, bin, c.args)
+		stdout, stderr, code := runBinaryStdin(t, bin, c.args, c.stdin)
 		if code != c.code {
 			t.Errorf("%s %q = %d, want %d (stderr %q)", bin, c.args, code, c.code, stderr)
 		}
-		if stdout != c.stdout {
+		if c.stdoutMatch == "" && stdout != c.stdout {
 			t.Errorf("%s %q stdout = %q, want %q", bin, c.args, stdout, c.stdout)
+		}
+		if c.stdoutMatch != "" && !strings.Contains(stdout, c.stdoutMatch) {
+			t.Errorf("%s %q stdout = %q, want it to contain %q", bin, c.args, stdout, c.stdoutMatch)
 		}
 		if c.stderrMatch == "" && stderr != "" {
 			t.Errorf("%s %q stderr = %q, want empty", bin, c.args, stderr)
@@ -264,13 +304,31 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 	}
 }
 
-// runBinary runs bin with args and returns its stdout, stderr and exit code.
-// A non-zero exit is an expected outcome here, not a test failure — only a
-// failure to run the binary at all is.
+// readFixture returns the bytes of a testdata file, for the rows that feed one
+// to the binary's standard input instead of naming it.
+func readFixture(t *testing.T, path string) string {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}
+
+// runBinary runs bin with args and an empty standard input.
 func runBinary(t *testing.T, bin string, args []string) (string, string, int) {
+	t.Helper()
+	return runBinaryStdin(t, bin, args, "")
+}
+
+// runBinaryStdin runs bin with args and stdin, and returns its stdout, stderr
+// and exit code. A non-zero exit is an expected outcome here, not a test
+// failure — only a failure to run the binary at all is.
+func runBinaryStdin(t *testing.T, bin string, args []string, stdin string) (string, string, int) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(bin, args...)
+	cmd.Stdin = strings.NewReader(stdin)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
