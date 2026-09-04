@@ -47,6 +47,34 @@ const importsSummary = `testdata/imports.xsd
   components: 2
 `
 
+// noComponentsSummary and includedNamespaceSummary are the two halves of the
+// namespace derivation's scope, each the whole stdout block below the header
+// its fixture echoes from a temporary path. They differ by one <xs:include>
+// and disagree about the namespace line, which is what makes the derivation
+// observably a property of the compilation rather than of the argument
+// document. Both are pinned as blocks, like orderSummary and importsSummary,
+// so a summary that regressed to printing nothing fails here too.
+const noComponentsSummary = `  types: 0
+  elements: 0
+  attributes: 0
+  attribute groups: 0
+  model groups: 0
+  notations: 0
+  identity constraints: 0
+  components: 0
+`
+
+const includedNamespaceSummary = `  namespace: http://example.com/ns
+  types: 0
+  elements: 1
+  attributes: 0
+  attribute groups: 0
+  model groups: 0
+  notations: 0
+  identity constraints: 0
+  components: 1
+`
+
 // brokenRule is the src-resolve charge testdata/broken.xsd earns. The line is
 // asserted by its shape and this substring rather than in full: the message is
 // the parser's and the location is absolute, so pinning either here would make
@@ -385,8 +413,8 @@ func TestParseAbsentNamespace(t *testing.T) {
 
 // TestParseNamespaceWithNoComponents pins the other end of the same
 // derivation: §3.17.1 gives the Schema component no {target namespace}
-// property, so a document's targetNamespace is observable only through the
-// components it declares, and one that declares none reports no namespace at
+// property, so a targetNamespace is observable only through the components a
+// compilation declares, and one that declares none reports no namespace at
 // all — not the ·absent· one, which would claim a schema with no namespace.
 func TestParseNamespaceWithNoComponents(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nocomponents.xsd")
@@ -399,8 +427,36 @@ func TestParseNamespaceWithNoComponents(t *testing.T) {
 	if code := run([]string{"parse", path}, &stdout, &stderr); code != 0 {
 		t.Fatalf("parse = %d, want 0 (stderr %q)", code, stderr.String())
 	}
-	if strings.Contains(stdout.String(), "  namespace:") {
-		t.Errorf("stdout =\n%s\nwant no namespace line at all", stdout.String())
+	if want := path + "\n" + noComponentsSummary; stdout.String() != want {
+		t.Errorf("stdout =\n%s\nwant\n%s", stdout.String(), want)
+	}
+}
+
+// TestParseNamespaceThroughInclusion pins the half the contract's scope turns
+// on: the derivation runs over the whole compilation, so the namespace of a
+// component an <xs:include>d document declares reaches the summary even though
+// the argument document declares nothing. One <xs:include> is the whole
+// difference from TestParseNamespaceWithNoComponents, and it reverses the
+// outcome — which is why "the components the compilation declares" and "the
+// components that document declares" are not the same contract.
+func TestParseNamespaceThroughInclusion(t *testing.T) {
+	dir := t.TempDir()
+	const ns = `xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.com/ns"`
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("child.xsd", `<xs:schema `+ns+`><xs:element name="a" type="xs:string"/></xs:schema>`)
+	write("root.xsd", `<xs:schema `+ns+`><xs:include schemaLocation="child.xsd"/></xs:schema>`)
+
+	root := filepath.Join(dir, "root.xsd")
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"parse", root}, &stdout, &stderr); code != 0 {
+		t.Fatalf("parse %q = %d, want 0 (stderr %q)", root, code, stderr.String())
+	}
+	if want := root + "\n" + includedNamespaceSummary; stdout.String() != want {
+		t.Errorf("stdout =\n%s\nwant\n%s", stdout.String(), want)
 	}
 }
 
