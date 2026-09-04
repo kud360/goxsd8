@@ -197,16 +197,14 @@ func TestProduceLocalAttributeTargetNamespaceClause6(t *testing.T) {
 }
 
 // TestProduceRefAttributeTargetNamespaceStaysAccepted pins the BOUNDARY clause 6
-// was deliberately not extended to (#1216): an <attribute ref="..."> carrying
-// targetNamespace is accepted, the attribute read by nothing and ignored.
+// was deliberately not extended to: an <attribute ref="..."> carrying
+// targetNamespace is accepted.
 //
-// It is a gap in the charge, not a reading of the spec. src-attribute clause 3.2
-// forbids only <simpleType>, form and type alongside ref — unlike src-element's
-// blanket clause 2.2, which admits nothing but minOccurs, maxOccurs and id and so
-// rejects the element-side twin — while clause 6.1 (name present) would in
-// principle bind here, since clause 3.1 forces name absent whenever ref is
-// present. Nothing charges it, and this test asserts what the producer does
-// today rather than what the spec asks for.
+// It is a gap in the charge, not a reading of the spec, and the gap itself is
+// tracked at rejectLocalAttributeTargetNamespace's ref= GAP(xsd) marker in
+// parser/produce_complex.go — that marker, not this comment, is the greppable
+// record and carries the account of why nothing charges the form. This test
+// asserts only what the producer does today, not what the spec asks for.
 func TestProduceRefAttributeTargetNamespaceStaysAccepted(t *testing.T) {
 	if _, err := produce(t, wrap("a", `
 <xs:attribute name="A" type="xs:string"/>

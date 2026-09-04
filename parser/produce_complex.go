@@ -3103,18 +3103,27 @@ func useValueConstraintOK(el *Element) error {
 // neither-ref-nor-name shape under clause 3.1 before it, and calls
 // produceLocalAttribute only on the !hasRef arm, so the two together leave name
 // present unconditionally and a 6.1 branch here could not be made to fire.
-// 6.1's one reachable failure is the ref= form, where clause 3.1 forces name
-// absent — and that form never arrives here, is unreached by clause 3.2's
-// forbidden list (which names <simpleType>, form and type, not targetNamespace,
-// unlike src-element's blanket clause 2.2), and so keeps accepting a
-// targetNamespace it ignores (#1216).
+//
+// GAP(xsd): a local <attribute ref="..."> writing targetNamespace is accepted,
+// clause 6 charged on it nowhere. That form is 6.1's one reachable failure —
+// clause 3.1 forces name absent whenever ref is present — and nothing catches
+// it: produceAttributeUse serves it on the hasRef arm, which returns ahead of
+// this function, and clause 3.2's forbidden list names <simpleType>, form and
+// type but not targetNamespace, unlike src-element's blanket clause 2.2 that
+// rejects the element-side twin. No open issue owns retiring it;
+// TestProduceRefAttributeTargetNamespaceStaysAccepted pins today's acceptance.
 //
 // A top-level <attribute> may not write the attribute at all —
 // xs:topLevelAttribute declares it use="prohibited" (xmlschema11-1.md:4713) —
-// and rejectProhibitedAttrs charges that as the §5.1 grammar fault it is. An
-// <attribute use="prohibited"> returns from produceAttributeUse ahead of here
-// and is not charged either, unlike the clauses that function charges before its
-// own return.
+// and rejectProhibitedAttrs charges that as the §5.1 grammar fault it is.
+//
+// GAP(xsd): an <attribute use="prohibited"> writing targetNamespace escapes
+// clause 6 as well. produceAttributeUse returns on the prohibited token ahead of
+// both its hasRef arm and produceLocalAttribute, so this function never runs on
+// one — which sits against that same function's §5.1 reasoning for charging
+// clauses 1, 2, 3 and 5 before that very return. Closing it means lifting this
+// call up into produceAttributeUse ahead of the return, which reorders clause 6
+// against clause 4 at a call site of its own. No open issue owns retiring it.
 //
 // 6.3's antecedent carries the clause's whole force: an attribute writing its own
 // document's targetNamespace REDUNDANTLY is legal wherever it stands, needing no
