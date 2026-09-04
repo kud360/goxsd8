@@ -33,7 +33,11 @@
 //	    and an instance in either exits 2 saying so.
 //	    xsi:schemaLocation hints on the document element of an XML
 //	    instance augment the schema set for that instance (resolved
-//	    relative to the instance; disable with -no-hints).
+//	    relative to the instance; disable with -no-hints). A hint the
+//	    set will not compose with is the instance's own fault, not
+//	    the schema set's: it is reported on stderr naming that
+//	    instance, whose hints are then dropped, and it is assessed
+//	    against the -schema documents alone.
 //	    Exit 0 when no instance was charged a violation, 1 invalid,
 //	    2 usage/IO, 3 when the schema set does not compile, aggregated
 //	    over the instances: 1 if any one of them is invalid. Every
@@ -121,6 +125,15 @@
 // of them, so the scope above is the strategy this CLI publishes rather than a
 // shortfall. Each hinted location is resolved against the instance's own path
 // (clause 4) and joins that instance's schema set alone.
+//
+// A hint that instance's set will not compose with — one pairing a namespace
+// with a document declaring another (src-import clause 3.1), or naming a
+// document that is not well-formed — is a fault of the INSTANCE that carried
+// it and never of the -schema set: clause 3 obliges a processor to dereference
+// no hint at all, so the hints of that instance are reported unusable on
+// stderr, naming it, and it is assessed against the -schema documents alone,
+// exactly as a hint naming a document that is not there already degrades. Exit
+// 3 answers a -schema set that does not compile and nothing else.
 //
 // -no-hints turns all of it off — clause 3's "Schema processors should provide
 // an option to control whether they do so" — and turning it off is what makes

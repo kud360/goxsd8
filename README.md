@@ -106,7 +106,12 @@ instance's **document element** augments that instance's schema set, resolved
 against the instance's own path; `-no-hints` turns that off, so a `-schema`
 set that declares nothing for the validation root is then charged
 `cvc-assess-elt` instead of quietly succeeding on a schema the instance
-itself named.
+itself named. A hint that set will not compose with — a namespace paired with
+a document declaring another, a document that is not well-formed, a document
+that is not there — is the **instance's** fault and not the schema set's: it
+is reported on stderr against that instance, whose hints are then dropped, and
+the instance is assessed against the `-schema` documents alone. Exit **3**
+answers a `-schema` set that does not compile and nothing else.
 
 `parse` compiles **each argument separately**, in argument order — several
 schema arguments are several compilations, not one set — and prints each
@@ -127,8 +132,8 @@ invocation, there being no per-instance spelling), `-no-hints` (ignore
 (which value backend `gen` emits against), `-q` (quiet) and `-v` (debug
 logging to stderr via `slog`, scoped with
 `GOXSD_DEBUG=parser,validate,codec` — a scoping neither `parse` nor
-`validate` honours yet). The common flags qualify a subcommand and **follow its name**:
-`goxsd8 parse -q order.xsd`, not `goxsd8 -q parse order.xsd`. `-q`
+`validate` honours yet). The common flags qualify a subcommand and **follow
+its name**: `goxsd8 parse -q order.xsd`, not `goxsd8 -q parse order.xsd`. `-q`
 suppresses a subcommand's informational output — `parse`'s summary — and
 never a diagnosis: neither `parse`'s error lines nor `validate`'s
 violations.

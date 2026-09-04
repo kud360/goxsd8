@@ -107,14 +107,18 @@ func TestValidateReportsEveryInstance(t *testing.T) {
 // fault is also reported ONCE, before any instance is read, and on stderr —
 // stdout carries verdicts about instances alone.
 func TestValidateSchemaFaultHasItsOwnExitCode(t *testing.T) {
+	// The code is its own before any run proves a schema set earns it: a
+	// contract that promised the split and spent an existing code on it would
+	// leave every assertion below passing.
+	if exitSchema == exitOK || exitSchema == exitInvalid || exitSchema == exitUsage {
+		t.Fatalf("exitSchema = %d, want a code of its own beside %d, %d and %d", exitSchema, exitOK, exitInvalid, exitUsage)
+	}
+
 	var stdout, stderr bytes.Buffer
 	args := []string{"validate", "-schema", "testdata/broken.xsd", validInstance, invalidInstance}
 	code := run(args, &stdout, &stderr)
 	if code != exitSchema {
 		t.Fatalf("code = %d, want %d", code, exitSchema)
-	}
-	if code == exitInvalid || code == exitUsage {
-		t.Errorf("a rejected schema set shares its code with %d", code)
 	}
 	if stdout.Len() != 0 {
 		t.Errorf("stdout = %q, want empty", stdout.String())
@@ -259,6 +263,77 @@ func TestValidateNoNamespaceHint(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "[cvc-assess-elt]") {
 		t.Errorf("-no-hints stdout = %q, want the cvc-assess-elt charge", stdout.String())
+	}
+}
+
+// TestValidateUnusableHintIsTheInstancesFault pins the attribution a hint
+// failure gets: a hint is the INSTANCE's own advisory claim (§4.3.2 clause 3),
+// so a set that stops compiling once that instance's hints are folded in is a
+// fault of the instance, never of the -schema set the invocation named. The
+// three ways a hint can be unusable — pairing a namespace with a document that
+// declares another, naming a document that is not well-formed, naming one that
+// is not there — therefore degrade identically: the -schema set alone decides,
+// which charges cvc-assess-elt here, and exitSchema stays the answer to a
+// -schema set that does not compile.
+//
+// No line may cite schemaSetLocation, which is this process's own synthesis and
+// names no document the reader can open (STYLE E3).
+func TestValidateUnusableHintIsTheInstancesFault(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	// The document the mis-paired hint names: its own targetNamespace is not
+	// the one the hint pairs it with, which is src-import clause 3.1.
+	write("actual.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.com/actual"><xs:element name="note" type="xs:string"/></xs:schema>`)
+	write("junk.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"`)
+	instance := func(name, location string) string {
+		return write(name, `<h:note xmlns:h="http://example.com/hinted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://example.com/hinted `+location+`">ok</h:note>`)
+	}
+	cases := []struct {
+		name string
+		path string
+		// want is the hinted document the diagnosis must name, empty where the
+		// set composes and there is nothing to report.
+		want string
+	}{
+		{"namespace mis-paired", instance("mispaired.xml", "actual.xsd"), "actual.xsd"},
+		{"hinted document malformed", instance("malformed-hint.xml", "junk.xsd"), "junk.xsd"},
+		{"hinted document missing", instance("missing-hint.xml", "nosuch.xsd"), ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := run([]string{"validate", "-schema", orderSchema, c.path}, &stdout, &stderr)
+			if code != exitInvalid {
+				t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout.String(), stderr.String())
+			}
+			if !strings.Contains(stdout.String(), "[cvc-assess-elt]") {
+				t.Errorf("stdout = %q, want the -schema set's own charge for an undeclared root", stdout.String())
+			}
+			if strings.Contains(stderr.String(), schemaSetLocation) {
+				t.Errorf("stderr = %q, want no line citing the synthesized wrapper root", stderr.String())
+			}
+			if strings.Contains(stdout.String(), schemaSetLocation) {
+				t.Errorf("stdout = %q, want no line citing the synthesized wrapper root", stdout.String())
+			}
+			if c.want == "" {
+				if stderr.Len() != 0 {
+					t.Errorf("stderr = %q, want empty: the set composed", stderr.String())
+				}
+				return
+			}
+			if !strings.Contains(stderr.String(), c.path) {
+				t.Errorf("stderr = %q, want the instance that carried the hint named", stderr.String())
+			}
+			if !strings.Contains(stderr.String(), c.want) {
+				t.Errorf("stderr = %q, want the hinted document %s named", stderr.String(), c.want)
+			}
+		})
 	}
 }
 

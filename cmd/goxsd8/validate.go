@@ -22,6 +22,7 @@ import (
 	"github.com/kud360/goxsd8/validate/xmlsrc"
 	"github.com/kud360/goxsd8/value"
 	"github.com/kud360/goxsd8/xsd"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // stdinArg is the instance argument naming standard input. It is an INSTANCE
@@ -235,7 +236,10 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 // hints consumes its prefix, so what the assessment reads is the replay
 // instanceHints returns. The hinted documents augment THIS instance's set and
 // no other's — a hint is a property of the document that carries it, and the
-// -schema arguments are the only set every instance shares.
+// -schema arguments are the only set every instance shares. Hints that will
+// not compose with that set are unusable rather than fatal: they are reported
+// against the instance and dropped, and exitSchema stays the answer to a
+// -schema set that does not compile.
 func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Writer) (*validate.Validator, io.Reader, int) {
 	if !vn.hints {
 		return vn.base, src, exitOK
@@ -250,14 +254,42 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 	}
 	augmented, err := compileSet(append(slices.Clone(vn.docs), found...), vn.backend, vn.log)
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, violationLine(err))
-		return nil, nil, exitSchema
+		// A set that stops compiling only once THIS instance's hints are folded
+		// in is a fault of the instance, not of the -schema set the invocation
+		// named: exitSchema would send a script to a schema set that compiles,
+		// and the fault is charged inside the wrapper root, a document the
+		// reader cannot open (STYLE E3). §4.3.2 clause 3 obliges a processor to
+		// dereference no hint at all, so the honest degradation is the one a
+		// hint naming a MISSING document already gets — the -schema set alone
+		// decides this instance, which charges cvc-assess-elt where it declares
+		// nothing for the root — with the hints reported as unusable rather
+		// than silently dropped.
+		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: ignoring its schema location hints, which do not compose with the -schema set: %s\n", instance, hintFault(err))
+		return vn.base, replay, exitOK
 	}
 	v, err := validate.New(augmented, vn.backend, validate.WithLogger(vn.log))
 	if err != nil {
 		return nil, nil, usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
 	return v, replay, exitOK
+}
+
+// hintFault renders a compile fault of a hint-augmented set for the diagnosis
+// that names the instance which carried the hints.
+//
+// A fault the wrapper root itself carries — src-import clause 3.1 against a
+// mis-paired hint, src-include clause 2 against a hinted document the wrapper
+// cannot compose — is rendered without its location: schemaSetLocation is this
+// process's own synthesis and names no document the reader can open, so the
+// rule and the message, which name the hinted document, are the whole of what
+// is left to say. A fault charged at a real document keeps its location, which
+// is the file the reader must edit.
+func hintFault(err error) string {
+	var e *xsderr.Error
+	if errors.As(err, &e) && e.Loc.URI == schemaSetLocation {
+		return fmt.Sprintf("[%s] %s", e.Rule, e.Msg)
+	}
+	return violationLine(err)
 }
 
 // violationLines renders one assessment's report, in document order: every

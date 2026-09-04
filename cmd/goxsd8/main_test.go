@@ -190,6 +190,7 @@ func TestUsageCoversContract(t *testing.T) {
 		"Only xml is assessed today",
 		"- names standard input as an\n      instance, never as a schema.",
 		"hints on the document element of an XML",
+		"set will not compose with is the instance's own fault",
 		// #472's own four decisions, each of which a user can only learn
 		// from this block: what several schema arguments mean, that a
 		// document parse cannot read is exit 2 rather than a verdict,

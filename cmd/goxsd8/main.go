@@ -54,7 +54,11 @@ Usage (contract; subcommands land with their milestones):
       and an instance in either exits 2 saying so.
       xsi:schemaLocation hints on the document element of an XML
       instance augment the schema set for that instance (resolved
-      relative to the instance; disable with -no-hints).
+      relative to the instance; disable with -no-hints). A hint the
+      set will not compose with is the instance's own fault, not
+      the schema set's: it is reported on stderr naming that
+      instance, whose hints are then dropped, and it is assessed
+      against the -schema documents alone.
       Exit 0 when no instance was charged a violation, 1 invalid,
       2 usage/IO, 3 when the schema set does not compile, aggregated
       over the instances: 1 if any one of them is invalid. Every
