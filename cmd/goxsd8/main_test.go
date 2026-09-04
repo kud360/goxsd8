@@ -89,7 +89,14 @@ func TestRunHelp(t *testing.T) {
 }
 
 // TestRunDispatch pins #514 and #472: the four diagnoses are distinct, and
-// each is the true one for its input.
+// each is the true one for its input. It supersedes TestDiagnosesAreDistinct
+// (removed, #999): that test asserted the same distinctness by comparing
+// diagnose's rendered strings, which cannot fail on a classification
+// collapse — notImplementedFmt and the other formats interpolate the input
+// argument, so two inputs the lookup misclassifies as the same kind still
+// render different strings. dispatchCases' per-input expected strings check
+// the classification itself, driven twice, here and through the built
+// binary in TestBuiltBinaryMatrix.
 func TestRunDispatch(t *testing.T) {
 	for _, c := range dispatchCases {
 		var stdout, stderr bytes.Buffer
@@ -104,29 +111,6 @@ func TestRunDispatch(t *testing.T) {
 		if stderr.String() != want {
 			t.Errorf("run(%q) stderr = %q, want %q", c.args, stderr.String(), want)
 		}
-	}
-}
-
-// TestDiagnosesAreDistinct is the property #514 exists for, widened by #472's
-// fourth answer: "you typed a name I do not have", "that one is reserved but
-// unbuilt", "your flag is on the wrong side of the subcommand" and "you gave
-// me no subcommand" must not collapse into one another.
-func TestDiagnosesAreDistinct(t *testing.T) {
-	kinds := []string{
-		diagnose([]string{"gen"}),        // reserved by the contract, unbuilt
-		diagnose([]string{"frobnicate"}), // outside the vocabulary
-		diagnose([]string{"-q"}),         // a flag, so no subcommand at all
-		diagnose([]string{"-q", "gen"}),  // a flag before the name it qualifies
-	}
-	for i, a := range kinds {
-		for _, b := range kinds[i+1:] {
-			if a == b {
-				t.Errorf("two of the four diagnoses collapse to %q", a)
-			}
-		}
-	}
-	if got := diagnose([]string{"GEN"}); got == diagnose([]string{"gen"}) {
-		t.Errorf("a reserved name and its wrong-case spelling both diagnose as %q", got)
 	}
 }
 
