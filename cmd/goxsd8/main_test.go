@@ -91,12 +91,13 @@ func TestRunHelp(t *testing.T) {
 // TestRunDispatch pins #514 and #472: the four diagnoses are distinct, and
 // each is the true one for its input. It supersedes TestDiagnosesAreDistinct
 // (removed, #999): that test asserted the same distinctness by comparing
-// diagnose's rendered strings, which cannot fail on a classification
-// collapse — notImplementedFmt and the other formats interpolate the input
-// argument, so two inputs the lookup misclassifies as the same kind still
-// render different strings. dispatchCases' per-input expected strings check
-// the classification itself, driven twice, here and through the built
-// binary in TestBuiltBinaryMatrix.
+// diagnose's rendered strings, which cannot fail on a collapse between two
+// branches whose diagnosis interpolates the input argument —
+// notImplementedFmt, unknownSubcommandFmt and leadingFlagFmt all do, so two
+// inputs those branches misclassify as the same kind still render different
+// strings. It stays armed against a collapse into noSubcommand, a bare
+// constant with nothing to interpolate — which is exactly the collapse a
+// pre-#472 diagnose regresses to, and dispatchCases below still catches it.
 func TestRunDispatch(t *testing.T) {
 	for _, c := range dispatchCases {
 		var stdout, stderr bytes.Buffer
