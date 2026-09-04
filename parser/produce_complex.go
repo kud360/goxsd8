@@ -2118,7 +2118,8 @@ func rejectRefElementSubstitutionGroup(el *Element) error {
 // precedence between clauses that fire together — §B leaves the tabulation of
 // error conditions deliberately incomplete (xmlschema11-1.md:6925) — so the
 // choice is this producer's, and clause 2.2 is the one it reaches by. Clauses
-// 2.1 and 4 are charged nowhere in this producer.
+// 2.1 is charged nowhere in this producer; clause 4 is, on the inline local form
+// alone (rejectLocalElementTargetNamespace), which a ref= form never reaches.
 func rejectRefElementDeclarationAttrs(el *Element) error {
 	for _, name := range [...]string{"name", "type", "default", "fixed", "nillable", "block", "form", "targetNamespace"} {
 		if _, ok := el.Attr(name); !ok {
@@ -2167,6 +2168,128 @@ func rejectRefElementChildren(el *Element) error {
 	return nil
 }
 
+// rejectLocalElementTargetNamespace charges src-element clause 4 (ed-with-ns,
+// §3.3.3, xmlschema11-1.md:1321) on a local inline <element name="..."> that
+// writes an explicit targetNamespace: "If targetNamespace is present then all of
+// the following are true: 4.1 name is present. 4.2 form is not present. 4.3 If
+// the ancestor <schema> does not have a targetNamespace attribute or its ·actual
+// value· is different from the ·actual value· of targetNamespace of <element>,
+// then all of the following are true: 4.3.1 <element> has <complexType> as an
+// ancestor. 4.3.2 (ed-with-ns-must-be-old) There is a <restriction> ancestor
+// between the <element> and the nearest <complexType> ancestor, and the ·actual
+// value· of the base attribute of <restriction> does not ·match· the name of
+// xs:anyType."
+//
+// The clause reaches this INLINE LOCAL form alone, though it states no "parent
+// is not <schema>" gate of its own. A top-level <element> may not write the
+// attribute at all — xs:topLevelElement declares it use="prohibited"
+// (xmlschema11-1.md:5086-:5107) where xs:localElement does not (:5110-:5130) —
+// and rejectProhibitedAttrs charges that as the §5.1 grammar fault it is. A
+// local <element ref="..."> is answered ahead of here by clause 2.2, whose
+// rejectRefElementDeclarationAttrs doc records that 4.1 fires with it and loses.
+//
+// 4.3's antecedent carries the clause's whole force: an element writing its own
+// document's targetNamespace REDUNDANTLY is legal wherever it stands, needing no
+// <complexType> or <restriction> ancestor, and 4.3.1/4.3.2 are read only once
+// the two namespaces differ. They are conjoined, so an <extension> between the
+// element and the nearest <complexType>, or a <restriction base="xs:anyType">,
+// fails the clause as squarely as no <complexType> ancestor at all.
+//
+// The ancestor <schema>'s targetNamespace is read as the EFFECTIVE one,
+// p.target, and its presence as p.chameleon()'s: §F.1 task (a) writes the
+// including namespace onto a chameleon document that has none of its own, and
+// the constraint is stated over that transformed document. p.target is also what
+// an <override>-substituted declaration is measured against, since such a
+// declaration takes the OVERRIDDEN document's schema-level defaults (PRINCIPLES
+// 16) — the footing localTargetNS reads the same value on for form="qualified".
+// Presence is a distinct fact from an empty value here, exactly as
+// [Element.Attr] keeps it: a schema with no targetNamespace at all satisfies
+// 4.3's antecedent whatever the element wrote.
+//
+// 4.3.2's ·match· is baseMatchesAnyType's, asked of the <restriction> and not of
+// this element: the lexical binds against the namespaces in scope where it was
+// written (PRINCIPLES 19).
+func (p *producer) rejectLocalElementTargetNamespace(el *Element) error {
+	tns, ok := el.Attr("targetNamespace")
+	if !ok {
+		return nil
+	}
+	if _, hasName := el.Attr("name"); !hasName {
+		return xsderr.New(ruleSrcElement, el.Loc(),
+			"the local <element> carries a targetNamespace attribute but no name attribute, which src-element clause 4.1 requires whenever targetNamespace is present")
+	}
+	if _, hasForm := el.Attr("form"); hasForm {
+		return xsderr.New(ruleSrcElement, el.Loc(),
+			"the local <element> carries both a targetNamespace and a form attribute, but src-element clause 4.2 admits no form attribute when targetNamespace is present")
+	}
+	// 4.3's antecedent, which fails — leaving 4.3.1 and 4.3.2 unread — only when
+	// the ancestor <schema> HAS a targetNamespace and the element wrote that same
+	// one.
+	_, own := p.schemaElem.Attr("targetNamespace")
+	if (own || p.chameleon()) && tns == p.target {
+		return nil
+	}
+	ct, restriction := nearestComplexTypeAndRestriction(el)
+	if ct == nil {
+		return xsderr.New(ruleSrcElement, el.Loc(),
+			"the local <element> declares targetNamespace %q, which is not the ancestor <schema>'s, but has no <complexType> ancestor, which src-element clause 4.3.1 requires of an element declaring a namespace of its own", tns)
+	}
+	if restriction == nil {
+		return xsderr.New(ruleSrcElement, el.Loc(),
+			"the local <element> declares targetNamespace %q, which is not the ancestor <schema>'s, but no <restriction> stands between it and the <complexType> at %s, which src-element clause 4.3.2 (ed-with-ns-must-be-old) requires of an element declaring a namespace of its own",
+			tns, ct.Loc())
+	}
+	if !p.baseMatchesAnyType(restriction) {
+		return nil
+	}
+	return xsderr.New(ruleSrcElement, el.Loc(),
+		"the local <element> declares targetNamespace %q, which is not the ancestor <schema>'s, but the <restriction> at %s standing between it and its <complexType> ancestor has base=%q, which ·matches· xs:anyType — src-element clause 4.3.2 (ed-with-ns-must-be-old) requires a base naming any other type",
+		tns, restriction.Loc(), attrOr(restriction, "base"))
+}
+
+// baseMatchesAnyType reports whether el's base attribute ·matches· the name of
+// xs:anyType — expanded-name equality (key-en-match, xmlschema11-1.md:2726)
+// against the {name}/{target namespace} pair of the ur-type (:431) — with the
+// lexical bound against el's OWN in-scope namespaces (PRINCIPLES 19).
+//
+// A base= that is absent, or whose prefix this producer cannot bind, ·matches·
+// no name at all and so answers false. That is the reading src-element clause
+// 4.3.2 asks for, not a swallowed fault: the binding error belongs to el, whose
+// own producer charges it at el's position, and produceComplexContent resolves
+// base= BEFORE descending into the content model that reaches the only caller
+// here.
+func (p *producer) baseMatchesAnyType(el *Element) bool {
+	baseLex, hasBase := el.Attr("base")
+	if !hasBase {
+		return false
+	}
+	base, err := p.bindQName(el, baseLex, "base")
+	return err == nil && base == anyTypeName
+}
+
+// nearestComplexTypeAndRestriction returns el's nearest <complexType> ancestor
+// and the innermost <restriction> ancestor standing BETWEEN the two — the two
+// ancestors src-element clause 4.3.1 and 4.3.2 are stated over (§3.3.3,
+// xmlschema11-1.md:1321). Both are nil when el has no <complexType> ancestor at
+// all, since a <restriction> above one answers neither clause; restriction alone
+// is nil when none intervenes.
+//
+// The walk is over the XML tree's ancestor axis, which the retained tree makes
+// available (parser/tree.go's parent link) and which every term of the clause is
+// stated in: no component of any ancestor is consulted, and none exists yet
+// while a local element is being mapped.
+func nearestComplexTypeAndRestriction(el *Element) (complexType, restriction *Element) {
+	for e := el.parent; e != nil; e = e.parent {
+		if isXSD(e, "complexType") {
+			return e, restriction
+		}
+		if restriction == nil && isXSD(e, "restriction") {
+			restriction = e
+		}
+	}
+	return nil, nil
+}
+
 // produceLocalElement maps a local inline <element name="..."> to a local
 // Element Declaration (§3.3.2.3, dcl.elt.local, {scope} = local), including its
 // {identity-constraint definitions}: §3.3.2.1's Common Mapping Rules apply
@@ -2203,6 +2326,12 @@ func rejectRefElementChildren(el *Element) error {
 // type= would silently win over an inline child. It covers the inline
 // <complexType> arm as much as the <simpleType> one — the clause names both.
 //
+// src-element clause 4 (ed-with-ns) is charged here too, behind the grammar walk
+// and ahead of the name, by rejectLocalElementTargetNamespace: this is the only
+// form of <element> the clause can reach (that function's doc gives the reason),
+// and its 4.1 answers before declarationName would report the absent name that
+// writing targetNamespace without one produces.
+//
 // An <element> carrying BOTH an inline <simpleType> and an inline <complexType>
 // is rejected outright, with a plain grammar-fault error rather than a rule
 // verdict: the schema for schema documents gives xs:localElement a single
@@ -2236,7 +2365,9 @@ func rejectRefElementChildren(el *Element) error {
 //
 // scopeParent is the nearest <complexType> or named <group> ancestor's component,
 // supplied by the caller (never recomputed from the element here — the ancestor
-// axis is not walkable from an *Element). It is a required parameter, and every
+// axis reaches that ancestor's ELEMENT, as nearestComplexTypeAndRestriction
+// walks it for clause 4, never the component it maps to, which does not exist
+// until the caller finishes building it). It is a required parameter, and every
 // path through this function builds the scope from it.
 func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScopeParent) (xsd.ElementDeclaration, error) {
 	if _, ok := el.Attr("substitutionGroup"); ok {
@@ -2254,6 +2385,9 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 		return xsd.ElementDeclaration{}, err
 	}
 	if err := checkS4SChildOrder(el, s4sElement); err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
+	if err := p.rejectLocalElementTargetNamespace(el); err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
 	qname, err := declarationName(el, p.localTargetNS(el, "elementFormDefault"))
