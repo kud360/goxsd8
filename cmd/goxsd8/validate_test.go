@@ -5,20 +5,25 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
 
 // The fixtures every outcome test turns on: the schema parse's own tests
 // compile, an instance of it that charges nothing, one whose sku lexical is
-// outside its Sku pattern, and a second namespace's schema paired with an
-// instance that names it through xsi:schemaLocation and nothing else.
+// outside its Sku pattern, a second namespace's schema paired with an
+// instance that names it through xsi:schemaLocation and nothing else, and a
+// schema carrying an <xs:assert> whose instance charges nothing and leaves
+// the assertion unevaluated.
 const (
-	validInstance   = "testdata/order-valid.xml"
-	invalidInstance = "testdata/order-invalid.xml"
-	orderSchema     = "testdata/order.xsd"
-	hintedInstance  = "testdata/hinted.xml"
-	hintedSchema    = "testdata/hinted.xsd"
+	validInstance    = "testdata/order-valid.xml"
+	invalidInstance  = "testdata/order-invalid.xml"
+	orderSchema      = "testdata/order.xsd"
+	hintedInstance   = "testdata/hinted.xml"
+	hintedSchema     = "testdata/hinted.xsd"
+	assertedSchema   = "testdata/asserted.xsd"
+	assertedInstance = "testdata/asserted.xml"
 )
 
 // TestValidateCleanInstance pins the quiet outcome: an instance that charges
@@ -128,6 +133,75 @@ func TestValidateSchemaFaultHasItsOwnExitCode(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "[src-resolve]") {
 		t.Errorf("stderr = %q, want the rule the assembly charged", stderr.String())
+	}
+}
+
+// TestValidateUndecidedInstanceHasItsOwnExitCode is this issue's witness: an
+// instance charged no violation whose assessment DECLINED a check it reached
+// is not the clean pass exit 0 names, and the CLI must say so on the same
+// stream and in the same shape a violation gets. asserted.xml charges nothing
+// and leaves the <xs:assert> of its governing type unevaluated, which
+// validate/doc.go's Contract calls undecided rather than a pass.
+func TestValidateUndecidedInstanceHasItsOwnExitCode(t *testing.T) {
+	// The code is its own before any run earns it, on the reasoning
+	// TestValidateSchemaFaultHasItsOwnExitCode states.
+	if slices.Contains([]int{exitOK, exitInvalid, exitUsage, exitSchema}, exitUndecided) {
+		t.Fatalf("exitUndecided = %d, want a code of its own beside %d, %d, %d and %d", exitUndecided, exitOK, exitInvalid, exitUsage, exitSchema)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"validate", "-schema", assertedSchema, assertedInstance}, &stdout, &stderr)
+	if code != exitUndecided {
+		t.Fatalf("code = %d, want %d (stdout %q, stderr %q)", code, exitUndecided, stdout.String(), stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want empty: a check the assessment declined is a verdict about the instance, not a fault of the run", stderr.String())
+	}
+	line, _, _ := strings.Cut(stdout.String(), "\n")
+	if !strings.HasPrefix(line, assertedInstance+":") {
+		t.Errorf("first line = %q, want it to open with the instance location", line)
+	}
+	if !strings.Contains(line, "[cvc-assertion]") {
+		t.Errorf("first line = %q, want the declined check's rule ID in brackets, as a violation line carries the charged one", line)
+	}
+}
+
+// TestValidateUndecidedIsLessSevereThanInvalid pins the severity ordering the
+// exit codes are aggregated in, which is not their numeric order: a batch
+// holding an instance shown invalid and one merely left undecided answers
+// with the invalid one, whatever order the arguments came in.
+func TestValidateUndecidedIsLessSevereThanInvalid(t *testing.T) {
+	for _, args := range [][]string{
+		{"validate", "-schema", orderSchema, "-schema", assertedSchema, invalidInstance, assertedInstance},
+		{"validate", "-schema", orderSchema, "-schema", assertedSchema, assertedInstance, invalidInstance},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := run(args, &stdout, &stderr); code != exitInvalid {
+			t.Errorf("run(%v) = %d, want %d (stdout %q, stderr %q)", args, code, exitInvalid, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "[cvc-assertion]") {
+			t.Errorf("run(%v) stdout =\n%s\nwant the undecided instance reported too, not swallowed by the invalid one", args, stdout.String())
+		}
+	}
+}
+
+// TestValidateQuietDoesNotSuppressUndecidedChecks holds the new stream to the
+// settled scope of -q: it silences a subcommand's informational output, and
+// the checks the assessment declined are a verdict about the instance.
+func TestValidateQuietDoesNotSuppressUndecidedChecks(t *testing.T) {
+	var quiet, loud, stderr bytes.Buffer
+	if code := run([]string{"validate", "-q", "-schema", assertedSchema, assertedInstance}, &quiet, &stderr); code != exitUndecided {
+		t.Fatalf("code = %d, want %d (stderr %q)", code, exitUndecided, stderr.String())
+	}
+	stderr.Reset()
+	if code := run([]string{"validate", "-schema", assertedSchema, assertedInstance}, &loud, &stderr); code != exitUndecided {
+		t.Fatalf("code = %d, want %d (stderr %q)", code, exitUndecided, stderr.String())
+	}
+	if quiet.String() != loud.String() {
+		t.Errorf("-q changed the report:\n%s\nwant\n%s", quiet.String(), loud.String())
+	}
+	if quiet.Len() == 0 {
+		t.Error("-q suppressed the whole report")
 	}
 }
 

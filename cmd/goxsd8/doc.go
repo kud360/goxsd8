@@ -38,11 +38,19 @@
 //	    the schema set's: it is reported on stderr naming that
 //	    instance, whose hints are then dropped, and it is assessed
 //	    against the -schema documents alone.
-//	    Exit 0 when no instance was charged a violation, 1 invalid,
-//	    2 usage/IO, 3 when the schema set does not compile, aggregated
-//	    over the instances: 1 if any one of them is invalid. Every
-//	    instance is assessed — the run never stops at the first invalid
-//	    one — and each violation prints one line on stdout:
+//	    Exit 0 when no instance was charged a violation and none left
+//	    a check undecided, 1 invalid, 2 usage/IO, and
+//	    3 when the schema set does not compile. 4 is an instance the
+//	    assessment declined to decide: no violation charged, and a
+//	    check it reached not performed, so the instance stands
+//	    undecided against the rule that check answers to rather than
+//	    clean. The code is the worst outcome over the instances, by
+//	    severity and not by number: undecided is less severe than
+//	    invalid, so a run holding one of each exits 1, and 4 answers a
+//	    run where something was left undecided and nothing was worse.
+//	    Every instance is assessed — the run never stops at the first
+//	    invalid one — and each violation, and each check the assessment
+//	    declined, prints one line on stdout:
 //	    <loc>: [<rule>] <message>.
 //
 //	goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
@@ -54,7 +62,8 @@
 // qualify a subcommand and follow its name — goxsd8 parse -q a.xsd, not
 // goxsd8 -q parse a.xsd. -q suppresses a subcommand's informational
 // output, which is parse's summary, and never a diagnosis: neither the
-// error lines above nor validate's violations are silenced by it.
+// error lines above nor validate's violations and undecided checks are
+// silenced by it.
 //
 // Implemented today: the help path, parse and validate. With no arguments,
 // or with -h, -help or --help in any argument position, goxsd8 prints this
@@ -112,6 +121,18 @@
 // compile exits 3, which is neither a verdict about an instance (1) nor an
 // argument this process could not read (2), so a script tells "your schema is
 // wrong" from "your data is wrong" by exit code alone.
+//
+// An instance the assessment DECLINED to decide exits 4: nothing was charged
+// against it, and a check the assessment reached was not performed — an
+// <xs:assert> whose {test} this engine does not evaluate, or a {type table}
+// that withheld its ·conditionally selected· type — so the document stands
+// undecided against exactly the rules those checks answer to, which is what
+// [validate.Result.Unevaluated] records and validate's own doc.go calls not a
+// pass. Each such check prints the "<loc>: [<rule>] <message>" line a
+// violation prints, on stdout, so a script scanning for a rule ID reads them
+// with the charges. 4 is the least severe outcome after 0 and the codes
+// aggregate by severity rather than by number, so a run whose instances mix
+// invalid with undecided exits 1: a gate acts on the verdict it has.
 //
 // An instance argument spelled - is standard input. -schema - is not
 // supported: a schema document's location is the base URI its own relative

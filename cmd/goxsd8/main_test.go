@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -140,6 +141,35 @@ func TestRunHelpWriteFailure(t *testing.T) {
 	}
 }
 
+// TestExitSeverityRanksEveryCode holds exitSeverity to the const block it
+// orders. A code missing from it ranks below every code that is in it, so an
+// invocation would answer with the outcome that code should have beaten —
+// silently, since nothing about a wrong exit code reaches a stream.
+func TestExitSeverityRanksEveryCode(t *testing.T) {
+	codes := []int{exitOK, exitInvalid, exitUsage, exitSchema, exitUndecided}
+	for _, c := range codes {
+		if !slices.Contains(exitSeverity, c) {
+			t.Errorf("exit code %d is ranked by nothing in exitSeverity", c)
+		}
+	}
+	if len(exitSeverity) != len(codes) {
+		t.Errorf("exitSeverity ranks %d codes, and the const block defines %d", len(exitSeverity), len(codes))
+	}
+
+	// The ordering the numbers do not carry, in both argument orders: a batch
+	// answers with the instance it decided against, not the one it declined
+	// to decide.
+	if worse(exitInvalid, exitUndecided) != exitInvalid || worse(exitUndecided, exitInvalid) != exitInvalid {
+		t.Errorf("worse over %d and %d = %d and %d, want %d both ways", exitInvalid, exitUndecided, worse(exitInvalid, exitUndecided), worse(exitUndecided, exitInvalid), exitInvalid)
+	}
+	if worse(exitOK, exitUndecided) != exitUndecided {
+		t.Errorf("worse(%d, %d) = %d, want %d: undecided is not a clean run", exitOK, exitUndecided, worse(exitOK, exitUndecided), exitUndecided)
+	}
+	if worse(exitSchema, exitUsage) != exitSchema {
+		t.Errorf("worse(%d, %d) = %d, want %d: a schema set that does not compile leaves every instance unassessed", exitSchema, exitUsage, worse(exitSchema, exitUsage), exitSchema)
+	}
+}
+
 // TestUsageCoversContract guards the usage constant against drifting away
 // from the doc.go contract it renders.
 func TestUsageCoversContract(t *testing.T) {
@@ -157,7 +187,7 @@ func TestUsageCoversContract(t *testing.T) {
 		"summary on stdout",
 		"first error on stderr as <loc>: [<rule>] <message>",
 		"assembly\n      stops there",
-		"1 if any one of them is invalid.",
+		"so a run holding one of each exits 1",
 		"prints one line on stdout",
 		"-format xml|json|ber",
 		"case-sensitively",
@@ -170,7 +200,7 @@ func TestUsageCoversContract(t *testing.T) {
 		// followed.
 		"compose into ONE set",
 		"3 when the schema set does not compile",
-		"Every\n      instance is assessed — the run never stops at the first invalid",
+		"Every instance is assessed — the run never stops at the first\n      invalid one",
 		"are usage errors listing the\n      values.",
 		"Only xml is assessed today",
 		"- names standard input as an\n      instance, never as a schema.",
@@ -184,6 +214,16 @@ func TestUsageCoversContract(t *testing.T) {
 		"2 when an\n      argument cannot be read",
 		"qualify a subcommand and follow its name",
 		"-q suppresses a subcommand's informational",
+		// #1223's own answers: that exit 0 no longer covers an instance the
+		// assessment declined to decide, what the code it does get means,
+		// that the codes aggregate by severity and not by number, and that
+		// the declined checks print beside the violations rather than being
+		// what -q swallows.
+		"none left\n      a check undecided",
+		"assessment declined to decide",
+		"undecided is less severe than",
+		"each check the assessment\n      declined, prints one line on stdout",
+		"validate's violations and undecided checks are\nsilenced by it",
 	}
 	for _, w := range want {
 		if !strings.Contains(usage, w) {

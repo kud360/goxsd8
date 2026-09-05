@@ -78,8 +78,9 @@ func formatVocabulary() string {
 
 // runValidate implements `goxsd8 validate`: it compiles the -schema arguments
 // into ONE schema set and assesses every positional argument against it,
-// writing each violation to stdout as the contract's "<loc>: [<rule>]
-// <message>". args excludes the subcommand name itself.
+// writing each violation, and each check the assessment declined, to stdout as
+// the contract's "<loc>: [<rule>] <message>". args excludes the subcommand
+// name itself.
 //
 // Every instance is assessed, in argument order: a violation in one never
 // stops the next, so a script gets the whole report from one run. The exit
@@ -100,7 +101,8 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	verbose := flags.Bool("v", false, "log assembly and assessment at debug level to stderr")
 	// -q is defined because the contract makes it common to every subcommand,
 	// and is read by nothing: validate writes no informational output, its
-	// stdout carrying the violation report doc.go forbids -q to silence.
+	// stdout carrying the report of violations and declined checks doc.go
+	// forbids -q to silence.
 	_ = flags.Bool("q", false, "accepted; validate has no informational output to suppress")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -180,7 +182,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	job := validation{docs: docs, base: v, backend: backend, forced: forced, hints: !*noHints, log: log}
 	code := exitOK
 	for _, instance := range instances {
-		code = max(code, job.one(instance, stdout, stderr))
+		code = worse(code, job.one(instance, stdout, stderr))
 	}
 	return code
 }
@@ -239,9 +241,10 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 		// instance in the same rendering a violation gets, so it lands on
 		// stdout with them and counts as invalid — nothing in the document was
 		// shown valid.
-		return reportLines(stdout, stderr, instance, []string{violationLine(err)})
+		return reportLines(stdout, stderr, instance, []string{violationLine(err)}, exitInvalid)
 	}
-	return reportLines(stdout, stderr, instance, violationLines(result))
+	lines, code := assessmentLines(result)
+	return reportLines(stdout, stderr, instance, lines, code)
 }
 
 // validatorFor returns the validator instance is assessed against and the
@@ -308,39 +311,73 @@ func hintFault(err error) string {
 	return violationLine(err)
 }
 
-// violationLines renders one assessment's report, in document order: every
+// assessmentLines renders one assessment's report, in document order — every
 // violation it charged, then the source fault that stopped the walk if one
-// did. A stopped walk is not a violation, but it is a verdict about the
-// instance in the same shape — the document was not read to its end, so
-// nothing past the fault was assessed — and it is rendered beside them rather
-// than dropped.
-func violationLines(result *validate.Result) []string {
+// did, then every check it REACHED and did not perform — together with the
+// exit code those lines earn.
+//
+// A stopped walk is not a violation, but it is a verdict about the instance in
+// the same shape — the document was not read to its end, so nothing past the
+// fault was assessed — and it is rendered beside them rather than dropped. A
+// check the assessment declined is a verdict too, and one no earlier reading
+// of a Result could recover from the exit code: validate/doc.go's Contract
+// makes an assessment that charged nothing and skipped something undecided
+// against exactly the rules those records name, not a pass (#1223).
+//
+// The code comes back with the lines because it is the one thing their
+// rendering does not carry: undecided records print exactly like charges, so
+// nothing in the text tells a reader which kind of report this is.
+func assessmentLines(result *validate.Result) ([]string, int) {
 	violations := result.Violations()
-	lines := make([]string, 0, len(violations)+1)
+	undecided := result.Unevaluated()
+	lines := make([]string, 0, len(violations)+len(undecided)+1)
 	for _, v := range violations {
 		lines = append(lines, violationLine(v))
 	}
 	if result.Err() != nil {
 		lines = append(lines, violationLine(result.Err()))
 	}
-	return lines
+	for _, u := range undecided {
+		lines = append(lines, undecidedLine(u))
+	}
+
+	code := exitOK
+	if len(undecided) > 0 {
+		code = exitUndecided
+	}
+	if len(violations) > 0 || result.Err() != nil {
+		code = exitInvalid
+	}
+	return lines, code
 }
 
-// reportLines writes one instance's violation report to stdout and reports the
-// instance's exit code: no line is a clean assessment, and any line is a
-// verdict of invalid.
+// undecidedLine renders one check the assessment declined in the rendering a
+// violation gets, so that a script scanning stdout for "[<rule>]" sees the
+// rules a document stands undecided against alongside the ones it was charged.
+//
+// It formats the three accessors rather than routing through violationLine,
+// because a [validate.Unevaluated] deliberately does not satisfy error and
+// must not be made to: it decides nothing about the document, and a consumer
+// that could errors.Is it would be one join away from a false reject.
+func undecidedLine(u validate.Unevaluated) string {
+	return fmt.Sprintf("%s: [%s] %s", u.Loc(), u.Rule(), u.Msg())
+}
+
+// reportLines writes one instance's report to stdout and reports the exit code
+// the assessment that produced it earned. An empty report writes nothing, so
+// a script sees output only when there is something to see.
 //
 // A failed write is charged the usage/IO code, on parseOne's reasoning: the
 // report the user asked for never arrived, which is a fault in this run rather
 // than a verdict about the document.
-func reportLines(stdout, stderr io.Writer, instance string, lines []string) int {
+func reportLines(stdout, stderr io.Writer, instance string, lines []string, code int) int {
 	if len(lines) == 0 {
-		return exitOK
+		return code
 	}
 	if _, err := io.WriteString(stdout, strings.Join(lines, "\n")+"\n"); err != nil {
-		return usageError(stderr, fmt.Sprintf("goxsd8: validate: writing the violations of %s: %v", instance, err))
+		return usageError(stderr, fmt.Sprintf("goxsd8: validate: writing the report of %s: %v", instance, err))
 	}
-	return exitInvalid
+	return code
 }
 
 // openInstance opens one instance argument for reading and returns the reader
