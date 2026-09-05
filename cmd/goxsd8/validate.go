@@ -26,9 +26,11 @@ import (
 )
 
 // stdinArg is the instance argument naming standard input. It is an INSTANCE
-// spelling alone: -schema - is not supported, because a schema document's
-// location is the base URI its own relative <xs:include> and <xs:import>
-// references resolve against (doc.go's argument vocabulary).
+// spelling alone: runValidate refuses it as a -schema value, because a schema
+// document's location is the base URI its own relative <xs:include> and
+// <xs:import> references resolve against (§4.3.2 clause 4), which standard
+// input has none of. A file genuinely named - is still reached by ./-
+// (doc.go's argument vocabulary).
 const stdinArg = "-"
 
 // stringList accumulates the values of a repeatable flag in argument order.
@@ -129,6 +131,20 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 
 	docs := make([]schemaDoc, 0, len(schemas))
 	for _, location := range schemas {
+		if location == stdinArg {
+			// Refused here, before os.Open is reached, because otherwise the
+			// contract's "not supported" holds only while no file named - exists
+			// in the working directory: one that does would be compiled as the
+			// schema set, exit 0, under a spelling that names no file.
+			//
+			// The refusal is this CLI's policy, not a spec rule. §4.3.2 clause 4
+			// resolves a relative schemaLocation against its owner element's base
+			// URI, which a stream has none of, and §4.2.3 and §4.2.6.2 make such
+			// a reference degrade the assessment rather than reject the document.
+			// Only the exact spelling is refused: ./- and any other path ending
+			// in - opens through rootLocation like any argument.
+			return usageError(stderr, fmt.Sprintf("goxsd8: validate: -schema %s: standard input is not a schema location, a schema document's location being the base URI its own relative <xs:include>, <xs:import> and <xs:override> references resolve against; name the document by path, or a file called %s by ./%s", stdinArg, stdinArg, stdinArg))
+		}
 		path, err := rootLocation(location)
 		if err != nil {
 			// An argument that cannot be read is a usage/IO fault, never a

@@ -116,7 +116,9 @@
 // An instance argument spelled - is standard input. -schema - is not
 // supported: a schema document's location is the base URI its own relative
 // <xs:include>, <xs:import> and <xs:override> references resolve against, and
-// standard input has none.
+// standard input has none. That spelling is refused, exit 2, rather than
+// opened, so a file which happens to be named - is never compiled as the
+// schema set behind it; ./- is what names that file.
 //
 // validate follows an xsi:schemaLocation or xsi:noNamespaceSchemaLocation hint
 // carried by the DOCUMENT ELEMENT of an XML instance, and no other element's.

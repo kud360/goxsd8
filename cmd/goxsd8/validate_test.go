@@ -456,7 +456,7 @@ func TestValidateUsageErrors(t *testing.T) {
 		{"undefined flag", []string{"validate", "-out", dir, "-schema", orderSchema, validInstance}, "flag provided but not defined: -out"},
 		{"missing schema", []string{"validate", "-schema", "testdata/nosuch.xsd", validInstance}, "no such file or directory"},
 		{"schema is a directory", []string{"validate", "-schema", dir, validInstance}, "is a directory"},
-		{"schema from stdin", []string{"validate", "-schema", "-", validInstance}, "no such file or directory"},
+		{"schema from stdin", []string{"validate", "-schema", "-", validInstance}, "standard input is not a schema location"},
 		{"missing instance", []string{"validate", "-schema", orderSchema, "testdata/nosuch.xml"}, "no such file or directory"},
 		{"stdin needs -format", []string{"validate", "-schema", orderSchema, "-"}, "carries no extension to name a source format"},
 		// -help=true is not one of the three help spellings, at any position
@@ -483,6 +483,42 @@ func TestValidateUsageErrors(t *testing.T) {
 			t.Errorf("%s and %s produce the same diagnosis %q", c.name, other, stderr.String())
 		}
 		seen[stderr.String()] = c.name
+	}
+}
+
+// TestValidateSchemaFileNamedDash pins the escape hatch the -schema -
+// refusal leaves open: the exact spelling - is refused and nothing else is, so
+// a file genuinely named - is still compiled as a schema document when a path
+// names it — ./- from its own directory, or an absolute path ending in it.
+//
+// The instance it rejects is asserted too, because an argument that was read
+// and an argument that was ignored both exit 0 on a clean instance.
+func TestValidateSchemaFileNamedDash(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	dash := write("-", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:x"><xs:element name="root" type="xs:int"/></xs:schema>`)
+	valid := write("valid.xml", `<root xmlns="urn:x">42</root>`)
+	invalid := write("invalid.xml", `<root xmlns="urn:x">forty-two</root>`)
+
+	// ./- names that file only from the directory holding it, so the run happens
+	// there; the absolute path names the same file from anywhere.
+	t.Chdir(dir)
+	for _, schema := range []string{dash, "./-"} {
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"validate", "-schema", schema, valid}, &stdout, &stderr); code != exitOK {
+			t.Errorf("-schema %s: code = %d, want %d (stdout %q, stderr %q)", schema, code, exitOK, stdout.String(), stderr.String())
+		}
+		stdout.Reset()
+		stderr.Reset()
+		if code := run([]string{"validate", "-schema", schema, invalid}, &stdout, &stderr); code != exitInvalid {
+			t.Errorf("-schema %s on the invalid instance: code = %d, want %d (stdout %q, stderr %q)", schema, code, exitInvalid, stdout.String(), stderr.String())
+		}
 	}
 }
 
