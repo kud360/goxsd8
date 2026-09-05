@@ -73,17 +73,25 @@ go tool lanestatus                    # committed lane scores, as PLAN.md's tabl
 go tool surface -base origin/main     # what this branch added/removed from the exported surface (T5)
 go tool wipsurvey < issues.json       # LIVE/CLAIMED/EXPIRED/RETIRED/UNKNOWN branches
 go tool gapaudit  < gapissues.json    # GAP( markers vs trackers
+go tool suiteindex element@targetNamespace   # suite fixtures carrying a construct
 ```
 
-Both surveys read their issue list from **stdin** in `gh issue list
---json`-shaped JSON, so any GitHub channel that can write that JSON to a
-file feeds them. docs/ROUTINES.md ranks the channels, states what to do when
-one errors, and spells the paginate-and-reshape recipe under "Survey input".
+`wipsurvey` and `gapaudit` read their issue list from **stdin** in `gh issue
+list --json`-shaped JSON, so any GitHub channel that can write that JSON to
+a file feeds them. docs/ROUTINES.md ranks the channels, states what to do
+when one errors, and spells the paginate-and-reshape recipe under "Survey
+input".
 
 Empty stdin is a supported mode, not a failure. `wipsurvey` then reports
 leases only and can never report RETIRED; `gapaudit` reports the marker
 census only and reconciles nothing against trackers. Each says so in its
 own output; neither exits non-zero.
+
+`suiteindex` censuses `testdata/xsdtests` by construct — namespace URI plus
+local name, in whatever encoding and prefix each fixture spells it with — so
+predict ratchet movement from its output rather than from a grep, which
+under-predicted three landings running (#1239). An absent submodule is a
+supported mode there too: it says so and exits 0.
 
 ## Style headlines
 

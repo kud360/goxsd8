@@ -14,6 +14,7 @@ tool (
 	github.com/kud360/goxsd8/tools/opmapgen
 	github.com/kud360/goxsd8/tools/rulecat
 	github.com/kud360/goxsd8/tools/spec2md
+	github.com/kud360/goxsd8/tools/suiteindex
 	github.com/kud360/goxsd8/tools/surface
 	github.com/kud360/goxsd8/tools/typespecgen
 	github.com/kud360/goxsd8/tools/wipsurvey
