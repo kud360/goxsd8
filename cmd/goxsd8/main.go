@@ -59,11 +59,19 @@ Usage (contract; subcommands land with their milestones):
       the schema set's: it is reported on stderr naming that
       instance, whose hints are then dropped, and it is assessed
       against the -schema documents alone.
-      Exit 0 when no instance was charged a violation, 1 invalid,
-      2 usage/IO, 3 when the schema set does not compile, aggregated
-      over the instances: 1 if any one of them is invalid. Every
-      instance is assessed — the run never stops at the first invalid
-      one — and each violation prints one line on stdout:
+      Exit 0 when no instance was charged a violation and none left
+      a check undecided, 1 invalid, 2 usage/IO, and
+      3 when the schema set does not compile. 4 is an instance the
+      assessment declined to decide: no violation charged, and a
+      check it reached not performed, so the instance stands
+      undecided against the rule that check answers to rather than
+      clean. The code is the worst outcome over the instances, by
+      severity and not by number: undecided is less severe than
+      invalid, so a run holding one of each exits 1, and 4 answers a
+      run where something was left undecided and nothing was worse.
+      Every instance is assessed — the run never stops at the first
+      invalid one — and each violation, and each check the assessment
+      declined, prints one line on stdout:
       <loc>: [<rule>] <message>.
 
   goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
@@ -75,7 +83,8 @@ slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec). They
 qualify a subcommand and follow its name — goxsd8 parse -q a.xsd, not
 goxsd8 -q parse a.xsd. -q suppresses a subcommand's informational
 output, which is parse's summary, and never a diagnosis: neither the
-error lines above nor validate's violations are silenced by it.
+error lines above nor validate's violations and undecided checks are
+silenced by it.
 
 Implemented today: the help path, parse and validate. With no arguments,
 or with -h, -help or --help in any argument position, goxsd8 prints this
@@ -89,22 +98,43 @@ qualifies, or that the first argument is a flag and no subcommand was
 given.
 `
 
-// The exit codes the CLI answers with, ordered by severity so that an
-// invocation over several arguments reports the worst outcome over its runs by
-// taking their maximum: a clean run, a rejected document, an argument list or a
-// file this process could not work with at all, and — for validate alone — a
-// schema set that does not compile, which is the most severe because it leaves
-// every instance unassessed rather than any one of them decided.
+// The exit codes the CLI answers with: a clean run, a rejected document, an
+// argument list or a file this process could not work with at all, and — for
+// validate alone — a schema set that does not compile and an instance the
+// assessment declined to decide.
 //
 // Which fault each code names is per subcommand and stated in doc.go: parse
 // charges exitInvalid for the schema it was asked to compile, where validate
 // charges it for an instance and answers exitSchema for its schema set.
 const (
-	exitOK      = 0
-	exitInvalid = 1
-	exitUsage   = 2
-	exitSchema  = 3
+	exitOK        = 0
+	exitInvalid   = 1
+	exitUsage     = 2
+	exitSchema    = 3
+	exitUndecided = 4
 )
+
+// exitSeverity orders the codes from least to most severe, so that an
+// invocation over several arguments reports the worst outcome over its runs
+// (worse). It is a separate encoding from the numbers themselves because the
+// two orders differ: exitUndecided takes the next free integer, since the
+// published meanings of 0 through 3 do not move (#720), while ranking below
+// exitInvalid — a batch mixing an instance shown invalid with one merely left
+// undecided answers with the invalid one, which is the verdict a gate acts on.
+// exitSchema stays the most severe: it leaves every instance unassessed rather
+// than any one of them decided.
+var exitSeverity = []int{exitOK, exitUndecided, exitInvalid, exitUsage, exitSchema}
+
+// worse returns the more severe of two exit codes. Both subcommands aggregate
+// their argument list through it, which is the one encoding of the contract's
+// "the exit code is the worst of those outcomes" (STYLE D3) — and taking the
+// numeric maximum instead would answer a mixed batch with exitUndecided.
+func worse(a, b int) int {
+	if slices.Index(exitSeverity, a) > slices.Index(exitSeverity, b) {
+		return a
+	}
+	return b
+}
 
 const (
 	// helpNotAFlagValueFmt answers the flag-package spellings -h=…/-help=…,

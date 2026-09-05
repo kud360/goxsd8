@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A schema whose complex type carries an <xs:assert>. This engine evaluates
+     no {test}, so an instance of it is charged nothing and records one
+     Result.Unevaluated under cvc-assertion: the undecided outcome the CLI
+     must not report as a clean pass. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:a="http://example.com/asserted"
+           targetNamespace="http://example.com/asserted"
+           elementFormDefault="qualified">
+
+  <xs:element name="box" type="a:BoxType"/>
+
+  <xs:complexType name="BoxType">
+    <xs:attribute name="width" type="xs:int"/>
+    <xs:assert test="@width &gt; 0"/>
+  </xs:complexType>
+
+</xs:schema>

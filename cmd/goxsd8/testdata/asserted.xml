@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An instance of asserted.xsd that satisfies every rule this engine does
+     evaluate: its whole outcome is the assertion nobody evaluated. -->
+<a:box xmlns:a="http://example.com/asserted" width="3"/>

@@ -59,7 +59,7 @@ func runParse(args []string, stdout, stderr io.Writer) int {
 
 	code := exitOK
 	for _, location := range locations {
-		code = max(code, parseOne(location, *quiet, log, stdout, stderr))
+		code = worse(code, parseOne(location, *quiet, log, stdout, stderr))
 	}
 	return code
 }

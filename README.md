@@ -71,13 +71,17 @@ undefined flag, a document that cannot be read, and for `validate` a
 is never a verdict about a schema or an instance. A script that read exit 2
 as "skip, unimplemented" must read the stderr line, or branch on the other
 codes instead: for `parse`, 0 compiled and 1 rejected; for `validate`, 0 no
-violation charged, 1 an invalid instance, and 3 a schema set that does not
-compile.
+violation charged and nothing left undecided, 1 an invalid instance, 3 a
+schema set that does not compile, and 4 an instance the assessment declined to
+decide — charged nothing, with a check it reached left unevaluated, so it
+stands undecided against the rule that check answers to. The codes aggregate
+by severity and not by number: 4 is less severe than 1, so a run whose
+instances mix invalid with undecided exits 1.
 
 ```sh
 goxsd8 parse order.xsd items.xsd                # compile + summary, exit 0/1/2
 goxsd8 validate -schema order.xsd -schema items.xsd order1.xml order2.xml
-                                                # exit 0 clean, 1 invalid, 2 usage, 3 schema
+                                                # exit 0 clean, 1 invalid, 2 usage, 3 schema, 4 undecided
 goxsd8 gen -schema order.xsd -out ./gen/order \
            -schema items.xsd -out ./gen/items  # one package per -schema/-out pair
 ```
@@ -90,8 +94,12 @@ target namespace of its own and `<xs:include>`s each with none — so a name
 two of them collide on is `sch-props-correct` clause 2 and a set that does
 not compile exits **3**, distinctly from an invalid instance (1). **Every
 instance is assessed**, in argument order: the run never stops at the first
-invalid one, and its exit code is the worst outcome over them — 1 if any one
-of them is invalid. An instance argument spelled `-` is standard input;
+invalid one, and its exit code is the worst outcome over them by severity —
+1 if any one of them is invalid, 4 if any one is undecided and none worse.
+Each check the assessment declined prints the same `<loc>: [<rule>]
+<message>` line on stdout that a violation prints, so an undecided document
+names the rules it stands undecided against rather than reading as clean.
+An instance argument spelled `-` is standard input;
 `-schema -` is not supported, a schema document's location being the base URI
 its own relative references resolve against.
 
