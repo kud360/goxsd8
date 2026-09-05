@@ -2270,9 +2270,11 @@ func (p *producer) restrictionFacets(restriction *Element) ([]xsd.Facet, error) 
 //
 // The element's OWN children are ordered against s4sElement here
 // (checkS4SChildOrder, #1076), the one content model Appendix A gives every form
-// an <element> takes. rejectBothInlineTypes is charged ahead of it: a <simpleType>
-// beside a <complexType> repeats that model's single type position, and only that
-// guard names both children (#444 owns the pairing).
+// an <element> takes. src-element clause 3 and rejectBothInlineTypes are charged
+// AHEAD of that walk, on the one exception to the default run order
+// checkS4SChildOrder's doc records: a <simpleType> beside a <complexType> repeats
+// that model's single type position, and only that guard names both children
+// (#444 owns the pairing).
 //
 // Its {type definition} is §3.3.2.1 dcl.elt.common's tier chain, which is a
 // COMMON mapping rule — §3.3.2.2 supplements only {scope} and {target
@@ -2790,7 +2792,10 @@ func rejectNotationContent(elem *Element) error {
 // The declaration's OWN children are ordered against s4sAttribute first
 // (checkS4SChildOrder, #1076), the one content model Appendix A gives the
 // top-level and the local form alike; produceAttributeUse orders every local
-// <attribute> against it.
+// <attribute> against it. Clause 4 below is charged BEHIND that walk, which is
+// the default run order checkS4SChildOrder's doc records — and is where this form
+// differs from produceElement, whose src-element clause 3 charges the same
+// both-present fault ahead of the walk.
 //
 // It charges the two src-attribute clauses (§3.2.3) this form can reach: 4
 // (type= and an inline <simpleType> mutually exclusive) and 1 (default and fixed

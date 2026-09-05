@@ -309,6 +309,37 @@ var (
 // (#1047). Children outside the XSD namespace are still skipped, on a reason of
 // their own: they are what xs:simpleRestrictionModel's "{any with namespace:
 // ##other}" position admits.
+//
+// WHERE this walk runs relative to a src-* clause charged over the same element
+// is this repo's decision and not the spec's, and every producer charging both
+// takes it from HERE (#1136). The spec is silent on the order: src-element's
+// preamble (§3.3.3, xmlschema11-1.md:1321) and §5.1's two bullets (:4295-:4297)
+// are unordered conjunctions — "all of the following", "two additional
+// conditions hold" — and §5.1 closes by imposing "no restrictions on processors
+// in the presence of errors, beyond the requirement that … a conforming
+// processor must report the fact" (:4298). "In addition to" scopes a Schema
+// Representation Constraint BEYOND the schema for schema documents (§2.3
+// gloss-src, :607); it does not sequence the two checks, and neither does the
+// scope-containment reading of it.
+//
+// The DEFAULT is this walk FIRST, so a document whose children the content model
+// does not admit is answered by the grammar fault and no src-* verdict is
+// reached over a shape the grammar already rejects. src-element clause 2.2
+// (elementParticleTerm), src-element clause 4
+// (rejectLocalElementTargetNamespace), and EVERY src-attribute clause this
+// parser charges (produceAttribute, produceAttributeUse, produceLocalAttribute)
+// are behind it.
+//
+// src-element clause 3 is the ONE exception, charged AHEAD of the walk in
+// produceElement and produceLocalElement: on a document writing type= together
+// with an inline <simpleType>/<complexType> whose children are ALSO out of
+// order, "both a type attribute and an inline type child" is the more actionable
+// verdict, and it stays paired with rejectBothInlineTypes so that shape is
+// answered once (#444). The exception does not generalize by shape —
+// src-attribute clause 4 is the same both-present fault on the attribute side
+// and is charged behind the walk at both attribute producers — so a NEW charge
+// takes the default unless it makes clause 3's message-quality argument for its
+// own site.
 func checkS4SChildOrder(owner *Element, m s4sModel) error {
 	// last is the position the previous matched child filled, and the search start
 	// is derived from it rather than tracked beside it (STYLE D3): a repeated
