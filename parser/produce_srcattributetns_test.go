@@ -1,9 +1,11 @@
 package parser_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
 )
 
@@ -231,5 +233,159 @@ func TestProduceTopLevelAttributeTargetNamespaceKeepsGrammarFault(t *testing.T) 
 	}
 	if rule, ok := xsderr.RuleOf(err); ok {
 		t.Fatalf("error = %v, charged %s; want a plain grammar fault carrying no rule ID (STYLE E2)", err, rule)
+	}
+}
+
+// TestProduceProhibitedAttributeTargetNamespaceClause6 pins src-attribute clause
+// 6 (att-with-ns) on the use="prohibited" form, which mapped to no component and
+// so reached no charge at all: every rejecting row here was ACCEPTED before, the
+// producer having returned on the prohibited token ahead of the only call site
+// (#1243).
+//
+// The rows are the clause-6 table above re-spelled with use="prohibited", because
+// the clause's antecedent is "if the targetNamespace attribute is present" and
+// carries no use= qualifier: a prohibited attribute fails and passes it on
+// exactly the facts an optional one does.
+func TestProduceProhibitedAttributeTargetNamespaceClause6(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, tc := range []struct {
+		name string
+		doc  string
+		// wantMsg is empty for the rows clause 6 must ACCEPT.
+		wantMsg string
+		// wantLine is the 1-based line the offending <attribute> sits on.
+		wantLine int
+	}{
+		{
+			// The shape #1216's round-2 arbiter reproduced through the CLI: the
+			// "extension rather than restriction" row above re-spelled with
+			// use="prohibited", which took it from REJECTED to ACCEPTED, components: 2.
+			name: "prohibited under an extension fails 6.3.2",
+			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="a" xmlns:tns="a">
+<xs:complexType name="base"><xs:sequence/></xs:complexType>
+<xs:complexType name="ct"><xs:complexContent><xs:extension base="tns:base">
+<xs:attribute name="w" use="prohibited" targetNamespace="b"/>
+</xs:extension></xs:complexContent></xs:complexType>
+</xs:schema>`,
+			wantMsg:  `no <restriction> stands between it and the <complexType>`,
+			wantLine: 4,
+		},
+		{
+			name: "prohibited with no complexType ancestor fails 6.3.1",
+			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="a">
+<xs:attributeGroup name="ag">
+<xs:attribute name="w" use="prohibited" targetNamespace="b"/>
+</xs:attributeGroup>
+</xs:schema>`,
+			wantMsg:  `has no <complexType> ancestor, which src-attribute clause 6.3.1 requires`,
+			wantLine: 3,
+		},
+		{
+			name: "prohibited with form alongside targetNamespace fails 6.2",
+			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="a">
+<xs:complexType name="ct">
+<xs:attribute name="w" use="prohibited" form="qualified" targetNamespace="a"/>
+</xs:complexType>
+</xs:schema>`,
+			wantMsg:  `src-attribute clause 6.2 admits no form attribute when targetNamespace is present`,
+			wantLine: 3,
+		},
+		{
+			name: "prohibited under a restriction whose base is not anyType is accepted",
+			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="a" xmlns:tns="a">
+<xs:complexType name="base">
+<xs:anyAttribute namespace="##other" processContents="lax"/>
+</xs:complexType>
+<xs:complexType name="ct"><xs:complexContent><xs:restriction base="tns:base">
+<xs:attribute name="w" use="prohibited" targetNamespace="b"/>
+</xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`,
+		},
+		{
+			// 6.3's antecedent fails, so the missing ancestors are no fault — the row the
+			// optional form has above, and the shape the end-to-end test below carries
+			// through to {prohibited attribute names}.
+			name: "prohibited writing the schema's own targetNamespace is accepted",
+			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="a">
+<xs:attributeGroup name="ag">
+<xs:attribute name="w" use="prohibited" targetNamespace="a"/>
+</xs:attributeGroup>
+</xs:schema>`,
+		},
+		{
+			// The BOUNDARY: prohibited on the ref= arm is still accepted, its clause-6
+			// gap being a different one — tracked at rejectLocalAttributeTargetNamespace's
+			// ref= GAP(xsd) marker and pinned by
+			// TestProduceRefAttributeTargetNamespaceStaysAccepted. This charge reaches the
+			// name= form, under prohibited exactly as under every other use=.
+			name: "prohibited on the ref arm stays accepted",
+			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="a" xmlns:tns="a">
+<xs:attribute name="A" type="xs:string"/>
+<xs:complexType name="ct">
+<xs:attribute ref="tns:A" use="prohibited" targetNamespace="b"/>
+</xs:complexType>
+</xs:schema>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, tc.doc)
+			if tc.wantMsg == "" {
+				if err != nil {
+					t.Fatalf("Produce rejected a document src-attribute clause 6 admits: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Produce accepted the document, want the src-attribute clause 6 fault %q", tc.wantMsg)
+			}
+			if !strings.Contains(err.Error(), tc.wantMsg) {
+				t.Fatalf("error = %v, want it to state %q", err, tc.wantMsg)
+			}
+			assertRule(t, err, "src-attribute")
+			loc, ok := xsderr.LocOf(err)
+			if !ok {
+				t.Fatalf("error %v carries no position, want the <attribute>'s (E3)", err)
+			}
+			if loc.URI != produceURI || loc.Line != tc.wantLine || loc.Col == 0 {
+				t.Fatalf("position = %s:%d:%d, want the offending <attribute> at %s:%d with a column",
+					loc.URI, loc.Line, loc.Col, produceURI, tc.wantLine)
+			}
+		})
+	}
+}
+
+// TestProduceProhibitedAttributeTargetNamespaceStillNamesItsNamespace carries the
+// clause-6-ADMISSIBLE prohibited form through to the one thing that reads it: an
+// explicit targetNamespace is what localTargetNS mints the {prohibited attribute
+// names} QName from, so the base's {b}w use is suppressed only when the
+// prohibiting <attribute> writes that namespace (§3.4.2.4 clause 3.2.2).
+//
+// The pair is the assertion: the same document without the targetNamespace names
+// {}w, matches nothing, and leaves the inherited use standing. Charging clause 6
+// upstream of prohibitedAttributeNames disturbs neither half — produceAttributeUse
+// walks these children before it, so all the charge can do is reject the whole
+// schema before a name is minted at all.
+func TestProduceProhibitedAttributeTargetNamespaceStillNamesItsNamespace(t *testing.T) {
+	const doc = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="b" xmlns:tns="b">
+<xs:complexType name="base"><xs:sequence/>
+<xs:attribute name="w" type="xs:string" form="qualified"/>
+</xs:complexType>
+<xs:complexType name="ct"><xs:complexContent><xs:restriction base="tns:base"><xs:sequence/>
+<xs:attribute name="w" use="prohibited"%s/>
+</xs:restriction></xs:complexContent></xs:complexType>
+</xs:schema>`
+	s, err := produce(t, fmt.Sprintf(doc, ` targetNamespace="b"`))
+	if err != nil {
+		t.Fatalf("Produce rejected the clause-6-admissible prohibited form: %v", err)
+	}
+	if uses := topComplexTypeIn(t, s, xsd.QName{Space: "b", Local: "ct"}).AttributeUses(); len(uses) != 0 {
+		t.Fatalf("{b}ct has %d attribute uses, want the base's {b}w suppressed by the prohibited name", len(uses))
+	}
+	s, err = produce(t, fmt.Sprintf(doc, ""))
+	if err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+	if uses := topComplexTypeIn(t, s, xsd.QName{Space: "b", Local: "ct"}).AttributeUses(); len(uses) != 1 {
+		t.Fatalf("{b}ct has %d attribute uses, want the base's {b}w still inherited: an unqualified prohibited {}w names another attribute", len(uses))
 	}
 }

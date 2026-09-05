@@ -2693,10 +2693,10 @@ func (p *producer) foldDefaultAttributes(ctElem *Element, visited map[xsd.QName]
 // a name= takes the local declaration's {target namespace} (§3.2.2.2).
 //
 // No src-attribute clause is charged here: produceAttributeUse charges clauses
-// 1, 2, 3 and 5 upstream, unconditionally, before the same prohibited
-// <attribute> declines to map, so re-charging them would put them in two
-// encodings (#358). Its clause 3 charge makes the `!hasName` branch below
-// unreachable — produceAttributeUses runs collectAttributeContent, which returns
+// 1, 2, 3, 5 and 6 upstream, before the same prohibited <attribute> declines
+// to map, so re-charging them would put them in two encodings (#358). Its
+// clause 3 charge makes the `!hasName` branch below unreachable —
+// produceAttributeUses runs collectAttributeContent, which returns
 // produceAttributeUse's rejection of a neither-ref-nor-name <attribute> before
 // this function walks the same children — and the branch is kept as a fallback.
 // The two failures that ARE surfaced here are an unresolvable ref= prefix —
@@ -2705,6 +2705,11 @@ func (p *producer) foldDefaultAttributes(ctElem *Element, visited map[xsd.QName]
 // by declarationName for every other declaration name in it. A prohibited
 // <attribute> earns no exemption from either: both are faults of the schema
 // document, and neither needs a component to exist to be a fault.
+//
+// Clause 6 is why the localTargetNS read below can no longer mint a name in a
+// namespace the clause forbids: the same collectAttributeContent walk charges
+// it on these children first, so an inadmissible targetNamespace fails the
+// whole schema before this function reaches one (#1243).
 func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error) {
 	var names []xsd.QName
 	for _, child := range parent.Children() {
@@ -2954,18 +2959,24 @@ func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.W
 // useValueConstraintOK) and 3 (exactly one of ref/name; ref excludes
 // simpleType/form/type).
 //
-// Clauses 1, 2, 3 and 5 are ALL charged BEFORE the use="prohibited" return,
-// because a Schema Representation Constraint holds of the <attribute> element
-// information item itself (§5.1: "any element information items which violate
-// any of the relevant Schema Representation Constraints"). Mapping to no
-// component at all (§3.2.2) skips the component-building half of the mapping,
-// never the validation: <attribute use="prohibited" default="d" fixed="f"/>
-// violates clause 1 exactly as the optional form does, and <attribute ref="a:x"
-// name="x" use="prohibited"/> violates clause 3.1 exactly as the non-prohibited
-// form does. This includes the neither-ref-nor-name shape (<attribute
-// use="prohibited"/>): clause 3.1 has no use= precondition, so that shape is
-// REJECTED under prohibited exactly as it already was under every other use=
-// value, not silently accepted as a no-op element (#358).
+// Clauses 1, 2, 3, 5 and — for the name= form — 6 are ALL charged BEFORE the
+// use="prohibited" return, because a Schema Representation Constraint holds of the
+// <attribute> element information item itself (§5.1: "any element information
+// items which violate any of the relevant Schema Representation Constraints").
+// Mapping to no component at all (§3.2.2) skips the component-building half of the
+// mapping, never the validation: <attribute use="prohibited" default="d"
+// fixed="f"/> violates clause 1 exactly as the optional form does, and <attribute
+// ref="a:x" name="x" use="prohibited"/> violates clause 3.1 exactly as the
+// non-prohibited form does. This includes the neither-ref-nor-name shape
+// (<attribute use="prohibited"/>): clause 3.1 has no use= precondition, so that
+// shape is REJECTED under prohibited exactly as it already was under every other
+// use= value, not silently accepted as a no-op element (#358). Clause 6
+// (att-with-ns) reaches the prohibited form on the same reasoning and by its own
+// call to rejectLocalAttributeTargetNamespace at that return, the one this
+// function makes (#1243): the clause's antecedent is the presence of
+// targetNamespace and carries no use= qualifier, so <attribute name="w"
+// use="prohibited" targetNamespace="b"/> under an <extension> fails 6.3.2 exactly
+// as the optional form does.
 //
 // default=/fixed= on the <attribute> element map to the USE's own {value
 // constraint} (§3.5.1 vc_au) for both forms: dcl.att.local (§3.2.2.2) leaves the
@@ -3021,6 +3032,22 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 		}
 	}
 	if use == "prohibited" {
+		// Clause 6 (att-with-ns) is charged HERE for the name= form, and only here,
+		// rather than by lifting rejectLocalAttributeTargetNamespace above this return:
+		// guarding the call to this branch leaves produceLocalAttribute's clause-4-then-6
+		// order standing for every other use=, so no charge is reordered against another
+		// anywhere (#1243). The hasRef arm keeps its own clause-6 gap, tracked at that
+		// function.
+		//
+		// GAP(xsd): clause 4 (type= and a <simpleType> child both present) is still
+		// charged nowhere on this branch — produceLocalAttribute holds its only charge
+		// and this return precedes it — so a prohibited <attribute> writing both is
+		// accepted. No open issue owns retiring it.
+		if !hasRef {
+			if err := p.rejectLocalAttributeTargetNamespace(el); err != nil {
+				return nil, err
+			}
+		}
 		return nil, nil
 	}
 	required := use == "required"
@@ -3105,9 +3132,11 @@ func useValueConstraintOK(el *Element) error {
 //
 // 6.1 is charged NOWHERE, here least of all: name is already present on every
 // <attribute> that reaches this function. produceAttributeUse rejects the
-// neither-ref-nor-name shape under clause 3.1 before it, and calls
-// produceLocalAttribute only on the !hasRef arm, so the two together leave name
-// present unconditionally and a 6.1 branch here could not be made to fire.
+// neither-ref-nor-name shape under clause 3.1 before it, and BOTH call sites sit
+// on its !hasRef arm — produceLocalAttribute for every use= that maps to a
+// component, and the prohibited return's own guarded call for the one that maps
+// to none — so name is present unconditionally and a 6.1 branch here could not be
+// made to fire.
 //
 // GAP(xsd): a local <attribute ref="..."> writing targetNamespace is accepted,
 // clause 6 charged on it nowhere. That form is 6.1's one reachable failure —
@@ -3121,14 +3150,6 @@ func useValueConstraintOK(el *Element) error {
 // A top-level <attribute> may not write the attribute at all —
 // xs:topLevelAttribute declares it use="prohibited" (xmlschema11-1.md:4713) —
 // and rejectProhibitedAttrs charges that as the §5.1 grammar fault it is.
-//
-// GAP(xsd): an <attribute use="prohibited"> writing targetNamespace escapes
-// clause 6 as well. produceAttributeUse returns on the prohibited token ahead of
-// both its hasRef arm and produceLocalAttribute, so this function never runs on
-// one — which sits against that same function's §5.1 reasoning for charging
-// clauses 1, 2, 3 and 5 before that very return. Closing it means lifting this
-// call up into produceAttributeUse ahead of the return, which reorders clause 6
-// against clause 4 at a call site of its own. No open issue owns retiring it.
 //
 // 6.3's antecedent carries the clause's whole force: an attribute writing its own
 // document's targetNamespace REDUNDANTLY is legal wherever it stands, needing no
@@ -3197,10 +3218,11 @@ func (p *producer) rejectLocalAttributeTargetNamespace(el *Element) error {
 // the element side, and that doc records why the exception stops there.
 //
 // src-attribute clause 6 (att-with-ns) is charged here too, ahead of the name, by
-// rejectLocalAttributeTargetNamespace: this is the only form of <attribute> the
-// clause reaches (that function's doc gives the reason), and until it ran the
-// attribute was read by localTargetNS alone, which mints the declaration in
-// whatever namespace it names without asking whether the clause admits it.
+// rejectLocalAttributeTargetNamespace — for every use= but prohibited, which maps
+// to no declaration and takes its charge from produceAttributeUse's own guarded
+// call instead (#1243). Until that charge ran the attribute was read by
+// localTargetNS alone, which mints the name in whatever namespace it declares
+// without asking whether the clause admits it.
 //
 // scopeParent is the containing <complexType>'s or <attributeGroup>'s component,
 // supplied by the caller and never recomputed from the element here: the ancestor
