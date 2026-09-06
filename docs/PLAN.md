@@ -494,11 +494,16 @@ for **`schema` +26** — the family's largest single move until **#1047** took
 `substitutionGroup=` on 2026-09-03 (`31263ed`, `Ratchet: unchanged` — the
 grammar-level `use="prohibited"` shape rejects with no case in the corpus to
 bank) and its grounding carved two siblings from its scope: **#1205**
-(`final=`/`abstract=`, the other grammar-prohibited pair, ratchet-neutral by the
-same construction, still open) and **#1206**, which **landed 2026-09-04**
-(`1780670`, `schema` **+16**) — `src-element` clause 2.2's prose-only eight
-attributes on a local `<element ref=>`, and the demonstration that this family's
-fixtures do exist where the grammar pair's do not. **#1206's own landing then
+(`final=`/`abstract=`, the other grammar-prohibited pair) and **#1206**, which
+**landed 2026-09-04** (`1780670`, `schema` **+16**) — `src-element` clause 2.2's
+prose-only eight attributes on a local `<element ref=>`. **#1205 LANDED
+2026-09-06** (`24ac7d3`) for `schema` **+5**, and it retired this family's
+"ratchet-neutral by construction" inheritance: #471's neutrality came from
+reaching the `ref=` form ALONE, while #1205 also reaches the inline form, where
+six local fixtures exist and five moved. Its `ref=` arm IS neutral as predicted
+(**0** fixtures suite-wide pair `ref=` with either attribute), and the inherited
+prediction never shipped as a claim because that issue's own Acceptance made
+measurement a precondition. **#1206's own landing then
 carved two more**, from a UTF-16LE corner of the suite no UTF-8 grep had
 reached: **#1215** (`src-element` clause 4, `ed-with-ns`) and **#1216**
 (`src-attribute` clause 6, `att-with-ns`). **Both LANDED 2026-09-04** —
@@ -509,9 +514,9 @@ reachable failure, a local `<attribute ref=>`) and **#1243** (an
 `<attribute use="prohibited">` escaping clause 6 entirely), and **both have now
 LANDED** — #1243 on 2026-09-05 (`3febb22`) and #1242 on 2026-09-06 (`6e95f25`),
 **each `Ratchet: unchanged` and each measured that way by `go tool suiteindex`
-construct census rather than assumed** — ratchet-neutral like #471 and #1205
-before them, but the first two of the family to prove it with an instrument
-instead of a grep. **#1243 carved one successor, #1242 carved none**,
+construct census rather than assumed** — ratchet-neutral like #471 before them
+(NOT like #1205, which banked **+5** on its inline arm), but the first two of
+the family to prove it with an instrument instead of a grep. **#1243 carved one successor, #1242 carved none**,
 which ENDS the run below: #1270 (`src-attribute` clause 4 charged nowhere on the
 `use="prohibited"` branch) is #1243's, and #1242's landing closed its arm with no
 residue. Live producer-decides-and-accepts members are **#1270**, **#931**
