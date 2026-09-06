@@ -103,6 +103,10 @@ This file does not restate them.
 
 ## Survey input
 
+**A failing `gh auth status` is not evidence against the recipe below** — it is
+repository-scoped REST, and which `gh` and proxy errors are real is settled
+under **Environment requirements**.
+
 `go tool wipsurvey` and `go tool gapaudit` read `gh issue list --json`-shaped
 JSON on stdin, so any channel that can write that JSON to a file feeds them.
 Over repository-scoped REST:
