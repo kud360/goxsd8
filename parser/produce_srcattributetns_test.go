@@ -198,22 +198,113 @@ func TestProduceLocalAttributeTargetNamespaceClause6(t *testing.T) {
 	}
 }
 
-// TestProduceRefAttributeTargetNamespaceStaysAccepted pins the BOUNDARY clause 6
-// was deliberately not extended to: an <attribute ref="..."> carrying
-// targetNamespace is accepted.
+// TestProduceRefAttributeTargetNamespaceClause61 pins src-attribute clause 6.1
+// (§3.2.3, xmlschema11-1.md:868) on the <attribute ref="..."> form: every
+// rejecting row here was ACCEPTED before, produceAttributeUse having served the
+// ref= arm ahead of the only clause-6 charge (#1242). It is the inverse of the
+// acceptance this file pinned while the gap stood.
 //
-// It is a gap in the charge, not a reading of the spec, and the gap itself is
-// tracked at rejectLocalAttributeTargetNamespace's ref= GAP(xsd) marker in
-// parser/produce_complex.go — that marker, not this comment, is the greppable
-// record and carries the account of why nothing charges the form. This test
-// asserts only what the producer does today, not what the spec asks for.
-func TestProduceRefAttributeTargetNamespaceStaysAccepted(t *testing.T) {
-	if _, err := produce(t, wrap("a", `
+// 6.1 is the clause's ONE reachable failure anywhere — clause 3.1 forces name
+// absent whenever ref is present, so the conjunct cannot be satisfied on this arm
+// — and the rows are shaped to pin that rather than a clause-6.3 fault wearing
+// 6.1's name: the schema's OWN targetNamespace is rejected too, where 6.3's
+// antecedent would have let it through, and use="prohibited" is rejected on the
+// same facts, the antecedent being targetNamespace's presence and nothing else.
+func TestProduceRefAttributeTargetNamespaceClause61(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2).
+	for _, tc := range []struct {
+		name string
+		doc  string
+		// wantMsg is empty for the rows clause 6.1 must ACCEPT.
+		wantMsg string
+		// wantLine is the 1-based line the offending <attribute> sits on.
+		wantLine int
+	}{
+		{
+			name: "ref writing a foreign targetNamespace fails 6.1",
+			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="a" xmlns:tns="a">
 <xs:attribute name="A" type="xs:string"/>
 <xs:complexType name="ct">
 <xs:attribute ref="tns:A" targetNamespace="b"/>
-</xs:complexType>`)); err != nil {
-		t.Fatalf("Produce rejected an <attribute ref> carrying targetNamespace: %v — the charge was scoped to the local name= form, so this document's acceptance is the pinned behavior", err)
+</xs:complexType>
+</xs:schema>`,
+			wantMsg:  `declares targetNamespace "b", but src-attribute clause 6.1 requires a name attribute`,
+			wantLine: 4,
+		},
+		{
+			// 6.1 carries none of 6.3's antecedent: writing the ancestor <schema>'s own
+			// targetNamespace is REDUNDANT rather than exempting, and name is still absent.
+			// A charge routed through rejectLocalAttributeTargetNamespace would accept this.
+			name: "ref writing the schema's own targetNamespace fails 6.1 all the same",
+			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="a" xmlns:tns="a">
+<xs:attribute name="A" type="xs:string"/>
+<xs:complexType name="ct">
+<xs:attribute ref="tns:A" targetNamespace="a"/>
+</xs:complexType>
+</xs:schema>`,
+			wantMsg:  `declares targetNamespace "a", but src-attribute clause 6.1 requires a name attribute`,
+			wantLine: 4,
+		},
+		{
+			// Charged ahead of the use="prohibited" return, for the reason §5.1 gives and
+			// clauses 1, 2, 3 and 5 already follow: mapping to no component bounds what the
+			// subtree contributes, never whether the element item is well-formed.
+			name: "ref with use=prohibited writing targetNamespace fails 6.1",
+			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="a" xmlns:tns="a">
+<xs:attribute name="A" type="xs:string"/>
+<xs:complexType name="ct">
+<xs:attribute ref="tns:A" use="prohibited" targetNamespace="b"/>
+</xs:complexType>
+</xs:schema>`,
+			wantMsg:  `declares targetNamespace "b", but src-attribute clause 6.1 requires a name attribute`,
+			wantLine: 4,
+		},
+		{
+			// The antecedent is targetNamespace's PRESENCE, not ref's: the ordinary ref=
+			// form is what clause 6 never speaks to, and a charge keyed off hasRef alone
+			// would take every reference in the corpus down with it.
+			name: "ref without targetNamespace is untouched by clause 6",
+			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="a" xmlns:tns="a">
+<xs:attribute name="A" type="xs:string"/>
+<xs:complexType name="ct">
+<xs:attribute ref="tns:A"/>
+</xs:complexType>
+</xs:schema>`,
+		},
+		{
+			name: "ref with use=prohibited and no targetNamespace is untouched by clause 6",
+			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="a" xmlns:tns="a">
+<xs:attribute name="A" type="xs:string"/>
+<xs:complexType name="ct">
+<xs:attribute ref="tns:A" use="prohibited"/>
+</xs:complexType>
+</xs:schema>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, tc.doc)
+			if tc.wantMsg == "" {
+				if err != nil {
+					t.Fatalf("Produce rejected a document src-attribute clause 6 admits: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Produce accepted the document, want the src-attribute clause 6.1 fault %q", tc.wantMsg)
+			}
+			if !strings.Contains(err.Error(), tc.wantMsg) {
+				t.Fatalf("error = %v, want it to state %q", err, tc.wantMsg)
+			}
+			assertRule(t, err, "src-attribute")
+			loc, ok := xsderr.LocOf(err)
+			if !ok {
+				t.Fatalf("error %v carries no position, want the <attribute>'s (E3)", err)
+			}
+			if loc.URI != produceURI || loc.Line != tc.wantLine || loc.Col == 0 {
+				t.Fatalf("position = %s:%d:%d, want the offending <attribute> at %s:%d with a column",
+					loc.URI, loc.Line, loc.Col, produceURI, tc.wantLine)
+			}
+		})
 	}
 }
 
@@ -313,18 +404,21 @@ func TestProduceProhibitedAttributeTargetNamespaceClause6(t *testing.T) {
 </xs:schema>`,
 		},
 		{
-			// The BOUNDARY: prohibited on the ref= arm is still accepted, its clause-6
-			// gap being a different one — tracked at rejectLocalAttributeTargetNamespace's
-			// ref= GAP(xsd) marker and pinned by
-			// TestProduceRefAttributeTargetNamespaceStaysAccepted. This charge reaches the
-			// name= form, under prohibited exactly as under every other use=.
-			name: "prohibited on the ref arm stays accepted",
+			// prohibited on the ref= arm fails a DIFFERENT conjunct: 6.1, name being absent
+			// wherever ref is present, charged in produceAttributeUse's hasRef block and
+			// tabled at TestProduceRefAttributeTargetNamespaceClause61 (#1242). The row
+			// stays here to pin that the two charges compose rather than shadow each other
+			// — this table's own charge reaches the name= form, under prohibited exactly as
+			// under every other use=.
+			name: "prohibited on the ref arm fails 6.1 instead",
 			doc: `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="a" xmlns:tns="a">
 <xs:attribute name="A" type="xs:string"/>
 <xs:complexType name="ct">
 <xs:attribute ref="tns:A" use="prohibited" targetNamespace="b"/>
 </xs:complexType>
 </xs:schema>`,
+			wantMsg:  `src-attribute clause 6.1 requires a name attribute`,
+			wantLine: 4,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

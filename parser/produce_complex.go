@@ -2956,27 +2956,29 @@ func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.W
 // sibling local Attribute Declaration is built inline. It enforces the structural
 // src-attribute clauses (§3.2.3): 1 (default and fixed mutually exclusive, via
 // valueConstraintOf), 2 and 5 (the default/fixed × use= corner, via
-// useValueConstraintOK) and 3 (exactly one of ref/name; ref excludes
-// simpleType/form/type).
+// useValueConstraintOK), 3 (exactly one of ref/name; ref excludes
+// simpleType/form/type) and 6.1 on the ref= form alone (#1242).
 //
-// Clauses 1, 2, 3, 5 and — for the name= form — 6 are ALL charged BEFORE the
-// use="prohibited" return, because a Schema Representation Constraint holds of the
-// <attribute> element information item itself (§5.1: "any element information
-// items which violate any of the relevant Schema Representation Constraints").
-// Mapping to no component at all (§3.2.2) skips the component-building half of the
-// mapping, never the validation: <attribute use="prohibited" default="d"
-// fixed="f"/> violates clause 1 exactly as the optional form does, and <attribute
-// ref="a:x" name="x" use="prohibited"/> violates clause 3.1 exactly as the
-// non-prohibited form does. This includes the neither-ref-nor-name shape
-// (<attribute use="prohibited"/>): clause 3.1 has no use= precondition, so that
-// shape is REJECTED under prohibited exactly as it already was under every other
-// use= value, not silently accepted as a no-op element (#358). Clause 6
-// (att-with-ns) reaches the prohibited form on the same reasoning and by its own
-// call to rejectLocalAttributeTargetNamespace at that return, the one this
-// function makes (#1243): the clause's antecedent is the presence of
-// targetNamespace and carries no use= qualifier, so <attribute name="w"
-// use="prohibited" targetNamespace="b"/> under an <extension> fails 6.3.2 exactly
-// as the optional form does.
+// Clauses 1, 2, 3, 5 and 6 are ALL charged BEFORE the use="prohibited" return,
+// because a Schema Representation Constraint holds of the <attribute> element
+// information item itself (§5.1: "any element information items which violate any
+// of the relevant Schema Representation Constraints"). Mapping to no component at
+// all (§3.2.2) skips the component-building half of the mapping, never the
+// validation: <attribute use="prohibited" default="d" fixed="f"/> violates clause
+// 1 exactly as the optional form does, and <attribute ref="a:x" name="x"
+// use="prohibited"/> violates clause 3.1 exactly as the non-prohibited form does.
+// This includes the neither-ref-nor-name shape (<attribute use="prohibited"/>):
+// clause 3.1 has no use= precondition, so that shape is REJECTED under prohibited
+// exactly as it already was under every other use= value, not silently accepted as
+// a no-op element (#358). Clause 6 (att-with-ns) reaches the prohibited form on
+// the same reasoning and by its own call to rejectLocalAttributeTargetNamespace at
+// that return, the one this function makes (#1243): the clause's antecedent is the
+// presence of targetNamespace and carries no use= qualifier, so <attribute
+// name="w" use="prohibited" targetNamespace="b"/> under an <extension> fails 6.3.2
+// exactly as the optional form does. The ref= form takes the same antecedent to
+// clause 6.1 in the hasRef block below, which likewise stands ahead of the
+// prohibited return, so <attribute ref="a:x" use="prohibited"
+// targetNamespace="b"/> is rejected exactly as the optional form is (#1242).
 //
 // default=/fixed= on the <attribute> element map to the USE's own {value
 // constraint} (§3.5.1 vc_au) for both forms: dcl.att.local (§3.2.2.2) leaves the
@@ -3030,14 +3032,31 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
 				"attribute has both ref and type, but src-attribute clause 3 forbids a type with ref")
 		}
+		// Clause 6.1's ONE reachable failure anywhere, and so the only place it is
+		// charged (#1242): clause 3.1 forces name ABSENT whenever ref is present, so a
+		// ref= attribute writing targetNamespace fails 6.1 unconditionally. Clause 3.2's
+		// forbidden-with-ref list names <simpleType>, form and type and stops short of
+		// targetNamespace, unlike src-element clause 2.2's blanket exclusion that rejects
+		// the element-side twin, so nothing above this reaches the shape.
+		//
+		// 6.2 and 6.3 are left unread: clause 6's conjuncts are independent ("all of the
+		// following must be true"), so failing 6.1 alone is grounds for rejection.
+		// rejectLocalAttributeTargetNamespace, which charges them, is not called here —
+		// its whole premise is that name is present.
+		if tns, hasTNS := el.Attr("targetNamespace"); hasTNS {
+			return nil, xsderr.New(ruleSrcAttribute, el.Loc(),
+				"the <attribute ref=\"...\"> declares targetNamespace %q, but src-attribute clause 6.1 requires a name attribute whenever targetNamespace is present, and clause 3.1 admits no name alongside ref", tns)
+		}
 	}
 	if use == "prohibited" {
 		// Clause 6 (att-with-ns) is charged HERE for the name= form, and only here,
 		// rather than by lifting rejectLocalAttributeTargetNamespace above this return:
 		// guarding the call to this branch leaves produceLocalAttribute's clause-4-then-6
 		// order standing for every other use=, so no charge is reordered against another
-		// anywhere (#1243). The hasRef arm keeps its own clause-6 gap, tracked at that
-		// function.
+		// anywhere (#1243). The guard is the helper's own premise, not a scope: name is
+		// present on every <attribute> it reads. The ref= arm takes clause 6.1 above
+		// instead, so a ref= attribute reaching this return wrote no targetNamespace at
+		// all (#1242).
 		//
 		// GAP(xsd): clause 4 (type= and a <simpleType> child both present) is still
 		// charged nowhere on this branch — produceLocalAttribute holds its only charge
@@ -3130,22 +3149,15 @@ func useValueConstraintOK(el *Element) error {
 // <attribute> and the nearest <complexType> ancestor, and the ·actual value· of
 // the base attribute of <restriction> does not ·match· the name of xs:anyType."
 //
-// 6.1 is charged NOWHERE, here least of all: name is already present on every
-// <attribute> that reaches this function. produceAttributeUse rejects the
-// neither-ref-nor-name shape under clause 3.1 before it, and BOTH call sites sit
-// on its !hasRef arm — produceLocalAttribute for every use= that maps to a
-// component, and the prohibited return's own guarded call for the one that maps
-// to none — so name is present unconditionally and a 6.1 branch here could not be
-// made to fire.
-//
-// GAP(xsd): a local <attribute ref="..."> writing targetNamespace is accepted,
-// clause 6 charged on it nowhere. That form is 6.1's one reachable failure —
-// clause 3.1 forces name absent whenever ref is present — and nothing catches
-// it: produceAttributeUse serves it on the hasRef arm, which returns ahead of
-// this function, and clause 3.2's forbidden list names <simpleType>, form and
-// type but not targetNamespace, unlike src-element's blanket clause 2.2 that
-// rejects the element-side twin. No open issue owns retiring it;
-// TestProduceRefAttributeTargetNamespaceStaysAccepted pins today's acceptance.
+// 6.1 is charged in produceAttributeUse's hasRef arm and never here: name is
+// already present on every <attribute> that reaches this function.
+// produceAttributeUse rejects the neither-ref-nor-name shape under clause 3.1
+// before it, and BOTH call sites sit on its !hasRef arm — produceLocalAttribute
+// for every use= that maps to a component, and the prohibited return's own
+// guarded call for the one that maps to none — so name is present unconditionally
+// and a 6.1 branch here could not be made to fire. The ref= form, where 6.1 is
+// the failing conjunct because clause 3.1 forces name absent, is rejected there
+// ahead of the reference resolution (#1242).
 //
 // A top-level <attribute> may not write the attribute at all —
 // xs:topLevelAttribute declares it use="prohibited" (xmlschema11-1.md:4713) —
