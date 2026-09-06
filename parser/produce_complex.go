@@ -3056,7 +3056,7 @@ func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.W
 // as the optional form is. Every other use= takes it from produceLocalAttribute,
 // which this return precedes; both sites call the one helper, so the clause has a
 // single encoding and two guarded call sites rather than a repeated predicate
-// (STYLE D4).
+// (STYLE D3).
 //
 // default=/fixed= on the <attribute> element map to the USE's own {value
 // constraint} (§3.5.1 vc_au) for both forms: dcl.att.local (§3.2.2.2) leaves the
@@ -3302,7 +3302,7 @@ func (p *producer) rejectLocalAttributeTargetNamespace(el *Element) error {
 // The clause's antecedent carries no use= qualifier, so both of the name= form's
 // paths call it — produceLocalAttribute for every use= that maps to a
 // declaration, and produceAttributeUse's use="prohibited" return for the one that
-// maps to none (#1270) — and the predicate is written once (STYLE D4). The ref=
+// maps to none (#1270) — and the predicate is written once (STYLE D3). The ref=
 // arm reaches neither call site carrying both: clause 3.2 rejects a ref=
 // attribute writing type=, and again one carrying a <simpleType> child, ahead of
 // them.
