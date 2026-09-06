@@ -40,6 +40,14 @@
 // then every file the census could not read all the way through as XML: the
 // ones that broke off partway, and the ones that held no element at all.
 //
+// A match line carries its position, then `parent=` naming the element it is
+// a direct child of — `(none)` for a document element — then the queried
+// attributes' values. The parent is what separates a local occurrence from a
+// top-level one, which no query over an element's OWN attributes can express
+// (#1282). It is the parent the document actually spells, never one corrected
+// against the grammar: an `xs:element` under `xs:redefine` is reported there,
+// wrong though that document is.
+//
 // The corpus ships deliberately malformed fixtures, so a parse fault is
 // content rather than a failure: the matches found ahead of it are kept and
 // the file is listed, because a construct BEHIND the fault is invisible here
@@ -220,6 +228,12 @@ type hit struct {
 	File string
 	Line int
 	Col  int
+	// Parent is the resolved name of the element this match is a direct child
+	// of, taken from the document as written and never reconciled with the
+	// grammar. The zero QName means the match is the document element and has
+	// no parent at all — a distinct value rather than a second field, because
+	// no name has an empty local part ([xsd.QName]).
+	Parent xsd.QName
 	// Values holds the queried attributes' values, in query order.
 	Values []string
 }
@@ -367,8 +381,15 @@ func scanFile(path, uri string, q query) (scan fixtureScan, err error) {
 // A read fault comes back WITH the hits found ahead of it rather than in
 // place of them: the suite ships deliberately malformed fixtures, and the
 // constructs before the fault are evidence the census must keep.
+//
+// open is the chain of elements enclosing the token in hand, pushed and
+// popped over this one stream rather than recovered by a second parse. The
+// pop cannot underflow: xmltree emits an end tag only for an element it holds
+// open under a matching name, and any other end tag is a fault that returns
+// above.
 func scanFixture(uri string, r io.Reader, q query) fixtureScan {
 	var scan fixtureScan
+	var open []xsd.QName
 	rd := xmltree.NewReader(uri, r)
 	for {
 		node, err := rd.Token()
@@ -382,18 +403,37 @@ func scanFixture(uri string, r io.Reader, q query) fixtureScan {
 			scan.Err = err
 			return scan
 		}
+		if _, ok := node.(*xmltree.EndElement); ok {
+			open = open[:len(open)-1]
+			continue
+		}
 		start, ok := node.(*xmltree.StartElement)
 		if !ok {
 			continue
 		}
+		// Read before the push, so the top of the stack is the parent rather
+		// than the element itself. Each entry is the name the reader resolved
+		// in that element's OWN scope, so a parent binding its prefix
+		// differently from its child still resolves correctly.
+		parent := innermost(open)
+		open = append(open, qnameOf(start.Name()))
 		scan.Elems++
 		values, ok := match(start, q)
 		if !ok {
 			continue
 		}
 		loc := start.Loc()
-		scan.Hits = append(scan.Hits, hit{File: uri, Line: loc.Line, Col: loc.Col, Values: values})
+		scan.Hits = append(scan.Hits, hit{File: uri, Line: loc.Line, Col: loc.Col, Parent: parent, Values: values})
 	}
+}
+
+// innermost is the name of the enclosing element the open chain ends with, or
+// the zero QName at the document level, where there is none.
+func innermost(open []xsd.QName) xsd.QName {
+	if len(open) == 0 {
+		return xsd.QName{}
+	}
+	return open[len(open)-1]
 }
 
 // match reports whether start is an occurrence of q's construct — its
@@ -430,7 +470,13 @@ func attrValue(start *xmltree.StartElement, want xsd.QName) (string, bool) {
 // comparison is on namespace URI and local part, never on the prefix the
 // document spelled — that equivalence is the tool's whole point.
 func sameName(want xsd.QName, got xmltree.Name) bool {
-	return want.Space == got.Space() && want.Local == got.Local()
+	return want == qnameOf(got)
+}
+
+// qnameOf restates a name the reader resolved in the form the query language
+// and the report both speak.
+func qnameOf(n xmltree.Name) xsd.QName {
+	return xsd.QName{Space: n.Space(), Local: n.Local()}
 }
 
 // printReport renders rep in the fixed layout the package doc describes.
@@ -467,7 +513,8 @@ func printReportTo(w io.Writer, rep report) {
 		_, _ = fmt.Fprintln(w, "(none)")
 	}
 	for _, h := range rep.Hits {
-		_, _ = fmt.Fprintf(w, "  %s:%d:%d%s\n", h.File, h.Line, h.Col, renderValues(rep.Query.Attrs, h.Values))
+		_, _ = fmt.Fprintf(w, "  %s:%d:%d parent=%s%s\n",
+			h.File, h.Line, h.Col, renderParent(h.Parent), renderValues(rep.Query.Attrs, h.Values))
 	}
 
 	printNotes(w, "Read only partly: a match behind the fault is invisible to this census", rep.Partial)
@@ -513,6 +560,16 @@ func countFiles(hits []hit) int {
 		prev = h.File
 	}
 	return n
+}
+
+// renderParent names the element a hit is a direct child of, in the same
+// Clark notation [query.String] echoes. A document element has no parent, and
+// "(none)" can never collide with one: parentheses are not NCName characters.
+func renderParent(parent xsd.QName) string {
+	if parent.Local == "" {
+		return "(none)"
+	}
+	return parent.String()
 }
 
 // renderValues formats a hit's attribute values against the names that
