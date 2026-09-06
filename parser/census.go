@@ -98,7 +98,35 @@ import (
 //     need no walk from here at all: §F.2 clause 1 substitutes them into the
 //     OVERRIDDEN document, whose own producer censuses them through
 //     topLevelDecls. A <redefine>'s are definitions of THIS document (§4.2.4
-//     clause 4.1.1) and are a region still to come.
+//     clause 4.1.1) and are a region still to come;
+//   - an <openContent>'s own children, and those of the <any> under it. Here a
+//     silence IS possible and nothing catches it. xs:openContent is "(annotation?,
+//     any?)" and xs:wildcard is xs:annotated plus attributes, leaving
+//     "(annotation?)" (§3.4.2), but no s4sModel exists for either, so
+//     checkS4SChildOrder is never invoked against an <openContent> or an <any>;
+//     checkOpenContentAny and openContentOf find the <any> by name and read
+//     nothing else of the wrapper, and produceWildcard reads only the namespace,
+//     notNamespace, notQName and processContents attributes.
+//     complexContentChildMapped admits the name while container holds no arm for
+//     it, so a stray XSD-namespace sibling of the <any> — or a child of the <any>
+//     itself — is reported by nothing and rejected by nothing;
+//   - a nested <group ref>'s or <attributeGroup ref>'s own children, uncaught the
+//     same way. Both ref forms hold "(annotation?)" alone: Appendix A's
+//     xs:groupRef, for the <group> §3.7.2 xr.mgd3 maps to a particle, and
+//     xs:attributeGroupRef, which §3.4.2.4's summary spells the same way. They are
+//     the REFERENCES, not the top-level DEFINITIONS censused above — xs:namedGroup
+//     is "(annotation?, (all | choice | sequence))" and xs:namedAttributeGroup
+//     carries the attribute tail — so there is nothing here to descend INTO. What
+//     is missing is the REPORT: modelGroup has no <group> arm and container none
+//     for <attributeGroup>, produceGroupRefParticle reads only ref, minOccurs and
+//     maxOccurs, no s4sModel orders either ref form, and groupParticles' default
+//     arm charges a name written DIRECTLY under an <all>/<choice>/<sequence>, not
+//     one nested inside a <group ref> it has already recognized;
+//   - an <assert>'s own children, the third such silence. xs:assertion extends
+//     xs:annotated with the test and xpathDefaultNamespace ATTRIBUTES and no
+//     element position of its own, leaving "(annotation?)" (§3.13.2). assertionsOf
+//     reads the test attribute and never the element's children, no s4sModel
+//     orders an <assert>, and container holds no arm for the name.
 //
 // A narrow census is SOUND but incomplete: it never names a construct the
 // producer does map, so a consumer may act on what it reports and must not read
