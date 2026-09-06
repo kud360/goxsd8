@@ -2943,3 +2943,92 @@ func TestProduceLocalElementSubstitutionGroupRejected(t *testing.T) {
 		t.Fatalf("position = %s:%d:%d, want the local <element>'s own line 2 of %s", loc.URI, loc.Line, loc.Col, produceURI)
 	}
 }
+
+// TestProduceLocalElementProhibitedAttrRejected pins final and abstract on the
+// INLINE local form: xs:localElement restricts both to use="prohibited"
+// (xmlschema11-1.md:5125-:5126), this producer runs no meta-schema validation
+// pass ahead of mapping, and before this charge both attributes were read by
+// nothing here and the document was accepted outright.
+//
+// Carrying NO rule ID is the assertion that matters, and it is what separates
+// this from TestProduceLocalElementSubstitutionGroupRejected next to it: the
+// third attribute the same grammar line prohibits draws e-props-correct clause 3
+// because the Common Mapping Rule for {substitution group affiliations} really
+// would build the value that clause forbids at local scope, while §3.3.2.1 maps
+// {abstract} and {substitution group exclusions} unconditionally and leaves no
+// numbered clause for these two to violate. Charging one anyway would be a
+// fabricated verdict (STYLE E2). The ref= form is pinned to src-element clause
+// 2.2 instead, by TestProduceRefElementUseProhibitedAttrRejected.
+//
+// The last row asserts the walk is in the GRAMMAR's declaration order, not the
+// document's (STYLE D2).
+func TestProduceLocalElementProhibitedAttrRejected(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		attrs    string
+		wantAttr string
+	}{
+		{name: "final", attrs: `final="restriction"`, wantAttr: "final"},
+		{name: "abstract", attrs: `abstract="true"`, wantAttr: "abstract"},
+		{
+			// abstract="false" is prohibited as squarely as abstract="true": the
+			// grammar rejects the ATTRIBUTE, and never reads its value.
+			name: "abstract=false", attrs: `abstract="false"`, wantAttr: "abstract",
+		},
+		{
+			name:     "declaration order wins over document order",
+			attrs:    `abstract="true" final="restriction"`,
+			wantAttr: "final",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := "\n" + `<xs:complexType name="CT"><xs:sequence>` +
+				`<xs:element name="e" type="xs:string" ` + tc.attrs + `/>` +
+				`</xs:sequence></xs:complexType>`
+			_, err := produce(t, wrap("", body))
+			if err == nil {
+				t.Fatalf("Produce accepted a local <element> carrying %s, want the §5.1 grammar fault", tc.wantAttr)
+			}
+			want := "carries a " + tc.wantAttr + ` attribute, which the schema for schema documents prohibits on the local form: xs:localElement restricts ` + tc.wantAttr + ` to use="prohibited"`
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %v, want it to state %q", err, want)
+			}
+			if rule, ok := xsderr.RuleOf(err); ok {
+				t.Errorf("error = %v, charged %s; want a plain grammar fault carrying no rule ID", err, rule)
+			}
+			if at := produceURI + ":2:"; !strings.Contains(err.Error(), at) {
+				t.Errorf("error = %v, want it to name the local <element> at %s", err, at)
+			}
+		})
+	}
+}
+
+// TestProduceLocalElementProhibitedAttrAccepted is the other side: the
+// prohibition is xs:localElement's alone, so the TOP-LEVEL form declares both
+// attributes legitimately (xmlschema11-1.md:5086-:5107) and a check hoisted out
+// of the local path would reject the whole language; and it reaches unqualified
+// attributes only, since xs:localElement admits foreign ones outright
+// (<anyAttribute namespace="##other"> at xmlschema11-1.md:5127).
+func TestProduceLocalElementProhibitedAttrAccepted(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{
+			name: "final and abstract on the top-level form",
+			body: `<xs:element name="top" type="xs:string" final="restriction" abstract="true"/>`,
+		},
+		{
+			name: "foreign-namespace final and abstract on the local form",
+			body: `<xs:complexType name="CT"><xs:sequence>` +
+				`<xs:element xmlns:o="urn:other" name="e" type="xs:string" o:final="restriction" o:abstract="true"/>` +
+				`</xs:sequence></xs:complexType>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := produce(t, wrap("", tc.body)); err != nil {
+				t.Fatalf("Produce rejected an <element> the schema for schema documents admits: %v", err)
+			}
+		})
+	}
+}
