@@ -4666,8 +4666,8 @@ MS-Errata102006-07-15/errC001/schema/errC001 pass
 MS-Errata102006-07-15/errC002/schema/errC002 pass
 MS-Errata102006-07-15/errC003/schema/errC003 pass
 MS-Errata102006-07-15/errC004/schema/errC004 pass
-MS-Errata102006-07-15/errC005/schema/errC005 fail
-MS-Errata102006-07-15/errC006/schema/errC006 fail
+MS-Errata102006-07-15/errC005/schema/errC005 pass
+MS-Errata102006-07-15/errC006/schema/errC006 pass
 MS-Errata102006-07-15/errC007/schema/errC007 pass
 MS-Errata102006-07-15/errC008/schema/errC008 fail
 MS-Errata102006-07-15/errC009/schema/errC009 fail
@@ -6327,7 +6327,7 @@ MS-Particles2006-07-15/particlesDa003/schema/particlesDa003 pass
 MS-Particles2006-07-15/particlesDa004/schema/particlesDa004 pass
 MS-Particles2006-07-15/particlesDa005/schema/particlesDa005 pass
 MS-Particles2006-07-15/particlesDa006/schema/particlesDa006 pass
-MS-Particles2006-07-15/particlesDa011/schema/particlesDa011 fail
+MS-Particles2006-07-15/particlesDa011/schema/particlesDa011 pass
 MS-Particles2006-07-15/particlesDb001/schema/particlesDb001 pass
 MS-Particles2006-07-15/particlesDb002/schema/particlesDb002 pass
 MS-Particles2006-07-15/particlesDb003/schema/particlesDb003 pass
@@ -9797,8 +9797,8 @@ MS-Schema2006-07-15/schU2/schema/schU2 pass
 MS-Schema2006-07-15/schU3/schema/schU3 fail
 MS-Schema2006-07-15/schU4/schema/schU4 fail
 MS-Schema2006-07-15/schU5/schema/schU5 fail
-MS-Schema2006-07-15/schZ001_78029-a/schema/schZ001_78029-a fail
-MS-Schema2006-07-15/schZ002_78029-b/schema/schZ002_78029-b fail
+MS-Schema2006-07-15/schZ001_78029-a/schema/schZ001_78029-a pass
+MS-Schema2006-07-15/schZ002_78029-b/schema/schZ002_78029-b pass
 MS-Schema2006-07-15/schZ003_78029-c/schema/schZ003_78029-c fail
 MS-Schema2006-07-15/schZ004/schema/schZ004 pass
 MS-Schema2006-07-15/schZ005/schema/schZ005 pass

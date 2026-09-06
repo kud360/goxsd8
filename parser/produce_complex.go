@@ -2034,7 +2034,7 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 		if err := checkS4SChildOrder(el, s4sElement); err != nil {
 			return nil, err
 		}
-		if err := rejectRefElementSubstitutionGroup(el); err != nil {
+		if err := rejectRefElementUseProhibitedAttrs(el); err != nil {
 			return nil, err
 		}
 		if err := rejectRefElementDeclarationAttrs(el); err != nil {
@@ -2056,38 +2056,50 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 	return xsd.ResolvedTerm{Term: decl}, nil
 }
 
-// rejectRefElementSubstitutionGroup charges src-element clause 2.2 (§3.3.3,
-// xmlschema11-1.md:1321) on a substitutionGroup attribute written on a local
-// <element ref="...">: "If ref is present, then no unqualified attributes are
-// present other than minOccurs, maxOccurs, and id."
+// rejectRefElementUseProhibitedAttrs charges src-element clause 2.2 (§3.3.3,
+// xmlschema11-1.md:1321) on the three attributes xs:localElement itself narrows
+// to use="prohibited" — substitutionGroup, final and abstract
+// (xmlschema11-1.md:5124-:5126) — written on a local <element ref="...">: "If
+// ref is present, then no unqualified attributes are present other than
+// minOccurs, maxOccurs, and id."
+//
+// They are walked in that grammar's declaration order, because the attribute the
+// rejection names is output and output never follows the document's attribute
+// order or a map's (STYLE D2).
+//
+// The three share ONE grammar fact, which is what separates them from
+// rejectRefElementDeclarationAttrs's eight: every one of those is syntactically
+// legal under ref= and clause 2.2's prose is the only thing rejecting it, while
+// these three are prohibited on every local <element> whatever form it takes.
+// Clause 2.2 is charged over all three all the same, since it reaches the XML
+// attribute directly under ref= and the §5.1 grammar class produceLocalElement
+// charges on the inline form (rejectLocalElementProhibitedAttrs) carries no rule
+// ID at all.
 //
 // The rule ID is src-element, NOT the e-props-correct clause 3 produceLocalElement
-// charges for the same attribute on the inline local form. The ref= form maps to
+// charges for substitutionGroup on the inline local form. The ref= form maps to
 // an xsd.ElementDeclarationRef, a deferred reference with no {substitution group
 // affiliations} property at all, so there is nothing for a component constraint
 // over that property to be violated by; charging e-props-correct here would be a
-// verdict the component tableau cannot carry (STYLE E2). Clause 2.2 reaches the
-// XML attribute directly and is the footing that fits.
-//
-// GAP(xsd): only substitutionGroup is charged here. The clause's exempt set is
-// {minOccurs, maxOccurs, id}, so eight further attributes xs:element declares
-// fall under this half and are rejectRefElementDeclarationAttrs's, on a footing
-// of their own; two more — final and abstract, which carry the same
-// unconditional use="prohibited" on xs:localElement that substitutionGroup does,
-// and escape the inline path too since produceLocalElement charges neither — are
-// charged nowhere in this producer, and #1205 owns them.
+// verdict the component tableau cannot carry (STYLE E2). The same holds a
+// fortiori for final and abstract, which no clause of e-props-correct confines
+// by {scope} on any form.
 //
 // "Unqualified attributes" scopes the clause to no-namespace attributes, which
 // Element.Attr already enforces by construction: a foreign-namespace
 // substitutionGroup is invisible to it, and xs:localElement admits foreign
 // attributes outright (<anyAttribute namespace="##other"> at
 // xmlschema11-1.md:5127).
-func rejectRefElementSubstitutionGroup(el *Element) error {
-	if _, ok := el.Attr("substitutionGroup"); !ok {
-		return nil
+func rejectRefElementUseProhibitedAttrs(el *Element) error {
+	for _, name := range [...]string{"substitutionGroup", "final", "abstract"} {
+		if _, ok := el.Attr(name); !ok {
+			continue
+		}
+		return xsderr.New(ruleSrcElement, el.Loc(),
+			"the <element ref=\"...\"> carries a %s attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id when ref is present",
+			name)
 	}
-	return xsderr.New(ruleSrcElement, el.Loc(),
-		"the <element ref=\"...\"> carries a substitutionGroup attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id when ref is present")
+	return nil
 }
 
 // rejectRefElementDeclarationAttrs charges src-element clause 2.2 (§3.3.3,
@@ -2102,11 +2114,12 @@ func rejectRefElementSubstitutionGroup(el *Element) error {
 // and output never follows the document's attribute order or a map's (STYLE D2).
 //
 // Clause 2.2's prose is the ONLY footing that rejects these eight, which is what
-// separates them from substitutionGroup: xs:localElement narrows exactly three
-// of the base type's attributes with use="prohibited" (substitutionGroup, final,
-// abstract at xmlschema11-1.md:5124-5126) and none of these, so every one of
-// them is syntactically legal under ref= and no grammar walk will ever reach
-// them. Clause 2's "if the item's parent is not <schema>" precondition is
+// separates them from the three rejectRefElementUseProhibitedAttrs answers ahead
+// of here: xs:localElement narrows exactly those three of the base type's
+// attributes with use="prohibited" (substitutionGroup, final, abstract at
+// xmlschema11-1.md:5124-:5126) and none of these, so every one of them is
+// syntactically legal under ref= and no grammar walk will ever reach them.
+// Clause 2's "if the item's parent is not <schema>" precondition is
 // satisfied by the call site alone: elementParticleTerm maps local particles,
 // and produceElement's top-level arm never reaches here.
 //
@@ -2148,7 +2161,7 @@ func rejectRefElementDeclarationAttrs(el *Element) error {
 //
 // Only the CHILD half of the clause is charged here. Its other half — no
 // unqualified attribute but minOccurs, maxOccurs and id — belongs to
-// rejectRefElementSubstitutionGroup and rejectRefElementDeclarationAttrs, both
+// rejectRefElementUseProhibitedAttrs and rejectRefElementDeclarationAttrs, both
 // of which run first, so a document violating both halves is answered at the
 // attribute.
 //
@@ -2164,6 +2177,46 @@ func rejectRefElementChildren(el *Element) error {
 		return xsderr.New(ruleSrcElement, c.Loc(),
 			"the <element ref=\"...\"> at %s carries a <%s> child, but src-element clause 2.2 admits no child in the Schema namespace other than <annotation> when ref is present",
 			el.Loc(), c.Name().Local())
+	}
+	return nil
+}
+
+// rejectLocalElementProhibitedAttrs rejects a final or abstract attribute
+// written on an inline local <element name="...">, which the schema for schema
+// documents prohibits there: xs:localElement restricts both to use="prohibited"
+// (xmlschema11-1.md:5125-:5126), unconditionally and whatever form the local
+// element takes, while xs:topLevelElement admits both (:5086-:5107).
+//
+// The fault carries NO numbered rule ID, on the footing rejectProhibitedAttrs's
+// doc establishes (parser/produce.go): §5.1 (xmlschema11-1.md:4289) makes it an
+// error for a schema document not to be "fully valid with respect to a schema
+// corresponding to the Schema for Schema Documents" (:4296), an error condition
+// independent of the numbered Schema Representation Constraints beside it.
+// Charging e-props-correct would be a fabricated verdict (STYLE E2): its clause 3
+// (§3.3.6.1, xmlschema11-1.md:1520) confines {substitution group affiliations}
+// by {scope}.{variety} and names no other property, and §3.3.2.1's Common
+// Mapping Rules (:1144, dcl.elt.common) map {abstract} from abstract and
+// {substitution group exclusions} from final/finalDefault UNCONDITIONALLY, so
+// neither property reaches a state any component constraint forbids at local
+// scope. src-element gives nothing either: clause 2.2's antecedent is "If ref is
+// present", false on this form, and no other clause reaches these two names.
+//
+// substitutionGroup carries the same use="prohibited" on xs:localElement and is
+// deliberately NOT in this list: produceLocalElement charges e-props-correct
+// clause 3 over it because the Common Mapping Rule for {substitution group
+// affiliations} really would build the non-empty value that clause forbids at
+// local scope, and that reasoning reaches no further. The ref= form draws
+// src-element clause 2.2 over all three instead
+// (rejectRefElementUseProhibitedAttrs).
+//
+// The two are checked in the grammar's own declaration order, so a document
+// writing both is always reported at final (STYLE D2).
+func rejectLocalElementProhibitedAttrs(el *Element) error {
+	for _, name := range [...]string{"final", "abstract"} {
+		if _, ok := el.Attr(name); !ok {
+			continue
+		}
+		return fmt.Errorf("parser: local <element> at %s carries a %s attribute, which the schema for schema documents prohibits on the local form: xs:localElement restricts %s to use=\"prohibited\", and it is legal on the top-level form alone", el.Loc(), name, name)
 	}
 	return nil
 }
@@ -2329,6 +2382,13 @@ func nearestComplexTypeAndRestriction(el *Element) (complexType, restriction *El
 // is charged AHEAD of the walk, on the one exception to the default run order
 // checkS4SChildOrder's doc records.
 //
+// final and abstract are rejected here, by rejectLocalElementProhibitedAttrs,
+// behind the grammar walk — the default that same doc records — because the
+// fault is of the walk's own uncataloged §5.1 class and carries no rule ID, so
+// it answers ahead of every numbered src-element clause below it. That doc gives
+// the reason no numbered rule fits, and the reason substitutionGroup is charged
+// separately and earlier.
+//
 // src-element clause 4 (ed-with-ns) is charged here too, behind the grammar walk
 // — the default that same doc records — and ahead of the name, by
 // rejectLocalElementTargetNamespace: this is the only form of <element> the
@@ -2359,13 +2419,14 @@ func nearestComplexTypeAndRestriction(el *Element) (complexType, restriction *El
 // The reach is the INLINE local form only, which is the only form that arrives
 // here: elementParticleTerm's <element ref> branch returns before this function
 // runs, and charges the same attribute there under src-element clause 2.2
-// instead (rejectRefElementSubstitutionGroup, whose doc gives the reason the
+// instead (rejectRefElementUseProhibitedAttrs, whose doc gives the reason the
 // rule ID differs).
 //
 // {disallowed substitutions} comes from the same disallowedSubstitutions mapping
 // the global path uses (STYLE T4): §3.3.2.1's row is a COMMON rule and the
 // meta-schema leaves block= permitted on xs:localElement, unlike the three
-// attributes it prohibits there (substitutionGroup, final, abstract).
+// attributes it prohibits there (substitutionGroup, final, abstract), each of
+// which this function rejects before reaching any mapping.
 //
 // scopeParent is the nearest <complexType> or named <group> ancestor's component,
 // supplied by the caller (never recomputed from the element here — the ancestor
@@ -2389,6 +2450,9 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 		return xsd.ElementDeclaration{}, err
 	}
 	if err := checkS4SChildOrder(el, s4sElement); err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
+	if err := rejectLocalElementProhibitedAttrs(el); err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
 	if err := p.rejectLocalElementTargetNamespace(el); err != nil {
