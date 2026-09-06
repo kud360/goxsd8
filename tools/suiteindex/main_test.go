@@ -131,6 +131,105 @@ func TestScanFixtureDecodesUTF16(t *testing.T) {
 	}
 }
 
+// TestScanFixtureRecordsTheParent pins the field #1282 added: each hit names
+// the element it is a DIRECT child of, resolved and in document order, so a
+// local-versus-top-level census reads off the report instead of being
+// hand-written (Appendix A's xs:localElement versus xs:topLevelElement).
+func TestScanFixtureRecordsTheParent(t *testing.T) {
+	doc := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="top" abstract="true"/>
+  <xs:complexType name="ct">
+    <xs:sequence>
+      <xs:element name="local" abstract="false"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="after" abstract="true"/>
+</xs:schema>`
+	scan := scanFixture("t.xsd", strings.NewReader(doc), mustQuery(t, "element@abstract"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	want := []xsd.QName{
+		{Space: xsd.XMLSchemaNS, Local: "schema"},
+		{Space: xsd.XMLSchemaNS, Local: "sequence"},
+		// The third pins the pop: without it "after" inherits the depth the
+		// nested declaration left behind.
+		{Space: xsd.XMLSchemaNS, Local: "schema"},
+	}
+	if len(scan.Hits) != len(want) {
+		t.Fatalf("got %d hit(s), want %d: %+v", len(scan.Hits), len(want), scan.Hits)
+	}
+	for i, w := range want {
+		if scan.Hits[i].Parent != w {
+			t.Errorf("Hits[%d] (%s) Parent = %+v, want %+v", i, scan.Hits[i].Values[0], scan.Hits[i].Parent, w)
+		}
+	}
+}
+
+// TestScanFixtureParentOfDocumentElement pins the absent case: a match that is
+// the document element has no parent, and the zero QName is how that is said.
+func TestScanFixtureParentOfDocumentElement(t *testing.T) {
+	doc := `<xs:element xmlns:xs="http://www.w3.org/2001/XMLSchema" name="root" abstract="true"/>`
+	scan := scanFixture("t.xsd", strings.NewReader(doc), mustQuery(t, "element@abstract"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	if len(scan.Hits) != 1 {
+		t.Fatalf("got %d hit(s), want 1: %+v", len(scan.Hits), scan.Hits)
+	}
+	if got := scan.Hits[0].Parent; got != (xsd.QName{}) {
+		t.Errorf("Parent = %+v, want the zero QName (no parent)", got)
+	}
+}
+
+// TestScanFixtureResolvesTheParentInItsOwnScope pins the hazard a prefix-text
+// stack would fall into: the parent's name comes from the bindings in force at
+// the PARENT, which its child here rebinds to something else entirely.
+func TestScanFixtureResolvesTheParentInItsOwnScope(t *testing.T) {
+	doc := `<p:schema xmlns:p="http://www.w3.org/2001/XMLSchema">
+  <p:element xmlns:p="urn:decoy" name="x"/>
+  <q:element xmlns:q="http://www.w3.org/2001/XMLSchema" name="y" abstract="true"/>
+</p:schema>`
+	scan := scanFixture("t.xsd", strings.NewReader(doc), mustQuery(t, "element@abstract"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	if len(scan.Hits) != 1 {
+		t.Fatalf("got %d hit(s), want 1: %+v", len(scan.Hits), scan.Hits)
+	}
+	want := xsd.QName{Space: xsd.XMLSchemaNS, Local: "schema"}
+	if got := scan.Hits[0].Parent; got != want {
+		t.Errorf("Parent = %+v, want %+v", got, want)
+	}
+}
+
+// TestReportNamesEachHitsParent pins that the field reaches the reader: the
+// default report prints the parent beside file:line:col, and says so for a
+// document element too.
+func TestReportNamesEachHitsParent(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "nested.xsd", xsPrefixDoc)
+	writeFixture(t, root, "bare.xsd",
+		`<xs:element xmlns:xs="http://www.w3.org/2001/XMLSchema" name="r" targetNamespace="urn:b"/>`)
+
+	rep, err := census(root, mustQuery(t, "element@targetNamespace"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	var out strings.Builder
+	if err := printReport(&out, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	for _, want := range []string{
+		"bare.xsd:1:1 parent=(none) targetNamespace=\"urn:b\"",
+		"nested.xsd:5:7 parent={http://www.w3.org/2001/XMLSchema}sequence targetNamespace=\"urn:b\"",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("report does not carry %q:\n%s", want, out.String())
+		}
+	}
+}
+
 // TestScanFixtureRequiresEveryQueriedAttribute pins the AND semantics of a
 // multi-attribute query, and that an element missing one named attribute is
 // not an occurrence.
@@ -426,6 +525,58 @@ func suiteRoot(t *testing.T) string {
 		t.Fatalf("reading %s: %v", root, err)
 	}
 	return root
+}
+
+// TestSuiteTopLevelCensusOfFinalAndAbstract pins #1205's census, which two
+// agents in one session each hand-wrote a namespace-aware walk to take
+// because the tool could not answer it (#1282). The query language is a
+// conjunction over one element's own attributes, so "final= OR abstract=" is
+// two censuses deduped by position — that composition is the whole method,
+// and the figures below are the pin it reproduces.
+func TestSuiteTopLevelCensusOfFinalAndAbstract(t *testing.T) {
+	root := suiteRoot(t)
+	type where struct {
+		File string
+		Line int
+		Col  int
+	}
+	seen := map[where]bool{}
+	var union []hit
+	for _, q := range []string{"element@final", "element@abstract"} {
+		rep, err := census(root, mustQuery(t, q))
+		if err != nil {
+			t.Fatalf("census %s: %v", q, err)
+		}
+		for _, h := range rep.Hits {
+			at := where{h.File, h.Line, h.Col}
+			if seen[at] {
+				continue
+			}
+			seen[at] = true
+			union = append(union, h)
+		}
+	}
+
+	// The three parents #1205 grouped as top-level. `redefine` admits no
+	// `element` child (xmlschema11-1.md:4078), so a hit under one is an
+	// invalid fixture reported verbatim — this tool censuses, it does not
+	// correct.
+	topLevel := map[xsd.QName]bool{
+		{Space: xsd.XMLSchemaNS, Local: "schema"}:   true,
+		{Space: xsd.XMLSchemaNS, Local: "redefine"}: true,
+		{Space: xsd.XMLSchemaNS, Local: "override"}: true,
+	}
+	top, local := 0, 0
+	for _, h := range union {
+		if topLevel[h.Parent] {
+			top++
+			continue
+		}
+		local++
+	}
+	if len(union) != 139 || top != 133 || local != 6 {
+		t.Errorf("census = %d hit(s), %d top-level, %d local; want 139, 133, 6", len(union), top, local)
+	}
 }
 
 // TestSuiteAcceptanceCases pins #1239's two acceptance cases against the real
