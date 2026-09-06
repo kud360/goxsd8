@@ -267,9 +267,10 @@ represents it**:
   closed and was never this finding** — it was the anonymous-type gap, which
   `xsd/ownedtypefold.go` closed by sharing the ROOTS descent and deliberately
   not the mapping logic — so the STYLE T4 duplication outlived its tracker
-  and is refiled at the 2026-09-06 audit. The standing limit is restated
-  deliberately: a THIRD finalize-time write site is a design change, not an
-  increment, and belongs in a reviewed issue before it is written.
+  and is refiled at the 2026-09-06 audit as #1285. The standing limit is
+  restated deliberately: a THIRD finalize-time write site is a design
+  change, not an increment, and belongs in a reviewed issue before it is
+  written.
 
 ### Value spaces without a dependency (`xsd.ValueSpace`)
 
@@ -667,7 +668,7 @@ compiles, is documented, and has **zero** callers module-wide.
   bound instead; `IsAbsent` is `URI`'s second result spelled a second way
   (D3); `AllowsNamespace` is exported beneath `AllowsName` by a `doc.go`
   that tells a caller admitting a name to reach for `AllowsName` instead.
-  Filed at the 2026-09-06 audit. `Notation.SystemIdentifier`,
+  Filed at the 2026-09-06 audit as #1287. `Notation.SystemIdentifier`,
   `Notation.PublicIdentifier` and `xmltree.CharData.Offset` are callerless
   too and are NOT filed: the first two are §3.14.1 component properties the
   model contracts to expose, and the third is the byte offset `codec`'s M10
