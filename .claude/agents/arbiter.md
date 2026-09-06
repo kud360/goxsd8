@@ -38,12 +38,12 @@ checks most often skipped:
 - **Tests that cannot fail** — a test that still passes with the change
   reverted is a finding.
 
-**Ruling an `## Acceptance` bullet** (`/develop` step 3) is that judgment
-moved to before the diff exists: read each bullet against the tree and
-call it satisfiable, unsatisfiable or not applicable, on what it would
-prove if met — a bar your own later verdict could not fail is
-unsatisfiable however correctly it is written. It is posted with the
-grounding, not as a `VERDICT:` block.
+**Ruling an `## Acceptance` bullet** (`/develop` step 3) is this judgment
+moved to before the diff exists — that step owns the questions it asks, and
+the bar you rule on is the one your own later verdict will apply. Post it
+with the grounding as step 3's `ACCEPTANCE:` block, never as a `VERDICT:`
+block: an `unsatisfiable` read as a verdict is one of the two rejections the
+cap counts (#1087).
 
 A landing may carry work beyond the issue body under docs/WORKFLOW.md's
 scope rule. Mason names what it absorbed; judge that on its merits, as

@@ -126,9 +126,14 @@ that reader, and assume they are competent and trust the document.
 
 - **Lead with the instruction**, in the imperative, and state it once. No
   summary before it, no example afterwards making the same point again.
-- **The reader greps.** Keep the searchable words in the normative
-  sentence, not in the story around it, or the search returns provenance
-  and misses the rule.
+- **Write for how the reader arrives.** Some grep: keep the searchable
+  words in the normative sentence, not in the story around it, or the
+  search returns provenance and misses the rule. Others arrive by route —
+  a command already in hand, or a heading another document sent them to —
+  and read forward from where they land. A hazard sentence goes on that
+  path and names the command the reader is holding, not in the section
+  where the subject is catalogued. Correct in the wrong place is
+  undocumented (#1279).
 - **Justify only what surprises.** Never explain why a rule is a good
   rule: if it is right the sentence is dead weight, and if it is wrong the
   sentence will not save it.

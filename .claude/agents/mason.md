@@ -72,8 +72,14 @@ Run `git submodule update --init testdata/xsdtests` before the gate:
 with the W3C suite empty whatever the session's checkout holds, and the
 gate fails on the missing-suite guard (#659).
 
-The gate (CLAUDE.md) passes. New behavior has tests that can actually fail
-— mutate the code mentally and ask whether the test would notice.
+The gate (CLAUDE.md) passes. New behavior has tests that can actually
+fail, and **the mutation is run, not imagined** — the worktree is isolated
+so you can break the line, watch the test, and put it back. A mutation you
+describe in your account and did not execute is the one the arbiter runs
+(#472). Mutate the message too: two arguments swapped inside one
+`fmt.Errorf` changes no branch and leaves every asserted substring present,
+so an assertion pins a subject only by pinning the opening
+`parser: <subject> at <loc>` as a prefix (#1048).
 
 ## The implementation account
 
