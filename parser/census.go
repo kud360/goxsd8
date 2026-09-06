@@ -82,7 +82,16 @@ import (
 // a measurement of its own.
 //
 // NOT censused, each a widening of its own and each a region with its own
-// dispatch:
+// dispatch — the first three covered by a rejection at the position, the fourth
+// answered by another producer's census or still to come, and the last six each
+// a live uncaught silence. None of the six is TOTAL. rejectS4SFaults
+// (produce.go) walks every XSD-namespace element of the document outside
+// <appinfo> and <documentation>, so at any depth a <notation> is charged for
+// where it stands (rejectMisplacedNotation) and a second <annotation> under one
+// parent for its cardinality (rejectRepeatedAnnotations). Every OTHER
+// XSD-namespace name is what survives at the six — an <xs:element> written under
+// an <openContent>, an <import>, a <group ref>, an <assert>, an <annotation> or
+// an <any> is reported by nothing and rejected by nothing.
 //
 //   - the <complexType> wrapper's own children once it has chosen <simpleContent>
 //     or <complexContent>, and those two wrappers' own children: checkS4SChildOrder
@@ -94,22 +103,48 @@ import (
 //     Appendix A gives its every form (s4sElement, s4sAttribute, s4sSimpleType),
 //     so a name those models do not admit is charged rather than dropped and no
 //     silence is left at those positions either;
+//   - a <notation>'s own children, covered by a rejection written for that one
+//     position. topLevelMapped admits the name and censusWalk.topLevel holds no
+//     arm for it, but xs:notation extends xs:annotated with three attributes
+//     (:5696), leaving "(annotation?)" (§3.14.2, :3376), and rejectNotationContent
+//     charges every child element but <annotation> — and every non-whitespace
+//     text node besides — so nothing written there is a silence;
 //   - an <override>'s or <redefine>'s children as seen from HERE. An <override>'s
 //     need no walk from here at all: §F.2 clause 1 substitutes them into the
 //     OVERRIDDEN document, whose own producer censuses them through
 //     topLevelDecls. A <redefine>'s are definitions of THIS document (§4.2.4
 //     clause 4.1.1) and are a region still to come;
-//   - an <openContent>'s own children, and those of the <any> under it. Here a
-//     silence IS possible and nothing catches it. xs:openContent is "(annotation?,
-//     any?)" and xs:wildcard is xs:annotated plus attributes, leaving
-//     "(annotation?)" (§3.4.2), but no s4sModel exists for either, so
-//     checkS4SChildOrder is never invoked against an <openContent> or an <any>;
-//     checkOpenContentAny and openContentOf find the <any> by name and read
-//     nothing else of the wrapper, and produceWildcard reads only the namespace,
-//     notNamespace, notQName and processContents attributes.
-//     complexContentChildMapped admits the name while container holds no arm for
-//     it, so a stray XSD-namespace sibling of the <any> — or a child of the <any>
-//     itself — is reported by nothing and rejected by nothing;
+//   - an <openContent>'s own children and a <defaultOpenContent>'s, and those of
+//     the <any> under either — one silence reached over one code path.
+//     xs:openContent is "(annotation?, any?)" (§3.4.2, :1728) and
+//     xs:defaultOpenContent is "(annotation?, any)" (§3.17.2, :3787); the <any> of
+//     either has type xs:wildcard, which extends xs:annotated with attributes
+//     alone (Appendix A, :5356), leaving "(annotation?)" (§3.10.2, :2838). No
+//     s4sModel exists for any of the four positions, so checkS4SChildOrder is
+//     never invoked against them. checkOpenContentAny and openContentOf find the
+//     <any> by name and read the wrapper's mode attribute; wildcardElement reads
+//     appliesToEmpty off a <defaultOpenContent>; checkDefaultOpenContent charges
+//     that element for carrying no <any>, and for a mode outside
+//     interleave|suffix, and for nothing else; produceWildcard reads the <any>'s
+//     namespace, notNamespace, notQName and processContents attributes.
+//     complexContentChildMapped admits <openContent> while container holds no arm
+//     for it, and topLevelMapped admits <defaultOpenContent> while
+//     censusWalk.topLevel holds none, so a stray XSD-namespace sibling of either
+//     <any> — or a child of an <any> itself — is reported by nothing;
+//   - an <include>'s or an <import>'s own children. Both hold "(annotation?)"
+//     alone — §4.2.3's summary at :4056 and §4.2.6's at :4181, Appendix A's
+//     xs:include (:5535) and xs:import (:5585) extending xs:annotated with the
+//     schemaLocation and namespace ATTRIBUTES and no element position — so there
+//     is nothing here to descend INTO, and what is missing is again the REPORT:
+//     topLevelMapped admits both names, censusWalk.topLevel holds an arm for
+//     neither, run's dispatch has an empty arm for both (the assembler consumed
+//     them during discovery, parse.go), and no s4sModel orders either.
+//     AssemblyReport does not already answer this. Its Unfollowed half records
+//     the ·inter-schema-document references· that yielded no DOCUMENT, as an
+//     UnfollowedReason and the directive element's own location (#272), and says
+//     nothing about that element's CHILDREN: a FOLLOWED <include> yields no
+//     UnfollowedDirective at all, and the report's other half carries this very
+//     census;
 //   - a nested <group ref>'s or <attributeGroup ref>'s own children, uncaught the
 //     same way. Both ref forms hold "(annotation?)" alone: Appendix A's
 //     xs:groupRef, for the <group> §3.7.2 xr.mgd3 maps to a particle, and
@@ -118,15 +153,66 @@ import (
 //     is "(annotation?, (all | choice | sequence))" and xs:namedAttributeGroup
 //     carries the attribute tail — so there is nothing here to descend INTO. What
 //     is missing is the REPORT: modelGroup has no <group> arm and container none
-//     for <attributeGroup>, produceGroupRefParticle reads only ref, minOccurs and
-//     maxOccurs, no s4sModel orders either ref form, and groupParticles' default
-//     arm charges a name written DIRECTLY under an <all>/<choice>/<sequence>, not
-//     one nested inside a <group ref> it has already recognized;
-//   - an <assert>'s own children, the third such silence. xs:assertion extends
-//     xs:annotated with the test and xpathDefaultNamespace ATTRIBUTES and no
-//     element position of its own, leaving "(annotation?)" (§3.13.2). assertionsOf
-//     reads the test attribute and never the element's children, no s4sModel
-//     orders an <assert>, and container holds no arm for the name.
+//     for <attributeGroup>; produceGroupRefParticle reads ref, minOccurs and
+//     maxOccurs, and collectReferencedGroup reads ref, each of them reading name
+//     as well through rejectProhibitedRefAttrs (produce.go), which charges the
+//     definition-form attribute the reference form prohibits; no s4sModel orders
+//     either ref form; and groupParticles' default arm charges a name written
+//     DIRECTLY under an <all>/<choice>/<sequence>, not one nested inside a <group
+//     ref> it has already recognized;
+//   - an <assert>'s own children. xs:assertion extends xs:annotated with the test
+//     and xpathDefaultNamespace ATTRIBUTES and no element position of its own,
+//     leaving "(annotation?)" (§3.13.2). assertionsOf reads the test attribute
+//     through buildXPathExpression, which reads xpathDefaultNamespace off the
+//     <assert> too — falling back to this document's <schema>, xpathDefaultNamespace
+//     (produce_xpath.go) — and neither of them descends into the element's
+//     children; no s4sModel orders an <assert>, and container holds no arm for the
+//     name;
+//   - an <annotation>'s own children, wherever one stands. No site of this walk
+//     descends into an <annotation> or reports one: topLevel, container and
+//     namedGroup each admit the name and hold no arm for it, and element,
+//     attributeDecl, simpleType and modelGroup report nothing of their own at any
+//     position. Nothing maps one either — this producer builds an xsd.Annotation
+//     nowhere, which is why topLevelMapped admits <annotation> for §3.15.1's
+//     reason rather than for a dispatch's — and no s4sModel orders one.
+//     xs:annotation is "(appinfo | documentation)*" (§3.15.2, :3480; Appendix A
+//     :5747), and rejectRepeatedAnnotations charges the two shapes it owns, a
+//     nested <annotation> at any cardinality and a second <annotation> under one
+//     parent, so any other XSD-namespace child of an <annotation> is what
+//     survives. The <appinfo> and <documentation> below one are never reached
+//     either, nor is anything inside them: that is <xs:any processContents="lax">
+//     content (:5727, :5740), no construct of this producer at any depth, and the
+//     content rejectS4SFaults stops at for the same reason.
+//   - every remaining element the walk STOPS at, by the rule that generates this
+//     half of the list rather than by another enumeration: a site descends only
+//     where the Censused side above says it does, so an element it reaches and
+//     does not descend keeps its OWN children out of the census. No s4sModel
+//     orders any of the four positions that rule leaves, and each is an element
+//     some pass reaches by name and reads ATTRIBUTES off: a particle <any> and an
+//     <anyAttribute> — groupParticles' "any" arm reaches produceWildcard through
+//     produceAnyParticle and collectAttributeContent hands it the <anyAttribute>
+//     it finds by name, xs:wildcard and the xs:anyAttribute element built on it
+//     (Appendix A :5356, :4729) leave "(annotation?)" (§3.10.2, :2838, :2846),
+//     and modelGroup holds no "any" arm while container holds none for
+//     "anyAttribute"; an <alternative> — xs:altType is "(annotation?, (simpleType
+//     | complexType)?)" (:5137, §3.12.2 :3210), checkSrcTA charges only HOW MANY
+//     of a type attribute, a <complexType> child and a <simpleType> child are
+//     present (src-ta, §3.12.3) and never a further child beside them,
+//     buildXPathExpression reads test and xpathDefaultNamespace off the element,
+//     and element's "alternative" arm descends into those two inline types alone;
+//     a <unique>, <key> or <keyref> with the <selector> and <field> under it —
+//     xs:keybase is "(annotation?, (selector, field+)?)" (:5648, §3.11.2 :2991)
+//     over two "(annotation?)" children (:5599, :5624, §3.11.2 :3010, :3016),
+//     constructIdentityConstraint finds the <selector> and the <field>s by name
+//     and reads xpath off each, and element holds no arm for any of the three
+//     constraint names; and every FACET element under a <simpleType> or
+//     <simpleContent> <restriction> — xs:facet is xs:annotated plus value and
+//     fixed (xmlschema11-2.md:4001), which xs:noFixedFacet spells "(annotation?)"
+//     outright (xmlschema11-2.md:4010), restrictionFacets reads value, fixed and
+//     an <assertion>'s test off each and never a facet's children, and neither
+//     site that reaches one reports its child — simpleType's <restriction> arm
+//     descends into the inline base <simpleType> alone, and container admits
+//     every mapped facet name while holding no arm for one.
 //
 // A narrow census is SOUND but incomplete: it never names a construct the
 // producer does map, so a consumer may act on what it reports and must not read
