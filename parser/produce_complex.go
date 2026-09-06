@@ -3021,28 +3021,42 @@ func combineAttributeWildcards(loc xsderr.Loc, wildcards []xsd.Wildcard) (*xsd.W
 // src-attribute clauses (§3.2.3): 1 (default and fixed mutually exclusive, via
 // valueConstraintOf), 2 and 5 (the default/fixed × use= corner, via
 // useValueConstraintOK), 3 (exactly one of ref/name; ref excludes
-// simpleType/form/type) and 6.1 on the ref= form alone (#1242).
+// simpleType/form/type) and 6.1 on the ref= form alone (#1242). It charges clause
+// 4 (type= and an inline <simpleType> mutually exclusive) on the prohibited name=
+// form alone; produceLocalAttribute holds that charge for every other use=
+// (#1270).
 //
-// Clauses 1, 2, 3, 5 and 6 are ALL charged BEFORE the use="prohibited" return,
-// because a Schema Representation Constraint holds of the <attribute> element
-// information item itself (§5.1: "any element information items which violate any
-// of the relevant Schema Representation Constraints"). Mapping to no component at
-// all (§3.2.2) skips the component-building half of the mapping, never the
-// validation: <attribute use="prohibited" default="d" fixed="f"/> violates clause
-// 1 exactly as the optional form does, and <attribute ref="a:x" name="x"
-// use="prohibited"/> violates clause 3.1 exactly as the non-prohibited form does.
-// This includes the neither-ref-nor-name shape (<attribute use="prohibited"/>):
-// clause 3.1 has no use= precondition, so that shape is REJECTED under prohibited
-// exactly as it already was under every other use= value, not silently accepted as
-// a no-op element (#358). Clause 6 (att-with-ns) reaches the prohibited form on
-// the same reasoning and by its own call to rejectLocalAttributeTargetNamespace at
-// that return, the one this function makes (#1243): the clause's antecedent is the
+// Clauses 1, 2, 3 and 5 are ALL charged BEFORE the use="prohibited" return, and
+// clauses 4 and 6 AT that return for the name= form, because a Schema
+// Representation Constraint holds of the <attribute> element information item
+// itself (§5.1: "any element information items which violate any of the relevant
+// Schema Representation Constraints"). Mapping to no component at all (§3.2.2)
+// skips the component-building half of the mapping, never the validation:
+// <attribute use="prohibited" default="d" fixed="f"/> violates clause 1 exactly as
+// the optional form does, and <attribute ref="a:x" name="x" use="prohibited"/>
+// violates clause 3.1 exactly as the non-prohibited form does. This includes the
+// neither-ref-nor-name shape (<attribute use="prohibited"/>): clause 3.1 has no
+// use= precondition, so that shape is REJECTED under prohibited exactly as it
+// already was under every other use= value, not silently accepted as a no-op
+// element (#358). Clause 6 (att-with-ns) reaches the prohibited form on the same
+// reasoning and by its own call to rejectLocalAttributeTargetNamespace at that
+// return, the one this function makes (#1243): the clause's antecedent is the
 // presence of targetNamespace and carries no use= qualifier, so <attribute
 // name="w" use="prohibited" targetNamespace="b"/> under an <extension> fails 6.3.2
 // exactly as the optional form does. The ref= form takes the same antecedent to
 // clause 6.1 in the hasRef block below, which likewise stands ahead of the
 // prohibited return, so <attribute ref="a:x" use="prohibited"
 // targetNamespace="b"/> is rejected exactly as the optional form is (#1242).
+//
+// Clause 4 reaches the prohibited form on that same reasoning and from that same
+// return, by the call to rejectAttributeTypeAndSimpleType this function makes
+// there (#1270): the clause's antecedent is the type attribute and a <simpleType>
+// child both being present and carries no use= qualifier, so <attribute name="x"
+// use="prohibited" type="xs:string"><simpleType/></attribute> is rejected exactly
+// as the optional form is. Every other use= takes it from produceLocalAttribute,
+// which this return precedes; both sites call the one helper, so the clause has a
+// single encoding and two guarded call sites rather than a repeated predicate
+// (STYLE D3).
 //
 // default=/fixed= on the <attribute> element map to the USE's own {value
 // constraint} (§3.5.1 vc_au) for both forms: dcl.att.local (§3.2.2.2) leaves the
@@ -3113,20 +3127,21 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 		}
 	}
 	if use == "prohibited" {
-		// Clause 6 (att-with-ns) is charged HERE for the name= form, and only here,
-		// rather than by lifting rejectLocalAttributeTargetNamespace above this return:
-		// guarding the call to this branch leaves produceLocalAttribute's clause-4-then-6
-		// order standing for every other use=, so no charge is reordered against another
-		// anywhere (#1243). The guard is the helper's own premise, not a scope: name is
-		// present on every <attribute> it reads. The ref= arm takes clause 6.1 above
-		// instead, so a ref= attribute reaching this return wrote no targetNamespace at
-		// all (#1242).
-		//
-		// GAP(xsd): clause 4 (type= and a <simpleType> child both present) is still
-		// charged nowhere on this branch — produceLocalAttribute holds its only charge
-		// and this return precedes it — so a prohibited <attribute> writing both is
-		// accepted. No open issue owns retiring it.
+		// Clauses 4 and 6 (att-with-ns) are charged HERE for the name= form, and only
+		// here, rather than by lifting either charge above this return: guarding the two
+		// calls to this branch leaves produceLocalAttribute's clause-4-then-6 order
+		// standing for every other use=, and repeats it here, so no charge is reordered
+		// against another anywhere (#1243, #1270). The guard is
+		// rejectLocalAttributeTargetNamespace's own premise, not a scope: name is present
+		// on every <attribute> it reads. Clause 4 takes the same guard for a different
+		// reason — clause 3.2 rejects a ref= attribute carrying type= or a <simpleType>
+		// child above, so nothing carrying both survives to here on that arm. The ref=
+		// arm takes clause 6.1 above instead, so a ref= attribute reaching this return
+		// wrote no targetNamespace at all (#1242).
 		if !hasRef {
+			if err := rejectAttributeTypeAndSimpleType(el); err != nil {
+				return nil, err
+			}
 			if err := p.rejectLocalAttributeTargetNamespace(el); err != nil {
 				return nil, err
 			}
@@ -3280,12 +3295,35 @@ func (p *producer) rejectLocalAttributeTargetNamespace(el *Element) error {
 		tns, restriction.Loc(), attrOr(restriction, "base"))
 }
 
+// rejectAttributeTypeAndSimpleType charges src-attribute clause 4 (§3.2.3,
+// xmlschema11-1.md:868) on a local <attribute name="...">: "The type attribute
+// and a simpleType child element must not both be present."
+//
+// The clause's antecedent carries no use= qualifier, so both of the name= form's
+// paths call it — produceLocalAttribute for every use= that maps to a
+// declaration, and produceAttributeUse's use="prohibited" return for the one that
+// maps to none (#1270) — and the predicate is written once (STYLE D3). The ref=
+// arm reaches neither call site carrying both: clause 3.2 rejects a ref=
+// attribute writing type=, and again one carrying a <simpleType> child, ahead of
+// them.
+func rejectAttributeTypeAndSimpleType(el *Element) error {
+	_, hasType := el.Attr("type")
+	if !hasType || childElement(el, xsd.XMLSchemaNS, "simpleType") == nil {
+		return nil
+	}
+	return xsderr.New(ruleSrcAttribute, el.Loc(),
+		"attribute has both a type attribute and an inline <simpleType> child, but src-attribute clause 4 forbids both")
+}
+
 // produceLocalAttribute maps the sibling local Attribute Declaration of a local
 // <attribute> (§3.2.2.2, {scope} = local, {value constraint} always absent on the
 // declaration — any default/fixed feeds the Attribute Use, #70). Its {type
 // definition} is mapped by declaredType over §3.2.2.2's three tiers: the
 // inline <simpleType> child (#229), the type= reference, or xs:anySimpleType.
-// src-attribute clause 4 (§3.2.3) rejects the both-present case first.
+// src-attribute clause 4 (§3.2.3) rejects the both-present case first, by
+// rejectAttributeTypeAndSimpleType — for every use= but prohibited, which maps to
+// no declaration and takes clause 4 from produceAttributeUse's own guarded call
+// to that same helper, exactly as it takes clause 6 (#1270).
 //
 // Both clauses charged here are behind produceAttributeUse's s4s walk, which
 // every local <attribute> passes through before reaching this function — the
@@ -3307,10 +3345,8 @@ func (p *producer) rejectLocalAttributeTargetNamespace(el *Element) error {
 // every local attribute declaration has a {scope}.{parent} (§3.2.1 sc_a), so
 // there is no path through this function that does not build the scope from it.
 func (p *producer) produceLocalAttribute(el *Element, scopeParent xsd.AttributeScopeParent) (xsd.AttributeDeclaration, error) {
-	_, hasType := el.Attr("type")
-	if hasType && childElement(el, xsd.XMLSchemaNS, "simpleType") != nil {
-		return xsd.AttributeDeclaration{}, xsderr.New(ruleSrcAttribute, el.Loc(),
-			"attribute has both a type attribute and an inline <simpleType> child, but src-attribute clause 4 forbids both")
+	if err := rejectAttributeTypeAndSimpleType(el); err != nil {
+		return xsd.AttributeDeclaration{}, err
 	}
 	if err := p.rejectLocalAttributeTargetNamespace(el); err != nil {
 		return xsd.AttributeDeclaration{}, err
