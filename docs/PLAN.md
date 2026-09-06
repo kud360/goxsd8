@@ -564,13 +564,20 @@ construct census rather than assumed** — ratchet-neutral like #471 before them
 (NOT like #1205, which banked **+5** on its inline arm), but the first two of
 the family to prove it with an instrument instead of a grep. **#1243 carved one successor, #1242 carved none**,
 which ENDS the run below: #1270 (`src-attribute` clause 4 charged nowhere on the
-`use="prohibited"` branch) is #1243's, and #1242's landing closed its arm with no
-residue. Live producer-decides-and-accepts members are **#1270**, **#931**
+`use="prohibited"` branch) was #1243's, and #1242's landing closed its arm with
+no residue. **#1270 has itself now LANDED — 2026-09-06, `d0fd4c6`,
+`Ratchet: unchanged` and measured that way by construct census — and it carved
+NO successor of this family either.** Its two residues are #1301 (a duplicate
+clause-4 predicate surviving at the top-level producer) and #1300 (a gate-script
+process defect); neither is a producer that decides and ACCEPTS, so neither
+extends this family. Live producer-decides-and-accepts members are **#931**
 (occurrence attributes on a named `<group>`'s child compositor), **#929** and
 **#455**. **The family carved a successor at every landing from #471 through
 #1243, and #1242 is the first that did not** — one reading is the tail reaching
 zero, the other is that this pair was narrower than its predecessors; two more
-landings decide it, and until they do neither reading is the one to plan on. A
+landings decide it. **#1270 is the FIRST of those two and it came back empty**,
+which is the tail reading; one more landing settles it, and until then neither
+reading is the one to plan on. A
 second, narrower family opened beside it — the rejections the
 producer already makes **correctly but describes badly**, whose bar
 `xsderr/doc.go` set with #966 — and it is **discharged**: #975 landed at
