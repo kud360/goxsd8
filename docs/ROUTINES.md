@@ -87,16 +87,24 @@ translate the local times above and mind DST drift. Keep develop slots
   and comments through `gh api repos/{owner}/{repo}/issues/{n}`, which is
   byte-faithful; where only the MCP channel is available, re-derive anything
   bracketed from the repo (#764).
-- **The checkout is shallow.** History before the graft is absent, so
-  `git merge-base` can come up empty — and
-  `git rev-list --left-right --count A...B` does not fail when it does; it
-  counts each side's whole visible history instead. An ahead/behind pair
-  taken here is not a divergence measurement (#802).
+- **The checkout is shallow, and every range query answers from the visible
+  history without saying so.** `git log A..B` reports hundreds of commits
+  ahead for branches that have diverged by nothing, `git merge-base` can come
+  up empty, and `git rev-list --left-right --count A...B` counts each side's
+  whole visible history rather than failing. An ahead/behind pair taken here
+  is not a divergence measurement, and a `git log` window is not a window.
+  **The remedy is `git fetch --unshallow origin`** — one call, after which
+  every reading is trustworthy (#802).
 - Cloud containers cannot delete or force-push remote refs — the git proxy
   rejects both. The workflow never needs to: landing cleanup is GitHub's
   auto-delete on merge, and abandoned branches are retired in place.
-- No human is watching. Commands must never wait for input — abort and log
-  instead.
+- **No human is watching, and no process outlives the turn that started it.**
+  Commands must never wait for input — abort and log instead. An agent turn
+  does not carry a live child process across invocations, so a backgrounded
+  command is dead the moment the turn ends: run the gate, and every other
+  multi-minute command, in the **foreground**, and block on its real exit code
+  in the same turn. A turn that ends "waiting for" a background run has
+  produced nothing and costs the whole dispatch (#1047).
 
 The gate and the other canonical commands are defined once, in CLAUDE.md.
 This file does not restate them.

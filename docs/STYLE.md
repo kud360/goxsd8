@@ -93,6 +93,12 @@ expose `IsPrimitive()` as a derived method if callers need the answer. No
 memoized caches without a profile showing a hot path. Two encodings of one
 fact will drift; fewer fields, fewer invariants, fewer bugs.
 
+This binds prose as well as fields. A fact stated in a doc comment, a test
+comment or a package doc is stated once and the other sites point at it — a
+paraphrase is a second encoding, so a verdict that corrects one copy leaves
+the reviewer no text to grep for the rest, and the copy that survives
+longest is the one inside the test that pins the behaviour (#925).
+
 **D4. No cycle checks — build in phases.** Structure construction so cycles
 cannot exist at traversal time: parse into raw documents, resolve references
 via named placeholders, then finalize components in dependency order.

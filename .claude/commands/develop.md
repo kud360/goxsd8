@@ -47,17 +47,40 @@ heartbeat.
    answer verbatim as a `GROUNDING:` comment — that comment is the only
    durable copy.
 
-   **Rule every `## Acceptance` bullet in that same comment**: read it
-   against the current tree and call it satisfiable, unsatisfiable or not
-   applicable, with the reason. The **oracle** rules where the issue takes
-   spec grounding; the **arbiter** rules where it does not, since the
-   bullet states the bar its own verdict will apply. An unsatisfiable
-   bullet is re-stated in the body — **cartographer**'s pen — before step
-   4 starts.
+   **Rule every `## Acceptance` bullet in that same comment**, against the
+   current tree and as the filer wrote it. Two questions, and a bullet
+   fails on either: **can this bar fail?** — one that holds however the
+   change turns out proves nothing — and **is what it says TRUE?** Where
+   the deliverable is prose the bullet's sentence IS the artifact, so
+   `satisfiable` reads as "copy it" and a false premise ships (#1188).
+   Rule the bullet as written: an "at least" list stays open, and
+   narrowing its scope at grounding is not a ruling on it (#1050). The
+   **oracle** rules where the issue takes spec grounding; the **arbiter**
+   rules where it does not, since the bullet states the bar its own verdict
+   will apply. Both post the same block, so one reader expectation covers
+   both branches and an omission is visible on its face:
 
-4. **Implement.** If the issue's `## Surface` is non-"none", have
-   **warden** pre-flight the planned shape before any code exists; shape
-   errors are cheapest before they are built. Then delegate to **mason**,
+   ```
+   ACCEPTANCE:
+   - "<the bullet>" — satisfiable | unsatisfiable | n/a, and why
+   ```
+
+   A bullet ruled unsatisfiable or false is re-stated in the body —
+   **cartographer**'s pen — before step 4 starts.
+
+   **Rule `## Surface` in the same comment**, because it is the trigger
+   step 4 reads: name what this change adds to or alters in the exported
+   contract, taken from the tree. The filer's self-report about a change
+   nobody had designed yet is not that ruling, and it correlates backwards
+   — the issue whose scope is least understood is the one most likely to
+   read `none` (#484).
+
+4. **Implement.** Where step 3's `## Surface` ruling found an exported
+   contract added or altered — a new identifier, or a change to what an
+   existing one accepts, returns or promises in its doc — have **warden**
+   pre-flight the planned shape before any code exists; shape errors are
+   cheapest before they are built. `go tool surface` answers the signature
+   question alone and is not that ruling. Then delegate to **mason**,
    always with worktree isolation. Only once mason reports completion,
    fast-forward-merge its local branch into `wip/issue-<N>`. If the change
    added or altered public API, warden reviews the diff too. Post both

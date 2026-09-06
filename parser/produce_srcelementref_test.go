@@ -136,33 +136,64 @@ func TestProduceRefElementChildRejected(t *testing.T) {
 	}
 }
 
-// TestProduceRefElementSubstitutionGroupRejected pins clause 2.2's ATTRIBUTE
-// half for substitutionGroup on a local <element ref="..."> (§3.3.3,
+// TestProduceRefElementUseProhibitedAttrRejected pins clause 2.2's ATTRIBUTE
+// half for the three attributes xs:localElement itself narrows to
+// use="prohibited" — substitutionGroup, final and abstract
+// (xmlschema11-1.md:5124-:5126) — on a local <element ref="..."> (§3.3.3,
 // xmlschema11-1.md:1321 — "If ref is present, then no unqualified attributes are
-// present other than minOccurs, maxOccurs, and id"): before this charge the
+// present other than minOccurs, maxOccurs, and id"): before these charges each
 // attribute was read by nothing on the ref= path and the document was accepted
 // outright.
 //
-// The rule ID is the assertion that matters. The INLINE local form is pinned to
-// e-props-correct clause 3 by TestProduceLocalElementSubstitutionGroupRejected,
-// and the two must not converge: the ref= form maps to an
-// ElementDeclarationRef, which has no {substitution group affiliations}
-// property for that component constraint to be violated by, so src-element is
-// the only footing that is not fabricated (STYLE E2).
+// The rule ID is the assertion that matters, and it is src-element for all three
+// even though the inline form answers each of them differently: substitutionGroup
+// is pinned there to e-props-correct clause 3 by
+// TestProduceLocalElementSubstitutionGroupRejected, and final/abstract to a
+// rule-ID-less §5.1 grammar fault by TestProduceLocalElementProhibitedAttrRejected.
+// The ref= form maps to an ElementDeclarationRef, which has no {substitution
+// group affiliations}, {abstract} or {substitution group exclusions} property for
+// any component constraint to be violated by, so src-element is the only footing
+// here that is not fabricated (STYLE E2).
 //
-// The second row asserts the order of the clause's two halves on a document that
-// violates both: the attribute half answers, at the <element> itself, not at the
-// child.
-func TestProduceRefElementSubstitutionGroupRejected(t *testing.T) {
+// The "also has a child" row asserts the order of the clause's two halves on a
+// document that violates both: the attribute half answers, at the <element>
+// itself, not at the child. The last row asserts the walk is in the GRAMMAR's
+// declaration order, not the document's (STYLE D2).
+func TestProduceRefElementUseProhibitedAttrRejected(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		lines []string
+		name     string
+		lines    []string
+		wantAttr string
 	}{
 		{
 			name: "substitutionGroup on a ref element",
 			lines: []string{
 				`<xs:element ref="tns:E" substitutionGroup="tns:E"/>`,
 			},
+			wantAttr: "substitutionGroup",
+		},
+		{
+			name: "final on a ref element",
+			lines: []string{
+				`<xs:element ref="tns:E" final="restriction"/>`,
+			},
+			wantAttr: "final",
+		},
+		{
+			name: "abstract on a ref element",
+			lines: []string{
+				`<xs:element ref="tns:E" abstract="true"/>`,
+			},
+			wantAttr: "abstract",
+		},
+		{
+			// abstract="false" is prohibited as squarely as abstract="true": the
+			// grammar rejects the ATTRIBUTE, and never reads its value.
+			name: "abstract=false on a ref element",
+			lines: []string{
+				`<xs:element ref="tns:E" abstract="false"/>`,
+			},
+			wantAttr: "abstract",
 		},
 		{
 			name: "substitutionGroup on a ref element that also has a child",
@@ -173,14 +204,22 @@ func TestProduceRefElementSubstitutionGroupRejected(t *testing.T) {
 				`</xs:simpleType>`,
 				`</xs:element>`,
 			},
+			wantAttr: "substitutionGroup",
+		},
+		{
+			name: "declaration order wins over document order",
+			lines: []string{
+				`<xs:element ref="tns:E" abstract="true" final="restriction"/>`,
+			},
+			wantAttr: "final",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := produce(t, refElementDoc(tc.lines...))
 			if err == nil {
-				t.Fatalf("Produce accepted an <element ref> carrying substitutionGroup, want the src-element clause 2.2 fault")
+				t.Fatalf("Produce accepted an <element ref> carrying %s, want the src-element clause 2.2 fault", tc.wantAttr)
 			}
-			const want = `the <element ref="..."> carries a substitutionGroup attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id`
+			want := fmt.Sprintf(`the <element ref="..."> carries a %s attribute, but src-element clause 2.2 admits no unqualified attribute other than minOccurs, maxOccurs and id`, tc.wantAttr)
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %v, want it to state %q", err, want)
 			}
@@ -206,22 +245,22 @@ func TestProduceRefElementSubstitutionGroupRejected(t *testing.T) {
 	}
 }
 
-// TestProduceRefElementSubstitutionGroupAccepted is the other side of the
+// TestProduceRefElementUseProhibitedAttrAccepted is the other side of the
 // attribute half: clause 2.2 reaches UNQUALIFIED attributes only — Element.Attr
 // answers for those alone, and xs:localElement admits foreign ones outright
 // (<anyAttribute namespace="##other"> at xmlschema11-1.md:5127) — and it exempts
 // minOccurs, maxOccurs and id by name. A check written as "a ref= element has no
-// substitutionGroup-shaped attribute", or one that swept the exempt set in with
-// it, would reject these.
-func TestProduceRefElementSubstitutionGroupAccepted(t *testing.T) {
+// substitutionGroup-, final- or abstract-shaped attribute", or one that swept
+// the exempt set in with it, would reject these.
+func TestProduceRefElementUseProhibitedAttrAccepted(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		lines []string
 	}{
 		{
-			name: "foreign-namespace substitutionGroup on a ref element",
+			name: "foreign-namespace prohibited attributes on a ref element",
 			lines: []string{
-				`<xs:element ref="tns:E" xmlns:o="urn:other" o:substitutionGroup="tns:E"/>`,
+				`<xs:element ref="tns:E" xmlns:o="urn:other" o:substitutionGroup="tns:E" o:final="restriction" o:abstract="true"/>`,
 			},
 		},
 		{

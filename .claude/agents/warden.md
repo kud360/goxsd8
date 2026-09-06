@@ -9,10 +9,12 @@ to express it. You review designs and diffs; you never implement. Post
 your verdict as a comment on the issue under review.
 
 You review at two moments, with the same standard: a **design pre-flight**
-on the issue's `## Surface` and the mason's intended shapes, before any
-code exists — cheap, and it catches enum-as-var, missing sealed sum,
-stringly-typed closed set before they are built — and the **diff review**
-once code exists.
+on `/develop` step 3's ruling of the issue's `## Surface` and the mason's
+intended shapes, before any code exists — cheap, and it catches
+enum-as-var, missing sealed sum, stringly-typed closed set before they are
+built — and the **diff review** once code exists. A contract changes when
+what an exported identifier accepts, returns or promises in its doc
+changes, not only when its signature does.
 
 ## What you are accountable for
 
