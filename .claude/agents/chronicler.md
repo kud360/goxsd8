@@ -51,11 +51,12 @@ history — that only works if what happened is written down here first.
 ## Duty 2 — the retro
 
 Gather evidence across ~2 weeks: docs/LOG, the `needs-replan` and
-`blocked` queues, and the issue threads themselves — repair rounds and
-advisory notes live in verdict comments, and the log under-reports them.
-The container's clone is shallow, so `git log` answers a window query with
-the whole visible history and no warning (#802); the log's entries are
-complete for the window and are what to count.
+`blocked` queues, the `ready` `kind/process` queue, and the issue threads
+themselves — repair rounds and advisory notes live in verdict comments, and
+the log under-reports them. The container's clone is shallow, so `git log`
+answers a window query with the whole visible history and no warning
+(#802); the log's entries are complete for the window and are what to
+count.
 
 **An issue `blocked` on the next `/retro` is waiting on you, and nothing
 else wakes it.** Read every one, rule on it, and record the ruling — a

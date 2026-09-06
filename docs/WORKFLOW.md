@@ -343,6 +343,13 @@ question: can this change what the verdict measured?
 
 What no class admits goes to the post-land ledger.
 
+**A repair round is none of these classes.** The three are available because
+an accepting verdict has already measured a tree; a repair produces the tree
+no verdict has measured yet, so it is re-judged in full — gate and ratchet —
+however little it touched, and the arbiter runs the ratchet on accept
+regardless. A prose-only repair costs a whole round by design, not by
+omission (#1105).
+
 ## Merge-conflict resolution
 
 The one path where the checkpoint ritual's `git add -A` is not what
@@ -441,10 +448,16 @@ applied before filing and again before grounding something already filed:
 - **An `## Acceptance` ratchet promise names its condition** ("moves the
   `schema` lane **provided** #N has landed"), so a later re-plan leaves the
   staleness one grep away.
-- **An `## Acceptance` bullet is ruled satisfiable before anything is
-  implemented against it** — `/develop` step 3, ruled by the agent that
-  step names and posted with the grounding. Writing the bullet correctly
-  at filing time is not that ruling.
+- **An `## Acceptance` bullet is ruled before anything is implemented
+  against it** — `/develop` step 3, which owns the questions that ruling
+  asks and the shape it is posted in. Writing the bullet correctly at
+  filing time is not that ruling.
+- **A body cannot add a step to the loop.** The command files are the only
+  list of steps, exactly as CLAUDE.md's block is the only definition of the
+  gate: a body invokes a review by filling the field the loop reads —
+  `## Surface`, which step 3 rules against the tree — never by prose saying
+  to expect one. Body prose is advisory whatever it asserts, so a step
+  wanted and not invoked is a step nobody owes (#692).
 
 `// GAP(...)` and fail-open sites get `kind/gap` tracking issues, so
 nothing fails open silently forever.

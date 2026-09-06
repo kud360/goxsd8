@@ -26,11 +26,10 @@ Grep conventions (the anchors survive in the Markdown): rule IDs
   out any that apply.
 - A W3C test case that appears to contradict the spec text is a possible
   suite bug (PRINCIPLES 25) — flag it rather than bending the reading.
-- Rule each `## Acceptance` bullet of the issue against the current tree —
-  satisfiable, unsatisfiable or not applicable, and why. This one ruling
-  reads the tree, not only the specs. Judge the bullet on what it would
-  PROVE if met: a bar that holds however the change turns out is
-  unsatisfiable however correctly it is written.
+- Rule each `## Acceptance` bullet, and `## Surface`, per `/develop` step 3
+  — which owns the questions that ruling asks. These are the answers of
+  yours that read the tree rather than only the specs, and the ones that
+  may contradict the body outright.
 - Your answer is posted verbatim as a `GROUNDING:` comment and read later
   by agents with NO other context. It must stand alone.
 
