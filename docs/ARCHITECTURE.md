@@ -14,9 +14,12 @@ Value implementations, parsing, validation, and generation live above them.
                                   nobody's API — internal/schemaloc, the schemaLocation
                                   resolver. Its "two packages must agree byte for byte"
                                   justification EXPIRED when #272 deleted the conformance
-                                  closure walk: parser is the sole consumer today, and
-                                  internal/schemaloc/doc.go still names the deleted one.
-                                  Filed for a fold-back (#845), not fixed here)
+                                  closure walk, and internal/schemaloc/doc.go still names
+                                  that deleted walk as its second consumer. It has TWO
+                                  consumers again, and neither is the one named: parser's
+                                  assembly, and cmd/goxsd8's own xsi:schemaLocation hint
+                                  reader. #845's fold-back into parser is therefore blocked
+                                  on #755 moving that reader into the library)
                  value           (value-space contracts, facet pipeline; imports xsd, xsderr, regex)
                  value/backendtest (conformance kit for any backend)
    builtin/strict  builtin/native  <user backends>   (implement value contracts)
@@ -33,7 +36,7 @@ Value implementations, parsing, validation, and generation live above them.
                  validate        (instance validation; adapters xmlsrc, jsonsrc, bersrc) [2]
                  codegen  codec  (generation; dataset ser/de)               [1]
                  conformance     (harness + ratchet; test-only)
-                 cmd/goxsd8      (the CLI; help/usage only today)
+                 cmd/goxsd8      (the CLI; help, parse and validate ship, gen does not)
 ```
 
 **[1] These boxes are DESTINATIONS, not shipped layers.**
@@ -74,7 +77,13 @@ the export interface entirely.
 Nothing in the library imports infrastructure. Infrastructure may import
 the library, and may import other infrastructure — so a tool needing the
 expectations file format calls `conformance.LoadExpectations` rather than
-becoming a second reader of a format that already has an owner. The
+becoming a second reader of a format that already has an owner.
+
+`cmd/goxsd8` is a library CONSUMER, not a place to grow capability. A
+capability the CLI needs and the library does not export is a library gap to
+file, not CLI code to write. The CLI has twice taken the other branch —
+instance-hint reading and multi-root assembly, both under "Parsing & loading"
+below — and each copy now blocks an unexport the library wants. The
 `validate` ENGINE imports no source's decoder (`encoding/xml`,
 `encoding/json`, BER) — only its adapter does, and `validate/imports_test.go`
 pins it. That ban is the engine's and not the library's: `parser/xmltree` is
@@ -251,12 +260,17 @@ represents it**:
 
   The previous edition of this bullet said "there is one write site, not a
   growing set". **The set grew** — that tripwire has fired once, and the two
-  folds are now near-identical parallel machinery (identical `position`
-  index, identical three-arm `Base()` switch, byte-identical `store…`
-  functions), which is a STYLE T4 finding filed as **#414** rather than
-  fixed here. The standing limit is restated deliberately: a THIRD
-  finalize-time write site is a design change, not an increment, and
-  belongs in a reviewed issue before it is written.
+  folds remain near-identical parallel machinery: identical
+  `position`/`types`/`folded` fold structs, identical index-building loops,
+  byte-identical `storeFoldedAttributeUses`/`storeFoldedAttributeWildcards`,
+  and identical `foldOwned…` wrappers around `ownedTypeFold`. **#414 is
+  closed and was never this finding** — it was the anonymous-type gap, which
+  `xsd/ownedtypefold.go` closed by sharing the ROOTS descent and deliberately
+  not the mapping logic — so the STYLE T4 duplication outlived its tracker
+  and is refiled at the 2026-09-06 audit as #1285. The standing limit is
+  restated deliberately: a THIRD finalize-time write site is a design
+  change, not an increment, and belongs in a reviewed issue before it is
+  written.
 
 ### Value spaces without a dependency (`xsd.ValueSpace`)
 
@@ -286,25 +300,16 @@ compared with `==`, never rendered (its underlying value is an address, so any
 textual or sorted form would be nondeterministic, D1/D2) and never derived
 from position. `Loc` is provenance, not identity.
 
-### Why the finalize machinery lives in `xsd` (a steward ruling, 2026-08-02; re-confirmed 2026-08-23)
+### Why the finalize machinery lives in `xsd` (a steward ruling, 2026-08-02; re-confirmed 2026-09-06)
 
-`xsd` is by far the largest package, and **8,044** of its non-test lines
-export **nothing at all** — 19 files as of 2026-08-29 (13 files /
-~6,700 lines at the 2026-08-02 audit): `allgrouplimited.go`,
-`assertionprefix.go`, `attributerestriction.go`, `attributeusefold.go`,
-`attributewildcardfold.go`, `collapsedintermediate.go`,
-`complexextension.go`, `contentrestricts.go`, `effectivetotalrange.go`,
-`elementconsistent.go`, `namespaceconstraint_sets.go`,
-`namespaceconstraint_subset.go`, `particleattribution.go`, `resolve.go`,
-`substitutiongroup.go`, `substitutiongrouptypes.go`,
-`typetablesubstitutable.go`, `valueconstraintvalid.go`, `wildcardadmit.go`.
-Four of the 2026-08-09 twenty have since grown an export and left the list
-(`complexderivation.go`'s `ValidlySubstitutable`, `defaultbinding.go`'s three
-`Resolved*`/`EffectiveValueConstraint`, `derivation.go`'s `CheckDerivation`,
-`elementdefaultvalid.go`'s `ElementDefaultValid` — all with real M5
-consumers), and three joined it. That looks like a
-candidate for an `xsd/finalize` sub-package. **It is not; do not propose the
-split.**
+`xsd` is by far the largest package, and most of its non-test files —
+`resolve.go`, `contentrestricts.go`, `complexextension.go`,
+`particleattribution.go`, the two attribute folds and the shared descent
+beneath them, and a dozen more — export **nothing at all**. The exact count
+is not maintained here and no audit should update it: it has only grown,
+and a figure in prose is a second encoding of something `go doc` and a file
+census answer better (#665). That looks like a candidate for an
+`xsd/finalize` sub-package. **It is not; do not propose the split.**
 
 The constraint machinery reads and writes the components' *unexported*
 fields — `attributeusefold.go` reads `ComplexType.prohibitedAttributeNames`
@@ -353,10 +358,18 @@ Two access styles over the compiled model, one shared core:
 - `loader`: the IO seam. `Resolver` answers "give me the schema document
   for (namespace, location hint)"; helpers provided for files, HTTP, and
   in-memory maps, plus a chaining/catalog resolver. The loader dedupes by
-  resolved location. Two DESTINATIONS on this seam ship nothing today: the
-  `xsi:schemaLocation` instance-hint reader that would route instance hints
-  through the same `Resolver` (#755), and a multi-root entry point, which
-  awaits a consumer (#671).
+  resolved location. Two capabilities named on this seam are `parser`'s to
+  export, neither exists there, and `cmd/goxsd8` has shipped its own copy of
+  BOTH rather than waiting. The `xsi:schemaLocation` instance-hint reader is
+  `cmd/goxsd8/validate.go`'s `instanceHints`/`hintsOf`, over
+  `internal/schemaloc` and `parser/xmltree` directly (#755). Multi-root
+  assembly is its `compileSet`, which has no entry point to call and so
+  synthesizes an `<xs:schema>` wrapper document as a STRING — one
+  `<xs:import>` or `<xs:include>` per `-schema` argument, `targetNamespace`
+  read back off each through `parser.ReadDocument` — and re-parses it (#671).
+  `loader/doc.go` states both in the present tense and `parser/doc.go` states
+  the second as awaiting a consumer; both sentences are drift, and the
+  consumer shipped.
 
 - `parser`: the schema-document compiler — the M4 spine, and the only
   writer of `xsd` components. `Parse(location, opts…)` reads the root
@@ -595,25 +608,27 @@ compiles, is documented, and has **zero** callers module-wide.
 
 - **The annotation subsystem** — `xsd.Annotation`/`AppInfo`/`Documentation`/
   `Attr` plus their constructors and accessors, `SchemaBuilder.AddAnnotation`,
-  a trailing `annotations []Annotation` parameter on **17** component
-  constructors, and `parser`'s `Text`/`Node` character-data retention that
-  exists (per `parser/tree.go`) to round-trip `<xs:documentation>`. No
-  producer builds an `Annotation`: all 37 `parser` call sites pass `nil`,
-  and no accessor is read. No milestone in docs/PLAN.md owns populating
-  it. Filed for a decision — populate it or unexport it — because the 17
-  trailing positional slots are #405's "last slot to wave through"
-  tripwire, once per constructor. #407's title and body still say 13: the
-  slot count grew by four while the subsystem stayed unpopulated, which is
-  that tripwire firing rather than a counting error.
+  a trailing `annotations []Annotation` parameter on every component
+  constructor that takes one, and `parser`'s `Text`/`Node` character-data
+  retention that exists (per `parser/tree.go`) to round-trip
+  `<xs:documentation>`. No producer builds an `Annotation`: every `parser`
+  call site passes `nil` and no accessor is read anywhere. No milestone in
+  docs/PLAN.md owns populating it. **#407** has already taken the delete
+  branch (its decision (b), part 1 of 2) and is `ready`; each trailing
+  positional slot is #405's "last slot to wave through" tripwire, once per
+  constructor, and the slot count has grown twice while the subsystem stayed
+  unpopulated. The slot count itself is not maintained here (#665).
 - **`value.LexicalFacet` / `value.ValueFacet`** — the two pipeline-stage
   interfaces. Every implementation is unexported inside `value`, the
   assembling function (`compile`) is unexported, and no exported API takes
   or returns a stage, so no consumer can exist. Either grow the composition
   seam the docs promise, or unexport the interfaces.
-- **`loader.FS`/`HTTP`/`Chain`/`ResolverFunc`** — no consumer, but
-  **justified and not to be filed**: the resolver helpers are declared
-  library surface in `loader/doc.go` for external users, which is the
-  "documented contract it fulfills" half of T5. Re-check, do not re-file.
+- **`loader.FS`/`HTTP`** — no consumer, but **justified and not to be
+  filed**: the resolver helpers are declared library surface in
+  `loader/doc.go` for external users, which is the "documented contract it
+  fulfills" half of T5. Re-check, do not re-file. `Chain` left this list
+  when `cmd/goxsd8`'s `compileSet` took it, `Dir` and `Map` have consumers
+  in both tiers, and `ResolverFunc` is exercised by `parser`'s tests.
   `regex.FlavorFO` sat here on the same terms until `xpath` and `validate`
   took it for their NCName prefix scanners (#979); the F&O functions it was
   built for still arrive at M6/M7.
@@ -630,18 +645,34 @@ compiles, is documented, and has **zero** callers module-wide.
   `xsd.AttributeResolver` — whose godoc still names "the instance validator
   (a future consumer)" — already has none, `validate` having shipped and
   resolved attributes by another route.
-- **`parser.Element` / `Node` / `Text` and the raw-tree accessors** —
-  library surface whose only module consumer is `conformance`'s
-  decidability model (36 `parser.Element` references in
-  `conformance/schema.go`, and none outside package `conformance`;
-  `parser.Node` and `Text.Data` have zero). Not a tier violation —
+- **`parser.Element` / `Node` / `Text` and the raw-tree accessors** — the
+  bulk consumer is still `conformance`'s decidability model
+  (`conformance/schema.go`'s `schemaShapeDecidable` and its predicates hold
+  every `parser.Element` reference outside package `parser` itself;
+  `parser.Node` and `Text.Data` have none anywhere). Not a tier violation —
   infrastructure may import the library — but the surface exists because
   that model has to re-derive the producer's coverage from the raw tree.
-  **#1029** supplies the signal that replaces it
-  (`parser.AssembledDocument.Unmapped`) and **#1030** consumes it, deleting
-  the model and unexporting these; `Text`'s own justification
-  (`<xs:documentation>` round-trip) belongs to the annotation decision
-  (#407).
+  **#1029** landed the signal that replaces it
+  (`parser.AssembledDocument.Unmapped`, whose one consumer today is
+  `conformance/census_test.go`'s one-directional soundness hold) and
+  **#1051** is the blocked successor that deletes the model. It can no
+  longer unexport the whole set on its own: `cmd/goxsd8` reads a `-schema`
+  document's `targetNamespace` through `parser.ReadDocument` →
+  `Document.Root` → `Element.Attr`, a read the multi-root entry point above
+  would delete. `Text`'s own justification (`<xs:documentation>`
+  round-trip) belongs to the annotation decision (#407).
+- **`xsd.Occurs.Permits`, `xsd.Namespace.IsAbsent`,
+  `xsd.NamespaceConstraint.AllowsNamespace`** — zero non-test callers
+  module-wide. `Permits` answers a closed `min <= n <= max` question no
+  caller asks, every occurrence site reading `Min`/`Max` for a one-sided
+  bound instead; `IsAbsent` is `URI`'s second result spelled a second way
+  (D3); `AllowsNamespace` is exported beneath `AllowsName` by a `doc.go`
+  that tells a caller admitting a name to reach for `AllowsName` instead.
+  Filed at the 2026-09-06 audit as #1287. `Notation.SystemIdentifier`,
+  `Notation.PublicIdentifier` and `xmltree.CharData.Offset` are callerless
+  too and are NOT filed: the first two are §3.14.1 component properties the
+  model contracts to expose, and the third is the byte offset `codec`'s M10
+  debuggability requirement names.
 - **`xsderr.IsValidRule`** — **resolved (#273); re-check, do not re-file.**
   It still has zero non-test consumers, but the module-wide test
   `xsderr/doc.go` claims now exists and passes:
