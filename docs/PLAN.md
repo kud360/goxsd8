@@ -504,13 +504,22 @@ reached: **#1215** (`src-element` clause 4, `ed-with-ns`) and **#1216**
 (`src-attribute` clause 6, `att-with-ns`). **Both LANDED 2026-09-04** —
 `976bdc2` for `schema` **+4** and `aeaf59e` for **+5**, each banking one and two
 cases past its own prediction — and **each carved a successor from its own
-boundary**: #1216's two `GAP(xsd)` markers are now **#1242** (clause 6.1's one
+boundary**: #1216's two `GAP(xsd)` markers became **#1242** (clause 6.1's one
 reachable failure, a local `<attribute ref=>`) and **#1243** (an
-`<attribute use="prohibited">` escaping clause 6 entirely), both open and both
-M4. Live producer-decides-and-accepts members are those two plus **#931**
+`<attribute use="prohibited">` escaping clause 6 entirely), and **both have now
+LANDED** — #1243 on 2026-09-05 (`3febb22`) and #1242 on 2026-09-06 (`6e95f25`),
+**each `Ratchet: unchanged` and each measured that way by `go tool suiteindex`
+construct census rather than assumed** — ratchet-neutral like #471 and #1205
+before them, but the first two of the family to prove it with an instrument
+instead of a grep. **#1243 carved one successor, #1242 carved none**,
+which ENDS the run below: #1270 (`src-attribute` clause 4 charged nowhere on the
+`use="prohibited"` branch) is #1243's, and #1242's landing closed its arm with no
+residue. Live producer-decides-and-accepts members are **#1270**, **#931**
 (occurrence attributes on a named `<group>`'s child compositor), **#929** and
-**#455**. **The family has now carved a successor at every landing since #471**,
-which is the pattern to expect from it and not tail growth. A
+**#455**. **The family carved a successor at every landing from #471 through
+#1243, and #1242 is the first that did not** — one reading is the tail reaching
+zero, the other is that this pair was narrower than its predecessors; two more
+landings decide it, and until they do neither reading is the one to plan on. A
 second, narrower family opened beside it — the rejections the
 producer already makes **correctly but describes badly**, whose bar
 `xsderr/doc.go` set with #966 — and it is **discharged**: #975 landed at
