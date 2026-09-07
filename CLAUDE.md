@@ -49,6 +49,11 @@ go tool commentwrap ./...                             # part 3 (-fix reflows)
 go test ./conformance -run TestConformance -count=1 -v  # part 4 (-v surfaces improved-but-unbanked cases)
 ```
 
+**Run each gate command unpiped and read its own exit code.** A pipeline's
+exit status is its last command's, so `go test ./... | tail` reports whether
+`tail` succeeded and stays green however the test failed; when the output is
+too long to read, redirect it to a file and read the file afterwards.
+
 **This block is the only definition of the gate.** A step named anywhere
 else — a session brief, a LOG entry, an issue body — is not a gate step,
 however confidently it is asserted; note it in one line and move on. Its
