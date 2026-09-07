@@ -463,7 +463,7 @@ func conditionalQNames(el *Element, attr, lexical string) ([]xsd.QName, error) {
 // here; any whitespace INSIDE the value survives collapse as a space and is
 // outside the lexical space either way.
 func conditionalDecimal(el *Element, attr, lexical string) (decimal, error) {
-	d, ok := parseDecimal(strings.Trim(lexical, " \t\r\n"))
+	d, ok := parseDecimal(collapseTrim(lexical))
 	if !ok {
 		return decimal{}, xsderr.New(ruleSrcCIP, el.Loc(),
 			"vc:%s value %q on <%s> is not in the ·lexical space· of xs:decimal, which src-cip requires it to be valid against (Datatypes §3.3.3.1)",

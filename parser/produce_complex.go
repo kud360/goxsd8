@@ -1373,7 +1373,7 @@ func (p *producer) checkDefaultOpenContent() error {
 	if !present {
 		return nil
 	}
-	switch strings.TrimSpace(mode) {
+	switch collapseTrim(mode) {
 	case "interleave", "suffix":
 		return nil
 	}
@@ -1480,7 +1480,7 @@ func wrapOpenContent(loc xsderr.Loc, explicit xsd.ContentType, oc xsd.OpenConten
 // element carries mode="none" — the ·actual value· of an xs:NMTOKEN-derived
 // enumeration, so surrounding whitespace is collapsed away before the compare.
 func openContentModeIsNone(we *Element) bool {
-	return strings.TrimSpace(attrOr(we, "mode")) == "none"
+	return collapseTrim(attrOr(we, "mode")) == "none"
 }
 
 // openContentModeOf maps a ·wildcard element·'s mode attribute to the {mode} of
@@ -1502,7 +1502,7 @@ func openContentModeOf(we *Element) (xsd.OpenContentMode, error) {
 	if !ok {
 		return xsd.OpenContentInterleave, nil
 	}
-	switch strings.TrimSpace(mode) {
+	switch collapseTrim(mode) {
 	case "interleave":
 		return xsd.OpenContentInterleave, nil
 	case "suffix":
@@ -3556,7 +3556,7 @@ func occursOf(el *Element) (occ xsd.Occurs, elided bool, err error) {
 	unbounded := false
 	max := 1
 	if maxS, ok := el.Attr("maxOccurs"); ok {
-		if strings.TrimSpace(maxS) == "unbounded" {
+		if collapseTrim(maxS) == "unbounded" {
 			unbounded = true
 		} else {
 			max, err = nonNegativeInt(maxS, el.Loc(), "maxOccurs")
@@ -3590,7 +3590,7 @@ func occursOf(el *Element) (occ xsd.Occurs, elided bool, err error) {
 // than a numeric {max occurs} — is charged by those constructors, on the two
 // values this helper has already parsed (#932).
 func nonNegativeInt(lexical string, loc xsderr.Loc, attr string) (int, error) {
-	n, err := strconv.Atoi(strings.TrimSpace(lexical))
+	n, err := strconv.Atoi(collapseTrim(lexical))
 	if err != nil || n < 0 {
 		return 0, xsderr.New(ruleDatatypeValid, loc,
 			"%s value %q is not a nonNegativeInteger", attr, lexical)
@@ -3627,7 +3627,7 @@ func allOccursGrammar(el *Element) error {
 	if !ok {
 		return nil
 	}
-	if strings.TrimSpace(lexical) == "unbounded" {
+	if collapseTrim(lexical) == "unbounded" {
 		return xsderr.New(ruleDatatypeValid, el.Loc(),
 			`<all> maxOccurs is "unbounded", but the schema for schema documents restricts it to the enumeration 0, 1`)
 	}
@@ -3665,7 +3665,7 @@ func allOccursEnum(lexical string, loc xsderr.Loc, attr string) error {
 // {process contents} outside skip/lax/strict — is charged by that constructor, on
 // the token this helper has already mapped (#950).
 func processContentsOf(lexical string, loc xsderr.Loc) (xsd.ProcessContents, error) {
-	switch strings.TrimSpace(lexical) {
+	switch collapseTrim(lexical) {
 	case "skip":
 		return xsd.ProcessSkip, nil
 	case "strict":
@@ -3725,9 +3725,13 @@ func hasParticleChild(group *Element) bool {
 }
 
 // minOccursZero reports whether el's minOccurs is lexically 0.
+//
+// GAP(xsd): clause 2.1.3 tests the ·actual value·, so minOccurs="00" — value 0 —
+// is not elided here, though occursOf's own both-zero test parses it and is.
+// This is maxOccursZero's gap one clause over; #929 owns closing both.
 func minOccursZero(el *Element) bool {
 	v, ok := el.Attr("minOccurs")
-	return ok && strings.TrimSpace(v) == "0"
+	return ok && collapseTrim(v) == "0"
 }
 
 // maxOccursZero reports whether el's maxOccurs is lexically 0.
@@ -3737,7 +3741,7 @@ func minOccursZero(el *Element) bool {
 // Reproduced through parser.Parse on #901; #929 owns closing it.
 func maxOccursZero(el *Element) bool {
 	v, ok := el.Attr("maxOccurs")
-	return ok && strings.TrimSpace(v) == "0"
+	return ok && collapseTrim(v) == "0"
 }
 
 // attrOr returns el's attribute local value, or the empty string when absent.

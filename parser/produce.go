@@ -1379,7 +1379,7 @@ var ncNameRE = func() *regexp.Regexp {
 // xsd.NewAttributeDeclaration's a-props-correct clause 1.
 func declarationName(el *Element, ns string) (xsd.QName, error) {
 	lexical, _ := el.Attr("name")
-	name := strings.Trim(lexical, "\x09\x0A\x0D\x20")
+	name := collapseTrim(lexical)
 	if name != "" && !ncNameRE.MatchString(name) {
 		return xsd.QName{}, xsderr.New(ruleDatatypeValid, el.Loc(),
 			"<%s> name %q is not in the ·lexical space· of xs:NCName, the type the schema for schema documents declares for it (Structures §5.1, §A): an NCName carries no colon and begins with a letter or '_' (Datatypes §3.4.7.1)",
@@ -2748,8 +2748,8 @@ func (p *producer) produceNotation(elem *Element) (xsd.Notation, error) {
 // outside the model as well: xs:annotated descends from xs:openAttrs
 // (:4412-:4422), which restricts xs:anyType with an <xs:anyAttribute> and so
 // opens ATTRIBUTES alone, as the type's own documentation says at :4415. The
-// whitespace is #x9/#xA/#xD/#x20, never strings.TrimSpace's wider class, for the
-// reason facetFixed's doc gives.
+// whitespace is #x9/#xA/#xD/#x20 exactly, read through collapseTrim for the
+// reason its doc gives.
 //
 // A SECOND <annotation> is not this function's fault to raise:
 // rejectS4SFaults' walk already reaches every element of the document with
@@ -2772,7 +2772,7 @@ func rejectNotationContent(elem *Element) error {
 			}
 			return fmt.Errorf("parser: <%s> at %s is not admitted inside the <notation> at %s: xs:notation extends xs:annotated, whose content model is (annotation?), so <annotation> is the only child element the schema for schema documents allows there", n.Name().Local(), n.Loc(), elem.Loc())
 		case *Text:
-			if strings.Trim(n.Data(), "\x09\x0A\x0D\x20") == "" {
+			if collapseTrim(n.Data()) == "" {
 				continue
 			}
 			return fmt.Errorf("parser: character data at %s is not admitted inside the <notation> at %s: xs:notation extends xs:annotated, whose content model is (annotation?) and holds elements only, so nothing but whitespace may appear between its tags", n.Loc(), elem.Loc())
@@ -3215,6 +3215,33 @@ func childElements(el *Element, space, local string) []*Element {
 	return found
 }
 
+// collapseTrim strips the four characters §4.3.6's whiteSpace facet is
+// whitespace for — #x9, #xA, #xD, #x20 — from both ends of a lexical form.
+// whiteSpace is fixed to collapse for every datatype the schema for schema
+// documents declares the attributes read here with, and it is applied BEFORE
+// lexical-space membership is tested (§4.1.4), so a padded " true " is the
+// ·actual value· true. It is this package's one spelling of that trim; route a
+// new lexical comparison through it. Comparisons that do not normalize at all
+// are separate work — boolAttr's true/1 compare, for one (#456).
+//
+// It cannot be strings.TrimSpace, whose unicode.IsSpace class also cuts U+0085,
+// U+00A0, U+2028 and the rest — characters §4.3.6 is NOT whitespace for and
+// collapse PRESERVES, so trimming them would accept literals the spec rejects:
+// maxOccurs="&#xA0;unbounded" read as unbounded, mode="&#xA0;none" as none.
+//
+// A four-character trim is not a private copy of the collapse algorithm (STYLE
+// T4): it decides membership in a set of whitespace-free literals exactly as a
+// full collapse would. Let T be the trimmed literal and R its collapse — if T
+// holds interior XML whitespace then R holds a #x20 and no target literal
+// contains one, so both reject; otherwise R == T. Every literal compared through
+// this helper is whitespace-free — none/interleave/suffix, unbounded,
+// skip/strict/lax, true/false/1/0, the decimal digit strings, NCNames,
+// xs:decimal literals and the empty string — so the equivalence holds at every
+// call site.
+func collapseTrim(lexical string) string {
+	return strings.Trim(lexical, "\x09\x0A\x0D\x20")
+}
+
 // facetFixed maps a facet element's fixed attribute to that facet's {fixed}
 // property: "The actual value of the fixed [attribute], if present, otherwise
 // false" (xsd-precisionDecimal.md §4.2.2 xr-maxScale and §4.3.2 xr-minScale, the
@@ -3225,17 +3252,11 @@ func childElements(el *Element, space, local string) []*Element {
 //
 //   - pre-lexical. xs:boolean fixes whiteSpace to collapse (§3.3.2.3, §4.3.6) and
 //     the whiteSpace facet is applied BEFORE lexical-space membership is tested
-//     (§4.1.4), so " true " is the value true. Trimming exactly #x9/#xA/#xD/#x20 —
-//     the only characters §4.3.6's replace and collapse steps ever touch, as
-//     value/whitespace.go spells out — decides that membership exactly as a full
-//     collapse would. Let T be the trimmed literal and R its collapse: if T holds
-//     interior whitespace then R holds a #x20 and no booleanRep literal contains
-//     one, so both reject; otherwise R == T. The trim set is load-bearing and
-//     cannot be strings.TrimSpace, whose unicode.IsSpace class also cuts U+0085,
-//     U+00A0, U+2028 and the rest — characters §4.3.6 is NOT whitespace for and
-//     collapse preserves, so trimming them would accept literals the spec rejects.
-//     A four-character trim is not a third private copy of the collapse algorithm
-//     (STYLE T4).
+//     (§4.1.4), so " true " is the value true. collapseTrim reads that ·actual
+//     value·, and its doc carries the proof that trimming §4.3.6's four
+//     characters decides booleanRep membership exactly as a full collapse would.
+//     The trim set is load-bearing, and the wider class Go's strings package
+//     trims is what that proof rules out.
 //   - lexical. booleanRep ::= 'true' | 'false' | '1' | '0' (§3.3.2.2), case
 //     sensitive: "TRUE" is not in the lexical space. Anything outside those four
 //     is charged cvc-datatype-valid (§4.1.4) — a literal outside a datatype's
@@ -3248,7 +3269,7 @@ func facetFixed(el *Element) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	switch strings.Trim(lexical, "\x09\x0A\x0D\x20") {
+	switch collapseTrim(lexical) {
 	case "true", "1":
 		return true, nil
 	case "false", "0":
