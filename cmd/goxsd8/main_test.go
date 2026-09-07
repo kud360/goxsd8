@@ -224,6 +224,16 @@ func TestUsageCoversContract(t *testing.T) {
 		"undecided is less severe than",
 		"each check the assessment\n      declined, prints one line on stdout",
 		"validate's violations and undecided checks are\nsilenced by it",
+		// #1260's own answers, none of which any earlier copy carried: that a
+		// schema-side schemaLocation resolving to nothing is reported at all,
+		// where and how it is reported, that -q leaves it alone, that a bare
+		// <xs:import> is not it, and that validate reports the same for its
+		// -schema set.
+		"whose schemaLocation resolves to no document is",
+		"named on stderr at its own position",
+		"-q does not silence it.",
+		"A bare <xs:import>, which names no",
+		"A -schema document's own unresolved directive",
 	}
 	for _, w := range want {
 		if !strings.Contains(usage, w) {

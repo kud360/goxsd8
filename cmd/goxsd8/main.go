@@ -38,6 +38,13 @@ Usage (contract; subcommands land with their milestones):
       stops there, so a rejected schema is one line); 2 when an
       argument cannot be read, which is never a verdict about a
       schema. The exit code is the worst of those outcomes.
+      An <xs:include>, <xs:import>, <xs:override> or empty
+      <xs:redefine> whose schemaLocation resolves to no document is
+      named on stderr at its own position, with no rule ID and no
+      change of exit code: the skip is legal, so the summary above is
+      printed off a schema short of whatever that document declares.
+      -q does not silence it. A bare <xs:import>, which names no
+      document, is not reported.
 
   goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...
       Assess instances against the compiled set; every schema needs
@@ -45,6 +52,9 @@ Usage (contract; subcommands land with their milestones):
       The -schema documents compose into ONE set — several of them are
       one compilation, not one each — and - names standard input as an
       instance, never as a schema.
+      A -schema document's own unresolved directive is named on
+      stderr the same way, once for the set, before any instance is
+      assessed.
       Source format by extension (.xml, .json, .ber) or forced with
       -format xml|json|ber, matched case-sensitively and applying to
       every instance of the invocation (there is no per-instance

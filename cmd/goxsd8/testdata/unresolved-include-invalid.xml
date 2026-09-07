@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The same root with a lexical outside xs:int, so the short set is shown
+     to decide the instance rather than merely to compile: the charge is the
+     instance's, and the unresolved directive is still only a stderr line. -->
+<s:present xmlns:s="http://example.com/short">seven</s:present>

@@ -166,7 +166,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	// validate.New requires them to be one value, or instance lexicals are read
 	// in a value space no facet on the schema was ever checked against.
 	backend := strict.New()
-	base, err := compileSet(docs, backend, log)
+	base, report, err := compileSet(docs, backend, log)
 	if err != nil {
 		// Reported once, before any instance is read: with no schema set there
 		// is no assessment to run, and one line beats the same line per
@@ -174,6 +174,11 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, violationLine(err))
 		return exitSchema
 	}
+	// Reported once for the same reason, and before any instance is assessed so
+	// that the shortfall stands above the report it explains. Every entry names
+	// a -schema document's own directive: the wrapper root's schemaLocations are
+	// the paths rootLocation already opened.
+	reportUnfollowed(stderr, "validate", report)
 	v, err := validate.New(base, backend, validate.WithLogger(log))
 	if err != nil {
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
@@ -271,7 +276,10 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 	if len(found) == 0 {
 		return vn.base, replay, exitOK
 	}
-	augmented, err := compileSet(append(slices.Clone(vn.docs), found...), vn.backend, vn.log)
+	// The augmented set's own report is dropped: what an unfollowed directive
+	// of a HINTED document owes the operator is #1251's ruling, not this
+	// call's, and runValidate has already reported the -schema set's.
+	augmented, _, err := compileSet(append(slices.Clone(vn.docs), found...), vn.backend, vn.log)
 	if err != nil {
 		// A set that stops compiling only once THIS instance's hints are folded
 		// in is a fault of the instance, not of the -schema set the invocation
@@ -473,17 +481,20 @@ func readSchemaDoc(path string) (schemaDoc, error) {
 // resolution of the absolute schemaLocations inside it leaves them absolute.
 const schemaSetLocation = "goxsd8-schema-set.xsd"
 
-// compileSet assembles docs into ONE schema set and returns it finalized.
+// compileSet assembles docs into ONE schema set and returns it finalized,
+// together with the assembly's report — every document it read and every
+// ·inter-schema-document reference· it could not follow to one, which is how a
+// caller observes a set that composed short of a document it named.
 //
-// There is no multi-root entry point to call — parser.Parse takes a single root
-// location, which is §4.2.1's schema(D) — so the set is expressed as a schema
+// There is no multi-root entry point to call — parser.ParseReport takes a
+// single root location, which is §4.2.1's schema(D) — so the set is expressed as a schema
 // document in the spec's own terms: a wrapper <schema> with no targetNamespace
 // of its own that <import>s or <include>s each document, served in memory and
 // composed by the ordinary assembly. Composing the set this way rather than
 // merging several finalized schemas is what keeps every cross-document rule the
 // parser already enforces — src-import clause 3, sch-props-correct clause 2,
 // src-resolve at finalize — enforced over the CLI's set too.
-func compileSet(docs []schemaDoc, backend value.Backend, log *slog.Logger) (*xsd.Schema, error) {
+func compileSet(docs []schemaDoc, backend value.Backend, log *slog.Logger) (*xsd.Schema, *parser.AssemblyReport, error) {
 	// The wrapper's schemaLocations are absolute paths, so the filesystem
 	// resolver is rooted at the filesystem root: parseOne's reasoning, that this
 	// process reads the documents its own user named, with that user's
@@ -494,7 +505,7 @@ func compileSet(docs []schemaDoc, backend value.Backend, log *slog.Logger) (*xsd
 		loader.Map(map[string]string{schemaSetLocation: schemaSetSource(docs)}),
 		loader.Dir(filesystemRoot(docs[0].location)),
 	)
-	return parser.Parse(schemaSetLocation,
+	return parser.ParseReport(schemaSetLocation,
 		parser.WithResolver(resolver),
 		parser.WithBackend(backend),
 		parser.WithLogger(log))
