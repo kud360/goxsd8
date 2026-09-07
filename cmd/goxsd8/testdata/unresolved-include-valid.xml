@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A valid instance of unresolved-include.xsd: the assessment reaches a
+     declaration the argument document itself makes, so a run that charges
+     nothing proves the SHORT set was still composed and assessed against —
+     an undeclared root would be charged cvc-assess-elt instead. -->
+<s:present xmlns:s="http://example.com/short">7</s:present>

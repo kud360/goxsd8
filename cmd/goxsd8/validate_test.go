@@ -15,15 +15,19 @@ import (
 // outside its Sku pattern, a second namespace's schema paired with an
 // instance that names it through xsi:schemaLocation and nothing else, and a
 // schema carrying an <xs:assert> whose instance charges nothing and leaves
-// the assertion unevaluated.
+// the assertion unevaluated, and a schema whose own <xs:include> names a
+// document that is not there with an instance of it either way.
 const (
-	validInstance    = "testdata/order-valid.xml"
-	invalidInstance  = "testdata/order-invalid.xml"
-	orderSchema      = "testdata/order.xsd"
-	hintedInstance   = "testdata/hinted.xml"
-	hintedSchema     = "testdata/hinted.xsd"
-	assertedSchema   = "testdata/asserted.xsd"
-	assertedInstance = "testdata/asserted.xml"
+	validInstance        = "testdata/order-valid.xml"
+	invalidInstance      = "testdata/order-invalid.xml"
+	orderSchema          = "testdata/order.xsd"
+	hintedInstance       = "testdata/hinted.xml"
+	hintedSchema         = "testdata/hinted.xsd"
+	assertedSchema       = "testdata/asserted.xsd"
+	assertedInstance     = "testdata/asserted.xml"
+	shortSchema          = "testdata/unresolved-include.xsd"
+	shortValidInstance   = "testdata/unresolved-include-valid.xml"
+	shortInvalidInstance = "testdata/unresolved-include-invalid.xml"
 )
 
 // TestValidateCleanInstance pins the quiet outcome: an instance that charges
@@ -269,6 +273,59 @@ func TestValidateSchemasShareATargetNamespace(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "[src-resolve]") {
 		t.Errorf("stderr = %q, want the unresolved reference charged", stderr.String())
+	}
+}
+
+// TestValidateNamesAnUnresolvedSchemaSideDirective is #1260's acceptance for
+// the other subcommand: a -schema document's own <xs:include> naming a
+// document that is not there is named on stderr, once, before any instance is
+// assessed — and nothing else moves. The set composes (src-include clause
+// 2.4), so exitSchema is not the answer, and assessment runs normally against
+// the SHORT set: the clean instance charges nothing and the invalid one is
+// charged against the declaration the argument document does make, which an
+// unassessed or empty set could not produce.
+//
+// The line belongs to the -schema set alone. A hinted document's own
+// unfollowed directives are #1251's, and no line may cite schemaSetLocation,
+// which names no document the reader can open (STYLE E3).
+func TestValidateNamesAnUnresolvedSchemaSideDirective(t *testing.T) {
+	abs, err := filepath.Abs(shortSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The <xs:include> the fixture carries on line 10.
+	at := abs + ":10:3:"
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"validate", "-schema", shortSchema, shortValidInstance}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("clean instance: code = %d, want %d (stdout %q, stderr %q)", code, exitOK, stdout.String(), stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty — the instance charges nothing", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), at) {
+		t.Errorf("stderr = %q, want the unfollowed directive's location %q", stderr.String(), at)
+	}
+	if strings.Contains(stderr.String(), schemaSetLocation) {
+		t.Errorf("stderr = %q, want no line citing the synthesized wrapper root", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "[") {
+		t.Errorf("stderr = %q, want no rule brackets — the skip is not a violation", stderr.String())
+	}
+
+	// One line for the set, not one per instance, and the assessment still
+	// decides every one of them.
+	stdout.Reset()
+	stderr.Reset()
+	args := []string{"validate", "-schema", shortSchema, shortValidInstance, shortInvalidInstance}
+	if code := run(args, &stdout, &stderr); code != exitInvalid {
+		t.Fatalf("two instances: code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "[cvc-type]") {
+		t.Errorf("stdout = %q, want the invalid instance charged against the short set", stdout.String())
+	}
+	if got := strings.Count(stderr.String(), at); got != 1 {
+		t.Errorf("stderr names the directive %d times, want 1 — the set is compiled once:\n%s", got, stderr.String())
 	}
 }
 

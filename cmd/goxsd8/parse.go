@@ -80,7 +80,7 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 	// for an embedding that treats a schemaLocation hint as attacker-supplied;
 	// this process reads the documents its own user named, with that user's
 	// privileges.
-	schema, err := parser.Parse(root,
+	schema, report, err := parser.ParseReport(root,
 		parser.WithResolver(loader.Dir(filesystemRoot(root))),
 		parser.WithLogger(log))
 	if err != nil {
@@ -90,6 +90,10 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 		_, _ = fmt.Fprintln(stderr, violationLine(err))
 		return exitInvalid
 	}
+	// Before the summary and ahead of the -q gate: the summary is this
+	// subcommand's informational output, and a directive the assembly behind it
+	// could not follow is a diagnosis, which doc.go forbids -q to silence.
+	reportUnfollowed(stderr, "parse", report)
 	if quiet {
 		return exitOK
 	}
@@ -104,7 +108,7 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 // rootLocation opens location to prove it is a readable file and returns its
 // absolute path. Opening it here is what lets an unreadable argument be
 // reported in the operating system's own words and charged exit 2, rather than
-// reaching parser.Parse and coming back as an assembly error indistinguishable
+// reaching the parser and coming back as an assembly error indistinguishable
 // in shape from a verdict about a schema's content.
 func rootLocation(location string) (string, error) {
 	f, err := os.Open(location)
@@ -138,6 +142,38 @@ func violationLine(err error) string {
 		return e.Error()
 	}
 	return err.Error()
+}
+
+// reportUnfollowed names on stderr, one line per directive at its own
+// position, every ·inter-schema-document reference· of a schema that DID
+// compile whose schemaLocation resolved to no document. verb is the subcommand
+// the diagnosis is charged to.
+//
+// The line carries no rule ID and moves no exit code, because this is not a
+// violation: src-include clause 2.4 (§4.2.3) and src-import (§4.2.6.2) both
+// make an unresolved schemaLocation legal to skip, and src-override (§4.2.5)
+// clause 1 is vacuously satisfied by the same failure, so rendering it through
+// violationLine's "<loc>: [<rule>] <message>" would publish a non-error as a
+// spec charge (STYLE E2). What it buys is that a summary, or an assessment,
+// answered off a SHORT assembly is distinguishable from one answered off a
+// complete one — the fact nothing but -v carried before (#1260).
+//
+// Only parser.UnfollowedLocationUnresolved is named. A bare <import>
+// (parser.UnfollowedNoLocation) names no document to have failed to reach:
+// §4.2.6.2 makes it the spelling for "references into this namespace are
+// expected", which another document of the set may supply, so reporting it
+// would charge a complete set with a shortfall. The other two reasons cannot
+// arrive here — parser.ParseReport returns an error alongside each of them,
+// and every caller of this reports only a schema it compiled.
+func reportUnfollowed(stderr io.Writer, verb string, report *parser.AssemblyReport) {
+	for _, u := range report.Unfollowed() {
+		if u.Reason != parser.UnfollowedLocationUnresolved {
+			continue
+		}
+		// A failed stderr write cannot change the outcome: the schema compiled,
+		// and stderr is the only channel this line has.
+		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: this schemaLocation resolved to no document, which is legal and skipped; the compiled schema is short of whatever that document declares\n", verb, u.At)
+	}
 }
 
 // usageError reports a usage or IO fault: the message, then the remedy, on

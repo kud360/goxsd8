@@ -205,6 +205,94 @@ func TestParseWrappedSchemaError(t *testing.T) {
 	}
 }
 
+// TestParseNamesAnUnresolvedDirective is #1260's acceptance: a schema argument
+// whose own directive names a document that is not there compiles — src-include
+// clause 2.4 makes the skip legal — so nothing about the summary or the exit
+// code moves, and the shortfall behind them is named on stderr rather than
+// reachable only behind -v.
+//
+// Both fixtures are the NON-ERROR class. An EMPTY <xs:redefine> keeps
+// <xs:include>'s skip, src-redefine clause 1 being antecedent on children other
+// than <annotation>; a NON-EMPTY one whose location does not resolve violates
+// that clause and is a rejected schema — the exit-1 path parseOne already had,
+// which this reporting leaves untouched.
+func TestParseNamesAnUnresolvedDirective(t *testing.T) {
+	cases := []struct {
+		name    string
+		fixture string
+	}{
+		{"include", "testdata/unresolved-include.xsd"},
+		{"empty redefine", "testdata/unresolved-empty-redefine.xsd"},
+	}
+	for _, c := range cases {
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"parse", c.fixture}, &stdout, &stderr); code != exitOK {
+			t.Errorf("%s: parse = %d, want %d — an unresolved schemaLocation is not an error", c.name, code, exitOK)
+		}
+		if want := "  elements: 1\n"; !strings.Contains(stdout.String(), want) {
+			t.Errorf("%s: stdout =\n%s\nwant %q — the summary is unchanged", c.name, stdout.String(), want)
+		}
+		line := strings.TrimSuffix(stderr.String(), "\n")
+		if strings.Contains(line, "\n") {
+			t.Errorf("%s: stderr = %q, want one line — the fixture carries one directive", c.name, stderr.String())
+		}
+		abs, err := filepath.Abs(c.fixture)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The directive's own position, which is the whole point of reporting
+		// it: an operator must be able to open the document and find the line.
+		// Both fixtures carry theirs on line 10.
+		if !strings.Contains(line, abs+":10:3:") {
+			t.Errorf("%s: stderr = %q, want the directive's location %q", c.name, line, abs+":10:3:")
+		}
+		// No rule ID, in the brackets a charge is rendered with: the skip is
+		// legal, so a script keying on "[<rule>]" must not read it as one.
+		if strings.Contains(line, "[") {
+			t.Errorf("%s: stderr = %q, want no rule brackets — this is not a violation", c.name, line)
+		}
+	}
+}
+
+// TestParseQuietDoesNotSuppressAnUnresolvedDirective holds the new line to
+// -q's published scope: -q suppresses the summary, which is parse's
+// informational output, and never a diagnosis. A gate spelled
+// `goxsd8 parse -q` is the case #1260 was filed from, so a -q that swallowed
+// this would leave the silence exactly where it was found.
+func TestParseQuietDoesNotSuppressAnUnresolvedDirective(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"parse", "-q", "testdata/unresolved-include.xsd"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("parse -q = %d, want %d (stderr %q)", code, exitOK, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("parse -q stdout = %q, want empty", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "resolved to no document") {
+		t.Errorf("parse -q stderr = %q, want the unfollowed directive named", stderr.String())
+	}
+}
+
+// TestParseSaysNothingOfABareImport pins the other side of the line #1260
+// draws: an <xs:import> with no schemaLocation names no document to have
+// failed to reach — §4.2.6.2 makes it the spelling for "references into this
+// namespace are expected", which another document of a set may supply — so
+// reporting it would charge a complete assembly with a shortfall.
+func TestParseSaysNothingOfABareImport(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bare.xsd")
+	body := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://example.com/ns">` +
+		`<xs:import namespace="http://example.com/other"/><xs:element name="a" type="xs:string"/></xs:schema>`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"parse", path}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("parse = %d, want %d (stderr %q)", code, exitOK, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want empty — a bare <xs:import> is not a shortfall", stderr.String())
+	}
+}
+
 // TestParseQuiet pins -q's scope, which binds validate too: it suppresses the
 // summary and nothing else. A -q that swallowed the error lines would break
 // every grep-based script, which is why the second half of this test is the

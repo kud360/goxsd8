@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An <xs:include> naming a document that is not there. src-include clause
+     2.4 makes the skip legal, so this compiles and is assessed against: the
+     summary, and every assessment, is answered off a schema set SHORT of
+     whatever the unread document declares. The <xs:include> sits on line 10,
+     which the tests cite. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/short">
+
+  <xs:include schemaLocation="nosuchdocument.xsd"/>
+
+  <xs:element name="present" type="xs:int"/>
+
+</xs:schema>
