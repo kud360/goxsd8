@@ -11,11 +11,13 @@ import (
 // This file maps the <alternative> children of an <element> into the element
 // declaration's {type table} (§3.3.2.1 dcl.elt.common over §3.12.2 declare-ta)
 // and charges §3.12.3 src-ta, §3.3.3 src-element clause 5 and §3.12.6
-// ta-props-correct clause 2 over the same children. It serves the GLOBAL
-// <element> path (produceElement) and both LOCAL ones (produceLocalElement)
-// from one implementation (STYLE T4): §3.3.2.1's {type table} row is a COMMON
-// mapping rule and §3.3.2.2 dcl.elt.global supplements {target namespace} and
-// {scope} alone, so a top-level <element> has nothing to map differently.
+// ta-props-correct clause 2 over the same children — behind §5.1's first bullet
+// over each <alternative>'s own children (checkS4SChildOrder, s4sAlternative,
+// produce_s4sorder.go). It serves the GLOBAL <element> path (produceElement)
+// and both LOCAL ones (produceLocalElement) from one implementation (STYLE T4):
+// §3.3.2.1's {type table} row is a COMMON mapping rule and §3.3.2.2
+// dcl.elt.global supplements {target namespace} and {scope} alone, so a
+// top-level <element> has nothing to map differently.
 
 // ruleSrcTA is Type Alternative Representation OK (Structures §3.12.3,
 // id="src-ta"): "each <alternative> element must have one (and only one) of the
@@ -76,8 +78,19 @@ func (t ctaStaticTypes) Type(name xsd.QName) (xsd.TypeDefinition, bool) {
 // type definition}'s {type definition} whenever the final <alternative> carries
 // a test.
 //
-// The mapping, once src-ta and src-element clause 5 have passed over every
-// <alternative>:
+// Each <alternative>'s OWN children are ordered against s4sAlternative here
+// (checkS4SChildOrder, #1275), the one content model Appendix A gives every
+// occurrence of the element. The walk is charged AHEAD of checkSrcTA, which is
+// the default run order checkS4SChildOrder's doc records: nothing about this
+// site makes src-element clause 3's message-quality argument, so a document
+// whose <alternative> children the content model does not admit is answered by
+// the grammar fault and no src-ta verdict is reached over it. Both faults can be
+// live on one element — a <simpleType> followed by a second <simpleType> repeats
+// s4sAlternative's single type position AND is two forms to checkSrcTA's count —
+// and this order decides which is reported.
+//
+// The mapping, once the s4s walk, src-ta and src-element clause 5 have passed
+// over every <alternative>:
 //
 //   - {alternatives} takes the <alternative> children WITH a test attribute, in
 //     document order, each through declare-ta. A TRAILING untested one is not
@@ -119,6 +132,9 @@ func (p *producer) typeTableOf(el *Element, edID xsd.ComponentID, declaredType x
 	}
 	last := len(alternatives) - 1
 	for i, alt := range alternatives {
+		if err := checkS4SChildOrder(alt, s4sAlternative); err != nil {
+			return nil, err
+		}
 		if err := checkSrcTA(alt); err != nil {
 			return nil, err
 		}
@@ -243,6 +259,13 @@ func (p *producer) alternativeTypes(alternatives []*Element, edID xsd.ComponentI
 // establishes is what that mapping's arm order relies on: src-ta is a constraint
 // on the XML representation, and an <alternative> holding exactly one inline type
 // child satisfies it outright.
+//
+// It runs BEHIND checkS4SChildOrder over the same element (s4sAlternative,
+// #1275), so the children it counts are already position-valid: at most one of
+// <simpleType> and <complexType> stands under the <alternative>, and nothing but
+// a leading <annotation> stands beside it. That leaves the type attribute paired
+// with an inline child as the ONLY shape reaching the more-than-one branch —
+// two inline children repeat one position and the walk answers them first.
 func checkSrcTA(alt *Element) error {
 	forms := 0
 	if _, hasType := alt.Attr("type"); hasType {

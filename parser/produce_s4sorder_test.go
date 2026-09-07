@@ -33,7 +33,8 @@ func s4sTopLevelDoc(lines ...string) string {
 // xs:complexRestrictionType (:1718) and xs:extensionType (:1723) — and, since
 // #1076, the three declarations that carry a content model of their own: xs:element
 // (:1120), xs:attribute (:828) and xs:simpleType (xmlschema11-2.md:2743), each
-// ordered by ONE model whichever form it is written in.
+// ordered by ONE model whichever form it is written in — and since #1275
+// xs:altType (:3210) on the same terms.
 //
 // Before this check the producer read every one of these subtrees by name and
 // never by position, so all of these documents assembled clean (#956). The four
@@ -345,6 +346,60 @@ func TestProduceS4SChildOrderRejected(t *testing.T) {
 			wantOwner: "<simpleType> at " + produceURI + ":2:1",
 			wantKind:  "repeats a position",
 		},
+		{
+			// The blind spot checkSrcTA cannot see (#1275): it counts FORMS through
+			// childElement, which answers with the FIRST <simpleType> alone, so a
+			// second one left the count at 1 and passed. s4sAlternative's single
+			// "(simpleType | complexType)?" position charges it.
+			name:     "two simpleType children on an alternative",
+			topLevel: true,
+			lines: []string{
+				`<xs:element name="e" type="xs:string">`,
+				`<xs:alternative test="true()">`,
+				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`,
+				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`,
+				`</xs:alternative>`,
+				`</xs:element>`,
+			},
+			wantChild: "<simpleType> at " + produceURI + ":5:1",
+			wantOwner: "<alternative> at " + produceURI + ":3:1",
+			wantKind:  "repeats a position",
+		},
+		{
+			// The two names share ONE position, so the second is a repeat of it and
+			// not a second optional — and this walk answers it ahead of src-ta, which
+			// counts the same document as two forms (checkSrcTA, produce_typetable.go).
+			name:     "complexType after a simpleType on an alternative",
+			topLevel: true,
+			lines: []string{
+				`<xs:element name="e" type="xs:string">`,
+				`<xs:alternative test="true()">`,
+				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`,
+				`<xs:complexType><xs:sequence/></xs:complexType>`,
+				`</xs:alternative>`,
+				`</xs:element>`,
+			},
+			wantChild: "<complexType> at " + produceURI + ":5:1",
+			wantOwner: "<alternative> at " + produceURI + ":3:1",
+			wantKind:  "repeats a position",
+		},
+		{
+			// xs:altType opens with the "annotation?" xs:annotated contributes, so an
+			// <annotation> written after the type child is late.
+			name:     "annotation after the type child of an alternative",
+			topLevel: true,
+			lines: []string{
+				`<xs:element name="e" type="xs:string">`,
+				`<xs:alternative test="true()">`,
+				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType>`,
+				`<xs:annotation/>`,
+				`</xs:alternative>`,
+				`</xs:element>`,
+			},
+			wantChild: "<annotation> at " + produceURI + ":5:1",
+			wantOwner: "<alternative> at " + produceURI + ":3:1",
+			wantKind:  "out of the child order",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := s4sDoc(tc.lines...)
@@ -597,6 +652,22 @@ func TestProduceS4SChildNoPositionRejected(t *testing.T) {
 			wantChild: "<attribute> at " + produceURI + ":6:1",
 			wantOwner: "<simpleType> at " + produceURI + ":4:1",
 		},
+		{
+			// xs:altType carries the two inline type names and nothing else, so an
+			// <element> under an <alternative> fills no position of it — the name
+			// checkSrcTA's form count never looked at (#1275).
+			name:     "element child on an alternative",
+			topLevel: true,
+			lines: []string{
+				`<xs:element name="e" type="xs:string">`,
+				`<xs:alternative test="true()" type="xs:string">`,
+				`<xs:element name="f"/>`,
+				`</xs:alternative>`,
+				`</xs:element>`,
+			},
+			wantChild: "<element> at " + produceURI + ":4:1",
+			wantOwner: "<alternative> at " + produceURI + ":3:1",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := s4sDoc(tc.lines...)
@@ -774,6 +845,22 @@ func TestProduceS4SChildOrderAccepted(t *testing.T) {
 				`<xs:simpleType name="U"><xs:annotation/><xs:union memberTypes="xs:string"/></xs:simpleType>` +
 				`<xs:element name="D"><xs:simpleType><xs:annotation/>` +
 				`<xs:restriction base="xs:string"/></xs:simpleType></xs:element>`,
+		},
+		{
+			// Every position of xs:altType filled, over both arms of its one
+			// "(simpleType | complexType)?" choice and beside the whole attribute set
+			// the type carries — test, type and xpathDefaultNamespace.
+			name: "alternative annotation before each inline type in turn",
+			body: `<xs:element name="D" type="tns:A">` +
+				`<xs:alternative test="true()" xpathDefaultNamespace="##targetNamespace">` +
+				`<xs:annotation/><xs:complexType><xs:complexContent>` +
+				`<xs:restriction base="tns:A"><xs:sequence/></xs:restriction>` +
+				`</xs:complexContent></xs:complexType></xs:alternative>` +
+				`<xs:alternative type="tns:A"/></xs:element>` +
+				`<xs:element name="D2" type="xs:string">` +
+				`<xs:alternative test="true()"><xs:annotation/>` +
+				`<xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:alternative>` +
+				`<xs:alternative type="xs:string"/></xs:element>`,
 		},
 		{
 			// None of the three models has a wildcard position, and none needs one: the

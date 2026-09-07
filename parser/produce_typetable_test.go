@@ -431,6 +431,12 @@ func TestProduceTypeTableTestIsAnXPathExpressionRecord(t *testing.T) {
 
 // src-ta (§3.12.3) counts the two INLINE forms as present, so an <alternative>
 // with exactly one type child is fine and only zero or two-or-more is charged.
+//
+// Since #1275 the two-or-more branch is reached by the type attribute paired with
+// ONE inline child alone: checkS4SChildOrder walks the same children against
+// s4sAlternative first, and a second inline child repeats the one position
+// xs:altType gives them both. That shape is pinned where the walk charges it,
+// beside the other s4s rows (produce_s4sorder_test.go).
 func TestProduceSrcTA(t *testing.T) {
 	cases := []struct {
 		name string
@@ -447,7 +453,6 @@ func TestProduceSrcTA(t *testing.T) {
 		{name: "no form at all", declared: "B", alternates: `<xs:alternative test="@k='t'"/>`, wantRule: true},
 		{name: "type attribute and complexType child", declared: "B", alternates: `<xs:alternative test="@k='t'" type="T"><xs:complexType><xs:sequence/></xs:complexType></xs:alternative>`, wantRule: true},
 		{name: "type attribute and simpleType child", declared: "B", alternates: `<xs:alternative test="@k='t'" type="T"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType></xs:alternative>`, wantRule: true},
-		{name: "both inline children", declared: "B", alternates: `<xs:alternative test="@k='t'"><xs:simpleType><xs:restriction base="xs:string"/></xs:simpleType><xs:complexType><xs:sequence/></xs:complexType></xs:alternative>`, wantRule: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
