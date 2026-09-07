@@ -41,6 +41,13 @@ func runParse(args []string, stdout, stderr io.Writer) int {
 		return usageError(stderr, fmt.Sprintf("goxsd8: parse: %v", err))
 	}
 	locations := flags.Args()
+	// Before anything is compiled: a flag written after the first schema
+	// argument was never read as a flag, and compiling the arguments around it
+	// would print a summary the misplaced flag may have asked to suppress
+	// (#1290).
+	if arg, ok := flagShapedIn(locations); ok {
+		return usageError(stderr, fmt.Sprintf(flagAfterPositionalFmt, "parse", arg))
+	}
 	if len(locations) == 0 {
 		return usageError(stderr, "goxsd8: parse: no schema given")
 	}

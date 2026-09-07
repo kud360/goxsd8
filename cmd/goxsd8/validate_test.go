@@ -582,6 +582,10 @@ func TestValidateUsageErrors(t *testing.T) {
 		want string
 	}{
 		{"no schema", []string{"validate", validInstance}, "goxsd8: validate: no schema given"},
+		// The schema named after the instance (#1290). The seen map below is
+		// what this row is for: this answer was byte-identical to the row above
+		// it, so a user who named a schema was told they had not.
+		{"schema after the instance", []string{"validate", validInstance, "-schema", orderSchema}, fmt.Sprintf(flagAfterPositionalFmt, "validate", "-schema")},
 		{"no instance", []string{"validate", "-schema", orderSchema}, "goxsd8: validate: no instance given"},
 		{"dangling -schema", []string{"validate", "-schema"}, "flag needs an argument: -schema"},
 		{"undefined flag", []string{"validate", "-out", dir, "-schema", orderSchema, validInstance}, "flag provided but not defined: -out"},
@@ -691,20 +695,22 @@ func TestValidateAdversarialArguments(t *testing.T) {
 }
 
 // TestValidateFlagAfterPositional pins the same consequence parse's own test
-// does: a subcommand's flags precede its positional arguments, the flag
-// package stopping at the first of them, so a trailing -no-hints is an
-// instance argument.
+// does, and the same reversal (#1290): a subcommand's flags precede its
+// positional arguments, and a trailing -no-hints is now reported as a
+// misplaced flag rather than read as an instance argument. Until then this
+// test asserted the trailing token reaching the source reader as a path.
 func TestValidateFlagAfterPositional(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	args := []string{"validate", "-schema", orderSchema, hintedInstance, "-no-hints"}
 	if code := run(args, &stdout, &stderr); code != exitUsage {
-		t.Fatalf("code = %d, want %d — the trailing -no-hints names no instance", code, exitUsage)
+		t.Fatalf("code = %d, want %d — the trailing -no-hints is a misplaced flag", code, exitUsage)
 	}
 	if stdout.Len() != 0 {
-		t.Errorf("stdout = %q, want empty: the one real instance charges nothing", stdout.String())
+		t.Errorf("stdout = %q, want empty: nothing is assessed once an argument is diagnosed", stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "-no-hints") {
-		t.Errorf("stderr = %q, want the trailing argument reported as an instance", stderr.String())
+	want := fmt.Sprintf(flagAfterPositionalFmt, "validate", "-no-hints")
+	if !strings.Contains(stderr.String(), want) {
+		t.Errorf("stderr = %q, want it to contain %q", stderr.String(), want)
 	}
 }
 

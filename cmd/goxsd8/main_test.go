@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,9 +37,10 @@ var helpCases = [][]string{
 
 // dispatchCases is the diagnosis every non-help invocation that reaches no
 // built subcommand earns: a reserved name, a name outside the vocabulary, a
-// flag before the subcommand it qualifies, or no subcommand at all. Each is
-// followed on stderr by helpPointer. One encoding of the matrix, driven twice
-// — through run below and through the built binary in TestBuiltBinaryMatrix.
+// help request carrying a value, a flag before the subcommand it qualifies, or
+// no subcommand at all. Each is followed on stderr by helpPointer. One
+// encoding of the matrix, driven twice — through run below and through the
+// built binary in TestBuiltBinaryMatrix.
 //
 // parse and validate have no row here: both are built, and parse_test.go and
 // validate_test.go are their matrices.
@@ -61,8 +63,15 @@ var dispatchCases = []struct {
 	{[]string{"-q"}, noSubcommand},
 	{[]string{"-xyz"}, noSubcommand},
 	{[]string{"-version"}, noSubcommand},
-	{[]string{"-help=true"}, noSubcommand},
 	{[]string{"-q", "frobnicate"}, noSubcommand},
+	// A valued help spelling is the fifth answer (#1189): it is a usage error
+	// in every position, and before a subcommand it names the three spellings
+	// rather than a rewrite that fails there too. The first row expected
+	// noSubcommand until this landed.
+	{[]string{"-help=true"}, helpNotAFlagValue},
+	{[]string{"-h=1"}, helpNotAFlagValue},
+	{[]string{"-help=true", "parse", "a.xsd"}, helpNotAFlagValue},
+	{[]string{"-h=1", "parse", "a.xsd"}, helpNotAFlagValue},
 	// A flag BEFORE a real subcommand is the one #472 settled: the common
 	// flags follow the name they qualify, and the diagnosis says so instead of
 	// claiming a subcommand that is right there was never given.
@@ -89,16 +98,16 @@ func TestRunHelp(t *testing.T) {
 	}
 }
 
-// TestRunDispatch pins #514 and #472: the four diagnoses are distinct, and
-// each is the true one for its input. It supersedes TestDiagnosesAreDistinct
+// TestRunDispatch pins #514, #472 and #1189: the five diagnoses are distinct,
+// and each is the true one for its input. It supersedes TestDiagnosesAreDistinct
 // (removed, #999): that test asserted the same distinctness by comparing
 // diagnose's rendered strings, which cannot fail on a collapse between two
-// branches whose diagnosis interpolates the input argument —
-// notImplementedFmt, unknownSubcommandFmt and leadingFlagFmt all do, so two
-// inputs those branches misclassify as the same kind still render different
-// strings. It stays armed against a collapse into noSubcommand, a bare
-// constant with nothing to interpolate — which is exactly the collapse a
-// pre-#472 diagnose regresses to, and dispatchCases below still catches it.
+// branches whose diagnosis interpolates the input argument — notImplementedFmt,
+// unknownSubcommandFmt and leadingFlagFmt all do, so two inputs those branches
+// misclassify as the same kind still render different strings. It stays armed
+// against a collapse into noSubcommand, a bare constant with nothing to
+// interpolate — which is exactly the collapse a pre-#472 diagnose regresses to,
+// and dispatchCases below still catches it.
 func TestRunDispatch(t *testing.T) {
 	for _, c := range dispatchCases {
 		var stdout, stderr bytes.Buffer
@@ -234,6 +243,21 @@ func TestUsageCoversContract(t *testing.T) {
 		"-q does not silence it.",
 		"A bare <xs:import>, which names no",
 		"A -schema document's own unresolved directive",
+		// #1261's own answers, which a script reading the summary had to
+		// reverse-engineer: that the count block is always all seven kinds in
+		// one fixed order, that types is simple and complex on one line, what
+		// model groups counts, and that components is their sum.
+		"all seven kinds always and always in this order",
+		"definitions together on the one line",
+		"counts the top-level <xs:group> definitions",
+		"components: line closing the block is the sum",
+		// #1007's own answer: gen's exit codes, which no copy carried, stated
+		// as the codes it will answer with because gen is unbuilt.
+		"Exit 0 when every pair is generated",
+		"the codes gen answers with once M9 builds it",
+		// #1189's fifth diagnosis, in the status paragraph that enumerates
+		// them.
+		"that a help request carries a value",
 	}
 	for _, w := range want {
 		if !strings.Contains(usage, w) {
@@ -247,6 +271,15 @@ func TestUsageCoversContract(t *testing.T) {
 		if !strings.Contains(usage, "goxsd8 "+name+" ") {
 			t.Errorf("usage documents no %q subcommand, but dispatch reserves it", name)
 		}
+	}
+	// The status paragraph states gen's status in the wording the binary
+	// prints, not in a second one of its own: both prose copies said "not yet
+	// built" where notImplementedFmt printed "not yet implemented", and nothing
+	// held them together (#1231). Derived from the constant rather than quoted,
+	// so a change to either side fails here.
+	verb := strings.TrimPrefix(fmt.Sprintf(notImplementedFmt, "gen"), "goxsd8: gen is ")
+	if !strings.Contains(usage, "gen is reserved but "+verb) {
+		t.Errorf("usage does not state gen's status in the wording notImplementedFmt prints (%q)", verb)
 	}
 }
 
@@ -307,6 +340,10 @@ func TestBuiltBinaryMatrix(t *testing.T) {
 		{args: []string{"parse", "testdata/broken.xsd"}, code: 1, stderrMatch: "[src-resolve]"},
 		{args: []string{"parse", "testdata/nosuch.xsd"}, code: 2, stderrMatch: "no such file or directory"},
 		{args: []string{"parse"}, code: 2, stderrMatch: "goxsd8: parse: no schema given"},
+		// The misplaced flag, through the shipped binary: the summary -q asked
+		// to suppress must not reach stdout ahead of the diagnosis (#1290).
+		{args: []string{"parse", "testdata/order.xsd", "-q"}, code: 2,
+			stderrMatch: "-q stands after a positional argument"},
 		{args: []string{"validate", "-schema", orderSchema, validInstance}, code: 0},
 		{args: []string{"validate", "-schema", orderSchema, invalidInstance}, code: 1,
 			stdoutMatch: invalidInstance + ":5:3: [cvc-attribute]"},

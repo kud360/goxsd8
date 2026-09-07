@@ -115,6 +115,13 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
 	}
 	instances := flags.Args()
+	// Ahead of the two missing-argument diagnoses, which are false of a command
+	// line that carries the argument in the wrong place: in `validate a.xml
+	// -schema a.xsd` the -schema the flag set never saw is the fault to report,
+	// not the schema the user did name (#1290).
+	if arg, ok := flagShapedIn(instances); ok {
+		return usageError(stderr, fmt.Sprintf(flagAfterPositionalFmt, "validate", arg))
+	}
 	if len(schemas) == 0 {
 		return usageError(stderr, "goxsd8: validate: no schema given")
 	}
