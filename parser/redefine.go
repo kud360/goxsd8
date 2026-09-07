@@ -1143,7 +1143,7 @@ func checkSelfReferenceOccurs(ref *Element, qn xsd.QName) error {
 		if !present {
 			continue
 		}
-		if strings.TrimSpace(lexical) == "unbounded" {
+		if collapseTrim(lexical) == "unbounded" {
 			return xsderr.New(ruleSrcRedefine, ref.Loc(),
 				"the self-reference of the redefining <group> %s has %s=%q, but src-redefine clause 6.1.2 requires both minOccurs and maxOccurs to be 1 (or absent)", qn, attr, lexical)
 		}
