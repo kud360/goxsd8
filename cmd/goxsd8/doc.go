@@ -207,7 +207,7 @@
 // today: schema compilation and XML instance assessment are reachable through
 // parser, xsd, validate and validate/xmlsrc, and the README documents both
 // routes for them. The capabilities this page reserves have no library route
-// either — validate/jsonsrc (M8), codegen with codec (M9) and
+// either — validate/jsonsrc (M8), codegen (M9) with codec (M10) and
 // validate/bersrc (M11) each export nothing yet, so for JSON instances, code
 // generation and BER instances there is no second route to document until
 // those milestones land. Error output is stable and line-oriented for

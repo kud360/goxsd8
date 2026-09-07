@@ -161,14 +161,13 @@ invocation, there being no per-instance spelling), `-no-hints` (ignore
 logging to stderr via `slog`, scoped with
 `GOXSD_DEBUG=parser,validate,codec` — a scoping neither `parse` nor
 `validate` honours yet). The common flags qualify a subcommand and **follow
-its name**: `goxsd8 parse -q order.xsd`, not `goxsd8 -q parse order.xsd`. They
-precede that subcommand's positional arguments too:
-`goxsd8 parse order.xsd -q` is a usage error naming the misplaced flag, not a
-run that compiles a schema called `-q`, and a file genuinely named `-q` is
-reached as `./-q`. `-q`
-suppresses a subcommand's informational output — `parse`'s summary — and
-never a diagnosis: neither `parse`'s error lines nor `validate`'s
-violations.
+its name**: `goxsd8 parse -q order.xsd`, not `goxsd8 -q parse order.xsd`.
+They precede that subcommand's positional arguments too:
+`goxsd8 parse order.xsd -q` is a usage error naming the misplaced flag, not
+a run that compiles a schema called `-q`, and a file genuinely named `-q` is
+reached as `./-q`. `-q` suppresses a subcommand's informational output —
+`parse`'s summary — and never a diagnosis: neither `parse`'s error lines nor
+`validate`'s violations.
 **`go doc github.com/kud360/goxsd8/cmd/goxsd8` is the authoritative CLI
 contract**, and this section summarizes it. `goxsd8 -help` prints the usage
 block from that contract — the subcommand syntax, the common flags and the
