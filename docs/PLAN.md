@@ -551,9 +551,10 @@ which ENDS the run below: #1270 (`src-attribute` clause 4 charged nowhere on the
 no residue. **#1270 has itself now LANDED — 2026-09-06, `d0fd4c6`,
 `Ratchet: unchanged` and measured that way by construct census — and it carved
 NO successor of this family either.** Its two residues are #1301 (a duplicate
-clause-4 predicate surviving at the top-level producer) and #1300 (a gate-script
-process defect); neither is a producer that decides and ACCEPTS, so neither
-extends this family. Live producer-decides-and-accepts members are **#931**
+clause-4 predicate surviving at the top-level producer, still open) and #1300 (a
+process defect about how a gate command is invoked — **LANDED 2026-09-07,
+`34aee07`**, `Ratchet: unchanged`); neither is a producer that decides and
+ACCEPTS, so neither extends this family. Live producer-decides-and-accepts members are **#931**
 (occurrence attributes on a named `<group>`'s child compositor), **#929** and
 **#455**. **The family carved a successor at every landing from #471 through
 #1243, and #1242 is the first that did not** — one reading is the tail reaching
