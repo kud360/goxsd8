@@ -221,8 +221,171 @@ func TestReportNamesEachHitsParent(t *testing.T) {
 		t.Fatalf("printReport: %v", err)
 	}
 	for _, want := range []string{
-		"bare.xsd:1:1 parent=(none) targetNamespace=\"urn:b\"",
-		"nested.xsd:5:7 parent={http://www.w3.org/2001/XMLSchema}sequence targetNamespace=\"urn:b\"",
+		"bare.xsd:1:1 parent=(none) children=[] targetNamespace=\"urn:b\"",
+		"nested.xsd:5:7 parent={http://www.w3.org/2001/XMLSchema}sequence children=[] targetNamespace=\"urn:b\"",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("report does not carry %q:\n%s", want, out.String())
+		}
+	}
+}
+
+// xsdName is one XSD-vocabulary name, for the child lists the tests below
+// compare against.
+func xsdName(local string) xsd.QName {
+	return xsd.QName{Space: xsd.XMLSchemaNS, Local: local}
+}
+
+// childNames renders one hit's child list for a failure message, since a
+// []xsd.QName prints as a wall of struct fields.
+func childNames(h hit) string {
+	var got []string
+	for _, c := range h.Children {
+		got = append(got, c.Local)
+	}
+	return "[" + strings.Join(got, " ") + "]"
+}
+
+// checkChildren compares each hit's child list against want, position by
+// position, so a missing repeat fails as loudly as a missing name.
+func checkChildren(t *testing.T, scan fixtureScan, want [][]xsd.QName) {
+	t.Helper()
+	if len(scan.Hits) != len(want) {
+		t.Fatalf("got %d hit(s), want %d: %+v", len(scan.Hits), len(want), scan.Hits)
+	}
+	for i, w := range want {
+		got := scan.Hits[i].Children
+		if len(got) != len(w) {
+			t.Errorf("Hits[%d].Children = %s, want %d name(s): %+v", i, childNames(scan.Hits[i]), len(w), w)
+			continue
+		}
+		for j, name := range w {
+			if got[j] != name {
+				t.Errorf("Hits[%d].Children[%d] = %+v, want %+v", i, j, got[j], name)
+			}
+		}
+	}
+}
+
+// TestScanFixtureRecordsDirectChildren pins the field #1304 added: a hit
+// carries the elements DIRECTLY under its match, in document order, with
+// repeats kept. The two xs:simpleType children are the multiplicity half of a
+// content-model census, which a deduplicated list would discard; the
+// xs:documentation is a grandchild and must not appear at all.
+func TestScanFixtureRecordsDirectChildren(t *testing.T) {
+	doc := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:alternative test="a">
+    <xs:annotation><xs:documentation/></xs:annotation>
+    <xs:simpleType/>
+    <xs:simpleType/>
+  </xs:alternative>
+  <xs:alternative test="b"/>
+  <xs:alternative test="c"></xs:alternative>
+</xs:schema>`
+	scan := scanFixture("t.xsd", strings.NewReader(doc), mustQuery(t, "alternative@test"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	checkChildren(t, scan, [][]xsd.QName{
+		{xsdName("annotation"), xsdName("simpleType"), xsdName("simpleType")},
+		// Self-closed and empty: no element child, and both fully read.
+		nil,
+		nil,
+	})
+	for i, h := range scan.Hits {
+		if h.ChildrenUnclosed {
+			t.Errorf("Hits[%d] (%s) is marked unclosed, but the fixture reads to the end", i, h.Values[0])
+		}
+	}
+}
+
+// TestScanFixtureRecordsChildrenOfNestedMatches pins the stack: a query
+// matching at several depths gives each match its own list, and an outer
+// match collects only what stands directly under IT — the inner match here is
+// a great-grandchild and belongs to neither list.
+func TestScanFixtureRecordsChildrenOfNestedMatches(t *testing.T) {
+	doc := `<xs:element xmlns:xs="http://www.w3.org/2001/XMLSchema" name="outer" abstract="true">
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element name="inner" abstract="false">
+        <xs:annotation/>
+        <xs:complexType/>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+</xs:element>`
+	scan := scanFixture("t.xsd", strings.NewReader(doc), mustQuery(t, "element@abstract"))
+	if scan.Err != nil {
+		t.Fatalf("scanFixture: %v", scan.Err)
+	}
+	checkChildren(t, scan, [][]xsd.QName{
+		{xsdName("complexType")},
+		{xsdName("annotation"), xsdName("complexType")},
+	})
+}
+
+// TestScanFixtureMarksOnlyTheMatchesLeftOpen pins the distinction the
+// file-level [report.Partial] flag cannot carry (#1304): a fixture whose read
+// faults still holds matches that closed ahead of the fault, and their child
+// lists are complete. The corpus's own instance is
+// msData/additional/test79253.xsd, which faults at its tail: `element@type`
+// finds 13 matches in it, every one of them self-closed with a known-empty
+// child list, and a file-level flag would report all 13 as unread.
+func TestScanFixtureMarksOnlyTheMatchesLeftOpen(t *testing.T) {
+	doc := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="closed" abstract="true">
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="cut" abstract="true">
+    <xs:annotation/>
+    <xs:whitespace>
+</xs:schema>`
+	scan := scanFixture("broken.xsd", strings.NewReader(doc), mustQuery(t, "element@abstract"))
+	if scan.Err == nil {
+		t.Fatal("scanFixture: want a read fault, got none")
+	}
+	checkChildren(t, scan, [][]xsd.QName{
+		{xsdName("complexType")},
+		{xsdName("annotation"), xsdName("whitespace")},
+	})
+	if scan.Hits[0].ChildrenUnclosed {
+		t.Error("Hits[0] (closed) is marked unclosed, but its end tag was read before the fault")
+	}
+	if !scan.Hits[1].ChildrenUnclosed {
+		t.Error("Hits[1] (cut) is not marked unclosed, so a prefix of its children reads as the whole list")
+	}
+}
+
+// TestReportNamesEachHitsChildren pins that the list reaches the reader: the
+// default report prints it beside the parent, "[]" for a match with no
+// element child, and an "(unclosed)" tail for one the read never closed.
+func TestReportNamesEachHitsChildren(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "full.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="a" targetNamespace="urn:b">
+    <xs:complexType/>
+    <xs:complexType/>
+  </xs:element>
+  <xs:element name="c" targetNamespace="urn:b"/>
+</xs:schema>`)
+	writeFixture(t, root, "cut.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="d" targetNamespace="urn:b">
+    <xs:annotation>
+</xs:schema>`)
+
+	rep, err := census(root, mustQuery(t, "element@targetNamespace"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	var out strings.Builder
+	if err := printReport(&out, rep); err != nil {
+		t.Fatalf("printReport: %v", err)
+	}
+	const ns = "{http://www.w3.org/2001/XMLSchema}"
+	for _, want := range []string{
+		"cut.xsd:2:3 parent=" + ns + "schema children=[" + ns + "annotation, (unclosed)]",
+		"full.xsd:2:3 parent=" + ns + "schema children=[" + ns + "complexType, " + ns + "complexType]",
+		"full.xsd:6:3 parent=" + ns + "schema children=[]",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("report does not carry %q:\n%s", want, out.String())
@@ -576,6 +739,62 @@ func TestSuiteTopLevelCensusOfFinalAndAbstract(t *testing.T) {
 	}
 	if len(union) != 139 || top != 133 || local != 6 {
 		t.Errorf("census = %d hit(s), %d top-level, %d local; want 139, 133, 6", len(union), top, local)
+	}
+}
+
+// TestSuiteAlternativeContentModel re-derives #1275's census FROM THE TOOL.
+// Two agents in one session each hand-wrote a walk to reach it and neither
+// scan survived (#1304); this reads it off the hits' own child lists.
+// xs:altType's model is "(annotation?, (simpleType | complexType)?)"
+// (docs/specs/md/xmlschema11-1.md:5137), and #1275 concluded that no suite
+// occurrence carries a child outside it, nor a second simpleType/complexType
+// beside a first.
+//
+// A match whose read broke off first fails here rather than passing quietly:
+// a prefix of a child list cannot answer a question about the whole of one.
+func TestSuiteAlternativeContentModel(t *testing.T) {
+	root := suiteRoot(t)
+	rep, err := census(root, mustQuery(t, "alternative"))
+	if err != nil {
+		t.Fatalf("census: %v", err)
+	}
+	if len(rep.Hits) != 232 || countFiles(rep.Hits) != 81 {
+		t.Errorf("census = %d occurrence(s) in %d fixture(s); want 232 in 81",
+			len(rep.Hits), countFiles(rep.Hits))
+	}
+	admitted := map[xsd.QName]bool{
+		xsdName("annotation"):  true,
+		xsdName("simpleType"):  true,
+		xsdName("complexType"): true,
+	}
+	withType := 0
+	for _, h := range rep.Hits {
+		if h.ChildrenUnclosed {
+			t.Errorf("%s:%d:%d — the read stopped inside this match, so %s is a prefix and settles nothing",
+				h.File, h.Line, h.Col, childNames(h))
+		}
+		types := 0
+		for _, c := range h.Children {
+			if !admitted[c] {
+				t.Errorf("%s:%d:%d carries child %s, which xs:altType does not admit", h.File, h.Line, h.Col, c)
+			}
+			if c.Local == "simpleType" || c.Local == "complexType" {
+				types++
+			}
+		}
+		if types > 1 {
+			t.Errorf("%s:%d:%d carries %d type children, %s — xs:altType admits at most one",
+				h.File, h.Line, h.Col, types, childNames(h))
+		}
+		if types == 1 {
+			withType++
+		}
+	}
+	// The corpus does exercise the inline type child, so the check above is
+	// not passing on 232 empty lists: a census that collected no child at all
+	// would satisfy every assertion in this test but this one.
+	if withType != 43 {
+		t.Errorf("%d occurrence(s) carry an inline type child, want 43", withType)
 	}
 }
 

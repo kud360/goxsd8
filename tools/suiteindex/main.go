@@ -41,12 +41,24 @@
 // ones that broke off partway, and the ones that held no element at all.
 //
 // A match line carries its position, then `parent=` naming the element it is
-// a direct child of — `(none)` for a document element — then the queried
-// attributes' values. The parent is what separates a local occurrence from a
-// top-level one, which no query over an element's OWN attributes can express
-// (#1282). It is the parent the document actually spells, never one corrected
-// against the grammar: an `xs:element` under `xs:redefine` is reported there,
-// wrong though that document is.
+// a direct child of — `(none)` for a document element — then `children=[…]`
+// listing the elements directly under it, then the queried attributes'
+// values. The parent is what separates a local occurrence from a top-level
+// one, which no query over an element's OWN attributes can express (#1282).
+// It is the parent the document actually spells, never one corrected against
+// the grammar: an `xs:element` under `xs:redefine` is reported there, wrong
+// though that document is, and its children are reported the same way.
+//
+// The child list is in document order and keeps repeats, because a
+// content-model census turns on multiplicity: "no child outside
+// `annotation | simpleType | complexType`" survives deduplication and "nor a
+// second `simpleType` beside a first" does not (#1304). `children=[]` is an
+// occurrence with no element child at all. A list whose last entry is
+// `(unclosed)` is one whose read broke off before the match's own end tag, so
+// the names ahead of the marker are a prefix rather than the whole list — a
+// fact about that MATCH and not about its file, since a fixture can fault at
+// its tail with every match in it already closed and every child list
+// complete.
 //
 // The corpus ships deliberately malformed fixtures, so a parse fault is
 // content rather than a failure: the matches found ahead of it are kept and
@@ -234,6 +246,19 @@ type hit struct {
 	// no parent at all — a distinct value rather than a second field, because
 	// no name has an empty local part ([xsd.QName]).
 	Parent xsd.QName
+	// Children are the resolved names of the elements directly under this
+	// match, in document order and with repeats kept. The multiplicity is the
+	// point: a content-model census asks whether a second xs:simpleType stands
+	// beside a first, which a deduplicated list or a distinct-child tally
+	// cannot answer (#1304).
+	Children []xsd.QName
+	// ChildrenUnclosed reports that the read ended before this match's own end
+	// tag, so Children is a prefix of the real list rather than the whole of
+	// it. It is a fact about the MATCH, which [report.Partial] — a fact about
+	// the file — cannot carry: a fixture that faults at its tail can hold
+	// matches that all closed cleanly, and a file-level flag would report
+	// their complete child lists as unread.
+	ChildrenUnclosed bool
 	// Values holds the queried attributes' values, in query order.
 	Values []string
 }
@@ -383,24 +408,33 @@ func scanFile(path, uri string, q query) (scan fixtureScan, err error) {
 // constructs before the fault are evidence the census must keep.
 //
 // open is the chain of elements enclosing the token in hand, pushed and
-// popped over this one stream rather than recovered by a second parse. The
-// pop cannot underflow: xmltree emits an end tag only for an element it holds
-// open under a matching name, and any other end tag is a fault that returns
-// above.
+// popped over this one stream rather than recovered by a second parse. Each
+// entry also remembers where its own hit lives, which is the whole mechanism
+// on the child side: the element a start tag is directly under is the top of
+// the stack, so appending the name there needs no depth arithmetic and a
+// match nested inside another match is not a special case. A hit is appended
+// at its START tag, which is what keeps the report in document order, and its
+// child list fills in as the children arrive.
+//
+// The pop cannot underflow: xmltree emits an end tag only for an element it
+// holds open under a matching name, and any other end tag is a fault that
+// returns above.
 func scanFixture(uri string, r io.Reader, q query) fixtureScan {
 	var scan fixtureScan
-	var open []xsd.QName
+	var open []openElem
 	rd := xmltree.NewReader(uri, r)
 	for {
 		node, err := rd.Token()
-		if errors.Is(err, io.EOF) {
-			return scan
-		}
 		if err != nil {
-			// Kept, not wrapped: an xmltree error already names the document
-			// and the position of the fault (STYLE E3), and the report prints
-			// the path beside it.
-			scan.Err = err
+			// A match still open when the stream ends never saw its end tag,
+			// so its child list stops where the read did.
+			markUnclosed(scan.Hits, open)
+			if !errors.Is(err, io.EOF) {
+				// Kept, not wrapped: an xmltree error already names the
+				// document and the position of the fault (STYLE E3), and the
+				// report prints the path beside it.
+				scan.Err = err
+			}
 			return scan
 		}
 		if _, ok := node.(*xmltree.EndElement); ok {
@@ -411,12 +445,14 @@ func scanFixture(uri string, r io.Reader, q query) fixtureScan {
 		if !ok {
 			continue
 		}
-		// Read before the push, so the top of the stack is the parent rather
-		// than the element itself. Each entry is the name the reader resolved
-		// in that element's OWN scope, so a parent binding its prefix
-		// differently from its child still resolves correctly.
+		// Both reads happen before the push, so the top of the stack is the
+		// enclosing element rather than this one. Each entry is the name the
+		// reader resolved in that element's OWN scope, so a parent binding its
+		// prefix differently from its child still resolves correctly.
+		name := qnameOf(start.Name())
 		parent := innermost(open)
-		open = append(open, qnameOf(start.Name()))
+		recordChild(scan.Hits, open, name)
+		open = append(open, openElem{Name: name, Hit: noHit})
 		scan.Elems++
 		values, ok := match(start, q)
 		if !ok {
@@ -424,16 +460,55 @@ func scanFixture(uri string, r io.Reader, q query) fixtureScan {
 		}
 		loc := start.Loc()
 		scan.Hits = append(scan.Hits, hit{File: uri, Line: loc.Line, Col: loc.Col, Parent: parent, Values: values})
+		open[len(open)-1].Hit = len(scan.Hits) - 1
 	}
 }
 
+// openElem is one element the walk is inside: the name a child of it reports
+// as its parent, and where its own hit lives in [fixtureScan.Hits] so that
+// child can be recorded against it.
+type openElem struct {
+	Name xsd.QName
+	Hit  int
+}
+
+// noHit is [openElem.Hit] for an element that is not itself a match, so
+// nothing collects what stands under it.
+const noHit = -1
+
 // innermost is the name of the enclosing element the open chain ends with, or
 // the zero QName at the document level, where there is none.
-func innermost(open []xsd.QName) xsd.QName {
+func innermost(open []openElem) xsd.QName {
 	if len(open) == 0 {
 		return xsd.QName{}
 	}
-	return open[len(open)-1]
+	return open[len(open)-1].Name
+}
+
+// recordChild writes name into the child list of the match the open chain
+// ends with, when that element is one. It writes through hits, which the
+// caller holds as [fixtureScan.Hits].
+func recordChild(hits []hit, open []openElem, name xsd.QName) {
+	if len(open) == 0 {
+		return
+	}
+	at := open[len(open)-1].Hit
+	if at == noHit {
+		return
+	}
+	hits[at].Children = append(hits[at].Children, name)
+}
+
+// markUnclosed records on every match still open that its child list is a
+// prefix of the real one. Every enclosing match is marked and not just the
+// innermost, because the read reached none of their end tags.
+func markUnclosed(hits []hit, open []openElem) {
+	for _, e := range open {
+		if e.Hit == noHit {
+			continue
+		}
+		hits[e.Hit].ChildrenUnclosed = true
+	}
 }
 
 // match reports whether start is an occurrence of q's construct — its
@@ -513,8 +588,8 @@ func printReportTo(w io.Writer, rep report) {
 		_, _ = fmt.Fprintln(w, "(none)")
 	}
 	for _, h := range rep.Hits {
-		_, _ = fmt.Fprintf(w, "  %s:%d:%d parent=%s%s\n",
-			h.File, h.Line, h.Col, renderParent(h.Parent), renderValues(rep.Query.Attrs, h.Values))
+		_, _ = fmt.Fprintf(w, "  %s:%d:%d parent=%s children=%s%s\n",
+			h.File, h.Line, h.Col, renderName(h.Parent), renderChildren(h), renderValues(rep.Query.Attrs, h.Values))
 	}
 
 	printNotes(w, "Read only partly: a match behind the fault is invisible to this census", rep.Partial)
@@ -562,14 +637,35 @@ func countFiles(hits []hit) int {
 	return n
 }
 
-// renderParent names the element a hit is a direct child of, in the same
-// Clark notation [query.String] echoes. A document element has no parent, and
-// "(none)" can never collide with one: parentheses are not NCName characters.
-func renderParent(parent xsd.QName) string {
-	if parent.Local == "" {
+// renderName names one element around a hit — its parent, or one of its
+// children — in the same Clark notation [query.String] echoes. Both sides go
+// through this one renderer, so however #1297 settles the spelling of a name
+// in no namespace, one fix reaches both.
+//
+// The zero QName is the parent of a document element, which has none; a child
+// is never zero. "(none)" can never collide with a name: parentheses are not
+// NCName characters.
+func renderName(n xsd.QName) string {
+	if n.Local == "" {
 		return "(none)"
 	}
-	return parent.String()
+	return n.String()
+}
+
+// renderChildren lists the elements directly under a hit, in document order
+// and with repeats kept, as "[a, b]" — "[]" for a match with no element
+// child. A list ending in "(unclosed)" is one whose read stopped before the
+// match's end tag, so the names ahead of the marker are a prefix; the marker
+// cannot be read as a name for the same reason "(none)" cannot.
+func renderChildren(h hit) string {
+	names := make([]string, 0, len(h.Children)+1)
+	for _, c := range h.Children {
+		names = append(names, renderName(c))
+	}
+	if h.ChildrenUnclosed {
+		names = append(names, "(unclosed)")
+	}
+	return "[" + strings.Join(names, ", ") + "]"
 }
 
 // renderValues formats a hit's attribute values against the names that
