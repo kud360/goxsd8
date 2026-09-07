@@ -99,19 +99,19 @@ var s4sStructuralTail = slices.Concat([]s4sSlot{
 // inherited from xs:annotated (:4426).
 var s4sAnnotationFirst = []s4sSlot{{admits: s4sNames("annotation")}}
 
-// The eleven models checkS4SChildOrder is charged with. Eight are the element
+// The twelve models checkS4SChildOrder is charged with. Eight are the element
 // positions a complex type is written through — xs:complexTypeModel appearing
 // twice, once for each of its disjuncts a <complexType> can be dispatched on. The
-// last three are the declarations whose own children were ordered against no
-// content model at all until #1076: <element>, <attribute> and <simpleType>. Each
-// model is quoted verbatim from its XML Representation Summary, and its slots are
-// that quotation read left to right.
+// last four are the declarations whose own children were ordered against no
+// content model at all until #1076 and #1275: <element>, <attribute>,
+// <simpleType> and <alternative>. Each model is quoted verbatim from its XML
+// Representation Summary, and its slots are that quotation read left to right.
 //
 // These are TRANSCRIBED from the spec, not generated (PRINCIPLES 26). Generating
 // them means flattening Appendix A itself — resolving xs:group refs and the
 // xs:restriction/xs:extension chains through xs:annotated — for the whole schema
-// for schema documents rather than these eleven, which is its own tool and its own
-// grounding; the eleven here are pinned against their quoted model text and against
+// for schema documents rather than these twelve, which is its own tool and its own
+// grounding; the twelve here are pinned against their quoted model text and against
 // the disjointness their fault classification rests on (the tests beside this
 // file), and rejectProhibitedAttrs (produce.go) already transcribes s4s facts on
 // the same footing.
@@ -274,6 +274,28 @@ var (
 			{admits: s4sNames("restriction", "list", "union")},
 		}),
 	}
+
+	// s4sAlternative is ONE model for every <alternative>, wherever it is written.
+	// Appendix A declares xs:altType once (:5137), and all three references to the
+	// element — from xs:element (:5060), xs:topLevelElement (:5095) and
+	// xs:localElement (:5119) — name that one type with no restriction between
+	// them. There is no local form to distinguish, so this model needs neither the
+	// attribute argument s4sElement makes nor s4sSimpleType's two-declaration one.
+	//
+	// "(simpleType | complexType)?" is ONE optional position, as it is on
+	// s4sElement: an <alternative> carrying both type children REPEATS that
+	// position rather than filling two consecutive optionals. src-ta (§3.12.3)
+	// reaches the same document by a different route — it counts a type attribute
+	// and the two children — and checkSrcTA is charged BEHIND this walk, the
+	// default run order recorded below.
+	s4sAlternative = s4sModel{
+		grammar: "xs:altType",
+		spec:    "xmlschema11-1.md:3210",
+		model:   "(annotation?, (simpleType | complexType)?)",
+		slots: slices.Concat(s4sAnnotationFirst, []s4sSlot{
+			{admits: s4sNames("simpleType", "complexType")},
+		}),
+	}
 )
 
 // checkS4SChildOrder rejects a child of owner that m's content model does not
@@ -326,9 +348,9 @@ var (
 // does not admit is answered by the grammar fault and no src-* verdict is
 // reached over a shape the grammar already rejects. src-element clause 2.2
 // (elementParticleTerm), src-element clause 4
-// (rejectLocalElementTargetNamespace), and EVERY src-attribute clause this
-// parser charges (produceAttribute, produceAttributeUse, produceLocalAttribute)
-// are behind it.
+// (rejectLocalElementTargetNamespace), src-ta (checkSrcTA,
+// produce_typetable.go), and EVERY src-attribute clause this parser charges
+// (produceAttribute, produceAttributeUse, produceLocalAttribute) are behind it.
 //
 // src-element clause 3 is the ONE exception, charged AHEAD of the walk in
 // produceElement and produceLocalElement: on a document writing type= together

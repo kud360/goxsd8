@@ -19,6 +19,7 @@ var s4sModels = []struct {
 	{"element", s4sElement},
 	{"attribute", s4sAttribute},
 	{"simpleType", s4sSimpleType},
+	{"alternative", s4sAlternative},
 }
 
 // s4sProbe is the vocabulary the models above draw on: every element name they

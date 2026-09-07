@@ -99,10 +99,16 @@ import (
 //     does not admit (#1047), so no silence is possible at those three positions
 //     and there is nothing left there for a census to report;
 //   - <element>, <attribute> and <simpleType>'s OWN children, on the same footing
-//     since #1076: each of the three is now ordered against the one content model
-//     Appendix A gives its every form (s4sElement, s4sAttribute, s4sSimpleType),
-//     so a name those models do not admit is charged rather than dropped and no
-//     silence is left at those positions either;
+//     since #1076, and an <alternative>'s since #1275: each of the four is now
+//     ordered against the one content model Appendix A gives its every form
+//     (s4sElement, s4sAttribute, s4sSimpleType, s4sAlternative), so a name those
+//     models do not admit is charged rather than dropped and no silence is left at
+//     those positions either. The <alternative> case is the one whose walk stands
+//     beside a src-* clause over the same children: xs:altType is "(annotation?,
+//     (simpleType | complexType)?)" (:5137, §3.12.2 :3210) and checkSrcTA charges
+//     only HOW MANY of a type attribute, a <complexType> child and a <simpleType>
+//     child are present (src-ta, §3.12.3), so it is checkS4SChildOrder alone that
+//     answers a further child beside them;
 //   - a <notation>'s own children, covered by a rejection written for that one
 //     position. topLevelMapped admits the name and censusWalk.topLevel holds no
 //     arm for it, but xs:notation extends xs:annotated with three attributes
@@ -187,32 +193,27 @@ import (
 //     half of the list rather than by another enumeration: a site descends only
 //     where the Censused side above says it does, so an element it reaches and
 //     does not descend keeps its OWN children out of the census. No s4sModel
-//     orders any of the four positions that rule leaves, and each is an element
+//     orders any of the three positions that rule leaves, and each is an element
 //     some pass reaches by name and reads ATTRIBUTES off: a particle <any> and an
 //     <anyAttribute> — groupParticles' "any" arm reaches produceWildcard through
 //     produceAnyParticle and collectAttributeContent hands it the <anyAttribute>
 //     it finds by name, xs:wildcard and the xs:anyAttribute element built on it
 //     (Appendix A :5356, :4729) leave "(annotation?)" (§3.10.2, :2838, :2846),
 //     and modelGroup holds no "any" arm while container holds none for
-//     "anyAttribute"; an <alternative> — xs:altType is "(annotation?, (simpleType
-//     | complexType)?)" (:5137, §3.12.2 :3210), checkSrcTA charges only HOW MANY
-//     of a type attribute, a <complexType> child and a <simpleType> child are
-//     present (src-ta, §3.12.3) and never a further child beside them,
-//     buildXPathExpression reads test and xpathDefaultNamespace off the element,
-//     and element's "alternative" arm descends into those two inline types alone;
-//     a <unique>, <key> or <keyref> with the <selector> and <field> under it —
-//     xs:keybase is "(annotation?, (selector, field+)?)" (:5648, §3.11.2 :2991)
-//     over two "(annotation?)" children (:5599, :5624, §3.11.2 :3010, :3016),
-//     constructIdentityConstraint finds the <selector> and the <field>s by name
-//     and reads xpath off each, and element holds no arm for any of the three
-//     constraint names; and every FACET element under a <simpleType> or
-//     <simpleContent> <restriction> — xs:facet is xs:annotated plus value and
-//     fixed (xmlschema11-2.md:4001), which xs:noFixedFacet spells "(annotation?)"
-//     outright (xmlschema11-2.md:4010), restrictionFacets reads value, fixed and
-//     an <assertion>'s test off each and never a facet's children, and neither
-//     site that reaches one reports its child — simpleType's <restriction> arm
-//     descends into the inline base <simpleType> alone, and container admits
-//     every mapped facet name while holding no arm for one.
+//     "anyAttribute"; a <unique>, <key> or <keyref> with the <selector> and
+//     <field> under it — xs:keybase is "(annotation?, (selector, field+)?)"
+//     (:5648, §3.11.2 :2991) over two "(annotation?)" children (:5599, :5624,
+//     §3.11.2 :3010, :3016), constructIdentityConstraint finds the <selector> and
+//     the <field>s by name and reads xpath off each, and element holds no arm for
+//     any of the three constraint names; and every FACET element under a
+//     <simpleType> or <simpleContent> <restriction> — xs:facet is xs:annotated
+//     plus value and fixed (xmlschema11-2.md:4001), which xs:noFixedFacet spells
+//     "(annotation?)" outright (xmlschema11-2.md:4010), restrictionFacets reads
+//     value, fixed and an <assertion>'s test off each and never a facet's
+//     children, and neither site that reaches one reports its child —
+//     simpleType's <restriction> arm descends into the inline base <simpleType>
+//     alone, and container admits every mapped facet name while holding no arm
+//     for one.
 //
 // A narrow census is SOUND but incomplete: it never names a construct the
 // producer does map, so a consumer may act on what it reports and must not read
@@ -350,7 +351,8 @@ func (w *censusWalk) modelGroup(group *Element) {
 // <simpleType>/<complexType> (§3.3.2.1 dcl.elt.common clause 1) and the ones its
 // <alternative> children own (§3.12.2 declare-ta) — and reports nothing of its
 // own: checkS4SChildOrder charges every XSD-namespace child s4sElement does not
-// admit (#1076), so no name at this position is a silence.
+// admit (#1076), and every one s4sAlternative does not admit under an
+// <alternative> it reaches (#1275), so no name at either position is a silence.
 func (w *censusWalk) element(el *Element) {
 	for c := range xsdChildren(el) {
 		switch c.Name().Local() {
