@@ -80,9 +80,8 @@ func (t ctaStaticTypes) Type(name xsd.QName) (xsd.TypeDefinition, bool) {
 //
 // Each <alternative>'s OWN children are ordered against s4sAlternative here
 // (checkS4SChildOrder, #1275), the one content model Appendix A gives every
-// occurrence of the element. The walk is charged AHEAD of checkSrcTA, which is
-// the default run order checkS4SChildOrder's doc records: nothing about this
-// site makes src-element clause 3's message-quality argument, so a document
+// occurrence of the element. The walk is charged AHEAD of checkSrcTA, the run
+// order checkS4SChildOrder's doc records for every src-* charge: a document
 // whose <alternative> children the content model does not admit is answered by
 // the grammar fault and no src-ta verdict is reached over it. Both faults can be
 // live on one element — a <simpleType> followed by a second <simpleType> repeats
