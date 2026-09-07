@@ -583,7 +583,7 @@ producer already makes **correctly but describes badly**, whose bar
 `xsderr/doc.go` set with #966 — and it is **discharged**: #975 landed at
 `1dcffbf`, so every s4s-grammar rejection now names its Appendix A production.
 
-**A THIRD family is the one that has been paying, and it has FIVE landed
+**A THIRD family is the one that has been paying, and it has SIX landed
 members.** #1030's unmapped-construct census turned the "decides and ACCEPTS"
 family from a shape into a list, and the list delivered `schema` **+34**
 (#1047), **+23** (#1046, plus `instance` +15), **+21** (#1076), **+16** (#1048)
@@ -594,6 +594,19 @@ all, banded on the criterion *"the shape is in the suite's invalid corpus"*
 instead. **That criterion is five-for-five on DIRECTION and predicts nothing
 about MAGNITUDE**; the +21 and the +2 came from the same family four days
 apart. The Status section carries the consequence for how the band is ordered.
+
+**The sixth member is #1275 (`34c39be`, 2026-09-07) and it is the first to bank
+NOTHING — because it did not use the criterion, it measured.** A twelfth
+`s4sModel` orders an `<alternative>`'s own children against `xs:altType`, the
+same section 5.1 first-bullet fault #1047 and #1076 charge at their positions;
+the corpus was censused before implementation and holds **no** `<alternative>`
+carrying an out-of-model child across 232 occurrences in 81 fixtures, so
+`Ratchet: unchanged` was predicted and then measured. **The criterion is a proxy
+for a census that `go tool suiteindex` can now take directly**, and where the
+two disagree the census is the fact — that is the methodological change this
+member carries, not a sixth data point for the proxy. Read the criterion's
+five-for-five as five-for-five *among issues banded on it*, which is a smaller
+claim than it looks.
 
 **The family replenishes itself as it is worked, which is what to expect and
 not tail growth** — every issue it has added was filed by the post-land pass of
@@ -606,6 +619,17 @@ wrong, and the census does not name that class.** #1136 is the one that stopped
 the accumulation: it replaced four independent local run-order guesses with ONE
 recorded decision, and its own follow-ups (#1246, #1247) are about that record
 rather than about a fifth guess.
+
+**#1275 shows the site-widening half is NOT exhausted, and it arrived from a
+third route again.** It is a further SITE — a twelfth `s4sModel` at a position
+nothing had ordered — not a defect in the widening, and it came from neither
+#1030's census list nor a run-order defect: #1050's reconciliation of
+`parser/census.go`'s Scope prose NAMED the silence in the tree and tracked it
+with nothing, and #1275 was the filing that was owed. **Every widening site the
+producer still owes is discoverable from that Scope section**, whose remaining
+live silences it enumerates; the open **#1276** would make that section's truth a
+DERIVED test rather than prose, which is what would turn the remainder into a
+list the way #1030 did once already.
 
 **Read the milestone count as a floor.** The GitHub milestone holds the feature
 slices; the comment-accuracy, doc and process issues that post-land passes file
