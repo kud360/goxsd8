@@ -3220,8 +3220,9 @@ func childElements(el *Element, space, local string) []*Element {
 // whiteSpace is fixed to collapse for every datatype the schema for schema
 // documents declares the attributes read here with, and it is applied BEFORE
 // lexical-space membership is tested (§4.1.4), so a padded " true " is the
-// ·actual value· true. Every lexical comparison in this package reads its
-// ·actual value· through this helper.
+// ·actual value· true. It is this package's one spelling of that trim; route a
+// new lexical comparison through it. Comparisons that do not normalize at all
+// are separate work — boolAttr's true/1 compare, for one (#456).
 //
 // It cannot be strings.TrimSpace, whose unicode.IsSpace class also cuts U+0085,
 // U+00A0, U+2028 and the rest — characters §4.3.6 is NOT whitespace for and
