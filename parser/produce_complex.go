@@ -2028,9 +2028,9 @@ func (p *producer) elementParticleTerm(el *Element, scopeParent xsd.ElementScope
 		// (§3.3.3, xmlschema11-1.md:1321), which admits <annotation> and nothing else
 		// under a ref= form: that clause is a numbered constraint of its own, this
 		// walk is the uncataloged §5.1 grammar class, and neither stands in for the
-		// other. Both run, the walk FIRST — the default run order
-		// checkS4SChildOrder's doc records — so clause 2.2 answers only for the
-		// shapes the content model admits.
+		// other. Both run, the walk FIRST — the run order checkS4SChildOrder's doc
+		// records — so clause 2.2 answers only for the shapes the content model
+		// admits.
 		if err := checkS4SChildOrder(el, s4sElement); err != nil {
 			return nil, err
 		}
@@ -2157,7 +2157,7 @@ func rejectRefElementDeclarationAttrs(el *Element) error {
 // position and passes that walk outright. Clause 2.2 is a Schema Representation
 // Constraint stated BEYOND the schema for schema documents, which is why it is
 // the only footing this rejection stands on (STYLE E2). The walk keeps running
-// ahead of it, on the default run order checkS4SChildOrder's doc records.
+// ahead of it, on the run order checkS4SChildOrder's doc records.
 //
 // Only the CHILD half of the clause is charged here. Its other half — no
 // unqualified attribute but minOccurs, maxOccurs and id — belongs to
@@ -2379,18 +2379,18 @@ func nearestComplexTypeAndRestriction(el *Element) (complexType, restriction *El
 // same footing produceElement charges it for a global <element>: without it,
 // type= would silently win over an inline child. It covers the inline
 // <complexType> arm as much as the <simpleType> one — the clause names both. It
-// is charged AHEAD of the walk, on the one exception to the default run order
-// checkS4SChildOrder's doc records.
+// is charged BEHIND the walk, the run order checkS4SChildOrder's doc records for
+// every src-* charge (#1246).
 //
 // final and abstract are rejected here, by rejectLocalElementProhibitedAttrs,
-// behind the grammar walk — the default that same doc records — because the
+// behind the grammar walk — the order that same doc records — because the
 // fault is of the walk's own uncataloged §5.1 class and carries no rule ID, so
 // it answers ahead of every numbered src-element clause below it. That doc gives
 // the reason no numbered rule fits, and the reason substitutionGroup is charged
 // separately and earlier.
 //
 // src-element clause 4 (ed-with-ns) is charged here too, behind the grammar walk
-// — the default that same doc records — and ahead of the name, by
+// — the order that same doc records — and ahead of the name, by
 // rejectLocalElementTargetNamespace: this is the only form of <element> the
 // clause can reach (that function's doc gives the reason), and its 4.1 answers
 // before declarationName would report the absent name that writing
@@ -2442,15 +2442,15 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 	_, hasType := el.Attr("type")
 	inlineSimple := childElement(el, xsd.XMLSchemaNS, "simpleType")
 	inlineComplex := childElement(el, xsd.XMLSchemaNS, "complexType")
-	if hasType && (inlineSimple != nil || inlineComplex != nil) {
-		return xsd.ElementDeclaration{}, xsderr.New(ruleSrcElement, el.Loc(),
-			"element has both a type attribute and an inline <simpleType>/<complexType> child, but src-element clause 3 forbids both")
-	}
 	if err := rejectBothInlineTypes(el, inlineSimple, inlineComplex); err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
 	if err := checkS4SChildOrder(el, s4sElement); err != nil {
 		return xsd.ElementDeclaration{}, err
+	}
+	if hasType && (inlineSimple != nil || inlineComplex != nil) {
+		return xsd.ElementDeclaration{}, xsderr.New(ruleSrcElement, el.Loc(),
+			"element has both a type attribute and an inline <simpleType>/<complexType> child, but src-element clause 3 forbids both")
 	}
 	if err := rejectLocalElementProhibitedAttrs(el); err != nil {
 		return xsd.ElementDeclaration{}, err
@@ -3074,8 +3074,8 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 	// return, for the reason produceElementParticle maps an elided element's {term}
 	// all the same: mapping to no component bounds what the subtree CONTRIBUTES, not
 	// how §5.1 binds the way it is spelled. Every src-attribute clause below is
-	// charged behind this walk, which is the default run order checkS4SChildOrder's
-	// doc records.
+	// charged behind this walk, which is the run order checkS4SChildOrder's doc
+	// records.
 	if err := checkS4SChildOrder(el, s4sAttribute); err != nil {
 		return nil, err
 	}
@@ -3326,10 +3326,10 @@ func rejectAttributeTypeAndSimpleType(el *Element) error {
 // to that same helper, exactly as it takes clause 6 (#1270).
 //
 // Both clauses charged here are behind produceAttributeUse's s4s walk, which
-// every local <attribute> passes through before reaching this function — the
-// default run order checkS4SChildOrder's doc records. Clause 4 is the
-// both-present fault src-element clause 3 is charged AHEAD of the walk for on
-// the element side, and that doc records why the exception stops there.
+// every local <attribute> passes through before reaching this function — the run
+// order checkS4SChildOrder's doc records for every src-* charge. Clause 4 is the
+// both-present fault src-element clause 3 charges on the element side, behind the
+// walk there too (#1246).
 //
 // src-attribute clause 6 (att-with-ns) is charged here too, ahead of the name, by
 // rejectLocalAttributeTargetNamespace — for every use= but prohibited, which maps

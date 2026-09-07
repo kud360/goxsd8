@@ -286,8 +286,8 @@ var (
 	// s4sElement: an <alternative> carrying both type children REPEATS that
 	// position rather than filling two consecutive optionals. src-ta (§3.12.3)
 	// reaches the same document by a different route — it counts a type attribute
-	// and the two children — and checkSrcTA is charged BEHIND this walk, the
-	// default run order recorded below.
+	// and the two children — and checkSrcTA is charged BEHIND this walk, the run
+	// order recorded below.
 	s4sAlternative = s4sModel{
 		grammar: "xs:altType",
 		spec:    "xmlschema11-1.md:3210",
@@ -344,24 +344,20 @@ var (
 // gloss-src, :607); it does not sequence the two checks, and neither does the
 // scope-containment reading of it.
 //
-// The DEFAULT is this walk FIRST, so a document whose children the content model
-// does not admit is answered by the grammar fault and no src-* verdict is
-// reached over a shape the grammar already rejects. src-element clause 2.2
-// (elementParticleTerm), src-element clause 4
+// The order is this walk FIRST, at every producer charging both and with no
+// exception: a document whose children the content model does not admit is
+// answered by the grammar fault, and no src-* verdict is reached over a shape
+// the grammar already rejects. src-element clause 2.2 (elementParticleTerm),
+// clause 3 (produceElement, produceLocalElement) and clause 4
 // (rejectLocalElementTargetNamespace), src-ta (checkSrcTA,
 // produce_typetable.go), and EVERY src-attribute clause this parser charges
-// (produceAttribute, produceAttributeUse, produceLocalAttribute) are behind it.
+// (produceAttribute, produceAttributeUse, produceLocalAttribute) are behind it,
+// and a NEW charge takes the same order (#1246).
 //
-// src-element clause 3 is the ONE exception, charged AHEAD of the walk in
-// produceElement and produceLocalElement: on a document writing type= together
-// with an inline <simpleType>/<complexType> whose children are ALSO out of
-// order, "both a type attribute and an inline type child" is the more actionable
-// verdict, and it stays paired with rejectBothInlineTypes so that shape is
-// answered once (#444). The exception does not generalize by shape —
-// src-attribute clause 4 is the same both-present fault on the attribute side
-// and is charged behind the walk at both attribute producers — so a NEW charge
-// takes the default unless it makes clause 3's message-quality argument for its
-// own site.
+// rejectBothInlineTypes (produce_complex.go) runs ahead of the walk on both
+// element paths and is no exception to that order: it charges no rule at all,
+// and it names BOTH type children of a shape this walk reports as a repeat of
+// the single type position of s4sElement. #444 owns whether that pairing stays.
 func checkS4SChildOrder(owner *Element, m s4sModel) error {
 	// last is the position the previous matched child filled, and the search start
 	// is derived from it rather than tracked beside it (STYLE D3): a repeated
