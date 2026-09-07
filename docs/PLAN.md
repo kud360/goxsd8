@@ -554,14 +554,24 @@ NO successor of this family either.** Its two residues are #1301 (a duplicate
 clause-4 predicate surviving at the top-level producer, still open) and #1300 (a
 process defect about how a gate command is invoked — **LANDED 2026-09-07,
 `34aee07`**, `Ratchet: unchanged`); neither is a producer that decides and
-ACCEPTS, so neither extends this family. Live producer-decides-and-accepts members are **#931**
-(occurrence attributes on a named `<group>`'s child compositor), **#929** and
-**#455**. **The family carved a successor at every landing from #471 through
-#1243, and #1242 is the first that did not** — one reading is the tail reaching
-zero, the other is that this pair was narrower than its predecessors; two more
-landings decide it. **#1270 is the FIRST of those two and it came back empty**,
-which is the tail reading; one more landing settles it, and until then neither
-reading is the one to plan on. A
+ACCEPTS, so neither extends this family. **#455 has now LANDED too — 2026-09-07,
+`8aca2a3`, `Ratchet: unchanged`, structurally excluded before it was measured
+twice — and it CARVED a successor: #1328** (`use`, `form` and the two
+`*FormDefault` attributes compared raw at every site, measured accepting
+`use="foo"` and reading `use=" required "` as `{required}`=false). It also
+unblocked **#456**, which was filed long before and is a discharge rather than a
+carve. Live producer-decides-and-accepts members are **#931** (occurrence
+attributes on a named `<group>`'s child compositor), **#929** — which #455's
+landing widened to own `minOccursZero`'s clause-2.1.3 compare as well as
+`maxOccursZero`'s — **#456** and **#1328**. **The family carved a successor at
+every landing from #471 through #1243, and #1242 is the first that did not** —
+one reading is the tail reaching zero, the other is that this pair was narrower
+than its predecessors; two more landings decide it. **#1270 was the first of
+those two and came back empty; #455 is the SECOND and came back with #1328**, so
+the test the last stamp set is answered and the tail reading is not the one to
+plan on: the family is still carving. Note what carried it — #455's successor
+came out of an ARBITER's non-blocking scope note, not out of a construct census,
+which is a different generator from the one #1270 and #1242 exhausted. A
 second, narrower family opened beside it — the rejections the
 producer already makes **correctly but describes badly**, whose bar
 `xsderr/doc.go` set with #966 — and it is **discharged**: #975 landed at
