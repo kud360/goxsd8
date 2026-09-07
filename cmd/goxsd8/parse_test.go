@@ -578,16 +578,52 @@ func TestParseAdversarialArguments(t *testing.T) {
 }
 
 // TestParseFlagAfterPositional pins the consequence doc.go's argument
-// vocabulary states: a subcommand's flags precede its positional arguments,
-// the flag package stopping at the first of them, so a trailing -q is a schema
-// location and not a request for quiet.
+// vocabulary states, which #1290 REVERSED: a subcommand's flags precede its
+// positional arguments, and a trailing -q is now reported as the misplacement
+// it is rather than opened as a schema location. Until then this test asserted
+// the opposite — the summary printed, then "open -q: no such file or
+// directory" — so the stdout assertion is the load-bearing half: reporting the
+// misplacement after the run would answer with the same code and the same
+// stderr line.
 func TestParseFlagAfterPositional(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"parse", "testdata/order.xsd", "-q"}, &stdout, &stderr)
-	if code != 2 {
-		t.Errorf("run = %d, want 2 — the trailing -q names no readable schema", code)
+	if code != exitUsage {
+		t.Errorf("run = %d, want %d — the trailing -q is a misplaced flag", code, exitUsage)
 	}
-	if stdout.String() != orderSummary {
-		t.Errorf("stdout =\n%s\nwant the summary, which a trailing -q does not suppress", stdout.String())
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty: nothing is compiled once an argument is diagnosed", stdout.String())
+	}
+	want := fmt.Sprintf(flagAfterPositionalFmt, "parse", "-q")
+	if !strings.Contains(stderr.String(), want) {
+		t.Errorf("stderr = %q, want it to contain %q", stderr.String(), want)
+	}
+}
+
+// TestParseFileNamedLikeAFlag pins the escape hatch the diagnosis above leaves
+// open, the one doc.go names beside ./- : a schema document whose file name
+// begins with - is compiled when a path reaches it, so the misplacement rule
+// costs no argument that a user can otherwise spell.
+func TestParseFileNamedLikeAFlag(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "-q")
+	body, err := os.ReadFile("testdata/order.xsd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// ./-q names that file only from the directory holding it, so the run
+	// happens there; the absolute path names the same file from anywhere.
+	t.Chdir(dir)
+	for _, location := range []string{path, "./-q"} {
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"parse", location}, &stdout, &stderr); code != exitOK {
+			t.Errorf("parse %s: code = %d, want %d (stderr %q)", location, code, exitOK, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "components: 8") {
+			t.Errorf("parse %s: stdout = %q, want the summary of the schema that path names", location, stdout.String())
+		}
 	}
 }

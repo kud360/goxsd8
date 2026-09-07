@@ -5,11 +5,20 @@
 //
 //	goxsd8 parse [-q] [-v] <schema.xsd>...
 //	    Compile each schema argument and print its summary on stdout:
-//	    the distinct namespaces of the components the compilation
+//	    the argument as it was spelled, then a block of lines indented
+//	    two spaces and spelled "<label>: <value>". A namespace: line
+//	    for each distinct namespace of the components the compilation
 //	    declares (the argument document and every one it includes,
-//	    imports, overrides or redefines), in first-appearance order
-//	    and none when it declares nothing, then a count of each kind
-//	    of declaration the schema documents make. Each argument is its
+//	    imports, overrides or redefines) comes first, in
+//	    first-appearance order and none when it declares nothing.
+//	    Then one count per kind of declaration those documents make,
+//	    all seven kinds always and always in this order: types,
+//	    elements, attributes, attribute groups, model groups,
+//	    notations, identity constraints. types counts the simple and
+//	    the complex definitions together on the one line; model groups
+//	    counts the top-level <xs:group> definitions; and the
+//	    components: line closing the block is the sum of those seven,
+//	    which no namespace line is counted into. Each argument is its
 //	    own root document and its own run, in argument order — several
 //	    arguments are several compilations, not one set.
 //	    Exit 0 when every one compiles; 1 when any is rejected, its
@@ -66,6 +75,14 @@
 //	goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
 //	    Generate Go types; repeated -schema/-out pairs map schemas to
 //	    output directories (multiple schemas, multiple output dirs).
+//	    Exit 0 when every pair is generated; 1 when a schema is
+//	    rejected, its first error on stderr as <loc>: [<rule>]
+//	    <message>; 2 when an argument cannot be read, an output
+//	    directory cannot be written, or a -schema stands without its
+//	    -out. The exit code is the worst of those outcomes. Those are
+//	    the codes gen answers with once M9 builds it: until then every
+//	    gen invocation exits 2, reporting that gen is not yet
+//	    implemented.
 //
 // Flags common to all subcommands: -q (quiet), -v (debug logging via
 // slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec). They
@@ -81,10 +98,10 @@
 // and honours -q and -v; goxsd8 validate assesses XML instances as above and
 // honours -v, -q silencing nothing there because it writes no informational
 // output. GOXSD_DEBUG scopes -v for neither. Every other invocation exits 2,
-// reporting on stderr that gen is reserved but not yet built, that the name
-// is not one of the three, that a flag stands before the subcommand it
-// qualifies, or that the first argument is a flag and no subcommand was
-// given.
+// reporting on stderr that gen is reserved but not yet implemented, that the
+// name is not one of the three, that a help request carries a value, that a
+// flag stands before the subcommand it qualifies, or that the first argument
+// is a flag and no subcommand was given.
 //
 // # Argument vocabulary
 //
@@ -99,7 +116,9 @@
 // are the whole vocabulary. The flag-package forms -help=true and -h=1 are not
 // help requests wherever they stand: before a subcommand one is a flag where a
 // name belongs, and after one it is a flag whose value the subcommand does not
-// accept. Both answers are usage errors naming the three spellings.
+// accept. Both answers are usage errors naming the three spellings, and
+// neither reports the flag as one to move: no argument position accepts a
+// valued help spelling, so there is nowhere to move it to.
 //
 // Help is never scoped to a subcommand: a help flag in any argument position
 // prints this whole contract and no other argument is examined, so both
@@ -111,8 +130,14 @@
 // common flags are its own, following it: goxsd8 parse -q a.xsd, never
 // goxsd8 -q parse a.xsd, which is the usage error that says so rather than
 // one claiming no subcommand was given. A subcommand's flags in turn precede
-// its positional arguments, the flag package stopping at the first of them,
-// so in goxsd8 parse a.xsd -q the -q is a schema location.
+// its positional arguments, the flag package stopping at the first of them, so
+// a flag-shaped token standing after one is not read as a flag at all: it is
+// reported as the misplacement it is, exit 2, rather than taken for a path or
+// silently dropped, so in goxsd8 parse a.xsd -q neither is -q a schema
+// location nor is the summary it asked to suppress printed. The exact
+// spelling - is never a misplaced flag — it is validate's standard-input
+// instance argument — and a positional genuinely named -q is spelled ./-q, as
+// a file named - is.
 //
 // A schema argument is a filesystem path, resolved to an absolute one before
 // the document is read: an argument spelled absolutely or through "../" works,
@@ -178,7 +203,13 @@
 // go version -m $(which goxsd8) for the module version of a tagged build.
 // -v is not available for one, being already assigned to debug logging.
 //
-// The CLI is a thin shell over the library — every capability here is
-// reachable through the public packages, and the README documents both
-// routes. Error output is stable and line-oriented for scripting.
+// The CLI is a thin shell over the library for the capabilities it runs
+// today: schema compilation and XML instance assessment are reachable through
+// parser, xsd, validate and validate/xmlsrc, and the README documents both
+// routes for them. The capabilities this page reserves have no library route
+// either — validate/jsonsrc (M8), codegen with codec (M9) and
+// validate/bersrc (M11) each export nothing yet, so for JSON instances, code
+// generation and BER instances there is no second route to document until
+// those milestones land. Error output is stable and line-oriented for
+// scripting.
 package main

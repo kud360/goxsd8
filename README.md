@@ -57,10 +57,12 @@ path, `parse` and `validate` run today. A bare `goxsd8`, or
 `-h`/`-help`/`--help` in any argument position, prints the usage contract to
 stdout and exits 0
 ([issue #251](https://github.com/kud360/goxsd8/issues/251)). Every invocation
-that reaches no built subcommand exits 2 with one of four lines on stderr:
+that reaches no built subcommand exits 2 with one of five lines on stderr:
 `gen` is reserved but not yet implemented, any other name is an unknown
-subcommand, a flag stands before the subcommand it qualifies, and a leading
-flag with no subcommand after it is no subcommand at all. `gen` lands with M9.
+subcommand, a help request carries a value (`-help=true` is not one of the
+three spellings in any position), a flag stands before the subcommand it
+qualifies, and a leading flag with no subcommand after it is no subcommand at
+all. `gen` lands with M9.
 
 **Exit 2 narrowed when `parse` landed, and again when `validate` did.** It
 used to mean "this binary is a stub" for every invocation; for both built
@@ -83,7 +85,7 @@ goxsd8 parse order.xsd items.xsd                # compile + summary, exit 0/1/2
 goxsd8 validate -schema order.xsd -schema items.xsd order1.xml order2.xml
                                                 # exit 0 clean, 1 invalid, 2 usage, 3 schema, 4 undecided
 goxsd8 gen -schema order.xsd -out ./gen/order \
-           -schema items.xsd -out ./gen/items  # one package per -schema/-out pair
+           -schema items.xsd -out ./gen/items  # one package per pair; exit 0/1/2 once M9 builds it
 ```
 
 `validate` needs its own `-schema` for every schema, and reads every
@@ -134,7 +136,10 @@ schema arguments are several compilations, not one set — and prints each
 summary on stdout: the distinct namespaces of the components that compilation
 declares (the argument document and every one it includes, imports, overrides
 or redefines), in first-appearance order and none when it declares nothing,
-then a count of each kind of declaration those documents make. A rejected
+then a count of each kind of declaration those documents make — seven counted
+kinds and a `components:` line holding their sum, which
+`go doc github.com/kud360/goxsd8/cmd/goxsd8` enumerates in the printed order,
+with what `types` and `model groups` each cover. A rejected
 schema prints its first error on stderr as `<loc>: [<rule>] <message>` and
 assembly stops there, so that is one line per rejected argument; the exit code
 is the worst outcome over the arguments: 0 when every one compiles, 1 when any
@@ -156,7 +161,11 @@ invocation, there being no per-instance spelling), `-no-hints` (ignore
 logging to stderr via `slog`, scoped with
 `GOXSD_DEBUG=parser,validate,codec` — a scoping neither `parse` nor
 `validate` honours yet). The common flags qualify a subcommand and **follow
-its name**: `goxsd8 parse -q order.xsd`, not `goxsd8 -q parse order.xsd`. `-q`
+its name**: `goxsd8 parse -q order.xsd`, not `goxsd8 -q parse order.xsd`. They
+precede that subcommand's positional arguments too:
+`goxsd8 parse order.xsd -q` is a usage error naming the misplaced flag, not a
+run that compiles a schema called `-q`, and a file genuinely named `-q` is
+reached as `./-q`. `-q`
 suppresses a subcommand's informational output — `parse`'s summary — and
 never a diagnosis: neither `parse`'s error lines nor `validate`'s
 violations.

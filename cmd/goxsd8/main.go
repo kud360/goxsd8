@@ -26,11 +26,20 @@ Usage (contract; subcommands land with their milestones):
 
   goxsd8 parse [-q] [-v] <schema.xsd>...
       Compile each schema argument and print its summary on stdout:
-      the distinct namespaces of the components the compilation
+      the argument as it was spelled, then a block of lines indented
+      two spaces and spelled "<label>: <value>". A namespace: line
+      for each distinct namespace of the components the compilation
       declares (the argument document and every one it includes,
-      imports, overrides or redefines), in first-appearance order
-      and none when it declares nothing, then a count of each kind
-      of declaration the schema documents make. Each argument is its
+      imports, overrides or redefines) comes first, in
+      first-appearance order and none when it declares nothing.
+      Then one count per kind of declaration those documents make,
+      all seven kinds always and always in this order: types,
+      elements, attributes, attribute groups, model groups,
+      notations, identity constraints. types counts the simple and
+      the complex definitions together on the one line; model groups
+      counts the top-level <xs:group> definitions; and the
+      components: line closing the block is the sum of those seven,
+      which no namespace line is counted into. Each argument is its
       own root document and its own run, in argument order — several
       arguments are several compilations, not one set.
       Exit 0 when every one compiles; 1 when any is rejected, its
@@ -87,6 +96,14 @@ Usage (contract; subcommands land with their milestones):
   goxsd8 gen -schema <schema.xsd> -out <dir> [-schema <s2> -out <d2>]... [-backend strict|native]
       Generate Go types; repeated -schema/-out pairs map schemas to
       output directories (multiple schemas, multiple output dirs).
+      Exit 0 when every pair is generated; 1 when a schema is
+      rejected, its first error on stderr as <loc>: [<rule>]
+      <message>; 2 when an argument cannot be read, an output
+      directory cannot be written, or a -schema stands without its
+      -out. The exit code is the worst of those outcomes. Those are
+      the codes gen answers with once M9 builds it: until then every
+      gen invocation exits 2, reporting that gen is not yet
+      implemented.
 
 Flags common to all subcommands: -q (quiet), -v (debug logging via
 slog to stderr; scope with GOXSD_DEBUG=parser,validate,codec). They
@@ -102,10 +119,10 @@ usage to stdout and exits 0. goxsd8 parse compiles its arguments as above
 and honours -q and -v; goxsd8 validate assesses XML instances as above and
 honours -v, -q silencing nothing there because it writes no informational
 output. GOXSD_DEBUG scopes -v for neither. Every other invocation exits 2,
-reporting on stderr that gen is reserved but not yet built, that the name
-is not one of the three, that a flag stands before the subcommand it
-qualifies, or that the first argument is a flag and no subcommand was
-given.
+reporting on stderr that gen is reserved but not yet implemented, that the
+name is not one of the three, that a help request carries a value, that a
+flag stands before the subcommand it qualifies, or that the first argument
+is a flag and no subcommand was given.
 `
 
 // The exit codes the CLI answers with: a clean run, a rejected document, an
@@ -147,12 +164,23 @@ func worse(a, b int) int {
 }
 
 const (
-	// helpNotAFlagValueFmt answers the flag-package spellings -h=…/-help=…,
+	// helpRequestSpelling answers the flag-package spellings -h=…/-help=…,
 	// which wantsHelp deliberately does not accept: the help vocabulary is the
 	// three bare tokens and nothing else (doc.go), so this is a usage error
-	// naming the spelling that would have worked. The subcommand fills the
-	// verb, because the flag set that rejected the spelling is its own.
-	helpNotAFlagValueFmt = "goxsd8: %s: a help request is spelled -h, -help or --help, with no value"
+	// naming the spelling that would have worked.
+	helpRequestSpelling = "a help request is spelled -h, -help or --help, with no value"
+
+	// helpNotAFlagValue is that answer before any subcommand, where no flag set
+	// has been reached to reject the spelling. It is what a valued help flag
+	// earns in either pre-subcommand position, in place of a diagnosis telling
+	// the user to move the flag after the subcommand: no position accepts the
+	// valued form, so the move the message names fails too (#1189).
+	helpNotAFlagValue = "goxsd8: " + helpRequestSpelling
+
+	// helpNotAFlagValueFmt is the same answer from a subcommand's own flag set,
+	// which fills the verb because the flag set that rejected the spelling is
+	// its own.
+	helpNotAFlagValueFmt = "goxsd8: %s: " + helpRequestSpelling
 
 	// helpPointer is the remedy line under every usage error. It names the
 	// binary's own help path, which resolves wherever the binary runs; a
@@ -179,7 +207,17 @@ const (
 	// Argument vocabulary), so this invocation names a real subcommand and is
 	// still a usage error — one that must not be reported as no subcommand at
 	// all, which is what a scan of the first argument alone concluded (#472).
+	// A valued help spelling never reaches it, because the rewrite it names
+	// would fail (helpNotAFlagValue).
 	leadingFlagFmt = "goxsd8: %s must follow the subcommand: goxsd8 %s %s ..."
+
+	// flagAfterPositionalFmt answers a flag-shaped token standing after a
+	// subcommand's first positional argument, which flag.FlagSet.Parse stopped
+	// at and never read as a flag. Reporting it is what keeps `parse a.xsd -q`
+	// from printing the summary -q asked to suppress and then failing to open
+	// -q as a schema, and `validate a.xml -schema a.xsd` from reporting the
+	// schema the user did name as missing (#1290).
+	flagAfterPositionalFmt = "goxsd8: %[1]s: %[2]s stands after a positional argument, where it is no longer read as a flag: the flags of a subcommand come before its arguments, and a file genuinely named %[2]s is named ./%[2]s"
 )
 
 func main() {
@@ -215,8 +253,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 // a subcommand belongs is a different fault depending on whether a subcommand
 // follows it, and reporting `goxsd8 -q parse a.xsd` as no subcommand at all
 // contradicts the argument list (#472). args is non-empty.
+//
+// A valued help spelling is answered ahead of that split and without reading
+// past it: no argument position accepts one, so there is no position to send
+// the user to (#1189).
 func diagnose(args []string) string {
 	arg := args[0]
+	if valuedHelpFlag(arg) {
+		return helpNotAFlagValue
+	}
 	if strings.HasPrefix(arg, "-") {
 		if name, ok := subcommandIn(args[1:]); ok {
 			return fmt.Sprintf(leadingFlagFmt, arg, name, arg)
@@ -240,6 +285,13 @@ func subcommandIn(args []string) (string, bool) {
 	return "", false
 }
 
+// helpSpellings is the whole help-flag vocabulary the contract publishes, in
+// the order doc.go names it. wantsHelp accepts these three bare tokens and
+// valuedHelpFlag rejects the same three carrying a flag-package value, so the
+// two read one encoding of the vocabulary rather than a list each (STYLE
+// D3/T4).
+var helpSpellings = []string{"-h", "-help", "--help"}
+
 // wantsHelp accepts a help flag in any argument position, and only in the
 // three bare spellings: the scan is deliberately positional-blind, gives --
 // no end-of-options meaning, and does not parse -help=true (doc.go).
@@ -248,9 +300,34 @@ func wantsHelp(args []string) bool {
 		return true
 	}
 	for _, a := range args {
-		if a == "-h" || a == "-help" || a == "--help" {
+		if slices.Contains(helpSpellings, a) {
 			return true
 		}
 	}
 	return false
+}
+
+// valuedHelpFlag reports whether arg is a help spelling carrying a
+// flag-package value — -h=1, -help=true. The bare spellings never reach it:
+// wantsHelp answers those before dispatch.
+func valuedHelpFlag(arg string) bool {
+	name, _, ok := strings.Cut(arg, "=")
+	return ok && slices.Contains(helpSpellings, name)
+}
+
+// flagShapedIn returns the first of a subcommand's positional arguments that
+// is spelled like a flag. flag.FlagSet.Parse stopped at the first positional,
+// so such a token was never read as a flag and is a misplacement rather than a
+// path (doc.go's argument vocabulary).
+//
+// The exact spelling - is standard input, an instance argument in its own
+// right; a file genuinely named -q is reached as ./-q, the escape hatch the
+// -schema - refusal already publishes for a file named -.
+func flagShapedIn(args []string) (string, bool) {
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") && a != stdinArg {
+			return a, true
+		}
+	}
+	return "", false
 }
