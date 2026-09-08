@@ -255,7 +255,7 @@
 //     substituted elements' ·canonical content· with the source location
 //     left out (parser/override.go's writeCanonicalElement), so two
 //     distinct but equivalent <xs:override> elements do reach one
-//     document identity.
+//     document identity. #603 owns closing this.
 //   - Two children of ONE <xs:override> with the same element type and
 //     name are reported under src-override, though §F.2's normative
 //     stylesheet resolves the pair as first-match-wins and the published
