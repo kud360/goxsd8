@@ -265,6 +265,12 @@ func TestUsageCoversContract(t *testing.T) {
 		// #1189's fifth diagnosis, in the status paragraph that enumerates
 		// them.
 		"that a help request carries a value",
+		// #1313's exception to the line shape above, which the copies must
+		// carry together or the shape reads as unconditional in whichever
+		// one drops it: the class, where its taxonomy lives, and what its
+		// line prints instead.
+		"s4s-grammar class (xsderr/doc.go)",
+		"the bare <message>",
 	}
 	for _, w := range want {
 		if !strings.Contains(usage, w) {
