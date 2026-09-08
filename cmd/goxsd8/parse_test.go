@@ -142,7 +142,8 @@ func TestParseSummaryIsDeterministic(t *testing.T) {
 // TestParseSchemaErrors pins the failure contract: exit 1, nothing on stdout,
 // and the rejected schema's first error on stderr in xsderr.Error's own
 // rendering — a location a reader can open, the rule ID in brackets, then the
-// message. Assembly stops at that error, so one rejected argument is one line.
+// message. Assembly stops at that error, so one rejected argument is one error
+// line.
 func TestParseSchemaErrors(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"parse", "testdata/broken.xsd"}, &stdout, &stderr)
@@ -263,14 +264,9 @@ const shortBrokenSchema = "testdata/unresolved-include-broken.xsd"
 // assembly the error came out of, so a schema that fails to compile is named
 // for it exactly as one that compiles is. It was dropped before, because
 // reportUnfollowed stood after the error return, which withheld the line where
-// an operator reading a rejection most needs it.
-//
-// Two facts, in two lines, with no claim about the relation between them: the
-// unread document may or may not be why the schema was rejected, and nothing in
-// the report says which. The wording is the other half of the ruling — a
-// rejected assembly is not a "compiled schema", and its skip is not called
-// legal, since the same reason records a non-empty <xs:redefine>'s fatal one
-// (src-redefine clause 1).
+// an operator reading a rejection most needs it. reportUnfollowed's own doc
+// comment states why the wording differs by outcome; this test does not
+// restate it.
 func TestParseNamesAnUnresolvedDirectiveOfARejectedSchema(t *testing.T) {
 	abs, err := filepath.Abs(shortBrokenSchema)
 	if err != nil {
