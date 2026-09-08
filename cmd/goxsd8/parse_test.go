@@ -142,7 +142,8 @@ func TestParseSummaryIsDeterministic(t *testing.T) {
 // TestParseSchemaErrors pins the failure contract: exit 1, nothing on stdout,
 // and the rejected schema's first error on stderr in xsderr.Error's own
 // rendering — a location a reader can open, the rule ID in brackets, then the
-// message. Assembly stops at that error, so one rejected argument is one line.
+// message. Assembly stops at that error, so one rejected argument is one error
+// line.
 func TestParseSchemaErrors(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"parse", "testdata/broken.xsd"}, &stdout, &stderr)
@@ -251,6 +252,65 @@ func TestParseNamesAnUnresolvedDirective(t *testing.T) {
 		if strings.Contains(line, "[") {
 			t.Errorf("%s: stderr = %q, want no rule brackets — this is not a violation", c.name, line)
 		}
+	}
+}
+
+// shortBrokenSchema carries #1312's shape: the same unresolved <xs:include>
+// the fixtures above carry, in a document that also earns brokenRule.
+const shortBrokenSchema = "testdata/unresolved-include-broken.xsd"
+
+// TestParseNamesAnUnresolvedDirectiveOfARejectedSchema is #1312's ruling —
+// option (a), report and then return: the shortfall is a fact about the
+// assembly the error came out of, so a schema that fails to compile is named
+// for it exactly as one that compiles is. It was dropped before, because
+// reportUnfollowed stood after the error return, which withheld the line where
+// an operator reading a rejection most needs it. reportUnfollowed's own doc
+// comment states why the wording differs by outcome; this test does not
+// restate it.
+func TestParseNamesAnUnresolvedDirectiveOfARejectedSchema(t *testing.T) {
+	abs, err := filepath.Abs(shortBrokenSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	note := "goxsd8: parse: " + abs + ":10:3: this schemaLocation resolved to no document; the rejected assembly is short of whatever that document declares\n"
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"parse", shortBrokenSchema}, &stdout, &stderr); code != exitInvalid {
+		t.Fatalf("parse = %d, want %d — the schema is rejected (stderr %q)", code, exitInvalid, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), note) {
+		t.Errorf("stderr =\n%s\nwant the note %q", stderr.String(), note)
+	}
+	if !strings.Contains(stderr.String(), brokenRule) {
+		t.Errorf("stderr =\n%s\nwant the error line too, charging %s", stderr.String(), brokenRule)
+	}
+	if strings.Contains(stderr.String(), "compiled schema") {
+		t.Errorf("stderr =\n%s\nwant no line calling this a compiled schema", stderr.String())
+	}
+	// The shortfall stands above the verdict it may or may not explain, which
+	// is the order both subcommands report in.
+	if strings.Index(stderr.String(), note) > strings.Index(stderr.String(), brokenRule) {
+		t.Errorf("stderr =\n%s\nwant the note before the error line", stderr.String())
+	}
+
+	// Per-argument independence, which the ruling leaves untouched: each
+	// argument is its own parseOne, so the compiling one keeps its own note AND
+	// its own wording beside the rejected one's.
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"parse", shortSchema, shortBrokenSchema}, &stdout, &stderr); code != exitInvalid {
+		t.Fatalf("two arguments: parse = %d, want %d (stderr %q)", code, exitInvalid, stderr.String())
+	}
+	shortAbs, err := filepath.Abs(shortSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiledNote := "goxsd8: parse: " + shortAbs + ":10:3: this schemaLocation resolved to no document, which is legal and skipped; the compiled schema is short of whatever that document declares\n"
+	if !strings.Contains(stderr.String(), compiledNote) {
+		t.Errorf("stderr =\n%s\nwant the compiling argument's own note %q", stderr.String(), compiledNote)
+	}
+	if !strings.Contains(stderr.String(), note) {
+		t.Errorf("stderr =\n%s\nwant the rejected argument's note %q", stderr.String(), note)
 	}
 }
 
