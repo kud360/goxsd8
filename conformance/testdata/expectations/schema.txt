@@ -314,8 +314,8 @@ Complex/complex015/schema/complex015.xsd pass
 Complex/complex016/schema/complex016.xsd pass
 Complex/complex017/schema/complex017.xsd pass
 Complex/complex018/schema/complex018.xsd fail
-Complex/complex019/schema/complex019.xsd fail
-Complex/complex020/schema/complex020.xsd fail
+Complex/complex019/schema/complex019.xsd pass
+Complex/complex020/schema/complex020.xsd pass
 Complex/complex021/schema/complex021.xsd pass
 Complex/complex022/schema/complex022.xsd pass
 Complex/complex023/schema/complex001.xsd pass
@@ -828,7 +828,7 @@ MS-Additional2006-07-15/addB050/schema/addB050 pass
 MS-Additional2006-07-15/addB051/schema/addB051 pass
 MS-Additional2006-07-15/addB051b/schema/addB051b pass
 MS-Additional2006-07-15/addB052/schema/addB052 pass
-MS-Additional2006-07-15/addB053/schema/addB053 fail
+MS-Additional2006-07-15/addB053/schema/addB053 pass
 MS-Additional2006-07-15/addB054/schema/addB054 pass
 MS-Additional2006-07-15/addB055/schema/addB055 pass
 MS-Additional2006-07-15/addB056/schema/addB056 pass
@@ -6040,7 +6040,7 @@ MS-ModelGroups2006-07-15/mgO015/schema/mgO015 pass
 MS-ModelGroups2006-07-15/mgO016/schema/mgO016 pass
 MS-ModelGroups2006-07-15/mgO017/schema/mgO017 pass
 MS-ModelGroups2006-07-15/mgO018/schema/mgO018 pass
-MS-ModelGroups2006-07-15/mgO019/schema/mgO019 fail
+MS-ModelGroups2006-07-15/mgO019/schema/mgO019 pass
 MS-ModelGroups2006-07-15/mgO020/schema/mgO020 pass
 MS-ModelGroups2006-07-15/mgO021/schema/mgO021 pass
 MS-ModelGroups2006-07-15/mgO022/schema/mgO022 pass
@@ -6421,7 +6421,7 @@ MS-Particles2006-07-15/particlesEc005/schema/particlesEc005 pass
 MS-Particles2006-07-15/particlesEc006/schema/particlesEc006 pass
 MS-Particles2006-07-15/particlesEc007/schema/particlesEc007 pass
 MS-Particles2006-07-15/particlesEc008/schema/particlesEc008 pass
-MS-Particles2006-07-15/particlesEc009/schema/particlesEc009 fail
+MS-Particles2006-07-15/particlesEc009/schema/particlesEc009 pass
 MS-Particles2006-07-15/particlesEc011/schema/particlesEc011 pass
 MS-Particles2006-07-15/particlesEc012/schema/particlesEc012 pass
 MS-Particles2006-07-15/particlesEc013/schema/particlesEc013 pass
@@ -6472,7 +6472,7 @@ MS-Particles2006-07-15/particlesHa004/schema/particlesHa004 pass
 MS-Particles2006-07-15/particlesHa005/schema/particlesHa005 pass
 MS-Particles2006-07-15/particlesHa006/schema/particlesHa006 pass
 MS-Particles2006-07-15/particlesHa007/schema/particlesHa007 pass
-MS-Particles2006-07-15/particlesHa008/schema/particlesHa008 fail
+MS-Particles2006-07-15/particlesHa008/schema/particlesHa008 pass
 MS-Particles2006-07-15/particlesHa009/schema/particlesHa009 pass
 MS-Particles2006-07-15/particlesHa010/schema/particlesHa010 pass
 MS-Particles2006-07-15/particlesHa011/schema/particlesHa011 pass

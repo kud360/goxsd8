@@ -396,6 +396,199 @@ func TestProduceNamedGroupBodyAccepted(t *testing.T) {
 	}
 }
 
+// TestProduceNamedGroupBodyOccursRejected pins, END TO END from a schema
+// DOCUMENT, that the <all>/<choice>/<sequence> BODY of a named <group> carrying
+// minOccurs or maxOccurs is rejected for that attribute. xs:namedGroup's <all>
+// arm restricts both to use="prohibited" (xmlschema11-1.md:5198-:5199) and
+// xs:simpleExplicitGroup, the type its <choice> and <sequence> arms are declared
+// with, does the same (:5253-:5254) — a prohibition the sibling guard on the
+// <group> ELEMENT (TestProduceTopLevelProhibitedAttrsRejected) never descends to.
+//
+// The fault is PRESENCE, so the two <all> rows are the ones to read twice:
+// maxOccurs="1" and minOccurs="0" both sit INSIDE allOccursGrammar's {0,1}
+// enumeration and are legal on a LOCAL <all>, which is why no widening of that
+// check reaches them and why every row asserts the error is NOT an *xsderr.Error
+// — allOccursGrammar charges cvc-datatype-valid, and answering with it here would
+// mean the value was judged rather than the attribute's presence.
+//
+// Each row asserts its OWN attribute and its OWN grammar type, so a guard that
+// checked one attribute and named another, or charged every arm against one
+// production, fails the table. The subject assertion is a prefix on
+// "parser: <subject> at file:line:col" (STYLE E3), pinning the message at the
+// COMPOSITOR CHILD on line 4 rather than at the <group> on line 3 — which the
+// message also names, in its own clause, so charging the two the other way round
+// fails both assertions (#1048).
+//
+// That a legal body still produces is TestProduceNamedGroupBodyAccepted's charge,
+// and that a LOCAL compositor keeps both attributes is
+// TestProduceLocalCompositorKeepsOccurs's; neither is re-pinned here.
+func TestProduceNamedGroupBodyOccursRejected(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2). The legal <group> is
+	// on line 2, the offending one opens line 3 and its body is on line 4.
+	cases := []struct {
+		name string
+		body string
+		// wantLocal is the compositor the message must open by charging, wantAttr the
+		// attribute it must name, and wantGrammar the production that prohibits it.
+		wantLocal   string
+		wantAttr    string
+		wantGrammar string
+	}{
+		{
+			name:        `<sequence maxOccurs=0>, empty`,
+			body:        `<xs:sequence maxOccurs="0"/>`,
+			wantLocal:   "sequence",
+			wantAttr:    "maxOccurs",
+			wantGrammar: "xs:simpleExplicitGroup",
+		},
+		{
+			name:        `<sequence minOccurs=0>, empty`,
+			body:        `<xs:sequence minOccurs="0"/>`,
+			wantLocal:   "sequence",
+			wantAttr:    "minOccurs",
+			wantGrammar: "xs:simpleExplicitGroup",
+		},
+		{
+			name:        `<sequence maxOccurs=2> with an <element>`,
+			body:        `<xs:sequence maxOccurs="2"><xs:element name="q" type="xs:string"/></xs:sequence>`,
+			wantLocal:   "sequence",
+			wantAttr:    "maxOccurs",
+			wantGrammar: "xs:simpleExplicitGroup",
+		},
+		{
+			name:        `<choice maxOccurs=2> with an <element>`,
+			body:        `<xs:choice maxOccurs="2"><xs:element name="q" type="xs:string"/></xs:choice>`,
+			wantLocal:   "choice",
+			wantAttr:    "maxOccurs",
+			wantGrammar: "xs:simpleExplicitGroup",
+		},
+		{
+			// maxOccurs="1" is the value xs:occurs declares as the default, so this row
+			// is a fault ONLY because the attribute is present at all.
+			name:        `<all maxOccurs=1>, empty`,
+			body:        `<xs:all maxOccurs="1"/>`,
+			wantLocal:   "all",
+			wantAttr:    "maxOccurs",
+			wantGrammar: "xs:namedGroup's own <all> arm",
+		},
+		{
+			name:        `<all minOccurs=0> with an <element>`,
+			body:        `<xs:all minOccurs="0"><xs:element name="q" type="xs:string"/></xs:all>`,
+			wantLocal:   "all",
+			wantAttr:    "minOccurs",
+			wantGrammar: "xs:namedGroup's own <all> arm",
+		},
+		{
+			// Both written: the grammar declares minOccurs first, so minOccurs is what
+			// is reported (STYLE D2). mgO019's shape, with the attributes in the other
+			// document order to prove the report follows the GRAMMAR's order and not
+			// the document's.
+			name:        `<all maxOccurs=0 minOccurs=0> reports minOccurs`,
+			body:        `<xs:all maxOccurs="0" minOccurs="0"><xs:element name="q" type="xs:string"/></xs:all>`,
+			wantLocal:   "all",
+			wantAttr:    "minOccurs",
+			wantGrammar: "xs:namedGroup's own <all> arm",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := wrap("urn:po", "\n"+
+				`<xs:group name="G"><xs:sequence><xs:element name="p" type="xs:string"/></xs:sequence></xs:group>`+"\n"+
+				`<xs:group name="G2">`+"\n"+tc.body+"\n"+`</xs:group>`)
+			_, err := produce(t, doc)
+			if err == nil {
+				t.Fatalf("Produce succeeded, want a grammar fault for the prohibited %s on the <%s> body", tc.wantAttr, tc.wantLocal)
+			}
+			var xe *xsderr.Error
+			if errors.As(err, &xe) {
+				t.Fatalf("error = %v (rule %s), want a plain Go error rather than a rule verdict", err, xe.Rule)
+			}
+			subject := fmt.Sprintf("parser: <%s> at %s:4:", tc.wantLocal, produceURI)
+			if !strings.HasPrefix(err.Error(), subject) {
+				t.Fatalf("error = %v, want it to open by charging %q, the compositor child (E3)", err, subject)
+			}
+			if want := fmt.Sprintf("carries a %s attribute", tc.wantAttr); !strings.Contains(err.Error(), want) {
+				t.Fatalf("error = %v, want it to name %q as the prohibited attribute", err, want)
+			}
+			if !strings.Contains(err.Error(), tc.wantGrammar) {
+				t.Fatalf("error = %v, want it to name %q, the production that prohibits the attribute", err, tc.wantGrammar)
+			}
+			if at := fmt.Sprintf("the body of the named <group> at %s:3:", produceURI); !strings.Contains(err.Error(), at) {
+				t.Fatalf("error = %v, want it to reference %q, the definition the body belongs to", err, at)
+			}
+		})
+	}
+}
+
+// TestProduceLocalCompositorKeepsOccurs pins that a LOCAL <all>/<choice>/<sequence>
+// keeps minOccurs and maxOccurs, which xs:explicitGroup leaves optional and only
+// xs:namedGroup's arms prohibit — so the sibling table's guard may not be widened
+// past the named <group> body it is confined to.
+//
+// Every row carries the same body the sibling table rejects, moved one position
+// out into a <complexType>, and asserts the named-group prohibition is NOT what
+// answers. The bare <sequence maxOccurs="0"> row is the shape #901 owns here: it
+// is legal GRAMMAR, so it may never be charged that prohibition, but the particle
+// it maps to violates p-props-correct with the default minOccurs="1" — a value
+// verdict one phase later, which is what that row pins instead of a bare produce.
+func TestProduceLocalCompositorKeepsOccurs(t *testing.T) {
+	// A slice, not a map: subtest order is output (STYLE D2).
+	cases := []struct {
+		name string
+		body string
+		// wantRule is the rule the row must be REJECTED by, where the shape is legal
+		// grammar that maps to an illegal component; empty where the row must produce.
+		wantRule xsderr.Rule
+	}{
+		{
+			name:     `local <sequence maxOccurs=0>`,
+			body:     `<xs:sequence maxOccurs="0"><xs:element name="p" type="xs:string"/></xs:sequence>`,
+			wantRule: "p-props-correct",
+		},
+		{
+			name: `local <sequence minOccurs=0 maxOccurs=0>`,
+			body: `<xs:sequence minOccurs="0" maxOccurs="0"><xs:element name="p" type="xs:string"/></xs:sequence>`,
+		},
+		{
+			name: `local <sequence minOccurs=0 maxOccurs=2>`,
+			body: `<xs:sequence minOccurs="0" maxOccurs="2"><xs:element name="p" type="xs:string"/></xs:sequence>`,
+		},
+		{
+			name: `local <choice maxOccurs=2>`,
+			body: `<xs:choice maxOccurs="2"><xs:element name="p" type="xs:string"/></xs:choice>`,
+		},
+		{
+			name: `local <all minOccurs=0>`,
+			body: `<xs:all minOccurs="0"><xs:element name="p" type="xs:string"/></xs:all>`,
+		},
+		{
+			name: `local <all maxOccurs=1>`,
+			body: `<xs:all maxOccurs="1"><xs:element name="p" type="xs:string"/></xs:all>`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := produce(t, wrap("", `<xs:complexType name="T">`+tc.body+`</xs:complexType>`))
+			if err != nil && strings.Contains(err.Error(), `use="prohibited"`) {
+				t.Fatalf("error = %v, want a local compositor's occurrence attributes to stay legal grammar", err)
+			}
+			if tc.wantRule == "" {
+				if err != nil {
+					t.Fatalf("Produce: %v, want a local compositor's occurrence attributes to stay legal", err)
+				}
+				return
+			}
+			var xe *xsderr.Error
+			if !errors.As(err, &xe) {
+				t.Fatalf("error = %v, want the %s verdict on the particle the legal grammar maps to", err, tc.wantRule)
+			}
+			if xe.Rule != tc.wantRule {
+				t.Fatalf("rule = %s, want %s", xe.Rule, tc.wantRule)
+			}
+		})
+	}
+}
+
 // TestProduceGroupRefElided proves a <group ref> with minOccurs=maxOccurs=0 maps
 // to no component at all (§3.7.2, xr.mgd3): the enclosing sequence gets no particle.
 func TestProduceGroupRefElided(t *testing.T) {
