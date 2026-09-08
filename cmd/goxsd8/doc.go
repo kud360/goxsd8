@@ -204,7 +204,12 @@
 // schemaLocation that resolves to nothing legal to skip, so that hint's
 // siblings still apply and the set still composes — short of whatever the
 // document would have declared, which is the fact the line carries and clause 3
-// calls "less than complete ·assessment· outcomes".
+// calls "less than complete ·assessment· outcomes". When the instance's hints
+// instead fail to compose with the -schema set, the same shortfall is named
+// first, in a line saying the augmented set was rejected rather than compiled
+// and saying nothing about whether the unread document had a part in that;
+// the hints are then reported unusable and the instance falls back to the
+// -schema set alone.
 //
 // -no-hints turns all of it off — clause 3's "Schema processors should provide
 // an option to control whether they do so" — and turning it off is what makes

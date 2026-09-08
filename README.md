@@ -126,7 +126,12 @@ that instance and by the location it resolved to, with no rule ID and no move
 in the exit code: `src-import` and `src-include` alike make a `schemaLocation`
 that resolves to nothing legal to skip, so its sibling hints still apply and
 the set still composes — short of whatever that document declares, which is
-what the line carries. A `-schema` document's **own** unresolved `<xs:include>`,
+what the line carries. When the instance's hints instead fail to compose with
+the `-schema` set, the same shortfall is named first, in a line saying the
+augmented set was rejected rather than compiled and saying nothing about
+whether the unread document had a part in that; the hints are then reported
+unusable and the instance is assessed against the `-schema` documents alone. A
+`-schema` document's **own** unresolved `<xs:include>`,
 `<xs:import>`, `<xs:override>` or empty `<xs:redefine>` is the other case and
 **is** named on stderr, once for the set and before any instance is assessed,
 exactly as `parse` names it below: that directive is the schema author's claim
