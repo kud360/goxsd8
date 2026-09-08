@@ -1805,6 +1805,10 @@ func (p *producer) produceModelGroupDefinition(name xsd.QName, el *Element) (xsd
 // verdict finalize owns (xsd/allgrouplimited.go). scopeParent is the enclosing
 // definition, threaded to the local element declarations in the body (§3.3.2.3
 // dcl.elt.local).
+//
+// Occurrence attributes on that child are rejected by rejectNamedGroupBodyOccurs
+// BEFORE the body is descended into, so a prohibited minOccurs/maxOccurs is
+// reported ahead of any fault among the particles it encloses.
 func (p *producer) buildDefinitionModelGroup(el *Element, scopeParent xsd.ElementScopeParent) (xsd.ModelGroup, error) {
 	group := compositorChild(el)
 	if group == nil {
@@ -1812,6 +1816,9 @@ func (p *producer) buildDefinitionModelGroup(el *Element, scopeParent xsd.Elemen
 	}
 	if dup := repeatedCompositorChild(el); dup != nil {
 		return xsd.ModelGroup{}, fmt.Errorf("parser: <%s> at %s is a second <all>, <choice> or <sequence> in the body of the named <group> at %s, which already carries the <%s> at %s: xs:namedGroup's content model (xmlschema11-1.md:5187) is (annotation?, (all | choice | sequence)), whose inner choice is minOccurs=\"1\" maxOccurs=\"1\" and so admits exactly one", dup.Name().Local(), dup.Loc(), el.Loc(), group.Name().Local(), group.Loc())
+	}
+	if err := rejectNamedGroupBodyOccurs(group, el); err != nil {
+		return xsd.ModelGroup{}, err
 	}
 	compositor, _ := compositorOf(group.Name().Local()) // compositorChild guarantees ok
 	particles, err := p.groupParticles(group, scopeParent)
@@ -1857,6 +1864,52 @@ func rejectNamedGroupBody(el *Element) error {
 		return fmt.Errorf("parser: <%s> at %s is not admitted in the body of the named <group> at %s: xs:namedGroup's content model (xmlschema11-1.md:5187) is (annotation?, (all | choice | sequence)), which admits exactly one <all>, <choice> or <sequence> and no other element", c.Name().Local(), c.Loc(), el.Loc())
 	}
 	return fmt.Errorf("parser: the named <group> at %s has no <all>, <choice> or <sequence> child: xs:namedGroup's content model (xmlschema11-1.md:5187) is (annotation?, (all | choice | sequence)), whose inner choice is minOccurs=\"1\" maxOccurs=\"1\" and so requires exactly one", el.Loc())
+}
+
+// rejectNamedGroupBodyOccurs rejects the <all>/<choice>/<sequence> body of a
+// named <group> carrying minOccurs or maxOccurs, which the schema for schema
+// documents prohibits on it. xs:namedGroup writes its <all> arm as an INLINE
+// xs:complexType restricting xs:all, and that restriction declares both
+// attributes use="prohibited" (xmlschema11-1.md:5198-:5199); its <choice> and
+// <sequence> arms are typed xs:simpleExplicitGroup (:5205-:5206), which declares
+// the same two prohibitions (:5253-:5254). Neither attribute survives to that
+// position: the base chain supplies them through xs:group's reference to the
+// xs:occurs attribute group (:5167) and each restriction removes them again.
+//
+// The fault is PRESENCE, not value. use="prohibited" excludes the attribute
+// however it is spelled, so minOccurs="1" — the default xs:occurs declares, a
+// semantic no-op — is as much a fault as maxOccurs="2". That is what separates
+// this guard from allOccursGrammar, whose {0,1} enumeration admits both of those
+// and which guards the LOCAL <all> alone.
+//
+// The fault carries NO numbered rule ID, on rejectProhibitedAttrs's footing for
+// the same prohibition one element up: §3.7.3 (xmlschema11-1.md:2286) reads
+// "None as such." in full and there is no src-mgd, so what binds is §5.1 (:4296)
+// directly — a schema document must be fully valid with respect to the Schema
+// for Schema Documents. A plain error, never an xsderr.Rule (STYLE E2).
+//
+// The two attributes are checked in the grammar's own declaration order, so a
+// body writing both is always reported at minOccurs (STYLE D2).
+//
+// A LOCAL compositor is never reached: this runs from buildDefinitionModelGroup
+// alone, and there xs:explicitGroup keeps both attributes, narrowed for the <all>
+// spelling by allOccursGrammar and by nothing else.
+func rejectNamedGroupBodyOccurs(group, decl *Element) error {
+	local := group.Name().Local()
+	// compositorChild guarantees one of the three, the same guarantee
+	// buildDefinitionModelGroup's compositorOf read relies on, so the <choice> and
+	// <sequence> arms' shared type is what anything but <all> is charged against.
+	grammar := "xs:simpleExplicitGroup (xmlschema11-1.md:5246)"
+	if local == "all" {
+		grammar = "xs:namedGroup's own <all> arm (xmlschema11-1.md:5193)"
+	}
+	for _, attr := range []string{"minOccurs", "maxOccurs"} {
+		if _, ok := group.Attr(attr); !ok {
+			continue
+		}
+		return fmt.Errorf("parser: <%s> at %s carries a %s attribute, which the schema for schema documents prohibits on the body of the named <group> at %s: %s restricts %s to use=\"prohibited\", and it is legal on a local compositor alone", local, group.Loc(), attr, decl.Loc(), grammar, attr)
+	}
+	return nil
 }
 
 // compositorChild returns el's first <all>/<choice>/<sequence> child (a model
@@ -3616,7 +3669,9 @@ func nonNegativeInt(lexical string, loc xsderr.Loc, attr string) (int, error) {
 //
 // Only the content-model <all> is checked: on the <all> body of a top-level named
 // <group>, Appendix A's xs:namedGroup makes both attributes use="prohibited", a
-// presence fault of a different declaration that this function does not model.
+// presence fault of a different declaration that rejectNamedGroupBodyOccurs
+// charges instead — and charges for minOccurs="0" and maxOccurs="1" too, which
+// this enumeration admits.
 func allOccursGrammar(el *Element) error {
 	if lexical, ok := el.Attr("minOccurs"); ok {
 		if err := allOccursEnum(lexical, el.Loc(), "minOccurs"); err != nil {
