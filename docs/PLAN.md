@@ -572,9 +572,23 @@ hand-written producer-level probe, was wrong on three of its four named
 candidates and under-predicted the lane by two, which is the defect **#1332**
 owns. It carved no producer-side successor: #1332 is `kind/process` and **#1333**
 pins the `xs:redefine` entry into `buildDefinitionModelGroup` by test, and
-neither decides and ACCEPTS. Live producer-decides-and-accepts members are
-**#929** — which #455's landing widened to own `minOccursZero`'s clause-2.1.3
-compare as well as `maxOccursZero`'s — **#456** and **#1328**. **The family
+neither decides and ACCEPTS. **#456 has now LANDED too — 2026-09-08,
+`5b84206`, `schema` +20 (fail → pass), zero regressions** — every one of the
+twenty a suite-declared-`invalid` fixture writing an xs:boolean schema
+attribute outside `booleanRep`. **It is the SECOND consecutive non-zero and the
+largest single bank in this chain's record** (against `unchanged`, #1205's +5
+and #931's +6), which settles what #931 opened: the run of four ratchet-neutral
+landings before it was the anomaly, not the rule, and no member may inherit
+either prediction. **It also answers #931's census defect from the other
+side.** `go tool suiteindex` could not take this census either — it censuses by
+construct, and this population is defined by attribute VALUE — but the member
+said so before being asked and predicted the twenty EXACTLY by censusing the
+attribute values directly. **Naming the instrument's limit is what #931 did not
+do**, which is the distinction #1332 now owns. It carved no successor: its one
+unmet acceptance item was dispositioned to the existing #717, not filed. Live
+producer-decides-and-accepts members are now **#929** — which #455's landing
+widened to own `minOccursZero`'s clause-2.1.3 compare as well as
+`maxOccursZero`'s — and **#1328**. **The family
 carved a successor at
 every landing from #471 through #1243, and #1242 is the first that did not** —
 one reading is the tail reaching zero, the other is that this pair was narrower
@@ -785,13 +799,24 @@ contradiction of it: a slice that decides a *new* rule moves the number far
 MORE than its rule count suggests when the declined shape is common, and #913
 moved it more than #790's descent did.
 
-**All TWELVE decided-and-wrong `instance` cases carry an owner, and the two
-classes below account for nine of them.** Measured at `c720206`: 15332 fail =
-15315 decline candidates + 5 declined indeterminate + **12** decided-and-wrong.
-The other three are owned outside these paragraphs (#1160) —
+**All ELEVEN decided-and-wrong `instance` cases carry an owner, and the two
+classes below account for nine of them.** At `5b84206`: 15332 fail = 15316
+decline candidates + 5 declined indeterminate + **11** decided-and-wrong. The
+other two are owned outside these paragraphs (#1160) —
 `MS-DataTypes2006-07-15/gMonth002_2061/instance/gMonth002_2061.v` and
-`gMonth004_2063.v` by **#921**, and `Open/open013/instance/open013.v1.xml` by
-**#456**.
+`gMonth004_2063.v`, both by **#921**.
+
+**It was TWELVE, and `Open/open013/instance/open013.v1.xml` is the case that
+left — reclassified by #456, not fixed by it.** #456 landed the `boolAttr` fix
+(2026-09-08, `5b84206`), so the fixture's `<xs:complexType mixed=" 1 ">` reads
+its ·actual value· `true` and the false reject is gone; but a correct `mixed`
+makes the ·effective content· a particle (§3.4.2.3.3 clause 2.1), routing to
+clause 5.2.1's default open content, and `xsd.Schema.ContentMatcher` declines
+any `{content type}` carrying `{open content}` under a `GAP(xsd)` owned by
+**#717**. Same banked line, a decline candidate now rather than a wrong
+decision — correctness up, lane score flat. The banked figure is
+`go tool lanestatus`'s; the decline figures are the arbiter's, taken at the
+same tree.
 
 **TWO classes are decided and decided WRONG, and the first is two cases, both
 #771**: `ElemDecl/targetns00101m/instance/targetNS00101m1_p`, whose root
