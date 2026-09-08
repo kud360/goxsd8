@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An <xs:redefine> carrying no schemaLocation at all: the schema for schema
+     documents declares that attribute use="required", so this document is not
+     valid against the grammar itself. That class carries no catalog rule ID
+     (xsderr/doc.go), which is why its rejection prints as a bare message and
+     not as the contract's "<loc>: [<rule>] <message>". The <xs:redefine> sits
+     on line 10, which the test cites. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://example.com/s4s">
+  <xs:redefine/>
+</xs:schema>

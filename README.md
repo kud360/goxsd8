@@ -152,7 +152,11 @@ with what `types` and `model groups` each cover. A rejected
 schema prints its first error on stderr as `<loc>: [<rule>] <message>` and
 assembly stops there, so that is one error line per rejected argument; the exit
 code is the worst outcome over the arguments: 0 when every one compiles, 1 when
-any is rejected, 2 when any cannot be read. An `<xs:include>`, `<xs:import>`,
+any is rejected, 2 when any cannot be read. A document whose root is not
+`<xs:schema>`, and a rejection in the **s4s-grammar** class
+(`go doc github.com/kud360/goxsd8/xsderr`), have no rule to cite: each prints
+the bare `<message>` instead, carrying what location it has inside the sentence
+rather than as the `<loc>:` prefix. An `<xs:include>`, `<xs:import>`,
 `<xs:override>` or empty `<xs:redefine>` whose `schemaLocation` resolves to no
 document is named on stderr at its own position — no rule ID, no change of
 exit code, and `-q` does not silence it — so a summary printed off a set
@@ -189,8 +193,10 @@ the help flag are recognized, whether `help` and `-version` are names, what
 
 `validate`'s violations print one per line on stdout as
 `<loc>: [<rule>] <message>` — the same rendering `parse` gives a schema
-error on stderr — where `<loc>` is `<file>:<line>:<col>` (`?` when unknown)
-and `<rule>` is the spec validation rule ID:
+error on stderr, bare-`<message>` exception and all, which on this path is
+the line naming the source fault that stopped the walk — where `<loc>` is
+`<file>:<line>:<col>` (`?` when unknown) and `<rule>` is the spec validation
+rule ID:
 
 ```
 order.xml:3:3: [cvc-type] the ·initial value· of the element amount is not ·valid· with respect to its ·governing type definition· {http://www.w3.org/2001/XMLSchema}decimal, which cvc-type clause 3.1.3 requires as per String Valid (§3.16.4): ?: [cvc-datatype-valid] decimal: "12,50" is not in the lexical space (decimal-lexical-representation, §3.3.3.1)

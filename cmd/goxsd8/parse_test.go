@@ -206,6 +206,108 @@ func TestParseWrappedSchemaError(t *testing.T) {
 	}
 }
 
+// TestParseS4SGrammarRejectionCarriesNoRule pins the exception the contract
+// states beside the "<loc>: [<rule>] <message>" shape (#1313): a document not
+// valid against the schema for schema documents is rejected with no rule to
+// cite (xsderr/doc.go), so its line is the bare message and its location sits
+// inside the sentence rather than as the <loc>: prefix.
+//
+// Both fixtures are asserted in the one test, because the claim is a
+// DIFFERENCE between two rejections that both exit 1 with one stderr line —
+// asserting the bare shape alone would pass against a renderer that had
+// dropped brackets from every line.
+//
+// The opening "parser: <redefine> at <loc>" is pinned as a prefix, which is
+// what makes the assertion fail on a message whose subject or location moved
+// rather than merely on one missing a bracket (#1048).
+func TestParseS4SGrammarRejectionCarriesNoRule(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"parse", "testdata/s4s-redefine.xsd"}, &stdout, &stderr)
+	if code != 1 {
+		t.Errorf("parse of a document invalid against the schema for schema documents = %d, want 1", code)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty — a rejected schema has no summary", stdout.String())
+	}
+	line := strings.TrimSuffix(stderr.String(), "\n")
+	if strings.Contains(line, "\n") {
+		t.Errorf("stderr = %q, want one error line", stderr.String())
+	}
+	if strings.Contains(line, "[") {
+		t.Errorf("stderr = %q, want no [<rule>]: the spec catalogs none for this class, and inventing one would read as a citation", line)
+	}
+	abs, err := filepath.Abs("testdata/s4s-redefine.xsd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The <xs:redefine> sits on line 10 of the fixture, and its location is
+	// carried INSIDE the sentence: a line opening with abs+":" would be the
+	// contract's <loc>: prefix, which this class does not print.
+	if !strings.HasPrefix(line, "parser: <redefine> at "+abs+":10:") {
+		t.Errorf("stderr = %q, want it to open with %q", line, "parser: <redefine> at "+abs+":10:")
+	}
+
+	// The rejection that DOES carry a rule, for the difference: same exit
+	// code, same single line, and both halves of the published shape.
+	var ruledOut, ruledErr bytes.Buffer
+	if code := run([]string{"parse", "testdata/broken.xsd"}, &ruledOut, &ruledErr); code != 1 {
+		t.Fatalf("parse of a rejected schema = %d, want 1", code)
+	}
+	ruled := strings.TrimSuffix(ruledErr.String(), "\n")
+	if !strings.Contains(ruled, brokenRule) {
+		t.Errorf("stderr = %q, want the charged rule in brackets", ruled)
+	}
+	brokenAbs, err := filepath.Abs("testdata/broken.xsd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(ruled, brokenAbs+":") {
+		t.Errorf("stderr = %q, want the <loc>: prefix the s4s-grammar line does not print", ruled)
+	}
+}
+
+// TestParseNonSchemaRootCarriesNoRule pins the second member of the no-rule-ID
+// class the contract names beside the "<loc>: [<rule>] <message>" shape
+// (#1313): a well-formed document whose root is not <xs:schema> is a caller
+// precondition fault rather than a schema-validity verdict (parser/produce.go),
+// so no rule governs it and its line is the bare message — the likeliest
+// operator mistake, pointing parse at an instance document.
+//
+// It is exit 1 and not exit 2: rootLocation has already proved the file
+// readable, so the rejection is a verdict about what the document IS.
+//
+// The whole message is pinned, not a bracket-free shape: the location it
+// carries is the path alone, without the line:col an s4s-grammar message
+// holds, so an assertion that stopped at "no [" would pass against a line that
+// had lost its subject or its file (#1048).
+func TestParseNonSchemaRootCarriesNoRule(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"parse", "testdata/notschema.xml"}, &stdout, &stderr)
+	if code != 1 {
+		t.Errorf("parse of a document whose root is not <xs:schema> = %d, want 1", code)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty — a rejected schema has no summary", stdout.String())
+	}
+	line := strings.TrimSuffix(stderr.String(), "\n")
+	if strings.Contains(line, "\n") {
+		t.Errorf("stderr = %q, want one error line", stderr.String())
+	}
+	if strings.Contains(line, "[") {
+		t.Errorf("stderr = %q, want no [<rule>]: no rule governs the document handed to a compiler, and inventing one would read as a citation", line)
+	}
+	abs, err := filepath.Abs("testdata/notschema.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The location is inside the sentence: a line opening with abs+":" would
+	// be the contract's <loc>: prefix, which this rejection does not print.
+	want := fmt.Sprintf("parser: assembling a schema requires a <schema> document root at %q, got foo", abs)
+	if line != want {
+		t.Errorf("stderr = %q, want %q", line, want)
+	}
+}
+
 // TestParseNamesAnUnresolvedDirective is #1260's acceptance: a schema argument
 // whose own directive names a document that is not there compiles — src-include
 // clause 2.4 makes the skip legal — so nothing about the summary or the exit
