@@ -306,7 +306,7 @@ var (
 // numbered rule ID: §2.3's gloss-src defines a Schema Representation Constraint as
 // a condition "beyond those which are expressed in" the schema for schema
 // documents, §2.4 states sd-valid and sd-supervalid as two separate conformance
-// clauses, and src-ct's own preamble (§3.4.3, :1945) opens "In addition to the
+// clauses, and src-ct's own preamble (§3.4.3, :1946) opens "In addition to the
 // conditions imposed … by the schema for schema documents" over five clauses none
 // of which concerns child order or cardinality. Charging src-ct — or any other
 // src-*/cvc-*/cos-* — here would be a fabricated verdict (STYLE E2). The plain
@@ -344,15 +344,40 @@ var (
 // gloss-src, :607); it does not sequence the two checks, and neither does the
 // scope-containment reading of it.
 //
-// The order is this walk FIRST, at every producer charging both and with no
-// exception: a document whose children the content model does not admit is
-// answered by the grammar fault, and no src-* verdict is reached over a shape
-// the grammar already rejects. src-element clause 2.2 (elementParticleTerm),
-// clause 3 (produceElement, produceLocalElement) and clause 4
-// (rejectLocalElementTargetNamespace), src-ta (checkSrcTA,
-// produce_typetable.go), and EVERY src-attribute clause this parser charges
-// (produceAttribute, produceAttributeUse, produceLocalAttribute) are behind it,
-// and a NEW charge takes the same order (#1246).
+// The order is this walk FIRST: a document whose children the content model does
+// not admit is answered by the grammar fault, and no src-* verdict is reached
+// over a shape the grammar already rejects. That rule IS the membership, and it
+// takes no roster. Inside a production — the body that walks one of the twelve
+// models above, and everything that body calls — EVERY src-* clause this parser
+// charges over the walked element or over anything beneath it is behind that
+// walk, with no exception, and a NEW charge takes the same order (#1246). The
+// families satisfying it today are examples of the rule and never its extent:
+// src-element, src-ct, src-attribute, src-ta, src-simple-type,
+// src-identity-constraint, src-resolve and src-wildcard among others. A landing
+// that adds a charge applies the rule to the site in hand; it does not come back
+// to lengthen that list.
+//
+// Charges from OUTSIDE a production are not in the class, since no walk has run
+// for them to stand behind — and some of them do land on an element a walk
+// visits later. src-cip is charged by conditionalInclude (conditional.go), which
+// Produce runs before any producer exists, and src-include, src-import,
+// src-import-noselfimport, src-override and src-redefine clause 1 during
+// assembly (parse.go, override.go) — src-override over a <simpleType>,
+// <complexType>, <element> or <attribute> child of the <override> that a
+// producer walks afterwards. src-expredef and src-redefine clauses 5, 6 and 7
+// are charged by produceRedefinition (redefine.go), clause 5 over the redefining
+// <simpleType>/<complexType> itself and over its derivation child, with the
+// src-resolve that clause's self-derivation lookup can raise beside it. All of
+// that decides whether the declaration is built at all, so it stands ahead of
+// the build this walk heads rather than inside it.
+//
+// WHICH walk stands in front of a clause need not be the one in the producer
+// body charging it. src-ct clause 1 constrains the <complexType>'s mixed
+// attribute but is charged from produceSimpleContent, so the walk ahead of it
+// is produceComplexType's over that <complexType>, and the two
+// <simpleContent>-side walks run AFTER it rather than before. Clauses 3 and 4
+// constrain an <openContent>'s children and stand behind the walk over the
+// element holding it — the <complexType> or the derivation alternant.
 //
 // rejectBothInlineTypes (produce_complex.go) runs ahead of the walk on both
 // element paths and is no exception to that order: it charges no rule at all,

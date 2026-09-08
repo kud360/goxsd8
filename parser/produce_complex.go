@@ -597,9 +597,12 @@ func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (
 //
 // The CHILD ORDER of the <simpleContent> and of the alternant it holds is
 // charged by checkS4SChildOrder, against s4sSimpleContentWrapper and then
-// s4sSimpleRestriction/s4sSimpleExtension. Both run ahead of the src-ct clauses
-// below, because src-ct states its conditions "in addition to" the schema for
-// schema documents rather than restating them (§3.4.3, :1945).
+// s4sSimpleRestriction/s4sSimpleExtension. Clause 2 below is behind both of
+// them; clause 1 is NOT, since it is charged over the <complexType> rather than
+// over anything under the <simpleContent> — the walk in front of it is
+// produceComplexType's, which runs before this body is entered at all. The run
+// order and why it is this repo's to choose are recorded on
+// checkS4SChildOrder's doc.
 //
 // It enforces the two src-ct (§3.4.3) clauses this representation carries, both
 // Schema Representation Constraints on the source XML and both charged before
@@ -898,8 +901,9 @@ func restrictedSimpleBase(base xsd.TypeDefinition, anySimpleType *xsd.SimpleType
 //
 // The CHILD ORDER of the <complexContent> and of the alternant it holds is
 // charged by checkS4SChildOrder, against s4sComplexContentWrapper and then
-// s4sComplexRestriction/s4sComplexExtension, both ahead of src-ct clause 5 below
-// and on the same footing as the <simpleContent> half.
+// s4sComplexRestriction/s4sComplexExtension, both ahead of src-ct clause 5
+// below. The run order and why it is this repo's to choose are recorded on
+// checkS4SChildOrder's doc.
 func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Element) (xsd.ComplexType, error) {
 	if dup := repeatedDerivationAlternant(cc); dup != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <%s> at %s is a second derivation alternant on the <complexContent> at %s, which the schema for schema documents prohibits: xs:complexContent (§3.4.2.3) holds a plain xs:choice, so a <complexContent> carries exactly one of <restriction>, <extension>", dup.Name().Local(), dup.Loc(), cc.Loc())
