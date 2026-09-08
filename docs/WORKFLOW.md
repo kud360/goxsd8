@@ -275,12 +275,20 @@ is anyone else's to volunteer:
    `git log HEAD..origin/main` is empty. If it is not, merge forward and
    re-judge per **After the verdict**, then re-verify: main can drift
    again while the PR is open.
-3. **Mason's own account of the change is on the issue thread** — the
+3. **Every implementation commit on the branch is dispositioned** — the
    thread's comments read back over the GitHub channel, not "mason
-   reported". Every mason commit on the branch is covered by some `MASON:`
-   comment, and a repair round's own comment dispositions every numbered
-   item of the verdict it repairs. An account that was never written is a
-   mason round, never the orchestrator's to compose (#565).
+   reported". The set to iterate is what
+   `git log --no-merges --format='%h %s' origin/main..HEAD -- ':(top,exclude)docs/LOG/'`
+   yields; merge-forwards, the chronicler's LOG-only commit and
+   `--allow-empty` lease heartbeats fall out of it and owe nothing, and the
+   `(top)` magic is what holds that answer steady from a subdirectory.
+   Every commit it does yield is covered by some `MASON:` comment on the
+   thread, or the orchestrator states here which arm of the pen bound
+   admits it — a verdict-specified change, or text no compiler reads. A
+   commit that is neither is a mason round that was skipped, and the branch
+   does not land (#1227). A repair round's own comment dispositions every
+   numbered item of the verdict it repairs. An account that was never
+   written is a mason round, never the orchestrator's to compose (#565).
 4. **Every issue the squash body names reads `closed`** — AFTER the merge,
    not before it. The iteration set is every `#<N>` reference the squash
    commit text names, subject and body, bound closing keyword and plain
@@ -304,13 +312,14 @@ session's place — the cartographer for its own `post-land` PR.
 Precondition 1 already says what it has to say here. Precondition 2 binds
 with nothing keyed on a verdict: `git log HEAD..origin/main` is empty,
 and a branch that is behind merges forward and re-runs the gate.
-Precondition 3 does not bind — there is no mason round and no owning
-issue thread, and the pass composes its own account into the LOG entry
-and the PR body instead. Precondition 4 runs its full procedure here,
-every `#<N>` the squash body names read back alike: a body of this shape
-names issues in order to record what it unblocked or disposed of, so
-`open` is an expected reading, disposed of by stating why the landing
-named it rather than by closing it by hand.
+Precondition 3 does not bind — the pass is held end to end by the agent
+that opens it, and there is no owning issue thread for a `MASON:` comment
+to be on; it composes its own account into the LOG entry and the PR body
+instead. Precondition 4 runs its full procedure here, every `#<N>` the
+squash body names read back alike: a body of this shape names issues in
+order to record what it unblocked or disposed of, so `open` is an expected
+reading, disposed of by stating why the landing named it rather than by
+closing it by hand.
 
 ### After the verdict
 
