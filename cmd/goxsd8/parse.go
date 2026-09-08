@@ -91,6 +91,12 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 		parser.WithResolver(loader.Dir(filesystemRoot(root))),
 		parser.WithLogger(log))
 	if err != nil {
+		// Above the verdict, and reported on this path for the reason
+		// reportUnfollowed states: the shortfall is a fact about the assembly the
+		// error came out of, and this report carries it (#1312). A root document
+		// that could not be read returns an empty report, so that third error
+		// shape still prints nothing here.
+		reportUnfollowed(stderr, "parse", assemblyRejected, report)
 		// A schema verdict, not an IO fault: rootLocation already opened the
 		// document. Errors reach stderr whatever -q says, so a script can
 		// grep them.
@@ -100,7 +106,7 @@ func parseOne(location string, quiet bool, log *slog.Logger, stdout, stderr io.W
 	// Before the summary and ahead of the -q gate: the summary is this
 	// subcommand's informational output, and a directive the assembly behind it
 	// could not follow is a diagnosis, which doc.go forbids -q to silence.
-	reportUnfollowed(stderr, "parse", report)
+	reportUnfollowed(stderr, "parse", assemblyCompiled, report)
 	if quiet {
 		return exitOK
 	}
@@ -151,10 +157,26 @@ func violationLine(err error) string {
 	return err.Error()
 }
 
+// The two assembly outcomes reportUnfollowed words its line for, named at the
+// call sites so that neither reads as a bare true or false.
+const (
+	assemblyCompiled = true
+	assemblyRejected = false
+)
+
 // reportUnfollowed names on stderr, one line per directive at its own
-// position, every ·inter-schema-document reference· of a schema that DID
-// compile whose schemaLocation resolved to no document. verb is the subcommand
-// the diagnosis is charged to.
+// position, every ·inter-schema-document reference· the assembly reached whose
+// schemaLocation resolved to no document. verb is the subcommand the diagnosis
+// is charged to, and compiled says whether that assembly went on to yield a
+// schema.
+//
+// BOTH outcomes are reported (#1312). The shortfall is a fact about the
+// assembly, which parser.AssemblyReport carries "as far as assembly got even
+// when ParseReport returns an error", so reading it only on the success path
+// withheld the line exactly where an operator holding an error needs to know
+// the set was short. A rejected assembly names the directives it reached before
+// stopping, which is all the report holds — one that failed on its root
+// document holds none and prints nothing.
 //
 // The line carries no rule ID and moves no exit code, because this is not a
 // violation: src-include clause 2.4 (§4.2.3) and src-import (§4.2.6.2) both
@@ -165,21 +187,37 @@ func violationLine(err error) string {
 // answered off a SHORT assembly is distinguishable from one answered off a
 // complete one — the fact nothing but -v carried before (#1260).
 //
+// compiled selects the wording because two of its claims hold only when the
+// assembly compiled. That the skip was LEGAL:
+// parser.UnfollowedLocationUnresolved also records the two unresolved locations
+// that are faults — a non-empty <xs:redefine>'s (src-redefine clause 1) and a
+// resolver that failed rather than reported absence — and each arrives with the
+// verdict charging it, which a line calling it legal would contradict. And that
+// the shortfall is all that is wrong: on the error path nothing in the report
+// says whether the unread document had any part in the rejection, so the line
+// says nothing of it either.
+//
 // Only parser.UnfollowedLocationUnresolved is named. A bare <import>
 // (parser.UnfollowedNoLocation) names no document to have failed to reach:
 // §4.2.6.2 makes it the spelling for "references into this namespace are
 // expected", which another document of the set may supply, so reporting it
-// would charge a complete set with a shortfall. The other two reasons cannot
-// arrive here — parser.ParseReport returns an error alongside each of them,
-// and every caller of this reports only a schema it compiled.
-func reportUnfollowed(stderr io.Writer, verb string, report *parser.AssemblyReport) {
+// would charge a complete set with a shortfall. The other two — a directive
+// with no schemaLocation at all (parser.UnfollowedNoSchemaLocation) and a
+// document that resolved but could not be read (parser.UnfollowedUnreadable) —
+// do reach here now that the error path reports too, and stay unnamed: each
+// arrives with the error that charges it, which says more than this line could.
+func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *parser.AssemblyReport) {
+	shortfall := "; the rejected assembly is short of whatever that document declares"
+	if compiled {
+		shortfall = ", which is legal and skipped; the compiled schema is short of whatever that document declares"
+	}
 	for _, u := range report.Unfollowed() {
 		if u.Reason != parser.UnfollowedLocationUnresolved {
 			continue
 		}
-		// A failed stderr write cannot change the outcome: the schema compiled,
-		// and stderr is the only channel this line has.
-		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: this schemaLocation resolved to no document, which is legal and skipped; the compiled schema is short of whatever that document declares\n", verb, u.At)
+		// A failed stderr write cannot change the outcome: the exit code is
+		// settled either way, and stderr is the only channel this line has.
+		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: this schemaLocation resolved to no document%s\n", verb, u.At, shortfall)
 	}
 }
 

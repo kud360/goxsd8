@@ -175,6 +175,13 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	backend := strict.New()
 	base, report, err := compileSet(docs, backend, log)
 	if err != nil {
+		// The set's own shortfall stands above the verdict, on parseOne's terms:
+		// the wrapper assembly discovers the -schema documents in argument order,
+		// so a document whose directive resolved to nothing is named whether or
+		// not a LATER one collides — a rejection here used to silence the whole
+		// set's notes, including those of documents that composed cleanly
+		// (#1312).
+		reportUnfollowed(stderr, "validate", assemblyRejected, report)
 		// Reported once, before any instance is read: with no schema set there
 		// is no assessment to run, and one line beats the same line per
 		// instance.
@@ -185,7 +192,7 @@ func runValidate(args []string, stdout, stderr io.Writer) int {
 	// that the shortfall stands above the report it explains. Every entry names
 	// a -schema document's own directive: the wrapper root's schemaLocations are
 	// the paths rootLocation already opened.
-	reportUnfollowed(stderr, "validate", report)
+	reportUnfollowed(stderr, "validate", assemblyCompiled, report)
 	v, err := validate.New(base, backend, validate.WithLogger(log))
 	if err != nil {
 		return usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))

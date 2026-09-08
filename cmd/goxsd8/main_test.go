@@ -243,6 +243,13 @@ func TestUsageCoversContract(t *testing.T) {
 		"-q does not silence it.",
 		"A bare <xs:import>, which names no",
 		"A -schema document's own unresolved directive",
+		// #1312's ruling, which the two copies must carry or the note is
+		// undocumented on the path it was dropped from: that a REJECTED
+		// assembly is named too, for what it reached, and that the line
+		// charges the shortfall no part in the rejection.
+		"A REJECTED schema is named the same",
+		"saying nothing about whether the unread document had a part",
+		"when the set does not compile, for whichever",
 		// #1261's own answers, which a script reading the summary had to
 		// reverse-engineer: that the count block is always all seven kinds in
 		// one fixed order, that types is simple and complex on one line, what

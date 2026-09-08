@@ -128,8 +128,10 @@ to name. A `-schema` document's **own** unresolved `<xs:include>`,
 `<xs:import>`, `<xs:override>` or empty `<xs:redefine>` is the other case and
 **is** named on stderr, once for the set and before any instance is assessed,
 exactly as `parse` names it below: that directive is the schema author's claim
-about a document, where a hint is the instance's. Exit **3** answers a
-`-schema` set that does not compile and nothing else.
+about a document, where a hint is the instance's. A set that does **not**
+compile is named the same way, for whichever documents its assembly reached, so
+one document's rejection does not silence another's shortfall. Exit **3**
+answers a `-schema` set that does not compile and nothing else.
 
 `parse` compiles **each argument separately**, in argument order — several
 schema arguments are several compilations, not one set — and prints each
@@ -141,16 +143,19 @@ kinds and a `components:` line holding their sum, which
 `go doc github.com/kud360/goxsd8/cmd/goxsd8` enumerates in the printed order,
 with what `types` and `model groups` each cover. A rejected
 schema prints its first error on stderr as `<loc>: [<rule>] <message>` and
-assembly stops there, so that is one line per rejected argument; the exit code
-is the worst outcome over the arguments: 0 when every one compiles, 1 when any
-is rejected, 2 when any cannot be read. An `<xs:include>`, `<xs:import>`,
+assembly stops there, so that is one error line per rejected argument; the exit
+code is the worst outcome over the arguments: 0 when every one compiles, 1 when
+any is rejected, 2 when any cannot be read. An `<xs:include>`, `<xs:import>`,
 `<xs:override>` or empty `<xs:redefine>` whose `schemaLocation` resolves to no
 document is named on stderr at its own position — no rule ID, no change of
 exit code, and `-q` does not silence it — so a summary printed off a set
 **short** of a document it named is distinguishable from one printed off a
 complete set. `src-include` clause 2.4 and `src-import` make that skip legal,
 which is why it is a line and not an error; a bare `<xs:import>`, naming no
-document to fail to reach, is not reported at all.
+document to fail to reach, is not reported at all. A **rejected** schema is
+named the same way, for the directives assembly reached before it stopped, in a
+line that says the assembly was rejected rather than compiled and says nothing
+about whether the unread document had a part in that.
 
 Beyond `-schema` and `-out`, the contract carries `-format xml|json|ber`
 (force the instance source format instead of deriving it from the

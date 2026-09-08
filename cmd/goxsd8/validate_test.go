@@ -25,6 +25,7 @@ const (
 	hintedSchema         = "testdata/hinted.xsd"
 	assertedSchema       = "testdata/asserted.xsd"
 	assertedInstance     = "testdata/asserted.xml"
+	brokenSchema         = "testdata/broken.xsd"
 	shortSchema          = "testdata/unresolved-include.xsd"
 	shortValidInstance   = "testdata/unresolved-include-valid.xml"
 	shortInvalidInstance = "testdata/unresolved-include-invalid.xml"
@@ -326,6 +327,44 @@ func TestValidateNamesAnUnresolvedSchemaSideDirective(t *testing.T) {
 	}
 	if got := strings.Count(stderr.String(), at); got != 1 {
 		t.Errorf("stderr names the directive %d times, want 1 — the set is compiled once:\n%s", got, stderr.String())
+	}
+}
+
+// TestValidateNamesAnUnresolvedDirectiveOfARejectedSet is #1312's ruling on
+// the set-wide arm. compileSet composes every -schema document as ONE
+// assembly, so reading its report only when that assembly compiled let one
+// document's unrelated rejection suppress every other document's shortfall:
+// here the src-resolve fault is broken.xsd's alone, and the unfollowed
+// <xs:include> belongs to a document that composed cleanly.
+//
+// Both are named, in the wording a rejected assembly earns, and the shortfall
+// stands above the verdict — which is neither charged against it nor cleared of
+// it, the report saying nothing either way.
+func TestValidateNamesAnUnresolvedDirectiveOfARejectedSet(t *testing.T) {
+	abs, err := filepath.Abs(shortSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The <xs:include> the fixture carries on line 10, in the rejected
+	// assembly's wording.
+	note := "goxsd8: validate: " + abs + ":10:3: this schemaLocation resolved to no document; the rejected assembly is short of whatever that document declares\n"
+
+	var stdout, stderr bytes.Buffer
+	args := []string{"validate", "-no-hints", "-schema", shortSchema, "-schema", brokenSchema, shortValidInstance}
+	if code := run(args, &stdout, &stderr); code != exitSchema {
+		t.Fatalf("code = %d, want %d — the set does not compile (stdout %q, stderr %q)", code, exitSchema, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), note) {
+		t.Errorf("stderr =\n%s\nwant the clean document's own note %q", stderr.String(), note)
+	}
+	if !strings.Contains(stderr.String(), "[src-resolve]") {
+		t.Errorf("stderr =\n%s\nwant the other document's rejection charged", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "compiled schema") {
+		t.Errorf("stderr =\n%s\nwant no line calling the rejected set a compiled schema", stderr.String())
+	}
+	if strings.Index(stderr.String(), note) > strings.Index(stderr.String(), "[src-resolve]") {
+		t.Errorf("stderr =\n%s\nwant the note before the error line", stderr.String())
 	}
 }
 
