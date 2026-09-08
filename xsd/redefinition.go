@@ -102,36 +102,15 @@ func (b *SchemaBuilder) AddRedefiningAttributeGroup(g, original AttributeGroupDe
 // the pairing is a single edge from a named definition to an off-index
 // component, and §3.6.2.1 has already inlined every <attributeGroup ref> at
 // mapping time, so an AttributeGroupDefinition holds no edge to another one and
-// no visited set belongs here (PRINCIPLES 9). It draws no resolvability
-// guarantee from Phase A for either side — see the GAP below.
-//
-// GAP(xsd): a reference on EITHER side — an <attribute ref>, or a type= on a
-// local <attribute> child, of the redefinition or of the original — that names
-// nothing the assembled schema holds gets no src-resolve (§3.17.6.2) verdict,
-// and #725 owns its retirement. This is not clause 4.1.2's doing:
-// resolveReferences (resolve.go) never walks s.attributeGroups for ANY
-// top-level attribute group, redefinition or not, so the redefinition side (in
-// {attribute group definitions} like any other component) is exactly as
-// unresolved as the original (which 4.1.2 additionally keeps out of every
-// property and index, but that exclusion costs it nothing here — it never had
-// Phase A coverage to lose).
-//
-// DIRECTION, per reader of the value that goes missing — the resolved
-// {attribute declaration} or {type definition} behind a use on either side
-// (STYLE P3a):
-//
-//   - AttributeUse.DeclarationName and findAttributeUse read the use's own
-//     QName with NO resolution, so the side still REPORTS the use. That is
-//     what matters most: under-reporting either side's {attribute uses} is
-//     what would make this check fail-CLOSED, and it does not happen.
-//   - checkAttributeTypeDerivedOK (defaultbinding.go) gets not-ok from
-//     attributeUseType and returns nil, leaving loc-testSubP clause 5.1
-//     undecided: FAIL-OPEN.
-//   - checkAttributeValueConstraintSubsumes reads the same miss as an ·absent·
-//     ·effective value constraint· and discharges clause 5.2.1: FAIL-OPEN.
-//   - checkAttributeUseSubsumes' clause 5.3 ({inheritable}) and
-//     checkAttributeRestrictionRequired ({required}) read the Attribute Use
-//     itself, never its declaration: UNAFFECTED.
+// no visited set belongs here (PRINCIPLES 9). It draws Phase A's resolvability
+// guarantee on BOTH sides: resolveReferences roots {attribute group
+// definitions} for the redefinition, which sits there like any other component,
+// and the recorded pairings for the original, which §4.2.4 clause 4.1.2 keeps
+// out of every property and index (#725). So a use whose <attribute ref> or
+// whose local <attribute>'s type= names NOTHING is rejected src-resolve before
+// this check runs, on the same footing as one inside a complex type; what still
+// reaches attributeUseType's not-ok arm (defaultbinding.go) is a type= naming a
+// COMPLEX type, which is no more this comparison's to charge here than there.
 func (s *Schema) checkAttributeGroupRedefinitions() error {
 	for _, r := range s.attributeGroupRedefinitions {
 		g, ok := s.attributeGroupIndex[r.name]

@@ -114,8 +114,12 @@ var allowedCollisionCitations = []citationAllowance{
 	// half of item 9 — "Where the spec permits reference cycles it also names
 	// the rule that forbids the harmful ones; detect those once, at finalize"
 	// — is what the colour-map guards cite, #738's checkUnionMembershipAcyclic
-	// (cos-st-restricts clause 3.3) included.
-	{file: "xsd/resolve.go", number: 9, count: 10},
+	// (cos-st-restricts clause 3.3) included. #725 added the eleventh, on Phase
+	// A's {attribute group definitions} root: §3.6.2.1 inlines every
+	// <attributeGroup ref> at producer mapping time, so a definition holds no
+	// edge to another one and the group a complex type also inlined is re-walked
+	// a bounded number of times rather than guarded — the first half again.
+	{file: "xsd/resolve.go", number: 9, count: 11},
 	{file: "xsd/simpletype.go", number: 9, count: 1},
 	{file: "xsd/substitutiongroup.go", number: 9, count: 1},
 	{file: "xsd/substitutiongrouptypes.go", number: 9, count: 1},

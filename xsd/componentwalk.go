@@ -258,6 +258,25 @@ func (w componentWalk) walkModelGroup(g ModelGroup, loc xsderr.Loc) error {
 	return nil
 }
 
+// walkAttributeGroupDefinition enters one Attribute Group Definition, whose
+// only nesting slot is its {attribute uses} (§3.6.1) — {attribute wildcard}
+// nests no component this tree reaches and {annotations} is a leaf.
+//
+// It is a ROOT entry point and is reached from no referring site: §3.6.2.1
+// inlines every <attributeGroup ref> at producer mapping time, so no component
+// holds an edge to an Attribute Group Definition. Every phase whose roots
+// include {attribute group definitions} enters them through here, so the owner
+// phrase and the referrer-Loc re-rooting are decided once (STYLE T4).
+func (w componentWalk) walkAttributeGroupDefinition(g AttributeGroupDefinition) error {
+	owner := attributeGroupOwner(g)
+	for _, u := range g.AttributeUses() {
+		if err := w.walkAttributeUse(u, g.Loc(), owner); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // attributeGroupOwner renders an Attribute Group Definition as the owner phrase
 // of a rejection message charged against one of its {attribute uses}. Unlike a
 // complex type's, its {name} is never absent (§3.6.1 requires it), so there is

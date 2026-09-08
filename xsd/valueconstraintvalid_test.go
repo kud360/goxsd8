@@ -314,28 +314,6 @@ func TestPhaseEOwnerNamesAnonymousComplexType(t *testing.T) {
 	}
 }
 
-// TestPhaseEUnresolvableRefIsSkipped pins the fail-open branch inside an
-// attribute group: Phase A never walks {attribute group definitions}, so a
-// dangling <attribute ref> there reaches Phase E unvetted and must be SKIPPED,
-// not charged — au-props-correct clause 3 has no declaration to read.
-func TestPhaseEUnresolvableRefIsSkipped(t *testing.T) {
-	vs := &stubValueSpace{same: false, decided: true}
-	_, err := vcSchema(t, vs, func(b *SchemaBuilder) {
-		use := vcRefUse(t, ValueDefault, "7") // g is never declared here
-		g, err := NewAttributeGroupDefinition(xsderr.Loc{}, uq("ag"), []AttributeUse{use}, nil, nil)
-		if err != nil {
-			t.Fatalf("NewAttributeGroupDefinition: %v", err)
-		}
-		b.AddAttributeGroup(g)
-	})
-	if err != nil {
-		t.Fatalf("an unresolvable <attribute ref> must be skipped, not charged: %v", err)
-	}
-	if vs.calls != 0 {
-		t.Fatalf("the ValueSpace was consulted %d time(s) for a use with no resolvable declaration", vs.calls)
-	}
-}
-
 // TestFinalizeWithoutValueSpaceFailsOpen pins that plain Finalize installs the
 // undecided value space rather than nil: the same schema Phase E rejects under a
 // decided-not-identical value space is ACCEPTED with no value space at all, and

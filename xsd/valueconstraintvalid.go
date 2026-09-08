@@ -110,12 +110,11 @@ import "github.com/kud360/goxsd8/xsderr"
 // are this phase's own: top-level type definitions, then top-level element
 // declarations (whose inline anonymous complex types carry attribute uses of
 // their own), then top-level model group definitions (whose particles can carry
-// element declarations with inline complex types), and finally — where Phase A
-// stops — top-level attribute group definitions. Between those roots and that
-// descent, every element declaration in the schema is charged exactly once, at
-// its own Loc, which is what makes clause 2's quantifier ("all element
-// declarations", §3.3.6) complete; see this file's head for the measurement
-// behind that shape.
+// element declarations with inline complex types), and finally top-level
+// attribute group definitions. Between those roots and that descent, every
+// element declaration in the schema is charged exactly once, at its own Loc,
+// which is what makes clause 2's quantifier ("all element declarations",
+// §3.3.6) complete; see this file's head for the measurement behind that shape.
 //
 // Since #401 materialised §3.4.2.4 clause 3, an INHERITED attribute use is a
 // member of the deriving type's {attribute uses} too, so it is re-checked at
@@ -130,17 +129,16 @@ import "github.com/kud360/goxsd8/xsderr"
 // which no enclosing type can move, so neither the verdict nor the reported
 // position depends on which route reached it.
 //
-// Phase A does NOT walk {attribute group definitions} (see resolve.go's
-// FOLLOW-COST ASYMMETRY note): every <attributeGroup ref> is inlined at producer
-// mapping time, so a group's uses are already folded into each complex type that
-// references it and walking types alone would suffice for the parser path. This
-// phase walks them anyway, because an UNREFERENCED group — and any group a
-// SchemaBuilder caller adds directly — holds Attribute Use components the spec
-// constrains all the same, and a folded use is simply re-tested with the same
-// verdict. The price of going where Phase A did not is that a group's <attribute
-// ref> was never vetted for resolvability: an unresolvable one is SKIPPED here
-// (ResolvedAttributeDeclaration reports no declaration), not charged src-resolve,
-// which is fail-open and never a false reject.
+// {attribute group definitions} are rooted although walking types alone would
+// suffice for the parser path — §3.6.2.1 inlines every <attributeGroup ref> at
+// producer mapping time, so a referenced group's uses are already folded into
+// each type referencing it. An UNREFERENCED group, and any group a SchemaBuilder
+// caller adds directly, holds Attribute Use components the spec constrains all
+// the same, and a folded use is simply re-tested with the same verdict. Phase A
+// roots them for that reason too (#725), so an <attribute ref> reaching this
+// phase has been vetted for resolvability like any other: the
+// ResolvedAttributeDeclaration miss below is unreachable for a schema that
+// survived Phase A, not a fail-open.
 func (s *Schema) checkComponentValueConstraints() error {
 	w := componentWalk{
 		attributeUse:       s.checkAttributeUseValueConstraint,
@@ -162,10 +160,8 @@ func (s *Schema) checkComponentValueConstraints() error {
 		}
 	}
 	for _, g := range s.attributeGroups {
-		for _, u := range g.AttributeUses() {
-			if err := w.walkAttributeUse(u, g.Loc(), attributeGroupOwner(g)); err != nil {
-				return err
-			}
+		if err := w.walkAttributeGroupDefinition(g); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -202,9 +198,9 @@ func (s *Schema) checkComponentValueConstraints() error {
 // handed to ValueSpace.Identical on both sides.
 //
 // Every non-decision is fail-open and never a false reject: an unresolvable
-// declaration (a dangling Ref, already charged src-resolve by Phase A on the
-// paths Phase A walks), a {type definition} that is absent, unresolvable, or
-// complex, and an undecided ValueSpace verdict all accept.
+// declaration (a dangling Ref, which Phase A already charged src-resolve at
+// every root this walk enters), a {type definition} that is absent,
+// unresolvable, or complex, and an undecided ValueSpace verdict all accept.
 func (s *Schema) checkAttributeUseValueConstraint(u AttributeUse, loc xsderr.Loc, owner string) error {
 	d, ok := s.ResolvedAttributeDeclaration(u)
 	if !ok {

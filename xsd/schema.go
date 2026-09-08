@@ -179,8 +179,10 @@ type Schema struct {
 	identityConstraints []IdentityConstraint
 	annotations         []Annotation
 
-	// attributeGroupRedefinitions carries the builder's pairings across finalize;
-	// checkAttributeGroupRedefinitions (redefinition.go) is its one reader.
+	// attributeGroupRedefinitions carries the builder's <attributeGroup> pairings
+	// across finalize; checkAttributeGroupRedefinitions (redefinition.go) charges
+	// clause 7.2.2 over them and resolveReferences (resolve.go) walks each
+	// original's {attribute uses} for src-resolve.
 	attributeGroupRedefinitions []attributeGroupRedefinition
 
 	// modelGroupRedefinitions carries the builder's <group> pairings across
