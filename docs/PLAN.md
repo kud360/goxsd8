@@ -624,8 +624,10 @@ sites for it. **A producer that decides more is a producer with more to get
 wrong, and the census does not name that class.** #1136 is the one that stopped
 the accumulation: it replaced four independent local run-order guesses with ONE
 recorded decision, and its own follow-ups (#1246, landed 2026-09-07 as
-`a363592`, and open #1247) are about that record rather than about a fifth
-guess.
+`a363592`, and #1247, landed 2026-09-08 as `77b0419`) are about that record
+rather than about a fifth guess. **That record now states a rule scoped by
+WHERE rather than a family roster**, and #1247's own follow-ups (#1342, #1343)
+are about its wording rather than its membership.
 
 **#1275 shows the site-widening half is NOT exhausted, and it arrived from a
 third route again.** It is a further SITE — a twelfth `s4sModel` at a position
