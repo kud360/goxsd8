@@ -446,6 +446,10 @@ func TestValidateNoNamespaceHint(t *testing.T) {
 // which charges cvc-assess-elt here, and exitSchema stays the answer to a
 // -schema set that does not compile.
 //
+// All three are also NAMED on stderr, against the instance and by the hinted
+// document (#1251). Only the first two are faults: a schemaLocation that
+// resolves to nothing is legal to skip, so that case's line carries no rule ID.
+//
 // No line may cite schemaSetLocation, which is this process's own synthesis and
 // names no document the reader can open (STYLE E3).
 func TestValidateUnusableHintIsTheInstancesFault(t *testing.T) {
@@ -467,13 +471,16 @@ func TestValidateUnusableHintIsTheInstancesFault(t *testing.T) {
 	cases := []struct {
 		name string
 		path string
-		// want is the hinted document the diagnosis must name, empty where the
-		// set composes and there is nothing to report.
+		// want is the hinted document the diagnosis must name.
 		want string
+		// composes reports whether the augmented set still compiles, which a
+		// hint naming a document that is not there does not stop: its line is a
+		// shortfall rather than a charge, so it carries no rule ID.
+		composes bool
 	}{
-		{"namespace mis-paired", instance("mispaired.xml", "actual.xsd"), "actual.xsd"},
-		{"hinted document malformed", instance("malformed-hint.xml", "junk.xsd"), "junk.xsd"},
-		{"hinted document missing", instance("missing-hint.xml", "nosuch.xsd"), ""},
+		{"namespace mis-paired", instance("mispaired.xml", "actual.xsd"), "actual.xsd", false},
+		{"hinted document malformed", instance("malformed-hint.xml", "junk.xsd"), "junk.xsd", false},
+		{"hinted document missing", instance("missing-hint.xml", "nosuch.xsd"), "nosuch.xsd", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -491,19 +498,95 @@ func TestValidateUnusableHintIsTheInstancesFault(t *testing.T) {
 			if strings.Contains(stdout.String(), schemaSetLocation) {
 				t.Errorf("stdout = %q, want no line citing the synthesized wrapper root", stdout.String())
 			}
-			if c.want == "" {
-				if stderr.Len() != 0 {
-					t.Errorf("stderr = %q, want empty: the set composed", stderr.String())
-				}
-				return
-			}
 			if !strings.Contains(stderr.String(), c.path) {
 				t.Errorf("stderr = %q, want the instance that carried the hint named", stderr.String())
 			}
 			if !strings.Contains(stderr.String(), c.want) {
 				t.Errorf("stderr = %q, want the hinted document %s named", stderr.String(), c.want)
 			}
+			if charged := strings.Contains(stderr.String(), "["); charged == c.composes {
+				t.Errorf("stderr = %q, want a rule bracket exactly where the augmented set does not compile (composes = %v)", stderr.String(), c.composes)
+			}
 		})
+	}
+}
+
+// TestValidateNamesAMissingHintedDocument is #1251's acceptance: a hint whose
+// location resolves to no document is legal to skip (src-import, src-include),
+// so the augmented set still composes and the assessment still runs — and the
+// operator is told, on stderr, which hinted document the set went without.
+// Before this the whole shortfall was §4.3.2 clause 3's "less than complete
+// ·assessment· outcomes" and nothing on either stream.
+//
+// The instance carries TWO hints so that the line is pinned to the hint that
+// FAILED rather than to a position among the hints: correlating the report's
+// entries to the hints by ordinal would name the resolving sibling here, the
+// entries being only the hints that failed.
+func TestValidateNamesAMissingHintedDocument(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	write("good.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:good"><xs:element name="root" type="xs:int"/></xs:schema>`)
+	// The document a mis-paired hint names: its own targetNamespace is not the
+	// one that hint pairs it with, which is src-import clause 3.1.
+	write("actual.xsd", `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:actual"><xs:element name="note" type="xs:string"/></xs:schema>`)
+	instance := func(name, pairs string) string {
+		return write(name, `<g:root xmlns:g="urn:good" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="`+pairs+`">7</g:root>`)
+	}
+	missing := filepath.Join(dir, "nosuch.xsd")
+	// The hint that resolves comes FIRST, so the failing one is hints[1] and an
+	// ordinal read of the single report entry would name good.xsd instead.
+	composing := instance("composing.xml", "urn:good good.xsd urn:gone nosuch.xsd")
+	note := "goxsd8: validate: " + composing + ": the schema location hint " + missing + " resolved to no document, which is legal and skipped; the compiled schema is short of whatever that document declares\n"
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"validate", "-schema", orderSchema, composing}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("code = %d, want %d — the surviving hint still decides (stdout %q, stderr %q)", code, exitOK, stdout.String(), stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty — the shortfall is not a verdict about the instance", stdout.String())
+	}
+	if stderr.String() != note {
+		t.Errorf("stderr = %q, want exactly %q", stderr.String(), note)
+	}
+
+	// -q silences no diagnosis (#1066).
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"validate", "-q", "-schema", orderSchema, composing}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("-q: code = %d, want %d (stderr %q)", code, exitOK, stderr.String())
+	}
+	if stderr.String() != note {
+		t.Errorf("-q stderr = %q, want exactly %q", stderr.String(), note)
+	}
+
+	// And the other assembly outcome, on reportUnfollowed's terms (#1312): the
+	// missing hint is named there too, in the wording that claims neither
+	// legality nor any part in the rejection — here the mis-paired sibling's.
+	// The missing hint comes FIRST this time, so both positions are exercised.
+	stdout.Reset()
+	stderr.Reset()
+	rejected := instance("rejected.xml", "urn:gone nosuch.xsd urn:wrong actual.xsd")
+	rejectedNote := "goxsd8: validate: " + rejected + ": the schema location hint " + missing + " resolved to no document; the rejected assembly is short of whatever that document declares\n"
+	if code := run([]string{"validate", "-schema", orderSchema, rejected}, &stdout, &stderr); code != exitInvalid {
+		t.Fatalf("rejected: code = %d, want %d (stdout %q, stderr %q)", code, exitInvalid, stdout.String(), stderr.String())
+	}
+	if !strings.HasPrefix(stderr.String(), rejectedNote) {
+		t.Errorf("rejected stderr =\n%s\nwant it to open with %q", stderr.String(), rejectedNote)
+	}
+	if !strings.Contains(stderr.String(), "[src-import]") {
+		t.Errorf("rejected stderr =\n%s\nwant the mis-paired hint charged", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "[cvc-assess-elt]") {
+		t.Errorf("rejected stdout = %q, want the -schema set's own charge for an undeclared root", stdout.String())
+	}
+	if strings.Contains(stderr.String(), schemaSetLocation) {
+		t.Errorf("stderr = %q, want no line citing the synthesized wrapper root", stderr.String())
 	}
 }
 
@@ -782,12 +865,21 @@ func TestSchemaSetSource(t *testing.T) {
 		{location: "/tmp/b&c.xsd"},
 		{location: `/tmp/"d".xsd`, namespace: "urn:e<f"},
 	})
-	want := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` +
-		`<xs:import namespace="http://example.com/a" schemaLocation="/tmp/a.xsd"/>` +
-		`<xs:include schemaLocation="/tmp/b&amp;c.xsd"/>` +
-		`<xs:import namespace="urn:e&lt;f" schemaLocation="/tmp/&#34;d&#34;.xsd"/>` +
+	want := `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">` + "\n" +
+		`<xs:import namespace="http://example.com/a" schemaLocation="/tmp/a.xsd"/>` + "\n" +
+		`<xs:include schemaLocation="/tmp/b&amp;c.xsd"/>` + "\n" +
+		`<xs:import namespace="urn:e&lt;f" schemaLocation="/tmp/&#34;d&#34;.xsd"/>` + "\n" +
 		`</xs:schema>`
 	if got != want {
 		t.Errorf("schemaSetSource =\n%s\nwant\n%s", got, want)
+	}
+	// The line invariant reportUnfollowedHints reads a wrapper position back
+	// through: docs[i]'s directive, and nothing else, on line i+wrapperFirstLine.
+	lines := strings.Split(got, "\n")
+	for i, location := range []string{"/tmp/a.xsd", "/tmp/b&amp;c.xsd", "/tmp/&#34;d&#34;.xsd"} {
+		line := i + wrapperFirstLine
+		if got := lines[line-1]; !strings.Contains(got, `schemaLocation="`+location+`"`) {
+			t.Errorf("line %d = %q, want docs[%d] (%s) alone on it", line, got, i, location)
+		}
 	}
 }

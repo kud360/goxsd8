@@ -277,7 +277,10 @@ func (vn *validation) one(instance string, stdout, stderr io.Writer) int {
 // -schema arguments are the only set every instance shares. Hints that will
 // not compose with that set are unusable rather than fatal: they are reported
 // against the instance and dropped, and exitSchema stays the answer to a
-// -schema set that does not compile.
+// -schema set that does not compile. A hint whose location resolves to no
+// document composes — it is legal to skip — and is reported too, because
+// nothing else in the run says the set this instance was assessed against is
+// short of a document the instance itself named (#1251).
 func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Writer) (*validate.Validator, io.Reader, int) {
 	if !vn.hints {
 		return vn.base, src, exitOK
@@ -290,11 +293,13 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 	if len(found) == 0 {
 		return vn.base, replay, exitOK
 	}
-	// The augmented set's own report is dropped: what an unfollowed directive
-	// of a HINTED document owes the operator is #1251's ruling, not this
-	// call's, and runValidate has already reported the -schema set's.
-	augmented, _, err := compileSet(append(slices.Clone(vn.docs), found...), vn.backend, vn.log)
+	augmented, report, err := compileSet(append(slices.Clone(vn.docs), found...), vn.backend, vn.log)
 	if err != nil {
+		// The hints' own shortfall stands above the diagnosis, on
+		// reportUnfollowed's terms: it is a fact about the assembly rather than a
+		// rider on what that assembly decided (#1312). It says nothing of the
+		// rejection, and the line below says nothing of it.
+		reportUnfollowedHints(stderr, instance, assemblyRejected, found, len(vn.docs), report)
 		// A set that stops compiling only once THIS instance's hints are folded
 		// in is a fault of the instance, not of the -schema set the invocation
 		// named: exitSchema would send a script to a schema set that compiles,
@@ -308,6 +313,9 @@ func (vn *validation) validatorFor(instance string, src io.Reader, stderr io.Wri
 		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: ignoring its schema location hints, which do not compose with the -schema set: %s\n", instance, hintFault(err))
 		return vn.base, replay, exitOK
 	}
+	// Before the assessment reads a byte, so that the shortfall stands above the
+	// report it explains, exactly as runValidate places the -schema set's.
+	reportUnfollowedHints(stderr, instance, assemblyCompiled, found, len(vn.docs), report)
 	v, err := validate.New(augmented, vn.backend, validate.WithLogger(vn.log))
 	if err != nil {
 		return nil, nil, usageError(stderr, fmt.Sprintf("goxsd8: validate: %v", err))
@@ -331,6 +339,46 @@ func hintFault(err error) string {
 		return fmt.Sprintf("[%s] %s", e.Rule, e.Msg)
 	}
 	return violationLine(err)
+}
+
+// reportUnfollowedHints names on stderr, one line per hint, every schema
+// location hint of instance whose location resolved to no document — §4.3.2
+// clause 3's "failure may cause less than complete ·assessment· outcomes",
+// which src-import and src-include make legal to skip and which nothing else in
+// this run reports (#1251). hinted are that instance's own hinted documents,
+// and first is the wrapper position they start at — the -schema arguments
+// occupy every position before it.
+//
+// A hint is named by the LOCATION IT RESOLVED TO, never by its directive's own
+// position: every wrapper directive is charged at schemaSetLocation, this
+// process's own synthesis, which names no document the reader can open
+// (hintFault's reasoning, STYLE E3). The position is read for one thing only —
+// WHICH hint an entry belongs to, which the report itself cannot say, a
+// [parser.UnfollowedDirective] carrying a reason and a position and no
+// schemaLocation. schemaSetSource writes one directive per line for exactly
+// this: its docs[i] is on line i+wrapperFirstLine, and hinted[j] is that
+// docs[first+j], so the entry names its hint outright. Correlating by ORDINAL
+// instead — the k-th entry to the k-th hint — is wrong, the entries being only
+// the hints that FAILED: one hint that resolves ahead of one that does not
+// shifts every mapping after it.
+func reportUnfollowedHints(stderr io.Writer, instance string, compiled bool, hinted []schemaDoc, first int, report *parser.AssemblyReport) {
+	for _, u := range report.Unfollowed() {
+		if u.Reason != parser.UnfollowedLocationUnresolved || u.At.URI != schemaSetLocation {
+			continue
+		}
+		i := u.At.Line - wrapperFirstLine - first
+		if i < 0 || i >= len(hinted) {
+			// Before the hints are the -schema arguments' own wrapper directives,
+			// which runValidate already named off the set's own assembly and which
+			// this call must not name a second time (#1260). Past them the wrapper
+			// carries no directive at all, so the upper bound is the range check
+			// alone.
+			continue
+		}
+		// A failed stderr write cannot change the outcome: the exit code is
+		// settled either way, and stderr is the only channel this line has.
+		_, _ = fmt.Fprintf(stderr, "goxsd8: validate: %s: the schema location hint %s resolved to no document%s\n", instance, hinted[i].location, shortfallClause(compiled))
+	}
 }
 
 // assessmentLines renders one assessment's report, in document order — every
@@ -534,19 +582,30 @@ func compileSet(docs []schemaDoc, backend value.Backend, log *slog.Logger) (*xsd
 // wrapper has no targetNamespace either, which is src-include clause 2.2, and
 // src-import clause 1.2 forbids a namespace-less <import> from a wrapper that
 // has no target namespace to declare it in.
+//
+// ONE DIRECTIVE PER LINE, docs[i]'s on line i+wrapperFirstLine. That layout is
+// the whole of the correlation reportUnfollowedHints needs: a
+// [parser.UnfollowedDirective] names the directive by position alone, and every
+// directive here shares schemaSetLocation, so written as one line the only
+// handle a caller would have is a byte column it cannot decode back to a
+// document (#1251).
 func schemaSetSource(docs []schemaDoc) string {
 	var b strings.Builder
-	b.WriteString(`<xs:schema xmlns:xs="` + xsd.XMLSchemaNS + `">`)
+	b.WriteString(`<xs:schema xmlns:xs="` + xsd.XMLSchemaNS + `">` + "\n")
 	for _, d := range docs {
 		if d.namespace == "" {
-			b.WriteString(`<xs:include schemaLocation="` + escapeAttr(d.location) + `"/>`)
+			b.WriteString(`<xs:include schemaLocation="` + escapeAttr(d.location) + `"/>` + "\n")
 			continue
 		}
-		b.WriteString(`<xs:import namespace="` + escapeAttr(d.namespace) + `" schemaLocation="` + escapeAttr(d.location) + `"/>`)
+		b.WriteString(`<xs:import namespace="` + escapeAttr(d.namespace) + `" schemaLocation="` + escapeAttr(d.location) + `"/>` + "\n")
 	}
 	b.WriteString(`</xs:schema>`)
 	return b.String()
 }
+
+// wrapperFirstLine is the line schemaSetSource writes docs[0]'s directive on,
+// line 1 carrying the wrapper's own <xs:schema> start tag.
+const wrapperFirstLine = 2
 
 // escapeAttr renders s as an XML attribute value's content. A filesystem path
 // and a namespace name are both arbitrary strings, and either can carry a

@@ -195,9 +195,21 @@
 // document that is not well-formed — is a fault of the INSTANCE that carried
 // it and never of the -schema set: clause 3 obliges a processor to dereference
 // no hint at all, so the hints of that instance are reported unusable on
-// stderr, naming it, and it is assessed against the -schema documents alone,
-// exactly as a hint naming a document that is not there already degrades. Exit
-// 3 answers a -schema set that does not compile and nothing else.
+// stderr, naming it, and it is assessed against the -schema documents alone.
+// Exit 3 answers a -schema set that does not compile and nothing else.
+//
+// A hint naming a document that is NOT THERE is named on stderr too, against
+// the instance that carried it and by the location it resolved to, carrying no
+// rule ID and moving no exit code: src-import and src-include alike make a
+// schemaLocation that resolves to nothing legal to skip, so that hint's
+// siblings still apply and the set still composes — short of whatever the
+// document would have declared, which is the fact the line carries and clause 3
+// calls "less than complete ·assessment· outcomes". When the instance's hints
+// instead fail to compose with the -schema set, the same shortfall is named
+// first, in a line saying the augmented set was rejected rather than compiled
+// and saying nothing about whether the unread document had a part in that;
+// the hints are then reported unusable and the instance falls back to the
+// -schema set alone.
 //
 // -no-hints turns all of it off — clause 3's "Schema processors should provide
 // an option to control whether they do so" — and turning it off is what makes
