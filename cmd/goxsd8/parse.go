@@ -157,8 +157,8 @@ func violationLine(err error) string {
 	return err.Error()
 }
 
-// The two assembly outcomes reportUnfollowed words its line for, named at the
-// call sites so that neither reads as a bare true or false.
+// The two assembly outcomes shortfallClause words a line for, named at the call
+// sites so that neither reads as a bare true or false.
 const (
 	assemblyCompiled = true
 	assemblyRejected = false
@@ -187,16 +187,6 @@ const (
 // answered off a SHORT assembly is distinguishable from one answered off a
 // complete one — the fact nothing but -v carried before (#1260).
 //
-// compiled selects the wording because two of its claims hold only when the
-// assembly compiled. That the skip was LEGAL:
-// parser.UnfollowedLocationUnresolved also records the two unresolved locations
-// that are faults — a non-empty <xs:redefine>'s (src-redefine clause 1) and a
-// resolver that failed rather than reported absence — and each arrives with the
-// verdict charging it, which a line calling it legal would contradict. And that
-// the shortfall is all that is wrong: on the error path nothing in the report
-// says whether the unread document had any part in the rejection, so the line
-// says nothing of it either.
-//
 // Only parser.UnfollowedLocationUnresolved is named. A bare <import>
 // (parser.UnfollowedNoLocation) names no document to have failed to reach:
 // §4.2.6.2 makes it the spelling for "references into this namespace are
@@ -207,18 +197,34 @@ const (
 // do reach here now that the error path reports too, and stay unnamed: each
 // arrives with the error that charges it, which says more than this line could.
 func reportUnfollowed(stderr io.Writer, verb string, compiled bool, report *parser.AssemblyReport) {
-	shortfall := "; the rejected assembly is short of whatever that document declares"
-	if compiled {
-		shortfall = ", which is legal and skipped; the compiled schema is short of whatever that document declares"
-	}
 	for _, u := range report.Unfollowed() {
 		if u.Reason != parser.UnfollowedLocationUnresolved {
 			continue
 		}
 		// A failed stderr write cannot change the outcome: the exit code is
 		// settled either way, and stderr is the only channel this line has.
-		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: this schemaLocation resolved to no document%s\n", verb, u.At, shortfall)
+		_, _ = fmt.Fprintf(stderr, "goxsd8: %s: %s: this schemaLocation resolved to no document%s\n", verb, u.At, shortfallClause(compiled))
 	}
+}
+
+// shortfallClause is what a line naming an unfollowed schemaLocation says about
+// the assembly it came out of, which is not the same sentence on both outcomes:
+// two of the compiled wording's claims hold only when the assembly compiled,
+// and every caller reporting an unfollowed directive says it the same way
+// (STYLE D3).
+//
+// That the skip was LEGAL: parser.UnfollowedLocationUnresolved also records the
+// two unresolved locations that are faults — a non-empty <xs:redefine>'s
+// (src-redefine clause 1) and a resolver that failed rather than reported
+// absence — and each arrives with the verdict charging it, which a line calling
+// it legal would contradict. And that the shortfall is all that is wrong: on
+// the error path nothing in the report says whether the unread document had any
+// part in the rejection, so the line says nothing of it either.
+func shortfallClause(compiled bool) string {
+	if compiled {
+		return ", which is legal and skipped; the compiled schema is short of whatever that document declares"
+	}
+	return "; the rejected assembly is short of whatever that document declares"
 }
 
 // usageError reports a usage or IO fault: the message, then the remedy, on
