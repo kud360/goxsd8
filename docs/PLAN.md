@@ -560,10 +560,22 @@ twice — and it CARVED a successor: #1328** (`use`, `form` and the two
 `*FormDefault` attributes compared raw at every site, measured accepting
 `use="foo"` and reading `use=" required "` as `{required}`=false). It also
 unblocked **#456**, which was filed long before and is a discharge rather than a
-carve. Live producer-decides-and-accepts members are **#931** (occurrence
-attributes on a named `<group>`'s child compositor), **#929** — which #455's
-landing widened to own `minOccursZero`'s clause-2.1.3 compare as well as
-`maxOccursZero`'s — **#456** and **#1328**. **The family carved a successor at
+carve. **#931 has now LANDED too — 2026-09-08, `c5e5e375`, `schema` +6
+(fail → pass), zero regressions** — the occurrence attributes on a named
+`<group>`'s body compositor, and this chain's first non-zero since #1205's +5.
+**It ends the zero run**: the four landings before it all read
+`Ratchet: unchanged` (#1243, #1242, #1270, #455) and the fifth banked six, so
+ratchet-neutrality is a property of the individual member and not of the family,
+and no further member may inherit the prediction. **It is also the one member
+whose count was NOT taken by construct census** — its prediction came from a
+hand-written producer-level probe, was wrong on three of its four named
+candidates and under-predicted the lane by two, which is the defect **#1332**
+owns. It carved no producer-side successor: #1332 is `kind/process` and **#1333**
+pins the `xs:redefine` entry into `buildDefinitionModelGroup` by test, and
+neither decides and ACCEPTS. Live producer-decides-and-accepts members are
+**#929** — which #455's landing widened to own `minOccursZero`'s clause-2.1.3
+compare as well as `maxOccursZero`'s — **#456** and **#1328**. **The family
+carved a successor at
 every landing from #471 through #1243, and #1242 is the first that did not** —
 one reading is the tail reaching zero, the other is that this pair was narrower
 than its predecessors; two more landings decide it. **#1270 was the first of
