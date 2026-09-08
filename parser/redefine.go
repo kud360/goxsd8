@@ -3,7 +3,6 @@ package parser
 import (
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/kud360/goxsd8/xsd"
 	"github.com/kud360/goxsd8/xsderr"
@@ -166,18 +165,19 @@ type redefineSet struct {
 	// it is how the two producers meet, and it is written exactly once per key,
 	// from a single document-order pass over one document.
 	originals map[componentKey]typeSource
-
-	// id is the set's canonical identity, derived from entries at construction:
-	// the ordered (kind, name, source location) triples. It is the redefine half
-	// of docKey, so that one document redefined two DIFFERENT ways is read twice —
-	// §4.2.4 clause 4.1.2 gives each reading its own component set — while a
-	// document reached again around a composition cycle is read once. Because
-	// every reachable set is drawn from the finitely many children of the finitely
-	// many <redefine> elements of the assembly, the space of ids is finite and the
-	// load-once index that keys on it terminates (STYLE D4: identity, not a cycle
-	// guard).
-	id string
 }
+
+// redefinitions are the ·redefinition·s in force over ONE discovered document —
+// one per reading of it the assembly merged into that discovery, in discovery
+// order, a nil member being a reading that reached the document plainly. The
+// empty slice is the [Produce] path, which follows no ·inter-schema-document
+// reference· and so has no reading of anything.
+//
+// It is a slice because a document reached under two readings is composed once
+// (docKey, parser/parse.go): §4.2.4 clause 4.1.2 subtracts per READING, so a
+// definition is contributed unless every reading subtracts it, while each
+// reading's own set still needs the original it subtracted.
+type redefinitions []*redefineSet
 
 // newRedefineSet reads the redefining declarations a <redefine> element declares
 // (§4.2.4's XML Representation Summary). It returns nil for one that declares
@@ -240,24 +240,17 @@ func newRedefineSet(el *Element) (*redefineSet, error) {
 }
 
 // buildRedefineSet completes a redefineSet from its document-ordered entries,
-// deriving the two indexes and the identity string from them so none is a second
-// encoding of the same fact (STYLE D3). An empty entry list is the nil set.
+// deriving both indexes from them so neither is a second encoding of the same
+// fact (STYLE D3). An empty entry list is the nil set.
 func buildRedefineSet(el *Element, entries []redefineEntry) *redefineSet {
 	if len(entries) == 0 {
 		return nil
 	}
 	index := make(map[componentKey]struct{}, len(entries))
 	byElem := make(map[*Element]componentKey, len(entries))
-	var id strings.Builder
 	for _, e := range entries {
 		index[e.key] = struct{}{}
 		byElem[e.elem] = e.key
-		id.WriteString(e.key.kind)
-		id.WriteByte(' ')
-		id.WriteString(e.key.name)
-		id.WriteByte('@')
-		id.WriteString(e.elem.Loc().String())
-		id.WriteByte('\n')
 	}
 	return &redefineSet{
 		el:        el,
@@ -265,18 +258,7 @@ func buildRedefineSet(el *Element, entries []redefineEntry) *redefineSet {
 		index:     index,
 		byElem:    byElem,
 		originals: make(map[componentKey]typeSource, len(entries)),
-		id:        id.String(),
 	}
-}
-
-// key is this set's contribution to a discovered document's load-once identity
-// (see [redefineSet].id). The nil set contributes the empty string, so a plainly
-// <include>d document and one reached under an empty <redefine> share a key.
-func (s *redefineSet) key() string {
-	if s == nil {
-		return ""
-	}
-	return s.id
 }
 
 // mustResolve reports whether src-redefine clause 1 obliges this set's
@@ -292,30 +274,75 @@ func (s *redefineSet) mustResolve() bool {
 
 // excepts reports whether el, a top-level declaration of the REDEFINED document,
 // is one this set replaces — §4.2.4 clause 4.1.2's "with the exception of those
-// explicitly redefined". Such a declaration contributes no component of its own;
-// it survives only as the hidden original a self-reference resolves to.
+// explicitly redefined". Under this reading such a declaration contributes no
+// component of its own; it survives as the hidden original a self-reference
+// resolves to.
 func (s *redefineSet) excepts(el *Element) bool {
-	if s == nil {
-		return false
-	}
 	key, ok := declarationKey(el)
 	if !ok {
+		return false
+	}
+	return s.replaces(key)
+}
+
+// replaces reports whether this set replaces the top-level definition key
+// names. The nil set — a plain reading, or an empty <redefine> — replaces none.
+func (s *redefineSet) replaces(key componentKey) bool {
+	if s == nil {
 		return false
 	}
 	_, redefined := s.index[key]
 	return redefined
 }
 
+// excepts reports whether EVERY reading of this document excepts el, which is
+// the only case in which no reading contributes it: the readings are merged into
+// one composition of the document (docKey, parser/parse.go), and §4.2.4 clause
+// 4.1.2 subtracts a definition from the reading whose <redefine> names it alone.
+// A document with no reading at all — [Produce] — excepts nothing.
+func (rs redefinitions) excepts(el *Element) bool {
+	if len(rs) == 0 {
+		return false
+	}
+	for _, s := range rs {
+		if !s.excepts(el) {
+			return false
+		}
+	}
+	return true
+}
+
+// recordOriginals notes src, the top-level declaration of this document that key
+// names, as the original of EVERY reading whose <redefine> replaces key.
+//
+// It is called for every top-level declaration, not only for one that excepts
+// reports no reading contributes: a reading needs the original it is paired with
+// (src-expredef clauses 1.1 and 2) whether or not some OTHER reading of the same
+// document still contributes that declaration under its own name. Withholding it
+// there would charge src-expredef's closing requirement against a redefinition
+// whose original is present (produceRedefinition).
+func (rs redefinitions) recordOriginals(key componentKey, src typeSource) error {
+	for _, s := range rs {
+		if !s.replaces(key) {
+			continue
+		}
+		if err := s.recordOriginal(key, src); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // recordOriginal notes the redefined document's own declaration for key, which
 // src-expredef clause 1.1 makes the hidden {name}-·absent· base of the redefining
 // type and clause 2 the target of a group/attributeGroup self-reference.
 //
-// TWO writers call it, both from the redefined document's own pre-scan and both
-// in that one document-order pass over that document's <schema> children:
-// prescan, for a top-level declaration §4.2.4 clause 4.1.2 excepts, and
-// prescanRedefine, for the redefining child of a NESTED <redefine> that clause
-// 4.1.1 makes a top-level definition of this document too (a chained redefine,
-// #585). A document carrying BOTH for one key declares two top-level definitions
+// TWO writers reach it, through redefinitions.recordOriginals, both from the
+// redefined document's own pre-scan and both in that one document-order pass over
+// that document's <schema> children: prescan, for a top-level declaration, and
+// prescanRedefine, for the redefining child of a NESTED <redefine> that §4.2.4
+// clause 4.1.1 makes a top-level definition of this document too (a chained
+// redefine, #585). A document carrying BOTH for one key declares two top-level definitions
 // of one expanded name, which sch-props-correct (§3.17.6.1) clause 2 forbids, so
 // the SECOND write is rejected instead of clobbering the first.
 //
@@ -392,11 +419,17 @@ func declarationKey(el *Element) (componentKey, bool) {
 }
 
 // chainedOriginal reports whether e, one of THIS document's own redefining
-// declarations, is itself excepted by the redefinition in force over this
+// declarations, is itself excepted by every ·redefinition· in force over this
 // document — a CHAINED <redefine>, where D1 redefines D2 and D2 redefines D3 for
 // one (kind, name). §4.2.4 clause 4.1.1 makes e a top-level definition of this
 // document, so it is what D1's src-expredef clause 1.1 pairs with and what clause
 // 4.1.2 excepts from the components this document contributes.
+func (p *producer) chainedOriginal(e redefineEntry) bool {
+	return chainedKind(e.key.kind) && p.rd.excepts(e.elem)
+}
+
+// chainedKind reports whether a redefining declaration of this element type
+// composes when it is itself redefined.
 //
 // GAP(xsd): only the two kinds src-expredef clause 1 PAIRS compose — <simpleType>
 // and <complexType>. A chained <group>/<attributeGroup>, whose clause 2 is a
@@ -413,16 +446,16 @@ func declarationKey(el *Element) (componentKey, bool) {
 // Measured by collapsing this function and running the fixture, not predicted.
 // #744 owns the retirement, and needs an xsd entry point for both kinds.
 //
-// The direction is fail-CLOSED, and the value withheld for those two kinds — the
-// rs.originals entry — has exactly three readers, all of which see the miss:
-// produceRedefinition REJECTS on it, charging src-expredef's closing requirement;
-// redefinedGroupOriginal and redefinedAttributeGroupOriginal (through originalFor)
-// would answer "not a self-reference", and neither runs, because that rejection
-// precedes them.
-func (p *producer) chainedOriginal(e redefineEntry) bool {
-	switch e.key.kind {
+// The direction is fail-CLOSED, and the value withheld for the other two kinds —
+// the outer set's originals entry — has exactly three readers, all of which see
+// the miss: produceRedefinition REJECTS on it, charging src-expredef's closing
+// requirement; redefinedGroupOriginal and redefinedAttributeGroupOriginal (through
+// originalFor) would answer "not a self-reference", and neither runs, because that
+// rejection precedes them.
+func chainedKind(kind string) bool {
+	switch kind {
 	case "simpleType", "complexType":
-		return p.rd.excepts(e.elem)
+		return true
 	}
 	return false
 }
@@ -492,6 +525,36 @@ func (p *producer) originalFor(decl *Element, qn xsd.QName, kinds ...string) (ty
 	}
 	src, recorded := rs.originals[key]
 	return src, recorded
+}
+
+// enterOriginal marks decl — the <redefine>d document's declaration that
+// src-expredef clause 1.1 pairs a redefining declaration with — as being built,
+// and reports whether it was not already being built.
+//
+// A decl already on that stack closes a <redefine> CYCLE over one (kind, name):
+// §4.2.4 clause 4.1.1 makes each level's redefining child the "top-level
+// definition item of that name and kind in the <redefine>d schema document" the
+// next level pairs with, so a cycle of <redefine>s over one name makes the
+// pairing's own base chain re-enter itself. Every hop of that chain is anonymous
+// (clause 1.1 gives the original an ·absent· {name}), so neither
+// buildComplexType's name-keyed sentinel nor buildSimpleType's ever sees it. Its
+// two callers charge the acyclicity rule for the kind they build.
+//
+// Every caller must pair it with leaveOriginal: the same declaration is a
+// legitimate original of two DIFFERENT redefinitions, one after the other, and
+// only a re-entry while it is still being built is the cycle.
+func (p *producer) enterOriginal(decl *Element) bool {
+	if _, building := p.symbols.redefineOriginals[decl]; building {
+		return false
+	}
+	p.symbols.redefineOriginals[decl] = struct{}{}
+	return true
+}
+
+// leaveOriginal unmarks decl once the original built from it is finished (see
+// enterOriginal).
+func (p *producer) leaveOriginal(decl *Element) {
+	delete(p.symbols.redefineOriginals, decl)
 }
 
 // redefinedTypeBase returns the ORIGINAL type definition a base= written at at —
@@ -638,19 +701,23 @@ func (p *producer) prescanRedefine(el *Element) error {
 			rs.recordSubstitute(e.key, decl)
 		}
 		p.prescanIdentityConstraints(decl)
-		if p.chainedOriginal(e) {
+		if chainedKind(e.key.kind) {
 			// A CHAINED redefine: some outer document redefines THIS one for the same
 			// (kind, name), and §4.2.4 clause 4.1.1 makes this redefining child a
 			// top-level definition of this document — so it is the "top-level
 			// definition item … in the <redefine>d schema document" src-expredef's
 			// closing requirement demands, and clause 1.1's original the outer
-			// redefinition is paired with. Clause 4.1.2 excepts it from the components
-			// this document contributes, exactly as prescan excepts an ordinary
-			// top-level declaration, so it is recorded and NOT registered under its own
-			// name: the outer redefinition owns that name.
-			if err := p.rd.recordOriginal(e.key, typeSource{elem: decl, owner: p}); err != nil {
+			// redefinition is paired with. It is recorded for every outer reading that
+			// names it, exactly as prescan records an ordinary top-level declaration.
+			if err := p.rd.recordOriginals(e.key, typeSource{elem: decl, owner: p}); err != nil {
 				return err
 			}
+		}
+		if p.chainedOriginal(e) {
+			// Clause 4.1.2 excepts it from the components this document contributes —
+			// so it is NOT registered under its own name, the outer redefinition owning
+			// that name — but only when EVERY reading excepts it, since a reading that
+			// does not redefine this name still contributes the definition.
 			continue
 		}
 		qn := xsd.QName{Space: p.target, Local: e.key.name}
@@ -713,15 +780,14 @@ func (p *producer) produceRedefine(el *Element) error {
 // model group definition in S2").
 //
 // Its message says "was recorded from" rather than "the redefined schema
-// document declares no": the miss it reports is on rs.originals, which one
-// unreachable-for-a-valid-schema path leaves unfilled even though the
-// declaration IS there. A document discovered twice under different override
-// sets but the same namespace builds a second redefineSet with an identical id,
-// so the redefined document's docKey collides, fetch dedups, and the second
-// set's pre-scan never runs. It over-rejects only, and the double discovery it
-// needs is itself a duplicate-component situation sch-props-correct must fail
-// anyway — but a wrong-but-unreachable error string is exactly the shape that
-// survives unexamined, so the claim is narrowed to what is actually known here.
+// document declares no": the miss it reports is on rs.originals, which is filled
+// by the redefined document's pre-scan, so it says what this producer knows
+// rather than asserting what the other document contains. Every reading of that
+// document records the originals of every set that reaches it
+// (redefinitions.recordOriginals), including a set whose <redefine> landed on a
+// document another directive had already composed — the dedup path that once
+// left the second set unfilled and charged this rule against a declaration that
+// was there (#1349).
 func (p *producer) produceRedefinition(rs *redefineSet, e redefineEntry) error {
 	qn, err := declarationName(e.elem, p.target)
 	if err != nil {

@@ -329,6 +329,24 @@ type symbols struct {
 	// recursion now.
 	builtGroups map[xsd.QName]*xsd.ModelGroupDefinition
 
+	// redefineOriginals is the ON-STACK set of the <redefine>d documents'
+	// declarations currently being built as src-expredef clause 1.1 ·original·s.
+	// It is a set and not a memo: an original's {name} is ·absent·, so nothing can
+	// name it and there is nothing to build once and hand back (see
+	// buildComplexType on why the anonymous hop stays out of the name-keyed
+	// memos).
+	//
+	// It is the guard for the one cycle those name-keyed sentinels cannot see:
+	// §4.2.4 clause 4.1.1 makes each level's redefining child the "top-level
+	// definition item" the next level pairs with, so a cycle of <redefine>s closed
+	// on one (kind, name) builds a {base type definition} chain of anonymous hops
+	// that re-enters itself without ever passing through a named build (#1349).
+	// Its two readers charge the same acyclicity rule the finalize-side walks do —
+	// ct-props-correct clause 3 at redefinedComplexBase, st-props-correct clause 2
+	// at resolveBase — which is PRINCIPLES 9's "detect once at construction",
+	// applied per construction path.
+	redefineOriginals map[*Element]struct{}
+
 	// builtIC is the build-once memo for identity-constraint construction. It has
 	// NO on-stack sentinel, unlike built/builtComplex: mapping a definition reads
 	// only its own <selector>/<field> and retains its refer= as an unresolved
@@ -427,6 +445,7 @@ func newSymbols(builder *xsd.SchemaBuilder, backend value.Backend) (*symbols, er
 		built:               maps.Clone(builtins),
 		builtGroups:         make(map[xsd.QName]*xsd.ModelGroupDefinition),
 		builtIC:             make(map[xsd.QName]xsd.IdentityConstraint),
+		redefineOriginals:   make(map[*Element]struct{}),
 		// xs:anyType is seeded DONE so a derivation naming it resolves to the very
 		// component AddType registered, rather than to a rebuilt twin.
 		builtComplex: map[xsd.QName]*xsd.ComplexType{anyTypeName: &anyType},
@@ -458,14 +477,15 @@ type producer struct {
 	// references, which §4.2.5 clause 3.2.1 orders BEFORE the substitution — see
 	// unqualifiedRefNS.
 	ov *overrideSet
-	// rd is the ·redefinition· in force over this document (§4.2.4,
-	// parser/redefine.go), nil unless it was reached through an <xs:redefine>.
-	// Like ov it is a property of the PATH the document was reached by, not of the
-	// document (STYLE D3). It EXCEPTS this document's own top-level declarations of
-	// the redefined names from contributing components (§4.2.4 clause 4.1.2), and
-	// it is where each of them is recorded as the original a self-reference in the
-	// redefining document resolves to (src-expredef).
-	rd *redefineSet
+	// rd holds the ·redefinition·s in force over this document (§4.2.4,
+	// parser/redefine.go) — one per reading of it the assembly merged into this
+	// discovery, empty on the [Produce] path. Like ov they are a property of the
+	// PATHS the document was reached by, not of the document (STYLE D3). A
+	// top-level declaration EVERY reading redefines contributes no component
+	// (§4.2.4 clause 4.1.2), and each reading is where the declaration it redefines
+	// is recorded as the original a self-reference in the redefining document
+	// resolves to (src-expredef).
+	rd redefinitions
 	// redefines are the sets read from THIS document's own <redefine> children, in
 	// document order — the other side of the same values: rd is what some other
 	// document's <redefine> did to this one, redefines is what this document's
@@ -479,11 +499,11 @@ type producer struct {
 
 // newProducer returns the build context for one document of an assembly. target
 // is THIS document's effective target namespace (see [producer].target), ov the
-// override in force over it (nil for none), rd the redefinition in force over it
-// (nil for none), redefines the sets read from its own <redefine> children (empty
-// for none) and sym the assembly's shared symbol table; all are set at
+// override in force over it (nil for none), rd the redefinitions in force over it
+// (empty for none), redefines the sets read from its own <redefine> children
+// (empty for none) and sym the assembly's shared symbol table; all are set at
 // construction and never mutated into validity afterward (STYLE T1).
-func newProducer(doc *Document, target string, ov *overrideSet, rd *redefineSet, redefines []*redefineSet, builder *xsd.SchemaBuilder, sym *symbols) *producer {
+func newProducer(doc *Document, target string, ov *overrideSet, rd redefinitions, redefines []*redefineSet, builder *xsd.SchemaBuilder, sym *symbols) *producer {
 	return &producer{schemaElem: doc.Root(), target: target, ov: ov, rd: rd, redefines: redefines, builder: builder, symbols: sym}
 }
 
@@ -681,15 +701,18 @@ func (p *producer) prescan() error {
 		if !ok {
 			continue
 		}
+		// Every reading whose <redefine> replaces this declaration takes it as the
+		// hidden original src-expredef pairs that redefining declaration with,
+		// recorded under THIS producer so its body is still mapped in its own
+		// document's context.
+		if err := p.rd.recordOriginals(componentKey{kind: el.Name().Local(), name: name}, typeSource{elem: decl, owner: p}); err != nil {
+			return err
+		}
 		if p.rd.excepts(el) {
-			// §4.2.4 clause 4.1.2: this declaration is explicitly redefined, so it
-			// contributes no component under its own name. It survives as the hidden
-			// original src-expredef pairs the redefining declaration with, recorded
-			// under THIS producer so its body is still mapped in its own document's
-			// context.
-			if err := p.rd.recordOriginal(componentKey{kind: el.Name().Local(), name: name}, typeSource{elem: decl, owner: p}); err != nil {
-				return err
-			}
+			// §4.2.4 clause 4.1.2: EVERY reading of this document explicitly redefines
+			// this declaration, so no reading contributes a component under its own
+			// name. One that does not redefine it still contributes it, and the
+			// redefinition then collides with it under sch-props-correct clause 2.
 			continue
 		}
 		switch {
@@ -1596,9 +1619,10 @@ func (p *producer) resolveBaseType(id complexTypeIdentity, at *Element, name xsd
 // The owning type is the redefining one at the first level and, under a CHAINED
 // <redefine>, another clause-1.1 original at every level below (#585) — so the
 // identity that supplies the mint is asked for it rather than being one arm
-// (redefineOriginalContext), and the recursion is what walks the chain. It
-// terminates for the reason resolveBase's does: each hop moves to the REDEFINED
-// document, and the chain of redefined documents is finite.
+// (redefineOriginalContext), and the recursion is what walks the chain. Each hop
+// moves to the REDEFINED document, so the chain is finite while the <redefine>
+// graph is acyclic over this name; a cycle over it is bounded and rejected by
+// enterOriginal, exactly as resolveBase's twin is.
 func (p *producer) redefinedComplexBase(id complexTypeIdentity, at *Element, name xsd.QName) (xsd.ComplexType, bool, error) {
 	owner, owns := redefineOriginalContext(id)
 	if !owns {
@@ -1608,6 +1632,12 @@ func (p *producer) redefinedComplexBase(id complexTypeIdentity, at *Element, nam
 	if !self {
 		return xsd.ComplexType{}, false, nil
 	}
+	if !p.enterOriginal(src.elem) {
+		return xsd.ComplexType{}, true, xsderr.New(ruleCTPropsCorr, at.Loc(),
+			"circular complex type definition: %s is redefined around a cycle of <redefine>s, so the original src-expredef clause 1.1 pairs this redefinition with derives ultimately from the redefinition again, but ct-props-correct clause 3 forbids a circular {base type definition} chain (only xs:anyType may be its own base)", name)
+	}
+	defer p.leaveOriginal(src.elem)
+
 	orig, err := src.owner.produceComplexType(newRedefineOriginal(owner), src.elem)
 	if err != nil {
 		return xsd.ComplexType{}, true, err
@@ -2057,9 +2087,17 @@ func (p *producer) resolveBase(restriction *Element) (xsd.SimpleTypeOrRef, error
 		// resolve back to the redefinition itself, which finalize's
 		// checkSimpleBaseAcyclic would then reject.
 		//
-		// It recurses one level per document across a redefine closure, which is
-		// finite: each hop moves to the REDEFINED document, and the chain of
-		// redefined documents is finite.
+		// It recurses one level per document across a redefine closure. What bounds
+		// it is enterOriginal, not the closure: each hop moves to the REDEFINED
+		// document, so the walk is finite only while the <redefine> graph is acyclic
+		// over this name, and a cycle over it is the circular {base type definition}
+		// chain st-props-correct clause 2 forbids.
+		if !p.enterOriginal(src.elem) {
+			return nil, xsderr.New(ruleSTPropsCorr, restriction.Loc(),
+				"circular simple type definition: %s is redefined around a cycle of <redefine>s, so the original src-expredef clause 1.1 pairs this redefinition with restricts the redefinition again, but st-props-correct clause 2 requires every simple type to reach a primitive datatype or xs:anySimpleType by following {base type definition} zero or more times", qn)
+		}
+		defer p.leaveOriginal(src.elem)
+
 		orig, err := src.owner.constructSimpleType(xsd.QName{}, src.elem)
 		if err != nil {
 			return nil, err

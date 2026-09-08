@@ -111,12 +111,13 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 // (src-resolve clause 4.2.2, §4.2.6.1), and the license reaches only the
 // document the element sits in — see parser/doc.go's Composition section.
 // Documents are read once each, keyed by resolved location AND the namespace
-// they were reached under AND the override and redefinition applied to them, so
-// a diamond or a (spec-legal) cycle of <include>s, or a namespace imported
-// repeatedly, contributes its components once and does not trip
-// sch-props-correct (§3.17.6.1) clause 2. Reading once skips the re-COMPOSITION
-// alone: every <import> element is still judged against src-import clause 3,
-// whether or not it was the one that caused D2 to be read.
+// they were reached under AND the override applied to them, so a diamond or a
+// (spec-legal) cycle of <include>s, a namespace imported repeatedly, or a
+// document reached both plainly and through an <xs:redefine>, contributes its
+// components once and does not trip sch-props-correct (§3.17.6.1) clause 2.
+// Reading once skips the re-COMPOSITION alone: every <import> element is still
+// judged against src-import clause 3, whether or not it was the one that caused
+// D2 to be read.
 //
 // An <xs:override> child (§4.2.5) is followed too: the document it names is
 // composed exactly as an <include>d one — §4.2.5 clause 3.1.2 defines an override
@@ -129,7 +130,10 @@ func Parse(location string, opts ...Option) (*xsd.Schema, error) {
 // both adds and subtracts: the document it names is composed as an <include>d
 // one, contributing every component it declares EXCEPT those the <redefine>
 // explicitly redefines (clause 4.1.2), while the <redefine>'s own children
-// contribute the replacements as definitions of THIS document (clause 4.1.1). A
+// contribute the replacements as definitions of THIS document (clause 4.1.1).
+// The subtraction is per REDEFINITION, not per document: one also reached
+// plainly, or redefined elsewhere for other names, still contributes the
+// definitions that reading does not redefine — and contributes them once. A
 // self-reference inside a redefining declaration resolves to the definition it
 // replaces, not to itself (src-expredef, parser/redefine.go). Two things differ
 // from <include>: a non-empty <redefine> whose schemaLocation does not resolve is
@@ -167,10 +171,12 @@ func ParseReport(location string, opts ...Option) (*xsd.Schema, *AssemblyReport,
 	// The root document's effective target namespace is its own: there is no
 	// including document to borrow one from (§4.2.3 clause 2.3 needs one).
 	rootTNS := attrOr(root.Root(), "targetNamespace")
-	a := newAssembly(resolved, rootTNS, cfg)
-	// The root is discovered under the nil (identity) override set: no <override>
-	// element points at it, so nothing substitutes for its own declarations.
-	if err := a.discover(root, resolved, rootTNS, nil, nil); err != nil {
+	a := newAssembly(cfg)
+	// The root is reached by no directive, so it is keyed under its own effective
+	// namespace and discovered under the nil (identity) override set and the nil
+	// (identity) redefinition: nothing substitutes for, or excepts, its own
+	// declarations.
+	if err := a.discover(root, docKey{resolved: resolved, namespace: rootTNS}, rootTNS, nil, nil); err != nil {
 		return nil, a.report(), err
 	}
 	schema, err := a.compile(cfg.backend)
@@ -215,14 +221,19 @@ type discovered struct {
 	// have duplicate and conflicting versions of some components".
 	ov *overrideSet
 
-	// rd is the ·redefinition· in force over THIS document (§4.2.4,
-	// parser/redefine.go), nil when it was not reached through an <xs:redefine>.
-	// It is a property of the path for the same reason ov is, and it says which of
-	// this document's own top-level definitions clause 4.1.2 excepts.
-	rd *redefineSet
+	// rds are the ·redefinition·s in force over THIS document (§4.2.4,
+	// parser/redefine.go) — ONE per reading of it the assembly merged here, in
+	// discovery order, each nil when that reading reached the document plainly. A
+	// discovered document always carries at least one.
+	//
+	// It is a slice rather than a single set because every reading of one document
+	// under one docKey composes ONCE (see docKey): a top-level definition is
+	// contributed unless EVERY reading excepts it, and each reading's own set still
+	// records the original it excepted (redefinitions, parser/redefine.go).
+	rds redefinitions
 
 	// redefines are the sets read from this document's OWN <redefine> children, in
-	// document order. It is the other end of rd — what this document does to
+	// document order. It is the other end of rds — what this document does to
 	// others rather than what was done to it — and it is not derivable from the
 	// document (STYLE D3): a set exists only for a <redefine> the assembly
 	// actually followed, which is what distinguishes an assembled document from
@@ -232,9 +243,10 @@ type discovered struct {
 	// unmapped is this discovery's coverage census (producer.census,
 	// parser/census.go), taken before any component of the document is built,
 	// for [AssembledDocument.Unmapped]. It is a property of the DISCOVERY rather
-	// than of the document (STYLE D3): rd excepts declarations from this reading
-	// alone (§4.2.4 clause 4.1.2), so the same file reached twice can hold a
-	// different census each time, and no field here derives it.
+	// than of the document (STYLE D3): rds and ov except and substitute for
+	// declarations another discovery of the same file maps (§4.2.4 clause 4.1.2,
+	// §F.2 clause 1), so the same file discovered twice can hold a different
+	// census each time, and no field here derives it.
 	unmapped []UnmappedConstruct
 }
 
@@ -248,19 +260,32 @@ type discovered struct {
 // the same reason: one document overridden two different ways yields two
 // different component sets (§4.2.5), while overriding it the same way twice, or
 // reaching it again around an <include>/<override> cycle, must contribute its
-// components once (§4.2.5's note on sch-props-correct clause 2). The redefine
-// half is there for the third time over: §4.2.4 clause 4.1.2 gives a redefined
-// document's reading a component set that DEPENDS on the redefinition applied to
-// it, so one document redefined two different ways is two readings, while
-// §4.2.4's own note asks that "multiple equivalent <redefine>ing of the same
+// components once (§4.2.5's note on sch-props-correct clause 2). In an
+// include-only closure both extra components are constant, so neither changes any
+// include behavior.
+//
+// The ·redefinition· applied to a reading is deliberately NOT part of it, so a
+// document reached both plainly and as an <xs:redefine> target — or redefined
+// twice — is composed ONCE and every definition the redefinitions do not reach is
+// minted once (#1349). §4.2.4's construction gives the redefining schema
+// "components identical to all the schema components of S2, with the exception of
+// those explicitly redefined" (src-redefine clause 4.1.2), which is §4.2.3 clause
+// 3.1.2's wording for a plain <include> verbatim; S2 is schema(D2), a pure
+// function of D2 (§4.2.1, key-corresponding-schema), so a definition NEITHER
+// reading redefines is one component both readings draw in, not two that happen
+// to be equal. Which definitions a redefinition subtracts is applied per reading
+// at production instead ([discovered].rds).
+//
+// The extrapolation is stated here because the spec is not explicit for this
+// shape: §4.2.4's closing note ("multiple equivalent <redefine>ing of the same
 // schema document will not constitute a violation of clause 2 of Schema
-// Properties Correct". In an include-only closure all three extra components are
-// constant, so none changes any include behavior.
+// Properties Correct") is scoped to redefine×redefine, and §4.2.5's is the only
+// note covering a MIXED pair of mechanisms — for <override>, which it makes a
+// genuine conflict. Hence override stays in the key and redefine does not.
 type docKey struct {
 	resolved  string
 	namespace string
 	override  string
-	redefine  string
 }
 
 // assembly is the multi-document build context for one [Parse] call: the
@@ -270,22 +295,23 @@ type assembly struct {
 	resolver loader.Resolver
 	log      *slog.Logger
 
-	// loaded indexes the documents already read (§4.2.3: "If two <include>
-	// elements specify the same schema location (after resolving relative URI
-	// references) then they refer to the same schema document"; §4.2.6.2's note
-	// wants repeated <import>s of one document not to trip sch-props-correct
-	// clause 2 either). It is a LOAD-ONCE index, not a cycle guard (STYLE D4):
-	// <include> cycles are spec-legal — §4.2.3 states the same schema corresponds
-	// to every document in the cycle — and are not detected, merely loaded once.
+	// loaded indexes the documents already read, each under the docKey it was
+	// discovered as (§4.2.3: "If two <include> elements specify the same schema
+	// location (after resolving relative URI references) then they refer to the
+	// same schema document"; §4.2.6.2's note wants repeated <import>s of one
+	// document not to trip sch-props-correct clause 2 either). It is a LOAD-ONCE
+	// index, not a cycle guard (STYLE D4): <include> cycles are spec-legal —
+	// §4.2.3 states the same schema corresponds to every document in the cycle —
+	// and are not detected, merely loaded once.
 	//
-	// Each entry records D2's OWN targetNamespace, ·absent· encoded as "". That is
-	// not redundant with anything else the assembly holds (STYLE D3): the key's
-	// namespace half is the namespace D2 was reached UNDER, which a chameleon
-	// <include> makes differ from D2's own (§F.1), and discovered.tns is that same
-	// effective namespace. Without it a second directive naming an
-	// already-read D2 could not judge src-import clause 3 against D2 short of
-	// re-reading the document — which is exactly what #275 was.
-	loaded map[docKey]string
+	// It indexes the DISCOVERY, not just the fact of it, because a second
+	// directive landing on an existing key still has something to contribute: the
+	// ·redefinition· it applies is appended to that discovery's readings
+	// ([discovered].rds). D2's own targetNamespace is read back off the discovery's
+	// document rather than stored beside it (STYLE D3), which is what lets a
+	// repeated <import> be judged against src-import clause 3 without re-reading
+	// D2 (#275).
+	loaded map[docKey]*discovered
 
 	// docs holds every discovered document in discovery order: depth-first,
 	// pre-order, over each <schema>'s <include>, <override> and <import> children
@@ -293,7 +319,12 @@ type assembly struct {
 	// the builder, so it is user-visible in sch-props-correct duplicate reports
 	// (STYLE D1/D2) and must not be made to depend on which KIND of directive was
 	// seen.
-	docs []discovered
+	//
+	// The entries are POINTERS, shared with loaded: a discovery is written back to
+	// after it is appended — its census, its own <redefine> sets, and the readings
+	// a later directive merges into it — and a second copy would silently drop
+	// those writes.
+	docs []*discovered
 
 	// unfollowed holds every ·inter-schema-document reference· (§4.2.1) that
 	// yielded no document, in encounter order, for [AssemblyReport.Unfollowed].
@@ -320,35 +351,39 @@ func (a *assembly) unfollowedAt(el *Element, reason UnfollowedReason) {
 	a.unfollowed = append(a.unfollowed, UnfollowedDirective{Reason: reason, At: el.Loc()})
 }
 
-// newAssembly returns the assembly for a root schema document already read from
-// rootResolved under rootTNS, its own effective target namespace, seeding the
-// load-once index with it (STYLE T1). The root is reached by no directive, so the
-// namespace it is keyed under and the targetNamespace recorded for it are both
-// its own.
-func newAssembly(rootResolved, rootTNS string, cfg config) *assembly {
+// newAssembly returns the empty assembly cfg configures. The load-once index is
+// filled by discover alone, the root included: every document of an assembly
+// enters it exactly where it is appended to docs, so no key can be claimed for a
+// discovery that never happens (STYLE T1).
+func newAssembly(cfg config) *assembly {
 	return &assembly{
 		resolver: cfg.resolver,
 		log:      cfg.log,
-		loaded:   map[docKey]string{{resolved: rootResolved, namespace: rootTNS}: rootTNS},
+		loaded:   make(map[docKey]*discovered),
 	}
 }
 
-// discover appends doc to the assembly under resolved — the location the
-// resolver reported for it — tns — its effective target namespace — and ov — the
-// ·override pre-processing· in force over it — and then, in ONE document-order
-// pass, follows each of its top-level <include> (§4.2.3: schema(D1) contains
-// immed(D1) plus the components of schema(D2) for each <include>d D2), <override>
-// (§4.2.5: plus the components of schema(override(E,Dold))) and <import>
-// (§4.2.6.2: plus a set of components identical to those of each imported S2)
-// children depth-first. The three directive kinds share the pass so that
-// component entry order stays document order rather than becoming
-// directive-kind-dependent (STYLE D1).
-func (a *assembly) discover(doc *Document, resolved, tns string, ov *overrideSet, rd *redefineSet) error {
-	// The index this document's own <redefine> sets are recorded at. It is taken
-	// before the append, and the recursion below appends further documents, so the
-	// position cannot be recomputed later from len(a.docs).
-	self := len(a.docs)
-	a.docs = append(a.docs, discovered{doc: doc, tns: tns, resolved: resolved, ov: ov, rd: rd})
+// discover appends doc to the assembly under key — the load-once identity this
+// reading of it was fetched as — tns — its effective target namespace — ov — the
+// ·override pre-processing· in force over it — and rd — the ·redefinition· in
+// force over this reading, nil for a plain one. It claims key for the discovery,
+// and then, in ONE document-order pass, follows each of the document's top-level
+// <include> (§4.2.3: schema(D1) contains immed(D1) plus the components of
+// schema(D2) for each <include>d D2), <override> (§4.2.5: plus the components of
+// schema(override(E,Dold))) and <import> (§4.2.6.2: plus a set of components
+// identical to those of each imported S2) children depth-first. The three
+// directive kinds share the pass so that component entry order stays document
+// order rather than becoming directive-kind-dependent (STYLE D1).
+//
+// A later directive resolving to key does not discover the document again; fetch
+// merges that reading's redefinition into this discovery instead.
+func (a *assembly) discover(doc *Document, key docKey, tns string, ov *overrideSet, rd *redefineSet) error {
+	// The discovery this document's own <redefine> sets are recorded on. The
+	// recursion below appends further documents, so it is held as the pointer
+	// docs and loaded share rather than as a position into either.
+	self := &discovered{doc: doc, tns: tns, resolved: key.resolved, ov: ov, rds: redefinitions{rd}}
+	a.loaded[key] = self
+	a.docs = append(a.docs, self)
 	for _, child := range doc.Root().Children() {
 		el, ok := child.(*Element)
 		if !ok {
@@ -380,7 +415,7 @@ func (a *assembly) discover(doc *Document, resolved, tns string, ov *overrideSet
 				return err
 			}
 			if set != nil {
-				a.docs[self].redefines = append(a.docs[self].redefines, set)
+				self.redefines = append(self.redefines, set)
 			}
 		}
 	}
@@ -506,19 +541,20 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rd *redefin
 		// not an error, D2 does not exist and clause 2's other sub-clauses do not
 		// apply — or D2 exists but is already in the assembly under this very key,
 		// which §4.2.3's and §4.2.5's notes on sch-props-correct clause 2 want
-		// composed exactly once.
+		// composed exactly once. fetch has already merged rd into that discovery's
+		// readings, so a <redefine> taking this path still excepts and pairs.
 		//
 		// Unlike <import> (#275), the dedup outcome needs no clause 2 re-check here,
 		// because the namespace half of the key IS tns and every way an entry lands
 		// under {resolved, tns, ov} has already established that the document there
-		// declares tns or no targetNamespace at all: the root seeds its own
-		// (newAssembly); an <include>/<override> read reaching a second directive has
-		// passed the clause 2 test below, whose failure aborts the assembly outright;
-		// and an <import> read has passed src-import clause 3, which requires D2's
-		// targetNamespace to equal the namespace attribute it is keyed under (clause
-		// 3.1) or to be absent when there is none (clause 3.2). Both cases are
-		// clause 2.1 (own == tns) or clause 2.2/2.3 (own absent), so re-running the
-		// test on a dedup hit could not change the verdict.
+		// declares tns or no targetNamespace at all: the root is discovered under its
+		// own (ParseReport); an <include>/<override>/<redefine> read reaching a second
+		// directive has passed the clause 2 test below, whose failure aborts the
+		// assembly outright; and an <import> read has passed src-import clause 3,
+		// which requires D2's targetNamespace to equal the namespace attribute it is
+		// keyed under (clause 3.1) or to be absent when there is none (clause 3.2).
+		// Both cases are clause 2.1 (own == tns) or clause 2.2/2.3 (own absent), so
+		// re-running the test on a dedup hit could not change the verdict.
 		return nil
 	}
 	if !f.doc.IsSchema() {
@@ -546,7 +582,7 @@ func (a *assembly) compose(el *Element, tns string, ov *overrideSet, rd *redefin
 	// document has one — 2.3, whose §F.1 coercion is applied at production time:
 	// either way D2 is discovered under the composing document's effective
 	// namespace, carrying whatever override or redefinition is in force over it.
-	return a.discover(f.doc, f.resolved, tns, ov, rd)
+	return a.discover(f.doc, f.key, tns, ov, rd)
 }
 
 // importDocument follows one <import> element (§4.2.6.2). It enforces
@@ -623,7 +659,7 @@ func (a *assembly) importDocument(el *Element, tns string) error {
 	// discovered under it: import applies NO §F.1 coercion, which is src-include
 	// clause 2.3's alone, and no ·override pre-processing· either, since §F.2
 	// clause 5 copies an <import> unchanged.
-	return a.discover(f.doc, f.resolved, f.tns, nil, nil)
+	return a.discover(f.doc, f.key, f.tns, nil, nil)
 }
 
 // checkNoSelfImport enforces src-import clause 1 (src-import-noselfimport,
@@ -711,18 +747,20 @@ func checkImportedNamespace(el *Element, requested, namespace string, hasNamespa
 //     sch-props-correct clause 2 either, and §4.2.5's note wants the same of
 //     "multiple equivalent overrides of the same schema document", so it
 //     contributes its components exactly once. D2 DOES exist here: only its
-//     re-COMPOSITION is skipped. This directive WAS followed — to a document
-//     already in the report — so nothing is recorded: reporting a dedup hit as
-//     unfollowed would mark almost every multi-document assembly.
+//     re-COMPOSITION is skipped, and rd is merged into that discovery's readings
+//     first, so a <redefine> landing here still excepts and pairs what it names.
+//     This directive WAS followed — to a document already in the report — so
+//     nothing is recorded: reporting a dedup hit as unfollowed would mark almost
+//     every multi-document assembly.
 //
 // Any OTHER resolver failure is real: a permission or transport error is not
 // silently downgraded to "absent". It still yielded no document, so it is
 // recorded too, under the same reason — the report says which references came
 // back empty, not why the resolver said so.
 //
-// The resolved location travels back with the document because it, not the
-// requested one, is the assembly's document identity (docKey) and the report's
-// [AssembledDocument.Location].
+// The load-once key travels back with the document because the RESOLVED location
+// in it, not the requested one, is the assembly's document identity and the
+// report's [AssembledDocument.Location].
 func (a *assembly) fetch(requested, namespace string, ov *overrideSet, rd *redefineSet, el *Element, rule xsderr.Rule) (fetched, error) {
 	rc, resolved, err := a.resolver.Resolve(namespace, requested)
 	if errors.Is(err, loader.ErrNotFound) {
@@ -740,11 +778,17 @@ func (a *assembly) fetch(requested, namespace string, ov *overrideSet, rd *redef
 	// it cannot affect the parse verdict (STYLE S3).
 	defer func() { _ = rc.Close() }()
 
-	key := docKey{resolved: resolved, namespace: namespace, override: ov.key(), redefine: rd.key()}
-	if own, done := a.loaded[key]; done {
+	key := docKey{resolved: resolved, namespace: namespace, override: ov.key()}
+	if prior, done := a.loaded[key]; done {
+		// This directive's own ·redefinition· joins the readings of that discovery,
+		// so the definitions it excepts are excepted here too and the ones it
+		// replaces still record their originals — while the document itself is
+		// composed exactly once (see docKey). rd is nil for every directive but a
+		// non-empty <redefine>, and a nil reading excepts nothing.
+		prior.rds = append(prior.rds, rd)
 		a.log.Debug("schema document already loaded", "directive", el.Name().Local(),
 			"namespace", namespace, "location", requested, "resolved", resolved, "at", el.Loc().String())
-		return fetched{resolved: resolved, tns: own, exists: true}, nil
+		return fetched{key: key, tns: attrOr(prior.doc.Root(), "targetNamespace"), exists: true}, nil
 	}
 
 	doc, err := ReadDocument(requested, rc)
@@ -773,14 +817,11 @@ func (a *assembly) fetch(requested, namespace string, ov *overrideSet, rd *redef
 	if err != nil {
 		return fetched{}, err
 	}
-	// D2's own targetNamespace is recorded WITH the load-once key, so a later
-	// directive that lands on this key can still be judged against D2 without
-	// re-reading it. The key is claimed only once the document is in hand, since
-	// there is nothing to record until then; an unreadable D2 aborts the assembly
-	// on the line above, so the key is never left unclaimed behind a live parse.
-	own := attrOr(doc.Root(), "targetNamespace")
-	a.loaded[key] = own
-	return fetched{doc: doc, resolved: resolved, tns: own, exists: true}, nil
+	// The key travels back with the document rather than being claimed here:
+	// discover claims it as it appends the discovery a later directive landing on
+	// this key merges into. D2's own targetNamespace travels back too, so a later
+	// directive can be judged against D2 without re-reading it.
+	return fetched{doc: doc, key: key, tns: attrOr(doc.Root(), "targetNamespace"), exists: true}, nil
 }
 
 // fetched is the outcome of one [assembly.fetch]: which of the three
@@ -795,9 +836,10 @@ type fetched struct {
 	// components a second time.
 	doc *Document
 
-	// resolved is the location the [loader.Resolver] reported for D2 — the
-	// identity half of docKey and the report's [AssembledDocument.Location].
-	resolved string
+	// key is the load-once identity this reading of D2 was fetched under, whether
+	// this directive read it or a previous one did. discover claims it, and its
+	// resolved half is the report's [AssembledDocument.Location].
+	key docKey
 
 	// tns is D2's OWN targetNamespace, ·absent· encoded as "", read off D2 whether
 	// this directive read it or a previous one did. It is what src-import clause 3
@@ -839,12 +881,8 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 		return nil, err
 	}
 	producers := make([]*producer, 0, len(a.docs))
-	for i := range a.docs {
-		// A POINTER into docs, not a range copy: the census is written back
-		// through it, and a write through a copy of the struct would be silently
-		// lost.
-		d := &a.docs[i]
-		p := newProducer(d.doc, d.tns, d.ov, d.rd, d.redefines, builder, sym)
+	for _, d := range a.docs {
+		p := newProducer(d.doc, d.tns, d.ov, d.rds, d.redefines, builder, sym)
 		// Taken before the first thing that can fail, so a document its own
 		// pre-scan rejects still reports what it holds — the report is populated
 		// as far as assembly got on every path ([AssemblyReport]).

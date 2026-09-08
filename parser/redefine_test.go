@@ -1264,11 +1264,11 @@ func TestParseRedefineContentModelRejectsOverrideOnlyKinds(t *testing.T) {
 
 // TestParseRedefineAndIncludeOfOneDocumentCollide covers the cross-mechanism
 // conflict the load-once index deliberately does NOT paper over: the document is
-// reached once plainly and once under a redefinition, and the two readings' key
-// halves differ, so both are composed. §4.2.4 clause 4.1.2 makes the second
-// reading's component set differ from the first's, and the duplicate expanded
-// name is a genuine sch-props-correct clause 2 (c-nmd) rejection — not something
-// to silently pick a winner for.
+// reached once plainly and once under a redefinition that names code, so the
+// plain reading contributes lib's own code and the redefining document
+// contributes the replacement §4.2.4 clause 4.1.1 makes ITS definition. The
+// duplicate expanded name is a genuine sch-props-correct clause 2 (c-nmd)
+// rejection — not something to silently pick a winner for.
 func TestParseRedefineAndIncludeOfOneDocumentCollide(t *testing.T) {
 	_, err := parseMap(t, "main.xsd", map[string]string{
 		"main.xsd": wrap("urn:a", `<xs:include schemaLocation="lib.xsd"/>`+
@@ -1281,13 +1281,78 @@ func TestParseRedefineAndIncludeOfOneDocumentCollide(t *testing.T) {
 	mustRule(t, err, "sch-props-correct")
 }
 
-// TestParseRedefineSameDocumentTwiceDiffers pins the docKey widening this slice
-// made: the redefine half of the load-once identity is what lets ONE document be
-// redefined two different ways, each reading contributing its own component set
-// (§4.2.4 clause 4.1.2). Without it the second <redefine> would silently dedup
-// onto the first and its redefinition would be dropped — so this asserts the
-// collision the spec's own outcome produces, which is the observable proof that
-// two readings happened.
+// TestParseRedefineTargetAlsoReadPlainlyComposesOnce is the other half of that
+// shape: what the <redefine> does NOT name (#1349). §4.2.4's construction gives
+// the redefining schema "components identical to all the schema components of
+// S2, with the exception of those explicitly redefined" — §4.2.3 clause 3.1.2's
+// wording for a plain <include> verbatim, over the same schema(D2), which §4.2.1
+// makes a pure function of D2 — so ct is ONE component both readings draw in and
+// is contributed once. It is NOT two equal components that collide under
+// sch-props-correct clause 2, which is what composing lib.xsd twice made of every
+// definition the <redefine> left alone.
+//
+// The assembly is still rejected, and on g: the plain reading contributes lib's
+// own g and the redefinition contributes its replacement. That is what makes the
+// charge readable — it names the definition the two readings genuinely disagree
+// about — and it is why the assertion is on the expanded name, not on the rule
+// alone.
+//
+// Both orders are run because the readings merge into whichever discovery came
+// first: a plain reading landing on a redefined one must widen it back to
+// contributing everything, exactly as a redefinition landing on a plain one must
+// not narrow it.
+func TestParseRedefineTargetAlsoReadPlainlyComposesOnce(t *testing.T) {
+	lib := wrap("urn:a", `<xs:group name="g"><xs:sequence/></xs:group>`+
+		`<xs:complexType name="ct"><xs:sequence><xs:element name="e" type="xs:string"/></xs:sequence></xs:complexType>`)
+	redefining := wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
+		`<xs:group name="g"><xs:sequence><xs:element name="d" type="xs:string"/></xs:sequence></xs:group>`+
+		`</xs:redefine>`)
+	cases := []struct {
+		name string
+		docs map[string]string
+	}{
+		{
+			name: "plainly first",
+			docs: map[string]string{
+				"main.xsd": wrap("urn:a", `<xs:include schemaLocation="lib.xsd"/>`+
+					`<xs:include schemaLocation="red.xsd"/>`),
+				"lib.xsd": lib,
+				"red.xsd": redefining,
+			},
+		},
+		{
+			name: "redefined first",
+			docs: map[string]string{
+				"main.xsd": wrap("urn:a", `<xs:include schemaLocation="red.xsd"/>`+
+					`<xs:include schemaLocation="lib.xsd"/>`),
+				"lib.xsd": lib,
+				"red.xsd": redefining,
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			n, err := readingsOf(t, "main.xsd", "lib.xsd", c.docs)
+			if n != 1 {
+				t.Fatalf("lib.xsd read %d times, want 1: a document reached plainly and as a <redefine> target is one composition", n)
+			}
+			mustRule(t, err, "sch-props-correct", "repeats the expanded name {urn:a}g")
+			if strings.Contains(err.Error(), "{urn:a}ct") {
+				t.Fatalf("error %q charges {urn:a}ct, which nothing redefines: the untouched definition must be minted once", err)
+			}
+		})
+	}
+}
+
+// TestParseRedefineSameDocumentTwiceDiffers pins what survives dropping the
+// redefinition from the load-once identity (#1349): ONE document redefined two
+// different ways is one composition, and the two redefinitions still collide.
+// The redefined document contributes nothing for code — every reading excepts it
+// under §4.2.4 clause 4.1.2 — while both <redefine> elements contribute a
+// replacement of that name to the SAME document, which is the sch-props-correct
+// clause 2 collision here. Were the second <redefine>'s original left unrecorded
+// by the reading that merged onto the first, src-expredef's closing requirement
+// would be charged in its place against a definition that is there.
 func TestParseRedefineSameDocumentTwiceDiffers(t *testing.T) {
 	_, err := parseMap(t, "main.xsd", map[string]string{
 		"main.xsd": wrap("urn:a", `<xs:redefine schemaLocation="lib.xsd">`+
@@ -1302,6 +1367,51 @@ func TestParseRedefineSameDocumentTwiceDiffers(t *testing.T) {
 			`<xs:restriction base="xs:string"/></xs:simpleType>`),
 	})
 	mustRule(t, err, "sch-props-correct")
+}
+
+// TestParseRedefineCycleRejected covers the one shape composing a <redefine>
+// target once made reachable (#1349): two documents that redefine EACH OTHER for
+// one (kind, name). §4.2.4 clause 4.1.1 makes each document's redefining child
+// the "top-level definition item of that name and kind in the <redefine>d schema
+// document" the other one pairs with, so the base chain src-expredef clause 1.1
+// builds runs a.ct ⊳ b.ct ⊳ a.ct ⊳ … and never reaches xs:anyType.
+//
+// Every hop of that chain is an ANONYMOUS original, so it passes through no
+// named build and neither buildComplexType's name-keyed sentinel nor
+// buildSimpleType's ever sees it; enterOriginal is what bounds it, and the
+// verdict is the acyclicity rule for the kind — the same rule the finalize-side
+// walks charge. Without the bound the walk recurses until the stack dies, which
+// is what the W3C suite's ibmData/schema_invalid/S4_2_4 cyclic-redefine cases
+// meet.
+func TestParseRedefineCycleRejected(t *testing.T) {
+	cases := []struct {
+		name   string
+		rule   xsderr.Rule
+		child  string
+		clause string
+	}{
+		{
+			name:   "complexType",
+			rule:   "ct-props-correct",
+			child:  `<xs:complexType name="ct"><xs:complexContent><xs:extension base="tns:ct"><xs:sequence/></xs:extension></xs:complexContent></xs:complexType>`,
+			clause: "clause 3",
+		},
+		{
+			name:   "simpleType",
+			rule:   "st-props-correct",
+			child:  `<xs:simpleType name="ct"><xs:restriction base="tns:ct"><xs:maxLength value="4"/></xs:restriction></xs:simpleType>`,
+			clause: "clause 2",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := parseMap(t, "a.xsd", map[string]string{
+				"a.xsd": wrap("urn:a", `<xs:redefine schemaLocation="b.xsd">`+c.child+`</xs:redefine>`),
+				"b.xsd": wrap("urn:a", `<xs:redefine schemaLocation="a.xsd">`+c.child+`</xs:redefine>`),
+			})
+			mustRule(t, err, c.rule, "{urn:a}ct", c.clause)
+		})
+	}
 }
 
 // TestProduceRedefineIsSkipped pins that [Produce] — the single-document entry

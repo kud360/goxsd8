@@ -1,12 +1,15 @@
 package conformance
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/kud360/goxsd8/loader"
 	"github.com/kud360/goxsd8/parser"
+	"github.com/kud360/goxsd8/xsderr"
 )
 
 // schemaDoc builds an in-memory schema document from body children wrapped in a
@@ -552,3 +555,41 @@ func TestSchemaExecutorDecidesNotationInAppinfoSuiteCase(t *testing.T) {
 // TestSchemaExecutorDeclinesUndecidableInclusion's (schema_closure_test.go),
 // which drives the same withholding end-to-end over a written tree and so needs
 // no suite fixture to stay pointed at a live shape.
+
+// TestSchemaSchZ006RejectedOnRedefinedGroup pins WHICH component the schema lane
+// rejects msData/schema/schZ006 for. The lane's expectation records only that the
+// case is decided and agreed with, so a rejection charged against the wrong
+// component keeps it banked and green — which is exactly what happened while
+// schZ006.xsd, reached both by the assembly root and as the target of
+// schZ006_b.xsd's <xs:redefine>, was composed twice (#1349).
+//
+// GCustomDimProps is the definition the two readings genuinely disagree about:
+// schZ006.xsd declares it with an empty <xs:sequence> and the <xs:redefine>
+// replaces it with one carrying DisplayInfo, so sch-props-correct (§3.17.6.1)
+// clause 2 has two components of one expanded name to charge. MemberType is
+// named because it is the untouched complexType the double composition used to
+// charge instead — nothing redefines it, and §4.2.4's "components identical to
+// all the schema components of S2, with the exception of those explicitly
+// redefined" makes it one component, not two. Skips when the submodule is absent.
+func TestSchemaSchZ006RejectedOnRedefinedGroup(t *testing.T) {
+	skipWithoutSuite(t)
+	dir := filepath.Join(suiteRoot, "msData", "schema")
+	_, err := parser.Parse("schZ006.xsd", parser.WithResolver(loader.Dir(dir)))
+	if err == nil {
+		t.Fatal("schZ006 must stay rejected: its <xs:redefine> replaces GCustomDimProps non-identically with a reading that also contributes the original")
+	}
+	var xe *xsderr.Error
+	if !errors.As(err, &xe) {
+		t.Fatalf("Parse error = %v (%T), want an *xsderr.Error", err, err)
+	}
+	if xe.Rule != "sch-props-correct" {
+		t.Fatalf("Parse error rule = %s, want sch-props-correct (%v)", xe.Rule, err)
+	}
+	const want = "repeats the expanded name {urn:schemas-microsoft-com:xml-analysis:mddataset}GCustomDimProps"
+	if !strings.Contains(xe.Error(), want) {
+		t.Fatalf("error %q does not charge the redefined model group: want %q", xe, want)
+	}
+	if strings.Contains(xe.Error(), "MemberType") {
+		t.Fatalf("error %q charges MemberType, which nothing redefines", xe)
+	}
+}

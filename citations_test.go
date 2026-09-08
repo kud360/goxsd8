@@ -53,7 +53,13 @@ var allowedCollisionCitations = []citationAllowance{
 	{file: "builtin/strict/duration.go", number: 5, count: 1},
 	{file: "builtin/strict/gregorian.go", number: 5, count: 1},
 	{file: "builtin/strict/strict.go", number: 5, count: 1},
-	{file: "parser/produce.go", number: 9, count: 4},
+	// #1349 added the fifth: symbols.redefineOriginals records that the anonymous
+	// src-expredef clause 1.1 hop is bounded by an on-stack set of its own,
+	// citing item 9's "detect once at construction" as what licenses a second
+	// entry point on ct-props-correct clause 3 — the same reading
+	// buildComplexType's own sentinel already argues, applied per construction
+	// path rather than per rule.
+	{file: "parser/produce.go", number: 9, count: 5},
 	{file: "value/union.go", number: 5, count: 1},
 	{file: "value/valuespace.go", number: 9, count: 1},
 	// #469: cos-all-limited follows <group ref> edges with no cycle guard,
