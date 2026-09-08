@@ -576,16 +576,22 @@ func TestProduceSimpleContentExtensionAttributes(t *testing.T) {
 
 // TestProduceSimpleContentMixedRejected pins src-ct clause 1
 // (simple-content-rules, §3.4.3): with the <simpleContent> alternative chosen,
-// the <complexType> must not have mixed="true". It is charged BEFORE the
+// the <complexType> must not have mixed = true. It is charged BEFORE the
 // <restriction> limitation decline, so the verdict is the rule either way.
+//
+// The clause tests the ·actual value·, not the literal, so every lexical that
+// maps to true reaches it — the padded " 1 " row is the one a raw string compare
+// let through, and it is the reason this rule's message names the value rather
+// than quoting mixed="true" (#456).
 func TestProduceSimpleContentMixedRejected(t *testing.T) {
-	for _, tc := range []struct{ name, alternant string }{
-		{"extension", `<xs:extension base="xs:string"/>`},
-		{"restriction", `<xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction>`},
+	for _, tc := range []struct{ name, mixed, alternant string }{
+		{"extension", "true", `<xs:extension base="xs:string"/>`},
+		{"restriction", "true", `<xs:restriction base="xs:string"><xs:maxLength value="4"/></xs:restriction>`},
+		{"padded 1 spelling", " 1 ", `<xs:extension base="xs:string"/>`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := produce(t, wrap("urn:x", `
-				<xs:complexType name="D" mixed="true"><xs:simpleContent>`+tc.alternant+`</xs:simpleContent></xs:complexType>`))
+				<xs:complexType name="D" mixed="`+tc.mixed+`"><xs:simpleContent>`+tc.alternant+`</xs:simpleContent></xs:complexType>`))
 			assertRule(t, err, "src-ct")
 			if !strings.Contains(err.Error(), "clause 1") {
 				t.Fatalf("error = %v, want it to cite src-ct clause 1", err)

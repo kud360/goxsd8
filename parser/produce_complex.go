@@ -552,8 +552,14 @@ func (p *producer) produceComplexType(id complexTypeIdentity, el *Element) (xsd.
 // <complexType>'s own here, so the check belongs where the disjunct is chosen
 // rather than to one arm of the dispatch.
 func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (xsd.ComplexType, error) {
-	mixed, _ := boolAttr(el, "mixed")
-	abstract, _ := boolAttr(el, "abstract")
+	mixed, _, err := boolAttr(el, "mixed")
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
+	abstract, _, err := boolAttr(el, "abstract")
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
 	content, err := p.buildComplexContentType(el, mixed, scopeParentOf(id))
 	if err != nil {
 		return xsd.ComplexType{}, err
@@ -620,9 +626,13 @@ func (p *producer) produceImplicitContent(id complexTypeIdentity, el *Element) (
 //     representation rule the source actually violates (STYLE E2), and only for
 //     the kinds the two exception sets happen to agree on.
 func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Element) (xsd.ComplexType, error) {
-	if mixed, present := boolAttr(ctElem, "mixed"); present && mixed {
+	mixed, hasMixed, err := boolAttr(ctElem, "mixed")
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
+	if hasMixed && mixed {
 		return xsd.ComplexType{}, xsderr.New(ruleSrcCT, ctElem.Loc(),
-			"<complexType> has mixed=\"true\" and a <simpleContent> child, but src-ct clause 1 forbids mixed=true when the <simpleContent> alternative is chosen")
+			"<complexType> has a <simpleContent> child and a mixed whose ·actual value· is true, but src-ct clause 1 forbids mixed = true when the <simpleContent> alternative is chosen")
 	}
 	if dup := repeatedDerivationAlternant(sc); dup != nil {
 		return xsd.ComplexType{}, fmt.Errorf("parser: <%s> at %s is a second derivation alternant on the <simpleContent> at %s, which the schema for schema documents prohibits: xs:simpleContent (§3.4.2.2) holds a plain xs:choice, so a <simpleContent> carries exactly one of <restriction>, <extension>", dup.Name().Local(), dup.Loc(), sc.Loc())
@@ -668,7 +678,10 @@ func (p *producer) produceSimpleContent(id complexTypeIdentity, ctElem, sc *Elem
 	if err != nil {
 		return xsd.ComplexType{}, err
 	}
-	abstract, _ := boolAttr(ctElem, "abstract")
+	abstract, _, err := boolAttr(ctElem, "abstract")
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
 	uses, prohibited, wildcard, err := p.produceAttributeUses(ctElem, derivation, attributeScopeParentOf(id))
 	if err != nil {
 		return xsd.ComplexType{}, err
@@ -922,8 +935,14 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 	if err := checkS4SChildOrder(derivation, alternantModel); err != nil {
 		return xsd.ComplexType{}, err
 	}
-	ctMixed, ctHasMixed := boolAttr(ctElem, "mixed")
-	ccMixed, ccHasMixed := boolAttr(cc, "mixed")
+	ctMixed, ctHasMixed, err := boolAttr(ctElem, "mixed")
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
+	ccMixed, ccHasMixed, err := boolAttr(cc, "mixed")
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
 	if ctHasMixed && ccHasMixed && ctMixed != ccMixed {
 		return xsd.ComplexType{}, xsderr.New(ruleSrcCT, cc.Loc(),
 			"mixed is present on both <complexType> and <complexContent> with differing values, but src-ct clause 5 requires them to be the same")
@@ -934,7 +953,10 @@ func (p *producer) produceComplexContent(id complexTypeIdentity, ctElem, cc *Ele
 	if ccHasMixed {
 		mixed = ccMixed
 	}
-	abstract, _ := boolAttr(ctElem, "abstract")
+	abstract, _, err := boolAttr(ctElem, "abstract")
+	if err != nil {
+		return xsd.ComplexType{}, err
+	}
 	baseLex, hasBase := derivation.Attr("base")
 	if !hasBase {
 		// base is use="required" on both xs:extensionType and xs:complexRestrictionType
@@ -1252,7 +1274,10 @@ func (p *producer) openContentType(owner *Element, explicit xsd.ContentType) (xs
 	if err := checkOpenContentAny(owner); err != nil {
 		return nil, err
 	}
-	we := p.wildcardElement(owner, explicit)
+	we, err := p.wildcardElement(owner, explicit)
+	if err != nil {
+		return nil, err
+	}
 	if we == nil {
 		return explicit, nil // clause 6.1: the ·wildcard element· is ·absent·
 	}
@@ -1299,22 +1324,29 @@ func checkOpenContentAny(owner *Element) error {
 // is empty and that element carries appliesToEmpty="true" (5.2.2).
 //
 // appliesToEmpty is read here and nowhere else: §3.4.1's Open Content record has
-// no such property, so it must not travel past this selection (STYLE D3).
-func (p *producer) wildcardElement(owner *Element, explicit xsd.ContentType) *Element {
+// no such property, so it must not travel past this selection (STYLE D3). It is
+// an xs:boolean like any other schema attribute, so a lexical outside
+// booleanRep is charged rather than read as false — which is why the selection
+// returns an error at all.
+func (p *producer) wildcardElement(owner *Element, explicit xsd.ContentType) (*Element, error) {
 	if own := childElement(owner, xsd.XMLSchemaNS, "openContent"); own != nil {
-		return own // clause 5.1
+		return own, nil // clause 5.1
 	}
 	def := p.defaultOpenContentElem()
 	if def == nil {
-		return nil // clause 5.3: this document declares no default
+		return nil, nil // clause 5.3: this document declares no default
 	}
 	if explicit.Variety() != xsd.ContentEmpty {
-		return def // clause 5.2.1
+		return def, nil // clause 5.2.1
 	}
-	if appliesToEmpty, _ := boolAttr(def, "appliesToEmpty"); appliesToEmpty {
-		return def // clause 5.2.2
+	appliesToEmpty, _, err := boolAttr(def, "appliesToEmpty")
+	if err != nil {
+		return nil, err
 	}
-	return nil // clause 5.3
+	if appliesToEmpty {
+		return def, nil // clause 5.2.2
+	}
+	return nil, nil // clause 5.3
 }
 
 // defaultOpenContentElem returns the <defaultOpenContent> child of THIS
@@ -2523,7 +2555,10 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	nillable, _ := boolAttr(el, "nillable")
+	nillable, _, err := boolAttr(el, "nillable")
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
 	constraints, err := p.identityConstraintsOf(el)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
@@ -2787,7 +2822,11 @@ func (p *producer) foldDefaultAttributes(ctElem *Element, visited map[xsd.QName]
 	if !ok {
 		return nil
 	}
-	if apply, present := boolAttr(ctElem, "defaultAttributesApply"); present && !apply {
+	apply, present, err := boolAttr(ctElem, "defaultAttributesApply")
+	if err != nil {
+		return err
+	}
+	if present && !apply {
 		return nil
 	}
 	qn, err := p.resolveQName(p.schemaElem, lexical, "defaultAttributes")
@@ -3206,7 +3245,10 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 		return nil, nil
 	}
 	required := use == "required"
-	inheritable, _ := boolAttr(el, "inheritable")
+	inheritable, _, err := boolAttr(el, "inheritable")
+	if err != nil {
+		return nil, err
+	}
 
 	if hasRef {
 		qn, err := p.resolveQName(el, ref, "ref")
@@ -3416,7 +3458,10 @@ func (p *producer) produceLocalAttribute(el *Element, scopeParent xsd.AttributeS
 	if err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
-	inheritable, _ := boolAttr(el, "inheritable")
+	inheritable, _, err := boolAttr(el, "inheritable")
+	if err != nil {
+		return xsd.AttributeDeclaration{}, err
+	}
 	scope, err := xsd.NewAttributeLocalScope(el.Loc(), scopeParent)
 	if err != nil {
 		return xsd.AttributeDeclaration{}, err
@@ -3809,12 +3854,36 @@ func attrOr(el *Element, local string) string {
 	return v
 }
 
-// boolAttr reads an xs:boolean-valued attribute (true/1 → true), reporting
-// presence. An absent attribute is (false, false).
-func boolAttr(el *Element, local string) (val bool, present bool) {
-	v, ok := el.Attr(local)
+// boolAttr reads an xs:boolean-valued schema attribute as its ·actual value·
+// (key-vv), reporting presence separately for the callers whose rule asks
+// whether the attribute was written rather than what it says. The two mapping
+// stages run in the order §4.1.4 fixes:
+//
+//   - pre-lexical. xs:boolean fixes whiteSpace to collapse (§3.3.2.3, §4.3.6)
+//     and the facet is applied BEFORE lexical-space membership is tested, so
+//     mixed=" 1 " is the value true. collapseTrim reads that ·actual value·, and
+//     its doc carries the proof that trimming §4.3.6's four characters decides
+//     booleanRep membership exactly as a full collapse would.
+//   - lexical. booleanRep ::= 'true' | 'false' | '1' | '0' (§3.3.2.2), case
+//     sensitive: "TRUE" and "yes" are not in the lexical space. Anything outside
+//     those four is charged cvc-datatype-valid (§4.1.4), which states no fallback
+//     clause — an out-of-space literal must not quietly become false.
+//
+// An absent attribute is the property's default and is NOT an error, a branch
+// distinct from present-but-invalid; facetFixed splits the same two. On a fault
+// both bools are their zero values and the error is the only meaningful return.
+func boolAttr(el *Element, local string) (val bool, present bool, err error) {
+	lexical, ok := el.Attr(local)
 	if !ok {
-		return false, false
+		return false, false, nil
 	}
-	return v == "true" || v == "1", true
+	switch collapseTrim(lexical) {
+	case "true", "1":
+		return true, true, nil
+	case "false", "0":
+		return false, true, nil
+	}
+	return false, false, xsderr.New(ruleDatatypeValid, el.Loc(),
+		"<%s> %s value %q is not in the lexical space of xs:boolean (true, false, 1, 0) that the schema for schema documents declares for it",
+		el.Name().Local(), local, lexical)
 }
