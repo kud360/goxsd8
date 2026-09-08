@@ -755,10 +755,15 @@ demonstration yet: **three of its four subcommand issues LANDED** — #1223
 (`20010ed`) and #1230 (`38ade3e`) — **three more were filed onto it** (#1250,
 #1251, #1257), and the milestone's open count did not move at all while
 `instance` stayed flat at 11029. **Every M5 issue that entered or left in that
-window was `cmd/goxsd8`.** The subcommand issues open here today are #1224
-(`blocked` on a trigger), #1250, #1251 and #1257; **#1260 and #1261 are the same
-shape and carry NO milestone deliberately, because they span `parse` (M4) as
-well.** Read the count as a floor and never as the lane's remaining work.
+window was `cmd/goxsd8`.** **The roster of open subcommand issues is not written
+here.** It went stale twice inside four days — #1260 and #1261 landed, then
+#1251 — for the reason the lane figure below is not written here either (#646).
+Read it off the queue: `area/cmd` on this milestone. The durable half is the
+milestone rule behind that roster, and it is the reason the count reads low: **a
+subcommand issue spanning `parse` (M4) as well as `validate` carries NO
+milestone deliberately**, so this milestone's `cmd/goxsd8` work is undercounted
+here rather than overcounted. Read the count as a floor and never as the lane's
+remaining work.
 
 **The lane score is a floor built for soundness, and no jump has ever changed
 what the number means.** The lane emits only "not valid" observations; a
