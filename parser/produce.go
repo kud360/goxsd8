@@ -2364,8 +2364,14 @@ func (p *producer) produceElement(qname xsd.QName, elem *Element) (xsd.ElementDe
 	// case. abstract is read on this path ALONE: the schema for schema documents
 	// declares it use="prohibited" on xs:localElement (§A), so produceLocalElement
 	// has no attribute to read.
-	nillable, _ := boolAttr(elem, "nillable")
-	abstract, _ := boolAttr(elem, "abstract")
+	nillable, _, err := boolAttr(elem, "nillable")
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
+	abstract, _, err := boolAttr(elem, "abstract")
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
 
 	constraints, err := p.identityConstraintsOf(elem)
 	if err != nil {
@@ -3260,7 +3266,7 @@ func childElements(el *Element, space, local string) []*Element {
 // lexical-space membership is tested (§4.1.4), so a padded " true " is the
 // ·actual value· true. It is this package's one spelling of that trim; route a
 // new lexical comparison through it. Comparisons that do not normalize at all
-// are separate work — boolAttr's true/1 compare, for one (#456).
+// are separate work — the raw use= and form= compares, for one (#1328).
 //
 // It cannot be strings.TrimSpace, whose unicode.IsSpace class also cuts U+0085,
 // U+00A0, U+2028 and the rest — characters §4.3.6 is NOT whitespace for and
