@@ -347,12 +347,19 @@ var (
 // The order is this walk FIRST, at every producer charging both and with no
 // exception: a document whose children the content model does not admit is
 // answered by the grammar fault, and no src-* verdict is reached over a shape
-// the grammar already rejects. src-element clause 2.2 (elementParticleTerm),
-// clause 3 (produceElement, produceLocalElement) and clause 4
-// (rejectLocalElementTargetNamespace), src-ta (checkSrcTA,
-// produce_typetable.go), and EVERY src-attribute clause this parser charges
-// (produceAttribute, produceAttributeUse, produceLocalAttribute) are behind it,
-// and a NEW charge takes the same order (#1246).
+// the grammar already rejects. That rule IS the membership: every src-ct,
+// src-element, src-attribute and src-ta clause this parser charges under one of
+// the twelve models above is behind the walk, and a NEW charge takes the same
+// order (#1246). Keep no roster of the individual sites here — apply the rule
+// to whichever site is in hand.
+//
+// WHICH walk stands in front of a clause need not be the one in the producer
+// body charging it. src-ct clause 1 constrains the <complexType>'s mixed
+// attribute but is charged from produceSimpleContent, so the walk ahead of it
+// is produceComplexType's over that <complexType>, and the two
+// <simpleContent>-side walks run AFTER it rather than before. Clauses 3 and 4
+// constrain an <openContent>'s children and stand behind the walk over the
+// element holding it — the <complexType> or the derivation alternant.
 //
 // rejectBothInlineTypes (produce_complex.go) runs ahead of the walk on both
 // element paths and is no exception to that order: it charges no rule at all,
