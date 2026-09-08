@@ -159,6 +159,175 @@ func keyOrRef(t *testing.T, name xsd.QName, category xsd.IdentityConstraintCateg
 	return keyOrRefFields(t, name, category, refer, 1)
 }
 
+// agRefUse builds an attribute use whose {attribute declaration} is an
+// <attribute ref> to name. The use carries the ZERO Loc on purpose: an
+// AttributeUse retains no position, so a rejection must take the enclosing
+// component's (the referrer-Loc convention, resolveReferences).
+func agRefUse(t *testing.T, name xsd.QName) xsd.AttributeUse {
+	t.Helper()
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.AttributeDeclarationRef{Name: name}, nil, false, nil)
+	if err != nil {
+		t.Fatalf("NewAttributeUse(ref %v): %v", name, err)
+	}
+	return u
+}
+
+// agLocalUse builds an attribute use over a sibling LOCAL declaration at loc,
+// named name and typed by typeName. Unlike a ref use, the declaration retains
+// its own position, which is where its {type definition} slot is charged.
+func agLocalUse(t *testing.T, loc xsderr.Loc, name, typeName xsd.QName) xsd.AttributeUse {
+	t.Helper()
+	scope, err := xsd.NewAttributeLocalScope(xsderr.Loc{}, xsd.AttributeComplexTypeScopeParent{Name: qn("container")})
+	if err != nil {
+		t.Fatalf("NewAttributeLocalScope: %v", err)
+	}
+	d, err := xsd.NewAttributeDeclaration(loc, name, xsd.TypeDefinitionRef{Name: typeName}, scope, nil, false, nil)
+	if err != nil {
+		t.Fatalf("NewAttributeDeclaration(%v): %v", name, err)
+	}
+	u, err := xsd.NewAttributeUse(xsderr.Loc{}, false, xsd.LocalAttributeDeclaration{Declaration: d}, nil, false, nil)
+	if err != nil {
+		t.Fatalf("NewAttributeUse(local %v): %v", name, err)
+	}
+	return u
+}
+
+// attributeGroupAt builds a top-level attribute group definition at loc over the
+// given {attribute uses}.
+func attributeGroupAt(t *testing.T, loc xsderr.Loc, name xsd.QName, uses ...xsd.AttributeUse) xsd.AttributeGroupDefinition {
+	t.Helper()
+	g, err := xsd.NewAttributeGroupDefinition(loc, name, uses, nil, nil)
+	if err != nil {
+		t.Fatalf("NewAttributeGroupDefinition(%v): %v", name, err)
+	}
+	return g
+}
+
+// attributeCTAt builds a complex type at loc whose {attribute uses} are the given
+// ones — the shape the producer leaves behind when a complex type references an
+// <attributeGroup>, since §3.6.2.1 inlines the ref at mapping time and splices a
+// copy of the group's uses into the type.
+func attributeCTAt(t *testing.T, loc xsderr.Loc, name xsd.QName, uses ...xsd.AttributeUse) xsd.ComplexType {
+	t.Helper()
+	ct, err := xsd.NewComplexType(loc, name, xsd.QName{}, nil, xsd.DerivationRestriction, false,
+		uses, nil, nil, xsd.EmptyContent{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewComplexType(%v): %v", name, err)
+	}
+	return ct
+}
+
+// TestResolveDanglingReferenceInAttributeGroup pins src-resolve (§3.17.6.2) at
+// the reference sites inside a top-level attribute group definition's own
+// {attribute uses} — an <attribute ref> (clause 1.2) and a local <attribute>'s
+// type= (clause 1.1) — across the four ways such a definition reaches the
+// assembled schema (#725).
+//
+// The four differ in WHICH root loop reaches the uses, which is the whole point:
+// a group a complex type references is reached incidentally through that type,
+// because the producer splices a copy of the group's uses into it; a group
+// NOTHING references is reached only through {attribute group definitions}; and a
+// <redefine> original is in no property and no index at all (§4.2.4 clause
+// 4.1.2), so only the recorded pairing reaches it. Each case also pins the
+// position, which is the definition the reader must edit — the group's own, or,
+// for a local declaration's type=, that declaration's.
+func TestResolveDanglingReferenceInAttributeGroup(t *testing.T) {
+	legal := func(t *testing.T, name xsd.QName) xsd.AttributeGroupDefinition {
+		return attributeGroupAt(t, xsderr.Loc{}, name, agRefUse(t, qn("declared")))
+	}
+	for _, tc := range []struct {
+		name  string
+		build func(t *testing.T, b *xsd.SchemaBuilder)
+		want  xsderr.Loc
+		msg   string
+	}{
+		{
+			name: "an <attribute ref> in a group nothing references",
+			build: func(t *testing.T, b *xsd.SchemaBuilder) {
+				b.AddAttributeGroup(attributeGroupAt(t, resolveLoc(101), qn("ag"), agRefUse(t, qn("nope"))))
+			},
+			want: resolveLoc(101),
+			msg:  "attribute use <attribute ref> references attribute declaration",
+		},
+		{
+			name: "a local <attribute>'s type= in a group nothing references",
+			build: func(t *testing.T, b *xsd.SchemaBuilder) {
+				b.AddAttributeGroup(attributeGroupAt(t, resolveLoc(102), qn("ag"),
+					agLocalUse(t, resolveLoc(103), qn("a"), qn("nope"))))
+			},
+			want: resolveLoc(103), // the declaration retains its own position
+			msg:  "attribute declaration " + qn("a").String() + " {type definition} references type",
+		},
+		{
+			name: "an <attribute ref> in a group a complex type references",
+			build: func(t *testing.T, b *xsd.SchemaBuilder) {
+				// The type carries the spliced copy and is reached first; the
+				// group's own copy is walked too, and either verdict rejects.
+				b.AddType(attributeCTAt(t, resolveLoc(104), qn("ct"), agRefUse(t, qn("nope"))))
+				b.AddAttributeGroup(attributeGroupAt(t, resolveLoc(105), qn("ag"), agRefUse(t, qn("nope"))))
+			},
+			want: resolveLoc(104),
+			msg:  "attribute use <attribute ref> references attribute declaration",
+		},
+		{
+			name: "an <attribute ref> in a redefining group",
+			build: func(t *testing.T, b *xsd.SchemaBuilder) {
+				b.AddRedefiningAttributeGroup(
+					attributeGroupAt(t, resolveLoc(106), qn("ag"), agRefUse(t, qn("nope"))),
+					legal(t, qn("ag")))
+			},
+			want: resolveLoc(106),
+			msg:  "attribute use <attribute ref> references attribute declaration",
+		},
+		{
+			name: "an <attribute ref> in the S2 original a redefinition replaces",
+			build: func(t *testing.T, b *xsd.SchemaBuilder) {
+				b.AddRedefiningAttributeGroup(legal(t, qn("ag")),
+					attributeGroupAt(t, resolveLoc(107), qn("ag"), agRefUse(t, qn("nope"))))
+			},
+			want: resolveLoc(107),
+			msg:  "attribute use <attribute ref> references attribute declaration",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := xsd.NewSchemaBuilder()
+			b.AddAttribute(attributeNamed(t, qn("declared")))
+			tc.build(t, b)
+			_, err := b.Finalize()
+			if err == nil {
+				t.Fatal("Finalize(dangling reference in an attribute group) succeeded, want src-resolve error")
+			}
+			assertRule(t, err, "src-resolve")
+			assertLoc(t, err, tc.want)
+			if !strings.Contains(err.Error(), tc.msg) {
+				t.Fatalf("message %q does not contain %q", err, tc.msg)
+			}
+		})
+	}
+}
+
+// TestResolveAttributeGroupsResolvable is the control for the four cases above:
+// the same four placements, every reference resolving, must finalize cleanly, so
+// the new roots reject a dangling name and nothing else. The redefinition is a
+// legal one — it repeats the original's single use — because src-redefine clause
+// 7.2.2 runs later over the same pairing and a rejection there would be
+// indistinguishable from a resolution failure here.
+func TestResolveAttributeGroupsResolvable(t *testing.T) {
+	b := xsd.NewSchemaBuilder()
+	b.AddType(simpleTypeNamed(t, qn("st")))
+	b.AddAttribute(attributeNamed(t, qn("declared")))
+	b.AddAttributeGroup(attributeGroupAt(t, xsderr.Loc{}, qn("unreferenced"),
+		agRefUse(t, qn("declared")), agLocalUse(t, xsderr.Loc{}, qn("a"), qn("st"))))
+	b.AddType(attributeCTAt(t, xsderr.Loc{}, qn("ct"), agRefUse(t, qn("declared"))))
+	b.AddAttributeGroup(attributeGroupAt(t, xsderr.Loc{}, qn("referenced"), agRefUse(t, qn("declared"))))
+	b.AddRedefiningAttributeGroup(
+		attributeGroupAt(t, xsderr.Loc{}, qn("redefined"), agRefUse(t, qn("declared"))),
+		attributeGroupAt(t, xsderr.Loc{}, qn("redefined"), agRefUse(t, qn("declared"))))
+	if _, err := b.Finalize(); err != nil {
+		t.Fatalf("Finalize(fully resolvable attribute groups): %v", err)
+	}
+}
+
 func TestResolveDanglingType(t *testing.T) {
 	// An element's @type names a type that is not in the schema.
 	b := xsd.NewSchemaBuilder()
@@ -506,8 +675,9 @@ func assertLoc(t *testing.T, err error, want xsderr.Loc) {
 }
 
 // TestResolveRejectionsCiteTheOffendingComponent pins the position of every
-// Loc-bearing rejection the resolution pass can raise — all ten sites, across
-// src-resolve (§3.17.6.2) clauses 1.1, 1.2, 1.3, 1.5 and 1.7, c-props-correct
+// Loc-bearing rejection the resolution pass can raise from its type, element,
+// model group and identity-constraint roots — ten sites, across src-resolve
+// (§3.17.6.2) clauses 1.1, 1.2, 1.3, 1.5 and 1.7, c-props-correct
 // (§3.11.6.1) clauses 1 and 2, ct-props-correct (§3.4.6.1) clause 3,
 // mg-props-correct (§3.8.6.1) clause 2 and e-props-correct (§3.3.6.1) clause 5 —
 // so no site can drift back to the zero "position unknown" Loc unnoticed.
@@ -515,7 +685,10 @@ func assertLoc(t *testing.T, err error, want xsderr.Loc) {
 // The table is per-SITE, not per-rule. A shared rule ID is no evidence that a
 // sibling site is guarded: sites charged the same rule reach their position by
 // different routes, and a case covering one of them would leave the others free
-// to regress silently.
+// to regress silently. The two ATTRIBUTE GROUP roots are the same kind of site
+// under two more routes — the group definition's own Loc, and a redefine
+// original's — and are pinned by TestResolveDanglingReferenceInAttributeGroup,
+// which needs their fixtures for its own reason.
 //
 // src-resolve accordingly gets five cases, because its reference sites do not all
 // take their position the same way. Three of them — a particle {term} <element

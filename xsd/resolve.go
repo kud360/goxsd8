@@ -304,6 +304,35 @@ func (s *Schema) resolveReferences() error {
 			return err
 		}
 	}
+	// {attribute group definitions} (§3.17.1), whose reference sites are an
+	// <attribute ref> and a local <attribute>'s type= (src-resolve clauses 1.2 and
+	// 1.1). A definition's {attribute uses} are its own components: the producer
+	// builds them for every top-level <attributeGroup> and splices a COPY into each
+	// complex type referencing it, since §3.6.2.1 inlines the ref at mapping time.
+	// Those copies are walked with their types above, so this loop is what reaches
+	// a definition NOTHING references. Re-charging the same names once per
+	// referencing type is bounded and harmless, and no visited set belongs here
+	// (PRINCIPLES 9): that same inlining leaves an Attribute Group Definition
+	// holding no edge to another one.
+	for _, g := range s.attributeGroups {
+		if err := w.walkAttributeGroupDefinition(g); err != nil {
+			return err
+		}
+	}
+	// The S2 originals of the <attributeGroup> redefinitions, in pairing order,
+	// for the reason the <group> originals below are walked: they are in no
+	// property and no index (§4.2.4 clause 4.1.2), so the loop above reaches none
+	// of them — yet checkAttributeGroupRedefinitions walks each as the B side of
+	// src-redefine clause 7.2.2, where an unresolvable <attribute ref> or type=
+	// leaves checkAttributeTypeDerivedOK (defaultbinding.go) with no type to put to
+	// loc-testSubP clause 5.1 and the clause undecided. A dangling name here is
+	// charged src-resolve as its own error rather than silently deciding someone
+	// else's clause.
+	for _, r := range s.attributeGroupRedefinitions {
+		if err := w.walkAttributeGroupDefinition(r.original); err != nil {
+			return err
+		}
+	}
 	for _, mgd := range s.modelGroups {
 		if err := w.walkModelGroup(mgd.ModelGroup(), mgd.Loc()); err != nil {
 			return err
@@ -779,11 +808,11 @@ func (s *Schema) resolveTypeTable(tt TypeTable, loc xsderr.Loc) error {
 // and this pass walks it by the same code (componentwalk.go), filling in only the
 // simpleType charge. Its ROOTS are its own: types, then element declarations,
 // then attribute declarations, then model group definitions, then attribute group
-// definitions. Attribute group definitions are rooted although Phase A does not
-// root them, for Phase E's reason (valueconstraintvalid.go) plus one of this
-// pass's own: the produce-time call this pass replaces charged every simple type
-// the producer CONSTRUCTED, whatever slot it ended up in, so a walk that skipped
-// a slot the producer can fill would be a silent regression.
+// definitions. Attribute group definitions are rooted for the reason Phase A and
+// Phase E root them (valueconstraintvalid.go) plus one of this pass's own: the
+// produce-time call this pass replaces charged every simple type the producer
+// CONSTRUCTED, whatever slot it ended up in, so a walk that skipped a slot the
+// producer can fill would be a silent regression.
 //
 // NO VISITED SET (STYLE D4, and STYLE D3's no-memoized-cache-without-a-profile).
 // A shared base is re-visited once per type that derives from it, which is
@@ -830,10 +859,8 @@ func (s *Schema) checkSimpleTypeDerivations() error {
 		}
 	}
 	for _, g := range s.attributeGroups {
-		for _, u := range g.AttributeUses() {
-			if err := w.walkAttributeUse(u, g.Loc(), attributeGroupOwner(g)); err != nil {
-				return err
-			}
+		if err := w.walkAttributeGroupDefinition(g); err != nil {
+			return err
 		}
 	}
 	return nil
