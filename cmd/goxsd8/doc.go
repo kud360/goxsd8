@@ -23,8 +23,8 @@
 //	    arguments are several compilations, not one set.
 //	    Exit 0 when every one compiles; 1 when any is rejected, its
 //	    first error on stderr as <loc>: [<rule>] <message> (assembly
-//	    stops there, so a rejected schema is one line); 2 when an
-//	    argument cannot be read, which is never a verdict about a
+//	    stops there, so a rejected schema is one error line); 2 when
+//	    an argument cannot be read, which is never a verdict about a
 //	    schema. The exit code is the worst of those outcomes.
 //	    An <xs:include>, <xs:import>, <xs:override> or empty
 //	    <xs:redefine> whose schemaLocation resolves to no document is
@@ -32,7 +32,11 @@
 //	    change of exit code: the skip is legal, so the summary above
 //	    is printed off a schema short of whatever that document
 //	    declares. -q does not silence it. A bare <xs:import>, which
-//	    names no document, is not reported.
+//	    names no document, is not reported. A REJECTED schema is
+//	    named the same way, for the directives assembly reached
+//	    before it stopped, in a line saying the assembly was rejected
+//	    rather than compiled and saying nothing about whether the
+//	    unread document had a part in that.
 //
 //	goxsd8 validate -schema <schema.xsd> [-schema <s2>]... <instance>...
 //	    Assess instances against the compiled set; every schema needs
@@ -42,7 +46,9 @@
 //	    instance, never as a schema.
 //	    A -schema document's own unresolved directive is named on
 //	    stderr the same way, once for the set, before any instance is
-//	    assessed.
+//	    assessed — and when the set does not compile, for whichever
+//	    documents the assembly reached, so one document's rejection
+//	    does not silence another's shortfall.
 //	    Source format by extension (.xml, .json, .ber) or forced with
 //	    -format xml|json|ber, matched case-sensitively and applying to
 //	    every instance of the invocation (there is no per-instance

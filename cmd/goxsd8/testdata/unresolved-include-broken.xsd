@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The shape #1312 was filed from: an <xs:include> naming a document that is
+     not there, whose skip src-include clause 2.4 makes legal, in a document
+     that ALSO carries an unrelated src-resolve fault. The schema is rejected,
+     and the shortfall is a separate fact about the same assembly. The
+     <xs:include> sits on line 10, which the tests cite. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:s="http://example.com/short-broken"
+           targetNamespace="http://example.com/short-broken">
+  <xs:include schemaLocation="nosuchdocument.xsd"/>
+
+  <xs:element name="broken" type="s:NoSuchType"/>
+
+</xs:schema>
