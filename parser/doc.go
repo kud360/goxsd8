@@ -45,20 +45,17 @@
 // carries a visited set purely to bound the walk and avoid re-descending
 // a group already folded in — it rejects nothing. Likewise the
 // composition index keyed by resolved location AND the namespace the
-// document was reached under AND the override applied to it AND the
-// redefinition applied to it is DOCUMENT IDENTITY, not a cycle guard:
-// §4.2.3 makes two xs:includes of the same resolved location the same
-// schema document and declares include cycles legal, §4.2.6.2 says as
-// much for repeated xs:imports, §4.2.5 says as much for equivalent
-// xs:overrides (and requires the processor to recognize that closure has
-// been reached, which is exactly what the index does), §4.2.4's own note
-// asks the same of "multiple equivalent xs:redefineing of the same
-// schema document", the namespace is part of the key because one
-// document reached as a chameleon include and as an import yields two
-// different component sets, and the override and the redefinition are
-// part of it because one document overridden — or redefined — two
-// different ways likewise does. Each distinct reading is loaded once and
-// nothing is rejected.
+// document was reached under AND the override applied to it is DOCUMENT
+// IDENTITY, not a cycle guard: §4.2.3 makes two xs:includes of the same
+// resolved location the same schema document and declares include cycles
+// legal, §4.2.6.2 says as much for repeated xs:imports, §4.2.5 says as
+// much for equivalent xs:overrides (and requires the processor to
+// recognize that closure has been reached, which is exactly what the
+// index does), the namespace is part of the key because one document
+// reached as a chameleon include and as an import yields two different
+// component sets, and the override is part of it because one document
+// overridden two different ways likewise does. Each distinct reading is
+// loaded once and nothing is rejected.
 //
 // # Determinism
 //
@@ -168,10 +165,18 @@
 // resolve is an ERROR (src-redefine clause
 // 1) where an <xs:include>'s is explicitly not one (src-include clause
 // 2.4). Documents are loaded once, keyed by resolved location, the
-// namespace they were reached under, the override applied to them and
-// the redefinition applied to them, so a repeated include, import,
-// equivalent override or equivalent redefinition, a diamond, or a
-// (spec-legal) cycle contributes its components once. Loading once
+// namespace they were reached under and the override applied to them, so
+// a repeated include, import or equivalent override, a diamond, or a
+// (spec-legal) cycle contributes its components once. The redefinition
+// is deliberately not part of that key, so a document reached both
+// plainly and as an xs:redefine target — or redefined twice — is
+// composed once and every definition a redefinition does not name is
+// contributed once: §4.2.4 gives the redefining schema "components
+// identical to all the schema components of S2, with the exception of
+// those explicitly redefined", which is §4.2.3's own wording for a plain
+// include over the same schema(D2). What each reading excepts is applied
+// per reading instead, so the definitions two readings disagree about do
+// still collide under sch-props-correct clause 2 (#1349). Loading once
 // suppresses the second COMPOSITION only, which is all §4.2.6.2's note
 // asks for: a repeated <xs:import> is still judged against src-import
 // clause 3, so one whose namespace disagrees with the already-loaded
@@ -235,21 +240,22 @@
 //     are #434, which must also supply the ·lax assessment· fallback
 //     §5.3 requires on the validation side.
 //   - GAP(xsd): two DISTINCT <xs:redefine> elements whose children are
-//     textually equivalent are treated as two different redefinitions of
-//     the same document, so redefining one document the same way down two
-//     paths yields duplicate components and a sch-props-correct clause 2
-//     rejection where §4.2.4's note ("multiple equivalent <redefine>ing
-//     of the same schema document will not constitute a violation") wants
-//     none. Redefinition identity is the ordered list of redefined
-//     (element type, name, source location) triples, so the SAME
-//     <xs:redefine> element reached twice is recognized — which is what
-//     terminates every cycle — while two elements are not. This
-//     over-rejects, so it can lose a valid assembly, never accept an
-//     invalid one. <xs:override> no longer has this gap: its identity is
-//     the substituted elements' ·canonical content· with the source
-//     location left out (parser/override.go's writeCanonicalElement), so
-//     two distinct but equivalent <xs:override> elements do reach one
-//     document identity.
+//     textually equivalent each contribute their own replacement
+//     components, so redefining one document the same way down two paths
+//     yields two components of one expanded name and a sch-props-correct
+//     clause 2 rejection where §4.2.4's note ("multiple equivalent
+//     <xs:redefine>ing of the same schema document will not constitute a
+//     violation") wants none. The REDEFINED document is composed once
+//     (see the composition paragraph above); what is never identified is
+//     one redefining declaration with another, which §4.2.4 asks for in
+//     the same breath as it warns of "the necessity of establishing
+//     identity component by component". This over-rejects, so it can
+//     lose a valid assembly, never accept an invalid one.
+//     <xs:override> no longer has this gap: its identity is the
+//     substituted elements' ·canonical content· with the source location
+//     left out (parser/override.go's writeCanonicalElement), so two
+//     distinct but equivalent <xs:override> elements do reach one
+//     document identity. #603 owns closing this.
 //   - Two children of ONE <xs:override> with the same element type and
 //     name are reported under src-override, though §F.2's normative
 //     stylesheet resolves the pair as first-match-wins and the published

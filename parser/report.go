@@ -45,7 +45,14 @@ type AssemblyReport struct {
 // document reached both as a chameleon <include> and as a bare <import>, or
 // overridden two different ways, is two distinct discoveries contributing two
 // distinct component sets (§4.2.5's "duplicate and conflicting versions of some
-// components"). This is a list of readings, not a set of files.
+// components"). This is a list of discoveries, not a set of files.
+//
+// The ·redefinition· a document was reached under is NOT part of that identity,
+// so one reached both plainly and as an <xs:redefine> target appears ONCE: §4.2.4
+// gives the redefining schema "components identical to all the schema components
+// of S2, with the exception of those explicitly redefined", so the two readings
+// share every component neither excepts and the document is composed once
+// (#1349).
 //
 // The slice is the report's own; treat it as read-only.
 func (r *AssemblyReport) Documents() []AssembledDocument { return r.documents }
@@ -105,9 +112,11 @@ type AssembledDocument struct {
 	// assembly that then failed carries an empty Unmapped meaning NOT COMPUTED
 	// rather than "nothing unmapped".
 	//
-	// It is a property of the DISCOVERY, not of the document: a ·redefinition· in
-	// force over one reading excepts declarations another reading maps (§4.2.4
-	// clause 4.1.2), so two discoveries of one file can differ here.
+	// It is a property of the DISCOVERY, not of the document: the ·override
+	// pre-processing· in force over one discovery substitutes for declarations
+	// another maps (§F.2 clause 1), and the ·redefinition·s merged into it except
+	// declarations another maps (§4.2.4 clause 4.1.2), so two discoveries of one
+	// file can differ here.
 	//
 	// The slice is the report's own; treat it as read-only.
 	Unmapped []UnmappedConstruct

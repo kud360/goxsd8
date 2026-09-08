@@ -376,10 +376,12 @@ Two access styles over the compiled model, one shared core:
   document through one `loader.Resolver`, walks the
   `<xs:include>`/`<xs:import>`/`<xs:override>` closure (§4.2.3, §4.2.6.2,
   §4.2.5) depth-first in document order with a load-once index keyed by
-  resolved location, the namespace the document was reached under, the
-  override applied to it and the redefinition applied to it (document
-  identity, *not* a cycle guard — include
-  cycles are spec-legal), applies chameleon coercion to a
+  resolved location, the namespace the document was reached under and the
+  override applied to it (document identity, *not* a cycle guard — include
+  cycles are spec-legal); the redefinition is deliberately outside that key,
+  so a document reached both plainly and as an `<xs:redefine>` target is
+  composed once and contributes each definition the redefinition does not
+  name once (#1349). It applies chameleon coercion to a
   no-`targetNamespace` included, overridden or redefined document (§F.1),
   carries override pre-processing (§F.2) and redefinition (§4.2.4) alike as
   data beside the effective namespace,
