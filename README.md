@@ -152,10 +152,11 @@ with what `types` and `model groups` each cover. A rejected
 schema prints its first error on stderr as `<loc>: [<rule>] <message>` and
 assembly stops there, so that is one error line per rejected argument; the exit
 code is the worst outcome over the arguments: 0 when every one compiles, 1 when
-any is rejected, 2 when any cannot be read. A rejection in the **s4s-grammar**
-class (`go doc github.com/kud360/goxsd8/xsderr`) has no rule to cite, so its
-line is the bare `<message>`, carrying its location inside the sentence rather
-than as the `<loc>:` prefix. An `<xs:include>`, `<xs:import>`,
+any is rejected, 2 when any cannot be read. A document whose root is not
+`<xs:schema>`, and a rejection in the **s4s-grammar** class
+(`go doc github.com/kud360/goxsd8/xsderr`), have no rule to cite: each prints
+the bare `<message>` instead, carrying what location it has inside the sentence
+rather than as the `<loc>:` prefix. An `<xs:include>`, `<xs:import>`,
 `<xs:override>` or empty `<xs:redefine>` whose `schemaLocation` resolves to no
 document is named on stderr at its own position — no rule ID, no change of
 exit code, and `-q` does not silence it — so a summary printed off a set

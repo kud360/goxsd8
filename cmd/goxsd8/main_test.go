@@ -267,8 +267,10 @@ func TestUsageCoversContract(t *testing.T) {
 		"that a help request carries a value",
 		// #1313's exception to the line shape above, which the copies must
 		// carry together or the shape reads as unconditional in whichever
-		// one drops it: the class, where its taxonomy lives, and what its
-		// line prints instead.
+		// one drops it: BOTH members violationLine's own doc enumerates,
+		// where the class's taxonomy lives, and what their line prints
+		// instead.
+		"A document whose root is not <xs:schema>",
 		"s4s-grammar class (xsderr/doc.go)",
 		"the bare <message>",
 	}

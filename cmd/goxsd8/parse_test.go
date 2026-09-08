@@ -266,6 +266,48 @@ func TestParseS4SGrammarRejectionCarriesNoRule(t *testing.T) {
 	}
 }
 
+// TestParseNonSchemaRootCarriesNoRule pins the second member of the no-rule-ID
+// class the contract names beside the "<loc>: [<rule>] <message>" shape
+// (#1313): a well-formed document whose root is not <xs:schema> is a caller
+// precondition fault rather than a schema-validity verdict (parser/produce.go),
+// so no rule governs it and its line is the bare message — the likeliest
+// operator mistake, pointing parse at an instance document.
+//
+// It is exit 1 and not exit 2: rootLocation has already proved the file
+// readable, so the rejection is a verdict about what the document IS.
+//
+// The whole message is pinned, not a bracket-free shape: the location it
+// carries is the path alone, without the line:col an s4s-grammar message
+// holds, so an assertion that stopped at "no [" would pass against a line that
+// had lost its subject or its file (#1048).
+func TestParseNonSchemaRootCarriesNoRule(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"parse", "testdata/notschema.xml"}, &stdout, &stderr)
+	if code != 1 {
+		t.Errorf("parse of a document whose root is not <xs:schema> = %d, want 1", code)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty — a rejected schema has no summary", stdout.String())
+	}
+	line := strings.TrimSuffix(stderr.String(), "\n")
+	if strings.Contains(line, "\n") {
+		t.Errorf("stderr = %q, want one error line", stderr.String())
+	}
+	if strings.Contains(line, "[") {
+		t.Errorf("stderr = %q, want no [<rule>]: no rule governs the document handed to a compiler, and inventing one would read as a citation", line)
+	}
+	abs, err := filepath.Abs("testdata/notschema.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The location is inside the sentence: a line opening with abs+":" would
+	// be the contract's <loc>: prefix, which this rejection does not print.
+	want := fmt.Sprintf("parser: assembling a schema requires a <schema> document root at %q, got foo", abs)
+	if line != want {
+		t.Errorf("stderr = %q, want %q", line, want)
+	}
+}
+
 // TestParseNamesAnUnresolvedDirective is #1260's acceptance: a schema argument
 // whose own directive names a document that is not there compiles — src-include
 // clause 2.4 makes the skip legal — so nothing about the summary or the exit
