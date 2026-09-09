@@ -21,6 +21,12 @@ own ratchet attribution is a separate issue; everything else you absorb
 and name in your handoff. Renames, unexports, stale comments and call
 sites your own diff breaks are cheaper absorbed than filed. Do not go
 looking for adjacent work, and do not leave it behind when you find it.
+When your diff deletes a `GAP(` marker, sweep the whole module — doc
+comments, test comments, package docs — for the prose that deletion
+leaves stale: grep the marker's owning identifier and its file name, then
+read the prose around every hit and search again by the operation the
+marker recorded, since most of the stale sites paraphrase that state and
+name neither the marker nor its file (#1167).
 
 Before writing: read the issue and its `GROUNDING:` comment. If the
 grounding lacks the rule IDs your change must implement, STOP and ask for
