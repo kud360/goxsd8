@@ -611,41 +611,65 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 	if rc.OpenContent != nil || bc.OpenContent != nil {
 		// GAP(xsd): a content type carrying an {open content} on either side is
 		// provisionally accepted rather than decided, and that is a RULED
-		// deferral rather than a fold in progress (#413). §3.4.6.3 licenses it:
-		// past the ·all·-scoped sentence the section makes it
-		// ·implementation-defined· whether a processor "(a) always detects
-		// violations of clause 2.4.2 by examination of the schema in isolation,
-		// (b) detects them only when some element information item in the input
-		// document is valid against T but not against T.{base type definition},
-		// or (c) sometimes". That paragraph names clause 2.4.2 and nothing
-		// narrower — unlike the sentence before it, scoped by its own text to
-		// T.{content type}.{particle}.{term}.{compositor} = all — so this arm is
-		// a (c) processor declaring the circumstance in which it declines.
+		// deferral rather than a fold in progress (#413).
 		//
-		// What it waits on is a construction, not a correction. §3.4.4.3
-		// (cvc-complex-content) states ·locally valid· under an interleave or
-		// suffix {open content} extensionally as well: SOME split of S into an S1
-		// ·valid· against {particle} and an S2 whose every element is ·valid·
-		// against {wildcard}, such that no prefix of S1 extended by the next S2
-		// element has a ·path· in {particle}. An existential decomposition with a
-		// per-position exclusion condition is a new automaton carrying its own
-		// soundness argument — the shape addAll needed for ·all· — and no
-		// algorithm for it is given: §3.4.6.3/.4 state only the containment, and
-		// Appendix J's construction guidance is scoped by its own text to
-		// cos-nonambig. The arm is live rather than latent: since #230 the
-		// producer emits {open content} from <openContent>/<defaultOpenContent>
-		// (§3.4.2.3.3 clauses 5-6), so an ordinary schema whose Open Content is
-		// wider than its base's is accepted here.
+		// The licence leaned on is §3.4.6.3's, quoted whole because the option
+		// carrying the weight is its last: "It is ·implementation-defined·
+		// whether a processor (a) always detects violations of clause 2.4.2 by
+		// examination of the schema in isolation, (b) detects them only when some
+		// element information item in the input document is valid against T but
+		// not against T.{base type definition}, or (c) sometimes detects such
+		// violations by examination of the schema in isolation and sometimes
+		// not", followed by "In the latter case, the circumstances in which the
+		// processor does one or the other are ·implementation-dependent·"
+		// (xmlschema11-1.md:2043). It names clause 2.4.2 and states no condition
+		// of its own, unlike the ·all·-scoped sentence at :2041 — a scope claim,
+		// not a guarantee, and this arm's cases split on it. Where T.{content
+		// type}.{particle}.{term}.{compositor} IS all, reached here rather than at
+		// usesAllCompositor below because this branch precedes it, the narrow
+		// :2041 sentence covers the case outright: its condition (1) holds and its
+		// condition (2) is this very inability. Everywhere else the arm rests, no
+		// more firmly than contentModelRestricts' giveup site below rests, on
+		// reading (c) as a residual catch-all detached from that condition (1) —
+		// which that site sets out and names a defensible but not textually
+		// guaranteed stretch, not re-argued here. It carries that site's other
+		// half too: (b) and (c) describe processors that defer detection to
+		// instance time and cross-check each instance against T.{base type
+		// definition}, and this arm performs no such cross-check, so a schema
+		// accepted here can be non-conforming with nothing left to say so.
+		//
+		// What retires the deferral is a construction, not a correction. §3.4.4.3
+		// (cvc-complex-content) states ·locally valid· under a present {open
+		// content} extensionally too, and per {mode}, with ONE designated
+		// exclusion per S2 element rather than a condition on every split point.
+		// Clause 2, suffix: S = S1 + S2, S1 ·valid· against {particle}, every
+		// element of S2 ·valid· against {wildcard}, and — S2 non-empty — S1 + E
+		// without a ·path· in {particle} for E the FIRST element of S2, S1 taken
+		// whole. Clause 3, interleave: S a member of S1 × S2 under §3.8.4.1.3's
+		// interleave operator, S1 and S2 as before, and for every E in S2, S3 + E
+		// without a ·path· where S3 is the LONGEST prefix of S1 whose members
+		// precede E in S. Quantifying over every prefix instead states a strictly
+		// stronger condition: (a?, b) under a wildcard admitting a accepts b a,
+		// since S3 there is b and b a has no ·path·, where the empty prefix plus a
+		// would reject it. An existential decomposition with that per-E designated
+		// exclusion is a new automaton carrying its own soundness argument — the
+		// shape addAll needed for ·all· — and no algorithm for it is given:
+		// §3.4.6.3/.4 state only the containment, and Appendix J's construction
+		// guidance is scoped by its own text to cos-nonambig.
+		//
+		// The arm is live rather than latent: since #230 the producer emits {open
+		// content} from <openContent>/<defaultOpenContent> (§3.4.2.3.3 clauses
+		// 5-6, parser/produce_complex.go), so an ordinary schema whose Open
+		// Content is wider than its base's is accepted here.
 		//
 		// Fail-open for both readers of this true. checkRestrictionContentType
 		// (complexderivation.go) charges derivation-ok-restriction and is the
-		// clause-2.4.2 caller the licence above names;
-		// checkExtensionTwoStepDerivable (complexextension.go) charges
-		// cos-ct-extends clause 1.5 and carries its own marker, the licence
-		// naming 2.4.2 not travelling to it. Each loses a rejection it could have
-		// made and neither gains one. checkModelGroupRedefinitions
-		// (redefinition.go) does not reach this arm at all — modelGroupContent
-		// leaves {open content} ·absent·.
+		// clause-2.4.2 caller the licence above names; checkExtensionTwoStepDerivable
+		// (complexextension.go) charges cos-ct-extends clause 1.5, which that
+		// licence does not reach, and carries its own marker for that. Each loses
+		// a rejection it could have made and neither gains one.
+		// checkModelGroupRedefinitions (redefinition.go) does not reach this arm
+		// at all — modelGroupContent leaves {open content} ·absent·.
 		return true
 	}
 	if s.usesAllCompositor(rc.Particle.Term()) {
