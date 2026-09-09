@@ -864,11 +864,13 @@ type fetched struct {
 // newSymbols, for the whole assembly. Every document's <defaultOpenContent> is
 // judged in that same pre-produce pass (checkDefaultOpenContent), so §3.4.2.3.3
 // clause 5.2 can only ever select one whose grammar already holds — including
-// through an on-demand base build into a document not yet produced. backend
-// supplies the finalized schema's value space too ([value.NewValueSpace]), so the
-// finalize-time {value} comparisons (au-props-correct clause 3, loc-testSubP
-// clauses 4.2/5.2.2) and the Simple Default Valid checks (a-props-correct clause
-// 2, au-props-correct clause
+// through an on-demand base build into a document not yet produced. Every
+// document's two *FormDefault attributes are judged in that pass too
+// (checkFormDefaults), for the content-independence reason that function's doc
+// gives. backend supplies the finalized schema's value space too
+// ([value.NewValueSpace]), so the finalize-time {value} comparisons
+// (au-props-correct clause 3, loc-testSubP clauses 4.2/5.2.2) and the Simple
+// Default Valid checks (a-props-correct clause 2, au-props-correct clause
 // 2) decide rather than fail open — see [Produce] for the full statement.
 //
 // Each document's coverage census (producer.census) is taken in that same
@@ -891,6 +893,9 @@ func (a *assembly) compile(backend value.Backend) (*xsd.Schema, error) {
 			return nil, err
 		}
 		if err := p.checkDefaultOpenContent(); err != nil {
+			return nil, err
+		}
+		if err := p.checkFormDefaults(); err != nil {
 			return nil, err
 		}
 		producers = append(producers, p)

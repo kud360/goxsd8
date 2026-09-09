@@ -145,6 +145,9 @@ func Produce(doc *Document, backend value.Backend) (*xsd.Schema, error) {
 	if err := p.checkDefaultOpenContent(); err != nil {
 		return nil, err
 	}
+	if err := p.checkFormDefaults(); err != nil {
+		return nil, err
+	}
 	if err := p.run(); err != nil {
 		return nil, err
 	}
@@ -3265,8 +3268,7 @@ func childElements(el *Element, space, local string) []*Element {
 // documents declares the attributes read here with, and it is applied BEFORE
 // lexical-space membership is tested (§4.1.4), so a padded " true " is the
 // ·actual value· true. It is this package's one spelling of that trim; route a
-// new lexical comparison through it. Comparisons that do not normalize at all
-// are separate work — the raw use= and form= compares, for one (#1328).
+// new lexical comparison through it.
 //
 // It cannot be strings.TrimSpace, whose unicode.IsSpace class also cuts U+0085,
 // U+00A0, U+2028 and the rest — characters §4.3.6 is NOT whitespace for and
@@ -3279,9 +3281,9 @@ func childElements(el *Element, space, local string) []*Element {
 // holds interior XML whitespace then R holds a #x20 and no target literal
 // contains one, so both reject; otherwise R == T. Every literal compared through
 // this helper is whitespace-free — none/interleave/suffix, unbounded,
-// skip/strict/lax, true/false/1/0, the decimal digit strings, NCNames,
-// xs:decimal literals and the empty string — so the equivalence holds at every
-// call site.
+// skip/strict/lax, true/false/1/0, prohibited/optional/required,
+// qualified/unqualified, the decimal digit strings, NCNames, xs:decimal literals
+// and the empty string — so the equivalence holds at every call site.
 func collapseTrim(lexical string) string {
 	return strings.Trim(lexical, "\x09\x0A\x0D\x20")
 }
