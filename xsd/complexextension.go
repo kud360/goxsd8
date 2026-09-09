@@ -431,9 +431,10 @@ func openContentModeLabel(oc *OpenContent) string {
 // position, with the re-ordering explained in the message.
 //
 // GAP(xsd): the CONTENT half of the second charge is undecided for a chain
-// carrying {open content} — owned by #413, which owns the same skip for real
-// restrictions. checkDerivationOKRestriction reaches the content models through
-// clause 2.4.2's contentTypeRestricts, which early-accepts the moment either side
+// carrying {open content} — a ruled deferral owned by #413, which owns the same
+// skip for real restrictions and states its licence and what retires it.
+// checkDerivationOKRestriction reaches the content models through clause 2.4.2's
+// contentTypeRestricts, which early-accepts the moment either side
 // carries an {open content} record (contentrestricts.go), and M inherits whatever
 // the §3.4.2.3.3 clause 4.2 merge propagated. The direction is fail-open — clause
 // 1.5's content half is skipped, never falsely charged — and the clause's

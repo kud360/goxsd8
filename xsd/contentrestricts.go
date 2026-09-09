@@ -609,17 +609,43 @@ func (s *Schema) contentTypeRestricts(tct, bct ContentType, scope contentRestric
 		return true
 	}
 	if rc.OpenContent != nil || bc.OpenContent != nil {
-		// GAP(xsd): Open Content is not folded into either automaton, so a
-		// content type carrying one is provisionally accepted. §3.4.4's
-		// ·locally valid· sequences for an interleave or suffix Open Content
-		// interleave the {wildcard} with the particle's own positions, which
-		// this construction does not model. Since #230 the producer really does
-		// emit {open content} (§3.4.2.3.3 clauses 5-6), so this arm is live for
-		// ordinary schemas rather than programmatic construction alone: a
-		// restriction whose Open Content is wider than its base's is accepted
-		// where derivation-ok-restriction clause 2.4 would reject it. The
-		// direction is fail-open — a missing rejection, never a false one — so it
-		// costs verdicts and cannot fabricate them; the fold lands with #413.
+		// GAP(xsd): a content type carrying an {open content} on either side is
+		// provisionally accepted rather than decided, and that is a RULED
+		// deferral rather than a fold in progress (#413). §3.4.6.3 licenses it:
+		// past the ·all·-scoped sentence the section makes it
+		// ·implementation-defined· whether a processor "(a) always detects
+		// violations of clause 2.4.2 by examination of the schema in isolation,
+		// (b) detects them only when some element information item in the input
+		// document is valid against T but not against T.{base type definition},
+		// or (c) sometimes". That paragraph names clause 2.4.2 and nothing
+		// narrower — unlike the sentence before it, scoped by its own text to
+		// T.{content type}.{particle}.{term}.{compositor} = all — so this arm is
+		// a (c) processor declaring the circumstance in which it declines.
+		//
+		// What it waits on is a construction, not a correction. §3.4.4.3
+		// (cvc-complex-content) states ·locally valid· under an interleave or
+		// suffix {open content} extensionally as well: SOME split of S into an S1
+		// ·valid· against {particle} and an S2 whose every element is ·valid·
+		// against {wildcard}, such that no prefix of S1 extended by the next S2
+		// element has a ·path· in {particle}. An existential decomposition with a
+		// per-position exclusion condition is a new automaton carrying its own
+		// soundness argument — the shape addAll needed for ·all· — and no
+		// algorithm for it is given: §3.4.6.3/.4 state only the containment, and
+		// Appendix J's construction guidance is scoped by its own text to
+		// cos-nonambig. The arm is live rather than latent: since #230 the
+		// producer emits {open content} from <openContent>/<defaultOpenContent>
+		// (§3.4.2.3.3 clauses 5-6), so an ordinary schema whose Open Content is
+		// wider than its base's is accepted here.
+		//
+		// Fail-open for both readers of this true. checkRestrictionContentType
+		// (complexderivation.go) charges derivation-ok-restriction and is the
+		// clause-2.4.2 caller the licence above names;
+		// checkExtensionTwoStepDerivable (complexextension.go) charges
+		// cos-ct-extends clause 1.5 and carries its own marker, the licence
+		// naming 2.4.2 not travelling to it. Each loses a rejection it could have
+		// made and neither gains one. checkModelGroupRedefinitions
+		// (redefinition.go) does not reach this arm at all — modelGroupContent
+		// leaves {open content} ·absent·.
 		return true
 	}
 	if s.usesAllCompositor(rc.Particle.Term()) {
