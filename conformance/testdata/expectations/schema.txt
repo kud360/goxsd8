@@ -1109,7 +1109,7 @@ MS-Annotations2006-07-15/annotF005/schema/annotF005 pass
 MS-Annotations2006-07-15/annotF006/schema/annotF006 pass
 MS-Annotations2006-07-15/annotF007/schema/annotF007 pass
 MS-Annotations2006-07-15/annotF008/schema/annotF008 pass
-MS-Annotations2006-07-15/annotF009/schema/annotF009 fail
+MS-Annotations2006-07-15/annotF009/schema/annotF009 pass
 MS-Annotations2006-07-15/annotZ001/schema/annotZ001 pass
 MS-Annotations2006-07-15/annotZ002/schema/annotZ002 pass
 MS-Annotations2006-07-15/annotZ004/schema/annotZ004 pass
@@ -1166,7 +1166,7 @@ MS-Attribute2006-07-15/attF011/schema/attF011 pass
 MS-Attribute2006-07-15/attG001/schema/attG001 pass
 MS-Attribute2006-07-15/attG002/schema/attG002 pass
 MS-Attribute2006-07-15/attG003/schema/attG003 pass
-MS-Attribute2006-07-15/attH001/schema/attH001 fail
+MS-Attribute2006-07-15/attH001/schema/attH001 pass
 MS-Attribute2006-07-15/attI001/schema/attI001 pass
 MS-Attribute2006-07-15/attI002/schema/attI002 pass
 MS-Attribute2006-07-15/attI003/schema/attI003 pass
@@ -4439,7 +4439,7 @@ MS-Element2006-07-15/elemK003/schema/elemK003 pass
 MS-Element2006-07-15/elemK004/schema/elemK004 pass
 MS-Element2006-07-15/elemK005/schema/elemK005 pass
 MS-Element2006-07-15/elemK006/schema/elemK006 pass
-MS-Element2006-07-15/elemK007/schema/elemK007 fail
+MS-Element2006-07-15/elemK007/schema/elemK007 pass
 MS-Element2006-07-15/elemL001/schema/elemL001 pass
 MS-Element2006-07-15/elemL002/schema/elemL002 pass
 MS-Element2006-07-15/elemL003/schema/elemL003 pass
@@ -4455,7 +4455,7 @@ MS-Element2006-07-15/elemN002/schema/elemN002 pass
 MS-Element2006-07-15/elemN003/schema/elemN003 pass
 MS-Element2006-07-15/elemN004/schema/elemN004 pass
 MS-Element2006-07-15/elemN005/schema/elemN005 pass
-MS-Element2006-07-15/elemN006/schema/elemN006 fail
+MS-Element2006-07-15/elemN006/schema/elemN006 pass
 MS-Element2006-07-15/elemO001/schema/elemO001 pass
 MS-Element2006-07-15/elemO002/schema/elemO002 pass
 MS-Element2006-07-15/elemO003/schema/elemO003 pass
@@ -4930,7 +4930,7 @@ MS-IdentityConstraint2006-07-15/idA031/schema/idA031 pass
 MS-IdentityConstraint2006-07-15/idA032/schema/idA032 pass
 MS-IdentityConstraint2006-07-15/idA033/schema/idA033 pass
 MS-IdentityConstraint2006-07-15/idA034/schema/idA034 pass
-MS-IdentityConstraint2006-07-15/idA035/schema/idA035 fail
+MS-IdentityConstraint2006-07-15/idA035/schema/idA035 pass
 MS-IdentityConstraint2006-07-15/idA036/schema/idA036 pass
 MS-IdentityConstraint2006-07-15/idA037/schema/idA037 pass
 MS-IdentityConstraint2006-07-15/idA038/schema/idA038 pass
@@ -4990,7 +4990,7 @@ MS-IdentityConstraint2006-07-15/idB031/schema/idB031 pass
 MS-IdentityConstraint2006-07-15/idB032/schema/idB032 pass
 MS-IdentityConstraint2006-07-15/idB033/schema/idB033 pass
 MS-IdentityConstraint2006-07-15/idB034/schema/idB034 pass
-MS-IdentityConstraint2006-07-15/idB035/schema/idB035 fail
+MS-IdentityConstraint2006-07-15/idB035/schema/idB035 pass
 MS-IdentityConstraint2006-07-15/idB036/schema/idB036 pass
 MS-IdentityConstraint2006-07-15/idB037/schema/idB037 pass
 MS-IdentityConstraint2006-07-15/idB038/schema/idB038 pass
@@ -5083,7 +5083,7 @@ MS-IdentityConstraint2006-07-15/idD002/schema/idD002 fail
 MS-IdentityConstraint2006-07-15/idD003/schema/idD003 pass
 MS-IdentityConstraint2006-07-15/idD004/schema/idD004 fail
 MS-IdentityConstraint2006-07-15/idD005/schema/idD005 fail
-MS-IdentityConstraint2006-07-15/idD006/schema/idD006 fail
+MS-IdentityConstraint2006-07-15/idD006/schema/idD006 pass
 MS-IdentityConstraint2006-07-15/idD007/schema/idD007 fail
 MS-IdentityConstraint2006-07-15/idD008/schema/idD008 pass
 MS-IdentityConstraint2006-07-15/idD009/schema/idD009 pass
@@ -5116,7 +5116,7 @@ MS-IdentityConstraint2006-07-15/idE002/schema/idE002 fail
 MS-IdentityConstraint2006-07-15/idE003/schema/idE003 pass
 MS-IdentityConstraint2006-07-15/idE004/schema/idE004 fail
 MS-IdentityConstraint2006-07-15/idE005/schema/idE005 fail
-MS-IdentityConstraint2006-07-15/idE006/schema/idE006 fail
+MS-IdentityConstraint2006-07-15/idE006/schema/idE006 pass
 MS-IdentityConstraint2006-07-15/idE007/schema/idE007 fail
 MS-IdentityConstraint2006-07-15/idE008/schema/idE008 pass
 MS-IdentityConstraint2006-07-15/idE009/schema/idE009 pass
@@ -5748,7 +5748,7 @@ MS-ModelGroups2006-07-15/mgA009/schema/mgA009 fail
 MS-ModelGroups2006-07-15/mgA010/schema/mgA010 fail
 MS-ModelGroups2006-07-15/mgA011/schema/mgA011 fail
 MS-ModelGroups2006-07-15/mgA012/schema/mgA012 pass
-MS-ModelGroups2006-07-15/mgA013/schema/mgA013 fail
+MS-ModelGroups2006-07-15/mgA013/schema/mgA013 pass
 MS-ModelGroups2006-07-15/mgA014/schema/mgA014 pass
 MS-ModelGroups2006-07-15/mgA015/schema/mgA015 pass
 MS-ModelGroups2006-07-15/mgA016/schema/mgA016 pass
@@ -6161,7 +6161,7 @@ MS-Notations2006-07-15/notatD006/schema/notatD006 pass
 MS-Notations2006-07-15/notatD007/schema/notatD007 pass
 MS-Notations2006-07-15/notatE001/schema/notatE001 pass
 MS-Notations2006-07-15/notatE002/schema/notatE002 fail
-MS-Notations2006-07-15/notatE003/schema/notatE003 fail
+MS-Notations2006-07-15/notatE003/schema/notatE003 pass
 MS-Notations2006-07-15/notatE004/schema/notatE004 pass
 MS-Notations2006-07-15/notatF001/schema/notatF001 pass
 MS-Notations2006-07-15/notatF002/schema/notatF002 pass
@@ -9742,7 +9742,7 @@ MS-Schema2006-07-15/schG9/schema/schG9 pass
 MS-Schema2006-07-15/schH1/schema/schH1 pass
 MS-Schema2006-07-15/schH2/schema/schH2 pass
 MS-Schema2006-07-15/schH3/schema/schH3 pass
-MS-Schema2006-07-15/schH4/schema/schH4 fail
+MS-Schema2006-07-15/schH4/schema/schH4 pass
 MS-Schema2006-07-15/schH5/schema/schH5 fail
 MS-Schema2006-07-15/schH6/schema/schH6 pass
 MS-Schema2006-07-15/schH9/schema/schH9 pass
@@ -9799,7 +9799,7 @@ MS-Schema2006-07-15/schU4/schema/schU4 fail
 MS-Schema2006-07-15/schU5/schema/schU5 fail
 MS-Schema2006-07-15/schZ001_78029-a/schema/schZ001_78029-a pass
 MS-Schema2006-07-15/schZ002_78029-b/schema/schZ002_78029-b pass
-MS-Schema2006-07-15/schZ003_78029-c/schema/schZ003_78029-c fail
+MS-Schema2006-07-15/schZ003_78029-c/schema/schZ003_78029-c pass
 MS-Schema2006-07-15/schZ004/schema/schZ004 pass
 MS-Schema2006-07-15/schZ005/schema/schZ005 pass
 MS-Schema2006-07-15/schZ006/schema/schZ006 pass
@@ -10303,8 +10303,8 @@ MS-Wildcards2006-07-15/wildH010/schema/wildH010 pass
 MS-Wildcards2006-07-15/wildH011/schema/wildH011 pass
 MS-Wildcards2006-07-15/wildH012/schema/wildH012 pass
 MS-Wildcards2006-07-15/wildI001/schema/wildI001 pass
-MS-Wildcards2006-07-15/wildI002/schema/wildI002 fail
-MS-Wildcards2006-07-15/wildI003/schema/wildI003 fail
+MS-Wildcards2006-07-15/wildI002/schema/wildI002 pass
+MS-Wildcards2006-07-15/wildI003/schema/wildI003 pass
 MS-Wildcards2006-07-15/wildI004/schema/wildI004 pass
 MS-Wildcards2006-07-15/wildI004i/schema/wildI004i pass
 MS-Wildcards2006-07-15/wildI005/schema/wildI005 fail
@@ -10443,9 +10443,9 @@ MS-Wildcards2006-07-15/wildP004/schema/wildP004 pass
 MS-Wildcards2006-07-15/wildP005/schema/wildP005 pass
 MS-Wildcards2006-07-15/wildP006/schema/wildP006 pass
 MS-Wildcards2006-07-15/wildQ001/schema/wildQ001 pass
-MS-Wildcards2006-07-15/wildQ002/schema/wildQ002 fail
-MS-Wildcards2006-07-15/wildQ003/schema/wildQ003 fail
-MS-Wildcards2006-07-15/wildQ004/schema/wildQ004 fail
+MS-Wildcards2006-07-15/wildQ002/schema/wildQ002 pass
+MS-Wildcards2006-07-15/wildQ003/schema/wildQ003 pass
+MS-Wildcards2006-07-15/wildQ004/schema/wildQ004 pass
 MS-Wildcards2006-07-15/wildZ001/schema/wildZ001 pass
 MS-Wildcards2006-07-15/wildZ002/schema/wildZ002 fail
 MS-Wildcards2006-07-15/wildZ003/schema/wildZ003 fail
