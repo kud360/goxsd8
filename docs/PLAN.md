@@ -598,19 +598,40 @@ construct, and this population is defined by attribute VALUE — but the member
 said so before being asked and predicted the twenty EXACTLY by censusing the
 attribute values directly. **Naming the instrument's limit is what #931 did not
 do**, which is the distinction #1332 now owns. It carved no successor: its one
-unmet acceptance item was dispositioned to the existing #717, not filed. Live
-producer-decides-and-accepts members are now **#929** — which #455's landing
-widened to own `minOccursZero`'s clause-2.1.3 compare as well as
-`maxOccursZero`'s — and **#1328**. **The family
+unmet acceptance item was dispositioned to the existing #717, not filed.
+**#1328 has now LANDED too — 2026-09-09, `51d9cf9`, `schema` +18 (13968 →
+13986, fail → pass), zero regressions** — `use=`, `form=` and the two
+`*FormDefault` attributes read as ·actual values· rather than raw literals, all
+four being `xs:NMTOKEN` restrictions Appendix A enumerates and `cvc-datatype-valid`
+stating no fallback clause. **It is the THIRD consecutive non-zero** (#931 +6,
+#456 +20, now +18) and **the first member of this family to predict its flip set
+EXACTLY**: banded on 24 enumerated fixtures plus ten measured shapes, it banked
+the body's 18 `fail` rows to the letter and left the 6 `pass` rows the body
+flagged as the risk unmoved — the census re-taken against the tree rather than
+trusted from the body. **It carved NO producer-side successor.**
+`effectiveDerivationSet`'s silent drop of unrecognized
+`block`/`final`/`blockDefault`/`finalDefault` tokens is ruled out of scope AND
+unfiled by its own Notes, on a different spec reading (`blockDefault` *"may
+include values other than"* the relevant set); its arbiter's one non-blocking
+observation was ruled not a STYLE T4 defect and recorded rather than filed; and
+#653, whose items 3 and 4 this landing discharged, took a thread comment and a
+body re-statement rather than a new issue. Live producer-decides-and-accepts
+members are now **#929** alone — which #455's landing widened to own
+`minOccursZero`'s clause-2.1.3 compare as well as `maxOccursZero`'s. **The family
 carved a successor at
 every landing from #471 through #1243, and #1242 is the first that did not** —
 one reading is the tail reaching zero, the other is that this pair was narrower
 than its predecessors; two more landings decide it. **#1270 was the first of
 those two and came back empty; #455 is the SECOND and came back with #1328**, so
-the test the last stamp set is answered and the tail reading is not the one to
-plan on: the family is still carving. Note what carried it — #455's successor
-came out of an ARBITER's non-blocking scope note, not out of a construct census,
-which is a different generator from the one #1270 and #1242 exhausted. A
+the test the last stamp set is answered — but **#1328 is itself the THIRD
+CONSECUTIVE member to carve nothing**, after #931 and #456, so *"the family is
+still carving"* is no longer the reading the record supports: the generator is
+producing landings and lane movement, not successors, and the queue this family
+feeds has narrowed to #929 alone. Note what carried the one carve there was —
+#455's successor came out of an ARBITER's non-blocking scope note, not out of a
+construct census, which is a different generator from the one #1270 and #1242
+exhausted; #1328's arbiter produced a non-blocking observation too, and that one
+was ruled not a defect, so the generator fired and came back empty. A
 second, narrower family opened beside it — the rejections the
 producer already makes **correctly but describes badly**, whose bar
 `xsderr/doc.go` set with #966 — and it is **discharged**: #975 landed at
