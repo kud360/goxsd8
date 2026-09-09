@@ -1416,6 +1416,40 @@ func (p *producer) checkDefaultOpenContent() error {
 	return fmt.Errorf(`parser: <defaultOpenContent> at %s has mode=%q, but the schema for schema documents admits only interleave or suffix there: xs:defaultOpenContent restricts mode to that two-value enumeration, and "none" belongs to xs:openContent's alone`, def.Loc(), mode)
 }
 
+// checkFormDefaults charges cvc-datatype-valid on this document's <schema>
+// element for an attributeFormDefault or elementFormDefault outside
+// xs:formChoice's qualified/unqualified enumeration.
+//
+// Running it once per document, ahead of production, is what makes the verdict
+// content-INDEPENDENT — the argument checkDefaultOpenContent's doc states, and
+// the reason this charge is NOT made where the value is read. localTargetNS
+// consults a *FormDefault only for a local declaration that carries neither
+// targetNamespace nor form=, so a document writing elementFormDefault="Qualified"
+// and declaring no such element would never be charged from there at all, while
+// the same document with one local element would be: the malformed attribute is a
+// fault of the document, not of whichever declaration happened to consult it.
+// form= and use= keep the opposite treatment for the opposite reason — every one
+// a document writes is read by the declaration carrying it.
+//
+// It is called beside checkDefaultOpenContent, for every document of the
+// assembly, so a document produced on demand through symbols.typeSource cannot
+// mint a local name off a *FormDefault this check has not judged.
+func (p *producer) checkFormDefaults() error {
+	// A slice, not a map: the two attributes are judged in one order every run
+	// (STYLE D1/D2), so a <schema> writing both malformed values names the same
+	// one every time.
+	for _, attr := range []string{"attributeFormDefault", "elementFormDefault"} {
+		lexical, ok := p.schemaElem.Attr(attr)
+		if !ok {
+			continue
+		}
+		if _, err := formChoiceQualified(lexical, p.schemaElem.Loc(), attr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // openContentOf computes §3.4.2.3.3 clause 6's {open content} from the
 // ·wildcard element· we, returning nil for clause 6.1 — a mode="none" element
 // contributes NO Open Content record, which is why xsd.OpenContentMode has no
@@ -2547,7 +2581,11 @@ func (p *producer) produceLocalElement(el *Element, scopeParent xsd.ElementScope
 	if err := p.rejectLocalElementTargetNamespace(el); err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
-	qname, err := declarationName(el, p.localTargetNS(el, "elementFormDefault"))
+	tns, err := p.localTargetNS(el, "elementFormDefault")
+	if err != nil {
+		return xsd.ElementDeclaration{}, err
+	}
+	qname, err := declarationName(el, tns)
 	if err != nil {
 		return xsd.ElementDeclaration{}, err
 	}
@@ -2852,6 +2890,12 @@ func (p *producer) foldDefaultAttributes(ctElem *Element, visited map[xsd.QName]
 // two forms mirror that function's split — a ref= resolves as a QName (§3.2.2.3),
 // a name= takes the local declaration's {target namespace} (§3.2.2.2).
 //
+// use= is read through attributeUseToken, the one encoding of that token (STYLE
+// T4), because the ·actual value· is what clause 3.2.2 quantifies over: read
+// raw, use=" prohibited " would map to no Attribute Use in produceAttributeUse
+// and still be absent from this exclusion set, silently reinstating the base
+// type's identically-named use at the finalize-time fold (#1328).
+//
 // No src-attribute clause is charged here: produceAttributeUse charges clauses
 // 1, 2, 3, 5 and 6 upstream, before the same prohibited <attribute> declines
 // to map, so re-charging them would put them in two encodings (#358). Its
@@ -2859,12 +2903,19 @@ func (p *producer) foldDefaultAttributes(ctElem *Element, visited map[xsd.QName]
 // produceAttributeUses runs collectAttributeContent, which returns
 // produceAttributeUse's rejection of a neither-ref-nor-name <attribute> before
 // this function walks the same children — and the branch is kept as a fallback.
-// The two failures that ARE surfaced here are an unresolvable ref= prefix —
+// The same walk charges an out-of-enumeration use= ahead of this function, which
+// is why attributeUseToken's error is a fallback here too.
+//
+// The three failures that ARE surfaced here are an unresolvable ref= prefix —
 // src-resolve, charged by resolveQName for every other reference in this
-// producer — and a name= that is not an xs:NCName, charged cvc-datatype-valid
-// by declarationName for every other declaration name in it. A prohibited
-// <attribute> earns no exemption from either: both are faults of the schema
-// document, and neither needs a component to exist to be a fault.
+// producer — a name= that is not an xs:NCName, charged cvc-datatype-valid by
+// declarationName for every other declaration name in it, and a form= outside
+// xs:formChoice, charged cvc-datatype-valid by localTargetNS for every other
+// local declaration. The third reaches this function ALONE, because
+// produceAttributeUse returns at the prohibited form without building the
+// sibling declaration that would otherwise read the attribute. A prohibited
+// <attribute> earns no exemption from any of the three: all are faults of the
+// schema document, and none needs a component to exist to be a fault.
 //
 // Clause 6 is why the localTargetNS read below can no longer mint a name in a
 // namespace the clause forbids: the same collectAttributeContent walk charges
@@ -2877,7 +2928,11 @@ func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error
 		if !ok || el.Name().Space() != xsd.XMLSchemaNS || el.Name().Local() != "attribute" {
 			continue
 		}
-		if use, _ := el.Attr("use"); use != "prohibited" {
+		use, err := attributeUseToken(el)
+		if err != nil {
+			return nil, err // unreachable: produceAttributeUse charged the same token upstream
+		}
+		if use != "prohibited" {
 			continue
 		}
 		if ref, hasRef := el.Attr("ref"); hasRef {
@@ -2891,7 +2946,11 @@ func (p *producer) prohibitedAttributeNames(parent *Element) ([]xsd.QName, error
 		if _, hasName := el.Attr("name"); !hasName {
 			continue // unreachable: produceAttributeUse already rejected this shape upstream
 		}
-		qn, err := declarationName(el, p.localTargetNS(el, "attributeFormDefault"))
+		tns, err := p.localTargetNS(el, "attributeFormDefault")
+		if err != nil {
+			return nil, err
+		}
+		qn, err := declarationName(el, tns)
 		if err != nil {
 			return nil, err
 		}
@@ -3175,7 +3234,10 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 	if err := checkS4SChildOrder(el, s4sAttribute); err != nil {
 		return nil, err
 	}
-	use := attributeUseToken(el)
+	use, err := attributeUseToken(el)
+	if err != nil {
+		return nil, err
+	}
 	vc, err := valueConstraintOf(el, ruleSrcAttribute)
 	if err != nil {
 		return nil, err
@@ -3272,15 +3334,39 @@ func (p *producer) produceAttributeUse(el *Element, scopeParent xsd.AttributeSco
 	return &au, nil
 }
 
-// attributeUseToken is the ·actual value· of an <attribute>'s use=, with an
-// absent attribute read as the schema for schema documents' declared default
-// "optional" — the single encoding of that default, shared by produceAttribute,
-// produceAttributeUse and useValueConstraintOK.
-func attributeUseToken(el *Element) string {
-	if use, hasUse := el.Attr("use"); hasUse {
-		return use
+// attributeUseToken is the ·actual value· of an <attribute>'s use= (key-vv),
+// with an absent attribute read as the schema for schema documents' declared
+// default "optional" — the single encoding of that default AND of the
+// enumeration, shared by produceAttributeUse, useValueConstraintOK and
+// prohibitedAttributeNames (STYLE T4). The two mapping stages run in the order
+// §4.1.4 fixes:
+//
+//   - pre-lexical. Appendix A declares use= as an xs:NMTOKEN restriction
+//     (xmlschema11-1.md:4685) and NMTOKEN fixes whiteSpace to collapse
+//     (§3.4.4.1), applied BEFORE lexical-space membership is tested, so
+//     use=" required " is the value required and maps {required} = true.
+//     collapseTrim reads that ·actual value·, and its doc carries the proof that
+//     trimming §4.3.6's four characters decides membership in a whitespace-free
+//     enumeration exactly as a full collapse would.
+//   - enumeration. The restriction enumerates exactly prohibited, optional and
+//     required, so anything else fails the type the attribute is declared with
+//     and is charged cvc-datatype-valid (§4.1.4), which states no fallback
+//     clause: use="foo" must not quietly read as optional and mint an Attribute
+//     Use where §3.2.2's prohibited form maps to no component at all.
+//
+// An absent attribute is that declared default and is NOT an error, a branch
+// distinct from present-but-invalid; boolAttr and facetFixed split the same two.
+func attributeUseToken(el *Element) (string, error) {
+	lexical, hasUse := el.Attr("use")
+	if !hasUse {
+		return "optional", nil
 	}
-	return "optional"
+	switch use := collapseTrim(lexical); use {
+	case "prohibited", "optional", "required":
+		return use, nil
+	}
+	return "", xsderr.New(ruleDatatypeValid, el.Loc(),
+		"<attribute> use value %q is not one of prohibited/optional/required, the enumeration the schema for schema documents restricts xs:NMTOKEN to there", lexical)
 }
 
 // useValueConstraintOK charges src-attribute (§3.2.3) clauses 2 and 5 against one
@@ -3296,14 +3382,18 @@ func attributeUseToken(el *Element) string {
 // shared with <element> (charged src-element clause 1), and <element> has no use=
 // attribute to consult. valueConstraintOf stays the single encoding of clause 1.
 //
-// The token is compared exactly, as the rest of produceAttributeUse compares it:
-// a use= outside {optional, prohibited, required} therefore reads as
-// other-than-optional here and is rejected when default is present. That is not
-// src-attribute's own enumeration check — the enumeration is imposed by the
-// schema for schema documents, which src-attribute is explicitly "in addition
-// to" — but no schema it rejects was valid under that schema either.
+// The token is the ·actual value· attributeUseToken maps, so both comparisons
+// below read one of the three values Appendix A enumerates: a use= outside
+// {optional, prohibited, required} fails its declared type and is charged there
+// first, and a padded " optional " is the value optional here as it is
+// everywhere else (#1328). Neither clause performs that enumeration check itself
+// — the enumeration is imposed by the schema for schema documents, which
+// src-attribute is explicitly "in addition to".
 func useValueConstraintOK(el *Element) error {
-	use := attributeUseToken(el)
+	use, err := attributeUseToken(el)
+	if err != nil {
+		return err
+	}
 	if _, hasDefault := el.Attr("default"); hasDefault && use != "optional" {
 		return xsderr.New(ruleSrcAttribute, el.Loc(),
 			"attribute has default with use=%q, but src-attribute clause 2 requires use to be optional when default is present", use)
@@ -3450,7 +3540,11 @@ func (p *producer) produceLocalAttribute(el *Element, scopeParent xsd.AttributeS
 	if err := p.rejectLocalAttributeTargetNamespace(el); err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
-	qname, err := declarationName(el, p.localTargetNS(el, "attributeFormDefault"))
+	tns, err := p.localTargetNS(el, "attributeFormDefault")
+	if err != nil {
+		return xsd.AttributeDeclaration{}, err
+	}
+	qname, err := declarationName(el, tns)
 	if err != nil {
 		return xsd.AttributeDeclaration{}, err
 	}
@@ -3622,25 +3716,63 @@ func disallowedNameKeywordOf(tok string, attributeWildcard bool, loc xsderr.Loc)
 		"notQName token %q is not valid against %s, whose keyword member type enumerates only %s", tok, declaredType, enumerated)
 }
 
+// formChoiceQualified is the ·actual value· of an xs:formChoice-typed attribute,
+// as the truth of "= qualified" that §3.2.2.2 and §3.3.2.3 case 2 test. Appendix
+// A declares xs:formChoice as an xs:NMTOKEN restriction enumerating exactly
+// qualified and unqualified (xmlschema11-1.md:4478), and NMTOKEN fixes
+// whiteSpace to collapse, applied BEFORE lexical-space membership is tested
+// (§4.1.4) — so form=" qualified " is the value qualified, and anything outside
+// the two-value enumeration fails the declared type and is charged
+// cvc-datatype-valid rather than reading as unqualified. attr names the
+// attribute read, one of form, elementFormDefault and attributeFormDefault, all
+// three declared with this one type.
+func formChoiceQualified(lexical string, loc xsderr.Loc, attr string) (bool, error) {
+	switch collapseTrim(lexical) {
+	case "qualified":
+		return true, nil
+	case "unqualified":
+		return false, nil
+	}
+	return false, xsderr.New(ruleDatatypeValid, loc,
+		"%s value %q is not one of qualified/unqualified, the enumeration the schema for schema documents restricts xs:formChoice to", attr, lexical)
+}
+
 // localTargetNS computes a local element/attribute declaration's {target
 // namespace} (§3.3.2.3 / §3.2.2.2): an explicit targetNamespace attribute wins,
 // else form= (qualified → the schema target, unqualified → absent), else the
 // schema's *FormDefault (formDefaultAttr is "elementFormDefault" or
 // "attributeFormDefault"), defaulting to absent (unqualified).
-func (p *producer) localTargetNS(el *Element, formDefaultAttr string) string {
+//
+// form= is charged HERE, at the declaration that writes it, the way
+// processContentsOf and openContentModeOf charge their own keyword attributes:
+// every form= the schema for schema documents admits at all sits on a local
+// declaration this function maps — rejectProhibitedAttrs rejects the top-level
+// form outright — so no value escapes the check by never being read.
+//
+// The *FormDefault read is the other way round — it is a plain comparison
+// against the collapsed lexical and charges NOTHING, because checkFormDefaults
+// has already judged both attributes of every document of the assembly before
+// any component is produced. That leaves exactly qualified and unqualified
+// reachable here, so testing for the first is testing for the second's
+// complement (#1328).
+func (p *producer) localTargetNS(el *Element, formDefaultAttr string) (string, error) {
 	if tns, ok := el.Attr("targetNamespace"); ok {
-		return tns
+		return tns, nil
 	}
 	if form, ok := el.Attr("form"); ok {
-		if form == "qualified" {
-			return p.target
+		qualified, err := formChoiceQualified(form, el.Loc(), "form")
+		if err != nil {
+			return "", err
 		}
-		return ""
+		if qualified {
+			return p.target, nil
+		}
+		return "", nil
 	}
-	if fd, ok := p.schemaElem.Attr(formDefaultAttr); ok && fd == "qualified" {
-		return p.target
+	if fd, ok := p.schemaElem.Attr(formDefaultAttr); ok && collapseTrim(fd) == "qualified" {
+		return p.target, nil
 	}
-	return ""
+	return "", nil
 }
 
 // occursOf maps the minOccurs/maxOccurs attributes to an Occurs (§3.9.2), each
