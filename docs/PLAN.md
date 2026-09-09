@@ -17,7 +17,7 @@ read them. One stamp for the whole section, so a reader can tell staleness
 from wrongness at a glance. Never add a dated paragraph beside the old
 one — appending is what this replaces.
 
-## Status — 2026-09-09 (`/backlog`. Replaced whole per step 6: the lane table is a fresh `go tool lanestatus` paste, the namespace a fresh `wipsurvey` against a fresh `git fetch -p origin` plus a `git ls-remote --heads`, the marker census a fresh `gapaudit`, and the milestone and queue counts a fresh page-numbered `state=all` fetch taken after this pass's own writes. **The window is FOURTEEN landings closing NINETEEN issues in two days** — band rows **1 through 10 and 12** in order, plus the two issues those rows' own landings carved or unblocked (**#1349**, **#456**); only row 11 (**#1167**) is left. **`schema` moved 13942 → 13968**, the first non-flat window in three, and **both movers banked from a population their own body had not identified**: #456's named case did NOT flip and twenty unnamed ones did, while #931 — banded LOWEST of the lane slices precisely because its population was a hypothesis — skipped the census its band row instructed in as many words and banked +6 where its body named 4. The namespace carries **ONE LIVE claim** (`wip/issue-413`) and **one EXPIRED, resumable** (`wip/issue-1167`). The marker census holds at **68** with **ZERO untracked sites for a TENTH consecutive stamp**. The **NINETEENTH persona consultation**: **six findings — five filed (#1367, #1368, #1369, #1370, #1371), one deduped into the issue that already owns it (#1286)**)
+## Status — 2026-09-09 (`/backlog`, the SECOND today. Replaced whole per step 6: the lane table is a fresh `go tool lanestatus` paste, the namespace a fresh `wipsurvey` against a `git fetch --unshallow` plus a `git ls-remote --heads`, the marker census a fresh `gapaudit`, and the milestone and queue counts a fresh page-numbered `state=all` fetch taken after this pass's own writes. **The window is ONE commit and ZERO landings** — `aeb482f`, #413's post-land pass — so all twelve of the last band's rows survive and this is a re-cut, not a fresh ordering. **Every lane is unchanged, cell for cell**, which is what a zero-landing window looks like. **The namespace carries TWO held claims, and the last stamp shows neither**: `wip/issue-1167` is now LIVE (it was EXPIRED and was taken) and `wip/issue-1328` is CLAIMED with an active grounding — band rows 1 and 10 of the last band, both off-limits. **The marker census holds at 68 and the ZERO-untracked streak ENDS at ten**: three markers say *"No issue owns"* in prose `gapaudit` cannot read, and #1378 and #1379 now own them. The **TWENTIETH persona consultation**: **nine findings — three filed (#1380, #1381, #1382), four deduped into the issues that already own them (#1283, #1005, #1369, #1286), two dismissed on measurement with the residue routed (#1293, #1318)**)
 
 Conformance lanes — **paste `go tool lanestatus` verbatim**, never a
 hand-count:
@@ -35,402 +35,439 @@ An em dash is a lane with no cases yet, which is a different claim from a lane
 scoring zero. `datatypes` is M3 and **complete**; `schema` is M4 and active;
 `instance` is M5 and active; `xpath`, `json` and `ber` wait on M6/M7, M8 and M11.
 
-### The band ran to exhaustion, `schema` moved +26, and neither mover banked the population its body named
+### A zero-landing window, and what a daily cadence against one looks like
 
-**Eleven of the last band's twelve rows landed, in order.** Rows 1–10 and 12;
-row 11 (**#1167**) is the only survivor and is banded again below. Two more
-issues landed with them, each carved or unblocked by a row's own landing:
-**#456** (row 3's dependant, `blocked` on it) and **#1349** (filed by row 9's
-landing).
+**Nothing landed.** The window since the last stamp is a single commit —
+`aeb482f`, #413's post-land pass, which filed #1374, #1375 and #1376. Every lane
+figure above is identical to the last stamp's, and **all twelve band rows are
+still open**.
 
-| landing | commit | predicted | banked |
-|---|---|---|---|
-| **#1007** +#1231 +#1123 +#1189 +#1261 +#1290 | `84bbed7` | unchanged, structural | unchanged |
-| **#1304** | `6d3b94e` | unchanged, measured AND structural | unchanged |
-| **#1300** | `34aee07` | unchanged | unchanged |
-| **#455** | `8aca2a3` | unchanged, structurally excluded then measured twice | unchanged |
-| **#931** | `c5e5e37` | **`schema` +4**, from an eighteen-day-old hand probe | **`schema` +6** |
-| **#725** | `6b3759e` | *"UP only"*, by construct census before implementing | unchanged (vacuously satisfied) |
-| **#1312** | `84da227` | unchanged, structural and measured | unchanged |
-| **#1247** | `77b0419` | unchanged, doc-only, run in write mode | unchanged |
-| **#1251** | `3e9b8eb` | unchanged, structural and measured | unchanged |
-| **#1203** | `f4ead6c` | unchanged, run in write mode | unchanged |
-| **#1313** | `665437a` | unchanged | unchanged |
-| **#1227** | `e36927d` | unchanged | unchanged |
-| **#1349** | `c5e7a57` | unchanged, predicted by the mechanism | unchanged |
-| **#456** | `5b84206` | **movement CONFIRMED on a named case** | **`schema` +20** |
+This is the first stamp in this record with nothing to score, and it is worth
+naming why rather than treating it as a gap in the evidence. **Two develop
+sessions are in flight right now**, both started since the last stamp: one holds
+`wip/issue-1328` (band row 1) and one holds `wip/issue-1167` (band row 10). The
+band did not fail to be consumed; it is being consumed, and the two sessions
+doing it had not finished when this pass ran. **The previous stamp ran at
+roughly the same hour and measured fourteen landings in two days**, so the
+honest reading is that a daily `/backlog` sometimes lands inside a window rather
+than after it, and produces a stamp about work in progress.
 
-**The finding is that BOTH movers banked a population their body had not
-identified, in opposite directions of the same error.**
-
-- **#456 named one suite case by ID and that case did not flip.** Its Acceptance
-  item 6 required `Open/open013/instance/open013.v1.xml` to flip; the defect it
-  named IS fixed (`mixed=" 1 "` reads its ·actual value·), but a correct `mixed`
-  makes the ·effective content· a particle (§3.4.2.3.3 clause 2.1), routing to
-  clause 5.2.1's default open content, which `xsd.Schema.ContentMatcher`
-  declines under a `GAP(xsd)` owned by **#717**. The case left #1160's
-  decided-and-wrong class for the decline-candidate class at the same banked
-  score. The **+20** came from twenty other fixtures — every suite-declared
-  `invalid` case writing an `xs:boolean` schema attribute outside `booleanRep` —
-  which the member censused directly, by attribute VALUE, because `suiteindex`
-  censuses by construct and cannot take that census. **Naming the instrument's
-  limit is the part that worked.**
-- **#931 was banded LOWEST of the lane slices for exactly the right reason and
-  then skipped the step that banding asked of it.** Its band row read *"Census
-  by construct FIRST, with #1282's `Parent` field, and re-band on what it says"*;
-  the census was never run, an eighteen-day-old hand probe went to the verdict
-  intact, and the lane moved **+6** where the body named 4, with 5 of the 6
-  flips unclassified by the body. **#1332** owns that defect and is band row 2.
-
-**So the last stamp's criterion — prefer a NAMED failing case or a
-construction-guaranteed direction over a hypothesis — selected the right issue
-and was right for the wrong reason.** It is kept, and sharpened by what this
-window measured: **a named single case is weaker evidence than an ENUMERATED
-candidate set**, because a single case can be blocked two layers downstream by a
-gap nobody tested against, while an enumeration cannot. Row 1 below is the first
-member of this family whose body carries both — ten shapes driven through
-`parser.Produce` and a complete set of **24 named suite fixtures**.
+**The one methodological consequence, and it is real.** With no landing to score,
+this pass has no ratchet prediction to check and no banked-versus-predicted row
+to add. The last two stamps' headline findings were both about prediction
+defects (#1205's, then #931's); this window supplies no third data point either
+way. **#1332 stays banded on the strength of the existing evidence**, not on new
+evidence, and this stamp does not claim the tax is compounding — one sighting is
+still one sighting.
 
 ### Branch namespace, `origin` — report-only; a session never deletes a ref
 
-**`go tool wipsurvey`, verbatim**, against a fresh `git fetch -p origin` and
-this pass's 760-issue pre-write feed:
+**`go tool wipsurvey`, verbatim**, against a `git fetch --unshallow origin` and
+this pass's 768-issue pre-write feed, with #1328's comments supplied on the
+second pass to date its lease:
 
 ```
 ISSUE  BRANCH          LEASE AGE  VERDICT  REASON
-413    wip/issue-413   3m0s       LIVE     wip/issue-413: tip pushed 3m0s ago, within the 2h0m0s claim TTL
-732    wip/issue-732   393h48m0s  RETIRED  wip/issue-732: issue #732 is closed
-822    wip/issue-822   571h46m0s  RETIRED  wip/issue-822: issue #822 is closed
-846    wip/issue-846   344h7m0s   RETIRED  wip/issue-846: issue #846 is closed
-872    wip/issue-872   537h47m0s  RETIRED  wip/issue-872: issue #872 is closed
-933    wip/issue-933   466h0m0s   RETIRED  wip/issue-933: issue #933 is closed
-968    wip/issue-968   405h5m0s   RETIRED  wip/issue-968: issue #968 is closed
-993    wip/issue-993   349h28m0s  RETIRED  wip/issue-993: issue #993 is closed
-1167   wip/issue-1167  2h54m0s    EXPIRED  wip/issue-1167: tip pushed 2h54m0s ago, past the 2h0m0s claim TTL
+732    wip/issue-732   404h53m0s  RETIRED  wip/issue-732: issue #732 is closed
+822    wip/issue-822   582h51m0s  RETIRED  wip/issue-822: issue #822 is closed
+846    wip/issue-846   355h12m0s  RETIRED  wip/issue-846: issue #846 is closed
+872    wip/issue-872   548h52m0s  RETIRED  wip/issue-872: issue #872 is closed
+933    wip/issue-933   main's     RETIRED  wip/issue-933: issue #933 is closed
+968    wip/issue-968   main's     RETIRED  wip/issue-968: issue #968 is closed
+993    wip/issue-993   360h33m0s  RETIRED  wip/issue-993: issue #993 is closed
+1167   wip/issue-1167  1h44m0s    LIVE     wip/issue-1167: tip pushed 1h44m0s ago, within the 2h0m0s claim TTL
+1328   wip/issue-1328  main's     CLAIMED  wip/issue-1328: no commits of its own and no RESUME:/TAKEOVER: comment ever posted -- a claim is born undated, so this is not a lapsed lease; settle it from the issue thread
 ```
 
-**`wip/issue-413` is LIVE and mid-repair-round**, tip `d2a14da`
-(*"xsd: repair the {open content} deferral marker's spec claims (#413)"*) pushed
-minutes before this survey, with an arbiter verdict and a `MASON: repair round`
-comment on the thread. **#413 is off-limits and is not banded**, and so is
-anything else editing `xsd/`'s open-content deferral markers — **#717** in
-particular, which the #456 analysis above puts one step from that code.
+**TWO claims are held and the last stamp shows neither. Re-run `wipsurvey`
+before starting anything.**
 
-**`wip/issue-1167` is EXPIRED and therefore RESUMABLE, not abandoned.** Its
-thread carries a `TAKEOVER:` comment timed 9 seconds after the branch tip
-(2026-09-09T00:14), so the claim was dated once and then lapsed at the 2h TTL —
-a session that died, not a branch nobody ever held. **Taking it means posting a
-second `TAKEOVER:` naming the tip you found, then pushing the heartbeat.** Read
-the thread's earlier `PROCESS NOTE` first: the branch's pre-takeover tip was a
-stray post-land commit for a DIFFERENT issue whose content is already on `main`,
-so none of that diff is #1167's history. **Not relabelled `needs-replan`** —
-under three hours is not "stale for days", and the label retires an issue rather
-than releasing a lease.
+**`wip/issue-1167` is LIVE**, tip `f3d2de4` (*"heartbeat — taking over expired
+lease"*) at 12:29 UTC, 1h44m before this survey. The last stamp reported it
+EXPIRED and invited a takeover; the takeover happened. **It is band row 10 of the
+last band and is not banded here.**
 
-**`wip/issue-1349` VANISHED at merge** — `git fetch -p` reported it deleted.
-That is GitHub's auto-delete working as the workflow says it does, and it is the
-first deletion observed in several stamps; the seven RETIRED refs below are
-parks and supersedes, which are supposed to persist.
+**`wip/issue-1328` is CLAIMED, undated by the tool, and ACTIVE in substance —
+settled from the thread, exactly as the tool's own reason line instructs.** Its
+tip is `main` (`aeb482f`) with no commits of its own, so `wipsurvey` cannot date
+the lease and correctly refuses to retire it on age. The thread settles it: a
+`GROUNDING:` comment at 13:16 UTC and a body edit at 13:18 UTC, **55 minutes
+before this survey**, the latter restating Acceptance item 2 on the grounding's
+ruling. A session is mid-grounding. **Not relabelled `needs-replan`** — that
+label retires an issue, and an active claim is the opposite of stale.
 
-**The same seven RETIRED refs, unchanged row for row — SIX stamps now.** All
-seven closed `not_planned`; none owes a supersede. Cloud containers cannot
-delete remote refs, so these accumulate by design and are not a finding.
-**Zero `parked/*`. Zero `meta/*`.**
+**The same seven RETIRED refs, unchanged row for row — SEVEN stamps now — and
+this pass re-verified the supersede chain rather than inheriting the claim.** All
+seven closed `not_planned`, and each names its replacement on its own thread:
+**#732**→#1001/#1002, **#822**→#851, **#846**→#1029/#1030, **#872**→#878,
+**#993**→#1018. Six of those replacements have since landed; **#1002** is the one
+still open and is properly `blocked` on the repo owner's ruling. **No supersede
+is owed and none is missing.**
 
-**FIVE non-`wip` `claude/*` refs stand, one of them new** — `eloquent-cerf-39rk64`
-(`0abeab6`), `-3xu0ki` (`62d5143`), `-8jq9o6` (`7841e98`), `-adewly` (`5d03049`)
-unchanged in tip, and **`-kk1f7v` (`1ba9b40`), which is `origin/main` exactly**:
-the session branch the last post-land pass landed through, left behind after its
-PR merged. Listed for human triage, not acted on. `wipsurvey` reads `wip/*` and
-`parked/*` only, so these and any `meta/*` are found by `git ls-remote --heads`
-and never by the survey.
+**`wip/issue-933` and `wip/issue-968` now read `main's` where the last stamp read
+466h and 405h.** That is the unshallow, not a change of state: both tips are
+ancestors of `origin/main`, which a shallow checkout could not see. Their
+verdicts are unchanged.
 
-### Marker census
+**Zero `needs-replan`. Zero `parked/*`. Zero `meta/*`.** **FIVE non-`wip`
+`claude/*` refs stand**, unchanged in tip from the last stamp — `-39rk64`,
+`-3xu0ki`, `-8jq9o6`, `-adewly`, and `-kk1f7v` (which is `origin/main`'s
+predecessor `1ba9b40`). Listed for human triage, not acted on. `wipsurvey` reads
+`wip/*` and `parked/*` only, so these are found by `git ls-remote --heads` and
+never by the survey.
 
-`go tool gapaudit` over this pass's whole 760-issue pre-write feed: **68 markers
+### Marker census — the ZERO-untracked streak ends at ten, and it was an artifact
+
+`go tool gapaudit` over this pass's whole 768-issue pre-write feed: **68 markers
 across 8 areas** — `xsd` 32, `validate` 17, `xpath` 6, `xml` 4, `parser` 3,
-`value` 3, `conformance` 2, `cmd` 1.
+`value` 3, `conformance` 2, `cmd` 1. **The total and the per-area split are
+identical to the last stamp**, which a zero-landing window guarantees.
 
-**The census total held at 68 across fourteen landings, and the per-area split
-is identical to the last stamp cell for cell.** Two of those landings touched
-markers in both directions — #725 deleted its `GAP(xsd)` at `redefinition.go`,
-#413's live branch is repairing another — so **the total holding is not the same
-claim as the SET holding**, and this pass did not diff marker by marker against
-the last stamp, which recorded counts only. Whoever next needs the composition
-must take it from `gapaudit` directly.
+**Group 1 moved 16 → 18 and group 2 23 → 26.** Both new group-1 rows are
+`dead end: cites CLOSED #413`, at `xsd/complexextension.go:433` and
+`xsd/contentrestricts.go:612` — exactly what #413's post-land pass predicted
+when it filed **#1376** to repoint them, and **#1376 is band row 6 below**.
 
-**Group 1 moved 17 → 16 and group 2 26 → 23. ZERO group-1 rows carry no
-annotation at all, so the tool's own filing rule selects nothing and there are
-ZERO untracked GAP sites — TENTH consecutive stamp.** No `kind/gap` issue was
-filed from the census this pass, and that is the census reporting a clean tree
-rather than a pass skipping the step.
+**Every group-1 row carries annotations, so the tool's mechanical filing rule
+selects nothing — and applying that rule is what produced ten consecutive stamps
+of "ZERO untracked GAP sites".** `gapaudit`'s own header says filing is *"a
+judgment on the annotations, not on their absence"*, and this pass took that
+judgment. `grep` for the class returns **exactly three sites that declare
+themselves unowned in prose the tool cannot read**:
 
-**One gap this pass found is invisible to this instrument, and that is worth
-recording beside the clean census.** #1369 (below) is an unimplemented s4s check
-with no `GAP(parser)` marker anywhere, so `gapaudit` cannot see it and neither
-can a reader of the tree — it was found from outside, by a persona compiling a
-schema with a one-letter typo in it. A clean census means every MARKED site has
-an owner; it has never meant the tree has no unmarked ones.
+- `xsd/contentrestricts.go:694` — *"No issue owns that retirement"*
+- `xsd/defaultbinding.go:355` — *"No issue owns this residual"*
+- `xsd/defaultbinding.go:549` — the same, *"exactly as at
+  fixedValueConstraintSubsumes' clause 4.2 twin"*
+
+Every `candidate owner` annotation on those rows is a bare `file-matches` on the
+containing file, and each was checked against the queue: **none owns the gap.**
+Two issues now do.
+
+- **#1378** owns the retirement of `contentTypeRestricts`' `maxContentPositions`
+  ceiling. It is the twin of **#499** and carries **strictly stronger evidence**:
+  #499's ceiling is inert on the W3C suite, this one is **REACHED** — the check
+  fires 1538 times, 1532 models sit at ≤ 2970 positions and **six exceed the
+  ceiling** (30001, 999999, 9999999 ×3, one past 16777216). Six declined
+  verdicts standing today. **#578 is the neighbour, not the owner** — it owns
+  construction cost at the same boundary — and both threads now say so.
+- **#1379** owns the two `loc-testSubP` fixed-value residuals at
+  `xsd/defaultbinding.go:345` (clause 4.2) and `:541` (clause 5.2), the `xsd`-side
+  twins of **#774**'s `validate`-side declines. Different package, different
+  rules, different phase; #774's ruling that the `xs:anySimpleType` case is not a
+  gap transfers, and its thread now says so.
+
+**The lesson is about the instrument, not the tree.** A clean census has never
+meant a clean tree — the last stamp said so, with #1369 as its witness. What this
+pass adds is narrower and more actionable: **a clean census does not even mean
+every MARKED site has an owner**, because `gapaudit` joins on citations and a
+marker can say "nobody owns me" in a sentence. **#1156** is the nearest
+instrument and is about a different blindness (the `paragraph()` boundary); the
+prose-declaration blindness has no owner and is not filed as one, because two
+greps over a 68-marker corpus is not yet a tool.
+
+**Citation drift, measured in a second file family and deliberately NOT
+repaired.** #413's landing moved `xsd/contentrestricts.go` by +72/−18, and nine
+open bodies carry `file:line` into the two files it touched. **Two citations now
+point at unrelated text**: #1156's `contentrestricts.go:742` (its central claim's
+coordinate, now `:838`) and #1156's and #345's `:1047` (now `:1097`). Both claims
+are still TRUE at `aeb482f`, verified against this pass's own `gapaudit` output;
+only the coordinates are false. **This pass re-anchored neither body.** #1356
+owns the ruling on whether a planning pass may re-anchor citations, its body
+records that two post-land passes have already done so as precedent with no
+document asking them to, and a third would settle by habit the question #1356
+exists to settle. The measurement went onto **#1356** as evidence instead, with a
+pointer comment on #1156 so its taker is not misled — and it makes one of #1356's
+arms cheaper, since a `citecheck` can detect both rows mechanically without
+judging whether a premise survived. **#1356 is band row 10 on that evidence.**
 
 ### Milestones and queue
 
 Counts from a page-numbered `state=all` REST fetch taken **after** this pass's
-writes, 14 pages (13 full at 100, page 14 at 71), PRs filtered locally:
-**1371 rows, 606 PRs excluded, 765 issues — 283 open, 482 closed.**
+writes, 14 pages (13 full at 100, page 14 at 82), PRs filtered locally:
+**1382 rows, 609 PRs excluded, 773 issues — 290 open, 483 closed.** Coverage
+verified rather than assumed: 1382 distinct numbers, min 1, max 1382, no gaps.
 
 | milestone | open | closed | state |
 |---|---:|---:|---|
 | M1 — Spec infrastructure | 0 | 3 | done |
 | M2 — Foundation leaves | 0 | 5 | done |
 | M3 — Datatypes vertical slice | 0 | 12 | complete |
-| **M4 — Schema parsing** | **51** | **124** | active |
-| **M5 — Instance validation (XML)** | **14** | **24** | active |
+| **M4 — Schema parsing** | **52** | **124** | active |
+| **M5 — Instance validation (XML)** | **15** | **24** | active |
 | M6 — XPath required subset | 1 | 0 | not started |
 | M7–M12 | 0 | 0 | not started |
 
-Queue labels, open only: **267 `ready`, 14 `blocked`, 0 `needs-replan`, 2
-`epic`** — summing to 283 with no gap, and **every open issue carries exactly
-one, verified over all 283 by grouping each issue's own label set rather than by
-summing two counts**. That distinction is the repair from two stamps ago
-holding: a check that adds `ready` and `blocked` and balances against the open
-total cannot see an `epic` hiding inside `blocked`. **#779** owns the mechanical
-check and carries this as its fifth class.
+Queue labels, open only: **273 `ready`, 15 `blocked`, 0 `needs-replan`, 2
+`epic`** — summing to 290 with no gap, and **every open issue carries exactly
+one, verified over all 290 by grouping each issue's own label set rather than by
+summing two counts**. **#779** owns the mechanical check and carries this as its
+fifth class.
 
-By kind: `kind/refactor` 80, `kind/process` 56, `kind/gap` 49, `kind/tooling`
-39, `kind/bug` 29, `kind/story` 24, `kind/docs` 21, `kind/feature` 4. By area:
-`parser` 79, `meta` 78, `xsd` 58, `conformance` 30, `docs` 30, `validate` 24,
-`cmd` 19, `value` 14, `builtin` 11, `xpath` 6, `xsderr` 6, `model` 4, `loader`
+By kind: `kind/refactor` 80, `kind/process` 56, `kind/gap` 53, `kind/tooling`
+39, `kind/bug` 31, `kind/story` 25, `kind/docs` 21, `kind/feature` 4. By area:
+`parser` 80, `meta` 78, `xsd` 63, `docs` 31, `conformance` 30, `validate` 25,
+`cmd` 21, `value` 14, `builtin` 11, `xpath` 6, `xsderr` 6, `model` 4, `loader`
 2, `regex` 2, `cli` 1.
 
-**M4 moved 117 → 124 closed and 50 → 51 open**: seven closed against it, and the
-open count still rose because this window's post-land passes and this pass filed
-more onto it than the landings retired — the shape #347 says to expect, `ready`
-being an output. **M5 moved 23 → 24 closed and is unchanged at 14 open**, third
-consecutive stamp at 14: every landing this window was `parser`, `cmd`, `xsd`,
-`tools/` or `meta`. Neither milestone's count is its lane's remaining work; the
-M4 and M5 scope sections below say so in their own words.
+**Both active milestones grew and neither closed anything**, which is what a
+zero-landing window plus a filing pass produces: **M4 51 → 52 open** (#1380) and
+**M5 14 → 15** (#1382), closed counts unchanged at 124 and 24. `ready` moved
+**268 → 273**: five filed by this pass (#1378, #1379, #1380, #1381, #1382) and
+nothing retired. That is #347's shape — `ready` is an output, not a target — and
+neither milestone's count is its lane's remaining work; the M4 and M5 scope
+sections below say so in their own words.
 
-**`ready` 267 is the honest startable count with ONE to subtract**: #413 carries
-a LIVE claim, so **266** are startable without colliding. **#1167's EXPIRED
-claim is NOT subtracted** — an expired lease is takeable, which is the whole
-point of the TTL.
+**`ready` 273 is the honest startable count with TWO to subtract**: #1328 and
+#1167 both carry live claims, so **271** are startable without colliding. This is
+the first stamp with two held at once, and neither is an expired lease that could
+be taken.
 
-**The unblock sweep measured a clean zero for the ELEVENTH consecutive stamp.**
-All **14** open `blocked` bodies were read and their `## Depends on` sections
-checked against every issue this window closed — the nineteen the landings
-closed, plus **#726** (closed moot by #725's post-land pass) and **#531**
-(closed obsolete by #1300's). **Not one names any of them**,
-and every named issue dependency in the partition — #250, #407, #831, #591,
-#248, #1324 — is open. **Zero relabelled.** The set stayed at 14 with one
-exchange: **#456** left it by landing, **#1344** joined it. Re-read the
-partition below rather than re-deriving it:
+**The unblock sweep measured a clean zero for the TWELFTH consecutive stamp**,
+measured at the source over all **15** open `blocked` bodies rather than
+inherited from #413's post-land pass. No `## Depends on` names #413 — the
+window's only closure. Every named issue dependency in the partition — **#1324**,
+**#407**, **#250**, **#831**, **#591**, **#248** — was checked individually and
+is **open**. **Zero relabelled.** The set is 15, up one from 14: **#1374** joined
+it and nothing left. Re-read the partition below rather than re-deriving it:
 
-- **FOUR are triggers rather than issues** and say so in their own
-  `## Depends on` — **#1224**, **#555**, **#1002** and **#1042**. **Do not
-  re-scan these on the next sweep.**
+- **FIVE are triggers rather than issues** and say so in their own
+  `## Depends on` — **#1374**, **#1224**, **#555**, **#1002** and **#1042**.
+  **Do not re-scan these on the next sweep.**
 - **TWO have every named issue dependency closed and each states in its own body
   why that is not a discharge** — **#16** and **#1051**.
 - **EIGHT still have at least one OPEN named dependency** — **#248**, **#267**
   and **#345** (all on #250), **#415** (#407), **#593** (#591), **#717**
-  (#248), **#871** (#831) and **#1344** (#1324). **#1344's is band row 8**,
+  (#248), **#871** (#831) and **#1344** (#1324). **#1344's is band row 12**,
   which is the one place in this partition the band can reach — and it
   discharges in EITHER direction, #1324 closing `not_planned` being a recorded
   ruling just as much as #1324 landing is.
 
-### Persona consultations — the NINETEENTH ran, and the named trigger fired again
+### Persona consultations — the TWENTIETH ran, and the named trigger did NOT fire
 
 The cartographer role-plays no persona and does not spawn one (#416): it has
 read the source, so a verdict it produced would launder an insider's opinion as
 an outsider's. **The orchestrating session ran both personas against the
-published surface — README, `go doc`, and a CLI built from `faf2017` — and
-handed this pass their reports; what follows is the folding, not the
-consultation.**
+published surface — README, `go doc`, and a CLI built from the tree — and handed
+this pass their reports; what follows is the folding, not the consultation.**
 
-**The trigger the last stamp named fired exactly as named, for the FIFTH window
-running.** It was *"whatever next changes the observable surface"*, with band
-rows 3, 5, 6, 7 and 10 listed as the ones that would. **Row 10 — #1313 — landed
-and fired it**, and cliuser went straight back at the sentence that landing had
-just widened.
+**The trigger the last stamp named did NOT fire, and the consultation ran
+anyway.** The trigger was *"whatever next changes the observable surface"*, with
+band rows 1, 4, 5, 6, 7, 9 and 12 listed as the ones that would. **Nothing
+landed, so nothing changed the surface** — this is the first consultation in six
+windows to run against an unchanged surface. **It is also the most productive of
+the six by count**, which is the finding: nine findings, three of them defects
+nobody had reported, against a surface two prior consultations had already read.
+**A consultation is not exhausted by a previous consultation**, and scheduling
+them on surface change alone would have skipped this one.
 
-**Six findings: FIVE filed, ONE deduped into the issue that already owns it, and
-THREE reproduced by this pass rather than taken on the reports' word.**
+**Nine findings: THREE filed, FOUR deduped into the issues that already own
+them, TWO dismissed on measurement. SEVEN of the nine were reproduced or
+verified by this pass rather than taken on the reports' word, and THREE of those
+seven corrected their report's mechanism while confirming its outcome.**
 
-- **cliuser, two findings, both filed and both reproduced from a binary built
-  out of the tree.** **#1367** — the no-rule-ID class does not print the bare
-  message all three contract copies promise; both members print
-  `parser: <message>`, an internal package name standing where every other
-  stderr line in the binary writes `goxsd8: ` or `goxsd8: <subcommand>: `.
-  **This pass corrected the report's central claim**: cliuser called it a
-  regression against #1313's widening, and it is not — `665437a` touched no
-  rendering, the prefix predates it on both members and is pinned by two
-  assertions in `parse_test.go`. What the widening did was make one inaccurate
-  sentence cover two members instead of one. **#1368** — a `-schema` document
-  whose root is not `xs:schema` is rejected on `validate` as
-  `goxsd8-schema-set.xsd:2:1: [src-include] …`, a `<loc>` naming the synthesized
-  wrapper (`schemaSetLocation`) that exists in no file and is documented
-  nowhere. **This pass traced the mechanism and found the sharper fact the
-  report did not state**: `readSchemaDoc` reads the document for its
-  `targetNamespace` alone and never asks what the root element is, so the
-  document is `xs:include`d and charged at the wrapper — while the OTHER class
-  member keeps its bare line on the same subcommand. **The two members diverge
-  by subcommand, so #1313's carve-out covers one of them on `validate`.**
-- **libuser, four findings, three filed and one deduped.** **#1369** — an
-  UNDECLARED no-namespace attribute is silently dropped: `xs:openAttrs`
-  (`xmlschema11-1.md:4412`-`:4425`) admits `##other` only, so `minOccur="2"` on a
-  local `xs:element` compiles with the DEFAULT occurrence and exits 0.
-  Reproduced and grounded in the spec by this pass. **The report's framing was
-  sharpened**: it read `xsderr`'s *"a prohibited or missing attribute"* as the
-  overclaim, but both of those ARE enforced — the unenforced case is the
-  undeclared one, which no doc in the tree names at all, so the surface
-  under-bounds the class rather than overclaiming it. **#1370** —
-  `builtin/doc.go:44` says a minimal backend implements *"the ~25 primitives"*
-  where five other sites, two of them in the same `go doc` output, say 19 (+
-  `precisionDecimal`). **#1371** — an s4s-grammar rejection offers a library
-  caller no classification route: `errors.As`, `RuleOf` and `LocOf` are all
-  false by design and no sentinel is exported anywhere.
+**Filed.**
 
-**ONE finding deduped rather than filed, and this is the first consultation in
-this record where a persona independently hit an issue already open.**
+- **#1380** (cliuser 1, `kind/bug`, M4) — a schema whose only top-level content
+  is `xs:bogusElement` compiles to `components: 0` and **exits 0**, while the
+  same fault one level deeper is charged correctly. Reproduced against a binary
+  built at `aeb482f`. **The report's mechanism was corrected**: it read the
+  construct as silently dropped with no detection anywhere, when in fact
+  #1029/#1030's coverage census DOES report it as `UnmappedNoDispatch` and
+  publishes it on `parser.AssembledDocument.Unmapped` — the gap is between
+  detection and both of its possible consumers, since `run`'s dispatch skips the
+  child and `grep -rn "Unmapped" cmd/` is **empty**. It is the XSD-namespace
+  ELEMENT twin of #1369's attribute axis and of **#1036**'s foreign-namespace
+  arm, and unlike #1369 its population **is** censusable by `suiteindex`.
+- **#1381** (cliuser 3, `kind/bug`, `area/cmd`+`area/docs`) — `parse`'s `types:`
+  and `components:` counts exclude anonymous type definitions, so two schemas
+  describing the identical content model report **1 vs 2**. Reproduced.
+  **The body adds the banding fact the report did not have**: the `-help`
+  contract knows how to say "top-level" and does, one clause later, on the
+  `model groups` line — so the enumeration is internally inconsistent about its
+  own scope, which is what makes "disclose it" the natural arm rather than an
+  arbitrary choice.
+- **#1382** (libuser 2, `kind/story`, M5) — `validate.New`'s *"backend MUST be
+  the backend schema was compiled with… Nothing here can detect that"* is the one
+  representable illegal state on the library's front path, and its failure is
+  silent: a wrong verdict on a valid document. **Verified rather than assumed** —
+  `go doc -all ./xsd` matches nothing on `Backend` or `ValueSpace`, so the doc's
+  reason is exact and the invariant has nowhere to live. Three routes; the body
+  argues route (c) deserves serious weight because `New`'s own doc already
+  reasons this way about the nil-backend default.
 
-- **`builtin/native` called a "shipped" backend by the module root doc → this is
-  #1286 ITEM 1, open since the 2026-09-06 steward audit**, and the disposition is
-  a comment on that thread (`issuecomment-5595240764`) rather than a sixth
-  filing. The persona reached it cold, from `go doc github.com/kud360/goxsd8` —
-  the exact entry point README sends a new consumer to — having never seen items
-  2 through 5. **It adds one banding fact the body did not have**: the SAME doc
-  block gets the distinction right two lines later, annotating `codegen, codec`
-  as *"(M9, M10 — not yet implemented)"*, so item 1 has a working template
-  inside the paragraph being fixed and is independently landable.
+**Deduped, with the sighting and what it adds recorded on the thread.**
 
-**Two cross-reference comments were posted so the family is sequenced rather
-than rediscovered**: on **#1313** (closed — recording that the landing did what
-it promised and that #1367/#1368 are what the consultation found), and on
-**#1354** (naming #1367 and #1371 as the two issues that read its membership
-ruling as an input).
+- **#1283** (libuser 1, its worst finding) — **second independent sighting, from
+  the opposite direction.** This body argues from inside (`compileSet` copies a
+  wrapper as a string); libuser argues from outside, having seen only README and
+  `go doc`, and experienced it not as a roadmap gap but as a **self-contradiction
+  between two published documents**: `parser`'s "Composition gaps" says no
+  multi-root entry point is exported, and README's CLI section documents the
+  capability shipping. **#1286 item 3 owns half of it; landing #1283 retires that
+  item, landing #1286 alone does not retire #1283.** Nothing filed for an interim
+  documented workaround — that would be debt with a known expiry — and the
+  comment says to revisit if #1283 goes untaken.
+- **#1005** (libuser 3) — **THIRD sighting**, and it brings one new fact: a
+  consumer tried **`ParseReport.Unfollowed()` as the accumulation API** and it is
+  not one. That cuts both ways on this issue's (a)/(b)/(c) ruling and the comment
+  states both directions; the immediately actionable part is that
+  `Unfollowed()`'s own doc does not say what it is not, which is one clause under
+  any of the three answers.
+- **#1369** (cliuser 2) — **second independent sighting, reproduced.** No body
+  edit: the report offered nested and top-level as separate observations, and
+  this body's own reproduction block already carries all three positions.
+  The contrast worth carrying into the landing is cliuser's: **required-attribute
+  enforcement works while unknown-attribute rejection does not**, so the s4s
+  grammar is consulted for one half of the attribute rule and not the other.
+- **#1286** (libuser 5) — a **sixth site** for its enumeration: `codegen/doc.go`
+  and `codec/doc.go` both say *"The package declares no exported surface today"*
+  and `builtin/native/doc.go`, with zero exports too, never uses that framing.
+  **Offered as a comment and deliberately NOT written into `## Acceptance`** —
+  #912 owns the finding that a body scoping work by enumerating sites goes stale,
+  and this body's acceptance is literally *"Each of the five reads true"*. The
+  taker adopts or rejects it explicitly.
+
+**Dismissed on measurement, with the residue routed rather than dropped.**
+
+- **libuser 4 — README overstates `go doc`'s sufficiency. FALSE, and checked
+  exhaustively.** README **states the limitation itself** at `:336-338` and then
+  **lists every Example by file and function name**; this pass verified **all
+  eleven exist, in the file named**. The report's empirical step — "zero Example
+  funcs printed" — is what a correct `go doc` run looks like, not a missing file.
+  The residue is real and belongs to **#1293**, which owns `xsd/doc.go` pointing
+  at Examples `go doc` will not show: **the disclaimer README pairs with its
+  pointer is exactly what that pointer lacks**, one clause, already shipping in
+  README and available to copy. A twelfth Example the README list omits
+  (`value/backendtest`'s `ExampleRun`) went to #1286 as a ride-along.
+- **cliuser 4 — unknown-flag errors fall back to raw Go boilerplate. FALSE in
+  mechanism.** Reproduced: the line carries the documented `goxsd8: <subcommand>: `
+  exit-2 prefix and the hand-crafted actionable follow-up every other exit-2 path
+  writes, so the claimed inconsistency with the rest of the CLI's error style
+  does not exist. The narrow residue that survives — **neither line names the
+  flags that ARE valid for the subcommand**, and `-help` prints the whole
+  multi-subcommand contract — went to **#1318** as a ride-along, since that issue
+  already owns the class *"a `flag`-package behaviour the contract does not
+  describe"*. The comment says the landing must adopt or reject it out loud,
+  because that comment is the only record it was looked at.
 
 **#1033 remains the one row no persona has ever looked at.**
 
 ### Working band
 
-**Re-derived from this pass's evidence.** The last band is exhausted — eleven of
-twelve rows landed — so this is a fresh ordering, not a re-shuffle. **#413
-carries a LIVE claim and is not here**; re-run `wipsurvey` before starting
-anything.
+**Re-cut, not re-derived.** Nothing landed, so all twelve of the last band's rows
+survive; what changed is that **rows 1 and 10 are now held** (#1328 CLAIMED and
+active, #1167 LIVE), this pass filed five issues, and two rows moved on new
+evidence. **Re-run `wipsurvey` before starting anything.**
 
 | # | issue | why here |
 |---|---|---|
-| 1 | #1328 | **The first M4 slice in this record whose body carries BOTH a measurement and an enumeration, which is exactly what this window proved a named single case is not.** `use`, `form`, `elementFormDefault` and `attributeFormDefault` are compared RAW at every site: ten shapes were driven through `parser.Produce` by the pass that filed it and all ten are accepted today — `use=" required "` MEASURES `{required}`=false, `form=" qualified "` mints a local name in NO namespace, `use="foo"`/`form="Qualified"`/`form=""` are silently taken as the defaults — and the enumeration half carries a complete candidate set of **24 named suite fixtures**, listed by name. It is #455's carved successor and the direct sibling of #456, which banked **+20** on the same ·actual value· footing. Direction is UP: every shape it changes is an acceptance today |
-| 2 | #1332 | **This window's own measured cost, and the second consecutive window whose finding is about ratchet predictions.** #931's band row instructed a `suiteindex` census in as many words; nobody re-read it, an eighteen-day-old hand probe went to the verdict intact, and the lane moved +6 where the body named 4. The last stamp's #1205 embarrassment was a prediction made before the instrument existed; this one is a prediction the instrument could have corrected, with the instruction sitting in the band row the session was working from. The body already picks its own hard part — ONE named owner, no third copy of the `suiteindex` rule — so it is one doc-only session |
-| 3 | #1359 | **A check that reports `ok` while its cases never execute, which is the same species as #1300 (last stamp's row 2, landed) and worse than a check that fails.** `TestCheckLandingRealHistory` SKIPS in a fresh container: #813's fixture pair sits on a deleted branch, `requireFixtures` discards the two REACHABLE cases along with it, and `go test ./tools/landcheck/` returns `ok`. `landcheck` is what mechanizes WORKFLOW's landing preconditions, so the thing not running is the thing that guards landings. Three arms, argued in the body, and the issue owes the choice |
-| 4 | #1354 | **Take this before either row 5 or row 7 — it rules on the MEMBERSHIP those two describe.** `violationLine`'s doc enumerates two members of the no-rule-ID branch and a third prints through it: `parse.go:737`'s non-`ErrNotFound` resolver fault, reachable through the CLI's own `loader.Dir`. Filed by #1313's post-land pass and already carrying the arbiter's independent trace. Doc-only, and it is the cheapest of the three |
-| 5 | #1367 | **A false sentence in the copy `README.md` itself calls authoritative, about the one thing an operator scripts against — and this consultation is the second outside reader to land on that same sentence.** All three copies promise the bare message; both members print `parser: `, an internal package name where every other stderr line writes the program name and subcommand. Two honest routes, and the body picks neither. **Its wording is constrained by row 4's ruling**, so take them in that order or take them together |
-| 6 | #1369 | **An M4 under-rejection whose direction is guaranteed by construction, found from outside, with NO marker anywhere in the tree.** `xs:openAttrs` admits `##other` only, so an undeclared no-namespace attribute is an s4s fault — and `minOccur="2"` compiles today with the default occurrence and exits 0. Below row 1 deliberately: the population is unmeasured and `suiteindex` cannot census it (it censuses by construct, not by attribute name), so **census the attribute names directly, the way #456 did**. It also carries a real design bar — the roster must be GENERATED from Appendix A, never hand-typed (PRINCIPLES 26) — and a scope judgment the taker must settle first, which is why it is not row 1 despite being the larger correctness win |
-| 7 | #1368 | **The `validate`-side half of rows 4 and 5, and the one that puts an operator in front of a filename that does not exist.** A `-schema` document whose root is not `xs:schema` is charged `[src-include]` against `goxsd8-schema-set.xsd:2:1`; the same input through `parse` is bare and rule-free. `readSchemaDoc` reads only `targetNamespace` and never the root name, which is the whole mechanism. Distinct from **#1224**, which owns the hint path and the opposite behaviour (elision), and from the #1251 landing's TOCTOU ruling, which is about a different line on a path this one does not use |
-| 8 | #1324 | **The only row in this band that discharges a `blocked` entry, and it discharges in either direction.** It challenges the eighth `/retro`'s deliberate one-copy ruling on the foreground-gate rule, asking whether `CLAUDE.md`'s gate block — the arrival path #1279 governs — should carry a pointer. #1344 waits on the ruling and closes with it whichever way it goes. The body states both outcomes as checkable `grep` results, which is what makes it one session |
-| 9 | #1361 | **A correctness defect #1349's landing exposed rather than introduced, in the code that landing rewrote.** The name-keyed component memos hand back the ORIGINAL for a redefining `xs:group`/`xs:complexType` whose expanded name is also contributed, so `sch-props-correct` clause 2 cites one location twice and `src-redefine` 6.2.2 goes vacuous. Freshest evidence in the queue, and the session that owns the surrounding code has just landed |
-| 10 | #1167 | **Two measured sightings (#414, #1115), unchanged after fourteen landings, and PRINCIPLES 27 says a repeated grep wants a tool.** `gapaudit` reconciles marker → issue and issue → marker; nothing audits prose that points AT a marker or its file. **Still exactly two sightings**, kept honest deliberately — this window added none. **Its branch is EXPIRED, not free**: post the `TAKEOVER:` naming the tip you found before pushing, and read the thread's `PROCESS NOTE` first, because the pre-takeover tip is a stray commit for a different issue |
-| 11 | #1356 | **A ruling the queue owes itself, measured at 55 open bodies.** They cite `file:line` into `cmd/goxsd8/doc.go`, `main.go` and `README.md` — files that took six landings in five days — against a WORKFLOW rule that already calls a line number a one-session shelf life. Two post-land passes have re-anchored citations as precedent with no document asking them to. Banded below rows 2 and 3 because its deliverable is a RULING among at least three arms rather than a fix, and one arm (a `citecheck` over the existing survey feed) is a session of its own that the ruling has to authorize first |
-| 12 | #1318 | **A contract copy that denies a behaviour `flag.Parse` gives it, in the argument vocabulary `go doc` calls authoritative.** `doc.go` denies `--` any end-of-options meaning while the flag package supplies one, and the valued-help sentence miscounts the same way. Same reader and same three files as rows 5 and 7 — take it with them if any of that group is opened, since whichever lands last rebases the other two |
+| 1 | #1369 | **The best available M4 lane slice now that #1328 is held, and the consultation confirmed it independently.** Direction is **guaranteed by construction** — `xs:openAttrs` admits `##other` only, so an undeclared no-namespace attribute is an s4s fault, and every shape it changes is an acceptance today, so the lane moves UP or flat. Now carries **two sightings**: the persona that found it and the cliuser that reproduced `minOccur="2"` compiling to exit 0 without knowing it was filed. Its two preconditions stand — census the attribute names **directly** (`suiteindex` censuses by construct and cannot reach this axis, so do it the way #456 did), and the roster must be **GENERATED** from Appendix A, never hand-typed (PRINCIPLES 26) |
+| 2 | #1380 | **The element-axis twin of row 1, filed by this pass, and it beats row 1 on the one axis the last two stamps made decisive: its population is CENSUSABLE.** `suiteindex` censuses by construct — namespace URI plus local name — which is exactly what an unrecognized top-level `xs:schema` child is, so the enumerated candidate set the last stamp asked for is one command away. Direction guaranteed the same way. It is also the smaller session: **the detection already landed** with #1029/#1030's census, and what is missing is the charge plus a ruling on whether the CLI should report the census at all. Banded below row 1 only because row 1's surface is the wider one |
+| 3 | #1361 | **A correctness defect #1349's landing exposed rather than introduced, in the code that landing rewrote.** The name-keyed component memos hand back the ORIGINAL for a redefining `xs:group`/`xs:complexType` whose expanded name is also contributed, so `sch-props-correct` clause 2 cites one location twice and `src-redefine` 6.2.2 goes vacuous. Freshest evidence in the queue, and its centre of gravity (`parser/redefine.go`, `xsd/ownedtypefold.go`) is the furthest of the three parser slices from the held branch |
+| 4 | #1332 | **The window's own measured cost, doc-only, one session.** #931's band row instructed a `suiteindex` census in as many words; nobody re-read it, an eighteen-day-old hand probe reached the verdict intact, and the lane moved +6 where the body named 4. **Held at row 4 rather than promoted**: this window landed nothing, so it supplies no second sighting, and the process clause bands on friction that compounds across sessions rather than on friction recorded once |
+| 5 | #1359 | **A check that reports `ok` while its cases never execute.** `TestCheckLandingRealHistory` SKIPS in a fresh container: #813's fixture pair sits on a deleted branch, `requireFixtures` discards the two REACHABLE cases with it, and `go test ./tools/landcheck/` returns `ok`. `landcheck` mechanizes WORKFLOW's landing preconditions, so the thing not running is the thing that guards landings. Three arms, argued in the body, and the issue owes the choice |
+| 6 | #1376 | **The only row whose cost is visible in THIS stamp's own tool output.** Both `{open content}` markers cite CLOSED #413; `gapaudit` group 1 grew 16 → 18 and both new rows are `dead end`. STYLE P3's named failure, one small session, and #413's post-land pass already sequenced it — *"#1376 before #1375 if only one is taken"* — because it clears a measurement every future `/backlog` would otherwise re-report |
+| 7 | #1354 | **Take this before rows 8 and 9 — it rules on the MEMBERSHIP those two describe.** `violationLine`'s doc enumerates two members of the no-rule-ID branch and a third prints through it: `parse.go:737`'s non-`ErrNotFound` resolver fault, reachable through the CLI's own `loader.Dir`. Doc-only, and it is the cheapest of the three |
+| 8 | #1367 | **A false sentence in the copy `README.md` itself calls authoritative, about the one thing an operator scripts against.** All three copies promise the bare message; both members print `parser: `, an internal package name where every other stderr line writes the program name and subcommand — and this pass saw it again incidentally while reproducing #1380 (`parser: unexpected model group child`). **Its wording is constrained by row 7's ruling**, so take them in that order or together |
+| 9 | #1368 | **The `validate`-side half of rows 7 and 8, and the one that puts an operator in front of a filename that does not exist.** A `-schema` document whose root is not `xs:schema` is charged `[src-include]` against `goxsd8-schema-set.xsd:2:1`; the same input through `parse` is bare and rule-free. `readSchemaDoc` reads only `targetNamespace` and never the root name. Distinct from **#1224**, which owns the hint path and the opposite behaviour |
+| 10 | #1356 | **Promoted from row 11 on this pass's own evidence.** Its 55 measured bodies were all `cmd/`; it now has a second file family, with `contentrestricts.go:742` and `:1047` pointing at unrelated text after #413's landing — and the failure mode its body predicts is observed with a name, since a reader who follows one **cannot tell whether the premise died or the line moved**. One arm is now demonstrably separable: a `citecheck` detects both rows mechanically without judging premises, so the tooling arm need not wait on the doctrine arm |
+| 11 | #1283 | **Promoted into the band on a second independent sighting, from the audience it is written for.** libuser ranked it the worst finding on the API surface, reaching from outside what this body argues from inside. It is the largest row here and needs a warden pre-flight, but it **retires #1286 item 3, unblocks #1051's unexport, and deletes the wrapper-as-a-string copy** that #1224, #1250 and #1346 all work around. Read #1251's and #1260's two signature facts in the body before designing the entry point — the report half and the per-root provenance are both load-bearing |
+| 12 | #1324 | **The only row in this band that discharges a `blocked` entry, and it discharges in either direction.** It challenges the eighth `/retro`'s deliberate one-copy ruling on the foreground-gate rule, asking whether `CLAUDE.md`'s gate block — the arrival path #1279 governs — should carry a pointer. #1344 waits on the ruling and closes with it whichever way it goes. The body states both outcomes as checkable `grep` results, which is what makes it one session |
 
-**Below the band, and why**: **#1297** pairs with the landed #1304 — that
-landing consolidated `renderParent` into `renderName`, so #1297's namespace
-rendering ruling now reaches `parent=` and every child from one site, and it
-should ride whoever next opens `tools/suiteindex`. **#1266** and **#1267** are
-the other two `suiteindex` follow-ups; #1266 carries a measured 232-vs-236
-corpus discrepancy. **#1370** is this pass's one-line `builtin` doc fix and is a
-pure ride-along for any session opening `builtin/`. **#1371** is the fourth
-libuser finding and is a SURFACE ruling — route 1 mints a discoverable marker
-and wants a warden pre-flight plus row 4's ruling first, route 2 is a disclaimer
-and is takeable today. **#1286** rose on this consultation's independent hit
-(item 1 alone is now independently landable) and is the natural partner for row
-5, sharing a reader if not a line. **#1301** and **#1307** are the two
-inline-copy refactors #1270 and #1246 carved, the same shape in the attribute
-and element producers. **#1310** and **#1346** both pin `cmd` behaviour that
-shipped untested and should ride row 7. **#1333** and **#1342** and **#1343**
-are #931's and #1247's carved follow-ups and each names its own file.
-**#1339**, **#1351**, **#1355** and **#1319** are this window's process
-findings, all four about accounts and closures rather than about code; **#1355**
-is the sharpest (an agent account that outlives the git state it describes) and
-should be read with #1227's landed precondition. **#1325** and **#1363** are
-citation-integrity tooling and pair with row 11. **#1336** pairs with the landed
-#725. **#1276** is the derived check that makes `census.go`'s Scope section
-unfalsifiable by drift and now has a second reason to exist: row 6 is a hole on
-the axis that section does not cover. **#929** is the s4s family's other live
-member and is banded below row 1 on the same criterion — census first.
-**#1314** and **#1315** are the eighteenth consultation's unlanded filings;
-#1315 wants a warden pre-flight and must be read with **#1283** and **#1051**.
-**#1250** and **#1257** are `cmd` rows on the same code path as row 7.
-**#1291**, **#1292** and **#1293** are the seventeenth consultation's and are
-unmoved. **#1285** and **#1287** are the 2026-09-06 steward audit's other
-findings. **#1201** retires the two `GAP(conformance)` markers. **#1183** and
-**#1196** both narrow #1051. **#1122**, **#1232**, **#1233**, **#1234**,
-**#1235**, **#1236**, **#513**, **#1003** are one-sentence fixes with settled
-directions. **#1033** is still the only row no persona has ever looked at.
+**Held and NOT banded**: **#1328** (CLAIMED, grounding posted 55 minutes before
+this survey) and **#1167** (LIVE, 1h44m). Both were rows in the last band and
+both are being worked now.
 
-**There is no `Increasing` steward ranking anywhere in the band, for the FOURTH
-consecutive stamp.** A scan of all 283 open bodies for `Cost of delay` returns
+**One banding hazard, and it is new.** `wip/issue-1328` sits on
+`parser/produce.go` and `parser/produce_complex.go`, and **all three of the
+queue's best M4 slices touch `parser/produce.go`** — rows 1 and 2 partially, and
+**#929 collides on both files**, which is why #929 stays below the band rather
+than rising into #1328's vacancy. Rows 1, 2 and 3 should expect to rebase when
+#1328 lands, and row 3 is deliberately the one furthest from it.
+
+**Below the band, and why**: **#1375** is NOT banded despite #413's post-land pass
+asking for it, and the reason is specific rather than a demotion — its own Notes
+carry an **unchecked hypothesis** that its apparatus and #1374's are the SAME
+construction (§3.4.4.3 clause 3.1 reaching §3.8.4.1.3's interleave operator), and
+a grounding on **#743** that confirms it **retires #1375 outright**. Banding a
+session onto an issue that one cheaper check may dissolve is the wrong order; the
+grounding is the next act, not the implementation. **#1318** just absorbed
+cliuser 4's residue and should ride rows 8 and 9, which share its three files.
+**#1378** and **#1379** are this pass's own gap filings and are startable, but
+unvetted by any second reader; #1378's route (b) is a one-session ruling and its
+route (a) is a construction wanting an oracle first. **#929** is blocked in
+practice by the held branch, not by a label. **#1381** is this pass's `cmd`
+filing and rides rows 8/9/12 cheaply, sharing `cmd/goxsd8/doc.go`. **#1382**
+wants a warden pre-flight and should be read with **#1283**, **#1315** and
+**#1051**. **#1036** is #1380's foreign-namespace arm and may reasonably be taken
+with it. **#1297**, **#1266** and **#1267** are the `suiteindex` follow-ups;
+**#1276** is the derived check row 2 would exercise. **#1370**, **#1286**,
+**#1371**, **#1301**, **#1307**, **#1310**, **#1346**, **#1333**, **#1342**,
+**#1343**, **#1339**, **#1351**, **#1355**, **#1319**, **#1325**, **#1363**,
+**#1336**, **#1314**, **#1315**, **#1250**, **#1257**, **#1291**, **#1292**,
+**#1293**, **#1285**, **#1287**, **#1201**, **#1183**, **#1196**, **#1122**,
+**#1232**, **#1233**, **#1234**, **#1235**, **#1236**, **#513**, **#1003** are
+unmoved from the last stamp. **#1033** is still the only row no persona has ever
+looked at.
+
+**There is no `Increasing` steward ranking anywhere in the band, for the FIFTH
+consecutive stamp.** A scan of all 290 open bodies for `Cost of delay` returns
 exactly **three** — **#849**, **#848** and **#845** — and none reads
-`Increasing`: #848 and #845 are *"stable debt"*, and #849's own body records
-that its ranking is falsified and that *"a steward re-ranking is warranted"*.
-The `kind/refactor` cost-of-delay clause of the banding rule therefore selects
-nothing again. **No `/retro` ran this window** — the last was 2026-09-06 and the
-routine is weekly — so the ranked backlog did not grow because the one
-instrument that can grow it did not run, which is a different fact from the last
-two stamps' finding that it ran and produced nothing.
+`Increasing`: #848 and #845 are *"stable debt"*, and #849's own body records that
+its ranking is falsified. The `kind/refactor` cost-of-delay clause of the banding
+rule therefore selects nothing again. **No `/retro` ran this window** — the last
+was 2026-09-06 and the routine is weekly, so the next is Sunday 2026-09-13.
 
 ### Next planning action
 
-1. **Prefer an ENUMERATED candidate set over a named single case, and say which
-   one a slice has.** This window's two movers both banked populations their
-   bodies had not identified: #456's named case was blocked two layers
-   downstream by #717's `GAP(xsd)` and did not flip, while twenty unnamed
-   fixtures did. A named case proves the population is non-empty; it does not
-   bound it, and it can be intercepted by a gap nobody tested against. **Row 1
-   (#1328) is banded on 24 named fixtures plus ten measured shapes**, and row 6
-   (#1369) is banded below it precisely because its direction is guaranteed and
-   its population is not yet counted.
-2. **Fix the re-reading gap before the next lane slice, not after it.** #931's
-   band row named the census, the census was never run, and nothing in the
-   process re-reads a body's ratchet prediction before it is acted on.
-   **#1332 is row 2** and is doc-only. This is the second consecutive window
-   whose headline finding is a prediction defect, and the first where the
-   correction was already written down and simply not read.
-3. **`wip/issue-413` is LIVE and `wip/issue-1167` is EXPIRED — treat them
-   differently.** #413 is off-limits, mid-repair-round, and so is the
-   open-content deferral code around it. #1167 is takeable by posting a
-   `TAKEOVER:` and pushing a heartbeat; it is band row 10 and its branch tip is
-   NOT its own history. **Re-run `wipsurvey` before starting anything** — this
-   pass's own survey watched `main` move four commits between the session brief
-   and the first measurement.
-4. **The nineteenth persona consultation is folded and nothing from it is handed
-   off.** Six findings: five filed (#1367, #1368, #1369, #1370, #1371), one
-   deduped into #1286 with a comment. **The next consultation is owed against
-   whatever next changes the observable surface** — naming the trigger rather
-   than scheduling a pass has now worked five windows running and correctly
-   predicted the firing landing twice. Band rows 1, 4, 5, 6, 7, 9 and 12 change
-   it; rows 2, 3, 8, 10 and 11 do not.
-5. **A clean marker census is not a clean tree, and #1369 is the witness.** Ten
-   consecutive stamps of zero untracked GAP sites mean every MARKED fail-open
-   has an owner. #1369 is an unimplemented s4s check with no marker at all,
-   found by a persona compiling a schema with a one-letter typo — invisible to
-   `gapaudit` by construction. **#1276** is the nearest instrument and covers
-   element positions only; whoever lands it should rule whether the attribute
-   axis is in its scope, which today is out by silence rather than by decision.
-6. **#849's steward re-ranking is owed for a FOURTH consecutive stamp, and the
-   condition the last stamp set has NOT yet been met.** It said *"file it at the
-   next `/retro`, or at the next `/backlog` if the retro passes over it again"*.
-   No `/retro` has run since 2026-09-06, so the retro has not had another turn
-   and nothing is filed here. **The next `/retro` is the deadline**: if it
+1. **Judge `gapaudit`'s group 1 on its annotations, not on their count.** Ten
+   consecutive stamps read "every row carries an annotation" as "zero untracked
+   sites"; three markers said *"No issue owns"* in their own prose the whole
+   time. **#1378** and **#1379** now own them. The general lesson is on the
+   instrument: `gapaudit` joins on citations, so a marker that disclaims
+   ownership in a sentence is invisible to it, and the two greps this pass ran
+   (`No issue owns`, `owns this residual`) are the cheap check until someone
+   decides that is a tool. **Do not file that tool yet** — two greps over a
+   68-marker corpus is not yet PRINCIPLES 27's threshold.
+2. **Prefer a CENSUSABLE population over an enumerated one, and an enumerated one
+   over a named case.** The last stamp established the second half; row 2
+   (**#1380**) sharpens it. #1369 and #1380 are the same species of defect with
+   the same guaranteed direction, and the only thing separating them is that
+   `suiteindex` can census one axis and not the other. **Row 2's band row says to
+   run that census first**; if it comes back empty, row 2 drops and says so.
+3. **TWO claims are held and neither is takeable.** #1328 is CLAIMED with a
+   grounding 55 minutes old; #1167 is LIVE at 1h44m. **Re-run `wipsurvey` before
+   starting anything** — this is the first stamp with two concurrent sessions,
+   and the previous stamp is stale about both.
+4. **The persona trigger did not fire and the consultation was the most
+   productive in six windows.** The naming-a-trigger scheme has worked five
+   windows running, but it would have skipped this one: nothing changed the
+   surface and nine findings came back, three of them defects. **Keep the trigger
+   and add a floor**: consult when the surface changes **or** when two windows
+   pass without one, whichever comes first. Band rows 1, 2, 7, 8, 9 and 11 change
+   the surface; rows 3, 4, 5, 6, 10 and 12 do not.
+5. **#849's steward re-ranking is owed for a FIFTH consecutive stamp and the
+   condition is STILL not met.** The standing condition is *"file it at the next
+   `/retro`, or at the next `/backlog` if the retro passes over it again"*. No
+   `/retro` has run since 2026-09-06, so the retro has not had another turn and
+   nothing is filed here. **Sunday 2026-09-13 is the deadline**: if that retro
    passes over #849 again, the next `/backlog` files the routing issue — the
    subject being that a routed re-ranking has no ledger and therefore never
    happens, which is #330's rule applied to the steward's own hand-offs.
+6. **A zero-landing window is not a zero-information window, but it is a
+   zero-PREDICTION window.** Two stamps running produced headline findings about
+   ratchet predictions; this one has no landing to check, so **#1332 is banded on
+   the old evidence and this stamp claims no trend**. The next stamp with a
+   landing should re-read #1332's standing before deciding whether the tax
+   compounds.
 7. **The human decision blocking #1002 is unchanged and is now carried for a
-   FIFTEENTH stamp.** #1002 waits on a ruling between (a) a constitutional
-   "superseded pass" ratchet class alongside `GOXSD_RATCHET_REMOVALS`,
-   enumerated by case ID, and (b) holding §4.2.2's `vc:maxVersion` arm until
-   real assertion evaluation lands. CLAUDE.md puts (a) beyond any agent —
-   *"changes only via a human-filed issue"* — and (b) depends on **#1042**,
-   filed and `blocked`. **No agent should attempt either.**
+   SIXTEENTH stamp.** #1002 waits on a ruling between (a) a constitutional
+   "superseded pass" ratchet class alongside `GOXSD_RATCHET_REMOVALS`, enumerated
+   by case ID, and (b) holding §4.2.2's `vc:maxVersion` arm until real assertion
+   evaluation lands. CLAUDE.md puts (a) beyond any agent — *"changes only via a
+   human-filed issue"* — and (b) depends on **#1042**, filed and `blocked`.
+   **No agent should attempt either.**
 8. **M6's carve is still owed and #1042 is still its only member.** #1042
    (`blocked`, `kind/gap`, M6) owns `cvc-assertion` (§3.13.4.1) and
    `cvc-assertions-valid` (§4.3.13.3). **M6 tier 2 itself is uncarved** —
@@ -445,40 +482,41 @@ still target one paragraph of `docs/WORKFLOW.md`'s filing discipline —
 **#510**, **#646**, **#679**, **#912** — and whichever lands last rebases three
 times; the 2026-09-06 `/retro` rewrote a neighbouring bullet of that same
 paragraph, so re-read it before grounding any of the four. **The next `/retro`
-inherits four**: the fold-the-five-species question (#635, #912, #609, #510,
+inherits five**: the fold-the-five-species question (#635, #912, #609, #510,
 #646), the `[tests that cannot fail]` **pattern** (routed by #472's post-land,
-with no filed carrier), **#849's owed steward re-ranking**, which item 6 above
-escalates, and now the **fourteen-landings-in-one-window throughput** this
-stamp measured — the band was sized 12 and consumed 11, so the band is no longer
-larger than a window and a `/backlog` that runs daily against a queue moving
-this fast is banding for less than one dispatch ahead. The `gh --paginate`
-page-2 403 trap stays a `/retro` datum and not a filing. The CTA cohort's 45
-banked `instance` failures remain unattributed. `gate.yml` runs and is still not
-a required status check, which only the repository owner can change.
+with no filed carrier), **#849's owed steward re-ranking**, which item 5 above
+escalates to a dated deadline, the **band-versus-window throughput** question the
+last stamp raised, and now the **persona-trigger floor** item 4 proposes. The
+`gh --paginate` page-2 403 trap stays a `/retro` datum and not a filing. The CTA
+cohort's 45 banked `instance` failures remain unattributed. `gate.yml` runs and
+is still not a required status check, which only the repository owner can change.
 
-**Environment, one witness each.** **`main` MOVED under this pass, and the
-session brief was stale about it**: the brief named `faf2017` as
-`origin/main`, and `origin/main` was `1ba9b40`, four commits ahead — #1349 and
-#456 with their post-land passes. The working branch was **fast-forwarded**
-(`git merge --ff-only`, no commit created, nothing pushed) before any
-measurement was taken, and **every number in this section is at `1ba9b40`**; the
-first `lanestatus` run, against the stale tree, read `schema` 13948/1450 and is
-not what is tabled above. Repository-scoped REST served every read and every
-write: **8 writes across 8 distinct issues** — **5 filed** (#1367, #1368, #1369,
-#1370, #1371) and **3 thread comments** (#1286's dedupe disposition, #1313's and
-#1354's cross-references) — plus this section's own replacement. **No issue body
-was PATCHed and none needed to be**: this window's fourteen post-land passes
-corrected bodies as they went, and the `## Depends on` sweep and the
-landed-issue citation scan over `## Milestones` both came back clean. **The
-paginate recipe ran to 14 pages twice**, 13 full at 100 each time and the last
-page short at 66 then 71, with the post-loop fullness check passing on both.
-**Three probes were run against a binary built from the tree** rather than
-reasoned about — #1367's prefix on both class members and both subcommands,
-#1368's wrapper-cited rejection, and #1369's silently-accepted `minOccur` typo —
-and two of the three corrected their report in mechanism while confirming it in
-outcome. **No conformance measurement was taken by this pass**: the lane table
-above is the committed expectations, which `docs/WORKFLOW.md` names as the lane
-score (#1120).
+**Environment, one witness each.** **`main` did NOT move under this pass** —
+`origin/main` was `aeb482f` at the session brief and at every measurement, which
+is the opposite of the last stamp's experience and is worth recording as the
+control case. **The checkout was SHALLOW and was unshallowed before any range
+reading** (`git fetch --unshallow origin`, #802); two `wipsurvey` rows changed
+verdict text as a direct result. Repository-scoped REST served every read and
+every write: **twelve writes across twelve distinct issues** — **five filed**
+(#1378, #1379, #1380, #1381, #1382) and **seven thread comments** (#499, #578,
+#774 for the gap families; #1356 and #1156 for the citation drift; then #1283,
+#1005, #1369, #1286, #1293, #1318 for the consultation) — plus this section's own
+replacement. **No issue body was PATCHed**, and the one place a body edit was
+arguable — #1156's and #345's drifted coordinates — was deliberately left to
+#1356's ruling, with the reason recorded on both threads. **The paginate recipe
+was run FOUR times and needed retries on THREE of them**: the pre-write feed came
+back short on pages 5 and 7, and the post-write feed short on **six** pages at
+once (one of which took five retries), which is the #1145 transient that returns
+valid JSON and exit 0. Every short page was re-fetched to 100 before any reshape,
+and final coverage was verified by distinct-number count rather than by the
+fullness check alone. **Five probes were run against a binary built from the
+tree** — #1380's top-level and nested contrast, #1369's two attribute shapes,
+#1381's anonymous-versus-named counts, cliuser 4's unknown-flag rendering, and
+README's eleven named Examples checked one by one against the tree — and **three
+of the five corrected their report in mechanism while confirming or refuting it
+in outcome**. **No conformance measurement was taken by this pass**: the lane
+table above is the committed expectations, which `docs/WORKFLOW.md` names as the
+lane score (#1120).
 
 ## Milestones
 
