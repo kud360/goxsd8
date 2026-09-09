@@ -541,18 +541,29 @@ func (p *producer) chameleon() bool {
 //
 // Placement is charged before content: a <notation> standing where the grammar
 // admits none is reported for where it stands, not for the second <annotation>
-// it also carries.
+// it also carries. The attribute guard runs last of the three, for the same
+// reason: where an element stands, and how many of a child it carries, are both
+// answered ahead of what its start tag spells.
+//
+// <appinfo> and <documentation> are subject to rejectUndeclaredAttrs alone, and
+// the split is the lax-content rule above: their CONTENT is governed by no guard
+// here, their own start tag is still their own production's — xs:appinfo declares
+// source (:5720-:5731) and xs:documentation source and xml:lang (:5733-:5745),
+// neither of them through xs:annotated.
 func rejectS4SFaults(el *Element) error {
 	if el.Name().Space() != xsd.XMLSchemaNS {
 		return nil
 	}
 	if isXSD(el, "appinfo") || isXSD(el, "documentation") {
-		return nil
+		return rejectUndeclaredAttrs(el)
 	}
 	if err := rejectMisplacedNotation(el); err != nil {
 		return err
 	}
 	if err := rejectRepeatedAnnotations(el); err != nil {
+		return err
+	}
+	if err := rejectUndeclaredAttrs(el); err != nil {
 		return err
 	}
 	for _, child := range el.Children() {

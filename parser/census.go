@@ -89,13 +89,22 @@ import (
 // dispatch — the first three covered by a rejection at the position, the fourth
 // answered by another producer's census or still to come, and the last six each
 // a live uncaught silence. None of the six is TOTAL. rejectS4SFaults
-// (produce.go) walks every XSD-namespace element of the document outside
-// <appinfo> and <documentation>, so at any depth a <notation> is charged for
-// where it stands (rejectMisplacedNotation) and a second <annotation> under one
-// parent for its cardinality (rejectRepeatedAnnotations). Every OTHER
-// XSD-namespace name is what survives at the six — an <xs:element> written under
-// an <openContent>, an <import>, a <group ref>, an <assert>, an <annotation> or
-// an <any> is reported by nothing and rejected by nothing.
+// (produce.go) descends through every XSD-namespace element of the document but
+// not into <appinfo> or <documentation>, so at any depth a <notation> is charged
+// for where it stands (rejectMisplacedNotation), a second <annotation> under one
+// parent for its cardinality (rejectRepeatedAnnotations), and any element it
+// reaches — the two lax-content wrappers included — for an unprefixed attribute
+// its own Appendix A production declares nowhere (rejectUndeclaredAttrs). Every
+// OTHER XSD-namespace name is what survives at the six — an <xs:element> written
+// under an <openContent>, an <import>, a <group ref>, an <assert>, an
+// <annotation> or an <any> is reported by nothing, and its PRESENCE where it
+// stands is rejected by nothing.
+//
+// This census is over element positions alone. The attribute axis is not censused
+// at any position, and it needs no accounting here because it is left with no
+// silence to account for: s4sAttrRosters (produce_s4sattrs.go) transcribes every
+// Appendix A production, and the two names it deliberately holds no roster for —
+// the precisionDecimal extension facets — are named there.
 //
 //   - the <complexType> wrapper's own children once it has chosen <simpleContent>
 //     or <complexContent>, and those two wrappers' own children: checkS4SChildOrder
